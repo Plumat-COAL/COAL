@@ -6,7 +6,8 @@ to produce a codon alignment.
 
 Built at the Reinvent the Wheel AI × Science Tool-building Hackathon, London, October 2026.
 
-> **Status:** v0.1 MVP (pure Python, no dependencies).
+> **Status:** v0.1 MVP (pure Python, no dependencies). Up to **~119× faster** than PAL2NAL
+> with byte-identical output on the benchmarked datasets — see [Benchmark results](#benchmark-results).
 
 ## Install and use
 
@@ -31,6 +32,49 @@ python -m unittest discover -s tests -v
 ```
 
 Compares COAL with stored PAL2NAL v14 outputs (`tests/golden/`); see `tests/README.md`.
+
+## Benchmark results
+
+COAL vs PAL2NAL v14 on synthetic datasets (see `benchmarks/README.md`). Each run is one
+command-line process, timed from start to finish (including Perl/Python start-up).
+Times are the median of 3 runs. **Every COAL output was byte-identical to PAL2NAL's.**
+
+| Sequences × codons | Total codons | PAL2NAL | COAL | Speedup | Peak memory PAL2NAL / COAL |
+|---|---:|---:|---:|---:|---:|
+| 10 × 500 | 5 k | 0.051 s | 0.061 s | 0.8× | 13 / 15 MB |
+| 100 × 100 | 10 k | 0.077 s | 0.062 s | 1.3× | 11 / 15 MB |
+| 100 × 500 | 50 k | 0.265 s | 0.072 s | 3.7× | 15 / 15 MB |
+| 100 × 2,000 | 200 k | 1.36 s | 0.093 s | 14.6× | 23 / 17 MB |
+| 1,000 × 500 | 500 k | 2.39 s | 0.139 s | 17.3× | 35 / 19 MB |
+| 100 × 10,000 | 1 M | 24.5 s | 0.207 s | **118.6×** | 55 / 23 MB |
+| 10,000 × 500 | 5 M | 24.7 s | 0.864 s | **28.6×** | 219 / 55 MB |
+
+What the numbers show:
+
+- **More sequences:** COAL is 17–29× faster from 1,000 sequences upward.
+- **Longer genes:** PAL2NAL's time grows much faster than the gene length: 5× more codons
+  (2,000 → 10,000) took 18× longer. COAL's time grows in proportion to the input, so the gap
+  widens with gene length.
+- **Tiny inputs:** both tools take about 0.05 s, which is mostly start-up time.
+
+Machine: Windows 11, Intel 64-bit CPU (Family 6 Model 183), Python 3.13.9, Strawberry Perl 5.42.3, COAL commit
+`58a1219`. Raw data: `benchmarks/results/bench_windows_20261016_2356.{csv,txt}`.
+
+**Limitations:** synthetic data only (random ancestral gene, about 10% of codons changed,
+about 5% deleted; no UTRs or frameshifts, which COAL v0.1 doesn't support); one machine;
+3 repeats. Speedups depend on the machine and dataset.
+
+### Reproduce
+
+```
+python scripts/fetch_pal2nal.py            # once; PAL2NAL is not redistributed
+pip install -e . psutil                    # psutil only for the memory columns
+python benchmarks/run_bench.py --repeats 3 --perl /path/to/perl
+```
+
+The script generates the same datasets every time (fixed random seed), times both tools,
+checks their outputs match, and writes `benchmarks/results/<name>.csv` plus a `.txt` file
+with the machine and software versions.
 
 ## Reference implementation (PAL2NAL)
 
