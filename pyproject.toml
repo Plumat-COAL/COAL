@@ -4,12 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "coal"
-version = "0.2.0"
+version = "0.3.0"
 description = "Fast codon alignment from a protein alignment and coding DNA (PAL2NAL alternative)"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
 dependencies = []
+
+[project.optional-dependencies]
+fast = ["numpy"]   # optional: speeds up the codon check on large inputs (BSD licence)
 
 [project.scripts]
 coal = "coal.cli:main"

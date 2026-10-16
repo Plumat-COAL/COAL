@@ -16,9 +16,11 @@ is an independent implementation):
 """
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 from functools import lru_cache
+from itertools import accumulate
 
 from .codon import ANCHOR_START, NORMAL, START, accepted, codon_ok, fast_code, residue_regex
 from .tables import get_code
@@ -30,7 +32,9 @@ _VALID = re.compile(r"[^-ACDEFGHIKLMNPQRSTVWY*XBZJOU0-9]")
 _DIGIT = re.compile(r"[0-9]")
 _AS_X = re.compile("[" + "".join(sorted(AS_X)) + "]")
 _CODON = re.compile(r"...", re.S)
-_STOP_FOR_NOGAP = re.compile(r"[UT]A[AGR]|[TU]GA")  # PAL2NAL -nogap rule (case-sensitive)
+_STOP_LOOKAHEAD = re.compile(r"(?=[UT]A[AGR]|[TU]GA)")  # PAL2NAL -nogap stop rule (case-sensitive)
+_GAPCHAR = re.compile("-")
+_TIMES3 = (3).__mul__
 ANCHOR = 10
 PREFIX_TOKENS = 8
 RUN_WINDOW, RUN_MIN, RUN_MAX = 24, 4, 8
@@ -53,15 +57,16 @@ class Threaded:
 
 # ---------------------------------------------------------------- pairing
 
-def pair_sequences(prot_ids: list[str], dna_ids: list[str]) -> list[int]:
-    """Counts must match; match by ID if every protein ID is a DNA ID, else by order."""
+def pair_sequences(prot_ids: list[str], dna_ids: list[str], dna_pos: dict | None = None) -> list[int]:
+    """Counts must match; match by ID if every protein ID is a DNA ID, else by order.
+    `dna_pos` (ID -> index) may be passed in to avoid building it again."""
     if len(prot_ids) != len(dna_ids):
         raise CoalError(
             f"number of sequences differs (protein: {len(prot_ids)}, DNA: {len(dna_ids)})"
         )
     if not prot_ids:
         raise CoalError("no sequences in input")
-    pos = {d: i for i, d in enumerate(dna_ids)}
+    pos = dna_pos if dna_pos is not None else {d: i for i, d in enumerate(dna_ids)}
     if all(p in pos for p in prot_ids):
         return [pos[p] for p in prot_ids]
     return list(range(len(prot_ids)))
@@ -213,10 +218,57 @@ def _quick_offset0(table: int, dna: str, residues: str) -> bool:
         return False
     if residues[0] == "M" and dna[:3] not in get_code(table).starts:
         return False
+    if len(residues) >= NP_MIN_CODONS:
+        # numpy costs ~0.1 s to import; switch to it only once this run has
+        # processed enough codons for the import to pay for itself.
+        _NP_STATE["seen"] = _NP_STATE.get("seen", 0) + len(residues)
+        if _NP_STATE["seen"] >= NP_AFTER_CODONS:
+            np = _numpy()
+            if np is not None:
+                return _np_quick(np, table, dna, residues)
     try:
         return "".join(map(fast_code(table).__getitem__, _CODON.findall(dna, 0, need))) == residues
     except KeyError:
         return False
+
+
+# Optional numpy acceleration of the quick check (same answer, ~10x faster on long
+# sequences). Imported lazily so short runs don't pay numpy's start-up time.
+_NP_STATE: dict = {}
+NP_MIN_CODONS = 300        # per sequence
+NP_AFTER_CODONS = 2_000_000  # per process, cumulative
+
+
+def _numpy():
+    if "np" not in _NP_STATE:
+        if os.environ.get("COAL_NO_NUMPY"):
+            _NP_STATE["np"] = None
+        else:
+            try:
+                import numpy as np
+                base = np.full(256, 255, dtype=np.uint8)
+                for i, b in enumerate(b"TCAG"):
+                    base[b] = i
+                _NP_STATE.update(np=np, base=base)
+            except ImportError:
+                _NP_STATE["np"] = None
+    return _NP_STATE["np"]
+
+
+@lru_cache(maxsize=None)
+def _np_table(table: int):
+    np = _NP_STATE["np"]
+    return np.frombuffer("".join(get_code(table).code.values()).encode("ascii"), dtype=np.uint8).copy()
+
+
+def _np_quick(np, table: int, dna: str, residues: str) -> bool:
+    need = 3 * len(residues)
+    b = _NP_STATE["base"][np.frombuffer(dna[:need].encode("ascii"), dtype=np.uint8)]
+    if (b == 255).any():
+        return False  # non-ACGT character: let the general search decide
+    b = b.reshape(-1, 3).astype(np.intp)
+    aa = _np_table(table)[b[:, 0] * 16 + b[:, 1] * 4 + b[:, 2]]
+    return bool((aa == np.frombuffer(residues.encode("ascii"), dtype=np.uint8)).all())
 
 
 def thread_one(seq_id: str, row: str, raw_dna: str, table: int) -> Threaded:
@@ -280,56 +332,85 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int) -> Threaded:
 
 # ---------------------------------------------------------------- assemble
 
-def build_alignment(items: list[Threaded], nogap: bool = False, nomismatch: bool = False) -> list[str]:
-    ncol = len(items[0].row)
+def column_widths(rows, ncol: int) -> list[int]:
+    """Width (in nt) of each alignment column: 3, or wider where a frameshift digit
+    N needs it (3 * ceil(N / 3)), as in PAL2NAL."""
     widths = [3] * ncol
-    for it in items:
-        for m in _DIGIT.finditer(it.row):
+    for row in rows:
+        for m in _DIGIT.finditer(row):
             i = m.start()
             widths[i] = max(widths[i], (max(int(m.group()) - 1, 0) // 3 + 1) * 3)
-    drop = set()
-    if nomismatch:
-        for it in items:
-            drop |= {c - 1 for c in it.mismatch_cols}
+    return widths
 
-    wide = any(w != 3 for w in widths)
-    rows = []
-    for it in items:
-        out, pos, row, dna = [], 0, it.row, it.dna
-        simple = not drop and not wide and not _DIGIT.search(row)
-        if simple:
-            # Fast path: copy runs of residues as whole DNA slices.
-            for m in re.finditer(r"-+|[^-]+", row):
-                n = m.end() - m.start()
-                if row[m.start()] == GAP:
-                    out.append("---" * n)
-                else:
-                    out.append(dna[pos:pos + 3 * n])
-                    pos += 3 * n
+
+def expand(it: Threaded, widths: list[int], wide: bool) -> str:
+    """Codon-aligned row for one sequence (before any column removal)."""
+    out, pos, row, dna = [], 0, it.row, it.dna
+    if not wide and not _DIGIT.search(row):
+        # Fast path, all at C level: split the row at gaps; residue segment k
+        # takes DNA [3*a_k, 3*b_k); joining with '---' puts one gap codon back
+        # per '-' (consecutive gaps give empty segments).
+        bounds = list(map(_TIMES3, accumulate(map(len, row.split(GAP)), initial=0)))
+        return "---".join(map(dna.__getitem__, map(slice, bounds, bounds[1:])))
+    for i, ch in enumerate(row):
+        w = widths[i]
+        if ch == GAP:
+            out.append("-" * w)
+        elif ch.isdigit():
+            d = int(ch)
+            out.append(dna[pos:pos + d] + "-" * (w - d))
+            pos += d
         else:
-            for i, ch in enumerate(row):
-                w = widths[i]
-                if ch == GAP:
-                    piece = "-" * w
-                elif ch.isdigit():
-                    d = int(ch)
-                    piece = dna[pos:pos + d] + "-" * (w - d)
-                    pos += d
-                else:
-                    piece = dna[pos:pos + 3] + "-" * (w - 3)
-                    pos += 3
-                if i not in drop:
-                    out.append(piece)
-        rows.append("".join(out))
+            out.append(dna[pos:pos + 3] + "-" * (w - 3))
+            pos += 3
+    return "".join(out)
 
-    if nogap:
-        keep = []
-        for k in range(0, len(rows[0]), 3):
-            trip = [r[k:k + 3] for r in rows]
-            if not any("-" in t or _STOP_FOR_NOGAP.search(t) for t in trip):
-                keep.append(k)
-        rows = ["".join(r[k:k + 3] for k in keep) for r in rows]
-    return rows
+
+def nogap_bad_triplets(expanded: str) -> set[int]:
+    """Indices of 3-nt output columns that -nogap removes for this row
+    (a gap, or a stop codon by PAL2NAL's case-sensitive rule)."""
+    bad = {m.start() // 3 for m in _GAPCHAR.finditer(expanded)}
+    bad.update(m.start() // 3 for m in _STOP_LOOKAHEAD.finditer(expanded) if m.start() % 3 == 0)
+    return bad
+
+
+def keep_slices(widths: list[int], drop_cols, bad_triplets) -> list[tuple[int, int]]:
+    """Character ranges of the expanded row that survive -nomismatch / -nogap.
+    Columns are multiples of 3 nt wide, so both rules work on 3-nt units."""
+    drop_cols, bad_triplets = set(drop_cols), set(bad_triplets)
+    slices: list[tuple[int, int]] = []
+    pos = 0
+    for i, w in enumerate(widths):
+        if i not in drop_cols:
+            for k in range(pos, pos + w, 3):
+                if k // 3 not in bad_triplets:
+                    if slices and slices[-1][1] == k:
+                        slices[-1] = (slices[-1][0], k + 3)
+                    else:
+                        slices.append((k, k + 3))
+        pos += w
+    return slices
+
+
+def apply_slices(s: str, slices: list[tuple[int, int]]) -> str:
+    return "".join(s[a:b] for a, b in slices)
+
+
+def build_alignment(items: list[Threaded], nogap: bool = False, nomismatch: bool = False) -> list[str]:
+    """In-memory assembly (library API). The streaming pipeline uses the same pieces."""
+    widths = column_widths((it.row for it in items), len(items[0].row))
+    wide = any(w != 3 for w in widths)
+    rows = [expand(it, widths, wide) for it in items]
+    if not (nogap or nomismatch):
+        return rows
+    drop = {c - 1 for it in items for c in it.mismatch_cols} if nomismatch else set()
+    bad = set().union(*(nogap_bad_triplets(r) for r in rows)) if nogap else set()
+    sl = keep_slices(widths, drop, bad)
+    return [apply_slices(r, sl) for r in rows]
+
+
+def prepare_row(pid: str, aln: str) -> str:
+    return aln.upper().replace(".", GAP)
 
 
 def codon_align(
@@ -341,7 +422,7 @@ def codon_align(
 ) -> tuple[list[tuple[str, str]], list[str]]:
     """Return ([(protein_id, codon_aligned_dna)], warnings)."""
     get_code(table)  # validates the table number
-    proteins = [(pid, aln.upper().replace(".", GAP)) for pid, aln in proteins]
+    proteins = [(pid, prepare_row(pid, aln)) for pid, aln in proteins]
     lengths = {len(s) for _, s in proteins}
     if len(lengths) > 1:
         raise CoalError(f"protein alignment rows have different lengths: {sorted(lengths)}")

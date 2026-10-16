@@ -6,7 +6,7 @@ to produce a codon alignment.
 
 Built at the Reinvent the Wheel AI × Science Tool-building Hackathon, London, October 2026.
 
-> **Status:** v0.2 (pure Python, no dependencies). Up to **~119× faster** than PAL2NAL
+> **Status:** v0.3 (pure Python, no required dependencies; numpy optional). Up to **~119× faster** than PAL2NAL
 > with byte-identical output on the benchmarked datasets — see [Benchmark results](#benchmark-results).
 
 ## Install and use
@@ -15,6 +15,8 @@ Built at the Reinvent the Wheel AI × Science Tool-building Hackathon, London, O
 pip install -e .
 coal pep.aln nuc.fasta > codon_aln.fasta            # or: python -m coal ...
 coal pep.aln nuc.fasta -codontable 2 -nogap         # PAL2NAL-style options work too
+coal big_pep.fasta big_nuc.fasta -j 0 -o out.fasta  # large data: all CPU cores
+pip install -e .[fast]                              # optional numpy speed-up for large inputs
 ```
 
 - **Input:** a protein alignment (FASTA or CLUSTAL) and the unaligned coding DNA (FASTA, one or more files).
@@ -33,8 +35,19 @@ coal pep.aln nuc.fasta -codontable 2 -nogap         # PAL2NAL-style options work
 - **`-nogap`** removes codon columns that contain a gap or a stop codon.
 - **Exit code** is non-zero on any error (PAL2NAL always exits 0). Warnings go to stderr; `-q` silences them.
 
-**Not yet supported:** output formats other than FASTA (`clustal`, `paml`, `codon`), `-blockonly`/Gblocks input,
-and multiple CPU cores.
+**Large inputs:** COAL streams the data. It reads the protein alignment and indexes the DNA file(s) (IDs and file
+positions only), then handles one sequence at a time, fetching its DNA from disk and writing its output row. So
+memory doesn't grow with the size of the sequences. `-j N` spreads the work over N processes (`-j 0` = all
+cores) and keeps the output in the input order. Output is written to a temporary file and only moved into place
+if the whole run succeeds, so an error never leaves a partial file. Notes:
+
+- `-nogap`/`-nomismatch` need every row before deciding which columns to remove, so the rows are first written to
+  a temporary file (disk space about the size of the output).
+- CLUSTAL input is read into memory (FASTA input is streamed).
+- Memory still holds the sequence IDs and their file positions, about 300 bytes per sequence (≈150 MB per
+  500,000 sequences).
+
+**Not yet supported:** output formats other than FASTA (`clustal`, `paml`, `codon`), and `-blockonly`/Gblocks input.
 
 **Deliberate differences from PAL2NAL** (details in `tests/README.md`):
 
@@ -85,6 +98,20 @@ Machine: Windows 11, Intel 64-bit CPU (Family 6 Model 183), Python 3.13.9, Straw
 **Limitations:** synthetic data only (random ancestral gene, about 10% of codons changed,
 about 5% deleted; no UTRs or frameshifts, which COAL v0.1 doesn't support); one machine;
 3 repeats. Speedups depend on the machine and dataset.
+
+### Scaling (v0.3)
+
+Synthetic data, 500 codons per gene. Measured on the 2-core Linux machine used for development (not the
+Windows machine above); peak memory as reported by `/usr/bin/time`. Output was byte-identical in every configuration.
+
+| Sequences | Input size | v0.2 | v0.3 `-j 1` | v0.3 `-j 2` | Peak memory v0.2 → v0.3 |
+|---:|---:|---:|---:|---:|---:|
+| 100,000 | 194 MB | 6.3 s | 3.6 s | 2.2 s | 515 MB → 87 MB |
+| 500,000 | 974 MB | 32.0 s | 17.0 s | 10.5 s | 2,523 MB → 143 MB |
+
+PAL2NAL was not run at these sizes. From its 10,000-sequence time (24.7 s on Windows), and assuming it grows
+in proportion, it would need roughly 4 and 20 minutes. Reproduce with
+`python benchmarks/run_bench.py --no-pal2nal --sizes 100000x500 500000x500 --coal-jobs 2 4 0`.
 
 ### Reproduce
 

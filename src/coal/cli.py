@@ -11,20 +11,10 @@ import argparse
 import sys
 
 from . import __version__
-from .core import CoalError, codon_align
-from .seqio import InputFormatError, read_alignment, read_dna
+from .core import CoalError
+from .pipeline import run
+from .seqio import InputFormatError
 from .tables import SUPPORTED
-
-WRAP = 60
-
-
-def write_fasta(records, fh, wrap: int = WRAP) -> None:
-    for rid, seq in records:
-        fh.write(f">{rid}\n")
-        if not seq:
-            fh.write("\n")  # PAL2NAL prints an empty line for an empty sequence
-        for i in range(0, len(seq), wrap):
-            fh.write(seq[i:i + wrap] + "\n")
 
 
 def main(argv=None) -> int:
@@ -43,27 +33,17 @@ def main(argv=None) -> int:
     ap.add_argument("-output", "--output-format", default="fasta", choices=["fasta"],
                     help="output format (only fasta so far)")
     ap.add_argument("-o", "--out", help="output file (default: stdout)")
+    ap.add_argument("-j", "--jobs", type=int, default=1, metavar="N",
+                    help="worker processes (default 1; 0 = all CPU cores)")
     ap.add_argument("-q", "--quiet", action="store_true", help="do not print warnings")
     ap.add_argument("--version", action="version", version=f"coal {__version__}")
     args = ap.parse_args(argv)
 
+    warn = None if args.quiet else (lambda w: print(f"coal: warning: {w}", file=sys.stderr))
     try:
-        result, warnings = codon_align(
-            read_alignment(args.pep_aln), read_dna(args.nuc_fasta),
-            table=args.codontable, nogap=args.nogap, nomismatch=args.nomismatch,
-        )
+        run(args.pep_aln, args.nuc_fasta, out_path=args.out, table=args.codontable,
+            nogap=args.nogap, nomismatch=args.nomismatch, jobs=args.jobs, warn=warn)
     except (CoalError, InputFormatError, UnicodeDecodeError, OSError) as e:
         print(f"coal: error: {e}", file=sys.stderr)
         return 1
-
-    if not args.quiet:
-        for w in warnings:
-            print(f"coal: warning: {w}", file=sys.stderr)
-    if args.out:
-        with open(args.out, "w", newline="\n") as fh:
-            write_fasta(result, fh)
-    else:
-        if hasattr(sys.stdout, "reconfigure"):
-            sys.stdout.reconfigure(newline="\n")
-        write_fasta(result, sys.stdout)
     return 0

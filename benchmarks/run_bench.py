@@ -83,18 +83,27 @@ def main() -> int:
     ap.add_argument("--timeout", type=float, default=900, help="seconds per run")
     ap.add_argument("--perl", default="perl")
     ap.add_argument("--name", default=None, help="results file stem")
+    ap.add_argument("--coal-jobs", type=int, nargs="*", default=[],
+                    help="also time COAL with these -j values (0 = all cores), e.g. --coal-jobs 2 4 0")
+    ap.add_argument("--no-pal2nal", action="store_true",
+                    help="time COAL only (for sizes where PAL2NAL takes too long)")
     a = ap.parse_args()
 
-    if not PAL2NAL.exists():
-        sys.exit("PAL2NAL not found; run: python scripts/fetch_pal2nal.py")
-    perl = shutil.which(a.perl) or sys.exit("perl not found")
+    perl = None
+    if not a.no_pal2nal:
+        if not PAL2NAL.exists():
+            sys.exit("PAL2NAL not found; run: python scripts/fetch_pal2nal.py")
+        perl = shutil.which(a.perl) or sys.exit("perl not found")
     sizes = ([tuple(map(int, s.lower().split("x"))) for s in a.sizes] if a.sizes
              else QUICK_SIZES if a.quick else DEFAULT_SIZES)
 
-    tools = {
-        "pal2nal": lambda d: [perl, str(PAL2NAL), str(d / "pep.fasta"), str(d / "nuc.fasta"), "-output", "fasta"],
-        "coal": lambda d: [sys.executable, "-m", "coal", str(d / "pep.fasta"), str(d / "nuc.fasta")],
-    }
+    tools = {}
+    if not a.no_pal2nal:
+        tools["pal2nal"] = lambda d: [perl, str(PAL2NAL), str(d / "pep.fasta"), str(d / "nuc.fasta"), "-output", "fasta"]
+    tools["coal"] = lambda d: [sys.executable, "-m", "coal", str(d / "pep.fasta"), str(d / "nuc.fasta")]
+    for j in a.coal_jobs:
+        tools[f"coal_j{j}"] = (lambda j: lambda d: [sys.executable, "-m", "coal", str(d / "pep.fasta"),
+                                                    str(d / "nuc.fasta"), "-j", str(j)])(j)
 
     RESULTS.mkdir(parents=True, exist_ok=True)
     stem = a.name or f"bench_{platform.system().lower()}_{datetime.now():%Y%m%d_%H%M}"
@@ -119,10 +128,12 @@ def main() -> int:
                     if m:
                         mems.append(m)
                 res[tool] = (times, mems, status)
-            pal_out = (tmp / "pal2nal.fa").read_bytes().replace(b"\r\n", b"\n")
-            coal_out = (tmp / "coal.fa").read_bytes().replace(b"\r\n", b"\n")
-            identical = (res["pal2nal"][2] == res["coal"][2] == "ok"
-                         and len(pal_out) > 0 and pal_out == coal_out)
+            ref_tool = "pal2nal" if "pal2nal" in res else "coal"
+            outs = {t: (tmp / f"{t}.fa").read_bytes().replace(b"\r\n", b"\n") for t in res
+                    if res[t][2] == "ok"}
+            ref = outs.get(ref_tool)
+            identical = (len(outs) == len(res) and bool(ref)
+                         and all(o == ref for o in outs.values()))
             row = {"n_seqs": n, "n_codons": L, "total_codons": n * L, "nuc_MB": round(nuc_mb, 2)}
             for tool, (times, mems, status) in res.items():
                 med = statistics.median(times) if times else None
@@ -131,12 +142,16 @@ def main() -> int:
                 row[f"{tool}_min_s"] = round(min(times), 4) if times else ""
                 row[f"{tool}_peak_MB"] = round(max(mems), 1) if mems else ""
                 row[f"{tool}_Mcodons_per_s"] = round(n * L / med / 1e6, 3) if med else ""
-            p, c = row["pal2nal_median_s"], row["coal_median_s"]
-            row["speedup"] = round(p / c, 2) if p and c else ""
+            p = row.get("pal2nal_median_s")
+            for tool in res:
+                if tool != "pal2nal":
+                    c = row[f"{tool}_median_s"]
+                    row[f"speedup_{tool}"] = round(p / c, 2) if p and c else ""
             row["outputs_identical"] = identical
             rows.append(row)
-            print(f"{n:>6} x {L:<6} pal2nal {p or res['pal2nal'][2]!s:>9}s  coal {c or res['coal'][2]!s:>9}s  "
-                  f"speedup {row['speedup']!s:>6}  identical={identical}", flush=True)
+            times_txt = "  ".join(f"{t} {row[f'{t}_median_s'] or res[t][2]!s:>8}s" for t in res)
+            sp = row.get("speedup_coal", "")
+            print(f"{n:>7} x {L:<6} {times_txt}  speedup {sp!s:>6}  identical={identical}", flush=True)
             with open(csv_path, "w", newline="") as fh:
                 w = csv.DictWriter(fh, fieldnames=list(rows[0]))
                 w.writeheader()
@@ -144,10 +159,11 @@ def main() -> int:
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
-    pv = subprocess.run([perl, "-e", "print $^V"], capture_output=True, text=True).stdout
+    pv = subprocess.run([perl, "-e", "print $^V"], capture_output=True, text=True).stdout if perl else "n/a"
     note = (f"date: {datetime.now():%Y-%m-%d %H:%M}\nplatform: {platform.platform()}\n"
             f"cpu: {platform.processor() or platform.machine()}\npython: {platform.python_version()}\n"
-            f"perl: {pv}\nrepeats: {a.repeats}\npsutil: {bool(psutil)}\n")
+            f"perl: {pv}\nrepeats: {a.repeats}\npsutil: {bool(psutil)}\ncpu_count: {os.cpu_count()}\n"
+            f"coal_jobs: {a.coal_jobs}\n")
     csv_path.with_suffix(".txt").write_text(note)
     print(f"\nwrote {csv_path.relative_to(ROOT)}")
     return 0
