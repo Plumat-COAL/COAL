@@ -1,0 +1,67 @@
+"""Minimal readers for FASTA and CLUSTAL protein alignments and FASTA DNA."""
+from __future__ import annotations
+
+from pathlib import Path
+
+
+class InputFormatError(ValueError):
+    pass
+
+
+def read_fasta(path: str | Path) -> list[tuple[str, str]]:
+    """Return [(id, sequence)]. ID = first whitespace token of the header.
+    Whitespace inside sequence lines is removed."""
+    records: list[tuple[str, list[str]]] = []
+    with open(path, encoding="ascii", errors="strict") as fh:
+        for lineno, line in enumerate(fh, 1):
+            line = line.rstrip("\r\n")
+            if line.startswith(">"):
+                parts = line[1:].split()
+                if not parts:
+                    raise InputFormatError(f"{path}:{lineno}: empty FASTA header")
+                records.append((parts[0], []))
+            elif line.strip():
+                if not records:
+                    raise InputFormatError(f"{path}:{lineno}: sequence data before first '>' header")
+                records[-1][1].append("".join(line.split()))
+    _check_unique([r[0] for r in records], path)
+    return [(rid, "".join(chunks)) for rid, chunks in records]
+
+
+def read_clustal(path: str | Path) -> list[tuple[str, str]]:
+    """Return [(id, aligned sequence)] from a CLUSTAL file (interleaved blocks)."""
+    order: list[str] = []
+    seqs: dict[str, list[str]] = {}
+    with open(path, encoding="ascii", errors="strict") as fh:
+        first = fh.readline()
+        if not first.startswith("CLUSTAL"):
+            raise InputFormatError(f"{path}: not a CLUSTAL file")
+        for line in fh:
+            line = line.rstrip("\r\n")
+            # Skip blank lines and conservation lines (start with whitespace).
+            if not line.strip() or line[0] in " \t":
+                continue
+            parts = line.split()
+            if len(parts) < 2:
+                raise InputFormatError(f"{path}: malformed CLUSTAL line: {line!r}")
+            name, chunk = parts[0], parts[1]
+            if name not in seqs:
+                order.append(name)
+                seqs[name] = []
+            seqs[name].append(chunk)
+    return [(n, "".join(seqs[n])) for n in order]
+
+
+def read_alignment(path: str | Path) -> list[tuple[str, str]]:
+    """Read a protein alignment, auto-detecting CLUSTAL vs FASTA."""
+    with open(path, encoding="ascii", errors="strict") as fh:
+        head = fh.read(7)
+    return read_clustal(path) if head == "CLUSTAL" else read_fasta(path)
+
+
+def _check_unique(ids: list[str], path) -> None:
+    seen = set()
+    for i in ids:
+        if i in seen:
+            raise InputFormatError(f"{path}: duplicate sequence ID {i!r}")
+        seen.add(i)

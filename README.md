@@ -6,7 +6,31 @@ to produce a codon alignment.
 
 Built at the Reinvent the Wheel AI × Science Tool-building Hackathon, London, October 2026.
 
-> **Status:** early development. No COAL implementation yet.
+> **Status:** v0.1 MVP (pure Python, no dependencies).
+
+## Install and use
+
+```
+pip install -e .
+coal pep.aln nuc.fasta > codon_aln.fasta      # or: python -m coal ...
+```
+
+Input: protein alignment (FASTA or CLUSTAL) and unaligned coding DNA (FASTA).
+Output: codon alignment in FASTA (60 columns per line), using protein-alignment IDs.
+Sequences are paired by ID when all protein IDs exist in the DNA file, otherwise by order.
+Exit code is non-zero on any error (unlike PAL2NAL, which exits 0).
+
+**v0.1 limitations:** genetic code 1 only; FASTA output only; DNA must be exactly the
+coding sequence (an optional trailing stop codon is trimmed); no UTRs, frameshift markers,
+or mismatch tolerance — these give a clear error.
+
+## Tests
+
+```
+python -m unittest discover -s tests -v
+```
+
+Compares COAL with stored PAL2NAL v14 outputs (`tests/golden/`); see `tests/README.md`.
 
 ## Reference implementation (PAL2NAL)
 
