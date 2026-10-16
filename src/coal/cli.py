@@ -33,8 +33,9 @@ def main(argv=None) -> int:
     ap.add_argument("-output", "--output-format", default="fasta", choices=["fasta"],
                     help="output format (only fasta so far)")
     ap.add_argument("-o", "--out", help="output file (default: stdout)")
-    ap.add_argument("-j", "--jobs", type=int, default=1, metavar="N",
-                    help="worker processes (default 1; 0 = all CPU cores)")
+    ap.add_argument("-j", "--jobs", type=int, default=0, metavar="N",
+                    help="maximum worker processes (default 0 = automatic: all CPU cores for large "
+                         "inputs, one process for small ones; 1 = never use extra processes)")
     ap.add_argument("-q", "--quiet", action="store_true", help="do not print warnings")
     ap.add_argument("--version", action="version", version=f"coal {__version__}")
     args = ap.parse_args(argv)

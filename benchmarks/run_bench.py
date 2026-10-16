@@ -100,7 +100,8 @@ def main() -> int:
     tools = {}
     if not a.no_pal2nal:
         tools["pal2nal"] = lambda d: [perl, str(PAL2NAL), str(d / "pep.fasta"), str(d / "nuc.fasta"), "-output", "fasta"]
-    tools["coal"] = lambda d: [sys.executable, "-m", "coal", str(d / "pep.fasta"), str(d / "nuc.fasta")]
+    # "coal" = single process (COAL's default is automatic -j); use --coal-jobs for more
+    tools["coal"] = lambda d: [sys.executable, "-m", "coal", str(d / "pep.fasta"), str(d / "nuc.fasta"), "-j", "1"]
     for j in a.coal_jobs:
         tools[f"coal_j{j}"] = (lambda j: lambda d: [sys.executable, "-m", "coal", str(d / "pep.fasta"),
                                                     str(d / "nuc.fasta"), "-j", str(j)])(j)

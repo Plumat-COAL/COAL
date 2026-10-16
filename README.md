@@ -15,7 +15,7 @@ Built at the Reinvent the Wheel AI × Science Tool-building Hackathon, London, O
 pip install -e .
 coal pep.aln nuc.fasta > codon_aln.fasta            # or: python -m coal ...
 coal pep.aln nuc.fasta -codontable 2 -nogap         # PAL2NAL-style options work too
-coal big_pep.fasta big_nuc.fasta -j 0 -o out.fasta  # large data: all CPU cores
+coal big_pep.fasta big_nuc.fasta -o out.fasta        # large data: uses all cores automatically
 pip install -e .[fast]                              # optional numpy speed-up for large inputs
 ```
 
@@ -37,8 +37,9 @@ pip install -e .[fast]                              # optional numpy speed-up fo
 
 **Large inputs:** COAL streams the data. It reads the protein alignment and indexes the DNA file(s) (IDs and file
 positions only), then handles one sequence at a time, fetching its DNA from disk and writing its output row. So
-memory doesn't grow with the size of the sequences. `-j N` spreads the work over N processes (`-j 0` = all
-cores) and keeps the output in the input order. Output is written to a temporary file and only moved into place
+memory doesn't grow with the size of the sequences. By default COAL uses all CPU cores for large inputs and one process
+for small ones (each extra process needs about 4 million nucleotides of DNA to pay for its start-up). `-j N`
+caps the number of processes and `-j 1` forces a single process. Output is always in the input order. Output is written to a temporary file and only moved into place
 if the whole run succeeds, so an error never leaves a partial file. Notes:
 
 - `-nogap`/`-nomismatch` need every row before deciding which columns to remove, so the rows are first written to

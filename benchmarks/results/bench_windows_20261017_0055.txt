@@ -1,0 +1,9 @@
+date: 2026-10-17 00:57
+platform: Windows-11-10.0.26200-SP0
+cpu: Intel64 Family 6 Model 183 Stepping 1, GenuineIntel
+python: 3.13.9
+perl: n/a
+repeats: 1
+psutil: True
+cpu_count: 20
+coal_jobs: [4, 8, 0]

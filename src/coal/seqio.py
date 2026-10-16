@@ -175,6 +175,10 @@ class DnaIndex:
     def __len__(self) -> int:
         return len(self.start)
 
+    def total_bytes(self) -> int:
+        """Size of all sequence data (including line breaks): a cheap work estimate."""
+        return sum(self.end) - sum(self.start)
+
     def get(self, i: int) -> str:
         """Sequence number i: non-letters removed, '#' lines skipped (as PAL2NAL)."""
         fno, a, b = self.fno[i], self.start[i], self.end[i]

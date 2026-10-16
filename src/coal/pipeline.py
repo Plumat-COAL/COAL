@@ -33,6 +33,19 @@ from .tables import get_code
 WRAP = 60
 _DIGIT = re.compile(r"[0-9]")
 BATCH_NT = 2_000_000      # target DNA per work batch (keeps IPC overhead low)
+# Starting worker processes costs ~0.1-0.2 s (more on Windows), about the time one
+# core needs for a few million nucleotides. So each extra worker must have at
+# least this much DNA to do, otherwise COAL runs in a single process.
+MIN_NT_PER_JOB = 4_000_000
+
+
+def effective_jobs(requested: int, total_nt: int, min_nt_per_job: int | None = None) -> int:
+    """Number of processes to actually use. requested: 0 = all cores, N = at most N."""
+    cores = os.cpu_count() or 1
+    cap = cores if requested <= 0 else requested
+    per = MIN_NT_PER_JOB if min_nt_per_job is None else min_nt_per_job
+    by_size = total_nt // per if per > 0 else cap
+    return max(1, min(cap, by_size))
 
 
 def _protein_rows(path):
@@ -113,11 +126,12 @@ def _results(batches, jobs: int, init_args):
 
 
 def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
-        nomismatch: bool = False, jobs: int = 1, warn=None) -> int:
-    """Convert; write FASTA to out_path (or stdout). Returns number of sequences."""
+        nomismatch: bool = False, jobs: int = 0, warn=None, min_nt_per_job: int | None = None) -> int:
+    """Convert; write FASTA to out_path (or stdout).
+
+    jobs: 0 = automatic (up to all cores), N = at most N processes. Small inputs
+    always run in one process (see MIN_NT_PER_JOB)."""
     get_code(table)
-    if jobs == 0:
-        jobs = os.cpu_count() or 1
     rows = _protein_rows(pep_path)
 
     # pass 1: protein IDs, row length, frameshift column widths
@@ -137,6 +151,7 @@ def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
         pairing = array("q", pair_sequences(ids, dna.ids, dna.pos))
         del ids
         dna.forget_ids()
+        jobs = effective_jobs(jobs, dna.total_bytes(), min_nt_per_job)
         widths = column_widths(digit_rows, ncol)
         two_pass = nogap or nomismatch
 
