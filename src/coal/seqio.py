@@ -1,16 +1,21 @@
 """Minimal readers for FASTA and CLUSTAL protein alignments and FASTA DNA."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
+
+_NON_LETTER = re.compile(r"[^A-Za-z]")
 
 
 class InputFormatError(ValueError):
     pass
 
 
-def read_fasta(path: str | Path) -> list[tuple[str, str]]:
+def read_fasta(path: str | Path, letters_only: bool = False) -> list[tuple[str, str]]:
     """Return [(id, sequence)]. ID = first whitespace token of the header.
-    Whitespace inside sequence lines is removed."""
+    Whitespace inside sequence lines is removed. With letters_only (used for DNA,
+    as PAL2NAL does), every non-letter is removed (gaps, digits, '*', ...) and
+    lines starting with '#' are skipped."""
     records: list[tuple[str, list[str]]] = []
     with open(path, encoding="ascii", errors="strict") as fh:
         for lineno, line in enumerate(fh, 1):
@@ -21,9 +26,15 @@ def read_fasta(path: str | Path) -> list[tuple[str, str]]:
                     raise InputFormatError(f"{path}:{lineno}: empty FASTA header")
                 records.append((parts[0], []))
             elif line.strip():
+                if letters_only and line.startswith("#"):
+                    continue
                 if not records:
                     raise InputFormatError(f"{path}:{lineno}: sequence data before first '>' header")
-                records[-1][1].append("".join(line.split()))
+                if letters_only:
+                    chunk = line if line.isalpha() else _NON_LETTER.sub("", line)
+                else:
+                    chunk = "".join(line.split())
+                records[-1][1].append(chunk)
     _check_unique([r[0] for r in records], path)
     return [(rid, "".join(chunks)) for rid, chunks in records]
 
@@ -65,3 +76,12 @@ def _check_unique(ids: list[str], path) -> None:
         if i in seen:
             raise InputFormatError(f"{path}: duplicate sequence ID {i!r}")
         seen.add(i)
+
+
+def read_dna(paths) -> list[tuple[str, str]]:
+    """Read one or more DNA FASTA files (records concatenated in order)."""
+    out: list[tuple[str, str]] = []
+    for p in paths:
+        out += read_fasta(p, letters_only=True)
+    _check_unique([r[0] for r in out], ", ".join(map(str, paths)))
+    return out

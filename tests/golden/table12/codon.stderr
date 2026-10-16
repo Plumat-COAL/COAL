@@ -1,0 +1,8 @@
+#------------------------------------------------------------------------#
+#  Input files:  pep.fasta nuc.fasta
+#  WARNING: s0 pepAlnPos 4: S does not correspond to CTG
+#  WARNING: s0 pepAlnPos 10: S does not correspond to CTG
+#  WARNING: s1 pepAlnPos 5: S does not correspond to CTG
+#  WARNING: s1 pepAlnPos 7: S does not correspond to CTG
+#------------------------------------------------------------------------#
+

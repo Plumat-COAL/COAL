@@ -57,7 +57,7 @@ def main() -> int:
         out.mkdir(parents=True, exist_ok=True)
         variants = {**m["variants"], **spec.get("extra_variants", {})}
         for vname, opts in variants.items():
-            cmd = [perl, pal2nal, spec["pep"], "nuc.fasta", *opts]
+            cmd = [perl, pal2nal, spec["pep"], *spec.get("nuc", ["nuc.fasta"]), *opts]
             r = subprocess.run(cmd, cwd=fx, capture_output=True, timeout=60)
             (out / f"{vname}.stdout").write_bytes(norm(r.stdout))
             (out / f"{vname}.stderr").write_bytes(norm(r.stderr))

@@ -6,24 +6,44 @@ to produce a codon alignment.
 
 Built at the Reinvent the Wheel AI × Science Tool-building Hackathon, London, October 2026.
 
-> **Status:** v0.1 MVP (pure Python, no dependencies). Up to **~119× faster** than PAL2NAL
+> **Status:** v0.2 (pure Python, no dependencies). Up to **~119× faster** than PAL2NAL
 > with byte-identical output on the benchmarked datasets — see [Benchmark results](#benchmark-results).
 
 ## Install and use
 
 ```
 pip install -e .
-coal pep.aln nuc.fasta > codon_aln.fasta      # or: python -m coal ...
+coal pep.aln nuc.fasta > codon_aln.fasta            # or: python -m coal ...
+coal pep.aln nuc.fasta -codontable 2 -nogap         # PAL2NAL-style options work too
 ```
 
-Input: protein alignment (FASTA or CLUSTAL) and unaligned coding DNA (FASTA).
-Output: codon alignment in FASTA (60 columns per line), using protein-alignment IDs.
-Sequences are paired by ID when all protein IDs exist in the DNA file, otherwise by order.
-Exit code is non-zero on any error (unlike PAL2NAL, which exits 0).
+- **Input:** a protein alignment (FASTA or CLUSTAL) and the unaligned coding DNA (FASTA, one or more files).
+  Non-letters in the DNA (gaps, digits, spaces) are ignored, as in PAL2NAL.
+- **Output:** a codon alignment in FASTA format (60 columns per line), using the protein-alignment IDs.
+- **Pairing:** sequences are matched by ID if every protein ID is in the DNA file(s), otherwise by order.
+- **Extra sequence around the gene** (UTRs, stop codon, poly-A) is skipped: COAL finds the leftmost place in the
+  DNA, in any reading frame, where the whole protein fits.
+- **Genetic codes:** `-codontable N` for the 17 NCBI codes PAL2NAL supports
+  (1–6, 9–16, 21–23). The first Met may use any start codon of that code.
+- **Frameshifts:** a digit N in the protein alignment means N bases (PAL2NAL convention). That column is widened
+  to the next multiple of 3 for every sequence.
+- **Mismatches:** if the protein doesn't fit exactly, COAL uses PAL2NAL's fallback: it lines up 10-residue
+  chunks and prints a warning for each codon that doesn't match its residue. `-nomismatch` removes those
+  columns. If even that fails, it's an error.
+- **`-nogap`** removes codon columns that contain a gap or a stop codon.
+- **Exit code** is non-zero on any error (PAL2NAL always exits 0). Warnings go to stderr; `-q` silences them.
 
-**v0.1 limitations:** genetic code 1 only; FASTA output only; DNA must be exactly the
-coding sequence (an optional trailing stop codon is trimmed); no UTRs, frameshift markers,
-or mismatch tolerance — these give a clear error.
+**Not yet supported:** output formats other than FASTA (`clustal`, `paml`, `codon`), `-blockonly`/Gblocks input,
+and multiple CPU cores.
+
+**Deliberate differences from PAL2NAL** (details in `tests/README.md`):
+
+- An invalid character in the protein alignment is an error. PAL2NAL silently drops a codon.
+- Genetic codes follow the current NCBI tables. In code 10, TGA = Cys (PAL2NAL treats it as a stop). In codes 11
+  and 13, COAL also accepts NCBI's alternative start codons (ATT/ATC/ATA, and ATA, respectively).
+- `.` is treated as a gap. In PAL2NAL it misaligns the output row.
+- Ambiguous DNA bases (IUPAC codes) are accepted when every base they could stand for gives the right amino acid.
+  PAL2NAL accepts only some fixed combinations.
 
 ## Tests
 
@@ -31,7 +51,9 @@ or mismatch tolerance — these give a clear error.
 python -m unittest discover -s tests -v
 ```
 
-Compares COAL with stored PAL2NAL v14 outputs (`tests/golden/`); see `tests/README.md`.
+Compares COAL with stored PAL2NAL v14 outputs (`tests/golden/`): 38 input cases × all FASTA option
+combinations (165 checks). COAL's output must be byte-identical, and its mismatch warnings must equal PAL2NAL's.
+See `tests/README.md`.
 
 ## Benchmark results
 

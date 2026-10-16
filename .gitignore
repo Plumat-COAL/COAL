@@ -27,3 +27,9 @@ venv/
 .idea/
 .DS_Store
 Thumbs.db
+
+# PAL2NAL temp files (left behind if it cannot delete them)
+tmpwhich.*
+erraafile.*
+errnucfile.*
+tbln.out.*

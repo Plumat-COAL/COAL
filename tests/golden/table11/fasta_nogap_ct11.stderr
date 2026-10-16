@@ -1,0 +1,6 @@
+#------------------------------------------------------------------------#
+#  Input files:  pep.fasta nuc.fasta
+#  Codontable 11 is used
+#  WARNING: s0 pepAlnPos 1: M does not correspond to ATA
+#------------------------------------------------------------------------#
+

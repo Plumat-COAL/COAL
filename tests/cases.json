@@ -1,32 +1,563 @@
 {
   "_comment": "Differential-test manifest. Each case is a folder in tests/fixtures/ with a protein alignment and nuc.fasta. Every case runs with all 'variants'; 'extra_variants' add case-specific option sets. Expected outputs come from PAL2NAL v14 via scripts/make_golden.py.",
   "variants": {
-    "fasta": ["-output", "fasta"],
-    "clustal": ["-output", "clustal"],
-    "paml": ["-output", "paml"],
-    "codon": ["-output", "codon"],
-    "fasta_nogap": ["-output", "fasta", "-nogap"],
-    "fasta_nomismatch": ["-output", "fasta", "-nomismatch"]
+    "fasta": [
+      "-output",
+      "fasta"
+    ],
+    "clustal": [
+      "-output",
+      "clustal"
+    ],
+    "paml": [
+      "-output",
+      "paml"
+    ],
+    "codon": [
+      "-output",
+      "codon"
+    ],
+    "fasta_nogap": [
+      "-output",
+      "fasta",
+      "-nogap"
+    ],
+    "fasta_nomismatch": [
+      "-output",
+      "fasta",
+      "-nomismatch"
+    ]
   },
   "cases": {
-    "clean":                  {"pep": "pep.fasta", "about": "Matching IDs, one gap, synonymous differences (GTT/GTC, GCT/GCA)"},
-    "clustal_input":          {"pep": "pep.aln",   "about": "Same as clean but protein alignment in CLUSTAL format"},
-    "multiline_fasta":        {"pep": "pep.fasta", "about": "Wrapped sequences, header descriptions, spaces inside DNA"},
-    "lowercase":              {"pep": "pep.fasta", "about": "Lower-case protein and DNA"},
-    "unordered_ids":          {"pep": "pep.fasta", "about": "Same IDs, DNA in a different order"},
-    "id_mismatch_same_order": {"pep": "pep.fasta", "about": "Different IDs, same order (positional fallback)"},
-    "id_mismatch_count":      {"pep": "pep.fasta", "about": "3 proteins, 2 DNA sequences"},
-    "codon_mismatch":         {"pep": "pep.fasta", "about": "s2 codon GAT (D) where alignment says V"},
-    "inframe_stop":           {"pep": "pep.fasta", "about": "In-frame TAA shown as * in protein"},
-    "terminal_stop":          {"pep": "pep.fasta", "about": "DNA has trailing stop codon absent from protein"},
-    "utr":                    {"pep": "pep.fasta", "about": "s1 has 5' UTR and 3' stop + polyA"},
-    "frameshift":             {"pep": "pep.fasta", "about": "s2 has a '2' (one-base deletion) in the protein alignment"},
-    "ambiguous_bases":        {"pep": "pep.fasta", "about": "NNN under X, and an IUPAC R in a codon"},
-    "rna":                    {"pep": "pep.fasta", "about": "U instead of T"},
-    "invalid_chars":          {"pep": "pep.fasta", "about": "'@' in protein, 'ZZZ' in DNA"},
-    "empty_protein":          {"pep": "pep.fasta", "about": "Empty protein alignment file"},
-    "codontable2":            {"pep": "pep.fasta", "about": "Vertebrate mito code: TGA=W, ATA=M",
-                               "extra_variants": {"fasta_ct2": ["-output", "fasta", "-codontable", "2"],
-                                                  "fasta_nomismatch_ct2": ["-output", "fasta", "-nomismatch", "-codontable", "2"]}}
+    "clean": {
+      "pep": "pep.fasta",
+      "about": "Matching IDs, one gap, synonymous differences (GTT/GTC, GCT/GCA)"
+    },
+    "clustal_input": {
+      "pep": "pep.aln",
+      "about": "Same as clean but protein alignment in CLUSTAL format"
+    },
+    "multiline_fasta": {
+      "pep": "pep.fasta",
+      "about": "Wrapped sequences, header descriptions, spaces inside DNA"
+    },
+    "lowercase": {
+      "pep": "pep.fasta",
+      "about": "Lower-case protein and DNA"
+    },
+    "unordered_ids": {
+      "pep": "pep.fasta",
+      "about": "Same IDs, DNA in a different order"
+    },
+    "id_mismatch_same_order": {
+      "pep": "pep.fasta",
+      "about": "Different IDs, same order (positional fallback)"
+    },
+    "id_mismatch_count": {
+      "pep": "pep.fasta",
+      "about": "3 proteins, 2 DNA sequences"
+    },
+    "codon_mismatch": {
+      "pep": "pep.fasta",
+      "about": "s2 codon GAT (D) where alignment says V"
+    },
+    "inframe_stop": {
+      "pep": "pep.fasta",
+      "about": "In-frame TAA shown as * in protein"
+    },
+    "terminal_stop": {
+      "pep": "pep.fasta",
+      "about": "DNA has trailing stop codon absent from protein"
+    },
+    "utr": {
+      "pep": "pep.fasta",
+      "about": "s1 has 5' UTR and 3' stop + polyA"
+    },
+    "frameshift": {
+      "pep": "pep.fasta",
+      "about": "s2 has a '2' (one-base deletion) in the protein alignment"
+    },
+    "ambiguous_bases": {
+      "pep": "pep.fasta",
+      "about": "NNN under X, and an IUPAC R in a codon"
+    },
+    "rna": {
+      "pep": "pep.fasta",
+      "about": "U instead of T"
+    },
+    "invalid_chars": {
+      "pep": "pep.fasta",
+      "about": "'@' in protein, 'ZZZ' in DNA"
+    },
+    "empty_protein": {
+      "pep": "pep.fasta",
+      "about": "Empty protein alignment file"
+    },
+    "codontable2": {
+      "pep": "pep.fasta",
+      "about": "Vertebrate mito code: TGA=W, ATA=M",
+      "extra_variants": {
+        "fasta_ct2": [
+          "-output",
+          "fasta",
+          "-codontable",
+          "2"
+        ],
+        "fasta_nomismatch_ct2": [
+          "-output",
+          "fasta",
+          "-nomismatch",
+          "-codontable",
+          "2"
+        ],
+        "fasta_nogap_ct2": [
+          "-output",
+          "fasta",
+          "-nogap",
+          "-codontable",
+          "2"
+        ]
+      }
+    },
+    "long_mismatch": {
+      "pep": "pep.fasta",
+      "about": "30 codons; s2 has one wrong codon -> fallback with a WARNING, not an error"
+    },
+    "alt_start": {
+      "pep": "pep.fasta",
+      "about": "First Met encoded by CTG/TTG (table-1 starts) and GTG (not a table-1 start)"
+    },
+    "utr_frames": {
+      "pep": "pep.fasta",
+      "about": "5' extra sequence of 0/1/2/5 nt (all frames), 3' stop + tail, lower-case DNA"
+    },
+    "frameshift_mixed": {
+      "pep": "pep.fasta",
+      "about": "Frameshift digits 1, 2, 4, 5 in one column (column widened to 6 nt)"
+    },
+    "two_nuc_files": {
+      "pep": "pep.fasta",
+      "nuc": [
+        "nuc1.fasta",
+        "nuc2.fasta"
+      ],
+      "about": "DNA split over two files; DNA contains gaps, digits and spaces that are stripped"
+    },
+    "table2": {
+      "pep": "pep.fasta",
+      "about": "Genes built with NCBI genetic code 2, using its reassigned codons and a non-ATG start where one exists",
+      "extra_variants": {
+        "fasta_ct2": [
+          "-output",
+          "fasta",
+          "-codontable",
+          "2"
+        ],
+        "fasta_nogap_ct2": [
+          "-output",
+          "fasta",
+          "-nogap",
+          "-codontable",
+          "2"
+        ],
+        "fasta_nomismatch_ct2": [
+          "-output",
+          "fasta",
+          "-nomismatch",
+          "-codontable",
+          "2"
+        ]
+      }
+    },
+    "table3": {
+      "pep": "pep.fasta",
+      "about": "Genes built with NCBI genetic code 3, using its reassigned codons and a non-ATG start where one exists",
+      "extra_variants": {
+        "fasta_ct3": [
+          "-output",
+          "fasta",
+          "-codontable",
+          "3"
+        ],
+        "fasta_nogap_ct3": [
+          "-output",
+          "fasta",
+          "-nogap",
+          "-codontable",
+          "3"
+        ],
+        "fasta_nomismatch_ct3": [
+          "-output",
+          "fasta",
+          "-nomismatch",
+          "-codontable",
+          "3"
+        ]
+      }
+    },
+    "table4": {
+      "pep": "pep.fasta",
+      "about": "Genes built with NCBI genetic code 4, using its reassigned codons and a non-ATG start where one exists",
+      "extra_variants": {
+        "fasta_ct4": [
+          "-output",
+          "fasta",
+          "-codontable",
+          "4"
+        ],
+        "fasta_nogap_ct4": [
+          "-output",
+          "fasta",
+          "-nogap",
+          "-codontable",
+          "4"
+        ],
+        "fasta_nomismatch_ct4": [
+          "-output",
+          "fasta",
+          "-nomismatch",
+          "-codontable",
+          "4"
+        ]
+      }
+    },
+    "table5": {
+      "pep": "pep.fasta",
+      "about": "Genes built with NCBI genetic code 5, using its reassigned codons and a non-ATG start where one exists",
+      "extra_variants": {
+        "fasta_ct5": [
+          "-output",
+          "fasta",
+          "-codontable",
+          "5"
+        ],
+        "fasta_nogap_ct5": [
+          "-output",
+          "fasta",
+          "-nogap",
+          "-codontable",
+          "5"
+        ],
+        "fasta_nomismatch_ct5": [
+          "-output",
+          "fasta",
+          "-nomismatch",
+          "-codontable",
+          "5"
+        ]
+      }
+    },
+    "table6": {
+      "pep": "pep.fasta",
+      "about": "Genes built with NCBI genetic code 6, using its reassigned codons and a non-ATG start where one exists",
+      "extra_variants": {
+        "fasta_ct6": [
+          "-output",
+          "fasta",
+          "-codontable",
+          "6"
+        ],
+        "fasta_nogap_ct6": [
+          "-output",
+          "fasta",
+          "-nogap",
+          "-codontable",
+          "6"
+        ],
+        "fasta_nomismatch_ct6": [
+          "-output",
+          "fasta",
+          "-nomismatch",
+          "-codontable",
+          "6"
+        ]
+      }
+    },
+    "table9": {
+      "pep": "pep.fasta",
+      "about": "Genes built with NCBI genetic code 9, using its reassigned codons and a non-ATG start where one exists",
+      "extra_variants": {
+        "fasta_ct9": [
+          "-output",
+          "fasta",
+          "-codontable",
+          "9"
+        ],
+        "fasta_nogap_ct9": [
+          "-output",
+          "fasta",
+          "-nogap",
+          "-codontable",
+          "9"
+        ],
+        "fasta_nomismatch_ct9": [
+          "-output",
+          "fasta",
+          "-nomismatch",
+          "-codontable",
+          "9"
+        ]
+      }
+    },
+    "table10": {
+      "pep": "pep.fasta",
+      "about": "Genes built with NCBI genetic code 10, using its reassigned codons and a non-ATG start where one exists",
+      "extra_variants": {
+        "fasta_ct10": [
+          "-output",
+          "fasta",
+          "-codontable",
+          "10"
+        ],
+        "fasta_nogap_ct10": [
+          "-output",
+          "fasta",
+          "-nogap",
+          "-codontable",
+          "10"
+        ],
+        "fasta_nomismatch_ct10": [
+          "-output",
+          "fasta",
+          "-nomismatch",
+          "-codontable",
+          "10"
+        ]
+      }
+    },
+    "table11": {
+      "pep": "pep.fasta",
+      "about": "Genes built with NCBI genetic code 11, using its reassigned codons and a non-ATG start where one exists",
+      "extra_variants": {
+        "fasta_ct11": [
+          "-output",
+          "fasta",
+          "-codontable",
+          "11"
+        ],
+        "fasta_nogap_ct11": [
+          "-output",
+          "fasta",
+          "-nogap",
+          "-codontable",
+          "11"
+        ],
+        "fasta_nomismatch_ct11": [
+          "-output",
+          "fasta",
+          "-nomismatch",
+          "-codontable",
+          "11"
+        ]
+      }
+    },
+    "table12": {
+      "pep": "pep.fasta",
+      "about": "Genes built with NCBI genetic code 12, using its reassigned codons and a non-ATG start where one exists",
+      "extra_variants": {
+        "fasta_ct12": [
+          "-output",
+          "fasta",
+          "-codontable",
+          "12"
+        ],
+        "fasta_nogap_ct12": [
+          "-output",
+          "fasta",
+          "-nogap",
+          "-codontable",
+          "12"
+        ],
+        "fasta_nomismatch_ct12": [
+          "-output",
+          "fasta",
+          "-nomismatch",
+          "-codontable",
+          "12"
+        ]
+      }
+    },
+    "table13": {
+      "pep": "pep.fasta",
+      "about": "Genes built with NCBI genetic code 13, using its reassigned codons and a non-ATG start where one exists",
+      "extra_variants": {
+        "fasta_ct13": [
+          "-output",
+          "fasta",
+          "-codontable",
+          "13"
+        ],
+        "fasta_nogap_ct13": [
+          "-output",
+          "fasta",
+          "-nogap",
+          "-codontable",
+          "13"
+        ],
+        "fasta_nomismatch_ct13": [
+          "-output",
+          "fasta",
+          "-nomismatch",
+          "-codontable",
+          "13"
+        ]
+      }
+    },
+    "table14": {
+      "pep": "pep.fasta",
+      "about": "Genes built with NCBI genetic code 14, using its reassigned codons and a non-ATG start where one exists",
+      "extra_variants": {
+        "fasta_ct14": [
+          "-output",
+          "fasta",
+          "-codontable",
+          "14"
+        ],
+        "fasta_nogap_ct14": [
+          "-output",
+          "fasta",
+          "-nogap",
+          "-codontable",
+          "14"
+        ],
+        "fasta_nomismatch_ct14": [
+          "-output",
+          "fasta",
+          "-nomismatch",
+          "-codontable",
+          "14"
+        ]
+      }
+    },
+    "table15": {
+      "pep": "pep.fasta",
+      "about": "Genes built with NCBI genetic code 15, using its reassigned codons and a non-ATG start where one exists",
+      "extra_variants": {
+        "fasta_ct15": [
+          "-output",
+          "fasta",
+          "-codontable",
+          "15"
+        ],
+        "fasta_nogap_ct15": [
+          "-output",
+          "fasta",
+          "-nogap",
+          "-codontable",
+          "15"
+        ],
+        "fasta_nomismatch_ct15": [
+          "-output",
+          "fasta",
+          "-nomismatch",
+          "-codontable",
+          "15"
+        ]
+      }
+    },
+    "table16": {
+      "pep": "pep.fasta",
+      "about": "Genes built with NCBI genetic code 16, using its reassigned codons and a non-ATG start where one exists",
+      "extra_variants": {
+        "fasta_ct16": [
+          "-output",
+          "fasta",
+          "-codontable",
+          "16"
+        ],
+        "fasta_nogap_ct16": [
+          "-output",
+          "fasta",
+          "-nogap",
+          "-codontable",
+          "16"
+        ],
+        "fasta_nomismatch_ct16": [
+          "-output",
+          "fasta",
+          "-nomismatch",
+          "-codontable",
+          "16"
+        ]
+      }
+    },
+    "table21": {
+      "pep": "pep.fasta",
+      "about": "Genes built with NCBI genetic code 21, using its reassigned codons and a non-ATG start where one exists",
+      "extra_variants": {
+        "fasta_ct21": [
+          "-output",
+          "fasta",
+          "-codontable",
+          "21"
+        ],
+        "fasta_nogap_ct21": [
+          "-output",
+          "fasta",
+          "-nogap",
+          "-codontable",
+          "21"
+        ],
+        "fasta_nomismatch_ct21": [
+          "-output",
+          "fasta",
+          "-nomismatch",
+          "-codontable",
+          "21"
+        ]
+      }
+    },
+    "table22": {
+      "pep": "pep.fasta",
+      "about": "Genes built with NCBI genetic code 22, using its reassigned codons and a non-ATG start where one exists",
+      "extra_variants": {
+        "fasta_ct22": [
+          "-output",
+          "fasta",
+          "-codontable",
+          "22"
+        ],
+        "fasta_nogap_ct22": [
+          "-output",
+          "fasta",
+          "-nogap",
+          "-codontable",
+          "22"
+        ],
+        "fasta_nomismatch_ct22": [
+          "-output",
+          "fasta",
+          "-nomismatch",
+          "-codontable",
+          "22"
+        ]
+      }
+    },
+    "table23": {
+      "pep": "pep.fasta",
+      "about": "Genes built with NCBI genetic code 23, using its reassigned codons and a non-ATG start where one exists",
+      "extra_variants": {
+        "fasta_ct23": [
+          "-output",
+          "fasta",
+          "-codontable",
+          "23"
+        ],
+        "fasta_nogap_ct23": [
+          "-output",
+          "fasta",
+          "-nogap",
+          "-codontable",
+          "23"
+        ],
+        "fasta_nomismatch_ct23": [
+          "-output",
+          "fasta",
+          "-nomismatch",
+          "-codontable",
+          "23"
+        ]
+      }
+    }
   }
 }

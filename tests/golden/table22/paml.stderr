@@ -1,0 +1,7 @@
+#------------------------------------------------------------------------#
+#  Input files:  pep.fasta nuc.fasta
+#  WARNING: s0 pepAlnPos 7: L does not correspond to TAG
+#  WARNING: s1 pepAlnPos 8: L does not correspond to TAG
+#  WARNING: s1 pepAlnPos 23: L does not correspond to TAG
+#------------------------------------------------------------------------#
+

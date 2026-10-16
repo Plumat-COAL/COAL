@@ -1,0 +1,6 @@
+#------------------------------------------------------------------------#
+#  Input files:  pep.fasta nuc.fasta
+#  WARNING: s0 pepAlnPos 4: C does not correspond to TGA
+#  WARNING: s1 pepAlnPos 5: C does not correspond to TGA
+#------------------------------------------------------------------------#
+

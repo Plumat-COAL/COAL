@@ -1,0 +1,7 @@
+#------------------------------------------------------------------------#
+#  Input files:  pep.fasta nuc.fasta
+#  Codontable 10 is used
+#  WARNING: s0 pepAlnPos 4: C does not correspond to TGA
+#  WARNING: s1 pepAlnPos 5: C does not correspond to TGA
+#------------------------------------------------------------------------#
+

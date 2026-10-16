@@ -1,0 +1,18 @@
+#------------------------------------------------------------------------#
+#  Input files:  pep.fasta nuc.fasta
+#  WARNING: s0 pepAlnPos 1: M does not correspond to ATA
+#  WARNING: s0 pepAlnPos 4: W does not correspond to TGA
+#  WARNING: s0 pepAlnPos 6: T does not correspond to CTG
+#  WARNING: s0 pepAlnPos 7: T does not correspond to CTT
+#  WARNING: s0 pepAlnPos 10: T does not correspond to CTC
+#  WARNING: s0 pepAlnPos 13: T does not correspond to CTA
+#  WARNING: s0 pepAlnPos 24: T does not correspond to CTA
+#  WARNING: s1 pepAlnPos 2: T does not correspond to CTC
+#  WARNING: s1 pepAlnPos 5: W does not correspond to TGA
+#  WARNING: s1 pepAlnPos 6: T does not correspond to CTA
+#  WARNING: s1 pepAlnPos 8: T does not correspond to CTT
+#  WARNING: s1 pepAlnPos 11: T does not correspond to CTC
+#  WARNING: s1 pepAlnPos 14: T does not correspond to CTA
+#  WARNING: s1 pepAlnPos 16: M does not correspond to ATA
+#------------------------------------------------------------------------#
+

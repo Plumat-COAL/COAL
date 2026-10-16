@@ -20,8 +20,33 @@ Recorded from the golden files, not assumed. COAL must match these, or document 
 | inframe_stop | `*` in protein maps to the stop codon. `-nogap` removes the stop column. |
 | terminal_stop, utr | UTRs and trailing stop codon trimmed; only the aligned region is output. |
 | frameshift | `2` → two bases plus one `-` (`GT-`). |
+| frameshift_mixed | Digits 1/2/4/5 in one column: the column is widened to 6 for every sequence (`4` → 4 bases + `--`; ordinary codon → codon + `---`). |
+| utr, utr_frames | Leftmost place in the DNA, in any frame, where the whole protein fits; extra sequence before and after is dropped. Case is kept. |
+| alt_start | The first Met may be any start codon of the genetic code (table 1: TTG/CTG/ATG). GTG is not a table-1 start, so PAL2NAL uses its fallback, which accepts A/C/G-TG for the first Met. No warning. |
+| long_mismatch | One wrong codon in 30 → fallback (10-residue chunks) succeeds, output produced, `WARNING ... V does not correspond to GAT` on stderr. Very short sequences (< 20 residues) with a mismatch fail instead (see codon_mismatch). |
+| two_nuc_files | DNA can be split over several files; all non-letters in the DNA are removed. |
+| table2 … table23 | `-codontable N` for each NCBI code PAL2NAL supports. With the default table these inputs mostly fail or warn. |
 | ambiguous_bases | `X`↔`NNN` and IUPAC `R` in codons accepted and copied. |
 | invalid_chars | `@` warned and treated as `X`. **Output for s1 is `ATGAAAGTTZZZ` — the final codon `CTG` (L) is lost with no warning.** Looks like a PAL2NAL bug; COAL should probably error instead (deliberate difference, to be decided). |
 | codontable2 | Default table → `ERROR: inconsistency`; `-codontable 2` → accepted. |
 
+When `-nomismatch` (or `-nogap`) removes every column, PAL2NAL prints an empty line for each sequence; COAL does the same.
+
 **Exit code is always 0, even on ERROR.** Errors are only visible as an empty stdout plus `ERROR` on stderr.
+
+## Deliberate differences (COAL ≠ PAL2NAL, by design)
+
+| Case | PAL2NAL v14 | COAL |
+|---|---|---|
+| invalid_chars | Drops a codon silently | Error, exit 1 |
+| table10 (`-codontable 10`) | TGA treated as stop → mismatch warnings; `-nomismatch` drops those columns | TGA = Cys (NCBI). Same output, no warnings |
+| table11, table13 | ATA (an NCBI start codon) not accepted as the first Met → warning | Accepted, no warning |
+| `.` in protein alignment | Row gets shorter (misaligned output) | Treated as a gap |
+| Ambiguous DNA bases | Fixed list of accepted combinations | Accepted if every possible codon gives the right amino acid |
+
+## Random differential testing
+
+Besides the fixtures, about 1,300 randomly generated inputs were compared during development (tables other than
+10/11/13, 1–4 sequences of 5–120 codons, gaps, substitutions, wrong codons, frameshift digits 1/2/4/5, extra
+sequence before and after the gene, mixed case, `-nogap`/`-nomismatch`). On the final code, 490 of them had **no
+differences**: COAL's output was identical, or both tools rejected the input.

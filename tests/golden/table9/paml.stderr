@@ -1,0 +1,15 @@
+#------------------------------------------------------------------------#
+#  Input files:  pep.fasta nuc.fasta
+#  WARNING: s0 pepAlnPos 4: W does not correspond to TGA
+#  WARNING: s0 pepAlnPos 7: N does not correspond to AAA
+#  WARNING: s0 pepAlnPos 10: S does not correspond to AGA
+#  WARNING: s0 pepAlnPos 13: S does not correspond to AGG
+#  WARNING: s0 pepAlnPos 18: W does not correspond to TGA
+#  WARNING: s1 pepAlnPos 5: W does not correspond to TGA
+#  WARNING: s1 pepAlnPos 8: N does not correspond to AAA
+#  WARNING: s1 pepAlnPos 11: S does not correspond to AGA
+#  WARNING: s1 pepAlnPos 14: S does not correspond to AGG
+#  WARNING: s1 pepAlnPos 18: W does not correspond to TGA
+#  WARNING: s1 pepAlnPos 19: W does not correspond to TGA
+#------------------------------------------------------------------------#
+
