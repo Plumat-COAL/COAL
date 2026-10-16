@@ -1,0 +1,5 @@
+
+ERROR: number of input seqs differ (aa: 3;  nuc: 2)!!
+
+   aa  's1 s2 s3'
+   nuc 's1 s2'

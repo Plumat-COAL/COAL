@@ -1,0 +1,7 @@
+# Default: normalise text files to LF in the repo.
+* text=auto
+
+# Test inputs and expected outputs must be byte-identical on every OS.
+tests/fixtures/** text eol=lf
+tests/golden/** text eol=lf
+tests/cases.json text eol=lf

@@ -1,0 +1,32 @@
+{
+  "_comment": "Differential-test manifest. Each case is a folder in tests/fixtures/ with a protein alignment and nuc.fasta. Every case runs with all 'variants'; 'extra_variants' add case-specific option sets. Expected outputs come from PAL2NAL v14 via scripts/make_golden.py.",
+  "variants": {
+    "fasta": ["-output", "fasta"],
+    "clustal": ["-output", "clustal"],
+    "paml": ["-output", "paml"],
+    "codon": ["-output", "codon"],
+    "fasta_nogap": ["-output", "fasta", "-nogap"],
+    "fasta_nomismatch": ["-output", "fasta", "-nomismatch"]
+  },
+  "cases": {
+    "clean":                  {"pep": "pep.fasta", "about": "Matching IDs, one gap, synonymous differences (GTT/GTC, GCT/GCA)"},
+    "clustal_input":          {"pep": "pep.aln",   "about": "Same as clean but protein alignment in CLUSTAL format"},
+    "multiline_fasta":        {"pep": "pep.fasta", "about": "Wrapped sequences, header descriptions, spaces inside DNA"},
+    "lowercase":              {"pep": "pep.fasta", "about": "Lower-case protein and DNA"},
+    "unordered_ids":          {"pep": "pep.fasta", "about": "Same IDs, DNA in a different order"},
+    "id_mismatch_same_order": {"pep": "pep.fasta", "about": "Different IDs, same order (positional fallback)"},
+    "id_mismatch_count":      {"pep": "pep.fasta", "about": "3 proteins, 2 DNA sequences"},
+    "codon_mismatch":         {"pep": "pep.fasta", "about": "s2 codon GAT (D) where alignment says V"},
+    "inframe_stop":           {"pep": "pep.fasta", "about": "In-frame TAA shown as * in protein"},
+    "terminal_stop":          {"pep": "pep.fasta", "about": "DNA has trailing stop codon absent from protein"},
+    "utr":                    {"pep": "pep.fasta", "about": "s1 has 5' UTR and 3' stop + polyA"},
+    "frameshift":             {"pep": "pep.fasta", "about": "s2 has a '2' (one-base deletion) in the protein alignment"},
+    "ambiguous_bases":        {"pep": "pep.fasta", "about": "NNN under X, and an IUPAC R in a codon"},
+    "rna":                    {"pep": "pep.fasta", "about": "U instead of T"},
+    "invalid_chars":          {"pep": "pep.fasta", "about": "'@' in protein, 'ZZZ' in DNA"},
+    "empty_protein":          {"pep": "pep.fasta", "about": "Empty protein alignment file"},
+    "codontable2":            {"pep": "pep.fasta", "about": "Vertebrate mito code: TGA=W, ATA=M",
+                               "extra_variants": {"fasta_ct2": ["-output", "fasta", "-codontable", "2"],
+                                                  "fasta_nomismatch_ct2": ["-output", "fasta", "-nomismatch", "-codontable", "2"]}}
+  }
+}
