@@ -8,6 +8,14 @@ _BASES = "TCAG"
 _AA1 = "FFLLSSSSYY**CC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG"
 STANDARD = {a + b + c: _AA1[i] for i, (a, b, c) in enumerate(product(_BASES, repeat=3))}
 
+# Unambiguous codons in any case, T or U -> amino acid (1000 entries).
+_VARIANTS = {"A": "Aa", "C": "Cc", "G": "Gg", "T": "TtUu"}
+FAST_CODE = {
+    "".join(v): aa
+    for codon, aa in STANDARD.items()
+    for v in product(*(_VARIANTS[b] for b in codon))
+}
+
 IUPAC = {
     "A": "A", "C": "C", "G": "G", "T": "T",
     "R": "AG", "Y": "CT", "S": "CG", "W": "AT", "K": "GT", "M": "AC",
