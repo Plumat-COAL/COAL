@@ -1,0 +1,29 @@
+# PAL2NAL reference distribution: no licence found, so never commit it.
+# Fetch locally with: python scripts/fetch_pal2nal.py
+PAL2NAL/
+*.tar.gz
+
+# Run outputs
+out/
+ref_*
+*.log
+
+# Large / generated data (add small fixtures under tests/fixtures/ explicitly)
+data/
+*.fa.gz
+*.fasta.gz
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# Editors / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
