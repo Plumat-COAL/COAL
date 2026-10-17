@@ -17,6 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src"
 TIMEOUT = 60
+WINDOWS = os.name == "nt"  # R2-D1
 
 PEP = ">s1\nMKV-AL\n>s2\nMKVSAL\n"
 NUC = ">s1\nATGAAAGTTGCTCTG\n>s2\nATGAAGGTCTCAGCACTA\n"
@@ -49,13 +50,17 @@ class TestEngA_OutputPath(TempDirCase):
         target = self.d / "target.fa"
         target.write_text("old\n")
         link = self.d / "link.fa"
-        link.symlink_to(target)
+        try:
+            link.symlink_to(target)
+        except (OSError, NotImplementedError):  # R2-D1
+            self.skipTest("cannot create symlinks here")
         r = coal(["p.fa", "n.fa", "-o", "link.fa"], self.d)
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertTrue(link.is_symlink())
         self.assertEqual(target.read_text(), EXPECTED)
         self.assertEqual(self.leftovers(), [])
 
+    @unittest.skipIf(WINDOWS, "R2-D1: no POSIX permission bits / umask on Windows")
     def test_new_file_mode_follows_umask(self):
         old = os.umask(0o022)
         try:
@@ -84,6 +89,7 @@ class TestEngA_OutputPath(TempDirCase):
 
 
 # ---------------------------------------------------------------- ENG-b
+@unittest.skipUnless(os.path.exists("/dev/stdin"), "R2-D1: no /dev/stdin (Windows)")
 class TestEngB_StreamInputs(TempDirCase):
     def test_protein_from_pipe(self):
         r = coal(["/dev/stdin", "n.fa"], self.d, stdin=PEP)
@@ -217,6 +223,7 @@ class TestEngF_Interrupts(TempDirCase):
                 p.wait()
         return p.returncode, err
 
+    @unittest.skipIf(WINDOWS, "R2-D1: Windows has no SIGTERM handler (send_signal = TerminateProcess)")
     def test_sigterm_cleans_up(self):
         import signal
         p = self.start()
@@ -225,6 +232,7 @@ class TestEngF_Interrupts(TempDirCase):
         self.assertNotIn("Traceback", err)
         self.assertEqual(list(self.tmpdir.iterdir()), [])
 
+    @unittest.skipIf(WINDOWS, "R2-D1: send_signal(SIGINT) is not supported on Windows")
     def test_sigint_message_and_130(self):
         import signal
         p = self.start()
@@ -252,6 +260,36 @@ class TestEngF_Interrupts(TempDirCase):
         self.assertEqual(err, "")
         self.assertEqual(p.returncode, 141)
         self.assertEqual(list(self.tmpdir.iterdir()), [])
+
+
+class TestR2D1_WindowsClosedStdout(TempDirCase):  # R2-D1
+    class _ClosedPipe:
+        def __init__(self, err):
+            self.err = err
+
+        def write(self, s):
+            raise self.err
+
+        def flush(self):
+            pass
+
+    def run_to(self, err, windows):
+        from unittest import mock
+        sys.path.insert(0, str(SRC))
+        from coal import pipeline
+        with mock.patch.object(pipeline, "_WINDOWS", windows), mock.patch.object(sys, "stdout", self._ClosedPipe(err)):
+            pipeline.run(str(self.d / "p.fa"), [str(self.d / "n.fa")])
+
+    def test_einval_on_windows_is_a_broken_pipe(self):
+        import errno
+        with self.assertRaises(BrokenPipeError):
+            self.run_to(OSError(errno.EINVAL, "Invalid argument"), True)
+
+    def test_einval_elsewhere_is_a_real_error(self):
+        import errno
+        with self.assertRaises(OSError) as cm:
+            self.run_to(OSError(errno.EINVAL, "Invalid argument"), False)
+        self.assertNotIsInstance(cm.exception, BrokenPipeError)
 
 
 # ---------------------------------------------------------------- ENG-g

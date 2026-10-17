@@ -47,7 +47,7 @@ class TestInstalledWheel(unittest.TestCase):
         whl = glob.glob(os.path.join(t, "dist", "*.whl"))[0]
         venv = os.path.join(t, "venv")
         subprocess.run([sys.executable, "-m", "venv", "--without-pip", venv], check=True, timeout=120)
-        py = os.path.join(venv, "Scripts" if os.name == "nt" else "bin", "python")
+        py = os.path.join(venv, "Scripts", "python.exe") if os.name == "nt" else os.path.join(venv, "bin", "python")  # R2-D1
         r = subprocess.run([sys.executable, "-m", "pip", "--python", py, "install", "--no-deps", "--no-index", whl],
                            capture_output=True, text=True, encoding="utf-8", timeout=300, env=env)
         self.assertEqual(r.returncode, 0, r.stdout[-2000:] + r.stderr[-2000:])

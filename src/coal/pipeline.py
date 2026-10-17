@@ -15,6 +15,7 @@ destination when everything succeeded, so an error never leaves partial output
 """
 from __future__ import annotations
 
+import errno
 import os
 import re
 from array import array
@@ -38,6 +39,7 @@ BATCH_NT = 2_000_000      # target DNA per work batch (keeps IPC overhead low)
 # core needs for a few million nucleotides. So each extra worker must have at
 # least this much DNA to do, otherwise COAL runs in a single process.
 MIN_NT_PER_JOB = 4_000_000
+_WINDOWS = os.name == "nt"  # CHANGED(R2-D1): see the broken-pipe handling in _run
 
 
 def effective_jobs(requested: int, total_nt: int, min_nt_per_job: int | None = None) -> int:
@@ -251,8 +253,16 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                     out = sys.stdout
                     if hasattr(out, "reconfigure"):
                         out.reconfigure(newline="\n")
-                    shutil.copyfileobj(fh, out, 1 << 20)
-                    out.flush()
+                    try:
+                        shutil.copyfileobj(fh, out, 1 << 20)
+                        out.flush()
+                    except OSError as e:
+                        # CHANGED(R2-D1): was only BrokenPipeError quiet; now, on Windows, EINVAL from writing
+                        # to a closed stdout pipe (how Windows often reports it) is a quiet exit 141 too.
+                        # See overnight/integration/CHANGES.md
+                        if _WINDOWS and not isinstance(e, BrokenPipeError) and e.errno == errno.EINVAL:
+                            raise BrokenPipeError(errno.EPIPE, "stdout closed") from None
+                        raise
             return 0
         finally:
             for f in (tmp, stage):
