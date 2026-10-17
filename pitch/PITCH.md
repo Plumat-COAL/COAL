@@ -55,10 +55,10 @@ was quoted; now about 110 spoken words, with the full claim kept below as refere
 - "We built this in a weekend with Claude. The reason you can trust it is that the real PAL2NAL checked every
   change." <!-- REV-2: how AI was used; QA.md Q6 has the detail -->
 - "Speed: 100 long genes, PAL2NAL 24 seconds, COAL 0.2: over a hundred times faster. And a C++ core, which we
-  measured at four to six times faster again." (Python numbers: benchmarks/results/bench_windows_20261016_2356,
+  measured at three to six times faster again." (Python numbers: benchmarks/results/bench_windows_20261016_2356,
   Windows, before the weekend's fixes; C++ vs Python: benchmarks/results/cpp_vs_python_linux_4084d1f.md, merged
-  code, 2-core Linux VM, 4.0-6.3x. Re-run run_bench.py on the presenting laptop if time allows.)
-- "Pure Python, no dependencies, MIT licence." Add "CI passes on Windows, macOS and Linux" only if the GitHub
+  code, 2-core Linux VM, 3.1-6.3x. Re-run run_bench.py on the presenting laptop if time allows.)
+- "A Python engine with no required dependencies, an optional C++ engine for the biggest jobs, MIT licence." Add "CI passes on Windows, macOS and Linux" only if the GitHub
   Actions run is green when you present.
 
 Reference, not read aloud (for questions; guarded by tests_app/test_docs_numbers.py):

@@ -2,9 +2,6 @@
 
 ## 0.4.0
 
-<!-- CHANGED(MRG-8): new file (scripts/release_notes.py takes the release notes from this section). -->
-<!-- CHANGED(SHIP-6): was the internal merge log ("Merged the extras and C++ branch ..."); now written for users -->
-
 COAL turns a protein alignment plus the unaligned coding DNA into a codon alignment, like PAL2NAL v14, with the same
 output apart from a short list of documented, deliberate differences (see the README).
 

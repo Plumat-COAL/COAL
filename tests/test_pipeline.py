@@ -39,7 +39,7 @@ class TestEffectiveJobs(unittest.TestCase):
         self.assertEqual(pipeline.effective_jobs(8, 1_000_000), 1)
 
     def test_large_inputs_scale_up_to_the_limit(self):
-        cores = os.cpu_count() or 1
+        cores = getattr(os, "process_cpu_count", os.cpu_count)() or 1   # the cores this process may use
         self.assertEqual(pipeline.effective_jobs(0, 10**12), cores)
         self.assertEqual(pipeline.effective_jobs(3, 10**12), 3)
         self.assertEqual(pipeline.effective_jobs(0, 3 * pipeline.MIN_NT_PER_JOB), min(3, cores))
