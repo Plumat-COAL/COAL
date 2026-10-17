@@ -54,6 +54,12 @@ STUB = textwrap.dedent(r'''
             raise RuntimeError("stub crashed on purpose")
         if mode == "nogui":
             raise ImportError("no module named gradio", name="gradio")
+        if os.environ.get("STUB_REFUSE_PORT") == str(port):  # WINCI-1: what Windows says for an exclusive holder
+            import errno
+            def server_bind():
+                raise PermissionError(errno.EACCES, "An attempt was made to access a socket in a way "
+                                                    "forbidden by its access permissions")
+            server_bind()
         srv = http.server.ThreadingHTTPServer(("127.0.0.1", port), H)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         def close():
@@ -204,17 +210,60 @@ class TestPorts(unittest.TestCase):
                                                              "(protocol/network address/port) is normally permitted")))
         self.assertFalse(cd.is_port_busy_error(OSError(errno.ENOENT, "No such file")))
 
+    def test_windows_access_denied_is_busy(self):  # WINCI-1
+        import errno
+        msg = "An attempt was made to access a socket in a way forbidden by its access permissions"
+        if os.name == "nt":
+            e = PermissionError(errno.EACCES, msg, None, 10013)
+        else:
+            e = PermissionError(errno.EACCES, msg)
+            e.winerror = 10013
+        self.assertTrue(cd.is_port_busy_error(e))
+        self.assertTrue(cd.is_port_busy_error(OSError("[WinError 10013] " + msg)))
+
+        def server_bind():
+            raise PermissionError(errno.EACCES, "Permission denied")
+        try:
+            server_bind()
+        except OSError as e:
+            self.assertTrue(cd.is_port_busy_error(e), "EACCES from a bind")
+
+        def open_settings():
+            raise PermissionError(errno.EACCES, "Permission denied", "settings.json")
+        try:
+            open_settings()
+        except OSError as e:
+            self.assertFalse(cd.is_port_busy_error(e), "EACCES on a file is not a busy port")
+
     def test_real_bind_error_is_detected(self):
+        # WINCI-1: also with SO_REUSEADDR (socketserver's allow_reuse_address), which Windows refuses with 10013
+        for reuse in (False, True):
+            with self.subTest(so_reuseaddr=reuse), socket.socket() as a:
+                a.bind(("127.0.0.1", 0))
+                a.listen(1)
+                with socket.socket() as b:
+                    if reuse:
+                        b.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    try:
+                        b.bind(("127.0.0.1", a.getsockname()[1]))
+                    except OSError as e:
+                        self.assertTrue(cd.is_port_busy_error(e), e)
+                    else:
+                        self.skipTest("OS allowed a second bind")
+
+    @unittest.skipUnless(os.name == "nt", "SO_EXCLUSIVEADDRUSE is Windows-only")
+    def test_exclusive_holder_is_detected(self):  # WINCI-1
         with socket.socket() as a:
+            a.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
             a.bind(("127.0.0.1", 0))
             a.listen(1)
-            with socket.socket() as b:
-                try:
-                    b.bind(("127.0.0.1", a.getsockname()[1]))
-                except OSError as e:
-                    self.assertTrue(cd.is_port_busy_error(e), e)
-                else:
-                    self.skipTest("OS allowed a second bind")
+            for reuse in (False, True):
+                with self.subTest(so_reuseaddr=reuse), socket.socket() as b:
+                    if reuse:
+                        b.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    with self.assertRaises(OSError) as cm:
+                        b.bind(("127.0.0.1", a.getsockname()[1]))
+                    self.assertTrue(cd.is_port_busy_error(cm.exception), cm.exception)
 
 
 class TestLocalServer(Base):
@@ -254,6 +303,18 @@ class TestLocalServer(Base):
             self.assertEqual(http_get(url)[0], 200)
         finally:
             busy.close()
+
+    def test_retries_when_windows_refuses_the_port(self):  # WINCI-1
+        calls = []
+        refused = cd.find_free_port()
+
+        def command(port):
+            calls.append(port)
+            return [sys.executable, self.stub, str(refused if len(calls) == 1 else port)]
+        s = self.server(command=command, start_timeout=30, env={"STUB_REFUSE_PORT": refused})
+        url = s.start()
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(http_get(url)[0], 200)
 
     def test_gives_up_after_three_busy_ports(self):
         busy = socket.socket()

@@ -149,13 +149,35 @@ def find_free_port(host: str = "127.0.0.1") -> int:
         return s.getsockname()[1]
 
 
+# CHANGED(WINCI-1): was: only EADDRINUSE / WinError 10048 counted as "port busy"; now also WinError 10013
+# (WSAEACCES: Windows' answer for a port held with exclusive use or inside a reserved/excluded port range) and
+# EACCES raised by a bind. See overnight/integration/CHANGES.md
 _PORT_BUSY = re.compile(r"empty port|address already in use|only one usage of each socket address|"
-                        r"errno 98|errno 48|winerror 10048", re.I)
+                        r"errno 98|errno 48|winerror 10048|winerror 10013|"
+                        r"access a socket in a way forbidden by its access permissions", re.I)
+_WSAEACCES, _WSAEADDRINUSE = 10013, 10048
+
+
+def _raised_by_bind(e: BaseException) -> bool:
+    """True if a function with 'bind' in its name (socket bind, socketserver's server_bind, uvicorn's
+    bind_socket, ...) is on the traceback: an EACCES there is about the port, not about a file."""
+    tb = e.__traceback__
+    while tb is not None:
+        if "bind" in tb.tb_frame.f_code.co_name.lower():
+            return True
+        tb = tb.tb_next
+    return False
 
 
 def is_port_busy_error(e: BaseException) -> bool:
     import errno
-    if isinstance(e, OSError) and e.errno in (errno.EADDRINUSE, 10048):
+    if not isinstance(e, OSError):
+        return bool(_PORT_BUSY.search(str(e)))
+    if getattr(e, "winerror", None) in (_WSAEACCES, _WSAEADDRINUSE):
+        return True
+    if e.errno in (errno.EADDRINUSE, _WSAEADDRINUSE):
+        return True
+    if e.errno == errno.EACCES and _raised_by_bind(e):
         return True
     return bool(_PORT_BUSY.search(str(e)))
 
