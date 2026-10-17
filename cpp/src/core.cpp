@@ -39,6 +39,7 @@ uint64_t allowed_for(const GeneticCode& code, char aa, int mode) {
 std::vector<Token> tokens(const std::string& row, size_t from, size_t to, int start_mode, int col0,
                           const GeneticCode& code) {
     std::vector<Token> toks;
+    toks.reserve(to - from);
     bool seen_specific = false;
     for (size_t i = from; i < to; ++i) {
         char ch = row[i];
@@ -276,6 +277,25 @@ std::string expand(const std::string& row, const std::string& dna, const std::ve
     for (int w : widths) total += w;
     out.reserve((size_t)total);
     size_t pos = 0;
+    bool plain = std::all_of(widths.begin(), widths.end(), [](int w) { return w == 3; }) &&
+                 std::none_of(row.begin(), row.end(), is_digit);
+    if (plain) {
+        // every column 3 nt: copy runs of residues, '---' per gap
+        size_t i = 0, n = row.size();
+        while (i < n) {
+            if (row[i] == '-') {
+                out.append(3, '-');
+                ++i;
+                continue;
+            }
+            size_t j = i;
+            while (j < n && row[j] != '-') ++j;
+            out.append(dna, pos, 3 * (j - i));
+            pos += 3 * (j - i);
+            i = j;
+        }
+        return out;
+    }
     for (size_t i = 0; i < row.size(); ++i) {
         int w = widths[i];
         char ch = row[i];
