@@ -92,26 +92,6 @@ static std::string unique_suffix() {
     return std::to_string(rd()) + "_" + std::to_string(counter++);
 }
 
-struct TempFile {
-    std::string path;
-    std::fstream f;
-    std::vector<char> buf;
-    explicit TempFile(const std::string& dir, const std::string& prefix) : buf(1 << 20) {
-        fs::path d = dir.empty() ? fs::temp_directory_path() : fs::path(dir);
-        path = (d / (prefix + unique_suffix() + ".tmp")).string();
-        f.rdbuf()->pubsetbuf(buf.data(), (std::streamsize)buf.size());
-        f.open(path, std::ios::in | std::ios::out | std::ios::binary | std::ios::trunc);
-        if (!f) throw InputError("[Errno 2] No such file or directory: " + py_repr(path));
-    }
-    void close() {
-        if (f.is_open()) f.close();
-    }
-    ~TempFile() {
-        close();
-        std::error_code ec;
-        if (!path.empty()) fs::remove(path, ec);
-    }
-};
 
 // ------------------------------------------------------------------ formatting
 
@@ -515,6 +495,7 @@ struct Checkpoint {
     void remove(bool keep_partial = false) {
         std::error_code ec;
         for (auto* p : {&path, &entries, &stage, &prot}) fs::remove(*p, ec);
+        fs::remove(stage + ".grid", ec);
         fs::remove(path + ".tmp", ec);
         if (!keep_partial) fs::remove(partial, ec);
     }
@@ -531,8 +512,8 @@ static void test_pause(int count) {
 // A file written by the pipeline: fresh, or (resume) truncated to a byte length and appended to.
 struct OutFile {
     std::string path;
+    std::vector<char> buf;  // declared before f: f's destructor flushes into it
     std::fstream f;
-    std::vector<char> buf;
     OutFile() : buf(1 << 20) {}
     void open(const std::string& p, long long resume_bytes = -1) {
         path = p;
@@ -703,6 +684,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
             std::error_code ec;
             for (auto* p : {&out_tmp, &stage_path, &prot_path})
                 if (!p->empty()) fs::remove(*p, ec);
+            if (!stage_path.empty()) fs::remove(stage_path + ".grid", ec);
         }
     }};
 
@@ -872,7 +854,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                 OutFile grid;
                 std::fstream* g = &sink.f;
                 if (!identity) {
-                    std::string gpath = ck ? ck->stage + ".grid" : stage_path + ".grid";
+                    std::string gpath = stage_path + ".grid";  // removed by the cleanup on any exit
                     grid.open(gpath);
                     sink.f.seekg(0);
                     for (long long i = 0; i < nout; ++i) {

@@ -111,8 +111,8 @@ def main(argv=None) -> int:
         if args.report:
             try:
                 rec.write(args.report)
-            except OSError as e:
-                print(f"coal: error: could not write the report: {e}", file=sys.stderr)
+            except OSError:
+                print(f"coal: error: could not write the report: {args.report}", file=sys.stderr)
                 rc = rc or 1
         if args.json:
             print(json.dumps(rec.to_dict(), indent=1))

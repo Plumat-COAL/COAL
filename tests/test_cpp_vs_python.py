@@ -121,7 +121,7 @@ def make_case(rng: random.Random):
     pep = "".join(f">{ids[i]}\n{rows[i]}\n" for i in range(nseq))
     nuc = "".join(f">{dna_ids[i]} desc\n{dnas[i]}\n" for i in order)
     if rng.random() < 0.01:
-        nuc = nuc.split("\n", 2)[-1] if nseq > 1 else nuc + f">extra\nATG\n"
+        nuc = nuc.split("\n", 2)[-1] if nseq > 1 else nuc + ">extra\nATG\n"
     table = gene_table if rng.random() < 0.85 else 1
     opts = ["-output", rng.choice(FORMATS)]
     if table != 1 or rng.random() < 0.2:

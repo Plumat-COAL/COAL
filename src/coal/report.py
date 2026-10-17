@@ -334,11 +334,19 @@ class RunReport:
         return d
 
     def write(self, path: str):
+        """Write atomically (temp file + rename); never leaves the temp file behind."""
         tmp = f"{path}.tmp{os.getpid()}"
-        with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
-            json.dump(self.to_dict(), fh, indent=1)
-            fh.write("\n")
-        os.replace(tmp, path)
+        try:
+            with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
+                json.dump(self.to_dict(), fh, indent=1)
+                fh.write("\n")
+            os.replace(tmp, path)
+        except OSError:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
 
 
 def genetic_code_fits(pep, nucs, positions, dna_index) -> dict[int, int]:

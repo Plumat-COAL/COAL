@@ -1,6 +1,7 @@
 #include "report.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 
 namespace coal {
