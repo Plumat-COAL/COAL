@@ -3,18 +3,26 @@
 ## 0.4.0
 
 <!-- CHANGED(MRG-8): new file (scripts/release_notes.py takes the release notes from this section). -->
+<!-- CHANGED(SHIP-6): was the internal merge log ("Merged the extras and C++ branch ..."); now written for users -->
 
-- Merged the extras and C++ branch (overnight/core) into the reviewed engine:
-  - `--report FILE.json` / `--json`: the run report (schema `coal.report/1`) written by the engine itself, with the
-    same per-gene statuses, messages, genetic-code suggestion and methods sentence as the GUI's report;
-    `coal: summary:` lines at the end of a run with problems.
-  - `--keep-going` (skip genes that cannot be converted, exit 2), `--max-warnings N`, `--progress`, `--resume`
-    (checkpoints; resumed output byte-identical).
-  - Pairing by normalised IDs (version suffix, case, `sp|…|` fields) where PAL2NAL's file order would give a protein
-    the DNA of another gene (a documented deliberate difference); unchanged where the order is right.
-  - A new reference case, `frameshift_codon_line` (285 stored PAL2NAL checks).
-  - The C++ engine (`cpp/`, CMake) and its tests; it is being brought up to the Python engine's behaviour.
-- Version 0.4.0.
+COAL turns a protein alignment plus the unaligned coding DNA into a codon alignment, like PAL2NAL v14, with the same
+output apart from a short list of documented, deliberate differences (see the README).
+
+- **Windows app:** an installer (or portable zip) with a local GUI: a plain-language health check for every gene, an
+  alignment view that marks where a gene breaks, one-click re-run with a suggested genetic code, and a ready-to-paste
+  methods sentence. Your data stays on your computer.
+- **All four PAL2NAL output formats** (`-output fasta|clustal|paml|codon`), `-blockonly`, and a drop-in `pal2nal`
+  command that accepts an unchanged PAL2NAL command line.
+- **Run report** (`--report FILE.json` / `--json`) with each gene's status, the genetic-code suggestion and the methods
+  sentence; `--keep-going` writes every other gene when one can't be aligned (exit 2); `--strict` refuses
+  probably-wrong data; `--max-warnings`, `--progress` and `--resume` for very large runs.
+- **Safer pairing:** IDs that match only after removing a version suffix, case or `sp|…|` fields are paired by ID,
+  and COAL says so.
+- **AI agents:** an MCP server with two tools, `codon_align` and `explain_report`.
+- **C++ engine** (`coal-cpp`, built from source with CMake): same options and byte-identical output, 3-6x faster
+  than the Python engine in our measurements.
+- **Tested:** 285 stored checks against PAL2NAL v14's own output and 20,000 random comparisons with the real PAL2NAL
+  v14, with 0 unexplained differences.
 
 ## 0.3.0
 

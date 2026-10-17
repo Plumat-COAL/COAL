@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import sys
 import tempfile
@@ -41,7 +42,11 @@ def build() -> dict:
             continue
         rep[k] = core.strip_folders(rep[k], names)  # CHANGED(SHIP-2): was replace(_q(full)), missing shlex quoting
         if k == "command_line":
-            rep[k] = rep[k].replace(core._q(os.path.join(t, "")), "").replace(os.path.join(t, ""), "")
+            # CHANGED(SHIP-2): was a text replace of the run folder, which left Windows' quotes around paths that are
+            # not inputs or outputs (--report). The engine writes this field with shlex.quote on every OS, so split
+            # it, drop the run folder from each argument and quote it again.
+            pre = os.path.join(t, "")
+            rep[k] = " ".join(shlex.quote(a[len(pre):] if a.startswith(pre) else a) for a in shlex.split(rep[k]))
     rep["coal_version"] = "demo"
     # CHANGED(MRG-10): was kept; the merged engine now writes its own methods_text naming "COAL v0.4.0", which
     # contradicts coal_version "demo" and overrides the app's methods_text (APP-15, FIN-C11), so the sample drops it

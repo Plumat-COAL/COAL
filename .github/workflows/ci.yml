@@ -177,7 +177,8 @@ jobs:
     # repository root, so this job never built or tested coal-cpp. Now it builds it on all three systems with
     # warnings as errors and runs every C++ test (goldens with COAL_IMPL=cpp, C++ vs Python, CLI, readers, tables,
     # thread pool); a skipped test fails the job, except tests.test_cpp_cli's live comparison with the Python CLI, which
-    # depends on argparse's exact messages and runs only on older 3.10/3.11 builds (it is run by hand there).
+    # depends on argparse's exact messages and runs only on older 3.10/3.11 builds (it is run by hand there), and the
+    # platform skips (Linux-only peak-memory test, POSIX signals/pipes on Windows). "not built" skips still fail.
     name: C++ engine on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
@@ -218,6 +219,6 @@ jobs:
           python -m unittest -v tests.test_differential tests.test_cpp_vs_python tests.test_cpp_cli \
             tests.test_cpp_readers tests.test_cpp_tables tests.test_cpp_pool 2>&1 | tee cpp_tests.txt
           test "${PIPESTATUS[0]}" -eq 0
-          if grep -iE "\.\.\. skipped" cpp_tests.txt | grep -viq "live comparison needs Python"; then
+          if grep -iE "\.\.\. skipped" cpp_tests.txt | grep -viqE "live comparison needs Python|peak memory read with getrusage|POSIX"; then
             echo "::error::C++ tests were skipped, so the C++ engine was not fully exercised"; exit 1
           fi
