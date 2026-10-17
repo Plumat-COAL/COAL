@@ -8,11 +8,13 @@ See overnight/integration/CHANGES.md
 
 Rules (as src/coal/seqio.py):
 - a UTF-8 BOM is skipped; \\n, \\r\\n and a lone \\r all end a line;
-- the file is CLUSTAL if its first line starts with "CLUSTAL", otherwise FASTA;
+- the file is CLUSTAL if its first non-blank line starts with "CLUSTAL", otherwise FASTA (CHANGED(FZ-1): was the
+  first line);
 - FASTA: blank lines are ignored, the ID is the first word after '>', lines starting with '#' are skipped
   (the engine skips them in DNA files; in a protein file it rejects them, so skipping changes nothing for
   any input the engine accepts); DNA keeps only letters, protein drops whitespace;
-- CLUSTAL: lines that are blank or start with whitespace are skipped; name = first word, data = second word.
+- CLUSTAL: lines that are blank, start with whitespace or '#' (CHANGED(FZ-1)), or start with CLUSTAL are skipped;
+  name = first word, data = second word.
 """
 from __future__ import annotations
 
@@ -37,12 +39,14 @@ def iter_records(path: str, dna: bool = False, ids_only: bool = False):
     neither FASTA nor CLUSTAL (no header at all)."""
     it = _lines(path)
     first = next(it, None)
+    while first is not None and not first.strip():  # CHANGED(FZ-1): leading blank lines
+        first = next(it, None)
     if first is None:
         raise ValueError(f"{path}: not FASTA or CLUSTAL")
     if is_clustal_line(first):
         seqs: dict[str, list[str]] = {}
         for line in it:
-            if not line.strip() or line[0] in " \t":
+            if not line.strip() or line[0] in " \t#" or line.startswith("CLUSTAL"):  # CHANGED(FZ-1): '#' lines
                 continue
             parts = line.split()
             if len(parts) >= 2 or ids_only:

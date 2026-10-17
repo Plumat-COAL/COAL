@@ -36,6 +36,15 @@ def _ascii_lines(fh, path):
         for line in fh:
             lineno += 1
             if not line.isascii():
+                # CHANGED(FZ-2): was an error for any non-ASCII byte; now a header's description (after the ID) may
+                # hold any text, as in PAL2NAL (e.g. ">a Krüppel-like factor"). Non-ASCII IDs and sequence data stay
+                # errors. See overnight/integration/CHANGES.md
+                if line.startswith(">"):
+                    head = line[1:].split(None, 1)
+                    if head and head[0].isascii():
+                        yield ">" + head[0] + "\n"
+                        continue
+                    raise InputFormatError(f"{path}:{lineno}: non-ASCII character in the sequence ID")
                 raise InputFormatError(f"{path}:{lineno}: non-ASCII character")
             yield line
     except UnicodeDecodeError:
@@ -76,12 +85,16 @@ def read_clustal(path: str | Path) -> list[tuple[str, str]]:
     seqs: dict[str, list[str]] = {}
     with _text(path) as fh:  # CHANGED(ENG-h)
         first = next(fh, "")
+        while first and not first.strip():  # CHANGED(FZ-1): leading blank lines (PAL2NAL reads such files as CLUSTAL)
+            first = next(fh, "")
         if not first.startswith("CLUSTAL"):
             raise InputFormatError(f"{path}: not a CLUSTAL file")
         for line in fh:
             line = line.rstrip("\r\n")
             # Skip blank lines and conservation lines (start with whitespace).
-            if not line.strip() or line[0] in " \t":
+            # CHANGED(FZ-1): also lines starting with '#' (PAL2NAL's block-mark lines; was read as a sequence named
+            # '#') and further CLUSTAL header lines, as PAL2NAL. See overnight/integration/CHANGES.md
+            if not line.strip() or line[0] in " \t#" or line.startswith("CLUSTAL"):
                 continue
             parts = line.split()
             if len(parts) < 2:
@@ -128,9 +141,7 @@ def clustal_mask(path: str | Path) -> str:
 
 def read_alignment(path: str | Path) -> list[tuple[str, str]]:
     """Read a protein alignment, auto-detecting CLUSTAL vs FASTA."""
-    with _text(path) as fh:  # CHANGED(ENG-h)
-        head = next(fh, "")[:7]
-    return read_clustal(path) if head == "CLUSTAL" else read_fasta(path)
+    return read_clustal(path) if is_clustal(path) else read_fasta(path)  # CHANGED(FZ-1): same rule as is_clustal
 
 
 def _check_unique(ids: list[str], path) -> None:
@@ -177,8 +188,12 @@ def iter_fasta(path: str | Path):
 
 
 def is_clustal(path: str | Path) -> bool:
+    """True if the first non-blank line starts with CLUSTAL (CHANGED(FZ-1): was the first line)."""
     with _text(path) as fh:  # CHANGED(ENG-h)
-        return next(fh, "").startswith("CLUSTAL")
+        for line in fh:
+            if line.strip():
+                return line.startswith("CLUSTAL")
+    return False
 
 
 _LETTERS = bytes(range(65, 91)) + bytes(range(97, 123))

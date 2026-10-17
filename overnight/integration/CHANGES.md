@@ -13,7 +13,21 @@ identical output formats. Reference: the real PAL2NAL v14 (sha256-verified, run 
 | DEC-3 | Closed output pipe: keep exit 141, silent; documented | done (no code change needed: consistent) | (DEC-3 commit) |
 | DEC-4 | All four output formats + `-blockonly` byte-identical to PAL2NAL; drop-in defaults to clustal; harness on all 279 goldens; random fuzz vs the real PAL2NAL (3,000 cases × 4 formats: 0 unexplained); fetch fallback; CI job | done | (DEC-4 commit) |
 
+Findings of the independent differential fuzz (29,395 cases against the real PAL2NAL v14), fixed on the same branch:
+
+| ID | Finding | Status | Commit |
+|---|---|---|---|
+| FZ-1 | CLUSTAL lines starting with '#' read as a sequence; CLUSTAL after leading blank lines read as FASTA | fixed | (FZ-1/FZ-2 commit) |
+| FZ-2 | Non-ASCII text in a protein header's description was an error | fixed | (FZ-1/FZ-2 commit) |
+
 <!-- DECISION-STATUS-END -->
+
+## Fuzz-finding rows
+
+| ID | Where (file:function) | Before | After | Why (finding / decision, with evidence) | Test proving it | Merge note |
+|---|---|---|---|---|---|---|
+| FZ-1 | src/coal/seqio.py `read_clustal`, `is_clustal`, `read_alignment`; src/coal_app/seqformat.py `iter_records` | A CLUSTAL line starting with '#' (PAL2NAL's block-mark line, e.g. `#    ###`, or a comment inside a block) was read as a sequence named '#' ("number of sequences differs (protein: 3 ...)"); a further `CLUSTAL` header line likewise; a CLUSTAL file starting with blank lines was read as FASTA (error) | '#' lines and `CLUSTAL` lines are skipped as sequence lines (a '#' line right after a block's last sequence line is its mark line, used by `-blockonly` and shown in clustal/codon output, DEC-4); the format is decided by the first non-blank line. The app's reader does the same | Tester's fuzz U5 (242 cases) and the "CLUSTAL starting with a blank line" group (26); PAL2NAL v14 run on the repros: output `>a ATGAAAGTT >b ATGCGT---` and a `#########` mark line | tests/test_fuzz_findings.py `TestFZ1ClustalHashAndBlankLines` (PAL2NAL's outputs; app reads the same IDs) | ENGINE CODE: teammate's engine/C++ must mirror. |
+| FZ-2 | src/coal/seqio.py `_ascii_lines` | Any non-ASCII byte in a protein file was an error, including a header description (`>a Krüppel-like factor 4` → "p.fa:1: non-ASCII character") | A header's description may hold any text; a non-ASCII ID is an error naming it (`p.fa:1: non-ASCII character in the sequence ID`; DNA IDs were already ASCII-only); non-ASCII sequence data stays an error | Tester's fuzz U6; PAL2NAL reads the header (only the ID is used) | tests/test_fuzz_findings.py `TestFZ2NonAsciiHeaderText` | ENGINE CODE: mirror. A non-ASCII ID is a deliberate difference (PAL2NAL copies the bytes into the output). |
 
 ## Decision rows
 
