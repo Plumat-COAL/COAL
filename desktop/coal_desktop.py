@@ -106,7 +106,11 @@ def child_env() -> dict:
     for h in ("127.0.0.1", "localhost"):
         if h not in no_proxy:
             no_proxy.append(h)
-    env["NO_PROXY"] = env["no_proxy"] = ",".join(no_proxy)
+    env["NO_PROXY"] = ",".join(no_proxy)
+    # CHANGED(WINCI-5): was NO_PROXY and no_proxy on every OS; now no_proxy only off Windows (Windows variable names
+    # are case-insensitive: two spellings in one environment block are duplicates). See overnight/integration/CHANGES.md
+    if not IS_WINDOWS:
+        env["no_proxy"] = env["NO_PROXY"]
     env["PYTHONUNBUFFERED"] = "1"
     env.setdefault("PYTHONIOENCODING", "utf-8")
     return env
@@ -578,6 +582,30 @@ class LocalServer:
 
 # ============================================================== single instance
 
+def lock_file(fh) -> None:
+    """Non-blocking exclusive OS lock on an open file (byte 0 on Windows); OSError if another handle holds it.
+    CHANGED(WINCI-4): moved out of SingleInstance.acquire (same calls) so tests lock the same way on every OS.
+    See overnight/integration/CHANGES.md"""
+    if IS_WINDOWS:
+        import msvcrt
+        fh.seek(0)
+        msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+    else:
+        import fcntl
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def unlock_file(fh) -> None:
+    """Release lock_file(fh). (Closing the file also releases it, asynchronously on Windows.)"""
+    if IS_WINDOWS:
+        import msvcrt
+        fh.seek(0)
+        msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl
+        fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+
+
 class SingleInstance:
     """At most one COAL window per user.
 
@@ -601,13 +629,7 @@ class SingleInstance:
         os.makedirs(self.dir, exist_ok=True)
         fh = open(self.lock_path, "a+b")
         try:
-            if IS_WINDOWS:
-                import msvcrt
-                fh.seek(0)
-                msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
-            else:
-                import fcntl
-                fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            lock_file(fh)
         except OSError:
             fh.close()
             return False
@@ -672,10 +694,8 @@ class SingleInstance:
             except OSError:
                 pass
             try:
-                if IS_WINDOWS:
-                    import msvcrt
-                    self._fh.seek(0)
-                    msvcrt.locking(self._fh.fileno(), msvcrt.LK_UNLCK, 1)
+                if IS_WINDOWS:  # POSIX: close() below releases the flock at once
+                    unlock_file(self._fh)
             except OSError:
                 pass
             self._fh.close()

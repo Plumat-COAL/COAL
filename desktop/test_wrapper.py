@@ -381,7 +381,11 @@ class TestLocalServer(Base):
             parent.wait(timeout=10)
             conn.settimeout(15)
             t0 = time.monotonic()
-            self.assertEqual(conn.recv(1), b"")  # blocks until the child's socket closes = it exited
+            try:  # blocks until the child's socket closes = it exited
+                got = conn.recv(1)
+            except (ConnectionResetError, ConnectionAbortedError):  # WINCI-3: Windows (job object kill) resets
+                got = b""
+            self.assertEqual(got, b"")
             self.assertLess(time.monotonic() - t0, 15)
         finally:
             if parent.poll() is None:
@@ -454,8 +458,8 @@ class TestServeProtocol(unittest.TestCase):
     def test_child_env_offline_and_no_proxy(self):
         old = dict(os.environ)
         try:
+            os.environ.pop("no_proxy", None)  # WINCI-5: first; on Windows this also removes NO_PROXY
             os.environ["NO_PROXY"] = "corp.example"
-            os.environ.pop("no_proxy", None)
             env = cd.child_env()
         finally:
             os.environ.clear()
@@ -989,25 +993,20 @@ class TestClaimInstance(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.dir, ignore_errors=True)
 
-    def test_unreachable_holder_gives_up_after_the_wait(self):
-        import fcntl
-        if cd.IS_WINDOWS:
-            self.skipTest("POSIX lock used to simulate a dead listener")
+    def test_unreachable_holder_gives_up_after_the_wait(self):  # WINCI-4: was POSIX-only (fcntl)
         with open(os.path.join(self.dir, "instance.lock"), "a+b") as fh:
-            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            cd.lock_file(fh)  # a holder with no listener (no instance.json)
             t0 = time.monotonic()
             self.assertEqual(cd.claim_instance(cd.SingleInstance(self.dir), {"action": "focus"}, wait=1.0),
                              "unreachable")
             self.assertGreaterEqual(time.monotonic() - t0, 0.9)
             self.assertLess(time.monotonic() - t0, 10)
+            cd.unlock_file(fh)
 
-    def test_lock_released_during_the_wait_is_taken(self):
-        import fcntl
-        if cd.IS_WINDOWS:
-            self.skipTest("POSIX lock used to simulate a slow release")
+    def test_lock_released_during_the_wait_is_taken(self):  # WINCI-4: was POSIX-only (fcntl)
         fh = open(os.path.join(self.dir, "instance.lock"), "a+b")
-        fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        threading.Timer(0.5, fh.close).start()  # released like a crashed holder, a bit later
+        cd.lock_file(fh)
+        threading.Timer(0.5, lambda: (cd.unlock_file(fh), fh.close())).start()  # released a bit later
         inst = cd.SingleInstance(self.dir)
         try:
             self.assertEqual(cd.claim_instance(inst, {"action": "focus"}, wait=5.0), "primary")
