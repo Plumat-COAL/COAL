@@ -1,6 +1,8 @@
 import asyncio
 import importlib.util
 import os
+import json
+import sys
 import shutil
 import tempfile
 import unittest
@@ -162,15 +164,20 @@ class TestToolSchemas(unittest.TestCase):
     def test_gradio_api_keeps_the_positional_order(self):
         # The Gradio HTTP API (and desktop/test_smoke.py's 8-value call) is positional: the Annotated hints must not
         # change the parameter list. Public Blocks.get_api_info() only; the exact type schema is Gradio's business.
-        from coal_app import ui
-        demo = ui.build()
-        get_info = getattr(demo, "get_api_info", None)
-        if get_info is None:
+        # CHANGED(SHIP-15): was built in this process, where other test modules replace `gradio` with a stub in
+        # sys.modules ("'_Comp' object is not subscriptable" in CI); now a fresh interpreter with the real Gradio.
+        import subprocess
+        code = ("import json, coal_app.ui as ui; d = ui.build(); f = getattr(d, 'get_api_info', None); "
+                "print(json.dumps(None if f is None else "
+                "[p['parameter_name'] for p in f()['named_endpoints']['/codon_align']['parameters']]))")
+        env = dict(os.environ, GRADIO_ANALYTICS_ENABLED="False")
+        r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=300, env=env)
+        self.assertEqual(r.returncode, 0, r.stderr[-2000:])
+        names = json.loads(r.stdout.strip().splitlines()[-1])
+        if names is None:
             self.skipTest("this Gradio has no Blocks.get_api_info()")
-        ep = get_info()["named_endpoints"]["/codon_align"]
-        self.assertEqual([p["parameter_name"] for p in ep["parameters"]],
-                         ["protein_alignment_path", "dna_fasta_path", "output_format", "codontable",
-                          "nogap", "nomismatch", "strict", "blockonly"])
+        self.assertEqual(names, ["protein_alignment_path", "dna_fasta_path", "output_format", "codontable",
+                                 "nogap", "nomismatch", "strict", "blockonly"])
 
 
 @unittest.skipUnless(has_mcp2() or REQUIRE_MCP, "mcp>=2 not installed (pip install -e .[mcp])")
