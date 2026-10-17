@@ -177,49 +177,91 @@ jobs:
     # would have tested the Python engine (COAL_IMPL is read by nothing); now: a clear "not applicable" notice
     # while cpp/ is absent, and once it exists the binary and tests/test_cpp_vs_python.py are required and the
     # job fails if those tests are skipped.
-    name: C++ engine (not applicable until cpp/CMakeLists.txt exists)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # CHANGED(CI-CPP1): was gated on cpp/CMakeLists.txt, which never exists (the C++ engine's CMakeLists.txt is at the
+    # repo root, target coal-cpp, sources in cpp/src/), so the job always said "not applicable" and coal-cpp was never
+    # built or tested in CI. Now: root CMakeLists.txt with add_executable(coal-cpp ...), built with warnings as errors
+    # on all three OSes, golden checks with COAL_IMPL=cpp plus every tests/test_cpp_*.py module; a skip because the
+    # binary or the reference is missing fails the job. See overnight/integration/CHANGES.md
+    name: C++ engine (coal-cpp) on ${{ matrix.os }}  # CHANGED(CI-CPP1): was "C++ engine (not applicable until cpp/CMakeLists.txt exists)"
+    runs-on: ${{ matrix.os }}  # CHANGED(CI-CPP1): was ubuntu-latest only
+    timeout-minutes: 30  # CHANGED(CI-CPP1): was 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    defaults:
+      run:
+        shell: bash  # CHANGED(CI-CPP1): new; the same scripts on Windows (Git Bash)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1 (CHANGED(FIN-A10): was @v4)
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0 (CHANGED(FIN-A10): was @v5)
         with:
           python-version: "3.13"
-      - name: Check for cpp/CMakeLists.txt
+      # CHANGED(CI-CPP1): was "Check for cpp/CMakeLists.txt" (`[ -f cpp/CMakeLists.txt ]`); tests_app/test_ci_steps.py runs this script.
+      - name: Check for the root CMakeLists.txt with coal-cpp
         id: detect
-        shell: bash
         run: |
-          if [ -f cpp/CMakeLists.txt ]; then
+          if [ -f CMakeLists.txt ] && grep -Eq '^[[:space:]]*add_executable[[:space:]]*\([[:space:]]*coal-cpp([[:space:]]|\))' CMakeLists.txt; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=C++ engine::NOT APPLICABLE: cpp/CMakeLists.txt does not exist on this branch, so nothing was built or tested."
-            echo "C++ engine: **not applicable** (no cpp/CMakeLists.txt on this branch). Nothing was built or tested." >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice title=C++ engine::NOT APPLICABLE: no CMakeLists.txt with add_executable(coal-cpp ...) at the repo root on this branch, so nothing was built or tested."
+            echo "C++ engine: **not applicable** (no root CMakeLists.txt building coal-cpp on this branch). Nothing was built or tested." >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Build
         if: steps.detect.outputs.present == 'true'
+        # CHANGED(CI-CPP1): was `cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Release`; now the root project, warnings fail the build
         run: |
-          cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Release
-          cmake --build cpp/build --config Release -j 2
-      - name: Require the binary and its comparison tests
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCOAL_WARNINGS_AS_ERRORS=ON
+          cmake --build build --config Release -j 2
+      - name: Require the binary and its C++ tests
         if: steps.detect.outputs.present == 'true'
-        shell: bash
         run: |
           # CHANGED(R2-D4): was `ls a b | head | grep -q .`, which always failed under bash -eo pipefail (ls exits 2
           # when one of the two paths is missing); tests_app/test_ci_steps.py runs this script.
-          [ -x cpp/build/coal ] || [ -f cpp/build/Release/coal.exe ] \
-            || { echo "::error::cpp/CMakeLists.txt exists but no cpp/build/coal binary was built"; exit 1; }
-          test -f tests/test_cpp_vs_python.py \
-            || { echo "::error::cpp/ exists but tests/test_cpp_vs_python.py (C++ vs Python comparison) is missing"; exit 1; }
+          # CHANGED(CI-CPP1): was cpp/build/coal or cpp/build/Release/coal.exe and only test_cpp_vs_python.py; now
+          # build/coal-cpp (Makefiles) or build/Release/coal-cpp.exe (Visual Studio), exported as COAL_CPP_BIN
+          # (relative: the tests resolve it against the repo root, so it also works for Windows Python).
+          bin=""
+          for c in build/coal-cpp build/Release/coal-cpp.exe build/coal-cpp.exe; do
+            if [ -f "$c" ]; then bin="$c"; break; fi
+          done
+          [ -n "$bin" ] || { echo "::error::CMakeLists.txt builds coal-cpp but no build/coal-cpp or build/Release/coal-cpp.exe was built"; exit 1; }
+          echo "COAL_CPP_BIN=$bin" >> "$GITHUB_ENV"
+          echo "coal-cpp: $bin"
+          for t in tests/test_differential.py tests/test_cpp_vs_python.py tests/test_cpp_cli.py tests/test_cpp_pool.py \
+                   tests/test_cpp_readers.py tests/test_cpp_tables.py tests/test_cpp_vs_reference.py; do
+            test -f "$t" || { echo "::error::$t (C++ engine tests) is missing"; exit 1; }
+          done
       - name: Install COAL
         if: steps.detect.outputs.present == 'true'
         run: python -m pip install -e .
-      - name: C++ vs Python tests (must not skip)
+      # CHANGED(CI-CPP1): new; the 285 PAL2NAL golden checks had never run against coal-cpp in CI.
+      - name: Golden checks with the C++ engine (must not skip)
         if: steps.detect.outputs.present == 'true'
-        shell: bash
+        env:
+          COAL_IMPL: cpp
         run: |
-          python -m unittest tests.test_cpp_vs_python -v 2>&1 | tee cpp_tests.txt
-          test "${PIPESTATUS[0]}" -eq 0
-          if grep -qiE "skipped|OK \(skipped" cpp_tests.txt; then
-            echo "::error::C++ comparison tests were skipped, so the C++ engine was not exercised"; exit 1
+          python tests/test_differential.py --count 2>&1 | tee golden.txt
+          status=${PIPESTATUS[0]}
+          grep -E "^(cpp: |PAL2NAL comparison:)" golden.txt >> "$GITHUB_STEP_SUMMARY" || true
+          if grep -q "^cpp: skipped" golden.txt || ! grep -q "^cpp: [0-9]*/[0-9]* golden checks" golden.txt; then
+            echo "::error::the golden checks did not run against coal-cpp (binary not found)"; exit 1
           fi
+          test "$status" -eq 0
+      # CHANGED(CI-CPP1): was `python -m unittest tests.test_cpp_vs_python` failing on any "skipped"; now every C++
+      # module, failing only on skips that mean coal-cpp / coal-cpp-dump / the reference engine was not found
+      # (by-design skips stay: CLI live comparison needs Python 3.10/3.11, POSIX-only and Linux-only tests, PAL2NAL fuzz).
+      - name: C++ engine tests (must not skip)
+        if: ${{ !cancelled() && steps.detect.outputs.present == 'true' }}
+        env:
+          COAL_IMPL: cpp
+        run: |
+          python -m unittest -v tests.test_differential tests.test_cpp_vs_python tests.test_cpp_cli tests.test_cpp_pool \
+            tests.test_cpp_readers tests.test_cpp_tables tests.test_cpp_vs_reference 2>&1 | tee cpp_tests.txt
+          status=${PIPESTATUS[0]}
+          grep -E "^(Ran |OK|FAILED)" cpp_tests.txt >> "$GITHUB_STEP_SUMMARY" || true
+          if grep -E "skipped '.*(not built|not available|COAL_REF_SRC)" cpp_tests.txt; then
+            echo "::error::C++ tests were skipped because coal-cpp, coal-cpp-dump or the reference engine was not found"; exit 1
+          fi
+          test "$status" -eq 0

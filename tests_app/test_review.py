@@ -602,7 +602,10 @@ class TestFinding16AndC4C5Ci(unittest.TestCase):
         self.assertIn("not applicable", cpp.lower())
         self.assertIn("tests/test_cpp_vs_python.py", cpp)
         self.assertIn("skipped", cpp)
-        self.assertNotIn("COAL_IMPL:", cpp)  # an env var nothing reads
+        # CHANGED(CI-CPP1): was assertNotIn("COAL_IMPL:") (an env var nothing read then); tests/test_differential.py
+        # now reads COAL_IMPL=cpp, so the golden steps must set it. See overnight/integration/CHANGES.md
+        self.assertIn("COAL_IMPL: cpp", cpp)
+        self.assertIn("python tests/test_differential.py --count", cpp)
 
     def test_require_switch_turns_skips_into_failures(self):
         import subprocess
