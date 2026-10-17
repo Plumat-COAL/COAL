@@ -25,5 +25,5 @@ Notes:
 - The first step-4 run (files `cpp_vs_python_linux_47d2168_*`, not committed) found the merged report's
   end-of-run step holding a view of every entry: C++ peak 152 MB on 100,000 x 500. Fixed in CPP-32/CPP-33
   (now 35-37 MB; guarded by tests/test_cpp_vs_python.py TestCppMemory). Times were unchanged by the fix.
-- Pre-merge numbers (01:33, `cpp_vs_python_linux.md`): C++ 100,000 x 500 0.95 s / 26 MB. The merged engine's
+- Pre-merge numbers (01:33, `cpp_vs_python_linux.md`, removed in IMP-M-4; see the git history): C++ 100,000 x 500 0.95 s / 26 MB. The merged engine's
   report keeps the DNA IDs as well (as the Python engine does), hence ~10 MB more.

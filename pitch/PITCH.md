@@ -5,7 +5,7 @@ formats are merged and tested in the Python engine (MRG-1..MRG-10, DEC-4). The C
 (it matches the Python engine on 285/285 stored checks and on thousands of random inputs). <!-- CHANGED(PITCH-1): was "[after the C++/formats branch is merged]" for --keep-going, ID normalisation and the C++ core; the Python features are merged now --> <!-- CHANGED(DEC-4): was "output formats" on the teammate's branch and "`coal --help` still lists only -output fasta" -->
 <!-- CHANGED(R2-D12): was "[after merge]", which read as the (already merged) engine-fixes branch -->
 
-**Before going on:** laptop on mains, browser tabs open in this order: (1) `pitch/explainer.html`,
+**Before going on:** laptop on mains, browser tabs open in this order: (1) `site/explainer.html`,
 (2) the COAL GUI at http://127.0.0.1:7860 (`python -m coal_app`), (3) `pitch/backup/` folder. Zoom the
 browser to 125-150 %. Run "One broken gene" once beforehand so nothing is cold.
 

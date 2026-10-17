@@ -57,16 +57,19 @@ class TestDocsNumbers(unittest.TestCase):
     def test_skill(self):
         self.expect(".claude/skills/coal/SKILL.md", f"all {self.c['stdout byte-identical']} byte-for-byte comparisons")
 
+    # CHANGED(IMP-M-4): the README's test counts moved to tests/README.md ("Test numbers"), word for word; the checks
+    # below follow them (README.md keeps a short claim and a link, and is still checked for forbidden wording)
     def test_readme(self):
         c = self.c
-        self.expect("README.md", f"= {self.n} checks", f"byte-identical in {c['stdout byte-identical']} checks",
+        self.expect("tests/README.md", f"= {self.n} checks", f"byte-identical in {c['stdout byte-identical']} checks",
                     f"identical in {c['warnings identical']} of them ({c['with -nomismatch']} with `-nomismatch`)",
                     f"in {c['both fail']} both tools fail")
 
     def test_readme_exit_status_count(self):  # R3-D5
         n_exit = self.c["COAL exit status"]
-        self.expect("README.md", f"Exit status in the other {n_exit}")
-        self.assertNotIn(f"Exit status in all {self.n}", _read("README.md"))
+        self.expect("tests/README.md", f"Exit status in the other {n_exit}")
+        for rel in ("README.md", "tests/README.md"):
+            self.assertNotIn(f"Exit status in all {self.n}", _read(rel))
 
     def test_readme_scaling_extrapolation(self):  # R3-D4
         import csv
@@ -110,9 +113,11 @@ class TestDocsNumbers(unittest.TestCase):
                          + c["deliberate nogap_code"], self.n, "the harness's own breakdown must add up")
         self.assertEqual(f["identical"] + f["both"] + f["deliberate"], f["comparisons"])
         self.assertEqual(tuple(map(sum, zip(*f["rows"].values()))), (f["identical"], f["both"], f["deliberate"]))
-        for rel in ("README.md", "pitch/PITCH.md", "pitch/QA.md", ".claude/skills/coal/SKILL.md"):
+        for rel in ("tests/README.md", "pitch/PITCH.md", "pitch/QA.md", ".claude/skills/coal/SKILL.md"):
             self.expect(rel, self.claim())
-        self.expect("README.md", f"seed 20261017, {f['cases']:,} cases: {f['comparisons']:,} comparisons, "
+        self.expect("README.md", "COAL's output is identical to PAL2NAL v14's except for a short list of documented, "
+                                 "deliberate differences", "tests/README.md#test-numbers")
+        self.expect("tests/README.md", f"seed 20261017, {f['cases']:,} cases: {f['comparisons']:,} comparisons, "
                                  f"{f['identical']:,} byte-identical, {f['both']:,} where both fail, "
                                  f"{f['deliberate']:,} deliberate differences")
         for fmt, (i, b, d) in f["rows"].items():
@@ -130,11 +135,11 @@ class TestDocsNumbers(unittest.TestCase):
     def test_breakdowns_add_up(self):  # FIN-C2 / FIN-A3
         c = self.c
         k = c["deliberate error"] + c["deliberate differs"] + c["deliberate nogap_code"]
-        text = _read("README.md")
+        text = _read("tests/README.md")
         m = re.search(r"stdout is byte-identical in (\d+) checks.*?in (\d+) both tools fail\. (\d+) checks are "
                       r"deliberate output or exit-status differences: (\d+) deliberate errors.*?, (\d+) with different "
                       r"output and (\d+) `-nogap` checks", text)
-        self.assertIsNotNone(m, "README.md Tests: the breakdown sentence is missing")
+        self.assertIsNotNone(m, "tests/README.md Test numbers: the breakdown sentence is missing")
         byte, both, kk, e, d, g = map(int, m.groups())
         self.assertEqual((byte, both, kk, e, d, g), (c["stdout byte-identical"], c["both fail"], k,
                                                      c["deliberate error"], c["deliberate differs"],

@@ -1,2 +1,0 @@
-n_seqs,n_codons,total_codons,nuc_MB,coal_status,coal_median_s,coal_min_s,coal_peak_MB,coal_Mcodons_per_s,coal_cpp_j1_status,coal_cpp_j1_median_s,coal_cpp_j1_min_s,coal_cpp_j1_peak_MB,coal_cpp_j1_Mcodons_per_s,coal_cpp_status,coal_cpp_median_s,coal_cpp_min_s,coal_cpp_peak_MB,coal_cpp_Mcodons_per_s,speedup_coal_cpp_j1_vs_python,speedup_coal_cpp_vs_python,speedup_coal,speedup_coal_cpp_j1,speedup_coal_cpp,outputs_identical
-10000,500,5000000,13.69,ok,0.5926,0.5679,44.3,8.438,ok,0.1142,0.108,14.4,43.778,ok,0.0972,0.0923,15.4,51.433,5.19,6.1,,,,True

@@ -1,4 +1,3 @@
-# WEB-11: new file. See overnight/integration/CHANGES.md
 cff-version: 1.2.0
 message: "If you use COAL in published work, please cite the version you used, and please cite PAL2NAL too."
 title: "COAL: codon alignments from protein alignments"

@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+<!-- CHANGED(IMP-M-4): Unreleased, 0.2.0 and 0.1.0 added from the git history -->
+- **MCP results tell the truth:** `codon_align` returns `completed` (COAL finished), `all_ok` / `needs_attention`
+  (whether every sequence matched its protein), `counts`, `suggested_codontable` and `next_step`, and a short summary
+  of COAL's messages instead of raw stderr. The old `ok` field (which meant "finished") is gone. A missing file, an
+  unknown genetic code or an unsupported format is now a tool error (`isError`), and the arguments have descriptions
+  and allowed values. The server reports its version.
+- **Windows, from source:** `desktop\run_from_source.bat` (the window) and `desktop\setup_mcp.bat` (the MCP server
+  for Claude, printing ready-to-paste registrations) use separate environments, pick Python 3.12 when available,
+  check the Python version and repair half-finished installs.
+- **Windows app:** the MCP endpoint is off by default (it was on a random port no client could be registered with);
+  `COAL.exe --mcp` turns it on.
+
 ## 0.4.0
 
 <!-- CHANGED(MRG-8): new file (scripts/release_notes.py takes the release notes from this section). -->
@@ -26,5 +40,19 @@ output apart from a short list of documented, deliberate differences (see the RE
 
 ## 0.3.0
 
+- **Large inputs:** a streaming pipeline with constant memory, automatic multi-process `-j` (only when each worker
+  gets enough work) and an optional numpy fast path (`".[fast]"`); 500,000 sequences: 2.5 GB -> 143 MB of memory.
 - All four PAL2NAL output formats and `-blockonly`, `--strict`, the drop-in `pal2nal` command, the GUI, MCP tools
   and the Windows app (see README.md).
+
+## 0.2.0
+
+- NCBI genetic codes 1-23 (`-codontable`), extra sequence around the gene (UTRs, stop codon) skipped, PAL2NAL's
+  frameshift digits, `-nogap` and `-nomismatch`, and PAL2NAL's handling of codons that don't match.
+- About twice as fast; on Windows 29x faster than PAL2NAL on 10,000 sequences and 119x on 10,000-codon genes,
+  with identical output.
+
+## 0.1.0
+
+- First version: a pure-Python, dependency-free `coal` command that builds a codon alignment from a protein
+  alignment and coding DNA, checked against stored PAL2NAL v14 outputs.

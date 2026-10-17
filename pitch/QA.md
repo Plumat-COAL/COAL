@@ -55,8 +55,8 @@ writes codeml's input directly. <!-- CHANGED(DEC-4): PAML output was "[after the
 
 **6. Is this AI-generated code you can't maintain?**
 Much of it was written with AI assistance (Claude), and we say so. What makes it maintainable is the
-same as for any code: about 3,100 lines of dependency-free Python in the engine and 4,100 in the app
-layer, a differential test suite against PAL2NAL's real output, more than 250 app tests, CI on Windows, macOS
+same as for any code: about 3,100 lines of dependency-free Python in the engine and 4,600 in the app
+layer, a differential test suite against PAL2NAL's real output, more than 300 app tests, CI on Windows, macOS
 and Linux, including the GUI tests against real Gradio and the C++ engine on all three (open the latest GitHub
 Actions run on main before you say "green") <!-- CHANGED(SHIP-5): was "all green in run 39006043852"; later runs were red on Windows until SHIP-2 -->, and documented decisions (every deliberate difference from PAL2NAL is written down with its test).
 <!-- CHANGED(FINAL-2): was "the Windows job was red until the round-2 fixes" (it was still red after round 2); now cites green run 39006043852. -->
