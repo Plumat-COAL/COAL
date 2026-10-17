@@ -1,0 +1,5 @@
+# build outputs and the local build venv (desktop/build.ps1)
+.venv/
+build/
+dist/
+__pycache__/

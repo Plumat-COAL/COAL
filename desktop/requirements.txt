@@ -1,6 +1,6 @@
 # COAL desktop app (Windows). Install into a local venv, from the repo root:
-#   py -3.12 -m venv .venv-desktop
-#   .venv-desktop\Scripts\python -m pip install -e ".[gui]" -r desktop\requirements.txt
+#   py -3.12 -m venv desktop\.venv
+#   desktop\.venv\Scripts\python -m pip install -e ".[gui]" -r desktop\requirements.txt
 #
 # Versions: latest releases on the projects' GitHub release pages on 2026-10-17. They could not
 # be checked against PyPI or installed on the machine that wrote this file (no PyPI access);

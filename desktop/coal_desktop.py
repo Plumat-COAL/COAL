@@ -45,6 +45,7 @@ EXIT_NO_GUI = 3              # serve(): the local app (Gradio) could not be impo
 SERVER_START_TIMEOUT = 60.0  # first start after install can be slow while antivirus scans files
 SERVER_STOP_TIMEOUT = 5.0
 PORT_ATTEMPTS = 3
+APP_MUTEX = "COAL-desktop-running"  # Inno Setup's AppMutex: setup/uninstall ask to close COAL first
 
 FROZEN = bool(getattr(sys, "frozen", False))
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -826,8 +827,23 @@ def dispatch(argv: list[str]) -> int:
     return main_window(args)
 
 
+def _hold_app_mutex():
+    """Windows: create a named mutex for as long as COAL runs (the handle is released by Windows
+    when the process ends). Only used so the installer/uninstaller can tell COAL is open.
+    Untested here (Linux)."""
+    if not IS_WINDOWS:
+        return None
+    try:
+        import ctypes
+        return ctypes.windll.kernel32.CreateMutexW(None, False, APP_MUTEX)
+    except Exception as e:  # noqa: BLE001
+        log.warning("could not create the app mutex: %s", e)
+        return None
+
+
 def main_window(args) -> int:
     log_path = setup_logging()
+    _mutex = _hold_app_mutex()  # noqa: F841 - kept alive until main_window returns
     log.info("COAL desktop starting (frozen=%s, python %s)", FROZEN, sys.version.split()[0])
     instance = SingleInstance(data_dir())
     if not instance.acquire():
