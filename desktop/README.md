@@ -83,6 +83,23 @@ Not sure what your files should look like? Click one of the **Try an example** b
 | a gene failed with a "frameshift" | a DNA letter is missing or extra in that gene (often a sequencing or assembly error) | fix or remove that gene and run again: COAL stops at the first failed gene, so no alignment is written: the genes before it are shown as "Not written" (with their own problems, if any) and the genes after it as "Not checked", not as fine | <!-- CHANGED(FIN-C7) -->
 <!-- CHANGED(R2-D8): BOM row removed (the engine now skips a byte order mark, ENG-h); frameshift advice: later genes are "not checked". See overnight/integration/CHANGES.md -->
 
+## Run from source (no installer)
+
+<!-- CHANGED(IMP-M-2): new; the launchers are in this folder -->
+With Python 3.10 or newer (3.12 recommended, from https://www.python.org/downloads/windows/) and a copy of the COAL
+repository (`git clone` or the source zip):
+
+- **The window:** double-click `desktop\run_from_source.bat`. The first start creates `.venv-gui` in the repository
+  folder and installs COAL with its GUI (a few minutes); later starts open the window straight away. If an install
+  was interrupted, the next start notices (it tries to import COAL, Gradio and pywebview) and repairs it.
+- **COAL in Claude (MCP):** double-click `desktop\setup_mcp.bat`. It creates `.venv-mcp` (a separate environment:
+  the GUI's and the MCP server's packages conflict), checks that the server imports, and prints a
+  `claude mcp add coal -- ...` line for Claude Code and a ready-to-paste `claude_desktop_config.json` entry for
+  Claude Desktop. Run it again to repair the install or to see the lines again. Give Claude full paths to your files.
+
+Both use the Python launcher (`py -3.12`, then `py -3`), or `python` if there is no launcher, and stop with a message
+if Python is missing or older than 3.10.
+
 ## Uninstall
 
 Settings > Apps > Installed apps > **COAL** > **Uninstall**. This removes COAL, its shortcuts,
@@ -111,10 +128,12 @@ COAL never checks for updates by itself. New versions are published at
   open**: the page has no password, and it can read any file your account can read if given its
   path. On a shared lab PC, close COAL when you're done.
   <!-- CHANGED(WIN-W6, decision 3): security line made plain. See overnight/windows-app/CHANGES.md -->
-- **AI tools on this computer** (MCP clients) can use COAL's tools while it is open, at
-  `http://127.0.0.1:<port>/gradio_api/mcp/sse`; the port changes every launch and is written in
-  `%LOCALAPPDATA%\COAL\logs\local_app.log`. To turn this off, start COAL with `COAL.exe --no-mcp`.
-  <!-- CHANGED(WIN-M): MCP on by default. See overnight/windows-app/CHANGES.md -->
+- **AI tools (MCP)**: the window does **not** serve COAL's MCP tools by default, because its port changes every
+  launch and an MCP client could not be pointed at it. To use COAL from Claude, set up the stand-alone MCP server
+  once with `desktop\setup_mcp.bat` (see "Run from source" above). `COAL.exe --mcp` still turns the endpoint on
+  for a session, at `http://127.0.0.1:<port>/gradio_api/mcp/sse` (the port is written in
+  `%LOCALAPPDATA%\COAL\logs\local_app.log`).
+  <!-- CHANGED(IMP-M-3): was on by default (WIN-M) on a random port. See overnight/integration/CHANGES.md -->
 - Logs are in `%LOCALAPPDATA%\COAL\logs`. They never contain your sequences, but they do contain
   file names, and `local_app.log` holds everything COAL's local app prints, which can include
   full file paths (for example in error messages). Look through them before sending; if

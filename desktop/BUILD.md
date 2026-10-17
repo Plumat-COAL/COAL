@@ -81,7 +81,8 @@ These only exist in the PyInstaller build and were never run:
   and that they exit.
 - `disable_windowed_traceback=True`: an unexpected error must land in
   `%LOCALAPPDATA%\COAL\logs\local_app.log`, never as an "Unhandled exception" box.
-- The MCP endpoint answers: the URL is logged in `local_app.log` (`gradio_api/mcp/sse`).
+- The MCP endpoint answers when started with `COAL.exe --mcp` (off by default, IMP-M-3): the URL is logged in
+  `local_app.log` (`gradio_api/mcp/sse`).
 
 ## C++ engine
 
