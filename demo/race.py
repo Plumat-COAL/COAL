@@ -140,6 +140,8 @@ class Racer:
         return (self.t1 or time.perf_counter()) - self.t0
 
 
+# CHANGED(APP-8): was PAL2NAL once per sequence of one family (measured process start-up); now once per gene
+# family vs one COAL run on all families. See overnight/app/CHANGES.md
 def run_pal2nal_per_family(r, perl, pal2nal, fams, workdir, deadline):
     out = []
     r.t0 = time.perf_counter()

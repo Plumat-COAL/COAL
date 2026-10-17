@@ -156,6 +156,8 @@ def _score(a, b):
     return _B62[_IDX.get(a, 22)][_IDX.get(b, 22)]
 
 
+# CHANGED(APP-10): was 6 full n x m matrices of Python ints (3000 x 3000: 1.25 GB); now 2 score rows + byte
+# tracebacks, and --max-length default 5000 -> 2000. See overnight/app/CHANGES.md
 def needleman_wunsch(s: str, t: str, gap_open: int = 11, gap_extend: int = 1) -> tuple[str, str]:
     """Global alignment, BLOSUM62, affine gaps (Gotoh: a gap of length k costs open + (k-1)*extend).
     Returns the two gapped rows.
@@ -307,6 +309,7 @@ def main(argv=None) -> int:
         aligned.append((x, y, ra, rb))
     if skipped:
         print(f"skipped {len(skipped)} pairs longer than --max-length {a.max_length}")
+    # CHANGED(APP-9): was a ValueError traceback when every pair was skipped; now a clear error, exit 1. See overnight/app/CHANGES.md
     if not aligned:
         print(f"error: all {len(pairs)} reciprocal-best-hit pairs have a protein longer than --max-length "
               f"{a.max_length}, so nothing was aligned. Raise --max-length (slower) and run again.",
@@ -340,7 +343,7 @@ def main(argv=None) -> int:
     except subprocess.TimeoutExpired:
         print("error: COAL did not finish in time", file=sys.stderr)
         return 1
-    with open(os.path.join(a.out, "coal.stderr.txt"), "w", encoding="utf-8") as fh:
+    with open(os.path.join(a.out, "coal.stderr.txt"), "w", encoding="utf-8") as fh:  # CHANGED(APP-18): utf-8
         fh.write(r.stderr)
     if r.returncode not in (0, 2) or not os.path.exists(batch_out):
         print(f"COAL failed (exit {r.returncode}):\n{r.stderr.strip()[-1500:]}", file=sys.stderr)

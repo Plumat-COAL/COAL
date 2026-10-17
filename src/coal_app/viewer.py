@@ -95,6 +95,8 @@ def _ok(aa: str, codon: str, code: dict, starts: frozenset, first: bool) -> bool
     """Does `codon` code for `aa`? IUPAC ambiguity codes count when every expansion does (the engine's rule)."""
     if len(codon) < 3:
         return False
+    # CHANGED(APP-5): was exact codons only and only X accepted; now IUPAC codes (all expansions must fit) and
+    # B Z J O U like X, as the engine does. See overnight/app/CHANGES.md
     if aa in "XBZJOU":  # the engine treats B Z J O U as X: any codon is accepted
         return True
     exp = gcode.expand(codon)
@@ -116,6 +118,7 @@ def diagnose(protein_row: str, dna: str, codontable: int = 1) -> dict:
     out: dict = {"cells": {}, "events": [], "matched": 0}
     if not res or len(dna) < 3:
         return out
+    # CHANGED(APP-2): was "first 3 residues must match exactly"; now up to 1 in 4 of the first 12 may mismatch. See overnight/app/CHANGES.md
     # where does the gene start? the leftmost offset where most of the first 12 residues match
     # (mismatches allowed: an alternative start codon or one odd early codon must not hide the gene)
     want = min(len(res), 12)
@@ -251,6 +254,8 @@ def build_rows(protein: list[tuple[str, str]], codon: list[tuple[str, str]] | No
                     continue
                 flag = ""
                 if codon_only:
+                    # CHANGED(APP-1): was report columns applied to output columns and aa translated from the
+                    # same codon (self-comparison); now nothing is marked in this mode. See overnight/app/CHANGES.md
                     # report columns are protein-alignment columns and aa comes from this very codon:
                     # nothing here can be checked honestly, so nothing is marked
                     pass
@@ -281,6 +286,7 @@ def build_rows(protein: list[tuple[str, str]], codon: list[tuple[str, str]] | No
                 if d["events"]:
                     r["note"] = d["events"][0]["text"]
                 if r["status"] is None:
+                    # CHANGED(APP-4): was "failed" if events else "ok" (mismatches ignored); now "warning" too
                     flagged = any(f in ("mismatch", "frameshift") for _, _, f in r["cells"])
                     r["status"] = "failed" if d["events"] else ("warning" if flagged else "ok")
             else:
@@ -394,7 +400,7 @@ def _issues(rows: list[dict], report: dict | None, shown_cols: int) -> str:
                      f"{'s' if unchecked != 1 else ''} (COAL stopped at an earlier error). In the view below their "
                      f"codons match their amino acids.</li>")
     if not items:
-        if any(not r.get("checked", True) for r in rows):
+        if any(not r.get("checked", True) for r in rows):  # CHANGED(APP-1): no "every codon matches" claim
             return ('<p class="note">Codons could not be checked against the protein in this view (columns were '
                     'removed).</p>')
         return '<p class="note">✔ Every codon matches its amino acid.</p>'

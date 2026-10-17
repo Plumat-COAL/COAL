@@ -43,9 +43,9 @@ risk, not value. `-nogap` removes gap and stop-codon columns, as many dN/dS setu
 
 **6. Is this AI-generated code you can't maintain?**
 Much of it was written with AI assistance (Claude), and we say so. What makes it maintainable is the
-same as for any code: about 1,000 lines of dependency-free Python in the engine and 1,800 in the app
-layer, a differential test suite against PAL2NAL's real output, 50+ app tests, CI configured for Windows,
-macOS and Linux, and documented decisions (every deliberate difference from PAL2NAL is written down with its test).
+same as for any code: about 1,050 lines of dependency-free Python in the engine and 2,150 in the app
+layer, a differential test suite against PAL2NAL's real output, 115 app tests, CI on Windows, macOS and
+Linux (green on the app branch; the new GUI and MCP jobs have not run yet: check before claiming them), and documented decisions (every deliberate difference from PAL2NAL is written down with its test).
 *[Team: say who reviewed which parts. Only claim review you actually did.]*
 
 **7. How will this be maintained after the weekend?**

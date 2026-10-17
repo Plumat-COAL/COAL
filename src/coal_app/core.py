@@ -364,6 +364,7 @@ _WARN_X = re.compile(r"^coal: warning: (\S+) pepAlnPos (\d+): (\S+) unknown AA t
 _WARN_ANY = re.compile(r"^coal: warning: (\S+) (.+)$")  # any other per-sequence warning
 
 
+# CHANGED(APP-3): was only "does not correspond to" lines; now every "coal: warning: <id> ..." line. See overnight/app/CHANGES.md
 def _parse_warning(line: str) -> tuple[str, dict] | None:
     """(sequence id, message) for any 'coal: warning: <id> ...' line, else None."""
     m = _WARN.match(line)
@@ -460,6 +461,7 @@ def build_fallback_report(protein, dna, out, fmt, table, nogap, nomismatch, keep
             else:
                 general.append({"code": _classify_error(msg), "text": msg})
     aborted = code not in (0, 2)
+    # CHANGED(APP-6): was "order"/"id" even when COAL stopped before pairing; now None (no pairing sentence). See overnight/app/CHANGES.md
     if aborted and general and not failed:
         pairing = None  # COAL stopped before pairing anything (e.g. counts differ, unreadable input)
     keep_going = bool(keep_going and detect_features().keep_going)  # only what was really passed
@@ -516,6 +518,8 @@ def _safe_sha(p):
         return None
 
 
+# CHANGED(APP-7): was the stripped protein ID shown as "DNA" and "probably wrong" even on clean runs; now the
+# real DNA ID, and the verdict depends on the run's outcome. See overnight/app/CHANGES.md
 def id_hints(protein: str, dna: str, report: dict | None = None) -> list[dict]:
     """Spot IDs that only differ by a version suffix (AT1G01010.1 vs AT1G01010).
 
@@ -653,7 +657,7 @@ def run_coal(protein_path: str, dna_path: str, output_format: str = "fasta", cod
                          f"(supported: {', '.join(f.output_formats)})")
     if int(codontable) not in GENETIC_CODES:
         raise ValueError(f"unknown genetic code {codontable}")
-    out_dir = out_dir or new_run_dir()
+    out_dir = out_dir or new_run_dir()  # CHANGED(APP-12): was mkdtemp("coal_") in /tmp, never removed. See overnight/app/CHANGES.md
     os.makedirs(out_dir, exist_ok=True)
     stem = os.path.splitext(os.path.basename(protein_path))[0].replace(".aln", "")
     out = os.path.join(out_dir, f"{stem}.codon.{_EXT.get(output_format, 'txt')}")
@@ -818,6 +822,7 @@ def health_rows(report: dict) -> list[list[str]]:
 
 def _jump_links(seq: dict, limit: int = 12) -> str:
     from .viewer import cell_id
+    # CHANGED(APP-3/APP-1): was every message column linked; now only cells the viewer anchors. See overnight/app/CHANGES.md
     # only codes the viewer gives an anchor to (it outlines mismatched and frameshift cells)
     cols = sorted({m["column"] for m in seq.get("messages") or []
                    if isinstance(m.get("column"), int) and m.get("code") in ("mismatch", "frameshift")})
@@ -833,7 +838,7 @@ def health_table_html(report: dict, links: bool = False) -> str:
     With links=True, problem columns link to the alignment viewer's cells (same page). No links when
     -nogap/-nomismatch removed columns: report columns then don't exist in the output."""
     opts = report.get("options") if isinstance(report.get("options"), dict) else {}
-    if opts.get("nogap") or opts.get("nomismatch"):
+    if opts.get("nogap") or opts.get("nomismatch"):  # CHANGED(APP-1): no jump links in codon-only mode
         links = False
     order = {"failed": 0, "warning": 1, "not_checked": 2, "ok": 3}
     seqs = sorted(report.get("sequences", []), key=lambda s: order.get(s.get("status"), 4))

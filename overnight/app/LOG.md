@@ -1,3 +1,82 @@
+# Review fixes (branch fix/app-review, from keanu_overnight/app; local commits only, nothing pushed)
+
+Two independent reviews (app findings 1-19, config/CI/docs findings C1-C15) plus user decisions (APP-L large
+files by path, APP-M MCP default). Every change has a row in `overnight/app/CHANGES.md` and a
+`CHANGED(<ID>)` comment at the code site. Each finding first got a failing test in `tests_app/`
+(mostly `tests_app/test_review.py`), then the fix.
+
+| Finding | Status | Commit |
+|---|---|---|
+| 1 codon-only viewer marks/links (blocker) | fixed | a9636bc |
+| 2 tolerant start search (blocker) | fixed | a9636bc |
+| 3 every engine warning counted (blocker) | fixed | a9636bc |
+| 4 viewer status without codon file | fixed | c7e76e9 |
+| 5 IUPAC codons like the engine | fixed | c7e76e9 |
+| 6 no pairing sentence when nothing was paired | fixed | c7e76e9 |
+| 7 ID-suffix hint (real DNA ID, verdict by outcome) | fixed | c7e76e9 |
+| 8 race: PAL2NAL once per gene family | fixed (coal_compat timeout left out on purpose: drop-in for long runs) | 1444e98 |
+| 9 diamond pipeline: all pairs skipped | fixed | 8c288e4 |
+| 10 NW memory (3000x3000: 15 s/1.25 GB -> 4.3 s/~28 MB), --max-length 2000 | fixed | 8c288e4 |
+| 11 hosted Space: intro text, path sandbox, MCP off on Space | fixed | e884ce4 |
+| 12 temp dirs (RUNS_DIR, 24 h pruning, probe files, tests clean up) | fixed | e884ce4 |
+| 13 genetic-code probes (sample <= 200, 30 s each, 90 s total; 22 s -> 1.6 s) | fixed; probes are not run with -q (they count warnings) | e884ce4 |
+| 14 malformed / BOM reports | fixed | 655a862 |
+| 15 sample report = real run of examples/mito with code 1, labelled demo | fixed | 655a862 |
+| 16 CI gui/mcp jobs, required-extras switch, stdio MCP handshake, unconditional asserts | fixed; gui/mcp jobs not yet run (nothing pushed); the gradio[mcp] 5.49.1 vs mcp 2.2.0 question stays **for a human / CI** | a879b52 |
+| 17 "COAL's app estimates" wording; mcp_demo.md regenerated | fixed | 655a862 |
+| 18 utf-8 everywhere | fixed | 8c288e4 |
+| 19 gcode drift test; locate_breaks above main | fixed | 655a862 |
+| C1 PAL2NAL also a web form | fixed | 3dbe45d |
+| C2 drop-in claim limited to -output fasta; -html hint; -nostderr accepted | fixed (-verbose still rejected: PAL2NAL source not available to confirm it) | 95d73bd |
+| C3 165-check split recomputed | fixed (numbers below) | 3dbe45d |
+| C4 honest C++ CI job | fixed | a879b52 |
+| C5 extras CI jobs | fixed (= 16) | a879b52 |
+| C6 explainer columns at step 1 | fixed (Playwright test) | 3dbe45d |
+| C7 "TGA = W (mito)" on the last step | fixed | 3dbe45d |
+| C8 explainer at 390 px | fixed | 3dbe45d |
+| C9 "10 s with 4 processes, 25 on one" | fixed | 3dbe45d |
+| C10 SKILL.md: current engine only | fixed | 4351f4a, 4d89937 |
+| C11 extras in separate environments | documented; real resolution **needs CI / a human** | 4351f4a |
+| C12 examples shipped in the wheel | fixed (wheel built + installed offline in a test) | a3ff7bc |
+| C13 public Space path sandbox | fixed (= 11) | e884ce4 |
+| C14 this log | fixed (here) | (this commit) |
+| C15 explainer "about 16 s" in PITCH.md | fixed | 3dbe45d |
+| APP-L1/L2 local path inputs, `?protein=&dna=` URL hook | done | be69a5c |
+| APP-M1 MCP on by default locally, off on the Space | done (decision recorded in CHANGES.md) | be69a5c |
+
+Note: commit 4351f4a was made with one failing app test (my own SKILL.md marker comment named the upcoming
+flags); fixed in the next commit 4d89937. All other commits had both suites passing.
+
+**C3 numbers** (recomputed by instrumenting `tests/test_differential.py::test_all_cases`): 165 checks =
+143 compare stdout byte for byte (94 of them also compare the mismatch warnings; 47 are -nomismatch variants
+whose warnings are not compared; 2 are table-10 deliberate warning-only differences) + 12 where PAL2NAL failed
+and COAL must exit non-zero with empty output (error text not compared) + 3 deliberate invalid-character
+errors (exit code only) + 7 deliberate "differs" (tables 10/11/13, exit code 0 only; 4 of them happen to give
+identical stdout). Golden .rc files are never read.
+
+**Tests now:** engine `python -m unittest discover -s tests`: 11 OK. App `python -m unittest discover -s
+tests_app`: 115 tests OK, 5 skipped here (3 need Gradio, 1 needs a non-root user, 1 needs network or
+`COAL_WHEELHOUSE` to build a wheel). With `COAL_WHEELHOUSE=<folder with a setuptools wheel>` the wheel test
+runs and passes. On CI the plain jobs will additionally skip the 2 MCP-server tests (no `mcp`) and the 2
+Playwright explainer tests; the new gui/mcp jobs require their tests. CI did run before these fixes: green
+runs exist for keanu_overnight/app (`gh run list`), each with 3 app tests skipped (2 GUI + 1 MCP), not 2.
+
+**Needs a human**
+1. Push the branch and read the new CI jobs: `gui` (first real run of ui.py and the Gradio 5.49.1 pin, incl.
+   the new path boxes and URL hook, only mock-tested here), `mcp`, and "Info: gui + mcp extras in one
+   environment" (does gradio[mcp] conflict with mcp==2.2.0?).
+2. README.md corrections (not mine to edit): line 69 says every check requires byte-identical output and equal
+   warnings; true only for 143 (output) and 94 (warnings) of the 165, see C3 numbers. Line 10 "byte-identical
+   output on the benchmarked datasets" is fine. Suggested README text for the GUI (earlier summary item 4)
+   should now also mention path boxes for big files and that the public Space has no MCP.
+3. Race (`demo/race.py`) CLI changed (`--families/--seqs/--codons`, `--family PEP NUC`); measure it on a
+   laptop with PAL2NAL before quoting any race number. No race number is quoted in the pitch today.
+4. PAL2NAL `-verbose`: if PAL2NAL v14 has it, add it to coal_compat's accepted-and-ignored flags.
+5. Engine-side (not app): unrelated protein and DNA currently exit 0 with per-codon warnings; SKILL.md now
+   tells agents to count warnings per gene.
+
+---
+
 # Overnight B (app/GUI/MCP): morning summary
 
 All 13 tasks done (1-7 from the brief, 8-13 added overnight) on branch `overnight/app` (local commits only, nothing pushed).
