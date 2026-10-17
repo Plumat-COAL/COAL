@@ -55,6 +55,15 @@ def step_1m(clock):
                 warmup=False, extra={"mode": "single_cap_test"})
 
 
+def step_1m_p2n16(clock):
+    """User addition (20:1x): one p2n16 run on 1M, no warm-up, 24 GB cap, 15-min timeout; OOM/TIMEOUT are results."""
+    m = speed_case("n1000000_L400")
+    tiers.TIMEOUT = 900
+    log("1M p2n16: single run, no warm-up, 24 GB cap, 15-min timeout")
+    run_and_log("B", ("p2n16", None), m, clock, "n1000000_L400 (single run, 24 GB cap, 900 s timeout)", runs=1,
+                warmup=False, extra={"mode": "single_cap_test"})
+
+
 def step_e(clock):
     log("Tier E (reduced): coal-cpp -j 1,2,4,8,12,20 on n100000_L400 and n1000000_L400; coal-py -j1/default on n100000_L400")
     for case in ("n100000_L400", "n1000000_L400"):
@@ -155,7 +164,7 @@ def step_dtime(clock):
             run_and_log("D", cfg, m, clock, f"{m['scenario']} {m['dir'].split('/')[-1]}")
 
 
-STEPS = {"1m": step_1m, "E": step_e, "C": step_c, "Dcorr": step_dcorr, "Dtime": step_dtime}
+STEPS = {"1m": step_1m, "1m_p2n16": step_1m_p2n16,"E": step_e, "C": step_c, "Dcorr": step_dcorr, "Dtime": step_dtime}
 
 if __name__ == "__main__":
     step = sys.argv[1]
