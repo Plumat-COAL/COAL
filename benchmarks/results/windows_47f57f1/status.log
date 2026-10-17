@@ -912,3 +912,8 @@
 [2026-10-17 21:29:56] D largest10 t000052 coal-cpp@jdefault: median 0.1445s peak 29.5 MB
 [2026-10-17 21:29:57] D largest10 t000052 coal-cpp@j1: median 0.1851s peak 23.7 MB
 [2026-10-17 21:30:04] STEP Dtime HARD STOP at 21:30 (deadline): run in flight discarded, rows already written kept
+[2026-10-17 21:38:45] OVERNIGHT start: n1000000_L400 p2n14 (3 h timeout) then p2n16 (6 h timeout), 1 run each, no warm-up (a ~40-min warm-up is not worth it), 24 GB cap; extra p2n14 runs only if they can finish before 08:00
+[2026-10-17 21:38:48] clock reference: 130.4% of nominal (single-thread probe)
+[2026-10-17 21:38:49] drift check overnight/start: coal-cpp -j1 n10000_L400 median 0.1376s peak 16.1 MB
+[2026-10-17 22:08:46] overnight clock (avg over last 30 min, all cores): 129.0% of nominal
+[2026-10-17 22:29:15] OVERNIGHT ABORTED: background shell reaped by Claude Code (host critically low on memory) during p2n14 n1000000_L400 run 1 (started 21:38:49, alive at 22:08:46); no row written for it; p2n16 not started; NOT an OOM under the 24 GB job cap; not restarted (needs user)

@@ -169,3 +169,7 @@ explanation for it, are **unverified**. The verification steps above still apply
 - Up to 2 more p2n14 runs (for a median), only if each can finish before 08:00.
 - Every completed output is graded against truth. Rows are in `runs.csv` (tier B, mode `single_overnight`).
 - Committed locally, not pushed (the user reviews and pushes in the morning).
+- **First attempt aborted, 2026-10-17 between 22:08 and 22:28.** Claude Code reaped the background shell because the
+  host was critically low on memory. This was not the 24 GB job cap. p2n14 run 1 was in progress (started 21:38:49)
+  and is lost with no row. p2n16 was not started. Likely cause, not measured: p2n14's 1M working set (about 18–19 GB
+  extrapolated) plus other processes on the 32 GB host. Only the drift-check rows of that attempt are in `runs.csv`.
