@@ -162,5 +162,28 @@ class TestEngD_PartialIdMatch(TempDirCase):
         self.assertEqual((r.returncode, r.stderr), (0, ""))
 
 
+# ---------------------------------------------------------------- ENG-e
+class TestEngE_LongFallback(unittest.TestCase):
+    def test_100k_codons_with_one_n_is_fast(self):
+        sys.path.insert(0, str(SRC))
+        import time
+        from coal.core import thread_one
+        from coal.tables import get_code
+        code = get_code(1).code
+        sense = sorted(c for c, a in code.items() if a != "*")
+        rng = random.Random(5)
+        cod = ["ATG"] + [rng.choice(sense) for _ in range(99_999)]
+        prot = "".join(code[c] for c in cod)
+        dna = "".join(cod)
+        k = 3 * 50_000 + 1
+        dna = dna[:k] + "N" + dna[k + 1:]
+        t = time.perf_counter()
+        r = thread_one("g", prot, dna, 1)
+        dt = time.perf_counter() - t
+        self.assertEqual(r.dna, dna)
+        self.assertEqual(r.mismatch_cols, {50_001})
+        self.assertLess(dt, 1.0)
+
+
 if __name__ == "__main__":
     unittest.main()

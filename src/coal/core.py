@@ -314,12 +314,23 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int) -> Threaded:
         raise CoalError(f"{seq_id}: protein and DNA are inconsistent (no match found)")
     pattern, col = [], 1
     found_any = False
+    expect = -1  # where this anchor starts if the previous anchors' matches are the real ones
     for k, a in enumerate(anchors):
         at = _tokens(a, ANCHOR_START if k == 0 else NORMAL, col)
-        if _find(target, at) < 0:
+        # CHANGED(ENG-e): was a full _find (regex compile + scan from the DNA start) for every
+        # anchor (quadratic); now tries the expected position first, which proves the anchor
+        # occurs, and only searches the whole DNA if it is not there. Same result.
+        # See overnight/engine-fixes/CHANGES.md
+        if expect >= 0 and _matches_at(table, dna, expect, at):
+            hit = expect
+        else:
+            hit = _find(target, at)
+        if hit < 0:
             at = [("w", 3 if t[0] == "r" else t[1], t[2]) for t in at]
+            expect = expect + _length(at) if expect >= 0 else -1
         else:
             found_any = True
+            expect = hit + _length(at)
         pattern += at
         col += len(a)
     s = _find(target, [("n", t[1], t[2]) if t[0] == "w" else t for t in pattern])
