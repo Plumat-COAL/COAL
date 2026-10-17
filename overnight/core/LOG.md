@@ -221,6 +221,7 @@ tests/test_cpp_vs_reference.py (reference goldens + reference fuzz vs PAL2NAL, c
   with '#' mark lines (FZ-1), tfastx notation (FZ-3), -nogap/-nomismatch rules.
 - 2026-10-17 12:25 UTC | CPP-10 FZ-5, CPP-11 ENG-i2 + DEC-4f | reference goldens 279/279 (was 248); random vs reference 887/1000 (was 739); fuzz unexplained 431 (was 440; -nogap differences now counted as deliberate).
 - 2026-10-17 12:30 UTC | CPP-12 FZ-1/FZ-2 readers, CPP-13 -blockonly + mark lines | goldens 279/279; random vs reference 892/1000; fuzz unexplained 76 (clustal/paml/fasta 22 each, codon 10).
+- 2026-10-17 12:32 UTC | CPP-14 FZ-3 tfastx | fuzz vs real PAL2NAL 1000 cases x 4 formats: 0 unexplained differences; goldens 279/279.
 
 ## Run 3 progress (C++ foundations brief: build, readers, tables, CLI, pool, test hookup)
 

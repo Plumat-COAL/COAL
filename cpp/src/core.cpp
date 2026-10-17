@@ -153,10 +153,42 @@ std::string py_repr_char(unsigned char c) {
 
 std::string prepare_row(const std::string& aln) {
     std::string r = aln;
+    bool tfastx = false;
     for (char& c : r) {
         if (c >= 'a' && c <= 'z') c = char(c - 32);
-        else if (c == '.') c = '-';
+        else if (c == '\\' || c == '/') tfastx = true;
     }
+    if (tfastx) {
+        // CPP-14 (reference FZ-3): tfastx/tfasty frameshift notation, read as PAL2NAL v14 reads it: '\\' = 1 base
+        // (digit 1); '/' + gaps + residue = a gap, the gaps, then 2 bases (digit 2). Any other '/' stays (invalid).
+        std::string t;
+        t.reserve(r.size());
+        for (size_t i = 0; i < r.size();) {
+            char c = r[i];
+            if (c == '\\') {
+                t += '1';
+                ++i;
+            } else if (c == '/') {
+                size_t j = i + 1;
+                while (j < r.size() && r[j] == '-') ++j;
+                if (j < r.size() && ((r[j] >= 'A' && r[j] <= 'Z') || r[j] == '*')) {
+                    t += '-';
+                    t.append(r, i + 1, j - i - 1);
+                    t += '2';
+                    i = j + 1;
+                } else {
+                    t += '/';
+                    ++i;
+                }
+            } else {
+                t += c;
+                ++i;
+            }
+        }
+        r.swap(t);
+    }
+    for (char& c : r)
+        if (c == '.') c = '-';
     return r;
 }
 
