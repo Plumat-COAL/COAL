@@ -34,15 +34,18 @@ Each case folder holds `pep.fasta`, `nuc.fasta` (or `nuc1/nuc2`), `truth.fasta` 
 
 ## Prebuilt data
 
-The built sets are also packed as three archives (`coal_testset_sim.tar.zst`,
-`coal_testset_ncbi.tar.zst`, `coal_testset_compara.tar.zst`). Unpack them into `validation/data/`:
+The built sets are also packed as four archives (`coal_testset_sim.tar.zst`,
+`coal_testset_speed1M.tar.zst`, `coal_testset_ncbi.tar.zst`, `coal_testset_compara.tar.zst`), with a
+`SHA256SUMS` file. Unpack them into `validation/data/`:
 
 ```
 cd validation/data && for f in /path/to/coal_testset_*.tar.zst; do tar --zstd -xf "$f"; done
 ```
 
-The 1,000,000-sequence speed set is not in the archive (about 3 GB); rebuild it with
-`python validation/build_sim.py speed` (about a minute; same seed, same files).
+`coal_testset_speed1M` holds the headline scalability point, `sim/speed/n1000000_L400`: 1,000,000
+sequences × 400 codons (1.22 Gnt of CDS, 1.7 GB input, 3 GB unpacked including the truth file).
+It is also rebuildable with `python validation/build_sim.py speed` (about a minute; same seed, same
+files: `nuc.fasta` sha256 is recorded in `sim/speed/manifest.jsonl`).
 
 ## Scoring (`check.py`, `run.py`)
 
