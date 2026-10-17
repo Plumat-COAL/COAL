@@ -26,10 +26,12 @@
   --card-line: #564D46;
   --card-hi: rgba(255, 236, 220, 0.09);   /* the card's inner top highlight */
   --card-code-bg: #171514;
-  --ember: #FF6A13;
-  --ember-hover: #FF8A45;
-  --on-ember: #1E1E1E;     /* 5.8:1 on ember, 7.1:1 on the hover colour */
-  --amber: #FFC24B;        /* 11.7:1 on the page; dark text on it (the "For this computer" mark) 10.4:1 */
+  /* CHANGED(AMB-2): the accent was ember #FF6A13 (hover #FF8A45); now the logo's amber. Ember stays in the logo
+     and the footer train only. */
+  --accent: #FFC24B;       /* 11.7:1 on the page, 9.5:1 on a card: links' hover line, current page, edges */
+  --accent-hover: #FFD27A;
+  --on-accent: #1E1E1E;    /* 10.4:1 on amber, 11.7:1 on the hover colour */
+  --amber: #FFC24B;
   --focus: #FFC24B;
   --ok: #8FD19E;
   --rail: #57524D;
@@ -63,7 +65,7 @@ body { margin: 0; background: var(--paper); color: var(--text); font-family: var
 @media (min-width: 40rem) { :root { --gutter: 2rem; } }
 img, svg { max-width: 100%; }
 a { color: var(--ink); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.18em; }
-a:hover { text-decoration-color: var(--ember); text-decoration-thickness: 2px; }
+a:hover { text-decoration-color: var(--accent); text-decoration-thickness: 2px; }
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 2px; }
 p, ul, ol, dl, figure, blockquote, table, pre { margin: 0 0 1em; }
 h1, h2, h3, h4 { color: var(--ink); line-height: 1.2; font-weight: 750; }
@@ -77,13 +79,13 @@ pre code { background: none; padding: 0; font-size: inherit; }
 kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3px; padding: 0 0.3em; }
 .visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);
   white-space: nowrap; }
-.skip { position: absolute; left: 1rem; top: -4rem; background: var(--ember); color: var(--on-ember); font-weight: 700;
+.skip { position: absolute; left: 1rem; top: -4rem; background: var(--accent); color: var(--on-accent); font-weight: 700;
   padding: 0.5rem 1rem; z-index: 10; }
 .skip:focus { top: 0.5rem; }
 .fine { font-size: var(--fs-sm); color: var(--muted); }
 .lead { font-size: var(--fs-lead); line-height: 1.45; color: var(--text); }
 
-/* Header: the small mark and name, then one link per page. The current page is underlined in ember. */
+/* Header: the small mark and name, then one link per page. The current page is underlined in amber. */
 .top { width: calc(100% - 2 * var(--gutter)); max-width: var(--wide); margin: 0 auto; padding: 0.85rem 0;
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.4rem 1.5rem;
   border-bottom: 1px solid var(--line); }
@@ -94,7 +96,7 @@ kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3p
 .top li a { display: inline-block; padding: 0.25rem 0; color: var(--text); text-decoration: none;
   border-bottom: 2px solid transparent; }
 .top li a:hover { color: var(--ink); border-bottom-color: var(--line); }
-.top li a[aria-current="page"] { color: var(--ink); font-weight: 700; border-bottom-color: var(--ember); }
+.top li a[aria-current="page"] { color: var(--ink); font-weight: 700; border-bottom-color: var(--accent); }
 @media (max-width: 30rem) { .top ul { gap: 0.1rem 1rem; } .top li a { font-size: 0.97rem; } }
 
 /* Page body: text at a reading measure; transcripts, tables, figures and the cards wider. */
@@ -123,18 +125,21 @@ main { width: calc(100% - 2 * var(--gutter)); max-width: var(--wide); margin: 0 
 .card .act { margin: 0 0 0.9rem; }
 .card .fine { margin: 0; font-size: 0.875rem; }
 .card code { background: var(--card-code-bg); }
-.suggest { position: absolute; top: -0.7rem; right: 1rem; margin: 0; padding: 0.05rem 0.55rem; border-radius: 999px;
-  background: var(--amber); color: var(--on-ember); font-size: 0.8rem; font-weight: 700; }
+/* CHANGED(AMB-2): was a filled amber pill (dark text), now that the buttons are amber an outlined one on the card
+   colour (amber text 9.5:1, its edge 9.5:1), so it does not read as a button */
+.suggest { position: absolute; top: -0.7rem; right: 1rem; margin: 0; padding: 0 0.55rem; border-radius: 999px;
+  background: var(--card-bg); color: var(--accent); border: 1.5px solid var(--accent); font-size: 0.8rem;
+  font-weight: 700; }
 .suggest[hidden] { display: none; }
-.card.is-suggested { border-color: var(--ember); box-shadow: inset 0 1px 0 var(--card-hi), 0 0 0 1px var(--ember),
+.card.is-suggested { border-color: var(--accent); box-shadow: inset 0 1px 0 var(--card-hi), 0 0 0 1px var(--accent),
   0 18px 36px -20px rgba(0, 0, 0, 0.9); }
-.btn { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 3rem; background: var(--ember);
-  color: var(--on-ember); font: inherit; font-weight: 800; font-size: 1.0625rem; padding: 0.6rem 1rem;
-  border: 2px solid var(--ember); border-radius: 6px; text-decoration: none; cursor: pointer;
+.btn { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 3rem; background: var(--accent);
+  color: var(--on-accent); font: inherit; font-weight: 800; font-size: 1.0625rem; padding: 0.6rem 1rem;
+  border: 2px solid var(--accent); border-radius: 6px; text-decoration: none; cursor: pointer;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25); }
-.btn:hover { background: var(--ember-hover); border-color: var(--ember-hover); text-decoration: none; }
+.btn:hover { background: var(--accent-hover); border-color: var(--accent-hover); text-decoration: none; }
 .btn.secondary { background: transparent; color: var(--ink); border-color: #8C827A; box-shadow: none; }  /* border 4.1:1 on a card (3:1 needed for a control's edge) */
-.btn.secondary:hover { border-color: var(--ember); }
+.btn.secondary:hover { border-color: var(--accent); }
 .card .cmd { margin: 0 0 0.6rem; background: var(--card-code-bg); border-color: var(--card-line); border-radius: 6px; }
 .card .cmd code { font-size: 0.78rem; }
 .also { display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; list-style: none; padding: 0; margin: 1.25rem 0 0;
