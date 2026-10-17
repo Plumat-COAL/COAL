@@ -21,6 +21,9 @@ from .seqio import InputFormatError
 from .tables import SUPPORTED
 
 
+MAX_WARNINGS = 20  # CHANGED(IMP-E-C): default --max-warnings
+
+
 def _on_sigterm(signum, frame):
     raise SystemExit(128 + signum)
 
@@ -70,9 +73,11 @@ def main(argv=None) -> int:
                     help="skip sequences that cannot be converted (or, with --strict, are refused) instead of "
                          "stopping; the others are written in input order, skipped ones are named on stderr and in "
                          "the report; exit code 2 if any was skipped")
-    ap.add_argument("--max-warnings", type=int, default=0, metavar="N",
-                    help="print at most N per-codon warning lines, then a count of the rest (default 0 = no limit, "
-                         "as PAL2NAL); notices and errors are always printed")
+    # CHANGED(IMP-E-C): default was 0 (no limit): a wrong genetic code printed hundreds of lines (834 on coxI). Now 20;
+    # the `pal2nal` drop-in passes 0 (PAL2NAL prints them all). See overnight/integration/CHANGES.md
+    ap.add_argument("--max-warnings", type=int, default=MAX_WARNINGS, metavar="N",
+                    help=f"print at most N per-codon warning lines, then a count of the rest (default {MAX_WARNINGS}; "
+                         "0 = all, as PAL2NAL); notices and errors are always printed")
     ap.add_argument("--progress", action="store_true",
                     help="show percent done and time left on stderr (inputs over 10,000 sequences)")
     ap.add_argument("--resume", action="store_true",
@@ -150,7 +155,9 @@ def main(argv=None) -> int:
                 "input_format" if isinstance(e, (InputFormatError, UnicodeDecodeError)) else "file_error")
         rec.fail(code, str(e), getattr(e, "seq_id", None))
     if hidden[0]:
-        where = "see the report" if (args.report or args.json) else "see them all with --report FILE.json"
+        # CHANGED(IMP-E-C): + "--max-warnings 0" (the cap is now on by default)
+        where = "see the report" if (args.report or args.json) else \
+            "see them all with --max-warnings 0 or --report FILE.json"
         print(f"coal: warning: ... and {hidden[0]:,} more warnings ({where})", file=sys.stderr)
     rec.exit_code = rc
     if not args.quiet:

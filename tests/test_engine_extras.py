@@ -225,7 +225,7 @@ class TestMethodsAndMaxWarnings(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)
             write_genes(d, 6, table=2, mito=True)
-            rc, _, full = run(d, ["pep.fasta", "nuc.fasta"])
+            rc, _, full = run(d, ["pep.fasta", "nuc.fasta", "--max-warnings", "0"])  # CHANGED(IMP-E-C): default 20
             n = full.count("does not correspond")
             self.assertGreater(n, 5)
             rc, _, err = run(d, ["pep.fasta", "nuc.fasta", "--max-warnings", "5"])
@@ -235,7 +235,7 @@ class TestMethodsAndMaxWarnings(unittest.TestCase):
             notices = [l for l in full.splitlines() if l.startswith("coal: warning:") and "pepAlnPos" not in l]
             self.assertEqual([l for l in err.splitlines() if l.startswith("coal: warning:") and "pepAlnPos" not in l],
                              notices + [f"coal: warning: ... and {n - 5} more warnings "
-                                        "(see them all with --report FILE.json)"])
+                                        "(see them all with --max-warnings 0 or --report FILE.json)"])  # IMP-E-C
             rc, _, err = run(d, ["pep.fasta", "nuc.fasta", "--max-warnings", "5", "-o", "o.fa", "--report", "r.json"])
             self.assertIn(f"... and {n - 5} more warnings (see the report)", err)
             r = json.loads((d / "r.json").read_text())   # the report keeps every warning

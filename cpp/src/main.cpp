@@ -87,7 +87,7 @@ struct Options {
     int jobs = 0;
     bool keep_going = false, progress = false, resume = false, json = false;
     bool resumable = true;  // CPP-28 (reference MRG-4): false when an input came through a pipe (spooled)
-    int max_warnings = 0;
+    int max_warnings = 20;  // CHANGED(IMP-E-C): was 0 (no limit); cli.py MAX_WARNINGS
     std::string report;
     std::vector<std::string> argv;  // raw arguments (for the report's "command")
 };
@@ -1450,7 +1450,8 @@ int main(int argc, char** argv) {
         rec.fail("file_error", restore_names(e.what()), false);
     }
     if (hidden) {
-        std::string where = (!o.report.empty() || o.json) ? "see the report" : "see them all with --report FILE.json";
+        std::string where = (!o.report.empty() || o.json) ? "see the report"
+                                                           : "see them all with --max-warnings 0 or --report FILE.json";
         std::cerr << "coal: warning: ... and " << fmt_n(hidden) << " more warnings (" << where << ")\n";
     }
     rec.exit_code = rc;

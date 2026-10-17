@@ -243,5 +243,31 @@ class TestStderrSameBothEngines(unittest.TestCase):
                         self.assertIn(b"Re-run with -codontable", py.stderr)
 
 
+class TestWarningCap(unittest.TestCase):
+    """IMP-E-C: `coal` caps per-codon warnings at 20 by default; the `pal2nal` drop-in prints them all."""
+
+    def test_default_cap_and_drop_in(self):
+        d = ROOT / "examples" / "mito"
+        rc, out, err = run_py(["protein.aln.fasta", "dna.fasta"], d)
+        rc0, out0, err0 = run_py(["protein.aln.fasta", "dna.fasta", "--max-warnings", "0"], d)
+        n = err0.count("pepAlnPos")
+        self.assertGreater(n, 20)
+        self.assertEqual((rc, out), (rc0, out0))
+        self.assertEqual(err.count("pepAlnPos"), 20)
+        self.assertIn(f"coal: warning: ... and {n - 20:,} more warnings (see them all with --max-warnings 0 or "
+                      f"--report FILE.json)", err)
+        from coal_compat.cli import main as pal2nal_main
+        o, e = io.StringIO(), io.StringIO()
+        old = os.getcwd()
+        os.chdir(d)
+        try:
+            with redirect_stdout(o), redirect_stderr(e):
+                pal2nal_main(["protein.aln.fasta", "dna.fasta", "-output", "fasta"])
+        finally:
+            os.chdir(old)
+        self.assertEqual(e.getvalue().count("pepAlnPos"), n)
+        self.assertNotIn("more warnings", e.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

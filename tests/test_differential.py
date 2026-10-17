@@ -92,6 +92,7 @@ def run_coal(case: str, opts: list[str]):
     spec = MANIFEST["cases"][case]
     args = [spec["pep"], *spec.get("nuc", ["nuc.fasta"])]
     o = list(opts)  # COAL takes PAL2NAL's options with the same spelling (CHANGED(DEC-4): incl. -output)
+    o = ["--max-warnings", "0", *o]  # CHANGED(IMP-E-C): `coal` caps warnings at 20 by default; PAL2NAL prints all
     if IMPL == "cpp":
         r = subprocess.run([str(cpp_binary()), *args, *o], cwd=FIX / case, capture_output=True, timeout=60)
         # stdout must be byte-identical; stderr is text (CRLF on Windows, as Python's): compare its lines (CPP-8)

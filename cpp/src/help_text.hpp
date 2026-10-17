@@ -16,7 +16,7 @@ positional arguments:
 
 options:
   -h, --help            show this help message and exit
-  -codontable N, --codontable N
+  -codontable, --codontable N
                         NCBI genetic code (default 1); one of 1, 2, 3, 4, 5,
                         6, 9, 10, 11, 12, 13, 14, 15, 16, 21, 22, 23
   -nogap, --nogap       remove codon columns containing gaps or stop codons
@@ -26,15 +26,15 @@ options:
   -nomismatch, --nomismatch
                         remove alignment columns where a codon does not match
                         its residue
-  -output {fasta,clustal,paml,codon}, --output-format {fasta,clustal,paml,codon}
+  -output, --output-format {fasta,clustal,paml,codon}
                         output format, as PAL2NAL v14 writes it (default
                         fasta; PAL2NAL's default is clustal)
   -blockonly, --blockonly
                         keep only the columns marked '#' in the CLUSTAL
                         input's conservation lines (PAL2NAL's -blockonly; no
                         effect if the input has no '#' marks)
-  -o OUT, --out OUT     output file (default: stdout)
-  -j N, --jobs N        worker threads (default 0 = all hardware threads)
+  -o, --out OUT         output file (default: stdout)
+  -j, --jobs N          worker threads (default 0 = all hardware threads)
   -q, --quiet           do not print warnings or notices (errors are always
                         printed)
   -strict, --strict     refuse probably-wrong data instead of writing it as
@@ -54,8 +54,8 @@ options:
                         stderr and in the report; exit code 2 if any was
                         skipped
   --max-warnings N      print at most N per-codon warning lines, then a count
-                        of the rest (default 0 = no limit, as PAL2NAL);
-                        notices and errors are always printed
+                        of the rest (default 20; 0 = all, as PAL2NAL); notices
+                        and errors are always printed
   --progress            show percent done and time left on stderr (inputs over
                         10,000 sequences)
   --resume              continue an interrupted run (needs -o, same inputs and
