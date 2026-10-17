@@ -353,8 +353,12 @@ def _issues(rows: list[dict], report: dict | None, shown_cols: int) -> str:
         from . import core
         sentences = {s.get("id"): core.sequence_sentence(s) for s in report.get("sequences", [])}
     items = []
+    unchecked = 0
     for r in rows:
         flagged = [(i + 1, f) for i, (_, _, f) in enumerate(r["cells"]) if f in ("mismatch", "frameshift")]
+        if r["status"] == "not_checked" and not flagged and not r["events"]:
+            unchecked += 1
+            continue
         if r["status"] == "ok" and not flagged and not r["events"]:
             continue
         icon, word = _ICON.get(r["status"], ("?", str(r["status"])))
@@ -372,6 +376,10 @@ def _issues(rows: list[dict], report: dict | None, shown_cols: int) -> str:
         items.append(f'<li><strong>{icon} {word}</strong> <a href="#{row_id(r["id"])}"><code>'
                      f'{html.escape(r["id"])}</code></a>: {html.escape(text or ev)}'
                      f'{(" " + html.escape(ev)) if ev and text and ev not in text else ""}{jump}</li>')
+    if unchecked:
+        items.append(f"<li><strong>– Not checked</strong>: {unchecked} other sequence"
+                     f"{'s' if unchecked != 1 else ''} (COAL stopped at an earlier error). In the view below their "
+                     f"codons match their amino acids.</li>")
     if not items:
         return '<p class="note">✔ Every codon matches its amino acid.</p>'
     return '<ul class="issues">' + "".join(items) + "</ul>"
