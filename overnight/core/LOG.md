@@ -1,5 +1,82 @@
 # Overnight log: core (branch overnight/core)
 
+## Morning summary (both overnight runs + code review)
+
+Everything is on the local branch `overnight/core` (17 commits on top of main `31cf3d0`). **Not pushed**: this machine has no GitHub credentials. Push it yourself when you're happy: `git push -u origin overnight/core`
+
+**State:** Python 279/279 and C++ 279/279 golden checks. The full test suite (52 tests) passes. The C++ vs Python random test is identical on 1000/1000 inputs, plus 3,000 more with other seeds. The final code-review pass came back clean.
+
+### Done → commit
+| task | commit |
+|---|---|
+| Run 1 · 1 Python `-output clustal/paml/codon` | `2d80616` |
+| Run 1 · 2 C++ core `coal-cpp` (+ random/threads tests, speed, benchmarks) | `4eb39aa` `5266c9d` `e1dd30c` `7add571` |
+| Run 1 · 3+4 run report `--report/--json`, `coal: summary:` lines, genetic-code hint | `f1373a2` |
+| Run 2 · 1 summary + hints | already done in run 1 (skipped) |
+| Run 2 · 2 `--keep-going` (exit 2) | `c409b01` |
+| Run 2 · 3 safe ID pairing (normalised, one-to-one; file-order warning) | `004d430` |
+| Run 2 · 4 `methods_text` in the report, `--max-warnings N` | `eef8c0b` |
+| Run 2 · 5 `--progress` | `6ace724` |
+| Run 2 · 6 `--resume` (checkpoints) | `4e98e10` |
+| Run 2 · 7 C++ parity for all of the above | `3f31971` |
+| Code review passes 1–4 | `77ee9d6` `640582b` `691203b` (pass 4 clean, no commit needed) |
+
+### Speed (measured, 2-core Linux VM, local disk, medians)
+| dataset | Python -j1 | C++ 1 thread | C++ 2 threads | speed-up |
+|---|---|---|---|---|
+| 10,000 × 500 | 0.593 s | 0.114 s | 0.097 s | 6.1× |
+| 100 × 10,000 | 0.149 s | 0.027 s | 0.023 s | 6.4× |
+| 100,000 × 500 | 3.559 s | 0.952 s | 0.881 s | 4.0× |
+C++ peak memory < 30 MB on a 137 MB input. Re-checked after all the changes: still the same. Details: benchmarks/results/cpp_vs_python_linux.md
+
+### Code review (repeated 4×, stopping early if a pass came back clean)
+- Pass 1 fixed 4 issues, including a real C++ heap-use-after-free on error paths (found with AddressSanitizer) and temp-file leaks.
+- Pass 2 fixed a wrong number in this log.
+- Pass 3 fixed a misleading `--resume` message.
+- Pass 4 was clean.
+- Tools used: pyflakes, `-Wall -Wextra -Wshadow`, ASan + UBSan and TSan builds run through the test suites, Python `-X dev` ResourceWarnings, CRLF inputs, adversarial edge cases on both engines.
+
+### Parked
+- `-output codon` residue-line quirk of PAL2NAL with frameshift digits 4/5. No golden covers it; see Decisions.
+
+### Needs a human decision
+- Add `build/` to .gitignore.
+- An untracked `Claude outputs/` folder sits in the repo root. It isn't mine, so I left it alone.
+- Bump the version to 0.4.0: `pyproject.toml` (off limits for me) and `src/coal/__init__.py`. `methods_text` currently says v0.3.0.
+- coal-cpp has not been compiled with MSVC on Windows (no compiler here). It is written to standard C++17, but try the Windows build below.
+- README (off limits) doesn't mention the new flags yet.
+
+### How to try it
+Linux/macOS:
+```
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j
+export PYTHONPATH=src            # or: pip install -e .
+python -m coal tests/fixtures/clean/pep.fasta tests/fixtures/clean/nuc.fasta -output paml -o out.paml --report report.json
+python -m coal pep.fasta nuc.fasta --keep-going -o out.fa          # skip broken genes, exit code 2
+python -m coal pep.fasta nuc.fasta -o out.fa --json                # report on stdout
+python -m coal pep.fasta nuc.fasta --max-warnings 20 --progress
+python -m coal pep.fasta nuc.fasta -o out.fa --resume              # after an interrupted run
+./build/coal-cpp <same options>                                    # C++ engine, same behaviour
+python -m unittest discover -s tests
+COAL_IMPL=cpp python -m unittest tests.test_differential
+python tests/test_differential.py --count
+python benchmarks/run_bench.py --impl both --sizes 10000x500
+```
+Windows (PowerShell, Visual Studio Build Tools + CMake):
+```
+cmake -S . -B build
+cmake --build build --config Release
+$env:PYTHONPATH="src"
+python -m coal tests\fixtures\clean\pep.fasta tests\fixtures\clean\nuc.fasta -output paml -o out.paml --report report.json
+.\build\Release\coal-cpp.exe tests\fixtures\long_mismatch\pep.fasta tests\fixtures\long_mismatch\nuc.fasta -output codon
+$env:COAL_IMPL="cpp"; $env:COAL_CPP_BIN="build\Release\coal-cpp.exe"; python -m unittest tests.test_differential tests.test_cpp_vs_python
+```
+Try the mito hint: run mitochondrial genes with the default code, and the summary suggests `-codontable 2`.
+
+(Timestamps below come from the VM's `date` and may not match UK time.)
+
+<details><summary>Run 1 summary (kept for reference)</summary>
+
 ## Morning summary — run 1 (C++ core prompt)
 
 **Done** (all on local branch `overnight/core`; nothing pushed — no GitHub credentials on this machine)
@@ -48,6 +125,8 @@ Push when happy: `git push -u origin overnight/core`
 
 (Timestamps below come from the VM's `date` and may not match UK time.)
 
+</details>
+
 ## Progress log
 
 - 2026-10-17 01:17 UTC | task 0 | preflight OK: cmake 4.4.4 + g++ 11.4, C++17 + std::thread hello-world built and ran (2 hardware threads). Branched overnight/core from main 31cf3d0 (pull: already up to date).
@@ -72,6 +151,7 @@ Push when happy: `git push -u origin overnight/core`
 - 2026-10-17 02:14 UTC | review pass 1 | NOT clean -> fixed | tools: pyflakes (Python), g++ -Wall -Wextra -Wshadow, AddressSanitizer + UBSan build run through the golden, random (1000), resume and progress tests, ThreadSanitizer build (setarch -R) on 3-thread runs of every staged/unstaged path, a CRLF-input check of all 38 fixtures on both engines, and a 13-case edge-case CLI comparison (missing files, missing output dir, empty input, bad options, --resume without checkpoint, ...). Found: (1) C++ heap-use-after-free on error paths: OutFile declared its stream buffer after the stream, so the buffer was freed before the stream's destructor flushed into it (ASan, 4 random inputs) -> member order fixed; (2) C++ temporary '.grid' file not removed if a block-format run failed or crashed in the final pass -> cleaned up on every exit; (3) Python report write left its temp file behind on failure and printed the temp name -> cleaned up, message names the report path; (4) one f-string without placeholders in a test. TSan: no races. Not testable here: MSVC/Windows build of coal-cpp (missing <algorithm>/<cctype> includes added for portability).
 - 2026-10-17 02:19 UTC | review pass 2 | NOT clean -> fixed | rebuilt ASan/UBSan on the current code and re-ran golden + random + resume + progress tests (clean, no leaked temp files; the 7 stray C++ temp files found in the temp dir were from the pre-fix ASan crashes of pass 1 and do not reappear); Python under -X dev with ResourceWarnings shown, in-process tests and CLI runs of every path (clean); full suite run twice (no flaky tests: 51 tests OK both times); re-read the C++ resume/cleanup/threading code and the Python pipeline/checkpoint code. Found: one wrong number in this log (task 6 line said '64 tests'; the whole suite has 51) -> corrected.
 - 2026-10-17 02:23 UTC | review pass 3 | NOT clean -> fixed | adversarial inputs on both engines (ASan build): empty DNA record, duplicate DNA IDs, pipe/version IDs reordered, non-ASCII header, all sequences failing with --keep-going (paml, -nomismatch), -nomismatch + clustal + --keep-going, corrupted checkpoint, emptied partial file -> engines agree on output, stderr and exit code in every case, and resumed outputs stay identical. Found: with an unreadable checkpoint or an incomplete partial file --resume said 'no checkpoint to resume', which is misleading -> both engines now say what they found ('found an unreadable checkpoint, so nothing can be resumed ...'); test added.
+- 2026-10-17 02:26 UTC | review pass 4 | CLEAN | ASan/UBSan (golden, random, resume, progress) and TSan (3 threads: plain, codon+keep-going, -nomismatch+report) on the final code; 3,000 new random cases (seeds 1-3) identical between engines; pyflakes clean; no TODO/debug leftovers; -X dev with ResourceWarnings: none; full suite 52 tests OK; golden 279/279 both engines; no leaked temp files; benchmarks re-checked (unchanged). Review stops here (clean pass).
 
 ## Decisions
 
