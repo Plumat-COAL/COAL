@@ -1,0 +1,18 @@
+{
+  "_comment": "Real-data datasets for tests/test_realdata.py. kind=roundtrip: a published codon alignment; the test derives the protein alignment and the unaligned DNA from it and COAL must rebuild it. partial: as roundtrip, but codons that are only partly gapped (fragment ends) become a gap in the protein and stay in the DNA. pair: a real protein alignment + real unaligned DNA (no codon-alignment truth): COAL's output must translate back to the protein alignment. Provenance and licence: <dir>/SOURCE.md.",
+  "datasets": {
+    "cd2":              {"kind": "roundtrip", "file": "CD2.nex.gz", "format": "nexus", "code": 1},
+    "ciliates":         {"kind": "roundtrip", "file": "ciliates.fas.gz", "format": "fasta", "code": 6},
+    "algae_coxI":       {"kind": "roundtrip", "file": "algae_coxI_aligned.fas.gz", "format": "fasta", "code": 4},
+    "coxI_mammals":     {"kind": "roundtrip", "file": "COXI.nex.gz", "format": "nexus", "code": 2},
+    "pts_bacteria":     {"kind": "roundtrip", "file": "Bacterial_PTS_trehalose_transporter_suIII.nex.gz", "format": "nexus", "code": 11},
+    "rem2_mammals":     {"kind": "roundtrip", "file": "mammalian_REM2_codons.SA.fasta.gz", "format": "fasta", "code": 1},
+    "mtdna_carnivores": {"kind": "roundtrip", "file": "mtDNA.fas.gz", "format": "fasta", "code": 2},
+    "rbcL_plants":      {"kind": "roundtrip", "file": "rbcL.nex.gz", "format": "nexus", "code": 11},
+    "hiv_rt":           {"kind": "roundtrip", "file": "HIV_RT.nex.gz", "format": "nexus", "code": 1},
+    "vwf_mammals":      {"kind": "partial", "file": "vwf.nex.gz", "format": "nexus", "code": 1},
+    "egfr":             {"kind": "pair", "pep": "egfr_pro.aln.gz", "nuc": "egfr_nucl.fa.gz", "id_map": "egfr_id.gz",
+                         "code": 1, "warnings": 1},
+    "adh_drosophila":   {"kind": "pair", "pep": "adh.aln.gz", "nuc": "drosophila.fasta.gz", "code": 1, "warnings": 0}
+  }
+}
