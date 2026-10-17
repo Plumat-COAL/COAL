@@ -181,5 +181,52 @@ class TestIdPairing(unittest.TestCase):
         self.assertEqual((mode, per[0], dna_ids[0]), ("order", "order", "n0"))
 
 
+
+class TestMethodsAndMaxWarnings(unittest.TestCase):
+    def test_methods_text(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            write_genes(d, 12, table=2, seed=2)
+            rc, _, err = run(d, ["pep.fasta", "nuc.fasta", "-codontable", "2", "-output", "paml", "-o", "o.paml",
+                                 "--report", "r.json"])
+            self.assertEqual(rc, 0, err)
+            from coal import __version__
+            m = json.loads((d / "r.json").read_text())["methods_text"]
+            self.assertEqual(m, f"Codon alignments were generated with COAL v{__version__} "
+                                "(https://github.com/chloe-newt/COAL) from 12 aligned protein sequences and their "
+                                "coding sequences, using the vertebrate mitochondrial genetic code (NCBI table 2) and "
+                                "PAML output; outputs are verified byte-identical to PAL2NAL v14 on the COAL test suite.")
+
+    def test_methods_text_keep_going_and_nogap(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            write_genes(d, 5, broken={1})
+            run(d, ["pep.fasta", "nuc.fasta", "--keep-going", "-nogap", "-o", "o.fa", "--report", "r.json"])
+            m = json.loads((d / "r.json").read_text())["methods_text"]
+            self.assertIn("from 4 aligned protein sequences and their coding sequences (1 sequence that could not "
+                          "be matched to its DNA was excluded), using the standard genetic code (NCBI table 1)", m)
+            self.assertIn("removing codon columns containing gaps or stop codons (-nogap)", m)
+
+    def test_max_warnings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            write_genes(d, 6, table=2, mito=True)
+            rc, _, full = run(d, ["pep.fasta", "nuc.fasta"])
+            n = full.count("does not correspond")
+            self.assertGreater(n, 5)
+            rc, _, err = run(d, ["pep.fasta", "nuc.fasta", "--max-warnings", "5"])
+            lines = [l for l in err.splitlines() if l.startswith("coal: warning:")]
+            self.assertEqual(lines[:5], [l for l in full.splitlines() if "does not correspond" in l][:5])
+            self.assertEqual(lines[5], f"coal: warning: ... and {n - 5} more warnings "
+                                       "(see them all with --report FILE.json)")
+            self.assertEqual(len(lines), 6)
+            rc, _, err = run(d, ["pep.fasta", "nuc.fasta", "--max-warnings", "5", "-o", "o.fa", "--report", "r.json"])
+            self.assertIn(f"... and {n - 5} more warnings (see the report)", err)
+            r = json.loads((d / "r.json").read_text())   # the report keeps every warning
+            self.assertEqual(sum(len(s["messages"]) for s in r["sequences"]), n)
+            rc, _, err = run(d, ["pep.fasta", "nuc.fasta", "--max-warnings", "0"])
+            self.assertEqual(err.count("does not correspond"), n)    # 0 = unlimited
+
+
 if __name__ == "__main__":
     unittest.main()

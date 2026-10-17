@@ -42,6 +42,9 @@ def main(argv=None) -> int:
     ap.add_argument("--keep-going", "-keep-going", action="store_true",
                     help="skip sequences that cannot be converted instead of stopping; the others are "
                          "written in input order, skipped ones are listed in the summary/report; exit code 2")
+    ap.add_argument("--max-warnings", type=int, default=0, metavar="N",
+                    help="print at most N per-codon warning lines, then a count of the rest "
+                         "(default 0 = no limit, as PAL2NAL)")
     ap.add_argument("--report", metavar="FILE.json",
                     help="write a JSON run report (schema coal.report/1), also when the run fails")
     ap.add_argument("--json", action="store_true",
@@ -56,7 +59,18 @@ def main(argv=None) -> int:
     rec = RunReport(argv, args.pep_aln, args.nuc_fasta, args.out, args.output_format, args.codontable,
                     args.nogap, args.nomismatch, keep_going=args.keep_going,
                     keep_entries=bool(args.report or args.json))
-    warn = None if args.quiet else (lambda w: print(f"coal: warning: {w}", file=sys.stderr))
+    hidden = [0]
+
+    def warn(w: str):
+        if args.max_warnings > 0 and "pepAlnPos" in w:
+            if warn.shown >= args.max_warnings:
+                hidden[0] += 1
+                return
+            warn.shown += 1
+        print(f"coal: warning: {w}", file=sys.stderr)
+    warn.shown = 0
+    if args.quiet:
+        warn = None
     rc = 0
     try:
         skipped = run(args.pep_aln, args.nuc_fasta, out_path=args.out, table=args.codontable,
@@ -71,6 +85,9 @@ def main(argv=None) -> int:
             code = (e.code if isinstance(e, CoalError) else
                     "input_format" if isinstance(e, (InputFormatError, UnicodeDecodeError)) else "file_error")
             rec.fail(code, str(e))
+    if hidden[0]:
+        where = "see the report" if (args.report or args.json) else "see them all with --report FILE.json"
+        print(f"coal: warning: ... and {hidden[0]:,} more warnings ({where})", file=sys.stderr)
     if rec is not None:
         rec.exit_code = rc
         try:

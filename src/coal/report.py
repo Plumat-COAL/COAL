@@ -50,6 +50,10 @@ _REASONS = {
 }
 
 
+REPO_URL = "https://github.com/chloe-newt/COAL"
+FORMAT_NAMES = {"fasta": "FASTA", "clustal": "CLUSTAL", "paml": "PAML", "codon": "codon-table (PAL2NAL '-output codon')"}
+
+
 def plain_reason(code: str, message: str) -> str:
     detail = message.split(": ", 1)[1] if code in ("invalid_chars", "no_match") and ": " in message else message
     m = re.search(r"\(([^()]*)\)\s*$", message)
@@ -246,6 +250,29 @@ class RunReport:
                          f"and no output was written.")
         return lines
 
+    def methods_text(self) -> str:
+        """Ready-to-paste methods sentence describing this run."""
+        c = self.counts()
+        n = self.output["sequences"] if self.output else sum(c.values())
+        t = self.table
+        code = "standard genetic code" if t == 1 else f"{TABLE_NAMES[t]} genetic code"
+        opts = []
+        if self.nogap:
+            opts.append("removing codon columns containing gaps or stop codons (-nogap)")
+        if self.nomismatch:
+            opts.append("removing columns with codons that do not match their amino acid (-nomismatch)")
+        opt_txt = (", " + " and ".join(opts)) if opts else ""
+        skipped = ""
+        if c["failed"] and self.keep_going and not self.error:
+            skipped = (f" ({_seqs(c['failed'])} that could not be matched to "
+                       f"{'its' if c['failed'] == 1 else 'their'} DNA {'was' if c['failed'] == 1 else 'were'} excluded)")
+        verified = "outputs are verified byte-identical to PAL2NAL v14 on the COAL test suite"
+        if t in (10, 11, 13):
+            verified += f" (COAL follows the current NCBI definition of table {t}, a documented difference)"
+        return (f"Codon alignments were generated with COAL v{__version__} ({REPO_URL}) from {_n(n)} aligned "
+                f"protein sequence{'' if n == 1 else 's'} and their coding sequences{skipped}, using the {code} "
+                f"(NCBI table {t}) and {FORMAT_NAMES[self.fmt]} output{opt_txt}; {verified}.")
+
     def to_dict(self) -> dict:
         c = self.counts()
         done = sum(c.values())
@@ -272,6 +299,7 @@ class RunReport:
         }
         d["summary"]["not_processed"] = max(0, total - done) if total else 0
         d["summary_text"] = self.summary_lines()
+        d["methods_text"] = self.methods_text()
         if self.error:
             d["error"] = self.error
         return d
