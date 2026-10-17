@@ -15,15 +15,19 @@ destination when everything succeeded, so an error never leaves partial output
 """
 from __future__ import annotations
 
+import json
 import mmap
 import os
+import time
 import re
 from array import array
 import shutil
 import sys
 import tempfile
 from collections import deque
+from itertools import islice
 
+from .checkpoint import CHECKPOINT_EVERY, Checkpoint, durable_size, open_append
 from .core import (
     CoalError, apply_slices, column_widths, expand, keep_slices, nogap_bad_triplets,
     order_pairing_warning, pair_ids, prepare_row, thread_one,
@@ -37,7 +41,7 @@ BLOCK_FORMATS = ("clustal", "codon")   # interleaved blocks: need every row befo
 CLUSTAL_BLOCK = 60      # nucleotides per CLUSTAL block
 CODON_BLOCK = 20        # residues / codons per "-output codon" block
 _DIGIT = re.compile(r"[0-9]")
-BATCH_NT = 2_000_000      # target DNA per work batch (keeps IPC overhead low)
+BATCH_NT = int(os.environ.get("COAL_BATCH_NT", 2_000_000))  # target DNA per work batch (keeps IPC overhead low)
 # Starting worker processes costs ~0.1-0.2 s (more on Windows), about the time one
 # core needs for a few million nucleotides. So each extra worker must have at
 # least this much DNA to do, otherwise COAL runs in a single process.
@@ -79,6 +83,14 @@ class Progress:
             self.stream.write(msg + "\n")
         self.stream.flush()
         self.printed = True
+
+
+def _test_pause(count: int) -> None:
+    """Test hook: COAL_TEST_PAUSE_AFTER_CHECKPOINT=k stops here after the k-th checkpoint
+    (so a test can kill the run at a known point)."""
+    if os.environ.get("COAL_TEST_PAUSE_AFTER_CHECKPOINT") == str(count):
+        print(f"coal: test: paused after checkpoint {count}", file=sys.stderr, flush=True)
+        time.sleep(3600)
 
 
 def effective_jobs(requested: int, total_nt: int, min_nt_per_job: int | None = None) -> int:
@@ -229,9 +241,10 @@ def write_blocks(stage, out, fmt: str, slices, length: int, ncol: int) -> None:
             prot.close()
 
 
-def _batches(rows, dna: DnaIndex, pairing):
+def _batches(rows, dna: DnaIndex, pairing, start: int = 0):
+    """Batches of (id, row, DNA) of about BATCH_NT nucleotides, from sequence `start` on."""
     batch, nt = [], 0
-    for k, (pid, row) in enumerate(rows):
+    for k, (pid, row) in enumerate(islice(rows, start, None), start):
         seq = dna.get(pairing[k])
         batch.append((pid, row, seq))
         nt += len(seq)
@@ -263,7 +276,8 @@ def _results(batches, jobs: int, init_args):
 
 def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
         nomismatch: bool = False, jobs: int = 0, warn=None, min_nt_per_job: int | None = None,
-        fmt: str = "fasta", rec=None, keep_going: bool = False, progress: bool = False) -> int:
+        fmt: str = "fasta", rec=None, keep_going: bool = False, progress: bool = False,
+        resume: bool = False, note=None) -> int:
     """Convert; write the alignment (fmt: fasta, clustal, paml or codon) to out_path (or stdout).
 
     jobs: 0 = automatic (up to all cores), N = at most N processes. Small inputs
@@ -271,7 +285,9 @@ def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
     that collects per-sequence results for the run report.
     keep_going: skip sequences that cannot be threaded (written: all the others, in
     order). Returns the number of skipped sequences (0 without keep_going).
-    progress: report percent done on stderr for inputs over PROGRESS_MIN_SEQS sequences."""
+    progress: report percent done on stderr for inputs over PROGRESS_MIN_SEQS sequences.
+    resume: continue an interrupted run with the same out_path from its checkpoint
+    (see checkpoint.py); note(text) receives informational messages."""
     get_code(table)
     if fmt not in FORMATS:
         raise CoalError(f"unknown output format {fmt!r}; one of {', '.join(FORMATS)}")
@@ -312,6 +328,7 @@ def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
                 example = (ids[k], dna.ids[pairing[k]])
             rec.set_pairing(mode, [dna.ids[j] for j in pairing] if rec.keep_entries else None, pairing, per_seq,
                             example)
+        ids_for_resume = ids if resume else None
         del ids
         dna.forget_ids()
         jobs = effective_jobs(jobs, dna.total_bytes(), min_nt_per_job)
@@ -320,20 +337,52 @@ def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
         # keep_going + paml: the header needs the final count, so stage the rows
         staged = two_pass or fmt in BLOCK_FORMATS or (keep_going and fmt == "paml")
 
-        dest_dir = os.path.dirname(os.path.abspath(out_path)) if out_path else None
-        tmp = tempfile.NamedTemporaryFile("w", delete=False, newline="\n", dir=dest_dir,
-                                          prefix=".coal_", suffix=".tmp", encoding="ascii")
-        stage = tempfile.NamedTemporaryFile("w+", delete=False, newline="\n", prefix=".coal_rows_",
-                                            encoding="ascii") if staged else None
+        ck, state = None, None
+        if out_path:
+            ck = Checkpoint(out_path, {"fmt": fmt, "table": table, "nogap": nogap, "nomismatch": nomismatch,
+                                       "keep_going": keep_going, "staged": staged}, [pep_path, *nuc_paths])
+            out_tmp, stage_path = ck.partial, (ck.stage if staged else None)
+            if resume:
+                state = ck.load_for_resume(stage_path or out_tmp)
+                if note:
+                    if state:
+                        note(f"resuming {out_path}: {state['completed']:,} of {nseq:,} sequences were already done"
+                             + (" (this format/option needs a second pass, which is redone in full)" if staged else ""))
+                    else:
+                        note(f"no checkpoint to resume for {out_path}; starting a normal run")
+            if state is None:
+                ck.remove(keep_partial=True)   # a stale checkpoint must never describe this run's files
+        else:
+            fd, out_tmp = tempfile.mkstemp(prefix=".coal_", suffix=".tmp")
+            os.close(fd)
+            stage_path = None
+            if staged:
+                fd, stage_path = tempfile.mkstemp(prefix=".coal_rows_", suffix=".tmp")
+                os.close(fd)
+        sink_path = stage_path if staged else out_tmp
+        start = state["completed"] if state else 0
+        sink = entries_fh = None
+        finished = failed = False
         try:
-            drop, bad = set(), set()
+            sink = open_append(sink_path, state["sink_bytes"] if state else None)
+            if ck:
+                entries_fh = open_append(ck.entries, state["entries_bytes"] if state else None)
+            if state:
+                drop, bad, skipped = set(state["drop"]), set(state["bad"]), state["skipped"]
+                if rec is not None:
+                    with open(ck.entries, encoding="ascii") as fh:
+                        nonok = [json.loads(l) for l in fh]
+                    rec.restore(state["rec"], nonok, start, ids_for_resume)
+            else:
+                drop, bad, skipped = set(), set(), 0
+                if fmt == "paml" and not staged:
+                    sink.write(paml_header(nseq, sum(widths)))
+            ids_for_resume = None
             init = (table, widths, staged, nogap, fmt, keep_going)
-            sink = stage.file if staged else tmp.file   # skip tempfile's per-call wrapper
-            if fmt == "paml" and not staged:
-                tmp.file.write(paml_header(nseq, sum(widths)))
-            done = skipped = 0
+            done = start
             prog = Progress(nseq) if progress and nseq > PROGRESS_MIN_SEQS else None
-            results = _results(_batches(rows(), dna, pairing), jobs, init)
+            last_ck = time.monotonic()
+            results = _results(_batches(rows(), dna, pairing, start), jobs, init)
             while True:
                 try:
                     text, warns, mcols, badt, items = next(results)
@@ -356,7 +405,9 @@ def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
                         if failure:
                             warn(f"skipped {failure[1]}")
                     if rec is not None:
-                        rec.add_sequence(pid, [w[len(pre):] for w in mine], failure=failure, k=done)
+                        entry = rec.add_sequence(pid, [w[len(pre):] for w in mine], failure=failure, k=done)
+                        if entries_fh is not None and entry is not None and entry["status"] != "ok":
+                            entries_fh.write(json.dumps(entry) + "\n")
                     done += 1
                     skipped += failure is not None
                 if prog:
@@ -365,47 +416,66 @@ def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
                 if nomismatch:
                     drop.update(c - 1 for c in mcols)
                 bad |= badt
+                if ck and time.monotonic() - last_ck >= CHECKPOINT_EVERY and done < nseq:
+                    ck.save({"completed": done, "nseq": nseq, "sink_bytes": durable_size(sink),
+                             "entries_bytes": durable_size(entries_fh), "skipped": skipped,
+                             "drop": sorted(drop), "bad": sorted(bad),
+                             "rec": rec.checkpoint_state() if rec is not None else None})
+                    last_ck = time.monotonic()
+                    _test_pause(ck.count)
             if prog and prog.printed:
                 prog.update(done, final=True)
             if keep_going and skipped == nseq:
                 raise CoalError(f"none of the {nseq} sequences could be converted", code="all_failed")
+            sink.close()
             if staged:
                 if two_pass:
                     sl = keep_slices(widths, drop if nomismatch else (), bad)
                 else:
                     sl = [(0, sum(widths))]
                 length = sum(b - a for a, b in sl)
-                stage.seek(0)
-                if fmt in BLOCK_FORMATS:
-                    write_blocks(stage.file, tmp.file, fmt, sl, length, ncol)
-                else:
-                    if fmt == "paml":
-                        tmp.file.write(paml_header(nseq - skipped, length))
-                    record = paml_record if fmt == "paml" else fasta_record
-                    for line in stage.file:
-                        pid, exp = line.rstrip("\n").split("\t", 1)
-                        tmp.file.write(record(pid, apply_slices(exp, sl)))
-            tmp.close()
+                with open(out_tmp, "w", newline="\n", encoding="ascii") as out, \
+                        open(stage_path, "r", newline="\n", encoding="ascii") as st:
+                    if fmt in BLOCK_FORMATS:
+                        write_blocks(st, out, fmt, sl, length, ncol)
+                    else:
+                        if fmt == "paml":
+                            out.write(paml_header(nseq - skipped, length))
+                        record = paml_record if fmt == "paml" else fasta_record
+                        for line in st:
+                            pid, exp = line.rstrip("\n").split("\t", 1)
+                            out.write(record(pid, apply_slices(exp, sl)))
             if rec is not None:
                 from .report import sha256_file
-                rec.set_output(out_path, sha256_file(tmp.name), nseq - skipped)
+                rec.set_output(out_path, sha256_file(out_tmp), nseq - skipped)
             if out_path:
-                os.replace(tmp.name, out_path)
+                os.replace(out_tmp, out_path)
             else:
-                with open(tmp.name, "r", encoding="ascii", newline="\n") as fh:
+                with open(out_tmp, "r", encoding="ascii", newline="\n") as fh:
                     out = sys.stdout
                     if hasattr(out, "reconfigure"):
                         out.reconfigure(newline="\n")
                     shutil.copyfileobj(fh, out, 1 << 20)
                     out.flush()
+            finished = True
             return skipped
+        except CoalError:
+            failed = True   # a real error: nothing to resume
+            raise
         finally:
-            for f in (tmp, stage):
+            for f in (sink, entries_fh):
                 if f is not None:
                     f.close()
-                    try:
-                        os.unlink(f.name)
-                    except OSError:
-                        pass
+            if ck is not None:
+                if finished or failed:
+                    ck.remove()
+                # otherwise (crash, Ctrl-C, disk full ...) keep partial + checkpoint for --resume
+            else:
+                for path in (out_tmp, stage_path):
+                    if path:
+                        try:
+                            os.unlink(path)
+                        except OSError:
+                            pass
     finally:
         dna.close()

@@ -6,8 +6,10 @@ from __future__ import annotations
 import io
 import json
 import os
+import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
@@ -258,6 +260,137 @@ class TestProgress(unittest.TestCase):
         finally:
             pipeline.PROGRESS_MIN_SEQS, pipeline.PROGRESS_EVERY = old
             pipeline.BATCH_NT = old_batch
+
+
+
+def coal_cmd(*args):
+    return [sys.executable, "-m", "coal", *args]
+
+
+def run_sub(cmd, cwd, env=None, timeout=120):
+    e = {**os.environ, "PYTHONPATH": str(ROOT / "src"), **(env or {})}
+    return subprocess.run(cmd, cwd=cwd, env=e, capture_output=True, timeout=timeout)
+
+
+def interrupt(cmd, cwd, after_checkpoint=3, extra_env=None):
+    """Start a run that pauses after its n-th checkpoint, then kill it (like a crash or a
+    cluster time limit). A watchdog kills it anyway after 60 s."""
+    env = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "COAL_BATCH_NT": "20000",
+           "COAL_CHECKPOINT_EVERY": "0", "COAL_TEST_PAUSE_AFTER_CHECKPOINT": str(after_checkpoint),
+           **(extra_env or {})}
+    p = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    dog = threading.Timer(60, p.kill)
+    dog.start()
+    try:
+        paused = False
+        for line in p.stderr:                 # ends when the process pauses (marker) or exits
+            if line.startswith("coal: test: paused"):
+                paused = True
+                break
+        p.terminate()
+        p.wait(timeout=30)
+    finally:
+        dog.cancel()
+        p.stderr.close()
+    return paused
+
+
+class TestResume(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._tmp = tempfile.TemporaryDirectory()
+        cls.d = Path(cls._tmp.name)
+        sys.path.insert(0, str(ROOT / "benchmarks"))
+        from gen_data import generate
+        generate(20000, 15, cls.d, seed=5)
+        # one gene that cannot be threaded (for --keep-going), in the second half
+        lines = (cls.d / "nuc.fasta").read_text().split("\n")
+        lines[2 * 15000 + 1] = lines[2 * 15000 + 1][:20] + lines[2 * 15000 + 1][21:]
+        (cls.d / "nuc_bad.fasta").write_text("\n".join(lines), newline="\n")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def check(self, opts, nuc="nuc.fasta", expect_rc=0):
+        ref = self.d / "ref.out"
+        r = run_sub(coal_cmd("pep.fasta", nuc, "-o", str(ref), *opts), self.d)
+        self.assertEqual(r.returncode, expect_rc, r.stderr[-300:])
+        out = self.d / "res.out"
+        if out.exists():
+            out.unlink()                                   # left by the previous subtest
+        cmd = coal_cmd("pep.fasta", nuc, "-o", str(out), *opts)
+        self.assertTrue(interrupt(cmd, self.d), "run did not reach its checkpoint")
+        ck = Path(str(out) + ".coal-checkpoint.json")
+        self.assertTrue(ck.exists())
+        self.assertGreater(json.loads(ck.read_text())["completed"], 0)
+        self.assertFalse(out.exists())                     # nothing moved into place yet
+        r = run_sub(cmd + ["--resume", "--report", "r.json"], self.d)
+        self.assertEqual(r.returncode, expect_rc, r.stderr[-300:])
+        self.assertIn(b"coal: note: resuming", r.stderr)
+        self.assertEqual(out.read_bytes(), ref.read_bytes())
+        self.assertFalse(ck.exists())
+        self.assertFalse(Path(str(out) + ".coal-partial").exists())
+        rep = json.loads((self.d / "r.json").read_text())
+        self.assertEqual(len(rep["sequences"]), 20000)
+        self.assertGreater(rep["resumed_from"], 0)
+        return rep
+
+    def test_resume_identical_every_format(self):
+        for opts in (["-output", "fasta"], ["-output", "paml"], ["-output", "clustal"], ["-output", "codon"],
+                     ["-output", "fasta", "-nogap"], ["-output", "paml", "-nomismatch"]):
+            with self.subTest(opts=opts):
+                self.check([*opts, "-j", "1"])
+
+    def test_resume_with_workers(self):
+        self.check(["-output", "fasta", "-j", "2"])
+
+    def test_resume_keep_going(self):
+        for opts in (["-output", "fasta"], ["-output", "paml"]):
+            with self.subTest(opts=opts):
+                rep = self.check([*opts, "--keep-going"], nuc="nuc_bad.fasta", expect_rc=2)
+                self.assertEqual(rep["summary"]["failed"], 1)
+                self.assertEqual([s["id"] for s in rep["sequences"] if s["status"] == "failed"], ["seq15000"])
+
+    def test_changed_inputs_refused(self):
+        d = self.d / "changed"
+        d.mkdir(exist_ok=True)
+        for f in ("pep.fasta", "nuc.fasta"):
+            (d / f).write_bytes((self.d / f).read_bytes())
+        cmd = coal_cmd("pep.fasta", "nuc.fasta", "-o", "out.fa")
+        self.assertTrue(interrupt(cmd, d))
+        with open(d / "nuc.fasta", "a") as fh:            # inputs change after the crash
+            fh.write("\n")
+        r = run_sub(cmd + ["--resume"], d)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn(b"The input files or options changed since the interrupted run, so it can't be resumed "
+                      b"safely. Start a new run without --resume.", r.stderr)
+        self.assertFalse((d / "out.fa").exists())
+        r = run_sub(coal_cmd("pep.fasta", "nuc.fasta", "-o", "out.fa", "-nogap", "--resume"), d)  # options changed
+        self.assertNotEqual(r.returncode, 0)
+        r = run_sub(cmd, d)                                # a new run without --resume is fine
+        self.assertEqual(r.returncode, 0)
+        self.assertFalse((d / "out.fa.coal-checkpoint.json").exists())
+
+    def test_no_checkpoint_runs_normally(self):
+        r = run_sub(coal_cmd("pep.fasta", "nuc.fasta", "-o", "fresh.fa", "--resume"), self.d)
+        self.assertEqual(r.returncode, 0)
+        self.assertIn(b"coal: note: no checkpoint to resume for fresh.fa; starting a normal run", r.stderr)
+        r2 = run_sub(coal_cmd("pep.fasta", "nuc.fasta"), self.d)
+        self.assertEqual((self.d / "fresh.fa").read_bytes(), r2.stdout)
+
+    def test_resume_needs_output_file(self):
+        r = run_sub(coal_cmd("pep.fasta", "nuc.fasta", "--resume"), self.d)
+        self.assertEqual(r.returncode, 2)
+
+    def test_never_resumes_without_flag(self):
+        cmd = coal_cmd("pep.fasta", "nuc.fasta", "-o", "nf.fa")
+        self.assertTrue(interrupt(cmd, self.d))
+        part = self.d / "nf.fa.coal-partial"
+        part.write_text("garbage that must not end up in the output\n")   # a normal run starts over
+        r = run_sub(cmd, self.d)
+        self.assertEqual(r.returncode, 0)
+        self.assertEqual((self.d / "nf.fa").read_bytes(), run_sub(coal_cmd("pep.fasta", "nuc.fasta"), self.d).stdout)
 
 
 if __name__ == "__main__":

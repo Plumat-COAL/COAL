@@ -117,6 +117,7 @@ class RunReport:
         self.hints: list[dict] = []
         self.exit_code = 0
         self.extra_summary: list[str] = []        # extra "coal: summary:" lines from the pipeline
+        self.resumed_from: int | None = None      # set when the run continued from a checkpoint
 
     # -------------------------------------------------- filled in by the pipeline
     def set_inputs(self, n_protein: int, dna_counts: list[int]):
@@ -134,7 +135,7 @@ class RunReport:
         k = sum(self.n[x] for x in ("ok", "warning", "failed")) if k is None else k
         if not warnings and failure is None and not self.keep_entries:
             self.n["ok"] += 1
-            return
+            return None
         msgs, mismatch = [], False
         for w in warnings:
             m = _MISMATCH.search(w)
@@ -171,6 +172,32 @@ class RunReport:
             self.failed_entries.append(entry)
         if self.keep_entries:
             self.entries.append(entry)
+        return entry
+
+    # -------------------------------------------------- --resume support
+    def checkpoint_state(self) -> dict:
+        return {"n": dict(self.n), "problems": list(self.problems)}
+
+    def restore(self, state: dict, nonok: list[dict], completed: int, prot_ids: list[str] | None):
+        """Continue a resumed run: counts of the first `completed` sequences, and their
+        entries rebuilt from the saved non-ok ones (ok entries are regenerated)."""
+        self.n = dict(state["n"])
+        self.problems = list(state["problems"])
+        self.failed_entries = [e for e in nonok if e["status"] == "failed"]
+        self.resumed_from = completed
+        if self.keep_entries:
+            by_k = {e["index"]: e for e in nonok}
+            self.entries = []
+            for k in range(completed):
+                e = by_k.get(k)
+                if e is None:
+                    dna_id = None
+                    if self.dna_ids is not None:
+                        dna_id = self.dna_ids(k) if callable(self.dna_ids) else self.dna_ids[k]
+                    e = {"id": prot_ids[k] if prot_ids else None, "index": k, "dna_id": dna_id,
+                         "pairing": (self.seq_pairing[k] if self.seq_pairing else self.pairing),
+                         "status": "ok", "messages": []}
+                self.entries.append(e)
 
     def fail(self, code: str, message: str):
         self.error = {"code": code, "text": plain_reason(code, message), "detail": message}
@@ -302,6 +329,8 @@ class RunReport:
         d["methods_text"] = self.methods_text()
         if self.error:
             d["error"] = self.error
+        if self.resumed_from is not None:
+            d["resumed_from"] = self.resumed_from
         return d
 
     def write(self, path: str):

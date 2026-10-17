@@ -47,6 +47,11 @@ def main(argv=None) -> int:
                          "(default 0 = no limit, as PAL2NAL)")
     ap.add_argument("--progress", action="store_true",
                     help="show percent done and time left on stderr (inputs over 10,000 sequences)")
+    ap.add_argument("--resume", action="store_true",
+                    help="continue an interrupted run (needs -o, same inputs and options) from its checkpoint "
+                         "<out>.coal-checkpoint.json; without a checkpoint it runs normally. Output is identical "
+                         "to an uninterrupted run. With -nogap, -nomismatch, clustal or codon output only the first "
+                         "pass resumes; the final pass is redone")
     ap.add_argument("--report", metavar="FILE.json",
                     help="write a JSON run report (schema coal.report/1), also when the run fails")
     ap.add_argument("--json", action="store_true",
@@ -56,6 +61,8 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     if args.json and not args.out:
         ap.error("--json requires -o (the alignment and the report cannot both go to stdout)")
+    if args.resume and not args.out:
+        ap.error("--resume requires -o (only runs that write to a file can be resumed)")
 
     # Always collected: it also drives the end-of-run "coal: summary:" lines.
     rec = RunReport(argv, args.pep_aln, args.nuc_fasta, args.out, args.output_format, args.codontable,
@@ -78,7 +85,8 @@ def main(argv=None) -> int:
         skipped = run(args.pep_aln, args.nuc_fasta, out_path=args.out, table=args.codontable,
                       nogap=args.nogap, nomismatch=args.nomismatch, jobs=args.jobs, warn=warn,
                       fmt=args.output_format, rec=rec, keep_going=args.keep_going,
-                      progress=args.progress)
+                      progress=args.progress, resume=args.resume,
+                      note=lambda t: print(f"coal: note: {t}", file=sys.stderr))
         if skipped:
             rc = 2   # partial success
     except (CoalError, InputFormatError, UnicodeDecodeError, OSError) as e:
