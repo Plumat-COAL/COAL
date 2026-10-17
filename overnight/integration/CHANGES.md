@@ -11,7 +11,7 @@ identical output formats. Reference: the real PAL2NAL v14 (sha256-verified, run 
 | DEC-1 | Mismatch handling: PAL2NAL's output by default; `--strict` opt-in | done | 798844d |
 | DEC-2 | `-q` silences warnings and notices; errors always printed | done | b4ad160 |
 | DEC-3 | Closed output pipe: keep exit 141, silent; documented | done (no code change needed: consistent) | 885abfd |
-| DEC-4 | All four output formats + `-blockonly` byte-identical to PAL2NAL; drop-in defaults to clustal; harness on all 279 goldens; random fuzz vs the real PAL2NAL (3,000 cases × 4 formats: 0 unexplained); fetch fallback; CI job | done | d03e857 |
+| DEC-4 | All four output formats + `-blockonly` byte-identical to PAL2NAL; drop-in defaults to clustal; harness on all 279 goldens; random fuzz vs the real PAL2NAL (3,000 cases × 4 formats at DEC-4; 5,000 × 4 after the FZ fixes: 0 unexplained); fetch fallback; CI job | done | d03e857 |
 
 Findings of the independent differential fuzz (29,395 cases against the real PAL2NAL v14), fixed on the same branch:
 
@@ -23,8 +23,8 @@ Findings of the independent differential fuzz (29,395 cases against the real PAL
 | FZ-5 | `-nogap` used the standard code's stops whatever `-codontable` said (both tools) | fixed in COAL; deliberate difference | 2ac3674 |
 | FZ-6 | 1–3-residue proteins with several valid placements: leftmost taken silently (both tools) | notice added (stdout unchanged) | 26583b8 |
 | FZ-4 | "only 7 of 7 codons have no ambiguous bases" for a short unambiguous gene | wording fixed | 26583b8 |
-| FZ-claim | "byte-identical to PAL2NAL" claims without qualification | qualified with real numbers, guarded | the FZ-D/FZ-claim commit (last on fix/decisions) |
-| FZ-D1..D9 | Differences where PAL2NAL is wrong, documented with repros (README, tests/README, fuzz `DELIBERATE`) | documented; FZ-D3 resolved instead (see row) | the FZ-D/FZ-claim commit (last on fix/decisions) |
+| FZ-claim | "byte-identical to PAL2NAL" claims without qualification | qualified with real numbers, guarded | 9af9608 |
+| FZ-D1..D9 | Differences where PAL2NAL is wrong, documented with repros (README, tests/README, fuzz `DELIBERATE`) | documented; FZ-D3 resolved instead (see row) | 9af9608 |
 
 <!-- DECISION-STATUS-END -->
 
