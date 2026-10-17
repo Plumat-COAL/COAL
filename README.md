@@ -373,7 +373,7 @@ Tag, and everything else is automatic:
    The site itself is redeployed by `.github/workflows/pages.yml` when `site/` changes on `main`.
 
 The Windows app is not code-signed yet (the release notes say so, with the SmartScreen and Smart App Control
-steps). Details, file names and the one-time setup checklist (enable Pages, first tag, custom domain, Zenodo DOI):
+steps). Details, file names and the one-time setup checklist (enable Pages, first tag, custom domain):
 `site/README.md`.
 
 ## Requirements
