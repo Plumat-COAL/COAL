@@ -119,3 +119,33 @@ class TestRunsOnExamples(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestMethodsText(unittest.TestCase):
+    def test_from_sample_report(self):
+        m = core.methods_text(core.load_sample_report())
+        self.assertIn("COAL v0.4.0", m)
+        self.assertIn("standard genetic code (NCBI translation table 1)", m)
+        self.assertIn("Of 20 sequences, 17 matched", m)
+        self.assertIn("1 could not be aligned and was excluded", m)
+        self.assertIn("Command: coal pep.aln", m)
+
+    def test_engine_text_wins(self):
+        rep = dict(core.load_sample_report(), methods_text="Engine sentence.")
+        self.assertEqual(core.methods_text(rep), "Engine sentence.")
+
+    def test_real_run_uses_basenames_and_options(self):
+        p, d = core.example_paths("mito")
+        r = core.run_coal(p, d, codontable=2, nogap=True, out_dir=tempfile.mkdtemp(prefix="coal_test_"))
+        m = core.methods_text(r.report)
+        self.assertIn("vertebrate mitochondrial genetic code (NCBI translation table 2)", m)
+        self.assertIn("gaps or stop codons were removed", m)
+        self.assertIn("Command: coal protein.aln.fasta dna.fasta -codontable 2 -nogap", m)
+        self.assertNotIn(os.path.dirname(p), m)
+        self.assertIn("Methods text (ready to paste):", core.explain(r.report))
+
+    def test_no_text_without_output(self):
+        p, d = core.example_paths("one_broken_gene")
+        r = core.run_coal(p, d, out_dir=tempfile.mkdtemp(prefix="coal_test_"))
+        if r.output_path is None:
+            self.assertEqual(core.methods_text(r.report), "")

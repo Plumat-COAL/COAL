@@ -293,6 +293,7 @@ def build_fallback_report(protein, dna, out, fmt, table, nogap, nomismatch, keep
             else:
                 general.append({"code": _classify_error(msg), "text": msg})
     aborted = code not in (0, 2)
+    keep_going = bool(keep_going and detect_features().keep_going)  # only what was really passed
     seqs = []
     for i, p in enumerate(pids):
         if pairing == "id":
@@ -574,6 +575,42 @@ def summary_sentence(report: dict) -> str:
     return f"{total} sequence{'s' if total != 1 else ''}: " + ", ".join(parts) + "."
 
 
+def methods_text(report: dict) -> str:
+    """A ready-to-paste methods sentence for a run (report["methods_text"] if the engine wrote one)."""
+    if report.get("methods_text"):
+        return str(report["methods_text"])
+    if report.get("exit_code") not in (0, 2) or not report.get("output"):
+        return ""
+    opts = report.get("options") or {}
+    s = report.get("summary") or {}
+    n = int(opts.get("codontable") or 1)
+    name = GENETIC_CODES.get(n, f"NCBI code {n}")
+    ver = report.get("coal_version") or "unknown"
+    total, ok, warn, failed = (s.get(k, 0) for k in ("total", "ok", "warning", "failed"))
+    parts = [f"Codon alignments were built with COAL v{ver} (https://github.com/chloe-newt/COAL), which places "
+             f"each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method "
+             f"of PAL2NAL; Suyama et al. 2006), using the {name.split(' (')[0].lower()} genetic code "
+             f"(NCBI translation table {n})."]
+    counts = f"Of {total} sequences, {ok} matched their protein exactly"
+    if warn:
+        counts += (f", {warn} contained codons that did not match the aligned amino acid"
+                   + (" (those alignment columns were removed)" if opts.get("nomismatch") else
+                      " (kept in the alignment)"))
+    if failed:
+        counts += f", and {failed} could not be aligned and {'was' if failed == 1 else 'were'} excluded"
+    parts.append(counts + ".")
+    if opts.get("nogap"):
+        parts.append("Codon columns containing gaps or stop codons were removed.")
+    cmd = report.get("command") or ""
+    for item in list(report.get("inputs") or []) + [report.get("output") or {}]:
+        pth = item.get("path") if isinstance(item, dict) else None
+        if pth:
+            cmd = cmd.replace(pth, os.path.basename(pth))
+    if cmd:
+        parts.append(f"Command: {cmd}")
+    return " ".join(parts)
+
+
 _PAIRING_TEXT = {
     "id": "Proteins and DNA were paired by matching their IDs exactly.",
     "normalised": "Proteins and DNA were paired by ID after tidying the IDs (for example removing '.1' suffixes).",
@@ -621,6 +658,9 @@ def explain(report: dict) -> str:
                      "same species), look for a missing or extra base near where it stops matching, and make "
                      "sure the genetic code is right for where the gene comes from (for example code 2 for "
                      "vertebrate mitochondria).")
+    m = methods_text(report)
+    if m:
+        lines += ["", "Methods text (ready to paste):", m]
     return "\n".join(lines)
 
 

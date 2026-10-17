@@ -31,7 +31,8 @@ def codon_align(protein_alignment_path: str, dna_fasta_path: str, output_format:
         failed sequences and how they were paired), hints (list of suggestions, e.g. a better genetic
         code as {"code": "genetic_code", "suggested_codontable": 2, "text": ...}), problems (list of
         {id, status, explanation} for every sequence that is not OK), coal_command and pal2nal_command
-        (the equivalent command lines), and stderr (COAL's raw messages).
+        (the equivalent command lines), methods_text (a ready-to-paste methods sentence, empty if
+        nothing was aligned), and stderr (COAL's raw messages).
     """
     for p in (protein_alignment_path, dna_fasta_path):
         if not os.path.isfile(p):
@@ -52,6 +53,7 @@ def codon_align(protein_alignment_path: str, dna_fasta_path: str, output_format:
         "summary_text": core.summary_sentence(r.report),
         "hints": r.hints,
         "problems": problems,
+        "methods_text": core.methods_text(r.report),
         "coal_command": r.coal_cmd,
         "pal2nal_command": r.pal2nal_cmd,
         "stderr": r.stderr[-4000:],
@@ -67,7 +69,7 @@ def explain_report(report_path: str) -> str:
     Returns:
         A short plain-English explanation: counts of OK / warning / failed sequences, how proteins and
         DNA were paired, one line per problem sequence with its likely cause (wrong genetic code,
-        mismatched IDs, frameshift), and suggested fixes.
+        mismatched IDs, frameshift), suggested fixes, and a ready-to-paste methods sentence.
     """
     try:
         rep = core.load_report(report_path)

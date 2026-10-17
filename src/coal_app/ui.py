@@ -91,6 +91,8 @@ def _results(report, output_path, report_path, coal_cmd, pal2nal_cmd, stderr, ba
         gr.update(value=stderr or "(no messages)"),
         gr.update(value=view_html or "<p>Run COAL to see the alignment here.</p>"),
         gr.update(value=view_path, visible=bool(view_path)),
+        gr.update(value=core.methods_text(report) if report else "",
+                  visible=bool(report and core.methods_text(report))),
     )
 
 
@@ -176,6 +178,8 @@ def build(demo_mode: bool = False) -> gr.Blocks:
         with gr.Accordion("View alignment (see exactly where a gene breaks)", open=True):
             view = gr.HTML("<p>Run COAL to see the alignment here.</p>")
             dl_view = gr.DownloadButton("Download alignment view (HTML)", visible=False)
+        methods = gr.Textbox(label="Methods paragraph (ready to paste into a paper)", lines=4, max_lines=8,
+                             interactive=False, show_copy_button=True, visible=False)
         cmds = gr.Code(label="Equivalent commands (copy into a terminal or pipeline)", language="shell",
                        interactive=False)
         with gr.Accordion("Raw COAL messages", open=False):
@@ -183,7 +187,7 @@ def build(demo_mode: bool = False) -> gr.Blocks:
         with gr.Accordion("What do these words mean?", open=False):
             gr.Markdown(GLOSSARY)
 
-        outputs = [banner, hint_md, hint_btn, hint_code, dl_out, dl_rep, table, cmds, raw, view, dl_view]
+        outputs = [banner, hint_md, hint_btn, hint_code, dl_out, dl_rep, table, cmds, raw, view, dl_view, methods]
         inputs = [protein, dna, fmt, code, nogap, nomismatch]
         run_btn.click(run_ui, inputs, outputs, show_api=False)
 
