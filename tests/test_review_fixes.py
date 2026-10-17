@@ -143,5 +143,24 @@ class TestEngC_Unrelated(TempDirCase):
         self.assertNotIn("pepAlnPos", r.stderr)
 
 
+# ---------------------------------------------------------------- ENG-d
+class TestEngD_PartialIdMatch(TempDirCase):
+    def test_some_ids_match_warns_and_pairs_by_order(self):
+        (self.d / "ip.fa").write_text(">geneA\nMKVAL\n>geneB\nMKVAL\n")
+        (self.d / "in.fa").write_text(">geneB\nATGAAAGTTGCTCTG\n>geneX\nATGAAGGTCGCACTA\n")
+        for extra in ([], ["-q"]):
+            r = coal(["ip.fa", "in.fa", *extra], self.d)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(r.stdout, ">geneA\nATGAAAGTTGCTCTG\n>geneB\nATGAAGGTCGCACTA\n")
+            self.assertIn("1 of 2 protein IDs", r.stderr)
+            self.assertIn("'geneA' gets DNA 'geneB'", r.stderr)
+
+    def test_no_ids_match_stays_silent(self):  # golden id_mismatch_same_order: PAL2NAL pairs by order
+        (self.d / "ip.fa").write_text(">a\nMKVAL\n>b\nMKVAL\n")
+        (self.d / "in.fa").write_text(">x\nATGAAAGTTGCTCTG\n>y\nATGAAGGTCGCACTA\n")
+        r = coal(["ip.fa", "in.fa"], self.d)
+        self.assertEqual((r.returncode, r.stderr), (0, ""))
+
+
 if __name__ == "__main__":
     unittest.main()

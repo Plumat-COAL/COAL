@@ -59,9 +59,11 @@ class Threaded:
 
 # ---------------------------------------------------------------- pairing
 
-def pair_sequences(prot_ids: list[str], dna_ids: list[str], dna_pos: dict | None = None) -> list[int]:
+def pair_sequences(prot_ids: list[str], dna_ids: list[str], dna_pos: dict | None = None,
+                   warn=None) -> list[int]:
     """Counts must match; match by ID if every protein ID is a DNA ID, else by order.
-    `dna_pos` (ID -> index) may be passed in to avoid building it again."""
+    `dna_pos` (ID -> index) may be passed in to avoid building it again.
+    `warn` is called when some (but not all) protein IDs are DNA IDs."""
     if len(prot_ids) != len(dna_ids):
         raise CoalError(
             f"number of sequences differs (protein: {len(prot_ids)}, DNA: {len(dna_ids)})"
@@ -71,6 +73,13 @@ def pair_sequences(prot_ids: list[str], dna_ids: list[str], dna_pos: dict | None
     pos = dna_pos if dna_pos is not None else {d: i for i, d in enumerate(dna_ids)}
     if all(p in pos for p in prot_ids):
         return [pos[p] for p in prot_ids]
+    # CHANGED(ENG-d): was silent order pairing; now warns when some but not all IDs match.
+    # See overnight/engine-fixes/CHANGES.md
+    hits = sum(p in pos for p in prot_ids)
+    if warn and hits:
+        p, d = next((p, d) for p, d in zip(prot_ids, dna_ids) if p != d)
+        warn(f"only {hits} of {len(prot_ids)} protein IDs are DNA IDs; pairing sequences by order "
+             f"instead (e.g. protein '{p}' gets DNA '{d}')")
     return list(range(len(prot_ids)))
 
 
@@ -442,9 +451,11 @@ def codon_align(
     lengths = {len(s) for _, s in proteins}
     if len(lengths) > 1:
         raise CoalError(f"protein alignment rows have different lengths: {sorted(lengths)}")
-    idx = pair_sequences([p[0] for p in proteins], [d[0] for d in dnas])
+    pair_warn: list[str] = []  # CHANGED(ENG-d): partial-ID-match warning added to warnings
+    idx = pair_sequences([p[0] for p in proteins], [d[0] for d in dnas], warn=pair_warn.append)
     items = [thread_one(pid, row, dnas[j][1], table) for (pid, row), j in zip(proteins, idx)]
     rows = build_alignment(items, nogap=nogap, nomismatch=nomismatch)
     warnings = [f"{it.seq_id} {w}" for it in items for w in it.warnings]
     warnings += [n for it in items for n in it.notices]  # CHANGED(ENG-c): notices included
+    warnings = pair_warn + warnings
     return [(it.seq_id, r) for it, r in zip(items, rows)], warnings

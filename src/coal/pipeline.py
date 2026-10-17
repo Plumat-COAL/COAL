@@ -184,7 +184,8 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
     dna = DnaIndex(nuc_paths)
     try:
         # DNA record number for each protein, as a compact array; then free the ID tables
-        pairing = array("q", pair_sequences(ids, dna.ids, dna.pos))
+        # CHANGED(ENG-d): passes notice, so a partial ID match is reported. See overnight/engine-fixes/CHANGES.md
+        pairing = array("q", pair_sequences(ids, dna.ids, dna.pos, warn=notice))
         del ids
         dna.forget_ids()
         jobs = effective_jobs(jobs, dna.total_bytes(), min_nt_per_job)
