@@ -431,5 +431,231 @@ class TestEngineDispatch(unittest.TestCase):
         self.assertIn("only '-m coal'", r.stderr)
 
 
+# ============================================================== fake pywebview (documented 6.x API shape)
+
+import threading  # noqa: E402
+import types  # noqa: E402
+from unittest import mock  # noqa: E402
+
+
+class FakeEvent:
+    def __init__(self):
+        self.handlers = []
+
+    def __iadd__(self, h):
+        self.handlers.append(h)
+        return self
+
+    def fire(self):
+        for h in list(self.handlers):
+            h()
+
+
+class FakeDocument:
+    def __init__(self, url):
+        self.url = url
+        self.events = types.SimpleNamespace(dragover=FakeEvent(), drop=FakeEvent())
+
+
+class FakeWindow:
+    def __init__(self, title, **kw):
+        self.title, self.kw = title, kw
+        self.url = None                      # html= content: no http URL
+        self.events = types.SimpleNamespace(closed=FakeEvent(), loaded=FakeEvent(), closing=FakeEvent())
+        self.dom = types.SimpleNamespace(document=FakeDocument(None))
+        self.documents = [self.dom.document]
+        self.calls = []
+
+    def get_current_url(self):
+        return self.url
+
+    def load_url(self, url):
+        self.calls.append(("load_url", url))
+        self.url = url
+        self.dom.document = FakeDocument(url)   # a new page: handlers on the old one are gone
+        self.documents.append(self.dom.document)
+        self.events.loaded.fire()
+
+    def destroy(self):
+        self.calls.append(("destroy",))
+
+    def restore(self):
+        self.calls.append(("restore",))
+
+    def show(self):
+        self.calls.append(("show",))
+
+
+def make_fake_webview(scenario):
+    """scenario(window, func) plays what the user does while webview.start() runs."""
+    wv = types.ModuleType("webview")
+    dom = types.ModuleType("webview.dom")
+    wv.settings = {"ALLOW_DOWNLOADS": False}
+    wv.windows = []
+    wv.start_kwargs = {}
+
+    class DOMEventHandler:
+        def __init__(self, callback, prevent_default=False, stop_propagation=False, debounce=0):
+            self.callback, self.prevent_default = callback, prevent_default
+
+    def create_window(title, **kw):
+        if getattr(wv, "fail_create", None):
+            raise wv.fail_create
+        w = FakeWindow(title, **kw)
+        wv.windows.append(w)
+        return w
+
+    def start(func=None, args=None, **kw):
+        wv.start_kwargs = kw
+        if getattr(wv, "fail_start", None):
+            raise wv.fail_start
+        w = wv.windows[0]
+        w.events.loaded.fire()  # the splash page loaded
+        scenario(w, lambda: func(args))
+
+    dom.DOMEventHandler = DOMEventHandler
+    wv.dom = dom
+    wv.create_window, wv.start = create_window, start
+    return wv
+
+
+class WindowBase(Base):
+    def setUp(self):
+        super().setUp()
+        self.dialogs, self.notices = [], []
+        self._patches = [
+            mock.patch.object(cd, "_error_dialog", side_effect=lambda t, x, offer_browser=False:
+                              (self.dialogs.append((t, x)), False)[1]),
+            mock.patch.object(cd, "_notice", side_effect=lambda t, x: self.notices.append((t, x)), create=True),
+            mock.patch.object(cd, "data_dir", return_value=self.tmp),
+        ]
+        for p in self._patches:
+            p.start()
+        self.instance = cd.SingleInstance(os.path.join(self.tmp, "inst"))
+
+    def tearDown(self):
+        for p in self._patches:
+            p.stop()
+        super().tearDown()
+
+    def run_window(self, server, scenario, files=(), **fail):
+        wv = make_fake_webview(scenario)
+        for k, v in fail.items():
+            setattr(wv, k, v)
+        with mock.patch.dict(sys.modules, {"webview": wv, "webview.dom": wv.dom}):
+            code = cd.run_window(server, self.instance, list(files))
+        return code, wv
+
+
+def run_and_close(w, startup):
+    t = threading.Thread(target=startup, daemon=True)  # pywebview runs func in a thread
+    t.start()
+    t.join(60)
+    w.events.closed.fire()
+
+
+class TestWindowDropGuard(WindowBase):
+    """WIN-W1: the drop guard must be on the Gradio page, not only on the splash page."""
+
+    def test_drop_handlers_are_on_the_app_page(self):
+        s = self.server(start_timeout=30)
+        code, wv = self.run_window(s, run_and_close)
+        self.assertEqual(code, 0)
+        w = wv.windows[0]
+        app_docs = [d for d in w.documents if d.url and d.url.startswith("http://127.0.0.1:")]
+        self.assertEqual(len(app_docs), 1)
+        drop = app_docs[0].events.drop.handlers
+        self.assertEqual(len(drop), 1, "no drop guard on the app page")
+        self.assertTrue(drop[0].prevent_default)
+        self.assertTrue(app_docs[0].events.dragover.handlers[0].prevent_default)
+        self.assertEqual(w.documents[0].events.drop.handlers, [], "splash page should not need it")
+
+
+class TestWindowClose(WindowBase):
+    """WIN-W2 / WIN-R9: closing the window while COAL starts is not an error, and is quick."""
+
+    def test_close_during_start_shows_no_error(self):
+        starting = threading.Event()
+
+        def command(port):
+            starting.set()
+            return [sys.executable, self.stub, str(port)]
+        s = self.server(mode="hang", command=command, start_timeout=60, stop_timeout=2)
+        threads, close_took = [], []
+
+        def scenario(w, startup):
+            t = threading.Thread(target=startup, daemon=True)
+            threads.append(t)
+            t.start()
+            self.assertTrue(starting.wait(30))
+            t0 = time.monotonic()
+            w.events.closed.fire()  # the person closes the window during "Starting COAL..."
+            close_took.append(time.monotonic() - t0)
+        code, wv = self.run_window(s, scenario)
+        threads[0].join(60)
+        self.assertFalse(threads[0].is_alive())
+        self.assertEqual(code, 0)
+        self.assertEqual(self.dialogs, [], "error dialog shown after the person closed COAL")
+        self.assertNotIn(("destroy",), wv.windows[0].calls)
+        self.assertFalse(s.running())
+        self.assertLess(close_took[0], 1.0, "closed handler blocked on stopping the server")
+
+
+class TestWindowFallback(WindowBase):
+    """WIN-R7: any failure creating/starting the window offers the browser fallback."""
+
+    def test_create_window_failure_offers_browser(self):
+        s = self.server(start_timeout=30)
+        with mock.patch.object(cd, "_run_in_browser", return_value=7) as rb:
+            cd._error_dialog.side_effect = lambda t, x, offer_browser=False: (self.dialogs.append((t, x)), True)[1]
+            code, _ = self.run_window(s, run_and_close, fail_create=RuntimeError("WebView2 missing"))
+        self.assertEqual(code, 7)
+        rb.assert_called_once()
+        self.assertIn("WebView2", self.dialogs[0][1])
+
+
+class TestOpenWith(WindowBase):
+    """WIN-W4: "Open with" / second launch with files shows a visible message."""
+
+    def test_second_launch_with_file_explains_what_to_do(self):
+        s = self.server(start_timeout=30)
+        p = os.path.join(REPO, "examples", "clean", "protein.aln.fasta")
+
+        def scenario(w, startup):
+            t = threading.Thread(target=startup, daemon=True)
+            t.start()
+            t.join(60)
+            self.instance.on_message({"action": "focus", "files": [p]})
+            w.events.closed.fire()
+        code, wv = self.run_window(s, scenario)
+        self.assertEqual(code, 0)
+        self.assertIn(("show",), wv.windows[0].calls)
+        self.assertEqual(len(self.notices), 1, self.notices)
+        text = self.notices[0][1]
+        self.assertIn("protein.aln.fasta", text)
+        self.assertIn("box 1", text)
+        self.assertNotIn(REPO, text)
+
+    def test_first_launch_with_file_explains_what_to_do(self):
+        s = self.server(start_timeout=30)
+        d = os.path.join(REPO, "examples", "clean", "dna.fasta")
+        code, _ = self.run_window(s, run_and_close, files=[d])
+        self.assertEqual(code, 0)
+        self.assertEqual(len(self.notices), 1, self.notices)
+        self.assertIn("box 2", self.notices[0][1])
+
+    def test_browser_mode_answers_second_launch(self):
+        s = self.server(start_timeout=30)
+        opened = []
+        with mock.patch("webbrowser.open", side_effect=opened.append):
+            def dialog(t, x, offer_browser=False):
+                if t == "COAL is running":  # "Press OK to quit": a second launch happens meanwhile
+                    self.instance.on_message({"action": "focus", "files": []})
+                return False
+            cd._error_dialog.side_effect = dialog
+            self.assertEqual(cd._run_in_browser(s, self.instance), 0)
+        self.assertEqual(len(opened), 2, "second launch should reopen the page")
+
+
 if __name__ == "__main__":
     unittest.main()

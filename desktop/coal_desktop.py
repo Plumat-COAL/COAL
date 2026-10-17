@@ -233,7 +233,12 @@ def serve(port: int, mcp: bool = False, launcher=None, parent_pid: int | None = 
 # ============================================================== window role: manage the child
 
 class ServerError(RuntimeError):
-    """The local app did not start. str() is a plain-English message for a dialog."""
+    """The local app did not start. str() is a plain-English message for a dialog.
+    ``cancelled``: start() gave up because stop() was called (the person closed COAL)."""
+
+    def __init__(self, message: str = "", cancelled: bool = False):
+        super().__init__(message)
+        self.cancelled = cancelled
 
 
 def default_server_command(port: int, mcp: bool = False) -> list[str]:
@@ -321,15 +326,25 @@ class LocalServer:
         self._log_fh = None
         self._job = None
         self._lock = threading.Lock()
+        self._stop_lock = threading.Lock()
+        self._pump_thread = None
+        self._stopped = False
 
     # --- start
     def start(self) -> str:
         last = ""
         for attempt in range(1, self.attempts + 1):
+            # CHANGED(WIN-W2): was: stop() during start() looked like a crash (and could start a
+            # new attempt); now start() raises ServerError(cancelled=True). See overnight/windows-app/CHANGES.md
+            if self._stopped:
+                raise ServerError("COAL was closed while it was starting.", cancelled=True)
             port = find_free_port()
             code, last = self._start_once(port)
             if code is None:
                 return self.url
+            if self._stopped:
+                self.stop()
+                raise ServerError("COAL was closed while it was starting.", cancelled=True)
             if code != EXIT_PORT_BUSY:
                 break
             log.warning("port %s was taken (attempt %s of %s)", port, attempt, self.attempts)
@@ -358,7 +373,8 @@ class LocalServer:
                 self._job.add(self.proc)
             except Exception as e:  # noqa: BLE001 - the stdin lifeline still works
                 log.warning("could not attach the local app to a job object: %s", e)
-        threading.Thread(target=self._pump, args=(self.proc, self._lines), daemon=True).start()
+        self._pump_thread = threading.Thread(target=self._pump, args=(self.proc, self._lines), daemon=True)
+        self._pump_thread.start()
         deadline = time.monotonic() + self.start_timeout
         while True:
             remaining = deadline - time.monotonic()
@@ -427,7 +443,13 @@ class LocalServer:
         return self.proc is not None and self.proc.poll() is None
 
     def stop(self) -> int | None:
-        """Close the lifeline (stdin), wait; then terminate; then kill. Safe to call twice."""
+        """Close the lifeline (stdin), wait; then terminate; then kill. Safe to call twice, and
+        from another thread while start() is waiting (start() then raises, cancelled)."""
+        self._stopped = True
+        with self._stop_lock:
+            return self._stop_locked()
+
+    def _stop_locked(self) -> int | None:
         p = self.proc
         if p is None:
             self._close_log()
@@ -449,8 +471,11 @@ class LocalServer:
         log.info("local app stopped (exit code %s)", p.returncode)
         return p.returncode
 
-    @staticmethod
-    def _close_pipes(p):
+    def _close_pipes(self, p):
+        # Let the reader thread see EOF first: closing stdout under a blocked readline() can block.
+        t = self._pump_thread
+        if t is not None and t is not threading.current_thread() and p.poll() is not None:
+            t.join(5)
         for s in (p.stdin, p.stdout):
             try:
                 s.close()
@@ -693,10 +718,50 @@ def _error_dialog(title: str, text: str, offer_browser: bool = False) -> bool:
     return False
 
 
+def _notice(title: str, text: str) -> None:
+    """Information box that does not block the caller (Windows), or stderr."""
+    if IS_WINDOWS:
+        def show():
+            try:
+                import ctypes
+                MB_ICONINFORMATION, MB_SETFOREGROUND, MB_TOPMOST = 0x40, 0x10000, 0x40000
+                ctypes.windll.user32.MessageBoxW(None, text, title,
+                                                 MB_ICONINFORMATION | MB_SETFOREGROUND | MB_TOPMOST)
+            except Exception:  # noqa: BLE001
+                pass
+        threading.Thread(target=show, daemon=True).start()
+        return
+    print(f"{title}: {text}", file=sys.stderr)
+
+
+def _names(classified: dict) -> dict:
+    """classify_dropped_files() result with file names only (logs never hold full paths)."""
+    b = lambda p: os.path.basename(p) if p else p  # noqa: E731
+    return {"protein": b(classified["protein"]), "dna": b(classified["dna"]),
+            "other": [b(p) for p in classified["other"]]}
+
+
+def open_with_message(paths) -> str:
+    """What to tell someone who opened files with COAL from Explorer (the boxes can't be filled
+    from outside the page yet, see DESIGN.md section 8)."""
+    c = classify_dropped_files(paths)
+    lines = []
+    if c["protein"]:
+        lines.append(f"Drag {os.path.basename(c['protein'])} onto box 1 (protein alignment).")
+    if c["dna"]:
+        lines.append(f"Drag {os.path.basename(c['dna'])} onto box 2 (coding DNA).")
+    for p in c["other"]:
+        lines.append(f"{os.path.basename(p or '')}: COAL couldn't tell whether this is a protein "
+                     "alignment or DNA. Drag it onto the box it belongs in.")
+    return ("COAL can't load files opened from Explorer yet, so please add them in the COAL "
+            "window:\n\n" + "\n".join(lines) + "\n\nYou can also click a box to choose a file.")
+
+
 def run_window(server: LocalServer, instance: SingleInstance, files: list[str]) -> int:
-    """Show the native window. UNTESTED (needs Windows + pywebview); written from pywebview 6.x docs:
-    create_window, window.events.closed, window.dom.document.events.drop with DOMEventHandler
-    (full paths in dataTransfer.files[i].pywebviewFullPath), load_url, restore/show, on_top,
+    """Show the native window. UNTESTED on Windows (tested here only against a fake pywebview in
+    test_wrapper.py); written from pywebview 6.x docs: create_window, window.events.loaded/closed,
+    window.get_current_url, window.dom.document.events.drop with DOMEventHandler (full paths in
+    dataTransfer.files[i].pywebviewFullPath), load_url, restore/show, on_top,
     webview.settings['ALLOW_DOWNLOADS'], webview.start(func, args, gui, private_mode, storage_path)."""
     import webview
     from webview.dom import DOMEventHandler
@@ -704,15 +769,11 @@ def run_window(server: LocalServer, instance: SingleInstance, files: list[str]) 
     # Gradio's download buttons need this; pywebview disables downloads by default.
     webview.settings["ALLOW_DOWNLOADS"] = True
 
-    window = webview.create_window(WINDOW_TITLE, html=SPLASH, width=1200, height=820,
-                                   min_size=(900, 600), text_select=True, zoomable=True,
-                                   background_color="#FFFFFF")
-    failure = {}
+    state = {"closing": False, "failure": None, "stopper": None}
+    window = None
 
     def bring_to_front(msg: dict):
         log.info("message from a second launch: %s", {k: v for k, v in msg.items() if k != "files"})
-        if msg.get("files"):
-            log.info("files given to the second launch: %s", classify_dropped_files(msg["files"]))
         try:
             window.restore()
             window.show()
@@ -720,6 +781,11 @@ def run_window(server: LocalServer, instance: SingleInstance, files: list[str]) 
             window.on_top = False
         except Exception as e:  # noqa: BLE001
             log.warning("could not bring the window to the front: %s", e)
+        if msg.get("files"):
+            # CHANGED(WIN-W4): was: files from "Open with"/a second launch were only logged; now a
+            # message tells the person to add them in the window. See overnight/windows-app/CHANGES.md
+            log.info("files given to the second launch: %s", _names(classify_dropped_files(msg["files"])))
+            _notice("COAL", open_with_message(msg["files"]))
 
     instance.on_message = bring_to_front
 
@@ -728,37 +794,67 @@ def run_window(server: LocalServer, instance: SingleInstance, files: list[str]) 
 
     def on_drop(e):
         # Drops on Gradio's own drop zones are handled by Gradio (it uploads over 127.0.0.1).
-        # This document-level handler mainly stops the window from navigating away to a file
-        # dropped elsewhere, and records the full paths for the planned path-based input.
+        # This document-level handler stops the window from navigating away to a file dropped
+        # elsewhere. Paths are not handed to the GUI yet (DESIGN.md section 8).
         try:
             paths = [f.get("pywebviewFullPath") for f in e.get("dataTransfer", {}).get("files", [])]
-            log.info("files dropped on the window: %s", classify_dropped_files([p for p in paths if p]))
+            log.info("files dropped on the window: %s", _names(classify_dropped_files([p for p in paths if p])))
         except Exception as ex:  # noqa: BLE001
             log.warning("could not read the dropped files: %s", ex)
 
-    def on_closed():
-        server.stop()
+    def on_loaded():
+        # CHANGED(WIN-W1): was: drop guard registered on the splash page, lost at load_url(); now
+        # registered on every load of the local app's page. See overnight/windows-app/CHANGES.md
+        try:
+            current = window.get_current_url() or ""
+            if not (server.url and current.startswith(server.url)):
+                return
+            doc = window.dom.document
+            doc.events.dragover += DOMEventHandler(on_drag, True, False, debounce=500)
+            doc.events.drop += DOMEventHandler(on_drop, True, False)
+        except Exception as ex:  # noqa: BLE001 - drag-and-drop guard is optional
+            log.warning("drag and drop guard not available: %s", ex)
 
-    window.events.closed += on_closed
+    def on_closed():
+        # CHANGED(WIN-W2, WIN-R9): was: server.stop() here (blocking, and a stop during start was
+        # reported as "could not start"); now: mark closing, stop in the background.
+        # See overnight/windows-app/CHANGES.md
+        if state["failure"] is None:
+            state["closing"] = True
+        t = threading.Thread(target=server.stop, daemon=True)
+        t.start()
+        state["stopper"] = t
 
     def startup(win):
-        try:
-            win.dom.document.events.dragover += DOMEventHandler(on_drag, True, False, debounce=500)
-            win.dom.document.events.drop += DOMEventHandler(on_drop, True, False)
-        except Exception as ex:  # noqa: BLE001 - drag-and-drop is optional
-            log.warning("drag and drop not available: %s", ex)
+        if state["closing"]:
+            return
         try:
             url = server.start()
         except ServerError as ex:
-            failure["error"] = str(ex)
-            win.destroy()
+            if state["closing"] or ex.cancelled:
+                return  # the person closed COAL while it was starting: not an error
+            state["failure"] = str(ex)
+            try:
+                win.destroy()
+            except Exception:  # noqa: BLE001 - already closed
+                pass
+            return
+        if state["closing"]:
             return
         if files:
-            log.info("opened with files: %s", classify_dropped_files(files))
+            log.info("opened with files: %s", _names(classify_dropped_files(files)))
+            _notice("COAL", open_with_message(files))
         win.load_url(url)
 
     gui = "edgechromium" if IS_WINDOWS else None  # never fall back to the IE11 engine
     try:
+        # CHANGED(WIN-R7): was: create_window outside the try (a failure there skipped the browser
+        # fallback); now any exception opening the window offers it. See overnight/windows-app/CHANGES.md
+        window = webview.create_window(WINDOW_TITLE, html=SPLASH, width=1200, height=820,
+                                       min_size=(900, 600), text_select=True, zoomable=True,
+                                       background_color="#FFFFFF")
+        window.events.loaded += on_loaded
+        window.events.closed += on_closed
         webview.start(startup, window, gui=gui, private_mode=True,
                       storage_path=os.path.join(data_dir(), "webview"), debug=False)
     except Exception as ex:  # noqa: BLE001 - typically: WebView2 runtime missing
@@ -768,17 +864,20 @@ def run_window(server: LocalServer, instance: SingleInstance, files: list[str]) 
                          "WebView2 Runtime is missing (it is part of Windows 11 and of Edge updates "
                          "on Windows 10).\n\nOpen COAL in your web browser instead? It still runs "
                          f"only on this computer.\n\n(Details: {ex})", offer_browser=True):
-            return _run_in_browser(server)
+            return _run_in_browser(server, instance)
         return 1
     finally:
+        t = state["stopper"]
+        if t is not None:
+            t.join(server.stop_timeout + 10)
         server.stop()
-    if failure:
-        _error_dialog("COAL could not start", failure["error"])
+    if state["failure"] and not state["closing"]:
+        _error_dialog("COAL could not start", state["failure"])
         return 1
     return 0
 
 
-def _run_in_browser(server: LocalServer) -> int:
+def _run_in_browser(server: LocalServer, instance: SingleInstance | None = None) -> int:
     """Fallback when no native window is possible: default browser + a small 'Quit COAL' dialog."""
     import webbrowser
     try:
@@ -787,6 +886,14 @@ def _run_in_browser(server: LocalServer) -> int:
         _error_dialog("COAL could not start", str(ex))
         return 1
     webbrowser.open(url)
+    if instance is not None:
+        # CHANGED(WIN-W4): was: a second launch in --browser mode did nothing visible; now it
+        # reopens the page (and explains "Open with" files). See overnight/windows-app/CHANGES.md
+        def on_message(msg):
+            webbrowser.open(url)
+            if msg.get("files"):
+                _notice("COAL", open_with_message(msg["files"]))
+        instance.on_message = on_message
     _error_dialog("COAL is running", f"COAL is open in your browser at {url}\n\n"
                   "Press OK to quit COAL.")
     server.stop()
@@ -858,7 +965,7 @@ def main_window(args) -> int:
                          log_path=os.path.join(os.path.dirname(log_path), "local_app.log"))
     try:
         if args.browser:
-            return _run_in_browser(server)
+            return _run_in_browser(server, instance)
         try:
             import webview  # noqa: F401
         except ImportError:
