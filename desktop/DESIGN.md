@@ -477,10 +477,10 @@ COAL.exe (wrapper: window + single-instance lock)        main thread: pywebview 
   `.fasta`, `.fa`, `.fas`, `.faa`, `.fna`. We never take over the default program for
   `.fasta` (people open those in Notepad++, Jalview, MEGA, and would be rightly annoyed).
   Opening a file with COAL passes its path to COAL; if COAL is open, the running window
-  receives it via the single-instance channel. Hackathon: COAL comes to the front and shows a
-  message naming the file and the box to drag it onto (it can't fill the box yet); putting it
-  into the drop zone needs the app's path inputs (section 8), to be wired after the branches
-  merge. <!-- CHANGED(WIN-W4). See overnight/windows-app/CHANGES.md -->
+  receives it via the single-instance channel. COAL comes to the front and loads the file by
+  path into the right box (sniffed: protein alignment or DNA) through the GUI's
+  `?protein=&dna=` hook, keeping the other box's file. <!-- CHANGED(WIN-W4b/R2-A9): was "shows a
+  message ... can't fill the box yet". See overnight/integration/CHANGES.md -->
 - **Uninstall:** Settings > Apps > COAL > Uninstall. Removes the install folder, the shortcut(s),
   the per-user registry keys, and COAL's own app data (`%LOCALAPPDATA%\COAL`: logs, lock,
   WebView2 cache) and `%TEMP%\coal_app_runs` (the GUI's run folders). Never touches results
@@ -565,9 +565,8 @@ PyInstaller. Mitigations, in order of effect:
 - **Found while writing this design:** a FASTA file saved with a UTF-8 byte-order mark (as
   old Notepad and some Windows tools do) makes the engine stop with
   `'ascii' codec can't decode byte 0xef in position 0`. That message is not plain English, and
-  the BOM is harmless. Proposed engine change in section 8 (read with `utf-8-sig`, still
-  reject other non-ASCII). Reproduced in `test_smoke.py` (expected-failure test, so it flips
-  when fixed).
+  the BOM is harmless. Fixed in the engine (ENG-h skips a BOM); `test_smoke.py`
+  `test_utf8_bom_is_accepted` is now a normal test (INT-2). <!-- CHANGED(R2-D8) -->
 
 ### 5.10 High-DPI scaling
 
@@ -627,7 +626,8 @@ PyInstaller. Mitigations, in order of effect:
 ### 5.15 Temporary files and logs
 
 - Gradio's own temp files (`%TEMP%\gradio`, shared with other Gradio apps) and the GUI's run
-  folders (`%TEMP%\coal_app_runs`; runs by AI agents over MCP: `%TEMP%\coal_*`) go to `%TEMP%`.
+  folders (`%TEMP%\coal_app_runs`, also used by runs from AI agents over MCP) go to `%TEMP%`.
+  <!-- CHANGED(R2-D8): was "MCP runs: %TEMP%\coal_*". See overnight/integration/CHANGES.md -->
 - The wrapper's logs go to `%LOCALAPPDATA%\COAL\logs\`: `coal_desktop.log` (newest 5 kept)
   and `local_app.log` (newest 3), rotated only by the instance holding the lock. They never
   contain sequence data, but `local_app.log` holds everything the local app prints (including
@@ -650,9 +650,9 @@ PyInstaller. Mitigations, in order of effect:
   Target: the wrapper's native file dialog (`create_file_dialog`) or the window-wide drop
   handler (pywebview's DOM `drop` event gives full paths) produces a path, which the GUI
   passes straight to the engine. Zero copies, works for files larger than RAM.
-- Today: Gradio's file box streams the file over 127.0.0.1 into Gradio's temp folder, then
-  the engine reads the copy. Correct and still local, but doubles disk use and time. Needs a
-  small GUI hook (section 8), which the wrapper is ready for.
+- Done (R2-A9): files dropped anywhere on the window, opened with COAL or given to a second
+  launch are passed by path (`?protein=&dna=`) and read in place. Only the box's own file
+  picker still uploads a copy into Gradio's temp folder. <!-- CHANGED(R2-A9) -->
 
 ### 6.2 Progress with time remaining
 

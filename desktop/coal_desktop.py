@@ -168,8 +168,9 @@ def launch_gradio(port: int, mcp: bool = False):
     from coal_app import core, ui  # ImportError -> EXIT_NO_GUI
     ex = bundled_examples_dir()
     if ex:
-        # core computes EXAMPLES_DIR as <coal_app>/../../examples, which doesn't exist in a
-        # bundle. Proposed proper fix (COAL_EXAMPLES_DIR) is in overnight/windows-app/LOG.md.
+        # core computes EXAMPLES_DIR as <coal_app>/../../examples, which doesn't exist in a bundle.
+        # CHANGED(R2-A9): comment was "proposed fix"; core now reads COAL_EXAMPLES_DIR (APP-C12), set here too.
+        os.environ["COAL_EXAMPLES_DIR"] = ex
         core.EXAMPLES_DIR = ex
     demo = ui.launch(host="127.0.0.1", port=port, mcp=mcp, demo_mode=False, prevent_thread_lock=True)
     return f"http://127.0.0.1:{port}/", demo.close
@@ -815,20 +816,33 @@ def _names(classified: dict) -> dict:
             "other": [b(p) for p in classified["other"]]}
 
 
-def open_with_message(paths) -> str:
-    """What to tell someone who opened files with COAL from Explorer (the boxes can't be filled
-    from outside the page yet, see DESIGN.md section 8)."""
+def query_url(base: str, protein: str | None, dna: str | None) -> str:
+    """The local app's URL with its ?protein=&dna= path hook filled in (URL-encoded); see core.paths_from_query."""
+    from urllib.parse import urlencode
+    q = {k: v for k, v in (("protein", protein), ("dna", dna)) if v}
+    return base.rstrip("/") + "/" + ("?" + urlencode(q) if q else "")
+
+
+def files_to_load(paths, current: dict) -> tuple[dict, str]:
+    """CHANGED(WIN-W4b/R2-A9): new. Sort files from "Open with", a second launch or a drop into protein / DNA
+    (by sniffing their content), keep the other box's file from `current` if only one kind is given, and
+    return ({"protein": path|None, "dna": path|None}, message for the person or "")."""
     c = classify_dropped_files(paths)
+    want = {"protein": c["protein"] or current.get("protein"), "dna": c["dna"] or current.get("dna")}
     lines = []
-    if c["protein"]:
-        lines.append(f"Drag {os.path.basename(c['protein'])} onto box 1 (protein alignment).")
-    if c["dna"]:
-        lines.append(f"Drag {os.path.basename(c['dna'])} onto box 2 (coding DNA).")
     for p in c["other"]:
-        lines.append(f"{os.path.basename(p or '')}: COAL couldn't tell whether this is a protein "
-                     "alignment or DNA. Drag it onto the box it belongs in.")
-    return ("COAL can't load files opened from Explorer yet, so please add them in the COAL "
-            "window:\n\n" + "\n".join(lines) + "\n\nYou can also click a box to choose a file.")
+        lines.append(f"{os.path.basename(p or '')}: COAL couldn't tell whether this is a protein alignment or "
+                     "DNA. Type or paste its path into the box it belongs in.")
+    if (c["protein"] or c["dna"]) and not (want["protein"] and want["dna"]):
+        lines.append("Now add the coding DNA (box 2)." if want["protein"] else
+                     "Now add the protein alignment (box 1).")
+    return want, "\n".join(lines)
+
+
+def open_with_message(paths) -> str:
+    """CHANGED(WIN-W4b/R2-A9): was "COAL can't load files opened from Explorer yet ... drag them"; files are now
+    loaded by path, so this only explains what could not be loaded (kept for callers/tests)."""
+    return files_to_load(paths, {})[1]
 
 
 def run_window(server: LocalServer, instance: SingleInstance, files: list[str]) -> int:
@@ -843,8 +857,19 @@ def run_window(server: LocalServer, instance: SingleInstance, files: list[str]) 
     # Gradio's download buttons need this; pywebview disables downloads by default.
     webview.settings["ALLOW_DOWNLOADS"] = True
 
-    state = {"closing": False, "failure": None, "stopper": None}
+    state = {"closing": False, "failure": None, "stopper": None, "loaded": {}}
     window = None
+
+    def load_files(paths):
+        # CHANGED(WIN-W4b/R2-A9): was only a message ("drag them onto the boxes"); now the files are loaded by
+        # path (read in place, never copied) through the GUI's ?protein=&dna= hook. See overnight/integration/CHANGES.md
+        want, msg = files_to_load(paths, state["loaded"])
+        log.info("loading files: %s", _names(classify_dropped_files([p for p in want.values() if p])))
+        if (want["protein"] or want["dna"]) and server.url:
+            state["loaded"] = want
+            window.load_url(query_url(server.url, want["protein"], want["dna"]))
+        if msg:
+            _notice("COAL", msg)
 
     def bring_to_front(msg: dict):
         log.info("message from a second launch: %s", {k: v for k, v in msg.items() if k != "files"})
@@ -856,10 +881,8 @@ def run_window(server: LocalServer, instance: SingleInstance, files: list[str]) 
         except Exception as e:  # noqa: BLE001
             log.warning("could not bring the window to the front: %s", e)
         if msg.get("files"):
-            # CHANGED(WIN-W4): was: files from "Open with"/a second launch were only logged; now a
-            # message tells the person to add them in the window. See overnight/windows-app/CHANGES.md
-            log.info("files given to the second launch: %s", _names(classify_dropped_files(msg["files"])))
-            _notice("COAL", open_with_message(msg["files"]))
+            # CHANGED(WIN-W4b/R2-A9): was a message only; now loaded by path. See overnight/integration/CHANGES.md
+            load_files(msg["files"])
 
     instance.on_message = bring_to_front
 
@@ -867,14 +890,18 @@ def run_window(server: LocalServer, instance: SingleInstance, files: list[str]) 
         pass
 
     def on_drop(e):
-        # Drops on Gradio's own drop zones are handled by Gradio (it uploads over 127.0.0.1).
-        # This document-level handler stops the window from navigating away to a file dropped
-        # elsewhere. Paths are not handed to the GUI yet (DESIGN.md section 8).
+        # This document-level handler stops the window from navigating away to a dropped file.
+        # CHANGED(WIN-W4b/R2-A9): was: paths only logged; now dropped files with a full path are loaded by path
+        # (read in place). A drop on one of Gradio's own boxes also starts Gradio's upload, which the page
+        # reload replaces. See overnight/integration/CHANGES.md
         try:
             paths = [f.get("pywebviewFullPath") for f in e.get("dataTransfer", {}).get("files", [])]
-            log.info("files dropped on the window: %s", _names(classify_dropped_files([p for p in paths if p])))
+            paths = [p for p in paths if p]
         except Exception as ex:  # noqa: BLE001
             log.warning("could not read the dropped files: %s", ex)
+            return
+        if paths:
+            load_files(paths)
 
     def on_loaded():
         # CHANGED(WIN-W1): was: drop guard registered on the splash page, lost at load_url(); now
@@ -915,9 +942,14 @@ def run_window(server: LocalServer, instance: SingleInstance, files: list[str]) 
             return
         if state["closing"]:
             return
-        if files:
+        if files:  # CHANGED(WIN-W4b/R2-A9): was a message only; now the files are loaded by path
+            want, msg = files_to_load(files, {})
             log.info("opened with files: %s", _names(classify_dropped_files(files)))
-            _notice("COAL", open_with_message(files))
+            state["loaded"] = want
+            win.load_url(query_url(url, want["protein"], want["dna"]))
+            if msg:
+                _notice("COAL", msg)
+            return
         win.load_url(url)
 
     gui = "edgechromium" if IS_WINDOWS else None  # never fall back to the IE11 engine
@@ -963,10 +995,17 @@ def _run_in_browser(server: LocalServer, instance: SingleInstance | None = None)
     if instance is not None:
         # CHANGED(WIN-W4): was: a second launch in --browser mode did nothing visible; now it
         # reopens the page (and explains "Open with" files). See overnight/windows-app/CHANGES.md
+        loaded = {}
+
         def on_message(msg):
+            if msg.get("files"):  # CHANGED(WIN-W4b/R2-A9): open the page with the files loaded by path
+                want, text = files_to_load(msg["files"], loaded)
+                loaded.update(want)
+                webbrowser.open(query_url(url, want["protein"], want["dna"]))
+                if text:
+                    _notice("COAL", text)
+                return
             webbrowser.open(url)
-            if msg.get("files"):
-                _notice("COAL", open_with_message(msg["files"]))
         instance.on_message = on_message
     _error_dialog("COAL is running", f"COAL is open in your browser at {url}\n\n"
                   "Press OK to quit COAL.")

@@ -25,9 +25,10 @@ words when a gene doesn't fit.
 4. Choose whether you want a desktop shortcut and an "Open with" entry for .fasta and .aln
    files (both optional; COAL never becomes your default program for those files). Click
    **Install**.
-   <!-- CHANGED(WIN-W4): "Open with" caveat added. See overnight/windows-app/CHANGES.md -->
-   *About "Open with":* in this version it opens COAL (or brings it to the front) and tells you
-   which box to drag the file onto. It can't load the file into the box by itself yet.
+   <!-- CHANGED(WIN-W4b/R2-A9): was "it can't load the file into the box by itself yet"; it now does. See overnight/integration/CHANGES.md -->
+   *About "Open with":* it opens COAL (or brings it to the front) and puts the file into the
+   right box (COAL looks inside to tell a protein alignment from DNA). The file is read where it
+   is, never copied. Open the other file the same way, or type its path.
 
 COAL now appears in your Start menu.
 
@@ -44,9 +45,11 @@ on this computer (127.0.0.1).
 
 1. Start **COAL** from the Start menu. A window opens (the first start can take ten seconds or
    so).
-2. Drop your **protein alignment** (FASTA or CLUSTAL, from MAFFT, MUSCLE, Clustal…) on box 1,
-   and the **coding DNA** of the same genes (FASTA, not aligned) on box 2. Or click a box to
-   choose a file.
+2. Drop your **protein alignment** (FASTA or CLUSTAL, from MAFFT, MUSCLE, Clustal…) and the
+   **coding DNA** of the same genes (FASTA, not aligned) anywhere on the window: COAL puts each
+   one in the right box and reads it where it is (no copy, so big files are fine). You can also
+   click a box to choose a file, or type or paste a file's path under the box.
+   <!-- CHANGED(R2-A9): drops anywhere are now loaded by path. See overnight/integration/CHANGES.md -->
 3. Check the **genetic code**: 1 for nuclear genes of most organisms, 2 for vertebrate
    mitochondria, 11 for bacteria and plastids.
 4. Click **Make codon alignment**.
@@ -73,8 +76,8 @@ Not sure what your files should look like? Click one of the **Try an example** b
 |---|---|---|
 | many codons "don't match", tip suggests another genetic code | the genes use a different genetic code (common for mitochondrial genes) | click the re-run button in the tip |
 | protein and DNA IDs don't match | e.g. proteins called `AT1G01010.1`, DNA called `AT1G01010` | rename so the IDs match (the tip says how they differ) |
-| a gene failed with a "frameshift" | a DNA letter is missing or extra in that gene (often a sequencing or assembly error) | fix or remove that gene; the others are fine |
-| "'ascii' codec can't decode byte 0xef in position 0" (protein file) or "sequence data before first '>' header" (DNA file) | the file was saved with a hidden "byte order mark" (old Notepad does this) | open it in Notepad, File > Save as, Encoding: **UTF-8** (not "UTF-8 with BOM"), save, try again |
+| a gene failed with a "frameshift" | a DNA letter is missing or extra in that gene (often a sequencing or assembly error) | fix or remove that gene and run again: COAL stops at the first failed gene, so the genes after it are shown as "not checked", not as fine |
+<!-- CHANGED(R2-D8): BOM row removed (the engine now skips a byte order mark, ENG-h); frameshift advice: later genes are "not checked". See overnight/integration/CHANGES.md -->
 
 ## Uninstall
 
@@ -85,8 +88,9 @@ touched.
 
 Two kinds of temporary files are left for Windows' own cleanup (Settings > System > Storage >
 Temporary files), or you can delete them yourself: `%TEMP%\gradio` (uploaded copies of files you
-dropped in; shared with any other Gradio-based program, so the uninstaller leaves it) and
-`%TEMP%\coal_*` folders (runs started by AI tools over MCP).
+chose with a box's file picker; shared with any other Gradio-based program, so the uninstaller
+leaves it). Runs started by AI tools over MCP use the same `%TEMP%\coal_app_runs` folder as the
+window. <!-- CHANGED(R2-D8): was "%TEMP%\coal_* folders (MCP runs)"; MCP runs go to coal_app_runs (core.RUNS_DIR) -->
 <!-- CHANGED(WIN-W6): temp folders listed. See overnight/windows-app/CHANGES.md -->
 
 ## Updates

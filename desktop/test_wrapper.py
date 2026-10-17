@@ -699,34 +699,91 @@ class TestWindowFallback(WindowBase):
 
 
 class TestOpenWith(WindowBase):
-    """WIN-W4: "Open with" / second launch with files shows a visible message."""
+    """WIN-W4b / R2-A9: "Open with", a second launch and drops load the files by path (read in place) through
+    the GUI's ?protein=&dna= hook."""
 
-    def test_second_launch_with_file_explains_what_to_do(self):
-        s = self.server(start_timeout=30)
-        p = os.path.join(REPO, "examples", "clean", "protein.aln.fasta")
+    P = os.path.join(REPO, "examples", "clean", "protein.aln.fasta")
+    D = os.path.join(REPO, "examples", "clean", "dna.fasta")
 
+    @staticmethod
+    def params(url):
+        from urllib.parse import parse_qs, urlparse
+        return {k: v[0] for k, v in parse_qs(urlparse(url).query).items()}
+
+    def app_loads(self, w):
+        return [c[1] for c in w.calls if c[0] == "load_url"]
+
+    def after_start(self, *actions):
         def scenario(w, startup):
             t = threading.Thread(target=startup, daemon=True)
             t.start()
             t.join(60)
-            self.instance.on_message({"action": "focus", "files": [p]})
+            for act in actions:
+                act(w)
             w.events.closed.fire()
-        code, wv = self.run_window(s, scenario)
-        self.assertEqual(code, 0)
-        self.assertIn(("show",), wv.windows[0].calls)
-        self.assertEqual(len(self.notices), 1, self.notices)
-        text = self.notices[0][1]
-        self.assertIn("protein.aln.fasta", text)
-        self.assertIn("box 1", text)
-        self.assertNotIn(REPO, text)
+        return scenario
 
-    def test_first_launch_with_file_explains_what_to_do(self):
+    def test_second_launch_with_both_files_loads_them(self):
         s = self.server(start_timeout=30)
-        d = os.path.join(REPO, "examples", "clean", "dna.fasta")
-        code, _ = self.run_window(s, run_and_close, files=[d])
+        code, wv = self.run_window(s, self.after_start(
+            lambda w: self.instance.on_message({"action": "focus", "files": [self.D, self.P]})))
         self.assertEqual(code, 0)
+        w = wv.windows[0]
+        self.assertIn(("show",), w.calls)
+        loads = self.app_loads(w)
+        self.assertEqual(len(loads), 2, loads)  # the app page, then the page with both paths
+        self.assertTrue(loads[1].startswith(s.url))
+        self.assertEqual(self.params(loads[1]), {"protein": self.P, "dna": self.D})
+        self.assertEqual(self.notices, [])
+
+    def test_one_file_keeps_the_other_and_asks_for_the_missing_one(self):
+        s = self.server(start_timeout=30)
+        code, wv = self.run_window(s, self.after_start(
+            lambda w: self.instance.on_message({"action": "focus", "files": [self.P]}),
+            lambda w: self.instance.on_message({"action": "focus", "files": [self.D]})))
+        self.assertEqual(code, 0)
+        loads = self.app_loads(wv.windows[0])
+        self.assertEqual(self.params(loads[1]), {"protein": self.P})
+        self.assertEqual(self.params(loads[2]), {"protein": self.P, "dna": self.D})
         self.assertEqual(len(self.notices), 1, self.notices)
         self.assertIn("box 2", self.notices[0][1])
+        self.assertNotIn(REPO, self.notices[0][1])
+
+    def test_first_launch_with_files_opens_them(self):
+        s = self.server(start_timeout=30)
+        code, wv = self.run_window(s, run_and_close, files=[self.P, self.D])
+        self.assertEqual(code, 0)
+        loads = self.app_loads(wv.windows[0])
+        self.assertEqual(len(loads), 1)
+        self.assertEqual(self.params(loads[0]), {"protein": self.P, "dna": self.D})
+        self.assertEqual(self.notices, [])
+
+    def test_unknown_file_is_explained(self):
+        s = self.server(start_timeout=30)
+        junk = os.path.join(self.tmp, "notes.txt")
+        with open(junk, "w", encoding="utf-8") as fh:
+            fh.write("12345\n")
+        code, wv = self.run_window(s, run_and_close, files=[junk])
+        self.assertEqual(code, 0)
+        self.assertEqual(len(self.app_loads(wv.windows[0])), 1)
+        self.assertIn("notes.txt", self.notices[0][1])
+
+    def test_drop_on_the_window_loads_by_path(self):
+        s = self.server(start_timeout=30)
+
+        def drop(w):
+            h = w.dom.document.events.drop.handlers[0]
+            h.callback({"dataTransfer": {"files": [{"name": "dna.fasta", "pywebviewFullPath": self.D},
+                                                   {"name": "protein.aln.fasta", "pywebviewFullPath": self.P}]}})
+        code, wv = self.run_window(s, self.after_start(drop))
+        self.assertEqual(code, 0)
+        loads = self.app_loads(wv.windows[0])
+        self.assertEqual(self.params(loads[-1]), {"protein": self.P, "dna": self.D})
+
+    def test_query_url_encodes_paths(self):
+        u = cd.query_url("http://127.0.0.1:7860/", "C:\\My Data\\p&q.fa", None)
+        self.assertEqual(u, "http://127.0.0.1:7860/?protein=C%3A%5CMy+Data%5Cp%26q.fa")
+        self.assertEqual(self.params(u), {"protein": "C:\\My Data\\p&q.fa"})
 
     def test_browser_mode_answers_second_launch(self):
         s = self.server(start_timeout=30)
@@ -735,10 +792,39 @@ class TestOpenWith(WindowBase):
             def dialog(t, x, offer_browser=False):
                 if t == "COAL is running":  # "Press OK to quit": a second launch happens meanwhile
                     self.instance.on_message({"action": "focus", "files": []})
+                    self.instance.on_message({"action": "focus", "files": [self.P, self.D]})
                 return False
             cd._error_dialog.side_effect = dialog
             self.assertEqual(cd._run_in_browser(s, self.instance), 0)
-        self.assertEqual(len(opened), 2, "second launch should reopen the page")
+        self.assertEqual(len(opened), 3, "second launch should reopen the page")
+        self.assertEqual(self.params(opened[2]), {"protein": self.P, "dna": self.D})
+
+
+class TestClosingFlag(WindowBase):
+    """Review round 2 test-quality note: closing the window before startup runs must stop startup."""
+
+    def test_closed_before_startup_starts_nothing(self):
+        calls = []
+
+        class FailingServer:  # start() would fail with a real (not "cancelled") error
+            url = None
+            stop_timeout = 1
+
+            def start(self):
+                calls.append("start")
+                raise cd.ServerError("the local app crashed")
+
+            def stop(self):
+                calls.append("stop")
+
+        def scenario(w, startup):
+            w.events.closed.fire()
+            startup()
+        code, wv = self.run_window(FailingServer(), scenario)
+        self.assertEqual(code, 0)
+        self.assertNotIn("start", calls)
+        self.assertEqual(self.dialogs, [], "error dialog after the person closed COAL")
+        self.assertEqual([c for c in wv.windows[0].calls if c[0] == "load_url"], [])
 
 
 class LogEnv(unittest.TestCase):
