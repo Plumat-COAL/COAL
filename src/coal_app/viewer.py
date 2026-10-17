@@ -323,57 +323,92 @@ def build_rows(protein: list[tuple[str, str]], codon: list[tuple[str, str]] | No
 
 # ---------------------------------------------------------------- rendering
 
-CSS = """
-.coalv { --bg:#ffffff; --fg:#1a1a1a; --muted:#5f6b75; --line:#d5dbe0; --gap:#9aa4ad; --mark:#000000;
-  --hl:#fff3b0; --hy:#d4ebf9; --ar:#f0d6e6; --po:#c9dcef; --ne:#f8d5c2; --pl:#c9eadf; --sp:#faf4c0; --st:#d9d9d9;
-  background:var(--bg); color:var(--fg); font-family:system-ui,"Segoe UI",Helvetica,Arial,sans-serif;
-  font-size:16px; line-height:1.35; }
-.coalv h2 { font-size:1.25em; margin:0.6em 0 0.3em; }
-.coalv .note { background:#eef3f7; border-left:5px solid #0072B2; padding:0.4em 0.7em; margin:0.4em 0; }
-.coalv .legend { display:flex; flex-wrap:wrap; gap:0.4em 1em; margin:0.5em 0; font-size:0.9em; }
-.coalv .legend span { display:inline-flex; align-items:center; gap:0.35em; }
-.coalv .sw { display:inline-block; width:1.1em; height:1.1em; border:1px solid var(--line); border-radius:3px; }
-.coalv .issues { margin:0.3em 0 0.8em; padding-left:1.2em; }
-.coalv .issues li { margin:0.25em 0; }
-.coalv .issues a { color:#0057a0; }
-.coalv .scroll { overflow:auto; max-height:75vh; border:1px solid var(--line); border-radius:6px; }
-.coalv table { border-collapse:separate; border-spacing:0; font-family:ui-monospace,Consolas,Menlo,monospace;
-  font-size:15px; }
-.coalv thead th { position:sticky; top:0; z-index:2; background:var(--bg); color:var(--muted);
-  font-weight:400; font-size:12px; text-align:left; padding:2px 0 2px 2px; border-bottom:1px solid var(--line);
-  height:1.4em; white-space:nowrap; }
-.coalv thead th.flag { color:var(--mark); font-weight:700; }
-.coalv th.name { position:sticky; left:0; z-index:1; background:var(--bg); text-align:left;
+# CHANGED(GUI-2): was one light palette with no text colour pinned on headings, cells and links, so in Gradio's dark
+# theme its light text leaked into the white panel (light grey on white, nearly invisible); now every colour is a
+# variable, set for light, for Gradio's dark theme (the ".dark" body class) and, in the downloaded page, for a dark
+# system theme; rules are "div.coalv ..." so they win over Gradio's ".prose ..." styles. Residue tints keep the
+# Okabe-Ito hues (dark versions: text 7.1-10.2:1); outlines, hatching and icon + word statuses unchanged. Text colours
+# are !important: Gradio's own rules for h2/th/td/a/code must not win in either theme.
+# See overnight/integration/CHANGES.md
+_LIGHT = {"bg": "#ffffff", "fg": "#1a1a1a", "muted": "#5f6b75", "line": "#d5dbe0", "gap": "#6e7780",
+          "mark": "#000000", "hl": "#fff3b0", "hlring": "#E69F00", "link": "#0057a0", "notebg": "#eef3f7",
+          "noteline": "#0072B2", "hatch": "rgba(0,0,0,0.12)", "hatch2": "rgba(0,0,0,0.06)",
+          "hy": "#d4ebf9", "ar": "#f0d6e6", "po": "#c9dcef", "ne": "#f8d5c2", "pl": "#c9eadf", "sp": "#faf4c0",
+          "st": "#d9d9d9"}
+_DARK = {"bg": "#1c1a19", "fg": "#ede9e4", "muted": "#b3ada6", "line": "#3a3633", "gap": "#9a938c",
+         "mark": "#ede9e4", "hl": "#5c4a10", "hlring": "#FFC24B", "link": "#8cc4ff", "notebg": "#262321",
+         "noteline": "#56B4E9", "hatch": "rgba(255,255,255,0.18)", "hatch2": "rgba(255,255,255,0.08)",
+         "hy": "#1e3b52", "ar": "#4a2a40", "po": "#2f3157", "ne": "#573420", "pl": "#1d4537", "sp": "#48421c",
+         "st": "#3d3b39"}
+
+
+def _vars(d: dict) -> str:
+    return "".join(f"--{k}:{v};" for k, v in d.items())
+
+
+CSS = ("body.coalv-page { margin:0; padding:12px 16px; background:#ffffff; }"
+       f"div.coalv {{ {_vars(_LIGHT)} color-scheme:light; }}"
+       f".dark div.coalv {{ {_vars(_DARK)} color-scheme:dark; }}"
+       f"@media (prefers-color-scheme: dark) {{ body.coalv-page div.coalv {{ {_vars(_DARK)} color-scheme:dark; }}"
+       f" body.coalv-page {{ background:{_DARK['bg']}; }} }}") + """
+div.coalv { background:var(--bg); color:var(--fg) !important; font-family:system-ui,"Segoe UI",Helvetica,Arial,sans-serif;
+  font-size:16px; line-height:1.35; padding:0.2em 0.9em 0.9em; border-radius:6px; }
+div.coalv h2 { font-size:1.25em; margin:0.6em 0 0.3em; color:var(--fg) !important; }
+div.coalv p, div.coalv li, div.coalv span, div.coalv strong { color:inherit !important; }
+div.coalv code { background:none; color:inherit !important; padding:0; font-size:0.95em; }
+div.coalv .note { background:var(--notebg); border-left:5px solid var(--noteline); padding:0.4em 0.7em;
+  margin:0.4em 0; color:var(--fg) !important; }
+div.coalv .legend { display:flex; flex-wrap:wrap; gap:0.4em 1em; margin:0.5em 0; font-size:0.9em; }
+div.coalv .legend span { display:inline-flex; align-items:center; gap:0.35em; }
+div.coalv .sw { display:inline-block; width:1.1em; height:1.1em; border:1px solid var(--line); border-radius:3px; }
+div.coalv .issues { margin:0.3em 0 0.8em; padding-left:1.2em; }
+div.coalv .issues li { margin:0.25em 0; }
+div.coalv a { color:var(--link) !important; text-decoration:underline; }
+div.coalv a:focus-visible, div.coalv .scroll:focus-visible { outline:3px solid var(--hlring); outline-offset:2px; }
+div.coalv .scroll { overflow:auto; max-height:75vh; border:1px solid var(--line); border-radius:6px;
+  background:var(--bg); }
+div.coalv table { border-collapse:separate; border-spacing:0; font-family:ui-monospace,Consolas,Menlo,monospace;
+  font-size:15px; margin:0; width:auto; background:var(--bg); color:var(--fg) !important; }
+div.coalv thead th { position:sticky; top:0; z-index:2; background:var(--bg); color:var(--muted) !important;
+  font-weight:400; font-size:12px; text-align:left; padding:2px 0 2px 2px; border:0;
+  border-bottom:1px solid var(--line); height:1.4em; white-space:nowrap; }
+div.coalv thead th.flag { color:var(--mark) !important; font-weight:700; }
+div.coalv th.name { position:sticky; left:0; z-index:1; background:var(--bg); color:var(--fg) !important; text-align:left;
   font-family:system-ui,"Segoe UI",Helvetica,Arial,sans-serif; font-size:14px; font-weight:600;
-  padding:0 0.6em; border-right:2px solid var(--line); white-space:nowrap; max-width:16em;
+  padding:0 0.6em; border:0; border-right:2px solid var(--line); white-space:nowrap; max-width:16em;
   overflow:hidden; text-overflow:ellipsis; }
-.coalv thead th.name { z-index:3; }
-.coalv th.name .st { font-weight:700; margin-right:0.3em; }
-.coalv td { padding:1px 2px; text-align:center; min-width:2.6em; scroll-margin:3em 3em 3em 18em; }
-.coalv td b { display:block; font-size:12px; line-height:1.1; }
-.coalv td i { display:block; font-style:normal; letter-spacing:0.02em; }
-.coalv td.gap { color:var(--gap); }
-.coalv td.hy{background:var(--hy)} .coalv td.ar{background:var(--ar)} .coalv td.po{background:var(--po)}
-.coalv td.ne{background:var(--ne)} .coalv td.pl{background:var(--pl)} .coalv td.sp{background:var(--sp)}
-.coalv td.st{background:var(--st)}
-.coalv td.mm { outline:2px solid var(--mark); outline-offset:-2px; }
-.coalv td.mm b::before { content:"\\2260 "; }
-.coalv td.fs { outline:3px double var(--mark); outline-offset:-3px; background-image:repeating-linear-gradient(
-  45deg, transparent 0 4px, rgba(0,0,0,0.12) 4px 6px); }
-.coalv td.fs b::before { content:"\\21AF "; }
-.coalv td.miss { color:var(--gap); background:repeating-linear-gradient(-45deg, transparent 0 4px,
-  rgba(0,0,0,0.06) 4px 6px); }
-.coalv td:target, .coalv td.hl { background:var(--hl) !important; box-shadow:inset 0 0 0 3px #E69F00; }
-.coalv tr:target th.name { background:var(--hl); }
-.coalv .rownote { font-weight:400; font-size:12px; color:var(--muted); }
-@media (max-width: 600px) { .coalv th.name { max-width:7.5em; padding:0 0.3em; font-size:12px; }
-  .coalv .rownote { display:none; } .coalv td { scroll-margin-left:9em; } }
-"""
+div.coalv thead th.name { z-index:3; }
+div.coalv th.name .st { font-weight:700; margin-right:0.3em; }
+div.coalv td { padding:1px 2px; text-align:center; min-width:2.6em; scroll-margin:3em 3em 3em 18em; border:0;
+  color:var(--fg) !important; }
+div.coalv td b { display:block; font-size:12px; line-height:1.1; font-weight:700; color:inherit !important; }
+div.coalv td i { display:block; font-style:normal; letter-spacing:0.02em; color:inherit !important; }
+div.coalv td.gap { color:var(--gap) !important; }
+div.coalv td.hy{background:var(--hy)} div.coalv td.ar{background:var(--ar)} div.coalv td.po{background:var(--po)}
+div.coalv td.ne{background:var(--ne)} div.coalv td.pl{background:var(--pl)} div.coalv td.sp{background:var(--sp)}
+div.coalv td.st{background:var(--st)}
+div.coalv td.mm { outline:2px solid var(--mark); outline-offset:-2px; }
+div.coalv td.mm b::before { content:"\\2260 "; }
+div.coalv td.fs { outline:3px double var(--mark); outline-offset:-3px; background-image:repeating-linear-gradient(
+  45deg, transparent 0 4px, var(--hatch) 4px 6px); }
+div.coalv td.fs b::before { content:"\\21AF "; }
+div.coalv td.miss { color:var(--gap) !important; background:repeating-linear-gradient(-45deg, transparent 0 4px,
+  var(--hatch2) 4px 6px); }
+div.coalv td:target, div.coalv td.hl { background:var(--hl) !important; box-shadow:inset 0 0 0 3px var(--hlring); }
+div.coalv tr:target th.name { background:var(--hl); }
+div.coalv .gapkey { color:var(--gap) !important; }
+div.coalv .rownote { font-weight:400; font-size:12px; color:var(--muted) !important; }
+@media (max-width: 600px) { div.coalv { padding:0.2em 0.5em 0.6em; }
+  div.coalv th.name { max-width:7.5em; padding:0 0.3em; font-size:12px; }
+  div.coalv .gapkey { color:var(--gap) !important; }
+div.coalv .rownote { display:none; } div.coalv td { scroll-margin-left:9em; } }
+@media print { div.coalv { %s } }
+""" % _vars(_LIGHT)
 
 JS = """
 (function(){
   function mark(){
-    document.querySelectorAll('.coalv td.hl').forEach(function(e){e.classList.remove('hl');});
+    document.querySelectorAll('div.coalv td.hl').forEach(function(e){e.classList.remove('hl');});
     var id = decodeURIComponent(location.hash.slice(1)); if(!id) return;
     var t = document.getElementById(id); if(!t || t.tagName !== 'TD') return;
     var idx = t.cellIndex, tb = t.closest('table');
@@ -468,7 +503,7 @@ def render_fragment(rows: list[dict], ncols: int, notes: list[str] | None = None
         out.append(f'<span><span class="sw" style="background:var(--{cls})"></span>{label}</span>')
     out.append('<span><b>≠</b> codon does not match its amino acid (outlined)</span>'
                '<span><b>↯</b> frameshift (double outline, hatched)</span>'
-               '<span style="color:var(--gap)">--- gap</span></div>')
+               '<span class="gapkey">--- gap</span></div>')  # CHANGED(GUI-2): was an inline colour
     flagged_cols = {i + 1 for r in shown_rows for i, (_, _, f) in enumerate(r["cells"][:cols])
                     if f in ("mismatch", "frameshift")}
     out.append('<div class="scroll" tabindex="0" aria-label="Codon alignment, scrolls sideways">'
@@ -514,8 +549,8 @@ def render_page(fragment: str, title: str = "COAL alignment view") -> str:
     """A complete, self-contained HTML document (no external scripts or fonts)."""
     return ("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
             "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-            f"<title>{html.escape(title)}</title><style>body{{margin:0;padding:12px 16px;background:#fff}}</style>"
-            f"</head><body>{fragment}<script>{JS}</script></body></html>")
+            f"<title>{html.escape(title)}</title><meta name=\"color-scheme\" content=\"light dark\">"
+            f"</head><body class=\"coalv-page\">{fragment}<script>{JS}</script></body></html>")
 
 
 def view(protein_path: str, codon_path: str | None = None, report: dict | str | None = None,
