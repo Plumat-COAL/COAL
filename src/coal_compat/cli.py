@@ -4,8 +4,9 @@
             [-codontable N] [-nogap] [-nomismatch] [-blockonly] [-nostderr] [-h]
 
 An unchanged PAL2NAL command line works: the default output format is clustal, as in PAL2NAL, and all four
-formats, -nogap, -nomismatch, -blockonly and every -codontable give PAL2NAL v14's output byte for byte (apart
-from COAL's documented deliberate differences, see README.md). The codon alignment goes to standard output,
+formats, -nogap, -nomismatch, -blockonly and every -codontable give PAL2NAL v14's output byte for byte on
+well-formed input (COAL's documented deliberate differences, where PAL2NAL silently writes wrong output, are listed
+in README.md). The codon alignment goes to standard output,
 messages to standard error. ``-nostderr`` is accepted and mapped to COAL's ``-q``: warnings and
 notices are silenced, errors still go to standard error (as with PAL2NAL's ``-nostderr``, which silences its
 warnings but not its ERROR messages). CHANGED(R2-A10): was "(COAL's ``-q``)", which implied a silent stderr.

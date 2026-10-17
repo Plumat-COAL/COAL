@@ -53,8 +53,8 @@ coal pep.aln nuc.fasta --strict -o codon.fasta           # 7. pipelines: stop on
 "always count the warnings per gene" (none are printed with -nomismatch) and exit codes 0/1/2 only.
 See overnight/integration/CHANGES.md -->
 <!-- CHANGED(DEC-4): was "Output is FASTA only" -->
-Output formats: `-output fasta` (the default of `coal`), `clustal`, `paml`, `codon`, each byte-identical to
-PAL2NAL v14 (`codon` cannot be combined with `-nogap`/`-nomismatch`/`-blockonly`, as in PAL2NAL). `-blockonly` keeps
+Output formats: `-output fasta` (the default of `coal`), `clustal`, `paml`, `codon`, as PAL2NAL v14 writes them.
+COAL is byte-identical to PAL2NAL v14 on well-formed input: all 279 stored reference checks pass (232 byte-identical, 24 where both tools fail, 23 documented deliberate differences), and in 20,000 random comparisons (5,000 cases x 4 output formats) and 6,000 independent stratified cases every difference from PAL2NAL is a documented, deliberate one, where PAL2NAL silently produces wrong or malformed output; 0 undocumented differences (list in README.md). <!-- CHANGED(FZ-claim) --> (`codon` cannot be combined with `-nogap`/`-nomismatch`/`-blockonly`, as in PAL2NAL). `-blockonly` keeps
 only the columns marked `#` under the blocks of a CLUSTAL input. Per-codon warnings (`coal: warning: <id> pepAlnPos N: ...`)
 go to stderr, and so do **notices about probably-wrong data** (below). `-q` silences warnings and notices alike
 (errors are always printed), so **don't use `-q` when you need to know about bad genes**; use `--strict` to stop on

@@ -74,6 +74,21 @@ class TestDocsNumbers(unittest.TestCase):
         m100k, m500k = round(t * 10 / 60), round(t * 50 / 60)
         self.expect("README.md", f"10,000-sequence time ({t:.1f} s)", f"roughly {m100k} and {m500k} minutes")
 
+    def test_compatibility_claim_is_qualified_everywhere(self):  # FZ-claim
+        c = self.c
+        claim = (f"byte-identical to PAL2NAL v14 on well-formed input: all {self.n} stored reference checks pass "
+                 f"({c['stdout byte-identical']} byte-identical, {c['both fail']} where both tools fail, "
+                 f"{c['deliberate error'] + c['deliberate differs'] + c['deliberate nogap_code']} documented deliberate "
+                 f"differences)")
+        for rel in ("README.md", "pitch/PITCH.md", "pitch/QA.md", ".claude/skills/coal/SKILL.md"):
+            self.expect(rel, claim, "0 undocumented differences")
+        self.expect("README.md", "5,000 cases: 20,000 comparisons, 14,368 byte-identical, 4,723 where both fail, 909")
+        self.expect("tests/README.md", "| fasta | 5,000 | 4,096 | 612 | 292 | 0 |")
+        for rel in ("README.md", "pitch/PITCH.md", "pitch/QA.md", ".claude/skills/coal/SKILL.md"):
+            text = _read(rel)
+            for m in re.finditer(r"[^.]*byte-identical to PAL2NAL[^.]*", text):
+                self.assertTrue(any(q in m.group(0) for q in ("well-formed", "benchmark")), f"{rel}: {m.group(0)}")
+
     def test_tests_readme_quotes_the_printed_line(self):
         self.expect("tests/README.md", self.line)
 

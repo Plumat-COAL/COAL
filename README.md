@@ -8,6 +8,10 @@ Built at the Reinvent the Wheel AI × Science Tool-building Hackathon, London, O
 
 > **Status:** v0.3 (pure Python, no required dependencies; numpy optional). Up to **~119× faster** than PAL2NAL
 > with byte-identical output on the benchmarked datasets — see [Benchmark results](#benchmark-results).
+>
+> **Compatibility:** COAL is byte-identical to PAL2NAL v14 on well-formed input: all 279 stored reference checks pass (232 byte-identical, 24 where both tools fail, 23 documented deliberate differences), and in 20,000 random comparisons (5,000 cases x 4 output formats) and 6,000 independent stratified cases every difference from PAL2NAL is a documented, deliberate one, where PAL2NAL silently produces wrong or malformed output; 0 undocumented differences. See
+> [Deliberate differences](#deliberate-differences-from-pal2nal) and [Tests](#tests).
+> <!-- CHANGED(FZ-claim): new; was unqualified "byte-identical" wording elsewhere. See overnight/integration/CHANGES.md -->
 
 ## Install and use
 
@@ -21,8 +25,8 @@ pip install -e .[fast]                              # optional numpy speed-up fo
 
 - **Input:** a protein alignment (FASTA or CLUSTAL) and the unaligned coding DNA (FASTA, one or more files).
   Non-letters in the DNA (gaps, digits, spaces) are ignored, as in PAL2NAL.
-- **Output:** a codon alignment, using the protein-alignment IDs, in any of PAL2NAL v14's formats, byte for byte as
-  PAL2NAL writes them: `-output fasta` (COAL's default; 60 columns per line), `clustal` (PAL2NAL's default), `paml`
+- **Output:** a codon alignment, using the protein-alignment IDs, in any of PAL2NAL v14's formats, as PAL2NAL writes
+  them (byte for byte on well-formed input; see Compatibility above): `-output fasta` (COAL's default; 60 columns per line), `clustal` (PAL2NAL's default), `paml`
   (codeml's input) or `codon` (amino acids above their codons; not combinable with `-nogap`/`-nomismatch`/`-blockonly`,
   as in PAL2NAL). The drop-in `pal2nal` command defaults to clustal, like PAL2NAL.
   <!-- CHANGED(DEC-4): was "a codon alignment in FASTA format". See overnight/integration/CHANGES.md -->
@@ -81,7 +85,9 @@ if the whole run succeeds, so an error never leaves a partial file. Notes:
 **Not supported:** PAL2NAL's `-html` web-server mode (a clear error) and Gblocks-format protein input.
 <!-- CHANGED(DEC-4): was "output formats other than FASTA (clustal, paml, codon), and -blockonly/Gblocks input" -->
 
-**Deliberate differences from PAL2NAL** (details in `tests/README.md`):
+### Deliberate differences from PAL2NAL
+
+Details and evidence in `tests/README.md`:
 
 - An invalid character in the protein alignment (e.g. `@`) is an error. PAL2NAL treats it as X but its output can
   lose a codon silently (fixture `invalid_chars`: `ATGAAAGTTZZZ`, the final CTG lost). PAL2NAL's tfastx/tfasty
@@ -102,10 +108,27 @@ if the whole run succeeds, so an error never leaves a partial file. Notes:
   nothing there. Mismatch warnings are not printed, as in PAL2NAL. The output is the same: both remove those columns.
   <!-- CHANGED(DEC-4): COAL kept B/Z/J/O/U columns with -nomismatch; now removes them like PAL2NAL -->
 - `U` (selenocysteine) in the protein is read as any codon, like B/Z/J/O, with a warning. PAL2NAL's search pattern
-  gives `U` no codon at all, so its row is misaligned or the gene fails. <!-- CHANGED(DEC-4): found by the fuzz -->
+  gives `U` no codon at all, so its row is misaligned or the gene fails. Repro: protein `M-UVE`, DNA `ATGTCAGTTGAG`:
+  COAL `ATG---TCAGTTGAG`; PAL2NAL fails ("inconsistency"). <!-- CHANGED(DEC-4): found by the fuzz --> <!-- CHANGED(FZ-D1): repro -->
+- B/Z/J/O in a gene that needs the fallback: PAL2NAL also checks their codons against the wrong pattern (B against
+  its start-codon list) and prints spurious `does not correspond` warnings; COAL accepts any codon there (stderr only;
+  with `-nomismatch` both remove those columns). <!-- CHANGED(FZ-D2) -->
 - RNA input (U instead of T): COAL reads U as T everywhere. PAL2NAL does too, except in its fallback (used when the
   protein doesn't fit exactly), where a first Met on AUG/CUG/GUG is not accepted: PAL2NAL then flags that codon
-  (and `-nomismatch` removes the column) or places the gene elsewhere in the DNA. <!-- CHANGED(DEC-4): found by the fuzz -->
+  (and `-nomismatch` removes the column) or places the gene elsewhere in the DNA, even in another reading frame.
+  <!-- CHANGED(DEC-4): found by the fuzz -->
+- Protein rows of different lengths are an error (`protein alignment rows have different lengths`); PAL2NAL silently
+  pads or truncates. <!-- CHANGED(FZ-D5) -->
+- Input that PAL2NAL misreads is read correctly: a protein FASTA starting with a blank line (PAL2NAL takes it for
+  CLUSTAL and fails), a UTF-8 BOM (PAL2NAL fails), `> id` with a space after `>` (PAL2NAL takes the header text as
+  sequence). <!-- CHANGED(FZ-D6) -->
+- Input that PAL2NAL silently mangles is a clear error: duplicate protein or DNA IDs (PAL2NAL concatenates or drops
+  records), an empty DNA `>` header, a second DNA file whose first record has no header (PAL2NAL appends it to the
+  previous file's last record), and `_` as a stop in the protein (PAL2NAL's alias; COAL: invalid character).
+  <!-- CHANGED(FZ-D7) -->
+- Ambiguity codes include plain N: a codon is accepted when every reading gives the residue, e.g. `NTG` as the first
+  Met in table 4 (all of ATG/CTG/GTG/TTG are table-4 starts). PAL2NAL's fixed list misses it and falls back to
+  another, frame-shifted placement. <!-- CHANGED(FZ-D8) -->
 - `coal`'s own default output format is FASTA (PAL2NAL's is clustal); the drop-in `pal2nal` command uses clustal.
 - `-nogap` removes the stop codons **of the selected genetic code**, in upper or lower case. PAL2NAL always removes
   the standard code's TAA/TAG/TGA, upper case only, whatever `-codontable` says: with `-codontable 2` (vertebrate
@@ -161,14 +184,17 @@ wrong-code DNA; UTRs, stops, frameshift digits, RNA, lower case; same, shuffled,
 random `-codontable`, `-nogap`, `-nomismatch`, `-blockonly`) runs through PAL2NAL and the drop-in `pal2nal` with the
 same command line in all four formats, and stdout must be byte-identical, or both must fail, except for the
 deliberate differences listed in the script (each is in the list above). CI runs it on every push (job
-`pal2nal-fuzz`). Result here, seed 20261017, 3,000 cases: no unexplained difference in any format (see
-`tests/README.md` for the counts). <!-- CHANGED(DEC-4): new -->
+`pal2nal-fuzz`). Result here, seed 20261017, 5,000 cases: 20,000 comparisons, 14,368 byte-identical, 4,723 where
+both fail, 909 in cases with a documented deliberate difference, 0 undocumented (per-format counts in
+`tests/README.md`). The independent tester's stratified generator (26 strata, FASTA output) gave, on 6,000 cases:
+4,625 byte-identical stdout, 631 both fail, 744 documented deliberate differences, 0 undocumented.
+<!-- CHANGED(DEC-4): new --> <!-- CHANGED(FZ-claim): was "3,000 cases: no unexplained difference" -->
 
 ## Benchmark results
 
 COAL vs PAL2NAL v14 on synthetic datasets (see `benchmarks/README.md`). Each run is one
 command-line process, timed from start to finish (including Perl/Python start-up).
-Times are the median of 3 runs. **Every COAL output was byte-identical to PAL2NAL's.**
+Times are the median of 3 runs. **On these benchmark datasets every COAL output was byte-identical to PAL2NAL's.** <!-- CHANGED(FZ-claim): qualified -->
 
 | Sequences × codons | Total codons | PAL2NAL | COAL | Speedup | Peak memory PAL2NAL / COAL |
 |---|---:|---:|---:|---:|---:|

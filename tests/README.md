@@ -49,7 +49,12 @@ When `-nomismatch` (or `-nogap`) removes every column, PAL2NAL prints an empty l
 | B/Z/J/O/U in the protein with `-nomismatch` (no golden case) | Prints no warnings at all with `-nomismatch` (seen in every `fasta_nomismatch` golden); removes the column (measured) | Still prints the `unknown AA type. Taken as 'X'` warning; mismatch warnings are suppressed as in PAL2NAL (ENG-i2). Removes the column too (DEC-4f; was kept) |
 | `U` (selenocysteine) in the protein (no golden case) | Its search pattern gives `U` no codon, so the row is misaligned or the gene fails (measured by the fuzz) | `U` is read as any codon, like B/Z/J/O, with a warning (DEC-4) |
 | RNA (U) DNA, protein starting with M, fallback needed (no golden case) | The fallback's first-Met pattern is `[ACGR]TG`, so AUG/CUG/GUG is flagged as a mismatch (`-nomismatch` drops the column) or the gene is placed elsewhere (measured by the fuzz) | U read as T everywhere: AUG accepted (DEC-4) |
-| Table 3, GTG as first Met | Not a table-3 start (its table 3 starts are ATA/ATG; measured) | GTG is a start (NCBI) (ENG-g) |
+| Table 3, GTG as first Met | Not a table-3 start (its table 3 starts are ATA/ATG; measured, also by the tester's 23,936 single-codon runs, which confirmed tables 3/10/11/13 as the only table differences) | GTG is a start (NCBI) (ENG-g; FZ-D9) |
+| B/Z/J/O in a gene that needs the fallback | Checks their codons against the wrong pattern (B against its start-codon list), spurious mismatch warnings | Any codon accepted (stderr only; both remove the columns with `-nomismatch`) (FZ-D2) |
+| Protein rows of different lengths | Pads/truncates silently | Error (FZ-D5) |
+| Protein FASTA starting with a blank line; UTF-8 BOM; `> id` (space after `>`) | Misdetected as CLUSTAL / fails / header text read as sequence | Read correctly (FZ-D6) |
+| Duplicate protein or DNA IDs; empty DNA `>` header; a second DNA file starting without a header; `_` as stop | Concatenates or drops records silently; `_` = stop | Clear error (FZ-D7) |
+| Ambiguity codes incl. N, e.g. `NTG` first Met in table 4 | Not in its fixed list; falls back to a frame-shifted placement | Accepted (every reading is a start) (FZ-D8) |
 | Default output format of `coal` | clustal | fasta (the drop-in `pal2nal` command defaults to clustal, like PAL2NAL) (DEC-4) |
 | `-nogap` with another genetic code, or lower-case DNA (14 goldens `fasta_nogap_ct<N>`) | Removes the standard code's TAA/TAG/TGA (upper case only) whatever `-codontable` says: table 2 deletes TGA = Trp columns and keeps AGA stops | Removes the selected code's stop codons, any case (FZ-5) |
 | Some but not all protein IDs are DNA IDs (no golden case) | Pairs by order, silently (measured) | Pairs by order (same output) and prints a notice (ENG-d); an error only with `--strict` (DEC-1) |
@@ -122,14 +127,26 @@ against the real PAL2NAL for every codon × residue and every first-Met codon: t
 ATT/ATC/ATA and table 13 ATA starts; IUPAC codes other than N; `U` residues; RNA first Met in the fallback), and a
 case may differ only if the generator gave it one of them. CI job `pal2nal-fuzz` runs it on every push.
 
-Result in this repository (seed 20261017, 3,000 cases, 12,000 comparisons; PAL2NAL v14 sha256 2b419417…):
+Result in this repository (seed 20261017, 5,000 cases, 20,000 comparisons; PAL2NAL v14 sha256 2b419417…; after
+FZ-1 … FZ-6): <!-- CHANGED(FZ-claim): was the 3,000-case run before the FZ fixes -->
 
 | `-output` | cases | identical | both fail | deliberate differences | unexplained |
 |---|---:|---:|---:|---:|---:|
-| clustal | 3,000 | 2,599 | 350 | 51 | 0 |
-| paml | 3,000 | 2,599 | 350 | 51 | 0 |
-| fasta | 3,000 | 2,599 | 350 | 51 | 0 |
-| codon | 3,000 | 1,242 | 1,739 | 19 | 0 |
+| clustal | 5,000 | 4,096 | 612 | 292 | 0 |
+| paml | 5,000 | 4,096 | 612 | 292 | 0 |
+| fasta | 5,000 | 4,096 | 612 | 292 | 0 |
+| codon | 5,000 | 2,080 | 2,887 | 33 | 0 |
+
+Deliberate differences by feature (cases): genetic_code 142, invalid_char 174, iupac 109, nogap_code 648,
+rna_first_met 96, u_residue 23. Cases exercising: '#' marks + `-blockonly` 476, '#' marks shown 488, `-nogap` 1,241,
+`-nomismatch` 1,311, CLUSTAL input 1,742, other codes 2,319, frameshift digits 206 (≥ 4: 114), tfastx 177, unrelated
+DNA 306, masked 592, partly matching IDs 236, more than one 60-nt block 3,834.
+
+The independent tester's stratified generator (26 strata such as BOM, CR line ends, tfastx, IUPAC, wrong code,
+edge cases; FASTA output; script in the tester's notes, not in the repo), re-run on this branch with 6,000 cases:
+4,962 both succeeded, of which 4,625 byte-identical stdout; 631 both fail; 744 differ, every one a documented
+deliberate difference (invalid characters, `.` as gap, NCBI tables, IUPAC, `U`, RNA first Met, B/Z/J/O fallback,
+`-nogap` stops, BOM / blank-line / `> id` input, rows of different lengths); 0 undocumented.
 
 (codon: both fail whenever the case has `-nogap`, `-nomismatch` or `-blockonly`, which PAL2NAL refuses with codon
 output.) Before DEC-4 the same harness found, besides the missing formats and `-blockonly`, two engine differences,

@@ -55,6 +55,10 @@ DELIBERATE = {
                      "accept AUG/CUG/GUG as the first Met (its fallback pattern has T only), so it flags that "
                      "codon (dropped by -nomismatch) or places the gene elsewhere; COAL reads U as T everywhere",
 }
+# Documented deliberate differences the generator does not produce (README.md lists them with repros): protein rows
+# of different lengths (COAL error); FASTA starting with a blank line, BOM, "> id" (COAL reads them, PAL2NAL fails);
+# duplicate IDs, empty DNA header, headerless second DNA file, '_' as stop (COAL error); B/Z/J/O fallback warnings
+# (stderr only, not compared); partial-N codons such as NTG (FZ-D8).
 # Codons behind "genetic_code" (run table -> codons): TGA anywhere in the DNA; a first Met on these codons.
 TABLE_CODONS = {10: {"TGA"}}
 START_CODONS = {3: {"GTG"}, 11: {"ATT", "ATC", "ATA"}, 13: {"ATA"}}

@@ -12,6 +12,7 @@ compare the warnings; 24 check that COAL rejects the inputs PAL2NAL fails on (ex
 documented, deliberate differences (14 of them `-nogap` with another genetic code: COAL removes that code's stop codons) <!-- CHANGED(FZ-5): was 246/240/9 -->, where we check COAL's own behaviour instead. On every change, CI also runs both
 tools on 3,000 random inputs x 4 formats (wrong DNA, masked genes, UTRs, frameshifts, every genetic code, -nogap,
 -nomismatch, -blockonly): identical apart from the documented differences. <!-- CHANGED(DEC-4): was 165/147/141/12/6 -->
+In one sentence: COAL is byte-identical to PAL2NAL v14 on well-formed input: all 279 stored reference checks pass (232 byte-identical, 24 where both tools fail, 23 documented deliberate differences), and in 20,000 random comparisons (5,000 cases x 4 output formats) and 6,000 independent stratified cases every difference from PAL2NAL is a documented, deliberate one, where PAL2NAL silently produces wrong or malformed output; 0 undocumented differences. <!-- CHANGED(FZ-claim) -->
 On your data, COAL checks every
 <!-- CHANGED(R2-D2): was 143 / 94 / 10; guarded by tests_app/test_docs_numbers.py -->
 codon against its amino acid and tells you per gene if it doesn't fit, with the column, so problems can't
