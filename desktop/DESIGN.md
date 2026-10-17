@@ -348,7 +348,7 @@ Small, because every setting is a support question. Stored in
 | open in COAL leaves this computer.                                       |
 | How to cite: ... [Copy]                                                  |
 | Updates: there is no automatic update. New versions are on               |
-|          github.com/chloe-newt/COAL/releases (copy link).                |
+|          github.com/plumat-coal/COAL/releases (copy link).                |
 | Third-party software included:  [ View licences ]                        |
 |   Python (PSF), Gradio (Apache-2.0), pywebview (BSD-3-Clause),           |
 |   Microsoft Edge WebView2 (part of Windows), PyInstaller bootloader      |

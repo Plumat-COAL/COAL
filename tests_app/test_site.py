@@ -1,0 +1,323 @@
+"""WEB-1..WEB-6: the download website (site/) and the release/pages workflows behind it."""
+import importlib.util
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import unittest
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SITE = os.path.join(ROOT, "site")
+WORKFLOWS = os.path.join(ROOT, ".github", "workflows")
+REPO_URL = "https://github.com/plumat-coal/COAL"
+
+try:
+    import yaml  # PyYAML: comes with gradio (the gui extra); CI's gui job sets COAL_REQUIRE_EXTRAS=gui
+except ImportError:  # pragma: no cover - depends on the environment
+    yaml = None
+REQUIRE_YAML = "gui" in os.environ.get("COAL_REQUIRE_EXTRAS", "").split(",")
+
+
+def _load(name):
+    spec = importlib.util.spec_from_file_location(name, os.path.join(ROOT, "scripts", name + ".py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _read(*parts):
+    with open(os.path.join(ROOT, *parts), encoding="utf-8") as fh:
+        return fh.read()
+
+
+def _workflow(name):
+    if yaml is None:
+        if REQUIRE_YAML:
+            raise AssertionError("PyYAML is missing although COAL_REQUIRE_EXTRAS=gui")
+        raise unittest.SkipTest("PyYAML not installed (it comes with the gui extra)")
+    with open(os.path.join(WORKFLOWS, name), encoding="utf-8") as fh:
+        return yaml.safe_load(fh)
+
+
+def _steps(wf, job):
+    return {s.get("name", s.get("uses", "")): s for s in wf["jobs"][job]["steps"]}
+
+
+def release_file_names(version="9.9.9"):
+    """The exact file list the release job checks (step "Check the release files"), with ${V} filled in."""
+    run = _steps(_workflow("release.yml"), "release")["Check the release files"]["run"]
+    block = re.search(r"expected=\((.*?)\)", run, re.S).group(1)
+    return [n.replace("${V}", version) for n in re.findall(r'"([^"]+)"', block)]
+
+
+class TestReleaseScripts(unittest.TestCase):
+    def test_version_check(self):
+        rv = _load("release_version")
+        init, proj = rv.source_versions()
+        self.assertEqual(init, proj, "src/coal/__init__.py and pyproject.toml disagree")
+        self.assertEqual(rv.check("v" + init), (init, False))
+        for bad in ("v9.9.9", init, "v" + init + "x", "", "release-" + init):
+            with self.assertRaises(ValueError, msg=bad):
+                rv.check(bad)
+        r = subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "release_version.py"), "v9.9.9"],
+                           capture_output=True, text=True, timeout=60)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("bump both", r.stderr)
+
+    def test_prerelease_tags(self):
+        rv = _load("release_version")
+        self.assertTrue(rv.TAG_RE.match("v1.0.0rc1"))
+        self.assertFalse(rv.TAG_RE.match("v1.0.0-rc1"))
+
+    def test_notes(self):
+        rn = _load("release_notes")
+        notes = rn.fixed_part("1.2.3")
+        for must in ("not code-signed", "Windows protected your PC", "Smart App Control", "Run anyway",
+                     "pip install", "coal-1.2.3-py3-none-any.whl", "releases/download/v1.2.3/", "SHA256SUMS.txt",
+                     "Get-FileHash", "sha256sum"):
+            self.assertIn(must, notes)
+        # Every file the notes name exists in the release workflow's list.
+        names = set(release_file_names("1.2.3"))
+        found = [f for f in re.findall(r"`((?:COAL|coal)[\w.-]*\.(?:exe|zip|whl|tar\.gz))`", notes) if "..." not in f]
+        self.assertGreaterEqual(len(found), 6)
+        for f in found:
+            self.assertIn(f, names)
+
+    def test_changelog_section(self):
+        rn = _load("release_notes")
+        with tempfile.TemporaryDirectory() as t:
+            p = os.path.join(t, "CHANGELOG.md")
+            with open(p, "w", encoding="utf-8") as fh:
+                fh.write("# Changelog\n\n## [1.2.3] - 2026-10-18\n\n- New thing.\n\n## v1.2.2\n\n- Old thing.\n")
+            self.assertEqual(rn.changelog_section("1.2.3", p), "- New thing.")
+            self.assertEqual(rn.changelog_section("1.2.2", p), "- Old thing.")
+            self.assertIsNone(rn.changelog_section("1.2", p))
+            self.assertIsNone(rn.changelog_section("1.2.3", os.path.join(t, "missing.md")))
+
+
+class TestReleaseWorkflow(unittest.TestCase):
+    def test_parses_and_triggers(self):
+        wf = _workflow("release.yml")
+        on = wf.get("on", wf.get(True))  # YAML 1.1 reads a bare `on` key as True
+        self.assertEqual(on["push"]["tags"], ["v*"])
+        self.assertIn("workflow_dispatch", on)
+        self.assertEqual(set(wf["jobs"]), {"python", "windows", "release"})
+
+    def test_permissions_minimal(self):
+        wf = _workflow("release.yml")
+        self.assertEqual(wf["permissions"], {"contents": "read"})
+        for name, job in wf["jobs"].items():
+            if name == "release":
+                self.assertEqual(job["permissions"], {"contents": "write"})
+            else:
+                self.assertNotIn("permissions", job, name)
+
+    def test_actions_pinned_to_commits(self):
+        for fname in ("release.yml",) + (("pages.yml",) if os.path.exists(os.path.join(WORKFLOWS, "pages.yml"))
+                                          else ()):
+            text = _read(".github", "workflows", fname)
+            uses = re.findall(r"uses:\s*(\S+)", text)
+            self.assertTrue(uses, fname)
+            for u in uses:
+                self.assertRegex(u, r"^[\w.-]+/[\w./-]+@[0-9a-f]{40}$", f"{fname}: {u} is not pinned to a commit")
+
+    def test_windows_job_builds_and_checks(self):
+        wf = _workflow("release.yml")
+        runs = "\n".join(s.get("run", "") for s in wf["jobs"]["windows"]["steps"])
+        self.assertEqual(wf["jobs"]["windows"]["runs-on"], "windows-latest")
+        self.assertIn(r"desktop\build.ps1", runs)
+        self.assertRegex(runs, r"choco install innosetup --version=\d+\.\d+\.\d+")
+        self.assertIn('"-m", "coal", "--version"', runs)
+        self.assertIn("Get-FileHash", runs)  # frozen vs Python output comparison
+        for name in ("COAL-Setup-$v.exe", "COAL-Setup-windows-x64.exe", "COAL-$v-windows-x64.zip",
+                     "COAL-windows-x64.zip"):
+            self.assertIn(name, runs)
+
+    def test_every_listed_file_is_produced(self):
+        """Each name in the release check list is created by some build step (or is the checksum file)."""
+        wf = _workflow("release.yml")
+        made = "\n".join(s.get("run", "") for j in ("python", "windows") for s in wf["jobs"][j]["steps"])
+        made = made.replace("$v", "${V}").replace("${env:VERSION}", "${V}")
+        for name in release_file_names("${V}"):
+            if name == "SHA256SUMS.txt":
+                continue
+            self.assertTrue(name in made or name in ("coal-${V}-py3-none-any.whl", "coal-${V}.tar.gz")
+                            and "python -m build" in made, f"no build step makes {name}")
+        sums = _steps(wf, "release")["SHA-256 of every file"]["run"]
+        self.assertIn("> SHA256SUMS.txt", sums)
+
+
+class TestPagesWorkflow(unittest.TestCase):
+    def test_deploys_site_on_main_with_minimal_permissions(self):
+        wf = _workflow("pages.yml")
+        on = wf.get("on", wf.get(True))
+        self.assertEqual(on["push"]["branches"], ["main"])
+        self.assertIn("site/**", on["push"]["paths"])
+        self.assertIn("workflow_dispatch", on)
+        self.assertEqual(wf["permissions"], {"contents": "read"})
+        self.assertNotIn("permissions", wf["jobs"]["build"])
+        self.assertEqual(wf["jobs"]["deploy"]["permissions"], {"pages": "write", "id-token": "write"})
+        self.assertEqual(wf["jobs"]["deploy"]["environment"]["name"], "github-pages")
+        uses = [s.get("uses", "") for j in wf["jobs"].values() for s in j["steps"]]
+        self.assertTrue(any(u.startswith("actions/upload-pages-artifact@") for u in uses))
+        self.assertTrue(any(u.startswith("actions/deploy-pages@") for u in uses))
+        build = "\n".join(s.get("run", "") for s in wf["jobs"]["build"]["steps"])
+        self.assertIn("cp -R site/. _site/", build)
+        self.assertIn("test_site.py", build)
+
+
+# WEB-8: screenshot now WebP (lossless, 51 KB instead of 234 KB); logo, mark and icons added.
+SITE_FILES = ("index.html", "style.css", "main.js", "sw.js", "favicon.svg", "explainer.html", "img/broken-gene.webp",
+              "assets/coal-mark.svg", "assets/coal-logo.png", "assets/coal-logo@2x.png", "assets/coal-logo-dark.png",
+              "assets/coal-logo-dark@2x.png", "assets/favicon-32.png", "assets/apple-touch-icon.png",
+              "assets/icon-512.png", "assets/coal-train.svg")
+TEXT_EXT = (".html", ".css", ".js", ".svg", ".txt", ".json", ".webmanifest")
+# Not requests: the SVG namespace, and the local app's address shown as text for people to open.
+ALLOWED_NON_REPO_URLS = ("http://www.w3.org/2000/svg", "http://127.0.0.1:7860")
+
+
+def site_text_files():
+    out = []
+    for d, _, files in os.walk(SITE):
+        for f in files:
+            if f.endswith(TEXT_EXT):
+                out.append(os.path.join(d, f))
+    return sorted(out)
+
+
+def site_links(html):
+    return re.findall(r'(?:href|src)\s*=\s*"([^"]*)"', html)
+
+
+class TestSiteFiles(unittest.TestCase):
+    def setUp(self):
+        self.index = _read("site", "index.html")
+
+    def test_files_exist(self):
+        for f in SITE_FILES + ("README.md",):
+            self.assertTrue(os.path.isfile(os.path.join(SITE, f)), f"site/{f} is missing")
+
+    def test_explainer_copy_is_current(self):
+        # The site serves a copy (Pages deploys site/ only); it must not drift from the tested original.
+        with open(os.path.join(ROOT, "pitch", "explainer.html"), "rb") as a, \
+                open(os.path.join(SITE, "explainer.html"), "rb") as b:
+            self.assertEqual(a.read(), b.read(), "site/explainer.html differs from pitch/explainer.html: copy it again")
+
+    def test_no_external_urls(self):
+        """Only links to github.com/plumat-coal/COAL; nothing else may be referenced (no CDNs, fonts, trackers)."""
+        for path in site_text_files():
+            with open(path, encoding="utf-8") as fh:
+                text = fh.read()
+            rel = os.path.relpath(path, ROOT)
+            for url in re.findall(r"""(?:https?:)?//[^\s"'<>()]+""", text):
+                url = url.rstrip(".,;:")  # sentence punctuation after a URL in running text
+                if url in ALLOWED_NON_REPO_URLS or url.startswith(ALLOWED_NON_REPO_URLS):
+                    continue
+                if url.startswith("//") and not url.startswith("//www") and "." not in url.split("/")[2]:
+                    continue  # a JS comment ("// ..."), not a protocol-relative URL
+                self.assertRegex(url, r"^https://github\.com/plumat-coal/COAL(?:[/#?]|$)", f"{rel}: external URL {url}")
+            for link in site_links(text):
+                self.assertFalse(link.startswith("//"), f"{rel}: protocol-relative link {link}")
+                if not link.startswith(("https://", "#", "mailto:")):
+                    self.assertFalse(link.startswith("/"), f"{rel}: {link} must be relative (site may move to a custom domain)")
+
+    def test_internal_links_resolve(self):
+        ids = set(re.findall(r'\sid="([^"]+)"', self.index))
+        for link in site_links(self.index):
+            if link.startswith("#"):
+                self.assertIn(link[1:], ids, f"anchor {link} has no target")
+            elif not link.startswith("https://"):
+                target = link.split("#")[0].split("?")[0] or "index.html"
+                if target in ("./", "."):
+                    target = "index.html"
+                self.assertTrue(os.path.isfile(os.path.join(SITE, target)), f"link {link}: site/{target} missing")
+        sw = _read("site", "sw.js")
+        for f in re.search(r"FILES\s*=\s*\[(.*?)\]", sw, re.S).group(1).replace('"', "").split(","):
+            f = f.strip()
+            if f not in ("./", ""):
+                self.assertTrue(os.path.isfile(os.path.join(SITE, f)), f"sw.js caches missing file {f}")
+
+    def test_download_links_match_release_files(self):
+        names = set(release_file_names())
+        latest = re.findall(r"https://github\.com/plumat-coal/COAL/releases/latest/download/([^\"'\s<]+)", self.index)
+        self.assertGreaterEqual(len(set(latest)), 4, "expected installer, zip, sdist and checksum links")
+        for f in latest:
+            self.assertIn(f, names, f"site links to {f}, which the release workflow does not upload")
+            self.assertNotRegex(f, r"\d+\.\d+", f"{f}: latest/download links need version-free names")
+        self.assertNotIn("/releases/download/", self.index, "versioned download links go stale; use releases/latest")
+        self.assertIn('id="win-download" href="https://github.com/plumat-coal/COAL/releases/latest/download/'
+                      'COAL-Setup-windows-x64.exe"', self.index)
+
+    def test_pip_commands_use_the_cache_safe_sdist(self):
+        cmds = re.findall(r'"coal(?:\[gui\])? @ ([^"]+)"', self.index)
+        self.assertGreaterEqual(len(cmds), 4)
+        for url in cmds:
+            self.assertTrue(url.endswith("/releases/latest/download/coal_src.tar.gz"), url)
+        # pip caches wheels built from URLs whose file name looks like name-version (WEB-1); the alias must not.
+        self.assertNotIn("-", "coal_src")
+
+    def test_claims_are_in_the_readme(self):
+        """Every measured number on the page (data-check) is quoted from README.md, which test_docs_numbers guards."""
+        readme = re.sub(r"\s+", " ", _read("README.md")).replace("**", "")
+        claims = re.findall(r'data-check="([^"]+)">([^<]*)<', self.index)
+        self.assertGreaterEqual(len(claims), 10)
+        for value, shown in claims:
+            self.assertEqual(value, shown, "data-check value and the text shown differ")
+            self.assertIn(value, readme, f"site claims {value!r}, which README.md does not say")
+        self.assertIn("Measured on", self.index)
+
+    def test_version_is_current(self):
+        """WEB-8: the page names the current version; it must match the package."""
+        init = re.search(r'__version__ = "([^"]+)"', _read("src", "coal", "__init__.py")).group(1)
+        shown = re.search(r'<span id="version" data-version="([^"]+)">([^<]+)</span>', self.index)
+        self.assertIsNotNone(shown, "version span missing")
+        self.assertEqual(shown.group(1), shown.group(2))
+        self.assertEqual(shown.group(1), init, "site/index.html names another version than src/coal/__init__.py")
+
+    def test_pal2nal_relationship_and_citation(self):
+        """WEB-8: the qualified PAL2NAL wording, the licences and the reference."""
+        for must in ("On well-formed input COAL's output is identical to PAL2NAL's",
+                     "COAL deliberately differs and documents why", "GPL-2.0", "contains none of PAL2NAL's code",
+                     "Suyama M, Torrents D, Bork P (2006)", "34:W609"):
+            self.assertIn(must, self.index)
+
+    def test_size_budget_with_images(self):
+        """WEB-8: the whole site, images included, stays under 250 KB (README.md excluded: not deployed)."""
+        total = sum(os.path.getsize(os.path.join(d, f)) for d, _, files in os.walk(SITE) for f in files
+                    if f != "README.md")
+        self.assertLess(total, 250 * 1024, f"site is {total} bytes (budget 250 KB)")
+
+    def test_unsigned_and_smart_app_control_explained(self):
+        for must in ("Windows protected your PC", "More info", "Run anyway", "Unknown publisher", "Smart App Control",
+                     "Get-FileHash", "sha256sum", "coal-gui", "SKILL.md", "/issues", "MIT", "Zenodo",
+                     "placeholder"):
+            self.assertIn(must, self.index)
+
+    def test_accessibility_basics(self):
+        self.assertRegex(self.index, r'<html lang="en">')
+        self.assertEqual(len(re.findall(r"<h1[\s>]", self.index)), 1)
+        self.assertIn('<main id="main">', self.index)
+        self.assertIn('href="#main"', self.index)
+        for img in re.findall(r"<img\b[^>]*>", self.index):
+            if 'src="assets/coal-mark.svg"' in img:  # WEB-8: decorative, next to the text "COAL" in the same link
+                self.assertIn('alt=""', img)
+                continue
+            self.assertRegex(img, r'\salt="[^"]{10,}"', img)
+        self.assertRegex(self.index, r'<a class="home" href="\./"><img src="assets/coal-mark\.svg"[^>]*><span>COAL</span></a>')
+        css = _read("site", "style.css")
+        self.assertIn("prefers-reduced-motion", css)
+        self.assertIn("prefers-color-scheme: dark", css)
+        self.assertIn(":focus-visible", css)
+
+    def test_size_budget(self):
+        total = 0
+        for d, _, files in os.walk(SITE):
+            for f in files:
+                if not f.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif", ".md")):
+                    total += os.path.getsize(os.path.join(d, f))
+        self.assertLess(total, 200 * 1024, f"site is {total} bytes without images (budget 200 KB)")
+
+
+if __name__ == "__main__":
+    unittest.main()

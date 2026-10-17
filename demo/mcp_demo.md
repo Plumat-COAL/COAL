@@ -152,7 +152,7 @@ How to fix a failed sequence: check it is the right DNA for that protein (same g
     },
     "... 21 more"
   ],
-  "methods_text": "Codon alignments were built with COAL v0.3.0 (https://github.com/chloe-newt/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 24 sequences, 0 matched their protein exactly, 24 contained codons that did not match the aligned amino acid (kept in the alignment). Command: coal protein.aln.fasta dna.fasta -o protein.codon.fasta",
+  "methods_text": "Codon alignments were built with COAL v0.3.0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 24 sequences, 0 matched their protein exactly, 24 contained codons that did not match the aligned amino acid (kept in the alignment). Command: coal protein.aln.fasta dna.fasta -o protein.codon.fasta",
   "coal_command": "coal protein.aln.fasta dna.fasta -o protein.codon.fasta",
   "pal2nal_command": "pal2nal.pl protein.aln.fasta dna.fasta -output fasta > protein.codon.fasta"
 }
@@ -176,7 +176,7 @@ How to fix a failed sequence: check it is the right DNA for that protein (same g
   "summary_text": "24 sequences: 24 OK, 0 with warnings, 0 failed.",
   "hints": [],
   "problems": [],
-  "methods_text": "Codon alignments were built with COAL v0.3.0 (https://github.com/chloe-newt/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the vertebrate mitochondrial genetic code (NCBI translation table 2). Of 24 sequences, 24 matched their protein exactly. Command: coal protein.aln.fasta dna.fasta -codontable 2 -o protein.codon.fasta",
+  "methods_text": "Codon alignments were built with COAL v0.3.0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the vertebrate mitochondrial genetic code (NCBI translation table 2). Of 24 sequences, 24 matched their protein exactly. Command: coal protein.aln.fasta dna.fasta -codontable 2 -o protein.codon.fasta",
   "coal_command": "coal protein.aln.fasta dna.fasta -codontable 2 -o protein.codon.fasta",
   "pal2nal_command": "pal2nal.pl protein.aln.fasta dna.fasta -output fasta -codontable 2 > protein.codon.fasta"
 }

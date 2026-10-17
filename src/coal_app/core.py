@@ -1204,7 +1204,7 @@ def methods_text(report: dict) -> str:
     total, ok, warn, failed = (s.get(k, 0) for k in ("total", "ok", "warning", "failed"))
     # CHANGED(APP-15): was always "COAL v<version>"; a non-numeric version (the demo sample) is shown in brackets
     shown = f"COAL v{ver}" if ver[:1].isdigit() else f"COAL ({ver})"
-    parts = [f"Codon alignments were built with {shown} (https://github.com/chloe-newt/COAL), which places "
+    parts = [f"Codon alignments were built with {shown} (https://github.com/plumat-coal/COAL), which places "
              f"each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method "
              f"of PAL2NAL; Suyama et al. 2006), using the {name.split(' (')[0].lower()} genetic code "
              f"(NCBI translation table {n})."]

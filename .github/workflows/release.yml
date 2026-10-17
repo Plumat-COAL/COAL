@@ -1,0 +1,226 @@
+# Release: on a pushed tag v* (or by hand), build the Python wheel + sdist and the Windows app (installer + portable
+# zip), check them, and publish a GitHub Release with every file, version-free copies and SHA256SUMS.txt.
+# The website (site/) links to https://github.com/plumat-coal/COAL/releases/latest/download/<version-free name>,
+# so a new release updates the download buttons without editing the site. See site/README.md.
+# WEB-1: new file. See overnight/integration/CHANGES.md
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build, e.g. v0.3.0"
+        required: true
+        type: string
+      publish:
+        description: "Create/update the GitHub Release (off = build and check only; files stay as workflow artifacts)"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  python:
+    name: Python wheel and sdist
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Tag matches the version in the source
+        id: v
+        run: python scripts/release_version.py "$TAG" --github-output
+      - name: Build wheel and sdist
+        run: |
+          python -m pip install build==1.2.2.post1
+          python -m build --outdir dist .
+          ls -l dist
+      - name: Check the wheel and the version-free sdist install and run
+        env:
+          V: ${{ steps.v.outputs.version }}
+        run: |
+          mkdir -p release
+          cp "dist/coal-${V}-py3-none-any.whl" "dist/coal-${V}.tar.gz" release/
+          # Version-free sdist copy for `pip install "coal[gui] @ .../releases/latest/download/coal_src.tar.gz"`.
+          # No hyphen in the name on purpose: pip caches wheels built from "name-version"-looking archive URLs, so
+          # "coal-latest.tar.gz" would keep installing the old build after a new release (tested with pip 24.0).
+          cp "dist/coal-${V}.tar.gz" release/coal_src.tar.gz
+          python -m venv "$RUNNER_TEMP/whl"
+          "$RUNNER_TEMP/whl/bin/python" -m pip install "release/coal-${V}-py3-none-any.whl"
+          test "$("$RUNNER_TEMP/whl/bin/coal" --version)" = "coal ${V}"
+          "$RUNNER_TEMP/whl/bin/coal" examples/clean/protein.aln.fasta examples/clean/dna.fasta -o "$RUNNER_TEMP/whl.fa"
+          PYTHONPATH=src python -m coal examples/clean/protein.aln.fasta examples/clean/dna.fasta -o "$RUNNER_TEMP/ref.fa"
+          cmp "$RUNNER_TEMP/whl.fa" "$RUNNER_TEMP/ref.fa"
+          python -m venv "$RUNNER_TEMP/src"
+          "$RUNNER_TEMP/src/bin/python" -m pip install "coal @ file://$PWD/release/coal_src.tar.gz"
+          test "$("$RUNNER_TEMP/src/bin/coal" --version)" = "coal ${V}"
+          ls -l release
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: dist-python
+          path: release/
+          if-no-files-found: error
+
+  windows:
+    name: Windows app (installer + portable zip)
+    runs-on: windows-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Tag matches the version in the source
+        id: v
+        run: python scripts/release_version.py $env:TAG --github-output
+      - name: Install Inno Setup (pinned)
+        run: |
+          choco install innosetup --version=6.4.3 --allow-downgrade -y --no-progress
+          $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "Inno Setup installed, but $iscc is missing" }
+      - name: Create the build venv with this Python (build.ps1 reuses it)
+        run: python -m venv desktop\.venv
+      - name: Build (desktop\build.ps1 - tests, PyInstaller, frozen --version and smoke test, installer)
+        timeout-minutes: 75
+        env:
+          GRADIO_ANALYTICS_ENABLED: "False"
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File desktop\build.ps1
+      - name: Smoke run - frozen engine output equals the Python engine's
+        timeout-minutes: 10
+        run: |
+          $ErrorActionPreference = "Stop"
+          $exe = "desktop\dist\COAL\COAL.exe"
+          $py = "desktop\.venv\Scripts\python.exe"
+          $prot = "examples\clean\protein.aln.fasta"
+          $dna = "examples\clean\dna.fasta"
+          $frozen = Join-Path $env:RUNNER_TEMP "smoke_frozen.fasta"
+          $ref = Join-Path $env:RUNNER_TEMP "smoke_python.fasta"
+          $out = Join-Path $env:RUNNER_TEMP "smoke_frozen.out"
+          $err = Join-Path $env:RUNNER_TEMP "smoke_frozen.err"
+          # A windowed exe has no console: capture its output through files, with a timeout.
+          function Invoke-Frozen([string[]]$ArgList) {
+            $p = Start-Process -FilePath $exe -ArgumentList $ArgList -NoNewWindow -PassThru `
+              -RedirectStandardOutput $out -RedirectStandardError $err
+            $null = $p.Handle
+            if (-not $p.WaitForExit(120000)) { & taskkill.exe /T /F /PID $p.Id; throw "COAL.exe $ArgList timed out" }
+            $p.WaitForExit()
+            $text = [string](Get-Content -Raw $out) + [string](Get-Content -Raw $err)
+            if ($p.ExitCode -ne 0) { throw "COAL.exe $ArgList exited $($p.ExitCode): $text" }
+            return $text
+          }
+          $v = Invoke-Frozen @("-m", "coal", "--version")
+          if ($v.Trim() -ne "coal $env:VERSION") { throw "COAL.exe -m coal --version printed '$($v.Trim())'" }
+          Write-Host "frozen engine: $($v.Trim())"
+          $null = Invoke-Frozen @("-m", "coal", $prot, $dna, "-o", $frozen)
+          & $py -m coal $prot $dna -o $ref
+          if ($LASTEXITCODE -ne 0) { throw "python -m coal failed ($LASTEXITCODE)" }
+          if ((Get-FileHash $frozen).Hash -ne (Get-FileHash $ref).Hash) { throw "frozen and Python outputs differ" }
+          Write-Host "frozen engine output is byte-identical to python -m coal on examples\clean"
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+      - name: Collect the installer and the portable zip (versioned and version-free names)
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $v = $env:VERSION
+          $setup = "desktop\dist\COAL-Setup-$v.exe"
+          if (-not (Test-Path $setup)) { throw "build.ps1 made no installer ($setup): was Inno Setup found?" }
+          New-Item -ItemType Directory -Force release | Out-Null
+          Copy-Item $setup "release\COAL-Setup-$v.exe"
+          Copy-Item $setup "release\COAL-Setup-windows-x64.exe"
+          Compress-Archive -Path "desktop\dist\COAL" -DestinationPath "release\COAL-$v-windows-x64.zip"
+          Copy-Item "release\COAL-$v-windows-x64.zip" "release\COAL-windows-x64.zip"
+          Get-ChildItem release | Format-Table Name, Length
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: dist-windows
+          path: release/
+          if-no-files-found: error
+
+  release:
+    name: GitHub Release
+    needs: [python, windows]
+    if: ${{ github.event_name == 'push' || inputs.publish }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write   # create the release and upload its files; nothing else
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          pattern: dist-*
+          merge-multiple: true
+          path: release
+      - name: SHA-256 of every file
+        working-directory: release
+        run: |
+          find . -maxdepth 1 -type f ! -name SHA256SUMS.txt -printf '%f\n' | LC_ALL=C sort | xargs sha256sum > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          sha256sum -c SHA256SUMS.txt
+      - name: Check the release files
+        # The website links to the version-free names below; tests_app/test_site.py checks it against this list.
+        env:
+          V: ${{ needs.python.outputs.version }}
+        run: |
+          expected=(
+            "COAL-Setup-${V}.exe"
+            "COAL-Setup-windows-x64.exe"
+            "COAL-${V}-windows-x64.zip"
+            "COAL-windows-x64.zip"
+            "coal-${V}-py3-none-any.whl"
+            "coal-${V}.tar.gz"
+            "coal_src.tar.gz"
+            "SHA256SUMS.txt"
+          )
+          for f in "${expected[@]}"; do test -s "release/$f" || { echo "::error::missing release file $f"; exit 1; }; done
+          test "$(ls release | wc -l)" -eq "${#expected[@]}" || { echo "::error::unexpected files: $(ls release)"; exit 1; }
+      - name: Create or update the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          V: ${{ needs.python.outputs.version }}
+          PRE: ${{ needs.python.outputs.prerelease }}
+        run: |
+          set +e
+          python3 scripts/release_notes.py "$V" notes.md
+          rc=$?
+          set -e
+          extra=()
+          if [ "$rc" -eq 3 ]; then extra+=(--generate-notes); elif [ "$rc" -ne 0 ]; then exit "$rc"; fi
+          if [ "$PRE" = "true" ]; then extra+=(--prerelease); fi
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" release/* --clobber
+            gh release edit "$TAG" --title "COAL $V" --notes-file notes.md
+          else
+            gh release create "$TAG" release/* --verify-tag --title "COAL $V" --notes-file notes.md "${extra[@]}"
+          fi
