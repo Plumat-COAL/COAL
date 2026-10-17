@@ -292,12 +292,125 @@ static void read_rows(std::istream& in, long long offset, long long count, std::
     in.read(&dst[0], (std::streamsize)count);
 }
 
+// CPP-24 (reference FIN-E2: bounded memory): clustal / codon output for many sequences. Every line of a block has a
+// fixed length, so each line's place in the output is known in advance: the rows are read a chunk of consecutive
+// sequences at a time (sequential reads) and each block's lines for that chunk are written at their offset. Memory
+// stays bounded by BLOCK_CHUNK_BYTES, not by the number of sequences, and no block of every sequence is held.
+static const long long BLOCK_SEQ_LIMIT = env_ll("COAL_BLOCK_MEMORY", 16000000);  // as the reference's BLOCK_MEMORY
+static const long long BLOCK_CHUNK_BYTES = env_ll("COAL_BLOCK_CHUNK", 32LL << 20);  // tests: small chunks
+
+static void write_blocks_chunked(std::ostream& out, const std::string& fmt, std::fstream& grid, long long length,
+                                 std::fstream* prot, long long ncol, const std::vector<std::string>& ids,
+                                 const std::string& mask) {
+    const bool codon = fmt == "codon";
+    const long long n = (long long)ids.size();
+    size_t w0 = 10;
+    for (auto& i : ids) w0 = std::max(w0, i.size());
+    const long long W = (long long)w0 + 4;
+    // residue-line tokens (codon): as in write_blocks
+    std::vector<long long> toks;
+    if (codon && n > 0) {
+        std::string last;
+        read_rows(*prot, (n - 1) * ncol, ncol, last);
+        for (long long i = 0; i < (long long)last.size(); ++i) {
+            toks.push_back(i);
+            char ch = last[(size_t)i];
+            if (ch >= '0' && ch <= '9')
+                for (int e = 0; e < std::max(ch - '0' - 1, 0) / 3; ++e) toks.push_back(-1);
+        }
+    }
+    const long long ntok = (long long)toks.size();
+    const long long nb = codon ? std::max((ntok + 19) / 20, (length / 3 + 19) / 20) : (length + 59) / 60;
+    auto trip_chars = [](long long len) { return len > 0 ? len + (len + 2) / 3 - 1 : 0; };  // "AAA CCC G"
+    std::vector<long long> seg0(nb), seg1(nb), ta(nb), te(nb), per(nb), off(nb);
+    long long pos = fmt == "clustal" ? 39 : 0;  // "CLUSTAL W multiple sequence alignment\n\n"
+    for (long long b = 0; b < nb; ++b) {
+        seg0[b] = std::min(length, b * 60);
+        seg1[b] = std::min(length, (b + 1) * 60);
+        long long sl = seg1[b] - seg0[b];
+        ta[b] = std::min(ntok, b * 20);
+        te[b] = std::min(ntok, (b + 1) * 20);
+        long long m = te[b] - ta[b];
+        per[b] = codon ? (W + (m ? 4 * m - 3 : 0) + 1) + (W + trip_chars(sl) + 1) : W + sl + 1;
+        off[b] = pos;
+        long long mline = mask.empty() ? 0 : W + (codon ? trip_chars(sl) : sl) + 1;
+        pos += n * per[b] + mline + 1;
+    }
+    if (fmt == "clustal") {
+        out.seekp(0);
+        out << "CLUSTAL W multiple sequence alignment\n\n";
+    }
+    const long long chunk = std::max(1LL, BLOCK_CHUNK_BYTES / std::max(1LL, length + ncol + 2 * W + 64));
+    std::string rows, prows, text;
+    const std::string pad((size_t)W, ' ');
+    for (long long k0 = 0; k0 < n; k0 += chunk) {
+        long long k1 = std::min(n, k0 + chunk);
+        read_rows(grid, k0 * length, (k1 - k0) * length, rows);
+        if (codon) read_rows(*prot, k0 * ncol, (k1 - k0) * ncol, prows);
+        for (long long b = 0; b < nb; ++b) {
+            text.clear();
+            text.reserve((size_t)((k1 - k0) * per[b]));
+            for (long long k = k0; k < k1; ++k) {
+                const char* row = rows.data() + (k - k0) * length;
+                if (codon) {
+                    const char* prow = prows.data() + (k - k0) * ncol;
+                    text += pad;
+                    for (long long t = ta[b]; t < te[b]; ++t) {
+                        if (t > ta[b]) text += "   ";
+                        long long c = toks[(size_t)t];
+                        text += c >= 0 ? prow[c] : '-';
+                    }
+                    text += '\n';
+                    text += ids[(size_t)k];
+                    text.append((size_t)(W - (long long)ids[(size_t)k].size()), ' ');
+                    for (long long i = seg0[b]; i < seg1[b]; i += 3) {
+                        if (i > seg0[b]) text += ' ';
+                        text.append(row + i, (size_t)std::min(3LL, seg1[b] - i));
+                    }
+                    text += '\n';
+                } else {
+                    text += ids[(size_t)k];
+                    text.append((size_t)(W - (long long)ids[(size_t)k].size()), ' ');
+                    text.append(row + seg0[b], (size_t)(seg1[b] - seg0[b]));
+                    text += '\n';
+                }
+            }
+            out.seekp(off[b] + k0 * per[b]);
+            out.write(text.data(), (std::streamsize)text.size());
+        }
+    }
+    for (long long b = 0; b < nb; ++b) {  // mark line and blank line closing each block
+        text.clear();
+        if (!mask.empty()) {
+            text += pad;
+            if (codon) {
+                for (long long i = seg0[b]; i < seg1[b]; i += 3) {
+                    if (i > seg0[b]) text += ' ';
+                    text.append(mask, (size_t)i, (size_t)std::min(3LL, seg1[b] - i));
+                }
+            } else {
+                text.append(mask, (size_t)seg0[b], (size_t)(seg1[b] - seg0[b]));
+            }
+            text += '\n';
+        }
+        text += '\n';
+        out.seekp(off[b] + n * per[b]);
+        out.write(text.data(), (std::streamsize)text.size());
+    }
+    out.seekp(pos);
+}
+
 // CLUSTAL / codon output from fixed-stride row files, a few blocks at a time.
 // mask: the '#' mark line (length characters) printed under each block, or empty (CPP-13).
 static void write_blocks(std::ostream& out, const std::string& fmt, std::fstream& grid, long long length,
                          std::fstream* prot, long long ncol, const std::vector<std::string>& ids,
                          const std::string& mask) {
     long long n = (long long)ids.size();
+    // CPP-24: the chunked writer unless one row is very long (then this one, a few blocks of every row at a time)
+    if (length > 0 && (n * (60 + (fmt == "codon" ? 20 : 0)) > BLOCK_SEQ_LIMIT || (length + ncol) * 4 <= BLOCK_CHUNK_BYTES)) {
+        write_blocks_chunked(out, fmt, grid, length, prot, ncol, ids, mask);
+        return;
+    }
     size_t width = 10;
     for (auto& i : ids) width = std::max(width, i.size());
     width += 4;
@@ -919,6 +1032,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
             }
         };
         run_ordered<Item>(read_batch, [&](Item& it) { work(it, ctx); }, emit, o.jobs);
+        if (staged) std::vector<std::string>().swap(ids);  // CPP-24: out_ids has what the final pass needs
         if (prog && prog->printed) prog->update(done, true);
         if (o.keep_going && skipped == nseq)
             throw CoalError("none of the " + std::to_string(nseq) + " sequences could be converted", "all_failed");

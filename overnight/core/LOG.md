@@ -2,6 +2,7 @@
 
 ## Run 5 progress (final engine fixes; reference 0f0330f)
 - 2026-10-17 13:21 UTC | CPP-22 FIN-E1, CPP-23 FIN-C14 | reference goldens 279/279; random vs reference 3000/3000 (seed 20261017) and 3000/3000 (seed 777); fuzz vs real PAL2NAL through the reference's updated harness, FUZZ_N=1500: seeds 20261017, 777, 4242: 0 unexplained each; reference tests via shim 94/96 (the same 2 in-process DEC-3 mocks; test_final_fixes added, all pass). FIN-E3 (drop-in argument parsing) is Python-only: coal-cpp is not used as the drop-in, nothing to port.
+- 2026-10-17 13:35 UTC | CPP-24 FIN-E2 bounded clustal/codon writer | peak memory and time, 500,000 x 150 codons (2-core VM): fasta -j1 2.26 s / 88 MB, -j0 2.41 s / 89 MB; clustal -j1 2.42 s / 114 MB, -j0 2.61 s / 115 MB (was 76.7 s / 256 MB); codon -j1 3.27 s / 126 MB, -j0 3.46 s / 125 MB. 250,000: fasta 53 MB, clustal 78 MB, codon 91 MB, so each format grows by ~35 MB per 250k sequences, the IDs.
 
 ## Run 4 summary: coal-cpp mirrors the reviewed reference engine (2026-10-17 13:01 UTC)
 
