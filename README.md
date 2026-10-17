@@ -64,6 +64,10 @@ pip install -e .[fast]                              # optional numpy speed-up fo
 - **Exit code** is non-zero on any error (PAL2NAL always exits 0). Warnings and notices go to stderr; `-q` (like
   PAL2NAL's `-nostderr`) silences all of them, including the notices about probably-wrong data, so check the exit
   code or use `--strict` when running quietly. Errors are always printed. stdout is the same with or without `-q`.
+  Every stderr line starts with `coal: error:` (the run or a gene failed; the message says which file, gene or
+  position and what to do), `coal: warning:` (data that may be wrong: mismatches, probably-wrong genes, pairing),
+  `coal: notice:` (information, e.g. about `--resume`) or `coal: summary:` (the end-of-run summary; it does not
+  repeat the error). <!-- CHANGED(ENG-UX-5/ENG-UX-10): new; "coal: note:" became "coal: notice:" -->
   <!-- CHANGED(DEC-2): was "notices about probably-wrong data ... are always printed". See overnight/integration/CHANGES.md -->
 - **Closed output pipe** (e.g. `coal pep.aln nuc.fa | head`): COAL stops silently (no traceback, no message) with exit
   status **141**, i.e. 128 + SIGPIPE, the POSIX convention that `yes`, `git log` and other Unix filters follow, so a

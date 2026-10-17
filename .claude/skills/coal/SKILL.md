@@ -118,11 +118,16 @@ For a plain-English summary call the MCP tool `explain_report(report_path)`.
 | What you see | Likely cause | Fix |
 |---|---|---|
 | Many `X does not correspond to TGA` warnings (W vs TGA), or M vs ATA | Mitochondrial genes read with the standard code | `-codontable 2` (vertebrates), 5 (invertebrates), 4, 9...; follow the `genetic_code` hint |
-| `number of sequences differs` | Protein and DNA files list different genes | Make both files contain the same genes |
+| `number of sequences differs` | Protein and DNA files list different genes | Make both files contain the same genes (the message names an extra or missing record when the IDs show it) |
+| `... looks like DNA, not a protein alignment` | The two files were given the other way round | Protein alignment first, DNA second: `coal PROTEIN_ALIGNMENT DNA_FASTA` |
+| `protein alignment rows have different lengths ...: is X an aligned protein file` | The protein file is not aligned | Align it first (MAFFT, MUSCLE, ...) |
+| `cannot open 'x.fa': no such file` | Wrong path | Check the file name and folder |
 | `protein and DNA are inconsistent` for the **first** gene, or for many genes | IDs don't match (e.g. `AT1G01010.1` vs `AT1G01010`), so COAL paired by order | Make IDs identical (strip `.1` version suffixes) |
-| `protein and DNA are inconsistent` for **one** gene | Frameshift (missing/extra base), wrong transcript, or truncated DNA | Check that gene's DNA; drop it and re-run (the current engine stops at the first failing gene) |
+| `protein and DNA are inconsistent` for **one** gene | Frameshift (missing/extra base), wrong transcript, or truncated DNA | Check that gene's DNA; the run stops at the first failing gene (the summary says where it breaks); `--keep-going` writes the others and leaves it out |
 | `invalid protein alignment characters` | Non-amino-acid symbols in the alignment | Remove them; `.` and `-` are both gaps |
 | Stop codons in output columns | Internal stops or terminal stop kept | `-nogap` removes stop columns |
+
+<!-- CHANGED(ENG-UX-2/3/4/6): rows for the new engine messages; the one-gene fix names --keep-going. See overnight/integration/CHANGES.md -->
 
 Never "fix" a mismatch by editing sequences silently: report which genes failed and why.
 

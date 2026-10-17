@@ -162,8 +162,10 @@ class ReaderCase(unittest.TestCase):
             if ref.is_clustal(path) and hasattr(ref, "clustal_mask"):  # CPP-13: PAL2NAL's '#' block marks
                 out["mask"] = ref.clustal_mask(path)
             return out
-        except (ref.InputFormatError, OSError) as e:
+        except ref.InputFormatError as e:
             return {"error": str(e)}
+        except OSError as e:  # CHANGED(ENG-UX-4): the pipeline's wording (the C++ readers say it themselves)
+            return {"error": ref.open_error_message(e.filename, e) if hasattr(ref, "open_error_message") else str(e)}
 
     def py_dna(self, paths: list[str]) -> dict:
         ref = self.ref
@@ -173,8 +175,10 @@ class ReaderCase(unittest.TestCase):
                 return {"records": [[idx.ids[i], idx.get(i)] for i in range(len(idx))]}
             finally:
                 idx.close()
-        except (ref.InputFormatError, OSError) as e:
+        except ref.InputFormatError as e:
             return {"error": str(e)}
+        except OSError as e:  # CHANGED(ENG-UX-4): the pipeline's wording (the C++ readers say it themselves)
+            return {"error": ref.open_error_message(e.filename, e) if hasattr(ref, "open_error_message") else str(e)}
 
 
 class TestProteinReaders(ReaderCase):
