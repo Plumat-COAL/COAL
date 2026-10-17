@@ -34,7 +34,7 @@ browser to 125-150 %. Run "One broken gene" once beforehand so nothing is cold.
 |---|---|---|
 | 0:55 | (show the empty page) | "COAL runs locally, on this laptop. Your data stays here." |
 | 1:00 | **Try an example: One broken gene** | "Twenty genes from twenty species. One has a single missing DNA letter." |
-| 1:08 | Point at the red-orange row in the health table | "COAL names the gene and says in plain English what is wrong and where: a missing base at column 102. Every status has an icon and a word, so it never relies on colour alone." |
+| 1:08 | Point at the red-orange row in the health table | "COAL names the gene and says in plain English what is wrong, and the app estimates where: probably a missing base at column 102. Every status has an icon and a word, so it never relies on colour alone." |
 | 1:20 | Click **column 102** | "One click takes you to the exact codon. You can see the reading frame slip." |
 | 1:30 | Scroll up, **Try an example: Mitochondrial genes** | "Now a classic mistake: mitochondrial genes run with the standard genetic code." |
 | 1:38 | Point at the tip banner | "COAL notices that every gene fits the vertebrate mitochondrial code and offers to fix it." |

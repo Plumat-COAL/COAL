@@ -45,7 +45,7 @@ class TestTools(_PrivateRuns):
 
     def test_explain_report(self):
         text = tools.explain_report(core.SAMPLE_REPORT)
-        self.assertIn("OG0001_sp14", text)
+        self.assertIn("Homo_COX1", text)  # APP-15
         self.assertIn("genetic code 2", text)
         self.assertIn("Could not read", tools.explain_report("/no/such/report.json"))
 
@@ -68,11 +68,8 @@ class TestStdioMcpServer(_PrivateRuns):
         names = sorted(t.name for t in asyncio.run(s.list_tools()))
         self.assertEqual(names, ["codon_align", "explain_report"])
         res = asyncio.run(s.call_tool("explain_report", {"report_path": core.SAMPLE_REPORT}))
-        self.assertIn("OG0001_sp14", res.content[0].text)
+        self.assertIn("Homo_COX1", res.content[0].text)  # APP-15
 
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class TestMcpDemoScript(_PrivateRuns):
@@ -84,3 +81,7 @@ class TestMcpDemoScript(_PrivateRuns):
         r = tools.codon_align(p, d)
         self.assertIn(r["problems"][0]["explanation"], md)
         self.assertIn("claude mcp add --transport stdio coal -- python -m coal_app --mcp", md)
+
+
+if __name__ == "__main__":
+    unittest.main()

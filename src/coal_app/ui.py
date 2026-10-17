@@ -125,8 +125,7 @@ def run_ui(protein, dna, fmt, code, nogap, nomismatch):
 
 def show_sample():
     rep = core.load_sample_report()
-    banner = ("### Sample report (not your data)\nThis is what a run looks like with a newer COAL that writes "
-              "reports. " + core.summary_sentence(rep))
+    banner = core.sample_banner(rep)
     return _results(rep, None, core.SAMPLE_REPORT, rep.get("command", ""), rep.get("pal2nal_equivalent", ""),
                     "", banner)
 
@@ -161,7 +160,7 @@ def build(demo_mode: bool = False) -> gr.Blocks:
         with gr.Row():
             gr.Markdown("**Try an example:**")
             ex_buttons = {n: gr.Button(core.EXAMPLES[n][0], size="sm") for n in core.available_examples()}
-            sample_btn = gr.Button("Show a sample report", size="sm")
+            sample_btn = gr.Button("Show a demo sample report", size="sm")
 
         banner = gr.Markdown("Results will appear here.")
         hint_md = gr.Markdown(visible=False, elem_classes=["coal-hint"])

@@ -1,0 +1,58 @@
+"""Regenerate src/coal_app/sample_report.json: the GUI's "Show a sample report" / --demo report.
+
+    python demo/make_sample_report.py
+
+It is a real run of this app on examples/mito with genetic code 1 (the mistake a new user makes with
+vertebrate mitochondrial genes), so every number in it comes from COAL itself. File paths are cut to file
+names and coal_version is "demo" so it is never mistaken for a run of a particular release.
+"""
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import sys
+import tempfile
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "src"))
+
+from coal_app import core  # noqa: E402
+
+DEMO_SOURCE = ("DEMO SAMPLE, not your data: examples/mito (24 vertebrate mitochondrial genes) run by the COAL app "
+               "with genetic code 1, which is the wrong code for these genes")
+
+
+def build() -> dict:
+    p, d = core.example_paths("mito")
+    t = tempfile.mkdtemp(prefix="coal_sample_")
+    try:
+        rep = core.run_coal(p, d, codontable=1, out_dir=t).report
+    finally:
+        shutil.rmtree(t, ignore_errors=True)
+    names = {}
+    for item in list(rep.get("inputs") or []) + [rep.get("output") or {}]:
+        if item.get("path"):
+            names[item["path"]] = os.path.basename(item["path"])
+            item["path"] = names[item["path"]]
+    for k in ("command", "pal2nal_equivalent"):
+        for full, base in names.items():
+            rep[k] = rep[k].replace(core._q(full), base).replace(full, base)
+    rep["coal_version"] = "demo"
+    rep["source"] = DEMO_SOURCE
+    rep["demo"] = True
+    rep["runtime_seconds"] = 0.0
+    return rep
+
+
+def main() -> int:
+    rep = build()
+    with open(core.SAMPLE_REPORT, "w", encoding="utf-8", newline="\n") as fh:
+        json.dump(rep, fh, indent=2)
+        fh.write("\n")
+    print(f"wrote {core.SAMPLE_REPORT}: {core.summary_sentence(rep)}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

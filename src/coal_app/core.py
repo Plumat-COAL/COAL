@@ -626,16 +626,57 @@ def run_coal(protein_path: str, dna_path: str, output_format: str = "fasta", cod
 
 # ---------------------------------------------------------------- reading reports
 
+def _validate_report(rep) -> None:
+    """Raise ValueError unless `rep` has the shapes explain() and the GUI rely on."""
+    def bad(what):
+        raise ValueError(f"not a valid COAL report: {what}")
+    if not isinstance(rep, dict):
+        bad("the file does not hold a JSON object")
+    if not str(rep.get("schema", "")).startswith("coal.report/"):
+        bad("expected schema 'coal.report/1'")
+    for key, typ, name in (("summary", dict, "an object"), ("options", dict, "an object"),
+                           ("output", (dict, type(None)), "an object or null"), ("inputs", list, "a list"),
+                           ("hints", list, "a list"), ("errors", list, "a list"), ("sequences", list, "a list")):
+        if key in rep and not isinstance(rep[key], typ):
+            bad(f"'{key}' should be {name}")
+    for key in ("inputs", "hints", "errors", "sequences"):
+        for i, item in enumerate(rep.get(key) or []):
+            if not isinstance(item, dict):
+                bad(f"'{key}' item {i + 1} should be an object")
+    for i, sq in enumerate(rep.get("sequences") or []):
+        if not isinstance(sq.get("messages", []), list) or not all(
+                isinstance(m, dict) for m in sq.get("messages") or []):
+            bad(f"'messages' of sequence {i + 1} should be a list of objects")
+    for k, v in (rep.get("summary") or {}).items():
+        if k != "pairing" and not isinstance(v, int):
+            bad(f"summary '{k}' should be a whole number")
+
+
 def load_report(path: str) -> dict:
-    with open(path, encoding="utf-8") as fh:
-        rep = json.load(fh)
-    if not isinstance(rep, dict) or not str(rep.get("schema", "")).startswith("coal.report/"):
-        raise ValueError(f"{path} is not a COAL report (expected schema 'coal.report/1')")
+    # CHANGED(APP-14): was plain utf-8 and no type checks (AttributeError on {"summary": []}); now utf-8-sig
+    # (a BOM is fine) and every field explain() uses is type-checked. See overnight/app/CHANGES.md
+    with open(path, encoding="utf-8-sig") as fh:
+        try:
+            rep = json.load(fh)
+        except ValueError as e:
+            raise ValueError(f"{path} is not JSON ({e})") from None
+    try:
+        _validate_report(rep)
+    except ValueError as e:
+        raise ValueError(f"{path} is {e}") from None
     return rep
 
 
 def load_sample_report() -> dict:
     return load_report(SAMPLE_REPORT)
+
+
+def sample_banner(rep: dict) -> str:
+    """GUI banner for the sample report. CHANGED(APP-15): was "what a run looks like with a newer COAL";
+    now a clearly labelled demo sample (a real run of examples/mito with the wrong genetic code)."""
+    return ("### Demo sample (not your data)\nThe 24 mitochondrial genes of the *Mitochondrial genes* example, run "
+            "with genetic code 1, the wrong code for them: see the tip to re-run with code 2. "
+            + summary_sentence(rep))
 
 
 def _mismatch_sentence(msgs: list[dict]) -> str:
@@ -759,7 +800,9 @@ def methods_text(report: dict) -> str:
     name = GENETIC_CODES.get(n, f"NCBI code {n}")
     ver = report.get("coal_version") or "unknown"
     total, ok, warn, failed = (s.get(k, 0) for k in ("total", "ok", "warning", "failed"))
-    parts = [f"Codon alignments were built with COAL v{ver} (https://github.com/chloe-newt/COAL), which places "
+    # CHANGED(APP-15): was always "COAL v<version>"; a non-numeric version (the demo sample) is shown in brackets
+    shown = f"COAL v{ver}" if ver[:1].isdigit() else f"COAL ({ver})"
+    parts = [f"Codon alignments were built with {shown} (https://github.com/chloe-newt/COAL), which places "
              f"each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method "
              f"of PAL2NAL; Suyama et al. 2006), using the {name.split(' (')[0].lower()} genetic code "
              f"(NCBI translation table {n})."]

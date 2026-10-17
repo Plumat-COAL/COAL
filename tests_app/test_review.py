@@ -467,5 +467,101 @@ class TestFinding13ProbeCost(_RunsDir):
         self.assertEqual([f for f in os.listdir(t) if f.startswith("probe")], [])
 
 
+class TestFinding14MalformedReports(unittest.TestCase):
+    def _report(self, obj=None, text=None, bom=False):
+        import json
+        t = _tmp(self)
+        p = os.path.join(t, "r.json")
+        data = text if text is not None else json.dumps(obj)
+        with open(p, "w", encoding="utf-8-sig" if bom else "utf-8") as fh:
+            fh.write(data)
+        return p
+
+    def test_wrong_types_give_a_clear_message(self):
+        from coal_app import tools
+        for obj in ({"schema": "coal.report/1", "summary": []},
+                    {"schema": "coal.report/1", "output": "x"},
+                    {"schema": "coal.report/1", "sequences": [1, 2]},
+                    {"schema": "coal.report/1", "sequences": [{"id": "a", "messages": "oops"}]},
+                    {"schema": "coal.report/1", "hints": "x"},
+                    {"schema": "coal.report/1", "errors": [3]},
+                    {"schema": "coal.report/1", "options": []},
+                    {"schema": "coal.report/1", "inputs": {}},
+                    [1, 2]):
+            text = tools.explain_report(self._report(obj))
+            self.assertTrue(text.startswith("Could not read the report:"), (obj, text))
+            self.assertIn("not a valid COAL report", text)
+
+    def test_bom_is_accepted(self):
+        import json
+        from coal_app import tools
+        with open(core.SAMPLE_REPORT, encoding="utf-8") as fh:
+            obj = json.load(fh)
+        text = tools.explain_report(self._report(obj, bom=True))
+        self.assertFalse(text.startswith("Could not read"), text)
+
+    def test_not_json(self):
+        from coal_app import tools
+        self.assertIn("Could not read the report", tools.explain_report(self._report(text="{nope")))
+
+
+class TestFinding15SampleReport(unittest.TestCase):
+    def test_sample_is_a_real_run_labelled_demo(self):
+        rep = core.load_sample_report()
+        self.assertEqual(rep["coal_version"], "demo")
+        self.assertTrue(rep["demo"])
+        self.assertIn("DEMO SAMPLE", rep["source"])
+        self.assertEqual(rep["options"]["codontable"], 1)
+        self.assertEqual([h["suggested_codontable"] for h in rep["hints"]], [2])
+        # every mismatch is one that code 2 explains (TGA = W, ATA = M)
+        from coal_app import gcode
+        for s in rep["sequences"]:
+            for m in s["messages"]:
+                if m["code"] == "mismatch":
+                    self.assertEqual(gcode.translate(m["codon"], 2), m["residue"], m)
+        self.assertIn("Demo sample", core.sample_banner(rep))
+        self.assertIn("not your data", core.sample_banner(rep))
+
+    def test_sample_matches_a_fresh_run(self):
+        mk = _load("make_sample_report_r", os.path.join(ROOT, "demo", "make_sample_report.py"))
+        self.assertEqual(mk.build(), core.load_sample_report())
+
+
+class TestFinding17DemoWording(unittest.TestCase):
+    def test_location_is_attributed_to_the_app_estimate(self):
+        for rel in ("demo/mcp_demo.md", "demo/make_mcp_demo.py", "pitch/PITCH.md"):
+            with open(os.path.join(ROOT, rel), encoding="utf-8") as fh:
+                text = fh.read()
+            self.assertNotIn("says *where*: a missing base", text, rel)
+            self.assertNotIn("what is wrong and where: a missing base", text, rel)
+        with open(os.path.join(ROOT, "demo", "mcp_demo.md"), encoding="utf-8") as fh:
+            self.assertIn("COAL's app estimates", fh.read())
+
+
+class TestFinding19NoDrift(unittest.TestCase):
+    def test_app_genetic_codes_equal_the_engine_tables(self):
+        from coal import tables
+        from coal_app import gcode
+        self.assertEqual(gcode._RAW, tables._RAW)
+
+    def test_viewer_defines_everything_before_main_block(self):
+        import ast
+        with open(os.path.join(ROOT, "src", "coal_app", "viewer.py"), encoding="utf-8") as fh:
+            body = ast.parse(fh.read()).body
+        main_at = next(i for i, n in enumerate(body) if isinstance(n, ast.If))
+        self.assertEqual([n.name for n in body[main_at:] if isinstance(n, ast.FunctionDef)], [])
+        self.assertEqual(main_at, len(body) - 1)
+
+    def test_test_classes_defined_before_unittest_main(self):
+        import ast
+        import glob
+        for path in glob.glob(os.path.join(ROOT, "tests_app", "test_*.py")):
+            with open(path, encoding="utf-8") as fh:
+                body = ast.parse(fh.read()).body
+            ifs = [i for i, n in enumerate(body) if isinstance(n, ast.If)]
+            if ifs:
+                self.assertEqual(ifs[-1], len(body) - 1, path)  # finding 16: nothing after the main block
+
+
 if __name__ == "__main__":
     unittest.main()

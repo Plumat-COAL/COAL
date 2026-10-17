@@ -513,10 +513,6 @@ def main(argv=None) -> int:
     return 0
 
 
-if __name__ == "__main__":
-    sys.exit(main())
-
-
 def locate_breaks(protein_path: str, dna_path: str, report: dict) -> None:
     """Add the column where each failed gene breaks (frameshift or not) to a report, in place."""
     try:
@@ -542,3 +538,7 @@ def locate_breaks(protein_path: str, dna_path: str, report: dict) -> None:
         ev = diagnose(prot[pid], d, table)["events"]
         if ev:
             s["messages"] = [{k: v for k, v in e.items()} for e in ev[:1]] + list(s.get("messages") or [])
+
+
+if __name__ == "__main__":
+    sys.exit(main())
