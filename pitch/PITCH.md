@@ -42,11 +42,12 @@ browser to 125-150 %. Run "One broken gene" once beforehand so nothing is cold.
 | 1:30 | Scroll up, **Try an example: Mitochondrial genes** | "Now a classic mistake: mitochondrial genes run with the standard genetic code." |
 | 1:38 | Point at the tip banner | "COAL notices that every gene fits the vertebrate mitochondrial code and offers to fix it." |
 | 1:45 | Click **Re-run with genetic code 2** | "One click. Everything matches." |
-| 1:52 | Point at the methods box, click copy | "And it writes the methods sentence for your paper, plus the exact command for your pipeline, and the PAL2NAL equivalent." |
+| 1:52 | Point at the methods box, click copy | "And it writes the methods sentence for your paper, plus the exact command for your pipeline, and the closest PAL2NAL command." <!-- CHANGED(FIN-A5) --> |
 | 2:00 | (one sentence) | "AI assistants get the same thing through MCP: two tools, `codon_align` and `explain_report`." |
 
 On the current engine the broken-gene run stops at the bad gene ("COAL stopped: no alignment was written")
-and the other 19 show as "not checked". **[after the C++/formats branch is merged]** With `--keep-going` the same click writes the 19
+and the other 19 show as not written (the 13 before it: "this gene itself had no problem") or "not checked" (the 6
+after it). <!-- CHANGED(FIN-C7): was "the other 19 show as \"not checked\"" --> **[after the C++/formats branch is merged]** With `--keep-going` the same click writes the 19
 good genes and flags the one bad one; say "the other 19 are aligned" only if you see it on screen.
 
 ## 2:05-2:35 Proof

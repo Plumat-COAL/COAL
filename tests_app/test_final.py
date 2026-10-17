@@ -279,5 +279,33 @@ class TestFinA6StrictAndBlockonly(Case):  # FIN-A6
         self.assertTrue(any("strict" in pr["explanation"] for pr in r["problems"]))
 
 
+class TestFinC7NotCheckedWording(Case):  # FIN-C7
+    def test_genes_before_and_after_the_error(self):
+        p, d = core.example_paths("one_broken_gene")
+        r = self.run_app(p, d)
+        seqs = {x["id"]: x for x in r.report["sequences"]}
+        before = core.sequence_sentence(seqs["OG0001_sp01"])
+        after = core.sequence_sentence(seqs["OG0001_sp20"])
+        self.assertIn("Not written: COAL stopped at an error in OG0001_sp14", before)
+        self.assertIn("this gene itself had no problem", before)
+        self.assertNotIn("earlier error", before)
+        self.assertIn("Not checked", after)
+        self.assertIn("OG0001_sp14", after)
+        self.assertEqual(r.report["summary"]["not_checked"], 19)
+
+
+class TestFinC12C13MessyIds(Case):  # FIN-C12 / FIN-C13
+    def test_order_pairing_is_named_as_the_cause(self):
+        p, d = core.example_paths("messy_ids")
+        r = self.run_app(p, d)
+        g = next(x for x in r.report["sequences"] if x["status"] == "failed")
+        text = core.sequence_sentence(g)
+        self.assertNotIn("truncated", text)
+        self.assertIn("by their order", text)
+        hint = next(h for h in r.hints if h["code"] == "id_mismatch")["text"]
+        self.assertNotIn("use a COAL version", hint)
+        self.assertIn("AT1G79010", hint)
+
+
 if __name__ == "__main__":
     unittest.main()

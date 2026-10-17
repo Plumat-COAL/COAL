@@ -701,6 +701,11 @@ def build_fallback_report(protein, dna, out, fmt, table, nogap, nomismatch, keep
         pairing = None  # COAL stopped before pairing anything (e.g. counts differ, unreadable input)
     keep_going = bool(keep_going and detect_features().keep_going)  # only what was really passed
     seqs = []
+    # CHANGED(FIN-C7): was "Not checked: COAL stopped at an earlier error" for every gene of a stopped run, also for
+    # the genes before the failing one (they were processed fine; their warnings were dropped). Now genes before it
+    # say "Not written ..." (with their own warnings) and genes after it name the failing gene.
+    # See overnight/integration/CHANGES.md
+    first_fail = next((i for i, p in enumerate(pids) if p in failed), None) if aborted else None
     for i, p in enumerate(pids):
         if pairing is None:
             d = None
@@ -722,6 +727,12 @@ def build_fallback_report(protein, dna, out, fmt, table, nogap, nomismatch, keep
             status, msgs = "failed", failed[p]
         elif aborted:
             status, msgs = "not_checked", []
+            if first_fail is not None:
+                fid = pids[first_fail]
+                if i < first_fail:
+                    msgs = [{"code": "not_written", "failed_id": fid}] + list(per.get(p) or [])
+                else:
+                    msgs = [{"code": "not_reached", "failed_id": fid}]
         elif any(m.get("code") in SUSPECT_CODES for m in msgs_p) or (  # CHANGED(DEC-1): probably wrong data
                 mispaired and any(m.get("code") == "mismatch" for m in msgs_p)):
             status = "failed"
@@ -811,8 +822,11 @@ def id_hints(protein: str, dna: str, report: dict | None = None) -> list[dict]:
         return [{"code": "id_mismatch",
                  "text": (f"The protein IDs don't exactly match the DNA IDs: they differ only by a version "
                           f"suffix (for example protein '{ex}' vs DNA '{dnorm[strip_version(ex)]}'). {verdict} "
-                          f"Remove the '.1'-style suffixes so the names match, or use a COAL version that "
-                          f"matches IDs after normalising them.")}]
+                          # CHANGED(FIN-C13): was "... or use a COAL version that matches IDs after normalising
+                          # them" (no such version exists); now concrete advice
+                          f"Rename the sequences so the IDs match exactly, for example by removing the '.1'-style "
+                          f"version suffixes from the protein alignment ('{ex}' -> '{strip_version(ex)}'), then "
+                          f"run again.")}]
     return [{"code": "id_mismatch",
              "text": (f"{len(missing)} protein ID(s) were not found in the DNA file (for example '{missing[0]}'). "
                       f"{verdict} Check that both files describe the same genes, in the same order.")}]
@@ -900,6 +914,8 @@ def _code_distance(a: int, b: int) -> tuple[int, int]:
 
 
 def _fits_now(sq: dict) -> bool:
+    if sq.get("status") == "not_checked":  # FIN-C7: processed before the error, without a definite mismatch
+        return any(m.get("code") == "not_written" for m in sq.get("messages") or []) and not real_mismatches(sq)
     return gene_kind(sq) in ("ok", "unchecked", "other")
 
 
@@ -912,7 +928,10 @@ def _fixable(sq: dict) -> bool:
     if k == "flagged":
         return any(m.get("code") == "suspect_unrelated" for m in sq.get("messages") or []) or bool(
             real_mismatches(sq))
-    return k in ("excluded", "not_checked")
+    if k == "not_checked":  # CHANGED(FIN-C7): a gene processed before the error is fixable only if it mismatched
+        written = any(m.get("code") == "not_written" for m in sq.get("messages") or [])
+        return bool(real_mismatches(sq)) if written else True
+    return k == "excluded"
 
 
 def genetic_code_hint(protein, dna, table, report, work_dir) -> dict | None:
@@ -1252,7 +1271,19 @@ def sequence_sentence(seq: dict) -> str:
     if st == "ok":
         return "Protein and DNA match codon for codon."
     if st == "not_checked":
-        return "Not checked: COAL stopped at an earlier error."
+        # CHANGED(FIN-C7): genes before / after the gene that stopped the run
+        mark = next((m for m in msgs if m.get("code") in ("not_written", "not_reached")), None)
+        if mark is None:
+            return "Not checked: COAL stopped at an earlier error."
+        fid = mark.get("failed_id")
+        if mark["code"] == "not_reached":
+            return f"Not checked: COAL stopped at an error in {fid} before reaching this gene."
+        own = [m for m in msgs if m is not mark]
+        if not own:
+            return (f"Not written: COAL stopped at an error in {fid}, so no alignment was written; this gene itself "
+                    f"had no problem.")
+        return f"Not written: COAL stopped at an error in {fid}, so no alignment was written. " + \
+            _mismatch_sentence(own)
     if st == "warning":
         return _mismatch_sentence(msgs)
     if st == "failed":
@@ -1264,6 +1295,10 @@ def sequence_sentence(seq: dict) -> str:
                 tail = {"frameshift": " Check the DNA near there (a sequencing or assembly error?).",
                         "inconsistent": " Is this the right DNA for this protein, and the right genetic code?",
                         "missing_dna": " The DNA looks truncated."}[m["code"]]
+                if seq.get("pairing") == "order" and seq.get("dna_id") and seq.get("dna_id") != seq.get("id"):
+                    # CHANGED(FIN-C12): was "The DNA looks truncated" also when the cause is pairing by order
+                    tail = (f" It was paired with DNA '{seq['dna_id']}' only by their order in the files (the IDs "
+                            f"don't match), so this is most likely the wrong DNA for it: make the IDs match.")
                 return m.get("text", "") + tail
         for m in msgs:
             if m.get("code") in _FAIL_SENTENCES:

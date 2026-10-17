@@ -76,7 +76,7 @@ Not sure what your files should look like? Click one of the **Try an example** b
 |---|---|---|
 | many codons "don't match", tip suggests another genetic code | the genes use a different genetic code (common for mitochondrial genes) | click the re-run button in the tip |
 | protein and DNA IDs don't match | e.g. proteins called `AT1G01010.1`, DNA called `AT1G01010` | rename so the IDs match (the tip says how they differ) |
-| a gene failed with a "frameshift" | a DNA letter is missing or extra in that gene (often a sequencing or assembly error) | fix or remove that gene and run again: COAL stops at the first failed gene, so the genes after it are shown as "not checked", not as fine |
+| a gene failed with a "frameshift" | a DNA letter is missing or extra in that gene (often a sequencing or assembly error) | fix or remove that gene and run again: COAL stops at the first failed gene, so no alignment is written: the genes before it are shown as "Not written" (with their own problems, if any) and the genes after it as "Not checked", not as fine | <!-- CHANGED(FIN-C7) -->
 <!-- CHANGED(R2-D8): BOM row removed (the engine now skips a byte order mark, ENG-h); frameshift advice: later genes are "not checked". See overnight/integration/CHANGES.md -->
 
 ## Uninstall
