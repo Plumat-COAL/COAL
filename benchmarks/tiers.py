@@ -219,9 +219,14 @@ class Clock:
         self.ref = None
         self.last_check = 0.0
 
-    def sample(self) -> float:
-        self.pdh.CollectQueryData(self.q)
-        return round(self.pdh.GetFormattedCounterValue(self.c, self.pdh.PDH_FMT_DOUBLE)[1], 1)
+    def sample(self):
+        """Blank when the interval since the last sample is too short for PDH to form a rate
+        ("negative denominator"); a missing clock reading must never crash a run."""
+        try:
+            self.pdh.CollectQueryData(self.q)
+            return round(self.pdh.GetFormattedCounterValue(self.c, self.pdh.PDH_FMT_DOUBLE)[1], 1)
+        except Exception:
+            return ""
 
     def probe(self) -> float:
         """Single-thread 2 s busy loop; the clock it ran at."""
@@ -334,8 +339,16 @@ def drift_check(tier, clock, when, seed):
     m = next(r for r in load_manifest("sim/speed") if r["scenario"] == "n10000_L400")
     rows = timed_case(tier, ("coal-cpp", 1), m, 5, clock, seed, extra={"mode": f"drift_{when}"})
     append_csv(OUTDIR / "runs.csv", rows, RUN_FIELDS)
+    log(f"drift check {tier}/{when}: coal-cpp -j1 n10000_L400 {_median_txt(rows)}")
+
+
+def _median_txt(rows) -> str:
+    """Summary for the log; never raises when every run failed (failures are recorded rows, not crashes)."""
     w = sorted(r["wall_s"] for r in rows if r["run_idx"] and r["status"] == "OK")
-    log(f"drift check {tier}/{when}: coal-cpp -j1 n10000_L400 median {w[len(w) // 2]:.4f}s")
+    if not w:
+        return f"no valid timed runs ({rows[0]['status']} {rows[0].get('reason', '')})"
+    mm = max(r["peak_mem_mb"] for r in rows if r["status"] == "OK")
+    return f"median {w[len(w) // 2]:.4f}s peak {mm} MB"
 
 
 def baseline(args):
@@ -349,9 +362,7 @@ def baseline(args):
     for cfg in cfgs:
         rows = timed_case("baseline", cfg, m, 10, clock, seed, extra={"mode": "startup"})
         append_csv(OUTDIR / "runs.csv", rows, RUN_FIELDS)
-        w = sorted(r["wall_s"] for r in rows if r["run_idx"] and r["status"] == "OK")
-        mm = max(r["peak_mem_mb"] for r in rows if r["status"] == "OK")
-        log(f"baseline {config_name(*cfg)}: median {w[len(w) // 2]:.4f}s peak {mm} MB")
+        log(f"baseline {config_name(*cfg)}: {_median_txt(rows)}")
 
 
 def tier_b(args):
@@ -367,7 +378,11 @@ def tier_b(args):
             cfgs = HEADLINE[:]
             rng.shuffle(cfgs)
             for cfg in cfgs:
-                out = timed_case("B", cfg, m, 0, clock, seed, cold=True)
+                try:
+                    out = timed_case("B", cfg, m, 0, clock, seed, cold=True)
+                except RuntimeError as ex:  # standby list could not be emptied: no valid cold run possible
+                    log(f"COLD BLOCK ABORTED at {m['scenario']} {config_name(*cfg)}: {ex}")
+                    return "ABORTED"
                 append_csv(OUTDIR / "runs.csv", out, RUN_FIELDS)
                 log(f"cold {m['scenario']} {config_name(*cfg)}: {out[0]['status']} {out[0]['wall_s']}s {out[0].get('reason', '')}")
         log("Tier B cold block done")
@@ -531,5 +546,9 @@ def main(args):
     assert "COAL_REF_SRC" not in os.environ or not os.environ["COAL_REF_SRC"], "unset COAL_REF_SRC first"
     os.environ.pop("COAL_REF_SRC", None)
     OUTDIR.mkdir(parents=True, exist_ok=True)
-    TIERS[args.tier](args)
+    step = f"{args.tier}{' cold-only' if getattr(args, 'cold_only', False) else ''}{' grade-only' if getattr(args, 'grade_only', False) else ''}"
+    status = TIERS[args.tier](args) or "OK"
+    # recorded TIMEOUT/OOM/ERROR runs are results, not failures: exit 0. Only an uncaught exception (a harness
+    # crash) exits non-zero and breaks a && queue.
+    log(f"STEP {step} FINISHED status={status} harness_commit={HARNESS_COMMIT}")
     return 0
