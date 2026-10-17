@@ -89,10 +89,16 @@ class Progress:
         self.printed = True
 
 
+def _test_hooks() -> bool:
+    """CHANGED(IMP-E-I): the test hooks below act only when COAL_TEST_HOOKS=1 is set as well, so a stray
+    COAL_TEST_PAUSE_* variable can never make a real run sleep. See overnight/integration/CHANGES.md"""
+    return os.environ.get("COAL_TEST_HOOKS") == "1"
+
+
 def _test_pause(count: int) -> None:
-    """Test hook: COAL_TEST_PAUSE_AFTER_CHECKPOINT=k stops here after the k-th checkpoint (so a test can kill
-    the run at a known point)."""
-    if os.environ.get("COAL_TEST_PAUSE_AFTER_CHECKPOINT") == str(count):
+    """Test hook: COAL_TEST_HOOKS=1 and COAL_TEST_PAUSE_AFTER_CHECKPOINT=k stop here after the k-th checkpoint (so a
+    test can kill the run at a known point)."""
+    if _test_hooks() and os.environ.get("COAL_TEST_PAUSE_AFTER_CHECKPOINT") == str(count):
         print(f"coal: test: paused after checkpoint {count}", file=sys.stderr, flush=True)
         time.sleep(3600)
 

@@ -731,7 +731,14 @@ struct Checkpoint {
     }
 };
 
+// CHANGED(IMP-E-I): test hooks act only with COAL_TEST_HOOKS=1 as well (pipeline.py _test_hooks)
+static bool test_hooks() {
+    const char* v = std::getenv("COAL_TEST_HOOKS");
+    return v && std::string(v) == "1";
+}
+
 static void test_pause(int count) {
+    if (!test_hooks()) return;
     const char* v = std::getenv("COAL_TEST_PAUSE_AFTER_CHECKPOINT");
     if (v && std::to_string(count) == v) {
         std::cerr << "coal: test: paused after checkpoint " << count << std::endl;
@@ -1132,7 +1139,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
             }
             std::cerr.flush();
             if (prog) prog->update(done);
-            if (ck && ck->count == 0 && done < nseq && std::getenv("COAL_TEST_PAUSE_BEFORE_CHECKPOINT")) {
+            if (ck && ck->count == 0 && done < nseq && test_hooks() && std::getenv("COAL_TEST_PAUSE_BEFORE_CHECKPOINT")) {
                 sink.f.flush();  // tests (CPP-28): partial files exist, no checkpoint describes them yet
                 std::cerr << "coal: test: paused before any checkpoint" << std::endl;
                 std::this_thread::sleep_for(std::chrono::seconds(3600));

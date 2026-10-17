@@ -69,5 +69,45 @@ class TestFinishErrorsAreLogged(unittest.TestCase):
             self.assertNotIn("debug", err)
 
 
+def make_synthetic(d: Path, n: int, codons: int, seed: int = 1) -> tuple[str, str]:
+    """benchmarks/gen_data.py's model (standard code); returns (pep, nuc) paths."""
+    sys.path.insert(0, str(ROOT / "benchmarks"))
+    from gen_data import generate
+    generate(n, codons, d, seed)
+    return str(d / "pep.fasta"), str(d / "nuc.fasta")
+
+
+class TestTestHooksInert(unittest.TestCase):
+    """IMP-E-I: COAL_TEST_PAUSE_* do nothing unless COAL_TEST_HOOKS=1 is set too."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = Path(tempfile.mkdtemp(prefix="coal_hooks_"))
+        cls.pep, cls.nuc = make_synthetic(cls.tmp, 300, 100)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def _run(self, cmd):
+        env = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "COAL_BATCH_NT": "20000", "COAL_CHECKPOINT_EVERY": "0",
+               "COAL_TEST_PAUSE_AFTER_CHECKPOINT": "1", "COAL_TEST_PAUSE_BEFORE_CHECKPOINT": "1",
+               "COAL_ENGINE": "python"}
+        env.pop("COAL_TEST_HOOKS", None)
+        r = subprocess.run(cmd + [self.pep, self.nuc, "-o", str(self.tmp / "out.fa")], env=env,
+                           capture_output=True, text=True, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("coal: test:", r.stderr)
+
+    def test_python(self):
+        self._run([sys.executable, "-m", "coal"])
+
+    def test_cpp(self):
+        b = cpp_binary()
+        if b is None:
+            self.skipTest("coal-cpp not built")
+        self._run([str(b)])
+
+
 if __name__ == "__main__":
     unittest.main()

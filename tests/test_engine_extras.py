@@ -291,6 +291,7 @@ def interrupt(cmd, cwd, after_checkpoint=3, extra_env=None):
     cluster time limit). A watchdog kills it anyway after 60 s."""
     env = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "COAL_BATCH_NT": "20000",
            "COAL_CHECKPOINT_EVERY": "0", "COAL_TEST_PAUSE_AFTER_CHECKPOINT": str(after_checkpoint),
+           "COAL_TEST_HOOKS": "1",  # CHANGED(IMP-E-I): the hooks need this too
            **(extra_env or {})}
     p = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
     dog = threading.Timer(60, p.kill)
