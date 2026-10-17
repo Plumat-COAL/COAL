@@ -157,3 +157,15 @@ explanation for it, are **unverified**. The verification steps above still apply
   of about `min(8, cores // 2)`, or a memory-aware cap (fix 3 above), would keep most of the speed-up at a fraction
   of the memory. The memory-per-`-j` curve was not measured (deadline), so that value is a suggestion to benchmark,
   not a measured optimum.
+
+## Overnight 1M PAL2NAL runs (`benchmarks/overnight.py`, started about 21:40)
+
+- n1000000_L400, p2n14 then p2n16, strictly sequential, nothing else running. **1 timed run each, no warm-up:**
+  at about 40 min per p2n14 run, a warm-up is not worth it (user decision). The first run may therefore include a
+  cold-cache read of the 1.2 GB inputs, which is small next to the run time.
+- Timeouts: p2n14 3 h, p2n16 6 h. 24 GB job cap kept. OOM/TIMEOUT are recorded as results.
+- coal-cpp -j1 n10000_L400 drift check before and after. Average clock speed (PDH) logged every 30 min with no
+  busy-loop probe.
+- Up to 2 more p2n14 runs (for a median), only if each can finish before 08:00.
+- Every completed output is graded against truth. Rows are in `runs.csv` (tier B, mode `single_overnight`).
+- Committed locally, not pushed (the user reviews and pushes in the morning).
