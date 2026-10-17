@@ -280,8 +280,9 @@ class TestServeProtocol(unittest.TestCase):
         self.assertTrue(cmd[1].endswith("coal_desktop.py"))
         self.assertEqual(cmd[2:5], ["--serve", "--port", "1234"])
         self.assertIn("--parent-pid", cmd)
-        self.assertNotIn("--mcp", cmd)
-        self.assertIn("--mcp", cd.default_server_command(1234, mcp=True))
+        self.assertNotIn("--mcp", cmd)  # WIN-M: MCP on by default, opt out with --no-mcp
+        self.assertNotIn("--no-mcp", cmd)
+        self.assertIn("--no-mcp", cd.default_server_command(1234, mcp=False))
 
     def test_child_env_offline_and_no_proxy(self):
         old = dict(os.environ)
@@ -658,8 +659,8 @@ class TestOpenWith(WindowBase):
         self.assertEqual(len(opened), 2, "second launch should reopen the page")
 
 
-class TestLaunchLogging(unittest.TestCase):
-    """WIN-W3: only the instance that owns the lock rotates logs; local_app.log is rotated too."""
+class LogEnv(unittest.TestCase):
+    """COAL_DESKTOP_HOME in a temp folder; log handlers added by main_window are removed."""
 
     def setUp(self):
         import logging
@@ -679,6 +680,11 @@ class TestLaunchLogging(unittest.TestCase):
                 h.close()
         self.env.stop()
         shutil.rmtree(self.tmp, ignore_errors=True)
+
+
+
+class TestLaunchLogging(LogEnv):
+    """WIN-W3: only the instance that owns the lock rotates logs; local_app.log is rotated too."""
 
     def write(self, name, text):
         with open(os.path.join(self.logs, name), "w", encoding="utf-8") as f:
@@ -751,6 +757,89 @@ class TestClaimInstance(unittest.TestCase):
                              "notified")
         finally:
             primary.release()
+
+
+class TestMcpDefault(unittest.TestCase):
+    """WIN-M: the desktop app serves MCP unless started with --no-mcp."""
+
+    def test_flags(self):
+        self.assertFalse(cd.parse_args([]).no_mcp)
+        self.assertTrue(cd.parse_args(["--no-mcp"]).no_mcp)
+        for argv, want in ((["--serve", "--port", "5"], True), (["--serve", "--port", "5", "--no-mcp"], False)):
+            with mock.patch.object(cd, "serve", return_value=0) as sv:
+                self.assertEqual(cd.dispatch(argv), 0)
+            self.assertEqual(sv.call_args.kwargs["mcp"], want, argv)
+
+
+class TestRoleErrors(LogEnv):
+    """WIN-W9 / WIN-R1: errors are reported as messages, never as a hidden traceback box."""
+
+    def test_missing_gui_message_installed_app(self):
+        def nogui(p, m):
+            raise ImportError("No module named 'gradio'", name="gradio")
+        out = io.StringIO()
+        with mock.patch.object(cd, "FROZEN", True):
+            self.assertEqual(cd.serve(1, launcher=nogui, stdin=io.BytesIO(b""), stdout=out), cd.EXIT_NO_GUI)
+        self.assertNotIn("pip", out.getvalue())
+        self.assertIn("reinstall", out.getvalue().lower())
+
+    def test_missing_gui_message_source_checkout_quotes_for_cmd(self):
+        def nogui(p, m):
+            raise ImportError("No module named 'gradio'", name="gradio")
+        out = io.StringIO()
+        with mock.patch.object(cd, "FROZEN", False):
+            cd.serve(1, launcher=nogui, stdin=io.BytesIO(b""), stdout=out)
+        self.assertIn('pip install -e ".[gui]"', out.getvalue())
+        self.assertNotIn("'.[gui]'", out.getvalue())
+
+    def test_unexpected_error_in_serve_is_printed_not_raised(self):
+        def boom(p, m):
+            raise RuntimeError("unexpected boom")
+        out = io.StringIO()
+        code = cd.serve(1, launcher=boom, stdin=io.BytesIO(b""), stdout=out)
+        self.assertEqual(code, cd.EXIT_CRASH)
+        self.assertIn("Traceback", out.getvalue())
+        self.assertIn("unexpected boom", out.getvalue())
+
+    def test_unexpected_error_in_engine_role_returns_1(self):
+        d = tempfile.mkdtemp()
+        try:
+            with open(os.path.join(d, "coal_boom_mod.py"), "w", encoding="utf-8") as f:
+                f.write("raise RuntimeError('engine boom')\n")
+            err = io.StringIO()
+            with mock.patch.object(sys, "path", [d] + sys.path), mock.patch.object(sys, "stderr", err), \
+                    mock.patch.object(sys, "argv", list(sys.argv)):
+                self.assertEqual(cd.run_engine([], module="coal_boom_mod"), 1)
+            self.assertIn("engine boom", err.getvalue())
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_bad_command_line_in_windowed_build_shows_a_message(self):
+        shown = []
+        with mock.patch.object(cd, "_windowed", return_value=True), \
+                mock.patch.object(cd, "_error_dialog", side_effect=lambda t, x, offer_browser=False: shown.append(x)):
+            with self.assertRaises(SystemExit) as cm:
+                cd.parse_args(["--no-such-option"])
+        self.assertEqual(cm.exception.code, 2)
+        self.assertEqual(len(shown), 1)
+        self.assertIn("--no-such-option", shown[0])
+
+    def test_unexpected_error_in_window_role_shows_a_message(self):
+        shown = []
+        with mock.patch.object(cd, "_run_in_browser", side_effect=RuntimeError("window boom")), \
+                mock.patch.object(cd, "_error_dialog", side_effect=lambda t, x, offer_browser=False: shown.append(x)):
+            self.assertEqual(cd.main_window(cd.parse_args(["--browser"])), 1)
+        self.assertEqual(len(shown), 1)
+        self.assertIn("unexpected", shown[0])
+
+
+class TestFirstLaunchPatience(unittest.TestCase):
+    """WIN-R8: first launch may be slow while Defender scans the bundle."""
+
+    def test_timeout_and_splash_message(self):
+        self.assertGreaterEqual(cd.SERVER_START_TIMEOUT, 180)
+        self.assertIn("First launch can take a minute", cd.SPLASH)
+        self.assertIn("setTimeout", cd.SPLASH)
 
 
 if __name__ == "__main__":

@@ -36,13 +36,17 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 
 APP_NAME = "COAL"
 WINDOW_TITLE = "COAL codon alignment"
 READY_PREFIX = "COAL-READY"
 EXIT_PORT_BUSY = 75          # serve(): the port was taken; the window process tries another one
 EXIT_NO_GUI = 3              # serve(): the local app (Gradio) could not be imported
-SERVER_START_TIMEOUT = 60.0  # first start after install can be slow while antivirus scans files
+EXIT_CRASH = 1               # serve()/engine: unexpected error (traceback printed to the pipe)
+# CHANGED(WIN-R8): was 60 s; now 180 s (first start after install can be slow while Defender scans
+# the bundle). See overnight/windows-app/CHANGES.md
+SERVER_START_TIMEOUT = 180.0
 SERVER_STOP_TIMEOUT = 5.0
 PORT_ATTEMPTS = 3
 APP_MUTEX = "COAL-desktop-running"  # Inno Setup's AppMutex: setup/uninstall ask to close COAL first
@@ -201,15 +205,32 @@ def serve(port: int, mcp: bool = False, launcher=None, parent_pid: int | None = 
     try:
         url, close = launcher(port, mcp)
     except ImportError as e:
-        print(f"coal_desktop: the local app could not start (missing {e.name or e}). "
-              f"In a source checkout: pip install -e '.[gui]' -r desktop/requirements.txt", file=stdout, flush=True)
+        # CHANGED(WIN-W9): was: told everyone to pip install with single quotes (fails in cmd);
+        # now: installed app -> "reinstall", source checkout -> cmd-safe double quotes.
+        # See overnight/windows-app/CHANGES.md
+        if FROZEN:
+            hint = "This installation of COAL is incomplete; please reinstall COAL."
+        else:
+            hint = 'In a source checkout: pip install -e ".[gui]" -r desktop/requirements.txt'
+        print(f"coal_desktop: the local app could not start (missing {e.name or e}). {hint}",
+              file=stdout, flush=True)
         return EXIT_NO_GUI
     except OSError as e:
         if is_port_busy_error(e):
             print(f"coal_desktop: port {port} is busy: {e}", file=stdout, flush=True)
             return EXIT_PORT_BUSY
-        raise
+        traceback.print_exc(file=stdout)
+        return EXIT_CRASH
+    except Exception:  # noqa: BLE001
+        # CHANGED(WIN-R1): was: unexpected errors propagated (in the windowed build: a modal
+        # "Unhandled exception" box in a hidden process); now printed to the pipe (-> local_app.log),
+        # exit 1. See overnight/windows-app/CHANGES.md
+        traceback.print_exc(file=stdout)
+        stdout.flush()
+        return EXIT_CRASH
     print(f"{READY_PREFIX} {url}", file=stdout, flush=True)
+    if mcp:
+        print(f"coal_desktop: MCP tools for AI agents at {url}gradio_api/mcp/sse", file=stdout, flush=True)
     stop = threading.Event()
     if parent_pid and IS_WINDOWS:
         threading.Thread(target=_wait_for_parent_windows, args=(parent_pid, stop.set),
@@ -246,11 +267,13 @@ class ServerError(RuntimeError):
         self.cancelled = cancelled
 
 
-def default_server_command(port: int, mcp: bool = False) -> list[str]:
+def default_server_command(port: int, mcp: bool = True) -> list[str]:
     base = [sys.executable] if FROZEN else [sys.executable, os.path.abspath(__file__)]
     cmd = base + ["--serve", "--port", str(port), "--parent-pid", str(os.getpid())]
-    if mcp:
-        cmd.append("--mcp")
+    # CHANGED(WIN-M): was: MCP off unless --mcp; now on unless --no-mcp (user decision).
+    # See overnight/windows-app/CHANGES.md
+    if not mcp:
+        cmd.append("--no-mcp")
     return cmd
 
 
@@ -334,6 +357,7 @@ class LocalServer:
         self._stop_lock = threading.Lock()
         self._pump_thread = None
         self._stopped = False
+        self._job_failed = False
 
     # --- start
     def start(self) -> str:
@@ -380,8 +404,13 @@ class LocalServer:
             try:
                 self._job = self._job or _WindowsJob()
                 self._job.add(self.proc)
+                self._job_failed = False
             except Exception as e:  # noqa: BLE001 - the stdin lifeline still works
-                log.warning("could not attach the local app to a job object: %s", e)
+                # CHANGED(WIN-R10): was: only logged; now stop() also kills the process tree
+                # (taskkill /T /F) so engine runs don't outlive COAL. See overnight/windows-app/CHANGES.md
+                log.warning("could not attach the local app to a job object (%s); "
+                            "will stop it with taskkill /T", e)
+                self._job_failed = True
         self._pump_thread = threading.Thread(target=self._pump, args=(self.proc, self._lines), daemon=True)
         self._pump_thread.start()
         deadline = time.monotonic() + self.start_timeout
@@ -442,9 +471,22 @@ class LocalServer:
         except subprocess.TimeoutExpired:
             return None
 
+    def _kill_tree(self):
+        """Windows without a job object: kill the local app AND the engine runs it started.
+        Untested here (Linux)."""
+        if not (IS_WINDOWS and self._job_failed and self.proc and self.proc.poll() is None):
+            return
+        try:
+            subprocess.run(["taskkill", "/T", "/F", "/PID", str(self.proc.pid)], capture_output=True,
+                           timeout=15, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000))
+        except (OSError, subprocess.TimeoutExpired) as e:
+            log.warning("taskkill failed: %s", e)
+
     def _kill(self):
         if self.proc and self.proc.poll() is None:
-            self.proc.kill()
+            self._kill_tree()
+            if self.proc.poll() is None:
+                self.proc.kill()
             self._wait_exit(5)
 
     # --- stop
@@ -463,6 +505,9 @@ class LocalServer:
         if p is None:
             self._close_log()
             return None
+        if p.poll() is None and IS_WINDOWS and self._job_failed:
+            self._kill_tree()  # WIN-R10: no graceful close, but no orphaned engine runs either
+            self._wait_exit(5)
         if p.poll() is None:
             try:
                 p.stdin.close()
@@ -620,6 +665,15 @@ class SingleInstance:
             with open(self.info_path, encoding="utf-8") as f:
                 info = json.load(f)
             payload = dict(message, token=info["token"])
+            if IS_WINDOWS:
+                # CHANGED(WIN-R6): was: relied on toggling on_top; now we also let the running COAL
+                # take the foreground (Windows' foreground lock). Untested here.
+                # See overnight/windows-app/CHANGES.md
+                try:
+                    import ctypes
+                    ctypes.windll.user32.AllowSetForegroundWindow(int(info["pid"]))
+                except Exception:  # noqa: BLE001
+                    pass
             with socket.create_connection(("127.0.0.1", int(info["port"])), timeout=timeout) as c:
                 c.settimeout(timeout)
                 c.sendall(json.dumps(payload).encode("utf-8") + b"\n")
@@ -685,12 +739,19 @@ def classify_dropped_files(paths) -> dict:
 
 # ============================================================== engine role
 
-def run_engine(args: list[str]) -> int:
+def run_engine(args: list[str], module: str = "coal") -> int:
     """`COAL.exe -m coal ARGS` -> the engine, exactly as `python -m coal ARGS`."""
     import runpy
     sys.argv = ["coal"] + list(args)
     try:
-        runpy.run_module("coal", run_name="__main__", alter_sys=True)
+        runpy.run_module(module, run_name="__main__", alter_sys=True)
+    except Exception:  # noqa: BLE001
+        # CHANGED(WIN-R1): was: propagated (windowed build: modal traceback box blocking the run
+        # until its timeout); now traceback on stderr (the GUI shows it), exit 1, like python -m coal.
+        # See overnight/windows-app/CHANGES.md
+        if sys.stderr is not None:
+            traceback.print_exc(file=sys.stderr)
+        return 1
     except SystemExit as e:
         code = e.code
         if code is None:
@@ -711,7 +772,10 @@ body { font: 18px system-ui, "Segoe UI", sans-serif; display:flex; align-items:c
        justify-content:center; height:100vh; margin:0; background:Canvas; color:CanvasText; }
 main { text-align:center; } p { opacity:.8; }
 </style></head><body><main role="status" aria-live="polite">
-<h1>Starting COAL&hellip;</h1><p>This computer only. No internet needed.</p></main></body></html>"""
+<h1>Starting COAL&hellip;</h1><p>This computer only. No internet needed.</p>
+<p id="slow" hidden>First launch can take a minute while Windows checks the app.</p></main>
+<script>setTimeout(function () { document.getElementById("slow").hidden = false; }, 10000);</script>
+</body></html>"""
 
 
 def _error_dialog(title: str, text: str, offer_browser: bool = False) -> bool:
@@ -912,14 +976,35 @@ def _run_in_browser(server: LocalServer, instance: SingleInstance | None = None)
 
 # ============================================================== entry point
 
+def _windowed() -> bool:
+    """The PyInstaller build is windowed (console=False): nobody sees stderr."""
+    return FROZEN and IS_WINDOWS
+
+
 def parse_args(argv):
     import argparse
-    ap = argparse.ArgumentParser(prog="COAL", description="COAL desktop app")
+
+    class Parser(argparse.ArgumentParser):
+        def error(self, message):
+            # CHANGED(WIN-W9): was: windowed build exited 2 silently; now a message box (or the
+            # pipe, for the hidden --serve child). See overnight/windows-app/CHANGES.md
+            if _windowed() or sys.stderr is None:
+                text = f"COAL could not understand its command line: {message}"
+                if "--serve" in argv:
+                    if sys.stdout is not None:
+                        print(text, file=sys.stdout, flush=True)
+                else:
+                    _error_dialog("COAL", text)
+                self.exit(2)
+            super().error(message)
+
+    ap = Parser(prog="COAL", description="COAL desktop app")
     ap.add_argument("files", nargs="*", help="sequence files to open (from 'Open with')")
     ap.add_argument("--serve", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--port", type=int, default=0, help=argparse.SUPPRESS)
     ap.add_argument("--parent-pid", type=int, default=None, help=argparse.SUPPRESS)
-    ap.add_argument("--mcp", action="store_true", help="also serve the MCP tools to AI agents on this computer")
+    ap.add_argument("--no-mcp", action="store_true",
+                    help="don't serve COAL's MCP tools to AI agents on this computer")
     ap.add_argument("--browser", action="store_true", help="open in the default browser instead of a window")
     ap.add_argument("--version", action="store_true")
     return ap.parse_args(argv)
@@ -940,19 +1025,25 @@ def dispatch(argv: list[str]) -> int:
         if not args.port:
             print("COAL: --serve needs --port", file=sys.stderr)
             return 2
-        return serve(args.port, mcp=args.mcp, parent_pid=args.parent_pid)
+        return serve(args.port, mcp=not args.no_mcp, parent_pid=args.parent_pid)
     return main_window(args)
 
 
 def _hold_app_mutex():
-    """Windows: create a named mutex for as long as COAL runs (the handle is released by Windows
-    when the process ends). Only used so the installer/uninstaller can tell COAL is open.
-    Untested here (Linux)."""
+    """Windows: create a named mutex that exists for as long as COAL runs. The handle is never
+    closed: Windows closes it when the process exits, which is when the mutex disappears for
+    Inno Setup's AppMutex check. Untested here (Linux)."""
     if not IS_WINDOWS:
         return None
     try:
         import ctypes
-        return ctypes.windll.kernel32.CreateMutexW(None, False, APP_MUTEX)
+        from ctypes import wintypes
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        # CHANGED(WIN-W9): was: default int restype (a HANDLE truncated to 32 bits); now HANDLE.
+        # See overnight/windows-app/CHANGES.md
+        k32.CreateMutexW.restype = wintypes.HANDLE
+        k32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
+        return k32.CreateMutexW(None, False, APP_MUTEX)
     except Exception as e:  # noqa: BLE001
         log.warning("could not create the app mutex: %s", e)
         return None
@@ -996,9 +1087,10 @@ def main_window(args) -> int:
         log_path = setup_logging()
         local_log = os.path.join(os.path.dirname(log_path), "local_app.log")
         rotate_log(local_log, keep=3)  # CHANGED(WIN-W3): was: appended forever; now rotated per launch
-        _mutex = _hold_app_mutex()  # noqa: F841
+        if IS_WINDOWS and not _hold_app_mutex():
+            log.warning("app mutex not created: setup/uninstall won't see that COAL is open")
         log.info("COAL desktop starting (frozen=%s, python %s)", FROZEN, sys.version.split()[0])
-        server = LocalServer(command=lambda port: default_server_command(port, mcp=args.mcp),
+        server = LocalServer(command=lambda port: default_server_command(port, mcp=not args.no_mcp),
                              log_path=local_log)
         if args.browser:
             return _run_in_browser(server, instance)
@@ -1009,6 +1101,13 @@ def main_window(args) -> int:
                           "Install desktop/requirements.txt, or start with --browser.")
             return 1
         return run_window(server, instance, files)
+    except Exception:  # noqa: BLE001
+        # CHANGED(WIN-R1): was: propagated (windowed build: "Unhandled exception" box); now logged
+        # and explained. See overnight/windows-app/CHANGES.md
+        log.exception("unexpected error")
+        _error_dialog("COAL", "COAL stopped because of an unexpected error. Details are in "
+                      f"{os.path.join(data_dir(), 'logs')}.")
+        return 1
     finally:
         if server is not None:
             server.stop()
@@ -1022,4 +1121,7 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
+    # CHANGED(WIN-R3): was: only inside main(); now first thing in the frozen entry point, before
+    # anything else runs, as PyInstaller recommends. See overnight/windows-app/CHANGES.md
+    multiprocessing.freeze_support()
     sys.exit(main())

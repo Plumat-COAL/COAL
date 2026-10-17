@@ -113,7 +113,9 @@ exe = EXE(  # noqa: F821
     icon=os.path.join(SPECPATH, "coal.ico"),  # noqa: F821
     version=version_info,
     console=False,          # windowed: no console window
-    disable_windowed_traceback=False,
+    # CHANGED(WIN-R1): was False (modal traceback box in hidden processes); now errors go to the logs.
+    # See overnight/windows-app/CHANGES.md
+    disable_windowed_traceback=True,
     upx=False,              # UPX is a common antivirus false-positive trigger
     debug=False,
     strip=False,
