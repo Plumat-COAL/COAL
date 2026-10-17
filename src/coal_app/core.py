@@ -436,6 +436,8 @@ def run_coal(protein_path: str, dna_path: str, output_format: str = "fasta", cod
     if report is None:
         report = build_fallback_report(protein_path, dna_path, out, output_format, codontable, nogap,
                                        nomismatch, keep_going, code, err, runtime)
+        from .viewer import locate_breaks
+        locate_breaks(protein_path, dna_path, report)
         hints = id_hints(protein_path, dna_path)
         if probe_codes:
             h = genetic_code_hint(protein_path, dna_path, codontable, report, out_dir)
@@ -511,6 +513,12 @@ def sequence_sentence(seq: dict) -> str:
         return _mismatch_sentence(msgs)
     if st == "failed":
         for m in msgs:
+            if isinstance(m.get("column"), int) and m.get("code") in ("frameshift", "inconsistent", "missing_dna"):
+                tail = {"frameshift": " Check the DNA near there (a sequencing or assembly error?).",
+                        "inconsistent": " Is this the right DNA for this protein, and the right genetic code?",
+                        "missing_dna": " The DNA looks truncated."}[m["code"]]
+                return m.get("text", "") + tail
+        for m in msgs:
             if m.get("code") in _FAIL_SENTENCES:
                 return _FAIL_SENTENCES[m["code"]]
         return " ".join(m.get("text", "") for m in msgs) or "COAL could not align this sequence."
@@ -526,8 +534,19 @@ def health_rows(report: dict) -> list[list[str]]:
     return rows
 
 
-def health_table_html(report: dict) -> str:
-    """Accessible HTML table (icon + word + sentence, never colour alone)."""
+def _jump_links(seq: dict, limit: int = 12) -> str:
+    from .viewer import cell_id
+    cols = sorted({m["column"] for m in seq.get("messages") or [] if isinstance(m.get("column"), int)})
+    if not cols:
+        return ""
+    links = ", ".join(f'<a href="#{cell_id(str(seq.get("id", "")), c)}">column {c}</a>' for c in cols[:limit])
+    more = f" and {len(cols) - limit} more" if len(cols) > limit else ""
+    return f'<br><span class="coal-small">Show in alignment: {links}{more}</span>'
+
+
+def health_table_html(report: dict, links: bool = False) -> str:
+    """Accessible HTML table (icon + word + sentence, never colour alone).
+    With links=True, problem columns link to the alignment viewer's cells (same page)."""
     order = {"failed": 0, "warning": 1, "not_checked": 2, "ok": 3}
     seqs = sorted(report.get("sequences", []), key=lambda s: order.get(s.get("status"), 4))
     out = ['<table class="coal-health"><caption>Sequence health, problems first</caption>',
@@ -541,7 +560,7 @@ def health_table_html(report: dict) -> str:
         out.append(
             f'<tr class="coal-{cls}"><td><span class="coal-badge coal-{cls}" aria-hidden="true">{icon}</span> '
             f'<strong>{word}</strong></td><td><code>{html.escape(str(s.get("id", "")))}</code>{pair}</td>'
-            f'<td>{html.escape(sequence_sentence(s))}</td></tr>')
+            f'<td>{html.escape(sequence_sentence(s))}{_jump_links(s) if links else ""}</td></tr>')
     out.append("</tbody></table>")
     return "".join(out)
 

@@ -1,6 +1,6 @@
 # Overnight B (app/GUI/MCP): morning summary
 
-All 7 tasks done on branch `overnight/app` (local commits only, nothing pushed).
+Tasks 1-7 done, plus task 8 (alignment viewer) on branch `overnight/app` (local commits only, nothing pushed).
 
 ## Done
 | Task | Commit |
@@ -12,7 +12,8 @@ All 7 tasks done on branch `overnight/app` (local commits only, nothing pushed).
 | 5. `pitch/explainer.html` (20 s, keyboard, reduced motion) | 4113091 |
 | 6. `demo/race.py` (PAL2NAL per gene vs one batched COAL run) | e87f62f |
 | 7. `coal_compat`: drop-in `pal2nal` command | 49d3a5c |
-| Final log | (this commit) |
+| Final log | 31d50b9 |
+| 8. Alignment viewer: `coal_app/viewer.py` + `python -m coal_app.viewer`, GUI panel, jump links | (see log) |
 
 ## Test results (final run, Linux, Python 3.13)
 - `python -m unittest discover -s tests`: 11 tests OK (engine untouched).
@@ -76,3 +77,7 @@ With the GUI running, Gradio serves MCP at `http://127.0.0.1:7860/gradio_api/mcp
 - Sat 02:18 Task 6 done: demo/race.py (PAL2NAL once per gene vs one batched COAL run, plus C++ binary if found in cpp/build or --cpp; live bars; times, speed-up and output match). Tested: missing-PAL2NAL path (unit test) and the race machinery with a stand-in .pl that forwards to COAL (40 genes, outputs MATCH). A real race against PAL2NAL needs testing on a teammate's laptop. C++ path untested (no cpp/ here; assumes the binary takes the same arguments as coal).
 - Sat 02:19 Task 7 done: src/coal_compat (`pal2nal` entry point and `python -m coal_compat`): PAL2NAL v14 command line (options in any order, several DNA files) -> `python -m coal`, output to stdout; -blockonly, -html, unknown options and unsupported formats give clear errors. Named `pal2nal`, not `pal2nal.pl`: a console script called pal2nal.pl becomes pal2nal.pl.exe on Windows and may clash with the .pl -> Perl file association; can't verify Windows here. Since PAL2NAL's default output is clustal, calls without -output fail clearly until the engine has clustal (no silent format change).
 - Sat 02:19 Final: all tests run once (engine 11 OK; app 34 OK, 2 skipped). Morning summary written. Stopping.
+- Sat 02:21 Task 8 (alignment viewer) started. Note: on the current engine one_broken_gene produces no codon alignment (exit 1), so the viewer also locates breaks itself from protein + DNA (frameshift = codons stop matching and a +/-1/2 base shift makes them match again).
+- Sat 02:25 Task 8, layout check 1 (headless Chromium 1280 px): every row of a failed run carried the per-row note "COAL could not align this gene" -> now only rows that break get a note (their break text).
+- Sat 02:25 Task 8, layout check 2 (390 px phone): sequence-name column took most of the width -> narrower name column and hidden row notes under 600 px. Rechecked: OK, no page-level horizontal scroll.
+- Sat 02:25 Task 8 done: src/coal_app/viewer.py (Gradio-free; self-contained HTML; Okabe-Ito tints by amino-acid property, letter always shown; mismatches outlined + the symbol for 'not equal'; frameshift double outline + hatching + lightning symbol; sticky names and column numbers; horizontal scroll; anchor links per problem cell, small optional JS highlights the whole column; capped at 200 seqs x 2,000 cols and 200,000 cells with a note). gcode.py holds NCBI tables (data copy, app still never imports coal). When COAL wrote no row for a gene, the viewer places its codons and finds the break: one_broken_gene -> frameshift at column 102 (1 base missing). Fallback reports now carry that column, so the health table, explain_report and the viewer agree. GUI: 'View alignment' panel under the health table (anchors work there without JS) + HTML download. 8 new tests (42 app tests OK, 2 skipped).

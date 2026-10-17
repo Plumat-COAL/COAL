@@ -13,7 +13,7 @@ os.environ.setdefault("GRADIO_ANALYTICS_ENABLED", "False")
 
 import gradio as gr  # noqa: E402
 
-from . import core, tools  # noqa: E402
+from . import core, tools, viewer  # noqa: E402
 
 RUNS_DIR = os.path.join(tempfile.gettempdir(), "coal_app_runs")
 
@@ -75,7 +75,8 @@ def _hint_parts(report):
     return gr.update(value=text, visible=True), btn, code
 
 
-def _results(report, output_path, report_path, coal_cmd, pal2nal_cmd, stderr, banner):
+def _results(report, output_path, report_path, coal_cmd, pal2nal_cmd, stderr, banner,
+             view_html="", view_path=None):
     hint_md, hint_btn, code = _hint_parts(report)
     cmds = f"# COAL\n{coal_cmd}\n\n# Same run with PAL2NAL\n{pal2nal_cmd}"
     return (
@@ -85,9 +86,11 @@ def _results(report, output_path, report_path, coal_cmd, pal2nal_cmd, stderr, ba
         code,
         gr.update(value=output_path, visible=bool(output_path)),
         gr.update(value=report_path, visible=bool(report_path)),
-        gr.update(value=core.health_table_html(report)),
+        gr.update(value=core.health_table_html(report, links=bool(view_html))),
         gr.update(value=cmds),
         gr.update(value=stderr or "(no messages)"),
+        gr.update(value=view_html or "<p>Run COAL to see the alignment here.</p>"),
+        gr.update(value=view_path, visible=bool(view_path)),
     )
 
 
@@ -110,7 +113,16 @@ def run_ui(protein, dna, fmt, code, nogap, nomismatch):
     else:
         head = "### ✖ COAL stopped: no alignment was written"
     banner = f"{head}\n{core.summary_sentence(r.report)}"
-    return _results(r.report, r.output_path, r.report_path, r.coal_cmd, r.pal2nal_cmd, r.stderr, banner)
+    view_html, view_path = "", None
+    try:
+        view_html = viewer.view(protein, r.output_path, r.report, dna, int(code), page=False)
+        view_path = os.path.join(out_dir, "alignment_view.html")
+        with open(view_path, "w", encoding="utf-8") as fh:
+            fh.write(viewer.view(protein, r.output_path, r.report, dna, int(code), page=True))
+    except (OSError, ValueError) as e:
+        view_html = f"<p>Could not draw the alignment: {e}</p>"
+    return _results(r.report, r.output_path, r.report_path, r.coal_cmd, r.pal2nal_cmd, r.stderr, banner,
+                    view_html, view_path)
 
 
 def show_sample():
@@ -161,6 +173,9 @@ def build(demo_mode: bool = False) -> gr.Blocks:
             dl_out = gr.DownloadButton("Download codon alignment", visible=False)
             dl_rep = gr.DownloadButton("Download report (JSON)", visible=False)
         table = gr.HTML()
+        with gr.Accordion("View alignment (see exactly where a gene breaks)", open=True):
+            view = gr.HTML("<p>Run COAL to see the alignment here.</p>")
+            dl_view = gr.DownloadButton("Download alignment view (HTML)", visible=False)
         cmds = gr.Code(label="Equivalent commands (copy into a terminal or pipeline)", language="shell",
                        interactive=False)
         with gr.Accordion("Raw COAL messages", open=False):
@@ -168,7 +183,7 @@ def build(demo_mode: bool = False) -> gr.Blocks:
         with gr.Accordion("What do these words mean?", open=False):
             gr.Markdown(GLOSSARY)
 
-        outputs = [banner, hint_md, hint_btn, hint_code, dl_out, dl_rep, table, cmds, raw]
+        outputs = [banner, hint_md, hint_btn, hint_code, dl_out, dl_rep, table, cmds, raw, view, dl_view]
         inputs = [protein, dna, fmt, code, nogap, nomismatch]
         run_btn.click(run_ui, inputs, outputs, show_api=False)
 
