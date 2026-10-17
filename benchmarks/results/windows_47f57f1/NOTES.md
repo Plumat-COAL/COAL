@@ -72,3 +72,59 @@ TGA-as-Cys codons exactly (4, 16, 10, 8). p2n16, coal-py and coal-cpp emit 0 war
   `ab92b8e18005-dirty`. The "-dirty" is a false positive: the check also counted result files written under
   `benchmarks/results/`. `git diff ab92b8e -- benchmarks ':!benchmarks/results'` was empty at the time, so the
   code was identical. Fixed so result files are excluded from the check; rows keep the label as recorded.
+
+## GitHub issue draft: coal-py commits ~630 MB per process once it imports numpy (default -j: up to ~11 GB)
+
+**Title:** coal-py: each worker commits ~630 MB after the lazy numpy import, so default `-j` memory scales with core
+count, not input size
+
+**Summary.** On Windows (i5-13600KF, 20 threads, numpy 2.4.6 + bundled `libscipy_openblas64_`), coal-py's
+peak committed memory jumps by about 630 MB in every process that imports numpy. At the default `-j` on 100k
+sequences that means 9.0-10.8 GB, against 0.69 GB at `-j1`, for a 1.9x speedup. None of it is input data.
+
+**Measurements** (Tier B, `runs.csv`, peak committed memory of the whole Job Object):
+
+| case | codons | -j1 | default -j (workers) | -j12 |
+|---|---|---|---|---|
+| n1000_L400 | 0.4 M | 18.6 MB | 18.7 MB (1) | 18.6 MB (1) |
+| n10000_L400 | 4.0 M | 647 MB | 98 MB (3) | 99 MB (3) |
+| n100000_L400 | 39.4 M | 688 MB | 9,024-10,849 MB (20) | 7,746 MB (12) |
+
+**Where it comes from** (code reading only, COAL `47f57f1`):
+
+- `core.py:353-360` `_quick_offset0`: for sequences of at least `NP_MIN_CODONS` = 300 codons, a per-process
+  counter accumulates codons. Once it reaches `NP_AFTER_CODONS` = 2,000,000 (`core.py:371`), `_numpy()` imports numpy
+  (`core.py:374-387`). numpy is used only for a uint8 table lookup and compare (`_np_quick`, `core.py:396`), never
+  for BLAS.
+- So the import happens in each process that individually checks 2 M codons, and every number above matches:
+  - n1k: no process reaches 2 M.
+  - n10k at -j1: one process, 4 M codons, imports.
+  - n10k at default (3 workers): about 1.3 M each, none imports.
+  - n100k at -j12: about 3.3 M each, all 12 import (7,746 MB is about 12 × 636 MB).
+  - n100k at default (20 workers): about 1.97 M each, right at the threshold, so some workers import and some don't.
+    That is why that config's peak varies from run to run (9.0-10.8 GB).
+- Things ruled out: work batches are about 2 Mnt (`BATCH_NT`, `pipeline.py:52`) with at most 2×jobs in flight
+  (`pipeline.py:307-323`). `DnaIndex` keeps only offsets and reads sequences on demand (`seqio.py:224-303`). Output is
+  streamed through a temp file (`pipeline.py:638`, `693-698`). None of these accounts for ~630 MB per process.
+- Likely mechanism (**hypothesis, not yet verified**): numpy's bundled OpenBLAS allocates per-thread buffers when it
+  loads, one thread per logical CPU by default (20 here, about 20 × 32 MB). On Windows this is committed memory.
+  If so, the per-process cost grows with core count, and so does the number of workers, so total memory would grow
+  roughly with cores² on bigger machines.
+- To verify (after the timed tiers, untimed): peak commit of `python -c "import numpy"` with and without
+  `OPENBLAS_NUM_THREADS=1`. Also coal-py n100k -j12 with `OPENBLAS_NUM_THREADS=1`, and again with `COAL_NO_NUMPY=1`.
+
+**Suggested fixes, in order:**
+
+1. **Limit BLAS threads before the import.** In `_numpy()`, `os.environ.setdefault(...)` for
+   `OPENBLAS_NUM_THREADS`, `OMP_NUM_THREADS` and `MKL_NUM_THREADS` = "1" before `import numpy`. COAL never calls
+   BLAS, so this costs nothing. It must run before numpy is first imported in that process. A worker initializer
+   (`_init_worker`) is the other place to do it.
+2. **Make the threshold deterministic, or drop numpy here.** The per-process 2 M-codon trigger makes memory depend
+   on how batches land on workers. An alternative is a numpy-free fast path (for example `bytes.translate` over a
+   codon-index encoding), which would remove the dependency's start-up and memory cost entirely.
+3. **Cap workers by memory as well as by size.** `effective_jobs` (`pipeline.py:100`) could also limit workers by
+   available commit divided by a per-worker estimate. This only mitigates; 1 removes the cause.
+- Chunked work or shared memory would **not** help: the per-worker memory is not input data (see "Things ruled out"
+  above).
+
+**Not changed in this benchmark run.** COAL is frozen at `47f57f1`.

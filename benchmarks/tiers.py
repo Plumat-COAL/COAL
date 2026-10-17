@@ -287,6 +287,11 @@ def _sha(path):
     return h.hexdigest()
 
 
+# (case, tool) -> sha256 of an output already graded TRUTH/REF/KNOWN_DIV in this process: a later byte-identical
+# output of the same tool on the same case is "same_as_graded" without re-grading (saves re-reading 1M outputs)
+GOOD_HASH: dict = {}
+
+
 def timed_case(tier, cfg, m, runs, clock, seed, warmup=True, cold=False, extra=None) -> list[dict]:
     """1 warm-up (graded; gates the rest) + `runs` timed runs, strictly sequential. cold=True: one cold run only.
     Every run's output is checked: byte-identical to the graded run, else re-graded."""
@@ -299,8 +304,8 @@ def timed_case(tier, cfg, m, runs, clock, seed, warmup=True, cold=False, extra=N
             "aln_cols": m["aln_cols"], "cds_nt": m["cds_nt"], "batch_size": 1, "mode": "single",
             "jobs": "default" if jobs is None else jobs, "jobs_effective": jobs_effective(tool, jobs, m["cds_nt"]),
             "cpu_temp_c": "", "seed": seed, "harness_commit": HARNESS_COMMIT, **(extra or {})}
-    rows, good_hash = [], None
-    plan = ([("cold", 0)] if cold else ([("warmup", 0)] if warmup else []) + [("timed", i) for i in range(1, runs + 1)])
+    rows, good_hash = [], GOOD_HASH.get((m["dir"], tool))
+    plan =([("cold", 0)] if cold else ([("warmup", 0)] if warmup else []) + [("timed", i) for i in range(1, runs + 1)])
     for k, (kind, idx) in enumerate(plan):
         clock.check()
         method = empty_standby() if kind == "cold" else ""
@@ -317,7 +322,7 @@ def timed_case(tier, cfg, m, runs, clock, seed, warmup=True, cold=False, extra=N
                 g, why, _ = grade.classify(tool, m, case_dir, r, o, None,
                                            OUTDIR / "diffs" / tier / config_name(tool, jobs) / (m["dir"].replace("/", "__") + ".diff"))
                 if g in ("TRUTH", "REF", "KNOWN_DIV"):
-                    good_hash = h
+                    good_hash = GOOD_HASH[(m["dir"], tool)] = h
                 else:
                     r.reason = why
         rows.append({**base, "run_idx": idx, "started_at": started, "cold": int(kind == "cold"), "cold_method": method,
