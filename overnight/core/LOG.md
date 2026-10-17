@@ -219,6 +219,7 @@ tests/test_cpp_vs_reference.py (reference goldens + reference fuzz vs PAL2NAL, c
 - Fuzz vs real PAL2NAL (FUZZ_N=1000, seed 20261017, 4 formats): 440 unexplained differences (clustal 168,
   paml 109, fasta 109, codon 54). Includes every `-blockonly` case (option missing in C++: DEC-4), CLUSTAL inputs
   with '#' mark lines (FZ-1), tfastx notation (FZ-3), -nogap/-nomismatch rules.
+- 2026-10-17 12:25 UTC | CPP-10 FZ-5, CPP-11 ENG-i2 + DEC-4f | reference goldens 279/279 (was 248); random vs reference 887/1000 (was 739); fuzz unexplained 431 (was 440; -nogap differences now counted as deliberate).
 
 ## Run 3 progress (C++ foundations brief: build, readers, tables, CLI, pool, test hookup)
 

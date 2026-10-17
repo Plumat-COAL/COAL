@@ -72,6 +72,7 @@ static double env_double(const char* name, double dflt) {
 // Same batch boundaries as pipeline.py (COAL_BATCH_NT overrides, for tests/tuning).
 static const long long BATCH_NT = env_ll("COAL_BATCH_NT", 2000000);
 static const int WRAP = 60;
+static const char* const MISMATCH_WARNING = " does not correspond to ";
 static const long long BLOCK_CACHE = 64LL << 20;  // bytes of rows held while writing blocks
 
 struct Options {
@@ -790,7 +791,8 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                         throw CoalError(cur[i].error, cur[i].error_code, cur[i].id);
                     }
             for (Item& it : cur) {
-                for (auto& w : it.warnings) warn(it.id + " " + w);
+                for (auto& w : it.warnings)  // CPP-11 (ENG-i2): no mismatch warnings with -nomismatch, as PAL2NAL
+                    if (!(o.nomismatch && w.find(MISMATCH_WARNING) != std::string::npos)) warn(it.id + " " + w);
                 if (it.failed) warn("skipped " + it.error);
                 const Entry* e = rec.add_sequence(it.id, it.warnings, it.failed ? it.error_code : "",
                                                   it.failed ? it.error : "", done);
@@ -803,7 +805,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                 if (staged) {
                     sink.f.write(it.out.data(), (std::streamsize)it.out.size());
                     if (!prot_path.empty()) prot.f.write(it.row.data(), (std::streamsize)it.row.size());
-                    if (o.nogap) mark_nogap_triplets(it.out, bad);
+                    if (o.nogap) mark_nogap_triplets(it.out, bad, *code);
                     if (o.nomismatch)
                         for (int c : it.mcols) drop[(size_t)(c - 1)] = 1;
                     out_ids.push_back(it.id);

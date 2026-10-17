@@ -178,9 +178,11 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
 
     Threaded res;
     for (size_t i = 0; i < row.size(); ++i)
-        if (as_x(row[i]))
+        if (as_x(row[i])) {
             res.warnings.push_back("pepAlnPos " + std::to_string(i + 1) + ": " + row[i] +
                                    " unknown AA type. Taken as 'X'");
+            res.mismatch_cols.push_back(int(i + 1));  // CPP-11 (DEC-4f): -nomismatch removes it, as PAL2NAL
+        }
 
     bool any_residue = false;
     for (char c : row)
@@ -313,18 +315,27 @@ std::string expand(const std::string& row, const std::string& dna, const std::ve
     return out;
 }
 
-void mark_nogap_triplets(const std::string& e, std::vector<char>& bad) {
+void mark_nogap_triplets(const std::string& e, std::vector<char>& bad, const GeneticCode& code) {
     size_t n = e.size() / 3;
     if (bad.size() < n) bad.resize(n, 0);
+    const uint8_t* iu = iupac_table();
+    const uint64_t* trip = iupac_triplet_table();
+    const uint64_t stops = code.codons[(unsigned char)'*'];
+    auto norm = [&](char ch) -> uint8_t {
+        int u = (unsigned char)ch;
+        if (u >= 'a' && u <= 'z') u -= 32;
+        if (u == 'U') u = 'T';
+        return iu[u];
+    };
     for (size_t k = 0; k < n; ++k) {
         const char* t = e.data() + 3 * k;
         if (t[0] == '-' || t[1] == '-' || t[2] == '-') {
             bad[k] = 1;
             continue;
         }
-        bool tu = t[0] == 'T' || t[0] == 'U';
-        if (tu && ((t[1] == 'A' && (t[2] == 'A' || t[2] == 'G' || t[2] == 'R')) || (t[1] == 'G' && t[2] == 'A')))
-            bad[k] = 1;
+        uint8_t a = norm(t[0]), b = norm(t[1]), c = norm(t[2]);
+        if ((a | b | c) & 0xF0) continue;  // not an IUPAC triplet
+        if (stops && (trip[a * 225 + b * 15 + c] & ~stops) == 0) bad[k] = 1;
     }
 }
 

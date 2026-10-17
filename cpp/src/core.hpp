@@ -42,9 +42,10 @@ void update_column_widths(std::vector<int>& widths, const std::string& row);
 // Codon-aligned row (before any column removal).
 std::string expand(const std::string& row, const std::string& dna, const std::vector<int>& widths);
 
-// Mark (bad[k] = 1) the 3-nt output units -nogap removes: a gap, or a stop codon
-// by PAL2NAL's case-sensitive rule ([TU]A[AGR] or [TU]GA).
-void mark_nogap_triplets(const std::string& expanded, std::vector<char>& bad);
+// Mark (bad[k] = 1) the 3-nt output units -nogap removes: a gap, or a stop codon of the selected
+// genetic code (any case, U read as T; an IUPAC triplet counts if every reading is a stop).
+// CPP-10 (reference FZ-5): was PAL2NAL's rule, the standard code's [TU]A[AGR] / [TU]GA, upper case only.
+void mark_nogap_triplets(const std::string& expanded, std::vector<char>& bad, const GeneticCode& code);
 
 // Character ranges [a, b) of the expanded row that survive -nomismatch / -nogap.
 std::vector<std::pair<long long, long long>> keep_slices(const std::vector<int>& widths,
