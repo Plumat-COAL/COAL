@@ -82,8 +82,9 @@ class TestDocsNumbers(unittest.TestCase):
                  f"differences)")
         for rel in ("README.md", "pitch/PITCH.md", "pitch/QA.md", ".claude/skills/coal/SKILL.md"):
             self.expect(rel, claim, "0 undocumented differences")
-        self.expect("README.md", "5,000 cases: 20,000 comparisons, 14,368 byte-identical, 4,723 where both fail, 909")
-        self.expect("tests/README.md", "| fasta | 5,000 | 4,096 | 612 | 292 | 0 |")
+        # CHANGED(MRG-1): was 14,368 / 4,723 / 909 and | 4,096 | 612 | 292 | 0 | (fuzz generator gained a mode)
+        self.expect("README.md", "5,000 cases: 20,000 comparisons, 13,826 byte-identical, 4,681 where both fail, 1,487")
+        self.expect("tests/README.md", "| fasta | 5,000 | 3,937 | 604 | 457 | 2 |")
         for rel in ("README.md", "pitch/PITCH.md", "pitch/QA.md", ".claude/skills/coal/SKILL.md"):
             text = _read(rel)
             for m in re.finditer(r"[^.]*byte-identical to PAL2NAL[^.]*", text):

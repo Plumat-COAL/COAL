@@ -127,23 +127,32 @@ once per output format. PAL2NAL succeeded (non-empty stdout) → COAL must exit 
 failed → COAL must exit non-zero with empty stdout. stderr is not compared. The only allowed differences are the
 script's `DELIBERATE` features (invalid protein characters; the NCBI-vs-PAL2NAL genetic-code differences, measured
 against the real PAL2NAL for every codon × residue and every first-Met codon: table 10 TGA, table 3 GTG, table 11
-ATT/ATC/ATA and table 13 ATA starts; IUPAC codes other than N; `U` residues; RNA first Met in the fallback), and a
-case may differ only if the generator gave it one of them. CI job `pal2nal-fuzz` runs it on every push.
+ATT/ATC/ATA and table 13 ATA starts; IUPAC codes other than N; `U` residues; RNA first Met in the fallback; DNA IDs
+that match only after normalising, in another order, MRG-1: COAL's output must be byte-identical to PAL2NAL's on the
+same case with the DNA records in protein order), and a case may differ only if the generator gave it one of them. CI job `pal2nal-fuzz` runs it on every push.
 
 Result in this repository (seed 20261017, 5,000 cases, 20,000 comparisons; PAL2NAL v14 sha256 2b419417…; after
-FZ-1 … FZ-6): <!-- CHANGED(FZ-claim): was the 3,000-case run before the FZ fixes -->
+the merge with the teammate's branch, MRG-1: the generator has the normalised-ID mode, so the numbers changed):
+<!-- CHANGED(FZ-claim): was the 3,000-case run before the FZ fixes --> <!-- CHANGED(MRG-1): was 4,096 / 612 / 292 / 0 and 2,080 / 2,887 / 33 / 0 -->
 
 | `-output` | cases | identical | both fail | deliberate differences | unexplained |
 |---|---:|---:|---:|---:|---:|
-| clustal | 5,000 | 4,096 | 612 | 292 | 0 |
-| paml | 5,000 | 4,096 | 612 | 292 | 0 |
-| fasta | 5,000 | 4,096 | 612 | 292 | 0 |
-| codon | 5,000 | 2,080 | 2,887 | 33 | 0 |
+| clustal | 5,000 | 3,937 | 604 | 457 | 2 |
+| paml | 5,000 | 3,937 | 604 | 457 | 2 |
+| fasta | 5,000 | 3,937 | 604 | 457 | 2 |
+| codon | 5,000 | 2,015 | 2,869 | 116 | 0 |
 
-Deliberate differences by feature (cases): genetic_code 142, invalid_char 174, iupac 109, nogap_code 648,
-rna_first_met 96, u_residue 23. Cases exercising: '#' marks + `-blockonly` 476, '#' marks shown 488, `-nogap` 1,241,
-`-nomismatch` 1,311, CLUSTAL input 1,742, other codes 2,319, frameshift digits 206 (≥ 4: 114), tfastx 177, unrelated
-DNA 306, masked 592, partly matching IDs 236, more than one 60-nt block 3,834.
+The 2 "unexplained" per format are the harness's own false positive (cases 556 and 1775: an IUPAC codon such as `TGD`,
+read stop/W/C in code 6, under `-nogap`; COAL keeps it by its documented rule, not every reading is a stop, while the
+neutralised reference reads it as a stop). COAL's output in both cases is byte-identical to the engine before the
+merge; the harness is being corrected (same class as the second seed's case 440). Second seed, 4242, 3,000 cases:
+see overnight/integration/CHANGES.md MRG-1.
+
+Deliberate differences by feature (cases): first_met_code 327, genetic_code 147, invalid_char 153, iupac 229,
+nogap_code 654, normalised_ids 678, rna_first_met 177, u_residue 21. Cases exercising: '#' marks + `-blockonly` 488,
+'#' marks shown 466, `-nogap` 1,226, `-nomismatch` 1,235, CLUSTAL input 1,773, other codes 2,279, frameshift digits
+197 (≥ 4: 94), tfastx 161, unrelated DNA 287, masked 583, partly matching IDs 275, normalised IDs 399, more than one
+60-nt block 3,885.
 
 The independent tester's stratified generator (26 strata such as BOM, CR line ends, tfastx, IUPAC, wrong code,
 edge cases; FASTA output; script in the tester's notes, not in the repo), re-run on this branch with 6,000 cases:

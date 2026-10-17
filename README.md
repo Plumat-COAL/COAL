@@ -225,9 +225,12 @@ wrong-code DNA; UTRs, stops, frameshift digits, RNA, lower case; same, shuffled,
 random `-codontable`, `-nogap`, `-nomismatch`, `-blockonly`) runs through PAL2NAL and the drop-in `pal2nal` with the
 same command line in all four formats, and stdout must be byte-identical, or both must fail, except for the
 deliberate differences listed in the script (each is in the list above). CI runs it on every push (job
-`pal2nal-fuzz`). Result here, seed 20261017, 5,000 cases: 20,000 comparisons, 14,368 byte-identical, 4,723 where
-both fail, 909 in cases with a documented deliberate difference, 0 undocumented (per-format counts in
-`tests/README.md`). The independent tester's stratified generator (26 strata, FASTA output) gave, on 6,000 cases:
+`pal2nal-fuzz`). Result here, seed 20261017, 5,000 cases: 20,000 comparisons, 13,826 byte-identical, 4,681 where
+both fail, 1,487 in cases with a documented deliberate difference, 0 undocumented engine differences (per-format counts
+in `tests/README.md`; 6 comparisons in 2 cases are flagged by the harness itself: an IUPAC codon such as `TGD` under
+`-nogap`, which COAL keeps by its documented rule because not every reading is a stop, while the harness's neutralised
+reference reads it as a stop; COAL's output there is unchanged from before the merge, and the harness is being
+corrected). <!-- CHANGED(MRG-1): was 14,368 / 4,723 / 909 (the generator gained the normalised-ID mode) --> The independent tester's stratified generator (26 strata, FASTA output) gave, on 6,000 cases:
 4,625 byte-identical stdout, 631 both fail, 744 documented deliberate differences, 0 undocumented.
 <!-- CHANGED(DEC-4): new --> <!-- CHANGED(FZ-claim): was "3,000 cases: no unexplained difference" -->
 
