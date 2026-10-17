@@ -79,7 +79,7 @@ struct Options {
     std::string pep;
     std::vector<std::string> nucs;
     int table = 1;
-    bool nogap = false, nomismatch = false, quiet = false;
+    bool nogap = false, nomismatch = false, quiet = false, blockonly = false;
     std::string fmt = "fasta";
     std::string out;
     int jobs = 0;
@@ -286,8 +286,10 @@ static void read_rows(std::istream& in, long long offset, long long count, std::
 }
 
 // CLUSTAL / codon output from fixed-stride row files, a few blocks at a time.
+// mask: the '#' mark line (length characters) printed under each block, or empty (CPP-13).
 static void write_blocks(std::ostream& out, const std::string& fmt, std::fstream& grid, long long length,
-                         std::fstream* prot, long long ncol, const std::vector<std::string>& ids) {
+                         std::fstream* prot, long long ncol, const std::vector<std::string>& ids,
+                         const std::string& mask) {
     long long n = (long long)ids.size();
     size_t width = 10;
     for (auto& i : ids) width = std::max(width, i.size());
@@ -316,6 +318,11 @@ static void write_blocks(std::ostream& out, const std::string& fmt, std::fstream
                 for (long long k = 0; k < n; ++k) {
                     text += names[(size_t)k];
                     text.append(rows[(size_t)k], (size_t)a, (size_t)(e - a));
+                    text += '\n';
+                }
+                if (!mask.empty()) {
+                    text.append(width, ' ');
+                    text.append(mask, (size_t)(b * 60), 60);
                     text += '\n';
                 }
                 text += '\n';
@@ -385,6 +392,15 @@ static void write_blocks(std::ostream& out, const std::string& fmt, std::fstream
                 for (long long i = da; i < de; i += 3) {
                     if (i > da) text += ' ';
                     text.append(rows[(size_t)k], (size_t)i, (size_t)std::min(3LL, de - i));
+                }
+                text += '\n';
+            }
+            if (!mask.empty()) {
+                text += pad;
+                long long m0 = std::min(length, b * 60), m1 = std::min(length, (b + 1) * 60);
+                for (long long i = m0; i < m1; i += 3) {
+                    if (i > m0) text += ' ';
+                    text.append(mask, (size_t)i, (size_t)std::min(3LL, m1 - i));
                 }
                 text += '\n';
             }
@@ -602,10 +618,15 @@ using WarnFn = std::function<void(const std::string&)>;
 
 static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnFn& warn, const WarnFn& note) {
     const GeneticCode* code = get_code(o.table);
-    if (o.fmt == "codon" && (o.nogap || o.nomismatch))
-        throw CoalError("\"-output codon\" cannot be combined with -nogap or -nomismatch (as in PAL2NAL)");
+    if (o.fmt == "codon" && (o.nogap || o.nomismatch || o.blockonly))
+        throw CoalError("-output codon cannot be combined with -nogap, -nomismatch or -blockonly (as in PAL2NAL)");
     const bool block = o.fmt == "clustal" || o.fmt == "codon";
-    const bool two_pass = o.nogap || o.nomismatch;
+    // CPP-13 (reference DEC-4): PAL2NAL's '#' block marks of a CLUSTAL input: -blockonly keeps only those
+    // columns; clustal / codon output show the marks under each block when -blockonly is not given
+    const std::string mask = is_clustal(o.pep) ? clustal_mask(o.pep) : std::string();
+    const bool has_marks = mask.find('#') != std::string::npos;
+    const bool block_cols = o.blockonly && has_marks;
+    const bool two_pass = o.nogap || o.nomismatch || block_cols;
     // keep_going + paml: the header needs the final count, so stage the rows
     const bool staged = two_pass || block || (o.keep_going && o.fmt == "paml");
 
@@ -667,7 +688,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
     std::string out_tmp, stage_path, prot_path;
     if (!o.out.empty()) {
         std::string canon = "fmt=" + o.fmt + "|table=" + std::to_string(o.table) + "|nogap=" + std::to_string(o.nogap) +
-                            "|nomismatch=" + std::to_string(o.nomismatch) + "|keep_going=" +
+                            "|nomismatch=" + std::to_string(o.nomismatch) + "|blockonly=" + std::to_string(o.blockonly) + "|keep_going=" +
                             std::to_string(o.keep_going) + "|staged=" + std::to_string(staged);
         std::vector<std::string> inputs{o.pep};
         inputs.insert(inputs.end(), o.nucs.begin(), o.nucs.end());
@@ -720,7 +741,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         sink.open(sink_path, resuming ? get("sink_bytes") : -1);
         if (ck) entries.open(ck->entries, resuming ? get("entries_bytes") : -1);
         if (!prot_path.empty()) prot.open(prot_path, resuming ? get("prot_bytes") : -1);
-        std::vector<char> drop(o.nomismatch ? (size_t)ncol : 0, 0), bad;
+        std::vector<char> drop((o.nomismatch || block_cols) ? (size_t)ncol : 0, 0), bad;
         long long skipped = 0;
         std::vector<std::string> out_ids;  // staged formats: IDs of the written sequences, in order
         if (resuming) {
@@ -783,6 +804,15 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         auto last_ck = std::chrono::steady_clock::now();
         long long done = start;
         // thread each batch while the next one is read; results written in input order (pool.hpp)
+        // CPP-13: with -blockonly, as PAL2NAL, only warnings about kept ('#') columns are printed
+        auto kept_col = [&](const std::string& w) {
+            if (!block_cols || w.compare(0, 10, "pepAlnPos ") != 0) return true;
+            size_t i = 10;
+            long long c = 0;
+            while (i < w.size() && w[i] >= '0' && w[i] <= '9') c = c * 10 + (w[i++] - '0');
+            if (i == 10 || i >= w.size() || w[i] != ':') return true;
+            return c >= 1 && c <= (long long)mask.size() && mask[(size_t)(c - 1)] == '#';
+        };
         auto emit = [&](std::vector<Item>& cur) {
             if (!o.keep_going)
                 for (size_t i = 0; i < cur.size(); ++i)
@@ -792,7 +822,8 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                     }
             for (Item& it : cur) {
                 for (auto& w : it.warnings)  // CPP-11 (ENG-i2): no mismatch warnings with -nomismatch, as PAL2NAL
-                    if (!(o.nomismatch && w.find(MISMATCH_WARNING) != std::string::npos)) warn(it.id + " " + w);
+                    if (!(o.nomismatch && w.find(MISMATCH_WARNING) != std::string::npos) && kept_col(w))
+                        warn(it.id + " " + w);
                 if (it.failed) warn("skipped " + it.error);
                 const Entry* e = rec.add_sequence(it.id, it.warnings, it.failed ? it.error_code : "",
                                                   it.failed ? it.error : "", done);
@@ -847,6 +878,9 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         if (staged) {
             out.open(out_tmp);
             std::vector<std::pair<long long, long long>> sl;
+            if (block_cols)  // CPP-13: -blockonly drops the columns not marked '#'
+                for (long long i = 0; i < ncol; ++i)
+                    if (i >= (long long)mask.size() || mask[(size_t)i] != '#') drop[(size_t)i] = 1;
             if (two_pass) sl = keep_slices(widths, drop, bad);
             else if (wtotal > 0) sl.push_back({0, wtotal});
             long long length = 0;
@@ -880,7 +914,14 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                     g = &grid.f;
                 }
                 if (!prot_path.empty()) prot.f.flush();
-                write_blocks(out.f, o.fmt, *g, length, prot_path.empty() ? nullptr : &prot.f, ncol, out_ids);
+                std::string mask_exp;  // the mark line under each block, one character per output nucleotide
+                if (has_marks && !o.blockonly) {
+                    std::string full;
+                    for (long long i = 0; i < ncol; ++i)
+                        full.append((size_t)widths[(size_t)i], i < (long long)mask.size() && mask[(size_t)i] == '#' ? '#' : ' ');
+                    mask_exp = identity ? full : apply_slices(full, sl);
+                }
+                write_blocks(out.f, o.fmt, *g, length, prot_path.empty() ? nullptr : &prot.f, ncol, out_ids, mask_exp);
                 if (!identity) {
                     grid.f.close();
                     std::error_code ec;
@@ -1008,6 +1049,7 @@ int main(int argc, char** argv) {
     const int a_nomis = ap.add({Kind::Flag, {"-nomismatch", "--nomismatch"}, "", false, {}, true});
     const int a_fmt =
         ap.add({Kind::Value, {"-output", "--output-format"}, "", false, {"fasta", "clustal", "paml", "codon"}, true});
+    const int a_block = ap.add({Kind::Flag, {"-blockonly", "--blockonly"}, "", false, {}, true});  // CPP-13
     const int a_out = ap.add({Kind::Value, {"-o", "--out"}, "", false, {}, true});
     const int a_jobs = ap.add({Kind::Value, {"-j", "--jobs"}, "", true, {}, true});
     const int a_quiet = ap.add({Kind::Flag, {"-q", "--quiet"}, "", false, {}, true});
@@ -1032,6 +1074,7 @@ int main(int argc, char** argv) {
     if (args.given(a_table)) o.table = to_int(args.get(a_table));
     o.nogap = args.given(a_nogap);
     o.nomismatch = args.given(a_nomis);
+    o.blockonly = args.given(a_block);
     if (args.given(a_fmt)) o.fmt = args.get(a_fmt);
     if (args.given(a_out)) o.out = args.get(a_out);
     if (args.given(a_jobs)) o.jobs = to_int(args.get(a_jobs));

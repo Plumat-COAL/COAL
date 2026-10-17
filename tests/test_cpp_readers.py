@@ -94,6 +94,17 @@ PROTEIN_CASES = {
     "clustal_malformed": b"CLUSTAL\n\ns1   MKVAL\nlonely\n",
     "clustal_tab_conservation": b"CLUSTAL\n\ns1 MKV\ns2 MKV\n\t***\n",
     "clustal_nonascii": "CLUSTAL\n\ns1 MKV\nsé2 MKV\n".encode("utf-8"),
+    # CPP-12 (reference FZ-1, FZ-2) and CPP-13 (mark lines)
+    "nonascii_description": ">s1 Krüppel-like factor 4\nMKVAL\n>s2 ok\nMKV\n".encode("utf-8"),
+    "nonascii_desc_after_nbsp": ">s1\u00a0desc é\nMKVAL\n".encode("utf-8"),
+    "nonascii_desc_after_tab_latin1": b">s1\tna\xefve\nMKVAL\n",
+    "nonascii_id_only": "> é\nMKVAL\n".encode("utf-8"),
+    "nonascii_id_then_desc": ">sé1 desc\nMKVAL\n".encode("utf-8"),
+    "clustal_leading_blank": b"\n  \nCLUSTAL W\n\ns1 MKV\ns2 MKV\n",
+    "clustal_hash_marks": b"CLUSTAL W\n\ns1    MKVAL\ns2    MKV-L\n#     ##  #\n\ns1    GG\ns2    GA\n      #\n",
+    "clustal_repeat_header": b"CLUSTAL W\n\ns1 MKV\ns2 MKV\n\nCLUSTAL W (again)\n\ns1 AL\ns2 AL\n",
+    "clustal_mark_short_line": b"CLUSTAL\n\nseq1      MKVALMKVAL\nseq2      MKVALMKVA-\n          ##\nseq1      W\nseq2      W",
+    "clustal_mark_after_last": b"CLUSTAL\n\ns1 MK\ns2 MK\n   #\n\ns1 VL\ns2 VL\n",
 }
 
 # name -> list of file contents (several files = multi-file DNA input)
@@ -144,7 +155,10 @@ class ReaderCase(unittest.TestCase):
         ref = self.ref
         try:
             recs = ref.read_clustal(path) if ref.is_clustal(path) else list(ref.iter_fasta(path))
-            return {"records": [list(r) for r in recs]}
+            out = {"records": [list(r) for r in recs]}
+            if ref.is_clustal(path) and hasattr(ref, "clustal_mask"):  # CPP-13: PAL2NAL's '#' block marks
+                out["mask"] = ref.clustal_mask(path)
+            return out
         except (ref.InputFormatError, OSError) as e:
             return {"error": str(e)}
 

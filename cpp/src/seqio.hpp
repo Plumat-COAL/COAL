@@ -60,6 +60,8 @@ private:
 };
 
 bool is_clustal(const std::string& path);
+// PAL2NAL's '#' mark line of a CLUSTAL alignment (one character per column; see seqio.cpp).
+std::string clustal_mask(const std::string& path);
 
 class DnaIndex {
 public:
