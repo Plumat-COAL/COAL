@@ -1,11 +1,13 @@
 """Rewrite the assembled site for a deploy before the first release exists (FIN-A9).
 
-    python scripts/site_without_release.py _site/index.html
+    python scripts/site_without_release.py _site/*.html
 
 Every `releases/latest/download/...` link would give a 404 until the first GitHub Release is published, so
 .github/workflows/pages.yml runs this on the copy it deploys (never on site/ itself) when `gh release view` finds no
 published release: download links become a "first release coming soon" note, the pip commands install from the
 repository instead, and a short notice goes at the top of the page. Running it twice changes nothing more.
+CHANGED(WEB-13): takes any number of pages (the site is several pages now); a page with no release download link
+(the guide, the cite page, the explainer) is left exactly as it is.
 """
 from __future__ import annotations
 
@@ -31,16 +33,25 @@ def rewrite(html: str) -> str:
     return html
 
 
+def needs_rewrite(html: str) -> bool:
+    """WEB-13: only pages that link to a release file get the notice."""
+    return LINK.search(html) is not None or REPO + "/releases/latest/download/" in html
+
+
 def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else argv
-    if len(argv) != 1:
+    if not argv:
         print(__doc__.strip().splitlines()[2].strip(), file=sys.stderr)
         return 2
-    with open(argv[0], encoding="utf-8") as fh:
-        html = fh.read()
-    with open(argv[0], "w", encoding="utf-8", newline="\n") as fh:
-        fh.write(rewrite(html))
-    print(f"{argv[0]}: download links replaced (no published release yet)")
+    for path in argv:
+        with open(path, encoding="utf-8") as fh:
+            html = fh.read()
+        if not needs_rewrite(html):
+            print(f"{path}: no release download links, unchanged")
+            continue
+        with open(path, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(rewrite(html))
+        print(f"{path}: download links replaced (no published release yet)")
     return 0
 
 
