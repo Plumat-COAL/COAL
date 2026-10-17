@@ -6,6 +6,7 @@ on:
 
 jobs:
   python:
+    # Core install only (no extras): the GUI and MCP tests skip here; the gui / mcp jobs below run them.
     name: Python ${{ matrix.python }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
@@ -28,8 +29,73 @@ jobs:
           GRADIO_ANALYTICS_ENABLED: "False"
         run: python -m unittest discover -s tests_app -v
 
+  # CHANGED(APP-16/APP-C5): was no job installing the extras (GUI and MCP tests always skipped); now one job per
+  # extra, each in its own environment, with COAL_REQUIRE_EXTRAS making the tests fail instead of skip.
+  gui:
+    name: GUI extra (.[gui], real Gradio)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install COAL with the gui extra
+        run: python -m pip install -e ".[gui]"
+      - name: Dependency check
+        run: python -m pip check
+      - name: App tests (GUI tests required)
+        env:
+          GRADIO_ANALYTICS_ENABLED: "False"
+          COAL_REQUIRE_EXTRAS: gui
+        run: python -m unittest discover -s tests_app -v
+
+  mcp:
+    name: MCP extra (.[mcp], stdio server)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install COAL with the mcp extra
+        run: python -m pip install -e ".[mcp]"
+      - name: Dependency check
+        run: python -m pip check
+      - name: App tests (MCP tests required)
+        env:
+          COAL_REQUIRE_EXTRAS: mcp
+        run: python -m unittest discover -s tests_app -v
+
+  extras-together:
+    # Informational: can .[gui] and .[mcp] share one environment? (gradio[mcp] 5.x may need mcp 1.x while the
+    # mcp extra pins 2.2.0.) Never fails the build; read the job summary.
+    name: "Info: gui + mcp extras in one environment"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Resolve both extras together
+        shell: bash
+        run: |
+          if python -m pip install --dry-run -e ".[gui,mcp]" > resolve.txt 2>&1; then
+            echo "gui + mcp extras resolve together." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "gui + mcp extras CONFLICT: install them in separate environments." >> "$GITHUB_STEP_SUMMARY"
+            tail -n 20 resolve.txt >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   cpp:
-    name: C++ build (if present)
+    # CHANGED(APP-C4): was a green "C++ build (if present)" with every step skipped, and once cpp/ existed it
+    # would have tested the Python engine (COAL_IMPL is read by nothing); now: a clear "not applicable" notice
+    # while cpp/ is absent, and once it exists the binary and tests/test_cpp_vs_python.py are required and the
+    # job fails if those tests are skipped.
+    name: C++ engine (not applicable until cpp/CMakeLists.txt exists)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -45,18 +111,31 @@ jobs:
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "cpp/CMakeLists.txt not found: skipping the C++ build."
+            echo "::notice title=C++ engine::NOT APPLICABLE: cpp/CMakeLists.txt does not exist on this branch, so nothing was built or tested."
+            echo "C++ engine: **not applicable** (no cpp/CMakeLists.txt on this branch). Nothing was built or tested." >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Build
         if: steps.detect.outputs.present == 'true'
         run: |
           cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Release
           cmake --build cpp/build --config Release -j 2
+      - name: Require the binary and its comparison tests
+        if: steps.detect.outputs.present == 'true'
+        shell: bash
+        run: |
+          ls cpp/build/coal cpp/build/Release/coal.exe 2>/dev/null | head -n 1 | grep -q . \
+            || { echo "::error::cpp/CMakeLists.txt exists but no cpp/build/coal binary was built"; exit 1; }
+          test -f tests/test_cpp_vs_python.py \
+            || { echo "::error::cpp/ exists but tests/test_cpp_vs_python.py (C++ vs Python comparison) is missing"; exit 1; }
       - name: Install COAL
         if: steps.detect.outputs.present == 'true'
         run: python -m pip install -e .
-      - name: Engine tests with the C++ implementation
+      - name: C++ vs Python tests (must not skip)
         if: steps.detect.outputs.present == 'true'
-        env:
-          COAL_IMPL: cpp
-        run: python -m unittest discover -s tests -v
+        shell: bash
+        run: |
+          python -m unittest tests.test_cpp_vs_python -v 2>&1 | tee cpp_tests.txt
+          test "${PIPESTATUS[0]}" -eq 0
+          if grep -qiE "skipped|OK \(skipped" cpp_tests.txt; then
+            echo "::error::C++ comparison tests were skipped, so the C++ engine was not exercised"; exit 1
+          fi

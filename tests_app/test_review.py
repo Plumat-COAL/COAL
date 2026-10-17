@@ -563,5 +563,49 @@ class TestFinding19NoDrift(unittest.TestCase):
                 self.assertEqual(ifs[-1], len(body) - 1, path)  # finding 16: nothing after the main block
 
 
+class TestFinding16AndC4C5Ci(unittest.TestCase):
+    def setUp(self):
+        with open(os.path.join(ROOT, ".github", "workflows", "ci.yml"), encoding="utf-8") as fh:
+            self.ci = fh.read()
+
+    def _job(self, name):
+        m = re.search(rf"^  {name}:\n(.*?)(?=^  [\w-]+:\n|\Z)", self.ci, re.S | re.M)
+        self.assertIsNotNone(m, name)
+        return m.group(1)
+
+    def test_extras_installed_and_required_in_separate_jobs(self):
+        gui, mcp = self._job("gui"), self._job("mcp")
+        self.assertIn('pip install -e ".[gui]"', gui)
+        self.assertIn("COAL_REQUIRE_EXTRAS: gui", gui)
+        self.assertNotIn("[mcp]", gui.replace("gradio[mcp]", ""))
+        self.assertIn('pip install -e ".[mcp]"', mcp)
+        self.assertIn("COAL_REQUIRE_EXTRAS: mcp", mcp)
+        self.assertNotIn("[gui]", mcp)
+
+    def test_cpp_job_cannot_go_green_without_exercising_cpp(self):
+        cpp = self._job("cpp")
+        self.assertIn("not applicable", cpp.lower())
+        self.assertIn("tests/test_cpp_vs_python.py", cpp)
+        self.assertIn("skipped", cpp)
+        self.assertNotIn("COAL_IMPL:", cpp)  # an env var nothing reads
+
+    def test_require_switch_turns_skips_into_failures(self):
+        import subprocess
+        import sys
+        env = dict(os.environ, COAL_REQUIRE_EXTRAS="gui")
+        r = subprocess.run([sys.executable, "-m", "unittest", "test_gui"], capture_output=True, text=True,
+                           encoding="utf-8", cwd=os.path.join(ROOT, "tests_app"), env=env, timeout=300)
+        try:
+            import gradio  # noqa: F401
+            has = True
+        except ImportError:
+            has = False
+        if has:
+            self.assertEqual(r.returncode, 0, r.stderr[-2000:])
+        else:
+            self.assertNotEqual(r.returncode, 0)
+            self.assertNotIn("skipped", r.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

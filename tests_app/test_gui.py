@@ -6,10 +6,21 @@ import unittest
 
 os.environ.setdefault("GRADIO_ANALYTICS_ENABLED", "False")
 HAS_GRADIO = importlib.util.find_spec("gradio") is not None
+# APP-16: the CI job that installs .[gui] sets COAL_REQUIRE_EXTRAS=gui, so a missing Gradio fails instead of skipping
+REQUIRE_GUI = "gui" in os.environ.get("COAL_REQUIRE_EXTRAS", "").split(",")
 
 
-@unittest.skipUnless(HAS_GRADIO, "gradio not installed")
+@unittest.skipUnless(HAS_GRADIO or REQUIRE_GUI, "gradio not installed (pip install -e .[gui])")
 class TestGui(unittest.TestCase):
+    def setUp(self):
+        import shutil
+        import tempfile
+        from coal_app import core
+        old = core.RUNS_DIR
+        core.RUNS_DIR = tempfile.mkdtemp(prefix="coal_test_runs_")
+        self.addCleanup(shutil.rmtree, core.RUNS_DIR, True)
+        self.addCleanup(setattr, core, "RUNS_DIR", old)
+
     def test_run_ui_function(self):
         from coal_app import core, ui
         p, d = core.example_paths("mito")
