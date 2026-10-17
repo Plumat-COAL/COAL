@@ -873,7 +873,7 @@ void RunReport::finish_impl(const RowsFn& rows, const DnaFn& dna, bool aborted) 
         }
         if (!real_mismatches(e).empty()) marks.push_back(k);
     }
-    std::set<long long> fset(failed.begin(), failed.begin() + (long long)std::min<size_t>(failed.size(), HINT_SAMPLE));
+    std::set<long long> fset(failed.begin(), failed.begin() + (std::ptrdiff_t)std::min<size_t>(failed.size(), HINT_SAMPLE));
     std::set<long long> mset(marks.begin(), marks.end());
     std::set<long long> need = fset;
     need.insert(mset.begin(), mset.end());
