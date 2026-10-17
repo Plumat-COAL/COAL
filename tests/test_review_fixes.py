@@ -254,5 +254,19 @@ class TestEngF_Interrupts(TempDirCase):
         self.assertEqual(list(self.tmpdir.iterdir()), [])
 
 
+# ---------------------------------------------------------------- ENG-g
+class TestEngG_Table3Starts(TempDirCase):
+    def test_gtg_start_in_table3(self):
+        (self.d / "gp.fa").write_text(">g\nMKVAS\n")
+        (self.d / "gn.fa").write_text(">g\nGTGAAAGTTGCTTCT\n")
+        r = coal(["gp.fa", "gn.fa", "-codontable", "3"], self.d)
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, ">g\nGTGAAAGTTGCTTCT\n", ""))
+
+    def test_table3_start_set(self):
+        sys.path.insert(0, str(SRC))
+        from coal.tables import get_code
+        self.assertEqual(set(get_code(3).starts), {"ATA", "ATG", "GTG"})
+
+
 if __name__ == "__main__":
     unittest.main()

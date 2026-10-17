@@ -41,6 +41,7 @@ When `-nomismatch` (or `-nogap`) removes every column, PAL2NAL prints an empty l
 | invalid_chars | Drops a codon silently | Error, exit 1 |
 | table10 (`-codontable 10`) | TGA treated as stop → mismatch warnings; `-nomismatch` drops those columns | TGA = Cys (NCBI). Same output, no warnings |
 | table11, table13 | ATA (an NCBI start codon) not accepted as the first Met → warning | Accepted, no warning |
+| table3, GTG as first Met (no golden case: the table3 fixture starts with ATA/ATG) | Unverified; if its table 3 lacks GTG, a GTG start is accepted only through the fallback (needs ≥ 20 residues) | GTG is a table-3 start codon (current NCBI: ATA, ATG, GTG) (ENG-g) |
 | `.` in protein alignment | Row gets shorter (misaligned output) | Treated as a gap |
 | Ambiguous DNA bases | Fixed list of accepted combinations | Accepted if every possible codon gives the right amino acid |
 | Fallback where more than half the codons do not match (e.g. unrelated protein and DNA; no golden case) | Not observed; the fallback pattern fits at offset 0, so presumably output + per-codon warnings | Error, exit 1 (ENG-c) |
