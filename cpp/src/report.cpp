@@ -607,6 +607,115 @@ static bool break_event(const std::string& row, const std::string& raw_dna, int 
     return false;
 }
 
+// ------------------------------------------------------------------ genetic-code search (report.py search_codes)
+
+// CHANGED(IMP-E-B): one gene fits a code: it threads, with no definite (A/C/G/T) mismatch and no suspect notice
+static bool gene_fits(const HintGene& g, const GeneticCode& gc) {
+    Threaded it;
+    try {
+        it = thread_one(g.id, g.row, g.dna, gc);
+    } catch (const CoalError&) {
+        return false;
+    }
+    long long col;
+    std::string aa, codon;
+    for (auto& w : it.warnings)
+        if (parse_mismatch(w, col, aa, codon) && !is_ambiguous_codon(w.substr(w.rfind(' ') + 1))) return false;
+    for (auto& x : it.notices)
+        if (is_suspect(sget(notice_message(g.id, x), "code"))) return false;
+    return true;
+}
+
+// CHANGED(IMP-E-D, IMP-E-B): the hint's search, shared by the end-of-run hint and the early notice; a code is dropped
+// as soon as it can no longer fit as many genes as the best so far (same result as testing all). tied empty = none.
+// memo: (sequence, code) -> fits, shared by the early notice and the end-of-run hint
+static CodeSearch search_codes(const std::vector<long long>& tested, const std::vector<long long>& problems,
+                               const std::map<long long, HintGene>& data, int table, FitMemo& memo) {
+    const long long nt = (long long)tested.size();
+    auto bad_under = [&](int c, long long at_least, bool& ok) {
+        std::set<long long> bad;
+        ok = true;
+        const GeneticCode* gc = get_code(c);
+        for (long long k : tested) {
+            auto key = std::make_pair(k, c);
+            auto hit = memo.find(key);
+            bool fits = hit != memo.end() ? hit->second : (memo[key] = gene_fits(data.at(k), *gc));
+            if (!fits) {
+                bad.insert(k);
+                if ((long long)bad.size() > nt - at_least) {
+                    ok = false;
+                    break;
+                }
+            }
+        }
+        return bad;
+    };
+    CodeSearch out;
+    bool ok_now;
+    std::set<long long> bad_now = bad_under(table, 0, ok_now);
+    out.fits_now = nt - (long long)bad_now.size();
+    std::vector<std::pair<long long, int>> results;
+    long long best = out.fits_now + 1;
+    for (int c : supported_tables()) {
+        if (c == table) continue;
+        bool ok;
+        std::set<long long> bad = bad_under(c, best, ok);
+        if (!ok) continue;
+        long long fit = nt - (long long)bad.size(), fixed = 0;
+        for (long long k : problems) fixed += bad_now.count(k) && !bad.count(k);
+        if (fixed && fit > out.fits_now) {
+            results.push_back({fit, c});
+            best = std::max(best, fit);
+        }
+    }
+    if (results.empty()) return out;
+    for (auto& r : results) out.top = std::max(out.top, r.first);
+    for (auto& r : results)
+        if (r.first == out.top) out.tied.push_back(r.second);
+    std::stable_sort(out.tied.begin(), out.tied.end(), [&](int a, int b) {
+        return std::make_pair(code_distance(table, a), a) < std::make_pair(code_distance(table, b), b);
+    });
+    // CHANGED(PRE-4): the standard code 1 first when it is among the tied codes (as report.py)
+    out.standard = out.tied.size() > 1 && std::find(out.tied.begin(), out.tied.end(), 1) != out.tied.end();
+    if (out.standard) {
+        out.tied.erase(std::find(out.tied.begin(), out.tied.end(), 1));
+        out.tied.insert(out.tied.begin(), 1);
+    }
+    return out;
+}
+
+static std::string do_(long long k) {
+    return k == 0 ? std::string("none do") : k == 1 ? std::string("only 1 does") : std::to_string(k) + " do";
+}
+
+// CHANGED(IMP-E-B): new (report.py early_code_notice): the suggestion said before the per-codon warnings, from the
+// first HINT_SAMPLE genes. Empty: no code does better.
+std::string early_code_notice(const RowsFn& rows, const DnaFn& dna, int table, long long total, FitMemo& memo) {
+    std::map<long long, HintGene> data;
+    std::vector<long long> tested, problems;
+    const GeneticCode* gc = get_code(table);
+    rows([&](long long k, const std::string& pid, const std::string& row) {
+        if (k >= HINT_SAMPLE) return false;
+        data[k] = HintGene{pid, row, dna(k)};
+        tested.push_back(k);
+        bool fits = memo[std::make_pair(k, table)] = gene_fits(data[k], *gc);
+        if (!fits) problems.push_back(k);
+        return k + 1 < HINT_SAMPLE;
+    });
+    if (problems.empty()) return "";
+    CodeSearch f = search_codes(tested, problems, data, table, memo);
+    if (f.tied.empty()) return "";
+    const int c = f.tied[0];
+    const long long nt = (long long)tested.size();
+    std::string who = nt == total ? (f.top == total ? "all " + std::to_string(total) + " sequences match"
+                                                    : std::to_string(f.top) + " of " + std::to_string(total) +
+                                                          " sequences match")
+                                  : std::to_string(f.top) + " of the first " + std::to_string(nt) + " sequences match";
+    return "wrong genetic code? Under genetic code " + std::to_string(c) + " (" + app_code_name(c) + "), " + who +
+           " their protein; under code " + std::to_string(table) + ", " + do_(f.fits_now) + ". Re-run with -codontable " +
+           std::to_string(c) + ".";
+}
+
 // ------------------------------------------------------------------ RunReport
 
 RunReport::RunReport(const std::vector<std::string>& argv, const std::string& pep, const std::vector<std::string>& nucs,
@@ -948,81 +1057,19 @@ void RunReport::finish_impl(const RowsFn& rows, const DnaFn& dna, bool aborted) 
     if ((long long)tested.size() > HINT_SAMPLE) tested.resize(HINT_SAMPLE);
     if (tested.empty()) return;
     std::set<long long> want(tested.begin(), tested.end());
-    std::map<long long, std::pair<std::string, std::string>> data;  // k -> (id, row)
-    std::map<long long, std::string> dnas;
+    std::map<long long, HintGene> data;
     rows([&](long long k, const std::string& pid, const std::string& row) {
-        if (want.count(k)) {
-            data[k] = {pid, row};
-            dnas[k] = dna(k);
-        }
+        if (want.count(k)) data[k] = HintGene{pid, row, dna(k)};
         return data.size() < want.size();
     });
     const long long nt = (long long)tested.size();
-    // CHANGED(IMP-E-D): stops (ok = false) as soon as fewer than at_least of the tested genes can fit
-    auto bad_under = [&](int c, long long at_least, bool& ok) {
-        std::set<long long> bad;
-        ok = true;
-        const GeneticCode* gc = get_code(c);
-        for (long long k : tested) {
-            auto& d = data[k];
-            Threaded it;
-            bool b = false;
-            try {
-                it = thread_one(d.first, d.second, dnas[k], *gc);
-            } catch (const CoalError&) {
-                b = true;
-            }
-            if (!b) {
-                long long col;
-                std::string aa, codon;
-                for (auto& w : it.warnings)
-                    if (parse_mismatch(w, col, aa, codon) && !is_ambiguous_codon(w.substr(w.rfind(' ') + 1))) b = true;
-                for (auto& x : it.notices)
-                    if (is_suspect(sget(notice_message(d.first, x), "code"))) b = true;
-            }
-            if (b) bad.insert(k);
-            if ((long long)bad.size() > nt - at_least) {
-                ok = false;
-                break;
-            }
-        }
-        return bad;
-    };
-    bool ok_now;
-    std::set<long long> bad_now = bad_under(table_, 0, ok_now);
-    long long fits_now = nt - (long long)bad_now.size();
-    std::vector<std::pair<long long, int>> results;
-    long long best = fits_now + 1;
-    for (int c : supported_tables()) {
-        if (c == table_) continue;
-        bool ok;
-        std::set<long long> bad = bad_under(c, best, ok);
-        if (!ok) continue;
-        long long fit = nt - (long long)bad.size(), fixed = 0;
-        for (long long k : problems) fixed += bad_now.count(k) && !bad.count(k);
-        if (fixed && fit > fits_now) {
-            results.push_back({fit, c});
-            best = std::max(best, fit);
-        }
-    }
-    if (results.empty()) return;
-    long long top = 0;
-    for (auto& r : results) top = std::max(top, r.first);
-    std::vector<int> tied;
-    for (auto& r : results)
-        if (r.first == top) tied.push_back(r.second);
-    std::stable_sort(tied.begin(), tied.end(), [&](int a, int b) {
-        return std::make_pair(code_distance(table_, a), a) < std::make_pair(code_distance(table_, b), b);
-    });
-    // CHANGED(PRE-4): the standard code 1 first when it is among the tied codes (as report.py)
-    bool standard = tied.size() > 1 && std::find(tied.begin(), tied.end(), 1) != tied.end();
-    if (standard) {
-        tied.erase(std::find(tied.begin(), tied.end(), 1));
-        tied.insert(tied.begin(), 1);
-    }
+    CodeSearch found = search_codes(tested, problems, data, table_, fit_memo);
+    if (found.tied.empty()) return;
+    const std::vector<int>& tied = found.tied;
+    const bool standard = found.standard;
+    const long long top = found.top, fits_now = found.fits_now;
     int c = tied[0];
     std::string name = app_code_name(c);
-    auto do_ = [](long long k) { return k == 0 ? std::string("none do") : k == 1 ? std::string("only 1 does") : std::to_string(k) + " do"; };
     std::string text;
     std::string T = std::to_string(table_), C = std::to_string(c);
     if (nt == n) {

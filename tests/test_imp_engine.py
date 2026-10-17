@@ -162,8 +162,42 @@ class TestCheapHint(unittest.TestCase):
         self.assertIn(f"COAL tested {report_mod.HINT_SAMPLE} of the 120 sequences", err)
         self.assertIn("Re-run with -codontable 1.", err)
         # every sampled gene under code 2 and under each code that ties for the best (1, 4, 6, 10, 11, 15, 16 here),
-        # the other 9 codes only until they can no longer win: 431 calls, not 17 x 50 = 850
+        # the other 9 codes only until they can no longer win: 431 calls, not 17 x 50 = 850 (the early notice of
+        # IMP-E-B tests the same 50 first; the end-of-run hint reuses its answers)
         self.assertLess(n, 9 * report_mod.HINT_SAMPLE)
+
+
+class TestSuggestionFirst(unittest.TestCase):
+    """IMP-E-B: one `coal: notice:` with the genetic-code suggestion before the per-codon warnings, naming the code the
+    end-of-run summary names."""
+
+    def _check(self, args, code, cwd=None):
+        rc, out, err = run_py(args, cwd)
+        lines = err.splitlines()
+        first = next(i for i, x in enumerate(lines) if "pepAlnPos" in x)
+        notes = [i for i, x in enumerate(lines) if x.startswith("coal: notice: wrong genetic code?")]
+        self.assertEqual(len(notes), 1, err)
+        self.assertLess(notes[0], first)
+        self.assertTrue(lines[notes[0]].endswith(f"Re-run with -codontable {code}."), lines[notes[0]])
+        self.assertTrue(lines[-1].endswith(f"Re-run with -codontable {code}."), lines[-1])
+        return lines
+
+    def test_mito_example_with_code_1(self):
+        lines = self._check(["protein.aln.fasta", "dna.fasta"], 2, cwd=ROOT / "examples" / "mito")
+        self.assertIn("all 24 sequences match their protein; under code 1, none do.", lines[0])
+
+    def test_synthetic_with_code_2(self):
+        tmp = Path(tempfile.mkdtemp(prefix="coal_first_"))
+        self.addCleanup(shutil.rmtree, tmp, True)
+        pep, nuc = make_synthetic(tmp, 80, 60)
+        lines = self._check([pep, nuc, "-codontable", "2"], 1)
+        self.assertIn("50 of the first 50 sequences match their protein; under code 2, none do.", lines[0])
+
+    def test_no_notice_when_quiet_nomismatch_or_right_code(self):
+        d = ROOT / "examples" / "mito"
+        for extra in (["-q"], ["-nomismatch"], ["-codontable", "2"]):
+            rc, out, err = run_py(["protein.aln.fasta", "dna.fasta", *extra], d)
+            self.assertNotIn("wrong genetic code?", err, extra)
 
 
 if __name__ == "__main__":

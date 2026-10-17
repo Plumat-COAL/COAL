@@ -1055,6 +1055,11 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
             sink.f << paml_header(nseq, wtotal);
         }
 
+        // CHANGED(IMP-E-B): the genetic-code suggestion before the per-codon warnings (pipeline.py early_code_notice)
+        if (!o.quiet && !o.nomismatch) {
+            std::string hint = early_code_notice(rows_fn, dna_fn, o.table, nseq, rec.fit_memo);
+            if (!hint.empty()) note(hint);
+        }
         // pass 2: batches of ~BATCH_NT nucleotides; thread batch k while reading batch k+1
         ProteinReader pr(o.pep);
         {

@@ -653,6 +653,14 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
             def _shown(warns):  # the warnings -blockonly keeps (as on stderr)
                 return [w for w in warns if not (keep_col and (m := _ALNPOS.search(" " + w))
                                                  and not keep_col(int(m.group(1))))]
+            if note and warn and not nomismatch:
+                # CHANGED(IMP-E-B): the genetic-code suggestion comes first, before the per-codon warnings it explains
+                # (was only in the last summary line, after e.g. 834 warnings on coxI). See overnight/integration/CHANGES.md
+                from .report import early_code_notice
+                hint = early_code_notice(rows(), lambda k: dna.get(pairing[k]), table, nseq,
+                                         rec.fit_memo if rec is not None else None)
+                if hint:
+                    note(hint)
             done = start
             prog = Progress(nseq) if progress and nseq > PROGRESS_MIN_SEQS else None
             last_ck = time.monotonic()

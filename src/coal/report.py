@@ -369,6 +369,103 @@ def strip_version(seq_id: str) -> str:
     return re.sub(r"\.\d+$", "", seq_id)
 
 
+def _fits(pid, row, dna, table) -> bool:
+    """A gene fits a code: it threads, with no definite (A/C/G/T) mismatch and no suspect notice (the hint's test)."""
+    from .core import CoalError, thread_one
+    try:
+        it = thread_one(pid, row, dna, table)
+    except CoalError:
+        return False  # (the app drops the whole code when one gene fails: --keep-going exits 2)
+    return not (any(_MISMATCH.match(w) and not is_ambiguous_codon(w.rsplit(" ", 1)[-1]) for w in it.warnings)
+                or any(notice_message(pid, x)["code"] in SUSPECT_CODES for x in it.notices))
+
+
+def search_codes(tested, problems, data, table, memo=None):
+    """The genetic-code hint's search: the codes under which most of the `tested` genes fit (data[k] = (id, row,
+    DNA)), if better than `table` and fixing at least one of `problems`. Returns (tied codes, best first; the
+    standard code is among them and first; how many fit the best; how many fit `table`) or None.
+    CHANGED(IMP-E-D): a code is dropped as soon as it can no longer fit as many genes as the best so far (same result
+    as testing every gene under every code). CHANGED(IMP-E-B): shared by the end-of-run hint and the early notice;
+    memo[(k, code)] keeps each answer, so the end-of-run hint does not redo the early notice's work.
+    teammate's C++ mirrors it (cpp/src/report.cpp search_codes). See overnight/integration/CHANGES.md"""
+    nt = len(tested)
+
+    def bad_under(c, at_least=0):
+        bad = set()
+        for k in tested:
+            key = (k, c)
+            ok = memo.get(key) if memo is not None else None
+            if ok is None:
+                ok = _fits(*data[k], c)
+                if memo is not None:
+                    memo[key] = ok
+            if not ok:
+                bad.add(k)
+                if len(bad) > nt - at_least:
+                    return None
+        return bad
+    # fits under the code used: the same test (not the statuses; in a stopped run the genes never reached
+    # would otherwise count as fixed by any code)
+    bad_now = bad_under(table)
+    fits_now = nt - len(bad_now)
+    results = []
+    best = fits_now + 1  # a code must fit more genes than the code used, and as many as the best one so far
+    for c in SUPPORTED:
+        if c == table:
+            continue
+        bad = bad_under(c, best)
+        if bad is None:
+            continue
+        fit = nt - len(bad)
+        fixed = sum(1 for k in problems if k in bad_now and k not in bad)
+        if fixed and fit > fits_now:
+            results.append((fit, c))
+            best = max(best, fit)
+    if not results:
+        return None
+    top = max(f for f, _ in results)
+    tied = sorted((c for f, c in results if f == top), key=lambda c: (code_distance(table, c)[0], c))
+    # CHANGED(PRE-4): was always the tied code that differs least from the one used (one_broken_gene run with
+    # code 2: "code 4 ... Codes 1, 10, 11, 15, 16 and 6 fit as well"); now the standard code 1 when it is among
+    # them (by far the most common right answer for nuclear genes). See overnight/integration/CHANGES.md
+    standard = 1 in tied and len(tied) > 1
+    if standard:
+        tied = [1] + [x for x in tied if x != 1]
+    return tied, standard, top, fits_now
+
+
+def _do(k: int) -> str:
+    return "none do" if k == 0 else ("only 1 does" if k == 1 else f"{k} do")
+
+
+def early_code_notice(rows, dna_of, table: int, total: int, memo=None) -> str | None:
+    """CHANGED(IMP-E-B): new. The genetic-code suggestion said before the per-codon warnings: the first HINT_SAMPLE
+    genes (rows: iterable of (id, row) in input order; dna_of(k): the DNA paired with gene k) are tested under
+    `table`; if any does not fit, under every other code, as the end-of-run hint does. None if no code does better.
+    teammate's C++ mirrors it (cpp/src/report.cpp early_code_notice). See overnight/integration/CHANGES.md"""
+    data, problems = {}, []
+    for k, (pid, row) in enumerate(rows):
+        if k >= HINT_SAMPLE:
+            break
+        data[k] = (pid, row, dna_of(k))
+        ok = _fits(*data[k], table)
+        if memo is not None:
+            memo[(k, table)] = ok
+        if not ok:
+            problems.append(k)
+    if not problems:
+        return None
+    found = search_codes(list(data), problems, data, table, memo)
+    if found is None:
+        return None
+    tied, _standard, top, fits_now = found
+    c, nt = tied[0], len(data)
+    who = (f"all {total} sequences match" if top == total else f"{top} of {total} sequences match") if nt == total \
+        else f"{top} of the first {nt} sequences match"
+    return (f"wrong genetic code? Under genetic code {c} ({APP_CODE_NAMES[c]}), {who} their protein; under code "
+            f"{table}, {_do(fits_now)}. Re-run with -codontable {c}.")
+
+
 class RunReport:
     """Collects one run's results. keep_entries=False (no --report/--json): ok sequences are only counted."""
 
@@ -377,6 +474,7 @@ class RunReport:
                  hint: bool = True):
         self.t0 = time.perf_counter()
         self.want_hint = hint  # CHANGED(IMP-E-D): False (-q without --report/--json): the hint is never shown
+        self.fit_memo: dict = {}  # CHANGED(IMP-E-B): (sequence, code) -> fits, shared with early_code_notice
         self.keep_entries = keep_entries
         self.argv = list(argv)
         self.pep, self.nucs, self.out, self.fmt, self.table = pep, list(nucs), out, fmt, table
@@ -538,7 +636,6 @@ class RunReport:
                 traceback.print_exc()
 
     def _finish(self, rows, dna, pairing, aborted):
-        from .core import CoalError, thread_one
         n = len(self.ids) if self.ids is not None else len(self.kinds)
         failed = {k for k, e in self.entries.items() if e["status"] == "failed"
                   and not any(isinstance(m.get("column"), int) for m in e["messages"])}
@@ -573,57 +670,16 @@ class RunReport:
                 data[k] = (pid, row, dna.get(pairing[k]))
             if len(data) == len(want):
                 break
-        def bad_under(c, at_least=0):
-            """The tested genes that do not fit code c; None as soon as fewer than at_least of them can fit."""
-            bad = set()
-            limit = nt - at_least
-            for k in tested:
-                pid, row, s = data[k]
-                try:
-                    it = thread_one(pid, row, s, c)
-                except CoalError:
-                    bad.add(k)  # (the app drops the whole code when one gene fails: --keep-going exits 2)
-                else:
-                    if any(_MISMATCH.match(w) and not is_ambiguous_codon(w.rsplit(" ", 1)[-1]) for w in it.warnings) \
-                            or any(notice_message(pid, x)["code"] in SUSPECT_CODES for x in it.notices):
-                        bad.add(k)
-                if len(bad) > limit:
-                    return None
-            return bad
-        nt = len(tested)
-        # fits under the code used: the same test (not the statuses; in a stopped run the genes never reached
-        # would otherwise count as fixed by any code)
-        bad_now = bad_under(self.table)
-        fits_now = nt - len(bad_now)
-        results = []
-        best = fits_now + 1  # a code must fit more genes than the code used, and as many as the best one so far
-        for c in SUPPORTED:
-            if c == self.table:
-                continue
-            bad = bad_under(c, best)
-            if bad is None:
-                continue
-            fit = nt - len(bad)
-            fixed = sum(1 for k in problems if k in bad_now and k not in bad)
-            if fixed and fit > fits_now:
-                results.append((fit, c))
-                best = max(best, fit)
-        if not results:
+        found = search_codes(tested, problems, data, self.table, self.fit_memo)
+        if found is None:
             return
-        top = max(f for f, _ in results)
-        tied = sorted((c for f, c in results if f == top), key=lambda c: (code_distance(self.table, c)[0], c))
-        # CHANGED(PRE-4): was always the tied code that differs least from the one used (one_broken_gene run with
-        # code 2: "code 4 ... Codes 1, 10, 11, 15, 16 and 6 fit as well"); now the standard code 1 when it is among
-        # them (by far the most common right answer for nuclear genes). See overnight/integration/CHANGES.md
-        standard = 1 in tied and len(tied) > 1
-        if standard:
-            tied = [1] + [x for x in tied if x != 1]
+        tied, standard, top, fits_now = found
+        nt = len(tested)
         c = tied[0]
         total, table = n, self.table
         name = APP_CODE_NAMES[c]
 
-        def do(k):
-            return "none do" if k == 0 else ("only 1 does" if k == 1 else f"{k} do")
+        do = _do
         if nt == total:
             who = f"all {total} sequences match" if top == total else f"{top} of {total} sequences match"
             text = f"Under genetic code {c} ({name}), {who} their protein; under code {table}, {do(fits_now)}."
