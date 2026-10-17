@@ -169,7 +169,7 @@ class TestPagesWorkflow(unittest.TestCase):
 
 # WEB-8: screenshot now WebP (lossless, 51 KB instead of 234 KB); logo, mark and icons added.
 SITE_FILES = ("index.html", "style.css", "main.js", "sw.js", "favicon.svg", "explainer.html", "img/broken-gene.webp",
-              "assets/coal-mark.svg", "assets/coal-logo.png", "assets/coal-logo@2x.png", "assets/coal-logo-dark.png",
+              "assets/coal-mark.svg", "assets/coal-mark-dark.svg", "assets/coal-logo.png", "assets/coal-logo@2x.png", "assets/coal-logo-dark.png",
               "assets/coal-logo-dark@2x.png", "assets/favicon-32.png", "assets/apple-touch-icon.png",
               "assets/icon-512.png", "assets/coal-train.svg")
 TEXT_EXT = (".html", ".css", ".js", ".svg", ".txt", ".json", ".webmanifest")
@@ -307,14 +307,16 @@ class TestSiteFiles(unittest.TestCase):
         self.assertIn('<main id="main">', self.index)
         self.assertIn('href="#main"', self.index)
         for img in re.findall(r"<img\b[^>]*>", self.index):
-            if 'src="assets/coal-mark.svg"' in img:  # WEB-8: decorative, next to the text "COAL" in the same link
+            if 'src="assets/coal-mark-dark.svg"' in img:  # CHANGED(WEB-12): was coal-mark.svg. WEB-8: decorative, next to the text "COAL" in the same link
                 self.assertIn('alt=""', img)
                 continue
             self.assertRegex(img, r'\salt="[^"]{10,}"', img)
-        self.assertRegex(self.index, r'<a class="home" href="\./"><img src="assets/coal-mark\.svg"[^>]*><span>COAL</span></a>')
+        self.assertRegex(self.index, r'<a class="home" href="\./"><img src="assets/coal-mark-dark\.svg"[^>]*><span>COAL</span></a>')
         css = _read("site", "style.css")
         self.assertIn("prefers-reduced-motion", css)
-        self.assertIn("prefers-color-scheme: dark", css)
+        # CHANGED(WEB-12): was "prefers-color-scheme: dark" (light page with a dark variant); the page is dark only
+        self.assertIn("color-scheme: dark;", css)
+        self.assertNotIn("prefers-color-scheme", re.sub(r"/\*.*?\*/", "", css, flags=re.S))
         self.assertIn(":focus-visible", css)
 
     def test_size_budget(self):

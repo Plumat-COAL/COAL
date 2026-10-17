@@ -2,56 +2,41 @@
    slate #4A4744, ember #FF6A13, amber #FFC24B). CHANGED(WEB-11): one column, no sidebar logo, no section markers,
    three download cards, ember only on the download buttons and link hover. See overnight/integration/CHANGES.md
    Contrast (WCAG 2.1, computed): every text/background pair below is at least 4.5:1 (figures in CHANGES.md WEB-11).
-   Ember is never used for text on the light background (2.77:1); it is a button fill under dark text. */
+   Ember is a button fill under dark text, and the cards' top edge. */
 
+/* CHANGED(WEB-12): was a light page with a dark variant under prefers-color-scheme; now dark only (owner's choice:
+   "the whole site dark / darker in colour"). Print still uses the light colours (see @media print). */
 :root {
-  --paper: #FCFBFA;
-  --ink: #1E1E1E;          /* headings */
-  --text: #2A2A2A;         /* charcoal */
-  --muted: #4A4744;        /* slate: secondary text */
-  --line: #DDD8D2;
-  --code-bg: #F2F0ED;
-  --codon-bg: #E9E5E0;
+  --paper: #121110;
+  --ink: #F1EEEA;          /* headings */
+  --text: #E4E0DB;
+  --muted: #B3ADA6;        /* secondary text: 8.2:1 on the page */
+  --line: #3A3633;
+  --code-bg: #1C1A19;
+  --codon-bg: #2E2B28;
+  --card-bg: #2E2724;      /* WEB-12: download cards, warm slate; text 11.2:1, muted 6.6:1 */
+  --card-line: #5A534D;
+  --card-code-bg: #1C1A19;
   --ember: #FF6A13;
   --ember-hover: #FF8A45;
-  --on-ember: #1E1E1E;
+  --on-ember: #1E1E1E;     /* 5.8:1 on ember */
   --amber: #FFC24B;
-  --focus: #1E1E1E;
-  --ok: #2E6B3A;
-  --rail: #2A2A2A;
-  --tr-body: #1E1E1E;      /* footer train */
-  --tr-boiler: #2A2A2A;
-  --tr-hub: #4A4744;
-  --tr-smoke: #CFC8BE;
-  --tr-coal: #2A2A2A;
-  --tr-slate: #4A4744;
+  --focus: #FFC24B;
+  --ok: #8FD19E;
+  --rail: #57524D;
+  --tr-body: #57524D;      /* footer train */
+  --tr-boiler: #6A655F;
+  --tr-hub: #2A2827;
+  --tr-smoke: #8A847D;
+  --tr-coal: #45413E;
+  --tr-slate: #6A655F;
   --ss-blue: #0B5CAD;
   --sans: Seravek, "Gill Sans Nova", Ubuntu, Calibri, "Segoe UI", "DejaVu Sans", system-ui, sans-serif;
   --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
   --gutter: 16px;
   --measure: 42rem;
   --wide: 60rem;
-  color-scheme: light dark;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #161514;
-    --ink: #F1EEEA;
-    --text: #E4E0DB;
-    --muted: #B3ADA6;
-    --line: #3A3633;
-    --code-bg: #201E1C;
-    --codon-bg: #2E2B28;
-    --focus: #FFC24B;
-    --ok: #8FD19E;
-    --rail: #57524D;
-    --tr-body: #57524D;
-    --tr-boiler: #6A655F;
-    --tr-hub: #2A2827;
-    --tr-smoke: #8A847D;
-    --tr-coal: #45413E;
-    --tr-slate: #6A655F;
-  }
+  color-scheme: dark;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -85,10 +70,6 @@ kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3p
 .home { display: inline-flex; align-items: center; gap: 0.5rem; font-weight: 800; font-size: 1.1rem;
   letter-spacing: 0.04em; text-decoration: none; color: var(--ink); }
 .home img { display: block; width: 38px; height: 30px; }
-@media (prefers-color-scheme: dark) {
-  /* The mark's charcoal squares would vanish on the dark page: give it the light tile the Windows icon uses. */
-  .home img { background: #F4F2EF; border-radius: 4px; padding: 3px; width: 44px; height: 36px; }
-}
 .top ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.25rem 1.1rem; }
 .top li a { text-decoration-color: transparent; }
 .top li a:hover { text-decoration-color: var(--ember); }
@@ -109,7 +90,10 @@ h1 { font-size: 2.25rem; font-weight: 800; letter-spacing: 0.02em; margin: 0 0 0
 .download { padding: 1.5rem 0 1.5rem; }
 .cards { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 48rem) { .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-.card { border: 1px solid var(--line); border-radius: 4px; padding: 1rem 1.1rem 0.4rem; min-width: 0; }
+.card { background: var(--card-bg); border: 1px solid var(--card-line); border-top: 3px solid var(--ember);
+  border-radius: 4px; padding: 1rem 1.1rem 0.4rem; min-width: 0; }  /* CHANGED(WEB-12): was no fill, page-coloured border */
+.card .cmd { background: var(--card-code-bg); border-color: var(--card-line); }
+.card code { background: var(--card-code-bg); }
 .card h3 { font-size: 1rem; font-weight: 700; margin: 0 0 0.7rem; }
 .card p { margin: 0 0 0.7rem; }
 .card .fine { font-size: 0.9rem; }
@@ -237,6 +221,9 @@ details.ss[open] summary { margin-bottom: 0.75rem; }
 }
 @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 @media print {
+  /* WEB-12: print on white paper */
+  :root { --paper: #FFFFFF; --ink: #1E1E1E; --text: #2A2A2A; --muted: #4A4744; --line: #DDD8D2; --code-bg: #F2F0ED;
+    --codon-bg: #E9E5E0; color-scheme: light; }
   .download, .top nav, .copy, .rail { display: none; }
   a { text-decoration: none; }
 }

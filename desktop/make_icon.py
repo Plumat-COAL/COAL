@@ -46,11 +46,17 @@ def squares():
             yield x, row * 112, k
 
 
-def mark_svg() -> str:
+# CHANGED(WEB-12): new. On a dark background charcoal and slate squares are lightened (the favicon's dark colours),
+# 5.1:1 and 8.4:1 on the site's #121110 page; ember and amber are unchanged.
+DARK_COLOURS = dict(COLOURS, c="#8C8782", s="#B5AFA8")
+
+
+def mark_svg(dark: bool = False) -> str:
+    colours = DARK_COLOURS if dark else COLOURS
     groups = {k: [] for k in "csea"}
     for x, y, k in squares():
         groups[k].append(f'<rect x="{x}" y="{y}" width="{SQUARE}" height="{SQUARE}" rx="{RADIUS}"/>')
-    body = "".join(f'<g fill="{COLOURS[k]}">{"".join(v)}</g>' for k, v in groups.items())
+    body = "".join(f'<g fill="{colours[k]}">{"".join(v)}</g>' for k, v in groups.items())
     return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {WIDTH} {HEIGHT}">{body}</svg>\n'
 
 
@@ -113,6 +119,8 @@ def main(argv):
         os.makedirs(os.path.join(site, "assets"), exist_ok=True)
         with open(os.path.join(site, "assets", "coal-mark.svg"), "w", encoding="utf-8", newline="\n") as fh:
             fh.write(mark_svg())
+        with open(os.path.join(site, "assets", "coal-mark-dark.svg"), "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(mark_svg(dark=True))  # WEB-12: the dark-only site's header mark
         with open(os.path.join(site, "favicon.svg"), "w", encoding="utf-8", newline="\n") as fh:
             fh.write(favicon_svg())
         draw(32).save(os.path.join(site, "assets", "favicon-32.png"), optimize=True)
