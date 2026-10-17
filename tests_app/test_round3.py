@@ -82,8 +82,13 @@ class TestR3D2CiConditions(unittest.TestCase):  # R3-D2
     def test_explainer_job_is_required(self):
         self.assertIsNone(self.re.search(r"^\s+continue-on-error:", self._job("explainer"), self.re.M))
 
-    def test_windows_gui_job_still_informational(self):
-        self.assertIn("continue-on-error: ${{ matrix.os == 'windows-latest' }}", self._job("gui"))
+    # CHANGED(FINAL-1): was test_windows_gui_job_still_informational (asserted continue-on-error on Windows);
+    # Windows passed in CI, so the GUI job and the desktop step must now be required on every OS.
+    def test_windows_gui_job_is_required(self):
+        self.assertIsNone(self.re.search(r"^\s+continue-on-error:", self._job("gui"), self.re.M))
+
+    def test_desktop_step_is_required_on_windows(self):
+        self.assertIsNone(self.re.search(r"^\s+continue-on-error:", self._step("python", "Desktop wrapper tests"), self.re.M))
 
 
 BOM = "\ufeff"
