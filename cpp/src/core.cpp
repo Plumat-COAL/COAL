@@ -1,6 +1,7 @@
 #include "core.hpp"
 
 #include <algorithm>
+#include <cstring>
 #include <set>
 
 namespace coal {
@@ -153,7 +154,54 @@ std::string py_repr_char(unsigned char c) {
     return std::string("'") + char(c) + "'";
 }
 
+// CHANGED(ENG-UX-13): the per-sequence inconsistency error, plus a hint when the inputs look swapped (core.py
+// inconsistent_message). See overnight/integration/CHANGES.md
+std::string inconsistent_message(const std::string& seq_id, const std::string& detail, const std::string& row,
+                                 const std::string& dna) {
+    std::string msg = seq_id + ": protein and DNA are inconsistent (" + detail + ")";
+    if (looks_like_dna(row))
+        msg += "; its protein row looks like DNA: are the two files the other way round? "
+               "(coal PROTEIN_ALIGNMENT DNA_FASTA)";
+    else if (looks_like_protein(dna))
+        msg += "; its DNA looks like protein: the second file must hold the coding DNA, not protein sequences";
+    return msg;
+}
+
 }  // namespace
+
+static const long long SNIFF_MIN = 20;  // as core.py
+
+static void count_letters(const std::string& text, const char* set, long long& letters, long long& in_set) {
+    letters = in_set = 0;
+    for (char ch : text) {
+        char c = (ch >= 'a' && ch <= 'z') ? char(ch - 32) : ch;
+        if (c < 'A' || c > 'Z') continue;
+        ++letters;
+        if (std::strchr(set, c)) ++in_set;
+    }
+}
+
+bool looks_like_dna(const std::string& text) {
+    long long n, k;
+    count_letters(text, "ACGTUN", n, k);
+    return n >= SNIFF_MIN && 10 * k >= 9 * n;
+}
+
+bool looks_like_protein(const std::string& text) {
+    long long n, k;
+    count_letters(text, "EFIJLOPQZ", n, k);
+    return n >= SNIFF_MIN && 10 * k >= n;
+}
+
+std::string row_length_message(const std::string& label, long long ncol, long long n, const std::string& pid,
+                               const std::string& rows) {
+    if (looks_like_dna(rows))
+        return label + " looks like DNA, not a protein alignment: give the protein alignment first and the DNA "
+                       "second (coal PROTEIN_ALIGNMENT DNA_FASTA)";
+    return "protein alignment rows have different lengths (" + std::to_string(ncol) + " and " + std::to_string(n) +
+           ", at " + pid + "): is " + label + " an aligned protein file, e.g. from MAFFT or MUSCLE? Every row of an "
+           "alignment has the same length, gaps included";
+}
 
 std::string prepare_row(const std::string& aln) {
     std::string r = aln;
@@ -214,8 +262,12 @@ static void note_ambiguous(Threaded& res, const std::string& seq_id, const Targe
 Threaded thread_one(const std::string& seq_id, const std::string& row, const std::string& raw_dna,
                     const GeneticCode& code, bool strict) {
     std::set<unsigned char> bad;
-    for (char c : row)
-        if (!valid_char(c)) bad.insert((unsigned char)c);
+    size_t first_bad = std::string::npos;
+    for (size_t i = 0; i < row.size(); ++i)
+        if (!valid_char(row[i])) {
+            bad.insert((unsigned char)row[i]);
+            if (first_bad == std::string::npos) first_bad = i;
+        }
     if (!bad.empty()) {
         std::string list = "[";
         bool firstc = true;
@@ -224,7 +276,11 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
             list += py_repr_char(c);
             firstc = false;
         }
-        throw CoalError(seq_id + ": invalid protein alignment characters " + list + "]", "invalid_protein", seq_id);
+        // CHANGED(ENG-UX-15): + where the first one is and what is allowed (core.py)
+        throw CoalError(seq_id + ": invalid protein alignment characters " + list + "] (first at column " +
+                            std::to_string(first_bad + 1) + "): a protein alignment may hold only amino-acid letters, "
+                            "'-' or '.' gaps, '*' stops and frameshift digits",
+                        "invalid_protein", seq_id);
     }
 
     Threaded res;
@@ -244,7 +300,9 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
             any_residue = true;
             break;
         }
-    if (!any_residue) throw CoalError(seq_id + ": protein sequence is empty", "empty", seq_id);
+    if (!any_residue)  // CHANGED(ENG-UX-16): + why and what to do (core.py)
+        throw CoalError(seq_id + ": protein sequence is empty (its alignment row has only gaps): remove it from both files",
+                        "empty", seq_id);
 
     Target target;
     target.code.resize(raw_dna.size());
@@ -274,7 +332,7 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
 
     // 2. anchor fallback
     auto ranges = anchors(row);
-    if (ranges.empty()) throw CoalError(seq_id + ": protein and DNA are inconsistent (no match found)", "inconsistent", seq_id);
+    if (ranges.empty()) throw CoalError(inconsistent_message(seq_id, "no match found", row, raw_dna), "inconsistent", seq_id);
     std::vector<Token> pattern;
     int col = 1;
     bool found_any = false;
@@ -293,7 +351,7 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
         col += int(b - a);
     }
     s = find(target, pattern);
-    if (s < 0) throw CoalError(seq_id + ": protein and DNA are inconsistent (no match found)", "inconsistent", seq_id);
+    if (s < 0) throw CoalError(inconsistent_message(seq_id, "no match found", row, raw_dna), "inconsistent", seq_id);
     res.dna = raw_dna.substr((size_t)s, (size_t)len);
 
     // mismatch report: first residue Met -> ATG/CTG/GTG, others -> genetic code
@@ -334,8 +392,8 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
     const std::string N = std::to_string(nres), K = std::to_string(nchk), B = std::to_string(nbad_chk);
     if (nchk && 2 * nbad_chk > nchk) {
         if (strict)
-            throw CoalError(seq_id + ": protein and DNA are inconsistent (" + B + " of " + K +
-                                " checkable codons do not match the protein)",
+            throw CoalError(inconsistent_message(seq_id, B + " of " + K + " checkable codons do not match the protein",
+                                                 row, raw_dna),
                             "inconsistent", seq_id);
         res.notices.push_back(seq_id + ": protein and DNA are probably unrelated: " + B + " of " + K +
                               " checkable codons do not match the protein. The row was written as PAL2NAL writes "
@@ -348,9 +406,9 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
                                      : "the gene has only " + N + " codons";
         const std::string what = namb ? "the gene" : "it";
         if (strict)
-            throw CoalError(seq_id + ": protein and DNA are inconsistent (no 10-residue segment of the protein was "
-                                "found in the DNA and " + few + ": too few to tell where " + what +
-                                " starts in the longer DNA)",
+            throw CoalError(inconsistent_message(seq_id, "no 10-residue segment of the protein was found in the DNA "
+                                                 "and " + few + ": too few to tell where " + what +
+                                                 " starts in the longer DNA", row, raw_dna),
                             "inconsistent", seq_id);
         res.notices.push_back(seq_id + ": position of the gene in the DNA is a guess: no 10-residue segment of the "
                               "protein was found in the DNA and " + few + ", too few to tell where " + what +

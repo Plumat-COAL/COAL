@@ -168,7 +168,10 @@ class TestReport(unittest.TestCase):
                           ("failed", ["frameshift", "inconsistent"]), ("not_checked", ["not_reached"])])
         self.assertIsNone(r["output"])
         self.assertEqual(r["summary"]["failed"], 1)
-        self.assertIn("coal: summary: 1 sequence of 4 could not be converted (first: g2:", err)
+        # CHANGED(ENG-UX-2/ENG-UX-5): was "1 sequence of 4 could not be converted (first: g2: <the error again>"
+        self.assertIn("coal: summary: g2: Frameshift at column", err)
+        self.assertIn("coal: summary: The run stopped at g2: 1 sequence was not checked and no output was written. Add "
+                      "--keep-going to write the other sequences and leave this one out.", err)
 
     def test_input_error_report(self):
         write_genes(self.d, 3)
@@ -206,12 +209,13 @@ class TestSummaryAndHints(unittest.TestCase):
             self.assertEqual(len(hints), 1, err)
             self.assertEqual(hints[0]["suggested_codontable"], 2)
             self.assertIn("Vertebrate mitochondrial", hints[0]["text"])
-            self.assertIn("Re-run with code 2?", err)
+            self.assertIn("Re-run with code 2?", hints[0]["text"])  # CHANGED(ENG-UX-7): the report keeps the app's text
+            self.assertIn("Re-run with -codontable 2.", err)          # ... the command line names the option
             # MRG-2b: the app's FIN-A1/FIN-C5 wording
             self.assertIn("coal: summary: 30 of 30 sequences have codons that do not match their amino acid (kept "
                           "in the alignment). Under genetic code 2 (Vertebrate mitochondrial), all 30 sequences match "
                           "their protein; under code 1, none do. Codes 5 and 13 fit these sequences too: choose the "
-                          "code of the organism and organelle the genes come from. Re-run with code 2?", err)
+                          "code of the organism and organelle the genes come from. Re-run with -codontable 2.", err)  # ENG-UX-7
             self.assertEqual((hints[0]["checked"], hints[0]["fit"], hints[0]["fit_current"]), (30, 30, 0))
             # with the right code: clean run, no summary, no hint
             rc, _, err = run(d, ["pep.fasta", "nuc.fasta", "-codontable", "2", "-o", "o.fa", "--report", "r.json"])

@@ -44,6 +44,9 @@ CODE_NAMES = {
 TABLE_NAMES = CODE_NAMES  # the teammate's name for it
 
 SUSPECT_CODES = ("suspect_unrelated", "suspect_position")
+# CHANGED(ENG-UX-9): the start and the end of the note before the methods text of a run with mostly problem genes
+NOT_READY = "Fix the warnings first:"
+AS_IT_STANDS = "Methods text for this run as it stands:"
 # one character per sequence in RunReport.kinds
 KIND_CHAR = {"ok": "o", "mismatch": "m", "unchecked": "u", "other": "x", "flagged": "f", "excluded": "e",
              "not_checked": "n"}
@@ -366,6 +369,7 @@ class RunReport:
         self.errors: list[dict] = []
         self.output: dict | None = None
         self.gc_hint: dict | None = None
+        self.gc_hint_cli: str | None = None        # the hint as the command line says it (ENG-UX-7)
         self.exit_code = 0
         self.resumed_from: int | None = None
         self._dict = None
@@ -589,6 +593,10 @@ class RunReport:
             text += (f" Code{'s' if len(tied) > 2 else ''} {others} fit{'' if len(tied) > 2 else 's'} "
                      + (f"as well, but code {c} differs least from code {table}." if closer else
                         "these sequences too: choose the code of the organism and organelle the genes come from."))
+        # CHANGED(ENG-UX-7): the summary line said "Re-run with code 2?" (the app's button wording); on the command line
+        # it now names the option. The report keeps the app's text (the app shows its own button; contract
+        # unchanged). See overnight/integration/CHANGES.md
+        self.gc_hint_cli = text + f" Re-run with -codontable {c}."
         text += f" Re-run with code {c}?"
         self.gc_hint = {"code": "genetic_code", "text": text, "suggested_codontable": c,
                         "checked": nt, "fit": top, "fit_current": fits_now}
@@ -713,14 +721,14 @@ class RunReport:
         n = len(self.ids) if self.ids is not None else len(self.kinds)
         ent = self.entries
         lines = []
-        hint = self.gc_hint
+        hint = self.gc_hint_cli if self.gc_hint else None  # CHANGED(ENG-UX-7): the command-line wording
         k = 0 if self.nomismatch else kc.get("m", 0)
         if k:
             fate = "removed by -nomismatch" if self.nomismatch else "kept in the alignment"
             s = (f"{_n(k)} of {_n(n)} sequences " + ("has" if k == 1 else "have")
                  + f" codons that do not match their amino acid ({fate}).")
             if hint:
-                s += " " + hint["text"]
+                s += " " + hint
             lines.append(s)
         k = 0 if self.nomismatch else kc.get("u", 0)
         if k:
@@ -735,24 +743,36 @@ class RunReport:
                          f"{first['messages'][0]['text']}) Remove {'it' if len(fl) == 1 else 'them'} before "
                          f"analysis, or use --strict to refuse such genes.")
         ex = sorted(i for i, e in ent.items() if gene_kind(e) == "excluded")
+        c = self.counts()
         if ex:
             first = ent[ex[0]]
-            left = (" and " + ("was" if len(ex) == 1 else "were") + " left out") if self.keep_going and \
-                not self.errors else ""
             why = next((m["text"] for m in first["messages"] if m["code"] not in ("frameshift", "missing_dna")
                         and not (m["code"] == "inconsistent" and "column" in m)), first["messages"][-1]["text"])
-            where = next((" " + m["text"] for m in first["messages"] if "column" in m), "")
-            s = f"{_seqs(len(ex))} of {_n(n)} could not be converted{left} (first: {first['id']}: {why}.{where})"
-            if hint and (self.nomismatch or not kc.get("m")):
-                s += " " + hint["text"]
-            lines.append(s)
-        if self.errors and not ex:
-            lines.append(f"The run failed: {self.errors[0]['text']}")
-        c = self.counts()
-        if (self.errors or ex) and self.exit_code not in (0, 2) and c["not_checked"]:
-            left = c["not_checked"]
-            lines.append(f"The run stopped there: {_seqs(left)} {'was' if left == 1 else 'were'} not checked and no "
-                         f"output was written.")
+            where = next((m["text"] for m in first["messages"] if "column" in m), "")
+            gc = " " + hint if hint and (self.nomismatch or not kc.get("m")) else ""
+            if self.keep_going:
+                left = (" and " + ("was" if len(ex) == 1 else "were") + " left out") if not self.errors else ""
+                where = " " + where if where else ""
+                lines.append(f"{_seqs(len(ex))} of {_n(n)} could not be converted{left} (first: {first['id']}: "
+                             f"{why}.{where}){gc}")
+            else:
+                # CHANGED(ENG-UX-2, ENG-UX-5): was "1 sequence of 20 could not be converted (first: <id>: <the error
+                # just printed>. <where>)" and "The run stopped there: ... no output was written." (no way out named);
+                # now where the gene breaks, without repeating the error, and what to do (--keep-going).
+                # See overnight/integration/CHANGES.md
+                if where:
+                    lines.append(f"{first['id']}: {where}{gc}")
+                elif gc:
+                    lines.append(gc.lstrip())
+                left = c["not_checked"]
+                s = f"The run stopped at {first['id']}"
+                s += (f": {_seqs(left)} {'was' if left == 1 else 'were'} not checked and no output was written."
+                      if left else ", so no output was written.")
+                if n > 1:
+                    s += " Add --keep-going to write the other sequences and leave this one out."
+                lines.append(s)
+        # CHANGED(ENG-UX-5): a run-level error (e.g. the counts differ) was printed twice: "coal: error: X" and
+        # "coal: summary: The run failed: X" (+ "The run stopped there: ... not checked"); now once, as the error.
         if self.pairing == "normalised":
             k = sum(1 for m in (self.seq_pairing or []) if m == "normalised")
             j = next((i for i, m in enumerate(self.seq_pairing or []) if m == "normalised"), None)
@@ -831,7 +851,15 @@ class RunReport:
                 cmd = cmd.replace(pth, os.path.basename(pth))
         if cmd:
             parts.append(f"Command: {cmd}")
-        return " ".join(parts)
+        text = " ".join(parts)
+        if total and 2 * ok < total:
+            # CHANGED(ENG-UX-9): new. A "ready-to-paste" methods text for a run where most genes have problems read as
+            # if the alignment were fine; it now starts with a note to fix the warnings first (the app shows the
+            # report's methods_text as it is). See overnight/integration/CHANGES.md
+            text = (f"{NOT_READY} only {ok} of {total} sequences matched their protein exactly, so this alignment is "
+                    f"probably not ready to use (see the hints and the messages for each sequence). {AS_IT_STANDS} "
+                    + text)
+        return text
 
     def to_dict(self, methods: bool = True) -> dict:
         entries = self._all_entries()

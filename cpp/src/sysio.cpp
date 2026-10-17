@@ -100,9 +100,10 @@ std::vector<std::string> spool_inputs(const std::vector<std::string>& args,
             out.push_back(a);
             continue;
         }
-        if (fs::is_directory(a, ec)) throw InputError(os_error(EISDIR, a), "file_error");
+        // CHANGED(ENG-UX-4): was Python's "[Errno N] ...: '<path>'"; now "cannot open '<path>': <reason>"
+        if (fs::is_directory(a, ec)) throw InputError(open_error(a), "file_error");
         std::ifstream src(a, std::ios::binary);
-        if (!src) throw InputError(os_error(errno ? errno : ENOENT, a), "file_error");
+        if (!src) throw InputError(open_error(a), "file_error");
         std::string base = fs::path(a).filename().string();
         for (char& c : base)
             if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' ||
@@ -160,6 +161,9 @@ OutTarget resolve_output(const std::string& out) {
     OutTarget t;
     t.real = real_path(out);
     std::error_code ec;
+    // CHANGED(ENG-UX-12): -o naming a folder failed only at the very end ("cannot write od: Is a directory")
+    if (fs::is_directory(t.real, ec))
+        throw CoalError("cannot write " + out + ": it is a folder, not a file (give a file name with -o)", "file_error");
     t.existing = fs::is_regular_file(t.real, ec);
     bool exists = fs::exists(t.real, ec);
     t.direct = exists && (!t.existing || fs::hard_link_count(t.real, ec) > 1);
@@ -184,6 +188,23 @@ OutTarget resolve_output(const std::string& out) {
     }
 #endif
     return t;
+}
+
+// CHANGED(ENG-UX-12): as pipeline.py _output_error: ENOENT in a folder that exists is not "does not exist",
+// permission denied says what to do, no -o names the temp folder. See overnight/integration/CHANGES.md
+std::string output_error(const std::string& out, int err) {
+    std::error_code ec;
+    std::string folder = out.empty() ? fs::temp_directory_path(ec).string()
+                                     : fs::absolute(fs::path(out)).lexically_normal().parent_path().string();
+    std::string why;
+    if (err == ENOENT && !fs::is_directory(folder, ec)) why = "folder " + folder + " does not exist";
+#ifdef ELOOP
+    else if (err == ELOOP) why = "folder " + folder + " is a symbolic link loop";
+#endif
+    else if (err == ENOTDIR) why = folder + " is not a folder";
+    else if (err == EACCES || err == EPERM) why = "permission denied (choose a folder you can write to)";
+    else why = std::strerror(err);
+    return "cannot write " + (out.empty() ? "a temporary file in " + folder : out) + ": " + why;
 }
 
 void copy_mode(const std::string& real, const std::string& tmp) {

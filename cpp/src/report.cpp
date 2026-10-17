@@ -1014,6 +1014,8 @@ void RunReport::finish_impl(const RowsFn& rows, const DnaFn& dna, bool aborted) 
                 (closer ? "as well, but code " + C + " differs least from code " + T + "."
                         : std::string("these sequences too: choose the code of the organism and organelle the genes come from."));
     }
+    // CHANGED(ENG-UX-7): the summary line names the option; the report keeps the app's text (report.py)
+    gc_hint_cli_ = text + " Re-run with -codontable " + C + ".";
     text += " Re-run with code " + C + "?";
     gc_hint_ = Json::object();
     gc_hint_.set("code", "genetic_code");
@@ -1106,7 +1108,7 @@ std::vector<std::string> RunReport::summary_lines() const {
         std::string fate = nomismatch_ ? "removed by -nomismatch" : "kept in the alignment";
         std::string s = fmt_n(k) + " of " + fmt_n(n) + " sequences " + (k == 1 ? "has" : "have") +
                         " codons that do not match their amino acid (" + fate + ").";
-        if (has_gc_hint_) s += " " + sget(gc_hint_, "text");
+        if (has_gc_hint_) s += " " + gc_hint_cli_;  // CHANGED(ENG-UX-7)
         lines.push_back(s);
     }
     k = nomismatch_ ? 0 : kc['u'];
@@ -1128,35 +1130,42 @@ std::vector<std::string> RunReport::summary_lines() const {
                         sget(first, "id") + ": " + sget(msgs_of(first)[0], "text") + ") Remove " + (one ? "it" : "them") +
                         " before analysis, or use --strict to refuse such genes.");
     }
+    auto c = counts();
     if (!ex.empty()) {
         const Json& first = entries_.at(ex[0]);
         const auto& ms = msgs_of(first);
-        std::string left = keep_going_ && errors_.empty() ? std::string(" and ") + (ex.size() == 1 ? "was" : "were") + " left out" : "";
         std::string why = ms.empty() ? "" : sget(ms.back(), "text"), where;
         for (auto& m : ms) {
-            std::string c = sget(m, "code");
-            if (c != "frameshift" && c != "missing_dna" && !(c == "inconsistent" && m.get("column"))) {
+            std::string cd = sget(m, "code");
+            if (cd != "frameshift" && cd != "missing_dna" && !(cd == "inconsistent" && m.get("column"))) {
                 why = sget(m, "text");
                 break;
             }
         }
         for (auto& m : ms)
             if (m.get("column")) {
-                where = " " + sget(m, "text");
+                where = sget(m, "text");
                 break;
             }
-        std::string s = seqs((long long)ex.size()) + " of " + fmt_n(n) + " could not be converted" + left + " (first: " +
-                        sget(first, "id") + ": " + why + "." + where + ")";
-        if (has_gc_hint_ && (nomismatch_ || !kc['m'])) s += " " + sget(gc_hint_, "text");
-        lines.push_back(s);
+        std::string gc = has_gc_hint_ && (nomismatch_ || !kc['m']) ? " " + gc_hint_cli_ : "";
+        const std::string fid = sget(first, "id");
+        if (keep_going_) {
+            std::string left = errors_.empty() ? std::string(" and ") + (ex.size() == 1 ? "was" : "were") + " left out" : "";
+            lines.push_back(seqs((long long)ex.size()) + " of " + fmt_n(n) + " could not be converted" + left + " (first: " +
+                            fid + ": " + why + "." + (where.empty() ? "" : " " + where) + ")" + gc);
+        } else {
+            // CHANGED(ENG-UX-2, ENG-UX-5): where the gene breaks without repeating the error, then what to do (report.py)
+            if (!where.empty()) lines.push_back(fid + ": " + where + gc);
+            else if (!gc.empty()) lines.push_back(gc.substr(1));
+            long long left = c["not_checked"];
+            std::string s = "The run stopped at " + fid;
+            s += left ? ": " + seqs(left) + " " + (left == 1 ? "was" : "were") + " not checked and no output was written."
+                      : std::string(", so no output was written.");
+            if (n > 1) s += " Add --keep-going to write the other sequences and leave this one out.";
+            lines.push_back(s);
+        }
     }
-    if (!errors_.empty() && ex.empty()) lines.push_back("The run failed: " + sget(errors_[0], "text"));
-    auto c = counts();
-    if ((!errors_.empty() || !ex.empty()) && exit_code != 0 && exit_code != 2 && c["not_checked"]) {
-        long long left = c["not_checked"];
-        lines.push_back("The run stopped there: " + seqs(left) + " " + (left == 1 ? "was" : "were") +
-                        " not checked and no output was written.");
-    }
+    // CHANGED(ENG-UX-5): a run-level error is no longer repeated as "The run failed: ..." (report.py)
     if (pairing_ == "normalised") {
         long long kk = 0, j = -1;
         for (size_t i = 0; i < seq_pairing_.size(); ++i)
@@ -1252,6 +1261,10 @@ std::string RunReport::methods_text(const Json& rep) const {
     if (!cmd.empty()) parts.push_back("Command: " + cmd);
     std::string out;
     for (size_t i = 0; i < parts.size(); ++i) out += (i ? " " : "") + parts[i];
+    if (tot && 2 * ok < tot)  // CHANGED(ENG-UX-9): a note to fix the warnings first (report.py)
+        out = "Fix the warnings first: only " + std::to_string(ok) + " of " + std::to_string(tot) +
+              " sequences matched their protein exactly, so this alignment is probably not ready to use (see the hints "
+              "and the messages for each sequence). Methods text for this run as it stands: " + out;
     return out;
 }
 

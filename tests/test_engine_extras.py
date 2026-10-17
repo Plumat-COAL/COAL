@@ -39,7 +39,7 @@ class TestSummaryHint(unittest.TestCase):
             self.assertIn("coal: summary: 40 of 40 sequences have codons that do not match their amino acid (kept "
                           "in the alignment). Under genetic code 2 (Vertebrate mitochondrial), all 40 sequences match "
                           "their protein; under code 1, none do. Codes 5 and 13 fit these sequences too: choose the "
-                          "code of the organism and organelle the genes come from. Re-run with code 2?", err)
+                          "code of the organism and organelle the genes come from. Re-run with -codontable 2.", err)  # ENG-UX-7
             # MRG-2/MRG-2b: the app's wording
             r = json.loads((d / "r.json").read_text())
             self.assertEqual(r["hints"][0]["suggested_codontable"], 2)
@@ -341,7 +341,7 @@ class TestResume(unittest.TestCase):
         self.assertFalse(out.exists())                     # nothing moved into place yet
         r = run_sub(cmd + ["--resume", "--report", "r.json"], self.d)
         self.assertEqual(r.returncode, expect_rc, r.stderr[-300:])
-        self.assertIn(b"coal: note: resuming", r.stderr)
+        self.assertIn(b"coal: notice: resuming", r.stderr)
         self.assertEqual(out.read_bytes(), ref.read_bytes())
         self.assertFalse(ck.exists())
         self.assertFalse(Path(str(out) + ".coal-partial").exists())
@@ -389,7 +389,7 @@ class TestResume(unittest.TestCase):
     def test_no_checkpoint_runs_normally(self):
         r = run_sub(coal_cmd("pep.fasta", "nuc.fasta", "-o", "fresh.fa", "--resume"), self.d)
         self.assertEqual(r.returncode, 0)
-        self.assertIn(b"coal: note: no checkpoint to resume for fresh.fa; starting a normal run", r.stderr)
+        self.assertIn(b"coal: notice: no checkpoint to resume for fresh.fa; starting a normal run", r.stderr)
         r2 = run_sub(coal_cmd("pep.fasta", "nuc.fasta"), self.d)
         self.assertEqual((self.d / "fresh.fa").read_bytes(), r2.stdout)
 
@@ -399,7 +399,7 @@ class TestResume(unittest.TestCase):
         (self.d / "bad.fa.coal-checkpoint.json").write_text("not json")
         r = run_sub(cmd + ["--resume"], self.d)
         self.assertEqual(r.returncode, 0)
-        self.assertIn(b"coal: note: found an unreadable checkpoint, so nothing can be resumed for bad.fa; "
+        self.assertIn(b"coal: notice: found an unreadable checkpoint, so nothing can be resumed for bad.fa; "
                       b"starting a normal run", r.stderr)
         self.assertEqual((self.d / "bad.fa").read_bytes(), run_sub(coal_cmd("pep.fasta", "nuc.fasta"), self.d).stdout)
 

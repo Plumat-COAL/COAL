@@ -1,8 +1,47 @@
 #include "seqio.hpp"
 
+#include <cerrno>
+#include <cstdio>
 #include <cstring>
+#include <filesystem>
 
 namespace coal {
+
+// CHANGED(ENG-UX-11): plain-words reader messages, as src/coal/seqio.py (were e.g. "sequence data before first '>'
+// header", "non-ASCII character", "non-ASCII sequence ID"). See overnight/integration/CHANGES.md
+const char* const NON_ASCII =
+    "non-ASCII character: sequence files must be plain text (is this a binary or word-processor file?)";
+const char* const NON_ASCII_ID =
+    "non-ASCII character in the sequence ID: use only ASCII letters, digits and punctuation in IDs";
+const char* const EMPTY_HEADER =
+    "empty FASTA header: a '>' line without a sequence ID (every record needs a name after '>')";
+#define COAL_BEFORE "sequence data before the first '>' header: not a FASTA file? (each FASTA record starts with a '>name' line"
+const char* const BEFORE_HEADER_PROTEIN = COAL_BEFORE "; a CLUSTAL file must start with 'CLUSTAL')";
+const char* const BEFORE_HEADER_DNA = COAL_BEFORE ")";
+#undef COAL_BEFORE
+
+std::string duplicate_message(const std::string& where, const std::string& rid) {
+    return where + ": duplicate sequence ID " + py_repr(rid) + ": every sequence needs its own ID";
+}
+
+// CHANGED(ENG-UX-4): was "[Errno 2] No such file or directory: '<path>'" for every input that could not be opened
+// (also for a folder or a file without read permission). See overnight/integration/CHANGES.md
+std::string open_error(const std::string& path) {
+    std::error_code ec;
+    std::string why;
+    if (std::filesystem::is_directory(path, ec)) {
+        why = "it is a folder, not a file";
+    } else {
+        errno = 0;
+        std::FILE* f = std::fopen(path.c_str(), "rb");
+        int e = errno;
+        if (f) std::fclose(f);
+        if (!f && e == ENOENT) why = "no such file";
+        else if (!f && (e == EACCES || e == EPERM)) why = "permission denied";
+        else why = std::strerror(e ? e : EIO);
+    }
+    return "cannot open '" + path + "': " + why;
+}
 
 bool py_space(unsigned char c) {
     return c == ' ' || (c >= 9 && c <= 13) || (c >= 0x1c && c <= 0x1f);
@@ -27,10 +66,6 @@ std::string py_repr(const std::string& s) {
     }
     out += q;
     return out;
-}
-
-static std::string no_such_file(const std::string& path) {
-    return "[Errno 2] No such file or directory: " + py_repr(path);
 }
 
 // Length of the Python str.split() whitespace character (ASCII or UTF-8 encoded) at s[i], or 0.
@@ -70,15 +105,15 @@ static void check_ascii(std::string& s, const std::string& path, long long linen
             s = ">" + s.substr(i, j - i);
             return;
         }
-        throw InputError(path + ":" + std::to_string(lineno) + ": non-ASCII character in the sequence ID");
+        throw InputError(path + ":" + std::to_string(lineno) + ": " + NON_ASCII_ID);
     }
-    throw InputError(path + ":" + std::to_string(lineno) + ": non-ASCII character");
+    throw InputError(path + ":" + std::to_string(lineno) + ": " + NON_ASCII);
 }
 
 // ------------------------------------------------------------------ LineReader
 
 LineReader::LineReader(const std::string& path) : path_(path), in_(path, std::ios::binary), buf_(1 << 16) {
-    if (!in_) throw InputError(no_such_file(path), "file_error");
+    if (!in_) throw InputError(open_error(path), "file_error");
     if (fill() && len_ >= 3 && (unsigned char)buf_[0] == 0xEF && (unsigned char)buf_[1] == 0xBB &&
         (unsigned char)buf_[2] == 0xBF)
         pos_ = 3;  // UTF-8 byte-order mark
@@ -171,7 +206,10 @@ ProteinReader::ProteinReader(const std::string& path) : path_(path) {
             if (blank(line) || line[0] == ' ' || line[0] == '\t' || line[0] == '#' || line.compare(0, 7, "CLUSTAL") == 0)
                 continue;
             auto parts = split_ws(line);
-            if (parts.size() < 2) throw InputError(path + ": malformed CLUSTAL line: " + py_repr(line));
+            if (parts.size() < 2)  // CHANGED(ENG-UX-11): + line number and what a block line holds
+                throw InputError(path + ":" + std::to_string(lr.lineno()) + ": malformed CLUSTAL line " + py_repr(line) +
+                                 ": each line of a block must hold a sequence name, then (after spaces) its aligned "
+                                 "sequence");
             auto it = seqs.find(parts[0]);
             if (it == seqs.end()) {
                 order.push_back(parts[0]);
@@ -202,9 +240,9 @@ bool ProteinReader::next(std::string& id, std::string& row) {
         if (!line.empty() && line[0] == '>') {
             auto parts = split_ws(line, 1);
             if (parts.empty())
-                throw InputError(path_ + ":" + std::to_string(lr_->lineno()) + ": empty FASTA header");
+                throw InputError(path_ + ":" + std::to_string(lr_->lineno()) + ": " + EMPTY_HEADER);
             const std::string& rid = parts[0];
-            if (seen_.count(rid)) throw InputError(path_ + ": duplicate sequence ID " + py_repr(rid));
+            if (seen_.count(rid)) throw InputError(duplicate_message(path_, rid));
             seen_[rid] = 1;
             if (in_rec) {
                 pending_id_ = rid;
@@ -216,8 +254,7 @@ bool ProteinReader::next(std::string& id, std::string& row) {
             have_pending_ = false;
         } else if (!blank(line)) {
             if (!in_rec)
-                throw InputError(path_ + ":" + std::to_string(lr_->lineno()) +
-                                 ": sequence data before first '>' header");
+                throw InputError(path_ + ":" + std::to_string(lr_->lineno()) + ": " + BEFORE_HEADER_PROTEIN);
             bool plain = true;
             for (unsigned char c : line)
                 if (py_space(c)) {
@@ -283,7 +320,7 @@ DnaIndex::DnaIndex(const std::vector<std::string>& paths) : paths_(paths) {
 
 void DnaIndex::scan(int fno, const std::string& path) {
     std::ifstream in(path, std::ios::binary);
-    if (!in) throw InputError(no_such_file(path), "file_error");
+    if (!in) throw InputError(open_error(path), "file_error");
     long long offset = 0;
     {  // UTF-8 byte-order mark
         char bom[3] = {};
@@ -332,16 +369,16 @@ void DnaIndex::scan(int fno, const std::string& path) {
                 start_.push_back(start);
                 end_.push_back(line_off);
             }
-            if (j == i) throw InputError(path + ":" + std::to_string(lineno) + ": empty FASTA header");
+            if (j == i) throw InputError(path + ":" + std::to_string(lineno) + ": " + EMPTY_HEADER);
             std::string rid = line.substr(i, j - i);
             for (unsigned char ch : rid)
-                if (ch > 127) throw InputError(path + ":" + std::to_string(lineno) + ": non-ASCII sequence ID");
-            if (pos_.count(rid)) throw InputError(joined + ": duplicate sequence ID " + py_repr(rid));
+                if (ch > 127) throw InputError(path + ":" + std::to_string(lineno) + ": " + NON_ASCII_ID);
+            if (pos_.count(rid)) throw InputError(duplicate_message(joined, rid));
             pos_[rid] = ids_.size();
             ids_.push_back(rid);
             start = offset;  // byte after the header line
         } else if (start < 0 && data_seen && !hash) {
-            throw InputError(path + ":" + std::to_string(lineno) + ": sequence data before first '>' header");
+            throw InputError(path + ":" + std::to_string(lineno) + ": " + BEFORE_HEADER_DNA);
         }
         line_start = true;
     };

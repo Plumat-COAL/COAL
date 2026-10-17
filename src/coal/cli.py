@@ -116,7 +116,8 @@ def main(argv=None) -> int:
     # CHANGED(DEC-2): was printed even with -q; now -q silences notices too (GNU / clig.dev "quiet", and PAL2NAL's
     # -nostderr). Errors are still printed. See overnight/integration/CHANGES.md
     notice = None if args.quiet else (lambda w: print(f"coal: warning: {w}", file=sys.stderr))
-    note = None if args.quiet else (lambda t: print(f"coal: note: {t}", file=sys.stderr))
+    # CHANGED(ENG-UX-10): was "coal: note:"; now "coal: notice:" (the three prefixes: error, warning, notice)
+    note = None if args.quiet else (lambda t: print(f"coal: notice: {t}", file=sys.stderr))
     # CHANGED(ENG-f): was default signal handling (SIGTERM left .coal_*.tmp files; Ctrl-C printed a
     # traceback; a closed stdout pipe gave "[Errno 32] Broken pipe", exit 1); now SIGTERM -> SystemExit
     # (cleanup runs, exit 143), Ctrl-C -> "coal: interrupted", exit 130, broken pipe -> silent exit 141.
@@ -158,7 +159,9 @@ def main(argv=None) -> int:
         try:
             rec.write(args.report)
         except OSError as e:
-            print(f"coal: error: could not write the report {args.report}: {e.strerror or e}", file=sys.stderr)
+            # CHANGED(ENG-UX-12): a folder gave "Is a directory"; now said in plain words (C++ said only the path)
+            why = "it is a folder, not a file" if os.path.isdir(args.report) else (e.strerror or e)
+            print(f"coal: error: could not write the report {args.report}: {why}", file=sys.stderr)
             rc = rc or 1
     if args.json:
         print(json.dumps(rec.to_dict(), indent=1))

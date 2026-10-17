@@ -118,6 +118,75 @@ def normalised_pairing(prot_ids: list[str], dna_ids: list[str], pos: dict) -> tu
     return idx, modes
 
 
+def _records(n: int, what: str) -> str:
+    return f"{n} {what}" + ("" if n == 1 else "s")
+
+
+def count_mismatch_message(prot_ids: list[str], dna_ids: list[str], pos: dict) -> str:
+    """CHANGED(ENG-UX-6): new. The count error with what to do; names an example record when the IDs show which
+    records are extra (every protein ID is a DNA ID) or which proteins have no DNA (exactly that many are missing)."""
+    p, d = len(prot_ids), len(dna_ids)
+    head = f"number of sequences differs (protein: {p}, DNA: {d}): each protein needs exactly one DNA record"
+    if d > p:
+        eg = ""
+        if all(x in pos for x in prot_ids):
+            pset = set(prot_ids)
+            extra = next(x for x in dna_ids if x not in pset)
+            eg = f" (e.g. '{extra}', which is not in the protein alignment)"
+        return (f"{head}; remove the {_records(d - p, 'extra DNA record')}{eg} or check you used the right files")
+    missing = [x for x in prot_ids if x not in pos]
+    eg = f" (e.g. '{missing[0]}')" if missing and len(missing) == p - d else ""
+    return (f"{head}; {p - d} protein" + (" has" if p - d == 1 else "s have") + f" no DNA record{eg}: add "
+            f"the missing DNA, remove those proteins from the alignment, or check you used the right files")
+
+
+_NUC = frozenset("ACGTUN")
+_PROTEIN_ONLY = frozenset("EFIJLOPQZ")  # amino-acid letters that are not IUPAC nucleotide codes (X excluded: masking)
+
+
+def _letters(s: str) -> list[str]:
+    return [c for c in s.upper() if "A" <= c <= "Z"]
+
+
+SNIFF_MIN = 20  # letters needed before COAL guesses what kind of sequence a text is
+
+
+def looks_like_dna(text: str) -> bool:
+    """CHANGED(ENG-UX-3): new. True if the text has at least SNIFF_MIN letters and at least 90% of them are
+    A/C/G/T/U/N (a protein alignment never is)."""
+    letters = _letters(text)
+    return len(letters) >= SNIFF_MIN and 10 * sum(c in _NUC for c in letters) >= 9 * len(letters)
+
+
+def looks_like_protein(text: str) -> bool:
+    """CHANGED(ENG-UX-13): new. True if the text has at least SNIFF_MIN letters and at least 10% of them are amino
+    acids that are not nucleotide codes."""
+    letters = _letters(text)
+    return len(letters) >= SNIFF_MIN and 10 * sum(c in _PROTEIN_ONLY for c in letters) >= len(letters)
+
+
+def row_length_message(label: str, ncol: int, n: int, pid: str, rows: str) -> str:
+    """CHANGED(ENG-UX-3): new. The error for protein rows of different lengths: the usual causes are the two files
+    given the other way round (the first file is DNA) and a protein file that is not aligned. `rows`: the text of
+    the rows seen (the first and the offending one)."""
+    if looks_like_dna(rows):
+        return (f"{label} looks like DNA, not a protein alignment: give the protein alignment first and the DNA "
+                f"second (coal PROTEIN_ALIGNMENT DNA_FASTA)")
+    return (f"protein alignment rows have different lengths ({ncol} and {n}, at {pid}): is {label} an aligned "
+            f"protein file, e.g. from MAFFT or MUSCLE? Every row of an alignment has the same length, gaps included")
+
+
+def inconsistent_message(seq_id: str, detail: str, row: str, dna: str) -> str:
+    """CHANGED(ENG-UX-13): the per-sequence inconsistency error, plus a hint when the inputs look swapped."""
+    msg = f"{seq_id}: protein and DNA are inconsistent ({detail})"
+    if looks_like_dna(row):
+        msg += ("; its protein row looks like DNA: are the two files the other way round? "
+                "(coal PROTEIN_ALIGNMENT DNA_FASTA)")
+    elif looks_like_protein(dna):
+        msg += "; its DNA looks like protein: the second file must hold the coding DNA, not protein sequences"
+    return msg
+
+
 def order_pairing_warning(prot_ids: list[str], dna_ids: list[str]) -> str:
     """The teammate's file-order notice. MRG-1: not printed (ENG-d: when no protein ID is a DNA ID, COAL stays
     silent as PAL2NAL does); the run report's id_mismatch hint says it instead. Kept for the C++ comparison."""
@@ -137,13 +206,13 @@ def pair_ids(prot_ids: list[str], dna_ids: list[str], dna_pos: dict | None = Non
     a protein with a different DNA record than the one its normalised ID names (otherwise the order pairing is
     the same pairing, and COAL keeps PAL2NAL's output and messages exactly).
     `warn` receives the notices; `strict` makes a partial exact-ID match an error (DEC-1), as before."""
+    pos = dna_pos if dna_pos is not None else {d: i for i, d in enumerate(dna_ids)}
     if len(prot_ids) != len(dna_ids):
-        raise CoalError(
-            f"number of sequences differs (protein: {len(prot_ids)}, DNA: {len(dna_ids)})", code="count_mismatch"
-        )
+        # CHANGED(ENG-UX-6): was "number of sequences differs (protein: P, DNA: D)" only; now also what to do, and an
+        # example record when the IDs show which one. See overnight/integration/CHANGES.md
+        raise CoalError(count_mismatch_message(prot_ids, dna_ids, pos), code="count_mismatch")
     if not prot_ids:
         raise CoalError("no sequences in input", code="no_sequences")
-    pos = dna_pos if dna_pos is not None else {d: i for i, d in enumerate(dna_ids)}
     if all(p in pos for p in prot_ids):
         return [pos[p] for p in prot_ids], "id", None
     hits = sum(p in pos for p in prot_ids)
@@ -165,10 +234,13 @@ def pair_ids(prot_ids: list[str], dna_ids: list[str], dna_pos: dict | None = Non
         k = moved[0]
         if warn:
             nn = modes.count("normalised")
+            # CHANGED(ENG-UX-1): the example was "(e.g. protein 'X' gets DNA 'Y', not 'Z')", read backwards (as if
+            # file order gave Y); now says which pairing is which. See overnight/integration/CHANGES.md
             warn(f"{nn} of {len(prot_ids)} protein IDs match a DNA ID only after normalising (version suffix, case "
                  f"or database fields), so sequences were paired by those IDs, not by file order as PAL2NAL "
                  f"pairs them: by order, {len(moved)} of {len(prot_ids)} proteins would get the DNA of another gene "
-                 f"(e.g. protein '{prot_ids[k]}' gets DNA '{dna_ids[idx[k]]}', not '{dna_ids[k]}')")
+                 f"(e.g. by file order, protein '{prot_ids[k]}' would get DNA '{dna_ids[k]}'; COAL paired it with "
+                 f"'{dna_ids[idx[k]]}')")
         return idx, "normalised", modes
     if hits and warn:
         # CHANGED(ENG-d): was silent order pairing; now warns when some but not all IDs match.
@@ -431,8 +503,11 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int, strict: bool = F
     bad = _VALID.search(row)
     if bad:
         chars = sorted(set(_VALID.findall(row)))
-        raise CoalError(f"{seq_id}: invalid protein alignment characters {chars}", code="invalid_protein",
-                         seq_id=seq_id)
+        # CHANGED(ENG-UX-15): was "<id>: invalid protein alignment characters ['@']" only; now also where the first one
+        # is and what is allowed. See overnight/integration/CHANGES.md
+        raise CoalError(f"{seq_id}: invalid protein alignment characters {chars} (first at column {bad.start() + 1}): "
+                        f"a protein alignment may hold only amino-acid letters, '-' or '.' gaps, '*' stops and "
+                        f"frameshift digits", code="invalid_protein", seq_id=seq_id)
 
     res = Threaded(seq_id, row, "")
     for m in _AS_X.finditer(row):
@@ -448,7 +523,9 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int, strict: bool = F
     dna = raw_dna.upper().replace("U", "T")
     residues = row.replace(GAP, "")
     if not residues:
-        raise CoalError(f"{seq_id}: protein sequence is empty", code="empty", seq_id=seq_id)
+        # CHANGED(ENG-UX-16): was "<id>: protein sequence is empty"; now says why and what to do
+        raise CoalError(f"{seq_id}: protein sequence is empty (its alignment row has only gaps): remove it from both "
+                        f"files", code="empty", seq_id=seq_id)
 
     # 1. exact fit (quick check at offset 0 first: the common, clean case)
     if not _DIGIT.search(residues) and _quick_offset0(table, dna, residues):
@@ -466,8 +543,8 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int, strict: bool = F
     # 2. anchor fallback
     anchors = _anchors(row)
     if not anchors:
-        raise CoalError(f"{seq_id}: protein and DNA are inconsistent (no match found)", code="inconsistent",
-                         seq_id=seq_id)
+        raise CoalError(inconsistent_message(seq_id, "no match found", row, raw_dna), code="inconsistent",
+                        seq_id=seq_id)  # CHANGED(ENG-UX-13): + a hint when the inputs look swapped
     pattern, col = [], 1
     found_any = False
     expect = -1  # where this anchor starts if the previous anchors' matches are the real ones
@@ -491,8 +568,8 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int, strict: bool = F
         col += len(a)
     s = _find(target, [("n", t[1], t[2]) if t[0] == "w" else t for t in pattern])
     if s < 0:
-        raise CoalError(f"{seq_id}: protein and DNA are inconsistent (no match found)", code="inconsistent",
-                         seq_id=seq_id)
+        raise CoalError(inconsistent_message(seq_id, "no match found", row, raw_dna), code="inconsistent",
+                        seq_id=seq_id)  # CHANGED(ENG-UX-13): + a hint when the inputs look swapped
     res.dna = raw_dna[s:s + _length(toks)]
 
     # mismatch report: first residue Met -> ATG/CTG/GTG, others -> genetic code
@@ -528,9 +605,9 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int, strict: bool = F
     # probably wrong. See overnight/integration/CHANGES.md
     if nchk and 2 * nbad_chk > nchk:
         if strict:
-            raise CoalError(f"{seq_id}: protein and DNA are inconsistent "
-                            f"({nbad_chk} of {nchk} checkable codons do not match the protein)",
-                            code="inconsistent", seq_id=seq_id)
+            raise CoalError(inconsistent_message(seq_id, f"{nbad_chk} of {nchk} checkable codons do not match the "
+                                                         f"protein", row, raw_dna),
+                            code="inconsistent", seq_id=seq_id)  # CHANGED(ENG-UX-13): + swapped-input hint
         res.notices.append(f"{seq_id}: protein and DNA are probably unrelated: {nbad_chk} of {nchk} checkable codons "
                            f"do not match the protein. The row was written as PAL2NAL writes it, but it is "
                            f"probably the wrong DNA or the wrong genetic code (--strict makes this an error)")
@@ -544,9 +621,11 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int, strict: bool = F
         # without any ambiguous base); now "the gene has only N codons" when none is ambiguous
         few = (f"only {nchk} of {nres} codons have no ambiguous bases" if namb else f"the gene has only {nres} codons")
         if strict:  # CHANGED(DEC-1): was always an error; see above
-            raise CoalError(f"{seq_id}: protein and DNA are inconsistent (no 10-residue segment of the protein was "
-                            f"found in the DNA and {few}: too few to tell where {'the gene' if namb else 'it'} "
-                            f"starts in the longer DNA)", code="inconsistent", seq_id=seq_id)
+            raise CoalError(inconsistent_message(seq_id, f"no 10-residue segment of the protein was found in the "
+                                                         f"DNA and {few}: too few to tell where "
+                                                         f"{'the gene' if namb else 'it'} starts in the longer DNA",
+                                                 row, raw_dna),
+                            code="inconsistent", seq_id=seq_id)  # CHANGED(ENG-UX-13): + swapped-input hint
         res.notices.append(f"{seq_id}: position of the gene in the DNA is a guess: no 10-residue segment of the "
                            f"protein was found in the DNA and {few}, too few to tell where "
                            f"{'the gene' if namb else 'it'} starts in the longer DNA. The codons were taken from the "
@@ -677,7 +756,11 @@ def codon_align(
     proteins = [(pid, prepare_row(pid, aln)) for pid, aln in proteins]
     lengths = {len(s) for _, s in proteins}
     if len(lengths) > 1:
-        raise CoalError(f"protein alignment rows have different lengths: {sorted(lengths)}", code="row_lengths")
+        # CHANGED(ENG-UX-3): + the likely cause (files swapped, or protein not aligned)
+        first = proteins[0][1]
+        k = next(i for i, (_, r) in enumerate(proteins) if len(r) != len(first))
+        raise CoalError(row_length_message("the protein alignment", len(first), len(proteins[k][1]), proteins[k][0],
+                                           first + proteins[k][1]), code="row_lengths")
     pair_warn: list[str] = []  # CHANGED(ENG-d): partial-ID-match warning added to warnings
     idx = pair_sequences([p[0] for p in proteins], [d[0] for d in dnas], warn=pair_warn.append, strict=strict)
     items = [thread_one(pid, row, dnas[j][1], table, strict) for (pid, row), j in zip(proteins, idx)]

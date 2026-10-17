@@ -37,9 +37,9 @@ from . import checkpoint as _ck
 from .checkpoint import Checkpoint, durable_size, open_append
 from .core import (
     MISMATCH_WARNING, CoalError, apply_slices, column_widths, expand, keep_slices, nogap_bad_triplets,
-    pair_ids, prepare_row, thread_one,
+    pair_ids, prepare_row, row_length_message, thread_one,
 )
-from .seqio import DnaIndex, InputFormatError, clustal_mask, is_clustal, iter_fasta, read_clustal
+from .seqio import DnaIndex, InputFormatError, clustal_mask, is_clustal, iter_fasta, open_error_message, read_clustal
 from .tables import get_code
 
 WRAP = 60
@@ -377,17 +377,18 @@ def run(pep_path, nuc_paths, *args, **kw) -> int:
         kw["out_format"] = kw.pop("fmt")
     spooled: list = []
     names = {}  # CHANGED(R2-E7): temp copy -> the argument it came from, for error messages
+    inputs = {str(pep_path), *map(str, nuc_paths)}
     try:
-        sp = _spool(pep_path, spooled)
-        names[sp] = str(pep_path)
-        nps = []
-        for p in nuc_paths:
-            nps.append(_spool(p, spooled))
-            names[nps[-1]] = str(p)
-        # CHANGED(MRG-4): a run whose input came through a pipe cannot be resumed (its data is gone), so it keeps
-        # no checkpoint. See overnight/integration/CHANGES.md
-        kw.setdefault("_resumable", not spooled)
         try:
+            sp = _spool(pep_path, spooled)
+            names[sp] = str(pep_path)
+            nps = []
+            for p in nuc_paths:
+                nps.append(_spool(p, spooled))
+                names[nps[-1]] = str(p)
+            # CHANGED(MRG-4): a run whose input came through a pipe cannot be resumed (its data is gone), so it
+            # keeps no checkpoint. See overnight/integration/CHANGES.md
+            kw.setdefault("_resumable", not spooled)
             return _run(sp, nps, *args, **kw)
         except (CoalError, InputFormatError) as e:
             msg = str(e)
@@ -397,6 +398,15 @@ def run(pep_path, nuc_paths, *args, **kw) -> int:
                 if isinstance(e, CoalError):
                     raise CoalError(msg, e.code, e.seq_id, e.index) from None
                 raise type(e)(msg) from None
+            raise
+        except OSError as e:
+            # CHANGED(ENG-UX-4): an input that cannot be opened was "[Errno 2] No such file or directory: 'x.fa'"
+            # (Python's wording); now "cannot open 'x.fa': no such file" (also: permission denied, it is a folder).
+            # See overnight/integration/CHANGES.md
+            fn = getattr(e, "filename", None)
+            user = names.get(str(fn), str(fn)) if fn is not None else None
+            if user in inputs:
+                raise CoalError(open_error_message(user, e), code="file_error") from None
             raise
     finally:
         for name in spooled:
@@ -408,17 +418,22 @@ def run(pep_path, nuc_paths, *args, **kw) -> int:
 
 def _output_error(out_path, e: OSError) -> CoalError:
     """CHANGED(R3-E2): the error for an output (or its partial file) that cannot be created, naming the user's -o
-    path in plain words (was the raw OSError naming COAL's hidden temp file). See overnight/integration/CHANGES.md"""
-    folder = os.path.dirname(os.path.abspath(out_path)) if out_path else ""
-    if e.errno == errno.ENOENT:
+    path in plain words (was the raw OSError naming COAL's hidden temp file). See overnight/integration/CHANGES.md
+    CHANGED(ENG-UX-12): ENOENT in a folder that exists (e.g. /proc) said "folder ... does not exist"; permission
+    denied now says what to do; no -o (a temporary file for stdout) named "None"."""
+    folder = os.path.dirname(os.path.abspath(out_path)) if out_path else tempfile.gettempdir()
+    if e.errno == errno.ENOENT and not os.path.isdir(folder):
         why = f"folder {folder} does not exist"
     elif e.errno == errno.ELOOP:
         why = f"folder {folder} is a symbolic link loop"
     elif e.errno == errno.ENOTDIR:
         why = f"{folder} is not a folder"
+    elif e.errno in (errno.EACCES, errno.EPERM):
+        why = "permission denied (choose a folder you can write to)"
     else:
         why = e.strerror or str(e)
-    return CoalError(f"cannot write {out_path}: {why}", code="file_error")
+    what = out_path if out_path else f"a temporary file in {folder}"
+    return CoalError(f"cannot write {what}: {why}", code="file_error")
 
 
 def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
@@ -462,15 +477,28 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
         last_row = row
         if ncol is None:
             ncol = len(row)
+            first_row = row
         elif len(row) != ncol:
-            raise CoalError(f"protein alignment rows have different lengths ({ncol} and {len(row)}, at {pid})",
+            # CHANGED(ENG-UX-3): was "protein alignment rows have different lengths (N and M, at id)" whatever the
+            # cause; now the files-swapped case (the first file is DNA) and the not-aligned case are told apart, with
+            # what to do. See overnight/integration/CHANGES.md
+            raise CoalError(row_length_message(str(pep_path), ncol, len(row), pid, first_row + row),
                             code="row_lengths")
         if _DIGIT.search(row):
             digit_rows.append(row)
+    if not ids:
+        # CHANGED(ENG-UX-6): was "number of sequences differs (protein: 0, DNA: N)"; now names the empty file
+        raise CoalError(f"{pep_path}: no sequences found: the file is empty or has no '>' header lines (expected a "
+                        f"protein alignment in FASTA or CLUSTAL format)", code="no_sequences")
     if rec is not None:
         rec.set_inputs(ids)
     dna = DnaIndex(nuc_paths)
     try:
+        if not len(dna):  # CHANGED(ENG-UX-6): was "number of sequences differs (protein: N, DNA: 0)"
+            raise CoalError(f"{', '.join(map(str, nuc_paths))}: no sequences found: the file"
+                            + ("s are" if len(nuc_paths) > 1 else " is")
+                            + " empty or ha" + ("ve" if len(nuc_paths) > 1 else "s")
+                            + " no '>' header lines (expected the coding DNA in FASTA format)", code="no_sequences")
         if rec is not None:
             per_file = [0] * len(dna.paths)
             for f in dna.fno:
@@ -513,6 +541,20 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                     raise CoalError(f"{out_path}: symbolic link loop; cannot write the output there",
                                     code="file_error") from None
         real_out = os.path.realpath(out_path) if out_path else None
+        # CHANGED(ENG-UX-12): -o naming a folder failed only at the very end ("[Errno 21] Is a directory: 'od'"); -o
+        # naming an input file overwrote that input. Both are now refused before any work. See overnight/integration/CHANGES.md
+        if real_out and os.path.isdir(real_out):
+            raise CoalError(f"cannot write {out_path}: it is a folder, not a file (give a file name with -o)",
+                            code="file_error")
+        if real_out and os.path.isfile(real_out):
+            for p in (pep_path, *nuc_paths):
+                try:
+                    same = os.path.samefile(p, real_out)
+                except OSError:
+                    same = False
+                if same:
+                    raise CoalError(f"cannot write {out_path}: it is one of the input files; choose another name for "
+                                    f"the output", code="file_error")
         existing = bool(real_out) and os.path.isfile(real_out)
         direct = bool(real_out) and os.path.exists(real_out) and (
             not existing or os.stat(real_out).st_nlink > 1)
@@ -568,8 +610,11 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                 tmp, tmp_name = t.file, t.name
                 scratch.append(t)
                 if two_pass:
-                    st = tempfile.NamedTemporaryFile("w+", delete=False, newline="\n", prefix=".coal_rows_",
-                                                     encoding="ascii")
+                    try:
+                        st = tempfile.NamedTemporaryFile("w+", delete=False, newline="\n", prefix=".coal_rows_",
+                                                         encoding="ascii")
+                    except OSError as e:  # CHANGED(ENG-UX-12): was the raw OSError
+                        raise _output_error(None, e) from None
                     scratch.append(st)
                     stage = st.file
             sink = stage if two_pass else tmp
@@ -649,7 +694,10 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
             if prog and prog.printed:
                 prog.update(done, final=True)
             if keep_going and skipped == nseq:
-                raise CoalError(f"none of the {nseq} sequences could be converted", code="all_failed")
+                # CHANGED(ENG-UX-17): + what to check
+                raise CoalError(f"none of the {nseq} sequences could be converted: check that the DNA file holds the "
+                                f"coding sequences of these proteins and that the genetic code (-codontable) is right",
+                                code="all_failed")
             if rec is not None:
                 rec.finish(rows, dna, pairing)
             if two_pass:
@@ -684,11 +732,18 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                     umask = os.umask(0)
                     os.umask(umask)
                     os.chmod(tmp_name, 0o666 & ~umask)  # CHANGED(ENG-a): was 0600; see CHANGES.md
-                os.replace(tmp_name, real_out)
+                try:
+                    os.replace(tmp_name, real_out)
+                except OSError as e:  # CHANGED(ENG-UX-12): was the raw OSError
+                    raise _output_error(out_path, e) from None
             elif out_path:
-                with open(tmp_name, "r", encoding="ascii", newline="\n") as fh, \
-                        open(out_path, "w", encoding="ascii", newline="\n") as dst:
-                    shutil.copyfileobj(fh, dst, 1 << 20)
+                with open(tmp_name, "r", encoding="ascii", newline="\n") as fh:
+                    try:
+                        dst = open(out_path, "w", encoding="ascii", newline="\n")
+                    except OSError as e:  # CHANGED(ENG-UX-12): was the raw OSError
+                        raise _output_error(out_path, e) from None
+                    with dst:
+                        shutil.copyfileobj(fh, dst, 1 << 20)
             else:
                 with open(tmp_name, "r", encoding="ascii", newline="\n") as fh:
                     out = sys.stdout

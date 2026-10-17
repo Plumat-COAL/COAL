@@ -171,7 +171,7 @@ class TestR3E3_DnaErrorLineNumbers(TempDirCase):  # R3-E3
         (self.d / "bn.fa").write_text("# comment\n\nATGAAA\n>s1\nATGAAAGTTGCTCTG\n")
         r = coal(["p.fa", "bn.fa"], self.d)
         self.assertEqual(r.returncode, 1)
-        self.assertIn("bn.fa:3: sequence data before first '>' header", r.stderr)
+        self.assertIn("bn.fa:3: sequence data before the first '>' header", r.stderr)  # CHANGED(ENG-UX-11)
 
     def test_non_ascii_id_has_line_number(self):
         (self.d / "un.fa").write_bytes(b">s1\nATGAAAGTTGCTCTG\n>s\xc3\xa92\nATG\n")

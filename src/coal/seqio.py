@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import codecs
+import errno
+import os
 import re
 from array import array
 from contextlib import contextmanager
@@ -12,6 +14,35 @@ _NON_LETTER = re.compile(r"[^A-Za-z]")
 
 class InputFormatError(ValueError):
     pass
+
+
+# CHANGED(ENG-UX-11): the reader messages say what is wrong in plain words and what a valid file looks like (were
+# e.g. "p.fa:1: sequence data before first '>' header", "p.fa:1: non-ASCII character"). teammate's C++ mirrors them
+# (cpp/src/seqio.cpp). See overnight/integration/CHANGES.md
+NON_ASCII = "non-ASCII character: sequence files must be plain text (is this a binary or word-processor file?)"
+NON_ASCII_ID = "non-ASCII character in the sequence ID: use only ASCII letters, digits and punctuation in IDs"
+EMPTY_HEADER = "empty FASTA header: a '>' line without a sequence ID (every record needs a name after '>')"
+_BEFORE = "sequence data before the first '>' header: not a FASTA file? (each FASTA record starts with a '>name' line"
+BEFORE_HEADER_PROTEIN = _BEFORE + "; a CLUSTAL file must start with 'CLUSTAL')"
+BEFORE_HEADER_DNA = _BEFORE + ")"
+
+
+def duplicate_message(where, rid: str) -> str:
+    return f"{where}: duplicate sequence ID {rid!r}: every sequence needs its own ID"
+
+
+def open_error_message(path: str, e: OSError) -> str:
+    """CHANGED(ENG-UX-4): new. "cannot open 'x.fa': no such file" (or: permission denied, it is a folder, or the
+    system's reason) for an input that cannot be opened (was "[Errno 2] No such file or directory: 'x.fa'")."""
+    if os.path.isdir(path):
+        why = "it is a folder, not a file"
+    elif e.errno == errno.ENOENT:
+        why = "no such file"
+    elif e.errno in (errno.EACCES, errno.EPERM):
+        why = "permission denied"
+    else:
+        why = e.strerror or str(e)
+    return f"cannot open '{path}': {why}"
 
 
 # CHANGED(ENG-h): text inputs were opened as strict ASCII (a UTF-8 BOM failed with "'ascii' codec
@@ -44,8 +75,8 @@ def _ascii_lines(fh, path):
                     if head and head[0].isascii():
                         yield ">" + head[0] + "\n"
                         continue
-                    raise InputFormatError(f"{path}:{lineno}: non-ASCII character in the sequence ID")
-                raise InputFormatError(f"{path}:{lineno}: non-ASCII character")
+                    raise InputFormatError(f"{path}:{lineno}: {NON_ASCII_ID}")
+                raise InputFormatError(f"{path}:{lineno}: {NON_ASCII}")
             yield line
     except UnicodeDecodeError:
         raise InputFormatError(f"{path}: near line {lineno + 1}: not an ASCII text file") from None
@@ -63,13 +94,14 @@ def read_fasta(path: str | Path, letters_only: bool = False) -> list[tuple[str, 
             if line.startswith(">"):
                 parts = line[1:].split()
                 if not parts:
-                    raise InputFormatError(f"{path}:{lineno}: empty FASTA header")
+                    raise InputFormatError(f"{path}:{lineno}: {EMPTY_HEADER}")
                 records.append((parts[0], []))
             elif line.strip():
                 if letters_only and line.startswith("#"):
                     continue
                 if not records:
-                    raise InputFormatError(f"{path}:{lineno}: sequence data before first '>' header")
+                    raise InputFormatError(f"{path}:{lineno}: "
+                                           + (BEFORE_HEADER_DNA if letters_only else BEFORE_HEADER_PROTEIN))
                 if letters_only:
                     chunk = line if line.isalpha() else _NON_LETTER.sub("", line)
                 else:
@@ -85,11 +117,13 @@ def read_clustal(path: str | Path) -> list[tuple[str, str]]:
     seqs: dict[str, list[str]] = {}
     with _text(path) as fh:  # CHANGED(ENG-h)
         first = next(fh, "")
+        lineno = 1
         while first and not first.strip():  # CHANGED(FZ-1): leading blank lines (PAL2NAL reads such files as CLUSTAL)
             first = next(fh, "")
+            lineno += 1
         if not first.startswith("CLUSTAL"):
             raise InputFormatError(f"{path}: not a CLUSTAL file")
-        for line in fh:
+        for lineno, line in enumerate(fh, lineno + 1):
             line = line.rstrip("\r\n")
             # Skip blank lines and conservation lines (start with whitespace).
             # CHANGED(FZ-1): also lines starting with '#' (PAL2NAL's block-mark lines; was read as a sequence named
@@ -98,7 +132,9 @@ def read_clustal(path: str | Path) -> list[tuple[str, str]]:
                 continue
             parts = line.split()
             if len(parts) < 2:
-                raise InputFormatError(f"{path}: malformed CLUSTAL line: {line!r}")
+                # CHANGED(ENG-UX-11): was "<file>: malformed CLUSTAL line: '...'" (no line number, no explanation)
+                raise InputFormatError(f"{path}:{lineno}: malformed CLUSTAL line {line!r}: each line of a block must "
+                                       f"hold a sequence name, then (after spaces) its aligned sequence")
             name, chunk = parts[0], parts[1]
             if name not in seqs:
                 order.append(name)
@@ -148,7 +184,7 @@ def _check_unique(ids: list[str], path) -> None:
     seen = set()
     for i in ids:
         if i in seen:
-            raise InputFormatError(f"{path}: duplicate sequence ID {i!r}")
+            raise InputFormatError(duplicate_message(path, i))
         seen.add(i)
 
 
@@ -174,14 +210,14 @@ def iter_fasta(path: str | Path):
                     yield rid, "".join(chunks)
                 parts = line[1:].split()
                 if not parts:
-                    raise InputFormatError(f"{path}:{lineno}: empty FASTA header")
+                    raise InputFormatError(f"{path}:{lineno}: {EMPTY_HEADER}")
                 rid, chunks = parts[0], []
                 if rid in seen:
-                    raise InputFormatError(f"{path}: duplicate sequence ID {rid!r}")
+                    raise InputFormatError(duplicate_message(path, rid))
                 seen.add(rid)
             elif line.strip():
                 if rid is None:
-                    raise InputFormatError(f"{path}:{lineno}: sequence data before first '>' header")
+                    raise InputFormatError(f"{path}:{lineno}: {BEFORE_HEADER_PROTEIN}")
                 chunks.append("".join(line.split()))
     if rid is not None:
         yield rid, "".join(chunks)
@@ -258,18 +294,18 @@ class DnaIndex:
                         self._add(fno, start, offset)
                     parts = line[1:].split()
                     if not parts:
-                        raise InputFormatError(f"{path}:{lineno}: empty FASTA header")
+                        raise InputFormatError(f"{path}:{lineno}: {EMPTY_HEADER}")
                     try:
                         rid = parts[0].decode("ascii")
                     except UnicodeDecodeError:
-                        raise InputFormatError(f"{path}:{lineno}: non-ASCII sequence ID") from None
+                        raise InputFormatError(f"{path}:{lineno}: {NON_ASCII_ID}") from None
                     if rid in self.pos:
-                        raise InputFormatError(f"{', '.join(self.paths)}: duplicate sequence ID {rid!r}")
+                        raise InputFormatError(duplicate_message(", ".join(self.paths), rid))
                     self.pos[rid] = len(self.ids)
                     self.ids.append(rid)
                     start = offset + len(line)
                 elif start is None and line.strip() and not line.startswith(b"#"):
-                    raise InputFormatError(f"{path}:{lineno}: sequence data before first '>' header")
+                    raise InputFormatError(f"{path}:{lineno}: {BEFORE_HEADER_DNA}")
                 offset += len(line)
             if start is not None:
                 self._add(fno, start, offset)

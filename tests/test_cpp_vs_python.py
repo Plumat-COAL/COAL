@@ -358,7 +358,7 @@ class TestCppResumeAndProgress(unittest.TestCase):
                 r = subprocess.run(cmd + ["--resume", "--report", "cc.json"], cwd=self.d, capture_output=True,
                                    timeout=120)
                 self.assertEqual(r.returncode, rc_ok, r.stderr[-300:])
-                self.assertIn(b"coal: note: resuming", r.stderr)
+                self.assertIn(b"coal: notice: resuming", r.stderr)
                 self.assertEqual(out_cc.read_bytes(), out_py.read_bytes())
                 self.assertFalse(ck.exists())
                 a = json.loads((self.d / "py.json").read_text())
@@ -388,7 +388,7 @@ class TestCppResumeAndProgress(unittest.TestCase):
         r = subprocess.run([str(self.binary), "pep.fasta", "nuc.fasta", "-o", "fresh.fa", "--resume"], cwd=d,
                            capture_output=True, timeout=60)
         self.assertEqual(r.returncode, 0)
-        self.assertIn(b"coal: note: no checkpoint to resume for fresh.fa; starting a normal run", r.stderr)
+        self.assertIn(b"coal: notice: no checkpoint to resume for fresh.fa; starting a normal run", r.stderr)
         r = subprocess.run([str(self.binary), "pep.fasta", "nuc.fasta", "--resume"], cwd=d, capture_output=True,
                            timeout=60)
         self.assertEqual(r.returncode, 2)
@@ -425,7 +425,7 @@ class TestCppResumeAndProgress(unittest.TestCase):
         self.assertEqual((d / "o.fa").read_text(), "old\n")
         r = subprocess.run(cmd + ["--resume"], cwd=d, capture_output=True, timeout=60)
         self.assertEqual(r.returncode, 0, r.stderr[-300:])
-        self.assertIn(b"coal: note: resuming o.fa", r.stderr)
+        self.assertIn(b"coal: notice: resuming o.fa", r.stderr)
         self.assertEqual((d / "o.fa").read_bytes(), ref)
         self.assertEqual((d / "twin.fa").read_bytes(), ref)  # the link is kept: written in place
         self.assertEqual(os.stat(d / "o.fa").st_ino, inode)
@@ -439,14 +439,14 @@ class TestCppResumeAndProgress(unittest.TestCase):
         r = subprocess.run([str(self.binary), "pep.fasta", "/dev/stdin", "-o", "o.fa", "--resume"], cwd=d,
                            input=(d / "nuc.fasta").read_bytes(), capture_output=True, timeout=60)
         self.assertEqual(r.returncode, 0, r.stderr[-300:])
-        self.assertIn(b"coal: note: o.fa cannot be resumed (an input is not a regular file); starting a normal run",
+        self.assertIn(b"coal: notice: o.fa cannot be resumed (an input is not a regular file); starting a normal run",
                       r.stderr)
         self.assertEqual((d / "o.fa").read_bytes(), ref)
         self.assertEqual(sorted(p.name for p in d.iterdir() if "coal" in p.name), [])
         r = subprocess.run([str(self.binary), "pep.fasta", "nuc.fasta", "-o", "/dev/null", "--resume"], cwd=d,
                            capture_output=True, timeout=60)
         self.assertEqual(r.returncode, 0, r.stderr[-300:])
-        self.assertIn(b"coal: note: /dev/null cannot be resumed (the output is not a regular file); starting a "
+        self.assertIn(b"coal: notice: /dev/null cannot be resumed (the output is not a regular file); starting a "
                       b"normal run", r.stderr)
 
     def test_progress(self):

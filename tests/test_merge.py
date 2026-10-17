@@ -74,8 +74,8 @@ class TestMrg1Pairing(_Tmp):
         self.assertEqual((rc, out), (0, self.ref))  # = PAL2NAL's output on the DNA put in protein order
         self.assertIn("coal: warning: 5 of 5 protein IDs match a DNA ID only after normalising (version suffix, "
                       "case or database fields), so sequences were paired by those IDs, not by file order as "
-                      "PAL2NAL pairs them: by order, 5 of 5 proteins would get the DNA of another gene (e.g. protein "
-                      "'g0' gets DNA 'G0.1', not 'G4.1')", err)
+                      "PAL2NAL pairs them: by order, 5 of 5 proteins would get the DNA of another gene (e.g. by file "
+                      "order, protein 'g0' would get DNA 'G4.1'; COAL paired it with 'G0.1')", err)  # CHANGED(ENG-UX-1)
         self.assertEqual(run(self.d, ["pep.fasta", "nuc.fasta", "-q"])[2], "")  # DEC-2
 
     def test_same_order_stays_pal2nal(self):
@@ -278,7 +278,7 @@ class TestMrg4ResumeComposes(_Tmp):
         self.assertTrue((self.d / "real.fa.coal-checkpoint.json").exists())
         r = sub(["pep.fasta", "nuc.fasta", "-o", "link.fa", "--resume"], self.d)
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn(b"coal: note: resuming link.fa", r.stderr)
+        self.assertIn(b"coal: notice: resuming link.fa", r.stderr)
         self.assertTrue(os.path.islink(self.d / "link.fa"))
         self.assertEqual(target.read_bytes(), self.ref)
         self.assertEqual(stat.S_IMODE(os.stat(target).st_mode), 0o640)
@@ -297,7 +297,7 @@ class TestMrg4ResumeComposes(_Tmp):
                            cwd=self.d, env=ENV, input=(self.d / "nuc.fasta").read_bytes(), capture_output=True,
                            timeout=120)  # a real pipe (a file on stdin is a regular file)
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn(b"coal: note: o.fa cannot be resumed (an input is not a regular file); starting a normal run",
+        self.assertIn(b"coal: notice: o.fa cannot be resumed (an input is not a regular file); starting a normal run",
                       r.stderr)
         self.assertEqual((self.d / "o.fa").read_bytes(), self.ref)
         self.assertFalse((self.d / "o.fa.coal-checkpoint.json").exists())

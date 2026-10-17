@@ -102,6 +102,7 @@ private:
     Json output_;
     bool has_gc_hint_ = false;
     Json gc_hint_;
+    std::string gc_hint_cli_;  // ENG-UX-7: the hint as the command line says it
     long long resumed_from_ = -1;
 };
 

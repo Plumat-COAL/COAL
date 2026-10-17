@@ -36,6 +36,9 @@ struct OutTarget {
 };
 // Checks -o PATH before any work: throws CoalError for a symlink loop or an unusable folder.
 OutTarget resolve_output(const std::string& out);
+// ENG-UX-12: "cannot write <out>: <reason in plain words>" (pipeline.py _output_error); out "" = stdout's temp file.
+std::string output_error(const std::string& out, int err);
+
 // Gives `tmp` the permissions `real` has (existing file) before it replaces it.
 void copy_mode(const std::string& real, const std::string& tmp);
 

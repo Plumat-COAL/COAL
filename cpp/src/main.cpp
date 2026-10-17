@@ -9,6 +9,7 @@
 // that replaces the destination only when everything succeeded.
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <cstdlib>
 #include <functional>
 #include <chrono>
@@ -168,15 +169,46 @@ static std::vector<std::string> id_keys(const std::string& rid) {
     return keys;
 }
 
+static std::string records(long long n, const std::string& what) {
+    return std::to_string(n) + " " + what + (n == 1 ? "" : "s");
+}
+
+// CHANGED(ENG-UX-6): the count error with what to do; an example record when the IDs show which records are extra
+// (every protein ID is a DNA ID) or which proteins have no DNA (exactly that many are missing). As core.py.
+static std::string count_mismatch_message(const std::vector<std::string>& prot, const std::vector<std::string>& dna_ids,
+                                          const std::unordered_map<std::string, size_t>& pos) {
+    const long long p = (long long)prot.size(), d = (long long)dna_ids.size();
+    std::string head = "number of sequences differs (protein: " + std::to_string(p) + ", DNA: " + std::to_string(d) +
+                       "): each protein needs exactly one DNA record";
+    if (d > p) {
+        std::string eg;
+        bool all = true;
+        for (auto& x : prot) all = all && pos.count(x);
+        if (all) {
+            std::set<std::string> pset(prot.begin(), prot.end());
+            for (auto& x : dna_ids)
+                if (!pset.count(x)) {
+                    eg = " (e.g. '" + x + "', which is not in the protein alignment)";
+                    break;
+                }
+        }
+        return head + "; remove the " + records(d - p, "extra DNA record") + eg + " or check you used the right files";
+    }
+    std::vector<std::string> missing;
+    for (auto& x : prot)
+        if (!pos.count(x)) missing.push_back(x);
+    std::string eg = !missing.empty() && (long long)missing.size() == p - d ? " (e.g. '" + missing[0] + "')" : "";
+    return head + "; " + std::to_string(p - d) + " protein" + (p - d == 1 ? " has" : "s have") + " no DNA record" + eg +
+           ": add the missing DNA, remove those proteins from the alignment, or check you used the right files";
+}
+
 // CPP-25 (reference MRG-1, core.py pair_ids): returns "id", "normalised" or "order"; fills idx, per_seq (only for
 // "normalised") and the notices.
 static std::string pair_ids(const std::vector<std::string>& prot, const std::vector<std::string>& dna_ids,
                             const std::unordered_map<std::string, size_t>& pos, std::vector<size_t>& idx,
                             std::vector<std::string>& per_seq, std::vector<std::string>& notes, bool strict) {
-    if (prot.size() != dna_ids.size())
-        throw CoalError("number of sequences differs (protein: " + std::to_string(prot.size()) +
-                            ", DNA: " + std::to_string(dna_ids.size()) + ")",
-                        "count_mismatch");
+    if (prot.size() != dna_ids.size())  // CHANGED(ENG-UX-6): + what to do (core.py count_mismatch_message)
+        throw CoalError(count_mismatch_message(prot, dna_ids, pos), "count_mismatch");
     if (prot.empty()) throw CoalError("no sequences in input", "no_sequences");
     idx.assign(prot.size(), 0);
     per_seq.clear();
@@ -258,8 +290,9 @@ static std::string pair_ids(const std::vector<std::string>& prot, const std::vec
         notes.push_back(std::to_string(nn) + " of " + T + " protein IDs match a DNA ID only after normalising (version "
                         "suffix, case or database fields), so sequences were paired by those IDs, not by file order "
                         "as PAL2NAL pairs them: by order, " + std::to_string(nmoved) + " of " + T +
-                        " proteins would get the DNA of another gene (e.g. protein '" + prot[first] + "' gets DNA '" +
-                        dna_ids[nidx[first]] + "', not '" + dna_ids[first] + "')");
+                        " proteins would get the DNA of another gene (e.g. by file order, protein '" + prot[first] +
+                        "' would get DNA '" + dna_ids[first] + "'; COAL paired it with '" + dna_ids[nidx[first]] +
+                        "')");  // CHANGED(ENG-UX-1): the example read backwards
         idx = nidx;
         per_seq = modes;
         return "normalised";
@@ -703,6 +736,9 @@ static void test_pause(int count) {
     }
 }
 
+// The -o argument ("" = stdout), for output_error() when a file of the run cannot be created (ENG-UX-12).
+static std::string g_out_arg;
+
 // A file written by the pipeline: fresh, or (resume) truncated to a byte length and appended to.
 struct OutFile {
     std::string path;
@@ -712,6 +748,7 @@ struct OutFile {
     void open(const std::string& p, long long resume_bytes = -1) {
         path = p;
         f.rdbuf()->pubsetbuf(buf.data(), (std::streamsize)buf.size());
+        errno = 0;
         if (resume_bytes >= 0) {
             fs::resize_file(p, (uintmax_t)resume_bytes);
             f.open(p, std::ios::in | std::ios::out | std::ios::binary);
@@ -719,7 +756,9 @@ struct OutFile {
         } else {
             f.open(p, std::ios::in | std::ios::out | std::ios::binary | std::ios::trunc);
         }
-        if (!f) throw InputError("[Errno 2] No such file or directory: " + py_repr(p), "file_error");
+        // CHANGED(ENG-UX-12): was "[Errno 2] No such file or directory: '<COAL's hidden file>'" whatever the reason;
+        // now the user's -o in plain words, as pipeline.py _output_error
+        if (!f) throw CoalError(output_error(g_out_arg, errno ? errno : ENOENT), "file_error");
     }
 };
 
@@ -793,24 +832,37 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
     std::vector<int> widths;
     {
         ProteinReader pr(o.pep);
-        std::string id, row;
+        std::string id, row, first_row;
         while (pr.next(id, row)) {
             row = prepare_row(row);
             if (ncol < 0) {
                 ncol = (long long)row.size();
                 widths.assign((size_t)ncol, 3);
+                first_row = row;
             } else if ((long long)row.size() != ncol) {
-                throw CoalError("protein alignment rows have different lengths (" + std::to_string(ncol) + " and " +
-                                    std::to_string(row.size()) + ", at " + id + ")",
+                // CHANGED(ENG-UX-3): files swapped (the first file is DNA) / protein not aligned told apart (core.py)
+                throw CoalError(row_length_message(o.pep, ncol, (long long)row.size(), id, first_row + row),
                                 "row_lengths");
             }
             update_column_widths(widths, row);
             ids_read.push_back(id);
         }
     }
+    if (ids_read.empty())  // CHANGED(ENG-UX-6): was "number of sequences differs (protein: 0, DNA: N)"
+        throw CoalError(o.pep + ": no sequences found: the file is empty or has no '>' header lines (expected a "
+                                "protein alignment in FASTA or CLUSTAL format)",
+                        "no_sequences");
     rec.set_inputs(std::move(ids_read));
     const std::vector<std::string>& ids = rec.ids();  // CPP-33: one copy, owned by the report
     DnaIndex dna(o.nucs);
+    if (dna.size() == 0) {  // CHANGED(ENG-UX-6): was "number of sequences differs (protein: N, DNA: 0)"
+        std::string joined;
+        for (size_t i = 0; i < o.nucs.size(); ++i) joined += (i ? ", " : "") + o.nucs[i];
+        const bool many = o.nucs.size() > 1;
+        throw CoalError(joined + ": no sequences found: the file" + (many ? "s are" : " is") + " empty or ha" +
+                            (many ? "ve" : "s") + " no '>' header lines (expected the coding DNA in FASTA format)",
+                        "no_sequences");
+    }
     rec.set_dna_inputs(dna.counts_per_file(), dna.ids());
     // CPP-25 (reference MRG-1): exact IDs; else (--strict: a partial exact match is an error) normalised IDs only
     // where file order would give a protein another gene's DNA, with a notice; else file order (ENG-d notice when
@@ -843,7 +895,20 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
     // CPP-16 (reference ENG-a, R2-E5, R3-E2): -o PATH is checked before any work. Symlinks are written through;
     // FIFOs, devices and files with other hard links are written in place (from a temp file, no checkpoint).
     OutTarget target;
+    g_out_arg = o.out;
     if (!o.out.empty()) target = resolve_output(o.out);
+    // CHANGED(ENG-UX-12): -o naming an input file overwrote that input; now refused before any work (pipeline.py)
+    if (!o.out.empty() && target.existing) {
+        std::vector<std::string> ins{o.pep};
+        ins.insert(ins.end(), o.nucs.begin(), o.nucs.end());
+        for (auto& p : ins) {
+            std::error_code eq;
+            if (fs::equivalent(p, target.real, eq) && !eq)
+                throw CoalError("cannot write " + o.out + ": it is one of the input files; choose another name for the "
+                                "output",
+                                "file_error");
+        }
+    }
     const bool direct = !o.out.empty() && target.direct;
     // CPP-28 (reference MRG-4): a checkpoint only for an output that is (or will be) a regular file - hard-linked
     // files included (written in place at the end) - and inputs that are regular files
@@ -1080,7 +1145,10 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         run_ordered<Item>(read_batch, [&](Item& it) { work(it, ctx); }, emit, o.jobs);
         if (prog && prog->printed) prog->update(done, true);
         if (o.keep_going && skipped == nseq)
-            throw CoalError("none of the " + std::to_string(nseq) + " sequences could be converted", "all_failed");
+            throw CoalError("none of the " + std::to_string(nseq) + " sequences could be converted: check that the DNA "
+                            "file holds the coding sequences of these proteins and that the genetic code (-codontable) "
+                            "is right",
+                            "all_failed");  // CHANGED(ENG-UX-17): + what to check
         rec.finish(rows_fn, dna_fn);  // CPP-27: break locations, mismatch patterns, genetic-code hint
         const long long nout = nseq - skipped;
         // CPP-33: the final pass names the written sequences: the report's IDs, or (--keep-going skipped some)
@@ -1163,11 +1231,12 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
             std::error_code ec;
             if (target.existing) copy_mode(target.real, out_tmp);  // CPP-16 (R2-E5): keep its permissions
             fs::rename(out_tmp, target.real, ec);
-            if (ec) throw CoalError("could not write " + o.out + ": " + ec.message(), "file_error");
+            if (ec) throw CoalError(output_error(o.out, ec.value()), "file_error");  // CHANGED(ENG-UX-12)
         } else if (direct) {  // CPP-16: FIFO / device / hard-linked file: written in place
             std::ifstream in(out_tmp, std::ios::binary);
+            errno = 0;
             std::ofstream dst(o.out, std::ios::binary | std::ios::trunc);
-            if (!dst) throw CoalError("cannot write " + o.out + ": " + std::strerror(errno), "file_error");
+            if (!dst) throw CoalError(output_error(o.out, errno ? errno : EIO), "file_error");  // CHANGED(ENG-UX-12)
             dst << in.rdbuf();
             dst.flush();
             if (!dst) throw CoalError("could not write " + o.out + " (disk full?)", "file_error");
@@ -1311,7 +1380,8 @@ int main(int argc, char** argv) {
         std::cerr << "coal: warning: " << w << '\n';
     };
     WarnFn note = [&](const std::string& t) {
-        if (!o.quiet) std::cerr << "coal: note: " << t << std::endl;  // -q: no notices (as the Python CLI)
+        // CHANGED(ENG-UX-10): was "coal: note:"; -q: no notices (as the Python CLI)
+        if (!o.quiet) std::cerr << "coal: notice: " << t << std::endl;
     };
     RunState rs;
     int rc = 0;
@@ -1352,17 +1422,24 @@ int main(int argc, char** argv) {
     if (!o.report.empty()) {
         std::string tmp = o.report + ".tmp" + unique_suffix();
         bool ok;
+        int err = 0;
         {
+            errno = 0;
             std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
             f << json_dump(rec.to_dict(), 1) << '\n';
             f.flush();
             ok = (bool)f;
+            if (!ok) err = errno ? errno : EIO;
         }
         std::error_code ec;
         if (ok) fs::rename(tmp, o.report, ec);
         if (!ok || ec) {
-            fs::remove(tmp, ec);
-            std::cerr << "coal: error: could not write the report: " << o.report << '\n';
+            if (ec) err = ec.value();
+            std::error_code rm;
+            fs::remove(tmp, rm);
+            // CHANGED(ENG-UX-12): was "could not write the report: <path>" (no reason); now as cli.py
+            std::string why = fs::is_directory(o.report, rm) ? "it is a folder, not a file" : std::strerror(err);
+            std::cerr << "coal: error: could not write the report " << o.report << ": " << why << '\n';
             if (!rc) rc = 1;
         }
     }

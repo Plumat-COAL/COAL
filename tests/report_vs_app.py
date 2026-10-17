@@ -139,6 +139,11 @@ def differences(res, protein=None, dna=None, table=1) -> list[str]:
             diffs.append(f"genetic-code hint {ga} != {ge}")
     if bool(a.get("output")) != bool(e.get("output")):
         diffs.append(f"output {a.get('output')} != {e.get('output')}")
+    # CHANGED(ENG-UX-9): the engine puts a "fix the warnings first" note before the methods text when fewer than half
+    # the genes are OK; the app's fallback text (built from stderr) has no such note. Compare the text after it.
+    from coal.report import AS_IT_STANDS, NOT_READY
+    if me and me.startswith(NOT_READY) and not (ma or "").startswith(NOT_READY):
+        me = me.split(AS_IT_STANDS + " ", 1)[1]
     if ma != me:
         diffs.append(f"methods text\n    app:    {ma}\n    engine: {me}")
     return diffs
