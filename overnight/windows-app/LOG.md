@@ -12,7 +12,7 @@ them is written from their documentation and marked untested below.
 | 2. `desktop/coal_desktop.py` wrapper + `requirements.txt` + `test_wrapper.py` (23 tests) | 8bc2308 |
 | 3. `coal_desktop.spec`, `build.ps1`, `installer.iss`, `BUILD.md`, `coal.ico` (+ `make_icon.py`), `.gitignore` (not built) | 8e1dcde |
 | 4. `SMOKE_TEST.md` (10 steps + accessibility pass) + `test_smoke.py` | da4748d |
-| 5. `desktop/README.md` for users (no screenshots: no GUI here) + this summary | (final commit) |
+| 5. `desktop/README.md` for users (no screenshots: no GUI here) + this summary | 5ab0470 (+ this hash fix) |
 
 ## Tested on this machine (Linux, Python 3.13)
 - `python -m unittest desktop/test_wrapper.py`: 23 OK. Port picking; local app child start ->
