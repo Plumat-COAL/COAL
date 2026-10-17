@@ -67,7 +67,7 @@ class TestLargeInputByPath(unittest.TestCase):
     def test_codon_align_by_path_makes_no_copy_and_output_is_right(self):
         t0 = time.time() - 1
         r = tools.codon_align(self.pep, self.nuc)
-        self.assertTrue(r["ok"], r.get("error"))
+        self.assertTrue(r["completed"], r.get("next_step"))
         self.assertEqual(r["summary"]["ok"], 22000)
         self.assertEqual(self._copies(t0, {r["output_path"], r["report_path"]}), [])
         # correct by construction: each residue's codon in order, '---' for each gap

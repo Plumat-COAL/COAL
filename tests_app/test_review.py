@@ -355,26 +355,27 @@ class TestFinding11HostedSandbox(_RunsDir):
         t = _tmp(self)
         secret = _write(os.path.join(t, "secret.fasta"), ">s1\nMAKL\n")
         dna = _write(os.path.join(t, "dna.fasta"), ">s1\nATGGCTAAACTG\n")
-        r = tools.codon_align(secret, dna)
-        self.assertFalse(r["ok"])
-        self.assertIn("not allowed", r["error"])
-        self.assertNotIn("output_path", {k for k, v in r.items() if v})
+        # CHANGED(IMP-M-1): was a {"ok": false, "error": ...} result; now a tool error (isError over MCP)
+        with self.assertRaisesRegex(tools.CoalToolError, "not allowed"):
+            tools.codon_align(secret, dna)
         for bad in (secret, "/etc/passwd", os.path.join(core.EXAMPLES_DIR, "..", "pyproject.toml")):
-            self.assertIn("not allowed", tools.explain_report(bad))
+            with self.assertRaisesRegex(tools.CoalToolError, "not allowed"):
+                tools.explain_report(bad)
         # a symlink inside the sandbox that points outside is refused too
         link = os.path.join(core.RUNS_DIR, "link.fasta")
         try:
             os.symlink(secret, link)
         except (OSError, NotImplementedError):
             self.skipTest("symlinks not available")
-        self.assertIn("not allowed", tools.codon_align(link, dna)["error"])
+        with self.assertRaisesRegex(tools.CoalToolError, "not allowed"):
+            tools.codon_align(link, dna)
 
     def test_hosted_tools_still_work_on_examples_and_their_own_reports(self):
         from coal_app import tools
         self._hosted(True)
         p, d = core.example_paths("clean")
         r = tools.codon_align(p, d)
-        self.assertTrue(r["ok"], r)
+        self.assertTrue(r["completed"], r)
         self.assertIn("Nothing went wrong", tools.explain_report(r["report_path"]))
 
     def test_local_tools_accept_any_path(self):
@@ -383,7 +384,7 @@ class TestFinding11HostedSandbox(_RunsDir):
         t = _tmp(self)
         p = _write(os.path.join(t, "p.fasta"), ">s1\nMAKL\n")
         d = _write(os.path.join(t, "d.fasta"), ">s1\nATGGCTAAACTG\n")
-        self.assertTrue(tools.codon_align(p, d)["ok"])
+        self.assertTrue(tools.codon_align(p, d)["completed"])
 
     def test_intro_depends_on_where_it_runs(self):
         self._hosted(False)
@@ -503,7 +504,9 @@ class TestFinding14MalformedReports(unittest.TestCase):
                     {"schema": "coal.report/1", "options": []},
                     {"schema": "coal.report/1", "inputs": {}},
                     [1, 2]):
-            text = tools.explain_report(self._report(obj))
+            with self.assertRaises(tools.CoalToolError) as cm:  # CHANGED(IMP-M-1): was a returned string
+                tools.explain_report(self._report(obj))
+            text = str(cm.exception)
             self.assertTrue(text.startswith("Could not read the report:"), (obj, text))
             self.assertIn("not a valid COAL report", text)
 
@@ -517,7 +520,8 @@ class TestFinding14MalformedReports(unittest.TestCase):
 
     def test_not_json(self):
         from coal_app import tools
-        self.assertIn("Could not read the report", tools.explain_report(self._report(text="{nope")))
+        with self.assertRaisesRegex(tools.CoalToolError, "Could not read the report"):
+            tools.explain_report(self._report(text="{nope"))
 
 
 class TestFinding15SampleReport(unittest.TestCase):
