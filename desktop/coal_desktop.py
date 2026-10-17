@@ -1105,6 +1105,9 @@ def parse_args(argv):
 
 def dispatch(argv: list[str]) -> int:
     if argv[:2] == ["-m", "coal"]:
+        # CHANGED(SHIP-12): the frozen engine also wrote its messages in cp1252 while the app reads them as UTF-8
+        # (coal_app.core): a file path outside cp1252 crashed the run, and one inside it (é) arrived garbled
+        _utf8_streams()
         return run_engine(argv[2:])
     if argv[:1] == ["-m"]:
         print(f"COAL: only '-m coal' is supported here, not '-m {' '.join(argv[1:2])}'", file=sys.stderr)
