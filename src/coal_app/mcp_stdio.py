@@ -1,6 +1,7 @@
 """Stand-alone MCP server over stdio (no Gradio needed): ``python -m coal_app --mcp``.
 
-Uses the official ``mcp`` Python SDK, version 2.x (``pip install -e ".[mcp]"``).
+Uses the official ``mcp`` Python SDK, version 2.x (``pip install -e ".[mcp]"``), or 1.x (the one Gradio's ``mcp`` extra
+installs, so the one inside the Windows app: ``COAL.exe -m coal_app --mcp``).
 Example client config (Claude Code / Claude Desktop), with the absolute path of the Python that has COAL:
     {"mcpServers": {"coal": {"command": "/abs/path/.venv-mcp/bin/python", "args": ["-m", "coal_app", "--mcp"]}}}
 """
@@ -44,10 +45,25 @@ def _structured_codon_align():
 
 
 def build_server():
-    from mcp.server.mcpserver import MCPServer  # mcp >= 2.0
+    try:
+        from mcp.server.mcpserver import MCPServer  # mcp >= 2.0
+    except ImportError:
+        return _build_fastmcp()
 
     server = MCPServer(name="coal", title="COAL codon alignment", instructions=INSTRUCTIONS,
                        version=server_version())
+    server.add_tool(_structured_codon_align(), name="codon_align")
+    server.add_tool(tools.explain_report)
+    return server
+
+
+def _build_fastmcp():
+    """CHANGED(SHIP-18): new. The same server on mcp 1.x (FastMCP). Gradio 5.49.1's `mcp` extra pins mcp==1.10.1, so
+    that is the mcp inside the Windows app, which now runs this server for Claude Desktop (`COAL.exe -m coal_app
+    --mcp`). Was: mcp 2 only (ImportError under 1.x). mcp 1.x has no server version field."""
+    from mcp.server.fastmcp import FastMCP  # mcp 1.x
+
+    server = FastMCP(name="coal", instructions=INSTRUCTIONS)
     server.add_tool(_structured_codon_align(), name="codon_align")
     server.add_tool(tools.explain_report)
     return server

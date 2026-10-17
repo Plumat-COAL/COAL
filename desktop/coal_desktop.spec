@@ -54,10 +54,14 @@ for f in glob.glob(os.path.join(REPO, "examples", "*", "*")):
     if os.path.isfile(f) and f.endswith((".fasta", ".md")):
         datas.append((f, os.path.join("examples", os.path.basename(os.path.dirname(f)))))
 
-# Optional C++ engine.
-cpp = sorted(glob.glob(os.path.join(REPO, "cpp", "build", "**", "coal-cpp.exe"), recursive=True))
+# Optional C++ engine (CI and release.yml build it first: cmake -S . -B build).
+# CHANGED(SHIP-19): was cpp/build/** only (the CMakeLists.txt is at the repo root, so builds land in build/) and put
+# into _internal/bin, where coal.dispatch.find_cpp does not look; now build/** too, into _internal itself (next to
+# python3*.dll and vcruntime), so `coal` hands large inputs to it.
+cpp = sorted(glob.glob(os.path.join(REPO, "build", "**", "coal-cpp.exe"), recursive=True)
+             + glob.glob(os.path.join(REPO, "cpp", "build", "**", "coal-cpp.exe"), recursive=True))
 if cpp:
-    binaries.append((cpp[0], "bin"))
+    binaries.append((cpp[0], "."))
     print(f"coal_desktop.spec: bundling C++ engine {cpp[0]}")
 else:
     print("coal_desktop.spec: no cpp\\build\\**\\coal-cpp.exe found; building without the C++ engine")

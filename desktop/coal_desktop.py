@@ -28,6 +28,7 @@ import json
 import logging
 import multiprocessing
 import os
+from pathlib import Path
 import queue
 import re
 import secrets
@@ -1105,6 +1106,12 @@ def parse_args(argv):
     ap.add_argument("--no-mcp", action="store_true",
                     help="don't serve COAL's MCP tools (the default for the window)")
     ap.add_argument("--browser", action="store_true", help="open in the default browser instead of a window")
+    # CHANGED(SHIP-18): new. The installer's "Connect COAL to Claude Desktop" box runs --connect-claude; uninstall
+    # runs --disconnect-claude --quiet.
+    ap.add_argument("--connect-claude", action="store_true",
+                    help="let Claude Desktop run COAL (adds COAL to Claude Desktop's settings)")
+    ap.add_argument("--disconnect-claude", action="store_true", help="remove COAL from Claude Desktop's settings")
+    ap.add_argument("--quiet", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--version", action="store_true")
     return ap.parse_args(argv)
 
@@ -1115,10 +1122,15 @@ def dispatch(argv: list[str]) -> int:
         # (coal_app.core): a file path outside cp1252 crashed the run, and one inside it (é) arrived garbled
         _utf8_streams()
         return run_engine(argv[2:])
+    if argv[:3] == ["-m", "coal_app", "--mcp"]:
+        return run_mcp_stdio()
     if argv[:1] == ["-m"]:
-        print(f"COAL: only '-m coal' is supported here, not '-m {' '.join(argv[1:2])}'", file=sys.stderr)
+        print(f"COAL: only '-m coal' and '-m coal_app --mcp' are supported here, not '-m {' '.join(argv[1:2])}'",
+              file=sys.stderr)
         return 2
     args = parse_args(argv)
+    if args.connect_claude or args.disconnect_claude:
+        return claude_desktop_command(connect=args.connect_claude, quiet=args.quiet)
     if args.version:
         from coal import __version__ as v  # noqa: PLC0415
         print(f"COAL desktop {v}")
@@ -1130,6 +1142,144 @@ def dispatch(argv: list[str]) -> int:
         _utf8_streams()
         return serve(args.port, mcp=not args.no_mcp, parent_pid=args.parent_pid)
     return main_window(args)
+
+
+# ============================================================== Claude Desktop (SHIP-18)
+
+MCP_ARGS = ["-m", "coal_app", "--mcp"]
+CLAUDE_CONFIG = "claude_desktop_config.json"
+
+
+def run_mcp_stdio() -> int:
+    """`COAL.exe -m coal_app --mcp`: COAL's MCP server over stdio, started by Claude Desktop (as `python -m coal_app
+    --mcp`). CHANGED(SHIP-18): new; was refused ("only '-m coal'"), so the installed app could not be used by Claude."""
+    if sys.stdin is None or sys.stdout is None:  # double-clicked or started without pipes (windowed build)
+        _error_dialog("COAL", "This part of COAL is started by Claude Desktop, not by hand.\n\nTo connect COAL to "
+                              "Claude Desktop, run the COAL installer again and keep \"Connect COAL to Claude "
+                              "Desktop\" ticked.")
+        return 2
+    _utf8_streams()
+    from coal_app import mcp_stdio  # noqa: PLC0415
+    return mcp_stdio.main()
+
+
+def claude_config_dirs(env=None) -> list[Path]:
+    """Folders where Claude Desktop keeps claude_desktop_config.json on this computer (existing ones only).
+    Windows: %APPDATA%\\Claude (installer) and the Microsoft Store package's own copy of it; macOS: Application
+    Support/Claude; Linux: ~/.config/Claude."""
+    env = os.environ if env is None else env
+    found = []
+    if env.get("APPDATA"):
+        found.append(Path(env["APPDATA"]) / "Claude")
+    if env.get("LOCALAPPDATA"):
+        found += sorted((Path(env["LOCALAPPDATA"]) / "Packages").glob("Claude_*/LocalCache/Roaming/Claude"))
+    home = Path(env.get("HOME") or env.get("USERPROFILE") or Path.home())
+    found += [home / "Library" / "Application Support" / "Claude", home / ".config" / "Claude"]
+    return [d for d in found if d.is_dir()]
+
+
+def coal_server_entry(exe: str | None = None) -> dict:
+    """The mcpServers entry that starts this COAL: the app itself when frozen, else this Python."""
+    return {"command": exe or sys.executable, "args": list(MCP_ARGS)}
+
+
+def update_claude_config(path: Path, entry: dict | None) -> str:
+    """Add (entry) or remove (None) mcpServers.coal in one claude_desktop_config.json, keeping everything else.
+    Returns "added", "updated", "unchanged", "removed" or "absent". Raises ValueError if the file is not a JSON
+    object (it is then left exactly as it was). A copy of the old file is kept as claude_desktop_config.json.bak-coal."""
+    import json
+    text = path.read_text(encoding="utf-8-sig") if path.exists() else ""
+    if text.strip():
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"{path} is not valid JSON ({e.msg}, line {e.lineno}); COAL did not change it") from e
+        if not isinstance(data, dict):
+            raise ValueError(f"{path} is not a JSON object; COAL did not change it")
+    else:
+        data = {}
+    servers = data.get("mcpServers")
+    if servers is not None and not isinstance(servers, dict):
+        raise ValueError(f'"mcpServers" in {path} is not an object; COAL did not change it')
+    servers = dict(servers or {})
+    old = servers.get("coal")
+    if entry is None:
+        if old is None:
+            return "absent"
+        del servers["coal"]
+        status = "removed"
+    else:
+        if old == entry:
+            return "unchanged"
+        servers["coal"] = entry
+        status = "updated" if old is not None else "added"
+    data["mcpServers"] = servers
+    if text:
+        import shutil
+        shutil.copyfile(path, path.with_name(path.name + ".bak-coal"))  # byte for byte
+    tmp = path.with_name(path.name + ".coal-tmp")
+    tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+    return status
+
+
+def _info_box(title: str, text: str) -> None:
+    if IS_WINDOWS:
+        try:
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(None, text, title, 0x40 | 0x10000)  # information, foreground
+            return
+        except Exception:  # noqa: BLE001
+            pass
+    print(f"{title}: {text}")
+
+
+def claude_desktop_command(connect: bool, quiet: bool = False, env=None, exe: str | None = None) -> int:
+    """--connect-claude / --disconnect-claude. Connect writes into every Claude Desktop settings file on this
+    computer (creating %APPDATA%\\Claude\\claude_desktop_config.json when Claude Desktop is not installed yet, so it
+    works once it is). Disconnect removes only an entry that starts this COAL (or any COAL.exe -m coal_app --mcp)."""
+    dirs = claude_config_dirs(env)
+    if connect and not dirs:
+        e = os.environ if env is None else env
+        base = e.get("APPDATA") or str(Path.home() / ".config")
+        dirs = [Path(base) / "Claude"]
+        dirs[0].mkdir(parents=True, exist_ok=True)
+    entry = coal_server_entry(exe)
+    results, errors = [], []
+    for d in dirs:
+        path = d / CLAUDE_CONFIG
+        try:
+            if connect:
+                results.append(update_claude_config(path, entry))
+            else:
+                import json
+                cur = None
+                if path.exists():
+                    try:
+                        cur = (json.loads(path.read_text(encoding="utf-8-sig") or "{}").get("mcpServers") or {}).get("coal")
+                    except (ValueError, AttributeError):
+                        cur = None
+                if isinstance(cur, dict) and cur.get("args") == MCP_ARGS and \
+                        Path(str(cur.get("command", ""))).name.lower() == Path(entry["command"]).name.lower():
+                    results.append(update_claude_config(path, None))
+        except (OSError, ValueError) as e:
+            errors.append(str(e))
+    if quiet:
+        return 1 if errors else 0
+    if errors:
+        _error_dialog("COAL", "COAL could not connect to Claude Desktop:\n\n" + "\n".join(errors))
+        return 1
+    if connect:
+        _info_box("COAL is connected to Claude Desktop",
+                  "Claude Desktop can now run COAL for you.\n\n"
+                  "If Claude Desktop is open, quit it completely (right-click its icon by the clock, then Quit) and "
+                  "open it again.\n\n"
+                  "Then ask Claude, for example: \"Use COAL to make a codon alignment from the files in "
+                  "C:\\Users\\you\\Documents\\genes\".")
+    else:
+        _info_box("COAL", "COAL was removed from Claude Desktop." if "removed" in results
+                  else "COAL was not connected to Claude Desktop.")
+    return 0
 
 
 def _utf8_streams() -> None:

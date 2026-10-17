@@ -2,7 +2,17 @@
 
 ## Unreleased
 
+## 0.4.2
+
 <!-- CHANGED(IMP-M-4): Unreleased, 0.2.0 and 0.1.0 added from the git history -->
+- **COAL in Claude Desktop, from the installer:** the Windows installer's last page has **Connect COAL to Claude
+  Desktop** (ticked). Claude Desktop then starts COAL itself (`COAL.exe -m coal_app --mcp`) and can run it on your
+  files; uninstalling removes the entry. `codon_align` can save the alignment where you ask (`save_as`), e.g. next to
+  the input files.
+- **C++ engine included:** the Windows app ships `coal-cpp.exe`, and `coal` hands inputs of 1 MB or more to it when it
+  is found and is the same version (same output, faster on large inputs); `COAL_ENGINE=python|cpp` chooses.
+- **Quieter, clearer engine output:** a wrong genetic code is reported once, before at most 20 per-codon warnings
+  (`--max-warnings`, 0 = all; the `pal2nal` drop-in still prints them all); `--help` is grouped and short.
 - **MCP results tell the truth:** `codon_align` returns `completed` (COAL finished), `all_ok` / `needs_attention`
   (whether every sequence matched its protein), `counts`, `suggested_codontable` and `next_step`, and a short summary
   of COAL's messages instead of raw stderr. The old `ok` field (which meant "finished") is gone. A missing file, an

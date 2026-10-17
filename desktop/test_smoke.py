@@ -309,7 +309,7 @@ class LocalAppTests(Checks):
                 p, d = core.example_paths(name)
                 # CHANGED(SHIP-10): was 6 values; codon_align has 8 parameters since FIN-A6 added strict and blockonly, and
                 # the real Gradio API rejects a short positional list (the first CI build of the installer failed here)
-                r = gradio_call(self.url, "codon_align", [p, d, "fasta", code, False, False, False, False])
+                r = gradio_call(self.url, "codon_align", [p, d, "fasta", code, False, False, False, False, ""])
                 self.check_result(name, code, r)
 
     def test_3_shutdown_frees_the_port(self):

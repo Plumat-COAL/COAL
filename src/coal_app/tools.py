@@ -27,8 +27,11 @@ except ImportError:  # pragma: no cover
 
 try:  # mcp >= 2 (the `mcp` extra): a ToolError is an anticipated failure, its message reaches the model
     from mcp.server.mcpserver.exceptions import ToolError as _ToolErrorBase
-except ImportError:  # Gradio's MCP server (mcp 1.x) or no MCP at all: any exception becomes isError
-    _ToolErrorBase = None
+except ImportError:
+    try:  # CHANGED(SHIP-18): mcp 1.x (Gradio's, and the Windows app's stdio server) has ToolError under fastmcp
+        from mcp.server.fastmcp.exceptions import ToolError as _ToolErrorBase
+    except ImportError:  # no MCP at all: any exception becomes isError
+        _ToolErrorBase = None
 
 # CHANGED(SHIP-13): was `class CoalToolError(_ToolErrorBase, ValueError)` with _ToolErrorBase = Exception when mcp 2 is
 # absent, which is an invalid MRO (Exception before its subclass ValueError): importing coal_app.tools failed in every
@@ -186,6 +189,10 @@ def codon_align(
     = False,
     blockonly: Annotated[bool, Field(
         description="Keep only the columns marked '#' under the blocks of a CLUSTAL protein alignment.")] = False,
+    save_as: Annotated[str, Field(
+        description="Optional absolute path to save the codon alignment to, e.g. next to the input files "
+                    "(C:\\data\\genes.codon.fasta). An existing folder means: save there under COAL's file name. "
+                    "Never overwrites an existing file. Default: COAL's own run folder (output_path).")] = "",
 ) -> dict:
     """Build a codon alignment from a protein alignment and the matching unaligned coding DNA (PAL2NAL replacement).
 
@@ -207,6 +214,8 @@ def codon_align(
             written; only a partial ID match (sequences that would be paired by order) stops the run. By default
             such genes are written, as PAL2NAL does, and reported as failed.
         blockonly: If true, keep only the columns marked '#' under the blocks of a CLUSTAL protein alignment.
+        save_as: Optional absolute path (or existing folder) to save the codon alignment to, for example next to
+            the input files, so the person finds it. Never overwrites a file. Empty: COAL's own run folder.
 
     Returns:
         A dict with: completed (COAL finished and wrote an alignment), all_ok (every sequence matched its
@@ -223,6 +232,13 @@ def codon_align(
     """
     for p in (protein_alignment_path, dna_fasta_path):
         _check_input(p)
+    save_as = (save_as or "").strip()
+    if save_as:
+        # CHANGED(SHIP-20): new. Agents (Claude Desktop) could only point at a file in COAL's temporary run folder.
+        if core.hosted():
+            raise CoalToolError("save_as is not available on this shared server; use output_path")
+        if not os.path.isabs(save_as):
+            raise CoalToolError(f"save_as must be an absolute path, not {save_as!r}")
     if int(codontable) not in core.GENETIC_CODES:
         raise CoalToolError(f"unknown genetic code {codontable} (supported: "
                             f"{', '.join(str(c) for c in core.GENETIC_CODES)})")
@@ -234,7 +250,26 @@ def codon_align(
                           blockonly=bool(blockonly))
     except ValueError as e:
         raise CoalToolError(str(e)) from e
-    return dict(summarise(r))
+    result = dict(summarise(r))
+    if save_as and result.get("output_path"):
+        dest = save_as
+        if os.path.isdir(dest):
+            dest = os.path.join(dest, os.path.basename(result["output_path"]))
+        if os.path.exists(dest):
+            raise CoalToolError(f"not saved: {dest} already exists (COAL never overwrites a file; choose another "
+                                f"name). The alignment is at {result['output_path']}")
+        parent = os.path.dirname(dest)
+        if not os.path.isdir(parent):
+            raise CoalToolError(f"not saved: the folder {parent} does not exist. The alignment is at "
+                                f"{result['output_path']}")
+        import shutil
+        try:
+            shutil.copyfile(result["output_path"], dest)
+        except OSError as e:
+            raise CoalToolError(f"not saved to {dest}: {e.strerror or e}. The alignment is at "
+                                f"{result['output_path']}") from e
+        result["output_path"] = dest
+    return result
 
 
 def explain_report(

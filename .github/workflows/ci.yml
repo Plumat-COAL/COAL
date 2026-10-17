@@ -285,6 +285,11 @@ jobs:
           choco install innosetup --version=6.7.1 --allow-downgrade -y --no-progress
           $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { throw "Inno Setup installed, but $iscc is missing" }
+      - name: Build the C++ engine (bundled into the app; SHIP-19)
+        run: |
+          cmake -S . -B build -A x64 -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+          cmake --build build --config Release -j 2
+          if (-not (Test-Path build\Release\coal-cpp.exe)) { throw "no build\Release\coal-cpp.exe" }
       - name: Create the build venv
         run: python -m venv desktop\.venv
       - name: Build (desktop\build.ps1)
@@ -296,6 +301,7 @@ jobs:
         run: |
           $s = Get-ChildItem desktop\dist\COAL-Setup-*.exe
           if (-not $s) { throw "desktop\build.ps1 made no installer" }
+          if (-not (Test-Path desktop\dist\COAL\_internal\coal-cpp.exe)) { throw "the C++ engine is not in the app" }
           $s | Format-Table Name, Length
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:

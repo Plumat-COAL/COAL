@@ -15,7 +15,7 @@ words when a gene doesn't fit.
 
 ## Install
 
-1. Download `COAL-Setup-0.4.1.exe`.
+1. Download `COAL-Setup-0.4.2.exe`.
 2. Edge may say the file **"isn't commonly downloaded"**. Click the **…** next to the message,
    then **Keep**, then **Show more** and **Keep anyway**.
 3. Double-click the file. Windows shows a blue box, **"Windows protected your PC"**. Click
@@ -128,9 +128,12 @@ COAL never checks for updates by itself. New versions are published at
   open**: the page has no password, and it can read any file your account can read if given its
   path. On a shared lab PC, close COAL when you're done.
   <!-- CHANGED(WIN-W6, decision 3): security line made plain. See overnight/windows-app/CHANGES.md -->
-- **AI tools (MCP)**: the window does **not** serve COAL's MCP tools by default, because its port changes every
-  launch and an MCP client could not be pointed at it. To use COAL from Claude, set up the stand-alone MCP server
-  once with `desktop\setup_mcp.bat` (see "Run from source" above). `COAL.exe --mcp` still turns the endpoint on
+- **AI tools (MCP)**: the installer's **Connect COAL to Claude Desktop** box (ticked by default; later:
+  `COAL.exe --connect-claude`) lets Claude Desktop start COAL's MCP server itself (`COAL.exe -m coal_app --mcp`):
+  quit and reopen Claude Desktop afterwards. Claude asks before each run; uninstalling removes the entry. The window
+  itself does **not** serve COAL's MCP tools by default, because its port changes every launch and an MCP client
+  could not be pointed at it. From source, set up the stand-alone MCP server once with `desktop\setup_mcp.bat`
+  (see "Run from source" above). `COAL.exe --mcp` still turns the endpoint on
   for a session, at `http://127.0.0.1:<port>/gradio_api/mcp/sse` (the port is written in
   `%LOCALAPPDATA%\COAL\logs\local_app.log`).
   <!-- CHANGED(IMP-M-3): was on by default (WIN-M) on a random port. See overnight/integration/CHANGES.md -->

@@ -245,8 +245,14 @@ Details and evidence in `tests/README.md`:
 
 <!-- CHANGED(IMP-M-4): registration docs moved here from demo/mcp_demo.md, version-free -->
 COAL's stdio MCP server gives an agent two tools: `codon_align` (protein alignment + coding DNA -> codon alignment,
-with a report) and `explain_report` (that report in plain English). Install it in its **own** virtual environment
-(not the one with `".[gui]"`):
+with a report; `save_as` puts the alignment where you want it) and `explain_report` (that report in plain English).
+
+**Windows app:** keep **Connect COAL to Claude Desktop** ticked on the installer's last page (or run
+`COAL.exe --connect-claude` later), then quit and reopen Claude Desktop. This adds a `coal` entry that starts
+`COAL.exe -m coal_app --mcp` to `claude_desktop_config.json`, keeping everything else in it (the old file is kept as
+`claude_desktop_config.json.bak-coal`); uninstalling COAL removes the entry again.
+
+**From source:** install it in its **own** virtual environment (not the one with `".[gui]"`):
 
 ```
 python -m venv .venv-mcp

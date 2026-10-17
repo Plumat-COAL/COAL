@@ -287,6 +287,9 @@ class TestHelpGroups(unittest.TestCase):
         self.assertEqual(m.group(1), "fasta,clustal,paml,codon")
 
     @unittest.skipIf(cpp_binary() is None, "coal-cpp not built")
+    # CHANGED(SHIP-17): coal-cpp's help mirrors Python 3.13's argparse layout ("-j, --jobs N"); 3.12 and older print
+    # "-j N, --jobs N", so the line-for-line comparison only holds on 3.13+ (CI's cpp job). Spellings are checked below.
+    @unittest.skipIf(sys.version_info < (3, 13), "help layout differs before Python 3.13")
     def test_cpp_help_and_spellings(self):
         from coal.cli import build_parser
         env = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "COLUMNS": "80", "COAL_ENGINE": "python"}
