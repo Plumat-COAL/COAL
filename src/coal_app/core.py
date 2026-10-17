@@ -274,10 +274,11 @@ def _coal_cmd() -> list[str]:
 def detect_features() -> Features:
     """Read ``python -m coal --help`` to find which options this engine has."""
     try:
+        # CHANGED(WINCI-2): was stdin inherited; now stdin=DEVNULL (see _run_engine). See overnight/integration/CHANGES.md
         h = subprocess.run(_coal_cmd() + ["--help"], capture_output=True, text=True, encoding="utf-8",
-                           errors="replace", timeout=60).stdout
+                           errors="replace", timeout=60, stdin=subprocess.DEVNULL).stdout
         v = subprocess.run(_coal_cmd() + ["--version"], capture_output=True, text=True, encoding="utf-8",
-                           errors="replace", timeout=60)
+                           errors="replace", timeout=60, stdin=subprocess.DEVNULL)
         version = (v.stdout or v.stderr).strip().replace("coal ", "") or "unknown"
     except (OSError, subprocess.SubprocessError):
         return Features()
@@ -477,8 +478,12 @@ def _run_engine(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, re
         cmd += ["--report", report_path]
     cmd += ["--", protein, dna]  # CHANGED(R2-A7): was positional first, so a file named '-p.fa' was an option
     t0 = time.perf_counter()
-    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8",
-                         errors="replace")
+    # CHANGED(WINCI-2): was stdin inherited from the app; now stdin=DEVNULL. In the desktop app the app's stdin is
+    # the wrapper's lifeline pipe, which serve() keeps a blocking read on; on Windows a child given that same
+    # (synchronous) pipe blocks at startup behind the pending read, so every engine run hung. The engine never
+    # reads stdin. See overnight/integration/CHANGES.md
+    p = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                         encoding="utf-8", errors="replace")
     try:
         _, err = p.communicate(timeout=timeout)
         code = p.returncode
@@ -502,7 +507,9 @@ def stop_engine(p: subprocess.Popen, grace: float = 5.0) -> None:
         return
     if os.name == "nt":
         try:
-            subprocess.run(["taskkill", "/T", "/F", "/PID", str(p.pid)], capture_output=True, timeout=30)
+            # CHANGED(WINCI-2): was stdin inherited; now DEVNULL (see _run_engine). See overnight/integration/CHANGES.md
+            subprocess.run(["taskkill", "/T", "/F", "/PID", str(p.pid)], capture_output=True, timeout=30,
+                           stdin=subprocess.DEVNULL)
         except (OSError, subprocess.SubprocessError):
             pass
     else:
@@ -533,8 +540,9 @@ def run_engine_command(cmd: list, timeout: float, temp_dir: str | None = None) -
     engine: workers orphaned, .coal_*.tmp left). Runs `cmd`, returns (returncode, stdout, stderr); on timeout or
     interrupt stops the engine as stop_engine does, removes its .coal_*.tmp files in `temp_dir` and re-raises
     (subprocess.TimeoutExpired on timeout). See overnight/integration/CHANGES.md"""
-    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8",
-                         errors="replace")
+    # CHANGED(WINCI-2): was stdin inherited; now DEVNULL (see _run_engine). See overnight/integration/CHANGES.md
+    p = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                         encoding="utf-8", errors="replace")
     try:
         out, err = p.communicate(timeout=timeout)
     except BaseException:

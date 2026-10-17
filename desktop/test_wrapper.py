@@ -393,6 +393,30 @@ class TestLocalServer(Base):
             watch.close()
 
 
+class TestLifelineNotInherited(unittest.TestCase):
+    """WINCI-2: the local app's stdin is the lifeline pipe that serve() keeps a blocking read on. On Windows a child
+    process handed that same pipe blocks at startup behind the pending read (every engine run hung in CI run
+    39007425931), so every process the local app starts must get its own stdin."""
+
+    def test_every_subprocess_in_coal_app_sets_stdin(self):
+        import ast
+        app = os.path.join(REPO, "src", "coal_app")
+        found = []
+        for name in sorted(os.listdir(app)):
+            if not name.endswith(".py"):
+                continue
+            with open(os.path.join(app, name), encoding="utf-8") as f:
+                tree = ast.parse(f.read())
+            for node in ast.walk(tree):
+                if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                        and node.func.attr in ("run", "Popen", "call", "check_call", "check_output")
+                        and isinstance(node.func.value, ast.Name) and node.func.value.id == "subprocess"):
+                    found.append(f"{name}:{node.lineno}")
+                    self.assertIn("stdin", [k.arg for k in node.keywords],
+                                  f"{name}:{node.lineno}: subprocess.{node.func.attr} without stdin=")
+        self.assertGreaterEqual(len(found), 4, found)  # the engine runs, --help/--version, taskkill
+
+
 class TestServeProtocol(unittest.TestCase):
     def test_ready_line_and_clean_exit_on_eof(self):
         out, closed = io.StringIO(), []

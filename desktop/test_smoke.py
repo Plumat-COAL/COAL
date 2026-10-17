@@ -216,6 +216,9 @@ def gradio_call(base, api_name, args, timeout=RUN_TIMEOUT):
     raise AssertionError(f"no result in Gradio API response: {sse[:500]}")
 
 
+# WINCI-2: the stand-in now starts exactly like the product's child (`coal_desktop.py --serve --port N --parent-pid P`
+# -> main() -> dispatch() -> serve()), with only launch_gradio replaced; and like Gradio's queue, POST returns the
+# event id at once and the run happens in a worker thread (GET waits for it).
 STAND_IN = r"""
 import json, sys, threading, uuid, http.server
 sys.path.insert(0, %(desktop)r)
@@ -223,10 +226,10 @@ import coal_desktop as cd
 cd.setup_source_paths()
 from coal_app import tools
 
-RESULTS = {}
+JOBS = {}
 
 class H(http.server.BaseHTTPRequestHandler):
-    # Stand-in for Gradio's HTTP API (same URLs and SSE shape), calling the same tool function.
+    # Stand-in for Gradio's HTTP API (same URLs and SSE shape), calling the same tool function (ui.py: gr.api).
     def _send(self, code, body, ctype="application/json"):
         b = body.encode()
         self.send_response(code); self.send_header("Content-Type", ctype)
@@ -235,16 +238,26 @@ class H(http.server.BaseHTTPRequestHandler):
         if self.path == "/":
             return self._send(200, "<title>COAL codon alignment</title>", "text/html")
         eid = self.path.rsplit("/", 1)[-1]
-        if self.path.startswith("/gradio_api/call/codon_align/") and eid in RESULTS:
-            return self._send(200, "event: complete\ndata: " + json.dumps([RESULTS.pop(eid)]) + "\n\n",
-                              "text/event-stream")
+        if self.path.startswith("/gradio_api/call/codon_align/") and eid in JOBS:
+            done, box = JOBS.pop(eid)
+            done.wait()
+            event, data = box[0]
+            return self._send(200, "event: " + event + "\ndata: " + json.dumps(data) + "\n\n", "text/event-stream")
         self._send(404, "{}")
     def do_POST(self):
         if self.path != "/gradio_api/call/codon_align":
             return self._send(404, "{}")
         args = json.loads(self.rfile.read(int(self.headers["Content-Length"])))["data"]
-        eid = uuid.uuid4().hex
-        RESULTS[eid] = tools.codon_align(*args)
+        eid, done, box = uuid.uuid4().hex, threading.Event(), []
+        def job():
+            try:
+                box.append(("complete", [tools.codon_align(*args)]))
+            except Exception as e:  # reported to the test like Gradio's "event: error"
+                box.append(("error", repr(e)))
+            finally:
+                done.set()
+        JOBS[eid] = (done, box)
+        threading.Thread(target=job, daemon=True).start()
         self._send(200, json.dumps({"event_id": eid}))
     def log_message(self, *a): pass
 
@@ -253,7 +266,8 @@ def launcher(port, mcp):
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     return "http://127.0.0.1:%%d/" %% port, lambda: (srv.shutdown(), srv.server_close())
 
-sys.exit(cd.serve(int(sys.argv[1]), launcher=launcher))
+cd.launch_gradio = launcher  # the only difference from the product's --serve child
+sys.exit(cd.main(sys.argv[1:]))
 """
 
 
@@ -318,7 +332,7 @@ class StandInLocalApp(LocalAppTests, unittest.TestCase):
         if not os.path.exists(path):
             with open(path, "w", encoding="utf-8") as f:
                 f.write(STAND_IN % {"desktop": HERE})
-        return [sys.executable, path, str(port)]
+        return [sys.executable, path] + cd.default_server_command(port)[2:]  # WINCI-2: the product's arguments
 
 
 @unittest.skipUnless(HAS_WEBVIEW, "pywebview not installed")
