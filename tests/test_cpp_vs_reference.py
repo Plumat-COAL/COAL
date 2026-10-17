@@ -197,6 +197,24 @@ class TestCppVsReferenceGolden(unittest.TestCase):
         self.assertEqual(failures, [], f"{len(failures)} failing golden checks, first: {failures[:3]}")
 
 
+# Reference tests that cannot apply to a separate binary: they replace sys.stdout inside the Python process.
+NOT_APPLICABLE = ("TestDec3ClosedPipe.test_posix_broken_pipe_is_141_and_silent_in_both_commands",
+                  "TestDec3ClosedPipe.test_windows_einval_is_141_too")
+
+
+@unittest.skipIf(_skip_reason(), _skip_reason() or "")
+class TestReferenceTestsWithCpp(unittest.TestCase):
+    """The reference's own engine tests (test_decisions, test_review_fixes, test_fuzz_findings), with its `coal`
+    command (python -m coal, and the `pal2nal` drop-in's engine call) running coal-cpp."""
+
+    def test_reference_tests(self):
+        rc, out = run_ref_tests()
+        bad = [ln for ln in out.splitlines() if ln.endswith(("... FAIL", "... ERROR"))
+               and not any(n.split(".")[1] in ln and n.split(".")[0] in ln for n in NOT_APPLICABLE)]
+        self.assertTrue(" tests in " in out, out[-2000:])
+        self.assertEqual(bad, [], out[-4000:])
+
+
 @unittest.skipIf(_skip_reason(), _skip_reason() or "")
 class TestCppVsReferenceLarge(unittest.TestCase):
     """CPP-20: 1,200 sequences (PAML header widths), every format, coal-cpp vs the reference Python engine."""
