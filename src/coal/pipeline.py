@@ -19,6 +19,7 @@ import os
 import re
 from array import array
 import shutil
+import signal
 import sys
 import tempfile
 from collections import deque
@@ -60,7 +61,16 @@ def _protein_rows(path):
 _W: dict = {}
 
 
+def mp_child() -> bool:
+    import multiprocessing
+    return multiprocessing.parent_process() is not None
+
+
 def _init_worker(table, widths, two_pass, nogap):
+    # CHANGED(ENG-f): workers ignore Ctrl-C (the main process reports it once, no worker
+    # tracebacks). See overnight/engine-fixes/CHANGES.md
+    if mp_child():
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
     _W.update(table=table, widths=widths, wide=any(w != 3 for w in widths),
               two_pass=two_pass, nogap=nogap)
 

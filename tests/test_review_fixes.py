@@ -185,5 +185,74 @@ class TestEngE_LongFallback(unittest.TestCase):
         self.assertLess(dt, 1.0)
 
 
+# ---------------------------------------------------------------- ENG-f
+class TestEngF_Interrupts(TempDirCase):
+    """coal is stopped while it copies its finished temp file to a stdout pipe that the
+    test does not drain (so it is blocked mid-copy, with the temp file present)."""
+
+    def setUp(self):
+        super().setUp()
+        sys.path.insert(0, str(ROOT / "benchmarks"))
+        from gen_data import generate
+        generate(200, 1000, self.d / "big", seed=3)   # ~600 kB of output, > a pipe buffer
+        self.tmpdir = self.d / "tmp"
+        self.tmpdir.mkdir()
+
+    def start(self):
+        env = dict(os.environ, PYTHONPATH=str(SRC), TMPDIR=str(self.tmpdir))
+        p = subprocess.Popen([sys.executable, "-m", "coal", "big/pep.fasta", "big/nuc.fasta", "-j", "1"],
+                             cwd=self.d, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.assertTrue(p.stdout.readline().startswith(b">seq0"))  # now in the copy phase
+        return p
+
+    def stop(self, p, sig):
+        p.send_signal(sig)
+        try:
+            p.stdout.close()  # only after the signal, so no broken pipe first
+            err = p.stderr.read().decode()
+            p.wait(timeout=TIMEOUT)
+        finally:
+            if p.poll() is None:
+                p.kill()
+                p.wait()
+        return p.returncode, err
+
+    def test_sigterm_cleans_up(self):
+        import signal
+        p = self.start()
+        rc, err = self.stop(p, signal.SIGTERM)
+        self.assertEqual(rc, 128 + signal.SIGTERM, err)
+        self.assertNotIn("Traceback", err)
+        self.assertEqual(list(self.tmpdir.iterdir()), [])
+
+    def test_sigint_message_and_130(self):
+        import signal
+        p = self.start()
+        rc, err = self.stop(p, signal.SIGINT)
+        self.assertEqual(rc, 130, err)
+        self.assertNotIn("Traceback", err)
+        self.assertIn("coal: interrupted", err)
+        self.assertEqual(list(self.tmpdir.iterdir()), [])
+
+    def test_broken_pipe_is_quiet(self):  # coal ... | head -1
+        from gen_data import generate
+        generate(2000, 1000, self.d / "huge", seed=3)   # ~6 MB of output, > any pipe buffer
+        env = dict(os.environ, PYTHONPATH=str(SRC), TMPDIR=str(self.tmpdir))
+        p = subprocess.Popen([sys.executable, "-m", "coal", "huge/pep.fasta", "huge/nuc.fasta", "-j", "1"],
+                             cwd=self.d, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            self.assertTrue(p.stdout.readline().startswith(b">seq0"))
+            p.stdout.close()
+            err = p.stderr.read().decode()
+            p.wait(timeout=TIMEOUT)
+        finally:
+            if p.poll() is None:
+                p.kill()
+                p.wait()
+        self.assertEqual(err, "")
+        self.assertEqual(p.returncode, 141)
+        self.assertEqual(list(self.tmpdir.iterdir()), [])
+
+
 if __name__ == "__main__":
     unittest.main()
