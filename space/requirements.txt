@@ -1,0 +1,2 @@
+# The Space's Gradio version comes from sdk_version in README.md; this adds the MCP extra at the same pin.
+gradio[mcp]==5.49.1
