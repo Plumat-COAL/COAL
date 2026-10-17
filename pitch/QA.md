@@ -56,7 +56,7 @@ writes codeml's input directly. <!-- CHANGED(DEC-4): PAML output was "[after the
 
 **6. Is this AI-generated code you can't maintain?**
 Much of it was written with AI assistance (Claude), and we say so. What makes it maintainable is the
-same as for any code: about 3,100 lines of dependency-free Python in the engine and 2,600 in the app
+same as for any code: about 3,100 lines of dependency-free Python in the engine and 3,300 in the app
 layer, a differential test suite against PAL2NAL's real output, more than 200 app tests, CI on Windows, macOS
 and Linux (all green in run 39006043852, including the GUI tests against real Gradio on Windows; still open the
 latest GitHub Actions run before you say "green"), and documented decisions (every deliberate difference from PAL2NAL is written down with its test).

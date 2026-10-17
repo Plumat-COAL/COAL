@@ -399,7 +399,10 @@ class TestR3A5UploadAfterPath(RunsDirCase):  # R3-A5
         for k in (prot, dna):
             labels, fn = found[k]
             self.assertEqual(len(labels), 1, labels)
-            self.assertTrue(labels[0].startswith("or type/paste a path"), labels)
+            # CHANGED(GUI-1): was labels "or type/paste a path ..."; the path boxes now sit under "Use a file path
+            # instead (large files)" and are labelled "<file> path"
+            self.assertTrue(labels[0].endswith(" path"), labels)
+            self.assertEqual(labels[0].split()[0], {prot: "Protein", dna: "Coding"}[k], labels)
             self.assertEqual(fn("/tmp/x.fa"), "")
             self.assertEqual(fn(None), "")
 

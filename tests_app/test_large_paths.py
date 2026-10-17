@@ -104,7 +104,10 @@ class TestLargeInputByPath(unittest.TestCase):
         self.assertTrue(os.path.isfile(page_path))
         self.assertIn("showing the first 200 of 22000 sequences", frag)
         self.assertLess(len(table), 300_000)
-        self.assertIn("21,800 more sequences", table)
+        # CHANGED(GUI-4): was "21,800 more sequences" (200 OK rows + a summary row); OK genes are now one collapsed
+        # row naming the first core.HEALTH_OK_NAMES of them
+        self.assertIn("All 22,000 genes match codon for codon", table)
+        self.assertIn(f"and {22000 - core.HEALTH_OK_NAMES:,} more", table)
 
     def test_gui_path_resolution_reads_in_place(self):
         p, info = core.resolve_input(None, f'  "{self.nuc}"  ')  # pasted with quotes

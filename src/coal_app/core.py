@@ -1330,6 +1330,7 @@ def _jump_links(seq: dict, limit: int = 12) -> str:
 
 
 HEALTH_MAX_ROWS = 200
+HEALTH_OK_NAMES = 2000  # CHANGED(GUI-4): OK genes are named in one collapsed row, at most this many
 
 
 def health_table_html(report: dict, links: bool = False) -> str:
@@ -1341,15 +1342,45 @@ def health_table_html(report: dict, links: bool = False) -> str:
         links = False
     order = {"failed": 0, "warning": 1, "not_checked": 2, "ok": 3}
     allseqs = sorted(report.get("sequences", []), key=lambda s: order.get(s.get("status"), 4))
+    if not allseqs:  # CHANGED(GUI-4): was an empty table with only its caption (no report yet, or an input error)
+        return ""
+    # CHANGED(GUI-4): was one row per OK gene too ("OK · Protein and DNA match codon for codon." x 19 under one
+    # failed gene); now OK genes without a note are one collapsed row listing their names. See
+    # overnight/integration/CHANGES.md
+    oks = [s for s in allseqs if s.get("status") == "ok" and not (s.get("dna_id") and s.get("dna_id") != s.get("id"))]
+    ok_ids = {id(s) for s in oks}
+    allseqs = [s for s in allseqs if id(s) not in ok_ids]
     # CHANGED(R2-A3): was one row per sequence (22,000 rows = 4.2 MB of HTML); now at most HEALTH_MAX_ROWS rows,
     # problems first, then one summary row for the rest. See overnight/integration/CHANGES.md
     seqs = allseqs[:HEALTH_MAX_ROWS]
     rest = allseqs[HEALTH_MAX_ROWS:]
-    out = ['<table class="coal-health"><caption>Sequence health, problems first</caption>',
+    caption = "Sequence health, problems first" if allseqs else "Sequence health"
+    out = [f'<table class="coal-health"><caption>{caption}</caption>',
            '<thead><tr><th scope="col">Status</th><th scope="col">Sequence</th>'
            '<th scope="col">What this means</th></tr></thead><tbody>']
+    # CHANGED(GUI-4): three or more problem genes with the same status and the same sentence, and nothing of their
+    # own (no jump link, no pairing note), are one row naming them (e.g. the 19 "Not checked: COAL stopped at an
+    # error in X" rows after a fatal error). See overnight/integration/CHANGES.md
+    groups: dict = {}
+    for s in seqs:
+        if not (s.get("dna_id") and s.get("dna_id") != s.get("id")) and not (links and _jump_links(s)):
+            groups.setdefault((s.get("status"), sequence_sentence(s)), []).append(s)
+    grouped = {id(x) for g in groups.values() if len(g) >= 3 for x in g}
+    done = set()
     for s in seqs:
         icon, word, cls = STATUS.get(s.get("status"), ("?", str(s.get("status")), ""))
+        if id(s) in grouped:
+            key = (s.get("status"), sequence_sentence(s))
+            if key in done:
+                continue
+            done.add(key)
+            g = groups[key]
+            names = " ".join(f"<code>{html.escape(str(x.get('id', '')))}</code>" for x in g)
+            out.append(
+                f'<tr class="coal-{cls}"><td><span class="coal-badge coal-{cls}" aria-hidden="true">{icon}</span> '
+                f'<strong>{word}</strong></td><td colspan="2">{html.escape(key[1])}<details><summary>{len(g):,} genes'
+                f'</summary><p class="coal-oklist">{names}</p></details></td></tr>')
+            continue
         pair = ""
         if s.get("dna_id") and s.get("dna_id") != s.get("id"):
             pair = f'<br><span class="coal-small">paired with DNA {html.escape(str(s["dna_id"]))}</span>'
@@ -1364,6 +1395,20 @@ def health_table_html(report: dict, links: bool = False) -> str:
         what = ", ".join(f"{n:,} {STATUS.get(k, ('', str(k), ''))[1]}" for k, n in kinds.items())
         out.append(f'<tr><td colspan="3">… and {len(rest):,} more sequences ({what}); the report JSON lists '
                    f'every sequence.</td></tr>')
+    if oks:  # CHANGED(GUI-4): one row for every OK gene, names listed on demand
+        icon, word, cls = STATUS["ok"]
+        names = " ".join(f"<code>{html.escape(str(s.get('id', '')))}</code>" for s in oks[:HEALTH_OK_NAMES])
+        more = (f" … and {len(oks) - HEALTH_OK_NAMES:,} more (the report JSON lists every sequence)"
+                if len(oks) > HEALTH_OK_NAMES else "")
+        n = len(oks)
+        if n == 1:
+            what = "The gene matches" if not allseqs else "1 gene matches"
+        else:
+            what = f"{'All ' if not allseqs else ''}{n:,} genes match"
+        out.append(
+            f'<tr class="coal-{cls} coal-oksum"><td><span class="coal-badge coal-{cls}" aria-hidden="true">{icon}'
+            f'</span> <strong>{word}</strong></td><td colspan="2"><details><summary>{what} codon for codon'
+            f'</summary><p class="coal-oklist">{names}{more}</p></details></td></tr>')
     out.append("</tbody></table>")
     return "".join(out)
 

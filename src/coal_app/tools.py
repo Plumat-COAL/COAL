@@ -8,6 +8,8 @@ import os
 from . import core
 
 
+# CHANGED(GUI-5): docstring only (strict): was "the run stops with an error and no alignment is written", but this tool
+# runs COAL with --keep-going (core.run_coal default, MRG-3), so refused genes are left out and the run goes on.
 def codon_align(protein_alignment_path: str, dna_fasta_path: str, output_format: str = "fasta",
                 codontable: int = 1, nogap: bool = False, nomismatch: bool = False, strict: bool = False,
                 blockonly: bool = False) -> dict:
@@ -25,9 +27,10 @@ def codon_align(protein_alignment_path: str, dna_fasta_path: str, output_format:
             5 = invertebrate mitochondrial, 11 = bacteria/plastids. Also 3, 4, 6, 9, 10, 12-16, 21-23.
         nogap: If true, remove codon columns that contain a gap or a stop codon.
         nomismatch: If true, remove columns where a codon doesn't match its amino acid.
-        strict: If true, refuse probably-wrong genes (protein and DNA probably unrelated, position of the gene a
-            guess, or sequences paired by order after a partial ID match): the run stops with an error and no
-            alignment is written. By default such genes are written, as PAL2NAL does, and reported as failed.
+        strict: If true, refuse probably-wrong genes (protein and DNA probably unrelated, or position of the gene a
+            guess): they are left out of the alignment and reported as failed, and the other genes are still
+            written; only a partial ID match (sequences that would be paired by order) stops the run. By default
+            such genes are written, as PAL2NAL does, and reported as failed.
         blockonly: If true, keep only the columns marked '#' under the blocks of a CLUSTAL protein alignment.
 
     Returns:
