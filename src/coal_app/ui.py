@@ -639,7 +639,8 @@ def build(demo_mode: bool = False) -> gr.Blocks:
                                          info=STRICT_INFO)  # CHANGED(FIN-A6): new options
                     blockonly = gr.Checkbox(label="Keep only '#'-marked columns",
                                             info="CLUSTAL input marked by Gblocks or similar. (-blockonly)")
-                run_btn = gr.Button("Make codon alignment", variant="primary", size="lg", elem_id="coal-run")
+                # CHANGED(POL-7): was "Make codon alignment"; owner's choice "Start alignment"
+                run_btn = gr.Button("Start alignment", variant="primary", size="lg", elem_id="coal-run")
 
                 # CHANGED(POL-4): hidden until there is a result (was always shown: "Results appear here.", an empty
                 # "View alignment" with "Drawn after a run." and a closed "Methods, commands and glossary");

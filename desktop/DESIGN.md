@@ -122,7 +122,7 @@ current local app (`coal_app/ui.py`) already does; the rest is target behaviour.
    aligned). DNA: OG0001.cds.fasta (20 sequences)." A wrong guess is fixed with a "Swap"
    button.
 2. Options keep their defaults: output FASTA, genetic code 1, no column removal.
-3. **Presses "Make codon alignment"** (or Enter when the button has focus, or Ctrl+Enter
+3. **Presses "Start alignment"** (or Enter when the button has focus, or Ctrl+Enter
    anywhere).
 4. While running: the button becomes "Cancel", a progress line shows "Checking 12,400 of
    20,000 sequences, about 40 s left" (target; needs engine progress, section 8).
@@ -203,7 +203,7 @@ current local app (`coal_app/ui.py`) already does; the rest is target behaviour.
 1. **Ticks "Remove gap columns (-nogap)"** or picks another output format or genetic code.
 2. Target: the results area dims and says "Options changed since this run. Press Make codon
    alignment to update." Results never silently mix old output with new options.
-3. **Presses "Make codon alignment".** The new run replaces the results on screen. Desktop
+3. **Presses "Start alignment".** The new run replaces the results on screen. Desktop
    target: the previous run's files are kept (each run gets its own folder,
    `OG0001_coal\run-2026-10-17_0912\`), so nothing is overwritten without asking.
 
@@ -240,7 +240,7 @@ two-column areas stack.
 |                                                                         |
 |  > Options  (FASTA, genetic code 1, no columns removed)                 |
 |                                                                         |
-|                       [  Make codon alignment  ]                        |
+|                       [  Start alignment  ]                        |
 +-------------------------------------------------------------------------+
 ```
 

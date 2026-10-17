@@ -56,7 +56,7 @@ on this computer (127.0.0.1).
    <!-- CHANGED(R2-A9): drops anywhere are now loaded by path. See overnight/integration/CHANGES.md -->
 3. Check the **genetic code**: 1 for nuclear genes of most organisms, 2 for vertebrate
    mitochondria, 11 for bacteria and plastids.
-4. Click **Make codon alignment**.
+4. Click **Start alignment**.  <!-- CHANGED(IMP-M-4): button renamed in POL-7 -->
 
 Not sure what your files should look like? Click one of the **Try an example** buttons.
 
