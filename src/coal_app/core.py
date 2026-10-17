@@ -97,8 +97,10 @@ def _coal_cmd() -> list[str]:
 def detect_features() -> Features:
     """Read ``python -m coal --help`` to find which options this engine has."""
     try:
-        h = subprocess.run(_coal_cmd() + ["--help"], capture_output=True, text=True, timeout=60).stdout
-        v = subprocess.run(_coal_cmd() + ["--version"], capture_output=True, text=True, timeout=60)
+        h = subprocess.run(_coal_cmd() + ["--help"], capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=60).stdout
+        v = subprocess.run(_coal_cmd() + ["--version"], capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=60)
         version = (v.stdout or v.stderr).strip().replace("coal ", "") or "unknown"
     except (OSError, subprocess.SubprocessError):
         return Features()
@@ -257,7 +259,8 @@ def _run_engine(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, re
         cmd += ["--report", report_path]
     t0 = time.perf_counter()
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=ENGINE_TIMEOUT)
+        p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           timeout=ENGINE_TIMEOUT)
         code, err = p.returncode, p.stderr
     except subprocess.TimeoutExpired:
         code, err = 1, f"coal: error: COAL did not finish within {ENGINE_TIMEOUT} seconds\n"

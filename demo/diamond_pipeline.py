@@ -48,7 +48,7 @@ def read_fasta(path):
 
 
 def write_fasta(path, recs):
-    with open(path, "w", newline="\n") as fh:
+    with open(path, "w", encoding="utf-8", newline="\n") as fh:
         for n, s in recs:
             fh.write(f">{n}\n")
             for i in range(0, len(s), 60):
@@ -95,7 +95,7 @@ def best_hits(diamond, query, db_fasta, work, tag, threads, timeout):
     db = os.path.join(work, f"{tag}_db")
     out = os.path.join(work, f"{tag}.tsv")
     run = lambda args: subprocess.run(diamond_cmd(diamond) + args, capture_output=True, text=True,  # noqa: E731
-                                      timeout=timeout)
+                                      encoding="utf-8", errors="replace", timeout=timeout)
     r = run(["makedb", "--in", db_fasta, "-d", db, "--quiet"])
     if r.returncode != 0:
         raise RuntimeError(f"diamond makedb failed: {r.stderr.strip()[:300]}")
@@ -104,7 +104,7 @@ def best_hits(diamond, query, db_fasta, work, tag, threads, timeout):
     if r.returncode != 0:
         raise RuntimeError(f"diamond blastp failed: {r.stderr.strip()[:300]}")
     best: dict[str, tuple[str, float]] = {}
-    with open(out) as fh:
+    with open(out, encoding="utf-8", errors="replace") as fh:
         for line in fh:
             f = line.rstrip("\n").split("\t")
             if len(f) < 3:
@@ -158,40 +158,67 @@ def _score(a, b):
 
 def needleman_wunsch(s: str, t: str, gap_open: int = 11, gap_extend: int = 1) -> tuple[str, str]:
     """Global alignment, BLOSUM62, affine gaps (Gotoh: a gap of length k costs open + (k-1)*extend).
-    Returns the two gapped rows."""
+    Returns the two gapped rows.
+
+    Memory: scores are kept for two rows only; the traceback is one byte per cell and state
+    (bytearrays), about 3 * n * m bytes (a 2,000 x 2,000 pair: ~12 MB). Time is O(n * m) in pure Python."""
     s, t = s.upper(), t.upper()
     n, m = len(s), len(t)
     NEG = -10 ** 9
     # three states: 0 = s[i] aligned to t[j]; 1 = s[i] against a gap; 2 = t[j] against a gap
-    V = [[[NEG] * (m + 1) for _ in range(n + 1)] for _ in range(3)]
-    P = [[[0] * (m + 1) for _ in range(n + 1)] for _ in range(3)]  # previous state for traceback
-    V[0][0][0] = 0
-    for i in range(1, n + 1):
-        V[1][i][0] = -gap_open - (i - 1) * gap_extend
-        P[1][i][0] = 0 if i == 1 else 1
+    PM = [bytearray(m + 1) for _ in range(n + 1)]
+    PX = [bytearray(m + 1) for _ in range(n + 1)]
+    PY = [bytearray(m + 1) for _ in range(n + 1)]
+    pM = [NEG] * (m + 1)
+    pX = [NEG] * (m + 1)
+    pY = [NEG] * (m + 1)
+    pM[0] = 0
     for j in range(1, m + 1):
-        V[2][0][j] = -gap_open - (j - 1) * gap_extend
-        P[2][0][j] = 0 if j == 1 else 2
-    M, X, Y = V
-    PM, PX, PY = P
+        pY[j] = -gap_open - (j - 1) * gap_extend
+        PY[0][j] = 0 if j == 1 else 2
     for i in range(1, n + 1):
         si = s[i - 1]
+        row = _B62[_IDX.get(si, 22)]
+        cM = [NEG] * (m + 1)
+        cX = [NEG] * (m + 1)
+        cY = [NEG] * (m + 1)
+        cX[0] = -gap_open - (i - 1) * gap_extend
+        PX[i][0] = 0 if i == 1 else 1
+        rM, rX, rY = PM[i], PX[i], PY[i]
         for j in range(1, m + 1):
-            c = (M[i - 1][j - 1], X[i - 1][j - 1], Y[i - 1][j - 1])
-            k = 0 if c[0] >= c[1] and c[0] >= c[2] else (1 if c[1] >= c[2] else 2)
-            M[i][j] = c[k] + _score(si, t[j - 1])
-            PM[i][j] = k
-            c = (M[i - 1][j] - gap_open, X[i - 1][j] - gap_extend, Y[i - 1][j] - gap_open)
-            k = 0 if c[0] >= c[1] and c[0] >= c[2] else (1 if c[1] >= c[2] else 2)
-            X[i][j] = c[k]
-            PX[i][j] = k
-            c = (M[i][j - 1] - gap_open, X[i][j - 1] - gap_open, Y[i][j - 1] - gap_extend)
-            k = 0 if c[0] >= c[1] and c[0] >= c[2] else (1 if c[1] >= c[2] else 2)
-            Y[i][j] = c[k]
-            PY[i][j] = k
+            a, b, c = pM[j - 1], pX[j - 1], pY[j - 1]
+            if a >= b and a >= c:
+                cM[j] = a + row[_IDX.get(t[j - 1], 22)]
+            elif b >= c:
+                cM[j] = b + row[_IDX.get(t[j - 1], 22)]
+                rM[j] = 1
+            else:
+                cM[j] = c + row[_IDX.get(t[j - 1], 22)]
+                rM[j] = 2
+            a, b, c = pM[j] - gap_open, pX[j] - gap_extend, pY[j] - gap_open
+            if a >= b and a >= c:
+                cX[j] = a
+            elif b >= c:
+                cX[j] = b
+                rX[j] = 1
+            else:
+                cX[j] = c
+                rX[j] = 2
+            a, b, c = cM[j - 1] - gap_open, cX[j - 1] - gap_open, cY[j - 1] - gap_extend
+            if a >= b and a >= c:
+                cY[j] = a
+            elif b >= c:
+                cY[j] = b
+                rY[j] = 1
+            else:
+                cY[j] = c
+                rY[j] = 2
+        pM, pX, pY = cM, cX, cY
+    P = (PM, PX, PY)
+    last = (pM[m], pX[m], pY[m])
     a, b = [], []
     i, j = n, m
-    state = max(range(3), key=lambda k: V[k][n][m])
+    state = max(range(3), key=lambda k: last[k])
     while i > 0 or j > 0:
         prev = P[state][i][j]
         if state == 0:
@@ -209,7 +236,7 @@ def needleman_wunsch(s: str, t: str, gap_open: int = 11, gap_extend: int = 1) ->
 def coal_help() -> str:
     try:
         return subprocess.run([sys.executable, "-m", "coal", "--help"], capture_output=True, text=True,
-                              timeout=60).stdout
+                              encoding="utf-8", errors="replace", timeout=60).stdout
     except (OSError, subprocess.SubprocessError):
         return ""
 
@@ -224,8 +251,9 @@ def main(argv=None) -> int:
     ap.add_argument("--diamond", help="path to the diamond binary (default: `diamond` on PATH)")
     ap.add_argument("--threads", type=int, default=os.cpu_count() or 1)
     ap.add_argument("--codontable", type=int, default=1, help="NCBI genetic code for COAL (default 1)")
-    ap.add_argument("--max-length", type=int, default=5000,
-                    help="skip pairs with a protein longer than this (pure-Python alignment is O(n*m))")
+    ap.add_argument("--max-length", type=int, default=2000,
+                    help="skip pairs with a protein longer than this (default 2000; the pure-Python alignment "
+                         "takes O(n*m) time and about 3*n*m bytes: a 2,000 x 2,000 pair ~2 s and ~12 MB)")
     ap.add_argument("--timeout", type=float, default=3600, help="time limit for each DIAMOND / COAL step (s)")
     a = ap.parse_args(argv)
 
@@ -260,7 +288,7 @@ def main(argv=None) -> int:
             return 1
     pairs = reciprocal_best_hits(ab, ba)
     print(f"reciprocal best hits: {len(pairs)}")
-    with open(os.path.join(a.out, "rbh.tsv"), "w", newline="\n") as fh:
+    with open(os.path.join(a.out, "rbh.tsv"), "w", encoding="utf-8", newline="\n") as fh:
         fh.write(f"{a.a_name}\t{a.b_name}\n")
         for x, y in pairs:
             fh.write(f"{x}\t{y}\n")
@@ -279,6 +307,11 @@ def main(argv=None) -> int:
         aligned.append((x, y, ra, rb))
     if skipped:
         print(f"skipped {len(skipped)} pairs longer than --max-length {a.max_length}")
+    if not aligned:
+        print(f"error: all {len(pairs)} reciprocal-best-hit pairs have a protein longer than --max-length "
+              f"{a.max_length}, so nothing was aligned. Raise --max-length (slower) and run again.",
+              file=sys.stderr)
+        return 1
 
     # one batch: every pair padded with trailing gaps to the same length, unique IDs per row
     width = max(len(ra) for _, _, ra, _ in aligned)
@@ -302,11 +335,12 @@ def main(argv=None) -> int:
         cmd += ["--report", os.path.join(a.out, "batch.report.json")]
     print(f"running COAL once on {len(pep)} sequences ({len(aligned)} pairs)")
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=a.timeout)
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           timeout=a.timeout)
     except subprocess.TimeoutExpired:
         print("error: COAL did not finish in time", file=sys.stderr)
         return 1
-    with open(os.path.join(a.out, "coal.stderr.txt"), "w") as fh:
+    with open(os.path.join(a.out, "coal.stderr.txt"), "w", encoding="utf-8") as fh:
         fh.write(r.stderr)
     if r.returncode not in (0, 2) or not os.path.exists(batch_out):
         print(f"COAL failed (exit {r.returncode}):\n{r.stderr.strip()[-1500:]}", file=sys.stderr)

@@ -198,5 +198,134 @@ class TestFinding7IdHint(unittest.TestCase):
         self.assertIn("probably wrong", texts[0])
 
 
+def _load(name, path):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class TestFinding9And10DiamondPipeline(unittest.TestCase):
+    def setUp(self):
+        self.dp = _load("diamond_pipeline_r", os.path.join(ROOT, "demo", "diamond_pipeline.py"))
+
+    def test_every_pair_skipped_is_a_clear_error(self):
+        import subprocess
+        import sys
+        sys.path.insert(0, os.path.join(ROOT, "tests_app"))
+        try:
+            from test_diamond_pipeline import make_input
+        finally:
+            sys.path.pop(0)
+        t = _tmp(self)
+        p = make_input(t)
+        r = subprocess.run([sys.executable, os.path.join(ROOT, "demo", "diamond_pipeline.py"),
+                            "--a-protein", p["ap"], "--a-cds", p["ac"], "--b-protein", p["bp"], "--b-cds", p["bc"],
+                            "--out", os.path.join(t, "o"), "--diamond",
+                            os.path.join(ROOT, "tests_app", "diamond_stub.py"), "--threads", "1",
+                            "--max-length", "10"], capture_output=True, text=True, timeout=300)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertNotIn("Traceback", r.stderr)
+        self.assertIn("--max-length", r.stderr)
+
+    def test_alignment_memory_is_bytes_not_python_ints(self):
+        import random
+        import tracemalloc
+        rng = random.Random(1)
+        a = "".join(rng.choice("ACDEFGHIKLMNPQRSTVWY") for _ in range(600))
+        b = "".join(rng.choice("ACDEFGHIKLMNPQRSTVWY") for _ in range(600))
+        tracemalloc.start()
+        ra, rb = self.dp.needleman_wunsch(a, b)
+        peak = tracemalloc.get_traced_memory()[1]
+        tracemalloc.stop()
+        self.assertEqual((ra.replace("-", ""), rb.replace("-", "")), (a, b))
+        self.assertLess(peak, 3_000_000)  # 3 x 601 x 601 bytes of traceback ~ 1.1 MB
+
+    def test_same_alignment_as_full_matrix_reference(self):
+        import random
+        rng = random.Random(5)
+        for _ in range(20):
+            a = "".join(rng.choice("ACDEFGHIKLMNPQRSTVWY") for _ in range(rng.randint(1, 40)))
+            b = list(a)
+            for _ in range(rng.randint(0, 8)):
+                k = rng.randrange(len(b) + 1)
+                if rng.random() < 0.5 and b:
+                    del b[min(k, len(b) - 1)]
+                else:
+                    b.insert(k, rng.choice("ACDEFGHIKLMNPQRSTVWY"))
+            b = "".join(b) or "M"
+            got = self.dp.needleman_wunsch(a, b)
+            self.assertEqual(_nw_score(self.dp, *got), _nw_best(self.dp, a, b))
+
+    def test_default_max_length_is_2000(self):
+        import subprocess
+        import sys
+        r = subprocess.run([sys.executable, os.path.join(ROOT, "demo", "diamond_pipeline.py"), "--help"],
+                           capture_output=True, text=True, timeout=60)
+        self.assertIn("default 2000", " ".join(r.stdout.split()))
+
+
+def _nw_score(dp, ra, rb, go=11, ge=1):
+    """Score of a gapped pair under BLOSUM62 + affine gaps."""
+    score, state = 0, None
+    for x, y in zip(ra, rb):
+        if x != "-" and y != "-":
+            score += dp._score(x, y)
+            state = None
+        else:
+            st = "a" if y == "-" else "b"
+            score -= ge if state == st else go
+            state = st
+    return score
+
+
+def _nw_best(dp, s, t, go=11, ge=1):
+    """Optimal score by a plain full-matrix Gotoh recursion (reference)."""
+    NEG = -10 ** 9
+    n, m = len(s), len(t)
+    M = [[NEG] * (m + 1) for _ in range(n + 1)]
+    X = [[NEG] * (m + 1) for _ in range(n + 1)]
+    Y = [[NEG] * (m + 1) for _ in range(n + 1)]
+    M[0][0] = 0
+    for i in range(1, n + 1):
+        X[i][0] = -go - (i - 1) * ge
+    for j in range(1, m + 1):
+        Y[0][j] = -go - (j - 1) * ge
+    for i in range(1, n + 1):
+        for j in range(1, m + 1):
+            M[i][j] = max(M[i - 1][j - 1], X[i - 1][j - 1], Y[i - 1][j - 1]) + dp._score(s[i - 1], t[j - 1])
+            X[i][j] = max(M[i - 1][j] - go, X[i - 1][j] - ge, Y[i - 1][j] - go)
+            Y[i][j] = max(M[i][j - 1] - go, X[i][j - 1] - go, Y[i][j - 1] - ge)
+    return max(M[n][m], X[n][m], Y[n][m])
+
+
+class TestFinding18Encodings(unittest.TestCase):
+    FILES = ["demo/diamond_pipeline.py", "demo/race.py", "demo/make_mcp_demo.py", "tests_app/diamond_stub.py",
+             "src/coal_app/core.py", "src/coal_app/viewer.py", "src/coal_app/tools.py", "src/coal_app/ui.py",
+             "src/coal_compat/cli.py", "space/build_space.py", "examples/make_examples.py"]
+
+    def test_text_files_and_pipes_name_utf8(self):
+        import ast
+        bad = []
+        for rel in self.FILES:
+            with open(os.path.join(ROOT, rel), encoding="utf-8") as fh:
+                tree = ast.parse(fh.read())
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                fn = node.func
+                name = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", "")
+                kw = {k.arg for k in node.keywords}
+                if name == "open":
+                    mode = node.args[1].value if len(node.args) > 1 and isinstance(node.args[1], ast.Constant) \
+                        else next((k.value.value for k in node.keywords if k.arg == "mode"), "r")
+                    if "b" not in str(mode) and "encoding" not in kw:
+                        bad.append(f"{rel}:{node.lineno} open")
+                elif name == "run" and "text" in kw and "encoding" not in kw:
+                    bad.append(f"{rel}:{node.lineno} subprocess.run(text=True)")
+        self.assertEqual(bad, [])
+
+
 if __name__ == "__main__":
     unittest.main()

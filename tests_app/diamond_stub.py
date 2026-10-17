@@ -6,7 +6,7 @@ import sys
 
 def read(path):
     recs, name = {}, None
-    for line in open(path):
+    for line in open(path, encoding="utf-8"):
         line = line.strip()
         if line.startswith(">"):
             name = line[1:].split()[0]
@@ -29,7 +29,7 @@ def main(argv):
         q = read(opt(args, "-q"))
         db = read(opt(args, "-d") + ".dmnd")
         kdb = {s: {seq[i:i + 3] for i in range(len(seq) - 2)} for s, seq in db.items()}
-        with open(opt(args, "-o"), "w") as out:
+        with open(opt(args, "-o"), "w", encoding="utf-8") as out:
             for qid, seq in q.items():
                 kq = {seq[i:i + 3] for i in range(len(seq) - 2)}
                 hits = sorted(((len(kq & ks), s) for s, ks in kdb.items()), reverse=True)[:5]
