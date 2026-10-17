@@ -98,8 +98,32 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
+def _maybe_cpp(ap, args, argv) -> int | None:
+    """CHANGED(IMP-E-A): run a large input with coal-cpp (coal/dispatch.py); its exit code, or None to go on in
+    Python. See overnight/integration/CHANGES.md"""
+    from . import dispatch
+    note = None if args.quiet else (lambda t: print(f"coal: notice: {t}", file=sys.stderr))
+    try:
+        path = dispatch.choose(args, argv, {a.dest: a.default for a in ap._actions}, note)
+    except dispatch.EngineError as e:
+        print(f"coal: error: {e}", file=sys.stderr)
+        return 1
+    if path is None:
+        return None
+    rc = dispatch.run_cpp(path, argv)
+    if isinstance(rc, int):
+        return rc
+    if (os.environ.get("COAL_ENGINE") or "").strip().lower() == "cpp":
+        print(f"coal: error: COAL_ENGINE=cpp: {rc}", file=sys.stderr)
+        return 1
+    if note:
+        note(f"{rc}; using the Python engine")
+    return None
+
+
 def main(argv=None) -> int:
     ap = build_parser()
+    command_line = argv is None  # CHANGED(IMP-E-A): only the command line may hand the run to coal-cpp
     argv = sys.argv[1:] if argv is None else list(argv)
     args = ap.parse_args(argv)
     if args.json and not args.out:
@@ -108,6 +132,10 @@ def main(argv=None) -> int:
         ap.error("--resume requires -o (only runs that write to a file can be resumed)")
     if args.max_warnings < 0:
         ap.error("--max-warnings must be 0 (no limit) or more")
+    if command_line:
+        rc = _maybe_cpp(ap, args, argv)
+        if rc is not None:
+            return rc
 
     # CHANGED(MRG-2): always collected (it also drives the end-of-run "coal: summary:" lines); per-sequence entries
     # of ok sequences only when a report is asked for

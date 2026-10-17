@@ -313,5 +313,143 @@ class TestHelpGroups(unittest.TestCase):
                     self.assertEqual(c.returncode, 0, c.stderr)
 
 
+@unittest.skipIf(os.name == "nt", "uses a POSIX shell wrapper to see which engine ran")
+@unittest.skipIf(cpp_binary() is None, "coal-cpp not built (set COAL_CPP_BIN)")
+class TestAutomaticCppDispatch(unittest.TestCase):
+    """IMP-E-A: `coal` runs coal-cpp for large inputs, with the same stdout, stderr, report and exit code."""
+
+    @classmethod
+    def setUpClass(cls):
+        from coal import dispatch
+        cls.tmp = Path(tempfile.mkdtemp(prefix="coal_disp_"))
+        cls.big = make_synthetic(cls.tmp / "big", 600, 500)  # ~1.17 MB > CPP_MIN_BYTES
+        cls.small = make_synthetic(cls.tmp / "small", 20, 100)
+        assert sum(os.path.getsize(p) for p in cls.big) >= dispatch.CPP_MIN_BYTES
+        assert sum(os.path.getsize(p) for p in cls.small) < dispatch.CPP_MIN_BYTES
+        cls.mark = cls.tmp / "cpp_ran"
+        cls.wrapper = cls.tmp / "coal-cpp"
+        cls.wrapper.write_text(f'#!/bin/sh\ncase "$1" in --version) ;; *) touch "{cls.mark}" ;; esac\n'
+                               f'exec "{cpp_binary()}" "$@"\n')
+        cls.wrapper.chmod(0o755)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def run_coal(self, args, engine=None, cpp=None, module="coal"):
+        if self.mark.exists():
+            self.mark.unlink()
+        env = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "COAL_CPP": str(cpp or self.wrapper)}
+        env.pop("COAL_ENGINE", None)
+        if engine:
+            env["COAL_ENGINE"] = engine
+        work = self.tmp / "work"
+        if work.exists():
+            shutil.rmtree(work)
+        work.mkdir()
+        r = subprocess.run([sys.executable, "-m", module, *args], cwd=work, env=env, capture_output=True, timeout=300)
+        rep = (work / "r.json").read_text() if (work / "r.json").exists() else None
+        out = (work / "o.fa").read_bytes() if (work / "o.fa").exists() else None
+        import json
+        if rep:
+            rep = json.loads(rep)
+            rep.pop("runtime_seconds")
+        stdout = r.stdout
+        if "--json" in args:  # the report on stdout: the same but for its run time
+            stdout = json.loads(stdout)
+            stdout.pop("runtime_seconds")
+        return r.returncode, stdout, r.stderr, out, rep, self.mark.exists()
+
+    def test_large_input_uses_cpp_with_identical_results(self):
+        for extra in ([], ["-codontable", "2"], ["-codontable", "2", "-o", "o.fa", "--report", "r.json"],
+                      ["-output", "clustal", "-nogap", "-q"], ["-codontable", "2", "--max-warnings", "0"],
+                      ["-o", "o.fa", "--json"]):
+            with self.subTest(extra=extra):
+                auto = self.run_coal([*self.big, *extra])
+                py = self.run_coal([*self.big, *extra], engine="python")
+                self.assertTrue(auto[5], "coal-cpp did not run")
+                self.assertFalse(py[5])
+                self.assertEqual(auto[:5], py[:5])
+
+    def test_small_input_stays_in_python(self):
+        auto = self.run_coal([*self.small, "-codontable", "2"])
+        self.assertFalse(auto[5])
+        self.assertIn(b"Re-run with -codontable 1.", auto[2])
+
+    def test_forced_modes(self):
+        r = self.run_coal([*self.small, "-codontable", "2"], engine="cpp")
+        self.assertTrue(r[5])
+        self.assertEqual(r[:5], self.run_coal([*self.small, "-codontable", "2"], engine="python")[:5])
+        self.assertFalse(self.run_coal(list(self.big), engine="python")[5])
+        rc, out, err, *_ = self.run_coal(list(self.small), engine="cpp", cpp=self.tmp / "missing")
+        self.assertEqual((rc, out), (1, b""))
+        self.assertIn(b"coal: error: COAL_ENGINE=cpp: coal-cpp was not found", err)
+        rc, out, err, *_ = self.run_coal(list(self.small), engine="fast")
+        self.assertEqual(rc, 1)
+        self.assertIn(b"COAL_ENGINE='fast'", err)
+
+    def test_cpp_that_cannot_start_falls_back_with_one_notice(self):
+        broken = self.tmp / "broken-coal-cpp"
+        broken.write_text("not a program\n")
+        broken.chmod(0o644)
+        r = self.run_coal(list(self.big), cpp=broken)
+        py = self.run_coal(list(self.big), engine="python")
+        self.assertEqual((r[0], r[1]), (py[0], py[1]))
+        extra = r[2].decode().replace(py[2].decode(), "", 1)
+        self.assertEqual(extra.count("\n"), 1)
+        self.assertTrue(extra.startswith("coal: notice: could not start"), extra)
+        self.assertTrue(extra.rstrip().endswith("; using the Python engine"), extra)
+        stale = self.tmp / "stale-coal-cpp"
+        stale.write_text('#!/bin/sh\necho "coal 0.0.1 (C++)"\n')
+        stale.chmod(0o755)
+        r = self.run_coal(list(self.big), cpp=stale)
+        self.assertEqual((r[0], r[1]), (py[0], py[1]))
+        self.assertIn(b"is coal 0.0.1 (C++), not coal ", r[2])
+        self.assertNotIn(b"notice", self.run_coal([*self.big, "-q"], cpp=stale)[2])
+
+    def test_pal2nal_drop_in_stays_in_python(self):
+        r = self.run_coal([*self.big, "-output", "fasta"], module="coal_compat")
+        self.assertEqual(r[0], 0)
+        self.assertFalse(r[5])
+
+    def test_app_gets_dispatch_for_free(self):
+        try:
+            from coal_app import core
+        except ImportError as e:
+            self.skipTest(f"coal_app not importable: {e}")
+        if self.mark.exists():
+            self.mark.unlink()
+        out = self.tmp / "app_out"
+        out.mkdir(exist_ok=True)
+        env = {**os.environ, "COAL_CPP": str(self.wrapper)}
+        env.pop("COAL_ENGINE", None)
+        with mock.patch.dict(os.environ, env, clear=True):
+            r = core.run_coal(*self.big, codontable=2, out_dir=str(out))
+        self.assertTrue(self.mark.exists(), "the app's `python -m coal` did not run coal-cpp")
+        self.assertEqual([h["suggested_codontable"] for h in r.report["hints"] if h["code"] == "genetic_code"], [1])
+
+    def test_binary_lookup_order(self):
+        from coal import dispatch
+        with mock.patch.dict(os.environ, {"COAL_CPP": str(self.wrapper)}):
+            self.assertEqual(dispatch.find_cpp(), str(self.wrapper))
+        with mock.patch.dict(os.environ, {"COAL_CPP": str(self.tmp / "missing")}):
+            self.assertIsNone(dispatch.find_cpp())
+        fake_py = self.tmp / "venv" / "bin" / "python"
+        fake_py.parent.mkdir(parents=True, exist_ok=True)
+        internal = self.tmp / "venv" / "bin" / "_internal"
+        internal.mkdir(exist_ok=True)
+        shutil.copy(self.wrapper, internal / "coal-cpp")
+        env = {k: v for k, v in os.environ.items() if k != "COAL_CPP"}
+        with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(sys, "executable", str(fake_py)):
+            self.assertEqual(dispatch.find_cpp(), str(internal / "coal-cpp"))  # a frozen app's _internal
+            shutil.copy(self.wrapper, fake_py.parent / "coal-cpp")
+            self.assertEqual(dispatch.find_cpp(), str(fake_py.parent / "coal-cpp"))  # next to Python first
+            os.unlink(fake_py.parent / "coal-cpp")
+            os.unlink(internal / "coal-cpp")
+            with mock.patch.object(dispatch.sysconfig, "get_path", lambda name: str(self.tmp / "none")), \
+                    mock.patch.dict(os.environ, {"PATH": str(self.tmp)}):
+                self.assertEqual(dispatch.find_cpp(), str(self.tmp / "coal-cpp"))  # then PATH
+
+
 if __name__ == "__main__":
     unittest.main()
