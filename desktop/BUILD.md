@@ -59,8 +59,8 @@ $env:COAL_SMOKE_EXE = "$PWD\desktop\dist\COAL\COAL.exe"; desktop\.venv\Scripts\p
 
 <!-- CHANGED(WIN-R2): new section. See overnight/windows-app/CHANGES.md -->
 `desktop\requirements.txt` pins `pywebview==6.2.1`, `pyinstaller==6.22.3` and
-`pyinstaller-hooks-contrib==2026.5`. None of the three has been installed from PyPI yet (they
-were taken from release pages / a mirror listing). On the first build, check that pip installs
+`pyinstaller-hooks-contrib==2026.8` (SHIP-8: was 2026.5, which conflicts with PyInstaller 6.22.3, found by the
+v0.4.0 release build; 2026.8 is the newest hooks release tag). On the first build, check that pip installs
 all three; if pip reports a conflict between PyInstaller and the hooks package, pin the
 hooks-contrib release from the same month as the PyInstaller release, and record it in
 `overnight/windows-app/LOG.md`.
