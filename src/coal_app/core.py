@@ -361,7 +361,14 @@ class RunResult:
 
 _WARN = re.compile(r"^coal: warning: (\S+) pepAlnPos (\d+): (\S+) does not correspond to (\S+)")
 _WARN_X = re.compile(r"^coal: warning: (\S+) pepAlnPos (\d+): (\S+) unknown AA type")
-_WARN_ANY = re.compile(r"^coal: warning: (\S+) (.+)$")  # any other per-sequence warning
+# CHANGED(R2-A2/R2-E2): was (\S+) so "s0:" kept its colon (and the notice was dropped); now the colon is stripped,
+# the engine's ENG-c / ENG-d notices are recognised, and a line naming no known sequence becomes a run-level hint.
+# See overnight/integration/CHANGES.md
+_WARN_ANY = re.compile(r"^coal: warning: (\S+?):? (.+)$")  # any other per-sequence warning
+_WARN_NOANCHOR = re.compile(r"^coal: warning: (\S+?): no 10-residue segment of the protein was found in the DNA; "
+                            r"codons were assigned by position \((\d+) of (\d+) do not match\)")
+_WARN_PAIRING = re.compile(r"^coal: warning: only (\d+) of (\d+) protein IDs are DNA IDs; (.*)$")
+PROBLEM_HINTS = ("partial_id_match", "engine_warning", "nomismatch_unknown")  # hints that mean "something is off"
 
 
 # CHANGED(APP-3): was only "does not correspond to" lines; now every "coal: warning: <id> ..." line. See overnight/app/CHANGES.md
@@ -379,12 +386,35 @@ def _parse_warning(line: str) -> tuple[str, dict] | None:
         return sid, {"code": "unknown_aa", "column": int(col), "residue": aa,
                      "text": (f"Column {col}: '{aa}' is not one of the 20 standard amino acids; COAL treated it "
                               f"as X (any codon accepted).")}
+    m = _WARN_NOANCHOR.match(line)
+    if m:
+        sid, nbad, nres = m.groups()
+        return sid, {"code": "no_anchor",
+                     "text": (f"No 10-residue stretch of the protein was found in the DNA, so codons were assigned "
+                              f"by position ({nbad} of {nres} do not match). Is this the right DNA for this protein, "
+                              f"and the right genetic code?")}
+    if _WARN_PAIRING.match(line):
+        return None  # run-level; see pairing_warning()
     m = _WARN_ANY.match(line)
     if m:
         sid, rest = m.groups()
         return sid, {"code": "warning", "text": f"COAL warning: {rest.strip()}"}
     return None
 _ERR = re.compile(r"^coal: error: (.*)$")
+
+
+def pairing_warning(line: str) -> dict | None:
+    """CHANGED(R2-A2): new. The engine's ENG-d line 'only K of N protein IDs are DNA IDs; ...' as a hint."""
+    m = _WARN_PAIRING.match(line)
+    if not m:
+        return None
+    k, n, rest = m.groups()
+    ex = re.search(r"protein '([^']*)' gets DNA '([^']*)'", rest)
+    eg = f" (for example protein '{ex.group(1)}' got DNA '{ex.group(2)}')" if ex else ""
+    return {"code": "partial_id_match",
+            "text": (f"Only {k} of {n} protein IDs were found in the DNA file, so COAL paired the sequences by "
+                     f"their order in the files instead{eg}. Some proteins are probably paired with the wrong "
+                     f"DNA: make the names match (or put both files in the same order) and run again.")}
 
 _EXT = {"fasta": "fasta", "clustal": "aln", "paml": "paml", "codon": "codon.txt"}
 
@@ -447,10 +477,18 @@ def build_fallback_report(protein, dna, out, fmt, table, nogap, nomismatch, keep
     per: dict[str, list[dict]] = {p: [] for p in pids}
     failed: dict[str, list[dict]] = {}
     general: list[dict] = []
+    run_hints: list[dict] = []
     for line in stderr.splitlines():
+        pw = pairing_warning(line)
+        if pw:
+            run_hints.append(pw)
+            continue
         w = _parse_warning(line)
-        if w:
-            per.setdefault(w[0], []).append(w[1])
+        if w and w[0] in per:
+            per[w[0]].append(w[1])
+            continue
+        if w or line.startswith("coal: warning:"):  # CHANGED(R2-A2): was kept under an unknown id and lost
+            run_hints.append({"code": "engine_warning", "text": "COAL warning: " + line[len("coal: warning:"):].strip()})
             continue
         m = _ERR.match(line)
         if m:
@@ -500,7 +538,7 @@ def build_fallback_report(protein, dna, out, fmt, table, nogap, nomismatch, keep
                    if produced else None),
         "summary": {"total": len(pids), "ok": counts["ok"], "warning": counts["warning"],
                     "failed": counts["failed"], "pairing": pairing},
-        "hints": [],
+        "hints": run_hints,
         "errors": general,
         "sequences": seqs,
         "runtime_seconds": round(runtime, 3),
@@ -533,6 +571,8 @@ def id_hints(protein: str, dna: str, report: dict | None = None) -> list[dict]:
     missing = [p for p in pids if p not in dset]
     if not missing:
         return []
+    if any(h.get("code") == "partial_id_match" for h in (report or {}).get("hints") or []):
+        return []  # CHANGED(R2-A2): the engine's own partial-match warning already says it (and that it's wrong)
     summ = (report or {}).get("summary") or {}
     if report is not None and summ.get("pairing") not in ("order", None):
         return []  # the engine paired them some other way (e.g. normalised IDs)
@@ -647,6 +687,60 @@ def genetic_code_hint(protein, dna, table, report, work_dir) -> dict | None:
     return {"code": "genetic_code", "text": text, "suggested_codontable": c}
 
 
+def mismatch_probe(protein, dna, table, keep_going, report, work_dir) -> dict:
+    """CHANGED(R2-A1/R2-D5/R2-E1): new. With -nomismatch the engine (like PAL2NAL) prints no mismatch
+    warnings, so the report said every gene matched. This re-runs the same inputs without -nomismatch (output
+    to a temporary file, deleted) to find which genes had mismatching codons, marks them "warning" (columns
+    removed) and stores the number of removed codon columns in summary["columns_removed"].
+    See overnight/integration/CHANGES.md"""
+    import shutil
+    probe_dir = tempfile.mkdtemp(prefix="probe_nomismatch_", dir=work_dir)
+    try:
+        code, err, _ = _run_engine(protein, dna, os.path.join(probe_dir, "probe.fasta"), "fasta", table,
+                                   False, False, keep_going, None)
+    finally:
+        shutil.rmtree(probe_dir, ignore_errors=True)
+    if code != 0:
+        report.setdefault("hints", []).append({
+            "code": "nomismatch_unknown",
+            "text": ("Columns were removed (-nomismatch), but COAL could not count which genes had mismatching "
+                     "codons. Run once without -nomismatch to see them.")})
+        return report
+    per: dict[str, list[dict]] = {}
+    cols: set[int] = set()
+    for line in err.splitlines():
+        w = _parse_warning(line)
+        if w and w[1].get("code") == "mismatch":
+            m = dict(w[1], removed=True)
+            per.setdefault(w[0], []).append(m)
+            cols.add(m["column"])
+    for sq in report.get("sequences", []):
+        mm = per.get(sq["id"])
+        if mm and sq["status"] in ("ok", "warning"):
+            sq["status"] = "warning"
+            sq["messages"] = mm + list(sq.get("messages") or [])
+    summ = report["summary"]
+    for k in ("ok", "warning"):
+        summ[k] = sum(1 for x in report.get("sequences", []) if x["status"] == k)
+    summ["columns_removed"] = len(cols)
+    return report
+
+
+def has_problem_hint(hints) -> bool:
+    return any(isinstance(h, dict) and h.get("code") in PROBLEM_HINTS for h in hints or [])
+
+
+def banner_head(ok: bool, summary: dict, hints=()) -> str:
+    """CHANGED(R2-A1/R2-A2): was inline in ui.run_ui; "every sequence matched" now also needs no removed columns
+    and no run-level problem (e.g. a partial ID match)."""
+    if (ok and not summary.get("failed") and not summary.get("warning") and not summary.get("columns_removed")
+            and not has_problem_hint(hints)):
+        return "### ✔ Done: every sequence matched"
+    if ok:
+        return "### ⚠ Done, with some problems (see the table)"
+    return "### ✖ COAL stopped: no alignment was written"
+
+
 def run_coal(protein_path: str, dna_path: str, output_format: str = "fasta", codontable: int = 1,
              nogap: bool = False, nomismatch: bool = False, keep_going: bool = True,
              out_dir: str | None = None, probe_codes: bool = True) -> RunResult:
@@ -676,9 +770,11 @@ def run_coal(protein_path: str, dna_path: str, output_format: str = "fasta", cod
     if report is None:
         report = build_fallback_report(protein_path, dna_path, out, output_format, codontable, nogap,
                                        nomismatch, keep_going, code, err, runtime)
+        if nomismatch and code == 0:
+            mismatch_probe(protein_path, dna_path, codontable, keep_going, report, out_dir)
         from .viewer import locate_breaks
         locate_breaks(protein_path, dna_path, report)
-        hints = id_hints(protein_path, dna_path, report)
+        hints = list(report.get("hints") or []) + id_hints(protein_path, dna_path, report)
         if probe_codes:
             h = genetic_code_hint(protein_path, dna_path, codontable, report, out_dir)
             if h:
@@ -772,8 +868,11 @@ def _mm_sentence(mm: list[dict]) -> str:
     detail = ""
     if first.get("residue") and first.get("codon"):
         detail = f": the protein says {first['residue']} but the DNA has {first['codon']}"
+    # CHANGED(R2-A1): mismatches found by the -nomismatch probe say their columns were removed
+    fate = ("Those columns were removed from the alignment (-nomismatch)" if first.get("removed")
+            else "Kept in the alignment")
     return (f"{n} codon{'s' if n != 1 else ''} {'do' if n != 1 else 'does'} not match "
-            f"{'their' if n != 1 else 'its'} amino acid{where}{detail}. Kept in the alignment; check the genetic code.")
+            f"{'their' if n != 1 else 'its'} amino acid{where}{detail}. {fate}; check the genetic code.")
 
 
 _FAIL_SENTENCES = {
@@ -864,7 +963,12 @@ def summary_sentence(report: dict) -> str:
     parts = [f"{s.get('ok', 0)} OK", f"{s.get('warning', 0)} with warnings", f"{s.get('failed', 0)} failed"]
     if s.get("not_checked"):
         parts.append(f"{s['not_checked']} not checked")
-    return f"{total} sequence{'s' if total != 1 else ''}: " + ", ".join(parts) + "."
+    text = f"{total} sequence{'s' if total != 1 else ''}: " + ", ".join(parts) + "."
+    if s.get("columns_removed"):  # CHANGED(R2-A1): say how much -nomismatch removed
+        n = s["columns_removed"]
+        text += (f" {n} codon column{'s were' if n != 1 else ' was'} removed because "
+                 f"{'they' if n != 1 else 'it'} didn't match (-nomismatch).")
+    return text
 
 
 def methods_text(report: dict) -> str:
@@ -887,8 +991,10 @@ def methods_text(report: dict) -> str:
              f"(NCBI translation table {n})."]
     counts = f"Of {total} sequences, {ok} matched their protein exactly"
     if warn:
+        removed = s.get("columns_removed")
         counts += (f", {warn} contained codons that did not match the aligned amino acid"
-                   + (" (those alignment columns were removed)" if opts.get("nomismatch") else
+                   + ((f" (those {removed} codon columns were removed)" if removed else
+                       " (those alignment columns were removed)") if opts.get("nomismatch") else
                       " (kept in the alignment)"))
     if failed:
         counts += f", and {failed} could not be aligned and {'was' if failed == 1 else 'were'} excluded"
@@ -944,7 +1050,8 @@ def explain(report: dict) -> str:
         lines.append("Suggestions:")
         for h in hints:
             lines.append(f"- {h.get('text')}")
-    if not failed and not warned and not report.get("errors"):
+    if (not failed and not warned and not report.get("errors") and not s.get("columns_removed")
+            and not has_problem_hint(hints)):
         lines.append("Nothing went wrong: every protein matched its DNA.")
     elif failed and not any(h.get("code") == "genetic_code" for h in hints):
         lines.append("")

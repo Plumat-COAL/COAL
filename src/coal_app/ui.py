@@ -112,12 +112,7 @@ def run_ui(protein, dna, fmt, code, nogap, nomismatch, protein_path="", dna_path
     except ValueError as e:
         return _results({}, None, None, "", "", str(e), f"### ✖ Could not run\n{e}")
     s = r.report.get("summary", {})
-    if r.ok and not s.get("failed") and not s.get("warning"):
-        head = "### ✔ Done: every sequence matched"
-    elif r.ok:
-        head = "### ⚠ Done, with some problems (see the table)"
-    else:
-        head = "### ✖ COAL stopped: no alignment was written"
+    head = core.banner_head(r.ok, s, r.hints)  # CHANGED(R2-A1): see core.banner_head
     banner = f"{head}\n{core.summary_sentence(r.report)}"
     view_html, view_path = "", None
     try:
