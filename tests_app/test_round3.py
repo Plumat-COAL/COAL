@@ -86,6 +86,92 @@ class TestR3D2CiConditions(unittest.TestCase):  # R3-D2
         self.assertIn("continue-on-error: ${{ matrix.os == 'windows-latest' }}", self._job("gui"))
 
 
+BOM = "\ufeff"
+
+
+def _variants(text: str, dna: bool):
+    """Edge-case spellings of one file that the engine accepts (name -> text)."""
+    v = {"plain": text, "bom": BOM + text, "crlf": text.replace("\n", "\r\n"), "cr": text.replace("\n", "\r"),
+         "blank_lines": "\n\n" + text.replace("\n>", "\n\n>")}
+    if dna:
+        v["hash_preamble"] = "# exported by tool\n# second line\n" + text
+        v["bom_crlf_hash"] = BOM + ("# exported by tool\n\n" + text).replace("\n", "\r\n")
+        v["hash_inside"] = text.replace("\n>", "\n# note\n>")
+    return v
+
+
+class TestR3A1ReadersMirrorEngine(RunsDirCase):  # R3-A1
+    def write(self, d, name, text):
+        p = os.path.join(d, name)
+        with open(p, "w", encoding="utf-8", newline="") as fh:
+            fh.write(text)
+        return p
+
+    def example(self, name="clean"):
+        p, d = core.example_paths(name)
+        with open(p, encoding="utf-8") as fh:
+            pt = fh.read()
+        with open(d, encoding="utf-8") as fh:
+            dt = fh.read()
+        return pt, dt
+
+    def test_app_readers_give_the_engine_ids_and_sequences(self):
+        from coal import seqio
+        from coal_app import viewer
+        pt, dt = self.example()
+        d = self.tmp()
+        clustal = "CLUSTAL W\n\ns1  MKV-AL\ns2  MKVSAL\n        ** **\n\ns1  WW\ns2  WW\n"
+        cases = [(k, t, False) for k, t in _variants(pt, False).items()]
+        cases += [("clustal_" + k, t, False) for k, t in _variants(clustal, False).items() if k != "blank_lines"]
+        cases += [(k, t, True) for k, t in _variants(dt, True).items()]
+        for k, text, dna in cases:
+            with self.subTest(k, dna=dna):
+                path = self.write(d, f"{k}_{int(dna)}.fa", text)
+                if dna:
+                    idx = seqio.DnaIndex([path])
+                    want = [(i, idx.get(n)) for n, i in enumerate(idx.ids)]
+                    idx.close()
+                else:
+                    want = seqio.read_alignment(path)
+                self.assertTrue(want)
+                self.assertEqual(core.read_ids(path), [i for i, _ in want])
+                self.assertEqual(viewer.read_alignment(path, dna=dna), want)
+
+    def run_pair(self, ptext, dtext, name="clean", **kw):
+        d = self.tmp()
+        p = self.write(d, "p.fa", ptext)
+        n = self.write(d, "d.fa", dtext)
+        return tools.codon_align(p, n, **kw)
+
+    def test_bom_dna_with_mito_protein_runs(self):
+        pt, dt = self.example("mito")
+        r = self.run_pair(pt, BOM + dt, codontable=1)
+        self.assertTrue(r["ok"], r.get("error"))
+        self.assertTrue(any(h.get("suggested_codontable") == 2 for h in r["hints"]), r["hints"])
+        self.assertEqual(r["summary"]["total"], 24, r["summary"])
+
+    def test_hash_preamble_dna_with_mito_protein_runs(self):
+        pt, dt = self.example("mito")
+        r = self.run_pair(pt, "# exported by tool\n" + dt, codontable=1)
+        self.assertTrue(r["ok"], r.get("error"))
+        self.assertTrue(any(h.get("suggested_codontable") == 2 for h in r["hints"]), r["hints"])
+        self.assertTrue(r["problems"])  # per-gene warnings, not only run-level tips
+
+    def test_clean_example_variants_pair_by_id(self):
+        pt, dt = self.example()
+        for k, (ptext, dtext) in {"bom_dna": (pt, BOM + dt), "hash_dna": (pt, "# x\n" + dt),
+                                  "bom_both": (BOM + pt, BOM + dt),
+                                  "bom_crlf_both": (BOM + pt.replace("\n", "\r\n"),
+                                                    BOM + ("# x\n" + dt).replace("\n", "\r\n"))}.items():
+            with self.subTest(k):
+                r = self.run_pair(ptext, dtext)
+                self.assertTrue(r["ok"], r.get("error"))
+                s = r["summary"]
+                self.assertEqual((s["total"], s["ok"], s["pairing"]), (8, 8, "id"), s)
+                self.assertFalse([h for h in r["hints"] if h.get("code") == "id_mismatch"], r["hints"])
+                self.assertNotIn("Of 0 sequences", r["methods_text"])
+
+
 class TestR3E1AppParsesNewNotice(unittest.TestCase):  # R3-E1
     def test_new_notice_with_ambiguous_count(self):
         line = ("coal: warning: g: no 10-residue segment of the protein was found in the DNA; codons were assigned "

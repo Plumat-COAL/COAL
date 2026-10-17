@@ -46,35 +46,13 @@ LEGEND = [("hy", "Hydrophobic (A V L I M)"), ("ar", "Aromatic (F W Y)"), ("po", 
 
 # ---------------------------------------------------------------- reading
 
-def read_alignment(path: str) -> list[tuple[str, str]]:
-    """(id, sequence) records from FASTA or CLUSTAL, in file order."""
-    with open(path, encoding="utf-8", errors="replace") as fh:
-        text = fh.read()
-    stripped = text.lstrip()
-    recs: list[tuple[str, str]] = []
-    if stripped.startswith(">"):
-        name, buf = None, []
-        for line in text.splitlines():
-            if line.startswith(">"):
-                if name is not None:
-                    recs.append((name, "".join(buf)))
-                parts = line[1:].split()
-                name, buf = (parts[0] if parts else ""), []
-            elif name is not None:
-                buf.append(line.strip())
-        if name is not None:
-            recs.append((name, "".join(buf)))
-        return recs
-    if stripped.upper().startswith("CLUSTAL"):
-        seqs: dict[str, list[str]] = {}
-        for line in text.splitlines()[1:]:
-            if not line.strip() or line[0].isspace():
-                continue
-            parts = line.split()
-            if len(parts) >= 2:
-                seqs.setdefault(parts[0], []).append(parts[1])
-        return [(k, "".join(v)) for k, v in seqs.items()]
-    raise ValueError(f"{path}: not FASTA or CLUSTAL")
+def read_alignment(path: str, dna: bool = False) -> list[tuple[str, str]]:
+    """(id, sequence) records from FASTA or CLUSTAL, in file order (dna=True: DNA FASTA rules).
+    CHANGED(R3-A1): was plain UTF-8, first line had to start with '>' or 'CLUSTAL' (a BOM or '#' preamble the
+    engine accepts was "not FASTA or CLUSTAL"); now the engine's rules, via seqformat.
+    See overnight/integration/CHANGES.md"""
+    from .seqformat import read_records
+    return read_records(path, dna=dna)
 
 
 def slug(seq_id: str) -> str:
@@ -526,7 +504,7 @@ def view(protein_path: str, codon_path: str | None = None, report: dict | str | 
             report = json.load(fh)
     protein = read_alignment(protein_path)
     codon = read_alignment(codon_path) if codon_path and os.path.isfile(codon_path) else None
-    dna = read_alignment(dna_path) if dna_path and os.path.isfile(dna_path) else None
+    dna = read_alignment(dna_path, dna=True) if dna_path and os.path.isfile(dna_path) else None  # CHANGED(R3-A1)
     # CHANGED(R2-A3): was rows built for every sequence (22,000 x 600 codons: 29 s, GBs) though only max_seqs
     # are drawn; now only the drawn sequences are built (problems of the others come from the report).
     total = len(protein)
@@ -602,7 +580,7 @@ def locate_breaks(protein_path: str, dna_path: str, report: dict) -> None:
     """Add the column where each failed gene breaks (frameshift or not) to a report, in place."""
     try:
         protein = read_alignment(protein_path)
-        dna = read_alignment(dna_path)
+        dna = read_alignment(dna_path, dna=True)  # CHANGED(R3-A1)
     except (OSError, ValueError):
         return
     table = int((report.get("options") or {}).get("codontable") or 1)

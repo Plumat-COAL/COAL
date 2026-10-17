@@ -305,31 +305,11 @@ def sha256_file(path: str) -> str:
 
 
 def read_ids(path: str) -> list[str]:
-    """Sequence IDs from a FASTA or CLUSTAL file (first word of each name), in file order."""
-    ids: list[str] = []
-    with open(path, encoding="utf-8", errors="replace") as fh:
-        first = ""
-        for line in fh:
-            if line.strip():
-                first = line
-                break
-        if first.startswith(">"):
-            ids.append(first[1:].split()[0] if first[1:].split() else "")
-            for line in fh:
-                if line.startswith(">"):
-                    parts = line[1:].split()
-                    ids.append(parts[0] if parts else "")
-            return ids
-        if first.upper().startswith("CLUSTAL"):
-            seen = set()
-            for line in fh:
-                if not line.strip() or line[0].isspace():
-                    continue
-                name = line.split()[0]
-                if name not in seen:
-                    seen.add(name)
-                    ids.append(name)
-    return ids
+    """Sequence IDs from a FASTA or CLUSTAL file (first word of each name), in file order.
+    CHANGED(R3-A1): was plain UTF-8 and a first line starting with '>' or 'CLUSTAL' only (a BOM or '#' preamble gave
+    no IDs); now the engine's rules, via seqformat. See overnight/integration/CHANGES.md"""
+    from .seqformat import read_ids as _read_ids
+    return _read_ids(path)
 
 
 def strip_version(seq_id: str) -> str:
@@ -716,7 +696,7 @@ def _write_sample(protein, dna, ids, report, work_dir):
     from .viewer import read_alignment
     want = set(ids)
     prot = [(i, r) for i, r in read_alignment(protein) if i in want]
-    dna_recs = read_alignment(dna)
+    dna_recs = read_alignment(dna, dna=True)  # CHANGED(R3-A1): DNA rules ('#' lines, letters only)
     pairs = {s["id"]: s.get("dna_id") for s in report.get("sequences", [])}
     dmap = dict(dna_recs)
     nuc = [(i, dmap.get(pairs.get(i) or i, "")) for i, _ in prot]
