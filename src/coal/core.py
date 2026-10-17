@@ -42,7 +42,16 @@ _NON_ACGT = re.compile("[^ACGT]")
 
 
 class CoalError(Exception):
-    pass
+    """An error COAL reports to the user. `code` is a stable machine-readable
+    reason (used in the run report); `seq_id` is set when one sequence failed."""
+
+    def __init__(self, message: str, code: str = "error", seq_id: str | None = None,
+                 index: int | None = None):
+        super().__init__(message)
+        self.code, self.seq_id, self.index = code, seq_id, index   # index: position in the batch/input
+
+    def __reduce__(self):  # keep code/seq_id/index across worker processes
+        return (CoalError, (str(self), self.code, self.seq_id, self.index))
 
 
 @dataclass
@@ -62,10 +71,11 @@ def pair_sequences(prot_ids: list[str], dna_ids: list[str], dna_pos: dict | None
     `dna_pos` (ID -> index) may be passed in to avoid building it again."""
     if len(prot_ids) != len(dna_ids):
         raise CoalError(
-            f"number of sequences differs (protein: {len(prot_ids)}, DNA: {len(dna_ids)})"
+            f"number of sequences differs (protein: {len(prot_ids)}, DNA: {len(dna_ids)})",
+            code="count_mismatch",
         )
     if not prot_ids:
-        raise CoalError("no sequences in input")
+        raise CoalError("no sequences in input", code="no_sequences")
     pos = dna_pos if dna_pos is not None else {d: i for i, d in enumerate(dna_ids)}
     if all(p in pos for p in prot_ids):
         return [pos[p] for p in prot_ids]
@@ -275,7 +285,7 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int) -> Threaded:
     bad = _VALID.search(row)
     if bad:
         chars = sorted(set(_VALID.findall(row)))
-        raise CoalError(f"{seq_id}: invalid protein alignment characters {chars}")
+        raise CoalError(f"{seq_id}: invalid protein alignment characters {chars}", code="invalid_chars", seq_id=seq_id)
 
     res = Threaded(seq_id, row, "")
     for m in _AS_X.finditer(row):
@@ -284,7 +294,7 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int) -> Threaded:
     dna = raw_dna.upper().replace("U", "T")
     residues = row.replace(GAP, "")
     if not residues:
-        raise CoalError(f"{seq_id}: protein sequence is empty")
+        raise CoalError(f"{seq_id}: protein sequence is empty", code="empty_protein", seq_id=seq_id)
 
     # 1. exact fit (quick check at offset 0 first: the common, clean case)
     if not _DIGIT.search(residues) and _quick_offset0(table, dna, residues):
@@ -300,7 +310,7 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int) -> Threaded:
     # 2. anchor fallback
     anchors = _anchors(row)
     if not anchors:
-        raise CoalError(f"{seq_id}: protein and DNA are inconsistent (no match found)")
+        raise CoalError(f"{seq_id}: protein and DNA are inconsistent (no match found)", code="no_match", seq_id=seq_id)
     pattern, col = [], 1
     for k, a in enumerate(anchors):
         at = _tokens(a, ANCHOR_START if k == 0 else NORMAL, col)
@@ -310,7 +320,7 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int) -> Threaded:
         col += len(a)
     s = _find(target, [("n", t[1], t[2]) if t[0] == "w" else t for t in pattern])
     if s < 0:
-        raise CoalError(f"{seq_id}: protein and DNA are inconsistent (no match found)")
+        raise CoalError(f"{seq_id}: protein and DNA are inconsistent (no match found)", code="no_match", seq_id=seq_id)
     res.dna = raw_dna[s:s + _length(toks)]
 
     # mismatch report: first residue Met -> ATG/CTG/GTG, others -> genetic code
@@ -425,7 +435,7 @@ def codon_align(
     proteins = [(pid, prepare_row(pid, aln)) for pid, aln in proteins]
     lengths = {len(s) for _, s in proteins}
     if len(lengths) > 1:
-        raise CoalError(f"protein alignment rows have different lengths: {sorted(lengths)}")
+        raise CoalError(f"protein alignment rows have different lengths: {sorted(lengths)}", code="row_lengths")
     idx = pair_sequences([p[0] for p in proteins], [d[0] for d in dnas])
     items = [thread_one(pid, row, dnas[j][1], table) for (pid, row), j in zip(proteins, idx)]
     rows = build_alignment(items, nogap=nogap, nomismatch=nomismatch)

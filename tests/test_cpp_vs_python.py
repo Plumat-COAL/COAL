@@ -134,12 +134,17 @@ def run_python(d: Path, opts):
                 rc = e.code
     finally:
         os.chdir(cwd)
-    return rc, out.getvalue(), err.getvalue()
+    return rc, out.getvalue(), strip_summary(err.getvalue())
 
 
 def run_cpp(binary: Path, d: Path, opts):
     r = subprocess.run([str(binary), "pep.fasta", "nuc.fasta", *opts], cwd=d, capture_output=True, timeout=60)
-    return r.returncode, r.stdout.decode("ascii"), r.stderr.decode("ascii", "replace")
+    return r.returncode, r.stdout.decode("ascii"), strip_summary(r.stderr.decode("ascii", "replace"))
+
+
+def strip_summary(err: str) -> str:
+    """Drop the plain-language "coal: summary:" lines (not part of PAL2NAL-compatible stderr)."""
+    return "".join(l for l in err.splitlines(True) if not l.startswith("coal: summary:"))
 
 
 def selected():

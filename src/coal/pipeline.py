@@ -71,14 +71,20 @@ def _init_worker(table, widths, two_pass, nogap, fmt="fasta"):
 
 
 def _work(batch):
-    """Thread one batch. Returns (text, warnings, mismatch columns, nogap triplets):
-    text is finished FASTA, or 'id<TAB>row' lines for the column-removal pass."""
-    parts, warns, mcols, bad = [], [], set(), set()
+    """Thread one batch. Returns (text, warnings, mismatch columns, nogap triplets, IDs):
+    text is finished FASTA, or 'id<TAB>row' lines for the column-removal pass.
+    A CoalError gets .index = position of the failing sequence in the batch."""
+    parts, warns, mcols, bad, pids = [], [], set(), set(), []
     two_pass = _W["two_pass"]
     fmt = _W.get("fmt", "fasta")
     record = paml_record if fmt == "paml" else fasta_record
-    for pid, row, dna in batch:
-        it = thread_one(pid, row, dna, _W["table"])
+    for i, (pid, row, dna) in enumerate(batch):
+        try:
+            it = thread_one(pid, row, dna, _W["table"])
+        except CoalError as e:
+            e.index = i
+            raise
+        pids.append(pid)
         exp = expand(it, _W["widths"], _W["wide"])
         warns += [f"{pid} {w}" for w in it.warnings]
         if two_pass:
@@ -89,7 +95,7 @@ def _work(batch):
                 bad |= nogap_bad_triplets(exp)
         else:
             parts.append(record(pid, exp))
-    return "".join(parts), warns, mcols, bad
+    return "".join(parts), warns, mcols, bad, pids
 
 
 # ------------------------------------------------------------------ main side
@@ -215,11 +221,12 @@ def _results(batches, jobs: int, init_args):
 
 def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
         nomismatch: bool = False, jobs: int = 0, warn=None, min_nt_per_job: int | None = None,
-        fmt: str = "fasta") -> int:
+        fmt: str = "fasta", rec=None) -> int:
     """Convert; write the alignment (fmt: fasta, clustal, paml or codon) to out_path (or stdout).
 
     jobs: 0 = automatic (up to all cores), N = at most N processes. Small inputs
-    always run in one process (see MIN_NT_PER_JOB)."""
+    always run in one process (see MIN_NT_PER_JOB). rec: optional report.RunReport
+    that collects per-sequence results for the run report."""
     get_code(table)
     if fmt not in FORMATS:
         raise CoalError(f"unknown output format {fmt!r}; one of {', '.join(FORMATS)}")
@@ -235,14 +242,23 @@ def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
         if ncol is None:
             ncol = len(row)
         elif len(row) != ncol:
-            raise CoalError(f"protein alignment rows have different lengths ({ncol} and {len(row)}, at {pid})")
+            raise CoalError(f"protein alignment rows have different lengths ({ncol} and {len(row)}, at {pid})",
+                            code="row_lengths")
         if _DIGIT.search(row):
             digit_rows.append(row)
     dna = DnaIndex(nuc_paths)
     try:
+        if rec is not None:
+            per_file = [0] * len(dna.paths)
+            for f in dna.fno:
+                per_file[f] += 1
+            rec.set_inputs(len(ids), per_file)
         # DNA record number for each protein, as a compact array; then free the ID tables
         pairing = array("q", pair_sequences(ids, dna.ids, dna.pos))
         nseq = len(pairing)
+        if rec is not None:
+            mode = "id" if all(p in dna.pos for p in ids) else "order"
+            rec.set_pairing(mode, [dna.ids[j] for j in pairing] if rec.keep_entries else None, pairing)
         del ids
         dna.forget_ids()
         jobs = effective_jobs(jobs, dna.total_bytes(), min_nt_per_job)
@@ -261,10 +277,32 @@ def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
             sink = stage.file if staged else tmp.file   # skip tempfile's per-call wrapper
             if fmt == "paml" and not staged:
                 tmp.file.write(paml_header(nseq, sum(widths)))
-            for text, warns, mcols, badt in _results(_batches(rows(), dna, pairing), jobs, init):
+            done = 0
+            results = _results(_batches(rows(), dna, pairing), jobs, init)
+            while True:
+                try:
+                    text, warns, mcols, badt, pids = next(results)
+                except StopIteration:
+                    break
+                except CoalError as e:
+                    if rec is not None and e.seq_id is not None:
+                        e.index = done + (e.index or 0)
+                        rec.add_sequence(e.seq_id, [], failure=(e.code, str(e)), k=e.index)
+                    raise
                 if warn:
                     for w in warns:
                         warn(w)
+                if rec is not None:
+                    wi = 0
+                    for pid in pids:
+                        mine, pre = [], pid + " "
+                        while wi < len(warns) and warns[wi].startswith(pre):
+                            mine.append(warns[wi][len(pre):])
+                            wi += 1
+                        rec.add_sequence(pid, mine, k=done)
+                        done += 1
+                else:
+                    done += len(pids)
                 sink.write(text)
                 if nomismatch:
                     drop.update(c - 1 for c in mcols)
@@ -286,6 +324,9 @@ def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
                         pid, exp = line.rstrip("\n").split("\t", 1)
                         tmp.file.write(record(pid, apply_slices(exp, sl)))
             tmp.close()
+            if rec is not None:
+                from .report import sha256_file
+                rec.set_output(out_path, sha256_file(tmp.name), nseq)
             if out_path:
                 os.replace(tmp.name, out_path)
             else:

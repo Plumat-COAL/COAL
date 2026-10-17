@@ -1,0 +1,252 @@
+{
+ "schema": "coal.report/1",
+ "coal_version": "0.3.0",
+ "command": "coal pep.fasta nuc.fasta -output paml -o out.paml --report report.json",
+ "pal2nal_equivalent": "pal2nal.pl pep.fasta nuc.fasta -output paml",
+ "options": {
+  "output_format": "paml",
+  "codontable": 1,
+  "nogap": false,
+  "nomismatch": false,
+  "keep_going": false
+ },
+ "inputs": [
+  {
+   "role": "protein",
+   "path": "pep.fasta",
+   "sha256": "748e72133e6287841f2dbf56104cee399cbd63e42a048bf5b538c18329d3f1dd",
+   "sequences": 6
+  },
+  {
+   "role": "dna",
+   "path": "nuc.fasta",
+   "sha256": "b93210cfb81e6b3282faeaedc49205b3c89ced7cd183c1531204271fac24481e",
+   "sequences": 6
+  }
+ ],
+ "output": {
+  "path": "out.paml",
+  "format": "paml",
+  "sha256": "f9b99621bdc14572d23aab68afdb58b70fbf48660c1144bce7d46d04b8eb7aa5",
+  "sequences": 6
+ },
+ "summary": {
+  "total": 6,
+  "ok": 0,
+  "warning": 6,
+  "failed": 0,
+  "pairing": "id",
+  "not_processed": 0
+ },
+ "hints": [
+  {
+   "code": "genetic_code",
+   "text": "Most sequences fit genetic code 2 (vertebrate mitochondrial). Try -codontable 2.",
+   "suggested_codontable": 2,
+   "checked": 6,
+   "fit": 6,
+   "fit_current": 0
+  }
+ ],
+ "sequences": [
+  {
+   "id": "g0",
+   "index": 0,
+   "dna_id": "g0",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 18,
+     "text": "Column 18: W does not match codon TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 41,
+     "text": "Column 41: M does not match codon ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 56,
+     "text": "Column 56: M does not match codon ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 59,
+     "text": "Column 59: W does not match codon TGA"
+    }
+   ]
+  },
+  {
+   "id": "g1",
+   "index": 1,
+   "dna_id": "g1",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 19,
+     "text": "Column 19: M does not match codon ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 22,
+     "text": "Column 22: W does not match codon TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 40,
+     "text": "Column 40: M does not match codon ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 52,
+     "text": "Column 52: M does not match codon ATA"
+    }
+   ]
+  },
+  {
+   "id": "g2",
+   "index": 2,
+   "dna_id": "g2",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 5,
+     "text": "Column 5: M does not match codon ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 17,
+     "text": "Column 17: W does not match codon TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 37,
+     "text": "Column 37: M does not match codon ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 38,
+     "text": "Column 38: W does not match codon TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 44,
+     "text": "Column 44: W does not match codon TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 52,
+     "text": "Column 52: W does not match codon TGA"
+    }
+   ]
+  },
+  {
+   "id": "g3",
+   "index": 3,
+   "dna_id": "g3",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 5,
+     "text": "Column 5: M does not match codon ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 13,
+     "text": "Column 13: W does not match codon TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 27,
+     "text": "Column 27: W does not match codon TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 39,
+     "text": "Column 39: W does not match codon TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 48,
+     "text": "Column 48: M does not match codon ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 52,
+     "text": "Column 52: W does not match codon TGA"
+    }
+   ]
+  },
+  {
+   "id": "g4",
+   "index": 4,
+   "dna_id": "g4",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 9,
+     "text": "Column 9: M does not match codon ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 11,
+     "text": "Column 11: W does not match codon TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 22,
+     "text": "Column 22: M does not match codon ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 42,
+     "text": "Column 42: M does not match codon ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 54,
+     "text": "Column 54: W does not match codon TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 55,
+     "text": "Column 55: W does not match codon TGA"
+    }
+   ]
+  },
+  {
+   "id": "g5",
+   "index": 5,
+   "dna_id": "g5",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 31,
+     "text": "Column 31: W does not match codon TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 60,
+     "text": "Column 60: M does not match codon ATA"
+    }
+   ]
+  }
+ ],
+ "runtime_seconds": 0.628,
+ "exit_code": 0,
+ "summary_text": [
+  "6 of 6 sequences have codon mismatches. They all fit genetic code 2 (vertebrate mitochondrial): try -codontable 2."
+ ]
+}
