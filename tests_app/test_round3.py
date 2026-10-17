@@ -322,7 +322,7 @@ class TestR3A4DemoTimeoutsStopWorkers(unittest.TestCase):  # R3-A4
         self.assertEqual([n for n in os.listdir(out) if n.startswith(".coal_")], [])
 
 
-_EVENTS = {"click", "change", "upload", "load", "then", "submit"}
+_EVENTS = {"click", "change", "upload", "load", "then", "submit", "input"}  # CHANGED(GUI-9): + input (settings)
 
 
 class _Comp:
@@ -392,14 +392,19 @@ class TestR3A5UploadAfterPath(RunsDirCase):  # R3-A5
             outs = outs if isinstance(outs, (list, tuple)) else [outs]
             fn = kw.get("fn", a[0] if a else None)
             found[self._label(comp)] = ([self._label(o) for o in outs], fn)
-        prot = next((k for k in found if k.startswith("1. Protein")), None)
-        dna = next((k for k in found if k.startswith("2. ")), None)
+        # CHANGED(GUI-13): the labels were "1. Protein alignment (...)" and "2. Coding DNA (...)"; now "Protein
+        # alignment" and "Coding DNA" (the formats are a hint inside the drop zone)
+        prot = next((k for k in found if k.startswith("Protein")), None)
+        dna = next((k for k in found if k.startswith("Coding DNA")), None)
         self.assertIsNotNone(prot, found)
         self.assertIsNotNone(dna, found)
         for k in (prot, dna):
             labels, fn = found[k]
             self.assertEqual(len(labels), 1, labels)
-            self.assertTrue(labels[0].startswith("or type/paste a path"), labels)
+            # CHANGED(GUI-1): was labels "or type/paste a path ..."; the path boxes now sit under "Use a file path
+            # instead (large files)" and are labelled "<file> path"
+            self.assertTrue(labels[0].endswith(" path"), labels)
+            self.assertEqual(labels[0].split()[0], {prot: "Protein", dna: "Coding"}[k], labels)
             self.assertEqual(fn("/tmp/x.fa"), "")
             self.assertEqual(fn(None), "")
 

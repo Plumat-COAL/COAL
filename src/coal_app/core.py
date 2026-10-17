@@ -1330,7 +1330,9 @@ def health_rows(report: dict) -> list[list[str]]:
     return rows
 
 
-def _jump_links(seq: dict, limit: int = 12) -> str:
+def _jump_links(seq: dict, limit: int = 12, preview: dict | None = None) -> str:
+    """CHANGED(GUI-10): preview (viewer.view's info: ids, first, last): a column outside the drawn part is named
+    without a link ("not in the preview"), so no link leads nowhere."""
     from .viewer import cell_id
     # CHANGED(APP-3/APP-1): was every message column linked; now only cells the viewer anchors. See overnight/app/CHANGES.md
     # only codes the viewer gives an anchor to (it outlines mismatched and frameshift cells)
@@ -1338,39 +1340,115 @@ def _jump_links(seq: dict, limit: int = 12) -> str:
                    if isinstance(m.get("column"), int) and m.get("code") in ("mismatch", "frameshift")})
     if not cols:
         return ""
-    links = ", ".join(f'<a href="#{cell_id(str(seq.get("id", "")), c)}">column {c}</a>' for c in cols[:limit])
+    sid = str(seq.get("id", ""))
+    drawn = preview is None or not preview.get("preview") or sid in (preview.get("ids") or ())
+    lo, hi = (preview or {}).get("first", 1), (preview or {}).get("last", 10 ** 9)
+
+    # CHANGED(GUI-14): was "Show in alignment: column 1, column 7, column 36, ..."; now "Columns 1, 7, 36"
+    # (the number is the link, as in a page index)
+    def one(c):
+        if drawn and lo <= c <= hi:
+            return f'<a href="#{cell_id(sid, c)}" aria-label="column {c:,}">{c:,}</a>'
+        return f"{c:,}"
+    links = ", ".join(one(c) for c in cols[:limit])
     more = f" and {len(cols) - limit} more" if len(cols) > limit else ""
-    return f'<br><span class="coal-small">Show in alignment: {links}{more}</span>'
+    lead = "Column" if len(cols) == 1 else "Columns"
+    if not drawn:
+        return f'<br><span class="coal-small">{lead} {links}{more} (this gene is not in the alignment preview)</span>'
+    inside = [c for c in cols[:limit] if lo <= c <= hi]
+    if len(inside) < len(cols[:limit]):
+        more += (f" ({'some are ' if inside else ''}outside the preview, which draws columns {lo:,}–{hi:,}; type a "
+                 f"column in \u201cCentre the preview on column\u201d under the alignment to see it)")
+    return f'<br><span class="coal-small">{lead} {links}{more}</span>'
+
+
+def _closing_sentence(text: str) -> str:
+    """CHANGED(GUI-14): the last sentence of a row's text when there is more than one ("" otherwise)."""
+    text = (text or "").rstrip()
+    i = text.rfind(". ", 0, len(text) - 1)
+    return text[i + 2:] if i > 0 else ""
 
 
 HEALTH_MAX_ROWS = 200
+HEALTH_OK_NAMES = 2000  # CHANGED(GUI-4): OK genes are named in one collapsed row, at most this many
 
 
-def health_table_html(report: dict, links: bool = False) -> str:
+def health_table_html(report: dict, links: bool = False, preview: dict | None = None) -> str:
     """Accessible HTML table (icon + word + sentence, never colour alone).
     With links=True, problem columns link to the alignment viewer's cells (same page). No links when
-    -nogap/-nomismatch removed columns: report columns then don't exist in the output."""
+    -nogap/-nomismatch removed columns: report columns then don't exist in the output.
+    CHANGED(GUI-10): preview: what the alignment preview drew (viewer.view's info); only cells in it are linked."""
     opts = report.get("options") if isinstance(report.get("options"), dict) else {}
     if opts.get("nogap") or opts.get("nomismatch"):  # CHANGED(APP-1): no jump links in codon-only mode
         links = False
     order = {"failed": 0, "warning": 1, "not_checked": 2, "ok": 3}
     allseqs = sorted(report.get("sequences", []), key=lambda s: order.get(s.get("status"), 4))
+    if not allseqs:  # CHANGED(GUI-4): was an empty table with only its caption (no report yet, or an input error)
+        return ""
+    # CHANGED(GUI-4): was one row per OK gene too ("OK · Protein and DNA match codon for codon." x 19 under one
+    # failed gene); now OK genes without a note are one collapsed row listing their names. See
+    # overnight/integration/CHANGES.md
+    oks = [s for s in allseqs if s.get("status") == "ok" and not (s.get("dna_id") and s.get("dna_id") != s.get("id"))]
+    ok_ids = {id(s) for s in oks}
+    allseqs = [s for s in allseqs if id(s) not in ok_ids]
     # CHANGED(R2-A3): was one row per sequence (22,000 rows = 4.2 MB of HTML); now at most HEALTH_MAX_ROWS rows,
     # problems first, then one summary row for the rest. See overnight/integration/CHANGES.md
     seqs = allseqs[:HEALTH_MAX_ROWS]
     rest = allseqs[HEALTH_MAX_ROWS:]
-    out = ['<table class="coal-health"><caption>Sequence health, problems first</caption>',
+    caption = "Sequences"  # CHANGED(GUI-14): was "Sequence health, problems first" / "Sequence health"
+    out = [f'<table class="coal-health"><caption>{caption}</caption>',
            '<thead><tr><th scope="col">Status</th><th scope="col">Sequence</th>'
            '<th scope="col">What this means</th></tr></thead><tbody>']
+    # CHANGED(GUI-4): three or more problem genes with the same status and the same sentence, and nothing of their
+    # own (no jump link, no pairing note), are one row naming them (e.g. the 19 "Not checked: COAL stopped at an
+    # error in X" rows after a fatal error). See overnight/integration/CHANGES.md
+    groups: dict = {}
+    for s in seqs:
+        paired = s.get("dna_id") and s.get("dna_id") != s.get("id")
+        if not paired and not (links and _jump_links(s, preview=preview)):
+            groups.setdefault((s.get("status"), sequence_sentence(s)), []).append(s)
+    grouped = {id(x) for g in groups.values() if len(g) >= 3 for x in g}
+    # CHANGED(GUI-14): a closing sentence that three or more rows of the same status share (e.g. "Kept in the
+    # alignment; check the genetic code." under 24 warnings) is said once, in a row above the first of them
+    tails: dict = {}
+    for s in seqs:
+        if id(s) not in grouped:
+            t = _closing_sentence(sequence_sentence(s))
+            if t:
+                tails.setdefault((s.get("status"), t), []).append(s)
+    shared = {id(x): k[1] for k, g in tails.items() if len(g) >= 3 for x in g}
+    told = set()
+    done = set()
     for s in seqs:
         icon, word, cls = STATUS.get(s.get("status"), ("?", str(s.get("status")), ""))
+        if id(s) in grouped:
+            key = (s.get("status"), sequence_sentence(s))
+            if key in done:
+                continue
+            done.add(key)
+            g = groups[key]
+            names = " ".join(f"<code>{html.escape(str(x.get('id', '')))}</code>" for x in g)
+            out.append(
+                f'<tr class="coal-{cls}"><td><span class="coal-badge coal-{cls}" aria-hidden="true">{icon}</span> '
+                f'<strong>{word}</strong></td><td colspan="2">{html.escape(key[1])}<details><summary>{len(g):,} genes'
+                f'</summary><p class="coal-oklist">{names}</p></details></td></tr>')
+            continue
+        sentence = sequence_sentence(s)
+        if id(s) in shared:
+            tail = shared[id(s)]
+            sentence = sentence[:-len(tail)].rstrip()
+            if (s.get("status"), tail) not in told:
+                told.add((s.get("status"), tail))
+                n = len(tails[(s.get("status"), tail)])
+                out.append(f'<tr class="coal-{cls} coal-shared"><td colspan="3"><span class="coal-badge coal-{cls}" '
+                           f'aria-hidden="true">{icon}</span> <strong>{n:,} genes:</strong> {html.escape(tail)}</td></tr>')
         pair = ""
         if s.get("dna_id") and s.get("dna_id") != s.get("id"):
             pair = f'<br><span class="coal-small">paired with DNA {html.escape(str(s["dna_id"]))}</span>'
         out.append(
             f'<tr class="coal-{cls}"><td><span class="coal-badge coal-{cls}" aria-hidden="true">{icon}</span> '
             f'<strong>{word}</strong></td><td><code>{html.escape(str(s.get("id", "")))}</code>{pair}</td>'
-            f'<td>{html.escape(sequence_sentence(s))}{_jump_links(s) if links else ""}</td></tr>')
+            f'<td>{html.escape(sentence)}{_jump_links(s, preview=preview) if links else ""}</td></tr>')
     if rest:
         kinds = {}
         for s in rest:
@@ -1378,6 +1456,20 @@ def health_table_html(report: dict, links: bool = False) -> str:
         what = ", ".join(f"{n:,} {STATUS.get(k, ('', str(k), ''))[1]}" for k, n in kinds.items())
         out.append(f'<tr><td colspan="3">… and {len(rest):,} more sequences ({what}); the report JSON lists '
                    f'every sequence.</td></tr>')
+    if oks:  # CHANGED(GUI-4): one row for every OK gene, names listed on demand
+        icon, word, cls = STATUS["ok"]
+        names = " ".join(f"<code>{html.escape(str(s.get('id', '')))}</code>" for s in oks[:HEALTH_OK_NAMES])
+        more = (f" … and {len(oks) - HEALTH_OK_NAMES:,} more (the report JSON lists every sequence)"
+                if len(oks) > HEALTH_OK_NAMES else "")
+        n = len(oks)
+        if n == 1:
+            what = "The gene matches" if not allseqs else "1 gene matches"
+        else:
+            what = f"{'All ' if not allseqs else ''}{n:,} genes match"
+        out.append(
+            f'<tr class="coal-{cls} coal-oksum"><td><span class="coal-badge coal-{cls}" aria-hidden="true">{icon}'
+            f'</span> <strong>{word}</strong></td><td colspan="2"><details><summary>{what} codon for codon'
+            f'</summary><p class="coal-oklist">{names}{more}</p></details></td></tr>')
     out.append("</tbody></table>")
     return "".join(out)
 
