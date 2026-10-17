@@ -8,7 +8,7 @@ landing now", never "it does". If the engine branch is not merged by Sunday 10:0
 (2) the COAL GUI at http://127.0.0.1:7860 (`python -m coal_app`), (3) `pitch/backup/` folder. Zoom the
 browser to 125-150 %. Run "One broken gene" once beforehand so nothing is cold.
 
-## 0:00-0:30 Problem: what a codon alignment is for (tab 1, explainer plays itself, 20 s)
+## 0:00-0:30 Problem: what a codon alignment is for (tab 1, explainer plays itself: last step at about 16 s, then it holds)
 
 - "To ask how a gene changed through evolution, for example which genes were under selection in bats
   or in a pathogen, biologists line up the same gene from many species. Proteins are easy to line up.
@@ -25,8 +25,8 @@ browser to 125-150 %. Run "One broken gene" once beforehand so nothing is cold.
   length: five times longer genes took 18 times longer in our measurements."
 - "When something is wrong it prints a cryptic line, or nothing, and still reports success: its exit
   code is always 0. In one case we found it silently drops a codon."
-- "It's a Perl script for the Linux command line. No interface for a bench scientist, and no way for an
-  AI assistant to use it safely."
+- "It's a Perl script, or a web form that handles one alignment at a time and can't be put in a pipeline.
+  Neither explains what went wrong to a bench scientist, and there's no way for an AI assistant to use it safely."
 
 ## 0:55-2:05 Live demo (tab 2, the COAL GUI)
 
@@ -35,7 +35,7 @@ browser to 125-150 %. Run "One broken gene" once beforehand so nothing is cold.
 | 0:55 | (show the empty page) | "COAL runs locally, on this laptop. Your data stays here." |
 | 1:00 | **Try an example: One broken gene** | "Twenty genes from twenty species. One has a single missing DNA letter." |
 | 1:08 | Point at the red-orange row in the health table | "COAL names the gene and says in plain English what is wrong, and the app estimates where: probably a missing base at column 102. Every status has an icon and a word, so it never relies on colour alone." |
-| 1:20 | Click **column 102** | "One click takes you to the exact codon. You can see the reading frame slip." |
+| 1:20 | Click **column 102** | "One click takes you to the exact codon where the frame shifts. The viewer re-reads the DNA from there in the new frame, so the codons after it line up again." |
 | 1:30 | Scroll up, **Try an example: Mitochondrial genes** | "Now a classic mistake: mitochondrial genes run with the standard genetic code." |
 | 1:38 | Point at the tip banner | "COAL notices that every gene fits the vertebrate mitochondrial code and offers to fix it." |
 | 1:45 | Click **Re-run with genetic code 2** | "One click. Everything matches." |
@@ -48,12 +48,14 @@ good genes and flags the one bad one; say "the other 19 are aligned" only if you
 
 ## 2:05-2:35 Proof
 
-- "Correctness: we test COAL against PAL2NAL's own output. 165 checks on 38 hand-made inputs and every
-  option: 143 give byte-identical output, 12 are inputs both tools reject, and 10 are deliberate,
-  documented differences where we think PAL2NAL is wrong, such as that dropped codon."
+- "Correctness: we test COAL against PAL2NAL version 14's own output: 165 checks on 38 hand-made inputs and
+  every FASTA option. 143 checks compare the output byte for byte, and 94 of those also compare the
+  warnings. 12 check that COAL rejects the inputs PAL2NAL fails on. 10 are documented, deliberate
+  differences where we think PAL2NAL is wrong, such as that dropped codon; for those we check COAL's own
+  behaviour."
 - "Speed, measured on one Windows laptop, end to end: 100 genes of 10,000 codons, PAL2NAL 24.5 seconds,
   COAL 0.2 seconds, 119 times faster. Ten thousand genes: 25 seconds down to under one second.
-  Half a million genes, nearly a gigabyte: 10 seconds. For tiny inputs both take about 0.05 seconds; we
+  Half a million genes, nearly a gigabyte: 10 seconds with 4 processes, 25 on one. For tiny inputs both take about 0.05 seconds; we
   don't claim a speed-up there."
 - "The engine is pure Python with no dependencies, MIT licence. Continuous integration is set up for Windows, macOS and
   Linux." (Only say "passes on all three" if the GitHub Actions run is green when you present.)

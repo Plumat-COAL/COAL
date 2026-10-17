@@ -5,8 +5,10 @@ Judges: Apheris, PDBe, the Ellison Institute, CuspAI, Inherent, UCL. Rule: if a 
 
 **1. How do you know it's correct on my data?**
 We compared COAL with PAL2NAL v14's real output on 38 hand-made inputs covering every behaviour we found
-(UTRs, frameshift codes, all 17 genetic codes, ambiguous bases, ID mismatches): 165 checks, 143
-byte-identical, 12 rejected by both, 10 deliberate documented differences. On your data, COAL checks every
+(UTRs, frameshift codes, all 17 genetic codes, ambiguous bases, ID mismatches): 165 checks. 143 compare
+COAL's output with PAL2NAL's byte for byte, and 94 of those also compare the warnings; 12 check that COAL
+rejects the inputs PAL2NAL fails on (exit code only, not the message); 10 are documented deliberate
+differences, where we check COAL's own behaviour instead. On your data, COAL checks every
 codon against its amino acid and tells you per gene if it doesn't fit, with the column, so problems can't
 pass silently. Honest limit: the speed benchmarks use synthetic data, not real genomes, and the reference
 inputs are small and hand-made.
@@ -15,7 +17,7 @@ inputs are small and hand-made.
 For one alignment it doesn't; small inputs are equally fast (about 0.05 s, measured). It matters at
 tree-of-life scale: pipelines call this step once per gene family, thousands to millions of times, and
 PAL2NAL slows down steeply on long genes (measured: 24.5 s vs 0.2 s for 100 genes x 10,000 codons). Half a
-million sequences take COAL about 10 s. Speed is the second point; the first is that failures are explained
+million sequences take COAL about 10 s with 4 processes (25 s on one). Speed is the second point; the first is that failures are explained
 instead of silent.
 
 **3. What happens with messy input?**
@@ -27,7 +29,8 @@ after removing version suffixes, and `--keep-going` so one bad gene doesn't stop
 
 **4. Why not just use PAL2NAL?**
 It works, and we treat it as the reference. But it always exits 0 even on errors, prints cryptic messages,
-needs Perl on a Linux-style command line, and has no interface for bench scientists or AI agents. COAL
+is a Perl script (or a web form that takes one alignment at a time and can't be used from a pipeline), and
+explains nothing to bench scientists or AI agents. COAL
 accepts PAL2NAL's options (there is even a drop-in `pal2nal` command), so a pipeline that already calls
 PAL2NAL with `-output fasta` can switch by changing the command name; pipelines that rely on PAL2NAL's
 default clustal output must add `-output fasta` until COAL writes clustal. PAL2NAL is GPL; COAL is an independent MIT implementation and contains none of its code.
