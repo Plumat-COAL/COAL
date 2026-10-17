@@ -451,9 +451,10 @@ class TestServeProtocol(unittest.TestCase):
         self.assertTrue(cmd[1].endswith("coal_desktop.py"))
         self.assertEqual(cmd[2:5], ["--serve", "--port", "1234"])
         self.assertIn("--parent-pid", cmd)
-        self.assertNotIn("--mcp", cmd)  # WIN-M: MCP on by default, opt out with --no-mcp
-        self.assertNotIn("--no-mcp", cmd)
-        self.assertIn("--no-mcp", cd.default_server_command(1234, mcp=False))
+        self.assertNotIn("--mcp", cmd)
+        # CHANGED(IMP-M-3): was MCP on by default (WIN-M); now off unless the window was started with --mcp
+        self.assertIn("--no-mcp", cmd)
+        self.assertNotIn("--no-mcp", cd.default_server_command(1234, mcp=True))
 
     def test_child_env_offline_and_no_proxy(self):
         old = dict(os.environ)
@@ -982,6 +983,14 @@ class TestLaunchLogging(LogEnv):
             self.assertEqual(f.read(), "OLD RUN\n")
         self.assertFalse(os.path.exists(os.path.join(self.logs, "local_app.log")))
 
+    def test_window_child_serves_mcp_only_with_the_mcp_flag(self):  # IMP-M-3
+        for argv, want_no_mcp in ((["--browser"], True), (["--browser", "--mcp"], False),
+                                  (["--browser", "--mcp", "--no-mcp"], True)):
+            with mock.patch.object(cd, "_run_in_browser", return_value=0) as rb:
+                self.assertEqual(cd.main_window(cd.parse_args(argv)), 0)
+            server = rb.call_args.args[0]
+            self.assertEqual("--no-mcp" in server.command(1234), want_no_mcp, argv)
+
 
 class TestClaimInstance(unittest.TestCase):
     """WIN-R5: a lock that is still being released, or a primary still writing instance.json,
@@ -1026,10 +1035,12 @@ class TestClaimInstance(unittest.TestCase):
 
 
 class TestMcpDefault(unittest.TestCase):
-    """WIN-M: the desktop app serves MCP unless started with --no-mcp."""
+    """IMP-M-3 (was WIN-M): the window serves MCP only with --mcp; the --serve child does what it is told."""
 
     def test_flags(self):
         self.assertFalse(cd.parse_args([]).no_mcp)
+        self.assertFalse(cd.parse_args([]).mcp)
+        self.assertTrue(cd.parse_args(["--mcp"]).mcp)
         self.assertTrue(cd.parse_args(["--no-mcp"]).no_mcp)
         for argv, want in ((["--serve", "--port", "5"], True), (["--serve", "--port", "5", "--no-mcp"], False)):
             with mock.patch.object(cd, "serve", return_value=0) as sv:

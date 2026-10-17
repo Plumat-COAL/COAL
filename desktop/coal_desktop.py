@@ -294,11 +294,14 @@ class ServerError(RuntimeError):
         self.cancelled = cancelled
 
 
-def default_server_command(port: int, mcp: bool = True) -> list[str]:
+def default_server_command(port: int, mcp: bool = False) -> list[str]:
     base = [sys.executable] if FROZEN else [sys.executable, os.path.abspath(__file__)]
     cmd = base + ["--serve", "--port", str(port), "--parent-pid", str(os.getpid())]
     # CHANGED(WIN-M): was: MCP off unless --mcp; now on unless --no-mcp (user decision).
     # See overnight/windows-app/CHANGES.md
+    # CHANGED(IMP-M-3): the window's default is MCP off again (mcp=False): the endpoint sits on a random port, so no
+    # MCP client could be registered with it. `COAL.exe --mcp` turns it on; the stdio server (desktop/setup_mcp.bat)
+    # is the way to register COAL with Claude. The --serve child still serves MCP unless given --no-mcp.
     if not mcp:
         cmd.append("--no-mcp")
     return cmd
@@ -1096,8 +1099,11 @@ def parse_args(argv):
     ap.add_argument("--serve", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--port", type=int, default=0, help=argparse.SUPPRESS)
     ap.add_argument("--parent-pid", type=int, default=None, help=argparse.SUPPRESS)
+    # CHANGED(IMP-M-3): --mcp added (opt in; the URL is only in local_app.log, on a random port); --no-mcp kept
+    ap.add_argument("--mcp", action="store_true",
+                    help="also serve COAL's MCP tools to AI agents on this computer (random port, see local_app.log)")
     ap.add_argument("--no-mcp", action="store_true",
-                    help="don't serve COAL's MCP tools to AI agents on this computer")
+                    help="don't serve COAL's MCP tools (the default for the window)")
     ap.add_argument("--browser", action="store_true", help="open in the default browser instead of a window")
     ap.add_argument("--version", action="store_true")
     return ap.parse_args(argv)
@@ -1201,7 +1207,7 @@ def main_window(args) -> int:
         if IS_WINDOWS and not _hold_app_mutex():
             log.warning("app mutex not created: setup/uninstall won't see that COAL is open")
         log.info("COAL desktop starting (frozen=%s, python %s)", FROZEN, sys.version.split()[0])
-        server = LocalServer(command=lambda port: default_server_command(port, mcp=not args.no_mcp),
+        server = LocalServer(command=lambda port: default_server_command(port, mcp=args.mcp and not args.no_mcp),
                              log_path=local_log)
         if args.browser:
             return _run_in_browser(server, instance)

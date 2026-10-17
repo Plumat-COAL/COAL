@@ -31,10 +31,8 @@ def tidy(obj):
 
 
 def call(fn, **kw):
-    res = fn(**kw)
-    if isinstance(res, dict):
-        res = {k: v for k, v in res.items() if k != "stderr"}  # raw stderr is long; agents rarely need it
-    return res
+    # CHANGED(IMP-M-1): was: dropped the raw "stderr" field; the tool now returns a compact summary itself
+    return fn(**kw)
 
 
 def main():
@@ -55,25 +53,26 @@ def _main():
     code = next((h["suggested_codontable"] for h in r2["hints"] if h.get("suggested_codontable")), 2)
     r2["problems"] = r2["problems"][:3] + ([f"... {len(r2['problems']) - 3} more"] if len(r2["problems"]) > 3 else [])
     r3 = call(tools.codon_align, protein_alignment_path=mito[0], dna_fasta_path=mito[1], codontable=code)
-    f = core.detect_features()
 
     md = f"""# MCP demo: "which of my orthologs failed, and why?" (60 seconds)
 
 A stage script for showing COAL as a tool an AI assistant can use. Everything below the script is the
-real output of the tool functions on this machine (COAL engine {f.version}), regenerated with
-`python demo/make_mcp_demo.py`. Newer engines give the same story with more detail.
+real output of the tool functions, regenerated with `python demo/make_mcp_demo.py`.
+<!-- CHANGED(IMP-M-4): version-free (was "COAL engine 0.3.0"); setup points to desktop/setup_mcp.bat -->
 
 ## Setup (before going on stage)
 
-1. `pip install -e ".[mcp]"` in the COAL repo (or `.[gui]` to use the web GUI's MCP endpoint instead).
-2. Add COAL to the assistant. Claude Code (run in the COAL folder, so `examples/...` paths resolve):
+1. `pip install -e ".[mcp]"` in the COAL repo, in its own virtual environment (not the one with `".[gui]"`).
+   On Windows, `desktop\\setup_mcp.bat` does this and prints the two registrations below, filled in.
+2. Add COAL to the assistant. Claude Code (use the full path of that environment's Python if it is not the
+   `python` on your PATH):
 
    ```
    claude mcp add --transport stdio coal -- python -m coal_app --mcp
    ```
 
    Claude Desktop (`claude_desktop_config.json`). Use the full path of the Python that has COAL installed
-   (`python -c "import sys; print(sys.executable)"`), and give the assistant full paths to the example files:
+   (`python -c "import sys; print(sys.executable)"`). Give the assistant full paths to the files in both cases:
 
    ```json
    {{

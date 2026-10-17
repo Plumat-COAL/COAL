@@ -24,6 +24,10 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0 (CHANGED(FIN-A10): was @v5)
         with:
           python-version: ${{ matrix.python }}
+          cache: pip  # CHANGED(IMP-M-5): pip cache, keyed on the files that pin dependencies
+          cache-dependency-path: |
+            pyproject.toml
+            desktop/requirements.txt
       - name: Install COAL
         run: python -m pip install -e .
       - name: Engine tests
@@ -63,6 +67,10 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0 (CHANGED(FIN-A10): was @v5)
         with:
           python-version: "3.13"
+          cache: pip  # IMP-M-5
+          cache-dependency-path: |
+            pyproject.toml
+            desktop/requirements.txt
       - name: Install COAL with the gui extra
         run: python -m pip install -e ".[gui]"
       - name: Dependency check
@@ -86,6 +94,10 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0 (CHANGED(FIN-A10): was @v5)
         with:
           python-version: "3.13"
+          cache: pip  # IMP-M-5
+          cache-dependency-path: |
+            pyproject.toml
+            desktop/requirements.txt
       - name: Install COAL
         run: python -m pip install -e .
       - name: Fetch PAL2NAL v14 (checksum-verified, not committed)
@@ -106,7 +118,7 @@ jobs:
           fi
 
   explainer:
-    # CHANGED(R2-D11): new; tests_app/test_explainer.py (pitch/explainer.html in Chromium) always skipped in CI.
+    # CHANGED(R2-D11): new; tests_app/test_explainer.py (site/explainer.html in Chromium) always skipped in CI.
     # CHANGED(R3-D2): was continue-on-error: true (first run); green in run 39001781214, so now required.
     # See overnight/integration/CHANGES.md
     name: "Explainer page in Chromium (Playwright)"
@@ -119,6 +131,16 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0 (CHANGED(FIN-A10): was @v5)
         with:
           python-version: "3.13"
+          cache: pip  # IMP-M-5
+          cache-dependency-path: |
+            pyproject.toml
+            desktop/requirements.txt
+      # CHANGED(IMP-M-5): the Chromium download is cached (key: the pinned Playwright version)
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ github.workspace }}/pw-browsers
+          key: playwright-1.48.0-chromium-${{ runner.os }}
       - name: Install COAL and Playwright with Chromium
         run: |
           python -m pip install -e . playwright==1.48.0
@@ -141,6 +163,10 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0 (CHANGED(FIN-A10): was @v5)
         with:
           python-version: "3.13"
+          cache: pip  # IMP-M-5
+          cache-dependency-path: |
+            pyproject.toml
+            desktop/requirements.txt
       - name: Install COAL with the mcp extra
         run: python -m pip install -e ".[mcp]"
       - name: Dependency check
@@ -162,6 +188,10 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0 (CHANGED(FIN-A10): was @v5)
         with:
           python-version: "3.13"
+          cache: pip  # IMP-M-5
+          cache-dependency-path: |
+            pyproject.toml
+            desktop/requirements.txt
       - name: Resolve both extras together
         shell: bash
         run: |
@@ -191,6 +221,10 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0 (CHANGED(FIN-A10): was @v5)
         with:
           python-version: "3.13"
+          cache: pip  # IMP-M-5
+          cache-dependency-path: |
+            pyproject.toml
+            desktop/requirements.txt
       - name: Build
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCOAL_WARNINGS_AS_ERRORS=ON
@@ -242,6 +276,10 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.12"
+          cache: pip  # IMP-M-5
+          cache-dependency-path: |
+            pyproject.toml
+            desktop/requirements.txt
       - name: Install Inno Setup (pinned, as release.yml)
         run: |
           choco install innosetup --version=6.7.1 --allow-downgrade -y --no-progress

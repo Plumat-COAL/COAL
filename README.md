@@ -11,9 +11,29 @@ Built at the Reinvent the Wheel AI × Science Tool-building Hackathon, London, O
 > Up to **~119× faster** than PAL2NAL
 > with byte-identical output on the benchmarked datasets — see [Benchmark results](#benchmark-results).
 >
-> **Compatibility:** COAL's output is identical to PAL2NAL v14's except for a short list of documented, deliberate differences (newer NCBI genetic-code tables for codes 3, 10, 11 and 13; `-nogap` removing the selected code's stop codons; the selected code's start codons for the first Met; pairing by IDs that match only after normalising where PAL2NAL v14's file order would give a protein another gene's DNA; and inputs where PAL2NAL v14 writes malformed output or fails). Tested: all 285 stored reference checks pass (238 byte-identical, 4 of them with deliberately different warnings; 24 where both tools fail; 23 deliberate output or exit-status differences: 6 deliberate errors, 3 different outputs, 14 `-nogap` checks with a non-standard code), and in 20,000 random comparisons with the real PAL2NAL v14 (5,000 cases x 4 output formats) 13,826 were byte-identical, 4,681 both failed and 1,493 were deliberate differences, each checked to be exactly the documented change; 0 unexplained differences. <!-- CHANGED(FIN-C2/FIN-C3/FIN-C10/FIN-C20): was the "byte-identical ... (well-formed input)" claim, "every difference is one where PAL2NAL silently produces wrong output" and a 6,000-case run not reproducible from the repo; now the documented exceptions and the FIN-C10 fuzz numbers --> See
-> [Deliberate differences](#deliberate-differences-from-pal2nal) and [Tests](#tests).
-> <!-- CHANGED(FZ-claim): new; was unqualified "byte-identical" wording elsewhere. See overnight/integration/CHANGES.md -->
+> **Compatibility:** COAL's output is identical to PAL2NAL v14's except for a short list of documented, deliberate differences
+> (see [Deliberate differences](#deliberate-differences-from-pal2nal)). All stored PAL2NAL v14 reference checks pass,
+> and random comparisons with the real PAL2NAL v14 find 0 unexplained differences: the numbers are in
+> [tests/README.md](tests/README.md#test-numbers).
+> <!-- CHANGED(IMP-M-4): the dense block of test counts moved to tests/README.md ("Test numbers"), word for word -->
+
+## Quick start
+
+```
+git clone https://github.com/plumat-coal/COAL && cd COAL
+python -m pip install -e .
+coal examples/clean/protein.aln.fasta examples/clean/dna.fasta > codon_aln.fasta
+```
+
+<!-- CHANGED(IMP-M-4): new 3-line quick start from git clone -->
+
+| I want to... | Go to |
+|---|---|
+| use the command line, PAL2NAL options, big inputs | [Install and use](#install-and-use) |
+| click instead of type (web GUI or Windows app) | [Ways to use COAL](#ways-to-use-coal), [desktop/README.md](desktop/README.md) |
+| let Claude or another AI agent run COAL (MCP) | [AI agents (MCP)](#ai-agents-mcp) |
+| the fastest engine (C++) | [C++ engine](#c-engine-coal-cpp) |
+| know how COAL differs from PAL2NAL and how that is tested | [Deliberate differences](#deliberate-differences-from-pal2nal), [tests/README.md](tests/README.md) |
 
 ## Install and use
 
@@ -22,8 +42,14 @@ pip install -e .
 coal pep.aln nuc.fasta > codon_aln.fasta            # or: python -m coal ...
 coal pep.aln nuc.fasta -codontable 2 -nogap         # PAL2NAL-style options work too
 coal big_pep.fasta big_nuc.fasta -o out.fasta        # large data: uses all cores automatically
-pip install -e .[fast]                              # optional numpy speed-up for large inputs
+pip install -e ".[fast]"                            # optional numpy speed-up for large inputs
 ```
+
+Optional extras: `".[gui]"` (web GUI and Windows app, Gradio) and `".[mcp]"` (stand-alone MCP server for AI agents).
+**Install `gui` and `mcp` in separate virtual environments**: they pin conflicting versions of the `mcp` package, so
+installing one into the other's environment can break it. The Windows launchers below do this for you. Quote the
+extras (`".[gui]"`): some shells (zsh, PowerShell) treat bare brackets specially.
+<!-- CHANGED(IMP-M-4): extras quoted; separate-environment warning next to the install commands -->
 
 - **Input:** a protein alignment (FASTA or CLUSTAL) and the unaligned coding DNA (FASTA, one or more files).
   Non-letters in the DNA (gaps, digits, spaces) are ignored, as in PAL2NAL.
@@ -202,16 +228,45 @@ Details and evidence in `tests/README.md`:
 - **Drop-in for PAL2NAL pipelines:** `pal2nal pep.aln nuc.fasta [PAL2NAL options]` (or `python -m coal_compat`)
   accepts an unchanged PAL2NAL v14 command line, with PAL2NAL's default clustal output, all four formats,
   `-blockonly` and `-nostderr` (= `-q`); `-html` is a clear error. <!-- CHANGED(DEC-4): was "-output fasta ..." -->
-- **Web GUI for bench scientists:** `pip install -e .[gui]`, then `python -m coal_app` (or `coal-gui`): runs on
+- **Web GUI for bench scientists:** `pip install -e ".[gui]"`, then `python -m coal_app` (or `coal-gui`): runs on
   this computer at http://127.0.0.1:7860, with a per-gene health check, an alignment view that marks where a
   gene breaks, genetic-code suggestions and a ready-to-paste methods sentence.
-- **AI agents (MCP):** `pip install -e .[mcp]`, then `python -m coal_app --mcp` (two tools: `codon_align`,
-  `explain_report`); the GUI also serves MCP. Agent instructions: `.claude/skills/coal/SKILL.md`.
+- **AI agents (MCP):** `pip install -e ".[mcp]"`, then `python -m coal_app --mcp` (two tools: `codon_align`,
+  `explain_report`); see [AI agents (MCP)](#ai-agents-mcp) below.
 - **Windows app:** a desktop wrapper with an installer, no terminal needed: `desktop/README.md` (users) and
-  `desktop/BUILD.md` (building it).
+  `desktop/BUILD.md` (building it). From a source checkout, double-click `desktop\run_from_source.bat` (it creates
+  `.venv-gui` on first start, repairs it if an install was interrupted, then opens the window).
+  <!-- CHANGED(IMP-M-2): Windows launchers from source -->
 - **Hosted demo:** a Hugging Face Space is prepared but not deployed: `space/README.md`, `space/DEPLOY.md`.
 - **Two-species preset:** `demo/diamond_pipeline.py` (DIAMOND reciprocal best hits, then COAL on every pair).
 - **C++ engine for the largest jobs:** `coal-cpp`, built with CMake, same options and output (below). <!-- CHANGED(SHIP-4): new -->
+
+## AI agents (MCP)
+
+<!-- CHANGED(IMP-M-4): registration docs moved here from demo/mcp_demo.md, version-free -->
+COAL's stdio MCP server gives an agent two tools: `codon_align` (protein alignment + coding DNA -> codon alignment,
+with a report) and `explain_report` (that report in plain English). Install it in its **own** virtual environment
+(not the one with `".[gui]"`):
+
+```
+python -m venv .venv-mcp
+.venv-mcp/bin/python -m pip install -e ".[mcp]"        # Windows: desktop\setup_mcp.bat does all of this
+claude mcp add coal -- "$PWD/.venv-mcp/bin/python" -m coal_app --mcp
+```
+
+For Claude Desktop, add this to `claude_desktop_config.json` (Settings > Developer > Edit Config), with the full path
+of that environment's Python (on Windows, `desktop\setup_mcp.bat` prints it ready to paste, backslashes escaped):
+
+```json
+{"mcpServers": {"coal": {"command": "/full/path/to/COAL/.venv-mcp/bin/python", "args": ["-m", "coal_app", "--mcp"]}}}
+```
+
+Give the tools **absolute paths**. `codon_align` returns `completed` (COAL finished), `all_ok` / `needs_attention`
+(whether every sequence matched its protein), `counts`, `suggested_codontable`, `next_step`, `output_path` and
+`report_path`; a missing file, an unknown genetic code or an unsupported format is a tool error. The web GUI
+(`python -m coal_app`) also serves the tools at `http://127.0.0.1:7860/gradio_api/mcp/sse`; the Windows app does
+not by default (`COAL.exe --mcp`). Agent instructions: `.claude/skills/coal/SKILL.md`; a stage demo:
+`demo/mcp_demo.md`.
 
 ## C++ engine (coal-cpp)
 
@@ -246,44 +301,15 @@ build/coal-cpp pep.aln nuc.fasta -o codon_aln.fasta       # Windows (Visual Stud
 
 ## Tests
 
-```
-python -m unittest discover -s tests -v
-```
+<!-- CHANGED(IMP-M-4): the test counts moved to tests/README.md ("Test numbers"); this section says where tests live -->
+| Where | What | Run |
+|---|---|---|
+| `tests/` | the engine (`coal`, `pal2nal`, `coal-cpp`): every stored PAL2NAL v14 reference output, options, large runs, real data | `python -m unittest discover -s tests` |
+| `tests_app/` | the app: GUI logic, MCP tools, reports, docs, website, packaging (Gradio / mcp tests skip without the extra) | `python -m unittest discover -s tests_app` |
+| `desktop/` | the Windows wrapper (`test_wrapper.py`) and an end-to-end smoke test of the local app (`test_smoke.py`) | `cd desktop && python -m unittest test_wrapper test_smoke` |
+| `tests/fuzz_vs_pal2nal.py` | random comparison with the real PAL2NAL v14 (needs Perl; `python scripts/fetch_pal2nal.py`) | `PAL2NAL=PAL2NAL/pal2nal.v14/pal2nal.pl python tests/fuzz_vs_pal2nal.py` |
 
-<!-- CHANGED(ENG-i4): was "165 checks. COAL's output must be byte-identical, and its mismatch warnings must equal PAL2NAL's" (rc files were not read, warnings not compared with -nomismatch, 4 checks compared only the exit code). See overnight/engine-fixes/CHANGES.md -->
-<!-- CHANGED(DEC-4): was "all FASTA option combinations = 165 checks ... 3 invalid_chars ... other 162 ... 147 ... 141 ... 12 ... 12 checks
-... 3 where COAL deliberately fails"; now every stored golden in all four formats. See overnight/integration/CHANGES.md -->
-Compares COAL with stored PAL2NAL v14 outputs (`tests/golden/`): 39 input cases × all option combinations in all
-four output formats = 285 checks (the test prints these counts). In the 6 `invalid_chars` checks COAL deliberately
-fails (see below). Exit status in the other 279: PAL2NAL always exits 0, so COAL must exit 0 exactly when PAL2NAL
-produced output.<!-- CHANGED(R3-D5): was "in all 165" checks; the harness checks exit status in 162. See overnight/integration/CHANGES.md --> stdout is byte-identical in 238 checks, and the per-codon warnings
-are identical in 234 of them (48 with `-nomismatch`); in the other 4 the warnings differ deliberately (NCBI tables
-10, 11 and 13); in 24 both tools fail. 23 checks are deliberate output or exit-status differences: 6 deliberate errors
-(`invalid_chars`, where COAL refuses), 3 with different output and 14 `-nogap` checks with a non-standard genetic code
-(COAL's output must equal PAL2NAL's output without `-nogap` with that code's stop columns removed). 238 + 24 + 23 =
-285. <!-- CHANGED(MRG-5): was 38 cases / 279 / 273 / 232 / 228 / 47 (the teammate's frameshift_codon_line case adds 6 checks) --> <!-- CHANGED(FIN-C2/FIN-A3): was "29 ... deliberate differences" (counted the 4 warning-only checks
-twice: 232 + 24 + 29 = 285); now one breakdown everywhere, guarded by tests_app/test_docs_numbers.py --> <!-- CHANGED(FZ-5): was 246 / 240 / 15 / 6 of the 246 --> See `tests/README.md` for exactly what is compared and for the list of deliberate differences.
-
-**Random differential test against the real PAL2NAL** (needs Perl; PAL2NAL is fetched, never committed):
-
-```
-python scripts/fetch_pal2nal.py
-PAL2NAL=PAL2NAL/pal2nal.v14/pal2nal.pl python tests/fuzz_vs_pal2nal.py      # FUZZ_N=3000 cases by default
-```
-
-Each random case (FASTA or CLUSTAL input, sometimes with `#` marks; clean, mismatching, unrelated, masked or
-wrong-code DNA; UTRs, stops, frameshift digits, RNA, lower case; same, shuffled, different or partly matching IDs;
-random `-codontable`, `-nogap`, `-nomismatch`, `-blockonly`) runs through PAL2NAL and the drop-in `pal2nal` with the
-same command line in all four formats, and stdout must be byte-identical, or both must fail, except for the
-deliberate differences listed in the script (each is in the list above). A difference counts as deliberate only if
-it is exactly the documented one: the script also runs PAL2NAL on a copy of the case with that feature neutralised
-(e.g. `U` → `B`, RNA → DNA, an alternative start codon → ATG) and COAL's output must equal that, apart from the
-documented change. CI runs it on every push (job `pal2nal-fuzz`). Result here, seed 20261017, 5,000 cases: 20,000
-comparisons, 13,826 byte-identical, 4,681 where both fail, 1,493 deliberate differences (each checked), 0
-unexplained (per-format counts in `tests/README.md`; seeds 4242 and 777 also give 0 unexplained).
-<!-- CHANGED(FIN-C10/FIN-C20): was the run before FIN-C10/FIN-E1 (14,368 / 4,723 / 909 "in cases with a documented
-deliberate difference", i.e. not checked) and a 6,000-case run whose generator is not in the repo -->
-<!-- CHANGED(DEC-4): new --> <!-- CHANGED(FZ-claim): was "3,000 cases: no unexplained difference" -->
+What each comparison checks, the counts and the list of deliberate differences: [tests/README.md](tests/README.md).
 
 ## Benchmark results
 

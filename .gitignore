@@ -36,3 +36,13 @@ tbln.out.*
 
 # C++ build output (cmake -S . -B build)
 build/
+
+# CHANGED(IMP-M-2/IMP-M-4): launcher environments (desktop\run_from_source.bat, desktop\setup_mcp.bat) and
+# stray local files at the repo root (run outputs, debug logs, old launchers; the launchers live in desktop/)
+.venv-gui/
+.venv-mcp/
+/*_out.fasta
+/*_check*.txt
+/*_check*.py
+/coal_test_log.txt
+/*.bat
