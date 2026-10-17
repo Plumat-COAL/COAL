@@ -228,5 +228,37 @@ class TestMethodsAndMaxWarnings(unittest.TestCase):
             self.assertEqual(err.count("does not correspond"), n)    # 0 = unlimited
 
 
+
+class TestProgress(unittest.TestCase):
+    def test_not_printed_for_small_inputs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            write_genes(d, 50)
+            rc, out, err = run(d, ["pep.fasta", "nuc.fasta", "--progress"])
+            self.assertEqual(rc, 0)
+            self.assertNotIn("progress", err)
+            self.assertEqual(out, run(d, ["pep.fasta", "nuc.fasta"])[1])
+
+    def test_printed_for_large_inputs_without_changing_output(self):
+        old = (pipeline.PROGRESS_MIN_SEQS, pipeline.PROGRESS_EVERY)
+        pipeline.PROGRESS_MIN_SEQS, pipeline.PROGRESS_EVERY = 100, 0.0   # small test, report every batch
+        old_batch = pipeline.BATCH_NT
+        pipeline.BATCH_NT = 3000
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                d = Path(tmp)
+                write_genes(d, 300, codons=20)
+                rc, out, err = run(d, ["pep.fasta", "nuc.fasta", "--progress"])
+                self.assertEqual(rc, 0)
+                lines = [l for l in err.splitlines() if l.startswith("coal: progress:")]
+                self.assertGreater(len(lines), 2)
+                self.assertRegex(lines[0], r"coal: progress: \d+% \([\d,]+ of 300 sequences\), ")
+                self.assertTrue(lines[-1].startswith("coal: progress: 100% (300 of 300 sequences), done in"))
+                self.assertEqual(out, run(d, ["pep.fasta", "nuc.fasta"])[1])   # stdout untouched
+        finally:
+            pipeline.PROGRESS_MIN_SEQS, pipeline.PROGRESS_EVERY = old
+            pipeline.BATCH_NT = old_batch
+
+
 if __name__ == "__main__":
     unittest.main()

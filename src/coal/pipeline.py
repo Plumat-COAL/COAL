@@ -42,6 +42,43 @@ BATCH_NT = 2_000_000      # target DNA per work batch (keeps IPC overhead low)
 # core needs for a few million nucleotides. So each extra worker must have at
 # least this much DNA to do, otherwise COAL runs in a single process.
 MIN_NT_PER_JOB = 4_000_000
+PROGRESS_MIN_SEQS = 10_000   # --progress only reports on inputs larger than this
+PROGRESS_EVERY = 2.0         # seconds between progress reports
+
+
+class Progress:
+    """Percent done + estimated time left on stderr: one updating line on a
+    terminal, plain lines otherwise. Never touches stdout."""
+
+    def __init__(self, total: int, stream=None):
+        import time
+        self.time = time.monotonic
+        self.total, self.stream = total, stream or sys.stderr
+        self.t0 = self.last = self.time()
+        self.tty = bool(getattr(self.stream, "isatty", lambda: False)())
+        self.printed = False
+
+    def update(self, done: int, final: bool = False):
+        now = self.time()
+        if not final and now - self.last < PROGRESS_EVERY:
+            return
+        self.last = now
+        pct = 100 * done // self.total if self.total else 100
+        el = now - self.t0
+        if final:
+            tail = f"done in {el:.1f} s"
+        elif done:
+            left = el / done * (self.total - done)
+            tail = f"about {left:.0f} s left" if left < 120 else f"about {left / 60:.0f} min left"
+        else:
+            tail = "estimating time left"
+        msg = f"coal: progress: {pct}% ({done:,} of {self.total:,} sequences), {tail}"
+        if self.tty:
+            self.stream.write("\r" + msg.ljust(78) + ("\n" if final else ""))
+        else:
+            self.stream.write(msg + "\n")
+        self.stream.flush()
+        self.printed = True
 
 
 def effective_jobs(requested: int, total_nt: int, min_nt_per_job: int | None = None) -> int:
@@ -226,14 +263,15 @@ def _results(batches, jobs: int, init_args):
 
 def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
         nomismatch: bool = False, jobs: int = 0, warn=None, min_nt_per_job: int | None = None,
-        fmt: str = "fasta", rec=None, keep_going: bool = False) -> int:
+        fmt: str = "fasta", rec=None, keep_going: bool = False, progress: bool = False) -> int:
     """Convert; write the alignment (fmt: fasta, clustal, paml or codon) to out_path (or stdout).
 
     jobs: 0 = automatic (up to all cores), N = at most N processes. Small inputs
     always run in one process (see MIN_NT_PER_JOB). rec: optional report.RunReport
     that collects per-sequence results for the run report.
     keep_going: skip sequences that cannot be threaded (written: all the others, in
-    order). Returns the number of skipped sequences (0 without keep_going)."""
+    order). Returns the number of skipped sequences (0 without keep_going).
+    progress: report percent done on stderr for inputs over PROGRESS_MIN_SEQS sequences."""
     get_code(table)
     if fmt not in FORMATS:
         raise CoalError(f"unknown output format {fmt!r}; one of {', '.join(FORMATS)}")
@@ -294,6 +332,7 @@ def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
             if fmt == "paml" and not staged:
                 tmp.file.write(paml_header(nseq, sum(widths)))
             done = skipped = 0
+            prog = Progress(nseq) if progress and nseq > PROGRESS_MIN_SEQS else None
             results = _results(_batches(rows(), dna, pairing), jobs, init)
             while True:
                 try:
@@ -320,10 +359,14 @@ def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
                         rec.add_sequence(pid, [w[len(pre):] for w in mine], failure=failure, k=done)
                     done += 1
                     skipped += failure is not None
+                if prog:
+                    prog.update(done)
                 sink.write(text)
                 if nomismatch:
                     drop.update(c - 1 for c in mcols)
                 bad |= badt
+            if prog and prog.printed:
+                prog.update(done, final=True)
             if keep_going and skipped == nseq:
                 raise CoalError(f"none of the {nseq} sequences could be converted", code="all_failed")
             if staged:

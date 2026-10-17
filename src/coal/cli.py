@@ -45,6 +45,8 @@ def main(argv=None) -> int:
     ap.add_argument("--max-warnings", type=int, default=0, metavar="N",
                     help="print at most N per-codon warning lines, then a count of the rest "
                          "(default 0 = no limit, as PAL2NAL)")
+    ap.add_argument("--progress", action="store_true",
+                    help="show percent done and time left on stderr (inputs over 10,000 sequences)")
     ap.add_argument("--report", metavar="FILE.json",
                     help="write a JSON run report (schema coal.report/1), also when the run fails")
     ap.add_argument("--json", action="store_true",
@@ -75,7 +77,8 @@ def main(argv=None) -> int:
     try:
         skipped = run(args.pep_aln, args.nuc_fasta, out_path=args.out, table=args.codontable,
                       nogap=args.nogap, nomismatch=args.nomismatch, jobs=args.jobs, warn=warn,
-                      fmt=args.output_format, rec=rec, keep_going=args.keep_going)
+                      fmt=args.output_format, rec=rec, keep_going=args.keep_going,
+                      progress=args.progress)
         if skipped:
             rc = 2   # partial success
     except (CoalError, InputFormatError, UnicodeDecodeError, OSError) as e:
