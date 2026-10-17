@@ -268,5 +268,34 @@ class TestEngG_Table3Starts(TempDirCase):
         self.assertEqual(set(get_code(3).starts), {"ATA", "ATG", "GTG"})
 
 
+# ---------------------------------------------------------------- ENG-h
+class TestEngH_InputEncodings(TempDirCase):
+    def check(self, pep: bytes, nuc: bytes):
+        (self.d / "hp.fa").write_bytes(pep)
+        (self.d / "hn.fa").write_bytes(nuc)
+        r = coal(["hp.fa", "hn.fa"], self.d)
+        self.assertEqual((r.returncode, r.stdout), (0, EXPECTED), r.stderr)
+
+    def test_utf8_bom(self):
+        bom = b"\xef\xbb\xbf"
+        self.check(bom + PEP.encode(), NUC.encode())
+        self.check(PEP.encode(), bom + NUC.encode())
+
+    def test_cr_only_line_endings(self):
+        self.check(PEP.replace("\n", "\r").encode(), NUC.encode())
+        self.check(PEP.encode(), NUC.replace("\n", "\r").encode())
+        self.check(PEP.replace("\n", "\r\n").encode(), NUC.replace("\n", "\r\n").encode())
+
+    def test_hash_line_before_first_dna_header_is_skipped(self):
+        self.check(PEP.encode(), b"# made by hand\n" + NUC.encode())
+
+    def test_non_ascii_error_names_the_file(self):
+        (self.d / "bad.fa").write_bytes(PEP.encode().replace(b"MKV-AL", b"MKV\xe9AL"))
+        r = coal(["bad.fa", "n.fa"], self.d)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("bad.fa", r.stderr)
+        self.assertNotIn("Traceback", r.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

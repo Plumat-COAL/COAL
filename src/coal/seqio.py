@@ -1,8 +1,10 @@
 """Minimal readers for FASTA and CLUSTAL protein alignments and FASTA DNA."""
 from __future__ import annotations
 
+import codecs
 import re
 from array import array
+from contextlib import contextmanager
 from pathlib import Path
 
 _NON_LETTER = re.compile(r"[^A-Za-z]")
@@ -12,13 +14,38 @@ class InputFormatError(ValueError):
     pass
 
 
+# CHANGED(ENG-h): text inputs were opened as strict ASCII (a UTF-8 BOM failed with "'ascii' codec
+# can't decode byte 0xef", no file name); now a BOM is skipped and other non-ASCII input is an
+# InputFormatError naming the file. See overnight/engine-fixes/CHANGES.md
+@contextmanager
+def _text(path):
+    """Lines of a text input: BOM skipped; \\n, \\r\\n and \\r all end a line."""
+    fh = open(path, encoding="utf-8-sig", errors="strict")
+    try:
+        yield _ascii_lines(fh, path)
+    finally:
+        fh.close()
+
+
+def _ascii_lines(fh, path):
+    lineno = 0
+    try:
+        for line in fh:
+            lineno += 1
+            if not line.isascii():
+                raise InputFormatError(f"{path}:{lineno}: non-ASCII character")
+            yield line
+    except UnicodeDecodeError:
+        raise InputFormatError(f"{path}: near line {lineno + 1}: not an ASCII text file") from None
+
+
 def read_fasta(path: str | Path, letters_only: bool = False) -> list[tuple[str, str]]:
     """Return [(id, sequence)]. ID = first whitespace token of the header.
     Whitespace inside sequence lines is removed. With letters_only (used for DNA,
     as PAL2NAL does), every non-letter is removed (gaps, digits, '*', ...) and
     lines starting with '#' are skipped."""
     records: list[tuple[str, list[str]]] = []
-    with open(path, encoding="ascii", errors="strict") as fh:
+    with _text(path) as fh:  # CHANGED(ENG-h)
         for lineno, line in enumerate(fh, 1):
             line = line.rstrip("\r\n")
             if line.startswith(">"):
@@ -44,8 +71,8 @@ def read_clustal(path: str | Path) -> list[tuple[str, str]]:
     """Return [(id, aligned sequence)] from a CLUSTAL file (interleaved blocks)."""
     order: list[str] = []
     seqs: dict[str, list[str]] = {}
-    with open(path, encoding="ascii", errors="strict") as fh:
-        first = fh.readline()
+    with _text(path) as fh:  # CHANGED(ENG-h)
+        first = next(fh, "")
         if not first.startswith("CLUSTAL"):
             raise InputFormatError(f"{path}: not a CLUSTAL file")
         for line in fh:
@@ -66,8 +93,8 @@ def read_clustal(path: str | Path) -> list[tuple[str, str]]:
 
 def read_alignment(path: str | Path) -> list[tuple[str, str]]:
     """Read a protein alignment, auto-detecting CLUSTAL vs FASTA."""
-    with open(path, encoding="ascii", errors="strict") as fh:
-        head = fh.read(7)
+    with _text(path) as fh:  # CHANGED(ENG-h)
+        head = next(fh, "")[:7]
     return read_clustal(path) if head == "CLUSTAL" else read_fasta(path)
 
 
@@ -94,7 +121,7 @@ def iter_fasta(path: str | Path):
     """Yield (id, sequence) one record at a time (whitespace removed)."""
     rid, chunks = None, []
     seen = set()
-    with open(path, encoding="ascii", errors="strict") as fh:
+    with _text(path) as fh:  # CHANGED(ENG-h)
         for lineno, line in enumerate(fh, 1):
             if line.startswith(">"):
                 if rid is not None:
@@ -115,11 +142,32 @@ def iter_fasta(path: str | Path):
 
 
 def is_clustal(path: str | Path) -> bool:
-    with open(path, encoding="ascii", errors="strict") as fh:
-        return fh.read(7) == "CLUSTAL"
+    with _text(path) as fh:  # CHANGED(ENG-h)
+        return next(fh, "").startswith("CLUSTAL")
 
 
 _LETTERS = bytes(range(65, 91)) + bytes(range(97, 123))
+# CHANGED(ENG-h): new helpers so a lone \r also ends a line in DNA files (classic Mac).
+_LINES = re.compile(rb"[^\r\n]*(?:\r\n|\r|\n)|[^\r\n]+")
+
+
+def _has_lone_cr(fh) -> bool:
+    """True if the first 64 kB of the (seekable) binary file have a \\r not followed by
+    \\n (old Mac line endings); position kept. Checking only the start keeps \\n and
+    \\r\\n files on the fast path."""
+    pos = fh.tell()
+    try:
+        c = fh.read(1 << 16)
+        if c.endswith(b"\r"):
+            c += fh.read(1)
+        return c.count(b"\r") != c.count(b"\r\n") + c.endswith(b"\r")
+    finally:
+        fh.seek(pos)
+
+
+def _cr_lines(fh):
+    for raw in fh:
+        yield from _LINES.findall(raw)
 _NON_LETTER_BYTES = bytes(b for b in range(256) if b not in _LETTERS)
 
 
@@ -142,22 +190,32 @@ class DnaIndex:
         self._fh: dict[int, object] = {}
 
     def _scan(self, fno: int, path: str) -> None:
+        # CHANGED(ENG-h): was \n-only lines, BOM not skipped, '#' before the first header an
+        # error; now a BOM is skipped, a lone \r also ends a line, and '#' lines before the
+        # first header are skipped (as read_fasta does). See overnight/engine-fixes/CHANGES.md
         with open(path, "rb") as fh:
             offset, start = 0, None
-            for line in fh:
+            if fh.read(len(codecs.BOM_UTF8)) == codecs.BOM_UTF8:
+                offset = len(codecs.BOM_UTF8)
+            else:
+                fh.seek(0)
+            for line in (_cr_lines(fh) if _has_lone_cr(fh) else fh):
                 if line.startswith(b">"):
                     if start is not None:
                         self._add(fno, start, offset)
                     parts = line[1:].split()
                     if not parts:
                         raise InputFormatError(f"{path}: empty FASTA header")
-                    rid = parts[0].decode("ascii")
+                    try:
+                        rid = parts[0].decode("ascii")
+                    except UnicodeDecodeError:
+                        raise InputFormatError(f"{path}: non-ASCII sequence ID") from None
                     if rid in self.pos:
                         raise InputFormatError(f"{', '.join(self.paths)}: duplicate sequence ID {rid!r}")
                     self.pos[rid] = len(self.ids)
                     self.ids.append(rid)
                     start = offset + len(line)
-                elif start is None and line.strip():
+                elif start is None and line.strip() and not line.startswith(b"#"):
                     raise InputFormatError(f"{path}: sequence data before first '>' header")
                 offset += len(line)
             if start is not None:
