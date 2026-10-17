@@ -39,7 +39,7 @@ COAL_PY = BENCH / "venv-coal" / "Scripts" / "python.exe"
 COAL_CPP = ROOT / "build" / "coal-cpp.exe"
 HARNESS_COMMIT = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--short=12", "HEAD"], capture_output=True,
                                 text=True).stdout.strip() + ("" if subprocess.run(["git", "-C", str(ROOT), "diff", "--quiet", "HEAD", "--",
-                                                                                  "benchmarks"]).returncode == 0 else "-dirty")
+                                                                                  "benchmarks", ":!benchmarks/results"]).returncode == 0 else "-dirty")
 TOOL_COMMIT = {"p2n14": "v14 sha256:2b419417e304", "p2n16": "da572f796bb5",
                "coal-py": COMMIT[:12], "coal-cpp": COMMIT[:12]}
 
@@ -153,10 +153,11 @@ def correctness_pass(tier: str, rows: list[dict], configs: list[tuple], workers:
 
 
 def class_table(rows, key="scenario") -> str:
-    classes = ["TRUTH", "REF", "KNOWN_DIV", "MISMATCH", "ERROR", "TIMEOUT", "OOM"]
+    classes = ["TRUTH", "REF", "KNOWN_DIV", "MISMATCH", "ERROR", "TIMEOUT", "OOM", "INPUT_INVALID"]
     cfgs = list(dict.fromkeys(config_name(r["tool"], None if r["jobs"] == "" else r["jobs"]) for r in rows))
     groups = list(dict.fromkeys(r[key] for r in rows))
-    abbr = {"TRUTH": "T", "REF": "R", "KNOWN_DIV": "K", "MISMATCH": "M", "ERROR": "E", "TIMEOUT": "TO", "OOM": "OOM"}
+    abbr = {"TRUTH": "T", "REF": "R", "KNOWN_DIV": "K", "MISMATCH": "M", "ERROR": "E", "TIMEOUT": "TO", "OOM": "OOM",
+            "INPUT_INVALID": "I"}
     def cell(rs):
         c = {k: sum(1 for r in rs if r["class"] == k) for k in classes}
         return " ".join(f"{abbr[k]}{v}" for k, v in c.items() if v) or "-"
@@ -166,7 +167,7 @@ def class_table(rows, key="scenario") -> str:
         lines.append(f"| {g} | " + " | ".join(
             cell([r for r in rs_g if config_name(r["tool"], None if r["jobs"] == "" else r["jobs"]) == c])
             for c in cfgs) + " |")
-    return "\n".join(lines) + "\n\nT=TRUTH R=REF K=KNOWN_DIV M=MISMATCH E=ERROR TO=TIMEOUT OOM=OOM\n"
+    return "\n".join(lines) + "\n\nT=TRUTH R=REF K=KNOWN_DIV M=MISMATCH E=ERROR TO=TIMEOUT OOM=OOM I=INPUT_INVALID\n"
 
 
 ALL_CONFIGS = [("p2n14", None), ("p2n16", None), ("coal-py", 1), ("coal-py", None), ("coal-cpp", 1), ("coal-cpp", None)]
@@ -413,15 +414,73 @@ C_CONFIGS = [("p2n14", None), ("p2n16", None), ("coal-py", None), ("coal-cpp", 1
 C_GRADE_CONFIGS = HEADLINE
 
 
+# Input features whose v14 failure is a documented divergence (case meta "features" -> where it is documented).
+DOCUMENTED_V14_FAILURES = {
+    "selenocysteine": "documented v14 defect: p2n16 tests/divergences.tsv fix_selenocysteine; COAL README 'U (selenocysteine)'",
+}
+
+
+def reclassify(res, metas):
+    """Cross-tool pass after grading (per-tool classify() cannot see the other tools):
+    - INPUT_INVALID: case listed in input_invalid.csv (triage_inputs.py) and every config failed on it.
+    - no truth and p2n14 failed: if every other config produced the same output and the case has a feature whose
+      v14 failure is documented -> those configs KNOWN_DIV "v14 fails; others agree"; if they disagree -> MISMATCH.
+    Rewrites class/reason in place; hashes are unchanged."""
+    inval = {}
+    p = OUTDIR / "input_invalid.csv"
+    if p.exists():
+        inval = {r["case"]: r for r in csv.DictReader(open(p, encoding="utf-8"))}
+    by_case = {}
+    for r in res:
+        by_case.setdefault(r["case"], []).append(r)
+    for case, rs in by_case.items():
+        if case in inval and all(r["class"] == "ERROR" for r in rs):
+            for r in rs:
+                r["class"] = "INPUT_INVALID"
+                r["reason"] = f"{inval[case]['category']}: {inval[case]['reason']} | tool said: {r['reason']}"
+            continue
+        p14 = [r for r in rs if r["tool"] == "p2n14"]
+        others = [r for r in rs if r["tool"] != "p2n14"]
+        if metas[case].get("truth") or not p14 or p14[0]["class"] != "ERROR" or not others:
+            continue
+        if any(r["class"] in ("ERROR", "TIMEOUT", "OOM") for r in others):
+            continue
+        agree = len({r["_hash"] for r in others}) == 1
+        doc = next((DOCUMENTED_V14_FAILURES[f] for f in metas[case].get("features", []) if f in DOCUMENTED_V14_FAILURES), None)
+        if agree and doc:
+            if not p14[0]["reason"].startswith(doc):
+                p14[0]["reason"] = f"{doc} | {p14[0]['reason']}"
+            for r in others:
+                r["class"], r["reason"] = "KNOWN_DIV", f"v14 fails; others agree ({doc})"
+        else:
+            for r in others:
+                r["class"] = "MISMATCH"
+                r["reason"] = "no reference (p2n14 failed); " + ("others agree, but no documented divergence" if agree
+                                                                 else "other tools disagree")
+    return res
+
+
 def tier_c_grade(args):
     STATE.mkdir(parents=True, exist_ok=True)
     path = OUTDIR / "correctness_C.csv"
-    if path.exists():
-        path.unlink()
+    if getattr(args, "reclassify", False):
+        # re-apply reclassify() to the recorded grading (tool outputs are not rerun); hashes come from the state files
+        old = list(csv.DictReader(open(path, encoding="utf-8")))
+        st = {n: json.load(open(STATE / f"C_{n}.json")) for n in C_SETS}
+        sets = {r["dir"]: n for n in C_SETS for r in load_manifest(C_SETS[n])}
+        for r in old:
+            r["_hash"] = st[sets[r["case"]]][config_name(r["tool"], None if r["jobs"] == "" else r["jobs"])][r["case"]]["hash"]
+        graded = {n: [r for r in old if sets[r["case"]] == n] for n in C_SETS}
+        log("Tier C reclassify: re-applying input_invalid.csv and documented-v14-failure rules to recorded grading")
+    path.unlink(missing_ok=True)
     for name, rel in C_SETS.items():
         rows = load_manifest(rel)
-        log(f"Tier C grading {name}: {len(rows)} cases x {len(C_GRADE_CONFIGS)} configs, workers={args.workers}")
-        res = correctness_pass("C", rows, C_GRADE_CONFIGS, workers=args.workers)
+        if getattr(args, "reclassify", False):
+            res = graded[name]
+        else:
+            log(f"Tier C grading {name}: {len(rows)} cases x {len(C_GRADE_CONFIGS)} configs, workers={args.workers}")
+            res = correctness_pass("C", rows, C_GRADE_CONFIGS, workers=args.workers)
+        res = reclassify(res, {r["dir"]: r for r in rows})
         append_csv(path, res, CORR_FIELDS)
         state = {}
         for r in res:

@@ -1,0 +1,3 @@
+tier,case,tool,reason_note
+B,sim/speed/n10_L35000,p2n14,"genuine v14 limit: one regex per sequence with 1-7 capture groups per residue; these proteins need 96,000-102,506 groups vs Perl's hard limit (65,533 usable); same failure under Strawberry 5.42.3, Cygwin 5.42.3 and Linux 5.40.1; not harness-related (reproduced outside it)"
+B,sim/speed/n100_L35000,p2n14,"genuine v14 limit: one regex per sequence with 1-7 capture groups per residue; these proteins need 96,000-102,506 groups vs Perl's hard limit (65,533 usable); same failure under Strawberry 5.42.3, Cygwin 5.42.3 and Linux 5.40.1; not harness-related (reproduced outside it)"

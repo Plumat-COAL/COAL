@@ -105,6 +105,9 @@ def main() -> int:
     ap.add_argument("--cold-only", action="store_true", help="--tier B: one cold-cache run per case/tool (needs admin)")
     ap.add_argument("--include-1m", action="store_true", help="--tier B: include the n1000000_L400 case")
     ap.add_argument("--grade-only", action="store_true", help="--tier C: correctness pass only (run before timing)")
+    ap.add_argument("--reclassify", action="store_true",
+                    help="--tier C --grade-only: re-apply the cross-tool reclassification to the recorded grading "
+                         "(no tool reruns)")
     ap.add_argument("--inproc", action="store_true",
                     help="--tier C: also time the supplementary in-process API loop (coal-py, p2n16)")
     a = ap.parse_args()

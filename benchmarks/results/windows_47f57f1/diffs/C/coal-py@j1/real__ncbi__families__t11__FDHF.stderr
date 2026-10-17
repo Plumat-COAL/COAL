@@ -1,0 +1,12 @@
+coal: warning: Escherichia_coli|NP_313088.1 pepAlnPos 1205: U (selenocysteine) is not checked; any codon is accepted
+coal: warning: Escherichia_coli|NP_418503.1 pepAlnPos 1205: U (selenocysteine) is not checked; any codon is accepted
+coal: warning: Desulfonema_limicola|WP_207690225.1 pepAlnPos 1205: U (selenocysteine) is not checked; any codon is accepted
+coal: warning: Metallumcola_ferriviriculae|WP_366922906.1 pepAlnPos 1205: U (selenocysteine) is not checked; any codon is accepted
+coal: warning: Sporomusa_malonica|WP_084576214.1 pepAlnPos 1205: U (selenocysteine) is not checked; any codon is accepted
+coal: warning: Salisediminibacterium_beveridgei|WP_232318278.1 pepAlnPos 1205: U (selenocysteine) is not checked; any codon is accepted
+coal: warning: Shewanella_avicenniae|WP_207355756.1 pepAlnPos 1205: U (selenocysteine) is not checked; any codon is accepted
+coal: warning: Shigella_sonnei|WP_077795360.1 pepAlnPos 1205: U (selenocysteine) is not checked; any codon is accepted
+coal: warning: Syntrophothermus_lipocalidus|WP_083761964.1 pepAlnPos 1205: U (selenocysteine) is not checked; any codon is accepted
+coal: warning: Dryocola_sharpae|WP_435930669.1 pepAlnPos 1205: U (selenocysteine) is not checked; any codon is accepted
+coal: warning: Methanocaldococcus_jannaschii|WP_083774551.1 pepAlnPos 1205: U (selenocysteine) is not checked; any codon is accepted
+coal: summary: 11 of 100 sequences contain non-standard amino acids (U, O, B, Z or J) whose codons were not checked.

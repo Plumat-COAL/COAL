@@ -39,3 +39,36 @@ TGA-as-Cys codons exactly (4, 16, 10, 8). p2n16, coal-py and coal-cpp emit 0 war
 - Native batch mode (mode 2): N/A for COAL (no multi-alignment mode; several DNA files = one alignment's DNA
   split across files). Supplementary, non-headline "in-process API loop": one interpreter calling
   `main(argv)` per file, for coal-py and p2n16.
+
+## Tier B: p2n14 fails on the L35000 cases (genuine v14 limit)
+
+- `n10_L35000` and `n100_L35000`: p2n14 exits 255 with empty stdout and the stderr
+  `Too many capture groups (limit is 65535) in regex m/((U|T|C|Y|A)(U|T)G)(G(U|T).)... at pal2nal.pl line 1790.`
+  This happened in all warm and cold runs.
+- Cause: for each sequence v14 builds one regex by appending a reverse-translation pattern per residue (1 capture
+  group for A/G/P/T, up to 7 for L/R/S; pal2nal.pl ~1759-1782), then runs `$nuc =~ /$qcodon/i` (line 1790).
+  Perl caps capture groups per regex (the error says 65535; 65,533 is the most that compiles). These proteins need
+  96,000-102,506 groups (every sequence in both cases is over the limit). The passing n1000_L10000 case peaks at
+  28,254.
+- What it means for v14: the limit depends on composition. For typical composition (about 2.8-2.9 groups per
+  residue) it starts failing at roughly 22,000-24,000 aa. For a protein made only of L/R/S it could fail as low as
+  about 9,400 aa. Tier A long_genes (up to 20,617 columns) all pass.
+- Not a harness, Windows or Strawberry issue: reproduced outside the harness (plain `perl pal2nal.pl ... > out
+  2> err`) under Strawberry Perl 5.42.3 (MSWin32), Git's Cygwin Perl 5.42.3, and Linux Perl 5.40.1 (WSL Ubuntu).
+  All three give the same exit code (255), the same stderr, and the same 65,533 limit (probe script counts the
+  groups). Timed runs: one ERROR row each, later runs SKIPPED. No median for p2n14 on these cases.
+
+## Tier C: selenocysteine (documented v14 defect, not a harness issue)
+
+- On SELD and FDHF (table11_large) p2n14 prints "ERROR: inconsistency between the following pep and nuc seqs",
+  exits **0** and writes no output. v14 accepts `U` but no codon table maps it, so the pattern is one codon short.
+  This is documented: grp-bork `tests/divergences.tsv` `fix_selenocysteine`, COAL README "U (selenocysteine)".
+  The other tools' MISMATCH on those two cases only means "no reference": p2n14 gave nothing to compare
+  against. These are to be reclassified KNOWN_DIV during triage.
+
+## harness_commit history
+
+- baseline rows: `b146167e713c`; warm Tier B: `ab92b8e18005`; cold Tier B and Tier C grading:
+  `ab92b8e18005-dirty`. The "-dirty" is a false positive: the check also counted result files written under
+  `benchmarks/results/`. `git diff ab92b8e -- benchmarks ':!benchmarks/results'` was empty at the time, so the
+  code was identical. Fixed so result files are excluded from the check; rows keep the label as recorded.

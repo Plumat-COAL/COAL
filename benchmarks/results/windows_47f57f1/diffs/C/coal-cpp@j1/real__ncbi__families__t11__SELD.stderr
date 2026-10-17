@@ -1,0 +1,19 @@
+coal: warning: Halalkalibacter_akibai|WP_081734170.1 pepAlnPos 473: U (selenocysteine) is not checked; any codon is accepted
+coal: warning: Bacillus_shivajii|WP_404802427.1 pepAlnPos 473: U (selenocysteine) is not checked; any codon is accepted
+coal: warning: Desulfonema_limicola|WP_207688219.1 pepAlnPos 473: U (selenocysteine) is not checked; any codon is accepted
+coal: warning: Mannheimia_bovis|WP_188156625.1 pepAlnPos 473: U (selenocysteine) is not checked; any codon is accepted
+coal: warning: Alkalihalophilus_pseudofirmus|WP_289234572.1 pepAlnPos 473: U (selenocysteine) is not checked; any codon is accepted
+coal: warning: Siminovitchia_fortis|WP_390615308.1 pepAlnPos 473: U (selenocysteine) is not checked; any codon is accepted
+coal: warning: Metallumcola_ferriviriculae|WP_366923532.1 pepAlnPos 473: U (selenocysteine) is not checked; any codon is accepted
+coal: warning: Sporomusa_malonica|WP_084576719.1 pepAlnPos 473: U (selenocysteine) is not checked; any codon is accepted
+coal: warning: Salisediminibacterium_beveridgei|WP_084007422.1 pepAlnPos 473: U (selenocysteine) is not checked; any codon is accepted
+coal: warning: Effusibacillus_dendaii|WP_226375427.1 pepAlnPos 473: U (selenocysteine) is not checked; any codon is accepted
+coal: warning: Syntrophothermus_lipocalidus|WP_013176491.1 pepAlnPos 473: U (selenocysteine) is not checked; any codon is accepted
+coal: warning: Anaerotruncus_colihominis|WP_081726379.1 pepAlnPos 473: U (selenocysteine) is not checked; any codon is accepted
+coal: warning: Syntrophobacter_fumaroxidans|WP_083764120.1 pepAlnPos 473: U (selenocysteine) is not checked; any codon is accepted
+coal: warning: Flavonifractor_plautii|WP_080567994.1 pepAlnPos 473: U (selenocysteine) is not checked; any codon is accepted
+coal: warning: Geobacter_sulfurreducens|WP_010941269.1 pepAlnPos 473: U (selenocysteine) is not checked; any codon is accepted
+coal: warning: Thermophilibacter_immobilis|WP_194370445.1 pepAlnPos 473: U (selenocysteine) is not checked; any codon is accepted
+coal: warning: Symbiobacterium_ostreiconchae|WP_464846160.1 pepAlnPos 473: U (selenocysteine) is not checked; any codon is accepted
+coal: warning: Methanocaldococcus_jannaschii|WP_083774555.1 pepAlnPos 473: U (selenocysteine) is not checked; any codon is accepted
+coal: summary: 18 of 83 sequences contain non-standard amino acids (treated as X).
