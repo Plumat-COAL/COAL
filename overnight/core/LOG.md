@@ -1,5 +1,48 @@
 # Overnight log: core (branch overnight/core)
 
+## Run 3 summary: C++ foundations brief (2026-10-17 11:08 UTC)
+
+All six items are done. They are committed on the local branch `overnight/core`. The branch is **not pushed**: `git push origin overnight/core` failed with "could not read Username", because this machine has no GitHub credentials. Push it from a machine that has them. `main` was not touched, and `origin/keanu_overnight/integration` was not merged (it was only read with `git show`). Every change has a row in `overnight/core/CHANGES.md`, and its ID starts the commit message.
+
+| item | ID | commit |
+|---|---|---|
+| 1 Build setup (CMake, C++17, std only, warnings-as-errors option for CI) | CPP-1 | `be537a6` |
+| 2 Input readers = reviewed `seqio.py` + Python/C++ reader test | CPP-2, CPP-2b | `c7d0ac0` |
+| 3 Genetic code tables (17; table 3 GTG) + table test | CPP-3 | `801ae19` |
+| 4 CLI: same options/help/messages as reviewed `python -m coal` | CPP-4 | `e2fc161` |
+| 5 Ordered streaming thread pool (`pool.hpp`) + stand-in test | CPP-5 | `29af0a5` |
+| 6 `COAL_IMPL=cpp` hookup in test_differential (skips when not built) | CPP-6 | `65c4a5c` |
+
+**Test results (at the end of the run):**
+- Clean build from scratch with `-DCOAL_WARNINGS_AS_ERRORS=ON` (GCC 11): no warnings.
+- clang `-Werror -Wall -Wextra -Wpedantic -Wshadow`, cross-compiled for Windows (MinGW) and macOS (arm64): clean.
+- Golden checks: Python 285/285, C++ 285/285.
+- Full suite `python -m unittest discover -s tests`: 77 tests OK, none skipped, 50 s.
+- New tests:
+  - test_cpp_readers: 43 edge cases.
+  - test_cpp_tables: 17 codes.
+  - test_cpp_cli: 50 error, 31 accepted, 10 help/version command lines, plus the help text.
+  - test_cpp_pool: 7 tests.
+  - All pass. Each was break-tested (code broken on purpose, failure seen, code restored).
+- test_cpp_vs_python: 1000/1000 identical.
+- The CLI tests pass under ASan/UBSan; the pool tests pass under TSan.
+
+**Parked:** nothing.
+
+**Needs a human decision:**
+1. **Output formats.** The brief says "for anything other than fasta print a not implemented yet error". The C++ clustal/paml/codon writers already existed from run 1 and pass all their golden checks, so I kept them working instead of disabling them. Say if you want them switched off.
+2. **`-strict/--strict`** is parsed exactly like the reference, then exits 2 with "not implemented yet in coal-cpp". It needs the core rules, which were out of scope.
+3. **The CLI follows Python 3.10/3.11 argparse messages.** Python 3.12.8+/3.13 quote `invalid choice` values differently and format help differently. The live comparison therefore runs only on 3.10/3.11. On other versions the test checks the messages pinned from 3.10.
+4. **Deliberate CLI differences from the reference** (all in CHANGES CPP-4):
+   - `-output` lists four choices.
+   - `--version` prints `coal 0.4.0 (C++)`.
+   - The C++-only options (`-keep-going`, `--max-warnings`, `--progress`, `--resume`, `--report`, `--json`) match exact names only, so `--j` still means `--jobs`.
+   - `-q` now also silences notices, as the reference does.
+5. **This branch's Python engine (`src/coal`) predates the reviewed fixes.** For example, it lacks the table-3 GTG start. The C++ readers and tables now follow the integration branch, so for table-3 genes starting with GTG they differ from this branch's Python until integration is merged.
+6. **MSVC is not available here.** Its flags are set (`/W4 /permissive- /utf-8`, `/WX` with the CI option), and the code is clean under clang `-Wconversion`, which approximates MSVC's loss-of-data warnings. Please run one native Windows build:
+   `cmake -S . -B build -DCOAL_WARNINGS_AS_ERRORS=ON && cmake --build build --config Release`
+7. **The local branch `overnight/merged`** (the merge with Keanu's integration branch, made earlier) is still unpushed and untouched.
+
 ## Morning summary (both overnight runs + code review)
 
 Everything is on the local branch `overnight/core` (17 commits on top of main `31cf3d0`). **Not pushed**: this machine has no GitHub credentials. Push it yourself when you're happy: `git push -u origin overnight/core`
