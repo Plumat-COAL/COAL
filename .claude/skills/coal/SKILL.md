@@ -50,11 +50,15 @@ coal pep.aln nuc.fasta -j 4 -o codon.fasta               # 5. big inputs: up to 
 See overnight/integration/CHANGES.md -->
 Output is FASTA only (`-output fasta`, the default). Per-codon warnings (`coal: warning: <id> pepAlnPos N: ...`)
 go to stderr; `-q` silences those, but **notices about probably-wrong data are always printed**:
-`<id>: no 10-residue segment of the protein was found in the DNA; codons were assigned by position (K of N do
-not match)` and `only K of N protein IDs are DNA IDs; pairing sequences by order instead (e.g. protein 'A'
+`<id>: no 10-residue segment of the protein was found in the DNA; codons were assigned by position (K of N
+checkable codons do not match; A contain N or other ambiguous bases)` (the last part only when A > 0) and `only K of N protein IDs are DNA IDs; pairing sequences by order instead (e.g. protein 'A'
 gets DNA 'B')` (some proteins are then almost certainly paired with the wrong DNA: fix the IDs).
 If more than half of a gene's checkable codons (codons made only of A/C/G/T) don't match, that is an error:
 `<id>: protein and DNA are inconsistent (K of N checkable codons do not match the protein)`.
+<!-- CHANGED(R3-E1): notice wording and the "too few" error below. See overnight/integration/CHANGES.md -->
+A gene where no 10-residue segment matched, fewer than 10 codons are checkable and the DNA is longer than the gene
+is also an error (`... only K of N codons have no ambiguous bases: too few to tell where the gene starts ...`):
+trim the UTR or use less heavily masked DNA.
 
 With `-nomismatch` the engine, like PAL2NAL, prints **no** mismatch warnings, so stderr cannot tell you
 which genes didn't fit. Run once without `-nomismatch` to see them, or use `codon_align`: it re-checks

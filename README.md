@@ -33,7 +33,10 @@ pip install -e .[fast]                              # optional numpy speed-up fo
   chunks and prints a warning for each codon that doesn't match its residue. `-nomismatch` removes those
   columns (and, as in PAL2NAL, then prints no mismatch warnings). If even that fails, it's an error. It is also
   an error if more than half of a gene's checkable codons (made only of A/C/G/T) don't match: that is not the
-  right DNA for the protein. Codons with N or other ambiguity codes don't count, so masked genes still align.
+  right DNA for the protein. Codons with N or other ambiguity codes don't count, so masked genes still align,
+  except that a gene with no matching 10-residue chunk and fewer than 10 checkable codons is an error when its DNA
+  is longer than the gene (the start can't be told, e.g. with a 5' UTR).
+  <!-- CHANGED(R3-E1): new exception. See overnight/integration/CHANGES.md -->
 - **`-nogap`** removes codon columns that contain a gap or a stop codon.
 - **Exit code** is non-zero on any error (PAL2NAL always exits 0). Warnings go to stderr; `-q` silences the
   per-codon warnings, but notices about probably-wrong data (no 10-residue segment found, only some IDs

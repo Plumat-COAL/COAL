@@ -245,6 +245,75 @@ class TestR2E3_AmbiguousCodons(TempDirCase):  # R2-E3
         self.assertIn("checkable codons do not match", r.stderr)
 
 
+class TestR3E1_MaskedGeneWithUTR(TempDirCase):  # R3-E1
+    PROT = "MTVDCLAHRFISDLVKSPSFGSVLACYVISPLDRNVCGQH"
+    DNA = ("GCATGNNNNNNNNNNNNTTGNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNATCAGTNNNNNNNNNNNN"
+           "NNNNNNTGTNNNNNNNNN")
+
+    def test_reviewer_repro_is_not_placed_shifted(self):
+        (self.d / "ep.fa").write_text(f">g\n{self.PROT}\n")
+        (self.d / "en.fa").write_text(f">g\n{self.DNA}\n")
+        r = coal(["ep.fa", "en.fa"], self.d)
+        self.assertNotEqual(r.returncode, 0, r.stdout)
+        self.assertEqual(r.stdout, "")
+        self.assertIn("g: protein and DNA are inconsistent", r.stderr)
+        self.assertIn("too few", r.stderr)
+
+    def test_randomized_heavy_mask_with_utr_never_shifted_at_exit_0(self):
+        sys.path.insert(0, str(SRC))
+        from coal.core import CoalError, thread_one
+        from coal.tables import get_code
+        code = get_code(1).code
+        sense = sorted(c for c, a in code.items() if a != "*" and c != "ATG")
+        rng = random.Random(2)  # at 3f9ee66 this seed gave 12 shifted outputs at exit 0
+        for _ in range(3000):
+            n = rng.randint(20, 120)
+            cod = ["ATG"] + [rng.choice(sense) for _ in range(n - 1)]
+            prot = "".join(code[c] for c in cod)
+            for i in rng.sample(range(1, n), int(rng.uniform(0.70, 0.98) * (n - 1))):
+                cod[i] = "NNN"
+            utr = "".join(rng.choice("ACGT") for _ in range(rng.randint(1, 30)))
+            cds = "".join(cod)
+            try:
+                got = thread_one("g", prot, utr + cds, 1).dna
+            except CoalError:
+                continue
+            self.assertEqual(got, cds, (prot, utr, cds))
+            # without the UTR the placement is forced: always accepted, unchanged
+            self.assertEqual(thread_one("g", prot, cds, 1).dna, cds)
+
+    def test_randomized_heavy_mask_exact_length_is_accepted(self):
+        sys.path.insert(0, str(SRC))
+        from coal.core import thread_one
+        from coal.tables import get_code
+        code = get_code(1).code
+        sense = sorted(c for c, a in code.items() if a != "*" and c != "ATG")
+        rng = random.Random(5)
+        for _ in range(500):
+            n = rng.randint(20, 120)
+            cod = ["ATG"] + [rng.choice(sense) for _ in range(n - 1)]
+            prot = "".join(code[c] for c in cod)
+            for i in rng.sample(range(1, n), int(rng.uniform(0.70, 0.98) * (n - 1))):
+                cod[i] = "NNN"
+            self.assertEqual(thread_one("g", prot, "".join(cod), 1).dna, "".join(cod))
+
+    def test_masked_gene_without_utr_and_trailing_stop_still_errors_or_is_right(self):
+        sys.path.insert(0, str(SRC))
+        from coal.core import CoalError, thread_one
+        cds = "ATG" + "NNN" * 11
+        try:
+            self.assertEqual(thread_one("g", "MKVALWYFHIKL", cds + "TAA", 1).dna, cds)
+        except CoalError:
+            pass
+
+    def test_notice_counts_checkable_codons(self):
+        # golden table3: no anchor, 7 of 25 checkable codons differ, none ambiguous
+        fx = ROOT / "tests" / "fixtures" / "table3"
+        r = coal([str(fx / "pep.fasta"), str(fx / "nuc.fasta"), "-q"], self.d)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("(7 of 25 checkable codons do not match)", r.stderr)
+
+
 # ---------------------------------------------------------------- ENG-d
 class TestEngD_PartialIdMatch(TempDirCase):
     def test_some_ids_match_warns_and_pairs_by_order(self):

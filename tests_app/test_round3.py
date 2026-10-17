@@ -86,5 +86,14 @@ class TestR3D2CiConditions(unittest.TestCase):  # R3-D2
         self.assertIn("continue-on-error: ${{ matrix.os == 'windows-latest' }}", self._job("gui"))
 
 
+class TestR3E1AppParsesNewNotice(unittest.TestCase):  # R3-E1
+    def test_new_notice_with_ambiguous_count(self):
+        line = ("coal: warning: g: no 10-residue segment of the protein was found in the DNA; codons were assigned "
+                "by position (1 of 12 checkable codons do not match; 30 contain N or other ambiguous bases)")
+        sid, msg = core._parse_warning(line)
+        self.assertEqual((sid, msg["code"]), ("g", "no_anchor"))
+        self.assertIn("1 of 12 checkable codons do not match; 30 contain N", msg["text"])
+
+
 if __name__ == "__main__":
     unittest.main()

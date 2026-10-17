@@ -418,8 +418,11 @@ _WARN_X = re.compile(r"^coal: warning: (\S+) pepAlnPos (\d+): (\S+) unknown AA t
 # the engine's ENG-c / ENG-d notices are recognised, and a line naming no known sequence becomes a run-level hint.
 # See overnight/integration/CHANGES.md
 _WARN_ANY = re.compile(r"^coal: warning: (\S+?):? (.+)$")  # any other per-sequence warning
+# CHANGED(R3-E1): was only "(K of N do not match)"; now also the engine's new "(K of N checkable codons do not match;
+# A contain N or other ambiguous bases)". See overnight/integration/CHANGES.md
 _WARN_NOANCHOR = re.compile(r"^coal: warning: (\S+?): no 10-residue segment of the protein was found in the DNA; "
-                            r"codons were assigned by position \((\d+) of (\d+) do not match\)")
+                            r"codons were assigned by position \((\d+) of (\d+) (?:checkable codons )?do not match"
+                            r"(?:; (\d+) contain N or other ambiguous bases)?\)")
 _WARN_PAIRING = re.compile(r"^coal: warning: only (\d+) of (\d+) protein IDs are DNA IDs; (.*)$")
 PROBLEM_HINTS = ("partial_id_match", "engine_warning", "nomismatch_unknown")  # hints that mean "something is off"
 
@@ -441,11 +444,12 @@ def _parse_warning(line: str) -> tuple[str, dict] | None:
                               f"as X (any codon accepted).")}
     m = _WARN_NOANCHOR.match(line)
     if m:
-        sid, nbad, nres = m.groups()
+        sid, nbad, nres, namb = m.groups()
+        amb = f"; {namb} contain N or other ambiguous bases" if namb else ""
         return sid, {"code": "no_anchor",
                      "text": (f"No 10-residue stretch of the protein was found in the DNA, so codons were assigned "
-                              f"by position ({nbad} of {nres} do not match). Is this the right DNA for this protein, "
-                              f"and the right genetic code?")}
+                              f"by position ({nbad} of {nres} checkable codons do not match{amb}). Is this the right "
+                              f"DNA for this protein, and the right genetic code?")}
     if _WARN_PAIRING.match(line):
         return None  # run-level; see pairing_warning()
     m = _WARN_ANY.match(line)

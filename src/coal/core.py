@@ -303,6 +303,11 @@ def _np_quick(np, table: int, dna: str, residues: str) -> bool:
     return bool((aa == np.frombuffer(residues.encode("ascii"), dtype=np.uint8)).all())
 
 
+# CHANGED(R3-E1): new. Fewest checkable (A/C/G/T-only) codons that make a placement without any matching anchor
+# trustworthy when the DNA is longer than the gene. See overnight/integration/CHANGES.md
+MIN_CHECKABLE = 10
+
+
 def thread_one(seq_id: str, row: str, raw_dna: str, table: int) -> Threaded:
     bad = _VALID.search(row)
     if bad:
@@ -386,13 +391,25 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int) -> Threaded:
     # A/C/G/T(U) count in neither the numerator nor the denominator (no rule if none is checkable).
     # See overnight/integration/CHANGES.md
     nres = sum(1 for t in toks if t[0] == "r")
-    nbad = len(res.mismatch_cols)
+    namb = nres - nchk
     if nchk and 2 * nbad_chk > nchk:
         raise CoalError(f"{seq_id}: protein and DNA are inconsistent "
                         f"({nbad_chk} of {nchk} checkable codons do not match the protein)")
+    # CHANGED(R3-E1): was accepted (exit 0, notice only) when no anchor matched and almost every codon was
+    # ambiguous: the all-wildcard pattern then sits at offset 0, so a 5' UTR ended up inside the codons (output
+    # shifted). Now, when no anchor matched, the DNA is longer than the gene (so the offset is not forced) and
+    # fewer than MIN_CHECKABLE codons can be checked, it is an error. See overnight/integration/CHANGES.md
+    if not found_any and len(dna) > _length(toks) and nchk < MIN_CHECKABLE:
+        raise CoalError(f"{seq_id}: protein and DNA are inconsistent (no 10-residue segment of the protein was "
+                        f"found in the DNA and only {nchk} of {nres} codons have no ambiguous bases: too few to "
+                        f"tell where the gene starts in the longer DNA)")
     if not found_any:
+        # CHANGED(R3-E1): was "(K of N do not match)" counting ambiguous codons as mismatches; now the same
+        # checkable-codon counts as the error rule, plus the number of ambiguous codons. See overnight/integration/CHANGES.md
+        amb = f"; {namb} contain N or other ambiguous bases" if namb else ""
         res.notices.append(f"{seq_id}: no 10-residue segment of the protein was found in the DNA; "
-                           f"codons were assigned by position ({nbad} of {nres} do not match)")
+                           f"codons were assigned by position ({nbad_chk} of {nchk} checkable codons do not "
+                           f"match{amb})")
     return res
 
 
