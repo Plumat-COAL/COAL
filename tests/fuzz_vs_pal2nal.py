@@ -49,6 +49,8 @@ DELIBERATE = {
              "PAL2NAL has a fixed list",
     "u_residue": "U (selenocysteine) in the protein: COAL treats it as X (any codon, with a warning) like B/Z/J/O; "
                  "PAL2NAL's search pattern gives U no codon at all, so the row is misaligned or the gene fails",
+    "nogap_code": "-nogap removes the stop codons of the selected genetic code, in any case (COAL, deliberate); "
+                  "PAL2NAL always removes the standard code's TAA/TAG/TGA, upper case only",
     "rna_first_met": "RNA (U) input with a protein starting with M: when PAL2NAL needs its fallback, it does not "
                      "accept AUG/CUG/GUG as the first Met (its fallback pattern has T only), so it flags that "
                      "codon (dropped by -nomismatch) or places the gene elsewhere; COAL reads U as T everywhere",
@@ -274,6 +276,9 @@ def make_case(rng: random.Random) -> Case:
         opts.append("-nomismatch")
     if rng.random() < (0.5 if mask else 0.05):
         opts.append("-blockonly")
+    stops = {k for k, v in get_code(run_table).code.items() if v == "*"}
+    if "-nogap" in opts and (stops != {"TAA", "TAG", "TGA"} or any(ch.islower() for d in dnas for ch in d)):
+        c.features.add("nogap_code")
     c.opts = opts
     c.info.add(f"mode {mode}")
     c.info.add(f"ids {did_mode}")

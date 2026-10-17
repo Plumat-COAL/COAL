@@ -7,9 +7,9 @@ isn't in (the engine-fixes branch is already merged). <!-- CHANGED(R2-D12): was 
 **1. How do you know it's correct on my data?**
 We compared COAL with PAL2NAL v14's real output on 38 hand-made inputs covering every behaviour we found
 (UTRs, frameshift codes, all 17 genetic codes, ambiguous bases, ID mismatches): 279 checks on 38 hand-made
-inputs, in all four output formats. 246 compare COAL's output with PAL2NAL's byte for byte, and 240 of those also
-compare the warnings; 24 check that COAL rejects the inputs PAL2NAL fails on (exit code only, not the message); 9 are
-documented, deliberate differences, where we check COAL's own behaviour instead. On every change, CI also runs both
+inputs, in all four output formats. 232 compare COAL's output with PAL2NAL's byte for byte, and 228 of those also
+compare the warnings; 24 check that COAL rejects the inputs PAL2NAL fails on (exit code only, not the message); 23 are
+documented, deliberate differences (14 of them `-nogap` with another genetic code: COAL removes that code's stop codons) <!-- CHANGED(FZ-5): was 246/240/9 -->, where we check COAL's own behaviour instead. On every change, CI also runs both
 tools on 3,000 random inputs x 4 formats (wrong DNA, masked genes, UTRs, frameshifts, every genetic code, -nogap,
 -nomismatch, -blockonly): identical apart from the documented differences. <!-- CHANGED(DEC-4): was 165/147/141/12/6 -->
 On your data, COAL checks every

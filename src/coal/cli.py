@@ -33,7 +33,9 @@ def main(argv=None) -> int:
     ap.add_argument("-codontable", "--codontable", type=int, default=1, choices=SUPPORTED,
                     metavar="N", help=f"NCBI genetic code (default 1); one of {', '.join(map(str, SUPPORTED))}")
     ap.add_argument("-nogap", "--nogap", action="store_true",
-                    help="remove codon columns containing gaps or stop codons")
+                    help="remove codon columns containing gaps or stop codons (stop codons of the -codontable "
+                         "code, any case; PAL2NAL uses the standard code's TAA/TAG/TGA, upper case only)")
+    # CHANGED(FZ-5): help said "stop codons" (the standard code's, upper case, as PAL2NAL); now the selected code's
     ap.add_argument("-nomismatch", "--nomismatch", action="store_true",
                     help="remove alignment columns where a codon does not match its residue")
     # CHANGED(DEC-4): was choices=["fasta"]; now PAL2NAL v14's four formats, byte-identical to PAL2NAL. The default

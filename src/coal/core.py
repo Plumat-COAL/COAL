@@ -32,7 +32,6 @@ _VALID = re.compile(r"[^-ACDEFGHIKLMNPQRSTVWY*XBZJOU0-9]")
 _DIGIT = re.compile(r"[0-9]")
 _AS_X = re.compile("[" + "".join(sorted(AS_X)) + "]")
 _CODON = re.compile(r"...", re.S)
-_STOP_LOOKAHEAD = re.compile(r"(?=[UT]A[AGR]|[TU]GA)")  # PAL2NAL -nogap stop rule (case-sensitive)
 _GAPCHAR = re.compile("-")
 _TIMES3 = (3).__mul__
 ANCHOR = 10
@@ -473,12 +472,21 @@ def expand(it: Threaded, widths: list[int], wide: bool) -> str:
     return "".join(out)
 
 
-def nogap_bad_triplets(expanded: str) -> set[int]:
-    """Indices of 3-nt output columns that -nogap removes for this row
-    (a gap, or a stop codon by PAL2NAL's case-sensitive rule)."""
+def nogap_bad_triplets(expanded: str, table: int) -> set[int]:
+    """Indices of 3-nt output columns that -nogap removes for this row: a gap, or a stop codon of genetic code
+    `table` (any case, U read as T; IUPAC triplets whose every reading is a stop count too)."""
+    # CHANGED(FZ-5): was PAL2NAL's rule, the standard code's stops TAA/TAG/TGA (and TAR), upper case only, whatever
+    # -codontable said (table 2 removed TGA = Trp and kept AGA = stop; lower-case 'taa' was never removed). Now the
+    # selected code's stops, case-insensitive: a deliberate difference. See overnight/integration/CHANGES.md
     bad = {m.start() // 3 for m in _GAPCHAR.finditer(expanded)}
-    bad.update(m.start() // 3 for m in _STOP_LOOKAHEAD.finditer(expanded) if m.start() % 3 == 0)
+    up = expanded.upper().replace("U", "T")
+    bad.update(m.start() // 3 for m in _stop_lookahead(table).finditer(up) if m.start() % 3 == 0)
     return bad
+
+
+@lru_cache(maxsize=None)
+def _stop_lookahead(table: int):
+    return re.compile("(?=" + residue_regex(table, "*") + ")")
 
 
 def keep_slices(widths: list[int], drop_cols, bad_triplets) -> list[tuple[int, int]]:
@@ -503,7 +511,8 @@ def apply_slices(s: str, slices: list[tuple[int, int]]) -> str:
     return "".join(s[a:b] for a, b in slices)
 
 
-def build_alignment(items: list[Threaded], nogap: bool = False, nomismatch: bool = False) -> list[str]:
+def build_alignment(items: list[Threaded], nogap: bool = False, nomismatch: bool = False,
+                    table: int = 1) -> list[str]:  # CHANGED(FZ-5): table is new (the -nogap stops)
     """In-memory assembly (library API). The streaming pipeline uses the same pieces."""
     widths = column_widths((it.row for it in items), len(items[0].row))
     wide = any(w != 3 for w in widths)
@@ -511,7 +520,7 @@ def build_alignment(items: list[Threaded], nogap: bool = False, nomismatch: bool
     if not (nogap or nomismatch):
         return rows
     drop = {c - 1 for it in items for c in it.mismatch_cols} if nomismatch else set()
-    bad = set().union(*(nogap_bad_triplets(r) for r in rows)) if nogap else set()
+    bad = set().union(*(nogap_bad_triplets(r, table) for r in rows)) if nogap else set()
     sl = keep_slices(widths, drop, bad)
     return [apply_slices(r, sl) for r in rows]
 
@@ -537,7 +546,7 @@ def codon_align(
     pair_warn: list[str] = []  # CHANGED(ENG-d): partial-ID-match warning added to warnings
     idx = pair_sequences([p[0] for p in proteins], [d[0] for d in dnas], warn=pair_warn.append, strict=strict)
     items = [thread_one(pid, row, dnas[j][1], table, strict) for (pid, row), j in zip(proteins, idx)]
-    rows = build_alignment(items, nogap=nogap, nomismatch=nomismatch)
+    rows = build_alignment(items, nogap=nogap, nomismatch=nomismatch, table=table)
     warnings = [f"{it.seq_id} {w}" for it in items for w in it.warnings
                 if not (nomismatch and MISMATCH_WARNING in w)]  # CHANGED(ENG-i2): as PAL2NAL
     warnings += [n for it in items for n in it.notices]  # CHANGED(ENG-c): notices included

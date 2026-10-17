@@ -45,7 +45,7 @@ class TestDocsNumbers(unittest.TestCase):
     def test_pitch_and_qa(self):
         c, n = self.c, self.n
         byte, warn, both = c["stdout byte-identical"], c["warnings identical"], c["both fail"]
-        other = c["deliberate error"] + c["deliberate differs"]
+        other = c["deliberate error"] + c["deliberate differs"] + c.get("deliberate nogap_code", 0)  # FZ-5
         for rel in ("pitch/PITCH.md", "pitch/QA.md"):
             self.expect(rel, f"{n} checks on {self.ncases} hand-made inputs", f"{byte} compare",
                         f"{warn} of those also compare the warnings", f"{both} check that COAL rejects",

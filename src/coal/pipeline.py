@@ -101,7 +101,7 @@ def _work(batch):
             parts.append(f"{pid}\t{exp}\n")
             mcols |= it.mismatch_cols
             if _W["nogap"]:
-                bad |= nogap_bad_triplets(exp)
+                bad |= nogap_bad_triplets(exp, _W["table"])  # CHANGED(FZ-5): the selected code's stops
         else:
             parts.append(_W["record"](pid, exp))
     return "".join(parts), warns, mcols, bad, notes

@@ -53,11 +53,11 @@ good genes and flags the one bad one; say "the other 19 are aligned" only if you
 
 <!-- CHANGED(R2-D2): was 143 / 94 / 10 (stale after the engine merge); now the harness's current counts, guarded by tests_app/test_docs_numbers.py. See overnight/integration/CHANGES.md -->
 - "Correctness: we test COAL against PAL2NAL version 14's own output: 279 checks on 38 hand-made inputs, in
-  all four output formats. 246 compare the output byte for byte, and 240 of those also compare the warnings.
-  24 check that COAL rejects the inputs PAL2NAL fails on. 9 are documented, deliberate differences where
-  we think PAL2NAL is wrong, such as that dropped codon; for those we check COAL's own behaviour. And on every
+  all four output formats. 232 compare the output byte for byte, and 228 of those also compare the warnings.
+  24 check that COAL rejects the inputs PAL2NAL fails on. 23 are documented, deliberate differences where
+  we think PAL2NAL is wrong, such as that dropped codon or `-nogap` ignoring the genetic code; for those we check COAL's own behaviour. And on every
   change, CI runs both tools on 3,000 random inputs in every format: byte-identical apart from those
-  documented differences." <!-- CHANGED(DEC-4): was 165 / 147 / 141 / 12 / 6, FASTA only; fuzz sentence new -->
+  documented differences." <!-- CHANGED(DEC-4): was 165 / 147 / 141 / 12 / 6, FASTA only; fuzz sentence new --> <!-- CHANGED(FZ-5): 246/240/9 -> 232/228/23 -->
 - "Speed, measured on one Windows laptop, end to end: 100 genes of 10,000 codons, PAL2NAL 24.5 seconds,
   COAL 0.2 seconds, 119 times faster. Ten thousand genes: 25 seconds down to under one second.
   Half a million genes, nearly a gigabyte: 10 seconds with 4 processes, 25 on one. For tiny inputs both take about 0.05 seconds; we

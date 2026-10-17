@@ -14,10 +14,10 @@ exit 2 = usage error today, extras in separate environments. See overnight/app/C
 - You have **aligned proteins** (from MAFFT, MUSCLE, Clustal...) and the **unaligned CDS/DNA** of the same genes,
   and need the DNA aligned codon by codon (the input for dN/dS, selection scans, codon-aware trees).
 - Someone mentions PAL2NAL: COAL accepts the same options (`-codontable`, `-nogap`, `-nomismatch`, `-blockonly`,
-  `-output clustal|paml|fasta|codon`) and gave the same output as PAL2NAL v14 in all 246 byte-for-byte comparisons
+  `-output clustal|paml|fasta|codon`) and gave the same output as PAL2NAL v14 in all 232 byte-for-byte comparisons
   of its test suite (all four formats), plus a random differential test against the real PAL2NAL; it is much faster
   on big inputs. The `pal2nal` command takes an unchanged PAL2NAL command line (default clustal, like PAL2NAL).
-  <!-- CHANGED(R2-D2): was 143 --> <!-- CHANGED(DEC-4): was "-output fasta ... same FASTA output ... 147" -->
+  <!-- CHANGED(R2-D2): was 143 --> <!-- CHANGED(DEC-4): was "-output fasta ... same FASTA output ... 147" --> <!-- CHANGED(FZ-5): 246 -> 232 -->
 - Not for: aligning sequences from scratch (run an aligner on the proteins first), non-coding DNA, or RNA genes.
 
 ## Install

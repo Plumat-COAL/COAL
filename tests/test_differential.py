@@ -51,6 +51,22 @@ for t in (10, 11, 13):
         DELIBERATE[(f"table{t}", v)] = "same_output"
     # -nomismatch: PAL2NAL drops the columns it flags (TGA in table 10, ATA starts in 11/13)
     DELIBERATE[(f"table{t}", f"fasta_nomismatch_ct{t}")] = "differs"
+# CHANGED(FZ-5): new. -nogap removes the selected code's stop codons (PAL2NAL: always the standard code's TAA/TAG/TGA).
+# COAL's output must equal PAL2NAL's output without -nogap (golden fasta_ct<N>) with COAL's -nogap rule applied.
+NOGAP_CODE = {"codontable2": 2, **{f"table{t}": t for t in (2, 3, 4, 5, 6, 9, 10, 13, 14, 15, 16, 21, 22)}}
+for c, t in NOGAP_CODE.items():
+    DELIBERATE[(c, f"fasta_nogap_ct{t}")] = "nogap_code"
+
+
+def nogap_expected(case: str, table: int) -> str:
+    """PAL2NAL's -codontable N output without -nogap, with gap columns and the code's stop columns removed."""
+    from coal.core import nogap_bad_triplets
+    from coal.pipeline import fasta_record
+    text = (GOLD / case / f"fasta_ct{table}.stdout").read_text()
+    recs = [(r.split("\n", 1)[0], r.split("\n", 1)[1].replace("\n", "")) for r in text.split(">")[1:]]
+    bad = set().union(*(nogap_bad_triplets(s, table) for _, s in recs))
+    return "".join(fasta_record(i, "".join(s[k:k + 3] for k in range(0, len(s), 3) if k // 3 not in bad))
+                   for i, s in recs)
 
 
 def run_coal(case: str, opts: list[str]):
@@ -83,7 +99,8 @@ def all_variants():  # CHANGED(DEC-4): was fasta_variants() (variants starting w
 
 
 COUNT_KEYS = ("golden rc = 0", "COAL exit status", "stdout byte-identical", "warnings identical",
-              "with -nomismatch", "both fail", "deliberate error", "deliberate same_output", "deliberate differs")
+              "with -nomismatch", "both fail", "deliberate error", "deliberate same_output", "deliberate differs",
+              "deliberate nogap_code")  # CHANGED(FZ-5): last key new
 
 
 def compare_all(tc: unittest.TestCase):
@@ -113,6 +130,9 @@ def compare_all(tc: unittest.TestCase):
             count["COAL exit status"] += 1
             if kind == "differs":
                 count["deliberate differs"] += 1
+            elif kind == "nogap_code":
+                tc.assertEqual(out, nogap_expected(case, NOGAP_CODE[case]))
+                count["deliberate nogap_code"] += 1
             elif not pal_ok:
                 tc.assertEqual(out, "")
                 count["both fail"] += 1

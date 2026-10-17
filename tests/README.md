@@ -51,6 +51,7 @@ When `-nomismatch` (or `-nogap`) removes every column, PAL2NAL prints an empty l
 | RNA (U) DNA, protein starting with M, fallback needed (no golden case) | The fallback's first-Met pattern is `[ACGR]TG`, so AUG/CUG/GUG is flagged as a mismatch (`-nomismatch` drops the column) or the gene is placed elsewhere (measured by the fuzz) | U read as T everywhere: AUG accepted (DEC-4) |
 | Table 3, GTG as first Met | Not a table-3 start (its table 3 starts are ATA/ATG; measured) | GTG is a start (NCBI) (ENG-g) |
 | Default output format of `coal` | clustal | fasta (the drop-in `pal2nal` command defaults to clustal, like PAL2NAL) (DEC-4) |
+| `-nogap` with another genetic code, or lower-case DNA (14 goldens `fasta_nogap_ct<N>`) | Removes the standard code's TAA/TAG/TGA (upper case only) whatever `-codontable` says: table 2 deletes TGA = Trp columns and keeps AGA stops | Removes the selected code's stop codons, any case (FZ-5) |
 | Some but not all protein IDs are DNA IDs (no golden case) | Pairs by order, silently (measured) | Pairs by order (same output) and prints a notice (ENG-d); an error only with `--strict` (DEC-1) |
 
 ## What `test_differential.py` compares
@@ -70,21 +71,25 @@ Every case in `cases.json` × every variant, in all four output formats (`fasta*
    is not compared.
 4. Where PAL2NAL failed: COAL must fail with empty stdout.
 5. `DELIBERATE` entries: `error` → COAL must exit non-zero; `same_output` → 1, 2 and 4 only; `differs` → COAL must
-   exit 0.
+   exit 0; `nogap_code` → COAL's output must equal PAL2NAL's `-codontable N` output without `-nogap`, with the gap
+   columns and code N's stop columns removed (FZ-5).
 
 The test prints its counts. Current output:
 
 ```
-PAL2NAL comparison: 38 cases, 279 checks: golden rc = 0 279, COAL exit status 273, stdout byte-identical 246,
-warnings identical 240, with -nomismatch 47, both fail 24, deliberate error 6, deliberate same_output 6,
-deliberate differs 3
+PAL2NAL comparison: 38 cases, 279 checks: golden rc = 0 279, COAL exit status 273, stdout byte-identical 232,
+warnings identical 228, with -nomismatch 47, both fail 24, deliberate error 6, deliberate same_output 4,
+deliberate differs 3, deliberate nogap_code 14
 ```
 
 That is: 279 golden exit codes read (all 0); 273 exit-status comparisons (the 6 deliberate errors, `invalid_chars`
 in the fasta, fasta_nogap, fasta_nomismatch, clustal, paml and codon variants, are checked as "COAL fails" instead);
-246 byte-identical outputs, of which 240 also have identical warnings (47 of those with `-nomismatch`) and 6 are
-deliberate warning differences (table10/11/13 `fasta_ct*` and `fasta_nogap_ct*`); 24 cases where both tools fail;
-3 deliberate output differences (`fasta_nomismatch_ct10/11/13`), checked only for exit 0.
+232 byte-identical outputs, of which 228 also have identical warnings (47 of those with `-nomismatch`) and 4 are
+deliberate warning differences (table10/11/13 `fasta_ct*`, table11 `fasta_nogap_ct11`); 24 cases where both tools
+fail; 3 deliberate output differences (`fasta_nomismatch_ct10/11/13`), checked only for exit 0; 14 `-nogap` checks
+with another genetic code (`fasta_nogap_ct<N>` of codontable2, table2–6, 9, 10, 13–16, 21, 22: COAL removes that
+code's stop codons; its output must equal the golden `fasta_ct<N>` with gap and stop columns removed, FZ-5).
+<!-- CHANGED(FZ-5): was 246 / 240 / 6 same_output -->
 <!-- CHANGED(DEC-4): was 165 / 162 / 147 / 141 / 12 / 3 (FASTA variants only) -->
 
 `-nomismatch`: PAL2NAL prints no warnings at all with `-nomismatch` (17 goldens where it would otherwise warn);

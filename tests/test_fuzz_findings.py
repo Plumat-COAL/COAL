@@ -92,5 +92,33 @@ class TestFZ2NonAsciiHeaderText(Tmp):  # FZ-2
         self.assertIn("p.fa:2: non-ASCII character", err)
 
 
+class TestFZ5NogapUsesTheSelectedCode(Tmp):  # FZ-5
+    def test_every_table_upper_and_lower_case(self):
+        sys.path.insert(0, str(SRC))
+        from coal.tables import CODONS, SUPPORTED, get_code
+        for t in SUPPORTED:
+            code = get_code(t).code
+            prot = "M" + "".join(code[c] for c in CODONS)
+            want = "ATG" + "".join(c for c in CODONS if code[c] != "*")
+            for case in (str.upper, str.lower):
+                with self.subTest(table=t, case=case.__name__):
+                    self.write("p.fa", f">s\n{prot}\n")
+                    self.write("n.fa", f">s\n{case('ATG' + ''.join(CODONS))}\n")
+                    rc, out, err = self.coal("p.fa", "n.fa", "-codontable", str(t), "-nogap", "-q")
+                    self.assertEqual(rc, 0, err)
+                    self.assertEqual(out.replace("\n", "").replace(">s", ""), case(want))
+
+    def test_table2_examples(self):
+        # table 2: TGA = Trp (kept), AGA = stop (removed). PAL2NAL v14 does the opposite (standard-code stops).
+        self.write("p.fa", ">s\nMW*\n")
+        self.write("n.fa", ">s\nATGTGAAGA\n")
+        self.assertEqual(self.coal("p.fa", "n.fa", "-codontable", "2", "-nogap")[:2], (0, ">s\nATGTGA\n"))
+
+    def test_rna_stop_removed(self):
+        self.write("p.fa", ">s\nMK*\n")
+        self.write("n.fa", ">s\naugaaauaa\n")
+        self.assertEqual(self.coal("p.fa", "n.fa", "-nogap")[:2], (0, ">s\naugaaa\n"))
+
+
 if __name__ == "__main__":
     unittest.main()

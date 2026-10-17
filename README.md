@@ -45,7 +45,8 @@ pip install -e .[fast]                              # optional numpy speed-up fo
   three cases into errors (exit 1, nothing written), for pipelines that would rather stop than continue.
   <!-- CHANGED(DEC-1): was "It is also an error if more than half ... / ... is an error when its DNA is longer" (ENG-c,
   R2-E3, R3-E1); now PAL2NAL's output by default plus a notice, errors only with --strict. See overnight/integration/CHANGES.md -->
-- **`-nogap`** removes codon columns that contain a gap or a stop codon.
+- **`-nogap`** removes codon columns that contain a gap or a stop codon of the selected genetic code (any case).
+  <!-- CHANGED(FZ-5): was "a stop codon" (PAL2NAL's standard-code rule) -->
 - **`-blockonly`** keeps only the columns marked `#` under the blocks of a CLUSTAL protein alignment (PAL2NAL's
   convention, e.g. Gblocks-selected positions); without `-blockonly` those marks are shown under each block of
   clustal and codon output, as PAL2NAL does. No effect if the input has no `#` marks. <!-- CHANGED(DEC-4): new -->
@@ -102,6 +103,11 @@ if the whole run succeeds, so an error never leaves a partial file. Notes:
   protein doesn't fit exactly), where a first Met on AUG/CUG/GUG is not accepted: PAL2NAL then flags that codon
   (and `-nomismatch` removes the column) or places the gene elsewhere in the DNA. <!-- CHANGED(DEC-4): found by the fuzz -->
 - `coal`'s own default output format is FASTA (PAL2NAL's is clustal); the drop-in `pal2nal` command uses clustal.
+- `-nogap` removes the stop codons **of the selected genetic code**, in upper or lower case. PAL2NAL always removes
+  the standard code's TAA/TAG/TGA, upper case only, whatever `-codontable` says: with `-codontable 2` (vertebrate
+  mitochondria) it deletes TGA columns, which code for Trp there, and keeps AGA/AGG stops; lower-case `taa` is never
+  removed. Repro: protein `MW*`, DNA `ATGTGAAGA`, `-codontable 2 -nogap`: PAL2NAL `ATGAGA`, COAL `ATGTGA`.
+  <!-- CHANGED(FZ-5): new deliberate difference -->
 <!-- CHANGED(R2-D6): ENG-c, ENG-d, ENG-g, ENG-i2 added. See overnight/integration/CHANGES.md -->
 
 ## Ways to use COAL
@@ -133,10 +139,11 @@ python -m unittest discover -s tests -v
 Compares COAL with stored PAL2NAL v14 outputs (`tests/golden/`): 38 input cases × all option combinations in all
 four output formats = 279 checks (the test prints these counts). In the 6 `invalid_chars` checks COAL deliberately
 fails (see below). Exit status in the other 273: PAL2NAL always exits 0, so COAL must exit 0 exactly when PAL2NAL
-produced output.<!-- CHANGED(R3-D5): was "in all 165" checks; the harness checks exit status in 162. See overnight/integration/CHANGES.md --> stdout is byte-identical in 246 checks, and the per-codon warnings
-are identical in 240 of them (47 with `-nomismatch`); in 24 both tools fail. 15 checks are deliberate differences:
-the other 6 of the 246 (same output, different warnings), 3 with different output and 6 where COAL deliberately
-fails. See `tests/README.md` for exactly what is compared and for the list of deliberate differences.
+produced output.<!-- CHANGED(R3-D5): was "in all 165" checks; the harness checks exit status in 162. See overnight/integration/CHANGES.md --> stdout is byte-identical in 232 checks, and the per-codon warnings
+are identical in 228 of them (47 with `-nomismatch`); in 24 both tools fail. 29 checks are deliberate differences:
+the other 4 of the 232 (same output, different warnings), 3 with different output, 14 `-nogap` checks with another
+genetic code (COAL's output must equal PAL2NAL's output without `-nogap` with that code's stop columns removed) and
+6 where COAL deliberately fails. <!-- CHANGED(FZ-5): was 246 / 240 / 15 / 6 of the 246 --> See `tests/README.md` for exactly what is compared and for the list of deliberate differences.
 
 **Random differential test against the real PAL2NAL** (needs Perl; PAL2NAL is fetched, never committed):
 
