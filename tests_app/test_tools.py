@@ -159,11 +159,18 @@ class TestToolSchemas(unittest.TestCase):
             self.assertIn(k, out["required"])
 
     @unittest.skipUnless(importlib.util.find_spec("gradio"), "gradio not installed")
-    def test_gradio_api_schema(self):
-        from gradio.utils import get_function_params, python_type_to_json_schema
-        params = {name: python_type_to_json_schema(t) for name, _, _, t in get_function_params(tools.codon_align)}
-        self.assertEqual(params["codontable"].get("enum"), list(core.GENETIC_CODES))
-        self.assertEqual(params["protein_alignment_path"].get("type"), "string")
+    def test_gradio_api_keeps_the_positional_order(self):
+        # The Gradio HTTP API (and desktop/test_smoke.py's 8-value call) is positional: the Annotated hints must not
+        # change the parameter list. Public Blocks.get_api_info() only; the exact type schema is Gradio's business.
+        from coal_app import ui
+        demo = ui.build()
+        get_info = getattr(demo, "get_api_info", None)
+        if get_info is None:
+            self.skipTest("this Gradio has no Blocks.get_api_info()")
+        ep = get_info()["named_endpoints"]["/codon_align"]
+        self.assertEqual([p["parameter_name"] for p in ep["parameters"]],
+                         ["protein_alignment_path", "dna_fasta_path", "output_format", "codontable",
+                          "nogap", "nomismatch", "strict", "blockonly"])
 
 
 @unittest.skipUnless(has_mcp2() or REQUIRE_MCP, "mcp>=2 not installed (pip install -e .[mcp])")
@@ -231,7 +238,7 @@ class TestStdioMcpHandshake(_PrivateRuns):
             for m in msgs:
                 p.stdin.write(json.dumps(m) + "\n")
             p.stdin.flush()
-            while 4 not in replies:
+            while not {1, 2, 3, 4} <= set(replies):  # replies can arrive out of order (4 fails fast)
                 line = p.stdout.readline()
                 if not line:
                     break

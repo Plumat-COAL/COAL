@@ -89,7 +89,13 @@ and plastids; also 6, 10, 12-16, 21-23.
 GUI for people: `python -m coal_app` (opens on http://127.0.0.1:7860 and serves MCP there too). AI agents:
 `python -m coal_app --mcp` gives two MCP tools, `codon_align(...)` and `explain_report(report_path)`;
 `codon_align` returns a `report_path` even with the current engine (the app builds the report from
-COAL's messages).
+COAL's messages). Give both tools **absolute paths**. In the result, `completed` only means COAL finished;
+use the alignment only when `all_ok` is true. If `needs_attention` is true, read `counts`
+(ok / warning / failed), `next_step` and `problems`, or call `explain_report(report_path)`; if
+`suggested_codontable` is set, re-run `codon_align` with it. A missing file, an unknown genetic code or an
+unsupported format is a tool error (isError), not a result.
+<!-- CHANGED(IMP-M-1): result fields documented (the old `ok` field, which meant "finished", is gone) -->
+
 
 ## How to read the report (`report_path` from `codon_align`, schema `coal.report/1`)
 
