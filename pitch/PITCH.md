@@ -1,10 +1,9 @@
 # COAL: 3-minute pitch ("teach the room")
 
-Rule for the speaker: say only what is on this page. Lines marked **[after the C++/formats branch is merged]**
-describe features being built on the teammate's branch (`--keep-going`, ID normalisation, C++ core); the
-engine-fixes branch is already merged. The four PAL2NAL output formats (clustal, paml, fasta, codon) are built on this
-branch (DEC-4). Say "this is landing now", never "it does". If that branch is not merged by Sunday 10:00, skip those
-lines. <!-- CHANGED(DEC-4): was "output formats" on the teammate's branch and "`coal --help` still lists only -output fasta" -->
+Rule for the speaker: say only what is on this page. `--keep-going`, safe ID pairing and the four output
+formats are merged and tested in the Python engine (MRG-1..MRG-10, DEC-4). Lines marked **[C++ core]** depend on
+the C++ engine passing its comparison tests against the merged code (Person A's step 3): if it hasn't by Sunday
+10:00, skip them. <!-- CHANGED(PITCH-1): was "[after the C++/formats branch is merged]" for --keep-going, ID normalisation and the C++ core; the Python features are merged now --> <!-- CHANGED(DEC-4): was "output formats" on the teammate's branch and "`coal --help` still lists only -output fasta" -->
 <!-- CHANGED(R2-D12): was "[after merge]", which read as the (already merged) engine-fixes branch -->
 
 **Before going on:** laptop on mains, browser tabs open in this order: (1) `pitch/explainer.html`,
@@ -45,10 +44,9 @@ browser to 125-150 %. Run "One broken gene" once beforehand so nothing is cold.
 | 1:52 | Point at the methods box, click copy | "And it writes the methods sentence for your paper, plus the exact command for your pipeline, and the closest PAL2NAL command." <!-- CHANGED(FIN-A5) --> |
 | 2:00 | (one sentence) | "AI assistants get the same thing through MCP: two tools, `codon_align` and `explain_report`." |
 
-On the current engine the broken-gene run stops at the bad gene ("COAL stopped: no alignment was written")
-and the other 19 show as not written (the 13 before it: "this gene itself had no problem") or "not checked" (the 6
-after it). <!-- CHANGED(FIN-C7): was "the other 19 show as \"not checked\"" --> **[after the C++/formats branch is merged]** With `--keep-going` the same click writes the 19
-good genes and flags the one bad one; say "the other 19 are aligned" only if you see it on screen.
+The app runs with `--keep-going`, so this click writes the 19 good genes and flags the one bad one (checked on the
+merged code: 19 OK, 1 failed, alignment written). You can say "the other 19 are aligned"; check it on screen during the
+rehearsal. <!-- CHANGED(PITCH-1): was "stops at the bad gene" on the pre-merge engine, with --keep-going as a future feature -->
 
 ## 2:05-2:35 Proof
 
@@ -62,9 +60,12 @@ good genes and flags the one bad one; say "the other 19 are aligned" only if you
   COAL 0.2 seconds, 119 times faster. Ten thousand genes: 25 seconds down to under one second.
   Half a million genes, nearly a gigabyte: 10 seconds with 4 processes, 25 on one. For tiny inputs both take about 0.05 seconds; we
   don't claim a speed-up there."
+  (Python engine, benchmarks/results/bench_windows_20261016_2356: measured before the weekend's fixes and the merge.
+  Swap in the numbers from Person A's step-4 re-run on the merged code if they differ. <!-- PITCH-1 -->)
 - "The engine is pure Python with no dependencies, MIT licence. Continuous integration is set up for Windows, macOS and
   Linux." (Only say "passes on all three" if the GitHub Actions run is green when you present.)
-- **[after the C++/formats branch is merged]** "A C++ core for the largest jobs."
+- **[C++ core]** "A C++ core for the largest jobs." (Speed numbers above are for the Python engine; quote C++ numbers
+  only from Person A's step-4 benchmark on the merged code.)
 
 ## 2:35-3:00 Vision
 
