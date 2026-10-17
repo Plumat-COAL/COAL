@@ -6,8 +6,10 @@ to produce a codon alignment.
 
 Built at the Reinvent the Wheel AI × Science Tool-building Hackathon, London, October 2026.
 
-> **Status:** v0.4 (pure Python, no required dependencies; numpy optional). Up to **~119× faster** than PAL2NAL
+> **Status:** v0.4: a Python package with no required dependencies (numpy optional), plus an optional
+> [C++ engine](#c-engine) with the same options and output. Up to **~119× faster** than PAL2NAL
 > with byte-identical output on the benchmarked datasets — see [Benchmark results](#benchmark-results).
+> <!-- CHANGED(DOC-CPP1): was "v0.4 (pure Python, no required dependencies; numpy optional)"; the C++ engine is merged -->
 >
 > **Compatibility:** COAL's output is identical to PAL2NAL v14's except for a short list of documented, deliberate differences (newer NCBI genetic-code tables for codes 3, 10, 11 and 13; `-nogap` removing the selected code's stop codons; the selected code's start codons for the first Met; pairing by IDs that match only after normalising where PAL2NAL v14's file order would give a protein another gene's DNA; and inputs where PAL2NAL v14 writes malformed output or fails). Tested: all 285 stored reference checks pass (238 byte-identical, 4 of them with deliberately different warnings; 24 where both tools fail; 23 deliberate output or exit-status differences: 6 deliberate errors, 3 different outputs, 14 `-nogap` checks with a non-standard code), and in 20,000 random comparisons with the real PAL2NAL v14 (5,000 cases x 4 output formats) 13,826 were byte-identical, 4,681 both failed and 1,493 were deliberate differences, each checked to be exactly the documented change; 0 unexplained differences. <!-- CHANGED(FIN-C2/FIN-C3/FIN-C10/FIN-C20): was the "byte-identical ... (well-formed input)" claim, "every difference is one where PAL2NAL silently produces wrong output" and a 6,000-case run not reproducible from the repo; now the documented exceptions and the FIN-C10 fuzz numbers --> See
 > [Deliberate differences](#deliberate-differences-from-pal2nal) and [Tests](#tests).
@@ -205,6 +207,65 @@ Details and evidence in `tests/README.md`:
   `desktop/BUILD.md` (building it).
 - **Hosted demo:** a Hugging Face Space is prepared but not deployed: `space/README.md`, `space/DEPLOY.md`.
 - **Two-species preset:** `demo/diamond_pipeline.py` (DIAMOND reciprocal best hits, then COAL on every pair).
+- **C++ engine:** `coal-cpp`, built from source with CMake (next section). <!-- CHANGED(DOC-CPP1): new bullet -->
+
+## C++ engine
+
+<!-- CHANGED(DOC-CPP1): new section; the C++ engine (cpp/src, root CMakeLists.txt) was merged without a README mention -->
+`coal-cpp` is a second implementation of the same engine in C++17, standard library only. It takes the same
+command-line options as `python -m coal` (all four formats, `-nogap`/`-nomismatch`/`-blockonly`, `--strict`,
+`--report`/`--json`, `--keep-going`, `--resume`, ...) and writes the same output, warnings, notices and exit
+codes (only `--version` differs: `coal 0.4.0 (C++)`). Like the Python engine it streams the data; `-j N` sets the
+number of worker threads (default: all hardware threads), and the output is always in the input order.
+It is optional and not in the pip wheel or the sdist (`pip install` installs the Python engine only): build it from a
+checkout (CMake 3.16+ and a C++17 compiler).
+
+Linux/macOS:
+
+```
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j
+./build/coal-cpp pep.aln nuc.fasta > codon_aln.fasta
+```
+
+Windows (PowerShell, Visual Studio Build Tools with the C++ workload, which includes CMake):
+
+```
+cmake -S . -B build
+cmake --build build --config Release
+.\build\Release\coal-cpp.exe pep.aln nuc.fasta -o codon_aln.fasta
+```
+
+Add `-DCOAL_WARNINGS_AS_ERRORS=ON` to the first `cmake` command to make compiler warnings fail the build.
+
+**Testing it:** the golden test and the random C++-vs-Python test run against the binary (they skip if it isn't
+built; `COAL_CPP_BIN` defaults to `./build/coal-cpp`):
+
+```
+COAL_IMPL=cpp python -m unittest tests.test_differential tests.test_cpp_vs_python
+COAL_IMPL=cpp python tests/test_differential.py --count            # "cpp: 285/285 golden checks"
+$env:COAL_IMPL="cpp"; $env:COAL_CPP_BIN="build\Release\coal-cpp.exe"; python -m unittest tests.test_differential tests.test_cpp_vs_python   # Windows
+```
+
+**Verified:** all 285 stored PAL2NAL v14 reference checks pass with `coal-cpp` (the same results as the Python
+engine); in 3,000 random inputs (`COAL_RANDOM_N=3000`, seeds 20261017 and 777) the C++ and Python engines gave
+identical stdout, stderr and exit status every time (and the same run report
+where one was written); it builds cleanly with warnings as errors with GCC (Linux), clang (cross-compiled for Windows and macOS) and MSVC 19.51 (Windows x86, `/W4 /WX`). Details:
+`overnight/core/LOG.md`.
+
+**Speed, C++ vs Python** (measured; one command-line process per run, start-up included, medians of 5 runs, 3 for
+100,000 × 500; output to stdout, FASTA; all outputs byte-identical):
+
+| Sequences × codons | Python `-j 1` | Python default | C++ `-j 1` | C++ default | Peak memory, Python / C++ (`-j 1`) |
+|---|---:|---:|---:|---:|---:|
+| 10,000 × 500 | 0.682 s | 0.651 s | 0.125 s | 0.109 s | 51.7 / 17.2 MB |
+| 100 × 10,000 | 0.176 s | 0.175 s | 0.033 s | 0.028 s | 27.7 / 13.8 MB |
+| 100,000 × 500 | 4.213 s | 2.945 s | 1.050 s | 0.964 s | 105.2 / 35.2 MB |
+
+C++ is 4.0–5.5× faster than Python with one worker and 3.1–6.3× with the defaults here. Machine: Linux VM with
+**2 CPU cores** and 4 GB RAM (Intel Core i5-13600KF host), Ubuntu 22.04, Python 3.10.12 with numpy, g++ 11.4
+Release; COAL commit `4084d1f`. With only 2 cores the default columns barely use parallelism; this is not the
+machine of the PAL2NAL table above, so don't combine the two tables. Raw data and command:
+`benchmarks/results/cpp_vs_python_linux_4084d1f.md`.
 
 ## Tests
 
@@ -380,6 +441,8 @@ steps). Details, file names and the one-time setup checklist (enable Pages, firs
 
 - Python 3.10+
 - Perl 5 (only for running the PAL2NAL reference)
+- CMake 3.16+ and a C++17 compiler (only for the optional C++ engine) <!-- CHANGED(DOC-CPP1): new -->
+
 
 ## Licence
 
