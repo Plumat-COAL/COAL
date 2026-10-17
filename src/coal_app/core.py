@@ -312,10 +312,14 @@ def build_fallback_report(protein, dna, out, fmt, table, nogap, nomismatch, keep
             else:
                 general.append({"code": _classify_error(msg), "text": msg})
     aborted = code not in (0, 2)
+    if aborted and general and not failed:
+        pairing = None  # COAL stopped before pairing anything (e.g. counts differ, unreadable input)
     keep_going = bool(keep_going and detect_features().keep_going)  # only what was really passed
     seqs = []
     for i, p in enumerate(pids):
-        if pairing == "id":
+        if pairing is None:
+            d = None
+        elif pairing == "id":
             d = p
         else:
             d = dids[i] if i < len(dids) else None
@@ -364,8 +368,11 @@ def _safe_sha(p):
         return None
 
 
-def id_hints(protein: str, dna: str) -> list[dict]:
-    """Spot IDs that only differ by a version suffix (AT1G01010.1 vs AT1G01010)."""
+def id_hints(protein: str, dna: str, report: dict | None = None) -> list[dict]:
+    """Spot IDs that only differ by a version suffix (AT1G01010.1 vs AT1G01010).
+
+    With a report: says the order pairing is probably wrong only if the run had failures, warnings or
+    stopped; if every pair matched codon for codon it says so and only suggests renaming."""
     try:
         pids, dids = read_ids(protein), read_ids(dna)
     except OSError:
@@ -374,20 +381,34 @@ def id_hints(protein: str, dna: str) -> list[dict]:
     missing = [p for p in pids if p not in dset]
     if not missing:
         return []
-    dnorm = {strip_version(d) for d in dids}
+    summ = (report or {}).get("summary") or {}
+    if report is not None and summ.get("pairing") not in ("order", None):
+        return []  # the engine paired them some other way (e.g. normalised IDs)
+    clean = (report is not None and report.get("exit_code") == 0 and summ.get("total")
+             and summ.get("ok") == summ.get("total"))
+    if report is not None and summ.get("pairing") is None:
+        verdict = "COAL stopped before pairing them."
+    elif clean:
+        verdict = ("Sequences were paired by their order in the files instead, and every pair matched codon "
+                   "for codon, so the pairing looks right; renaming makes it safe.")
+    else:
+        verdict = ("Sequences were therefore paired by their order in the files, which is probably wrong "
+                   "for the sequences that failed or have warnings.") if report is not None else (
+                   "Sequences were therefore paired by their order in the files, which may be wrong.")
+    dnorm: dict[str, str] = {}
+    for d in dids:
+        dnorm.setdefault(strip_version(d), d)
     fixable = [p for p in missing if strip_version(p) in dnorm]
     if fixable and len(fixable) == len(missing):
         ex = fixable[0]
         return [{"code": "id_mismatch",
                  "text": (f"The protein IDs don't exactly match the DNA IDs: they differ only by a version "
-                          f"suffix (for example protein '{ex}' vs DNA '{strip_version(ex)}'). Sequences were "
-                          f"therefore paired by their order in the files, which is probably wrong. Remove the "
-                          f"'.1'-style suffixes so the names match, or use a COAL version that matches "
-                          f"IDs after normalising them.")}]
+                          f"suffix (for example protein '{ex}' vs DNA '{dnorm[strip_version(ex)]}'). {verdict} "
+                          f"Remove the '.1'-style suffixes so the names match, or use a COAL version that "
+                          f"matches IDs after normalising them.")}]
     return [{"code": "id_mismatch",
-             "text": (f"{len(missing)} protein ID(s) were not found in the DNA file (for example '{missing[0]}'), "
-                      f"so sequences were paired by their order in the files. Check that both files describe "
-                      f"the same genes, in the same order.")}]
+             "text": (f"{len(missing)} protein ID(s) were not found in the DNA file (for example '{missing[0]}'). "
+                      f"{verdict} Check that both files describe the same genes, in the same order.")}]
 
 
 CANDIDATE_CODES = (2, 3, 4, 5, 9, 11, 13, 14, 21)
@@ -458,7 +479,7 @@ def run_coal(protein_path: str, dna_path: str, output_format: str = "fasta", cod
                                        nomismatch, keep_going, code, err, runtime)
         from .viewer import locate_breaks
         locate_breaks(protein_path, dna_path, report)
-        hints = id_hints(protein_path, dna_path)
+        hints = id_hints(protein_path, dna_path, report)
         if probe_codes:
             h = genetic_code_hint(protein_path, dna_path, codontable, report, out_dir)
             if h:

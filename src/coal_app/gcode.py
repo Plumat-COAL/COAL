@@ -57,6 +57,25 @@ def table(number: int) -> tuple[dict[str, str], frozenset[str]]:
     return dict(zip(CODONS, aas)), frozenset(c for c, s in zip(CODONS, starts) if s == "M")
 
 
+IUPAC = {
+    "A": "A", "C": "C", "G": "G", "T": "T",
+    "R": "AG", "Y": "CT", "S": "CG", "W": "AT", "K": "GT", "M": "AC",
+    "B": "CGT", "D": "AGT", "H": "ACT", "V": "ACG", "N": "ACGT",
+}
+
+
+@lru_cache(maxsize=4096)
+def expand(codon: str) -> tuple[str, ...]:
+    """All plain codons an IUPAC triplet stands for (U read as T); () if it is not a triplet of IUPAC letters."""
+    c = codon.upper().replace("U", "T")
+    if len(c) != 3 or any(b not in IUPAC for b in c):
+        return ()
+    return tuple("".join(x) for x in product(*(IUPAC[b] for b in c)))
+
+
 def translate(codon: str, number: int = 1) -> str:
-    """Amino acid for a codon ('X' if it contains anything but A/C/G/T/U)."""
-    return table(number)[0].get(codon.upper().replace("U", "T"), "X")
+    """Amino acid for a codon. An ambiguous codon (IUPAC, e.g. GCN) gives its amino acid only if every
+    codon it stands for gives the same one (the engine's rule), else 'X'. Non-IUPAC characters give 'X'."""
+    code = table(number)[0]
+    aas = {code[c] for c in expand(codon)}
+    return aas.pop() if len(aas) == 1 else "X"

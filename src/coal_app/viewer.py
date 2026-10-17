@@ -92,12 +92,15 @@ def row_id(seq_id: str) -> str:
 # ---------------------------------------------------------------- placing codons for failed genes
 
 def _ok(aa: str, codon: str, code: dict, starts: frozenset, first: bool) -> bool:
+    """Does `codon` code for `aa`? IUPAC ambiguity codes count when every expansion does (the engine's rule)."""
     if len(codon) < 3:
         return False
     if aa in "XBZJOU":  # the engine treats B Z J O U as X: any codon is accepted
         return True
-    t = code.get(codon, "X")
-    return t == aa or (first and aa == "M" and codon in starts)
+    exp = gcode.expand(codon)
+    if not exp:
+        return False
+    return all(code.get(c) == aa or (first and aa == "M" and c in starts) for c in exp)
 
 
 def diagnose(protein_row: str, dna: str, codontable: int = 1) -> dict:
@@ -278,7 +281,8 @@ def build_rows(protein: list[tuple[str, str]], codon: list[tuple[str, str]] | No
                 if d["events"]:
                     r["note"] = d["events"][0]["text"]
                 if r["status"] is None:
-                    r["status"] = "failed" if d["events"] else "ok"
+                    flagged = any(f in ("mismatch", "frameshift") for _, _, f in r["cells"])
+                    r["status"] = "failed" if d["events"] else ("warning" if flagged else "ok")
             else:
                 for a in prow:
                     r["cells"].append(("-" if not a.isalpha() else a.upper(), "   ",

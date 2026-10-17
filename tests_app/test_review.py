@@ -109,5 +109,94 @@ class TestFinding3AnyWarningCounts(unittest.TestCase):
         self.assertIn("something new happened here", core.sequence_sentence(s1))
 
 
+class TestFinding4NoCodonFileStatus(unittest.TestCase):
+    def test_mismatches_without_events_are_warnings(self):
+        p, d = core.example_paths("mito")
+        rows, _, _ = viewer.build_rows(viewer.read_alignment(p), None, None, viewer.read_alignment(d), 1)
+        danio = next(r for r in rows if r["id"] == "Danio_COX1")
+        self.assertEqual(danio["events"], [])
+        self.assertTrue(any(f == "mismatch" for _, _, f in danio["cells"]))
+        self.assertEqual(danio["status"], "warning")
+        page = viewer.view(p, None, None, d)
+        self.assertNotRegex(page, r"✔ OK</strong> <a[^>]*><code>Danio_COX1</code></a>: [^<]*Jump to")
+
+
+class TestFinding5Iupac(unittest.TestCase):
+    def test_ambiguous_codon_accepted_like_the_engine(self):
+        from coal_app import gcode
+        self.assertEqual(gcode.translate("GCN"), "A")
+        self.assertEqual(gcode.translate("GAN"), "X")  # GAT/GAC = D, GAA/GAG = E
+        self.assertEqual(gcode.translate("TAR"), "*")
+        t = _tmp(self)
+        p = _write(os.path.join(t, "p.fasta"), ">s1\nMAKL\n")
+        d = _write(os.path.join(t, "d.fasta"), ">s1\nATGGCNAAACTG\n")
+        r = core.run_coal(p, d, out_dir=t, probe_codes=False)
+        self.assertEqual(r.exit_code, 0)
+        self.assertEqual(r.report["summary"]["ok"], 1)
+        page = viewer.view(p, r.output_path, r.report, d)
+        self.assertNotIn("is not coded by", page)
+        self.assertNotRegex(page, r'<td class="[^"]*\bmm\b')
+        # and a genuinely ambiguous codon is still flagged
+        self.assertTrue(viewer.diagnose("MDKL", "ATGGANAAACTG")["cells"][2][1] == "mismatch")
+
+
+class TestFinding6NoPairingSentenceWhenNothingPaired(unittest.TestCase):
+    def test_empty_protein_file(self):
+        t = _tmp(self)
+        p = _write(os.path.join(t, "empty.fasta"), "")
+        d = core.example_paths("clean")[1]
+        r = core.run_coal(p, d, out_dir=t, probe_codes=False)
+        self.assertEqual(r.exit_code, 1)
+        text = core.explain(r.report)
+        self.assertNotIn("paired", text)
+        self.assertIsNone(r.report["summary"]["pairing"])
+
+    def test_dna_given_as_protein(self):
+        d = core.example_paths("clean")[1]
+        r = core.run_coal(d, d, out_dir=_tmp(self), probe_codes=False)
+        self.assertEqual(r.exit_code, 1)
+        self.assertNotIn("paired", core.explain(r.report))
+
+    def test_successful_run_still_states_pairing(self):
+        p, d = core.example_paths("clean")
+        r = core.run_coal(p, d, out_dir=_tmp(self), probe_codes=False)
+        self.assertIn("paired by matching their IDs exactly", core.explain(r.report))
+
+
+class TestFinding7IdHint(unittest.TestCase):
+    def _files(self, t, pid_suffix, did_suffix):
+        p, d = core.example_paths("clean")
+        prot = viewer.read_alignment(p)
+        dna = dict(viewer.read_alignment(d))
+        pp = _write(os.path.join(t, "p.fasta"), "".join(f">{i}{pid_suffix}\n{s}\n" for i, s in prot))
+        dd = _write(os.path.join(t, "d.fasta"), "".join(f">{i}{did_suffix}\n{dna[i]}\n" for i, _ in prot))
+        return pp, dd
+
+    def test_example_shows_the_real_dna_id(self):
+        t = _tmp(self)
+        pp, dd = self._files(t, "", ".1")
+        h = core.id_hints(pp, dd)
+        self.assertEqual(len(h), 1)
+        self.assertIn("protein 'gene01' vs DNA 'gene01.1'", h[0]["text"])
+
+    def test_successful_order_pairing_is_not_called_wrong(self):
+        t = _tmp(self)
+        pp, dd = self._files(t, ".1", "")
+        r = core.run_coal(pp, dd, out_dir=t, probe_codes=False)
+        self.assertEqual((r.exit_code, r.report["summary"]["ok"]), (0, 8))
+        texts = [h["text"] for h in r.hints if h["code"] == "id_mismatch"]
+        self.assertEqual(len(texts), 1)
+        self.assertNotIn("probably wrong", texts[0])
+        self.assertIn("every pair matched", texts[0])
+
+    def test_failed_run_keeps_the_warning(self):
+        p, d = core.example_paths("messy_ids")
+        r = core.run_coal(p, d, out_dir=_tmp(self), probe_codes=False)
+        self.assertNotEqual(r.exit_code, 0)
+        texts = [h["text"] for h in r.hints if h["code"] == "id_mismatch"]
+        self.assertEqual(len(texts), 1)
+        self.assertIn("probably wrong", texts[0])
+
+
 if __name__ == "__main__":
     unittest.main()
