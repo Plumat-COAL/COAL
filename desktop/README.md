@@ -96,7 +96,7 @@ window. <!-- CHANGED(R2-D8): was "%TEMP%\coal_* folders (MCP runs)"; MCP runs go
 ## Updates
 
 COAL never checks for updates by itself. New versions are published at
-`github.com/chloe-newt/COAL/releases`. Installing a new version over the old one is fine.
+`github.com/plumat-coal/COAL/releases`. Installing a new version over the old one is fine.
 
 ## Privacy and what's inside
 
@@ -121,5 +121,5 @@ COAL never checks for updates by itself. New versions are published at
 
 ## Help
 
-Open an issue at `github.com/chloe-newt/COAL/issues`, with the log folder zipped and, if
+Open an issue at `github.com/plumat-coal/COAL/issues`, with the log folder zipped and, if
 possible, a small file that shows the problem.

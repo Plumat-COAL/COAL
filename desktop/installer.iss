@@ -27,8 +27,8 @@ AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
 AppPublisher=COAL contributors
-AppPublisherURL=https://github.com/chloe-newt/COAL
-AppSupportURL=https://github.com/chloe-newt/COAL/issues
+AppPublisherURL=https://github.com/plumat-coal/COAL
+AppSupportURL=https://github.com/plumat-coal/COAL/issues
 AppComments=Codon alignment from a protein alignment and coding DNA. Works offline.
 ; Per-user install: no UAC prompt. {autopf} is %LOCALAPPDATA%\Programs in this mode.
 PrivilegesRequired=lowest
