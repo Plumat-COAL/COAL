@@ -23,11 +23,11 @@ jobs:
       - name: Install COAL
         run: python -m pip install -e .
       - name: Engine tests
-        run: python -m unittest discover -s tests -v
+        run: python .github/ci_unittest.py discover -s tests  # CHANGED(FINAL-3)
       - name: App tests
         env:
           GRADIO_ANALYTICS_ENABLED: "False"
-        run: python -m unittest discover -s tests_app -v
+        run: python .github/ci_unittest.py discover -s tests_app  # CHANGED(FINAL-3)
       # CHANGED(R2-D11): new; desktop/test_wrapper.py and test_smoke.py never ran in CI. Required on Linux; on
       # Windows they run for the first time here, so they may not fail the build until a run is green there
       # (then remove continue-on-error). See overnight/integration/CHANGES.md
@@ -40,7 +40,7 @@ jobs:
         working-directory: desktop
         env:
           GRADIO_ANALYTICS_ENABLED: "False"
-        run: python -m unittest test_wrapper test_smoke -v
+        run: python ../.github/ci_unittest.py test_wrapper test_smoke  # CHANGED(FINAL-3): was python -m unittest; failures now also appear as readable annotations
 
   # CHANGED(APP-16/APP-C5): was no job installing the extras (GUI and MCP tests always skipped); now one job per
   # extra, each in its own environment, with COAL_REQUIRE_EXTRAS making the tests fail instead of skip.
@@ -67,7 +67,7 @@ jobs:
         env:
           GRADIO_ANALYTICS_ENABLED: "False"
           COAL_REQUIRE_EXTRAS: gui
-        run: python -m unittest discover -s tests_app -v
+        run: python .github/ci_unittest.py discover -s tests_app  # CHANGED(FINAL-3)
 
   explainer:
     # CHANGED(R2-D11): new; tests_app/test_explainer.py (pitch/explainer.html in Chromium) always skipped in CI.
@@ -112,7 +112,7 @@ jobs:
       - name: App tests (MCP tests required)
         env:
           COAL_REQUIRE_EXTRAS: mcp
-        run: python -m unittest discover -s tests_app -v
+        run: python .github/ci_unittest.py discover -s tests_app  # CHANGED(FINAL-3)
 
   extras-together:
     # Informational: can .[gui] and .[mcp] share one environment? (gradio[mcp] 5.x may need mcp 1.x while the
