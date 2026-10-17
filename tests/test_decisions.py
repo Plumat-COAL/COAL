@@ -139,5 +139,53 @@ class TestDec2Quiet(Tmp):  # DEC-2
         self.assertTrue(r.stdout.startswith(">u\n"))
 
 
+class TestDec3ClosedPipe(Tmp):  # DEC-3
+    class _Closed(__import__("io").StringIO):
+        def __init__(self, err):
+            super().__init__()
+            self.err = err
+
+        def write(self, s):
+            raise self.err
+
+        def fileno(self):
+            raise __import__("io").UnsupportedOperation("no fileno")
+
+    def _main(self, module, windows, err):
+        import contextlib
+        import errno
+        import io
+        from unittest import mock
+        sys.path.insert(0, str(SRC))
+        from coal import pipeline
+        main = __import__(module + ".cli", fromlist=["main"]).main
+        e = io.StringIO()
+        cwd = os.getcwd()
+        os.chdir(self.d)
+        try:
+            with mock.patch.object(pipeline, "_WINDOWS", windows), \
+                    mock.patch.object(sys, "stdout", self._Closed(err)), contextlib.redirect_stderr(e):
+                args = ["up.fa", "un.fa"] + (["-output", "fasta"] if module == "coal_compat" else [])
+                rc = main(args)
+        finally:
+            os.chdir(cwd)
+        return rc, e.getvalue()
+
+    def test_posix_broken_pipe_is_141_and_silent_in_both_commands(self):
+        import errno
+        for module in ("coal", "coal_compat"):
+            with self.subTest(module=module):
+                self.assertEqual(self._main(module, False, BrokenPipeError(errno.EPIPE, "Broken pipe"))[0], 141)
+
+    def test_windows_einval_is_141_too(self):
+        import errno
+        for module in ("coal", "coal_compat"):
+            with self.subTest(module=module):
+                rc, err = self._main(module, True, OSError(errno.EINVAL, "Invalid argument"))
+                self.assertEqual(rc, 141)
+                self.assertNotIn("Traceback", err)
+                self.assertNotIn("coal: error", err)
+
+
 if __name__ == "__main__":
     unittest.main()

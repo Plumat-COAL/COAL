@@ -46,6 +46,11 @@ pip install -e .[fast]                              # optional numpy speed-up fo
   PAL2NAL's `-nostderr`) silences all of them, including the notices about probably-wrong data, so check the exit
   code or use `--strict` when running quietly. Errors are always printed. stdout is the same with or without `-q`.
   <!-- CHANGED(DEC-2): was "notices about probably-wrong data ... are always printed". See overnight/integration/CHANGES.md -->
+- **Closed output pipe** (e.g. `coal pep.aln nuc.fa | head`): COAL stops silently (no traceback, no message) with exit
+  status **141**, i.e. 128 + SIGPIPE, the POSIX convention that `yes`, `git log` and other Unix filters follow, so a
+  shell or pipeline can tell "the reader stopped early" from a real error (1). Python's documentation suggests exiting
+  with 1 instead; we follow the Unix convention. The same 141 on Windows, where a closed pipe is reported as EINVAL.
+  Other exit codes: 130 Ctrl-C, 143 SIGTERM, 129 SIGHUP, 2 usage error. <!-- CHANGED(DEC-3): new bullet -->
 <!-- CHANGED(R2-D6, R2-E4): was "-q silences them" and no mention of the more-than-half rule (ENG-c, as amended by R2-E3). See overnight/integration/CHANGES.md -->
 
 **Large inputs:** COAL streams the data. It reads the protein alignment and indexes the DNA file(s) (IDs and file
