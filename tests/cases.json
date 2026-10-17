@@ -558,6 +558,10 @@
           "23"
         ]
       }
+    },
+    "frameshift_codon_line": {
+      "pep": "pep.fasta",
+      "about": "Frameshift digits 1-9 in several columns over two 20-column blocks; the last sequence's digit decides the extra '-' tokens in the -output codon residue line"
     }
   }
 }

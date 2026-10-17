@@ -64,6 +64,11 @@ DELIBERATE = {
     "first_met_code": "the first Met of a gene that needs the fallback (one N, one mismatch, ...): COAL accepts the "
                       "selected code's start and Met codons (e.g. ATT and ATA in code 2, TTG in code 11), as in its "
                       "exact-fit path; PAL2NAL accepts only ATG/CTG/GTG there, whatever -codontable says (FIN-E1)",
+    # CHANGED(MRG-1): new
+    "normalised_ids": "DNA IDs equal to the protein IDs only after normalising (version suffix, case, database "
+                      "fields such as sp|...|) and in another order: PAL2NAL pairs by file order (each protein gets "
+                      "another gene's DNA); COAL pairs by the normalised IDs. Exact check: COAL's output is "
+                      "byte-identical to PAL2NAL's on the same case with the DNA records put in protein order",
     "rna_first_met": "RNA (U) input with a protein starting with M: when PAL2NAL needs its fallback, it does not "
                      "accept AUG/CUG/GUG as the first Met (its fallback pattern has T only), so it flags that "
                      "codon (dropped by -nomismatch) or places the gene elsewhere; COAL reads U as T everywhere",
@@ -90,6 +95,7 @@ class Case:
         self.files = {}      # name -> text
         self.ref_files = {}  # CHANGED(FIN-C10): name -> neutralised text (see the module docstring)
         self.ref_files_b = {}  # the same without the first-Met substitution (for a gene placed off its own frame)
+        self.ref_files_p = {}  # CHANGED(MRG-1): the case itself with the DNA records in protein order (normalised_ids)
         self.pep = None
         self.nucs = []
         self.opts = []
@@ -336,10 +342,29 @@ def make_case(rng: random.Random) -> Case:
         c.features.add("genetic_code")
 
     # DNA IDs and order
-    did_mode = rng.choices(("same", "shuffled", "different", "partial", "count"), (0.65, 0.17, 0.1, 0.05, 0.03))[0]
+    # CHANGED(MRG-1): "normalised" is new (was "same" 0.65)
+    did_mode = rng.choices(("same", "shuffled", "different", "partial", "count", "normalised"),
+                           (0.57, 0.17, 0.1, 0.05, 0.03, 0.08))[0]
     order = list(range(nseq))
     dids = list(pids)
-    if did_mode == "shuffled":
+    if did_mode == "normalised":
+        def variant(p):
+            r = rng.random()
+            if r < 0.15:
+                return p
+            if r < 0.45:
+                return f"{p}.{rng.randint(1, 9)}"
+            if r < 0.7 and p.swapcase() != p:
+                return p.swapcase()
+            return f"{rng.choice(('sp', 'tr', 'gi'))}|{p}|{p.upper()}_HUMAN"
+        dids = [variant(p) for p in pids]
+        if len(set(dids)) < nseq:
+            dids = list(pids)  # a duplicate DNA ID is a COAL error (FZ-D7): keep the case plain
+        else:
+            c.features.add("normalised_ids")
+        if rng.random() < 0.75:
+            rng.shuffle(order)
+    elif did_mode == "shuffled":
         rng.shuffle(order)
     elif did_mode == "different":
         dids = [f"d{k}x" for k in range(nseq)]
@@ -348,16 +373,20 @@ def make_case(rng: random.Random) -> Case:
     recs = [(dids[j], dnas[j], ref_dnas[j][0], ref_dnas[j][1]) for j in order]
     if did_mode == "count":
         recs = recs[:-1] if (len(recs) > 1 and rng.random() < 0.5) else recs + [("extra",) + ("ATGAAA",) * 3]
+    # CHANGED(MRG-1): with normalised IDs every reference has the DNA in protein order (what COAL pairs)
+    ref_recs = [(dids[j], dnas[j], ref_dnas[j][0], ref_dnas[j][1]) for j in range(nseq)] \
+        if "normalised_ids" in c.features else recs
     width = rng.choice((0, 60, 60, 70, 13))
     split = len(recs) > 1 and rng.random() < 0.1
     cut = rng.randint(1, len(recs) - 1) if split else None
-    nuc_parts, ref_parts, ref_parts_b = [], [], []
-    for col, parts in ((1, nuc_parts), (2, ref_parts), (3, ref_parts_b)):
+    nuc_parts, ref_parts, ref_parts_b, ref_parts_p = [], [], [], []
+    for col, parts, rr in ((1, nuc_parts, recs), (2, ref_parts, ref_recs), (3, ref_parts_b, ref_recs),
+                           (1, ref_parts_p, ref_recs)):
         if split:
-            parts += ["".join(f">{r[0]}\n" + _wrap(r[col], width) for r in recs[:cut]),
-                      "".join(f">{r[0]}\n" + _wrap(r[col], width) for r in recs[cut:])]
+            parts += ["".join(f">{r[0]}\n" + _wrap(r[col], width) for r in rr[:cut]),
+                      "".join(f">{r[0]}\n" + _wrap(r[col], width) for r in rr[cut:])]
         else:
-            parts.append("".join(f">{r[0]} desc\n" + _wrap(r[col], width) for r in recs))
+            parts.append("".join(f">{r[0]} desc\n" + _wrap(r[col], width) for r in rr))
 
     # protein file
     lower = rng.random() < 0.1
@@ -402,10 +431,12 @@ def make_case(rng: random.Random) -> Case:
     c.files[c.pep] = text
     c.ref_files[c.pep] = rtext
     c.ref_files_b[c.pep] = rtext
+    c.ref_files_p[c.pep] = text
     for i, part in enumerate(nuc_parts):
         c.files[f"nuc{i}.fasta"] = part
         c.ref_files[f"nuc{i}.fasta"] = ref_parts[i]
         c.ref_files_b[f"nuc{i}.fasta"] = ref_parts_b[i]
+        c.ref_files_p[f"nuc{i}.fasta"] = ref_parts_p[i]
         c.nucs.append(f"nuc{i}.fasta")
 
     opts = []
@@ -577,19 +608,25 @@ def fuzz(pal2nal, n, seed, report=print, keep_dir=None, formats=FORMATS):
             refs = {}
 
             def reference(fmt, variant, case=case, d=d, refs=refs):
-                """PAL2NAL's stdout on a neutralised copy of the case, without -nogap (FIN-C10)."""
+                """PAL2NAL's stdout on a neutralised copy of the case, without -nogap (FIN-C10); variant 2: the case
+                itself with only the DNA records reordered, with every option (MRG-1)."""
                 if (fmt, variant) not in refs:
                     rd = os.path.join(d, f"ref{variant}")
                     os.makedirs(rd, exist_ok=True)
-                    for name, text in (case.ref_files, case.ref_files_b)[variant].items():
+                    for name, text in (case.ref_files, case.ref_files_b, case.ref_files_p)[variant].items():
                         with open(os.path.join(rd, name), "w", newline="\n") as fh:
                             fh.write(text)
-                    opts = [o for o in case.opts if o != "-nogap"]
+                    opts = [o for o in case.opts if o != "-nogap" or variant == 2]
                     refs[fmt, variant] = run_pal2nal(pal2nal, rd, [case.pep, *case.nucs, "-output", fmt, *opts])[1]
                 return refs[fmt, variant]
 
             def verified(fmt, rc, out, case=case):
                 """None if the difference is exactly a documented one (either reference), else why not."""
+                if case.features & set(DELIBERATE) == {"normalised_ids"}:  # CHANGED(MRG-1): exact, byte for byte
+                    ref = reference(fmt, 2)
+                    if (rc == 0 and out == ref != "") or (ref == "" and rc != 0 and out == ""):
+                        return None
+                    return "normalised IDs: COAL's output is not PAL2NAL's on the DNA in protein order"
                 why = check_deliberate(case, fmt, rc, out, reference(fmt, 0))
                 if why is not None and case.ref_files_b != case.ref_files:
                     if check_deliberate(case, fmt, rc, out, reference(fmt, 1)) is None:

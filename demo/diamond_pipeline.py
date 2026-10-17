@@ -332,8 +332,11 @@ def main(argv=None) -> int:
             print(f"more than {MAX_DROPS} pairs failed; running the remaining {len(todo)} pairs one at a time")
             for item in todo:
                 res = run_batch([item], a, h, "pair", stderr_log, cds)
-                if isinstance(res, dict):
+                ids = (f"{a.a_name}__{item[0]}", f"{a.b_name}__{item[1]}")
+                if isinstance(res, dict) and all(i in res for i in ids):
                     codon.update(res)
+                elif isinstance(res, dict):  # CHANGED(MRG-7): one side skipped by --keep-going
+                    dropped.append((item[0], item[1], skip_reason(stderr_log[-1], ids)))
                 else:
                     dropped.append((item[0], item[1], drop_reason(res[1])))  # CHANGED(R3-A3): was all of stderr
             todo = []
@@ -341,8 +344,14 @@ def main(argv=None) -> int:
         res = run_batch(todo, a, h, "batch", stderr_log, cds)
         if isinstance(res, dict):
             codon.update(res)
-            if any(f"{a.a_name}__{x}" not in res for x, *_ in todo):
-                rc_worst = 2  # --keep-going left some pairs out
+            # CHANGED(MRG-7): was only the A side checked (a B-side CDS skipped by the engine's --keep-going, new
+            # since the merge, silently lost its pair: exit 0, not in dropped_pairs.tsv); now a pair missing either
+            # side is dropped with COAL's error for that sequence. See overnight/integration/CHANGES.md
+            for it in todo:
+                ia, ib = f"{a.a_name}__{it[0]}", f"{a.b_name}__{it[1]}"
+                if ia not in res or ib not in res:
+                    dropped.append((it[0], it[1], skip_reason(stderr_log[-1], (ia, ib))))
+                    rc_worst = 2  # --keep-going left some pairs out
             break
         bad_id, why = res
         hit = next((it for it in todo if bad_id in (f"{a.a_name}__{it[0]}", f"{a.b_name}__{it[1]}")), None)
@@ -387,6 +396,16 @@ def main(argv=None) -> int:
 
 
 MAX_DROPS = 20
+
+
+def skip_reason(stderr: str, ids) -> str:
+    """CHANGED(MRG-7): new. The engine's --keep-going line for a skipped sequence ('coal: warning: skipped <msg>',
+    msg = the error COAL prints without --keep-going) as the 'coal: error: <msg>' line drop_reason gives."""
+    for ln in stderr.splitlines():
+        if ln.startswith("coal: warning: skipped ") and any(ln[len("coal: warning: skipped "):].startswith(i + ":")
+                                                            for i in ids):
+            return ("coal: error: " + ln[len("coal: warning: skipped "):]).replace("\t", " ")
+    return "COAL left this pair out (--keep-going)"
 
 
 def drop_reason(stderr: str) -> str:

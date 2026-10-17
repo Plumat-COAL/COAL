@@ -11,6 +11,11 @@ Usage:
     python benchmarks/run_bench.py                     # default size grid
     python benchmarks/run_bench.py --quick             # tiny grid, smoke test
     python benchmarks/run_bench.py --sizes 100x500 1000x500 --repeats 5
+    python benchmarks/run_bench.py --impl both --sizes 10000x500   # COAL Python vs C++ only
+
+--impl python|cpp|both times COAL's engines only (no PAL2NAL): "coal" = Python -j 1,
+"coal_cpp_j1" = C++ on one thread, "coal_cpp" = C++ on all hardware threads (its default).
+The C++ binary comes from --cpp-bin (default build/coal-cpp).
 """
 from __future__ import annotations
 
@@ -87,7 +92,19 @@ def main() -> int:
                     help="also time COAL with these -j values (0 = all cores), e.g. --coal-jobs 2 4 0")
     ap.add_argument("--no-pal2nal", action="store_true",
                     help="time COAL only (for sizes where PAL2NAL takes too long)")
+    ap.add_argument("--impl", choices=["python", "cpp", "both"],
+                    help="time COAL's Python and/or C++ engine only (implies --no-pal2nal)")
+    ap.add_argument("--cpp-bin", default=str(ROOT / "build" / "coal-cpp"), help="coal-cpp executable")
+    ap.add_argument("--data-dir", type=Path, default=DATA,
+                    help="where generated datasets are cached (default benchmarks/data)")
     a = ap.parse_args()
+    if a.impl:
+        a.no_pal2nal = True
+    cpp_bin = Path(a.cpp_bin)
+    if a.impl in ("cpp", "both") and not cpp_bin.exists() and cpp_bin.with_suffix(".exe").exists():
+        cpp_bin = cpp_bin.with_suffix(".exe")
+    if a.impl in ("cpp", "both") and not cpp_bin.exists():
+        sys.exit(f"{cpp_bin} not found; build it: cmake -S . -B build && cmake --build build")
 
     perl = None
     if not a.no_pal2nal:
@@ -101,7 +118,11 @@ def main() -> int:
     if not a.no_pal2nal:
         tools["pal2nal"] = lambda d: [perl, str(PAL2NAL), str(d / "pep.fasta"), str(d / "nuc.fasta"), "-output", "fasta"]
     # "coal" = single process (COAL's default is automatic -j); use --coal-jobs for more
-    tools["coal"] = lambda d: [sys.executable, "-m", "coal", str(d / "pep.fasta"), str(d / "nuc.fasta"), "-j", "1"]
+    if a.impl != "cpp":
+        tools["coal"] = lambda d: [sys.executable, "-m", "coal", str(d / "pep.fasta"), str(d / "nuc.fasta"), "-j", "1"]
+    if a.impl in ("cpp", "both"):
+        tools["coal_cpp_j1"] = lambda d: [str(cpp_bin), str(d / "pep.fasta"), str(d / "nuc.fasta"), "-j", "1"]
+        tools["coal_cpp"] = lambda d: [str(cpp_bin), str(d / "pep.fasta"), str(d / "nuc.fasta")]
     for j in a.coal_jobs:
         tools[f"coal_j{j}"] = (lambda j: lambda d: [sys.executable, "-m", "coal", str(d / "pep.fasta"),
                                                     str(d / "nuc.fasta"), "-j", str(j)])(j)
@@ -113,7 +134,7 @@ def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="coal_bench_"))
     try:
         for n, L in sizes:
-            d = DATA / f"n{n}_L{L}"
+            d = a.data_dir / f"n{n}_L{L}"
             if not (d / "nuc.fasta").exists():
                 generate(n, L, d)
             nuc_mb = (d / "nuc.fasta").stat().st_size / 2**20
@@ -143,6 +164,11 @@ def main() -> int:
                 row[f"{tool}_min_s"] = round(min(times), 4) if times else ""
                 row[f"{tool}_peak_MB"] = round(max(mems), 1) if mems else ""
                 row[f"{tool}_Mcodons_per_s"] = round(n * L / med / 1e6, 3) if med else ""
+            py = row.get("coal_median_s")
+            for tool in ("coal_cpp_j1", "coal_cpp"):
+                c = row.get(f"{tool}_median_s")
+                if py and c:
+                    row[f"speedup_{tool}_vs_python"] = round(py / c, 2)
             p = row.get("pal2nal_median_s")
             for tool in res:
                 if tool != "pal2nal":
@@ -164,7 +190,7 @@ def main() -> int:
     note = (f"date: {datetime.now():%Y-%m-%d %H:%M}\nplatform: {platform.platform()}\n"
             f"cpu: {platform.processor() or platform.machine()}\npython: {platform.python_version()}\n"
             f"perl: {pv}\nrepeats: {a.repeats}\npsutil: {bool(psutil)}\ncpu_count: {os.cpu_count()}\n"
-            f"coal_jobs: {a.coal_jobs}\n")
+            f"coal_jobs: {a.coal_jobs}\nimpl: {a.impl}\ndata_dir: {a.data_dir}\n")
     csv_path.with_suffix(".txt").write_text(note)
     print(f"\nwrote {csv_path.relative_to(ROOT)}")
     return 0

@@ -45,7 +45,18 @@ MISMATCH_WARNING = " does not correspond to "  # CHANGED(ENG-i2): new constant, 
 
 
 class CoalError(Exception):
-    pass
+    """An error COAL reports to the user. `code` is a stable machine-readable reason (used in the run report);
+    `seq_id` is set when one sequence failed (so --keep-going can skip it); `index` is its position in the input.
+    CHANGED(MRG-3): new attributes, from the teammate's branch (was a bare Exception subclass); the message text
+    is unchanged. See overnight/integration/CHANGES.md"""
+
+    def __init__(self, message: str, code: str = "error", seq_id: str | None = None,
+                 index: int | None = None):
+        super().__init__(message)
+        self.code, self.seq_id, self.index = code, seq_id, index
+
+    def __reduce__(self):  # keep code/seq_id/index (and any extra attributes) across worker processes
+        return (CoalError, (str(self), self.code, self.seq_id, self.index), dict(self.__dict__))
 
 
 @dataclass
@@ -62,35 +73,117 @@ class Threaded:
 
 # ---------------------------------------------------------------- pairing
 
-def pair_sequences(prot_ids: list[str], dna_ids: list[str], dna_pos: dict | None = None,
-                   warn=None, strict: bool = False) -> list[int]:
-    """Counts must match; match by ID if every protein ID is a DNA ID, else by order.
-    `dna_pos` (ID -> index) may be passed in to avoid building it again.
-    `warn` is called when some (but not all) protein IDs are DNA IDs; with `strict` that is an error."""
+DB_TAGS = frozenset({"sp", "tr", "gi", "ref", "gb", "emb", "dbj", "pdb", "lcl", "gnl", "pir", "prf",
+                     "tpg", "tpe", "tpd", "bbs", "bbm", "pat"})
+
+
+def _strip_version(x: str) -> str:
+    """AT1G01010.1 -> AT1G01010 (a trailing '.<digits>')."""
+    head, dot, tail = x.rpartition(".")
+    return head if dot and head and tail.isdigit() else x
+
+
+def id_keys(rid: str) -> set[str]:
+    """Normalised forms of an ID used for safe pairing: version suffix removed, lower case; for pipe headers
+    (sp|P12345|NAME_HUMAN) every field except database tags is tried as well. (Teammate's branch, MRG-1.)"""
+    keys = {_strip_version(rid).lower()}
+    fields = [f for f in rid.split("|") if f]
+    if len(fields) > 1:
+        keys.update(_strip_version(f).lower() for f in fields if f.lower() not in DB_TAGS)
+    return keys
+
+
+def normalised_pairing(prot_ids: list[str], dna_ids: list[str], pos: dict) -> tuple[list[int], list[str]] | None:
+    """DNA record per protein by normalised ID (id_keys), or None. Accepted only if every protein has exactly one
+    candidate (an exact ID match wins) and the pairing is one-to-one. Returns (indices, per-protein 'id' or
+    'normalised')."""
+    by_key: dict[str, set[int]] = {}
+    for i, d in enumerate(dna_ids):
+        for k in id_keys(d):
+            by_key.setdefault(k, set()).add(i)
+    idx, modes, used = [], [], set()
+    for p in prot_ids:
+        if p in pos:
+            j, m = pos[p], "id"
+        else:
+            cands = set().union(*(by_key.get(k, ()) for k in id_keys(p)))
+            if len(cands) != 1:
+                return None
+            j, m = next(iter(cands)), "normalised"
+        if j in used:
+            return None
+        used.add(j)
+        idx.append(j)
+        modes.append(m)
+    return idx, modes
+
+
+def order_pairing_warning(prot_ids: list[str], dna_ids: list[str]) -> str:
+    """The teammate's file-order notice. MRG-1: not printed (ENG-d: when no protein ID is a DNA ID, COAL stays
+    silent as PAL2NAL does); the run report's id_mismatch hint says it instead. Kept for the C++ comparison."""
+    pairs = ", ".join(f"{p} <-> DNA {d}" if i == 0 else f"{p} <-> {d}"
+                      for i, (p, d) in enumerate(zip(prot_ids[:2], dna_ids[:2])))
+    more = ", ..." if len(prot_ids) > 2 else ""
+    return (f"IDs don't match, so sequences were paired by file order (protein {pairs}{more}). "
+            f"Check this is what you want.")
+
+
+def pair_ids(prot_ids: list[str], dna_ids: list[str], dna_pos: dict | None = None, warn=None,
+             strict: bool = False):
+    """Pair proteins with DNA records. Returns (DNA index per protein, mode, per-protein modes or None).
+
+    mode "id": every protein ID is a DNA ID. "order": file order, PAL2NAL's rule. "normalised": by normalised ID
+    (version suffix, case, pipe fields; see normalised_pairing), used ONLY where PAL2NAL's file order would pair
+    a protein with a different DNA record than the one its normalised ID names (otherwise the order pairing is
+    the same pairing, and COAL keeps PAL2NAL's output and messages exactly).
+    `warn` receives the notices; `strict` makes a partial exact-ID match an error (DEC-1), as before."""
     if len(prot_ids) != len(dna_ids):
         raise CoalError(
-            f"number of sequences differs (protein: {len(prot_ids)}, DNA: {len(dna_ids)})"
+            f"number of sequences differs (protein: {len(prot_ids)}, DNA: {len(dna_ids)})", code="count_mismatch"
         )
     if not prot_ids:
-        raise CoalError("no sequences in input")
+        raise CoalError("no sequences in input", code="no_sequences")
     pos = dna_pos if dna_pos is not None else {d: i for i, d in enumerate(dna_ids)}
     if all(p in pos for p in prot_ids):
-        return [pos[p] for p in prot_ids]
-    # CHANGED(ENG-d): was silent order pairing; now warns when some but not all IDs match.
-    # See overnight/engine-fixes/CHANGES.md
+        return [pos[p] for p in prot_ids], "id", None
     hits = sum(p in pos for p in prot_ids)
-    if hits and (warn or strict):
+    if hits and strict:
+        # CHANGED(DEC-1): was always a warning (ENG-d); now an error with --strict (MRG-1: also when normalised
+        # IDs would pair them). See overnight/integration/CHANGES.md
         p, d = next((p, d) for p, d in zip(prot_ids, dna_ids) if p != d)
-        text = (f"only {hits} of {len(prot_ids)} protein IDs are DNA IDs; pairing sequences by order "
-                f"instead (e.g. protein '{p}' gets DNA '{d}')")
-        # CHANGED(DEC-1): was always a warning (ENG-d); now an error with --strict, and the warning says so.
-        # See overnight/integration/CHANGES.md
-        if strict:
-            raise CoalError(f"only {hits} of {len(prot_ids)} protein IDs are DNA IDs, so sequences would be paired "
-                            f"by order (e.g. protein '{p}' with DNA '{d}'); make the IDs match, or run without "
-                            f"--strict to pair by order as PAL2NAL does")
-        warn(text + " (--strict makes this an error)")
-    return list(range(len(prot_ids)))
+        raise CoalError(f"only {hits} of {len(prot_ids)} protein IDs are DNA IDs, so sequences would be paired "
+                        f"by order (e.g. protein '{p}' with DNA '{d}'); make the IDs match, or run without "
+                        f"--strict to pair by order as PAL2NAL does", code="partial_id_match")
+    norm = normalised_pairing(prot_ids, dna_ids, pos)
+    if norm is not None and norm[0] != list(range(len(prot_ids))):
+        # CHANGED(MRG-1): new (teammate's safe ID pairing, limited to where it matters). Was: pairing by file order,
+        # as PAL2NAL, which gives this protein the DNA of another gene. Deliberate difference from PAL2NAL v14
+        # (definition of a codon alignment: a protein's codons must come from its own DNA). teammate's C++ must
+        # mirror. See overnight/integration/CHANGES.md
+        idx, modes = norm
+        moved = [k for k, j in enumerate(idx) if j != k]
+        k = moved[0]
+        if warn:
+            nn = modes.count("normalised")
+            warn(f"{nn} of {len(prot_ids)} protein IDs match a DNA ID only after normalising (version suffix, case "
+                 f"or database fields), so sequences were paired by those IDs, not by file order as PAL2NAL "
+                 f"pairs them: by order, {len(moved)} of {len(prot_ids)} proteins would get the DNA of another gene "
+                 f"(e.g. protein '{prot_ids[k]}' gets DNA '{dna_ids[idx[k]]}', not '{dna_ids[k]}')")
+        return idx, "normalised", modes
+    if hits and warn:
+        # CHANGED(ENG-d): was silent order pairing; now warns when some but not all IDs match.
+        # See overnight/engine-fixes/CHANGES.md
+        p, d = next((p, d) for p, d in zip(prot_ids, dna_ids) if p != d)
+        warn(f"only {hits} of {len(prot_ids)} protein IDs are DNA IDs; pairing sequences by order "
+             f"instead (e.g. protein '{p}' gets DNA '{d}') (--strict makes this an error)")
+    return list(range(len(prot_ids))), "order", None
+
+
+def pair_sequences(prot_ids: list[str], dna_ids: list[str], dna_pos: dict | None = None,
+                   warn=None, strict: bool = False) -> list[int]:
+    """Counts must match; DNA record number for each protein (see pair_ids).
+    `warn` is called with the pairing notices; with `strict` a partial exact-ID match is an error."""
+    return pair_ids(prot_ids, dna_ids, dna_pos, warn=warn, strict=strict)[0]
 
 
 # ---------------------------------------------------------------- tokens
@@ -338,7 +431,8 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int, strict: bool = F
     bad = _VALID.search(row)
     if bad:
         chars = sorted(set(_VALID.findall(row)))
-        raise CoalError(f"{seq_id}: invalid protein alignment characters {chars}")
+        raise CoalError(f"{seq_id}: invalid protein alignment characters {chars}", code="invalid_protein",
+                         seq_id=seq_id)
 
     res = Threaded(seq_id, row, "")
     for m in _AS_X.finditer(row):
@@ -354,7 +448,7 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int, strict: bool = F
     dna = raw_dna.upper().replace("U", "T")
     residues = row.replace(GAP, "")
     if not residues:
-        raise CoalError(f"{seq_id}: protein sequence is empty")
+        raise CoalError(f"{seq_id}: protein sequence is empty", code="empty", seq_id=seq_id)
 
     # 1. exact fit (quick check at offset 0 first: the common, clean case)
     if not _DIGIT.search(residues) and _quick_offset0(table, dna, residues):
@@ -372,7 +466,8 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int, strict: bool = F
     # 2. anchor fallback
     anchors = _anchors(row)
     if not anchors:
-        raise CoalError(f"{seq_id}: protein and DNA are inconsistent (no match found)")
+        raise CoalError(f"{seq_id}: protein and DNA are inconsistent (no match found)", code="inconsistent",
+                         seq_id=seq_id)
     pattern, col = [], 1
     found_any = False
     expect = -1  # where this anchor starts if the previous anchors' matches are the real ones
@@ -396,7 +491,8 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int, strict: bool = F
         col += len(a)
     s = _find(target, [("n", t[1], t[2]) if t[0] == "w" else t for t in pattern])
     if s < 0:
-        raise CoalError(f"{seq_id}: protein and DNA are inconsistent (no match found)")
+        raise CoalError(f"{seq_id}: protein and DNA are inconsistent (no match found)", code="inconsistent",
+                         seq_id=seq_id)
     res.dna = raw_dna[s:s + _length(toks)]
 
     # mismatch report: first residue Met -> ATG/CTG/GTG, others -> genetic code
@@ -433,7 +529,8 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int, strict: bool = F
     if nchk and 2 * nbad_chk > nchk:
         if strict:
             raise CoalError(f"{seq_id}: protein and DNA are inconsistent "
-                            f"({nbad_chk} of {nchk} checkable codons do not match the protein)")
+                            f"({nbad_chk} of {nchk} checkable codons do not match the protein)",
+                            code="inconsistent", seq_id=seq_id)
         res.notices.append(f"{seq_id}: protein and DNA are probably unrelated: {nbad_chk} of {nchk} checkable codons "
                            f"do not match the protein. The row was written as PAL2NAL writes it, but it is "
                            f"probably the wrong DNA or the wrong genetic code (--strict makes this an error)")
@@ -449,7 +546,7 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int, strict: bool = F
         if strict:  # CHANGED(DEC-1): was always an error; see above
             raise CoalError(f"{seq_id}: protein and DNA are inconsistent (no 10-residue segment of the protein was "
                             f"found in the DNA and {few}: too few to tell where {'the gene' if namb else 'it'} "
-                            f"starts in the longer DNA)")
+                            f"starts in the longer DNA)", code="inconsistent", seq_id=seq_id)
         res.notices.append(f"{seq_id}: position of the gene in the DNA is a guess: no 10-residue segment of the "
                            f"protein was found in the DNA and {few}, too few to tell where "
                            f"{'the gene' if namb else 'it'} starts in the longer DNA. The codons were taken from the "
@@ -580,7 +677,7 @@ def codon_align(
     proteins = [(pid, prepare_row(pid, aln)) for pid, aln in proteins]
     lengths = {len(s) for _, s in proteins}
     if len(lengths) > 1:
-        raise CoalError(f"protein alignment rows have different lengths: {sorted(lengths)}")
+        raise CoalError(f"protein alignment rows have different lengths: {sorted(lengths)}", code="row_lengths")
     pair_warn: list[str] = []  # CHANGED(ENG-d): partial-ID-match warning added to warnings
     idx = pair_sequences([p[0] for p in proteins], [d[0] for d in dnas], warn=pair_warn.append, strict=strict)
     items = [thread_one(pid, row, dnas[j][1], table, strict) for (pid, row), j in zip(proteins, idx)]
