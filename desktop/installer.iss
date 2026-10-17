@@ -52,8 +52,10 @@ OutputDir=dist
 OutputBaseFilename=COAL-Setup-{#AppVersion}
 Compression=lzma2/max
 SolidCompression=yes
-; Tell Explorer to refresh "Open with" menus (only matters when that task was chosen).
-ChangesAssociations=yes
+; Tell Explorer to refresh "Open with" menus, only when that task was chosen.
+; CHANGED(WIN-W8): was yes; now a boolean expression (Inno Setup 6 allows one here; not compiled
+; yet: if ISCC rejects it, go back to yes). See overnight/windows-app/CHANGES.md
+ChangesAssociations=WizardIsTaskSelected('openwith')
 SetupLogging=yes
 
 [Languages]
@@ -64,7 +66,13 @@ SelectTasksLabel2=COAL installs for you only and needs no administrator rights. 
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
-Name: "openwith"; Description: "Add COAL to ""Open with"" for .aln and .fasta files (your default programs don't change)"; Flags: unchecked
+; CHANGED(WIN-W4): was: offered "Open with" with no caveat; now says what it does today. See overnight/windows-app/CHANGES.md
+Name: "openwith"; Description: "Add COAL to ""Open with"" for .aln and .fasta files (opens COAL and tells you which box to drag the file onto; it can't load the file by itself yet; your default programs don't change)"; Flags: unchecked
+
+[InstallDelete]
+; CHANGED(WIN-W8): new. An upgrade first removes the old bundle, so files a newer build no longer
+; ships don't linger and get imported. See overnight/windows-app/CHANGES.md
+Type: filesandordirs; Name: "{app}\_internal"
 
 [Files]
 Source: "dist\COAL\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -97,6 +105,9 @@ Filename: "{app}\{#AppExe}"; Description: "Open COAL now"; Flags: nowait postins
 Type: filesandordirs; Name: "{localappdata}\COAL"
 ; Anything the app left inside its own folder.
 Type: filesandordirs; Name: "{app}"
+; CHANGED(WIN-W6): new. The local app's run folders (results shown in the window; downloads you
+; saved elsewhere are untouched). See overnight/windows-app/CHANGES.md
+Type: filesandordirs; Name: "{%TEMP}\coal_app_runs"
 
 [Code]
 // Microsoft's documented way to detect the Evergreen WebView2 Runtime: the "pv" value under

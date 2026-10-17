@@ -11,3 +11,6 @@ pywebview==6.2.1
 
 # Build only: one-folder Windows build (desktop\build.ps1).
 pyinstaller==6.22.3
+# CHANGED(WIN-R2): was unpinned (PyInstaller pulls whatever is newest); now pinned. 2026.5 was seen
+# in a PyPI mirror listing (web search, 2026-10-17), not installed. See overnight/windows-app/CHANGES.md
+pyinstaller-hooks-contrib==2026.5

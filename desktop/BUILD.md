@@ -23,12 +23,17 @@ In PowerShell, from the repo root:
 powershell -ExecutionPolicy Bypass -File desktop\build.ps1
 ```
 
+<!-- CHANGED(WIN-W7): new note. See overnight/windows-app/CHANGES.md -->
+On a managed (university/company) PC, Group Policy can override `-ExecutionPolicy Bypass`; then
+the script won't run at all, and you need IT or a non-managed machine.
+
 It will, each step with a timeout:
 
 1. create `desktop\.venv` and install `.[gui]` and `desktop\requirements.txt` (pinned);
 2. run the engine, app, wrapper and smoke tests (`-SkipTests` to skip);
 3. run PyInstaller with `desktop\coal_desktop.spec` into `desktop\dist\COAL\`;
-4. check the frozen app: `COAL.exe -m coal --version` and the smoke test against `COAL.exe`;
+4. check the frozen app: `COAL.exe -m coal --version` (its output is captured and must show
+   the version) and the smoke test against `COAL.exe`;
 5. if Inno Setup is installed, build `desktop\dist\COAL-Setup-<version>.exe`.
 
 Options: `-Clean` (start from scratch), `-NoInstaller`, `-Python -3.13`.
@@ -50,6 +55,34 @@ $env:COAL_SMOKE_EXE = "$PWD\desktop\dist\COAL\COAL.exe"; desktop\.venv\Scripts\p
 (For a machine-wide Inno Setup the last line is
 `& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=0.3.0 desktop\installer.iss`.)
 
+## Pinned versions: verify on the first build
+
+<!-- CHANGED(WIN-R2): new section. See overnight/windows-app/CHANGES.md -->
+`desktop\requirements.txt` pins `pywebview==6.2.1`, `pyinstaller==6.22.3` and
+`pyinstaller-hooks-contrib==2026.5`. None of the three has been installed from PyPI yet (they
+were taken from release pages / a mirror listing). On the first build, check that pip installs
+all three; if pip reports a conflict between PyInstaller and the hooks package, pin the
+hooks-contrib release from the same month as the PyInstaller release, and record it in
+`overnight/windows-app/LOG.md`.
+
+## Frozen-mode checks (first build)
+
+<!-- CHANGED(WIN-R3): new section. See overnight/windows-app/CHANGES.md -->
+These only exist in the PyInstaller build and were never run:
+
+- `COAL.exe --serve` (the hidden child) gets valid stdout/stdin pipes even though the exe is
+  windowed. If not, `serve()` exits with code 4 and the window says the local app stopped while
+  starting (exit code 4).
+- `COAL.exe -m coal ...` runs the engine via `runpy.run_module("coal")` (build.ps1 checks
+  `--version`; the frozen smoke test runs the examples).
+- Large inputs make the engine use worker processes (`ProcessPoolExecutor`, spawn). Each worker
+  is `COAL.exe` again and must be caught by `multiprocessing.freeze_support()` (first line under
+  `__main__`). Check with a big dataset that Task Manager shows workers and no extra windows,
+  and that they exit.
+- `disable_windowed_traceback=True`: an unexpected error must land in
+  `%LOCALAPPDATA%\COAL\logs\local_app.log`, never as an "Unhandled exception" box.
+- The MCP endpoint answers: the URL is logged in `local_app.log` (`gradio_api/mcp/sse`).
+
 ## C++ engine
 
 If `cpp\build\...\coal-cpp.exe` exists when PyInstaller runs, the spec copies it into the
@@ -68,7 +101,7 @@ the GUI always runs `python -m coal`. Using it needs a GUI/engine decision (LOG.
 |---|---|---|
 | `COAL.exe` opens nothing; `%LOCALAPPDATA%\COAL\logs\local_app.log` shows a missing module | a module Gradio/uvicorn imports by name | add it to `hiddenimports` in the spec |
 | log shows a missing file inside `gradio\` | a Gradio data file not collected | `collect_all` should cover it; check `module_collection_mode` |
-| window says "Starting COAL…" forever then an error after 60 s | local app crashed: see `local_app.log` | as above |
+| window says "Starting COAL…" for a long time, then an error after 180 s | local app crashed or hung: see `local_app.log` | as above |
 | "Try an example" buttons missing | examples not found in the bundle | check `_internal\examples\clean\dna.fasta` exists |
 | a console window flashes on each run | engine started without `CREATE_NO_WINDOW` | should not happen in the windowed build; report it |
 | Defender quarantines `COAL.exe` | heuristic false positive | DESIGN.md 5.7; submit the file to Microsoft |

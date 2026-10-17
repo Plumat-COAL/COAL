@@ -66,11 +66,39 @@ function Invoke-Step {
         -NoNewWindow -PassThru
     $null = $p.Handle  # keep the handle so ExitCode is available after exit
     if (-not $p.WaitForExit($TimeoutSec * 1000)) {
-        Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+        # CHANGED(WIN-W7): was Stop-Process (top process only; pip/PyInstaller/test children kept
+        # running); now the whole tree. See overnight/windows-app/CHANGES.md
+        & taskkill.exe /T /F /PID $p.Id | Out-Null
         throw "$Title did not finish within $TimeoutSec seconds and was stopped."
     }
     $p.WaitForExit()
     if ($p.ExitCode -ne 0) { throw "$Title failed (exit code $($p.ExitCode))." }
+}
+
+function Invoke-Capture {
+    # Run a program with a timeout and return its stdout+stderr (redirected to files, because a
+    # windowed exe has no console to print to). Throws on timeout or non-zero exit.
+    param([string]$Title, [string]$File, [string[]]$Arguments, [int]$TimeoutSec = 120)
+    Write-Host ""
+    Write-Host "==> $Title" -ForegroundColor Cyan
+    $argLine = ($Arguments | ForEach-Object { Quote-Arg $_ }) -join " "
+    $out = [System.IO.Path]::GetTempFileName()
+    $err = [System.IO.Path]::GetTempFileName()
+    try {
+        $p = Start-Process -FilePath $File -ArgumentList $argLine -WorkingDirectory $Repo `
+            -NoNewWindow -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
+        $null = $p.Handle
+        if (-not $p.WaitForExit($TimeoutSec * 1000)) {
+            & taskkill.exe /T /F /PID $p.Id | Out-Null
+            throw "$Title did not finish within $TimeoutSec seconds and was stopped."
+        }
+        $p.WaitForExit()
+        $text = [string](Get-Content -Raw $out) + [string](Get-Content -Raw $err)
+        if ($p.ExitCode -ne 0) { throw "$Title failed (exit code $($p.ExitCode)): $text" }
+        return $text
+    } finally {
+        Remove-Item $out, $err -ErrorAction SilentlyContinue
+    }
 }
 
 Push-Location $Repo
@@ -105,7 +133,13 @@ try {
     if (-not (Test-Path $Exe)) { throw "PyInstaller finished but $Exe is missing." }
 
     # 4. Check the frozen build: engine dispatch, then the smoke test against COAL.exe.
-    Invoke-Step "Frozen engine: COAL.exe -m coal --version" $Exe @("-m", "coal", "--version") 120
+    # CHANGED(WIN-W7): was: exit code only (a windowed exe's output is invisible); now the output
+    # is captured and must name the version. See overnight/windows-app/CHANGES.md
+    $v = Invoke-Capture "Frozen engine: COAL.exe -m coal --version" $Exe @("-m", "coal", "--version") 120
+    if ($v -notmatch [regex]::Escape($version)) {
+        throw "COAL.exe -m coal --version printed '$($v.Trim())', expected version $version."
+    }
+    Write-Host "    $($v.Trim())"
     if (-not $SkipTests) {
         $env:COAL_SMOKE_EXE = $Exe
         try {

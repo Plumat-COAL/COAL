@@ -32,8 +32,10 @@ datas, binaries, hiddenimports = [], [], []
 
 # Gradio and friends: data files (frontend build, templates), metadata (importlib.metadata
 # version lookups), and every submodule (uvicorn and fastapi import some by name).
+# CHANGED(WIN-M, WIN-R4): was: no "mcp"; now collected, because the desktop app serves MCP by
+# default (gradio[mcp] -> the mcp package). See overnight/windows-app/CHANGES.md
 for pkg in ("gradio", "gradio_client", "safehttpx", "groovy", "uvicorn", "fastapi", "starlette",
-            "webview"):
+            "webview", "mcp"):
     try:
         d, b, h = collect_all(pkg)
     except Exception as e:  # a package missing from the venv must fail loudly, not silently
@@ -99,7 +101,9 @@ a = Analysis(  # noqa: F821
     excludes=["tkinter", "matplotlib", "IPython", "pytest"],
     # Gradio reads its own source files at run time (e.g. inspect, .pyi event stubs); keep it as
     # plain .py files on disk rather than only bytecode inside the archive.
-    module_collection_mode={"gradio": "py", "gradio_client": "py"},
+    # CHANGED(WIN-R4): was: coal_app as bytecode only; now .py too (gr.api / MCP read the tool
+    # functions' source/docstrings). See overnight/windows-app/CHANGES.md
+    module_collection_mode={"gradio": "py", "gradio_client": "py", "coal_app": "py"},
     noarchive=False,
 )
 pyz = PYZ(a.pure)  # noqa: F821
