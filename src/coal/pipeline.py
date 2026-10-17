@@ -155,7 +155,12 @@ def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
         widths = column_widths(digit_rows, ncol)
         two_pass = nogap or nomismatch
 
-        dest_dir = os.path.dirname(os.path.abspath(out_path)) if out_path else None
+        # CHANGED(ENG-a): was always temp-file-then-rename next to out_path (replaced symlinks,
+        # FIFOs and devices; mode 0600); now renames only onto a regular/new file (symlinks
+        # resolved), writes other paths directly. See overnight/engine-fixes/CHANGES.md
+        real_out = os.path.realpath(out_path) if out_path else None
+        direct = bool(real_out) and os.path.exists(real_out) and not os.path.isfile(real_out)
+        dest_dir = os.path.dirname(real_out) if out_path and not direct else None
         tmp = tempfile.NamedTemporaryFile("w", delete=False, newline="\n", dir=dest_dir,
                                           prefix=".coal_", suffix=".tmp", encoding="ascii")
         stage = tempfile.NamedTemporaryFile("w+", delete=False, newline="\n", prefix=".coal_rows_",
@@ -179,8 +184,15 @@ def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
                     pid, exp = line.rstrip("\n").split("\t", 1)
                     tmp.file.write(fasta_record(pid, apply_slices(exp, sl)))
             tmp.close()
-            if out_path:
-                os.replace(tmp.name, out_path)
+            if out_path and not direct:
+                umask = os.umask(0)
+                os.umask(umask)
+                os.chmod(tmp.name, 0o666 & ~umask)  # CHANGED(ENG-a): was 0600; see CHANGES.md
+                os.replace(tmp.name, real_out)
+            elif out_path:
+                with open(tmp.name, "r", encoding="ascii", newline="\n") as fh, \
+                        open(out_path, "w", encoding="ascii", newline="\n") as dst:
+                    shutil.copyfileobj(fh, dst, 1 << 20)
             else:
                 with open(tmp.name, "r", encoding="ascii", newline="\n") as fh:
                     out = sys.stdout
