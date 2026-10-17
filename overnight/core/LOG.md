@@ -1,6 +1,52 @@
 # Overnight log: core (branch overnight/core)
 
-(Morning summary will be written here at the end.)
+## Morning summary — run 1 (C++ core prompt)
+
+**Done** (all on local branch `overnight/core`; nothing pushed — no GitHub credentials on this machine)
+- Task 0 preflight → OK (cmake 4.4.4, g++ 11.4, C++17 + threads)
+- Task 1 Python `-output clustal|paml|codon` → `2d80616`
+- Task 2 C++ core `coal-cpp` → `4eb39aa` (golden), `5266c9d` (random + threads tests), `e1dd30c` (speed), `7add571` (benchmarks)
+- Task 3 run report `--report` / `--json` → `f1373a2`
+- Task 4 `coal: summary:` lines + genetic-code hint → `f1373a2` (same commit; built together with the report)
+
+**Golden checks:** Python 279/279, C++ 279/279 (every case × every variant in tests/cases.json, incl. clustal/paml/codon).
+
+**C++ vs Python random test:** 1000/1000 identical (stdout, full stderr, exit code), ~7 s; `-j 1/2/3` identical on a 2-batch dataset in every format.
+
+**Speed (measured, 2-core Linux VM, data on local disk, medians):**
+| dataset | Python -j1 | C++ 1 thread | C++ 2 threads | speed-up |
+|---|---|---|---|---|
+| 10,000 × 500 | 0.593 s | 0.114 s | 0.097 s | 6.1× |
+| 100 × 10,000 | 0.149 s | 0.027 s | 0.023 s | 6.4× |
+| 100,000 × 500 | 3.559 s | 0.952 s | 0.881 s | 4.0× |
+C++ peak memory < 30 MB on the 137 MB input. Details: benchmarks/results/cpp_vs_python_linux.md.
+
+**Parked:** `-output codon` residue-line quirk of PAL2NAL with frameshift digits 4/5 (see Decisions) — no golden covers it.
+
+**Needs a human decision:** add `build/` to .gitignore; untracked `Claude outputs/` folder in the repo root (not mine, left alone); C++ does not yet print the `coal: summary:` lines or support `--report` (Python only — run 2's task 7 may add it).
+
+**How to build and try it**
+Linux/macOS:
+```
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j
+./build/coal-cpp tests/fixtures/long_mismatch/pep.fasta tests/fixtures/long_mismatch/nuc.fasta -output codon
+PYTHONPATH=src python -m coal tests/fixtures/clean/pep.fasta tests/fixtures/clean/nuc.fasta -output paml -o out.paml --report report.json
+python -m unittest discover -s tests            # Python engine (needs PYTHONPATH=src or pip install -e .)
+COAL_IMPL=cpp python -m unittest tests.test_differential
+python tests/test_differential.py --count       # "279/279 golden checks"
+python benchmarks/run_bench.py --impl both --sizes 10000x500
+```
+Windows (PowerShell, Visual Studio Build Tools + CMake installed):
+```
+cmake -S . -B build
+cmake --build build --config Release
+.\build\Release\coal-cpp.exe tests\fixtures\long_mismatch\pep.fasta tests\fixtures\long_mismatch\nuc.fasta -output codon
+$env:PYTHONPATH="src"; python -m coal tests\fixtures\clean\pep.fasta tests\fixtures\clean\nuc.fasta -output paml -o out.paml --report report.json
+$env:COAL_IMPL="cpp"; $env:COAL_CPP_BIN="build\Release\coal-cpp.exe"; python -m unittest tests.test_differential
+```
+Push when happy: `git push -u origin overnight/core`
+
+(Timestamps below come from the VM's `date` and may not match UK time.)
 
 ## Progress log
 
