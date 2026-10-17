@@ -97,7 +97,14 @@ def main() -> int:
     ap.add_argument("--cpp-bin", default=str(ROOT / "build" / "coal-cpp"), help="coal-cpp executable")
     ap.add_argument("--data-dir", type=Path, default=DATA,
                     help="where generated datasets are cached (default benchmarks/data)")
+    ap.add_argument("--tier", choices=["A", "B", "C", "D", "E", "baseline"],
+                    help="run a manifest-driven tier of the Windows release benchmark (see tiers.py); "
+                         "other options are ignored")
+    ap.add_argument("--workers", type=int, default=10, help="--tier: concurrent cases in correctness passes")
     a = ap.parse_args()
+    if a.tier:
+        import tiers
+        return tiers.main(a)
     if a.impl:
         a.no_pal2nal = True
     cpp_bin = Path(a.cpp_bin)
