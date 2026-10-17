@@ -13,6 +13,10 @@ on:
       - ".github/workflows/pages.yml"
       - ".github/workflows/release.yml"
       - "tests_app/test_site.py"
+  # CHANGED(SHIP-1): new. The site's download buttons depend on a published release (FIN-A9), but the site was only
+  # rebuilt on a push to main, so a release published after that push left "first release coming soon" in place.
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
