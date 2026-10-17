@@ -3,9 +3,17 @@ import re
 import subprocess
 import sys
 import tempfile
+import shutil
 import unittest
 
 from coal_app import core, viewer
+
+
+def _tmpdir(test):
+    d = tempfile.mkdtemp(prefix="coal_test_")
+    test.addCleanup(shutil.rmtree, d, True)
+    return d
+
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -40,7 +48,7 @@ class TestViewer(unittest.TestCase):
 
     def test_broken_gene_shows_frameshift(self):
         p, d = core.example_paths("one_broken_gene")
-        r = core.run_coal(p, d, out_dir=tempfile.mkdtemp(prefix="coal_test_"))
+        r = core.run_coal(p, d, out_dir=_tmpdir(self))
         page = viewer.view(p, r.output_path, r.report, d)
         m = re.search(r'<td class="([^"]*)" id="coalv-OG0001_sp14-c(\d+)"', page)
         self.assertIsNotNone(m)

@@ -46,7 +46,7 @@ def wrap(seq: str, width: int = 60) -> str:
 
 
 def write_fasta(path: str, records: list[tuple[str, str]]) -> None:
-    with open(path, "w", newline="\n") as fh:
+    with open(path, "w", encoding="utf-8", newline="\n") as fh:
         for name, seq in records:
             fh.write(f">{name}\n{wrap(seq)}\n")
 
@@ -94,7 +94,7 @@ def write_dataset(name: str, proteins: list[tuple[str, str]], dnas: list[tuple[s
     os.makedirs(d, exist_ok=True)
     write_fasta(os.path.join(d, "protein.aln.fasta"), proteins)
     write_fasta(os.path.join(d, "dna.fasta"), dnas)
-    with open(os.path.join(d, "README.md"), "w", newline="\n") as fh:
+    with open(os.path.join(d, "README.md"), "w", encoding="utf-8", newline="\n") as fh:
         fh.write(readme.strip() + "\n")
 
 

@@ -1,8 +1,13 @@
-"""Race: PAL2NAL (once per gene, as typical pipelines run it) vs one batched COAL run.
+"""Race: PAL2NAL once per gene family (as pipelines call it) vs one batched COAL run on all families.
 
-    python demo/race.py                         # 300 synthetic genes x 400 codons
-    python demo/race.py --genes 1000 --codons 500
-    python demo/race.py --protein pep.aln --dna nuc.fasta   # your own data
+    python demo/race.py                              # 300 synthetic gene families x 4 sequences x 400 codons
+    python demo/race.py --families 1000 --seqs 2     # e.g. 1000 ortholog pairs
+    python demo/race.py --family pep1.aln nuc1.fa --family pep2.aln nuc2.fa   # your own families
+
+Pipelines (OrthoFinder-style ortholog groups, pairwise dN/dS) call PAL2NAL once per gene family:
+one protein alignment + its DNA per call. COAL can do the same, but it can also take all families in
+one run (rows padded with trailing gaps to one width), which is what is raced here. Outputs are checked
+family by family against PAL2NAL's (COAL's padding columns removed).
 
 PAL2NAL is NOT included (GPL-2.0). This script runs *your* local copy, by default
 PAL2NAL/pal2nal.v14/pal2nal.pl as fetched by `python scripts/fetch_pal2nal.py`.
@@ -62,27 +67,62 @@ def read_fasta(path):
 
 
 def write_fasta(path, recs):
-    with open(path, "w", newline="\n") as fh:
+    with open(path, "w", encoding="utf-8", newline="\n") as fh:
         for n, s in recs:
             fh.write(f">{n}\n")
             for i in range(0, len(s), 60):
                 fh.write(s[i:i + 60] + "\n")
 
 
-def make_synthetic(workdir, genes, codons, seed=7):
-    """Synthetic aligned proteins + their DNA, using examples/make_examples.py helpers."""
+def make_synthetic(workdir, families, seqs, codons, seed=7):
+    """Synthetic gene families (aligned proteins + their DNA), using examples/make_examples.py helpers.
+    Returns [(protein_path, dna_path)], one pair of files per family."""
     spec = importlib.util.spec_from_file_location("make_examples", os.path.join(ROOT, "examples", "make_examples.py"))
     mx = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mx)
     rng = random.Random(seed)
     cmap = mx.codon_map(mx.CODE1)
-    rows = mx.make_family(rng, genes, codons)
-    names = [f"gene{i + 1:05d}" for i in range(genes)]
-    prot = os.path.join(workdir, "race.pep.fasta")
-    dna = os.path.join(workdir, "race.nuc.fasta")
-    write_fasta(prot, list(zip(names, rows)))
-    write_fasta(dna, [(n, mx.back_translate(rng, r.replace("-", ""), cmap)) for n, r in zip(names, rows)])
-    return prot, dna
+    out = []
+    for f in range(families):
+        rows = mx.make_family(rng, seqs, codons)
+        names = [f"fam{f + 1:05d}_sp{k + 1}" for k in range(seqs)]
+        prot = os.path.join(workdir, f"fam{f + 1:05d}.pep.fasta")
+        dna = os.path.join(workdir, f"fam{f + 1:05d}.nuc.fasta")
+        write_fasta(prot, list(zip(names, rows)))
+        write_fasta(dna, [(n, mx.back_translate(rng, r.replace("-", ""), cmap)) for n, r in zip(names, rows)])
+        out.append((prot, dna))
+    return out
+
+
+def batch_families(fams, workdir):
+    """All families in one protein alignment + one DNA file (rows padded with trailing gaps).
+    Returns (protein_path, dna_path, {id: protein row width})."""
+    prot_all, dna_all, width = [], [], {}
+    for p, d in fams:
+        prot_all += read_fasta(p)
+        dna_all += read_fasta(d)
+    ids = [n for n, _ in prot_all]
+    if len(set(ids)) != len(ids):
+        raise ValueError("sequence IDs must be unique across families to batch them")
+    w = max((len(r) for _, r in prot_all), default=0)
+    for n, r in prot_all:
+        width[n] = len(r)
+    prot = os.path.join(workdir, "all.pep.fasta")
+    dna = os.path.join(workdir, "all.nuc.fasta")
+    write_fasta(prot, [(n, r + "-" * (w - len(r))) for n, r in prot_all])
+    write_fasta(dna, dna_all)
+    return prot, dna, width
+
+
+def unpad(records, ref_len):
+    """Cut COAL's rows from the batch to the length of PAL2NAL's row for the same ID (the rest is the
+    padding added to batch the families). Returns None if anything but gaps was cut off, or an ID is unknown."""
+    out = []
+    for n, s in records:
+        if n not in ref_len or s[ref_len[n]:].strip("-"):
+            return None
+        out.append((n, s[:ref_len[n]]))
+    return out
 
 
 # ---------------------------------------------------------------- racers
@@ -100,25 +140,22 @@ class Racer:
         return (self.t1 or time.perf_counter()) - self.t0
 
 
-def run_pal2nal_per_gene(r, perl, pal2nal, prot_recs, dna_recs, workdir, deadline):
-    dna = dict(dna_recs)
+# CHANGED(APP-8): was PAL2NAL once per sequence of one family (measured process start-up); now once per gene
+# family vs one COAL run on all families. See overnight/app/CHANGES.md
+def run_pal2nal_per_family(r, perl, pal2nal, fams, workdir, deadline):
     out = []
     r.t0 = time.perf_counter()
     try:
-        for name, row in prot_recs:
-            p = os.path.join(workdir, "one.pep")
-            d = os.path.join(workdir, "one.nuc")
-            write_fasta(p, [(name, row)])
-            write_fasta(d, [(name, dna[name])])
+        for p, d in fams:
             left = deadline - time.perf_counter()
             if left <= 0:
                 raise TimeoutError("time limit reached")
             res = subprocess.run([perl, pal2nal, p, d, "-output", "fasta"], capture_output=True, text=True,
-                                 timeout=left)
+                                 encoding="utf-8", errors="replace", timeout=left)
             if res.returncode != 0 or not res.stdout.startswith(">"):
-                raise RuntimeError(f"PAL2NAL failed on {name}: {res.stderr.strip()[:200]}")
+                raise RuntimeError(f"PAL2NAL failed on {os.path.basename(p)}: {res.stderr.strip()[:200]}")
             fa = os.path.join(workdir, "one.out")
-            with open(fa, "w") as fh:
+            with open(fa, "w", encoding="utf-8") as fh:
                 fh.write(res.stdout)
             out.extend(read_fasta(fa))
             r.done += 1
@@ -131,8 +168,8 @@ def run_pal2nal_per_gene(r, perl, pal2nal, prot_recs, dna_recs, workdir, deadlin
 def run_batched(r, cmd, out_path, deadline):
     r.t0 = time.perf_counter()
     try:
-        res = subprocess.run(cmd + ["-o", out_path], capture_output=True, text=True,
-                             timeout=max(1.0, deadline - time.perf_counter()))
+        res = subprocess.run(cmd + ["-o", out_path], capture_output=True, text=True, encoding="utf-8",
+                             errors="replace", timeout=max(1.0, deadline - time.perf_counter()))
         if res.returncode not in (0, 2):
             raise RuntimeError(res.stderr.strip()[:300])
         r.records = read_fasta(out_path)
@@ -148,7 +185,7 @@ def bar(r, width=28):
     frac = r.done / r.total if r.total else 1
     fill = int(frac * width)
     state = "error" if r.error else ("done" if r.t1 else "")
-    return f"  {r.label:<26} [{'#' * fill}{'.' * (width - fill)}] {r.done:>6}/{r.total} genes {r.elapsed:8.2f} s  {state}"
+    return f"  {r.label:<30} [{'#' * fill}{'.' * (width - fill)}] {r.done:>6}/{r.total} families {r.elapsed:8.2f} s  {state}"
 
 
 def find_cpp():
@@ -165,10 +202,12 @@ def main(argv=None):
     ap.add_argument("--pal2nal", default=DEFAULT_PAL2NAL, help="path to your local pal2nal.pl")
     ap.add_argument("--perl", default=shutil.which("perl") or "perl", help="Perl interpreter")
     ap.add_argument("--cpp", help="path to the C++ COAL binary (default: look in cpp/build/)")
-    ap.add_argument("--protein", help="your protein alignment (FASTA); default: synthetic data")
-    ap.add_argument("--dna", help="your coding DNA (FASTA)")
-    ap.add_argument("--genes", type=int, default=300)
-    ap.add_argument("--codons", type=int, default=400)
+    ap.add_argument("--family", nargs=2, action="append", metavar=("PEP_ALN", "NUC_FASTA"),
+                    help="one of your gene families (protein alignment FASTA + its DNA); repeat it. "
+                         "Default: synthetic families")
+    ap.add_argument("--families", type=int, default=300, help="synthetic gene families (default 300)")
+    ap.add_argument("--seqs", type=int, default=4, help="sequences per synthetic family (default 4)")
+    ap.add_argument("--codons", type=int, default=400, help="codons per synthetic gene (default 400)")
     ap.add_argument("--timeout", type=float, default=900, help="give up after this many seconds")
     args = ap.parse_args(argv)
 
@@ -178,46 +217,46 @@ def main(argv=None):
     if not shutil.which(args.perl) and not os.path.isfile(args.perl):
         print("Perl was not found. PAL2NAL needs Perl 5 (Windows: Strawberry Perl). Use --perl /path/to/perl.")
         return 0
-    if bool(args.protein) != bool(args.dna):
-        ap.error("give both --protein and --dna, or neither")
     if os.name == "nt":
         os.system("")  # enable ANSI escape codes in the Windows console
 
     work = tempfile.mkdtemp(prefix="coal_race_")
     try:
-        if args.protein:
-            prot, dna = args.protein, args.dna
+        if args.family:
+            fams = [tuple(x) for x in args.family]
         else:
-            print(f"Making {args.genes} synthetic genes x {args.codons} codons ...")
-            prot, dna = make_synthetic(work, args.genes, args.codons)
-        prot_recs, dna_recs = read_fasta(prot), read_fasta(dna)
-        n = len(prot_recs)
-        missing = [p for p, _ in prot_recs if p not in dict(dna_recs)]
-        if missing:
-            print(f"Protein and DNA IDs must match for the per-gene run (e.g. {missing[0]} has no DNA).")
+            print(f"Making {args.families} synthetic gene families x {args.seqs} sequences x {args.codons} codons ...")
+            fams = make_synthetic(work, args.families, args.seqs, args.codons)
+        try:
+            prot, dna, width = batch_families(fams, work)
+        except ValueError as e:
+            print(f"Cannot batch these families: {e}")
             return 1
+        n = len(fams)
         deadline = time.perf_counter() + args.timeout
         racers = []
         threads = []
-        r_p = Racer("PAL2NAL (once per gene)", n)
+        r_p = Racer("PAL2NAL (once per family)", n)
         racers.append(r_p)
-        threads.append(threading.Thread(target=run_pal2nal_per_gene, daemon=True,
-                                        args=(r_p, args.perl, args.pal2nal, prot_recs, dna_recs,
-                                              os.path.join(work, "p"), deadline)))
         os.makedirs(os.path.join(work, "p"))
-        r_c = Racer("COAL (one batched run)", n)
+        threads.append(threading.Thread(target=run_pal2nal_per_family, daemon=True,
+                                        args=(r_p, args.perl, args.pal2nal, fams, os.path.join(work, "p"),
+                                              deadline)))
+        r_c = Racer("COAL (one run, all families)", n)
         racers.append(r_c)
         threads.append(threading.Thread(target=run_batched, daemon=True, args=(
             r_c, [sys.executable, "-m", "coal", prot, dna, "-j", "1"], os.path.join(work, "coal.fa"), deadline)))
         cpp = args.cpp or find_cpp()
         if cpp:
-            r_x = Racer("COAL C++ (one batched run)", n)
+            r_x = Racer("COAL C++ (one run)", n)
             racers.append(r_x)
             threads.append(threading.Thread(target=run_batched, daemon=True,
                                             args=(r_x, [cpp, prot, dna], os.path.join(work, "cpp.fa"), deadline)))
 
         tty = sys.stdout.isatty()
-        print(f"\nRace: {n} genes\n")
+        nseq = len(width)
+        print(f"\nRace: {n} gene families ({nseq} sequences). PAL2NAL is called once per gene family, "
+              f"as pipelines call it; COAL runs once on all of them.\n")
         for t in threads:
             t.start()
         stop = threading.Event()
@@ -248,7 +287,8 @@ def main(argv=None):
             ref = dict(base.records)
             for r in racers[1:]:
                 if r.records is not None:
-                    same = dict(r.records) == ref and len(r.records) == len(base.records)
+                    mine = unpad(r.records, {k: len(v) for k, v in ref.items()})
+                    same = mine is not None and dict(mine) == ref and len(mine) == len(base.records)
                     print(f"  {r.label} output {'MATCHES' if same else 'DIFFERS FROM'} PAL2NAL's.")
         return 0 if not any(r.error for r in racers) else 1
     finally:

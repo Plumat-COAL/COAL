@@ -23,6 +23,8 @@ def tidy(obj):
     text = json.dumps(obj, indent=2) if not isinstance(obj, str) else obj
     text = text.replace(ROOT.replace("\\", "\\\\"), "<COAL>").replace(ROOT, "<COAL>")
     tmp = tempfile.gettempdir()
+    for runs in (core.RUNS_DIR.replace("\\", "\\\\"), core.RUNS_DIR):
+        text = re.sub(re.escape(runs) + r"[\\/]+run_[A-Za-z0-9_]+", "<tmp>", text)
     text = re.sub(re.escape(tmp.replace("\\", "\\\\")) + r"[\\/]+coal_[A-Za-z0-9_]+", "<tmp>", text)
     text = re.sub(re.escape(tmp) + r"[\\/]+coal_[A-Za-z0-9_]+", "<tmp>", text)
     return text.replace("\\\\", "/")
@@ -36,6 +38,15 @@ def call(fn, **kw):
 
 
 def main():
+    import shutil
+    core.RUNS_DIR = tempfile.mkdtemp(prefix="coal_demo_runs_")  # private, deleted below
+    try:
+        _main()
+    finally:
+        shutil.rmtree(core.RUNS_DIR, ignore_errors=True)
+
+
+def _main():
     broken = core.example_paths("one_broken_gene")
     mito = core.example_paths("mito")
     r1 = call(tools.codon_align, protein_alignment_path=broken[0], dna_fasta_path=broken[1])
@@ -86,7 +97,7 @@ real output of the tool functions on this machine (COAL engine {f.version}), reg
 | 0:00 | Chat window | "Bioinformatics tools are built for people at a terminal. COAL is also built for AI assistants." |
 | 0:05 | Type the prompt below | "I'll ask in plain English, like a biologist would." |
 | 0:12 | Tool call `codon_align` on one_broken_gene | "It calls COAL directly. No copy-pasting commands, no file-format guessing." |
-| 0:20 | Tool call `explain_report` | "COAL found the problem gene, and it says *where*: a missing base at column 102." |
+| 0:20 | Tool call `explain_report` | "COAL found the problem gene, and COAL's app estimates *where*: probably a missing base at column 102." |
 | 0:30 | Assistant's answer | "The assistant can explain it because COAL explains it: plain words, not a stack trace." |
 | 0:38 | Second prompt (mito) | "Now mitochondrial genes, with the wrong settings, as people often do." |
 | 0:45 | `codon_align` -> hint -> `codon_align` with code 2 | "COAL spots the wrong genetic code, suggests code 2, the assistant re-runs it. Everything fits." |
@@ -99,8 +110,8 @@ real output of the tool functions on this machine (COAL engine {f.version}), reg
 **Prompt 2:**
 > Same for examples/mito.
 
-Expected assistant answer to prompt 1 (paraphrased): "OG0001_sp14 failed: one DNA base is missing at
-alignment column 102 (a frameshift), so the codons after it are out of step. Check that gene's sequence
+Expected assistant answer to prompt 1 (paraphrased): "OG0001_sp14 failed: COAL's app estimates that one DNA
+base is missing at alignment column 102 (a frameshift), so the codons after it are out of step. Check that gene's sequence
 (likely a sequencing or assembly error). COAL stopped there, so no alignment was written yet: drop that gene
 and re-run, or (with a COAL that has `--keep-going`) align the other 19 now." With a `--keep-going` engine
 the first call already returns the alignment of the 19 good genes, and the answer starts "19 of 20 are fine".

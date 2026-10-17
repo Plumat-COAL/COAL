@@ -1,9 +1,17 @@
 import json
 import os
 import tempfile
+import shutil
 import unittest
 
 from coal_app import core
+
+
+def _tmpdir(test):
+    d = tempfile.mkdtemp(prefix="coal_test_")
+    test.addCleanup(shutil.rmtree, d, True)
+    return d
+
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -21,32 +29,32 @@ class TestSampleReport(unittest.TestCase):
         self.assertEqual(set(r["options"]), {"output_format", "codontable", "nogap", "nomismatch", "keep_going"})
         self.assertEqual({i["role"] for i in r["inputs"]}, {"protein", "dna"})
 
-    def test_counts(self):
+    def test_counts(self):  # APP-15: the sample is now a real run of examples/mito with code 1
         r = self.rep
-        self.assertEqual(len(r["sequences"]), 20)
+        self.assertEqual(len(r["sequences"]), 24)
         st = [s["status"] for s in r["sequences"]]
-        self.assertEqual((st.count("ok"), st.count("warning"), st.count("failed")), (17, 2, 1))
-        self.assertEqual(r["summary"], {"total": 20, "ok": 17, "warning": 2, "failed": 1, "pairing": "id"})
+        self.assertEqual((st.count("ok"), st.count("warning"), st.count("failed")), (0, 24, 0))
+        self.assertEqual(r["summary"], {"total": 24, "ok": 0, "warning": 24, "failed": 0, "pairing": "id"})
         self.assertEqual([h["code"] for h in r["hints"]], ["genetic_code"])
         self.assertEqual(r["hints"][0]["suggested_codontable"], 2)
 
     def test_explain_and_rows(self):
         text = core.explain(self.rep)
-        self.assertIn("1 failed", text)
-        self.assertIn("OG0001_sp14", text)
-        self.assertIn("frameshift", text)
+        self.assertIn("24 with warnings", text)
+        self.assertIn("Homo_COX1", text)
+        self.assertIn("genetic code 2", text)
         rows = core.health_rows(self.rep)
-        self.assertEqual(len(rows), 20)
+        self.assertEqual(len(rows), 24)
         for icon, word, sid, sentence in rows:
             self.assertTrue(icon and word and sid and sentence)  # never colour alone
         html = core.health_table_html(self.rep)
         self.assertIn("<caption>", html)
-        self.assertLess(html.index("OG0001_sp14"), html.index("OG0001_sp01"))  # problems first
+        self.assertIn("Homo_COX1", html)
 
     def test_load_report_rejects_other_json(self):
         with tempfile.TemporaryDirectory() as t:
             p = os.path.join(t, "x.json")
-            with open(p, "w") as fh:
+            with open(p, "w", encoding="utf-8") as fh:
                 json.dump({"hello": 1}, fh)
             with self.assertRaises(ValueError):
                 core.load_report(p)
@@ -82,7 +90,7 @@ class TestHelpers(unittest.TestCase):
 class TestRunsOnExamples(unittest.TestCase):
     def run_example(self, name, **kw):
         p, d = core.example_paths(name)
-        t = tempfile.mkdtemp(prefix="coal_test_")
+        t = _tmpdir(self)
         return core.run_coal(p, d, out_dir=t, **kw)
 
     def test_clean(self):
@@ -104,8 +112,11 @@ class TestRunsOnExamples(unittest.TestCase):
 
     def test_messy_ids_hint(self):
         r = self.run_example("messy_ids")
-        self.assertIn("id_mismatch", [h["code"] for h in r.hints])
-        if r.report["summary"].get("pairing") != "normalised":  # engine without ID normalisation
+        if core.detect_features().report:  # newer engine: its own report and ID normalisation
+            self.assertEqual(r.report["summary"]["pairing"], "normalised")
+        else:  # this engine: no normalisation, pairs by order, the app's hint explains why
+            self.assertEqual(r.report["summary"]["pairing"], "order")
+            self.assertIn("id_mismatch", [h["code"] for h in r.hints])
             self.assertIn("version", r.hints[0]["text"])
 
     def test_broken_gene_is_named(self):
@@ -113,22 +124,23 @@ class TestRunsOnExamples(unittest.TestCase):
         failed = [s["id"] for s in r.report["sequences"] if s["status"] == "failed"]
         self.assertEqual(failed, ["OG0001_sp14"])
         self.assertIn("OG0001_sp14", core.explain(r.report))
-        if r.exit_code == 1:
+        if core.detect_features().keep_going:  # engine with --keep-going: the 19 good genes are written
+            self.assertEqual(r.exit_code, 2)
+            self.assertIsNotNone(r.output_path)
+        else:  # this engine stops at the broken gene
+            self.assertEqual(r.exit_code, 1)
             self.assertIsNone(r.output_path)
 
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class TestMethodsText(unittest.TestCase):
     def test_from_sample_report(self):
         m = core.methods_text(core.load_sample_report())
-        self.assertIn("COAL v0.4.0", m)
+        self.assertIn("COAL (demo)", m)  # APP-15
         self.assertIn("standard genetic code (NCBI translation table 1)", m)
-        self.assertIn("Of 20 sequences, 17 matched", m)
-        self.assertIn("1 could not be aligned and was excluded", m)
-        self.assertIn("Command: coal pep.aln", m)
+        self.assertIn("Of 24 sequences, 0 matched", m)
+        self.assertIn("24 contained codons that did not match", m)
+        self.assertIn("Command: coal protein.aln.fasta dna.fasta -o protein.codon.fasta", m)
 
     def test_engine_text_wins(self):
         rep = dict(core.load_sample_report(), methods_text="Engine sentence.")
@@ -136,7 +148,7 @@ class TestMethodsText(unittest.TestCase):
 
     def test_real_run_uses_basenames_and_options(self):
         p, d = core.example_paths("mito")
-        r = core.run_coal(p, d, codontable=2, nogap=True, out_dir=tempfile.mkdtemp(prefix="coal_test_"))
+        r = core.run_coal(p, d, codontable=2, nogap=True, out_dir=_tmpdir(self))
         m = core.methods_text(r.report)
         self.assertIn("vertebrate mitochondrial genetic code (NCBI translation table 2)", m)
         self.assertIn("gaps or stop codons were removed", m)
@@ -146,6 +158,13 @@ class TestMethodsText(unittest.TestCase):
 
     def test_no_text_without_output(self):
         p, d = core.example_paths("one_broken_gene")
-        r = core.run_coal(p, d, out_dir=tempfile.mkdtemp(prefix="coal_test_"))
-        if r.output_path is None:
+        r = core.run_coal(p, d, out_dir=_tmpdir(self))
+        if core.detect_features().keep_going:  # output written: the methods text counts the failed gene
+            self.assertIn("1 could not be aligned", core.methods_text(r.report))
+        else:
+            self.assertIsNone(r.output_path)
             self.assertEqual(core.methods_text(r.report), "")
+
+
+if __name__ == "__main__":
+    unittest.main()

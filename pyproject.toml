@@ -17,6 +17,9 @@ fast = ["numpy"]   # optional: speeds up the codon check on large inputs (BSD li
 # NOTE: pin not verified against PyPI (no PyPI access when written); see overnight/app/LOG.md.
 gui = ["gradio[mcp]==5.49.1"]
 # Stand-alone stdio MCP server (python -m coal_app --mcp), no Gradio needed.
+# CHANGED(APP-C11): was silent; now documented: install `gui` and `mcp` in SEPARATE environments. gradio[mcp] 5.x
+# probably needs mcp 1.x while this pins 2.2.0 (unverified: no PyPI here). CI installs each extra in its own job
+# and the "Info: gui + mcp extras in one environment" job reports whether they resolve together.
 mcp = ["mcp==2.2.0"]
 
 [project.scripts]
@@ -29,3 +32,11 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 coal_app = ["*.json"]
+
+# CHANGED(APP-C12): was not shipped (an installed wheel found no examples); now installed under
+# <prefix>/share/coal/examples, where coal_app.core looks after COAL_EXAMPLES_DIR and a repo checkout.
+[tool.setuptools.data-files]
+"share/coal/examples/clean" = ["examples/clean/README.md", "examples/clean/dna.fasta", "examples/clean/protein.aln.fasta"]
+"share/coal/examples/mito" = ["examples/mito/README.md", "examples/mito/dna.fasta", "examples/mito/protein.aln.fasta"]
+"share/coal/examples/messy_ids" = ["examples/messy_ids/README.md", "examples/messy_ids/dna.fasta", "examples/messy_ids/protein.aln.fasta"]
+"share/coal/examples/one_broken_gene" = ["examples/one_broken_gene/README.md", "examples/one_broken_gene/dna.fasta", "examples/one_broken_gene/protein.aln.fasta"]
