@@ -93,7 +93,8 @@ class TestTruthfulResult(_PrivateRuns):
         r = tools.codon_align(p, d, codontable=1)
         self.assertLessEqual(len(r["problems"]), tools.MAX_PROBLEMS)
         self.assertEqual(r["problems_total"], 24)
-        self.assertGreater(r["warning_lines"], 24)
+        # CHANGED(IMP-E-C): was > 24 (every per-codon line); `coal` now prints 20 and "... and N more" by default
+        self.assertIn(r["warning_lines"], (20, 21))
         self.assertFalse([ln for ln in r["engine_messages"] if ln.startswith("coal: warning:")])
         self.assertLess(len(json.dumps(r)), 12000)
 

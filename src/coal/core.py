@@ -31,6 +31,7 @@ AS_X = set("BZJOU")  # accepted but treated as 'X' (with a warning), like PAL2NA
 AS_X_NAMES = {"U": "selenocysteine", "O": "pyrrolysine", "B": "D or N", "Z": "E or Q", "J": "I or L"}  # FIN-C14
 _VALID = re.compile(r"[^-ACDEFGHIKLMNPQRSTVWY*XBZJOU0-9]")
 _DIGIT = re.compile(r"[0-9]")
+_MORE_THAN_3_RES = re.compile(r"[^-0-9](?:[-0-9]*[^-0-9]){3}")  # CHANGED(IMP-E-H): _note_ambiguous's quick test
 _AS_X = re.compile("[" + "".join(sorted(AS_X)) + "]")
 _CODON = re.compile(r"...", re.S)
 _GAPCHAR = re.compile("-")
@@ -487,7 +488,9 @@ def _note_ambiguous(res: Threaded, table: int, dna: str, row: str, toks=None) ->
     """CHANGED(FZ-6): new. A protein of at most 3 residues often fits in several places of a longer DNA (e.g. inside
     a 5' UTR); like PAL2NAL, COAL takes the leftmost, and now says so. stdout is unchanged.
     See overnight/integration/CHANGES.md"""
-    if len(row) - row.count(GAP) - sum(row.count(d) for d in "0123456789") > AMBIGUOUS_MAX_RESIDUES:
+    # CHANGED(IMP-E-H): was 11 str.count calls over the whole row on every sequence (0.57 s on 50k); now one regex
+    # that stops at the 4th residue (any character but a gap or a frameshift digit). Same rule
+    if _MORE_THAN_3_RES.search(row):
         return  # the common case, decided without building tokens
     toks = toks if toks is not None else _tokens(row, START)
     nres = sum(1 for t in toks if t[0] == "r")

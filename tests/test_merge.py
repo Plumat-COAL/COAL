@@ -243,6 +243,7 @@ class TestMrg3KeepGoing(_Tmp):
 # ------------------------------------------------------------------ MRG-4 --resume / --progress compose
 def interrupt(cmd, cwd, after=2, extra_env=None):
     env = {**ENV, "COAL_BATCH_NT": "20000", "COAL_CHECKPOINT_EVERY": "0",
+           "COAL_TEST_HOOKS": "1",  # CHANGED(IMP-E-I): the hooks need this too
            "COAL_TEST_PAUSE_AFTER_CHECKPOINT": str(after), **(extra_env or {})}
     p = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
     dog = threading.Timer(60, p.kill)

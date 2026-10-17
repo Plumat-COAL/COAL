@@ -89,10 +89,16 @@ class Progress:
         self.printed = True
 
 
+def _test_hooks() -> bool:
+    """CHANGED(IMP-E-I): the test hooks below act only when COAL_TEST_HOOKS=1 is set as well, so a stray
+    COAL_TEST_PAUSE_* variable can never make a real run sleep. See overnight/integration/CHANGES.md"""
+    return os.environ.get("COAL_TEST_HOOKS") == "1"
+
+
 def _test_pause(count: int) -> None:
-    """Test hook: COAL_TEST_PAUSE_AFTER_CHECKPOINT=k stops here after the k-th checkpoint (so a test can kill
-    the run at a known point)."""
-    if os.environ.get("COAL_TEST_PAUSE_AFTER_CHECKPOINT") == str(count):
+    """Test hook: COAL_TEST_HOOKS=1 and COAL_TEST_PAUSE_AFTER_CHECKPOINT=k stop here after the k-th checkpoint (so a
+    test can kill the run at a known point)."""
+    if _test_hooks() and os.environ.get("COAL_TEST_PAUSE_AFTER_CHECKPOINT") == str(count):
         print(f"coal: test: paused after checkpoint {count}", file=sys.stderr, flush=True)
         time.sleep(3600)
 
@@ -649,6 +655,14 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
             def _shown(warns):  # the warnings -blockonly keeps (as on stderr)
                 return [w for w in warns if not (keep_col and (m := _ALNPOS.search(" " + w))
                                                  and not keep_col(int(m.group(1))))]
+            if note and warn and not nomismatch:
+                # CHANGED(IMP-E-B): the genetic-code suggestion comes first, before the per-codon warnings it explains
+                # (was only in the last summary line, after e.g. 834 warnings on coxI). See overnight/integration/CHANGES.md
+                from .report import early_code_notice
+                hint = early_code_notice(rows(), lambda k: dna.get(pairing[k]), table, nseq,
+                                         rec.fit_memo if rec is not None else None)
+                if hint:
+                    note(hint)
             done = start
             prog = Progress(nseq) if progress and nseq > PROGRESS_MIN_SEQS else None
             last_ck = time.monotonic()

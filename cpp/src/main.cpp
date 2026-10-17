@@ -87,7 +87,7 @@ struct Options {
     int jobs = 0;
     bool keep_going = false, progress = false, resume = false, json = false;
     bool resumable = true;  // CPP-28 (reference MRG-4): false when an input came through a pipe (spooled)
-    int max_warnings = 0;
+    int max_warnings = 20;  // CHANGED(IMP-E-C): was 0 (no limit); cli.py MAX_WARNINGS
     std::string report;
     std::vector<std::string> argv;  // raw arguments (for the report's "command")
 };
@@ -731,7 +731,14 @@ struct Checkpoint {
     }
 };
 
+// CHANGED(IMP-E-I): test hooks act only with COAL_TEST_HOOKS=1 as well (pipeline.py _test_hooks)
+static bool test_hooks() {
+    const char* v = std::getenv("COAL_TEST_HOOKS");
+    return v && std::string(v) == "1";
+}
+
 static void test_pause(int count) {
+    if (!test_hooks()) return;
     const char* v = std::getenv("COAL_TEST_PAUSE_AFTER_CHECKPOINT");
     if (v && std::to_string(count) == v) {
         std::cerr << "coal: test: paused after checkpoint " << count << std::endl;
@@ -1048,6 +1055,11 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
             sink.f << paml_header(nseq, wtotal);
         }
 
+        // CHANGED(IMP-E-B): the genetic-code suggestion before the per-codon warnings (pipeline.py early_code_notice)
+        if (!o.quiet && !o.nomismatch) {
+            std::string hint = early_code_notice(rows_fn, dna_fn, o.table, nseq, rec.fit_memo);
+            if (!hint.empty()) note(hint);
+        }
         // pass 2: batches of ~BATCH_NT nucleotides; thread batch k while reading batch k+1
         ProteinReader pr(o.pep);
         {
@@ -1132,7 +1144,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
             }
             std::cerr.flush();
             if (prog) prog->update(done);
-            if (ck && ck->count == 0 && done < nseq && std::getenv("COAL_TEST_PAUSE_BEFORE_CHECKPOINT")) {
+            if (ck && ck->count == 0 && done < nseq && test_hooks() && std::getenv("COAL_TEST_PAUSE_BEFORE_CHECKPOINT")) {
                 sink.f.flush();  // tests (CPP-28): partial files exist, no checkpoint describes them yet
                 std::cerr << "coal: test: paused before any checkpoint" << std::endl;
                 std::this_thread::sleep_for(std::chrono::seconds(3600));
@@ -1379,6 +1391,7 @@ int main(int argc, char** argv) {
 
     RunReport rec(o.argv, o.pep, o.nucs, o.out, o.fmt, o.table, o.nogap, o.nomismatch, o.keep_going,
                   !o.report.empty() || o.json, o.strict, o.blockonly);
+    rec.want_hint = !o.quiet || !o.report.empty() || o.json;  // CHANGED(IMP-E-D)
     install_signal_handlers();  // CPP-18 (reference ENG-f, R2-E8, DEC-3)
     // CPP-17 (reference ENG-b, R2-E7): pipes, /dev/stdin and FIFOs are copied to temp files first; messages name
     // the argument, not the temp copy
@@ -1437,7 +1450,8 @@ int main(int argc, char** argv) {
         rec.fail("file_error", restore_names(e.what()), false);
     }
     if (hidden) {
-        std::string where = (!o.report.empty() || o.json) ? "see the report" : "see them all with --report FILE.json";
+        std::string where = (!o.report.empty() || o.json) ? "see the report"
+                                                           : "see them all with --max-warnings 0 or --report FILE.json";
         std::cerr << "coal: warning: ... and " << fmt_n(hidden) << " more warnings (" << where << ")\n";
     }
     rec.exit_code = rc;
