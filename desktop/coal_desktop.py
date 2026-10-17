@@ -724,8 +724,11 @@ def sniff_sequence_file(path: str, max_bytes: int = 256 * 1024) -> str:
 
 
 def classify_dropped_files(paths) -> dict:
-    """Sort dropped paths into {'protein': path|None, 'dna': path|None, 'other': [paths]}."""
-    out = {"protein": None, "dna": None, "other": []}
+    """Sort dropped paths into {'protein': path|None, 'dna': path|None, 'other': [paths], 'extra': [(kind, path)]}
+    ('extra': a second protein or DNA file; only the first of each kind is used)."""
+    # CHANGED(R3-A6): was a second file of a kind put in 'other' ("COAL couldn't tell whether this is a protein
+    # alignment or DNA"); now in 'extra', so files_to_load can say only one is used. See overnight/integration/CHANGES.md
+    out = {"protein": None, "dna": None, "other": [], "extra": []}
     for p in paths:
         if not p or not os.path.isfile(p):
             out["other"].append(p)
@@ -733,6 +736,8 @@ def classify_dropped_files(paths) -> dict:
         kind = sniff_sequence_file(p)
         if kind in ("protein", "dna") and out[kind] is None:
             out[kind] = p
+        elif kind in ("protein", "dna"):
+            out["extra"].append((kind, p))
         else:
             out["other"].append(p)
     return out
@@ -833,6 +838,11 @@ def files_to_load(paths, current: dict) -> tuple[dict, str]:
     for p in c["other"]:
         lines.append(f"{os.path.basename(p or '')}: COAL couldn't tell whether this is a protein alignment or "
                      "DNA. Type or paste its path into the box it belongs in.")
+    # CHANGED(R3-A6): new message for a second file of the same kind. See overnight/integration/CHANGES.md
+    for kind in ("protein", "dna"):
+        if any(k == kind for k, _ in c["extra"]):
+            what = "protein alignment" if kind == "protein" else "DNA file"
+            lines.append(f"Only one {what} can be loaded at a time; using {c[kind]}.")
     if (c["protein"] or c["dna"]) and not (want["protein"] and want["dna"]):
         lines.append("Now add the coding DNA (box 2)." if want["protein"] else
                      "Now add the protein alignment (box 1).")

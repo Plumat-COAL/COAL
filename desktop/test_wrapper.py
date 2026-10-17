@@ -462,6 +462,20 @@ class TestDroppedFiles(unittest.TestCase):
             self.assertEqual((r["protein"], r["dna"]), (p, d))
             self.assertEqual(r["other"], [os.path.join(REPO, "missing.fa")])
 
+    def test_two_files_of_one_kind(self):  # R3-A6
+        d1 = os.path.join(REPO, "examples", "clean", "dna.fasta")
+        d2 = os.path.join(REPO, "examples", "mito", "dna.fasta")
+        p1 = os.path.join(REPO, "examples", "clean", "protein.aln.fasta")
+        p2 = os.path.join(REPO, "examples", "mito", "protein.aln.fasta")
+        want, msg = cd.files_to_load([d1, d2], {})
+        self.assertEqual(want["dna"], d1)
+        self.assertIn("Only one DNA file can be loaded at a time; using " + d1, msg)
+        self.assertNotIn("couldn't tell", msg)
+        want, msg = cd.files_to_load([p1, p2, d1], {})
+        self.assertEqual((want["protein"], want["dna"]), (p1, d1))
+        self.assertIn("Only one protein alignment can be loaded at a time; using " + p1, msg)
+        self.assertNotIn("couldn't tell", msg)
+
     def test_clustal_bom_crlf_and_unaligned_protein(self):
         tmp = tempfile.mkdtemp()
         try:

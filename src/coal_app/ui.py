@@ -97,8 +97,8 @@ def run_ui(protein, dna, fmt, code, nogap, nomismatch, protein_path="", dna_path
     # CHANGED(APP-L1): was uploads only; now a typed/pasted path (local only) wins over an upload and is read
     # in place, never copied. See overnight/app/CHANGES.md
     try:
-        protein, _ = core.resolve_input(protein, protein_path)
-        dna, _ = core.resolve_input(dna, dna_path)
+        protein, p_desc = core.resolve_input(protein, protein_path)
+        dna, d_desc = core.resolve_input(dna, dna_path)
     except ValueError as e:
         return _results({}, None, None, "", "", str(e), f"### ✖ Could not use that file\n{e}")
     if not protein or not dna:
@@ -113,7 +113,9 @@ def run_ui(protein, dna, fmt, code, nogap, nomismatch, protein_path="", dna_path
         return _results({}, None, None, "", "", str(e), f"### ✖ Could not run\n{e}")
     s = r.report.get("summary", {})
     head = core.banner_head(r.ok, s, r.hints)  # CHANGED(R2-A1): see core.banner_head
-    banner = f"{head}\n{core.summary_sentence(r.report)}"
+    # CHANGED(R3-A5): was no file names in the banner; now it says which files were used (path box or upload).
+    # See overnight/integration/CHANGES.md
+    banner = f"{head}\n{core.summary_sentence(r.report)}\n\nFiles used: protein {p_desc}; DNA {d_desc}."
     view_html, view_path = "", None
     try:
         # CHANGED(R2-A3): was viewer.view twice (fragment + page); now rendered once
@@ -122,6 +124,10 @@ def run_ui(protein, dna, fmt, code, nogap, nomismatch, protein_path="", dna_path
         view_html = f"<p>Could not draw the alignment: {e}</p>"
     return _results(r.report, r.output_path, r.report_path, r.coal_cmd, r.pal2nal_cmd, r.stderr, banner,
                     view_html, view_path)
+
+
+def _clear_path(_upload):
+    return ""
 
 
 def show_sample():
@@ -199,6 +205,10 @@ def build(demo_mode: bool = False) -> gr.Blocks:
         run_btn.click(run_ui, inputs, outputs, show_api=False)
         protein_path.change(core.path_status, protein_path, protein_info, show_api=False)
         dna_path.change(core.path_status, dna_path, dna_info, show_api=False)
+        # CHANGED(R3-A5): was an upload silently ignored while its path box held a path ("Open with" fills the
+        # boxes and a path wins); now uploading a file clears that box. See overnight/integration/CHANGES.md
+        protein.upload(_clear_path, protein, protein_path, show_api=False)
+        dna.upload(_clear_path, dna, dna_path, show_api=False)
 
         if local:
             # Desktop wrappers: open http://127.0.0.1:7860/?protein=<path>&dna=<path> (URL-encoded) to fill the

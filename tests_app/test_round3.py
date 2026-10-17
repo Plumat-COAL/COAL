@@ -317,6 +317,96 @@ class TestR3A4DemoTimeoutsStopWorkers(unittest.TestCase):  # R3-A4
         self.assertEqual([n for n in os.listdir(out) if n.startswith(".coal_")], [])
 
 
+_EVENTS = {"click", "change", "upload", "load", "then", "submit"}
+
+
+class _Comp:
+    """Stand-in for any Gradio object: records constructor arguments and event wiring."""
+    REG: list = []
+
+    def __init__(self, name="", parent=None, args=(), kw=None):
+        self._name, self._parent, self._args, self._kw = name, parent, args, kw or {}
+
+    def __getattr__(self, n):
+        if n.startswith("__"):
+            raise AttributeError(n)
+        return _Comp(n, self)
+
+    def __call__(self, *a, **kw):
+        if self._name in _EVENTS and self._parent is not None:
+            _Comp.REG.append((self._parent, self._name, a, kw))
+            return _Comp("chain")
+        return _Comp(self._name, None, a, kw)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def __iter__(self):
+        return iter(())
+
+
+def _stub_gradio():
+    import types
+    mod = types.ModuleType("gradio")
+    mod.__getattr__ = lambda n: _Comp(n)
+    mod.update = lambda **kw: _Comp("update", None, (), kw)
+    return mod
+
+
+class TestR3A5UploadAfterPath(RunsDirCase):  # R3-A5
+    def setUp(self):
+        super().setUp()
+        saved = {k: sys.modules.get(k) for k in ("gradio", "coal_app.ui")}
+
+        def restore():
+            for k, v in saved.items():
+                if v is None:
+                    sys.modules.pop(k, None)
+                else:
+                    sys.modules[k] = v
+        self.addCleanup(restore)
+        sys.modules["gradio"] = _stub_gradio()
+        sys.modules.pop("coal_app.ui", None)
+        import importlib
+        self.ui = importlib.import_module("coal_app.ui")
+        _Comp.REG = []
+
+    def _label(self, comp):
+        return str(comp._kw.get("label", ""))
+
+    def test_upload_clears_its_path_box(self):
+        self.ui.build()
+        found = {}
+        for comp, ev, a, kw in _Comp.REG:
+            if ev != "upload":
+                continue
+            outs = kw.get("outputs", a[2] if len(a) > 2 else None)
+            outs = outs if isinstance(outs, (list, tuple)) else [outs]
+            fn = kw.get("fn", a[0] if a else None)
+            found[self._label(comp)] = ([self._label(o) for o in outs], fn)
+        prot = next((k for k in found if k.startswith("1. Protein")), None)
+        dna = next((k for k in found if k.startswith("2. ")), None)
+        self.assertIsNotNone(prot, found)
+        self.assertIsNotNone(dna, found)
+        for k in (prot, dna):
+            labels, fn = found[k]
+            self.assertEqual(len(labels), 1, labels)
+            self.assertTrue(labels[0].startswith("or type/paste a path"), labels)
+            self.assertEqual(fn("/tmp/x.fa"), "")
+            self.assertEqual(fn(None), "")
+
+    def test_banner_names_the_files_used(self):
+        p, d = core.example_paths("clean")
+        out = self.ui.run_ui(None, None, "fasta", 1, False, False, p, d)
+        banner = out[0]._kw["value"]
+        self.assertIn("protein.aln.fasta", banner)
+        self.assertIn("dna.fasta", banner)
+        self.assertIn("read in place", banner)
+
+
 class TestR3E1AppParsesNewNotice(unittest.TestCase):  # R3-E1
     def test_new_notice_with_ambiguous_count(self):
         line = ("coal: warning: g: no 10-residue segment of the protein was found in the DNA; codons were assigned "
