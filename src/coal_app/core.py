@@ -51,6 +51,17 @@ EXAMPLES = {
     "one_broken_gene": ("One broken gene", "19 good genes and one with a frameshift."),
 }
 
+# CHANGED(PRE-1): new. The settings each example runs with; an example button puts them into the form (so the
+# dropdown and checkboxes show what ran) before it runs. Before, an example ran with whatever the form held, so
+# after "Re-run with genetic code 2" on the Mitochondrial genes, "One broken gene" ran with code 2 (19 healthy
+# genes as warnings). Every example uses the standard code 1: the Mitochondrial genes deliberately so (the demo
+# shows the genetic-code tip; pitch/PITCH.md). The output format stays the user's choice (it does not change
+# what is found). See overnight/integration/CHANGES.md
+EXAMPLE_SETTINGS: dict[str, dict] = {
+    name: {"codontable": 1, "nogap": False, "nomismatch": False, "strict": False, "blockonly": False}
+    for name in EXAMPLES
+}
+
 # NCBI genetic codes supported by COAL/PAL2NAL, with plain names.
 GENETIC_CODES: dict[int, str] = {
     1: "Standard (nuclear genes of most organisms)",
@@ -957,7 +968,7 @@ def genetic_code_hint(protein, dna, table, report, work_dir) -> dict | None:
     mismatches (not a frameshift-like run), probably-unrelated, excluded or unchecked genes ask for a hint; every gene
     (up to PROBE_SAMPLE, problem genes first) is re-run under each candidate code; a gene fits when it has no definite
     mismatch and no probably-unrelated notice; the text says what was tested; ties go to the code closest to the
-    current one, and other codes that fit as well are named; a start-codon-only problem says so.
+    current one (CHANGED(PRE-4): to code 1 when it is tied), and other codes that fit as well are named; a start-codon-only problem says so.
     See overnight/integration/CHANGES.md
 
     Each probe has a short time limit and all probes run within PROBE_BUDGET seconds; every probe file is deleted."""
@@ -1011,6 +1022,10 @@ def genetic_code_hint(protein, dna, table, report, work_dir) -> dict | None:
     top = max(f for f, _ in results)
     tied = sorted((c for f, c in results if f == top),
                   key=lambda c: (_code_distance(table, c)[0], CANDIDATE_CODES.index(c)))
+    # CHANGED(PRE-4): the standard code 1 first when it is among the tied codes (as the engine, coal/report.py)
+    standard = 1 in tied and len(tied) > 1
+    if standard:
+        tied = [1] + [x for x in tied if x != 1]
     c = tied[0]
     n, total = len(tested), len(seqs)
     name = GENETIC_CODES[c]
@@ -1036,7 +1051,8 @@ def genetic_code_hint(protein, dna, table, report, work_dir) -> dict | None:
                               else [str(tied[1])])
         closer = _code_distance(table, c)[0] < _code_distance(table, tied[1])[0]
         text += (f" Code{'s' if len(tied) > 2 else ''} {others} fit{'' if len(tied) > 2 else 's'} "
-                 + (f"as well, but code {c} differs least from code {table}." if closer else
+                 + ("as well, but code 1 is the standard code, used by most nuclear genes." if standard else
+                    f"as well, but code {c} differs least from code {table}." if closer else
                     "these sequences too: choose the code of the organism and organelle the genes come from."))
     text += f" Re-run with code {c}?"
     return {"code": "genetic_code", "text": text, "suggested_codontable": c}
@@ -1370,6 +1386,7 @@ def _closing_sentence(text: str) -> str:
 
 
 HEALTH_MAX_ROWS = 200
+HEALTH_GROUP_SHOWN = 3  # CHANGED(PRE-3): rows shown of a group that shares its closing sentence; the rest on demand
 HEALTH_OK_NAMES = 2000  # CHANGED(GUI-4): OK genes are named in one collapsed row, at most this many
 
 
@@ -1417,9 +1434,32 @@ def health_table_html(report: dict, links: bool = False, preview: dict | None = 
             if t:
                 tails.setdefault((s.get("status"), t), []).append(s)
     shared = {id(x): k[1] for k, g in tails.items() if len(g) >= 3 for x in g}
+    # CHANGED(PRE-3): such a group listed every row (24 under "⚠ 24 genes: Kept in the alignment; check the genetic
+    # code."); now its first HEALTH_GROUP_SHOWN rows, then the others under one "Show N more" disclosure (a
+    # native <details>, as gr.HTML runs no scripts) right after them, each with its own jump links
+    later = {}
+    for g in tails.values():
+        if len(g) > HEALTH_GROUP_SHOWN:
+            later[id(g[HEALTH_GROUP_SHOWN - 1])] = g[HEALTH_GROUP_SHOWN:]
+    hidden = {id(x) for g in later.values() for x in g}
     told = set()
     done = set()
+
+    def row(s, sentence):
+        icon, word, cls = STATUS.get(s.get("status"), ("?", str(s.get("status")), ""))
+        pair = ""
+        if s.get("dna_id") and s.get("dna_id") != s.get("id"):
+            pair = f'<br><span class="coal-small">paired with DNA {html.escape(str(s["dna_id"]))}</span>'
+        return (f'<tr class="coal-{cls}"><td><span class="coal-badge coal-{cls}" aria-hidden="true">{icon}</span> '
+                f'<strong>{word}</strong></td><td><code>{html.escape(str(s.get("id", "")))}</code>{pair}</td>'
+                f'<td>{html.escape(sentence)}{_jump_links(s, preview=preview) if links else ""}</td></tr>')
+
+    def short(s):
+        sentence = sequence_sentence(s)
+        return sentence[:-len(shared[id(s)])].rstrip() if id(s) in shared else sentence
     for s in seqs:
+        if id(s) in hidden:
+            continue
         icon, word, cls = STATUS.get(s.get("status"), ("?", str(s.get("status")), ""))
         if id(s) in grouped:
             key = (s.get("status"), sequence_sentence(s))
@@ -1433,22 +1473,21 @@ def health_table_html(report: dict, links: bool = False, preview: dict | None = 
                 f'<strong>{word}</strong></td><td colspan="2">{html.escape(key[1])}<details><summary>{len(g):,} genes'
                 f'</summary><p class="coal-oklist">{names}</p></details></td></tr>')
             continue
-        sentence = sequence_sentence(s)
         if id(s) in shared:
             tail = shared[id(s)]
-            sentence = sentence[:-len(tail)].rstrip()
             if (s.get("status"), tail) not in told:
                 told.add((s.get("status"), tail))
                 n = len(tails[(s.get("status"), tail)])
                 out.append(f'<tr class="coal-{cls} coal-shared"><td colspan="3"><span class="coal-badge coal-{cls}" '
                            f'aria-hidden="true">{icon}</span> <strong>{n:,} genes:</strong> {html.escape(tail)}</td></tr>')
-        pair = ""
-        if s.get("dna_id") and s.get("dna_id") != s.get("id"):
-            pair = f'<br><span class="coal-small">paired with DNA {html.escape(str(s["dna_id"]))}</span>'
-        out.append(
-            f'<tr class="coal-{cls}"><td><span class="coal-badge coal-{cls}" aria-hidden="true">{icon}</span> '
-            f'<strong>{word}</strong></td><td><code>{html.escape(str(s.get("id", "")))}</code>{pair}</td>'
-            f'<td>{html.escape(sentence)}{_jump_links(s, preview=preview) if links else ""}</td></tr>')
+        out.append(row(s, short(s)))
+        if id(s) in later:  # CHANGED(PRE-3): the rest of its group, on demand
+            more = later[id(s)]
+            out.append(f'<tr class="coal-morerows"><td colspan="3"><details><summary>Show {len(more):,} '
+                       f'more</summary><table class="coal-health coal-nested"><thead class="coal-sr"><tr>'
+                       f'<th scope="col">Status</th><th scope="col">Sequence</th><th scope="col">What this means</th>'
+                       f'</tr></thead><tbody>{"".join(row(x, short(x)) for x in more)}</tbody></table></details>'
+                       f'</td></tr>')
     if rest:
         kinds = {}
         for s in rest:

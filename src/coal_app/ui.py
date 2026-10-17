@@ -137,11 +137,25 @@ summary:focus-visible, [tabindex]:focus-visible {
 #coal-code .wrap, #coal-format .wrap, #coal-set-code .wrap, #coal-set-format .wrap { border-color:var(--coal-field) !important; }
 #coal-more, #coal-paths, #coal-view, #coal-details { border-top:1px solid var(--coal-line) !important;
   border-radius:0 !important; }
+/* CHANGED(PRE-2): a scrollbar showed under every collapsed accordion. Gradio 5.49.1 (js/accordion
+   Accordion.svelte) turns the title's ▼ icon by rotate(90deg) when closed; the icon is a flex item taller than
+   wide, so its turned box stuck out a few px past the right edge, and the block (js/atoms Block.svelte: inline
+   overflow:auto) scrolled. It did not show before GUI-13, whose block_padding has no sides (the icon now sits on
+   the edge). The icon is a square now, so turning it changes nothing outside it. */
+button.label-wrap > span.icon { display:inline-flex; align-items:center; justify-content:center; flex:none;
+  width:1.4em; height:1.4em; line-height:1; transform-origin:50% 50%; }
 #coal-tabs [role="tablist"] > button:first-child { padding-left:0; }
 /* Gradio joins the fields of a row into one .form with no gap; keep a gap between the two boxes */
 .form:has(#coal-code), .form:has(#coal-set-code) { gap:var(--layout-gap) !important; background:transparent !important; }
 #coal-hint-rerun, #coal-set-reset, #coal-view-dl { align-self:flex-start; width:auto !important; flex:0 0 auto !important; }
 .coal-health tr.coal-shared td { color:var(--coal-muted); border-bottom:0; padding-bottom:0.2em; }
+/* CHANGED(PRE-3): the rest of a long group of rows, under "Show N more" (a nested table of the same columns) */
+.coal-health tr.coal-morerows > td { white-space:normal; padding:0.45em 0; }
+.coal-health tr.coal-morerows > td > details > summary { padding-left:calc(6px + 0.7em); color:var(--coal-info); }
+.coal-health .coal-nested { margin-top:0.45em; }
+.coal-health .coal-nested tr:last-child td { border-bottom:0; }
+.coal-sr { position:absolute !important; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden;
+  clip:rect(0 0 0 0); white-space:nowrap; border:0; }
 /* in the app the health table above already lists every problem with its jump link: the view's own heading and
    problem list (kept in the downloadable page) are not repeated here */
 #coal-view div.coalv > h2, #coal-view div.coalv > ul.issues, #coal-view div.coalv > details.hidden-issues {
@@ -415,6 +429,13 @@ def centre_ui(ctx, column):
             gr.update(value=core.health_table_html(report, links=True, preview=info)))
 
 
+def example_form(name: str) -> tuple:
+    """CHANGED(PRE-1): the form values an example runs with: genetic code, remove gap columns, remove mismatched
+    columns, refuse probably-wrong genes, keep only marked columns (core.EXAMPLE_SETTINGS)."""
+    e = core.EXAMPLE_SETTINGS[name]
+    return e["codontable"], e["nogap"], e["nomismatch"], e["strict"], e["blockonly"]
+
+
 def _clear_path(_upload):
     return ""
 
@@ -660,14 +681,17 @@ def build(demo_mode: bool = False) -> gr.Blocks:
 
             demo.load(fill_from_url, None, [protein_path, dna_path, paths_box], show_api=False)
 
+        # CHANGED(PRE-1): an example also sets the genetic code and the four options to its own settings
+        # (core.EXAMPLE_SETTINGS), shown in the form, before it runs; it ran with whatever the form held (after
+        # "Re-run with genetic code 2", "One broken gene" ran with code 2). A user's own files keep the form as is.
         for name, btn in ex_buttons.items():
             p, d = core.example_paths(name)
 
-            def load_example(p=p, d=d):
-                return p, d, "", ""
+            def load_example(p=p, d=d, name=name):
+                return (p, d, "", "", *example_form(name))
 
-            btn.click(load_example, None, [protein, dna, protein_path, dna_path], show_api=False).then(
-                run_ui, inputs, outputs, show_api=False)
+            btn.click(load_example, None, [protein, dna, protein_path, dna_path, code, nogap, nomismatch, strict,
+                                           blockonly], show_api=False).then(run_ui, inputs, outputs, show_api=False)
 
         sample_btn.click(show_sample, None, outputs, show_api=False)
 

@@ -331,6 +331,7 @@ class _Comp:
 
     def __init__(self, name="", parent=None, args=(), kw=None):
         self._name, self._parent, self._args, self._kw = name, parent, args, kw or {}
+        self._origin = None  # CHANGED(PRE-1): for a chain, the (component, event) it follows (".then" wiring)
 
     def __getattr__(self, n):
         if n.startswith("__"):
@@ -340,7 +341,9 @@ class _Comp:
     def __call__(self, *a, **kw):
         if self._name in _EVENTS and self._parent is not None:
             _Comp.REG.append((self._parent, self._name, a, kw))
-            return _Comp("chain")
+            chain = _Comp("chain")
+            chain._origin = (self._parent, self._name)
+            return chain
         return _Comp(self._name, None, a, kw)
 
     def __enter__(self):
