@@ -1,4 +1,10 @@
 cmake_minimum_required(VERSION 3.16)
+# Default to an optimised build. Set before project(): with MSVC and a single-config generator (Ninja,
+# NMake) project() would otherwise make Debug the default (CPP-7). Ignored by Visual Studio/Xcode
+# generators, which pick the configuration at build time (--config Release).
+if(NOT DEFINED CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL "")
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type (Release, Debug, RelWithDebInfo, MinSizeRel)")
+endif()
 project(coal_cpp VERSION 0.4.0 LANGUAGES CXX)
 
 # coal-cpp: C++17, standard library only. Builds with MSVC, Clang and GCC (Windows, macOS, Linux).
@@ -11,9 +17,6 @@ option(COAL_BUILD_TOOLS "Build coal-cpp-dump (test helper used by tests/test_cpp
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
-  set(CMAKE_BUILD_TYPE Release)
-endif()
 
 find_package(Threads REQUIRED)
 

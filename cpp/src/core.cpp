@@ -70,7 +70,8 @@ struct Target {
 
     // Does the triplet at pos encode a residue with these allowed codons?
     inline bool ok(long long pos, uint64_t allowed) const {
-        uint8_t a = code[pos], b = code[pos + 1], c = code[pos + 2];
+        const size_t i = (size_t)pos;  // CPP-7: explicit (size_t is 32-bit on 32-bit Windows: MSVC C4244)
+        uint8_t a = code[i], b = code[i + 1], c = code[i + 2];
         if ((a | b | c) & 0xF0) return false;  // 255 = not IUPAC (valid codes are 0..14)
         return (triplet[a * 225 + b * 15 + c] & ~allowed) == 0;
     }

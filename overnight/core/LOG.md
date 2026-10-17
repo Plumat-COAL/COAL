@@ -42,6 +42,7 @@ All six items are done. They are committed on the local branch `overnight/core`.
 6. **MSVC is not available here.** Its flags are set (`/W4 /permissive- /utf-8`, `/WX` with the CI option), and the code is clean under clang `-Wconversion`, which approximates MSVC's loss-of-data warnings. Please run one native Windows build:
    `cmake -S . -B build -DCOAL_WARNINGS_AS_ERRORS=ON && cmake --build build --config Release`
    - 2026-10-17 11:15 UTC: tried to run it on Chloe's Windows PC. Not possible: the PC has no Visual Studio or Build Tools (no VS developer prompts, no VS Installer, no Windows CMake in the Start menu), and the terminal can only be clicked, not typed into. Next step: install "Build Tools for Visual Studio 2022" with the "Desktop development with C++" workload (includes MSVC and CMake), or run a windows-latest GitHub Actions job (.github/ is outside this branch's files: human decision).
+   - 2026-10-17 11:23 UTC: Chloe installed Build Tools (MSVC 19.51, VS 18) and ran the build: it failed on core.cpp:73 (C4244 long long -> 32-bit size_t, x86 target) and was a Debug build by default. Fixed in CPP-7; the earlier 64-bit -Wconversion check could not see it (size_t is 64-bit there), so the clang check now also targets 32-bit Windows.
 7. **The local branch `overnight/merged`** (the merge with Keanu's integration branch, made earlier) is still unpushed and untouched.
 
 ## Morning summary (both overnight runs + code review)
