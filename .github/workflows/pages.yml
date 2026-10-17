@@ -57,10 +57,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view --repo "${{ github.repository }}" > /dev/null 2>&1; then
-            echo "A published release exists: download buttons kept."
+          # CHANGED(SHIP-14): was "a published release exists"; v0.4.0 was published with no files (its build failed),
+          # so the buttons were kept and every download gave a 404. Now the latest release must hold the installer.
+          if gh release view --repo "${{ github.repository }}" --json assets --jq '.assets[].name' 2>/dev/null \
+              | grep -qx "COAL-Setup-windows-x64.exe"; then
+            echo "The latest release has its files: download buttons kept."
           else
-            echo "::warning::No published release yet: download buttons replaced by the install-from-source notice."
+            echo "::warning::No release with files yet: download buttons replaced by the install-from-source notice."
             # CHANGED(WEB-13): every page (was _site/index.html only); pages without download links are left as they are
             python scripts/site_without_release.py _site/*.html
           fi
