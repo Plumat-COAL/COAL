@@ -1,4 +1,4 @@
-# PAL2NAL reference distribution: no licence found, so never commit it.
+# PAL2NAL reference distribution (GPL-2.0): not redistributed, so never commit it.
 # Fetch locally with: python scripts/fetch_pal2nal.py
 PAL2NAL/
 *.tar.gz

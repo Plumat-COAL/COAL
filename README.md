@@ -140,9 +140,10 @@ with the machine and software versions.
 ## Reference implementation (PAL2NAL)
 
 COAL is an independent implementation. PAL2NAL v14 is used only as a
-black-box reference for differential testing and benchmarking. Its distribution
-has no licence file, so **it is not included in this repository** and its code
-and test data must not be copied here.
+black-box reference for differential testing and benchmarking. PAL2NAL is
+distributed under the GNU General Public License v2.0 (GPL-2.0). COAL contains
+no PAL2NAL code, so **PAL2NAL is not included or redistributed in this
+repository**, and its code and test data must not be copied here.
 
 To fetch it locally (into `PAL2NAL/`, which is git-ignored):
 
@@ -174,4 +175,4 @@ protein sequence alignments into the corresponding codon alignments.
 
 ## Licence
 
-COAL is released under the MIT License (see `LICENSE`). This does not cover PAL2NAL.
+COAL is released under the MIT License (see `LICENSE`). This does not cover PAL2NAL, which is a separate program licensed under GPL-2.0 and used only as an external reference for testing.

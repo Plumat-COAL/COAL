@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Fetch the PAL2NAL v14 reference distribution into PAL2NAL/ (git-ignored).
 
-PAL2NAL has no licence file, so it is never committed to this repository.
+PAL2NAL is licensed under GPL-2.0 and COAL contains none of its code, so it is
+never committed to or redistributed from this repository.
 Every developer fetches it locally with this script.
 
 Usage:
