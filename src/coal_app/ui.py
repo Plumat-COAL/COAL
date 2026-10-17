@@ -7,7 +7,6 @@ Offline: no CDN fonts (system fonts only) and analytics disabled.
 from __future__ import annotations
 
 import os
-import tempfile
 
 os.environ.setdefault("GRADIO_ANALYTICS_ENABLED", "False")
 
@@ -15,7 +14,6 @@ import gradio as gr  # noqa: E402
 
 from . import core, tools, viewer  # noqa: E402
 
-RUNS_DIR = os.path.join(tempfile.gettempdir(), "coal_app_runs")
 
 # Okabe-Ito colour-blind-safe palette; every status also has an icon and a word.
 CSS = """
@@ -43,8 +41,7 @@ INTRO = """
 Give COAL a **protein alignment** and the **DNA** of the same genes. It lines the DNA up
 <abbr title="Three DNA letters that code for one amino acid">codon</abbr> by codon to match
 the protein alignment, and tells you in plain words about any gene that doesn't fit.
-Nothing leaves your computer.
-"""
+"""  # CHANGED(APP-11): was always "Nothing leaves your computer."; now core.intro_text() (local vs hosted)
 
 GLOSSARY = """
 - **Codon**: three DNA letters that code for one amino acid (for example ATG = M, methionine).
@@ -101,8 +98,7 @@ def run_ui(protein, dna, fmt, code, nogap, nomismatch):
         return _results({}, None, None, "", "", "",
                         "### ⚠ Please add both files\nUpload a protein alignment and a DNA FASTA file, "
                         "or press one of the **Try an example** buttons.")
-    os.makedirs(RUNS_DIR, exist_ok=True)
-    out_dir = tempfile.mkdtemp(prefix="run_", dir=RUNS_DIR)
+    out_dir = core.new_run_dir()  # CHANGED(APP-12): runs older than 24 h are pruned
     try:
         r = core.run_coal(protein, dna, fmt, int(code), bool(nogap), bool(nomismatch), out_dir=out_dir)
     except ValueError as e:
@@ -143,7 +139,7 @@ def build(demo_mode: bool = False) -> gr.Blocks:
         text_size=gr.themes.sizes.text_lg,
     )
     with gr.Blocks(title="COAL codon alignment", theme=theme, css=CSS, analytics_enabled=False) as demo:
-        gr.Markdown(INTRO)
+        gr.Markdown(INTRO + core.intro_text())
         with gr.Row():
             protein = gr.File(label="1. Protein alignment (FASTA or CLUSTAL)", type="filepath",
                               file_types=[".fasta", ".fa", ".faa", ".aln", ".fas", ".clustal", ".txt"])
@@ -218,9 +214,10 @@ def build(demo_mode: bool = False) -> gr.Blocks:
 
 
 def launch(host="127.0.0.1", port=7860, mcp=True, demo_mode=False, prevent_thread_lock=False):
-    os.makedirs(RUNS_DIR, exist_ok=True)
+    os.makedirs(core.RUNS_DIR, exist_ok=True)
+    core.prune_runs()  # CHANGED(APP-12): was never pruned; now runs older than 24 h are removed at startup
     demo = build(demo_mode)
     demo.launch(server_name=host, server_port=port, mcp_server=mcp, inbrowser=False,
-                allowed_paths=[core.EXAMPLES_DIR, RUNS_DIR, os.path.dirname(core.SAMPLE_REPORT)],
+                allowed_paths=[core.EXAMPLES_DIR, core.RUNS_DIR, os.path.dirname(core.SAMPLE_REPORT)],
                 prevent_thread_lock=prevent_thread_lock, show_error=True)
     return demo

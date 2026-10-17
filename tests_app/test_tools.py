@@ -1,6 +1,8 @@
 import asyncio
 import importlib.util
 import os
+import shutil
+import tempfile
 import unittest
 
 from coal_app import core, tools
@@ -10,7 +12,17 @@ def has_mcp2():
     return importlib.util.find_spec("mcp") is not None and importlib.util.find_spec("mcp.server.mcpserver") is not None
 
 
-class TestTools(unittest.TestCase):
+class _PrivateRuns(unittest.TestCase):
+    """Tool runs write into core.RUNS_DIR: use a private one per test and delete it afterwards."""
+
+    def setUp(self):
+        old = core.RUNS_DIR
+        core.RUNS_DIR = tempfile.mkdtemp(prefix="coal_test_runs_")
+        self.addCleanup(shutil.rmtree, core.RUNS_DIR, True)
+        self.addCleanup(setattr, core, "RUNS_DIR", old)
+
+
+class TestTools(_PrivateRuns):
     def test_codon_align_clean(self):
         p, d = core.example_paths("clean")
         r = tools.codon_align(p, d)
@@ -49,7 +61,7 @@ class TestTools(unittest.TestCase):
 
 
 @unittest.skipUnless(has_mcp2(), "mcp>=2 not installed")
-class TestStdioMcpServer(unittest.TestCase):
+class TestStdioMcpServer(_PrivateRuns):
     def test_lists_and_calls_tools(self):
         from coal_app import mcp_stdio
         s = mcp_stdio.build_server()
@@ -63,7 +75,7 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class TestMcpDemoScript(unittest.TestCase):
+class TestMcpDemoScript(_PrivateRuns):
     def test_demo_outputs_match_current_tools(self):
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         with open(os.path.join(root, "demo", "mcp_demo.md"), encoding="utf-8") as fh:

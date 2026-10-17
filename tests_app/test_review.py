@@ -327,5 +327,145 @@ class TestFinding18Encodings(unittest.TestCase):
         self.assertEqual(bad, [])
 
 
+class _RunsDir(unittest.TestCase):
+    """Point core.RUNS_DIR at a private folder for the test (and clean it up)."""
+
+    def setUp(self):
+        self._old_runs = core.RUNS_DIR
+        core.RUNS_DIR = _tmp(self)
+        self.addCleanup(setattr, core, "RUNS_DIR", self._old_runs)
+
+
+class TestFinding11HostedSandbox(_RunsDir):
+    def _hosted(self, on):
+        old = os.environ.get("COAL_HOSTED")
+        if on:
+            os.environ["COAL_HOSTED"] = "1"
+        else:
+            os.environ.pop("COAL_HOSTED", None)
+        self.addCleanup(lambda: os.environ.__setitem__("COAL_HOSTED", old) if old is not None
+                        else os.environ.pop("COAL_HOSTED", None))
+
+    def test_hosted_tools_refuse_paths_outside_the_sandbox(self):
+        from coal_app import tools
+        self._hosted(True)
+        t = _tmp(self)
+        secret = _write(os.path.join(t, "secret.fasta"), ">s1\nMAKL\n")
+        dna = _write(os.path.join(t, "dna.fasta"), ">s1\nATGGCTAAACTG\n")
+        r = tools.codon_align(secret, dna)
+        self.assertFalse(r["ok"])
+        self.assertIn("not allowed", r["error"])
+        self.assertNotIn("output_path", {k for k, v in r.items() if v})
+        for bad in (secret, "/etc/passwd", os.path.join(core.EXAMPLES_DIR, "..", "pyproject.toml")):
+            self.assertIn("not allowed", tools.explain_report(bad))
+        # a symlink inside the sandbox that points outside is refused too
+        link = os.path.join(core.RUNS_DIR, "link.fasta")
+        try:
+            os.symlink(secret, link)
+        except (OSError, NotImplementedError):
+            self.skipTest("symlinks not available")
+        self.assertIn("not allowed", tools.codon_align(link, dna)["error"])
+
+    def test_hosted_tools_still_work_on_examples_and_their_own_reports(self):
+        from coal_app import tools
+        self._hosted(True)
+        p, d = core.example_paths("clean")
+        r = tools.codon_align(p, d)
+        self.assertTrue(r["ok"], r)
+        self.assertIn("Nothing went wrong", tools.explain_report(r["report_path"]))
+
+    def test_local_tools_accept_any_path(self):
+        from coal_app import tools
+        self._hosted(False)
+        t = _tmp(self)
+        p = _write(os.path.join(t, "p.fasta"), ">s1\nMAKL\n")
+        d = _write(os.path.join(t, "d.fasta"), ">s1\nATGGCTAAACTG\n")
+        self.assertTrue(tools.codon_align(p, d)["ok"])
+
+    def test_intro_depends_on_where_it_runs(self):
+        self._hosted(False)
+        self.assertIn("Nothing leaves your computer", core.intro_text())
+        self._hosted(True)
+        text = core.intro_text()
+        self.assertNotIn("Nothing leaves your computer", text)
+        self.assertIn("Hugging Face", text)
+
+    def test_space_app_marks_itself_hosted_and_turns_mcp_off(self):
+        with open(os.path.join(ROOT, "src", "coal_app", "space_app.py"), encoding="utf-8") as fh:
+            src = fh.read()
+        self.assertIn('os.environ["COAL_HOSTED"] = "1"', src)
+        self.assertIn("mcp=False", src)
+        with open(os.path.join(ROOT, "space", "README.md"), encoding="utf-8") as fh:
+            readme = fh.read()
+        self.assertNotIn("Space as an MCP server", readme)
+
+
+class TestFinding12TempDirs(_RunsDir):
+    def test_probe_outputs_are_removed(self):
+        p, d = core.example_paths("mito")
+        t = _tmp(self)
+        r = core.run_coal(p, d, out_dir=t)
+        self.assertEqual([h["suggested_codontable"] for h in r.hints if h["code"] == "genetic_code"], [2])
+        self.assertEqual([f for f in os.listdir(t) if f.startswith("probe")], [])
+
+    def test_default_out_dir_is_under_runs_dir_not_tmp_root(self):
+        import glob
+        before = set(glob.glob(os.path.join(tempfile.gettempdir(), "coal_*")))
+        p, d = core.example_paths("clean")
+        r = core.run_coal(p, d, probe_codes=False)
+        self.assertTrue(os.path.realpath(r.output_path).startswith(os.path.realpath(core.RUNS_DIR) + os.sep))
+        self.assertEqual(set(glob.glob(os.path.join(tempfile.gettempdir(), "coal_*"))) - before, set())
+
+    def test_prune_runs_by_age(self):
+        import time
+        old = os.path.join(core.RUNS_DIR, "run_old")
+        new = os.path.join(core.RUNS_DIR, "run_new")
+        for x in (old, new):
+            os.makedirs(x)
+            _write(os.path.join(x, "f.txt"), "x")
+        past = time.time() - 25 * 3600
+        os.utime(old, (past, past))
+        os.utime(os.path.join(old, "f.txt"), (past, past))
+        removed = core.prune_runs(max_age_hours=24)
+        self.assertEqual(removed, 1)
+        self.assertFalse(os.path.exists(old))
+        self.assertTrue(os.path.exists(new))
+
+
+class TestFinding13ProbeCost(_RunsDir):
+    def test_probes_are_small_and_time_limited(self):
+        calls = []
+        real = core._run_engine
+
+        def spy(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, report_path, timeout=None):
+            calls.append((protein, len(core.read_ids(protein)), timeout))
+            return real(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, report_path, timeout=timeout)
+
+        core._run_engine = spy
+        self.addCleanup(setattr, core, "_run_engine", real)
+        # 250 sequences, every one with a TGA (W in code 2, stop in code 1): more than the 200-sequence sample
+        t = _tmp(self)
+        prot, dna = [], []
+        for i in range(250):
+            prot.append(f">s{i}\nMKWL\n")
+            dna.append(f">s{i}\nATGAAATGACTG\n")
+        p = _write(os.path.join(t, "p.fasta"), "".join(prot))
+        d = _write(os.path.join(t, "d.fasta"), "".join(dna))
+        r = core.run_coal(p, d, out_dir=t)
+        probes = calls[1:]
+        self.assertTrue(probes)
+        for protein, n, timeout in probes:
+            self.assertNotEqual(protein, p)  # a sample file, not the whole input
+            self.assertLessEqual(n, 200)
+            self.assertGreater(n, 0)
+            self.assertIsNotNone(timeout)
+            self.assertLessEqual(timeout, core.PROBE_TIMEOUT)
+        self.assertLessEqual(core.PROBE_TIMEOUT, 30)
+        hint = [h for h in r.hints if h["code"] == "genetic_code"]
+        self.assertEqual(hint[0]["suggested_codontable"], 2)
+        self.assertIn("200 of 200 sequences checked (a sample of the 250", hint[0]["text"])
+        self.assertEqual([f for f in os.listdir(t) if f.startswith("probe")], [])
+
+
 if __name__ == "__main__":
     unittest.main()

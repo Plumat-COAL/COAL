@@ -16,6 +16,11 @@ Upload a protein alignment and the coding DNA of the same genes; COAL lines the 
 codon, shows a plain-English health check per gene and an alignment view that marks exactly where
 a gene breaks. A fast, MIT-licensed alternative to PAL2NAL.
 
-AI agents can use the same Space as an MCP server (tools `codon_align` and `explain_report`).
+Files you upload are processed on this shared Hugging Face server and deleted within 24 hours (or when
+the Space restarts). For unpublished or sensitive data, install COAL on your own computer instead.
+
+AI agents: the MCP tools (`codon_align`, `explain_report`) work on files on the computer that runs them,
+so use them locally (`pip install "coal[mcp]"`, then `python -m coal_app --mcp`, or `coal-gui`, which also
+serves MCP). This public Space does not serve MCP.
 
 Source: https://github.com/chloe-newt/COAL

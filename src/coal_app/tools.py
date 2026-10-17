@@ -36,11 +36,16 @@ def codon_align(protein_alignment_path: str, dna_fasta_path: str, output_format:
         nothing was aligned), and stderr (COAL's raw messages).
     """
     for p in (protein_alignment_path, dna_fasta_path):
+        # CHANGED(APP-11): was any server path accepted; now only sandbox paths when hosted. See overnight/app/CHANGES.md
+        why = core.check_path_allowed(p)
+        if why:
+            return {"ok": False, "error": why, "output_path": None}
         if not os.path.isfile(p):
             return {"ok": False, "error": f"file not found: {p}", "output_path": None}
     try:
+        # CHANGED(APP-12): was a /tmp/coal_* folder never cleaned; now a pruned folder in core.RUNS_DIR
         r = core.run_coal(protein_alignment_path, dna_fasta_path, output_format, int(codontable),
-                          bool(nogap), bool(nomismatch))
+                          bool(nogap), bool(nomismatch), out_dir=core.new_run_dir())
     except ValueError as e:
         return {"ok": False, "error": str(e), "output_path": None}
     problems = [{"id": s.get("id"), "status": s.get("status"), "explanation": core.sequence_sentence(s)}
@@ -72,6 +77,9 @@ def explain_report(report_path: str) -> str:
         DNA were paired, one line per problem sequence with its likely cause (wrong genetic code,
         mismatched IDs, frameshift), suggested fixes, and a ready-to-paste methods sentence.
     """
+    why = core.check_path_allowed(report_path)  # CHANGED(APP-11): sandboxed when hosted
+    if why:
+        return f"Could not read the report: {why}"
     try:
         rep = core.load_report(report_path)
     except (OSError, ValueError) as e:

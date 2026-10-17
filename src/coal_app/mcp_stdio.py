@@ -26,5 +26,7 @@ def build_server():
 
 
 def main() -> int:
+    from . import core
+    core.prune_runs()  # CHANGED(APP-12): old run folders are removed at startup
     build_server().run("stdio")
     return 0

@@ -76,6 +76,76 @@ STATUS = {
 }
 
 ENGINE_TIMEOUT = 600  # seconds for one engine run
+PROBE_TIMEOUT = 30    # seconds for one genetic-code probe
+PROBE_BUDGET = 90     # seconds for all probes of one run together
+PROBE_SAMPLE = 200    # at most this many problem sequences are re-run per probe
+
+# Per-run output folders (GUI and MCP tools). Pruned by age; see prune_runs().
+RUNS_DIR = os.environ.get("COAL_RUNS_DIR") or os.path.join(tempfile.gettempdir(), "coal_app_runs")
+RUNS_MAX_AGE_HOURS = 24
+
+
+def prune_runs(max_age_hours: float = RUNS_MAX_AGE_HOURS) -> int:
+    """Delete run folders in RUNS_DIR not modified for max_age_hours. Returns how many were removed."""
+    import shutil
+    try:
+        names = os.listdir(RUNS_DIR)
+    except OSError:
+        return 0
+    cutoff = time.time() - max_age_hours * 3600
+    removed = 0
+    for n in names:
+        p = os.path.join(RUNS_DIR, n)
+        try:
+            if os.path.isdir(p) and not os.path.islink(p) and os.path.getmtime(p) < cutoff:
+                shutil.rmtree(p, ignore_errors=True)
+                removed += not os.path.exists(p)
+        except OSError:
+            continue
+    return removed
+
+
+def new_run_dir() -> str:
+    """A fresh folder for one run's outputs inside RUNS_DIR (old runs are pruned first)."""
+    os.makedirs(RUNS_DIR, exist_ok=True)
+    prune_runs()
+    return tempfile.mkdtemp(prefix="run_", dir=RUNS_DIR)
+
+
+# ---------------------------------------------------------------- local vs hosted
+
+def hosted() -> bool:
+    """True when running as a shared web service (the Hugging Face Space sets COAL_HOSTED=1)."""
+    return os.environ.get("COAL_HOSTED", "") == "1"
+
+
+def sandbox_roots() -> list[str]:
+    """Folders the tools may read when hosted: the bundled examples, run outputs and Gradio's uploads."""
+    gradio_tmp = os.environ.get("GRADIO_TEMP_DIR") or os.path.join(tempfile.gettempdir(), "gradio")
+    return [os.path.realpath(p) for p in (EXAMPLES_DIR, RUNS_DIR, gradio_tmp)]
+
+
+def check_path_allowed(path: str) -> str | None:
+    """None if the tools may read `path`, else a plain-English reason. Locally every path is allowed;
+    when hosted only files inside sandbox_roots() (after resolving symlinks and '..')."""
+    if not hosted():
+        return None
+    real = os.path.realpath(path)
+    for root in sandbox_roots():
+        if real == root or real.startswith(root.rstrip(os.sep) + os.sep):
+            return None
+    return (f"reading '{path}' is not allowed on this shared server: only uploaded files, the bundled "
+            f"examples and this server's own results can be used. Install COAL locally to use your own paths.")
+
+
+INTRO_LOCAL = "Nothing leaves your computer: COAL runs here, on this machine."
+INTRO_HOSTED = ("This copy runs on a shared Hugging Face server: files you upload are processed there and "
+                f"deleted within {RUNS_MAX_AGE_HOURS} hours (or when the Space restarts). For unpublished or "
+                "sensitive data, install COAL on your own computer (pip install) instead.")
+
+
+def intro_text() -> str:
+    return INTRO_HOSTED if hosted() else INTRO_LOCAL
 
 
 # ---------------------------------------------------------------- engine features
@@ -244,8 +314,9 @@ _ERR = re.compile(r"^coal: error: (.*)$")
 _EXT = {"fasta": "fasta", "clustal": "aln", "paml": "paml", "codon": "codon.txt"}
 
 
-def _run_engine(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, report_path):
+def _run_engine(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, report_path, timeout=None):
     f = detect_features()
+    timeout = timeout or ENGINE_TIMEOUT
     cmd = _coal_cmd() + [protein, dna, "-o", out, "-codontable", str(int(table))]
     if fmt != "fasta":
         cmd += ["-output", fmt]
@@ -260,10 +331,10 @@ def _run_engine(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, re
     t0 = time.perf_counter()
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
-                           timeout=ENGINE_TIMEOUT)
+                           timeout=timeout)
         code, err = p.returncode, p.stderr
     except subprocess.TimeoutExpired:
-        code, err = 1, f"coal: error: COAL did not finish within {ENGINE_TIMEOUT} seconds\n"
+        code, err = 1, f"coal: error: COAL did not finish within {timeout:g} seconds\n"
     return code, err, time.perf_counter() - t0
 
 
@@ -417,38 +488,85 @@ def id_hints(protein: str, dna: str, report: dict | None = None) -> list[dict]:
 CANDIDATE_CODES = (2, 3, 4, 5, 9, 11, 13, 14, 21)
 
 
-def genetic_code_hint(protein, dna, table, report, work_dir) -> dict | None:
-    """If sequences have mismatches, see whether another genetic code fits more of them."""
-    seqs = report.get("sequences", [])
-    bad = sum(1 for s in seqs if s["status"] in ("warning", "failed"))
-    if not seqs or bad == 0:
+def _write_sample(protein, dna, ids, report, work_dir):
+    """Protein alignment + DNA FASTA with only the sequences in `ids` (kept in file order)."""
+    from .viewer import read_alignment
+    want = set(ids)
+    prot = [(i, r) for i, r in read_alignment(protein) if i in want]
+    dna_recs = read_alignment(dna)
+    pairs = {s["id"]: s.get("dna_id") for s in report.get("sequences", [])}
+    dmap = dict(dna_recs)
+    nuc = [(i, dmap.get(pairs.get(i) or i, "")) for i, _ in prot]
+    if any(not seq for _, seq in nuc):
         return None
+    ps = os.path.join(work_dir, "probe_sample.pep.fasta")
+    ds = os.path.join(work_dir, "probe_sample.nuc.fasta")
+    for path, recs in ((ps, prot), (ds, nuc)):
+        with open(path, "w", encoding="utf-8", newline="\n") as fh:
+            fh.writelines(f">{i}\n{seq}\n" for i, seq in recs)
+    return ps, ds
+
+
+def genetic_code_hint(protein, dna, table, report, work_dir) -> dict | None:
+    """If sequences have mismatches, see whether another genetic code fits more of them.
+    CHANGED(APP-13): was 9 full-input engine runs (600 s limit each, probe files left behind); now as below.
+    See overnight/app/CHANGES.md.
+
+    Each candidate code is tried on (at most PROBE_SAMPLE of) the problem sequences only, each probe with a
+    short time limit and all probes within PROBE_BUDGET seconds; every probe file is deleted afterwards."""
+    import shutil
+    seqs = report.get("sequences", [])
+    bad_ids = [s["id"] for s in seqs if s["status"] in ("warning", "failed")]
+    if not seqs or not bad_ids:
+        return None
+    # sequences COAL never reached (it stopped at an error) may fit another code too
+    bad_ids += [s["id"] for s in seqs if s["status"] == "not_checked"]
     try:
-        if os.path.getsize(protein) + os.path.getsize(dna) > 5_000_000:
-            return None  # keep the GUI responsive on big inputs
+        if os.path.getsize(protein) + os.path.getsize(dna) > 50_000_000:
+            return None  # keep the GUI responsive on very big inputs
     except OSError:
         return None
+    sample = bad_ids[:PROBE_SAMPLE]
     current_ok = sum(1 for s in seqs if s["status"] == "ok")
+    probe_dir = tempfile.mkdtemp(prefix="probe_", dir=work_dir)
     best = None
-    for c in CANDIDATE_CODES:
-        if c == int(table):
-            continue
-        out = os.path.join(work_dir, f"probe_{c}.fasta")
-        code, err, _ = _run_engine(protein, dna, out, "fasta", c, False, False, True, None)
-        if code not in (0, 2):
-            continue
-        warned = {w[0] for w in map(_parse_warning, err.splitlines()) if w}
-        n_ok = sum(1 for s in seqs if s["id"] not in warned)
-        if best is None or n_ok > best[1]:
-            best = (c, n_ok)
-    if best and best[1] > current_ok:
-        c, n_ok = best
+    try:
+        files = _write_sample(protein, dna, sample, report, probe_dir)
+        if files is None:
+            return None
+        ps, ds = files
+        t_end = time.perf_counter() + PROBE_BUDGET
+        for c in CANDIDATE_CODES:
+            left = t_end - time.perf_counter()
+            if c == int(table) or left <= 1:
+                continue
+            out = os.path.join(probe_dir, f"probe_{c}.fasta")
+            code, err, _ = _run_engine(ps, ds, out, "fasta", c, False, False, True, None,
+                                       timeout=min(PROBE_TIMEOUT, left))
+            if os.path.exists(out):
+                os.remove(out)
+            if code not in (0, 2):
+                continue
+            warned = {w[0] for w in map(_parse_warning, err.splitlines()) if w}
+            fixed = sum(1 for i in sample if i not in warned)
+            if best is None or fixed > best[1]:
+                best = (c, fixed)
+    finally:
+        shutil.rmtree(probe_dir, ignore_errors=True)
+    if not best or best[1] == 0:
+        return None
+    c, fixed = best
+    if len(sample) == len(bad_ids):
+        n_ok = current_ok + fixed
         most = "All" if n_ok == len(seqs) else ("Most" if n_ok * 2 > len(seqs) else f"{n_ok} of {len(seqs)}")
-        return {"code": "genetic_code",
-                "text": (f"{most} sequences fit genetic code {c} ({GENETIC_CODES[c]}) without any mismatches, "
-                         f"compared with {current_ok} under code {int(table)}. Re-run with code {c}?"),
-                "suggested_codontable": c}
-    return None
+        text = (f"{most} sequences fit genetic code {c} ({GENETIC_CODES[c]}) without any mismatches, "
+                f"compared with {current_ok} under code {int(table)}. Re-run with code {c}?")
+    else:
+        text = (f"{fixed} of {len(sample)} sequences checked (a sample of the {len(bad_ids)} with problems or "
+                f"not checked) fit genetic code {c} "
+                f"({GENETIC_CODES[c]}) without any mismatches; {current_ok} of {len(seqs)} sequences fit code "
+                f"{int(table)}. Re-run with code {c}?")
+    return {"code": "genetic_code", "text": text, "suggested_codontable": c}
 
 
 def run_coal(protein_path: str, dna_path: str, output_format: str = "fasta", codontable: int = 1,
@@ -461,7 +579,7 @@ def run_coal(protein_path: str, dna_path: str, output_format: str = "fasta", cod
                          f"(supported: {', '.join(f.output_formats)})")
     if int(codontable) not in GENETIC_CODES:
         raise ValueError(f"unknown genetic code {codontable}")
-    out_dir = out_dir or tempfile.mkdtemp(prefix="coal_")
+    out_dir = out_dir or new_run_dir()
     os.makedirs(out_dir, exist_ok=True)
     stem = os.path.splitext(os.path.basename(protein_path))[0].replace(".aln", "")
     out = os.path.join(out_dir, f"{stem}.codon.{_EXT.get(output_format, 'txt')}")

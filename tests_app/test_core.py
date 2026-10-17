@@ -1,9 +1,17 @@
 import json
 import os
 import tempfile
+import shutil
 import unittest
 
 from coal_app import core
+
+
+def _tmpdir(test):
+    d = tempfile.mkdtemp(prefix="coal_test_")
+    test.addCleanup(shutil.rmtree, d, True)
+    return d
+
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -82,7 +90,7 @@ class TestHelpers(unittest.TestCase):
 class TestRunsOnExamples(unittest.TestCase):
     def run_example(self, name, **kw):
         p, d = core.example_paths(name)
-        t = tempfile.mkdtemp(prefix="coal_test_")
+        t = _tmpdir(self)
         return core.run_coal(p, d, out_dir=t, **kw)
 
     def test_clean(self):
@@ -136,7 +144,7 @@ class TestMethodsText(unittest.TestCase):
 
     def test_real_run_uses_basenames_and_options(self):
         p, d = core.example_paths("mito")
-        r = core.run_coal(p, d, codontable=2, nogap=True, out_dir=tempfile.mkdtemp(prefix="coal_test_"))
+        r = core.run_coal(p, d, codontable=2, nogap=True, out_dir=_tmpdir(self))
         m = core.methods_text(r.report)
         self.assertIn("vertebrate mitochondrial genetic code (NCBI translation table 2)", m)
         self.assertIn("gaps or stop codons were removed", m)
@@ -146,6 +154,6 @@ class TestMethodsText(unittest.TestCase):
 
     def test_no_text_without_output(self):
         p, d = core.example_paths("one_broken_gene")
-        r = core.run_coal(p, d, out_dir=tempfile.mkdtemp(prefix="coal_test_"))
+        r = core.run_coal(p, d, out_dir=_tmpdir(self))
         if r.output_path is None:
             self.assertEqual(core.methods_text(r.report), "")
