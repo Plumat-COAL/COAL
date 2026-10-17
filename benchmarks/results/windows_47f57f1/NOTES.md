@@ -173,3 +173,6 @@ explanation for it, are **unverified**. The verification steps above still apply
   host was critically low on memory. This was not the 24 GB job cap. p2n14 run 1 was in progress (started 21:38:49)
   and is lost with no row. p2n16 was not started. Likely cause, not measured: p2n14's 1M working set (about 18–19 GB
   extrapolated) plus other processes on the 32 GB host. Only the drift-check rows of that attempt are in `runs.csv`.
+- **Second attempt** (started 22:47:21 by the user, outside Claude Code): p2n14 run 1 OK, 3,714.1 s, peak
+  18,563 MB, TRUTH. Start drift median was 0.1347 s. Clock 131–134% of nominal. The `cpu_perf_pct` of 674.4 on that
+  row is not plausible and should be ignored. One 30-min clock line also came out blank. The cause was not checked. The user chose to leave the overnight p2n16 run out of SUMMARY.

@@ -8,9 +8,10 @@ Windows 11. Details: `env.json`. Raw data: `runs.csv`, `correctness_*.csv`. Run 
 ## Headlines
 
 **The headline is single-threaded speed.** coal-cpp at `-j1` is 74–1,115× faster than p2n14 on the Tier B workloads.
-Extra threads add little: **coal-cpp plateaus at about 1.2× from `-j2`** (Tier E). At 1M sequences, **p2n16 did
-not finish (DNF, >900 s)**, so coal-cpp `-j1` (12.52 s) is **more than 71.9× faster** (>84× at default `-j`), a
-lower bound. p2n14 at 1M was not run; its figure is **extrapolated** (about 40 min).
+Extra threads add little: **coal-cpp plateaus at about 1.2× from `-j2`** (Tier E). At 1M sequences, **p2n14
+took 3,714 s (62 min) and 18.6 GB, output correct (TRUTH)**. That is a single run with no warm-up, made overnight.
+So coal-cpp `-j1` (12.52 s) is **297× faster** (347× at default `-j`). **p2n16 did not finish (DNF, >900 s)**,
+so against p2n16 coal-cpp `-j1` is **more than 71.9× faster**, a lower bound.
 
 Speed-ups against p2n14, from warm medians:
 
@@ -21,7 +22,7 @@ Speed-ups against p2n14, from warm medians:
 | 1k seqs × 400 codons (p2n14 2.3 s) | 74× | 86× | 12.5× | 12.8× |
 | 100 real NCBI families, one process per file (p2n14 125 ms/file) | **6.9×** (18 ms/file) | 6.9× | **0.68×** (184 ms/file) | 0.68× |
 | 1M seqs × 400 codons, vs p2n16 DNF (>900 s) | >71.9× (12.5 s) | >84× (10.7 s) | >17.9× (50.3 s) | >34× (26.4 s, single run) |
-| 1M seqs × 400 codons, vs p2n14 **extrapolated** (~2,400 s) | ~190× | ~220× | ~48× | ~90× |
+| 1M seqs × 400 codons (p2n14 3,714 s, single run²) | **297×** | 347× | 73.9× | 141× |
 
 - **Correctness:** every COAL config matched truth or the reference on every case run: Tier A 412/412, Tier C
   2000/2000 simulated plus 3273/3273 NCBI cases matching p2n14 (excluding invalid inputs), and **Tier D 2595/2595
@@ -32,7 +33,13 @@ Speed-ups against p2n14, from warm medians:
   files** (Python start-up and imports: 92 ms baseline against 24 ms for p2n14).
 - **Thread scaling is weak.** coal-cpp plateaus at about 1.2× from `-j2` (efficiency 6% at -j20). coal-py gains 1.9× at default
   `-j`, but its committed memory goes from 0.69 GB to about 10 GB at n100k (known COAL issue, below).
-- At 1M: p2n16 **DNF (>900 s)**, so these are lower bounds. p2n14 **not run; extrapolated** at about 40 min.
+- At 1M: p2n14 **measured, 3,714 s and 18.6 GB, TRUTH** (one overnight run, no warm-up). p2n16 **DNF (>900 s)**,
+  so the speed-ups against it are lower bounds.
+
+² p2n14 at 1M is one run with no warm-up, made overnight (user decision; NOTES.md). The COAL figures are medians of
+3 after a warm-up, except coal-py default (single run). The earlier extrapolation of about 2,400 s
+(about 190×/220×/48×/90×) **underestimated p2n14's time by about 1.5×** (measured/extrapolated = 1.55). See the 1M
+section.
 
 Plots: `tierB_nsweep_time.png`, `tierB_nsweep_mem.png`, `tierB_lsweep_time.png`, `tierE_coalcpp_scaling.png`,
 `tierC_ncbi100_per_file.png`. Merged correctness for every tier: `correctness.csv`.
@@ -61,7 +68,7 @@ These proteins need 96,000–102,506. The threshold depends on composition: abou
 proteins. The failure was reproduced outside the harness, identically, under Strawberry Perl 5.42.3, Cygwin Perl
 5.42.3 and Linux Perl 5.40.1. Details: NOTES.md.
 
-### 1M sequences (n1000000_L400, 1.2 Gnt; COAL measured, PAL2NAL extrapolated)
+### 1M sequences (n1000000_L400, 1.2 Gnt)
 
 | tool | result | peak committed memory |
 |---|---|---|
@@ -70,13 +77,16 @@ proteins. The failure was reproduced outside the harness, identically, under Str
 | coal-py -j1 | 50.27 s (median of 3) | 1,176 MB |
 | coal-py default | 26.43 s (**single run**, under the 24 GB cap: OK, no OOM) | 8,032 MB |
 | p2n16 | **TIMEOUT** (single run, no warm-up, 900 s limit set for the deadline) | 3,743 MB at the kill |
-| p2n14 | **not run (time)** | — |
+| p2n14 | **3,714.1 s** (62 min; **single run, no warm-up**, overnight, 3 h timeout), **TRUTH** | **18,563 MB** (under the 24 GB cap: OK) |
 
-**Extrapolations, clearly labelled. Not measurements.**
-- **p2n14 at 1M: about 40 min, about 18–19 GB.** Its n-sweep is linear in time (exponents 1.04 and 0.98 per decade;
-  239 s at n100k), so 10× gives about 2,400 s. Its memory grows about 9.6× per decade (193 MB → 1,852 MB), giving
-  about 18–19 GB, below the 24 GB cap but not by much. Total time per run with warm-up is about 2.7 h, which is why
-  it was cut.
+p2n14 at 1M grows faster than linearly: 15.5× the n100k time for 10× the sequences, an exponent of 1.19 for that
+decade against 0.98 for the one before. Memory grows 10.0× per decade (1,852 MB → 18,563 MB). The cause of the
+superlinear time was not investigated.
+
+**Extrapolations, kept for comparison. Not measurements.**
+- p2n14 at 1M, made before the overnight run: **about 40 min (~2,400 s), about 18–19 GB.** It assumed linear time
+  (n-sweep exponents 1.04 and 0.98) and about 9.6× memory per decade. **Time was underestimated by about 1.5×**
+  (3,714 s measured). The memory estimate was right (18.6 GB measured).
 - **p2n16 at 1M:** measured TIMEOUT at 15 min. Its n-sweep is superlinear (99 s at n100k, exponent 1.35 in the last
   decade), which extrapolates to about 35–40 min (99 s × 10^1.35), consistent with the timeout. Its memory trend (6.7 GB at n100k, about 9.8× per decade)
   suggested an OOM at about 65 GB. It hit the time limit first, at 3.7 GB, so whether it would OOM under the cap is
@@ -259,7 +269,8 @@ A hard deadline came in at 19:5x (results and PR by 21:45, later moved to 22:00)
    the stop (coal-cpp default only) is kept and tagged INCOMPLETE. Batch sizes 1, 10, 1000 and all: **not run**. The
    in-process API loop: **not run**.
 3. **1M: COAL only.** coal-cpp -j1/default and coal-py -j1, timed. coal-py default: one run. p2n16: one run, no
-   warm-up, 900 s timeout (TIMEOUT). p2n14 at 1M: **not run**, extrapolated only. Cold-cache 1M: **not run**.
+   warm-up, 900 s timeout (TIMEOUT). p2n14 at 1M: not run before the deadline. It was **run afterwards, overnight**
+   (one run, no warm-up; see the 1M section). Cold-cache 1M: **not run**.
    -j12 at 1M: only in Tier E (coal-cpp).
 4. **Tier E reduced** to coal-cpp at -j 1, 2, 4, 8, 12, 20 on n100000_L400 and n1000000_L400, plus coal-py -j1 and
    default on n100000_L400. -j 6, 10, 14, 16, the 10 largest Compara trees and the 1,000-family batch: **not run**.
