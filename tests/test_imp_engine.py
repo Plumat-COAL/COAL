@@ -269,5 +269,49 @@ class TestWarningCap(unittest.TestCase):
         self.assertNotIn("more warnings", e.getvalue())
 
 
+class TestHelpGroups(unittest.TestCase):
+    """IMP-E-F: --help in four groups with short help; coal-cpp prints the same help (one documented line, -j) and
+    accepts every option spelling the Python parser has."""
+
+    def test_groups_and_length(self):
+        from coal.cli import build_parser
+        h = build_parser().format_help()
+        for g in ("Core:", "PAL2NAL options:", "Large runs:", "Reporting:"):
+            self.assertIn("\n" + g + "\n", h)
+        self.assertLess(len(h.splitlines()), 60)
+        self.assertIn("-output, --output-format {fasta,clustal,paml,codon}", h)  # the app reads the formats here
+
+    @unittest.skipIf(cpp_binary() is None, "coal-cpp not built")
+    def test_cpp_help_and_spellings(self):
+        from coal.cli import build_parser
+        env = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "COLUMNS": "80", "COAL_ENGINE": "python"}
+        py = subprocess.run([sys.executable, "-m", "coal", "--help"], env=env, capture_output=True, text=True,
+                            timeout=60).stdout.splitlines()
+        cp = subprocess.run([str(cpp_binary()), "--help"], env=env, capture_output=True, text=True,
+                            timeout=60).stdout.splitlines()
+        i, j = next(k for k, x in enumerate(py) if "-j, --jobs" in x), next(k for k, x in enumerate(cp) if "-j, --jobs" in x)
+        self.assertEqual(py[:i] + py[i + 2:], cp[:j] + cp[j + 1:])  # -j: "worker threads" in C++, one line
+        self.assertIn("worker threads", cp[j])
+        values = {"-codontable": "2", "--codontable": "2", "-output": "fasta", "--output-format": "fasta",
+                  "-o": "x.fa", "--out": "x.fa", "-j": "1", "--jobs": "1", "--max-warnings": "3",
+                  "--report": "r.json"}
+        d = FIX / "clean"
+        tmp = Path(tempfile.mkdtemp(prefix="coal_sp_"))
+        self.addCleanup(shutil.rmtree, tmp, True)
+        for act in build_parser()._actions:
+            for opt in act.option_strings:
+                if opt in ("-h", "--help", "--version"):
+                    continue
+                args = [str(d / "pep.fasta"), str(d / "nuc.fasta"), opt] + ([values[opt]] if opt in values else [])
+                if opt in ("--json", "--resume"):
+                    args += ["-o", "y.fa"]
+                with self.subTest(opt=opt):
+                    p = subprocess.run([sys.executable, "-m", "coal", *args], cwd=tmp, env=env, capture_output=True,
+                                       timeout=60)
+                    c = subprocess.run([str(cpp_binary()), *args], cwd=tmp, env=env, capture_output=True, timeout=60)
+                    self.assertEqual(p.returncode, 0, p.stderr)
+                    self.assertEqual(c.returncode, 0, c.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
