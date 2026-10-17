@@ -41,6 +41,7 @@ All six items are done. They are committed on the local branch `overnight/core`.
 5. **This branch's Python engine (`src/coal`) predates the reviewed fixes.** For example, it lacks the table-3 GTG start. The C++ readers and tables now follow the integration branch, so for table-3 genes starting with GTG they differ from this branch's Python until integration is merged.
 6. **MSVC is not available here.** Its flags are set (`/W4 /permissive- /utf-8`, `/WX` with the CI option), and the code is clean under clang `-Wconversion`, which approximates MSVC's loss-of-data warnings. Please run one native Windows build:
    `cmake -S . -B build -DCOAL_WARNINGS_AS_ERRORS=ON && cmake --build build --config Release`
+   - 2026-10-17 11:15 UTC: tried to run it on Chloe's Windows PC. Not possible: the PC has no Visual Studio or Build Tools (no VS developer prompts, no VS Installer, no Windows CMake in the Start menu), and the terminal can only be clicked, not typed into. Next step: install "Build Tools for Visual Studio 2022" with the "Desktop development with C++" workload (includes MSVC and CMake), or run a windows-latest GitHub Actions job (.github/ is outside this branch's files: human decision).
 7. **The local branch `overnight/merged`** (the merge with Keanu's integration branch, made earlier) is still unpushed and untouched.
 
 ## Morning summary (both overnight runs + code review)
