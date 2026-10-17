@@ -31,8 +31,11 @@ jobs:
       # CHANGED(R2-D11): new; desktop/test_wrapper.py and test_smoke.py never ran in CI. Required on Linux; on
       # Windows they run for the first time here, so they may not fail the build until a run is green there
       # (then remove continue-on-error). See overnight/integration/CHANGES.md
+      # CHANGED(R3-D2): was `if: matrix.os != 'macos-latest'` (implicit success(), so skipped whenever App tests
+      # failed); now also runs after a failed earlier step. The job still fails if any test step failed.
+      # See overnight/integration/CHANGES.md
       - name: Desktop wrapper tests
-        if: matrix.os != 'macos-latest'
+        if: ${{ !cancelled() && matrix.os != 'macos-latest' }}
         continue-on-error: ${{ matrix.os == 'windows-latest' }}
         working-directory: desktop
         env:
@@ -68,11 +71,11 @@ jobs:
 
   explainer:
     # CHANGED(R2-D11): new; tests_app/test_explainer.py (pitch/explainer.html in Chromium) always skipped in CI.
-    # First run here, so informational until a run is green (then remove continue-on-error).
+    # CHANGED(R3-D2): was continue-on-error: true (first run); green in run 39001781214, so now required.
+    # See overnight/integration/CHANGES.md
     name: "Explainer page in Chromium (Playwright)"
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    continue-on-error: true
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw-browsers
     steps:

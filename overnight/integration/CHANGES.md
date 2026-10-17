@@ -1,5 +1,12 @@
 # Integration changes (keanu_overnight/integration = app + windows-app + engine-fixes)
 
+## Round 3 rows
+
+| ID | Where | Before | After | Why | Test proving it | Merge note |
+|---|---|---|---|---|---|---|
+| R3-D1 | .gitattributes | `examples/**` fell under `* text=auto`, so a Windows (or `core.autocrlf=true`) checkout had CRLF examples; their sha256 then differed from src/coal_app/sample_report.json and test_sample_matches_a_fresh_run failed (windows-latest "App tests" red in run 39001781214) | `examples/** text eol=lf`: examples are byte-identical on every OS (also in the Windows app bundle). `git add --renormalize .` changed nothing (the repo copies were already LF) | Reproduced with `git clone --config core.eol=crlf --config core.autocrlf=true`: the only failure in that clone | tests_app/test_round3.py `TestR3D1ExamplesAreLF` (rule present; `git check-attr` says lf for every example; no CR bytes in examples, which fails in a CRLF clone without the rule) | If the other branch adds files under examples/ they are now forced LF; that is intended |
+| R3-D2 | .github/workflows/ci.yml (python job "Desktop wrapper tests"; explainer job) | Desktop step had `if: matrix.os != 'macos-latest'` (implicit success(), so skipped whenever App tests failed); explainer job `continue-on-error: true` | `if: ${{ !cancelled() && matrix.os != 'macos-latest' }}` (the job still fails if any test step failed); explainer job required (it was green in run 39001781214). Windows GUI job and the Windows desktop step keep continue-on-error until they have passed once | Finding R3-D2 | tests_app/test_round3.py `TestR3D2CiConditions` | CI only |
+
 ## Round 2 fixes (branch fix/round2, from keanu_overnight/integration f915b07)
 
 Status per finding (rows with details further down, under "Round 2 rows"). Nothing pushed; CI has not run on
