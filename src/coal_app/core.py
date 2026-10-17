@@ -257,7 +257,10 @@ def paths_from_query(params) -> tuple[str, str]:
     return str(get("protein") or ""), str(get("dna") or "")
 
 
-INTRO_LOCAL = "Nothing leaves your computer: COAL runs here, on this machine."
+# CHANGED(POL-1): was "Nothing leaves your computer: COAL runs here, on this machine.", shown as the app's footer.
+# The owner asked to cut it (a reassurance, not something to act on); the fact stays in README.md, desktop/README.md
+# and the site. The hosted note stays: there, files do go to a shared server, and people need to know.
+INTRO_LOCAL = ""
 INTRO_HOSTED = ("This copy runs on a shared Hugging Face server: files you upload are processed there and "
                 f"deleted within {RUNS_MAX_AGE_HOURS} hours (or when the Space restarts). For unpublished or "
                 "sensitive data, install COAL on your own computer (pip install) instead.")

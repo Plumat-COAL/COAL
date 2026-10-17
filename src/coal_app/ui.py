@@ -182,12 +182,30 @@ button.label-wrap > span.icon { display:inline-flex; align-items:center; justify
   display:none !important; }
 /* CHANGED(GUI-9): Settings tab */
 #coal-settings-tab-button { margin-left:auto; }
-#coal-settings .coal-set-head { margin:0.6em 0 0; font-size:1.05rem; font-weight:700; color:var(--coal-ink); }
-#coal-settings .coal-set-head:first-child { margin-top:0.2em; }
 #coal-settings-status p { margin:0; color:var(--coal-muted); }
 #coal-centre { align-items:flex-end !important; gap:8px !important; flex-wrap:wrap !important; }
 #coal-centre > * { flex:0 1 auto !important; min-width:0 !important; }
 #coal-view-dl-note p { margin:0; }
+/* CHANGED(POL-2): section headings, as the site's type scale (site/style.css h3: 1.1875rem, bold, ink): one per
+   group (Files, Genetic code, Output, Results); more space above a heading than between the fields of a group;
+   field labels lighter than headings (theme: block title #4A4744 / #B3ADA6, regular weight) */
+.coal-sec { margin:0 !important; padding:0.9rem 0 0 !important; font-size:1.1875rem !important; font-weight:700 !important;
+  line-height:1.25 !important; color:var(--coal-ink) !important; letter-spacing:0 !important; border:0 !important; }
+.coal-sec.coal-sec-first { padding-top:0.25rem !important; }
+/* CHANGED(POL-3): the genetic code is its own section: its label is drawn as the section heading (the dropdown
+   keeps it as its accessible name), a one-line hint under it, and a larger value than the other fields */
+#coal-code span[data-testid="block-info"] { margin-top:0.9rem; font-size:1.1875rem; font-weight:700; line-height:1.25;
+  color:var(--coal-ink); }
+#coal-code input { font-size:1.125rem !important; font-weight:600; }
+/* Gradio wraps each field in a .form (fill = border colour); the narrower boxes keep the page behind them */
+.form:has(#coal-code) { max-width:640px; }
+/* CHANGED(POL-3): output format is secondary: a narrower box under the "Output" heading */
+.form:has(#coal-format) { max-width:320px; background:transparent !important; }
+/* CHANGED(POL-6): Gradio's own footer link "Settings" (js/core/src/Blocks.svelte in 5.49.1: footer >
+   button.settings, after a div.divider) opens Gradio's panel (display language, theme), a second settings place
+   whose language choice only translates Gradio's own labels. COAL has one: its Settings tab. Hidden with the "·"
+   before it; "Use via API or MCP" and "Built with Gradio" stay. */
+footer > button.settings, footer > div.divider:nth-last-child(2) { display:none !important; }
 @media (max-width: 640px) {
   .coal-head { gap:12px; } .coal-head .coal-mark { width:32px; height:25px; }
   .coal-head h1 { font-size:1.4rem; } .coal-headline { font-size:1.2rem; }
@@ -222,7 +240,9 @@ def _theme():
         block_border_color="#DEDAD6", block_border_color_dark="#3A3633",
         border_color_primary="#DEDAD6", border_color_primary_dark="#3A3633",
         block_label_text_color="#4A4744", block_label_text_color_dark="#B3ADA6",
-        block_title_text_color="#2A2A2A", block_title_text_color_dark="#E4E0DB",
+        # CHANGED(POL-2): field labels one step lighter than the section headings (were #2A2A2A / #E4E0DB, the body
+        # text); #4A4744 on the page 8.6:1, #B3ADA6 on the dark page 8.9:1
+        block_title_text_color="#4A4744", block_title_text_color_dark="#B3ADA6",
         block_info_text_color="#5E5853", block_info_text_color_dark="#B3ADA6",
         # CHANGED(GUI-13): fields now sit on the page, so they need their own edge: a 1px border (Base has none) and,
         # in dark mode, the surface colour (was the page colour, which would hide the field)
@@ -300,6 +320,15 @@ FORMAT_SHORT = {"fasta": "FASTA", "clustal": "CLUSTAL", "paml": "PAML (for codem
 CODE_INFO = "1 for nuclear genes, 2 for vertebrate mitochondria, 11 for bacteria and plastids."
 
 
+# CHANGED(POL-3): the one line under the genetic code (it is the choice that most often makes results wrong)
+CODE_HINT = "Mitochondrial, bacterial and plastid genes need their own code."
+
+
+def _sec(text: str, first: bool = False) -> str:
+    """CHANGED(POL-2): a section heading of the form (h2; the page's h1 is COAL)."""
+    return f'<h2 class="coal-sec{" coal-sec-first" if first else ""}">{text}</h2>'
+
+
 def _code_choices():
     return [(f"{n}: {CODE_SHORT.get(n, name)}", n) for n, name in core.GENETIC_CODES.items()]
 
@@ -368,6 +397,7 @@ def _results(report, output_path, report_path, coal_cmd, pal2nal_cmd, stderr, ba
         ctx,
         gr.update(visible=bool(preview and preview.get("preview") and preview.get("last", 0) - preview.get("first", 1)
                                + 1 < preview.get("ncols", 0))),
+        gr.update(visible=True),  # CHANGED(POL-4): the results area, hidden until the first result
     )
 
 
@@ -547,6 +577,9 @@ def build(demo_mode: bool = False) -> gr.Blocks:
         # CHANGED(GUI-13): "Codon alignment" -> "Align" (a verb, like the button; the header already says COAL)
         with gr.Tabs(elem_id="coal-tabs"):
             with gr.Tab("Align", id="align", elem_id="coal-align-tab"):
+                # CHANGED(POL-2): the form reads as sections, each under one heading: Files, Genetic code, Output,
+                # then the button; Results below (docs/ui-principles.md, "Round 4 polish")
+                gr.HTML(_sec("Files", first=True), padding=False)
                 with gr.Row(equal_height=True):
                     # CHANGED(GUI-8): was height=150, which clipped the drop zone (its icon covered the label)
                     # CHANGED(GUI-13): labels were "1. Protein alignment (FASTA or CLUSTAL)" / "2. Coding DNA
@@ -564,27 +597,7 @@ def build(demo_mode: bool = False) -> gr.Blocks:
                     ex_buttons = {n: gr.Button(core.EXAMPLES[n][0], size="sm", variant="secondary")
                                   for n in core.available_examples()}
                     sample_btn = gr.Button("Sample report", size="sm", variant="secondary")  # was "Demo sample report"
-
-                with gr.Row():
-                    # CHANGED(GUI-8): short option names (they were cut off), the wider box for the genetic code
-                    # CHANGED(GUI-13): no help lines under the boxes (the option names carry the meaning)
-                    code = gr.Dropdown(_code_choices(), value=saved["codontable"], label="Genetic code",
-                                       scale=3, min_width=260, elem_id="coal-code")
-                    fmt = gr.Dropdown(_format_choices(features), value=fmt0,
-                                      label="Output format", info=_format_info(features), scale=2, min_width=220,
-                                      elem_id="coal-format")
-                # CHANGED(GUI-5): the four flags were always shown, labelled with the flag; now under "More
-                # options", plain label first, the flag at the end of the help text
-                # CHANGED(GUI-13): stacked (Primer: stack form fields), each help line cut to one short line
-                with gr.Accordion("More options", open=False, elem_id="coal-more"):
-                    nogap = gr.Checkbox(value=saved["nogap"], label="Remove gap columns",
-                                        info="Columns with a gap or stop codon. (-nogap)")
-                    nomismatch = gr.Checkbox(value=saved["nomismatch"], label="Remove mismatched columns",
-                                             info="Columns where a codon doesn't match its amino acid. (-nomismatch)")
-                    strict = gr.Checkbox(value=saved["strict"], label="Refuse probably-wrong genes",
-                                         info=STRICT_INFO)  # CHANGED(FIN-A6): new options
-                    blockonly = gr.Checkbox(label="Keep only '#'-marked columns",
-                                            info="CLUSTAL input marked by Gblocks or similar. (-blockonly)")
+                # CHANGED(POL-2): the file-path disclosure moved up into the Files section (was after "More options")
                 # CHANGED(GUI-1): the path boxes were always shown under the drop zones; now under a closed
                 # disclosure (opened by the desktop wrapper's ?protein=&dna= link). Labels CHANGED(GUI-1): were "or
                 # type/paste a path on this computer (big files: read in place, not copied)" on both.
@@ -602,9 +615,37 @@ def build(demo_mode: bool = False) -> gr.Blocks:
                             dna_path = gr.Textbox(label="Coding DNA path", placeholder="/path/to/dna.fasta",
                                                   visible=local, max_lines=1, elem_id="coal-dna-path")
                             dna_info = gr.Markdown(visible=local)
+
+                # CHANGED(GUI-8): short option names (they were cut off), the wider box for the genetic code
+                # CHANGED(GUI-13): no help lines under the boxes (the option names carry the meaning)
+                # CHANGED(POL-3): was one row "Genetic code | Output format" of equal weight. The genetic code is
+                # the choice that most often makes results wrong: it is now a section of its own, first, its label
+                # drawn as the heading (CSS), a larger value and one hint line. Output format is secondary: a
+                # narrower box under "Output" (its label is the heading; the box keeps it as its accessible name)
+                code = gr.Dropdown(_code_choices(), value=saved["codontable"], label="Genetic code", info=CODE_HINT,
+                                   min_width=260, elem_id="coal-code")
+                gr.HTML(_sec("Output"), padding=False)
+                fmt = gr.Dropdown(_format_choices(features), value=fmt0, label="Output format", show_label=False,
+                                  info=_format_info(features), min_width=220, elem_id="coal-format")
+                # CHANGED(GUI-5): the four flags were always shown, labelled with the flag; now under "More
+                # options", plain label first, the flag at the end of the help text
+                # CHANGED(GUI-13): stacked (Primer: stack form fields), each help line cut to one short line
+                with gr.Accordion("More options", open=False, elem_id="coal-more"):
+                    nogap = gr.Checkbox(value=saved["nogap"], label="Remove gap columns",
+                                        info="Columns with a gap or stop codon. (-nogap)")
+                    nomismatch = gr.Checkbox(value=saved["nomismatch"], label="Remove mismatched columns",
+                                             info="Columns where a codon doesn't match its amino acid. (-nomismatch)")
+                    strict = gr.Checkbox(value=saved["strict"], label="Refuse probably-wrong genes",
+                                         info=STRICT_INFO)  # CHANGED(FIN-A6): new options
+                    blockonly = gr.Checkbox(label="Keep only '#'-marked columns",
+                                            info="CLUSTAL input marked by Gblocks or similar. (-blockonly)")
                 run_btn = gr.Button("Make codon alignment", variant="primary", size="lg", elem_id="coal-run")
 
-                with gr.Column(elem_id="coal-results"):
+                # CHANGED(POL-4): hidden until there is a result (was always shown: "Results appear here.", an empty
+                # "View alignment" with "Drawn after a run." and a closed "Methods, commands and glossary");
+                # every result (run, example, sample report, missing-file message) shows it (_results)
+                with gr.Column(elem_id="coal-results", visible=bool(demo_mode)) as results_box:
+                    gr.HTML(_sec("Results"), padding=False)  # CHANGED(POL-2)
                     # CHANGED(AMB-4): banner, tip and re-run button in one column; when the genetic-code hint
                     # explains the run, CSS draws them as one box with the button as its primary action
                     with gr.Column(elem_id="coal-fixbox"):
@@ -646,7 +687,7 @@ def build(demo_mode: bool = False) -> gr.Blocks:
             # "Account settings"); the facts that were four bullets are one "About" line
             with gr.Tab("Settings", id="settings", elem_id="coal-settings-tab"):
                 with gr.Column(elem_id="coal-settings"):
-                    gr.HTML('<p class="coal-set-head">Defaults</p>', padding=False)
+                    gr.HTML(_sec("Defaults", first=True), padding=False)  # CHANGED(POL-2): was p.coal-set-head
                     with gr.Row():
                         s_code = gr.Dropdown(_code_choices(), value=saved["codontable"], label="Genetic code",
                                              scale=3, min_width=260, elem_id="coal-set-code")
@@ -656,18 +697,20 @@ def build(demo_mode: bool = False) -> gr.Blocks:
                     s_nogap = gr.Checkbox(value=saved["nogap"], label="Remove gap columns")
                     s_nomismatch = gr.Checkbox(value=saved["nomismatch"], label="Remove mismatched columns")
                     s_strict = gr.Checkbox(value=saved["strict"], label="Refuse probably-wrong genes")
-                    gr.HTML('<p class="coal-set-head">Preview</p>', padding=False)
+                    gr.HTML(_sec("Preview"), padding=False)  # CHANGED(POL-2): was p.coal-set-head
                     s_preview = gr.Radio([(settings.PREVIEW_LABELS[k], k) for k in settings.PREVIEW_SIZES],
                                          value=saved["preview"], label="Largest preview (sequences × columns)",
                                          elem_id="coal-set-preview")
-                    gr.HTML('<p class="coal-set-head">About</p>', padding=False)
+                    gr.HTML(_sec("About"), padding=False)  # CHANGED(POL-2): was p.coal-set-head
                     gr.Markdown(
                         _settings_where() + f"\n\nResults are deleted after {core.RUNS_MAX_AGE_HOURS} hours"
                         + (f" (`{core.RUNS_DIR}`)." if local else "."), elem_classes=["coal-small"])
                     s_status = gr.Markdown(_note, elem_id="coal-settings-status")
                     s_reset = gr.Button("Reset to defaults", variant="secondary", size="sm", elem_id="coal-set-reset")
         # CHANGED(GUI-13): the where-the-data-goes note, small, at the foot of the page (was in the header)
-        gr.HTML(gui_html.footer_html(core.intro_text()), elem_id="coal-footer", padding=False)
+        # CHANGED(POL-1): only when there is a note (the hosted Space); the local "Nothing leaves your computer" is gone
+        if core.intro_text():
+            gr.HTML(gui_html.footer_html(core.intro_text()), elem_id="coal-footer", padding=False)
         # per-browser store: used on the hosted Space only (locally the settings file is the store, because the
         # desktop app's web view keeps no browser storage between starts). The storage key and the "secret" are
         # fixed so the value survives a restart of the Space (Gradio's guide: a random secret is made per launch
@@ -682,6 +725,7 @@ def build(demo_mode: bool = False) -> gr.Blocks:
         # CHANGED(GUI-10): the run context (for "Centre the preview on column") and that control's row
         run_ctx = gr.State(None)
         outputs += [run_ctx, centre_row]
+        outputs += [results_box]  # CHANGED(POL-4)
         inputs = [protein, dna, fmt, code, nogap, nomismatch, protein_path, dna_path, strict, blockonly, s_preview]
         run_btn.click(run_ui, inputs, outputs, show_api=False)
         protein_path.change(core.path_status, protein_path, protein_info, show_api=False)

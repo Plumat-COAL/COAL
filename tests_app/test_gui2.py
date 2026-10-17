@@ -169,7 +169,7 @@ class TestGui9SettingsUi(UiCase):
     def test_run_uses_preview_size_and_offers_centring(self):
         p, d = core.example_paths("one_broken_gene")
         out = self.ui.run_ui(None, None, "fasta", 1, False, False, p, d, False, False, "small")
-        self.assertEqual(len(out), 14)
+        self.assertEqual(len(out), 15)  # CHANGED(POL-4): was 14; + the results area (shown by every result)
         ctx = out[12]
         self.assertEqual(ctx["preview"], "small")
         self.assertFalse(out[13]._kw.get("visible"))  # 20 genes, all columns drawn: no centring needed
