@@ -44,7 +44,7 @@ from coal.cli import main as coal_main  # noqa: E402
 from coal.tables import SUPPORTED, get_code  # noqa: E402
 from test_differential import cpp_binary  # noqa: E402
 
-SEED = 20261017
+SEED = int(os.environ.get("COAL_RANDOM_SEED", "20261017"))  # CPP-22: second seeds
 N = int(os.environ.get("COAL_RANDOM_N", "1000"))
 FORMATS = ["fasta", "clustal", "paml", "codon"]
 BASES = "ACGT"

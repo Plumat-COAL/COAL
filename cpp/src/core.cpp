@@ -33,7 +33,9 @@ struct Token {
 
 uint64_t allowed_for(const GeneticCode& code, char aa, int mode) {
     if (aa == 'M' && mode == START) return code.starts;
-    if (aa == 'M' && mode == ANCHOR_START) return anchor_start_mask();
+    // CPP-22 (reference FIN-E1): the fallback's first Met also accepts the selected code's start and Met codons
+    // (was ATG/CTG/GTG only, PAL2NAL's rule; deliberate difference from PAL2NAL v14)
+    if (aa == 'M' && mode == ANCHOR_START) return anchor_start_mask() | code.starts | code.codons[(unsigned char)'M'];
     return code.codons[(unsigned char)aa];
 }
 
@@ -228,8 +230,11 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
     Threaded res;
     for (size_t i = 0; i < row.size(); ++i)
         if (as_x(row[i])) {
-            res.warnings.push_back("pepAlnPos " + std::to_string(i + 1) + ": " + row[i] +
-                                   " unknown AA type. Taken as 'X'");
+            // CPP-23 (reference FIN-C14): was "U unknown AA type. Taken as 'X'" (PAL2NAL's wording)
+            const char* name = row[i] == 'U' ? "selenocysteine" : row[i] == 'O' ? "pyrrolysine"
+                               : row[i] == 'B' ? "D or N" : row[i] == 'Z' ? "E or Q" : "I or L";
+            res.warnings.push_back("pepAlnPos " + std::to_string(i + 1) + ": " + row[i] + " (" + name +
+                                   ") is not checked; any codon is accepted");
             res.mismatch_cols.push_back(int(i + 1));  // CPP-11 (DEC-4f): -nomismatch removes it, as PAL2NAL
         }
 

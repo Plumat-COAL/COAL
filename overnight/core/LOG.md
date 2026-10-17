@@ -1,5 +1,8 @@
 # Overnight log: core (branch overnight/core)
 
+## Run 5 progress (final engine fixes; reference 0f0330f)
+- 2026-10-17 13:21 UTC | CPP-22 FIN-E1, CPP-23 FIN-C14 | reference goldens 279/279; random vs reference 3000/3000 (seed 20261017) and 3000/3000 (seed 777); fuzz vs real PAL2NAL through the reference's updated harness, FUZZ_N=1500: seeds 20261017, 777, 4242: 0 unexplained each; reference tests via shim 94/96 (the same 2 in-process DEC-3 mocks; test_final_fixes added, all pass). FIN-E3 (drop-in argument parsing) is Python-only: coal-cpp is not used as the drop-in, nothing to port.
+
 ## Run 4 summary: coal-cpp mirrors the reviewed reference engine (2026-10-17 13:01 UTC)
 
 Reference: `origin/keanu_overnight/integration` at bb80bde, in a read-only worktree (`~/coal-ref`, not merged; `overnight/merged` untouched). Every change has a row in `overnight/core/CHANGES.md` (CPP-9 .. CPP-21, each citing the reference row it mirrors). **Not pushed from here** (no GitHub credentials on this machine): push with `git push origin overnight/core` from Chloe's terminal.

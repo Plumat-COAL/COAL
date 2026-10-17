@@ -235,7 +235,9 @@ const Entry* RunReport::add_sequence(const std::string& pid, const std::vector<s
                                                   rest, col});
             continue;
         }
-        if (parse_warning(w, " unknown AA type", col, aa, rest)) {
+        static const std::string not_checked = ") is not checked; any codon is accepted";  // CPP-23 wording
+        if (parse_warning(w, " (", col, aa, rest) && rest.size() >= not_checked.size() &&
+            rest.compare(rest.size() - not_checked.size(), not_checked.size(), not_checked) == 0) {
             unknown = true;
             e.messages.push_back({"unknown_aa", "Column " + std::to_string(col) + ": " + aa +
                                                     " is not a standard amino acid; treated as X (any codon)", col});
