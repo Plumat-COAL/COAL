@@ -51,20 +51,20 @@ class TestCppRequireStep(unittest.TestCase):  # R2-D4
                               capture_output=True, text=True, timeout=60)
 
     def test_linux_binary_passes(self):
-        r = self.run_step("cpp/build/coal")
+        r = self.run_step("build/coal-cpp")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
     def test_windows_binary_passes(self):
-        r = self.run_step("cpp/build/Release/coal.exe")
+        r = self.run_step("build/Release/coal-cpp.exe")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
     def test_no_binary_fails(self):
         r = self.run_step(None)
         self.assertEqual(r.returncode, 1)
-        self.assertIn("no cpp/build/coal binary", r.stdout + r.stderr)
+        self.assertIn("no build/coal-cpp binary", r.stdout + r.stderr)
 
     def test_missing_comparison_tests_fail(self):
-        r = self.run_step("cpp/build/coal", with_tests=False)
+        r = self.run_step("build/coal-cpp", with_tests=False)
         self.assertEqual(r.returncode, 1)
         self.assertIn("test_cpp_vs_python.py", r.stdout + r.stderr)
 

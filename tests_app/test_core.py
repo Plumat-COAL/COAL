@@ -168,5 +168,32 @@ class TestMethodsText(unittest.TestCase):
             self.assertEqual(core.methods_text(r.report), "")
 
 
+
+
+class TestShip2StripFolders(unittest.TestCase):
+    """SHIP-2: the engine quotes full paths with shlex.quote on every OS; on Windows (backslashes, drive colon) that
+    always adds quotes, and the methods text showed 'protein.aln.fasta' with the quotes left behind."""
+
+    def test_quoted_full_path_becomes_plain_name(self):
+        import shlex
+        p = os.path.join(tempfile.gettempdir(), "run (1)", "protein.aln.fasta")
+        d = os.path.join(tempfile.gettempdir(), "run (1)", "dna.fasta")
+        cmd = f"coal {shlex.quote(p)} {shlex.quote(d)} -codontable 2"
+        self.assertEqual(core.strip_folders(cmd, [p, d]), "coal protein.aln.fasta dna.fasta -codontable 2")
+
+    def test_methods_text_from_a_quoted_folder(self):
+        t = tempfile.mkdtemp(prefix="coal ship2 (x)")
+        try:
+            p, d = core.example_paths("mito")
+            for src in (p, d):
+                shutil.copy(src, t)
+            r = core.run_coal(os.path.join(t, os.path.basename(p)), os.path.join(t, os.path.basename(d)),
+                              codontable=2, out_dir=t)
+            self.assertIn(f"Command: coal {os.path.basename(p)} {os.path.basename(d)} -codontable 2",
+                          core.methods_text(r.report))
+        finally:
+            shutil.rmtree(t, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()

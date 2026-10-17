@@ -5,8 +5,10 @@
 // CHANGED(WEB-8): was coal-site-v1 with img/broken-gene.png; now v2 with the logo assets and the WebP screenshot.
 // CHANGED(WEB-11): v3; the page no longer shows the large logo PNGs, so they are not cached.
 // CHANGED(WEB-12): v4; dark-only page with the dark header mark.
-var CACHE = "coal-site-v4";
-var FILES = ["./", "index.html", "style.css", "main.js", "favicon.svg", "explainer.html", "img/broken-gene.webp",
+// CHANGED(WEB-13): v5; the site is several pages, set in a self-hosted font.
+var CACHE = "coal-site-v5";
+var FILES = ["./", "index.html", "install.html", "guide.html", "differences.html", "cite.html", "style.css", "main.js",
+  "favicon.svg", "explainer.html", "img/broken-gene.webp", "assets/fonts/AtkinsonHyperlegibleNext-wght.woff2",
   "assets/coal-mark-dark.svg", "assets/favicon-32.png", "assets/apple-touch-icon.png"];
 
 self.addEventListener("install", function (event) {

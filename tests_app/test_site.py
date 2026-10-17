@@ -168,7 +168,9 @@ class TestPagesWorkflow(unittest.TestCase):
 
 
 # WEB-8: screenshot now WebP (lossless, 51 KB instead of 234 KB); logo, mark and icons added.
-SITE_FILES = ("index.html", "style.css", "main.js", "sw.js", "favicon.svg", "explainer.html", "img/broken-gene.webp",
+# CHANGED(WEB-13): the site is several pages, with a self-hosted font and its licence
+PAGES = ("index.html", "install.html", "guide.html", "differences.html", "cite.html")
+SITE_FILES = PAGES + ("assets/fonts/AtkinsonHyperlegibleNext-wght.woff2", "assets/fonts/OFL.txt") + ("index.html", "style.css", "main.js", "sw.js", "favicon.svg", "explainer.html", "img/broken-gene.webp",
               "assets/coal-mark.svg", "assets/coal-mark-dark.svg", "assets/coal-logo.png", "assets/coal-logo@2x.png", "assets/coal-logo-dark.png",
               "assets/coal-logo-dark@2x.png", "assets/favicon-32.png", "assets/apple-touch-icon.png",
               "assets/icon-512.png", "assets/coal-train.svg")
@@ -177,10 +179,16 @@ TEXT_EXT = (".html", ".css", ".js", ".svg", ".txt", ".json", ".webmanifest")
 ALLOWED_NON_REPO_URLS = ("http://www.w3.org/2000/svg", "http://127.0.0.1:7860")
 
 
+# CHANGED(WEB-13): new. The font's licence names its project and licence sites; no page loads or links them.
+NOT_LOADED = (os.path.join("assets", "fonts", "OFL.txt"),)
+
+
 def site_text_files():
     out = []
     for d, _, files in os.walk(SITE):
         for f in files:
+            if os.path.relpath(os.path.join(d, f), SITE) in NOT_LOADED:
+                continue
             if f.endswith(TEXT_EXT):
                 out.append(os.path.join(d, f))
     return sorted(out)
@@ -191,8 +199,12 @@ def site_links(html):
 
 
 class TestSiteFiles(unittest.TestCase):
+    # CHANGED(WEB-13): content moved from index.html to install, guide, differences and cite pages. Checks that need
+    # a string somewhere on the site look at all pages (self.all); per-page checks loop over self.pages.
     def setUp(self):
         self.index = _read("site", "index.html")
+        self.pages = {p: _read("site", p) for p in PAGES}
+        self.all = "\n".join(self.pages.values())
 
     def test_files_exist(self):
         for f in SITE_FILES + ("README.md",):
@@ -223,15 +235,19 @@ class TestSiteFiles(unittest.TestCase):
                     self.assertFalse(link.startswith("/"), f"{rel}: {link} must be relative (site may move to a custom domain)")
 
     def test_internal_links_resolve(self):
-        ids = set(re.findall(r'\sid="([^"]+)"', self.index))
-        for link in site_links(self.index):
-            if link.startswith("#"):
-                self.assertIn(link[1:], ids, f"anchor {link} has no target")
-            elif not link.startswith("https://"):
-                target = link.split("#")[0].split("?")[0] or "index.html"
-                if target in ("./", "."):
-                    target = "index.html"
-                self.assertTrue(os.path.isfile(os.path.join(SITE, target)), f"link {link}: site/{target} missing")
+        # CHANGED(WEB-13): every page, and page#anchor links must find the anchor on that page
+        ids = {p: set(re.findall(r'\sid="([^"]+)"', h)) for p, h in self.pages.items()}
+        for page, html in self.pages.items():
+            for link in site_links(html):
+                if link.startswith("#"):
+                    self.assertIn(link[1:], ids[page], f"{page}: anchor {link} has no target")
+                elif not link.startswith("https://"):
+                    target = link.split("#")[0].split("?")[0] or page
+                    if target in ("./", "."):
+                        target = "index.html"
+                    self.assertTrue(os.path.isfile(os.path.join(SITE, target)), f"{page}: link {link}: site/{target} missing")
+                    if "#" in link and target in ids:
+                        self.assertIn(link.split("#")[1], ids[target], f"{page}: link {link} has no target")
         sw = _read("site", "sw.js")
         for f in re.search(r"FILES\s*=\s*\[(.*?)\]", sw, re.S).group(1).replace('"', "").split(","):
             f = f.strip()
@@ -240,17 +256,18 @@ class TestSiteFiles(unittest.TestCase):
 
     def test_download_links_match_release_files(self):
         names = set(release_file_names())
-        latest = re.findall(r"https://github\.com/plumat-coal/COAL/releases/latest/download/([^\"'\s<]+)", self.index)
+        # CHANGED(WEB-13): all pages (was index.html only)
+        latest = re.findall(r"https://github\.com/plumat-coal/COAL/releases/latest/download/([^\"'\s<]+)", self.all)
         self.assertGreaterEqual(len(set(latest)), 4, "expected installer, zip, sdist and checksum links")
         for f in latest:
             self.assertIn(f, names, f"site links to {f}, which the release workflow does not upload")
             self.assertNotRegex(f, r"\d+\.\d+", f"{f}: latest/download links need version-free names")
-        self.assertNotIn("/releases/download/", self.index, "versioned download links go stale; use releases/latest")
+        self.assertNotIn("/releases/download/", self.all, "versioned download links go stale; use releases/latest")
         self.assertIn('id="win-download" href="https://github.com/plumat-coal/COAL/releases/latest/download/'
                       'COAL-Setup-windows-x64.exe"', self.index)
 
     def test_pip_commands_use_the_cache_safe_sdist(self):
-        cmds = re.findall(r'"coal(?:\[gui\])? @ ([^"]+)"', self.index)
+        cmds = re.findall(r'"coal(?:\[gui\])? @ ([^"]+)"', self.all)  # CHANGED(WEB-13): all pages
         self.assertGreaterEqual(len(cmds), 4)
         for url in cmds:
             self.assertTrue(url.endswith("/releases/latest/download/coal_src.tar.gz"), url)
@@ -260,12 +277,12 @@ class TestSiteFiles(unittest.TestCase):
     def test_claims_are_in_the_readme(self):
         """Every measured number on the page (data-check) is quoted from README.md, which test_docs_numbers guards."""
         readme = re.sub(r"\s+", " ", _read("README.md")).replace("**", "")
-        claims = re.findall(r'data-check="([^"]+)">([^<]*)<', self.index)
+        claims = re.findall(r'data-check="([^"]+)">([^<]*)<', self.all)  # CHANGED(WEB-13): all pages
         self.assertGreaterEqual(len(claims), 10)
         for value, shown in claims:
             self.assertEqual(value, shown, "data-check value and the text shown differ")
             self.assertIn(value, readme, f"site claims {value!r}, which README.md does not say")
-        self.assertIn("Measured on", self.index)
+        self.assertIn("Measured on", self.pages["differences.html"])
 
     def test_version_is_current(self):
         """WEB-8: the page names the current version; it must match the package."""
@@ -274,6 +291,9 @@ class TestSiteFiles(unittest.TestCase):
         self.assertIsNotNone(shown, "version span missing")
         self.assertEqual(shown.group(1), shown.group(2))
         self.assertEqual(shown.group(1), init, "site/index.html names another version than src/coal/__init__.py")
+        # CHANGED(WEB-13): new; the citation (now on cite.html) names the version too
+        ref = re.findall(r"<span data-version-ref>([^<]+)</span>", self.all)
+        self.assertEqual(ref, [init], "site/cite.html: the citation's data-version-ref span names another version")
 
     def test_pal2nal_relationship_and_citation(self):
         """WEB-8: the qualified PAL2NAL wording, the licences and the reference."""
@@ -282,7 +302,7 @@ class TestSiteFiles(unittest.TestCase):
         for must in ("COAL's output is identical to PAL2NAL v14's except for a short list of documented, deliberate "
                      "differences", "GPL-2.0", "contains none of PAL2NAL's code",
                      "Suyama M, Torrents D, Bork P (2006)", "34:W609"):
-            self.assertIn(must, self.index)
+            self.assertIn(must, self.all)  # CHANGED(WEB-13): was index.html; now differences.html and cite.html
 
     def test_size_budget_with_images(self):
         """WEB-8: the whole site, images included, stays under 250 KB (README.md excluded: not deployed)."""
@@ -296,28 +316,53 @@ class TestSiteFiles(unittest.TestCase):
                      # CHANGED(WEB-11): was "Zenodo", "placeholder" (the DOI placeholder); the owner asked for no DOI
                      # and named authors, so the page cites Newton and Murati and points to CITATION.cff
                      "Newton C, Murati K (2026)", "CITATION.cff"):
-            self.assertIn(must, self.index)
+            self.assertIn(must, self.all)  # CHANGED(WEB-13): was index.html; now install, guide and cite pages
         # CHANGED(WEB-11): new; the owner asked for no DOI or Zenodo mention and for the large sidebar logo to go
         for gone in ("Zenodo", "placeholder", "DOI", 'class="logo"', "coal-logo.png"):
-            self.assertNotIn(gone, self.index)
+            for page, html in self.pages.items():
+                self.assertNotIn(gone, html, page)
 
     def test_accessibility_basics(self):
-        self.assertRegex(self.index, r'<html lang="en">')
-        self.assertEqual(len(re.findall(r"<h1[\s>]", self.index)), 1)
-        self.assertIn('<main id="main">', self.index)
-        self.assertIn('href="#main"', self.index)
-        for img in re.findall(r"<img\b[^>]*>", self.index):
-            if 'src="assets/coal-mark-dark.svg"' in img:  # CHANGED(WEB-12): was coal-mark.svg. WEB-8: decorative, next to the text "COAL" in the same link
-                self.assertIn('alt=""', img)
-                continue
-            self.assertRegex(img, r'\salt="[^"]{10,}"', img)
-        self.assertRegex(self.index, r'<a class="home" href="\./"><img src="assets/coal-mark-dark\.svg"[^>]*><span>COAL</span></a>')
+        for page, html in self.pages.items():  # CHANGED(WEB-13): every page (was index.html only)
+            self.assertRegex(html, r'<html lang="en">', page)
+            self.assertEqual(len(re.findall(r"<h1[\s>]", html)), 1, page)
+            self.assertIn('<main id="main">', html, page)
+            self.assertIn('href="#main"', html, page)
+            for img in re.findall(r"<img\b[^>]*>", html):
+                if 'src="assets/coal-mark-dark.svg"' in img:  # CHANGED(WEB-12): was coal-mark.svg. WEB-8: decorative, next to the text "COAL" in the same link
+                    self.assertIn('alt=""', img)
+                    continue
+                self.assertRegex(img, r'\salt="[^"]{10,}"', img)
+            self.assertRegex(html, r'<a class="home" href="\./"><img src="assets/coal-mark-dark\.svg"[^>]*><span>COAL</span></a>', page)
         css = _read("site", "style.css")
         self.assertIn("prefers-reduced-motion", css)
         # CHANGED(WEB-12): was "prefers-color-scheme: dark" (light page with a dark variant); the page is dark only
         self.assertIn("color-scheme: dark;", css)
         self.assertNotIn("prefers-color-scheme", re.sub(r"/\*.*?\*/", "", css, flags=re.S))
         self.assertIn(":focus-visible", css)
+
+    def test_same_header_and_footer_on_every_page(self):
+        """WEB-13: one header and footer for the whole site; only the current page's nav link is marked."""
+        def chrome(html):
+            head = re.search(r'<header class="top">.*?</header>', html, re.S).group(0)
+            foot = re.search(r'<footer class="foot".*?</footer>', html, re.S).group(0)
+            return head.replace(' aria-current="page"', ""), foot
+        first = chrome(self.index)
+        for page, html in self.pages.items():
+            self.assertEqual(chrome(html), first, f"{page}: header or footer differs from index.html")
+            current = re.findall(r'<a href="([^"]+)" aria-current="page">', html)
+            self.assertEqual(current, [] if page == "index.html" else [page], page)
+            if page != "index.html":
+                self.assertIn(f'href="{page}"', first[0], f"{page} is not in the header")
+
+    def test_font_is_self_hosted_with_its_licence(self):
+        """WEB-13: the only font file is ours, small, and the OFL travels with it."""
+        css = _read("site", "style.css")
+        self.assertEqual(re.findall(r'url\("([^"]+)"\)', css), ["assets/fonts/AtkinsonHyperlegibleNext-wght.woff2"])
+        size = os.path.getsize(os.path.join(SITE, "assets", "fonts", "AtkinsonHyperlegibleNext-wght.woff2"))
+        self.assertLess(size, 60 * 1024)
+        self.assertIn("SIL Open Font License", _read("site", "assets", "fonts", "OFL.txt"))
+        self.assertIn('href="assets/fonts/OFL.txt"', self.index)
 
     def test_size_budget(self):
         total = 0

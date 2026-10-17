@@ -38,7 +38,7 @@ options:
   -q, --quiet           do not print warnings or notices (errors are always
                         printed)
   -strict, --strict     refuse probably-wrong data instead of writing it as
-                        PAL2NAL does (PAL2NAL never refuses): exit 1 with no
+                        PAL2NAL does (PAL2NAL writes these): exit 1 with no
                         output if (1) more than half of a sequence's checkable
                         codons (A/C/G/T only) do not match its protein; (2) no
                         10-residue segment of a protein is found in its DNA,

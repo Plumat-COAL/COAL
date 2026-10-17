@@ -606,10 +606,14 @@ class TestFinding16AndC4C5Ci(unittest.TestCase):
 
     def test_cpp_job_cannot_go_green_without_exercising_cpp(self):
         cpp = self._job("cpp")
-        self.assertIn("not applicable", cpp.lower())
+        # CHANGED(SHIP-3): was "not applicable" while cpp/ was absent and "COAL_IMPL is read by nothing"; coal-cpp now
+        # builds from the root CMakeLists.txt and tests/test_differential.py reads COAL_IMPL
+        self.assertIn("cmake -S . -B build", cpp)
+        self.assertIn("COAL_IMPL: cpp", cpp)
+        self.assertIn("tests.test_differential", cpp)
         self.assertIn("tests/test_cpp_vs_python.py", cpp)
         self.assertIn("skipped", cpp)
-        self.assertNotIn("COAL_IMPL:", cpp)  # an env var nothing reads
+        self.assertNotIn("not applicable", cpp.lower())
 
     def test_require_switch_turns_skips_into_failures(self):
         import subprocess

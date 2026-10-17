@@ -848,6 +848,10 @@ class RunReport:
         for item in list(rep.get("inputs") or []) + [rep.get("output") or {}]:
             pth = item.get("path") if isinstance(item, dict) else None
             if pth:
+                # CHANGED(SHIP-2): the quoted full path is replaced first; on Windows every full path is quoted
+                # (backslashes), and replacing only the folder left 'protein.aln.fasta' in quotes
+                if shlex.quote(pth) != pth:
+                    cmd = cmd.replace(shlex.quote(pth), shlex.quote(os.path.basename(pth)))
                 cmd = cmd.replace(pth, os.path.basename(pth))
         if cmd:
             parts.append(f"Command: {cmd}")

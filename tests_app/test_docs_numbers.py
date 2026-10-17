@@ -6,6 +6,9 @@ import re
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# CHANGED(WEB-13): new; the site is several pages, and the forbidden-wording rules apply to all of them
+SITE_PAGES = tuple(sorted(os.path.relpath(p, ROOT).replace(os.sep, "/")
+                          for p in glob.glob(os.path.join(ROOT, "site", "*.html"))))
 
 
 def _harness():
@@ -114,8 +117,9 @@ class TestDocsNumbers(unittest.TestCase):
                                  f"{f['deliberate']:,} deliberate differences")
         for fmt, (i, b, d) in f["rows"].items():
             self.expect("tests/README.md", f"| {fmt} | {f['cases']:,} | {i:,} | {b:,} | {d:,} | 0 |")
+        # CHANGED(WEB-13): every page of the site (was site/index.html only)
         for rel in ("README.md", "tests/README.md", "pitch/PITCH.md", "pitch/QA.md", ".claude/skills/coal/SKILL.md",
-                    "site/index.html", "src/coal_compat/cli.py"):
+                    "src/coal_compat/cli.py") + SITE_PAGES:
             text = _read(rel)
             self.assertNotIn("on well-formed input", text, f"{rel}: the well-formed claim is false (FIN-C3)")
             self.assertNotIn("stratified", text, f"{rel}: the stratified run is not reproducible (FIN-C20)")
@@ -137,18 +141,18 @@ class TestDocsNumbers(unittest.TestCase):
                                                      c["deliberate nogap_code"]))
         self.assertEqual(e + d + g, kk)
         self.assertEqual(byte + both + kk, self.n)
-        site = _read("site/index.html")
+        site = _read("site/differences.html")  # CHANGED(WEB-13): the breakdown moved from site/index.html
         spans = dict((v, v) for v in re.findall(r'data-check="([^"]+)"', site))
         nums = {}
         for key, pat in (("total", r"^(\d+) checks$"), ("byte", r"^byte-identical in (\d+) checks$"),
                          ("both", r"^in (\d+) both tools fail$"),
                          ("delib", r"^(\d+) checks are deliberate output or exit-status differences$")):
             hits = [int(re.match(pat, v).group(1)) for v in spans if re.match(pat, v)]
-            self.assertEqual(len(hits), 1, f"site/index.html: one data-check for {key}")
+            self.assertEqual(len(hits), 1, f"site/differences.html: one data-check for {key}")
             nums[key] = hits[0]
         self.assertEqual(nums["byte"] + nums["both"] + nums["delib"], nums["total"], f"site numbers: {nums}")
         self.assertEqual(nums["total"], self.n)
-        for rel in ("README.md", "pitch/PITCH.md", "pitch/QA.md", ".claude/skills/coal/SKILL.md", "site/index.html"):
+        for rel in ("README.md", "pitch/PITCH.md", "pitch/QA.md", ".claude/skills/coal/SKILL.md") + SITE_PAGES:
             self.assertNotIn("29 checks are deliberate", _read(rel))
 
     def test_tests_readme_quotes_the_printed_line(self):

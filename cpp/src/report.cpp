@@ -1256,8 +1256,13 @@ std::string RunReport::methods_text(const Json& rep) const {
         for (auto& x : in->a) paths.push_back(sget(x, "path"));
     if (const Json* o = rep.get("output"))
         if (o->type == Json::Object) paths.push_back(sget(*o, "path"));
-    for (auto& p : paths)
-        if (!p.empty()) cmd = replace_all(cmd, p, basename_of(p));
+    for (auto& p : paths) {
+        if (p.empty()) continue;
+        // SHIP-2: mirror report.py; replace the quoted full path first (Windows paths are always quoted)
+        std::string q = shlex_quote(p);
+        if (q != p) cmd = replace_all(cmd, q, shlex_quote(basename_of(p)));
+        cmd = replace_all(cmd, p, basename_of(p));
+    }
     if (!cmd.empty()) parts.push_back("Command: " + cmd);
     std::string out;
     for (size_t i = 0; i < parts.size(); ++i) out += (i ? " " : "") + parts[i];
