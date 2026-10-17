@@ -1124,8 +1124,23 @@ def dispatch(argv: list[str]) -> int:
         if not args.port:
             print("COAL: --serve needs --port", file=sys.stderr)
             return 2
+        _utf8_streams()
         return serve(args.port, mcp=not args.no_mcp, parent_pid=args.parent_pid)
     return main_window(args)
+
+
+def _utf8_streams() -> None:
+    """CHANGED(SHIP-11): new. The --serve child writes to a pipe; in the frozen app (PyInstaller) that pipe used the
+    ANSI code page (cp1252) whatever PYTHONIOENCODING said, so Gradio's own start-up line with an emoji ('🔨
+    Launching MCP server') raised UnicodeEncodeError and the local app died (first CI build of the installer).
+    The parent decodes the pipe as UTF-8 (LocalServer), so use UTF-8 here and never fail on a character."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):
+                pass
 
 
 def _hold_app_mutex():

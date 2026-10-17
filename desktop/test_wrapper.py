@@ -1159,5 +1159,24 @@ class TestLaunchGradio(unittest.TestCase):
             self.assertIsNone(cd.bundled_examples_dir())
 
 
+
+class TestUtf8Streams(unittest.TestCase):
+    """SHIP-11: the --serve child must not die when Gradio prints an emoji to a cp1252 pipe."""
+
+    def test_emoji_on_a_cp1252_pipe_after_reconfigure(self):
+        raw = io.BytesIO()
+        pipe = io.TextIOWrapper(raw, encoding="cp1252")
+        with mock.patch.object(sys, "stdout", pipe), mock.patch.object(sys, "stderr", pipe):
+            with self.assertRaises(UnicodeEncodeError):
+                print("\U0001f528 Launching MCP server", file=sys.stdout, flush=True)
+            cd._utf8_streams()
+            print("\U0001f528 Launching MCP server", file=sys.stdout, flush=True)
+        self.assertIn("Launching MCP server".encode(), raw.getvalue())
+
+    def test_no_streams_is_fine(self):
+        with mock.patch.object(sys, "stdout", None), mock.patch.object(sys, "stderr", None):
+            cd._utf8_streams()
+
+
 if __name__ == "__main__":
     unittest.main()
