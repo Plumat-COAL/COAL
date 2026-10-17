@@ -234,8 +234,23 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
         direct = bool(real_out) and os.path.exists(real_out) and (
             not existing or os.stat(real_out).st_nlink > 1)
         dest_dir = os.path.dirname(real_out) if out_path and not direct else None
-        tmp = tempfile.NamedTemporaryFile("w", delete=False, newline="\n", dir=dest_dir,
-                                          prefix=".coal_", suffix=".tmp", encoding="ascii")
+        # CHANGED(R3-E2): was the raw OSError naming COAL's hidden temp file ("No such file or directory:
+        # '.../nodir/.coal_x.tmp'"); now the error names the user's -o path in plain words.
+        # See overnight/integration/CHANGES.md
+        try:
+            tmp = tempfile.NamedTemporaryFile("w", delete=False, newline="\n", dir=dest_dir,
+                                              prefix=".coal_", suffix=".tmp", encoding="ascii")
+        except OSError as e:
+            folder = os.path.dirname(os.path.abspath(out_path)) if out_path else ""
+            if e.errno == errno.ENOENT:
+                why = f"folder {folder} does not exist"
+            elif e.errno == errno.ELOOP:
+                why = f"folder {folder} is a symbolic link loop"
+            elif e.errno == errno.ENOTDIR:
+                why = f"{folder} is not a folder"
+            else:
+                why = e.strerror or str(e)
+            raise CoalError(f"cannot write {out_path}: {why}") from None
         stage = tempfile.NamedTemporaryFile("w+", delete=False, newline="\n", prefix=".coal_rows_",
                                             encoding="ascii") if two_pass else None
         try:

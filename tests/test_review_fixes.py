@@ -143,6 +143,50 @@ class TestR2E7_PipeNames(TempDirCase):  # R2-E7
         self.assertNotIn(".coal_in_", r.stderr)
 
 
+class TestR3E2_OutputFolderErrors(TempDirCase):  # R3-E2
+    def test_missing_folder_names_the_output_path(self):
+        r = coal(["p.fa", "n.fa", "-o", os.path.join("nodir", "out.fa")], self.d)
+        self.assertEqual(r.returncode, 1, r.stderr)
+        self.assertNotIn(".coal_", r.stderr)
+        self.assertIn(os.path.join("nodir", "out.fa"), r.stderr)
+        self.assertIn("folder", r.stderr)
+        self.assertIn("does not exist", r.stderr)
+        self.assertFalse((self.d / "nodir").exists())
+
+    def test_folder_symlink_loop_names_the_output_path(self):
+        try:
+            (self.d / "loopA").symlink_to(self.d / "loopB")
+            (self.d / "loopB").symlink_to(self.d / "loopA")
+        except (OSError, NotImplementedError):
+            self.skipTest("cannot create symlinks here")
+        r = coal(["p.fa", "n.fa", "-o", os.path.join("loopA", "out.fa")], self.d)
+        self.assertEqual(r.returncode, 1, r.stderr)
+        self.assertNotIn(".coal_", r.stderr)
+        self.assertIn(os.path.join("loopA", "out.fa"), r.stderr)
+        self.assertEqual(self.leftovers(), [])
+
+
+class TestR3E3_DnaErrorLineNumbers(TempDirCase):  # R3-E3
+    def test_data_before_header_has_line_number(self):
+        (self.d / "bn.fa").write_text("# comment\n\nATGAAA\n>s1\nATGAAAGTTGCTCTG\n")
+        r = coal(["p.fa", "bn.fa"], self.d)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("bn.fa:3: sequence data before first '>' header", r.stderr)
+
+    def test_non_ascii_id_has_line_number(self):
+        (self.d / "un.fa").write_bytes(b">s1\nATGAAAGTTGCTCTG\n>s\xc3\xa92\nATG\n")
+        r = coal(["p.fa", "un.fa"], self.d)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("un.fa:3:", r.stderr)
+
+    def test_crlf_and_cr_line_numbers(self):
+        for name, nl in (("crlf.fa", b"\r\n"), ("cr.fa", b"\r")):
+            (self.d / name).write_bytes(nl.join([b">s1", b"ATGAAAGTTGCTCTG", b">", b"ATG", b""]))
+            r = coal(["p.fa", name], self.d)
+            self.assertEqual(r.returncode, 1)
+            self.assertIn(f"{name}:3: empty FASTA header", r.stderr)
+
+
 # ---------------------------------------------------------------- ENG-b
 @unittest.skipUnless(os.path.exists("/dev/stdin"), "R2-D1: no /dev/stdin (Windows)")
 class TestEngB_StreamInputs(TempDirCase):

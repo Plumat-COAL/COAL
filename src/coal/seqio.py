@@ -202,24 +202,27 @@ class DnaIndex:
                 offset = len(codecs.BOM_UTF8)
             else:
                 fh.seek(0)
-            for line in (_cr_lines(fh) if _has_lone_cr(fh) else fh):
+            # CHANGED(R3-E3): was "<file>: empty FASTA header" / "non-ASCII sequence ID" / "sequence data before
+            # first '>' header" with no line number; now "<file>:<line>: ..." as for protein files.
+            # See overnight/integration/CHANGES.md
+            for lineno, line in enumerate(_cr_lines(fh) if _has_lone_cr(fh) else fh, 1):
                 if line.startswith(b">"):
                     if start is not None:
                         self._add(fno, start, offset)
                     parts = line[1:].split()
                     if not parts:
-                        raise InputFormatError(f"{path}: empty FASTA header")
+                        raise InputFormatError(f"{path}:{lineno}: empty FASTA header")
                     try:
                         rid = parts[0].decode("ascii")
                     except UnicodeDecodeError:
-                        raise InputFormatError(f"{path}: non-ASCII sequence ID") from None
+                        raise InputFormatError(f"{path}:{lineno}: non-ASCII sequence ID") from None
                     if rid in self.pos:
                         raise InputFormatError(f"{', '.join(self.paths)}: duplicate sequence ID {rid!r}")
                     self.pos[rid] = len(self.ids)
                     self.ids.append(rid)
                     start = offset + len(line)
                 elif start is None and line.strip() and not line.startswith(b"#"):
-                    raise InputFormatError(f"{path}: sequence data before first '>' header")
+                    raise InputFormatError(f"{path}:{lineno}: sequence data before first '>' header")
                 offset += len(line)
             if start is not None:
                 self._add(fno, start, offset)
