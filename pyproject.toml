@@ -22,6 +22,7 @@ mcp = ["mcp==2.2.0"]
 [project.scripts]
 coal = "coal.cli:main"
 coal-gui = "coal_app.__main__:main"
+pal2nal = "coal_compat.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
