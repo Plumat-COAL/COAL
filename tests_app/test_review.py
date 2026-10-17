@@ -388,7 +388,8 @@ class TestFinding11HostedSandbox(_RunsDir):
 
     def test_intro_depends_on_where_it_runs(self):
         self._hosted(False)
-        self.assertIn("Nothing leaves your computer", core.intro_text())
+        # CHANGED(POL-1): was assertIn("Nothing leaves your computer", ...); the local app shows no note now
+        self.assertEqual(core.intro_text(), "")
         self._hosted(True)
         text = core.intro_text()
         self.assertNotIn("Nothing leaves your computer", text)

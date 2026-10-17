@@ -49,9 +49,12 @@ class TestGui1Banner(unittest.TestCase):  # GUI-1
         self.assertIn("<svg", html)
         # CHANGED(GUI-13): was the intro text in the header; the header is the mark and "COAL" only (owner: "just
         # COAL is fine") and the where-the-data-goes note is the page footer
-        self.assertNotIn(core.intro_text(), html)
+        # CHANGED(POL-1): checked with the hosted note (the local app has none now, and "" is in every string)
+        intro = core.INTRO_HOSTED
+        self.assertNotIn(intro, gui_html.header_html(intro))
         self.assertNotIn("codon alignment", html)
-        self.assertIn(core.intro_text(), gui_html.footer_html(core.intro_text()))
+        self.assertIn(intro, gui_html.footer_html(intro))
+        self.assertEqual(gui_html.footer_html(""), "")
 
 
 class TestGui4HealthTable(unittest.TestCase):  # GUI-4
@@ -216,8 +219,11 @@ class TestGui13LessText(unittest.TestCase):  # GUI-13, GUI-14
             src = fh.read()
         self.assertIn('gr.Tab("Align"', src)
         for c in comps:
+            # CHANGED(POL-3): was assertIsNone(info) for both genetic-code boxes; the main form's has one hint line
+            # (the Settings tab's still has none)
             if c._name == "Dropdown" and c._kw.get("label") == "Genetic code":
-                self.assertIsNone(c._kw.get("info"))
+                self.assertEqual(c._kw.get("info"), self.ui.CODE_HINT if c._kw.get("elem_id") == "coal-code"
+                                 else None)
         self.assertIsNone(self.ui._format_info(core.Features(output_formats=("fasta", "paml"))))
         self.assertIn("Re-run", self.ui._strip_rerun("Use code 2. Re-run with code 2?", 2) + "Re-run")
         self.assertEqual(self.ui._strip_rerun("Use code 2. Re-run with code 2?", 2), "Use code 2.")

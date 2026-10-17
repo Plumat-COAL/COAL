@@ -41,8 +41,9 @@ def header_html(intro: str = "") -> str:
 
 def footer_html(intro: str) -> str:
     """CHANGED(GUI-13): new. The where-the-data-goes note (core.intro_text()), small, at the foot of the page (as
-    Squoosh puts "images never leave your device" below its drop zone, not in its header)."""
-    return f'<p class="coal-foot">{html.escape(intro)}</p>'
+    Squoosh puts "images never leave your device" below its drop zone, not in its header).
+    CHANGED(POL-1): "" when there is no note (the local app has none now; the hosted Space keeps its note)."""
+    return f'<p class="coal-foot">{html.escape(intro)}</p>' if intro else ""
 
 
 # ---------------------------------------------------------------- result banner
@@ -181,8 +182,11 @@ def message_banner(kind: str, title: str, text: str = "", text_html: str = "") -
 
 def empty_banner() -> str:
     # CHANGED(GUI-13): was a dashed box "Results appear here: add the two files (or pick an example) and press
-    # Make codon alignment." directly under that button; now one quiet line
-    return '<p class="coal-empty-note" role="status">Results appear here.</p>'
+    # Make codon alignment." directly under that button; then one quiet line "Results appear here."
+    # CHANGED(POL-4): nothing. The whole results area (heading, banner, view, methods) stays hidden until there is
+    # something to show (ui.build: #coal-results visible=False, made visible by every result), as Squoosh shows no
+    # result panel before an image is opened. The form above already names the next step (the button).
+    return ""
 
 
 def sample_banner(report: dict, sentence: str) -> str:
