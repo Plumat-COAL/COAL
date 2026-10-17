@@ -354,8 +354,9 @@ class TestSingleInstance(unittest.TestCase):
             self.assertFalse(cd.SingleInstance(self.dir).acquire())
             p.kill()
             p.wait(timeout=10)
-            again = cd.SingleInstance(self.dir)
-            self.assertTrue(again.acquire())  # the OS released the dead process's lock
+            again = cd.SingleInstance(self.dir)  # WIN-R5
+            # the OS released the dead process's lock (asynchronously on Windows: allow 3 s)
+            self.assertEqual(cd.claim_instance(again, {"action": "focus"}, wait=3.0), "primary")
             again.release()
         finally:
             if p.poll() is None:
@@ -655,6 +656,101 @@ class TestOpenWith(WindowBase):
             cd._error_dialog.side_effect = dialog
             self.assertEqual(cd._run_in_browser(s, self.instance), 0)
         self.assertEqual(len(opened), 2, "second launch should reopen the page")
+
+
+class TestLaunchLogging(unittest.TestCase):
+    """WIN-W3: only the instance that owns the lock rotates logs; local_app.log is rotated too."""
+
+    def setUp(self):
+        import logging
+        self.tmp = tempfile.mkdtemp(prefix="coal_logs_")
+        self.logs = os.path.join(self.tmp, "logs")
+        os.makedirs(self.logs)
+        self.root_handlers = list(logging.getLogger().handlers)
+        self.env = mock.patch.dict(os.environ, {"COAL_DESKTOP_HOME": self.tmp})
+        self.env.start()
+
+    def tearDown(self):
+        import logging
+        root = logging.getLogger()
+        for h in list(root.handlers):
+            if h not in self.root_handlers:
+                root.removeHandler(h)
+                h.close()
+        self.env.stop()
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def write(self, name, text):
+        with open(os.path.join(self.logs, name), "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def test_second_launch_leaves_the_running_instances_log_alone(self):
+        got = []
+        primary = cd.SingleInstance(self.tmp, on_message=got.append)
+        self.assertTrue(primary.acquire())
+        try:
+            self.write("coal_desktop.log", "PRIMARY\n")
+            self.assertEqual(cd.main_window(cd.parse_args([])), 0)
+        finally:
+            primary.release()
+        with open(os.path.join(self.logs, "coal_desktop.log"), encoding="utf-8") as f:
+            self.assertEqual(f.read(), "PRIMARY\n")
+        self.assertFalse(os.path.exists(os.path.join(self.logs, "coal_desktop.log.1")))
+
+    def test_primary_rotates_local_app_log(self):
+        self.write("local_app.log", "OLD RUN\n")
+        with mock.patch.object(cd, "_run_in_browser", return_value=0):
+            self.assertEqual(cd.main_window(cd.parse_args(["--browser"])), 0)
+        with open(os.path.join(self.logs, "local_app.log.1"), encoding="utf-8") as f:
+            self.assertEqual(f.read(), "OLD RUN\n")
+        self.assertFalse(os.path.exists(os.path.join(self.logs, "local_app.log")))
+
+
+class TestClaimInstance(unittest.TestCase):
+    """WIN-R5: a lock that is still being released, or a primary still writing instance.json,
+    gets a few seconds before COAL says it is "already running"."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp(prefix="coal_claim_")
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def test_unreachable_holder_gives_up_after_the_wait(self):
+        import fcntl
+        if cd.IS_WINDOWS:
+            self.skipTest("POSIX lock used to simulate a dead listener")
+        with open(os.path.join(self.dir, "instance.lock"), "a+b") as fh:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            t0 = time.monotonic()
+            self.assertEqual(cd.claim_instance(cd.SingleInstance(self.dir), {"action": "focus"}, wait=1.0),
+                             "unreachable")
+            self.assertGreaterEqual(time.monotonic() - t0, 0.9)
+            self.assertLess(time.monotonic() - t0, 10)
+
+    def test_lock_released_during_the_wait_is_taken(self):
+        import fcntl
+        if cd.IS_WINDOWS:
+            self.skipTest("POSIX lock used to simulate a slow release")
+        fh = open(os.path.join(self.dir, "instance.lock"), "a+b")
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        threading.Timer(0.5, fh.close).start()  # released like a crashed holder, a bit later
+        inst = cd.SingleInstance(self.dir)
+        try:
+            self.assertEqual(cd.claim_instance(inst, {"action": "focus"}, wait=5.0), "primary")
+        finally:
+            inst.release()
+            fh.close()
+
+    def test_running_primary_is_notified(self):
+        got = []
+        primary = cd.SingleInstance(self.dir, on_message=got.append)
+        self.assertTrue(primary.acquire())
+        try:
+            self.assertEqual(cd.claim_instance(cd.SingleInstance(self.dir), {"action": "focus"}, wait=3.0),
+                             "notified")
+        finally:
+            primary.release()
 
 
 if __name__ == "__main__":

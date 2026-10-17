@@ -108,20 +108,25 @@ def child_env() -> dict:
     return env
 
 
-def setup_logging(name: str = "coal_desktop.log", keep: int = 5) -> str:
-    """Log to <data_dir>/logs/<name>; keep the newest `keep` old logs. Never logs sequences."""
-    d = os.path.join(data_dir(), "logs")
-    os.makedirs(d, exist_ok=True)
-    path = os.path.join(d, name)
-    try:  # rotate: name.4 <- name.3 ... name.1 <- name
+def rotate_log(path: str, keep: int) -> None:
+    """path.<keep> <- ... <- path.1 <- path. Only the instance that holds the lock calls this."""
+    try:
         for i in range(keep - 1, 0, -1):
             a, b = f"{path}.{i}", f"{path}.{i + 1}"
             if os.path.exists(a):
                 os.replace(a, b)
         if os.path.exists(path):
             os.replace(path, path + ".1")
-    except OSError:
-        pass
+    except OSError as e:
+        log.warning("could not rotate %s: %s", path, e)
+
+
+def setup_logging(name: str = "coal_desktop.log", keep: int = 5) -> str:
+    """Log to <data_dir>/logs/<name>; keep the newest `keep` old logs. Never logs sequences."""
+    d = os.path.join(data_dir(), "logs")
+    os.makedirs(d, exist_ok=True)
+    path = os.path.join(d, name)
+    rotate_log(path, keep)
     handler = logging.FileHandler(path, encoding="utf-8")
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
     root = logging.getLogger()
@@ -364,9 +369,13 @@ class LocalServer:
             flags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)  # no console flashing up
         self._lines = queue.Queue()
         self.output = []
-        self.proc = subprocess.Popen(
-            self.command(port), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT, env=self.env, creationflags=flags, close_fds=True)
+        argv = self.command(port)
+        with self._stop_lock:  # WIN-W2: stop() runs either before this (no child) or after (sees it)
+            if self._stopped:
+                return -1, "COAL was closed while it was starting."
+            self.proc = subprocess.Popen(
+                argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, env=self.env, creationflags=flags, close_fds=True)
         if IS_WINDOWS:
             try:
                 self._job = self._job or _WindowsJob()
@@ -553,9 +562,10 @@ class SingleInstance:
         self._thread.start()
 
     def _accept_loop(self):
+        sock = self._sock  # release() sets self._sock to None after closing it
         while True:
             try:
-                conn, _ = self._sock.accept()
+                conn, _ = sock.accept()
             except OSError:
                 return  # listener closed by release()
             with conn:
@@ -948,22 +958,48 @@ def _hold_app_mutex():
         return None
 
 
+INSTANCE_WAIT = 3.0  # seconds to wait for a lock still being released / a primary still starting
+
+
+def claim_instance(instance: SingleInstance, message: dict, wait: float = INSTANCE_WAIT) -> str:
+    """'primary' (we hold the lock), 'notified' (the running COAL got `message`) or 'unreachable'.
+
+    CHANGED(WIN-R5): was: one try, then "already running"; now retries for `wait` seconds (on
+    Windows a crashed holder's lock is released asynchronously, and a new primary takes the lock
+    before writing instance.json). See overnight/windows-app/CHANGES.md"""
+    deadline = time.monotonic() + wait
+    while True:
+        if instance.acquire():
+            return "primary"
+        if instance.notify_primary(message, timeout=2.0):
+            return "notified"
+        if time.monotonic() >= deadline:
+            return "unreachable"
+        time.sleep(0.25)
+
+
 def main_window(args) -> int:
-    log_path = setup_logging()
-    _mutex = _hold_app_mutex()  # noqa: F841 - kept alive until main_window returns
-    log.info("COAL desktop starting (frozen=%s, python %s)", FROZEN, sys.version.split()[0])
     instance = SingleInstance(data_dir())
-    if not instance.acquire():
-        files = [os.path.abspath(f) for f in args.files]
-        if instance.notify_primary({"action": "focus", "files": files}):
-            log.info("COAL is already open; asked it to come to the front")
-            return 0
+    files = [os.path.abspath(f) for f in args.files]
+    # CHANGED(WIN-W3): was: logs rotated before the single-instance check (a second launch rotated
+    # the running COAL's log); now only the lock holder touches the logs; a second launch writes
+    # none. See overnight/windows-app/CHANGES.md
+    role = claim_instance(instance, {"action": "focus", "files": files})
+    if role == "notified":
+        return 0
+    if role == "unreachable":
         _error_dialog("COAL", "COAL seems to be already running but did not respond. "
                       "Close it from the taskbar (or Task Manager) and try again.")
         return 1
-    server = LocalServer(command=lambda port: default_server_command(port, mcp=args.mcp),
-                         log_path=os.path.join(os.path.dirname(log_path), "local_app.log"))
+    server = None
     try:
+        log_path = setup_logging()
+        local_log = os.path.join(os.path.dirname(log_path), "local_app.log")
+        rotate_log(local_log, keep=3)  # CHANGED(WIN-W3): was: appended forever; now rotated per launch
+        _mutex = _hold_app_mutex()  # noqa: F841
+        log.info("COAL desktop starting (frozen=%s, python %s)", FROZEN, sys.version.split()[0])
+        server = LocalServer(command=lambda port: default_server_command(port, mcp=args.mcp),
+                             log_path=local_log)
         if args.browser:
             return _run_in_browser(server, instance)
         try:
@@ -972,9 +1008,10 @@ def main_window(args) -> int:
             _error_dialog("COAL", "The window component (pywebview) is not installed. "
                           "Install desktop/requirements.txt, or start with --browser.")
             return 1
-        return run_window(server, instance, [os.path.abspath(f) for f in args.files])
+        return run_window(server, instance, files)
     finally:
-        server.stop()
+        if server is not None:
+            server.stop()
         instance.release()
 
 
