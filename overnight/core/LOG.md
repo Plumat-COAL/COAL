@@ -4,7 +4,7 @@
 
 Everything is on the local branch `overnight/core` (17 commits on top of main `31cf3d0`). **Not pushed**: this machine has no GitHub credentials. Push it yourself when you're happy: `git push -u origin overnight/core`
 
-**State:** Python 279/279 and C++ 279/279 golden checks. The full test suite (52 tests) passes. The C++ vs Python random test is identical on 1000/1000 inputs, plus 3,000 more with other seeds. The final code-review pass came back clean.
+**State:** Python 285/285 and C++ 285/285 golden checks (279 + the new frameshift_codon_line case). The full test suite (52 tests) passes. The C++ vs Python random test is identical on 1000/1000 inputs, plus 3,000 more with other seeds. The final code-review pass came back clean.
 
 ### Done → commit
 | task | commit |
@@ -37,7 +37,7 @@ C++ peak memory < 30 MB on a 137 MB input. Re-checked after all the changes: sti
 - Tools used: pyflakes, `-Wall -Wextra -Wshadow`, ASan + UBSan and TSan builds run through the test suites, Python `-X dev` ResourceWarnings, CRLF inputs, adversarial edge cases on both engines.
 
 ### Parked
-- `-output codon` residue-line quirk of PAL2NAL with frameshift digits 4/5. No golden covers it; see Decisions.
+- ~~`-output codon` residue-line quirk~~ Fixed next morning (see below).
 
 ### Needs a human decision
 - ~~Add `build/` to .gitignore.~~ Done (Chloe asked, next morning).
@@ -152,6 +152,7 @@ Push when happy: `git push -u origin overnight/core`
 - 2026-10-17 02:19 UTC | review pass 2 | NOT clean -> fixed | rebuilt ASan/UBSan on the current code and re-ran golden + random + resume + progress tests (clean, no leaked temp files; the 7 stray C++ temp files found in the temp dir were from the pre-fix ASan crashes of pass 1 and do not reappear); Python under -X dev with ResourceWarnings shown, in-process tests and CLI runs of every path (clean); full suite run twice (no flaky tests: 51 tests OK both times); re-read the C++ resume/cleanup/threading code and the Python pipeline/checkpoint code. Found: one wrong number in this log (task 6 line said '64 tests'; the whole suite has 51) -> corrected.
 - 2026-10-17 02:23 UTC | review pass 3 | NOT clean -> fixed | adversarial inputs on both engines (ASan build): empty DNA record, duplicate DNA IDs, pipe/version IDs reordered, non-ASCII header, all sequences failing with --keep-going (paml, -nomismatch), -nomismatch + clustal + --keep-going, corrupted checkpoint, emptied partial file -> engines agree on output, stderr and exit code in every case, and resumed outputs stay identical. Found: with an unreadable checkpoint or an incomplete partial file --resume said 'no checkpoint to resume', which is misleading -> both engines now say what they found ('found an unreadable checkpoint, so nothing can be resumed ...'); test added.
 - 2026-10-17 02:26 UTC | review pass 4 | CLEAN | ASan/UBSan (golden, random, resume, progress) and TSan (3 threads: plain, codon+keep-going, -nomismatch+report) on the final code; 3,000 new random cases (seeds 1-3) identical between engines; pyflakes clean; no TODO/debug leftovers; -X dev with ResourceWarnings: none; full suite 52 tests OK; golden 279/279 both engines; no leaked temp files; benchmarks re-checked (unchanged). Review stops here (clean pass).
+- 2026-10-17 09:40 UTC | morning | codon residue-line quirk FIXED | black-box probing of PAL2NAL (110 + 8 layouts, output only) showed the rule: after a column where the LAST sequence has digit N, each residue line gets 3*ceil(N/3)/3-1 extra '-' tokens (gap/residue there: none). Implemented in both engines (residue_line_blocks / write_blocks), 98/98 probe layouts identical to PAL2NAL for each engine; new fixture tests/fixtures/frameshift_codon_line + PAL2NAL goldens via scripts/make_golden.py (case added to cases.json) -> 285/285 golden checks on both engines; the previous build fails the new codon golden, so the test covers the fix.
 
 ## Decisions
 

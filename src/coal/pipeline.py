@@ -186,6 +186,37 @@ def _view(f, size):
     return mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) if size else b""
 
 
+def residue_line_blocks(last_row: str) -> list[list[tuple[int, int]]]:
+    """Layout of the residue line in "-output codon", cut into blocks of 20 tokens.
+
+    One token per alignment column, plus, after a column where the LAST sequence
+    has a frameshift digit N, 3*ceil(N/3)/3 - 1 extra '-' tokens (one for 4-6, two
+    for 7-9) on every sequence's residue line. That is PAL2NAL v14's observed
+    behaviour (black-box probes: only the last sequence's character counts, a gap
+    or residue there adds nothing). Each block is a list of pieces: (c0, c1) =
+    columns c0..c1-1 of the row, or (-1, k) = k '-' tokens."""
+    toks: list[int] = []
+    for i, ch in enumerate(last_row):
+        toks.append(i)
+        if ch.isdigit():
+            toks.extend([-1] * ((max(int(ch) - 1, 0) // 3 + 1) - 1))
+    blocks = []
+    for j in range(0, len(toks), CODON_BLOCK):
+        pieces: list[tuple[int, int]] = []
+        for t in toks[j:j + CODON_BLOCK]:
+            if t >= 0:
+                if pieces and pieces[-1][0] >= 0 and pieces[-1][1] == t:
+                    pieces[-1] = (pieces[-1][0], t + 1)
+                else:
+                    pieces.append((t, t + 1))
+            elif pieces and pieces[-1][0] < 0:
+                pieces[-1] = (-1, pieces[-1][1] + 1)
+            else:
+                pieces.append((-1, 1))
+        blocks.append(pieces)
+    return blocks
+
+
 def write_blocks(stage, out, fmt: str, slices, length: int, ncol: int) -> None:
     """Write CLUSTAL or codon output from the staged rows.
 
@@ -217,15 +248,19 @@ def write_blocks(stage, out, fmt: str, slices, length: int, ncol: int) -> None:
             pm = _view(prot, n * ncol)
             pad = " " * width
             ntrip = length // 3
+            last = pm[(n - 1) * ncol:n * ncol].decode("ascii") if n else ""
+            res_blocks = residue_line_blocks(last)
             # The residue line and the codon line are cut into blocks of 20 separately
             # (as PAL2NAL does), so a widened frameshift column shifts the residues.
-            nblk = max(-(-ncol // CODON_BLOCK), -(-ntrip // CODON_BLOCK))
+            nblk = max(len(res_blocks), -(-ntrip // CODON_BLOCK))
             for b in range(nblk):
-                a0, a1 = min(b * CODON_BLOCK, ncol), min((b + 1) * CODON_BLOCK, ncol)
+                pieces = res_blocks[b] if b < len(res_blocks) else ()
                 d0, d1 = min(3 * b * CODON_BLOCK, length), min(3 * (b + 1) * CODON_BLOCK, length)
                 lines = []
                 for k in range(n):
-                    aa = pm[k * ncol + a0:k * ncol + a1].decode("ascii")
+                    base = k * ncol
+                    aa = "".join(pm[base + c0:base + c1].decode("ascii") if c0 >= 0 else "-" * c1
+                                 for c0, c1 in pieces)
                     dna = gm[k * length + d0:k * length + d1].decode("ascii")
                     lines.append(pad + "   ".join(aa) + "\n")
                     lines.append(names[k] + " ".join([dna[i:i + 3] for i in range(0, len(dna), 3)]) + "\n")

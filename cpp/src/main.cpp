@@ -336,15 +336,37 @@ static void write_blocks(std::ostream& out, const std::string& fmt, std::fstream
         }
         return;
     }
-    // codon: residue line and codon line cut into blocks of 20 separately (as PAL2NAL)
+    // codon: residue line and codon line cut into blocks of 20 separately (as PAL2NAL).
+    // Residue-line tokens: one per column, plus extra '-' tokens after a column where the
+    // LAST sequence has a frameshift digit (see residue_line_blocks in pipeline.py).
     long long ntrip = length / 3;
-    long long nb = std::max((ncol + 19) / 20, (ntrip + 19) / 20);
+    std::string last;
+    if (n > 0) read_rows(*prot, (n - 1) * ncol, ncol, last);
+    std::vector<long long> toks;  // column index, or -1 for an extra '-'
+    for (long long i = 0; i < (long long)last.size(); ++i) {
+        toks.push_back(i);
+        char ch = last[(size_t)i];
+        if (ch >= '0' && ch <= '9') {
+            int extra = std::max(ch - '0' - 1, 0) / 3;
+            for (int e = 0; e < extra; ++e) toks.push_back(-1);
+        }
+    }
+    long long nres = ((long long)toks.size() + 19) / 20;
+    long long nb = std::max(nres, (ntrip + 19) / 20);
     long long per = std::max(1LL, BLOCK_CACHE / std::max(1LL, n * 80));
     std::vector<std::string> rows((size_t)n), prows((size_t)n);
     std::string pad(width, ' ');
     for (long long sb = 0; sb < nb; sb += per) {
-        long long d0 = std::min(length, sb * 60), d1 = std::min(length, (sb + per) * 60);
-        long long p0 = std::min(ncol, sb * 20), p1 = std::min(ncol, (sb + per) * 20);
+        long long sb_end = std::min(nb, sb + per);
+        long long d0 = std::min(length, sb * 60), d1 = std::min(length, sb_end * 60);
+        // columns needed by the residue tokens of these blocks
+        long long p0 = ncol, p1 = 0;
+        for (long long t = std::min((long long)toks.size(), sb * 20); t < std::min((long long)toks.size(), sb_end * 20); ++t)
+            if (toks[(size_t)t] >= 0) {
+                p0 = std::min(p0, toks[(size_t)t]);
+                p1 = std::max(p1, toks[(size_t)t] + 1);
+            }
+        if (p1 < p0) p0 = p1 = 0;
         bool whole = d0 == 0 && d1 == length && p0 == 0 && p1 == ncol;
         if (whole) {  // whole rows: read sequentially
             grid.seekg(0);
@@ -359,15 +381,16 @@ static void write_blocks(std::ostream& out, const std::string& fmt, std::fstream
                 read_rows(*prot, k * ncol + p0, p1 - p0, prows[(size_t)k]);
             }
         }
-        for (long long b = sb; b < std::min(nb, sb + per); ++b) {
+        for (long long b = sb; b < sb_end; ++b) {
             long long da = std::min(length, b * 60) - d0, de = std::min(length, (b + 1) * 60) - d0;
-            long long pa = std::min(ncol, b * 20) - p0, pe = std::min(ncol, (b + 1) * 20) - p0;
+            long long ta = std::min((long long)toks.size(), b * 20), te = std::min((long long)toks.size(), (b + 1) * 20);
             text.clear();
             for (long long k = 0; k < n; ++k) {
                 text += pad;
-                for (long long i = pa; i < pe; ++i) {
-                    if (i > pa) text += "   ";
-                    text += prows[(size_t)k][(size_t)i];
+                for (long long t = ta; t < te; ++t) {
+                    if (t > ta) text += "   ";
+                    long long c = toks[(size_t)t];
+                    text += c >= 0 ? prows[(size_t)k][(size_t)(c - p0)] : '-';
                 }
                 text += '\n';
                 text += names[(size_t)k];
