@@ -20,7 +20,7 @@ from tiers import (DATA, HARNESS_COMMIT, HEADLINE, NCPU, OUTDIR, RUN_FIELDS, STA
                    load_manifest, log, timed_case, _median_txt)
 
 TODAY = datetime.now().date()
-HARD_STOP = datetime.combine(TODAY, datetime.strptime("21:15", "%H:%M").time())
+HARD_STOP = datetime.combine(TODAY, datetime.strptime("21:30", "%H:%M").time())  # user moved it from 21:15 (20:4x)
 D_CORR_STOP = datetime.combine(TODAY, datetime.strptime("21:00", "%H:%M").time())
 RUNS = 3
 SEED = 20261017
@@ -31,7 +31,7 @@ def watchdog(step):
     def stop():
         while datetime.now() < HARD_STOP:
             time.sleep(5)
-        log(f"STEP {step} HARD STOP at 21:15 (deadline): run in flight discarded, rows already written kept")
+        log(f"STEP {step} HARD STOP at {HARD_STOP:%H:%M} (deadline): run in flight discarded, rows already written kept")
         os._exit(0)  # jobrun's Job Objects are KILL_ON_JOB_CLOSE: the tool in flight dies with this process
     threading.Thread(target=stop, daemon=True).start()
 
@@ -146,22 +146,25 @@ def step_dcorr(clock):
 
 
 def step_dtime(clock):
-    if datetime.now() >= D_CORR_STOP:
-        log("Tier D timing: not started (after 21:00) -> not run (time)")
-        return
+    """User update (20:4x): 20 trees per bin + the 10 largest, all 6 configs, 1 warm-up + 3; runs until HARD_STOP
+    (21:30). Bins in order, the 10 largest last; what is not reached is "not run (time)"."""
     rows = load_manifest("real/compara")
     rng = random.Random(SEED)
-    pick = []
-    for b, rs in d_bins(rows).items():
-        pick += rng.sample(rs, min(10, len(rs)))
-    seen = {r["dir"] for r in pick}
-    pick += [r for r in sorted(rows, key=lambda r: -r["cds_nt"])[:5] if r["dir"] not in seen]
-    log(f"Tier D timing: {len(pick)} trees (10 per bin + the 5 largest), all 6 configs, 1 warm-up + 3")
-    for m in pick:
-        cfgs = HEADLINE[:]
-        rng.shuffle(cfgs)
-        for cfg in cfgs:
-            run_and_log("D", cfg, m, clock, f"{m['scenario']} {m['dir'].split('/')[-1]}")
+    largest = sorted(rows, key=lambda r: -r["cds_nt"])[:10]
+    big = {r["dir"] for r in largest}
+    groups = [(b, rng.sample([r for r in rs if r["dir"] not in big], min(20, len(rs)))) for b, rs in d_bins(rows).items()]
+    groups.append(("largest10", largest))
+    plan = {g: [m["dir"] for m in ms] for g, ms in groups}
+    json.dump(plan, open(OUTDIR / "tierD_timing_plan.json", "w"), indent=1)
+    log(f"Tier D timing: {sum(len(v) for v in plan.values())} trees (20 per bin + the 10 largest), all 6 configs, "
+        f"1 warm-up + 3; stops at {HARD_STOP:%H:%M}")
+    for g, ms in groups:
+        for i, m in enumerate(ms, 1):
+            cfgs = HEADLINE[:]
+            rng.shuffle(cfgs)
+            for cfg in cfgs:
+                run_and_log("D", cfg, m, clock, f"{g} {m['dir'].split('/')[-1]}", extra={"mode": f"single:{g}"})
+            log(f"D timing {g}: {i}/{len(ms)} trees done")
 
 
 STEPS = {"1m": step_1m, "1m_p2n16": step_1m_p2n16,"E": step_e, "C": step_c, "Dcorr": step_dcorr, "Dtime": step_dtime}
