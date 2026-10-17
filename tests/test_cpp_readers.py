@@ -26,11 +26,15 @@ TIMEOUT = 60
 
 
 def cpp_dump() -> Path | None:
-    p = Path(os.environ.get("COAL_CPP_DUMP", ROOT / "build" / "coal-cpp-dump"))
+    default = ROOT / "build" / "coal-cpp-dump"
+    if os.environ.get("COAL_CPP_BIN"):  # next to the coal-cpp under test (CPP-8)
+        default = Path(os.environ["COAL_CPP_BIN"]).with_name("coal-cpp-dump")
+    p = Path(os.environ.get("COAL_CPP_DUMP", default))
     if not p.is_absolute():
         p = ROOT / p
     for cand in (p, p.with_suffix(".exe"), p.parent / "Release" / (p.name + ".exe")):
-        if cand.is_file():
+        # on Windows only .exe files: a shared folder may also hold the Linux build (CPP-8)
+        if cand.is_file() and (os.name != "nt" or cand.suffix.lower() == ".exe"):
             return cand
     return None
 

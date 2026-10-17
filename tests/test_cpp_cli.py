@@ -36,7 +36,8 @@ def cpp_binary() -> Path | None:
     if not p.is_absolute():
         p = ROOT / p
     for cand in (p, p.with_suffix(".exe"), p.parent / "Release" / (p.name + ".exe")):
-        if cand.is_file():
+        # on Windows only .exe files: a shared folder may also hold the Linux build (CPP-8)
+        if cand.is_file() and (os.name != "nt" or cand.suffix.lower() == ".exe"):
             return cand
     return None
 

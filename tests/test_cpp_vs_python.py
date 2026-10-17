@@ -158,7 +158,8 @@ def run_python(d: Path, opts):
 
 def run_cpp(binary: Path, d: Path, opts):
     r = subprocess.run([str(binary), "pep.fasta", "nuc.fasta", *opts], cwd=d, capture_output=True, timeout=60)
-    return r.returncode, r.stdout.decode("ascii"), r.stderr.decode("ascii", "replace")
+    # stderr is text (CRLF on Windows, as Python's own stderr): compare lines (CPP-8)
+    return r.returncode, r.stdout.decode("ascii"), r.stderr.decode("ascii", "replace").replace("\r\n", "\n")
 
 
 def normalise(res, d: Path, opts):

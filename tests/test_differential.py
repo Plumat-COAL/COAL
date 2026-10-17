@@ -41,7 +41,8 @@ def cpp_binary() -> Path | None:
     if not p.is_absolute():
         p = ROOT / p
     for cand in (p, p.with_suffix(".exe"), p.parent / "Release" / (p.name + ".exe")):
-        if cand.is_file():
+        # on Windows only .exe files: a shared folder may also hold the Linux build (CPP-8)
+        if cand.is_file() and (os.name != "nt" or cand.suffix.lower() == ".exe"):
             return cand
     return None
 
@@ -67,7 +68,8 @@ def run_coal(case: str, opts: list[str]):
     if IMPL == "cpp":
         r = subprocess.run([str(cpp_binary()), *args, *o], cwd=FIX / case, capture_output=True,
                            timeout=60)
-        return r.returncode, r.stdout.decode("ascii"), r.stderr.decode("ascii", "replace")
+        # stdout must be byte-identical; stderr is text (CRLF on Windows, as Python's): compare its lines (CPP-8)
+        return r.returncode, r.stdout.decode("ascii"), r.stderr.decode("ascii", "replace").replace("\r\n", "\n")
     out, err = io.StringIO(), io.StringIO()
     cwd = os.getcwd()
     os.chdir(FIX / case)
