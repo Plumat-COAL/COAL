@@ -34,7 +34,18 @@ its MRG row. **Not pushed from here** (no credentials): `git push origin overnig
 - Re-run on Windows with `set COAL_REF_SRC=` (expected 285/285 and random OK).
 - `--version`: C++ prints `coal 0.4.0 (C++)`, Python `coal 0.4.0` (tests only check the prefix); keep the suffix?
 
-Next: step 4 benchmarks.
+### Step 4 (benchmarks) and CPP-32/CPP-33 (2026-10-17 16:00 UTC)
+- The first step-4 run showed C++ peak memory on 100,000 x 500 at 152 MB (26 MB before the merge): the ported
+  report built a view of every entry at the end of the run, and the IDs were held 3-4 times. Fixed in CPP-32 /
+  CPP-33 (4084d1f), guarded by TestCppMemory (fails with the old code: 1,455 bytes per extra sequence; now ~300).
+  500,000 x 150: fasta 110 MB / 2.4 s, clustal 134 MB, codon 146 MB. All step-3 checks re-run green on 4084d1f
+  (goldens 285/285, random 3000/3000 x 2 seeds, 151 reference tests, ASan/UBSan, TSan, cross-compile 0 warnings).
+- Benchmarks at 4084d1f, `--impl both --coal-jobs 0` (2-core / 4 GB VM): `benchmarks/results/cpp_vs_python_linux_4084d1f.md`.
+  10,000 x 500: Python 0.682 s (-j 1) / 0.651 s (default), C++ 0.125 / 0.109 s (5.5x / 6.0x).
+  100 x 10,000: 0.176 / 0.175 vs 0.033 / 0.028 s (5.3x / 6.3x). 100,000 x 500: 4.213 / 2.945 vs 1.050 / 0.964 s
+  (4.0x / 3.1x); C++ peak 35-37 MB vs Python 105-125 MB. Outputs byte-identical everywhere.
+- Needs a human: push; the same benchmark on a machine with more cores for headline numbers; Windows tests with
+  `COAL_REF_SRC` cleared.
 
 ## Run 5 progress (final engine fixes; reference 0f0330f)
 - 2026-10-17 13:21 UTC | CPP-22 FIN-E1, CPP-23 FIN-C14 | reference goldens 279/279; random vs reference 3000/3000 (seed 20261017) and 3000/3000 (seed 777); fuzz vs real PAL2NAL through the reference's updated harness, FUZZ_N=1500: seeds 20261017, 777, 4242: 0 unexplained each; reference tests via shim 94/96 (the same 2 in-process DEC-3 mocks; test_final_fixes added, all pass). FIN-E3 (drop-in argument parsing) is Python-only: coal-cpp is not used as the drop-in, nothing to port.
