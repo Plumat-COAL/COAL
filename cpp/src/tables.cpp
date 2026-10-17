@@ -17,8 +17,9 @@ const Raw RAW[] = {
         "---M------**--*----M---------------M----------------------------"},
     {2, "FFLLSSSSYY**CCWWLLLLPPPPHHQQRRRRIIMMTTTTNNKKSS**VVVVAAAADDEEGGGG",
         "----------**--------------------MMMM----------**---M------------"},
+    // ENG-g: starts ATA ATG GTG (current NCBI)
     {3, "FFLLSSSSYY**CCWWTTTTPPPPHHQQRRRRIIMMTTTTNNKKSSRRVVVVAAAADDEEGGGG",
-        "----------**----------------------MM----------------------------"},
+        "----------**----------------------MM---------------M------------"},
     {4, "FFLLSSSSYY**CCWWLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG",
         "--MM------**-------M------------MMMM---------------M------------"},
     {5, "FFLLSSSSYY**CCWWLLLLPPPPHHQQRRRRIIMMTTTTNNKKSSSSVVVVAAAADDEEGGGG",
