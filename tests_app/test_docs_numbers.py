@@ -74,20 +74,79 @@ class TestDocsNumbers(unittest.TestCase):
         m100k, m500k = round(t * 10 / 60), round(t * 50 / 60)
         self.expect("README.md", f"10,000-sequence time ({t:.1f} s)", f"roughly {m100k} and {m500k} minutes")
 
-    def test_compatibility_claim_is_qualified_everywhere(self):  # FZ-claim
-        c = self.c
-        claim = (f"byte-identical to PAL2NAL v14 on well-formed input: all {self.n} stored reference checks pass "
-                 f"({c['stdout byte-identical']} byte-identical, {c['both fail']} where both tools fail, "
-                 f"{c['deliberate error'] + c['deliberate differs'] + c['deliberate nogap_code']} documented deliberate "
-                 f"differences)")
+    # CHANGED(FIN-C2/FIN-C3/FIN-C10): was the "byte-identical to PAL2NAL v14 on well-formed input ... 23 documented
+    # deliberate differences ... every difference is one where PAL2NAL silently produces wrong output" claim (false:
+    # well-formed mito -codontable 2 -nogap differs) and the fuzz numbers of the run before FIN-C10. Now one claim built
+    # from the harness's counts and the FIN-C10 fuzz run, and every breakdown must add up to the total.
+    FUZZ = {"cases": 5000, "comparisons": 20000, "identical": 14269, "both": 4692, "deliberate": 1039,
+            "rows": {"clustal": (4067, 600, 333), "paml": (4067, 600, 333), "fasta": (4067, 600, 333),
+                     "codon": (2068, 2892, 40)}}
+
+    def claim(self):
+        c, f = self.c, self.FUZZ
+        k = c["deliberate error"] + c["deliberate differs"] + c["deliberate nogap_code"]
+        return ("COAL's output is identical to PAL2NAL v14's except for a short list of documented, deliberate "
+                "differences (newer NCBI genetic-code tables for codes 3, 10, 11 and 13; `-nogap` removing the selected "
+                "code's stop codons; the selected code's start codons for the first Met; and inputs where PAL2NAL v14 "
+                f"writes malformed output or fails). Tested: all {self.n} stored reference checks pass "
+                f"({c['stdout byte-identical']} byte-identical, {c['deliberate same_output']} of them with deliberately "
+                f"different warnings; {c['both fail']} where both tools fail; {k} deliberate output or exit-status "
+                f"differences: {c['deliberate error']} deliberate errors, {c['deliberate differs']} different outputs, "
+                f"{c['deliberate nogap_code']} `-nogap` checks with a non-standard code), and in "
+                f"{f['comparisons']:,} random comparisons with the real PAL2NAL v14 ({f['cases']:,} cases x 4 output "
+                f"formats) {f['identical']:,} were byte-identical, {f['both']:,} both failed and {f['deliberate']:,} "
+                f"were deliberate differences, each checked to be exactly the documented change; 0 unexplained "
+                f"differences.")
+
+    def test_compatibility_claim_everywhere(self):  # FZ-claim, FIN-C3
+        c, f = self.c, self.FUZZ
+        self.assertEqual(c["stdout byte-identical"] + c["both fail"] + c["deliberate error"] + c["deliberate differs"]
+                         + c["deliberate nogap_code"], self.n, "the harness's own breakdown must add up")
+        self.assertEqual(f["identical"] + f["both"] + f["deliberate"], f["comparisons"])
+        self.assertEqual(tuple(map(sum, zip(*f["rows"].values()))), (f["identical"], f["both"], f["deliberate"]))
         for rel in ("README.md", "pitch/PITCH.md", "pitch/QA.md", ".claude/skills/coal/SKILL.md"):
-            self.expect(rel, claim, "0 undocumented differences")
-        self.expect("README.md", "5,000 cases: 20,000 comparisons, 14,368 byte-identical, 4,723 where both fail, 909")
-        self.expect("tests/README.md", "| fasta | 5,000 | 4,096 | 612 | 292 | 0 |")
-        for rel in ("README.md", "pitch/PITCH.md", "pitch/QA.md", ".claude/skills/coal/SKILL.md"):
+            self.expect(rel, self.claim())
+        self.expect("README.md", f"seed 20261017, {f['cases']:,} cases: {f['comparisons']:,} comparisons, "
+                                 f"{f['identical']:,} byte-identical, {f['both']:,} where both fail, "
+                                 f"{f['deliberate']:,} deliberate differences")
+        for fmt, (i, b, d) in f["rows"].items():
+            self.expect("tests/README.md", f"| {fmt} | {f['cases']:,} | {i:,} | {b:,} | {d:,} | 0 |")
+        for rel in ("README.md", "tests/README.md", "pitch/PITCH.md", "pitch/QA.md", ".claude/skills/coal/SKILL.md",
+                    "site/index.html", "src/coal_compat/cli.py"):
             text = _read(rel)
-            for m in re.finditer(r"[^.]*byte-identical to PAL2NAL[^.]*", text):
-                self.assertTrue(any(q in m.group(0) for q in ("well-formed", "benchmark")), f"{rel}: {m.group(0)}")
+            self.assertNotIn("on well-formed input", text, f"{rel}: the well-formed claim is false (FIN-C3)")
+            self.assertNotIn("stratified", text, f"{rel}: the stratified run is not reproducible (FIN-C20)")
+            for m in re.finditer(r"[^.]*\bidentical to PAL2NAL\b[^.]*", text):
+                self.assertRegex(m.group(0), r"PAL2NAL v14", f"{rel}: say PAL2NAL v14: {m.group(0)}")
+                self.assertTrue(any(q in m.group(0) for q in ("except", "benchmark")), f"{rel}: {m.group(0)}")
+
+    def test_breakdowns_add_up(self):  # FIN-C2 / FIN-A3
+        c = self.c
+        k = c["deliberate error"] + c["deliberate differs"] + c["deliberate nogap_code"]
+        text = _read("README.md")
+        m = re.search(r"stdout is byte-identical in (\d+) checks.*?in (\d+) both tools fail\. (\d+) checks are "
+                      r"deliberate output or exit-status differences: (\d+) deliberate errors.*?, (\d+) with different "
+                      r"output and (\d+) `-nogap` checks", text)
+        self.assertIsNotNone(m, "README.md Tests: the breakdown sentence is missing")
+        byte, both, kk, e, d, g = map(int, m.groups())
+        self.assertEqual((byte, both, kk, e, d, g), (c["stdout byte-identical"], c["both fail"], k,
+                                                     c["deliberate error"], c["deliberate differs"],
+                                                     c["deliberate nogap_code"]))
+        self.assertEqual(e + d + g, kk)
+        self.assertEqual(byte + both + kk, self.n)
+        site = _read("site/index.html")
+        spans = dict((v, v) for v in re.findall(r'data-check="([^"]+)"', site))
+        nums = {}
+        for key, pat in (("total", r"^(\d+) checks$"), ("byte", r"^byte-identical in (\d+) checks$"),
+                         ("both", r"^in (\d+) both tools fail$"),
+                         ("delib", r"^(\d+) checks are deliberate output or exit-status differences$")):
+            hits = [int(re.match(pat, v).group(1)) for v in spans if re.match(pat, v)]
+            self.assertEqual(len(hits), 1, f"site/index.html: one data-check for {key}")
+            nums[key] = hits[0]
+        self.assertEqual(nums["byte"] + nums["both"] + nums["delib"], nums["total"], f"site numbers: {nums}")
+        self.assertEqual(nums["total"], self.n)
+        for rel in ("README.md", "pitch/PITCH.md", "pitch/QA.md", ".claude/skills/coal/SKILL.md", "site/index.html"):
+            self.assertNotIn("29 checks are deliberate", _read(rel))
 
     def test_tests_readme_quotes_the_printed_line(self):
         self.expect("tests/README.md", self.line)

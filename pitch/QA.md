@@ -12,7 +12,7 @@ compare the warnings; 24 check that COAL rejects the inputs PAL2NAL fails on (ex
 documented, deliberate differences (14 of them `-nogap` with another genetic code: COAL removes that code's stop codons) <!-- CHANGED(FZ-5): was 246/240/9 -->, where we check COAL's own behaviour instead. On every change, CI also runs both
 tools on 3,000 random inputs x 4 formats (wrong DNA, masked genes, UTRs, frameshifts, every genetic code, -nogap,
 -nomismatch, -blockonly): identical apart from the documented differences. <!-- CHANGED(DEC-4): was 165/147/141/12/6 -->
-In one sentence: COAL is byte-identical to PAL2NAL v14 on well-formed input: all 279 stored reference checks pass (232 byte-identical, 24 where both tools fail, 23 documented deliberate differences), and in 20,000 random comparisons (5,000 cases x 4 output formats) and 6,000 independent stratified cases every difference from PAL2NAL is a documented, deliberate one, where PAL2NAL silently produces wrong or malformed output; 0 undocumented differences. <!-- CHANGED(FZ-claim) -->
+In one sentence: COAL's output is identical to PAL2NAL v14's except for a short list of documented, deliberate differences (newer NCBI genetic-code tables for codes 3, 10, 11 and 13; `-nogap` removing the selected code's stop codons; the selected code's start codons for the first Met; and inputs where PAL2NAL v14 writes malformed output or fails). Tested: all 279 stored reference checks pass (232 byte-identical, 4 of them with deliberately different warnings; 24 where both tools fail; 23 deliberate output or exit-status differences: 6 deliberate errors, 3 different outputs, 14 `-nogap` checks with a non-standard code), and in 20,000 random comparisons with the real PAL2NAL v14 (5,000 cases x 4 output formats) 14,269 were byte-identical, 4,692 both failed and 1,039 were deliberate differences, each checked to be exactly the documented change; 0 unexplained differences. <!-- CHANGED(FIN-C2/FIN-C3/FIN-C10/FIN-C20): was the "byte-identical ... (well-formed input)" claim, "every difference is one where PAL2NAL silently produces wrong output" and a 6,000-case run not reproducible from the repo; now the documented exceptions and the FIN-C10 fuzz numbers --> <!-- CHANGED(FZ-claim) -->
 On your data, COAL checks every
 <!-- CHANGED(R2-D2): was 143 / 94 / 10; guarded by tests_app/test_docs_numbers.py -->
 codon against its amino acid and tells you per gene if it doesn't fit, with the column, so problems can't
@@ -32,7 +32,8 @@ instead of silent.
 Built today: wrong genetic code -> COAL tests other codes and suggests the one that fits (one-click re-run
 in the GUI). A frameshift -> the gene and column are named and shown in the alignment view. Invalid
 characters -> a clear error (PAL2NAL silently drops a codon). DNA that doesn't belong to the protein -> the same
-output as PAL2NAL (it never refuses), plus a plain warning naming the gene, and the GUI marks it failed;
+output as PAL2NAL v14 where PAL2NAL writes one (it refuses only some short or frameshifted genes, with
+"inconsistency"), plus <!-- CHANGED(FIN-C17): was "(it never refuses)" --> a plain warning naming the gene, and the GUI marks it failed;
 `--strict` makes it an error instead. <!-- CHANGED(DEC-1): new sentence --> Protein IDs like AT1G01010.1 vs DNA IDs
 AT1G01010 -> COAL explains the mismatch. Errors give a non-zero exit code. **[after the C++/formats branch is merged]** IDs matched
 after removing version suffixes, and `--keep-going` so one bad gene doesn't stop the rest.

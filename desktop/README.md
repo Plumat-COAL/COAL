@@ -33,9 +33,13 @@ words when a gene doesn't fit.
 COAL now appears in your Start menu.
 
 **If Windows says "Smart App Control blocked an app"** with no "Run anyway" button, your PC
-only allows signed apps, and this test build can't run on it yet. Please don't turn Smart App
-Control off for COAL (it can't be turned back on without reinstalling Windows); wait for a
-signed version.
+only allows signed apps, and this unsigned build can't run on it: Smart App Control has no way to
+allow a single app. You can turn Smart App Control off (Windows Security > App & browser control),
+but on some Windows versions it can then only be turned back on by resetting or reinstalling
+Windows, so we suggest leaving it on and installing COAL with pip instead (see "Install with pip"
+in the release notes or on the website).
+<!-- CHANGED(FIN-C18): was "it can't be turned back on without reinstalling Windows; wait for a signed version"
+(inconsistent with the site and the release notes, which recommend pip) -->
 
 **On a university or company laptop** the install may be blocked by IT policy. Send IT this
 page; COAL installs in your own user folder (`%LOCALAPPDATA%\Programs\COAL`) and only listens

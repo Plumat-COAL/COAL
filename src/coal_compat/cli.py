@@ -7,7 +7,7 @@ An unchanged PAL2NAL command line works: the default output format is clustal, a
 formats, -nogap, -nomismatch, -blockonly and every -codontable give PAL2NAL v14's output byte for byte, except for
 COAL's documented deliberate differences (README.md: newer NCBI genetic-code tables, -nogap using the chosen code's
 stop codons, the chosen code's start codons in the fallback, and inputs where PAL2NAL v14 writes malformed output or
-fails). CHANGED(FIN-C3): was "byte for byte on well-formed input". The command line is read as PAL2NAL v14 reads it
+fails). CHANGED(FIN-C3): was "byte for byte" for all well-formed input. The command line is read as PAL2NAL v14 reads it
 (FIN-E3: a dangling -output or -codontable is ignored, "-codontable 2x" is code 2). The codon alignment goes to
 standard output,
 messages to standard error. ``-nostderr`` is accepted and mapped to COAL's ``-q``: warnings and
