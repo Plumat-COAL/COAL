@@ -52,7 +52,7 @@
 namespace fs = std::filesystem;
 using namespace coal;
 
-static const char* VERSION = "0.4.0";
+static const char* VERSION = "0.4.1";
 static long long env_ll(const char* name, long long dflt) {
     const char* v = std::getenv(name);
     if (!v || !*v) return dflt;

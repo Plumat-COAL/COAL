@@ -10,7 +10,7 @@
 
 namespace coal {
 
-static const char* VERSION = "0.4.0";
+static const char* VERSION = "0.4.1";
 static const char* SCHEMA = "coal.report/1";
 static const char* REPO_URL = "https://github.com/plumat-coal/COAL";
 static const int HINT_SAMPLE = 200;
