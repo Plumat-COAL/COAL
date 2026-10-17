@@ -1,5 +1,35 @@
 # Integration changes (keanu_overnight/integration = app + windows-app + engine-fixes)
 
+## Round 3 fixes (branch fix/round3, from keanu_overnight/integration 3f9ee66)
+
+Status per finding (rows with details under "Round 3 rows"). Nothing pushed; CI has not run on these commits.
+
+| ID | Status | Commit |
+|---|---|---|
+| R3-D1 (Windows CI red: CRLF examples break the sample-report hash) | fixed; verified in a `core.eol=crlf core.autocrlf=true` clone (all three suites pass there); the windows-latest log itself could not be downloaded here (403), so other Windows-only failures, if any, need the next CI run | 084f8c5 |
+| R3-D2 (desktop step skipped after failed app tests; explainer job) | fixed | 084f8c5 |
+| R3-E1 (masked gene + 5' UTR output shifted at exit 0) | fixed (engine) | 274f0bd |
+| R3-A1 (app readers stricter than the engine: BOM, '#', CR) | fixed | bd38f7f |
+| R3-E2 (-o into a missing folder names COAL's temp file) | fixed (engine) | 0da284c |
+| R3-E3 (DNA-file errors without line numbers) | fixed (engine) | 0da284c |
+| R3-A2 (NNN codons called a genetic-code problem) | fixed | 781f637 |
+| R3-A3 (multi-line drop reasons in dropped_pairs.tsv) | fixed | 8bf3305 |
+| R3-A4 (demo timeouts orphan engine workers) | fixed on Linux; Windows taskkill path unverified (as R2-A4) | 8bf3305 |
+| R3-A5 (upload ignored while a path box is filled) | fixed against a stub Gradio; real Gradio `.upload` unverified here | e100fee |
+| R3-A6 (second DNA/protein file called "couldn't tell") | fixed | e100fee |
+| R3-D3 (SMOKE_TEST step 6) | fixed | f1a2fc5 |
+| R3-D4 (+ R3-D4b QA app test count) | fixed, guarded by the docs test | f1a2fc5 |
+| R3-D5 (exit status "in all 165") | fixed, guarded by the docs test | f1a2fc5 |
+
+Engine code changed (teammate's engine/C++ must mirror): R3-E1 (new error when no anchor matched, the DNA is
+longer than the gene and fewer than 10 codons are checkable; notice now counts checkable codons and names the
+ambiguous ones), R3-E2 (-o folder error wording), R3-E3 (DNA-file error line numbers). No golden output changed;
+no file under tests/golden or tests/fixtures touched. The app parses both the old and the new no-anchor notice.
+
+Test counts at the end of round 3 (Linux, Python 3.13): tests 54 OK; tests_app 176 OK (5 skipped: 3 need Gradio,
+1 needs a non-root user, 1 needs network/COAL_WHEELHOUSE); desktop test_wrapper + test_smoke 63 OK (4 skipped).
+The same counts in a fresh `git clone --config core.eol=crlf --config core.autocrlf=true` of this branch.
+
 ## Round 3 rows
 
 | ID | Where | Before | After | Why | Test proving it | Merge note |
