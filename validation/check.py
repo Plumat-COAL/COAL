@@ -52,6 +52,18 @@ def pair_cds(pep_ids: list[str], nuc: list[tuple[str, str]]) -> list[str]:
     return [s for _, s in nuc]
 
 
+AMBIG_AA = {"B": {"D", "N"}, "Z": {"E", "Q"}, "J": {"I", "L"}, "U": {"*"}, "O": {"*"}}
+_IUPAC = {"A": "A", "C": "C", "G": "G", "T": "T", "U": "T", "R": "AG", "Y": "CT", "S": "CG", "W": "AT",
+          "K": "GT", "M": "AC", "B": "CGT", "D": "AGT", "H": "ACT", "V": "ACG", "N": "ACGT"}
+
+
+def _expand_codon(c: str) -> list[str]:
+    out = [""]
+    for ch in c.upper():
+        out = [o + b for o in out for b in _IUPAC.get(ch, "")]
+    return out
+
+
 def column_widths(pep_rows: list[str]) -> list[int]:
     w = [3] * (len(pep_rows[0]) if pep_rows else 0)
     for r in pep_rows:
@@ -124,6 +136,9 @@ def check_case(case_dir: Path, out_path: Path, stderr_text: str = "", meta: dict
                 problem("translate", f"{sid} col {j + 1}: {ch} -> {tok}")
                 continue
             aa = translate(cod, table)
+            if ch in AMBIG_AA:  # B/Z/J: codon may encode any listed residue; U/O: Sec/Pyl on a stop codon
+                exp = {translate(e, table) for e in _expand_codon(cod)}
+                aa = ch if exp and exp <= AMBIG_AA[ch] else aa
             fine = (aa == ch or ch == "X" or
                     (first_res and ch == "M" and cod.upper().replace("U", "T") in starts) or
                     (sid, j + 1) in warned)

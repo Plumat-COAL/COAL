@@ -11,8 +11,8 @@ its script.
 | `accuracy` | `build_sim.py accuracy` | 412 simulated gene families across 40 scenarios (edge cases, all 17 genetic codes) | exact (simulation truth) |
 | `speed` | `build_sim.py speed` | single large alignments: 1k–1M sequences × 400 codons; 100–35,000 codons per gene | exact |
 | `families` | `build_sim.py families` | 2,000 realistic families (2–500 seqs, 30–5,000 codons): per-family throughput | exact |
-| `compara` | `build_compara.py` | real vertebrate gene trees, Ensembl Compara 116, stratified by tree size | Ensembl's own CDS alignment |
-| `ncbi` | `build_ncbi.py` | real tree-of-life families from ~316 RefSeq genomes (bacteria, archaea, fungi, protists, plants, animals), aligned with FAMSA | none: reference-free checks + PAL2NAL |
+| `compara` | `build_compara.py` | 2,634 real vertebrate gene trees from Ensembl Compara 116 (of 54,308): up to 400 per size bin (2–10, 11–50, 51–200, 201–1000, all 289 trees >1000 seqs) plus trees with selenocysteine, `*`, B/Z and ambiguous bases | Ensembl's own CDS alignment |
+| `ncbi` | `build_ncbi.py` | 3,437 real tree-of-life families from 316 RefSeq genomes (250 bacteria, 30 archaea, fungi, protists, plants, animals; genetic codes 11, 1, 4, 6, 12), aligned with FAMSA | none: reference-free checks + PAL2NAL |
 
 ### Simulation (`simulate.py`, `cases.py`)
 
@@ -31,6 +31,18 @@ endings, every NCBI table PAL2NAL supports, divergent/saturated sequences, very 
 
 Each case folder holds `pep.fasta`, `nuc.fasta` (or `nuc1/nuc2`), `truth.fasta` (when known) and
 `meta.json` (scenario, options such as `-codontable`, sizes, flags). Each tier has a `manifest.jsonl`.
+
+## Prebuilt data
+
+The built sets are also packed as three archives (`coal_testset_sim.tar.zst`,
+`coal_testset_ncbi.tar.zst`, `coal_testset_compara.tar.zst`). Unpack them into `validation/data/`:
+
+```
+cd validation/data && for f in /path/to/coal_testset_*.tar.zst; do tar --zstd -xf "$f"; done
+```
+
+The 1,000,000-sequence speed set is not in the archive (about 3 GB); rebuild it with
+`python validation/build_sim.py speed` (about a minute; same seed, same files).
 
 ## Scoring (`check.py`, `run.py`)
 
@@ -72,10 +84,12 @@ the command, platform and CPU count. Only compare timings from the same machine.
 - `table10` cases: PAL2NAL treats TGA as a stop in code 10 (COAL follows NCBI: Cys), so PAL2NAL's
   warnings fail the warnings check there. This is a documented deliberate difference.
 - `iupac`: COAL accepts any ambiguity code whose expansions all give the residue; PAL2NAL accepts a
-  fixed list. Both agreed on every simulated case.
+  fixed list.
 - Compara: Ensembl's CDS alignment is a back-translation of its protein alignment, so it is an
-  independent check of placement. Expect convention differences (selenocysteine `U`, partial codons,
-  `X` residues); `meta.json` flags those trees (`features`) so they can be examined separately.
+  independent check of placement. `meta.json` → `features` flags trees with selenocysteine `U`, `X`,
+  B/Z, `*` and ambiguous bases. Checked against its own inputs, Ensembl's answer passes the
+  reference-free checks in all but a handful of trees, where Ensembl has a Met on a non-start codon
+  or a residue on a stop codon (readthrough). A tool should warn there, not silently agree.
 - NCBI: CDS come straight from RefSeq annotation, with stop codons, partial genes, `transl_except`
   (selenocysteine) and programmed frameshifts (`exception=ribosomal slippage`). The members with such
   quirks are listed in `meta.json` → `quirky_members`. The genetic code of each genome is inferred
