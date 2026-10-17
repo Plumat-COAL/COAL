@@ -12,16 +12,37 @@ import os
 import sys
 
 
+def _is_loopback(host: str) -> bool:
+    import ipaddress
+    if host.strip().lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host.strip("[]")).is_loopback
+    except ValueError:
+        return False
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="coal-gui", description="COAL web GUI and MCP server.")
     ap.add_argument("--host", default="127.0.0.1", help="address to listen on (default 127.0.0.1, this computer only)")
     ap.add_argument("--port", type=int, default=7860)
+    ap.add_argument("--allow-remote", action="store_true",
+                    help="allow a --host other than this computer (DANGER: the GUI has no login, and anyone who can "
+                         "reach it can make COAL read any file you can read)")
     ap.add_argument("--demo", action="store_true", help="open with the sample report loaded")
     ap.add_argument("--no-mcp", action="store_true", help="do not serve the MCP tools from the web GUI")
     ap.add_argument("--mcp", action="store_true", help="run only the MCP server, over stdio")
     ap.add_argument("--check", action="store_true", help="show detected engine features and exit")
     args = ap.parse_args(argv)
     os.environ.setdefault("GRADIO_ANALYTICS_ENABLED", "False")
+    if not _is_loopback(args.host) and not args.mcp and not args.check:
+        if not args.allow_remote:
+            print(f"coal-gui: refusing to listen on {args.host}: the GUI has no login, and anyone who can reach it "
+                  "could read any file you can read through it. Use the default 127.0.0.1, or add --allow-remote "
+                  "if you really mean it.", file=sys.stderr)
+            return 2
+        print(f"coal-gui: warning: listening on {args.host} with --allow-remote: anyone who can reach this address "
+              "can read your files through COAL.", file=sys.stderr)
 
     if args.check:
         from . import core
