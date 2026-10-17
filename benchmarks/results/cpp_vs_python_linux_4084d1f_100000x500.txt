@@ -1,0 +1,11 @@
+date: 2026-10-17 15:54
+platform: Linux-6.8.0-138-generic-x86_64-with-glibc2.35
+cpu: x86_64
+python: 3.10.12
+perl: n/a
+repeats: 3
+psutil: True
+cpu_count: 2
+coal_jobs: [0]
+impl: both
+data_dir: /sessions/rcw-01y2b5hvihubcqfejojmq4nz/coal_bench_data

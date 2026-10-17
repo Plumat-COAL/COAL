@@ -1,0 +1,2 @@
+# The top-level .gitignore ignores *.fa.gz / *.fasta.gz (generated data); these are committed test data.
+!*.gz

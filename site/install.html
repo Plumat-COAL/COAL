@@ -1,0 +1,192 @@
+<!doctype html>
+<!-- WEB-3: new file. CHANGED(WEB-8), CHANGED(WEB-11), CHANGED(WEB-12): see overnight/integration/CHANGES.md.
+     CHANGED(WEB-13): the site is split into short pages (index, install, guide, differences, cite) that share this
+     header and footer; tests_app/test_site.py checks they stay the same on every page. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; frame-src 'self'; base-uri 'self'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Install COAL</title>
+<meta name="description" content="Install COAL on Windows, macOS or Linux, or for the command line only; the release files and how to check them.">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#121110">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="preload" href="assets/fonts/AtkinsonHyperlegibleNext-wght.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css">
+<script src="main.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <a class="home" href="./"><img src="assets/coal-mark-dark.svg" width="38" height="30" alt=""><span>COAL</span></a>
+  <nav aria-label="Main">
+    <ul>
+      <li><a href="install.html" aria-current="page">Install</a></li>
+      <li><a href="guide.html">Guide</a></li>
+      <li><a href="differences.html">Differences</a></li>
+      <li><a href="cite.html">Cite</a></li>
+      <li><a href="https://github.com/plumat-coal/COAL">GitHub</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main id="main">
+<div class="page-head">
+  <h1>Install</h1>
+  <p class="lead">Steps for Windows, macOS, Linux and the command line only. To update, run the same install again:
+    it fetches the newest release.</p>
+  <ul class="toc" aria-label="On this page">
+    <li><a href="#windows">Windows</a></li>
+    <li><a href="#smart-app-control">Smart App Control</a></li>
+    <li><a href="#macos">macOS</a></li>
+    <li><a href="#linux">Linux</a></li>
+    <li><a href="#cli">Command line only</a></li>
+    <li><a href="#files">Files and checksums</a></li>
+  </ul>
+</div>
+
+  <section class="sec" id="windows" aria-labelledby="windows-title">
+    <h2 id="windows-title">Windows</h2>
+    <ol class="steps">
+      <li>Download <a href="https://github.com/plumat-coal/COAL/releases/latest/download/COAL-Setup-windows-x64.exe">COAL-Setup-windows-x64.exe</a>.</li>
+      <li>Edge may say the file <q>isn't commonly downloaded</q>. Select <kbd>…</kbd> next to the message, then
+        <strong>Keep</strong>, <strong>Show more</strong> and <strong>Keep anyway</strong>.</li>
+      <li>Open the file. Windows shows <q>Windows protected your PC</q>. Select <strong>More info</strong>, check
+        that the app is <code>COAL-Setup-windows-x64.exe</code> and the publisher is <q>Unknown publisher</q>,
+        then select <strong>Run anyway</strong>. You can <a href="#verify">check the file's checksum</a> first.
+        <details class="ss">
+          <summary>What these 2 screens look like</summary>
+          <div class="ss-pair">
+            <div class="ss-box" role="img" aria-label="First screen: Windows protected your PC. Microsoft Defender SmartScreen prevented an unrecognized app from starting. Running this app might put your PC at risk. A More info link and a Don't run button.">
+              <p class="ss-title">Windows protected your PC</p>
+              <p>Microsoft Defender SmartScreen prevented an unrecognized app from starting. Running this app might put your PC at risk.</p>
+              <p class="ss-link">More info</p>
+              <p class="ss-buttons"><span class="ss-btn">Don't run</span></p>
+            </div>
+            <div class="ss-box" role="img" aria-label="After More info: App: COAL-Setup-windows-x64.exe. Publisher: Unknown publisher. Buttons Run anyway and Don't run.">
+              <p class="ss-title">Windows protected your PC</p>
+              <p>Microsoft Defender SmartScreen prevented an unrecognized app from starting. Running this app might put your PC at risk.</p>
+              <p class="ss-meta">App: <span>COAL-Setup-windows-x64.exe</span><br>Publisher: <span>Unknown publisher</span></p>
+              <p class="ss-buttons"><span class="ss-btn ss-go">Run anyway</span><span class="ss-btn">Don't run</span></p>
+            </div>
+          </div>
+          <p class="fine">Redrawn from the 2 SmartScreen screens. The wording varies a little between Windows
+            versions. Left: the first screen. Right: after <strong>More info</strong>.</p>
+        </details>
+      </li>
+      <li>Choose whether you want a desktop shortcut and an <q>Open with</q> entry for .fasta and .aln files. Both
+        are optional. Select <strong>Install</strong>. COAL goes into <code>%LOCALAPPDATA%\Programs\COAL</code>.</li>
+      <li>Start <strong>COAL</strong> from the Start menu. The first start can take about 10 seconds. Drop your
+        protein alignment and DNA onto the window, or select <strong>Try an example</strong>.</li>
+    </ol>
+
+    <div class="note" id="smart-app-control">
+      <h3>If Smart App Control blocks COAL</h3>
+      <p>Smart App Control on Windows 11 blocks unsigned apps. It has no <q>Run anyway</q> button and no way to
+        allow a single app. You can switch it off, but on some Windows versions it can then only be switched back
+        on by resetting or reinstalling Windows. We suggest leaving it on and installing with pip instead. In
+        PowerShell, with Python 3.10 or newer from python.org:</p>
+      <div class="cmd block" data-copy-group>
+        <code id="win-pip">py -m venv $HOME\coal-env
+&amp; $HOME\coal-env\Scripts\python -m pip install "coal[gui] @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz"
+&amp; $HOME\coal-env\Scripts\python -m coal_app</code>
+        <button type="button" class="copy" data-copy="win-pip" aria-label="Copy the Windows pip commands">Copy</button>
+      </div>
+      <p>The last line starts the app. Open <code>http://127.0.0.1:7860</code> in your browser. The app listens on
+        this computer only.</p>
+    </div>
+    <p class="fine">To run COAL without installing it, unzip
+      <a href="https://github.com/plumat-coal/COAL/releases/latest/download/COAL-windows-x64.zip">COAL-windows-x64.zip</a>
+      and run <code>COAL\COAL.exe</code>. Windows asks for the same confirmation. On a managed university or company
+      computer, IT policy may block both.</p>
+  </section>
+
+  <section class="sec" id="macos" aria-labelledby="macos-title">
+    <h2 id="macos-title">macOS</h2>
+    <ol class="steps">
+      <li>In Terminal, run <code>python3 --version</code>. You need 3.10 or newer. If yours is older, install the
+        current Python from python.org.</li>
+      <li>Make a virtual environment for COAL:
+        <div class="cmd" data-copy-group><code id="mac-1">python3 -m venv ~/coal-env</code><button type="button" class="copy" data-copy="mac-1" aria-label="Copy: make the environment">Copy</button></div></li>
+      <li>Install COAL and its app into it:
+        <div class="cmd" data-copy-group><code id="mac-2">~/coal-env/bin/python -m pip install "coal[gui] @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz"</code><button type="button" class="copy" data-copy="mac-2" aria-label="Copy: install COAL">Copy</button></div></li>
+      <li>Start the app and open <code>http://127.0.0.1:7860</code> in your browser. <kbd>Ctrl</kbd>+<kbd>C</kbd>
+        in Terminal stops it.
+        <div class="cmd" data-copy-group><code id="mac-3">~/coal-env/bin/coal-gui</code><button type="button" class="copy" data-copy="mac-3" aria-label="Copy: start the app">Copy</button></div></li>
+    </ol>
+  </section>
+
+  <section class="sec" id="linux" aria-labelledby="linux-title">
+    <h2 id="linux-title">Linux</h2>
+    <ol class="steps">
+      <li>Run <code>python3 --version</code> (3.10 or newer). On Debian and Ubuntu you may also need
+        <code>sudo apt install python3-venv</code>.</li>
+      <li>Recent Debian, Ubuntu and Fedora refuse <code>pip install</code> outside a virtual environment, so make
+        one and install COAL into it:
+        <div class="cmd block" data-copy-group><code id="lin-1">python3 -m venv ~/coal-env
+~/coal-env/bin/python -m pip install "coal[gui] @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz"</code><button type="button" class="copy" data-copy="lin-1" aria-label="Copy: make the environment and install COAL">Copy</button></div></li>
+      <li>Start the app with <code>~/coal-env/bin/coal-gui</code> and open <code>http://127.0.0.1:7860</code>.
+        On a server, use the command line.</li>
+    </ol>
+  </section>
+
+  <section class="sec" id="cli" aria-labelledby="cli-title">
+    <h2 id="cli-title">Command line only</h2>
+    <p>The pip install also puts <code>coal</code> and <code>pal2nal</code> in <code>~/coal-env/bin</code>
+      (<code>$HOME\coal-env\Scripts</code> on Windows). For the command line alone, write <code>coal</code> instead
+      of <code>coal[gui]</code> in the install command. The engine has no required dependencies.</p>
+<pre class="code"><code>coal protein.aln.fasta dna.fasta -o codon.aln.fasta
+coal protein.aln.fasta dna.fasta -codontable 2 -nogap -o codon.aln.fasta
+coal --help</code></pre>
+  </section>
+
+<section class="sec" id="files" aria-labelledby="downloads">
+  <h2 id="downloads">Files and checksums</h2>
+  <p>These links always point to the newest release. Older versions and release notes are on the
+    <a href="https://github.com/plumat-coal/COAL/releases">releases page</a>.</p>
+  <div class="table-scroll" tabindex="0" role="group" aria-labelledby="files-cap">
+    <table class="files">
+      <caption id="files-cap" class="visually-hidden">Files in the newest COAL release</caption>
+      <thead><tr><th scope="col">File</th><th scope="col">Contents</th></tr></thead>
+      <tbody>
+        <tr><td><a href="https://github.com/plumat-coal/COAL/releases/latest/download/COAL-Setup-windows-x64.exe">COAL-Setup-windows-x64.exe</a></td><td>Windows installer, 64-bit Windows 10 and 11</td></tr>
+        <tr><td><a href="https://github.com/plumat-coal/COAL/releases/latest/download/COAL-windows-x64.zip">COAL-windows-x64.zip</a></td><td>The same app without an installer. Unzip and run <code>COAL\COAL.exe</code>.</td></tr>
+        <tr><td><a href="https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz">coal_src.tar.gz</a></td><td>Python source package, used by the pip commands on this page</td></tr>
+        <tr><td><a href="https://github.com/plumat-coal/COAL/releases/latest/download/SHA256SUMS.txt">SHA256SUMS.txt</a></td><td>SHA-256 of every file in the release</td></tr>
+        <tr><td><a href="https://github.com/plumat-coal/COAL/releases/latest">Python wheel</a></td><td>On the release page. Its name contains the version, so it has no fixed link.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3 id="verify">Check a file</h3>
+  <p>Download SHA256SUMS.txt into the same folder as the file, then run the command for your system.</p>
+  <dl class="verify">
+    <dt>Windows (PowerShell)</dt>
+    <dd><pre class="code"><code>Get-FileHash .\COAL-Setup-windows-x64.exe -Algorithm SHA256</code></pre>
+      The hash must equal the one on that file's line of SHA256SUMS.txt. Case does not matter.</dd>
+    <dt>Linux</dt>
+    <dd><pre class="code"><code>sha256sum -c --ignore-missing SHA256SUMS.txt</code></pre>
+      Every file you downloaded should print <samp>OK</samp>.</dd>
+    <dt>macOS</dt>
+    <dd><pre class="code"><code>shasum -a 256 coal_src.tar.gz</code></pre>
+      Compare the result with that file's line of SHA256SUMS.txt.</dd>
+  </dl>
+</section>
+<p class="status" id="copy-status" role="status" aria-live="polite"></p>
+</main>
+
+<footer class="foot" id="credits">
+  <div class="foot-text">
+    <p>Made by Chloe Newton and Keanu Murati at Reinvent the Wheel, an AI × Science tool-building hackathon in
+      London, October 2026.</p>
+    <p>No cookies, trackers or external scripts. Set in Atkinson Hyperlegible Next
+      (<a href="assets/fonts/OFL.txt">SIL Open Font License</a>).</p>
+  </div>
+  <div class="rail"><svg class="train" viewBox="140 204 1120 582" aria-hidden="true" focusable="false"><g class="ts" fill="#CFC8BE"><circle cx="304" cy="328" r="32"/><circle cx="368" cy="272" r="44"/><circle cx="456" cy="236" r="28"/></g><g class="tb" fill="#1E1E1E"><rect x="264" y="368" width="72" height="124" rx="12.4"/></g><g class="tbo" fill="#2A2A2A"><rect x="216" y="480" width="376" height="216" rx="40"/></g><g class="tb" fill="#1E1E1E"><path d="M216 600V696H144Z"/><rect x="568" y="316" width="200" height="380" rx="20"/><rect x="552" y="296" width="232" height="36" rx="12.4"/><rect x="792" y="496" width="464" height="200" rx="21"/><rect x="760" y="622" width="40" height="20" rx="0"/><circle cx="320" cy="720" r="52"/><circle cx="480" cy="720" r="52"/><circle cx="672" cy="712" r="64"/><circle cx="880" cy="732" r="40"/><circle cx="1024" cy="732" r="40"/><circle cx="1168" cy="732" r="40"/></g><g class="ta" fill="#FFC24B"><rect x="616" y="368" width="104" height="88" rx="12"/></g><g class="th" fill="#4A4744"><circle cx="320" cy="719.5" r="15.5"/><circle cx="480" cy="719.5" r="15.5"/><circle cx="672" cy="711.5" r="19.5"/><circle cx="880" cy="732" r="11"/><circle cx="1024" cy="732" r="11"/><circle cx="1168" cy="732" r="11"/></g><g class="tc" fill="#2A2A2A"><rect x="848" y="448" width="40" height="40" rx="8"/><rect x="878" y="400" width="40" height="40" rx="8"/><rect x="974" y="400" width="40" height="40" rx="8"/><rect x="1004" y="352" width="40" height="40" rx="8"/><rect x="1052" y="352" width="40" height="40" rx="8"/><rect x="1052" y="448" width="40" height="40" rx="8"/><rect x="1082" y="400" width="40" height="40" rx="8"/></g><g class="tsl" fill="#4A4744"><rect x="926" y="400" width="40" height="40" rx="8"/><rect x="956" y="352" width="40" height="40" rx="8"/></g><g class="te" fill="#FF6A13"><rect x="800" y="448" width="40" height="40" rx="8"/><rect x="896" y="448" width="40" height="40" rx="8"/><rect x="1004" y="448" width="40" height="40" rx="8"/><rect x="1034" y="400" width="40" height="40" rx="8"/><rect x="1112" y="448" width="40" height="40" rx="8"/><rect x="1208" y="448" width="40" height="40" rx="8"/></g><g class="ta" fill="#FFC24B"><rect x="956" y="448" width="40" height="40" rx="8"/><rect x="1130" y="400" width="40" height="40" rx="8"/><rect x="1160" y="448" width="40" height="40" rx="8"/></g></svg></div>
+</footer>
+</body>
+</html>

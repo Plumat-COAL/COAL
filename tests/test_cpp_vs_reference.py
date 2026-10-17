@@ -120,6 +120,26 @@ import sys
 CPP = {cpp!r}
 
 
+# Tests tune the reference engine through module variables (pipeline.BATCH_NT ...); coal-cpp reads the same
+# settings from COAL_* environment variables, so a changed value is passed on.
+_TUNING = {{"BATCH_NT": "COAL_BATCH_NT", "BLOCK_MEMORY": "COAL_BLOCK_MEMORY",
+           "PROGRESS_MIN_SEQS": "COAL_PROGRESS_MIN_SEQS", "PROGRESS_EVERY": "COAL_PROGRESS_EVERY"}}
+try:
+    from coal import pipeline as _pipeline
+    _DEFAULTS = {{k: getattr(_pipeline, k) for k in _TUNING if hasattr(_pipeline, k)}}
+except Exception:  # noqa: BLE001
+    _pipeline, _DEFAULTS = None, {{}}
+
+
+def _tuning_env():
+    env = dict(os.environ)
+    for k, v in _DEFAULTS.items():
+        now = getattr(_pipeline, k)
+        if now != v:
+            env[_TUNING[k]] = str(now)
+    return env
+
+
 def _on_sigterm(signum, frame):
     raise SystemExit(128 + signum)
 
@@ -128,13 +148,21 @@ def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     sys.stdout.flush()
     sys.stderr.flush()
-    return subprocess.call([CPP, *argv], env=dict(os.environ, COAL_CPP_ONLY_LINES="0"))
+    r = subprocess.run([CPP, *argv], capture_output=True, env=_tuning_env())  # callers may redirect sys.stdout
+    for stream, data in ((sys.stdout, r.stdout), (sys.stderr, r.stderr)):
+        if data:
+            if hasattr(stream, "buffer"):
+                stream.flush()
+                stream.buffer.write(data)
+            else:
+                stream.write(data.decode("utf-8", "replace").replace("\\r\\n", "\\n"))
+            stream.flush()
+    return r.returncode
 """
 SHIM_MAIN = """import os
 import sys
 
 CPP = {cpp!r}
-os.environ["COAL_CPP_ONLY_LINES"] = "0"  # leave out the stderr lines only coal-cpp prints
 if os.name == "nt":
     import subprocess
     sys.exit(subprocess.call([CPP, *sys.argv[1:]]))
@@ -145,7 +173,8 @@ __path__.append({ref!r})  # every module but cli / __main__ comes from the refer
 with open(_os.path.join({ref!r}, "__init__.py")) as _f:
     exec(compile(_f.read(), "coal/__init__.py", "exec"))
 """
-REF_TEST_MODULES = ("test_decisions", "test_review_fixes", "test_fuzz_findings", "test_final_fixes")
+REF_TEST_MODULES = ("test_decisions", "test_review_fixes", "test_fuzz_findings", "test_final_fixes",
+                    "test_merge", "test_report", "test_engine_extras")
 
 
 def build_shim(tmp: Path) -> Path:
@@ -162,12 +191,13 @@ def build_shim(tmp: Path) -> Path:
         if (REF_SRC / name).exists():
             os.symlink(REF_SRC / name, src / name)
     (tmp / "tests").mkdir()
-    for name in ("fixtures", "golden", "cases.json"):
+    for name in ("fixtures", "golden", "cases.json", "report_example.json"):
         os.symlink(ref_root / "tests" / name, tmp / "tests" / name)
-    for name in ("scripts", "benchmarks", "examples", "README.md", "pyproject.toml"):
+    for name in ("scripts", "benchmarks", "examples", "README.md", "pyproject.toml", "CMakeLists.txt", "site",
+                 "CHANGELOG.md"):
         if (ref_root / name).exists():
             os.symlink(ref_root / name, tmp / name)
-    for m in REF_TEST_MODULES:
+    for m in REF_TEST_MODULES + ("report_vs_app",):
         (tmp / "tests" / f"{m}.py").write_bytes((ref_root / "tests" / f"{m}.py").read_bytes())
     return tmp / "tests"
 
@@ -206,12 +236,14 @@ NOT_APPLICABLE = ("TestDec3ClosedPipe.test_posix_broken_pipe_is_141_and_silent_i
 
 @unittest.skipIf(_skip_reason(), _skip_reason() or "")
 class TestReferenceTestsWithCpp(unittest.TestCase):
-    """The reference's own engine tests (test_decisions, test_review_fixes, test_fuzz_findings), with its `coal`
-    command (python -m coal, and the `pal2nal` drop-in's engine call) running coal-cpp."""
+    """The reference's own engine tests (REF_TEST_MODULES: the decision, review, fuzz, final-fix, merge, report and
+    engine-extras tests), with its `coal` command (python -m coal, coal.cli.main, and the `pal2nal` drop-in's engine
+    call) running coal-cpp. Tests that call pipeline.run in-process still exercise the Python engine."""
 
     def test_reference_tests(self):
         rc, out = run_ref_tests()
-        bad = [ln for ln in out.splitlines() if ln.endswith(("... FAIL", "... ERROR"))
+        # "FAIL: test (module.Class)" headers also cover failing subtests (their verbose line says nothing)
+        bad = [ln for ln in out.splitlines() if ln.startswith(("FAIL: ", "ERROR: "))
                and not any(n.split(".")[1] in ln and n.split(".")[0] in ln for n in NOT_APPLICABLE)]
         self.assertTrue(" tests in " in out, out[-2000:])
         self.assertEqual(bad, [], out[-4000:])

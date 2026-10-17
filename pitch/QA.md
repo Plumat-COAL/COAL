@@ -1,8 +1,7 @@
 # COAL: likely judge questions, short honest answers
 
-Judges: Apheris, PDBe, the Ellison Institute, CuspAI, Inherent, UCL. Rule: if a feature is marked
-**[after the C++/formats branch is merged]**, say "being merged now", or say nothing about it if that branch
-isn't in (the engine-fixes branch is already merged). <!-- CHANGED(R2-D12): was "[after merge]" -->
+Judges: Apheris, PDBe, the Ellison Institute, CuspAI, Inherent, UCL. Everything below is merged and tested, including
+the C++ engine. <!-- CHANGED(REV-3): was a rule for features "[after the C++/formats branch is merged]"; all are merged now -->
 
 **1. How do you know it's correct on my data?**
 We compared COAL with PAL2NAL v14's real output on 39 hand-made inputs covering every behaviour we found
@@ -35,8 +34,8 @@ characters -> a clear error (PAL2NAL silently drops a codon). DNA that doesn't b
 output as PAL2NAL v14 where PAL2NAL writes one (it refuses only some short or frameshifted genes, with
 "inconsistency"), plus <!-- CHANGED(FIN-C17): was "(it never refuses)" --> a plain warning naming the gene, and the GUI marks it failed;
 `--strict` makes it an error instead. <!-- CHANGED(DEC-1): new sentence --> Protein IDs like AT1G01010.1 vs DNA IDs
-AT1G01010 -> COAL explains the mismatch. Errors give a non-zero exit code. **[after the C++/formats branch is merged]** IDs matched
-after removing version suffixes, and `--keep-going` so one bad gene doesn't stop the rest.
+AT1G01010 -> COAL explains the mismatch. Errors give a non-zero exit code. IDs that match only
+after removing version suffixes are paired by name, with a notice,, and `--keep-going` so one bad gene doesn't stop the rest.
 
 **4. Why not just use PAL2NAL?**
 It works, and we treat it as the reference. But it always exits 0 even on errors, prints cryptic messages,
@@ -58,8 +57,8 @@ writes codeml's input directly. <!-- CHANGED(DEC-4): PAML output was "[after the
 Much of it was written with AI assistance (Claude), and we say so. What makes it maintainable is the
 same as for any code: about 3,100 lines of dependency-free Python in the engine and 4,100 in the app
 layer, a differential test suite against PAL2NAL's real output, more than 250 app tests, CI on Windows, macOS
-and Linux (all green in run 39006043852, including the GUI tests against real Gradio on Windows; still open the
-latest GitHub Actions run before you say "green"), and documented decisions (every deliberate difference from PAL2NAL is written down with its test).
+and Linux, including the GUI tests against real Gradio and the C++ engine on all three (open the latest GitHub
+Actions run on main before you say "green") <!-- CHANGED(SHIP-5): was "all green in run 39006043852"; later runs were red on Windows until SHIP-2 -->, and documented decisions (every deliberate difference from PAL2NAL is written down with its test).
 <!-- CHANGED(FINAL-2): was "the Windows job was red until the round-2 fixes" (it was still red after round 2); now cites green run 39006043852. -->
 <!-- CHANGED(R2-D2, R2-D3): was "about 1,050 lines ... 2,150 ... 115 app tests ... green on the app branch; the new GUI and MCP jobs have not run yet" (both false). See overnight/integration/CHANGES.md -->
 <!-- CHANGED(R3-D4b): app test count 140 -> 170 (round 3 added tests; the docs guard requires it). See overnight/integration/CHANGES.md -->
@@ -85,5 +84,14 @@ with the same columns and gene names a human sees, instead of guessing from raw 
 
 **10. What doesn't it do yet?**
 PAL2NAL's `-html` web-server mode (a clear error) and Gblocks-format input. <!-- CHANGED(DEC-4): was "CLUSTAL/PAML/codon
-output formats and -blockonly" --> The web GUI is new and has only been run on *[team: the laptops it was tested on]*; the Space is not deployed. The DIAMOND
-preset has only been tested with a stand-in, not real genomes. The C++ core is **[after the C++/formats branch is merged]**.
+output formats and -blockonly" --> The desktop app has been run on Windows 11 (the command line byte-identical to Linux) and in CI on Linux; the Space is not deployed. The DIAMOND
+preset has only been tested with a stand-in, not real genomes. The C++ core is merged and matches the Python engine (285/285 stored checks, thousands of random inputs); it is
+built from source with CMake, not yet shipped in the installer.
+
+**11. Why not just fix PAL2NAL?** <!-- REV-3: new -->
+It's GPL Perl, and we wanted an MIT engine anyone can embed, plus a C++ core. We kept PAL2NAL as the reference
+that judged us: every change was compared with its output.
+
+**12. What if the gene really has a frameshift, e.g. a pseudogene?** <!-- REV-3: new -->
+Then COAL is right to stop on it: a frameshifted gene has no valid codon alignment. With `--keep-going` it is left
+out and named, so you can drop it or fix its sequence; the rest of the family is written.

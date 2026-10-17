@@ -224,7 +224,7 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
             list += py_repr_char(c);
             firstc = false;
         }
-        throw CoalError(seq_id + ": invalid protein alignment characters " + list + "]", "invalid_chars", seq_id);
+        throw CoalError(seq_id + ": invalid protein alignment characters " + list + "]", "invalid_protein", seq_id);
     }
 
     Threaded res;
@@ -244,7 +244,7 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
             any_residue = true;
             break;
         }
-    if (!any_residue) throw CoalError(seq_id + ": protein sequence is empty", "empty_protein", seq_id);
+    if (!any_residue) throw CoalError(seq_id + ": protein sequence is empty", "empty", seq_id);
 
     Target target;
     target.code.resize(raw_dna.size());
@@ -274,7 +274,7 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
 
     // 2. anchor fallback
     auto ranges = anchors(row);
-    if (ranges.empty()) throw CoalError(seq_id + ": protein and DNA are inconsistent (no match found)", "no_match", seq_id);
+    if (ranges.empty()) throw CoalError(seq_id + ": protein and DNA are inconsistent (no match found)", "inconsistent", seq_id);
     std::vector<Token> pattern;
     int col = 1;
     bool found_any = false;
@@ -293,7 +293,7 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
         col += int(b - a);
     }
     s = find(target, pattern);
-    if (s < 0) throw CoalError(seq_id + ": protein and DNA are inconsistent (no match found)", "no_match", seq_id);
+    if (s < 0) throw CoalError(seq_id + ": protein and DNA are inconsistent (no match found)", "inconsistent", seq_id);
     res.dna = raw_dna.substr((size_t)s, (size_t)len);
 
     // mismatch report: first residue Met -> ATG/CTG/GTG, others -> genetic code
@@ -336,7 +336,7 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
         if (strict)
             throw CoalError(seq_id + ": protein and DNA are inconsistent (" + B + " of " + K +
                                 " checkable codons do not match the protein)",
-                            "unrelated", seq_id);
+                            "inconsistent", seq_id);
         res.notices.push_back(seq_id + ": protein and DNA are probably unrelated: " + B + " of " + K +
                               " checkable codons do not match the protein. The row was written as PAL2NAL writes "
                               "it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an "
@@ -351,7 +351,7 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
             throw CoalError(seq_id + ": protein and DNA are inconsistent (no 10-residue segment of the protein was "
                                 "found in the DNA and " + few + ": too few to tell where " + what +
                                 " starts in the longer DNA)",
-                            "position_guess", seq_id);
+                            "inconsistent", seq_id);
         res.notices.push_back(seq_id + ": position of the gene in the DNA is a guess: no 10-residue segment of the "
                               "protein was found in the DNA and " + few + ", too few to tell where " + what +
                               " starts in the longer DNA. The codons were taken from the start of the DNA as PAL2NAL "

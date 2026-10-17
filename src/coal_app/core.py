@@ -324,6 +324,20 @@ def _q(p: str) -> str:
     return shlex.quote(p) if os.name != "nt" else (f'"{p}"' if " " in p else p)
 
 
+def strip_folders(text: str, paths) -> str:
+    """CHANGED(SHIP-2): new. Show each path in a command by its file name only, however it was quoted.
+    The engine quotes with shlex.quote on every OS, so on Windows a full path (backslashes, drive colon) arrived as
+    'C:\\...\\protein.aln.fasta' and removing only the folder left the quotes: 'protein.aln.fasta'. Each quoted form
+    of the full path is now replaced by the file name quoted the app's way. See overnight/integration/CHANGES.md"""
+    for p in sorted({p for p in paths if p}, key=len, reverse=True):
+        base = os.path.basename(p)
+        for form in (shlex.quote(p), _q(p)):
+            if form != p:
+                text = text.replace(form, _q(base))
+        text = text.replace(p, base)
+    return text
+
+
 def coal_command(protein: str, dna: str, output_format="fasta", codontable=1, nogap=False,
                  nomismatch=False, out="codon_aln.fasta", keep_going=False, report: str | None = None,
                  strict=False, blockonly=False) -> str:  # CHANGED(FIN-A6): strict, blockonly
@@ -1580,11 +1594,9 @@ def methods_text(report: dict) -> str:
                      else "The alignment columns holding such codons were removed (-nomismatch).")
     if opts.get("nogap"):
         parts.append("Codon columns containing gaps or stop codons were removed.")
-    cmd = report.get("command") or ""
-    for item in list(report.get("inputs") or []) + [report.get("output") or {}]:
-        pth = item.get("path") if isinstance(item, dict) else None
-        if pth:
-            cmd = cmd.replace(pth, os.path.basename(pth))
+    cmd = strip_folders(report.get("command") or "",  # CHANGED(SHIP-2): was replace(pth, basename) per path
+                        [item.get("path") for item in list(report.get("inputs") or []) + [report.get("output") or {}]
+                         if isinstance(item, dict)])
     if cmd:
         parts.append(f"Command: {cmd}")
     return " ".join(parts)

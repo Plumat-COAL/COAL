@@ -57,8 +57,9 @@ def main(argv=None) -> int:
                     help="do not print warnings or notices (errors are always printed)")
     # CHANGED(DEC-1): new. Was: these three rules were always errors (ENG-c, R3-E1) or a warning (ENG-d). Now
     # PAL2NAL's behaviour by default (output + notice) and errors only with --strict. See overnight/integration/CHANGES.md
+    # CHANGED(REV-1): help said "(PAL2NAL never refuses)"; PAL2NAL does refuse some inputs (FIN-C17), it writes these
     ap.add_argument("-strict", "--strict", action="store_true",
-                    help="refuse probably-wrong data instead of writing it as PAL2NAL does (PAL2NAL never refuses): "
+                    help="refuse probably-wrong data instead of writing it as PAL2NAL does (PAL2NAL writes these): "
                          "exit 1 with no output if (1) more than half of a sequence's checkable codons (A/C/G/T "
                          "only) do not match its protein; (2) no 10-residue segment of a protein is found in its "
                          "DNA, the DNA is longer than the gene and fewer than 10 codons are checkable (where the gene "

@@ -13,6 +13,10 @@ on:
       - ".github/workflows/pages.yml"
       - ".github/workflows/release.yml"
       - "tests_app/test_site.py"
+  # CHANGED(SHIP-1): new. The site's download buttons depend on a published release (FIN-A9), but the site was only
+  # rebuilt on a push to main, so a release published after that push left "first release coming soon" in place.
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -57,7 +61,8 @@ jobs:
             echo "A published release exists: download buttons kept."
           else
             echo "::warning::No published release yet: download buttons replaced by the install-from-source notice."
-            python scripts/site_without_release.py _site/index.html
+            # CHANGED(WEB-13): every page (was _site/index.html only); pages without download links are left as they are
+            python scripts/site_without_release.py _site/*.html
           fi
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9  # v5.0.0
         with:

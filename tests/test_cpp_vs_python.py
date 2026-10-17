@@ -280,6 +280,38 @@ class TestCppThreads(unittest.TestCase):
                     self.assertEqual(run_python(d, [*opts, "-j", "1"]), ref)
 
 
+@unittest.skipUnless(sys.platform.startswith("linux"), "peak memory read with getrusage (Linux: KB)")
+class TestCppMemory(unittest.TestCase):
+    """CPP-32 (reference FIN-E2 rule): memory must not grow with the number of sequences beyond the IDs. The run
+    report's end-of-run step once kept a view of every entry (~1.1 KB per sequence)."""
+
+    PEAK = ("import resource, subprocess, sys; subprocess.run(sys.argv[1:], stdout=subprocess.DEVNULL, check=True, "
+            "timeout=120); print(resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss)")
+
+    def peak_kb(self, binary, d):
+        r = subprocess.run([sys.executable, "-c", self.PEAK, str(binary), "pep.fasta", "nuc.fasta", "-j", "1"],
+                           cwd=d, capture_output=True, text=True, timeout=150)
+        self.assertEqual(r.returncode, 0, r.stderr[-300:])
+        return int(r.stdout.strip())
+
+    def test_growth_per_sequence_is_the_ids_only(self):
+        binary = cpp_binary()
+        if binary is None:
+            self.skipTest("coal-cpp not built")
+        sys.path.insert(0, str(ROOT / "benchmarks"))
+        from gen_data import generate
+        with tempfile.TemporaryDirectory() as t:
+            peaks = []
+            for n in (20000, 80000):
+                d = Path(t) / str(n)
+                d.mkdir()
+                generate(n, 40, d, seed=4)
+                peaks.append(self.peak_kb(binary, d))
+            per_seq = (peaks[1] - peaks[0]) * 1024 / 60000
+            print(f"\npeak {peaks} KB: {per_seq:.0f} bytes per extra sequence", file=sys.stderr)
+            self.assertLess(per_seq, 600, f"peak {peaks} KB: {per_seq:.0f} bytes per extra sequence")
+
+
 class TestCppResumeAndProgress(unittest.TestCase):
     """--resume and --progress in coal-cpp: interrupted + resumed C++ runs must give
     exactly what an uninterrupted Python run gives."""
@@ -332,8 +364,10 @@ class TestCppResumeAndProgress(unittest.TestCase):
                 a = json.loads((self.d / "py.json").read_text())
                 b = json.loads((self.d / "cc.json").read_text())
                 self.assertGreater(b.pop("resumed_from"), 0)
+                # CPP-27: the merged report repeats the command (output path, --resume) in two more fields
+                b["methods_text"] = b["methods_text"].replace(out_cc.name, out_py.name)
                 for x in (a, b):
-                    for k in ("runtime_seconds", "command", "output"):
+                    for k in ("runtime_seconds", "command", "command_line", "output"):
                         x.pop(k)
                 self.assertEqual(a, b)
 
@@ -358,6 +392,62 @@ class TestCppResumeAndProgress(unittest.TestCase):
         r = subprocess.run([str(self.binary), "pep.fasta", "nuc.fasta", "--resume"], cwd=d, capture_output=True,
                            timeout=60)
         self.assertEqual(r.returncode, 2)
+
+    def _copy_inputs(self, name):
+        d = self.d / name
+        d.mkdir(exist_ok=True)
+        for f in ("pep.fasta", "nuc.fasta"):
+            (d / f).write_bytes((self.d / f).read_bytes())
+        return d
+
+    @unittest.skipIf(os.name == "nt", "POSIX signals")
+    def test_signal_before_any_checkpoint_leaves_nothing(self):  # CPP-28 (reference MRG-4, ENG-f)
+        from test_engine_extras import interrupt
+        d = self._copy_inputs("sig0")
+        cmd = [str(self.binary), "pep.fasta", "nuc.fasta", "-o", "o.fa"]
+        env = {"COAL_TEST_PAUSE_BEFORE_CHECKPOINT": "1", "COAL_TEST_PAUSE_AFTER_CHECKPOINT": "0",
+               "COAL_CHECKPOINT_EVERY": "3600"}
+        self.assertTrue(interrupt(cmd, d, extra_env=env), "C++ run did not pause")
+        self.assertEqual(sorted(p.name for p in d.iterdir() if p.name not in ("pep.fasta", "nuc.fasta")), [])
+
+    @unittest.skipIf(os.name == "nt", "POSIX hard links and signals")
+    def test_hard_linked_output_is_resumable_and_written_in_place(self):  # CPP-28 (reference MRG-4, R2-E5)
+        from test_engine_extras import interrupt
+        d = self._copy_inputs("hard")
+        ref = subprocess.run([str(self.binary), "pep.fasta", "nuc.fasta"], cwd=d, capture_output=True,
+                             timeout=60).stdout
+        (d / "o.fa").write_text("old\n")
+        os.link(d / "o.fa", d / "twin.fa")
+        inode = os.stat(d / "o.fa").st_ino
+        cmd = [str(self.binary), "pep.fasta", "nuc.fasta", "-o", "o.fa"]
+        self.assertTrue(interrupt(cmd, d, after_checkpoint=2))
+        self.assertTrue((d / "o.fa.coal-checkpoint.json").exists())
+        self.assertEqual((d / "o.fa").read_text(), "old\n")
+        r = subprocess.run(cmd + ["--resume"], cwd=d, capture_output=True, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stderr[-300:])
+        self.assertIn(b"coal: note: resuming o.fa", r.stderr)
+        self.assertEqual((d / "o.fa").read_bytes(), ref)
+        self.assertEqual((d / "twin.fa").read_bytes(), ref)  # the link is kept: written in place
+        self.assertEqual(os.stat(d / "o.fa").st_ino, inode)
+        self.assertEqual(sorted(p.name for p in d.iterdir() if "coal" in p.name), [])
+
+    @unittest.skipIf(os.name == "nt", "POSIX pipes and /dev/null")
+    def test_piped_input_or_device_output_cannot_resume(self):  # CPP-28 (reference MRG-4)
+        d = self._copy_inputs("pipe")
+        ref = subprocess.run([str(self.binary), "pep.fasta", "nuc.fasta"], cwd=d, capture_output=True,
+                             timeout=60).stdout
+        r = subprocess.run([str(self.binary), "pep.fasta", "/dev/stdin", "-o", "o.fa", "--resume"], cwd=d,
+                           input=(d / "nuc.fasta").read_bytes(), capture_output=True, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stderr[-300:])
+        self.assertIn(b"coal: note: o.fa cannot be resumed (an input is not a regular file); starting a normal run",
+                      r.stderr)
+        self.assertEqual((d / "o.fa").read_bytes(), ref)
+        self.assertEqual(sorted(p.name for p in d.iterdir() if "coal" in p.name), [])
+        r = subprocess.run([str(self.binary), "pep.fasta", "nuc.fasta", "-o", "/dev/null", "--resume"], cwd=d,
+                           capture_output=True, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stderr[-300:])
+        self.assertIn(b"coal: note: /dev/null cannot be resumed (the output is not a regular file); starting a "
+                      b"normal run", r.stderr)
 
     def test_progress(self):
         env = {**os.environ, "COAL_PROGRESS_MIN_SEQS": "100", "COAL_PROGRESS_EVERY": "0", "COAL_BATCH_NT": "20000"}

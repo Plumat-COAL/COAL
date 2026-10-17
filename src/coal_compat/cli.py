@@ -7,22 +7,22 @@ An unchanged PAL2NAL command line works: the default output format is clustal, a
 formats, -nogap, -nomismatch, -blockonly and every -codontable give PAL2NAL v14's output byte for byte, except for
 COAL's documented deliberate differences (README.md: newer NCBI genetic-code tables, -nogap using the chosen code's
 stop codons, the chosen code's start codons in the fallback, and inputs where PAL2NAL v14 writes malformed output or
-fails). CHANGED(FIN-C3): was "byte for byte" for all well-formed input. The command line is read as PAL2NAL v14 reads it
-(FIN-E3: a dangling -output or -codontable is ignored, "-codontable 2x" is code 2). The codon alignment goes to
-standard output,
-messages to standard error. ``-nostderr`` is accepted and mapped to COAL's ``-q``: warnings and
-notices are silenced, errors still go to standard error (as with PAL2NAL's ``-nostderr``, which silences its
-warnings but not its ERROR messages). CHANGED(R2-A10): was "(COAL's ``-q``)", which implied a silent stderr.
-CHANGED(DEC-2): was "COAL's notices about probably-wrong data ... still go to standard error".
-``-html`` (PAL2NAL's web-server mode: HTML on standard output, messages included) gives a clear error.
+fails). The command line is read as PAL2NAL v14 reads it (a dangling -output or -codontable is ignored,
+"-codontable 2x" is code 2). The codon alignment goes to standard output, messages to standard error.
+``-nostderr`` is accepted and mapped to COAL's ``-q``: warnings and notices are silenced, errors still go to
+standard error (as with PAL2NAL's ``-nostderr``, which silences its warnings but not its ERROR messages).
+``-html`` (PAL2NAL's web-server mode) gives a clear error.
 COAL's own options (``--strict``, ``-j``, ``-o`` ...) are not accepted here; use ``coal`` for those.
 
 Differences from PAL2NAL: the exit code is non-zero on errors (PAL2NAL always exits 0): 1 for a usage error or
-bad input (CHANGED(FIN-E3): documented; `coal` itself uses 2 for a usage error), 130 / 141 / 143 as for `coal`.
-CHANGED(DEC-4): was "the default output format is PAL2NAL's (clustal), so when this COAL can only write FASTA you
-must pass -output fasta"; now clustal/paml/codon are written and the default is clustal.
-See overnight/integration/CHANGES.md
+bad input (``coal`` itself uses 2 for a usage error), 130 / 141 / 143 as for ``coal``.
 """
+# CHANGED(REV-1): the help text above no longer carries change notes (users saw them in `pal2nal --help`); they are kept
+# here. CHANGED(FIN-C3): was "byte for byte" for all well-formed input. FIN-E3: PAL2NAL v14's argument parsing.
+# CHANGED(R2-A10): was "(COAL's -q)", which implied a silent stderr. CHANGED(DEC-2): was "COAL's notices about
+# probably-wrong data ... still go to standard error". CHANGED(FIN-E3): exit 1 for usage errors documented.
+# CHANGED(DEC-4): was "the default output format is PAL2NAL's (clustal), so when this COAL can only write FASTA you
+# must pass -output fasta". See overnight/integration/CHANGES.md
 from __future__ import annotations
 
 import re

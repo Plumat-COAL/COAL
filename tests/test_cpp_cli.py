@@ -6,10 +6,10 @@ extracted with `git ls-tree` / `git show` into a temp dir, not merged; or COAL_R
   * Live comparison (Python 3.10/3.11 only, whose argparse messages coal-cpp reproduces): every
     command line in CASES is run through both; same exit code, same last stderr line on errors, same
     stdout on successful runs. `--help` must equal the reference parser's help after the documented
-    C++ changes (HELP_DRIVER: -output choices, -j/-strict help, the C++-only options).
+    C++ change (HELP_DRIVER: the -j help says threads; MRG-8 keeps "processes" for Python).
   * Pinned expectations (any Python): the error messages captured from the reference with Python 3.10.
-  * C++-only behaviour: -output clustal/paml/codon accepted, --strict "not implemented yet", the C++
-    extras match exact names only (so `--j` still means --jobs as in Python).
+  * C++-only checks: -output clustal/paml/codon, -strict, the extras (CPP-29: ordinary, abbreviable options
+    of the merged parser, so `--j` is ambiguous between --jobs and --json, as in Python).
 
 `python tests/test_cpp_cli.py --write-help` regenerates cpp/src/help_text.hpp from the reference.
 Skipped if build/coal-cpp (COAL_CPP_BIN) is not built.
@@ -90,19 +90,6 @@ except _Got as g:
 for act in ap._actions:
     if act.dest == "jobs":  # coal-cpp uses threads (CPP-19: -output, -blockonly and -strict are as the reference)
         act.help = "worker threads (default 0 = all hardware threads)"
-g = ap.add_argument_group("C++ engine extras (exact option names only)")
-g.add_argument("-keep-going", "--keep-going", action="store_true",
-               help="skip sequences that cannot be converted; exit code 2 if any were skipped")
-g.add_argument("--max-warnings", type=int, metavar="N",
-               help="print at most N per-codon warning lines (default 0 = no limit)")
-g.add_argument("--progress", action="store_true",
-               help="percent done and time left on stderr (inputs over 10,000 sequences)")
-g.add_argument("--resume", action="store_true",
-               help="continue an interrupted -o run from its checkpoint (same inputs/options); with -nogap, "
-                    "-nomismatch, clustal or codon output only the first pass resumes and the final pass is redone")
-g.add_argument("--report", metavar="FILE.json",
-               help="write a JSON run report (schema coal.report/1), also when the run fails")
-g.add_argument("--json", action="store_true", help="print the run report to stdout (requires -o)")
 sys.stdout.write(ap.format_help())
 '''
 
@@ -133,12 +120,15 @@ ACCEPTED = [
     [P, N], [P, N, "-codontable", "2"], [P, N, "--cod", "2"], [P, N, "-cod", "2"], [P, N, "-codontable=2"],
     [P, N, "--codontable=11"], [P, N, "-codontable", " 1_1 "], [P, N, "-codontable", "+011"],
     [P, N, "-nog"], [P, N, "--nogap"], [P, N, "-nom"], [P, N, "--nomismatch", "-nogap"],
-    [P, N, "-j4"], [P, N, "--jobs=2"], [P, N, "-j=3"], [P, N, "--jobs", "1_0"], [P, N, "--j", "1"],
+    [P, N, "-j4"], [P, N, "--jobs=2"], [P, N, "-j=3"], [P, N, "--jobs", "1_0"],
     [P, N, "-q"], [P, N, "-qq"], [P, N, "-qj2"], [P, N, "--qu"],
     ["--", P, N], [P, "--", N], ["-q", "--", P, N], [P, "-o", "x.fa", N], ["-o", "out.fa", P, N],
     [P, N, "-o", "x.fa", "-o", "y.fa"], [P, N, "-output", "fasta"], [P, N, "--output-format=fasta"],
     [P, N, "--output-f", "fasta"], [P, "--", N, "--"], [P, N, "-blockonly"], [P, N, "--block"], [P, N, "-b"],
     [P, N, "-output", "clustal"], [P, N, "-output", "paml", "-nogap"], [P, N, "-strict"],
+    # CPP-29 (reference MRG-3/MRG-4): the extras, abbreviated as any option
+    [P, N, "--keep"], [P, N, "-keep"], [P, N, "-keep-going"], [P, N, "--max", "3"], [P, N, "--max-warnings=0"], [P, N, "--prog"],
+    [P, N, "-o", "x.fa", "--res"], [P, N, "-o", "x.fa", "--rep", "r.json"],
 ]
 HELP_CASES = [["-h"], ["--help"], ["--h"], [P, "--he"], ["-qh"], ["--help", "-j", "x"], ["-h", "--foo"]]
 VERSION_CASES = [["--version"], ["--v"], ["--vers", P]]
@@ -156,11 +146,15 @@ ERRORS = [
     [P, N, "-j", "x", "--help"], [P, N, "-n", "--help"], ["--foo", "-n"],
     [P, N, "-output", "xml"], [P, N, "-output"], [P, N, "--output-format=XML"], [P, N, "-outp", "fasta"],
     [P, N, "-blockonly=1"], [P, N, "--blockonly=yes"],
+    # CPP-29 (reference MRG-3/MRG-4)
+    [P, N, "--j", "1"], [P, N, "--re"], [P, N, "--max-warnings", "-1"], [P, N, "--max-warnings", "x"],
+    [P, N, "--keep-going=1"], [P, N, "--json"], [P, N, "--resume"], [P, N, "--report"],
 ]
 # The C++ engine accepts four formats, so its -output choices list differs (documented).
 CHOICES_DIFF = "argument -output/--output-format: invalid choice:"
 
-# Pinned: last stderr line of the reference (Python 3.10, bb80bde) for each ERRORS command line; exit code 2.
+# Pinned: last stderr line of the reference (Python 3.10; bb80bde, CPP-29 rows 0729829) for each ERRORS
+# command line; exit code 2.
 PINNED = {
     '': 'coal: error: the following arguments are required: pep_aln, nuc_fasta',
     "'pep.fasta'": 'coal: error: the following arguments are required: nuc_fasta',
@@ -214,6 +208,15 @@ PINNED = {
     "'pep.fasta' 'nuc.fasta' '-outp' 'fasta'": 'coal: error: ambiguous option: -outp could match -output, -o',
     "'pep.fasta' 'nuc.fasta' '-blockonly=1'": "coal: error: argument -blockonly/--blockonly: ignored explicit argument '1'",
     "'pep.fasta' 'nuc.fasta' '--blockonly=yes'": "coal: error: argument -blockonly/--blockonly: ignored explicit argument 'yes'",
+    # CPP-29: captured from the merged reference (0729829), Python 3.10
+    "'pep.fasta' 'nuc.fasta' '--j' '1'": 'coal: error: ambiguous option: --j could match --jobs, --json',
+    "'pep.fasta' 'nuc.fasta' '--re'": 'coal: error: ambiguous option: --re could match --resume, --report',
+    "'pep.fasta' 'nuc.fasta' '--max-warnings' '-1'": 'coal: error: --max-warnings must be 0 (no limit) or more',
+    "'pep.fasta' 'nuc.fasta' '--max-warnings' 'x'": "coal: error: argument --max-warnings: invalid int value: 'x'",
+    "'pep.fasta' 'nuc.fasta' '--keep-going=1'": "coal: error: argument --keep-going/-keep-going: ignored explicit argument '1'",
+    "'pep.fasta' 'nuc.fasta' '--json'": 'coal: error: --json requires -o (the alignment and the report cannot both go to stdout)',
+    "'pep.fasta' 'nuc.fasta' '--resume'": 'coal: error: --resume requires -o (only runs that write to a file can be resumed)',
+    "'pep.fasta' 'nuc.fasta' '--report'": 'coal: error: argument --report: expected one argument',
 }
 
 
@@ -341,16 +344,16 @@ class CppOnly(_Base):
                 c = self.cpp([P, N, flag])
                 self.assertEqual((c.returncode, c.stdout), (0, plain.stdout), c.stderr)
 
-    def test_extras_exact_names_only(self):
-        c = self.cpp([P, N, "--keep"])
-        self.assertEqual(last_line(c.stderr), "coal: error: unrecognized arguments: --keep")
-        self.assertEqual(self.cpp([P, N, "--j", "1"]).returncode, 0)  # not ambiguous with --json
-        self.assertEqual(self.cpp([P, N, "-keep-going", "--max-warnings=3"]).returncode, 0)
-        c = self.cpp([P, N, "--max-warnings", "x"])
-        self.assertEqual(last_line(c.stderr), "coal: error: argument --max-warnings: invalid int value: 'x'")
-        c = self.cpp([P, N, "--json"])
-        self.assertEqual(c.returncode, 2)
-        self.assertIn("--json requires -o", last_line(c.stderr))
+    def test_extras_are_ordinary_options(self):  # CPP-29 (reference MRG-3/MRG-4 cli.py)
+        c = self.cpp([P, N, "--j", "1"])
+        self.assertEqual(last_line(c.stderr), "coal: error: ambiguous option: --j could match --jobs, --json")
+        self.assertEqual(self.cpp([P, N, "--keep", "--max=3"]).returncode, 0)
+        c = self.cpp([P, N, "-o", "x.fa", "--js"])  # the report has a run time, so not in ACCEPTED (stdout differs)
+        self.assertEqual(c.returncode, 0, c.stderr)
+        self.assertTrue(c.stdout.startswith("{"), c.stdout[:80])
+        c = self.cpp([P, N, "--max-warnings", "-1"])
+        self.assertEqual((c.returncode, last_line(c.stderr)), (2, "coal: error: --max-warnings must be 0 (no limit) "
+                                                                  "or more"))
 
     def test_version(self):
         c = self.cpp(["--version"])
