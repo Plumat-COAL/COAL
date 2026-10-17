@@ -58,11 +58,17 @@ page (`data-check`) is quoted from `README.md`.
 
 ## Releasing
 
+<!-- CHANGED(FIN-A9): order changed: tag and let the Release run publish BEFORE merging to main (merging deploys the
+site at once). See overnight/integration/CHANGES.md -->
 1. Bump the version in `src/coal/__init__.py`, `pyproject.toml` and `index.html` (they must agree), optionally add a
-   `## <version>` section to `CHANGELOG.md`, commit, and merge to `main`.
-2. Tag and push: `git tag v0.3.0 && git push origin v0.3.0`.
+   `## <version>` section to `CHANGELOG.md`, and commit.
+2. Tag that commit and push the tag: `git tag v0.3.0 && git push origin v0.3.0`.
 3. The Release workflow builds and checks the wheel, sdist, Windows installer and portable zip, writes
-   `SHA256SUMS.txt` and publishes the GitHub Release. The website's buttons point at it as soon as it is published.
+   `SHA256SUMS.txt` and publishes the GitHub Release. **Wait until it has published, before merging to `main`**:
+   merging deploys the website at once, and its buttons point at the newest published release.
+4. Merge to `main`. If no published release exists when the site is deployed, `pages.yml` replaces the download
+   buttons with a "First release coming soon" note and a pip install from the repository
+   (`scripts/site_without_release.py`), so visitors never get a 404.
 
 A tag that doesn't match the source version fails at the first step. Tags like `v0.4.0rc1` become pre-releases,
 which `releases/latest` (and so the website) ignores. To rebuild without publishing, run the workflow by hand
@@ -83,8 +89,9 @@ To see the OS-specific variants, use "Show the download for Windows, macOS or Li
 
 - [ ] **Enable Pages:** Settings > Pages > Build and deployment > Source: **GitHub Actions**. Then run Actions >
       Pages > Run workflow once (or push to `main`).
-- [ ] **First release:** push a tag `v<version>` matching `src/coal/__init__.py` (now `v0.3.0`). Until a release
-      exists, every download link on the site gives a 404.
+- [ ] **First release, before merging to `main`:** push a tag `v<version>` matching `src/coal/__init__.py` (now
+      `v0.3.0`) and wait for the Release run to publish. Until a release exists, the deployed site shows "First
+      release coming soon" instead of download buttons (FIN-A9).
 - [ ] Check the first release run's Windows job log (the build has never run on GitHub) and download the installer
       once to see the SmartScreen screens match the drawing on the page.
 - [ ] Optional, later: **custom domain**: Settings > Pages > Custom domain, plus a DNS `CNAME` record. Nothing in

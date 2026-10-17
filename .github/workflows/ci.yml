@@ -4,6 +4,10 @@ on:
   push:
   pull_request:
 
+# CHANGED(FIN-A10): new; was the default token permissions. See overnight/integration/CHANGES.md
+permissions:
+  contents: read
+
 jobs:
   python:
     # Core install only (no extras): the GUI and MCP tests skip here; the gui / mcp jobs below run them.
@@ -16,8 +20,8 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python: ["3.10", "3.13"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1 (CHANGED(FIN-A10): was @v4)
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0 (CHANGED(FIN-A10): was @v5)
         with:
           python-version: ${{ matrix.python }}
       - name: Install COAL
@@ -55,8 +59,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1 (CHANGED(FIN-A10): was @v4)
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0 (CHANGED(FIN-A10): was @v5)
         with:
           python-version: "3.13"
       - name: Install COAL with the gui extra
@@ -78,8 +82,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1 (CHANGED(FIN-A10): was @v4)
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0 (CHANGED(FIN-A10): was @v5)
         with:
           python-version: "3.13"
       - name: Install COAL
@@ -111,8 +115,8 @@ jobs:
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw-browsers
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1 (CHANGED(FIN-A10): was @v4)
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0 (CHANGED(FIN-A10): was @v5)
         with:
           python-version: "3.13"
       - name: Install COAL and Playwright with Chromium
@@ -133,8 +137,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1 (CHANGED(FIN-A10): was @v4)
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0 (CHANGED(FIN-A10): was @v5)
         with:
           python-version: "3.13"
       - name: Install COAL with the mcp extra
@@ -154,8 +158,8 @@ jobs:
     timeout-minutes: 10
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1 (CHANGED(FIN-A10): was @v4)
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0 (CHANGED(FIN-A10): was @v5)
         with:
           python-version: "3.13"
       - name: Resolve both extras together
@@ -177,8 +181,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1 (CHANGED(FIN-A10): was @v4)
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0 (CHANGED(FIN-A10): was @v5)
         with:
           python-version: "3.13"
       - name: Check for cpp/CMakeLists.txt

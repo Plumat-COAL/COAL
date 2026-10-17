@@ -332,12 +332,14 @@ Tag, and everything else is automatic:
 
 1. Set the same version in `src/coal/__init__.py`, `pyproject.toml` and the `id="version"` span in
    `site/index.html` (a test fails if they differ) (optionally add a `## <version>` section to
-   `CHANGELOG.md` for the release notes; without one, GitHub generates notes from merged pull requests), commit,
-   merge to `main`.
-2. `git tag v0.3.0 && git push origin v0.3.0`
+   `CHANGELOG.md` for the release notes; without one, GitHub generates notes from merged pull requests), commit.
+2. Tag that commit: `git tag v0.3.0 && git push origin v0.3.0`
 3. `.github/workflows/release.yml` checks the tag against the source version, builds and checks the wheel, the sdist
    and the Windows app (`desktop/build.ps1`: tests, PyInstaller, frozen-engine check, Inno Setup installer), writes
-   `SHA256SUMS.txt` and publishes the GitHub Release, with version-free copies of the downloads.
+   `SHA256SUMS.txt` and publishes the GitHub Release, with version-free copies of the downloads. **Wait until it has
+   published, then merge to `main`** (merging deploys the website at once). If the site is deployed while no release
+   exists, its download buttons are replaced by a "First release coming soon" note with a pip install from the
+   repository. <!-- CHANGED(FIN-A9): was "commit, merge to main" before tagging (the site's buttons 404 until a release exists) -->
 4. The website (https://plumat-coal.github.io/COAL/, from `site/`) links to
    `releases/latest/download/<version-free name>`, so it offers the new release at once; only the version shown
    on the page is edited by hand (step 1).<!-- CHANGED(WEB-8): was "nothing to edit"; the page now names the

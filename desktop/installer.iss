@@ -67,7 +67,9 @@ SelectTasksLabel2=COAL installs for you only and needs no administrator rights. 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
 ; CHANGED(WIN-W4): was: offered "Open with" with no caveat; now says what it does today. See overnight/windows-app/CHANGES.md
-Name: "openwith"; Description: "Add COAL to ""Open with"" for .aln and .fasta files (opens COAL and tells you which box to drag the file onto; it can't load the file by itself yet; your default programs don't change)"; Flags: unchecked
+; CHANGED(FIN-A8): was "... tells you which box to drag the file onto; it can't load the file by itself yet" (stale since
+; R2-A9: COAL fills in the file's path itself). See overnight/integration/CHANGES.md
+Name: "openwith"; Description: "Add COAL to ""Open with"" for .aln and .fasta files (opens COAL with that file filled in, read in place; your default programs don't change)"; Flags: unchecked
 
 [InstallDelete]
 ; CHANGED(WIN-W8): new. An upgrade first removes the old bundle, so files a newer build no longer

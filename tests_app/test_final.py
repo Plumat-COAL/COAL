@@ -307,5 +307,64 @@ class TestFinC12C13MessyIds(Case):  # FIN-C12 / FIN-C13
         self.assertIn("AT1G79010", hint)
 
 
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _load_script(name):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(name, os.path.join(ROOT, "scripts", name + ".py"))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+class TestFinA9NoReleaseYet(unittest.TestCase):  # FIN-A9
+    def test_downloads_replaced_when_no_release(self):
+        m = _load_script("site_without_release")
+        with open(os.path.join(ROOT, "site", "index.html"), encoding="utf-8") as fh:
+            page = fh.read()
+        self.assertIn("releases/latest/download/", page)
+        out = m.rewrite(page)
+        self.assertNotIn("releases/latest/download/", out)
+        self.assertNotIn("releases/download/", out)
+        self.assertIn("First release coming soon", out)
+        self.assertIn('pip install "coal[gui] @ git+https://github.com/plumat-coal/COAL"', out)
+        self.assertEqual(out.count("<main"), 1)
+        self.assertEqual(m.rewrite(out), out)  # idempotent
+
+    def test_pages_workflow_checks_for_a_release(self):
+        with open(os.path.join(ROOT, ".github", "workflows", "pages.yml"), encoding="utf-8") as fh:
+            wf = fh.read()
+        self.assertIn("gh release view", wf)
+        self.assertIn("scripts/site_without_release.py _site/index.html", wf)
+        self.assertIn("GH_TOKEN: ${{ github.token }}", wf)
+        with open(os.path.join(ROOT, "site", "README.md"), encoding="utf-8") as fh:
+            self.assertIn("before merging to `main`", fh.read())
+
+
+class TestFinA10CiHygiene(unittest.TestCase):  # FIN-A10
+    def test_ci_permissions_and_pinned_actions(self):
+        with open(os.path.join(ROOT, ".github", "workflows", "ci.yml"), encoding="utf-8") as fh:
+            ci = fh.read()
+        self.assertRegex(ci, r"(?m)^permissions:\n  contents: read")
+        uses = re.findall(r"uses: (\S+)", ci)
+        self.assertTrue(uses)
+        for u in uses:
+            self.assertRegex(u, r"@[0-9a-f]{40}$", f"unpinned action {u}")
+        with open(os.path.join(ROOT, ".github", "workflows", "release.yml"), encoding="utf-8") as fh:
+            rel = {r.split("@")[0]: r for r in re.findall(r"uses: (\S+)", fh.read())}
+        for u in uses:
+            self.assertEqual(u, rel.get(u.split("@")[0], u), "not the SHA release.yml uses")
+
+
+class TestFinA8InstallerText(unittest.TestCase):  # FIN-A8
+    def test_open_with_text_is_current(self):
+        with open(os.path.join(ROOT, "desktop", "installer.iss"), encoding="utf-8") as fh:
+            iss = fh.read()
+        line = next(ln for ln in iss.splitlines() if ln.startswith('Name: "openwith"'))
+        self.assertNotIn("can't load the file by itself", line)
+        self.assertIn("filled in", line)
+
+
 if __name__ == "__main__":
     unittest.main()

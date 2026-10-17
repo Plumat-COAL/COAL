@@ -46,6 +46,19 @@ jobs:
           cp -R site/. _site/
           rm -f _site/README.md
           ls -lR _site
+      # CHANGED(FIN-A9): new. Before the first release every releases/latest/download/... button gave a 404; now, when no
+      # published release exists, the deployed copy says "First release coming soon" and installs from source.
+      # See overnight/integration/CHANGES.md
+      - name: Download buttons only when a release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view --repo "${{ github.repository }}" > /dev/null 2>&1; then
+            echo "A published release exists: download buttons kept."
+          else
+            echo "::warning::No published release yet: download buttons replaced by the install-from-source notice."
+            python scripts/site_without_release.py _site/index.html
+          fi
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9  # v5.0.0
         with:
           path: _site
