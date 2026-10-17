@@ -322,19 +322,20 @@ static void write_blocks_chunked(std::ostream& out, const std::string& fmt, std:
     const long long ntok = (long long)toks.size();
     const long long nb = codon ? std::max((ntok + 19) / 20, (length / 3 + 19) / 20) : (length + 59) / 60;
     auto trip_chars = [](long long len) { return len > 0 ? len + (len + 2) / 3 - 1 : 0; };  // "AAA CCC G"
-    std::vector<long long> seg0(nb), seg1(nb), ta(nb), te(nb), per(nb), off(nb);
+    const size_t nbz = (size_t)nb;
+    std::vector<long long> seg0(nbz), seg1(nbz), ta(nbz), te(nbz), per(nbz), off(nbz);
     long long pos = fmt == "clustal" ? 39 : 0;  // "CLUSTAL W multiple sequence alignment\n\n"
     for (long long b = 0; b < nb; ++b) {
-        seg0[b] = std::min(length, b * 60);
-        seg1[b] = std::min(length, (b + 1) * 60);
-        long long sl = seg1[b] - seg0[b];
-        ta[b] = std::min(ntok, b * 20);
-        te[b] = std::min(ntok, (b + 1) * 20);
-        long long m = te[b] - ta[b];
-        per[b] = codon ? (W + (m ? 4 * m - 3 : 0) + 1) + (W + trip_chars(sl) + 1) : W + sl + 1;
-        off[b] = pos;
+        seg0[(size_t)b] = std::min(length, b * 60);
+        seg1[(size_t)b] = std::min(length, (b + 1) * 60);
+        long long sl = seg1[(size_t)b] - seg0[(size_t)b];
+        ta[(size_t)b] = std::min(ntok, b * 20);
+        te[(size_t)b] = std::min(ntok, (b + 1) * 20);
+        long long m = te[(size_t)b] - ta[(size_t)b];
+        per[(size_t)b] = codon ? (W + (m ? 4 * m - 3 : 0) + 1) + (W + trip_chars(sl) + 1) : W + sl + 1;
+        off[(size_t)b] = pos;
         long long mline = mask.empty() ? 0 : W + (codon ? trip_chars(sl) : sl) + 1;
-        pos += n * per[b] + mline + 1;
+        pos += n * per[(size_t)b] + mline + 1;
     }
     if (fmt == "clustal") {
         out.seekp(0);
@@ -349,33 +350,33 @@ static void write_blocks_chunked(std::ostream& out, const std::string& fmt, std:
         if (codon) read_rows(*prot, k0 * ncol, (k1 - k0) * ncol, prows);
         for (long long b = 0; b < nb; ++b) {
             text.clear();
-            text.reserve((size_t)((k1 - k0) * per[b]));
+            text.reserve((size_t)((k1 - k0) * per[(size_t)b]));
             for (long long k = k0; k < k1; ++k) {
-                const char* row = rows.data() + (k - k0) * length;
+                const char* row = rows.data() + (size_t)((k - k0) * length);
                 if (codon) {
-                    const char* prow = prows.data() + (k - k0) * ncol;
+                    const char* prow = prows.data() + (size_t)((k - k0) * ncol);
                     text += pad;
-                    for (long long t = ta[b]; t < te[b]; ++t) {
-                        if (t > ta[b]) text += "   ";
+                    for (long long t = ta[(size_t)b]; t < te[(size_t)b]; ++t) {
+                        if (t > ta[(size_t)b]) text += "   ";
                         long long c = toks[(size_t)t];
-                        text += c >= 0 ? prow[c] : '-';
+                        text += c >= 0 ? prow[(size_t)c] : '-';
                     }
                     text += '\n';
                     text += ids[(size_t)k];
                     text.append((size_t)(W - (long long)ids[(size_t)k].size()), ' ');
-                    for (long long i = seg0[b]; i < seg1[b]; i += 3) {
-                        if (i > seg0[b]) text += ' ';
-                        text.append(row + i, (size_t)std::min(3LL, seg1[b] - i));
+                    for (long long i = seg0[(size_t)b]; i < seg1[(size_t)b]; i += 3) {
+                        if (i > seg0[(size_t)b]) text += ' ';
+                        text.append(row + (size_t)i, (size_t)std::min(3LL, seg1[(size_t)b] - i));
                     }
                     text += '\n';
                 } else {
                     text += ids[(size_t)k];
                     text.append((size_t)(W - (long long)ids[(size_t)k].size()), ' ');
-                    text.append(row + seg0[b], (size_t)(seg1[b] - seg0[b]));
+                    text.append(row + (size_t)seg0[(size_t)b], (size_t)(seg1[(size_t)b] - seg0[(size_t)b]));
                     text += '\n';
                 }
             }
-            out.seekp(off[b] + k0 * per[b]);
+            out.seekp(off[(size_t)b] + k0 * per[(size_t)b]);
             out.write(text.data(), (std::streamsize)text.size());
         }
     }
@@ -384,17 +385,17 @@ static void write_blocks_chunked(std::ostream& out, const std::string& fmt, std:
         if (!mask.empty()) {
             text += pad;
             if (codon) {
-                for (long long i = seg0[b]; i < seg1[b]; i += 3) {
-                    if (i > seg0[b]) text += ' ';
-                    text.append(mask, (size_t)i, (size_t)std::min(3LL, seg1[b] - i));
+                for (long long i = seg0[(size_t)b]; i < seg1[(size_t)b]; i += 3) {
+                    if (i > seg0[(size_t)b]) text += ' ';
+                    text.append(mask, (size_t)i, (size_t)std::min(3LL, seg1[(size_t)b] - i));
                 }
             } else {
-                text.append(mask, (size_t)seg0[b], (size_t)(seg1[b] - seg0[b]));
+                text.append(mask, (size_t)seg0[(size_t)b], (size_t)(seg1[(size_t)b] - seg0[(size_t)b]));
             }
             text += '\n';
         }
         text += '\n';
-        out.seekp(off[b] + n * per[b]);
+        out.seekp(off[(size_t)b] + n * per[(size_t)b]);
         out.write(text.data(), (std::streamsize)text.size());
     }
     out.seekp(pos);
