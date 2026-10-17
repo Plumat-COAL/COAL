@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>COAL explainer</title>
+<style>
+  :root {
+    --bg: #101418; --fg: #f4f4f0; --muted: #a9b1b8; --panel: #1b2229;
+    --aa: #56B4E9; --nt: #f4f4f0; --gap: #a9b1b8; --bad: #E69F00; --ok: #009E73;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+    font-family: system-ui, "Segoe UI", Helvetica, Arial, sans-serif; }
+  body { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2vh 3vw; }
+  h1 { font-size: clamp(22px, 3.2vw, 48px); margin: 0 0 3vh; font-weight: 700; letter-spacing: 0.01em; }
+  h1 .brand { color: var(--aa); }
+  .stage { background: var(--panel); border-radius: 18px; padding: 4vh 3vw 6vh; width: min(96vw, 1500px);
+    display: flex; flex-direction: column; gap: 4vh; align-items: center; }
+  .row { display: flex; align-items: flex-end; gap: 0.25em;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, Menlo, monospace; font-size: clamp(22px, 3.9vw, 66px); }
+  .name { font-family: system-ui, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 0.5em; color: var(--muted);
+    width: 4.2em; text-align: right; padding-right: 0.5em; align-self: center; }
+  .cell { position: relative; width: 1.25em; height: 1.9em; transition: width 0.6s ease;
+    transition-delay: calc(var(--i) * 0.12s); border-radius: 0.15em; }
+  .aa, .nt { position: absolute; left: 0; right: 0; text-align: center; transition: all 0.6s ease;
+    transition-delay: calc(var(--i) * 0.12s); }
+  .aa { bottom: 0.1em; color: var(--aa); font-weight: 700; }
+  .nt { bottom: 0.1em; opacity: 0; color: var(--nt); letter-spacing: 0.02em; }
+  .gap .aa { color: var(--gap); }
+  .gap .nt { color: var(--gap); }
+  /* step 1+: letters expand into codons; the amino acid moves up as a small label */
+  .s1 .cell:not(.gap), .s2 .cell, .s3 .cell, .s4 .cell { width: 2.4em; }
+  .s1 .cell:not(.gap) .aa, .s2 .aa, .s3 .aa, .s4 .aa { bottom: 2.5em; font-size: 0.5em; }
+  .s1 .cell:not(.gap) .nt, .s2 .nt, .s3 .nt, .s4 .nt { opacity: 1; }
+  /* step 2+: gaps become --- */
+  .s2 .gap .aa, .s3 .gap .aa, .s4 .gap .aa { opacity: 0.6; }
+  /* step 3: the codon that doesn't match its letter */
+  .s3 .bad, .s4 .bad { outline: 0.08em solid var(--bad); outline-offset: 0.05em; }
+  .s3 .bad .nt, .s4 .bad .nt { color: var(--bad); font-weight: 700; }
+  .s3 .bad { animation: flash 0.5s ease-in-out 0.2s 4; }
+  @keyframes flash { 50% { background: var(--bad); } }
+  .s3 .bad::after, .s4 .bad::after { content: "TGA = STOP"; position: absolute; top: 100%; left: 50%;
+    transform: translateX(-50%); margin-top: 0.15em; font-family: system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 0.32em; font-weight: 700; color: var(--bad); white-space: nowrap; }
+  .caption { min-height: 3.2em; font-size: clamp(18px, 2.4vw, 38px); line-height: 1.3; text-align: center;
+    max-width: 30em; margin-top: 2vh; }
+  .caption strong { color: var(--bad); }
+  .caption em { color: var(--ok); font-style: normal; font-weight: 700; }
+  .controls { margin-top: 3vh; display: flex; gap: 1em; align-items: center; font-size: clamp(14px, 1.4vw, 22px); }
+  button { font: inherit; color: var(--fg); background: #2a333c; border: 2px solid #44505c; border-radius: 10px;
+    padding: 0.4em 1em; cursor: pointer; }
+  button:focus-visible { outline: 3px solid var(--aa); outline-offset: 2px; }
+  .dots { display: flex; gap: 0.5em; }
+  .dot { width: 0.8em; height: 0.8em; border-radius: 50%; background: #44505c; }
+  .dot.on { background: var(--aa); }
+  .help { color: var(--muted); font-size: clamp(12px, 1.1vw, 18px); margin-top: 1.5vh; }
+  @media (prefers-reduced-motion: reduce) {
+    .cell, .aa, .nt { transition: none !important; }
+    .s3 .bad { animation: none; background: rgba(230, 159, 0, 0.25); }
+  }
+</style>
+</head>
+<body>
+  <h1><span class="brand">COAL</span>: from a protein alignment to a codon alignment</h1>
+  <div class="stage s0" id="stage" aria-hidden="true">
+    <div class="row" id="r0"><span class="name">Human</span></div>
+    <div class="row" id="r1"><span class="name">Mouse</span></div>
+  </div>
+  <p class="caption" id="caption" aria-live="polite"></p>
+  <div class="controls">
+    <button id="back" type="button" aria-label="Previous step">&#9664; Back</button>
+    <button id="play" type="button" aria-label="Pause">Pause</button>
+    <button id="next" type="button" aria-label="Next step">Next &#9654;</button>
+    <div class="dots" id="dots" aria-hidden="true"></div>
+  </div>
+  <p class="help">Space or &rarr; next &middot; &larr; back &middot; P pause</p>
+<script>
+(function () {
+  "use strict";
+  // Protein alignment and the codons that produce it ("---" for a gap).
+  var rows = [
+    { aa: "MKT-LWG", nt: ["ATG", "AAA", "ACC", "---", "CTG", "TGG", "GGC"] },
+    { aa: "MKSALWG", nt: ["ATG", "AAG", "TCT", "GCA", "CTT", "TGA", "GGT"] }
+  ];
+  var BAD = { row: 1, col: 5 };   // Mouse W <- TGA: a stop codon in the standard code
+  var captions = [
+    "A protein alignment: amino acids lined up in columns, <em>one letter each</em>.",
+    "Each amino acid is written in the DNA as <em>three letters: a codon</em>.",
+    "A gap in the protein becomes a gap of three in the DNA: <em>---</em>",
+    "Here the protein says <strong>W</strong>, but the DNA says <strong>TGA</strong>, which normally means " +
+      "<strong>STOP</strong>. The DNA doesn't spell this protein, so this column can't be trusted.",
+    "COAL does this for every gene, in seconds, and tells you in plain words <em>which genes don't fit and " +
+      "why</em> (here: mitochondrial DNA, where TGA does mean W)."
+  ];
+  var STEP_MS = 4000;
+  var stage = document.getElementById("stage");
+  var cap = document.getElementById("caption");
+  var dots = document.getElementById("dots");
+  var playBtn = document.getElementById("play");
+  var step = 0, timer = null, playing = true;
+
+  rows.forEach(function (r, ri) {
+    var el = document.getElementById("r" + ri);
+    for (var i = 0; i < r.aa.length; i++) {
+      var c = document.createElement("span");
+      c.className = "cell" + (r.aa[i] === "-" ? " gap" : "") + (ri === BAD.row && i === BAD.col ? " bad" : "");
+      c.style.setProperty("--i", i);
+      c.innerHTML = '<span class="aa">' + r.aa[i] + '</span><span class="nt">' + r.nt[i] + "</span>";
+      el.appendChild(c);
+    }
+  });
+  captions.forEach(function () { var d = document.createElement("span"); d.className = "dot"; dots.appendChild(d); });
+
+  function show(n) {
+    step = Math.max(0, Math.min(captions.length - 1, n));
+    stage.className = "stage s" + step;
+    cap.innerHTML = captions[step];
+    Array.prototype.forEach.call(dots.children, function (d, i) { d.className = "dot" + (i === step ? " on" : ""); });
+    if (step === captions.length - 1) { setPlaying(false, true); }
+  }
+  function tick() { if (step < captions.length - 1) { show(step + 1); } }
+  function setPlaying(p, ended) {
+    playing = p;
+    clearInterval(timer);
+    timer = p ? setInterval(tick, STEP_MS) : null;
+    playBtn.textContent = p ? "Pause" : (ended ? "Replay" : "Play");
+    playBtn.setAttribute("aria-label", playBtn.textContent);
+  }
+  function manual(n) { setPlaying(false); show(n); }
+
+  document.getElementById("next").addEventListener("click", function () { manual(step + 1); });
+  document.getElementById("back").addEventListener("click", function () { manual(step - 1); });
+  playBtn.addEventListener("click", function () {
+    if (playing) { setPlaying(false); return; }
+    if (step === captions.length - 1) { show(0); }
+    setPlaying(true);
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.target && e.target.tagName === "BUTTON" && (e.key === " " || e.key === "Enter")) { return; }
+    if (e.key === " " || e.key === "ArrowRight" || e.key === "PageDown") { e.preventDefault(); manual(step + 1); }
+    else if (e.key === "ArrowLeft" || e.key === "PageUp") { e.preventDefault(); manual(step - 1); }
+    else if (e.key === "p" || e.key === "P") { playBtn.click(); }
+    else if (e.key === "Home") { manual(0); }
+  });
+  show(0);
+  setPlaying(true);
+})();
+</script>
+</body>
+</html>
