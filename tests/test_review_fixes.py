@@ -149,6 +149,47 @@ class TestEngC_Unrelated(TempDirCase):
         self.assertNotIn("pepAlnPos", r.stderr)
 
 
+class TestR2E3_AmbiguousCodons(TempDirCase):  # R2-E3
+    def masked_pair(self, frac=0.55, n=300, seed=7):
+        sys.path.insert(0, str(SRC))
+        from coal.tables import get_code
+        code = get_code(1).code
+        sense = sorted(c for c, a in code.items() if a != "*" and c != "ATG")
+        rng = random.Random(seed)
+        cod = ["ATG"] + [rng.choice(sense) for _ in range(n - 1)]
+        prot = "".join(code[c] for c in cod)
+        masked = list(cod)
+        for i in rng.sample(range(1, n), int(frac * n)):
+            masked[i] = "NNN"
+        return prot, "".join(masked)
+
+    def test_mostly_masked_gene_is_aligned(self):
+        prot, dna = self.masked_pair()
+        clean_p, clean_d = "MKVAL", "ATGAAAGTTGCTCTG"
+        pad = len(prot) - len(clean_p)
+        (self.d / "mp.fa").write_text(f">masked\n{prot}\n>clean\n{clean_p}{'-' * pad}\n")
+        (self.d / "mn.fa").write_text(f">masked\n{dna}\n>clean\n{clean_d}\n")
+        r = coal(["mp.fa", "mn.fa", "-q"], self.d)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        sys.path.insert(0, str(SRC))
+        from coal.pipeline import fasta_record
+        self.assertEqual(r.stdout, fasta_record("masked", dna) + fasta_record("clean", clean_d + "---" * pad))
+
+    def test_all_ambiguous_codons_do_not_trigger_the_rule(self):
+        (self.d / "ap.fa").write_text(">g\nMKVALWYFHIKL\n")
+        (self.d / "an.fa").write_text(">g\nATG" + "NNN" * 11 + "\n")
+        r = coal(["ap.fa", "an.fa", "-q"], self.d)
+        self.assertEqual((r.returncode, r.stdout), (0, ">g\nATG" + "NNN" * 11 + "\n"), r.stderr)
+
+    def test_definite_mismatches_still_rejected_with_checkable_wording(self):
+        pep, nuc = _random_pair()
+        (self.d / "rp.fa").write_text(pep)
+        (self.d / "rn.fa").write_text(nuc)
+        r = coal(["rp.fa", "rn.fa"], self.d)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("checkable codons do not match", r.stderr)
+
+
 # ---------------------------------------------------------------- ENG-d
 class TestEngD_PartialIdMatch(TempDirCase):
     def test_some_ids_match_warns_and_pairs_by_order(self):

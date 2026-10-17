@@ -343,6 +343,7 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int) -> Threaded:
 
     # mismatch report: first residue Met -> ATG/CTG/GTG, others -> genetic code
     pos, first = 0, True
+    nchk = nbad_chk = 0  # CHANGED(R2-E3): codons with only A/C/G/T(U) bases, and those of them that mismatch
     for t in toks:
         if t[0] == "n":
             pos += t[1]
@@ -350,19 +351,27 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int) -> Threaded:
         aa, c = t[1], t[2]
         codon = res.dna[pos:pos + 3]
         mode = ANCHOR_START if (first and aa == "M") else NORMAL
-        if not codon_ok(table, codon.upper().replace("U", "T"), aa, mode):
+        cu = codon.upper().replace("U", "T")
+        checkable = not cu.strip("ACGT")
+        nchk += checkable
+        if not codon_ok(table, cu, aa, mode):
             res.warnings.append(f"pepAlnPos {c}: {row[c - 1]}{MISMATCH_WARNING}{codon}")
             res.mismatch_cols.add(c)
+            nbad_chk += checkable
         first = False
         pos += 3
     # CHANGED(ENG-c): was success whenever the wildcard pattern fit (unrelated protein and DNA
     # gave exit 0); now > half the codons mismatching is an error, and no anchor matching
     # gives a notice. See overnight/engine-fixes/CHANGES.md
+    # CHANGED(R2-E3): was all codons counted, so a correctly placed gene with > half NNN (masked / low
+    # coverage) codons was rejected and the run aborted; now codons containing any base other than
+    # A/C/G/T(U) count in neither the numerator nor the denominator (no rule if none is checkable).
+    # See overnight/integration/CHANGES.md
     nres = sum(1 for t in toks if t[0] == "r")
     nbad = len(res.mismatch_cols)
-    if 2 * nbad > nres:
+    if nchk and 2 * nbad_chk > nchk:
         raise CoalError(f"{seq_id}: protein and DNA are inconsistent "
-                        f"({nbad} of {nres} codons do not match the protein)")
+                        f"({nbad_chk} of {nchk} checkable codons do not match the protein)")
     if not found_any:
         res.notices.append(f"{seq_id}: no 10-residue segment of the protein was found in the DNA; "
                            f"codons were assigned by position ({nbad} of {nres} do not match)")
