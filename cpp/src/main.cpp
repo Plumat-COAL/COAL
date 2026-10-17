@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <functional>
 #include <chrono>
+#include <climits>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -29,7 +30,9 @@
 #include <io.h>
 #endif
 
+#include "args.hpp"
 #include "core.hpp"
+#include "help_text.hpp"
 #include "json.hpp"
 #include "report.hpp"
 #include "seqio.hpp"
@@ -987,132 +990,89 @@ static void compute_hints(const Options& o, RunReport& rec, const RunState& rs) 
 
 // ------------------------------------------------------------------ CLI
 
-static const char* USAGE =
-    "usage: coal-cpp [-h] [-codontable N] [-nogap] [-nomismatch] [-output {fasta,clustal,paml,codon}]\n"
-    "                [-o OUT] [-j N] [-q] [--keep-going] [--max-warnings N] [--progress] [--resume]\n"
-    "                [--report FILE.json] [--json] [--version] pep_aln nuc_fasta [nuc_fasta ...]\n";
+// -------------------------------------------------------------- command line (CPP-4)
+// Same options, help and error messages as `python -m coal` on the reviewed branch (argparse); see
+// args.hpp. Differences (documented in overnight/core/CHANGES.md): -output also accepts clustal, paml
+// and codon; -strict is accepted but not implemented yet; the C++-only extras match exact names only.
 
-static const char* HELP =
-    "\nConvert a protein alignment + unaligned coding DNA into a codon alignment (C++ engine of COAL;\n"
-    "same options and output as `python -m coal`).\n\n"
-    "  -codontable N       NCBI genetic code (default 1)\n"
-    "  -nogap              remove codon columns containing gaps or stop codons\n"
-    "  -nomismatch         remove alignment columns where a codon does not match its residue\n"
-    "  -output FORMAT      fasta (default), clustal, paml or codon\n"
-    "  -o, --out FILE      output file (default: stdout)\n"
-    "  -j, --jobs N        worker threads (default 0 = all hardware threads)\n"
-    "  -q, --quiet         do not print warnings or the summary\n"
-    "  --keep-going        skip sequences that cannot be converted; exit code 2 if any were skipped\n"
-    "  --max-warnings N    print at most N per-codon warning lines (default 0 = no limit)\n"
-    "  --progress          percent done and time left on stderr (inputs over 10,000 sequences)\n"
-    "  --resume            continue an interrupted -o run from its checkpoint (same inputs/options);\n"
-    "                      with -nogap, -nomismatch, clustal or codon output only the first pass\n"
-    "                      resumes and the final pass is redone\n"
-    "  --report FILE.json  write a JSON run report (schema coal.report/1), also when the run fails\n"
-    "  --json              print the run report to stdout (requires -o)\n";
+static std::string usage_text() {
+    std::string h = COAL_HELP;
+    return h.substr(0, h.find("\n\n") + 1);
+}
 
 static int usage_error(const std::string& msg) {
-    std::cerr << USAGE << "coal-cpp: error: " << msg << '\n';
+    std::cerr << usage_text() << "coal: error: " << msg << '\n';
     return 2;
 }
 
-static bool parse_int(const std::string& s, int& v) {
-    if (s.empty()) return false;
-    size_t i = (s[0] == '-' || s[0] == '+') ? 1 : 0;
-    if (i == s.size()) return false;
-    for (size_t k = i; k < s.size(); ++k)
-        if (s[k] < '0' || s[k] > '9') return false;
-    try {
-        v = std::stoi(s);
-    } catch (...) {
-        return false;
-    }
-    return true;
+// argparse-normalised decimal -> int (saturating; the values are thread counts / warning limits)
+static int to_int(const std::string& norm) {
+    bool neg = !norm.empty() && norm[0] == '-';
+    std::string d = neg ? norm.substr(1) : norm;
+    if (d.size() > 9) return neg ? INT_MIN : INT_MAX;
+    int v = std::stoi(d);
+    return neg ? -v : v;
 }
 
 int main(int argc, char** argv) {
     std::ios::sync_with_stdio(false);
     Options o;
-    std::vector<std::string> pos;
     for (int i = 1; i < argc; ++i) o.argv.push_back(argv[i]);
-    for (int i = 1; i < argc; ++i) {
-        std::string a = argv[i];
-        if (a.size() > 1 && a[0] == '-' && !(a[1] >= '0' && a[1] <= '9')) {
-            std::string name = a, val;
-            bool has_val = false;
-            size_t eq = a.find('=');
-            if (eq != std::string::npos) {
-                name = a.substr(0, eq);
-                val = a.substr(eq + 1);
-                has_val = true;
-            }
-            auto take = [&](std::string& dst) -> bool {
-                if (has_val) {
-                    dst = val;
-                    return true;
-                }
-                if (i + 1 >= argc) return false;
-                dst = argv[++i];
-                return true;
-            };
-            if (name == "-h" || name == "--help") {
-                std::cout << USAGE << HELP;
-                return 0;
-            } else if (name == "--version") {
-                std::cout << "coal " << VERSION << " (C++)\n";
-                return 0;
-            } else if (name == "-codontable" || name == "--codontable") {
-                std::string v;
-                int t;
-                if (!take(v)) return usage_error("argument -codontable/--codontable: expected one argument");
-                if (!parse_int(v, t)) return usage_error("argument -codontable/--codontable: invalid int value: '" + v + "'");
-                if (!get_code(t)) return usage_error("argument -codontable/--codontable: invalid choice: " + v);
-                o.table = t;
-            } else if (name == "-nogap" || name == "--nogap") {
-                o.nogap = true;
-            } else if (name == "-nomismatch" || name == "--nomismatch") {
-                o.nomismatch = true;
-            } else if (name == "-output" || name == "--output-format") {
-                std::string v;
-                if (!take(v)) return usage_error("argument -output/--output-format: expected one argument");
-                if (v != "fasta" && v != "clustal" && v != "paml" && v != "codon")
-                    return usage_error("argument -output/--output-format: invalid choice: '" + v + "'");
-                o.fmt = v;
-            } else if (name == "-o" || name == "--out") {
-                if (!take(o.out)) return usage_error("argument -o/--out: expected one argument");
-            } else if (name == "-j" || name == "--jobs") {
-                std::string v;
-                if (!take(v) || !parse_int(v, o.jobs)) return usage_error("argument -j/--jobs: invalid int value");
-            } else if (name == "-q" || name == "--quiet") {
-                o.quiet = true;
-            } else if (name == "--keep-going" || name == "-keep-going") {
-                o.keep_going = true;
-            } else if (name == "--max-warnings") {
-                std::string v;
-                if (!take(v) || !parse_int(v, o.max_warnings))
-                    return usage_error("argument --max-warnings: invalid int value");
-            } else if (name == "--progress") {
-                o.progress = true;
-            } else if (name == "--resume") {
-                o.resume = true;
-            } else if (name == "--report") {
-                if (!take(o.report)) return usage_error("argument --report: expected one argument");
-            } else if (name == "--json") {
-                o.json = true;
-            } else {
-                return usage_error("unrecognized arguments: " + a);
-            }
-        } else {
-            pos.push_back(a);
-        }
+
+    using coal::args::Kind;
+    using coal::args::Spec;
+    coal::args::Parser ap("coal", usage_text(), COAL_HELP, std::string("coal ") + VERSION + " (C++)");
+    std::vector<std::string> tables;
+    for (int t : supported_tables()) tables.push_back(std::to_string(t));
+    ap.add({Kind::Help, {"-h", "--help"}, "", false, {}, true});
+    const int a_pep = ap.add({Kind::Positional, {}, "pep_aln", false, {}, true});
+    const int a_nuc = ap.add({Kind::PositionalPlus, {}, "nuc_fasta", false, {}, true});
+    const int a_table = ap.add({Kind::Value, {"-codontable", "--codontable"}, "", true, tables, true});
+    const int a_nogap = ap.add({Kind::Flag, {"-nogap", "--nogap"}, "", false, {}, true});
+    const int a_nomis = ap.add({Kind::Flag, {"-nomismatch", "--nomismatch"}, "", false, {}, true});
+    const int a_fmt =
+        ap.add({Kind::Value, {"-output", "--output-format"}, "", false, {"fasta", "clustal", "paml", "codon"}, true});
+    const int a_out = ap.add({Kind::Value, {"-o", "--out"}, "", false, {}, true});
+    const int a_jobs = ap.add({Kind::Value, {"-j", "--jobs"}, "", true, {}, true});
+    const int a_quiet = ap.add({Kind::Flag, {"-q", "--quiet"}, "", false, {}, true});
+    const int a_strict = ap.add({Kind::Flag, {"-strict", "--strict"}, "", false, {}, true});
+    ap.add({Kind::Version, {"--version"}, "", false, {}, true});
+    // C++-only options: exact names (no abbreviations), so they never make a Python command line ambiguous
+    const int a_keep = ap.add({Kind::Flag, {"-keep-going", "--keep-going"}, "", false, {}, false});
+    const int a_maxw = ap.add({Kind::Value, {"--max-warnings"}, "", true, {}, false});
+    const int a_prog = ap.add({Kind::Flag, {"--progress"}, "", false, {}, false});
+    const int a_resume = ap.add({Kind::Flag, {"--resume"}, "", false, {}, false});
+    const int a_report = ap.add({Kind::Value, {"--report"}, "", false, {}, false});
+    const int a_json = ap.add({Kind::Flag, {"--json"}, "", false, {}, false});
+
+    coal::args::Result args = ap.parse(o.argv);
+    if (args.exit) {
+        std::cout << args.out << std::flush;
+        std::cerr << args.err << std::flush;
+        return args.code;
     }
-    if (pos.size() < 2) return usage_error("the following arguments are required: pep_aln, nuc_fasta");
+    o.pep = args.get(a_pep);
+    o.nucs = args.values[(size_t)a_nuc];
+    if (args.given(a_table)) o.table = to_int(args.get(a_table));
+    o.nogap = args.given(a_nogap);
+    o.nomismatch = args.given(a_nomis);
+    if (args.given(a_fmt)) o.fmt = args.get(a_fmt);
+    if (args.given(a_out)) o.out = args.get(a_out);
+    if (args.given(a_jobs)) o.jobs = to_int(args.get(a_jobs));
+    o.quiet = args.given(a_quiet);
+    o.keep_going = args.given(a_keep);
+    if (args.given(a_maxw)) o.max_warnings = to_int(args.get(a_maxw));
+    o.progress = args.given(a_prog);
+    o.resume = args.given(a_resume);
+    if (args.given(a_report)) o.report = args.get(a_report);
+    o.json = args.given(a_json);
+    if (args.given(a_strict))
+        return usage_error("argument -strict/--strict: not implemented yet in coal-cpp "
+                           "(the Python engine has it: python -m coal --strict)");
     if (o.json && o.out.empty())
         return usage_error("--json requires -o (the alignment and the report cannot both go to stdout)");
     if (o.resume && o.out.empty())
         return usage_error("--resume requires -o (only runs that write to a file can be resumed)");
-    o.pep = pos[0];
-    o.nucs.assign(pos.begin() + 1, pos.end());
 
     RunReport rec(o.argv, o.pep, o.nucs, o.out, o.fmt, o.table, o.nogap, o.nomismatch, o.keep_going,
                   !o.report.empty() || o.json);
@@ -1128,7 +1088,9 @@ int main(int argc, char** argv) {
         }
         std::cerr << "coal: warning: " << w << '\n';
     };
-    WarnFn note = [](const std::string& t) { std::cerr << "coal: note: " << t << std::endl; };
+    WarnFn note = [&](const std::string& t) {
+        if (!o.quiet) std::cerr << "coal: note: " << t << std::endl;  // -q: no notices (as the Python CLI)
+    };
     RunState rs;
     int rc = 0;
     try {

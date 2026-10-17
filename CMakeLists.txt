@@ -21,7 +21,7 @@ find_package(Threads REQUIRED)
 add_library(coal_core STATIC cpp/src/tables.cpp cpp/src/core.cpp cpp/src/seqio.cpp cpp/src/json.cpp cpp/src/report.cpp)
 target_include_directories(coal_core PUBLIC cpp/src)
 
-add_executable(coal-cpp cpp/src/main.cpp)
+add_executable(coal-cpp cpp/src/main.cpp cpp/src/args.cpp)
 target_link_libraries(coal-cpp PRIVATE coal_core Threads::Threads)
 
 set(COAL_TARGETS coal_core coal-cpp)
