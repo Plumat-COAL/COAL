@@ -249,5 +249,5 @@
  "summary_text": [
   "6 of 6 sequences have codon mismatches. They all fit genetic code 2 (vertebrate mitochondrial): try -codontable 2."
  ],
- "methods_text": "Codon alignments were generated with COAL v0.4.0 (https://github.com/chloe-newt/COAL) from 6 aligned protein sequences and their coding sequences, using the standard genetic code (NCBI table 1) and PAML output; outputs are verified byte-identical to PAL2NAL v14 on the COAL test suite."
+ "methods_text": "Codon alignments were generated with COAL v0.4.0 (https://github.com/plumat-coal/COAL) from 6 aligned protein sequences and their coding sequences, using the standard genetic code (NCBI table 1) and PAML output."
 }
