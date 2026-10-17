@@ -16,7 +16,10 @@ namespace coal {
 static const char* VERSION = "0.4.0";
 static const char* SCHEMA = "coal.report/1";
 static const char* REPO_URL = "https://github.com/plumat-coal/COAL";
-static const int HINT_SAMPLE = 200;
+// CHANGED(IMP-E-D): the hint re-tests at most 50 sequences (was 200) and drops a code as soon as it cannot fit as many
+// as the best so far; break locations still for up to 200 failed genes (report.py HINT_SAMPLE, BREAK_SAMPLE)
+static const int HINT_SAMPLE = 50;
+static const int BREAK_SAMPLE = 200;
 
 static std::string code_name(int t) {  // CODE_NAMES (names inside a sentence, FIN-C11)
     switch (t) {
@@ -905,7 +908,7 @@ void RunReport::finish_impl(const RowsFn& rows, const DnaFn& dna, bool aborted) 
         }
         if (!real_mismatches(e).empty()) marks.push_back(k);
     }
-    std::set<long long> fset(failed.begin(), failed.begin() + (std::ptrdiff_t)std::min<size_t>(failed.size(), HINT_SAMPLE));
+    std::set<long long> fset(failed.begin(), failed.begin() + (std::ptrdiff_t)std::min<size_t>(failed.size(), BREAK_SAMPLE));
     std::set<long long> mset(marks.begin(), marks.end());
     std::set<long long> need = fset;
     need.insert(mset.begin(), mset.end());
@@ -924,6 +927,7 @@ void RunReport::finish_impl(const RowsFn& rows, const DnaFn& dna, bool aborted) 
             return k + 1 < n;
         });
     }
+    if (!want_hint) return;  // CHANGED(IMP-E-D): -q without --report/--json never shows it
     // CPP-32: one entry view at a time (keeping all n of them took ~1.1 KB per sequence: 114 MB at 100,000);
     // a clean sequence of a run that was not aborted is never fixable, so its view is not even built
     std::map<long long, Json> pview;  // the problem entries' views (for the start-codon text below)
@@ -953,40 +957,53 @@ void RunReport::finish_impl(const RowsFn& rows, const DnaFn& dna, bool aborted) 
         }
         return data.size() < want.size();
     });
-    auto bad_under = [&](int c) {
+    const long long nt = (long long)tested.size();
+    // CHANGED(IMP-E-D): stops (ok = false) as soon as fewer than at_least of the tested genes can fit
+    auto bad_under = [&](int c, long long at_least, bool& ok) {
         std::set<long long> bad;
+        ok = true;
         const GeneticCode* gc = get_code(c);
         for (long long k : tested) {
             auto& d = data[k];
             Threaded it;
+            bool b = false;
             try {
                 it = thread_one(d.first, d.second, dnas[k], *gc);
             } catch (const CoalError&) {
-                bad.insert(k);
-                continue;
+                b = true;
             }
-            bool b = false;
-            long long col;
-            std::string aa, codon;
-            for (auto& w : it.warnings)
-                if (parse_mismatch(w, col, aa, codon) && !is_ambiguous_codon(w.substr(w.rfind(' ') + 1))) b = true;
-            for (auto& x : it.notices)
-                if (is_suspect(sget(notice_message(d.first, x), "code"))) b = true;
+            if (!b) {
+                long long col;
+                std::string aa, codon;
+                for (auto& w : it.warnings)
+                    if (parse_mismatch(w, col, aa, codon) && !is_ambiguous_codon(w.substr(w.rfind(' ') + 1))) b = true;
+                for (auto& x : it.notices)
+                    if (is_suspect(sget(notice_message(d.first, x), "code"))) b = true;
+            }
             if (b) bad.insert(k);
+            if ((long long)bad.size() > nt - at_least) {
+                ok = false;
+                break;
+            }
         }
         return bad;
     };
-    std::set<long long> bad_now = bad_under(table_);
-    long long fits_now = 0;
-    for (long long k : tested) fits_now += !bad_now.count(k);
+    bool ok_now;
+    std::set<long long> bad_now = bad_under(table_, 0, ok_now);
+    long long fits_now = nt - (long long)bad_now.size();
     std::vector<std::pair<long long, int>> results;
+    long long best = fits_now + 1;
     for (int c : supported_tables()) {
         if (c == table_) continue;
-        std::set<long long> bad = bad_under(c);
-        long long fit = 0, fixed = 0;
-        for (long long k : tested) fit += !bad.count(k);
+        bool ok;
+        std::set<long long> bad = bad_under(c, best, ok);
+        if (!ok) continue;
+        long long fit = nt - (long long)bad.size(), fixed = 0;
         for (long long k : problems) fixed += bad_now.count(k) && !bad.count(k);
-        if (fixed && fit > fits_now) results.push_back({fit, c});
+        if (fixed && fit > fits_now) {
+            results.push_back({fit, c});
+            best = std::max(best, fit);
+        }
     }
     if (results.empty()) return;
     long long top = 0;
@@ -1004,7 +1021,6 @@ void RunReport::finish_impl(const RowsFn& rows, const DnaFn& dna, bool aborted) 
         tied.insert(tied.begin(), 1);
     }
     int c = tied[0];
-    long long nt = (long long)tested.size();
     std::string name = app_code_name(c);
     auto do_ = [](long long k) { return k == 0 ? std::string("none do") : k == 1 ? std::string("only 1 does") : std::to_string(k) + " do"; };
     std::string text;

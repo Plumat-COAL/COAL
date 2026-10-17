@@ -1386,6 +1386,7 @@ int main(int argc, char** argv) {
 
     RunReport rec(o.argv, o.pep, o.nucs, o.out, o.fmt, o.table, o.nogap, o.nomismatch, o.keep_going,
                   !o.report.empty() || o.json, o.strict, o.blockonly);
+    rec.want_hint = !o.quiet || !o.report.empty() || o.json;  // CHANGED(IMP-E-D)
     install_signal_handlers();  // CPP-18 (reference ENG-f, R2-E8, DEC-3)
     // CPP-17 (reference ENG-b, R2-E7): pipes, /dev/stdin and FIFOs are copied to temp files first; messages name
     // the argument, not the temp copy

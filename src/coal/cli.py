@@ -99,7 +99,8 @@ def main(argv=None) -> int:
     # of ok sequences only when a report is asked for
     rec = RunReport(argv, args.pep_aln, args.nuc_fasta, args.out, args.output_format, args.codontable,
                     args.nogap, args.nomismatch, keep_going=args.keep_going,
-                    keep_entries=bool(args.report or args.json), strict=args.strict, blockonly=args.blockonly)
+                    keep_entries=bool(args.report or args.json), strict=args.strict, blockonly=args.blockonly,
+                    hint=not args.quiet or bool(args.report or args.json))  # CHANGED(IMP-E-D): -q never shows it
     hidden = [0]
     shown = [0]
 

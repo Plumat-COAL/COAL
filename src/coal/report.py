@@ -30,7 +30,12 @@ from .tables import SUPPORTED, get_code
 
 SCHEMA = "coal.report/1"
 REPO_URL = "https://github.com/plumat-coal/COAL"  # CHANGED(MRG-2): was github.com/chloe-newt/COAL (WEB-7)
-HINT_SAMPLE = 200          # the genetic-code hint re-tests at most this many sequences, problem genes first (app)
+# CHANGED(IMP-E-D): the genetic-code hint re-tests at most HINT_SAMPLE sequences, problem genes first (was 200, the
+# app's PROBE_SAMPLE; 50 keeps every bundled example whole, so the engine's report still equals the app's), and drops
+# a code as soon as it can no longer fit as many as the best code so far. Break locations are still found for up to
+# BREAK_SAMPLE failed genes. See overnight/integration/CHANGES.md
+HINT_SAMPLE = 50
+BREAK_SAMPLE = 200
 
 # Names inside a sentence: common words lower case, genus names capitalised as NCBI writes them (FIN-C11)
 CODE_NAMES = {
@@ -368,8 +373,10 @@ class RunReport:
     """Collects one run's results. keep_entries=False (no --report/--json): ok sequences are only counted."""
 
     def __init__(self, argv, pep: str, nucs, out: str | None, fmt: str, table: int, nogap: bool, nomismatch: bool,
-                 keep_going: bool = False, keep_entries: bool = True, strict: bool = False, blockonly: bool = False):
+                 keep_going: bool = False, keep_entries: bool = True, strict: bool = False, blockonly: bool = False,
+                 hint: bool = True):
         self.t0 = time.perf_counter()
+        self.want_hint = hint  # CHANGED(IMP-E-D): False (-q without --report/--json): the hint is never shown
         self.keep_entries = keep_entries
         self.argv = list(argv)
         self.pep, self.nucs, self.out, self.fmt, self.table = pep, list(nucs), out, fmt, table
@@ -536,7 +543,7 @@ class RunReport:
         failed = {k for k, e in self.entries.items() if e["status"] == "failed"
                   and not any(isinstance(m.get("column"), int) for m in e["messages"])}
         marks = {k for k, e in self.entries.items() if real_mismatches(e)}
-        need = set(sorted(failed)[:HINT_SAMPLE]) | marks
+        need = set(sorted(failed)[:BREAK_SAMPLE]) | marks
         rowof = {}
         if need:
             for k, (pid, row) in enumerate(rows()):
@@ -549,6 +556,8 @@ class RunReport:
                     if k in marks:
                         annotate_mismatch_pattern(row, self.entries[k])
         # CHANGED(MRG-2b): the app's FIN-A1/FIN-C4/FIN-C5 hint (src/coal_app/core.py genetic_code_hint), computed here
+        if not self.want_hint:
+            return
         view = [self.entry_view(k, aborted) for k in range(n)]
         problems = [k for k, e in enumerate(view) if fixable(e)]
         if not problems:
@@ -564,32 +573,41 @@ class RunReport:
                 data[k] = (pid, row, dna.get(pairing[k]))
             if len(data) == len(want):
                 break
-        def bad_under(c):
+        def bad_under(c, at_least=0):
+            """The tested genes that do not fit code c; None as soon as fewer than at_least of them can fit."""
             bad = set()
+            limit = nt - at_least
             for k in tested:
                 pid, row, s = data[k]
                 try:
                     it = thread_one(pid, row, s, c)
                 except CoalError:
                     bad.add(k)  # (the app drops the whole code when one gene fails: --keep-going exits 2)
-                    continue
-                if any(_MISMATCH.match(w) and not is_ambiguous_codon(w.rsplit(" ", 1)[-1]) for w in it.warnings) or \
-                        any(notice_message(pid, x)["code"] in SUSPECT_CODES for x in it.notices):
-                    bad.add(k)
+                else:
+                    if any(_MISMATCH.match(w) and not is_ambiguous_codon(w.rsplit(" ", 1)[-1]) for w in it.warnings) \
+                            or any(notice_message(pid, x)["code"] in SUSPECT_CODES for x in it.notices):
+                        bad.add(k)
+                if len(bad) > limit:
+                    return None
             return bad
+        nt = len(tested)
         # fits under the code used: the same test (not the statuses; in a stopped run the genes never reached
         # would otherwise count as fixed by any code)
         bad_now = bad_under(self.table)
-        fits_now = sum(1 for k in tested if k not in bad_now)
+        fits_now = nt - len(bad_now)
         results = []
+        best = fits_now + 1  # a code must fit more genes than the code used, and as many as the best one so far
         for c in SUPPORTED:
             if c == self.table:
                 continue
-            bad = bad_under(c)
-            fit = sum(1 for k in tested if k not in bad)
+            bad = bad_under(c, best)
+            if bad is None:
+                continue
+            fit = nt - len(bad)
             fixed = sum(1 for k in problems if k in bad_now and k not in bad)
             if fixed and fit > fits_now:
                 results.append((fit, c))
+                best = max(best, fit)
         if not results:
             return
         top = max(f for f, _ in results)
@@ -601,7 +619,7 @@ class RunReport:
         if standard:
             tied = [1] + [x for x in tied if x != 1]
         c = tied[0]
-        nt, total, table = len(tested), n, self.table
+        total, table = n, self.table
         name = APP_CODE_NAMES[c]
 
         def do(k):

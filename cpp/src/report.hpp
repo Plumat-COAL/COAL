@@ -54,6 +54,7 @@ public:
     void restore(const Json& state, const std::vector<Json>& nonok, long long completed);
 
     bool keep_entries;
+    bool want_hint = true;  // CHANGED(IMP-E-D): false under -q without --report/--json (report.py want_hint)
     bool finished = false;
     int exit_code = 0;
 

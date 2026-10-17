@@ -134,5 +134,37 @@ class TestFastAcceptanceSets(unittest.TestCase):
             self.assertEqual(bool(core._MORE_THAN_3_RES.search(row)), old, row)
 
 
+class TestCheapHint(unittest.TestCase):
+    """IMP-E-D: the hint is skipped under -q (unless --report/--json) and tests at most HINT_SAMPLE sequences."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="coal_hint_"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.pep, self.nuc = make_synthetic(self.tmp, 120, 60)
+
+    def _calls(self, extra):
+        import coal.core
+        with mock.patch.object(coal.core, "thread_one", wraps=coal.core.thread_one) as m:
+            rc, out, err = run_py([self.pep, self.nuc, "-codontable", "2", *extra])
+        return rc, err, m.call_count
+
+    def test_quiet_skips_the_hint(self):
+        rc, err, n = self._calls(["-q"])
+        self.assertEqual((rc, err, n), (0, "", 0))
+        rc, err, n = self._calls(["-q", "-o", str(self.tmp / "o.fa"), "--report", str(self.tmp / "r.json")])
+        self.assertGreater(n, 0)
+        import json
+        h = json.loads((self.tmp / "r.json").read_text())["hints"]
+        self.assertEqual([x["suggested_codontable"] for x in h if x["code"] == "genetic_code"], [1])
+
+    def test_sample_and_early_stop(self):
+        rc, err, n = self._calls([])
+        self.assertIn(f"COAL tested {report_mod.HINT_SAMPLE} of the 120 sequences", err)
+        self.assertIn("Re-run with -codontable 1.", err)
+        # every sampled gene under code 2 and under each code that ties for the best (1, 4, 6, 10, 11, 15, 16 here),
+        # the other 9 codes only until they can no longer win: 431 calls, not 17 x 50 = 850
+        self.assertLess(n, 9 * report_mod.HINT_SAMPLE)
+
+
 if __name__ == "__main__":
     unittest.main()
