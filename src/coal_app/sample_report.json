@@ -1,0 +1,220 @@
+{
+  "schema": "coal.report/1",
+  "coal_version": "0.4.0",
+  "command": "coal pep.aln nuc.fasta --keep-going --report run.report.json -o codon_aln.fasta",
+  "pal2nal_equivalent": "pal2nal.pl pep.aln nuc.fasta -output fasta > codon_aln.fasta",
+  "options": {
+    "output_format": "fasta",
+    "codontable": 1,
+    "nogap": false,
+    "nomismatch": false,
+    "keep_going": true
+  },
+  "inputs": [
+    {
+      "role": "protein",
+      "path": "pep.aln",
+      "sha256": "62923f1f95ff80eedc914487cbe6e4bbd1764860c601f9ce30a7bed172159196",
+      "sequences": 20
+    },
+    {
+      "role": "dna",
+      "path": "nuc.fasta",
+      "sha256": "8c4a9688717f92544ae4afc62449b7eac4a437f8c206b311f34391156507d75f",
+      "sequences": 20
+    }
+  ],
+  "output": {
+    "path": "codon_aln.fasta",
+    "format": "fasta",
+    "sha256": "36365ec3ec9e84677044ba650e1a5d373687a065aa52d3040d4cf40b0c19763b",
+    "sequences": 19
+  },
+  "summary": {
+    "total": 20,
+    "ok": 17,
+    "warning": 2,
+    "failed": 1,
+    "pairing": "id"
+  },
+  "hints": [
+    {
+      "code": "genetic_code",
+      "text": "The 2 sequences with warnings use TGA for tryptophan (W) and ATA for methionine (M), as vertebrate mitochondria do. They fit genetic code 2 (vertebrate mitochondrial) with no mismatches. Re-run with code 2?",
+      "suggested_codontable": 2
+    }
+  ],
+  "sequences": [
+    {
+      "id": "OG0001_sp01",
+      "dna_id": "OG0001_sp01",
+      "pairing": "id",
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "OG0001_sp02",
+      "dna_id": "OG0001_sp02",
+      "pairing": "id",
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "OG0001_sp03",
+      "dna_id": "OG0001_sp03",
+      "pairing": "id",
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "OG0001_sp04",
+      "dna_id": "OG0001_sp04",
+      "pairing": "id",
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "OG0001_sp05",
+      "dna_id": "OG0001_sp05",
+      "pairing": "id",
+      "status": "warning",
+      "messages": [
+        {
+          "code": "mismatch",
+          "text": "Column 57: amino acid W does not match codon TGA.",
+          "column": 57,
+          "residue": "W",
+          "codon": "TGA"
+        },
+        {
+          "code": "mismatch",
+          "text": "Column 131: amino acid W does not match codon TGA.",
+          "column": 131,
+          "residue": "W",
+          "codon": "TGA"
+        }
+      ]
+    },
+    {
+      "id": "OG0001_sp06",
+      "dna_id": "OG0001_sp06",
+      "pairing": "id",
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "OG0001_sp07",
+      "dna_id": "OG0001_sp07",
+      "pairing": "id",
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "OG0001_sp08",
+      "dna_id": "OG0001_sp08",
+      "pairing": "id",
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "OG0001_sp09",
+      "dna_id": "OG0001_sp09",
+      "pairing": "id",
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "OG0001_sp10",
+      "dna_id": "OG0001_sp10",
+      "pairing": "id",
+      "status": "warning",
+      "messages": [
+        {
+          "code": "mismatch",
+          "text": "Column 12: amino acid M does not match codon ATA.",
+          "column": 12,
+          "residue": "M",
+          "codon": "ATA"
+        }
+      ]
+    },
+    {
+      "id": "OG0001_sp11",
+      "dna_id": "OG0001_sp11",
+      "pairing": "id",
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "OG0001_sp12",
+      "dna_id": "OG0001_sp12",
+      "pairing": "id",
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "OG0001_sp13",
+      "dna_id": "OG0001_sp13",
+      "pairing": "id",
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "OG0001_sp14",
+      "dna_id": "OG0001_sp14",
+      "pairing": "id",
+      "status": "failed",
+      "messages": [
+        {
+          "code": "frameshift",
+          "text": "The DNA stops matching the protein at column 101: one base appears to be missing (frameshift).",
+          "column": 101
+        }
+      ]
+    },
+    {
+      "id": "OG0001_sp15",
+      "dna_id": "OG0001_sp15",
+      "pairing": "id",
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "OG0001_sp16",
+      "dna_id": "OG0001_sp16",
+      "pairing": "id",
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "OG0001_sp17",
+      "dna_id": "OG0001_sp17",
+      "pairing": "id",
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "OG0001_sp18",
+      "dna_id": "OG0001_sp18",
+      "pairing": "id",
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "OG0001_sp19",
+      "dna_id": "OG0001_sp19",
+      "pairing": "id",
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "OG0001_sp20",
+      "dna_id": "OG0001_sp20",
+      "pairing": "id",
+      "status": "ok",
+      "messages": []
+    }
+  ],
+  "runtime_seconds": 0.084,
+  "exit_code": 2
+}
