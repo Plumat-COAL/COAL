@@ -30,7 +30,8 @@ def codon_align(protein_alignment_path: str, dna_fasta_path: str, output_format:
         (str; a coal.report/1 JSON file, pass it to explain_report), summary (counts of ok / warning /
         failed sequences and how they were paired), hints (list of suggestions, e.g. a better genetic
         code as {"code": "genetic_code", "suggested_codontable": 2, "text": ...}), problems (list of
-        {id, status, explanation} for every sequence that is not OK), coal_command and pal2nal_command
+        {id, status, explanation} for every sequence with a warning or failure; sequences COAL never
+        reached after a fatal error are only counted in summary.not_checked), coal_command and pal2nal_command
         (the equivalent command lines), methods_text (a ready-to-paste methods sentence, empty if
         nothing was aligned), and stderr (COAL's raw messages).
     """
@@ -43,7 +44,7 @@ def codon_align(protein_alignment_path: str, dna_fasta_path: str, output_format:
     except ValueError as e:
         return {"ok": False, "error": str(e), "output_path": None}
     problems = [{"id": s.get("id"), "status": s.get("status"), "explanation": core.sequence_sentence(s)}
-                for s in r.report.get("sequences", []) if s.get("status") != "ok"]
+                for s in r.report.get("sequences", []) if s.get("status") in ("warning", "failed")]
     return {
         "ok": r.ok,
         "exit_code": r.exit_code,

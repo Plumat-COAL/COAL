@@ -61,3 +61,14 @@ class TestStdioMcpServer(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestMcpDemoScript(unittest.TestCase):
+    def test_demo_outputs_match_current_tools(self):
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(root, "demo", "mcp_demo.md"), encoding="utf-8") as fh:
+            md = fh.read()
+        p, d = core.example_paths("one_broken_gene")
+        r = tools.codon_align(p, d)
+        self.assertIn(r["problems"][0]["explanation"], md)
+        self.assertIn("claude mcp add --transport stdio coal -- python -m coal_app --mcp", md)

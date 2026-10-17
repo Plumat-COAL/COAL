@@ -1,6 +1,6 @@
 # Overnight B (app/GUI/MCP): morning summary
 
-Tasks 1-7 done, plus task 8 (alignment viewer) on branch `overnight/app` (local commits only, nothing pushed).
+All 12 tasks done (1-7 from the brief, 8-12 added overnight) on branch `overnight/app` (local commits only, nothing pushed).
 
 ## Done
 | Task | Commit |
@@ -13,11 +13,16 @@ Tasks 1-7 done, plus task 8 (alignment viewer) on branch `overnight/app` (local 
 | 6. `demo/race.py` (PAL2NAL per gene vs one batched COAL run) | e87f62f |
 | 7. `coal_compat`: drop-in `pal2nal` command | 49d3a5c |
 | Final log | 31d50b9 |
-| 8. Alignment viewer: `coal_app/viewer.py` + `python -m coal_app.viewer`, GUI panel, jump links | (see log) |
+| 8. Alignment viewer: `coal_app/viewer.py` + `python -m coal_app.viewer`, GUI panel, jump links, frameshift location | ab2c8cd |
+| 9. Hugging Face Space files in `space/` (prepared, NOT deployed; `space/DEPLOY.md`) | 6d69028 |
+| 10. `demo/diamond_pipeline.py`: two species -> longest isoforms -> DIAMOND RBH -> pairwise NW -> one COAL run | aff4a4f |
+| 11. Ready-to-paste methods paragraph (GUI box with copy button, `codon_align`, `explain_report`) | 1abff5b |
+| 12. `demo/mcp_demo.md` 60-second MCP stage script with real tool outputs (`demo/make_mcp_demo.py` regenerates it) | (final commit) |
 
 ## Test results (final run, Linux, Python 3.13)
 - `python -m unittest discover -s tests`: 11 tests OK (engine untouched).
-- `python -m unittest discover -s tests_app`: 34 tests OK, 2 skipped (Gradio GUI tests: Gradio not installable here).
+- `python -m unittest discover -s tests_app`: 52 tests OK, 2 skipped (Gradio GUI tests: Gradio not installable here).
+- Viewer checked visually in headless Chromium (1280 px and 390 px phone); 2 layout fixes, see log.
 - Windows/macOS not tested here; the CI workflow covers them on the first push.
 
 ## What switches on once the engine branch is merged (no app changes needed)
@@ -36,7 +41,8 @@ Tasks 1-7 done, plus task 8 (alignment viewer) on branch `overnight/app` (local 
 3. `pal2nal` command name (not `pal2nal.pl`, see log). PAL2NAL's default output is clustal, so `pal2nal pep nuc` without `-output fasta` errors until the engine has clustal: OK, or default to fasta with a warning?
 4. Suggested README text (README is not mine to edit):
    > **GUI and AI agents.** `pip install -e .[gui]` then `python -m coal_app` (or `coal-gui`) opens a web page on your computer: upload files or try an example, see a plain-English health check per gene, download the result. The same server offers MCP tools (`codon_align`, `explain_report`) to AI agents; `python -m coal_app --mcp` is a stdio-only MCP server (`pip install -e .[mcp]`). **Old pipelines:** replace `pal2nal.pl` with `pal2nal` (installed with COAL). **Examples:** `examples/` has four small datasets with READMEs.
-5. A real race against PAL2NAL (`python demo/race.py`) must be tried on a laptop with PAL2NAL fetched; here only the "not installed" path and a stand-in were tested.
+5. Real runs still to try on a laptop: the DIAMOND pipeline with real `diamond` (tested here only with a 3-mer stand-in), the Space deploy (`space/DEPLOY.md`), and the MCP demo in a real Claude client.
+6. A real race against PAL2NAL (`python demo/race.py`) must be tried on a laptop with PAL2NAL fetched; here only the "not installed" path and a stand-in were tested.
 
 ## How to try it
 Linux / macOS:
@@ -44,6 +50,7 @@ Linux / macOS:
 pip install -e ".[gui]"
 python -m coal_app                      # GUI on http://127.0.0.1:7860 ; --demo shows the sample report
 python -m coal_app --check              # which engine features were detected
+python -m coal_app.viewer examples/one_broken_gene/protein.aln.fasta --dna examples/one_broken_gene/dna.fasta -o view.html
 python -m coal examples/mito/protein.aln.fasta examples/mito/dna.fasta -codontable 2
 pal2nal examples/clean/protein.aln.fasta examples/clean/dna.fasta -output fasta
 python demo/race.py                     # needs: python scripts/fetch_pal2nal.py
@@ -53,6 +60,7 @@ Windows (PowerShell):
 ```
 py -m pip install -e ".[gui]"
 py -m coal_app
+py -m coal_app.viewer examples\one_broken_gene\protein.aln.fasta --dna examples\one_broken_gene\dna.fasta -o view.html
 py -m coal examples\mito\protein.aln.fasta examples\mito\dna.fasta -codontable 2
 py -m coal_compat examples\clean\protein.aln.fasta examples\clean\dna.fasta -output fasta
 py demo\race.py --perl C:\Strawberry\perl\bin\perl.exe
@@ -84,3 +92,5 @@ With the GUI running, Gradio serves MCP at `http://127.0.0.1:7860/gradio_api/mcp
 - Sat 02:26 Task 9 done (not deployed): src/coal_app/space_app.py (0.0.0.0:7860, MCP on), space/ (README front matter sdk gradio / sdk_version 5.49.1 = gui pin / app_file app.py, requirements.txt, app.py that puts src/ on sys.path and PYTHONPATH for the engine subprocess, build_space.py that assembles a Space folder, DEPLOY.md step by step). Tested: front matter matches the pin; build_space output contains everything and its copied engine runs. Space itself not run (no Gradio here).
 - Sat 02:28 Task 10 done: demo/diamond_pipeline.py (longest isoform per gene from gene:/gene= tag or isoform suffix; reciprocal best hits with the user's diamond (makedb + blastp both ways, outfmt 6); pure-Python Needleman-Wunsch with BLOSUM62 + affine gaps (Gotoh, pointer traceback); one batch padded with trailing gaps so COAL runs once; split into pairs/*.codon.fasta; --keep-going/--report used if the engine has them). Clear error when diamond is missing. Tested with tests_app/diamond_stub.py (a 3-mer stand-in, NOT DIAMOND): 11 proteins -> 6 genes -> 5 RBH -> 5 pair alignments that translate back to the proteins. A real run needs DIAMOND on a laptop. Pure-Python alignment is O(n*m): about 0.1 s per 400-aa pair here; --max-length 5000 skips giants.
 - Sat 02:29 Task 11 done: core.methods_text(report) (report['methods_text'] if the engine writes one, else built from version, genetic-code name + number, counts, -nogap/-nomismatch and the command with file names only; empty when nothing was aligned). Shown in the GUI as a read-only textbox with a copy button (Gradio show_copy_button, unverified), returned by codon_align as methods_text and appended to explain_report. Also fixed: rebuilt reports claimed --keep-going in the command when the engine doesn't have it. 4 new tests.
+- Sat 02:30 Task 12 done: demo/mcp_demo.md (setup with `claude mcp add --transport stdio coal -- python -m coal_app --mcp`, syntax checked against code.claude.com/docs/en/mcp; Claude Desktop config; 60-second timed script; real outputs of codon_align / explain_report on one_broken_gene and mito with code 1 then 2), regenerated by demo/make_mcp_demo.py. Making it showed `problems` listed 19 'not checked' rows: now only warnings/failures (count stays in summary.not_checked). On the current engine the script says COAL stopped at OG0001_sp14 (not '19 of 20 fine'); it notes how the answer changes with --keep-going.
+- Sat 02:30 Final: engine tests 11 OK; app tests 52 OK, 2 skipped. Summary updated. Stopping.
