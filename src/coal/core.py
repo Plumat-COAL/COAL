@@ -28,6 +28,7 @@ from .tables import get_code
 GAP = "-"
 STANDARD_AA = set("ACDEFGHIKLMNPQRSTVWY*X")
 AS_X = set("BZJOU")  # accepted but treated as 'X' (with a warning), like PAL2NAL
+AS_X_NAMES = {"U": "selenocysteine", "O": "pyrrolysine", "B": "D or N", "Z": "E or Q", "J": "I or L"}  # FIN-C14
 _VALID = re.compile(r"[^-ACDEFGHIKLMNPQRSTVWY*XBZJOU0-9]")
 _DIGIT = re.compile(r"[0-9]")
 _AS_X = re.compile("[" + "".join(sorted(AS_X)) + "]")
@@ -341,7 +342,11 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int, strict: bool = F
 
     res = Threaded(seq_id, row, "")
     for m in _AS_X.finditer(row):
-        res.warnings.append(f"pepAlnPos {m.start() + 1}: {m.group()} unknown AA type. Taken as 'X'")
+        # CHANGED(FIN-C14): was "U unknown AA type. Taken as 'X'" (PAL2NAL's wording; U is a known amino acid,
+        # selenocysteine); now "U (selenocysteine) is not checked; any codon is accepted" (same for B/Z/J/O).
+        # Behaviour and stdout unchanged. See overnight/integration/CHANGES.md
+        res.warnings.append(f"pepAlnPos {m.start() + 1}: {m.group()} ({AS_X_NAMES[m.group()]}) is not checked; "
+                            f"any codon is accepted")
         # CHANGED(DEC-4f): was kept by -nomismatch; now removed, as PAL2NAL v14 removes every column it printed a
         # message for (found by the differential fuzz). See overnight/integration/CHANGES.md
         res.mismatch_cols.add(m.start() + 1)

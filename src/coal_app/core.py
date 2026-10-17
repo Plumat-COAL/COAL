@@ -394,7 +394,9 @@ STOPPED_TEXT = ("The run was stopped before it finished (COAL was interrupted, k
 
 
 _WARN = re.compile(r"^coal: warning: (\S+) pepAlnPos (\d+): (\S+) does not correspond to (\S+)")
-_WARN_X = re.compile(r"^coal: warning: (\S+) pepAlnPos (\d+): (\S+) unknown AA type")
+# CHANGED(FIN-C14): was only PAL2NAL's "X unknown AA type" wording; now also the engine's "U (selenocysteine) is not
+# checked; any codon is accepted". See overnight/integration/CHANGES.md
+_WARN_X = re.compile(r"^coal: warning: (\S+) pepAlnPos (\d+): (\S+) (?:unknown AA type|\([^)]*\) is not checked)")
 # CHANGED(R2-A2/R2-E2): was (\S+) so "s0:" kept its colon (and the notice was dropped); now the colon is stripped,
 # the engine's ENG-c / ENG-d notices are recognised, and a line naming no known sequence becomes a run-level hint.
 # See overnight/integration/CHANGES.md
@@ -427,9 +429,11 @@ def _parse_warning(line: str) -> tuple[str, dict] | None:
     m = _WARN_X.match(line)
     if m:
         sid, col, aa = m.groups()
+        # CHANGED(FIN-C14): was "'U' is not one of the 20 standard amino acids; COAL treated it as X"; now names it
+        what = {"U": "selenocysteine", "O": "pyrrolysine", "B": "D or N", "Z": "E or Q", "J": "I or L"}.get(aa)
         return sid, {"code": "unknown_aa", "column": int(col), "residue": aa,
-                     "text": (f"Column {col}: '{aa}' is not one of the 20 standard amino acids; COAL treated it "
-                              f"as X (any codon accepted).")}
+                     "text": (f"Column {col}: '{aa}'" + (f" ({what})" if what else "") + " is not one of the 20 "
+                              f"standard amino acids, so COAL did not check its codon (any codon accepted).")}
     m = _WARN_UNRELATED.match(line)
     if m:  # CHANGED(DEC-1): new
         sid, nbad, nchk = m.groups()

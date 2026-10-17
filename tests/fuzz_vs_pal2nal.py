@@ -14,8 +14,16 @@ line, once for each output format (-output clustal / paml / fasta / codon), so 4
 Rule per comparison: PAL2NAL always exits 0; it succeeded if its stdout is non-empty. Then COAL (the ``pal2nal``
 command, run in-process) must exit 0 with byte-identical stdout; if PAL2NAL failed, COAL must exit non-zero with
 empty stdout. stderr is not compared (COAL's messages are its own). The only exceptions are the deliberate
-differences in DELIBERATE below (each is in README.md's list): a case that has one of those features may differ,
-and is counted under that feature instead.
+differences in DELIBERATE below (each is in README.md's list).
+CHANGED(FIN-C10): was "a case that has one of those features may differ" (ANY difference was accepted when the case
+had ANY deliberate feature); now a difference is accepted only if it is exactly the documented one. The generator
+also writes a neutralised copy of each case (U residues -> B, RNA -> DNA, alternative start codons -> ATG, table-10
+TGA codons -> TGC, each IUPAC codon -> one of its readings chosen so that it matches the residue / is a stop exactly
+when COAL says so; substituted codons are written in the other letter case so they can be recognised), and the real
+PAL2NAL is run on that copy without -nogap. COAL's output must then equal that reference output, with -nogap applied
+by COAL's documented rule (gap or stop codon of the selected code, any case) and only the substituted codons allowed
+to differ (and only by the documented substitution); an invalid protein character must be a COAL error. Anything
+else is an unexplained difference. See overnight/integration/CHANGES.md
 """
 from __future__ import annotations
 
@@ -32,6 +40,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
+from coal.codon import ANCHOR_STARTS, IUPAC, accepted  # noqa: E402
+from coal.core import nogap_bad_triplets  # noqa: E402
 from coal.tables import SUPPORTED, get_code  # noqa: E402
 from coal_compat.cli import main as pal2nal_main  # noqa: E402
 
@@ -45,12 +55,15 @@ DELIBERATE = {
                     "(every codon x residue, every first-Met codon): table 10 TGA (NCBI Cys, PAL2NAL stop) and the "
                     "first-Met start codons GTG in table 3, ATT/ATC/ATA in table 11 and ATA in table 13 (NCBI "
                     "starts PAL2NAL lacks). Nothing else differs",
-    "iupac": "IUPAC codes other than N in the DNA: COAL accepts a codon if every reading gives the residue; "
-             "PAL2NAL has a fixed list",
+    "iupac": "IUPAC codes other than N in the DNA: COAL accepts a codon if every reading gives the residue (and "
+             "-nogap removes it if every reading is a stop, e.g. TRA); PAL2NAL has a fixed list",
     "u_residue": "U (selenocysteine) in the protein: COAL treats it as X (any codon, with a warning) like B/Z/J/O; "
                  "PAL2NAL's search pattern gives U no codon at all, so the row is misaligned or the gene fails",
     "nogap_code": "-nogap removes the stop codons of the selected genetic code, in any case (COAL, deliberate); "
                   "PAL2NAL always removes the standard code's TAA/TAG/TGA, upper case only",
+    "first_met_code": "the first Met of a gene that needs the fallback (one N, one mismatch, ...): COAL accepts the "
+                      "selected code's start and Met codons (e.g. ATT and ATA in code 2, TTG in code 11), as in its "
+                      "exact-fit path; PAL2NAL accepts only ATG/CTG/GTG there, whatever -codontable says (FIN-E1)",
     "rna_first_met": "RNA (U) input with a protein starting with M: when PAL2NAL needs its fallback, it does not "
                      "accept AUG/CUG/GUG as the first Met (its fallback pattern has T only), so it flags that "
                      "codon (dropped by -nomismatch) or places the gene elsewhere; COAL reads U as T everywhere",
@@ -75,11 +88,43 @@ def _codons(table):
 class Case:
     def __init__(self):
         self.files = {}      # name -> text
+        self.ref_files = {}  # CHANGED(FIN-C10): name -> neutralised text (see the module docstring)
+        self.ref_files_b = {}  # the same without the first-Met substitution (for a gene placed off its own frame)
         self.pep = None
         self.nucs = []
         self.opts = []
         self.features = set()
         self.info = set()  # what the case exercises (reported as coverage counts)
+
+
+def _readings(trip):
+    return ["".join(x) for x in __import__("itertools").product(*(IUPAC.get(b, b) for b in trip.upper()))]
+
+
+def _reference_reading(table, aa, trip):
+    """CHANGED(FIN-C10): new. A concrete reading of an IUPAC codon that matches residue `aa` exactly when COAL accepts
+    the codon (every reading matches) and is a stop exactly when COAL's -nogap removes it (every reading is a stop);
+    None if no reading has both properties."""
+    code = get_code(table).code
+    reads = _readings(trip)
+
+    def enc(r):
+        return True if aa in "XBZJOU" else r in accepted(table, aa)
+    all_enc = trip.upper() in accepted(table, aa) if aa not in "XBZJOU" else True
+    all_stop = all(code[r] == "*" for r in reads)
+    for r in reads:
+        if enc(r) == all_enc and (code[r] == "*") == all_stop:
+            return r
+    return None
+
+
+def _flip(s, marks):
+    """The marked positions in the other letter case."""
+    t = list(s)
+    for i in marks:
+        if 0 <= i < len(t):
+            t[i] = t[i].lower() if t[i].isupper() else t[i].upper()
+    return "".join(t)
 
 
 def _wrap(seq, width):
@@ -168,8 +213,10 @@ def make_case(rng: random.Random) -> Case:
     dnas = []
     mode = rng.choices(("clean", "mismatch", "unrelated", "masked", "wrongtable"),
                        (0.55, 0.22, 0.06, 0.12, 0.05))[0]
+    ref_dnas = []  # CHANGED(FIN-C10): neutralised DNA (see the module docstring)
     for k, row in enumerate(rows):
         out = []
+        out_res = []  # residue of each entry of `out` (None for frameshift bases)
         first = True
         start_idx = None  # index in `out` of the codon of the first Met (an M before any non-X residue)
         slash = False
@@ -183,6 +230,7 @@ def make_case(rng: random.Random) -> Case:
                 n = int(ch) if ch.isdigit() else 1 if ch == "\\" else 2
                 slash = False
                 out.append("".join(rng.choice("ACGT") for _ in range(n)))
+                out_res.append(None)
                 continue
             if ch == "M" and first and rng.random() < 0.3 and code.starts:
                 cod = rng.choice(sorted(code.starts))
@@ -193,6 +241,7 @@ def make_case(rng: random.Random) -> Case:
             if first and ch == "M":
                 start_idx = len(out)
             out.append(cod)
+            out_res.append(ch)
             if ch not in "XBZJOU":
                 first = False
         cds = out
@@ -205,25 +254,83 @@ def make_case(rng: random.Random) -> Case:
         elif mode == "masked":
             frac = rng.choice((0.3, 0.6, 0.85, 0.95, 1.0))
             cds = [("NNN" if len(x) == 3 and rng.random() < frac else x) for x in cds]
-        if start_idx is not None and cds[start_idx].upper().replace("U", "T") in START_CODONS.get(run_table, ()):
-            c.features.add("genetic_code")
-        seq = "".join(cds)
-        if rng.random() < 0.3:
-            seq = "".join(rng.choice("ACGT") for _ in range(rng.randint(1, 30))) + seq
-        if rng.random() < 0.3:
-            seq += rng.choice(("TAA", "TAG", "TGA")) + "".join(rng.choice("ACGT") for _ in range(rng.randint(0, 20)))
-        if rng.random() < 0.03 and len(seq) > 3:
-            seq = seq[:-rng.randint(1, 3)]
+        cds = list(cds)
+        ref = list(cds)
+        marked = set()  # indices into cds/ref whose reference codon is a substitution
+        # CHANGED(FIN-C10): was IUPAC codes anywhere in the DNA (UTRs too); now in the gene's codons only, each with a
+        # concrete reading for the reference run (codons with no reading of the right kind are left unchanged)
         if rng.random() < 0.04:
-            seq = "".join(rng.choice("RYSWKMBDHV") if b in "ACGT" and rng.random() < 0.05 else b for b in seq)
-            c.features.add("iupac")
+            for i, (x, aa) in enumerate(zip(cds, out_res)):
+                if aa is None or i == start_idx or len(x) != 3 or x.strip("ACGT"):
+                    continue
+                trip = "".join(rng.choice("RYSWKMBDHV") if rng.random() < 0.05 else b for b in x)
+                if trip == x:
+                    continue
+                r = _reference_reading(run_table, aa, trip)
+                if r is None:
+                    continue
+                cds[i], ref[i] = trip, r
+                marked.add(i)
+                c.features.add("iupac")
+        keep_tga = set()  # table 10: TGA is Cys (NCBI), a stop for PAL2NAL v14 (neutralised as TGC for Cys codons)
+        if run_table in TABLE_CODONS:
+            pos = 0
+            for i, x in enumerate(ref):
+                if x.upper() == "TGA" and out_res[i] == "C":
+                    ref[i] = "TGC"
+                    marked.add(i)
+                    keep_tga.add(pos)
+                pos += len(x)
+        first_met = cds[start_idx].upper() if start_idx is not None else None
+        if first_met in START_CODONS.get(run_table, ()):
+            c.features.add("genetic_code")
+        elif first_met in FIRST_MET(run_table) and first_met not in ANCHOR_STARTS:
+            c.features.add("first_met_code")  # FIN-E1: matters only when the gene needs the fallback
+        start_marked = set()
+        if first_met in START_CODONS.get(run_table, ()) or (
+                first_met in FIRST_MET(run_table) and first_met not in ANCHOR_STARTS):
+            ref[start_idx] = "ATG"
+            start_marked.add(start_idx)
+        seq = "".join(cds)
+        rseq = "".join(ref)
+        rseq_b = "".join(cds[i] if i in start_marked else x for i, x in enumerate(ref))  # without the start fix
+        pos, mpos, mpos_b = 0, set(), set()
+        for i, x in enumerate(ref):
+            if i in marked or i in start_marked:
+                mpos.update(range(pos, pos + len(x)))
+            if i in marked:
+                mpos_b.update(range(pos, pos + len(x)))
+            pos += len(x)
+        if rng.random() < 0.3:
+            utr = "".join(rng.choice("ACGT") for _ in range(rng.randint(1, 30)))
+            seq, rseq, rseq_b = utr + seq, utr + rseq, utr + rseq_b
+            mpos, mpos_b = {p + len(utr) for p in mpos}, {p + len(utr) for p in mpos_b}
+            keep_tga = {p + len(utr) for p in keep_tga}
+        if rng.random() < 0.3:
+            tail = rng.choice(("TAA", "TAG", "TGA")) + "".join(rng.choice("ACGT") for _ in range(rng.randint(0, 20)))
+            seq, rseq, rseq_b = seq + tail, rseq + tail, rseq_b + tail
+        if run_table in TABLE_CODONS:
+            # FIN-C10: any other TGA (UTR, out of frame, a random codon) would change PAL2NAL's placement search in a
+            # way the reference cannot neutralise, so it becomes TGG in both copies
+            sl, rl, rb = list(seq), list(rseq), list(rseq_b)
+            while True:
+                hits = [m for m in range(len(sl) - 2) if "".join(sl[m:m + 3]) == "TGA" and m not in keep_tga]
+                if not hits:
+                    break
+                for m in hits:
+                    sl[m + 2] = rl[m + 2] = rb[m + 2] = "G"
+            seq, rseq, rseq_b = "".join(sl), "".join(rl), "".join(rb)
+        if rng.random() < 0.03 and len(seq) > 3:
+            cut = rng.randint(1, 3)
+            seq, rseq, rseq_b = seq[:-cut], rseq[:-cut], rseq_b[:-cut]
         if rng.random() < 0.05:
-            seq = seq.replace("T", "U")
+            seq = seq.replace("T", "U")  # the reference keeps T
             if start_idx is not None:
                 c.features.add("rna_first_met")
         if rng.random() < 0.1:
-            seq = seq.lower()
+            seq, rseq, rseq_b = seq.lower(), rseq.lower(), rseq_b.lower()
         dnas.append(seq)
+        ref_dnas.append((_flip(rseq, mpos), _flip(rseq_b, mpos_b)))
 
     if any(t in d.upper().replace("U", "T") for d in dnas for t in TABLE_CODONS.get(run_table, ())):
         c.features.add("genetic_code")
@@ -238,21 +345,27 @@ def make_case(rng: random.Random) -> Case:
         dids = [f"d{k}x" for k in range(nseq)]
     elif did_mode == "partial" and nseq >= 2:
         dids = [p if k == 0 else f"other{k}" for k, p in enumerate(pids)]
-    recs = [(dids[j], dnas[j]) for j in order]
+    recs = [(dids[j], dnas[j], ref_dnas[j][0], ref_dnas[j][1]) for j in order]
     if did_mode == "count":
-        recs = recs[:-1] if (len(recs) > 1 and rng.random() < 0.5) else recs + [("extra", "ATGAAA")]
+        recs = recs[:-1] if (len(recs) > 1 and rng.random() < 0.5) else recs + [("extra",) + ("ATGAAA",) * 3]
     width = rng.choice((0, 60, 60, 70, 13))
-    nuc_parts = ["".join(f">{i} desc\n" + _wrap(s, width) for i, s in recs)]
-    if len(recs) > 1 and rng.random() < 0.1:
-        cut = rng.randint(1, len(recs) - 1)
-        nuc_parts = ["".join(f">{i}\n" + _wrap(s, width) for i, s in recs[:cut]),
-                     "".join(f">{i}\n" + _wrap(s, width) for i, s in recs[cut:])]
+    split = len(recs) > 1 and rng.random() < 0.1
+    cut = rng.randint(1, len(recs) - 1) if split else None
+    nuc_parts, ref_parts, ref_parts_b = [], [], []
+    for col, parts in ((1, nuc_parts), (2, ref_parts), (3, ref_parts_b)):
+        if split:
+            parts += ["".join(f">{r[0]}\n" + _wrap(r[col], width) for r in recs[:cut]),
+                      "".join(f">{r[0]}\n" + _wrap(r[col], width) for r in recs[cut:])]
+        else:
+            parts.append("".join(f">{r[0]} desc\n" + _wrap(r[col], width) for r in recs))
 
     # protein file
     lower = rng.random() < 0.1
     srows = ["".join(r) for r in rows]
     if lower:
         srows = [s.lower() for s in srows]
+    # CHANGED(FIN-C10): the reference protein has B where the case has U (PAL2NAL treats B as COAL treats U)
+    rrows = [s.replace("U", "B").replace("u", "b") for s in srows]
     ncol = len(srows[0])
     mask = None
     if rng.random() < 0.35:
@@ -265,24 +378,34 @@ def make_case(rng: random.Random) -> Case:
                 n = rng.randint(1, 15)
                 mask += [rng.choice("# ")] * n
             mask = "".join(mask[:ncol])
-        text = "CLUSTAL W (1.83) multiple sequence alignment\n\n\n"
+        text = rtext = "CLUSTAL W (1.83) multiple sequence alignment\n\n\n"
         for b in range(0, ncol, blk):
-            for p, s in zip(pids, srows):
+            for p, s, r in zip(pids, srows, rrows):
                 text += p.ljust(idw) + s[b:b + blk] + "\n"
+                rtext += p.ljust(idw) + r[b:b + blk] + "\n"
             last = b + blk >= ncol
             if mask is not None:
-                text += " " * idw + mask[b:b + blk].rstrip() + "\n"
+                ml = " " * idw + mask[b:b + blk].rstrip() + "\n"
             else:
-                text += " " * idw + "".join(rng.choice(" *:.") for _ in s[b:b + blk]).rstrip() + "\n"
+                ml = " " * idw + "".join(rng.choice(" *:.") for _ in s[b:b + blk]).rstrip() + "\n"
+            text, rtext = text + ml, rtext + ml
             if not last or rng.random() < 0.8:
-                text += "\n"
+                text, rtext = text + "\n", rtext + "\n"
         c.pep = "pep.aln"
     else:
-        text = "".join(f">{p}\n" + _wrap(s, rng.choice((0, 60, 10))) for p, s in zip(pids, srows))
+        text = rtext = ""
+        for p, s, r in zip(pids, srows, rrows):
+            w = rng.choice((0, 60, 10))
+            text += f">{p}\n" + _wrap(s, w)
+            rtext += f">{p}\n" + _wrap(r, w)
         c.pep = "pep.fasta"
     c.files[c.pep] = text
+    c.ref_files[c.pep] = rtext
+    c.ref_files_b[c.pep] = rtext
     for i, part in enumerate(nuc_parts):
         c.files[f"nuc{i}.fasta"] = part
+        c.ref_files[f"nuc{i}.fasta"] = ref_parts[i]
+        c.ref_files_b[f"nuc{i}.fasta"] = ref_parts_b[i]
         c.nucs.append(f"nuc{i}.fasta")
 
     opts = []
@@ -318,6 +441,93 @@ def make_case(rng: random.Random) -> Case:
         if o in opts:
             c.info.add(o)
     return c
+
+
+def parse_output(fmt, text):
+    """CHANGED(FIN-C10): new. [(id, aligned sequence)] from PAL2NAL/COAL output in any of the four formats
+    (amino-acid, mark and header lines skipped)."""
+    lines = text.split("\n")
+    recs = []
+    if fmt == "fasta":
+        for ln in lines:
+            if ln.startswith(">"):
+                recs.append([ln[1:].strip(), ""])
+            elif recs:
+                recs[-1][1] += ln.strip()
+    elif fmt == "paml":
+        n, width = (int(x) for x in lines[0].split())
+        i = 1
+        for _ in range(n):
+            while not lines[i].strip():
+                i += 1
+            sid, seq = lines[i].strip(), ""
+            i += 1
+            while len(seq) < width:
+                seq += lines[i].strip()
+                i += 1
+            recs.append([sid, seq])
+    else:  # clustal, codon
+        order = {}
+        for ln in lines[1:] if fmt == "clustal" else lines:
+            if not ln.strip() or ln[0] in " #" or ln.startswith("CLUSTAL"):
+                continue
+            sid, _, rest = ln.partition(" ")
+            if sid not in order:
+                order[sid] = len(recs)
+                recs.append([sid, ""])
+            recs[order[sid]][1] += rest.replace(" ", "")
+    return [tuple(r) for r in recs]
+
+
+def _allowed_codon(table, coal3, ref3):
+    """CHANGED(FIN-C10/FIN-E1): new. True if a substituted reference codon `ref3` is the documented neutralisation of
+    COAL's codon `coal3`: one of its IUPAC readings, TGC for table 10's TGA, or ATG for a first-Met codon that is a
+    start or Met codon of the selected code."""
+    reads = _readings(coal3.upper().replace("U", "T"))
+    r = ref3.upper()
+    if r in reads:
+        return True
+    if table in TABLE_CODONS and r == "TGC" and "TGA" in reads:
+        return True
+    return r == "ATG" and any(x in FIRST_MET(table) for x in reads)
+
+
+def FIRST_MET(table):
+    code = get_code(table)
+    return code.starts | code.codons.get("M", frozenset())
+
+
+def check_deliberate(case, fmt, rc, out, ref_out):
+    """CHANGED(FIN-C10): new. None if COAL's result is exactly the documented deliberate difference for this case,
+    else the reason it is not. `ref_out`: PAL2NAL's stdout on the neutralised case (without -nogap)."""
+    if "invalid_char" in case.features:
+        return None if rc != 0 and out == "" else "invalid protein character but COAL did not refuse"
+    if ref_out == "":
+        return None if rc != 0 and out == "" else "PAL2NAL fails on the neutralised case but COAL succeeded"
+    if rc != 0:
+        return f"COAL failed (exit {rc}) but PAL2NAL succeeds on the neutralised case"
+    try:
+        want, got = parse_output(fmt, ref_out), parse_output(fmt, out)
+    except (ValueError, IndexError) as e:
+        return f"could not parse output ({e})"
+    table = int(case.opts[case.opts.index("-codontable") + 1]) if "-codontable" in case.opts else 1
+    if "-nogap" in case.opts:  # COAL's documented rule applied to PAL2NAL's output without -nogap
+        bad = set().union(*(nogap_bad_triplets(sq, table) for _, sq in want)) if want else set()
+        want = [(i, "".join(sq[k:k + 3] for k in range(0, len(sq), 3) if k // 3 not in bad)) for i, sq in want]
+    if [i for i, _ in want] != [i for i, _ in got]:
+        return "different IDs or order"
+    for (sid, w), (_, g) in zip(want, got):
+        if len(w) != len(g):
+            return f"{sid}: length {len(g)}, expected {len(w)}"
+        for k in range(0, len(w), 3):
+            c3, r3 = g[k:k + 3], w[k:k + 3]
+            if c3.replace("U", "T").replace("u", "t") == r3:
+                continue
+            marked = [a.isupper() != b.isupper() for a, b in zip(c3, r3) if a.isalpha() and b.isalpha()]
+            if any(marked) and _allowed_codon(table, c3, r3):
+                continue
+            return f"{sid} at nt {k + 1}: COAL {c3}, expected {r3}"
+    return None
 
 
 def run_pal2nal(pal2nal, d, args):
@@ -364,6 +574,28 @@ def fuzz(pal2nal, n, seed, report=print, keep_dir=None, formats=FORMATS):
                 procs[fmt] = (args, subprocess.Popen(["perl", pal2nal, *args], cwd=d, stdout=subprocess.PIPE,
                                                      stderr=subprocess.PIPE))
             keep = False
+            refs = {}
+
+            def reference(fmt, variant, case=case, d=d, refs=refs):
+                """PAL2NAL's stdout on a neutralised copy of the case, without -nogap (FIN-C10)."""
+                if (fmt, variant) not in refs:
+                    rd = os.path.join(d, f"ref{variant}")
+                    os.makedirs(rd, exist_ok=True)
+                    for name, text in (case.ref_files, case.ref_files_b)[variant].items():
+                        with open(os.path.join(rd, name), "w", newline="\n") as fh:
+                            fh.write(text)
+                    opts = [o for o in case.opts if o != "-nogap"]
+                    refs[fmt, variant] = run_pal2nal(pal2nal, rd, [case.pep, *case.nucs, "-output", fmt, *opts])[1]
+                return refs[fmt, variant]
+
+            def verified(fmt, rc, out, case=case):
+                """None if the difference is exactly a documented one (either reference), else why not."""
+                why = check_deliberate(case, fmt, rc, out, reference(fmt, 0))
+                if why is not None and case.ref_files_b != case.ref_files:
+                    if check_deliberate(case, fmt, rc, out, reference(fmt, 1)) is None:
+                        return None
+                return why
+            why = None
             for fmt in formats:
                 args, p = procs[fmt]
                 rc, out, err = run_coal(d, args)
@@ -380,7 +612,8 @@ def fuzz(pal2nal, n, seed, report=print, keep_dir=None, formats=FORMATS):
                     cnt["identical"] += 1
                 elif not pal_ok and rc != 0 and out == "":
                     cnt["both_fail"] += 1
-                elif case.features & set(DELIBERATE):
+                elif case.features & set(DELIBERATE) and (why := verified(fmt, rc, out)) is None:
+                    # CHANGED(FIN-C10): was accepted unchecked
                     cnt["deliberate"] += 1
                     for f in case.features & set(DELIBERATE):
                         by_feature[f] = by_feature.get(f, 0) + 1
@@ -388,6 +621,8 @@ def fuzz(pal2nal, n, seed, report=print, keep_dir=None, formats=FORMATS):
                     cnt["differ"] += 1
                     keep = True
                     bad.append({"case": i, "dir": d, "args": args, "pal2nal_ok": pal_ok, "coal_rc": rc,
+                                "features": sorted(case.features),
+                                "why": why if case.features & set(DELIBERATE) else "no deliberate feature",
                                 "pal2nal_stdout": pout[:400], "coal_stdout": out[:400],
                                 "coal_stderr": err[-400:], "pal2nal_stderr": perr.decode("latin-1")[-400:]})
             if keep and keep_dir:

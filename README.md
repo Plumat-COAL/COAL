@@ -34,7 +34,8 @@ pip install -e .[fast]                              # optional numpy speed-up fo
 - **Extra sequence around the gene** (UTRs, stop codon, poly-A) is skipped: COAL finds the leftmost place in the
   DNA, in any reading frame, where the whole protein fits.
 - **Genetic codes:** `-codontable N` for the 17 NCBI codes PAL2NAL supports
-  (1–6, 9–16, 21–23). The first Met may use any start codon of that code.
+  (1–6, 9–16, 21–23). The first Met may use any start codon of that code (also when the gene doesn't fit exactly
+  and COAL needs its fallback placement, unlike PAL2NAL v14). <!-- CHANGED(FIN-E1): fallback clause new -->
 - **Frameshifts:** a digit N in the protein alignment means N bases (PAL2NAL convention). That column is widened
   to the next multiple of 3 for every sequence. tfastx/tfasty notation is read as PAL2NAL reads it: `\` = 1 base,
   `/` followed by (gaps and) a residue = a gap, then 2 bases. <!-- CHANGED(FZ-3): tfastx sentence new -->
@@ -63,7 +64,10 @@ pip install -e .[fast]                              # optional numpy speed-up fo
   status **141**, i.e. 128 + SIGPIPE, the POSIX convention that `yes`, `git log` and other Unix filters follow, so a
   shell or pipeline can tell "the reader stopped early" from a real error (1). Python's documentation suggests exiting
   with 1 instead; we follow the Unix convention. The same 141 on Windows, where a closed pipe is reported as EINVAL.
-  Other exit codes: 130 Ctrl-C, 143 SIGTERM, 129 SIGHUP, 2 usage error. <!-- CHANGED(DEC-3): new bullet -->
+  Other exit codes: 130 Ctrl-C, 143 SIGTERM, 129 SIGHUP; a usage error (unknown option, missing file name) is 2
+  for `coal` and 1 for the drop-in `pal2nal`, which reads its command line as PAL2NAL v14 does (a dangling
+  `-output` or `-codontable` is ignored, `-codontable 2x` means code 2). <!-- CHANGED(DEC-3): new bullet -->
+  <!-- CHANGED(FIN-E3): was "2 usage error" for both commands (the drop-in exits 1). See overnight/integration/CHANGES.md -->
 <!-- CHANGED(R2-D6, R2-E4): was "-q silences them" and no mention of the more-than-half rule (ENG-c, as amended by R2-E3). See overnight/integration/CHANGES.md -->
 
 **Large inputs:** COAL streams the data. It reads the protein alignment and indexes the DNA file(s) (IDs and file
@@ -76,8 +80,11 @@ if the whole run succeeds, so an error never leaves a partial file. Notes:
 - `-nogap`/`-nomismatch`/`-blockonly` need every row before deciding which columns to remove, so the rows are first
   written to a temporary file (disk space about the size of the output). The clustal and codon formats interleave
   all sequences block by block, so they use temporary files the same way (about twice the output size on disk) and
-  hold at most 16 MB of rows in memory at a time. `-j` gives the same output in every format.
+  hold at most 16 MB of rows in memory at a time (measured with 500,000 sequences of 150 codons, `-j 1`: peak memory
+  122 MB for fasta, 139 MB for clustal, 145 MB for codon). `-j` gives the same output in every format.
   <!-- CHANGED(DEC-4): clustal/codon sentence new -->
+  <!-- CHANGED(FIN-E2): was claimed but not true (one block of every sequence was held: 320 MB clustal, 533 MB codon
+  in the same test); now true, numbers measured. See overnight/integration/CHANGES.md -->
 - CLUSTAL input is read into memory (FASTA input is streamed).
 - Memory still holds the sequence IDs and their file positions, about 300 bytes per sequence (≈150 MB per
   500,000 sequences).
@@ -104,8 +111,9 @@ Details and evidence in `tests/README.md`:
   <!-- CHANGED(DEC-1): was "More than half ... is an error" (a stdout difference); now stderr only. See overnight/integration/CHANGES.md -->
 - Genetic code 3 (yeast mitochondrial) also accepts GTG as a start codon (current NCBI table; PAL2NAL v14's table 3
   accepts only ATA/ATG, measured). <!-- CHANGED(DEC-4): was "unverified" -->
-- With `-nomismatch`, `unknown AA type. Taken as 'X'` warnings (for B/Z/J/O/U) are still printed; PAL2NAL prints
-  nothing there. Mismatch warnings are not printed, as in PAL2NAL. The output is the same: both remove those columns.
+- With `-nomismatch`, the warnings for B/Z/J/O/U (`U (selenocysteine) is not checked; any codon is accepted`;
+  PAL2NAL words it `unknown AA type. Taken as 'X'`) are still printed; PAL2NAL prints nothing there.
+  <!-- CHANGED(FIN-C14): the warning's wording --> Mismatch warnings are not printed, as in PAL2NAL. The output is the same: both remove those columns.
   <!-- CHANGED(DEC-4): COAL kept B/Z/J/O/U columns with -nomismatch; now removes them like PAL2NAL -->
 - `U` (selenocysteine) in the protein is read as any codon, like B/Z/J/O, with a warning. PAL2NAL's search pattern
   gives `U` no codon at all, so its row is misaligned or the gene fails. Repro: protein `M-UVE`, DNA `ATGTCAGTTGAG`:
@@ -113,6 +121,12 @@ Details and evidence in `tests/README.md`:
 - B/Z/J/O in a gene that needs the fallback: PAL2NAL also checks their codons against the wrong pattern (B against
   its start-codon list) and prints spurious `does not correspond` warnings; COAL accepts any codon there (stderr only;
   with `-nomismatch` both remove those columns). <!-- CHANGED(FZ-D2) -->
+- The first Met in the fallback (a gene that doesn't fit exactly, e.g. one N or one mismatching codon): COAL
+  accepts the selected code's start and Met codons, as it does when the gene fits exactly (NCBI tables).
+  PAL2NAL v14 accepts only ATG/CTG/GTG there, whatever `-codontable` says, so a code-2 gene starting with ATT or
+  ATA gets a spurious mismatch at column 1, and `-nomismatch` deletes column 1 for every sequence. Repro: a code-2
+  gene starting `ATT` with one `N` further on, `-codontable 2`: PAL2NAL "M does not correspond to ATT"; COAL no
+  warning (the same as without the `N`). <!-- CHANGED(FIN-E1): new deliberate difference -->
 - RNA input (U instead of T): COAL reads U as T everywhere. PAL2NAL does too, except in its fallback (used when the
   protein doesn't fit exactly), where a first Met on AUG/CUG/GUG is not accepted: PAL2NAL then flags that codon
   (and `-nomismatch` removes the column) or places the gene elsewhere in the DNA, even in another reading frame.
@@ -120,8 +134,9 @@ Details and evidence in `tests/README.md`:
 - Protein rows of different lengths are an error (`protein alignment rows have different lengths`); PAL2NAL silently
   pads or truncates. <!-- CHANGED(FZ-D5) -->
 - Input that PAL2NAL misreads is read correctly: a protein FASTA starting with a blank line (PAL2NAL takes it for
-  CLUSTAL and fails), a UTF-8 BOM (PAL2NAL fails), `> id` with a space after `>` (PAL2NAL takes the header text as
-  sequence). <!-- CHANGED(FZ-D6) -->
+  CLUSTAL and fails), a UTF-8 BOM (PAL2NAL fails), `> id` with a space after `>` (PAL2NAL finds no protein
+  sequences: "number of input seqs differ (aa: 0 ...)", no output). <!-- CHANGED(FZ-D6) -->
+  <!-- CHANGED(FIN-C19): was "PAL2NAL takes the header text as sequence" (measured: it reads 0 proteins) -->
 - Input that PAL2NAL silently mangles is a clear error: duplicate protein or DNA IDs (PAL2NAL concatenates or drops
   records), an empty DNA `>` header, a second DNA file whose first record has no header (PAL2NAL appends it to the
   previous file's last record), and `_` as a stop in the protein (PAL2NAL's alias; COAL: invalid character).

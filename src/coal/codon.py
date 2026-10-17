@@ -16,7 +16,7 @@ IUPAC = {
     "R": "AG", "Y": "CT", "S": "CG", "W": "AT", "K": "GT", "M": "AC",
     "B": "CGT", "D": "AGT", "H": "ACT", "V": "ACG", "N": "ACGT",
 }
-ANCHOR_STARTS = frozenset({"ATG", "CTG", "GTG"})  # PAL2NAL's first-Met rule in fallback mode
+ANCHOR_STARTS = frozenset({"ATG", "CTG", "GTG"})  # PAL2NAL's first-Met rule in fallback mode (FIN-E1: + the code's)
 
 # Residue "modes": how the first Met of a sequence is treated.
 NORMAL, START, ANCHOR_START = 0, 1, 2
@@ -27,7 +27,11 @@ def _allowed(table: int, aa: str, mode: int) -> frozenset[str]:
     if aa == "M" and mode == START:
         return code.starts
     if aa == "M" and mode == ANCHOR_START:
-        return ANCHOR_STARTS
+        # CHANGED(FIN-E1): was ATG/CTG/GTG only (PAL2NAL's fallback rule) whatever the table, so code 2's ATT/ATA start
+        # was a mismatch (and -nomismatch dropped column 1) whenever a gene needed the fallback; now also the selected
+        # code's start and Met codons, as in the exact-fit path. Deliberate difference from PAL2NAL v14.
+        # teammate's engine/C++ must mirror. See overnight/integration/CHANGES.md
+        return ANCHOR_STARTS | code.starts | code.codons.get("M", frozenset())
     return code.codons.get(aa, frozenset())
 
 

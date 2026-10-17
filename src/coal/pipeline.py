@@ -9,8 +9,10 @@ Memory use does not grow with the number of sequences beyond their IDs:
 With -nogap / -nomismatch / -blockonly, which depend on every row, pass 2 writes rows to a
 temporary file and a final pass removes the flagged columns. The clustal and codon formats
 interleave all sequences block by block, so they also take that path: the final rows go to a
-fixed-width temporary file, which is then read back a group of blocks at a time (memory stays
-bounded by BLOCK_MEMORY, not by the number or length of the sequences).
+fixed-width temporary file, which is then read back a group of blocks at a time, or, when one block of
+all sequences is larger than BLOCK_MEMORY, one block a chunk of sequences at a time (FIN-E2); the rows and
+blocks held in memory stay bounded by BLOCK_MEMORY, not by the number or length of the sequences (the IDs
+and padded names are kept, as in every format).
 
 Output goes to a temporary file first and is only moved/copied to the real
 destination when everything succeeded, so an error never leaves partial output
@@ -162,7 +164,17 @@ def write_blocks(out, fmt: str, ids, rows_fh, alilen: int, aa_fh=None, aalen: in
         out.write("CLUSTAL W multiple sequence alignment\n\n")
     nblk = -(-alilen // WRAP)
     n = len(ids)
-    group = max(1, memory // max(1, n * (WRAP + (20 if aa_fh else 0))))
+    per_seq = WRAP + (20 if aa_fh else 0)
+    if n * per_seq > memory:
+        # CHANGED(FIN-E2): was always at least one whole block of every sequence in memory (segments, then the joined
+        # text: ~0.4 KB per sequence for clustal, ~0.8 KB for codon; 500,000 sequences: 320 / 533 MB peak vs 122 MB
+        # for fasta). Now, when one block of all sequences exceeds `memory`, each block is written a chunk of
+        # sequences at a time. Same bytes. teammate's engine/C++ must mirror (bounded memory).
+        # See overnight/integration/CHANGES.md
+        _write_blocks_chunked(out, fmt, names, pad, rows_fh, alilen, aa_fh, aalen, mask, nblk,
+                              max(1, memory // (4 * per_seq)))
+        return
+    group = max(1, memory // max(1, n * per_seq))
     for b0 in range(0, nblk, group):
         b1 = min(nblk, b0 + group)
         segs, aas = [], []
@@ -191,6 +203,34 @@ def write_blocks(out, fmt: str, ids, rows_fh, alilen: int, aa_fh=None, aalen: in
                 buf.append(pad + m + "\n")
             buf.append("\n")
         out.write("".join(buf))
+
+
+def _block_mark(fmt, mask, b, pad):
+    m = mask[WRAP * b:WRAP * b + WRAP]
+    if fmt == "codon":
+        m = " ".join([m[i:i + 3] for i in range(0, len(m), 3)])
+    return pad + m + "\n"
+
+
+def _write_blocks_chunked(out, fmt, names, pad, rows_fh, alilen, aa_fh, aalen, mask, nblk, chunk) -> None:
+    """CHANGED(FIN-E2): new. write_blocks for many sequences: block by block, `chunk` sequences at a time."""
+    n = len(names)
+    for b in range(nblk):
+        lo, hi = WRAP * b, min(WRAP * b + WRAP, alilen)
+        a0, a1 = min(20 * b, aalen), min(20 * b + 20, aalen)
+        for k0 in range(0, n, chunk):
+            buf = []
+            for k in range(k0, min(n, k0 + chunk)):
+                rows_fh.seek(k * alilen + lo)
+                seg = rows_fh.read(hi - lo).decode("ascii")
+                if fmt == "clustal":
+                    buf.append(names[k] + seg + "\n")
+                else:
+                    aa_fh.seek(k * aalen + a0)
+                    buf.append(pad + "   ".join(aa_fh.read(a1 - a0).decode("ascii")) + "\n")
+                    buf.append(names[k] + " ".join([seg[i:i + 3] for i in range(0, len(seg), 3)]) + "\n")
+            out.write("".join(buf))
+        out.write((_block_mark(fmt, mask, b, pad) if mask is not None else "") + "\n")
 
 
 def _batches(rows, dna: DnaIndex, pairing):

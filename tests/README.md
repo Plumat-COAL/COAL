@@ -46,13 +46,14 @@ When `-nomismatch` (or `-nogap`) removes every column, PAL2NAL prints an empty l
 | Fallback where more than half the codons do not match (e.g. unrelated protein and DNA; no golden case) | Output + per-codon warnings, exit 0 (measured with the real PAL2NAL v14: unrelated sequences, 30–90 % mismatching genes) | Same output and warnings, plus a notice; an error (exit 1) only with `--strict` (DEC-1; was always an error, ENG-c) |
 | Gene with no matching 10-residue anchor, fewer than 10 checkable codons and DNA longer than the gene (e.g. 85 % NNN + 5' UTR; no golden case) | Output (codons taken from the start of the DNA, so shifted by the UTR) + per-codon warnings, exit 0 (measured) | Same output and warnings, plus a notice that the row may be shifted; an error only with `--strict` (DEC-1; was always an error, R3-E1) |
 | Fallback where no 10-residue anchor matches but at most half the codons differ (table3/5/9/13/14/21/22 with the default table) | Output + per-codon warnings | Same output and warnings, plus a summary notice (ENG-c; silenced by `-q` since DEC-2) |
-| B/Z/J/O/U in the protein with `-nomismatch` (no golden case) | Prints no warnings at all with `-nomismatch` (seen in every `fasta_nomismatch` golden); removes the column (measured) | Still prints the `unknown AA type. Taken as 'X'` warning; mismatch warnings are suppressed as in PAL2NAL (ENG-i2). Removes the column too (DEC-4f; was kept) |
+| B/Z/J/O/U in the protein with `-nomismatch` (no golden case) | Prints no warnings at all with `-nomismatch` (seen in every `fasta_nomismatch` golden); removes the column (measured) | Still prints its warning (`U (selenocysteine) is not checked; any codon is accepted`, FIN-C14); mismatch warnings are suppressed as in PAL2NAL (ENG-i2). Removes the column too (DEC-4f; was kept) |
 | `U` (selenocysteine) in the protein (no golden case) | Its search pattern gives `U` no codon, so the row is misaligned or the gene fails (measured by the fuzz) | `U` is read as any codon, like B/Z/J/O, with a warning (DEC-4) |
 | RNA (U) DNA, protein starting with M, fallback needed (no golden case) | The fallback's first-Met pattern is `[ACGR]TG`, so AUG/CUG/GUG is flagged as a mismatch (`-nomismatch` drops the column) or the gene is placed elsewhere (measured by the fuzz) | U read as T everywhere: AUG accepted (DEC-4) |
 | Table 3, GTG as first Met | Not a table-3 start (its table 3 starts are ATA/ATG; measured, also by the tester's 23,936 single-codon runs, which confirmed tables 3/10/11/13 as the only table differences) | GTG is a start (NCBI) (ENG-g; FZ-D9) |
 | B/Z/J/O in a gene that needs the fallback | Checks their codons against the wrong pattern (B against its start-codon list), spurious mismatch warnings | Any codon accepted (stderr only; both remove the columns with `-nomismatch`) (FZ-D2) |
 | Protein rows of different lengths | Pads/truncates silently | Error (FZ-D5) |
-| Protein FASTA starting with a blank line; UTF-8 BOM; `> id` (space after `>`) | Misdetected as CLUSTAL / fails / header text read as sequence | Read correctly (FZ-D6) |
+| Protein FASTA starting with a blank line; UTF-8 BOM; `> id` (space after `>`) | Misdetected as CLUSTAL / fails / finds no protein ("aa: 0", no output; FIN-C19: was "header text read as sequence") | Read correctly (FZ-D6) |
+| First Met of a gene that needs the fallback (one N or one mismatch), e.g. code 2 ATT/ATA (no golden case) | Accepts only ATG/CTG/GTG there, whatever `-codontable` says: spurious mismatch at column 1; `-nomismatch` deletes column 1 (measured) | The selected code's start and Met codons, as in the exact-fit path (FIN-E1; fuzz feature `first_met_code`) |
 | Duplicate protein or DNA IDs; empty DNA `>` header; a second DNA file starting without a header; `_` as stop | Concatenates or drops records silently; `_` = stop | Clear error (FZ-D7) |
 | Ambiguity codes incl. N, e.g. `NTG` first Met in table 4 | Not in its fixed list; falls back to a frame-shifted placement | Accepted (every reading is a start) (FZ-D8) |
 | Default output format of `coal` | clustal | fasta (the drop-in `pal2nal` command defaults to clustal, like PAL2NAL) (DEC-4) |
@@ -98,7 +99,7 @@ code's stop codons; its output must equal the golden `fasta_ct<N>` with gap and 
 <!-- CHANGED(DEC-4): was 165 / 162 / 147 / 141 / 12 / 3 (FASTA variants only) -->
 
 `-nomismatch`: PAL2NAL prints no warnings at all with `-nomismatch` (17 goldens where it would otherwise warn);
-COAL now does the same for mismatch warnings (ENG-i2). COAL still prints `unknown AA type. Taken as 'X'` for
+COAL now does the same for mismatch warnings (ENG-i2). COAL still prints its B/Z/J/O/U warning (`... is not checked; any codon is accepted`, FIN-C14) for
 B/Z/J/O/U with `-nomismatch`; no golden case covers that (see the deliberate differences above). Both remove those
 columns (DEC-4f).
 

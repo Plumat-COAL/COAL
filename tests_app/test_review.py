@@ -90,7 +90,7 @@ class TestFinding3AnyWarningCounts(unittest.TestCase):
         p = _write(os.path.join(t, "p.fasta"), ">s1\nMBKL\n>s2\nMAKL\n")
         d = _write(os.path.join(t, "d.fasta"), ">s1\nATGGATAAACTG\n>s2\nATGGCTAAACTG\n")
         r = core.run_coal(p, d, out_dir=t, probe_codes=False)
-        self.assertIn("unknown AA type", r.stderr)
+        self.assertIn("B (D or N) is not checked", r.stderr)  # FIN-C14
         self.assertEqual((r.report["summary"]["ok"], r.report["summary"]["warning"]), (1, 1))
         s1 = next(s for s in r.report["sequences"] if s["id"] == "s1")
         self.assertEqual(s1["status"], "warning")

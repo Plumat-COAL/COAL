@@ -4,9 +4,12 @@
             [-codontable N] [-nogap] [-nomismatch] [-blockonly] [-nostderr] [-h]
 
 An unchanged PAL2NAL command line works: the default output format is clustal, as in PAL2NAL, and all four
-formats, -nogap, -nomismatch, -blockonly and every -codontable give PAL2NAL v14's output byte for byte on
-well-formed input (COAL's documented deliberate differences, where PAL2NAL silently writes wrong output, are listed
-in README.md). The codon alignment goes to standard output,
+formats, -nogap, -nomismatch, -blockonly and every -codontable give PAL2NAL v14's output byte for byte, except for
+COAL's documented deliberate differences (README.md: newer NCBI genetic-code tables, -nogap using the chosen code's
+stop codons, the chosen code's start codons in the fallback, and inputs where PAL2NAL v14 writes malformed output or
+fails). CHANGED(FIN-C3): was "byte for byte on well-formed input". The command line is read as PAL2NAL v14 reads it
+(FIN-E3: a dangling -output or -codontable is ignored, "-codontable 2x" is code 2). The codon alignment goes to
+standard output,
 messages to standard error. ``-nostderr`` is accepted and mapped to COAL's ``-q``: warnings and
 notices are silenced, errors still go to standard error (as with PAL2NAL's ``-nostderr``, which silences its
 warnings but not its ERROR messages). CHANGED(R2-A10): was "(COAL's ``-q``)", which implied a silent stderr.
@@ -14,18 +17,19 @@ CHANGED(DEC-2): was "COAL's notices about probably-wrong data ... still go to st
 ``-html`` (PAL2NAL's web-server mode: HTML on standard output, messages included) gives a clear error.
 COAL's own options (``--strict``, ``-j``, ``-o`` ...) are not accepted here; use ``coal`` for those.
 
-Differences from PAL2NAL: the exit code is non-zero on errors (PAL2NAL always exits 0).
+Differences from PAL2NAL: the exit code is non-zero on errors (PAL2NAL always exits 0): 1 for a usage error or
+bad input (CHANGED(FIN-E3): documented; `coal` itself uses 2 for a usage error), 130 / 141 / 143 as for `coal`.
 CHANGED(DEC-4): was "the default output format is PAL2NAL's (clustal), so when this COAL can only write FASTA you
 must pass -output fasta"; now clustal/paml/codon are written and the default is clustal.
 See overnight/integration/CHANGES.md
 """
 from __future__ import annotations
 
+import re
 import sys
 
 USAGE = __doc__
 
-VALUE_OPTS = {"-output", "-codontable"}
 FLAG_OPTS = {"-nogap", "-nomismatch", "-blockonly"}  # CHANGED(DEC-4): -blockonly was rejected as unsupported
 UNSUPPORTED = {
     # CHANGED(APP-C2): was "use -output fasta or clustal" (clustal is not supported yet); now only what works
@@ -41,36 +45,59 @@ class UsageError(Exception):
     pass
 
 
+_PERL_NUM = re.compile(r"\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)")
+PAL2NAL_TABLES = (1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 16, 21, 22, 23)
+
+
+def _perl_number(v: str) -> float:
+    """The number Perl reads from a string in a numeric comparison: its leading numeric part, else 0."""
+    m = _PERL_NUM.match(v)
+    return float(m.group(1)) if m else 0.0
+
+
 def translate(argv: list[str], supported_formats=FORMATS) -> list[str]:
-    """Turn PAL2NAL arguments into ``coal`` arguments (raises UsageError)."""
+    """Turn PAL2NAL arguments into ``coal`` arguments (raises UsageError).
+
+    CHANGED(FIN-E3): was strict (a dangling -output / -codontable, "-codontable 1.0", "-codontable 2x" and
+    "-codontable -nogap" were errors, PAL2NAL v14 runs them). Now the command line is read as PAL2NAL v14 reads it
+    (observed by running it): -output takes the next argument whatever it is; after -codontable the flags -h,
+    -output, -nogap, -nomismatch, -blockonly and -codontable are still read as options and the next other argument
+    is the table, compared as a Perl number (leading numeric part: "1.0" = 1, "2x" = "+2" = "2e0" = 2; "2.5" and
+    "0x2" are invalid); a value never given leaves the default. See overnight/integration/CHANGES.md"""
     files: list[str] = []
     fmt = "clustal"  # PAL2NAL's default
     table = None
     flags: list[str] = []
-    i = 0
-    while i < len(argv):
-        a = argv[i]
-        if a in UNSUPPORTED:
-            raise UsageError(UNSUPPORTED[a])
-        if a in VALUE_OPTS:
-            if i + 1 >= len(argv):
-                raise UsageError(f"{a} needs a value")
-            v = argv[i + 1]
-            if a == "-output":
-                if v not in FORMATS:
-                    raise UsageError(f"unknown -output format '{v}' (PAL2NAL formats: {', '.join(FORMATS)})")
-                fmt = v
-            else:
-                try:
-                    table = int(v)
-                except ValueError:
-                    raise UsageError(f"-codontable needs a number, got '{v}'") from None
-            i += 2
+    want_out = want_table = False
+    for a in argv:
+        if a == "-h":
+            print(USAGE, file=sys.stderr)  # PAL2NAL prints its help and carries on
+            continue
+        if a == "-output":
+            want_out = True
+            continue
+        if want_out:
+            if a not in FORMATS:
+                raise UsageError(f"unknown -output format '{a}' (PAL2NAL formats: {', '.join(FORMATS)})")
+            fmt, want_out = a, False
             continue
         if a in FLAG_OPTS:
             if a not in flags:
                 flags.append(a)
-        elif a in QUIET_OPTS:
+            continue
+        if a == "-codontable":
+            want_table = True
+            continue
+        if want_table:
+            num = _perl_number(a)
+            if num not in PAL2NAL_TABLES:
+                raise UsageError(f"invalid codontable number, {a} (PAL2NAL codes: "
+                                 f"{', '.join(map(str, PAL2NAL_TABLES))})")
+            table, want_table = int(num), False
+            continue
+        if a in UNSUPPORTED:
+            raise UsageError(UNSUPPORTED[a])
+        if a in QUIET_OPTS:
             if "-q" not in flags:
                 flags.append("-q")
         elif a.startswith("-") and len(a) > 1:
@@ -78,7 +105,6 @@ def translate(argv: list[str], supported_formats=FORMATS) -> list[str]:
                              f"-blockonly, -nostderr, -h)")
         else:
             files.append(a)
-        i += 1
     if len(files) < 2:
         raise UsageError("give a protein alignment and at least one DNA file")
     if fmt not in supported_formats:
