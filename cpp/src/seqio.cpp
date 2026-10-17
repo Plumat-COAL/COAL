@@ -178,8 +178,16 @@ bool ProteinReader::next(std::string& id, std::string& row) {
             if (!in_rec)
                 throw InputError(path_ + ":" + std::to_string(lr_->lineno()) +
                                  ": sequence data before first '>' header");
+            bool plain = true;
             for (unsigned char c : line)
-                if (!py_space(c)) row += char(c);
+                if (py_space(c)) {
+                    plain = false;
+                    break;
+                }
+            if (plain) row += line;
+            else
+                for (unsigned char c : line)
+                    if (!py_space(c)) row += char(c);
         }
     }
     have_pending_ = false;
@@ -231,6 +239,17 @@ void DnaIndex::scan(int fno, const std::string& path) {
         size_t n = (size_t)in.gcount();
         if (n == 0) break;
         for (size_t k = 0; k < n; ++k) {
+            if (!line_start && !header && start >= 0) {
+                // inside sequence data: only the end of the line matters
+                const char* nl = (const char*)std::memchr(buf.data() + k, '\n', n - k);
+                if (!nl) {
+                    offset += (long long)(n - k);
+                    break;
+                }
+                size_t skip = (size_t)(nl - (buf.data() + k));
+                offset += (long long)skip;
+                k += skip;
+            }
             char c = buf[k];
             if (line_start) {
                 line_start = false;

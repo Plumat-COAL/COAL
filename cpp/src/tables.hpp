@@ -35,6 +35,10 @@ uint8_t iupac_code(unsigned char c);
 // idx = a*225 + b*15 + c with a, b, c from iupac_code.
 uint64_t iupac_triplet_mask(int idx);
 
+// Whole lookup tables, for hot loops (avoid a call per base).
+const uint8_t* iupac_table();          // 256 entries
+const uint64_t* iupac_triplet_table(); // 15*15*15 entries
+
 // The first-Met codons PAL2NAL accepts in fallback (anchor) mode.
 uint64_t anchor_start_mask();
 

@@ -110,4 +110,8 @@ uint64_t iupac_triplet_mask(int idx) { return tables().triplet[idx]; }
 
 uint64_t anchor_start_mask() { return tables().anchor_start; }
 
+const uint8_t* iupac_table() { return tables().iupac.data(); }
+
+const uint64_t* iupac_triplet_table() { return tables().triplet.data(); }
+
 }  // namespace coal

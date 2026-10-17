@@ -163,6 +163,11 @@ static void process(std::vector<Item>& batch, const Ctx& c, int nthreads) {
     for (auto& th : pool) th.join();
 }
 
+static void read_next(std::istream& in, long long count, std::string& dst) {
+    dst.resize((size_t)count);
+    if (count) in.read(&dst[0], (std::streamsize)count);
+}
+
 static void read_rows(std::istream& in, long long offset, long long count, std::string& dst) {
     dst.resize((size_t)count);
     if (count == 0) return;
@@ -190,7 +195,12 @@ static void write_blocks(std::ostream& out, const std::string& fmt, std::fstream
         std::vector<std::string> rows((size_t)n);
         for (long long sb = 0; sb < nb; sb += per) {
             long long s0 = sb * 60, s1 = std::min(length, (sb + per) * 60);
-            for (long long k = 0; k < n; ++k) read_rows(grid, k * length + s0, s1 - s0, rows[(size_t)k]);
+            if (s0 == 0 && s1 == length) {  // whole rows: read sequentially
+                grid.seekg(0);
+                for (long long k = 0; k < n; ++k) read_next(grid, length, rows[(size_t)k]);
+            } else {
+                for (long long k = 0; k < n; ++k) read_rows(grid, k * length + s0, s1 - s0, rows[(size_t)k]);
+            }
             for (long long b = sb; b < std::min(nb, sb + per); ++b) {
                 long long a = b * 60 - s0, e = std::min(s1 - s0, a + 60);
                 text.clear();
@@ -214,9 +224,19 @@ static void write_blocks(std::ostream& out, const std::string& fmt, std::fstream
     for (long long sb = 0; sb < nb; sb += per) {
         long long d0 = std::min(length, sb * 60), d1 = std::min(length, (sb + per) * 60);
         long long p0 = std::min(ncol, sb * 20), p1 = std::min(ncol, (sb + per) * 20);
+        bool whole = d0 == 0 && d1 == length && p0 == 0 && p1 == ncol;
+        if (whole) {  // whole rows: read sequentially
+            grid.seekg(0);
+            prot->seekg(0);
+        }
         for (long long k = 0; k < n; ++k) {
-            read_rows(grid, k * length + d0, d1 - d0, rows[(size_t)k]);
-            read_rows(*prot, k * ncol + p0, p1 - p0, prows[(size_t)k]);
+            if (whole) {
+                read_next(grid, length, rows[(size_t)k]);
+                read_next(*prot, ncol, prows[(size_t)k]);
+            } else {
+                read_rows(grid, k * length + d0, d1 - d0, rows[(size_t)k]);
+                read_rows(*prot, k * ncol + p0, p1 - p0, prows[(size_t)k]);
+            }
         }
         for (long long b = sb; b < std::min(nb, sb + per); ++b) {
             long long da = std::min(length, b * 60) - d0, de = std::min(length, (b + 1) * 60) - d0;
@@ -368,8 +388,9 @@ static int run(const Options& o) {
         if (!block) {
             if (o.fmt == "paml") tmp.f << paml_header(nseq, length);
             std::string text;
+            stage->f.seekg(0);
             for (long long i = 0; i < nseq; ++i) {
-                read_rows(stage->f, i * wtotal, wtotal, row);
+                read_next(stage->f, wtotal, row);
                 text.clear();
                 record_into(text, o.fmt, out_ids[(size_t)i], identity ? row : apply_slices(row, sl));
                 tmp.f << text;
@@ -379,8 +400,9 @@ static int run(const Options& o) {
             std::fstream* g = &stage->f;
             if (!identity) {
                 grid = std::make_unique<TempFile>("", ".coal_grid_");
+                stage->f.seekg(0);
                 for (long long i = 0; i < nseq; ++i) {
-                    read_rows(stage->f, i * wtotal, wtotal, row);
+                    read_next(stage->f, wtotal, row);
                     std::string s = apply_slices(row, sl);
                     grid->f.write(s.data(), (std::streamsize)s.size());
                 }

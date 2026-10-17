@@ -65,13 +65,17 @@ long long total_length(const std::vector<Token>& toks) {
 // DNA upper-cased with U->T, as IUPAC codes (255 = not an IUPAC letter).
 struct Target {
     std::vector<uint8_t> code;
+    const uint64_t* triplet = iupac_triplet_table();
+
+    // Does the triplet at pos encode a residue with these allowed codons?
+    inline bool ok(long long pos, uint64_t allowed) const {
+        uint8_t a = code[pos], b = code[pos + 1], c = code[pos + 2];
+        if ((a | b | c) & 0xF0) return false;  // 255 = not IUPAC (valid codes are 0..14)
+        return (triplet[a * 225 + b * 15 + c] & ~allowed) == 0;
+    }
 };
 
-inline bool residue_ok(const Target& t, long long pos, const Token& tok) {
-    uint8_t a = t.code[pos], b = t.code[pos + 1], c = t.code[pos + 2];
-    if (a == 255 || b == 255 || c == 255) return false;
-    return (iupac_triplet_mask(a * 225 + b * 15 + c) & ~tok.allowed) == 0;
-}
+inline bool residue_ok(const Target& t, long long pos, const Token& tok) { return t.ok(pos, tok.allowed); }
 
 bool matches_at(const Target& t, long long s, const std::vector<Token>& toks) {
     long long pos = s;
@@ -186,11 +190,18 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
 
     Target target;
     target.code.resize(raw_dna.size());
-    for (size_t i = 0; i < raw_dna.size(); ++i) {
-        unsigned char c = (unsigned char)raw_dna[i];
-        if (c >= 'a' && c <= 'z') c = (unsigned char)(c - 32);
-        if (c == 'U') c = 'T';
-        target.code[i] = iupac_code(c);
+    {
+        // upper-case, U -> T, then IUPAC code: one table lookup per base
+        uint8_t map[256];
+        const uint8_t* iu = iupac_table();
+        for (int c = 0; c < 256; ++c) {
+            int u = (c >= 'a' && c <= 'z') ? c - 32 : c;
+            if (u == 'U') u = 'T';
+            map[c] = iu[u];
+        }
+        const unsigned char* src = (const unsigned char*)raw_dna.data();
+        uint8_t* dst = target.code.data();
+        for (size_t i = 0; i < raw_dna.size(); ++i) dst[i] = map[src[i]];
     }
 
     // 1. exact fit
@@ -237,10 +248,7 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
         if (t.any) {
             ok = true;
         } else {
-            uint64_t allowed = allowed_for(code, t.aa, mode);
-            uint8_t a = target.code[s + pos], b = target.code[s + pos + 1], c = target.code[s + pos + 2];
-            ok = a != 255 && b != 255 && c != 255 &&
-                 (iupac_triplet_mask(a * 225 + b * 15 + c) & ~allowed) == 0;
+            ok = target.ok(s + pos, allowed_for(code, t.aa, mode));
         }
         if (!ok) {
             res.warnings.push_back("pepAlnPos " + std::to_string(t.col) + ": " + row[t.col - 1] +
