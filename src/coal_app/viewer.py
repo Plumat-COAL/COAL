@@ -395,15 +395,18 @@ def build_rows(protein: list[tuple[str, str]], codon: list[tuple[str, str]] | No
 # are !important: Gradio's own rules for h2/th/td/a/code must not win in either theme.
 # See overnight/integration/CHANGES.md
 # CHANGED(GUI-10): ov* colours of the overview (graphics: problem marks >= 3:1 on the background, WCAG 1.4.11)
+# CHANGED(AMB-1): statuses follow the app (warning ember #D45400 / #FF6A13, was amber; failed crimson #E0284F, was
+# ember) so that none looks like the accent; the jump-target ring and preview edge are the accent (deep gold
+# #8A5A00 on light, amber on dark; light was #E69F00 / #B07A00). Marks keep their shapes (tall / short / hanging).
 _LIGHT = {"bg": "#ffffff", "fg": "#1a1a1a", "muted": "#5f6b75", "line": "#d5dbe0", "gap": "#6e7780",
-          "ovok": "#b8b2ab", "ovwarn": "#B07A00", "ovfail": "#B84400", "ovgap": "#8a939b", "ovprob": "#B84400",
-          "ovbox": "#1a1a1a", "ovun": "#d5d0ca", "prevbg": "#fff6dc", "prevline": "#B07A00",
-          "mark": "#000000", "hl": "#fff3b0", "hlring": "#E69F00", "link": "#0057a0", "notebg": "#eef3f7",
+          "ovok": "#b8b2ab", "ovwarn": "#D45400", "ovfail": "#E0284F", "ovgap": "#8a939b", "ovprob": "#A83E00",
+          "ovbox": "#1a1a1a", "ovun": "#d5d0ca", "prevbg": "#fff6dc", "prevline": "#8A5A00",
+          "mark": "#000000", "hl": "#fff3b0", "hlring": "#8A5A00", "link": "#0057a0", "notebg": "#eef3f7",
           "noteline": "#0072B2", "hatch": "rgba(0,0,0,0.12)", "hatch2": "rgba(0,0,0,0.06)",
           "hy": "#d4ebf9", "ar": "#f0d6e6", "po": "#c9dcef", "ne": "#f8d5c2", "pl": "#c9eadf", "sp": "#faf4c0",
           "st": "#d9d9d9"}
 _DARK = {"bg": "#1c1a19", "fg": "#ede9e4", "muted": "#b3ada6", "line": "#3a3633", "gap": "#9a938c",
-         "ovok": "#6a655f", "ovwarn": "#FFC24B", "ovfail": "#FF6A13", "ovgap": "#7d7670", "ovprob": "#FF8A45",
+         "ovok": "#6a655f", "ovwarn": "#FF6A13", "ovfail": "#E0284F", "ovgap": "#7d7670", "ovprob": "#FF8A45",
          "ovbox": "#ede9e4", "ovun": "#4a4642", "prevbg": "#2e2614", "prevline": "#FFC24B",
          "mark": "#ede9e4", "hl": "#5c4a10", "hlring": "#FFC24B", "link": "#8cc4ff", "notebg": "#262321",
          "noteline": "#56B4E9", "hatch": "rgba(255,255,255,0.18)", "hatch2": "rgba(255,255,255,0.08)",

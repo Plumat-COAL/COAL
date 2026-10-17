@@ -235,7 +235,7 @@ two-column areas stack.
 |   OG0001.aln.fasta  20 seqs  [x]      OG0001.cds.fasta  20 seqs  [x]    |
 |                                       [ Swap ]                          |
 |                                                                         |
-|  Try an example:  [Clean nuclear genes] [Mitochondrial genes]           |
+|  Try an example:  [Clean nuclear genes] [Mitochondrial (wrong code)]    |
 |                   [Messy IDs] [One broken gene]                         |
 |                                                                         |
 |  > Options  (FASTA, genetic code 1, no columns removed)                 |

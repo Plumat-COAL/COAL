@@ -46,7 +46,8 @@ def _find_examples() -> str:
 EXAMPLES_DIR = _find_examples()
 EXAMPLES = {
     "clean": ("Clean nuclear genes", "Eight genes that fit the standard code. Everything should be OK."),
-    "mito": ("Mitochondrial genes", "Genes that only fit the vertebrate mitochondrial code (2)."),
+    # CHANGED(AMB-3): the button was "Mitochondrial genes"; it runs them with code 1 on purpose (the demo of the tip)
+    "mito": ("Mitochondrial (wrong code)", "Vertebrate mitochondrial genes, run with the standard code 1 on purpose."),
     "messy_ids": ("Messy IDs", "Protein IDs like AT1G01010.1, DNA IDs like AT1G01010."),
     "one_broken_gene": ("One broken gene", "19 good genes and one with a frameshift."),
 }
@@ -1055,7 +1056,9 @@ def genetic_code_hint(protein, dna, table, report, work_dir) -> dict | None:
                     f"as well, but code {c} differs least from code {table}." if closer else
                     "these sequences too: choose the code of the organism and organelle the genes come from."))
     text += f" Re-run with code {c}?"
-    return {"code": "genetic_code", "text": text, "suggested_codontable": c}
+    # CHANGED(AMB-4): also the counts, under the names the engine's hint uses (coal/report.py), for code_fix
+    return {"code": "genetic_code", "text": text, "suggested_codontable": c, "checked": n, "fit": top,
+            "fit_current": fits_now}
 
 
 def mismatch_probe(protein, dna, table, keep_going, report, work_dir, blockonly=False) -> dict:
@@ -1226,7 +1229,7 @@ def load_sample_report() -> dict:
 def sample_banner(rep: dict) -> str:
     """GUI banner for the sample report. CHANGED(APP-15): was "what a run looks like with a newer COAL";
     now a clearly labelled demo sample (a real run of examples/mito with the wrong genetic code)."""
-    return ("### Demo sample (not your data)\nThe 24 mitochondrial genes of the *Mitochondrial genes* example, run "
+    return ("### Demo sample (not your data)\nThe 24 mitochondrial genes of the *Mitochondrial (wrong code)* example, run "
             "with genetic code 1, the wrong code for them: see the tip to re-run with code 2. "
             + summary_sentence(rep))
 
@@ -1385,6 +1388,41 @@ def _closing_sentence(text: str) -> str:
     return text[i + 2:] if i > 0 else ""
 
 
+CODE_FIX_SHARE = 0.9  # CHANGED(AMB-4): share of the checked genes that must fit the suggested code
+
+
+def code_fix(report: dict) -> dict | None:
+    """CHANGED(AMB-4): new. When the genetic-code hint explains the run (all, or at least CODE_FIX_SHARE, of the
+    checked sequences fit the suggested code, and more of them than fit the code used), what the result page
+    says first: the code used, the code to use, the counts, and the other codes that fit too (the hint's own
+    sentence). None otherwise. Reads the report's hints only; the report and the engine are unchanged."""
+    cur = (report.get("options") or {}).get("codontable") if isinstance(report.get("options"), dict) else None
+    for h in report.get("hints") or []:
+        sug = h.get("suggested_codontable")
+        try:
+            checked, fit, fit_cur = int(h.get("checked") or 0), int(h.get("fit") or 0), int(h.get("fit_current") or 0)
+        except (TypeError, ValueError):
+            continue
+        if h.get("code") != "genetic_code" or not sug or not checked or sug == cur:
+            continue
+        if fit < CODE_FIX_SHARE * checked or fit <= fit_cur:
+            continue
+        m = re.search(r"Codes? [\d, and]+ fits? [^.]*\.", h.get("text") or "")
+        return {"current": cur, "code": int(sug), "checked": checked, "fit": fit, "fit_current": fit_cur,
+                "others": m.group(0) if m else ""}
+    return None
+
+
+def _plural_genes(n: int) -> str:
+    return "1 gene" if n == 1 else f"{n:,} genes"
+
+
+def _code_fix_genes(seqs: list[dict]) -> list[dict]:
+    """CHANGED(AMB-4): the warnings a wrong genetic code explains (a warning with a mismatched codon)."""
+    return [s for s in seqs if s.get("status") == "warning"
+            and any(m.get("code") == "mismatch" for m in (s.get("messages") or []))]
+
+
 HEALTH_MAX_ROWS = 200
 HEALTH_GROUP_SHOWN = 3  # CHANGED(PRE-3): rows shown of a group that shares its closing sentence; the rest on demand
 HEALTH_OK_NAMES = 2000  # CHANGED(GUI-4): OK genes are named in one collapsed row, at most this many
@@ -1408,6 +1446,14 @@ def health_table_html(report: dict, links: bool = False, preview: dict | None = 
     oks = [s for s in allseqs if s.get("status") == "ok" and not (s.get("dna_id") and s.get("dna_id") != s.get("id"))]
     ok_ids = {id(s) for s in oks}
     allseqs = [s for s in allseqs if id(s) not in ok_ids]
+    # CHANGED(AMB-4): when the genetic-code hint explains the run (code_fix), the warnings it explains are one
+    # closed row after the other problems ("24 genes with mismatched codons under code 1: expected with the wrong
+    # code"), not 24 rows; runs without such a hint are as before
+    fix = code_fix(report)
+    fixed = _code_fix_genes(allseqs) if fix else []
+    if fixed:
+        fixed_ids = {id(s) for s in fixed}
+        allseqs = [s for s in allseqs if id(s) not in fixed_ids]
     # CHANGED(R2-A3): was one row per sequence (22,000 rows = 4.2 MB of HTML); now at most HEALTH_MAX_ROWS rows,
     # problems first, then one summary row for the rest. See overnight/integration/CHANGES.md
     seqs = allseqs[:HEALTH_MAX_ROWS]
@@ -1488,6 +1534,19 @@ def health_table_html(report: dict, links: bool = False, preview: dict | None = 
                        f'<th scope="col">Status</th><th scope="col">Sequence</th><th scope="col">What this means</th>'
                        f'</tr></thead><tbody>{"".join(row(x, short(x)) for x in more)}</tbody></table></details>'
                        f'</td></tr>')
+    if fixed:  # CHANGED(AMB-4)
+        icon, word, cls = STATUS["warning"]
+        shown = fixed[:HEALTH_MAX_ROWS]
+        more = (f'<p class="coal-small">… and {len(fixed) - len(shown):,} more; the report JSON lists every '
+                f'sequence.</p>' if len(fixed) > len(shown) else "")
+        what = (f"{_plural_genes(len(fixed))} with mismatched codons under code {fix['current']}: expected with "
+                f"the wrong code" if fix.get("current") else f"{_plural_genes(len(fixed))} with mismatched codons")
+        out.append(f'<tr class="coal-{cls} coal-codefix-row"><td><span class="coal-badge coal-{cls}" '
+                   f'aria-hidden="true">{icon}</span> <strong>{word}</strong></td><td colspan="2"><details><summary>'
+                   f'{html.escape(what)}</summary><table class="coal-health coal-nested"><thead class="coal-sr"><tr>'
+                   f'<th scope="col">Status</th><th scope="col">Sequence</th><th scope="col">What this means</th>'
+                   f'</tr></thead><tbody>{"".join(row(x, sequence_sentence(x)) for x in shown)}</tbody></table>'
+                   f'{more}</details></td></tr>')
     if rest:
         kinds = {}
         for s in rest:

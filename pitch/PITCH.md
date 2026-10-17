@@ -33,10 +33,10 @@ browser to 125-150 %. Run "One broken gene" once beforehand so nothing is cold.
 |---|---|---|
 | 0:55 | (show the empty page) | "COAL runs locally, on this laptop. Your data stays here." |
 | 1:00 | **Try an example: One broken gene** | "Twenty synthetic genes, one per species. One has a single missing DNA letter." <!-- CHANGED(REV-2): the example data are synthetic --> |
-| 1:08 | Point at the red-orange row in the health table | "COAL names the gene and says in plain English what is wrong, and the app estimates where: probably a missing base at column 102. Every status has an icon and a word, so it never relies on colour alone." |
+| 1:08 | Point at the red row in the health table | "COAL names the gene and says in plain English what is wrong, and the app estimates where: probably a missing base at column 102. Every status has an icon and a word, so it never relies on colour alone." |
 | 1:20 | Click **column 102** | "One click takes you to the exact codon where the frame shifts. The viewer re-reads the DNA from there in the new frame, so the codons after it line up again." |
-| 1:30 | Scroll up, **Try an example: Mitochondrial genes** | "Now a classic mistake: mitochondrial genes run with the standard genetic code." |
-| 1:38 | Point at the tip banner | "COAL notices that every gene fits the vertebrate mitochondrial code and offers to fix it." |
+| 1:30 | Scroll up, **Try an example: Mitochondrial (wrong code)** <!-- CHANGED(AMB-3): was "Mitochondrial genes" --> | "Now a classic mistake: mitochondrial genes run with the standard genetic code." |
+| 1:38 | Point at the banner "Wrong genetic code?" <!-- CHANGED(AMB-4) --> | "COAL notices that every gene fits the vertebrate mitochondrial code and offers to fix it." |
 | 1:45 | Click **Re-run with genetic code 2** | "One click. Everything matches." |
 | 1:52 | Point at the methods box, click copy | "And it writes the methods sentence for your paper, plus the exact command for your pipeline, and the closest PAL2NAL command." <!-- CHANGED(FIN-A5) --> |
 | 2:00 | (one sentence) | "AI assistants get the same thing through MCP: two tools, `codon_align` and `explain_report`." |

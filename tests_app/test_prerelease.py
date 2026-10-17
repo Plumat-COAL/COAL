@@ -167,6 +167,9 @@ class TestPre3LongGroups(unittest.TestCase):
         cls.tmp = tempfile.mkdtemp(prefix="coal_pre3_")
         p, d = core.example_paths("mito")
         cls.report = core.run_coal(p, d, "fasta", 1, False, False, out_dir=cls.tmp).report
+        # CHANGED(AMB-4): with its genetic-code hint this run's warnings are one closed row (TestAmb4CodeFix); the
+        # grouping of PRE-3 is for runs without such a hint, so the hint is left out here
+        cls.report = dict(cls.report, hints=[])
 
     @classmethod
     def tearDownClass(cls):
@@ -197,6 +200,82 @@ class TestPre3LongGroups(unittest.TestCase):
         self.assertIn("3 genes:</strong>", h)
         rep["sequences"] = copy.deepcopy(self.report["sequences"][:4])
         self.assertIn("<summary>Show 1 more</summary>", core.health_table_html(rep, links=True))
+
+class TestAmb4CodeFix(UiCase):
+    """AMB-4: when the genetic-code hint explains the run, the result reads as "wrong code, here is the fix"."""
+
+    def setUp(self):
+        super().setUp()
+        self.page = Page(self.ui)
+        self.banner = self.page.find(elem_id="coal-banner")
+        self.table = self.page.find(elem_id="coal-health-box")
+
+    def test_mito_banner_names_cause_and_fix(self):
+        pg = self.page
+        pg.fire(pg.find(text=core.EXAMPLES["mito"][0]))
+        b = pg.get(self.banner)
+        self.assertIn('class="coal-banner coal-info coal-codefix" role="status"', b)  # informational, not a warning
+        self.assertIn('aria-hidden="true">ℹ</span> Wrong genetic code?', b)  # icon + words
+        self.assertIn("With code 1 (Standard) 24 of 24 genes have mismatched codons; with code 2 (Vertebrate "
+                      "mitochondrial) all 24 match.", b)
+        self.assertIn('<p class="coal-small">Codes 5 and 13 fit these sequences too', b)  # secondary line
+        self.assertNotIn("coal-tile", b)
+        self.assertNotIn("with warnings", b)
+        self.assertEqual(pg.get(pg.find(elem_id="coal-hint")), "")  # the tip is in the banner now
+        # the 24 warnings: one closed row, every gene inside it with its jump links
+        t = pg.get(self.table)
+        self.assertIn("<details><summary>24 genes with mismatched codons under code 1: expected with the wrong "
+                      "code</summary>", t)
+        self.assertEqual(t.count("coal-codefix-row"), 1)
+        self.assertNotIn("Show ", t)
+        self.assertEqual(t.count('<tr class="coal-warning">'), 24)
+
+    def test_rerun_is_the_primary_action_in_the_banner(self):
+        import ast
+        import inspect
+        p, d = core.example_paths("mito")
+        rep = core.run_coal(p, d, "fasta", 1, False, False, out_dir=core.new_run_dir()).report
+        md, btn, code = self.ui._hint_parts(rep)
+        self.assertEqual(code, 2)
+        self.assertEqual(btn._kw, {"value": "Re-run with genetic code 2", "visible": True, "variant": "primary"})
+        self.assertEqual(md._kw.get("visible"), False)
+        # the button and the banner are in one column, drawn as one box when the banner is the code fix
+        import textwrap
+        tree = ast.parse(textwrap.dedent(inspect.getsource(self.ui.build)))
+        box = next(w for w in ast.walk(tree) if isinstance(w, ast.With)
+                   and "coal-fixbox" in ast.unparse(w.items[0].context_expr))
+        inside = ast.unparse(box)
+        self.assertIn("elem_id='coal-banner'", inside)
+        self.assertIn("elem_id='coal-hint-rerun'", inside)
+        self.assertIn("#coal-fixbox:has(.coal-codefix) {", self.ui.CSS)
+
+    def test_other_hints_and_runs_unchanged(self):
+        pg = self.page
+        pg.fire(pg.find(text=core.EXAMPLES["one_broken_gene"][0]))  # no hint: as before
+        b = pg.get(self.banner)
+        self.assertNotIn("coal-codefix", b)
+        self.assertIn("19 of 20 genes aligned", b)
+        rep = {"options": {"codontable": 1}, "summary": {"total": 10, "warning": 10},
+               "hints": [{"code": "genetic_code", "text": "t", "suggested_codontable": 2, "checked": 10,
+                          "fit": 6, "fit_current": 0}]}
+        self.assertIsNone(core.code_fix(rep))  # 6 of 10 fit: a tip as before, not the code-fix banner
+        md, btn, code = self.ui._hint_parts(rep)
+        self.assertEqual(btn._kw.get("variant"), "secondary")
+        self.assertEqual(md._kw.get("visible"), True)
+
+    def test_one_broken_gene_with_code_2(self):
+        # 19 of 20 fit code 1, one gene has a frameshift: the code-fix banner, with the failure still counted
+        p, d = core.example_paths("one_broken_gene")
+        rep = core.run_coal(p, d, "fasta", 2, False, False, out_dir=core.new_run_dir()).report
+        fix = core.code_fix(rep)
+        self.assertEqual((fix["current"], fix["code"], fix["fit"], fix["checked"]), (2, 1, 19, 20))
+        from coal_app import gui_html
+        b = gui_html.code_fix_banner(fix, rep, self.ui.CODE_SHORT)
+        self.assertIn("with code 1 (Standard) 19 of 20 match.", b)
+        self.assertIn("✖</span> 1 failed", b)
+        t = core.health_table_html(rep)
+        self.assertLess(t.index("<strong>Failed</strong>"), t.index("coal-codefix-row"))  # real problem first
+
 
 if __name__ == "__main__":
     unittest.main()

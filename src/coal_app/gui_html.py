@@ -97,9 +97,9 @@ def _chips(summary: dict) -> str:
 
 
 def gene_strip(report: dict) -> str:
-    """One small tile per gene, in file order (like the tiles of the COAL mark): quiet grey for OK, amber with '!'
-    for a warning, ember with '✖' for a failure, dashed for not checked. Decorative for screen readers (the counts
-    are in the text); each tile's tooltip names the gene."""
+    """One small tile per gene, in file order (like the tiles of the COAL mark): quiet grey for OK, ember with '!'
+    for a warning, crimson with '✖' for a failure (CHANGED(AMB-1): were amber and ember), dashed for not checked.
+    Decorative for screen readers (the counts are in the text); each tile's tooltip names the gene."""
     seqs = report.get("sequences") or []
     if not seqs or len(seqs) > STRIP_MAX:
         return ""
@@ -141,6 +141,35 @@ def run_banner(head: str, report: dict, sentence: str, files: str = "") -> str:
         + '</div>')
 
 
+def _code_name(code, names: dict) -> str:
+    name = (names or {}).get(code, "")
+    return f"code {code} ({name.split(' (')[0]})" if name else f"code {code}"
+
+
+def code_fix_banner(fix: dict, report: dict, names: dict | None = None, files: str = "") -> str:
+    """CHANGED(AMB-4): new. The banner when the genetic-code hint explains the run (core.code_fix): it reads as
+    "the code chosen does not fit these genes; here is the fix", not as a page of warnings. Informational style
+    (nothing is broken, the choice of code is), icon + words; no gene tiles, chips only for failed or unchecked
+    genes (those are real problems). The re-run button (ui: #coal-hint-rerun, primary) sits under it in the
+    same box (ui.CSS #coal-fixbox). names: code -> short name (ui.CODE_SHORT)."""
+    s = report.get("summary") or {}
+    cur, new = fix.get("current"), fix["code"]
+    checked, fit, bad = fix["checked"], fix["fit"], fix["checked"] - fix["fit_current"]
+    used = _code_name(cur, names) if cur else "the code used"
+    good = f"all {checked:,}" if fit == checked else f"{fit:,} of {checked:,}"
+    text = (f"With {used} {bad:,} of {_plural(checked, 'gene')} have mismatched codons; with "
+            f"{_code_name(new, names)} {good} match.")
+    real = {k: s.get(k) for k in ("failed", "not_checked") if s.get(k)}
+    return (
+        '<div class="coal-banner coal-info coal-codefix" role="status">'
+        '<p class="coal-headline"><span class="coal-icon" aria-hidden="true">ℹ</span> Wrong genetic code?</p>'
+        f'<p class="coal-detail">{html.escape(text)}</p>'
+        + (f'<div class="coal-chips">{_chips(real)}</div>' if real else "")
+        + (f'<p class="coal-small">{html.escape(fix["others"])}</p>' if fix.get("others") else "")
+        + (f'<p class="coal-files">{html.escape(files)}</p>' if files else "")
+        + '</div>')
+
+
 def message_banner(kind: str, title: str, text: str = "", text_html: str = "") -> str:
     """A banner without a report: kind 'warning' / 'failed' / 'info'. text is escaped; text_html is not."""
     icon, cls = _KIND.get(kind, _KIND["info"])
@@ -168,6 +197,6 @@ def sample_banner(report: dict, sentence: str) -> str:
         f'<p class="coal-headline">{html.escape(headline(s, kind))}</p>'
         f'<div class="coal-chips">{_chips(s)}</div>'
         f'{gene_strip(report)}'
-        '<p class="coal-detail">The <em>Mitochondrial genes</em> example, run with the wrong genetic code (1).'
+        '<p class="coal-detail">The <em>Mitochondrial (wrong code)</em> example: run with genetic code 1 on purpose.'
         + (f' {html.escape(extra_sentence(sentence))}' if extra_sentence(sentence) else "")
         + '</p></div>')

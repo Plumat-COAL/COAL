@@ -20,18 +20,29 @@ from . import core, gui_html, settings, tools, viewer  # noqa: E402
 # dark), system fonts only (no web fonts are requested), for light and for Gradio's dark theme (".dark" on the
 # body). Text contrast is at least 4.5:1 in both (figures in overnight/integration/CHANGES.md GUI-3). Every status
 # keeps an icon and a word, never colour alone.
+# CHANGED(AMB-1): the accent (primary button, active tab, focus ring, link hover, drop-zone hover, "Show N more")
+# was ember #FF6A13, the same colour as a failed gene; it is now the logo's amber #FFC24B (button fill, dark text
+# #1E1E1E, 10.4:1) and, where it is text or a thin line on the light theme, deep gold #8A5A00 (5.4:1 on the page).
+# So that no status looks like the accent, warning moved from amber to ember (fill #D45400 light / #FF6A13 dark,
+# text #A83E00 / #FF8A45) and failed from ember to crimson (fill #E0284F, text #B8143F / #FF8597). Figures and
+# the colour-blind check: overnight/integration/CHANGES.md AMB-1.
 SANS = ["Seravek", "Gill Sans Nova", "Ubuntu", "Calibri", "Segoe UI", "DejaVu Sans", "system-ui", "sans-serif"]
 MONO = ["ui-monospace", "Cascadia Mono", "SF Mono", "Menlo", "Consolas", "DejaVu Sans Mono", "monospace"]
 
 CSS = """
 :root, .light { --coal-page:#F6F5F3; --coal-surface:#FFFFFF; --coal-ink:#1E1E1E; --coal-text:#2A2A2A;
-  --coal-muted:#5E5853; --coal-line:#DEDAD6; --coal-ok:#4A4744; --coal-warn:#8A5D00; --coal-warn-fill:#FFC24B;
-  --coal-fail:#B84400; --coal-fail-fill:#FF6A13; --coal-info:#0B5CAD; --coal-focus:#B84400;
+  --coal-muted:#5E5853; --coal-line:#DEDAD6; --coal-ok:#4A4744; --coal-warn:#A83E00; --coal-warn-fill:#D45400;
+  --coal-fail:#B8143F; --coal-fail-fill:#E0284F; --coal-info:#0B5CAD; --coal-focus:#8A5A00;
+  --coal-accent:#FFC24B; --coal-accent-line:#8A5A00;
   --coal-tile-ok:#4A4744; --coal-tile-line:#8C8782; --coal-m1:#2A2A2A; --coal-m2:#4A4744; --coal-field:#8C8782; }
 .dark { --coal-page:#121110; --coal-surface:#1C1A19; --coal-ink:#F1EEEA; --coal-text:#E4E0DB;
-  --coal-muted:#B3ADA6; --coal-line:#3A3633; --coal-ok:#B5AFA8; --coal-warn:#FFC24B; --coal-warn-fill:#FFC24B;
-  --coal-fail:#FF8A45; --coal-fail-fill:#FF6A13; --coal-info:#8CC4FF; --coal-focus:#FFC24B;
+  --coal-muted:#B3ADA6; --coal-line:#3A3633; --coal-ok:#B5AFA8; --coal-warn:#FF8A45; --coal-warn-fill:#FF6A13;
+  --coal-fail:#FF8597; --coal-fail-fill:#E0284F; --coal-info:#8CC4FF; --coal-focus:#FFC24B;
+  --coal-accent:#FFC24B; --coal-accent-line:#FFC24B;
   --coal-tile-ok:#6A655F; --coal-tile-line:#8C8782; --coal-m1:#8C8782; --coal-m2:#B5AFA8; --coal-field:#6A655F; }
+/* CHANGED(AMB-1): Gradio's theme has one --color-accent for both themes (active tab text and underline); the dark
+   theme takes amber, the light one the deep gold */
+.dark, .dark .gradio-container { --color-accent:#FFC24B; --color-accent-soft:#3A2E14; }
 .gradio-container { max-width:1080px !important; margin:0 auto !important; }
 /* header */
 /* CHANGED(GUI-13): the header is the mark and the name only */
@@ -48,7 +59,7 @@ CSS = """
 #coal-examples button { background:none !important; border:0 !important; box-shadow:none !important;
   padding:2px 0 !important; min-height:0 !important; font-weight:400 !important; color:var(--coal-info) !important;
   text-decoration:underline; text-underline-offset:3px; }
-#coal-examples button:hover { text-decoration-thickness:2px; }
+#coal-examples button:hover { text-decoration-thickness:2px; color:var(--coal-accent-line) !important; }  /* CHANGED(AMB-1): hover in the accent */
 #coal-downloads { flex-wrap:wrap !important; gap:8px !important; }
 #coal-downloads > * { flex:0 0 auto !important; min-width:0 !important; width:auto !important; }
 #coal-run { font-size:1.1rem !important; min-height:52px; font-weight:700; }
@@ -59,6 +70,13 @@ CSS = """
 .coal-banner.coal-warning { border-left-color:var(--coal-warn-fill); }
 .coal-banner.coal-failed { border-left-color:var(--coal-fail-fill); }
 .coal-banner.coal-info { border-left-color:var(--coal-info); }
+/* CHANGED(AMB-4): the genetic-code banner and its re-run button as one box (where :has() works; elsewhere the
+   button sits right under the banner) */
+#coal-fixbox:has(.coal-codefix) { border:1px solid var(--coal-line); border-left:6px solid var(--coal-info);
+  border-radius:8px; padding:14px 18px; background:var(--coal-surface); gap:12px !important; }
+#coal-fixbox:has(.coal-codefix) .coal-banner { border:0; border-radius:0; padding:0; background:none; }
+.coal-codefix .coal-detail { margin-top:2px !important; }
+.coal-codefix .coal-small { margin-top:6px !important; }
 .coal-empty-note { margin:0; color:var(--coal-muted); }
 .coal-banner p { margin:0; }
 .coal-status { font-size:0.9em; color:var(--coal-muted); }
@@ -78,11 +96,12 @@ CSS = """
   sans-serif; text-align:center; color:#1E1E1E; overflow:hidden; }
 .coal-tile.coal-ok { background:var(--coal-tile-ok); }
 .coal-tile.coal-warning { background:var(--coal-warn-fill); }
-.coal-tile.coal-failed { background:var(--coal-fail-fill); }
+.coal-tile.coal-failed { background:var(--coal-fail-fill); color:#FFFFFF; }  /* CHANGED(AMB-1): white ✖ on crimson 4.6:1 */
 .coal-tile.coal-unchecked { border:1.5px dashed var(--coal-tile-line); color:var(--coal-muted); line-height:11px; }
 .coal-detail { color:var(--coal-text); line-height:1.5; }
 .coal-files { margin-top:4px !important; font-size:0.88em; color:var(--coal-muted); overflow-wrap:anywhere; }
-#coal-hint { border-left:6px solid var(--coal-warn-fill); border-radius:8px; padding:0.6em 0.9em; }
+#coal-hint { border-left:6px solid var(--coal-accent-line);  /* CHANGED(AMB-1): was the warning colour */
+  border-radius:8px; padding:0.6em 0.9em; }
 /* health table */
 .coal-health { width:100%; border-collapse:collapse; font-size:1rem; color:var(--coal-text); }
 .coal-health caption { text-align:left; font-weight:600; padding:0.4em 0; color:var(--coal-ink); }
@@ -98,6 +117,7 @@ CSS = """
 .coal-health .coal-oklist { margin:0.5em 0 0; line-height:1.9; }
 .coal-health .coal-oklist code { margin-right:0.4em; white-space:nowrap; }
 .coal-health a { color:var(--coal-info); }
+.coal-health a:hover, .coal-health summary:hover { text-decoration-color:var(--coal-accent-line); text-decoration-thickness:2px; }  /* CHANGED(AMB-1) */
 .coal-badge { display:inline-block; min-width:1.2em; font-weight:700; }
 .coal-badge.coal-ok { color:var(--coal-ok); } .coal-badge.coal-warning { color:var(--coal-warn); }
 .coal-badge.coal-failed { color:var(--coal-fail); } .coal-badge.coal-unchecked { color:var(--coal-muted); }
@@ -125,7 +145,7 @@ summary:focus-visible, [tabindex]:focus-visible {
   display:none !important; }
 #coal-protein button[aria-dropeffect], #coal-dna button[aria-dropeffect] { min-height:128px; height:auto !important;
   border:1.5px dashed var(--coal-field) !important; border-radius:8px; background:var(--coal-surface) !important; }
-#coal-protein button[aria-dropeffect]:hover, #coal-dna button[aria-dropeffect]:hover { border-color:var(--coal-focus) !important; }
+#coal-protein button[aria-dropeffect]:hover, #coal-dna button[aria-dropeffect]:hover { border-color:var(--coal-accent-line) !important; }  /* CHANGED(AMB-1) */
 #coal-protein button[aria-dropeffect] > div, #coal-dna button[aria-dropeffect] > div { font-size:0 !important; gap:2px; }
 #coal-protein button[aria-dropeffect] > div > .or, #coal-dna button[aria-dropeffect] > div > .or { display:none !important; }
 #coal-protein button[aria-dropeffect] > div::before, #coal-dna button[aria-dropeffect] > div::before {
@@ -151,7 +171,7 @@ button.label-wrap > span.icon { display:inline-flex; align-items:center; justify
 .coal-health tr.coal-shared td { color:var(--coal-muted); border-bottom:0; padding-bottom:0.2em; }
 /* CHANGED(PRE-3): the rest of a long group of rows, under "Show N more" (a nested table of the same columns) */
 .coal-health tr.coal-morerows > td { white-space:normal; padding:0.45em 0; }
-.coal-health tr.coal-morerows > td > details > summary { padding-left:calc(6px + 0.7em); color:var(--coal-info); }
+.coal-health tr.coal-morerows > td > details > summary { padding-left:calc(6px + 0.7em); color:var(--coal-accent-line); }  /* CHANGED(AMB-1): was blue */
 .coal-health .coal-nested { margin-top:0.45em; }
 .coal-health .coal-nested tr:last-child td { border-bottom:0; }
 .coal-sr { position:absolute !important; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden;
@@ -182,10 +202,11 @@ def _theme():
     stone = gr.themes.Color(c50="#F6F5F3", c100="#EEECE9", c200="#DEDAD6", c300="#C4BEB8", c400="#A39C95",
                             c500="#7D7670", c600="#5E5853", c700="#4A4744", c800="#2E2B28", c900="#1C1A19",
                             c950="#121110", name="coal_stone")
-    ember = gr.themes.Color(c50="#FFF3EB", c100="#FFE2CF", c200="#FFC4A0", c300="#FFA26B", c400="#FF8A45",
-                            c500="#FF6A13", c600="#E25500", c700="#B84400", c800="#8F3500", c900="#662600",
-                            c950="#401800", name="coal_ember")
-    theme = gr.themes.Base(primary_hue=ember, secondary_hue=stone, neutral_hue=stone, font=SANS, font_mono=MONO,
+    # CHANGED(AMB-1): primary hue was ember (#FF6A13, c500); now the logo's amber #FFC24B (c500) down to deep gold
+    amber = gr.themes.Color(c50="#FFF8EB", c100="#FFEFCF", c200="#FFE0A0", c300="#FFD27A", c400="#FFCB63",
+                            c500="#FFC24B", c600="#E6A82E", c700="#B07A00", c800="#8A5A00", c900="#5E3D00",
+                            c950="#3A2600", name="coal_amber")
+    theme = gr.themes.Base(primary_hue=amber, secondary_hue=stone, neutral_hue=stone, font=SANS, font_mono=MONO,
                            text_size=gr.themes.sizes.text_lg, radius_size=gr.themes.sizes.radius_md)
     return theme.set(
         body_background_fill="#F6F5F3", body_background_fill_dark="#121110",
@@ -207,19 +228,22 @@ def _theme():
         # in dark mode, the surface colour (was the page colour, which would hide the field)
         input_background_fill="#FFFFFF", input_background_fill_dark="#1C1A19", input_border_width="1px",
         input_border_color="#8C8782", input_border_color_dark="#6A655F",
-        input_border_color_focus="#B84400", input_border_color_focus_dark="#FFC24B",
-        button_primary_background_fill="#FF6A13", button_primary_background_fill_dark="#FF6A13",
-        button_primary_background_fill_hover="#FF8A45", button_primary_background_fill_hover_dark="#FF8A45",
+        input_border_color_focus="#8A5A00", input_border_color_focus_dark="#FFC24B",  # CHANGED(AMB-1): was #B84400
+        # CHANGED(AMB-1): primary button amber #FFC24B (hover #FFD27A) with #1E1E1E text, 10.4:1 (11.7:1 hovered);
+        # was ember #FF6A13 / #FF8A45. Light theme: a deep gold edge #8A5A00 (5.4:1 on the page) outlines it
+        button_primary_background_fill="#FFC24B", button_primary_background_fill_dark="#FFC24B",
+        button_primary_background_fill_hover="#FFD27A", button_primary_background_fill_hover_dark="#FFD27A",
         button_primary_text_color="#1E1E1E", button_primary_text_color_dark="#1E1E1E",
-        button_primary_border_color="#E25500", button_primary_border_color_dark="#FF6A13",
+        button_primary_border_color="#8A5A00", button_primary_border_color_dark="#FFC24B",
         button_secondary_background_fill="#FFFFFF", button_secondary_background_fill_dark="#2E2B28",
         button_secondary_background_fill_hover="#EEECE9", button_secondary_background_fill_hover_dark="#3A3633",
         button_secondary_text_color="#2A2A2A", button_secondary_text_color_dark="#F1EEEA",
         button_secondary_border_color="#A39C95", button_secondary_border_color_dark="#5A534D",
-        checkbox_background_color_selected="#FF6A13", checkbox_background_color_selected_dark="#FF6A13",
-        checkbox_border_color_selected="#B84400", checkbox_border_color_selected_dark="#FF6A13",
+        # CHANGED(AMB-1): was ember; deep gold in both themes so Gradio's white tick stays readable (5.9:1)
+        checkbox_background_color_selected="#8A5A00", checkbox_background_color_selected_dark="#8A5A00",
+        checkbox_border_color_selected="#8A5A00", checkbox_border_color_selected_dark="#FFC24B",
         link_text_color="#0B5CAD", link_text_color_dark="#8CC4FF",
-        color_accent="#FF6A13", color_accent_soft="#FFE2CF", color_accent_soft_dark="#3A2A20",
+        color_accent="#8A5A00", color_accent_soft="#FFEFCF", color_accent_soft_dark="#3A2E14",  # CHANGED(AMB-1); dark: CSS
     )
 
 
@@ -297,12 +321,18 @@ def _format_info(features):
 def _hint_parts(report):
     hints = report.get("hints") or []
     if not hints:
-        return gr.update(value="", visible=False), gr.update(visible=False), None
+        return gr.update(value="", visible=False), gr.update(visible=False, variant="secondary"), None
+    fix = core.code_fix(report)
+    if fix:  # CHANGED(AMB-4): the banner says it all; the re-run is its primary action, under it in the same box
+        return (gr.update(value="", visible=False),
+                gr.update(value=f"Re-run with genetic code {fix['code']}", visible=True, variant="primary"),
+                fix["code"])
     code = next((h.get("suggested_codontable") for h in hints if h.get("suggested_codontable")), None)
     # CHANGED(GUI-13): the tip's closing question ("Re-run with code 2?") is the button right under it
     text = "\n\n".join("**Tip:** " + _strip_rerun(h.get("text") or "", h.get("suggested_codontable"))
                          for h in hints)
-    btn = gr.update(value=f"Re-run with genetic code {code}", visible=True) if code else gr.update(visible=False)
+    btn = (gr.update(value=f"Re-run with genetic code {code}", visible=True, variant="secondary") if code
+           else gr.update(visible=False, variant="secondary"))
     return gr.update(value=text, visible=True), btn, code
 
 
@@ -383,6 +413,9 @@ def run_ui(protein, dna, fmt, code, nogap, nomismatch, protein_path="", dna_path
     # one tile per gene, the same sentence and files line). See overnight/integration/CHANGES.md
     banner = gui_html.run_banner(head, r.report, core.summary_sentence(r.report),
                                  f"Files used: protein {p_desc}; DNA {d_desc}.")
+    fix = core.code_fix(r.report)
+    if fix:  # CHANGED(AMB-4): the genetic-code hint explains the run: say so first, with the fix
+        banner = gui_html.code_fix_banner(fix, r.report, CODE_SHORT, f"Files used: protein {p_desc}; DNA {d_desc}.")
     view_html, view_path, view_ok = "", None, False
     info: dict = {}
     ctx = {"protein": protein, "output": r.output_path, "report": r.report_path, "dna": dna, "code": int(code),
@@ -572,10 +605,13 @@ def build(demo_mode: bool = False) -> gr.Blocks:
                 run_btn = gr.Button("Make codon alignment", variant="primary", size="lg", elem_id="coal-run")
 
                 with gr.Column(elem_id="coal-results"):
-                    banner = gr.HTML(gui_html.empty_banner(), elem_id="coal-banner", padding=False)
-                    hint_md = gr.Markdown(visible=False, elem_id="coal-hint")
-                    hint_btn = gr.Button("Re-run", visible=False, variant="secondary", size="md",
-                                         elem_id="coal-hint-rerun")
+                    # CHANGED(AMB-4): banner, tip and re-run button in one column; when the genetic-code hint
+                    # explains the run, CSS draws them as one box with the button as its primary action
+                    with gr.Column(elem_id="coal-fixbox"):
+                        banner = gr.HTML(gui_html.empty_banner(), elem_id="coal-banner", padding=False)
+                        hint_md = gr.Markdown(visible=False, elem_id="coal-hint")
+                        hint_btn = gr.Button("Re-run", visible=False, variant="secondary", size="md",
+                                             elem_id="coal-hint-rerun")
                     hint_code = gr.State(None)
                     with gr.Row(elem_id="coal-downloads"):
                         # CHANGED(GUI-13): size md (was the default lg, as big as the primary button)
