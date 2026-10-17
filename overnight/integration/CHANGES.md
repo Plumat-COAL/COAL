@@ -1,5 +1,50 @@
 # Integration changes (keanu_overnight/integration = app + windows-app + engine-fixes)
 
+## Round 2 fixes (branch fix/round2, from keanu_overnight/integration f915b07)
+
+Status per finding (rows with details further down, under "Round 2 rows"). Nothing pushed; CI has not run on
+these commits.
+
+| ID | Status | Commit |
+|---|---|---|
+| R2-A1 = R2-D5 = R2-E1 (-nomismatch reported as all OK) | fixed (probe run without -nomismatch, `summary.columns_removed`, hint back) | b351800 (docs: fbfcb83) |
+| R2-A2 = R2-E2 (ENG-c/ENG-d notices dropped) | fixed | b351800 |
+| R2-A3 (GUI on 50 MB: 46 s, 2.3 GB) | fixed (~5 s, 174 MB under tracemalloc) | 5ea344d |
+| R2-A4 (orphaned workers / temp files on timeout, Ctrl-C) | fixed on Linux; Windows taskkill path unverified | 4e03a4c |
+| R2-A5 (diamond pipeline: one bad pair, 0 written) | fixed | 24988d4 |
+| R2-A6 (killed runs "Nothing went wrong") | fixed | 98d4738 |
+| R2-A7 (exit 2 usage error = success) | fixed | 98d4738 |
+| R2-A8 (prune deletes user folders) | fixed | 1b1d60d |
+| R2-A9 / WIN-W4b (desktop: load files by path) | fixed against the fake pywebview; real WebView2 behaviour unverified | 8cf8d75 |
+| R2-A9 test note (closing flag untested) | fixed (direct test, fails without the line) | 8cf8d75 |
+| R2-A10 (SKILL / compat docstring vs engine) | fixed | fbfcb83 |
+| R2-A11 (pasted file:// URLs, invisible marks) | fixed | 1b1d60d |
+| R2-A12 (viewer calls aligned genes "Failed") | fixed | 8f034b9 |
+| R2-D1 (Windows CI red) | fixed as far as can be checked here (Linux only): POSIX-only engine tests skipped on nt, Windows closed-pipe EINVAL handled, venv python.exe; needs the first windows-latest run | 2c797be |
+| R2-D2 (stale docs numbers) + guard test | fixed | fbfcb83 |
+| R2-D3 (QA/LOG CI claims) | fixed | fbfcb83 |
+| R2-D4 (C++ job binary check always fails) | fixed, step script executed by a test | a1bf590 |
+| R2-D6 = R2-E4 (README) | fixed | fbfcb83 |
+| R2-D7 (SKILL exit codes, "succeed") | fixed | fbfcb83 |
+| R2-D8 (desktop docs) | fixed | 8cf8d75 |
+| R2-D9 (space: pip install coal) | fixed | fbfcb83 |
+| R2-D10 (Gradio pin "unverified") | fixed | fbfcb83 |
+| R2-D11 (CI gaps) | done; new Windows desktop/GUI runs and the explainer job are continue-on-error until a human sees them green | a1bf590 |
+| R2-D12 ("[after merge]") | fixed | fbfcb83 |
+| R2-E3 (NNN codons in the >half rule) | fixed (engine) | 7f7b815 |
+| R2-E5 .. R2-E10 | fixed (engine; E9 verified output-identical on goldens + 4,000 random cases) | 76ceb2c |
+
+Engine code changed (teammate's engine/C++ must mirror): R2-D1b (Windows EINVAL on closed stdout), R2-E3
+(rule + error wording), R2-E4 (`-q` help text), R2-E5 (-o mode / hard links / symlink loop), R2-E6 (bad-byte line
+number), R2-E7 (piped-input names), R2-E8 (SIGHUP), R2-E9 (performance only, no output change). Engine tests
+changed: tests/test_review_fixes.py (Windows skips, new R2 tests, looser TestEngE bound, closed pipes),
+tests/test_differential.py (counting moved into `compare_all`, same checks). No golden output changed.
+
+Unverified here (no Windows, no real pywebview/Gradio, no CI run): everything marked UNVERIFIED in the rows below.
+
+Test counts at the end of round 2 (Linux, Python 3.13): tests 44 OK; tests_app 154 OK (5 skipped: 3 need Gradio,
+1 needs a non-root user, 1 needs network/COAL_WHEELHOUSE); desktop test_wrapper + test_smoke 62 OK (4 skipped).
+
 Changes needed only because the branches were combined. Same marking rules as the other CHANGES.md files.
 
 | ID | Where | Before | After | Why | Test proving it | Merge note |

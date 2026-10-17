@@ -85,7 +85,8 @@ COAL now does the same for mismatch warnings (ENG-i2). COAL still prints `unknow
 B/Z/J/O/U with `-nomismatch`; no golden case covers that (see the deliberate differences above).
 
 Other test files: `test_pipeline.py` (results independent of `-j` and batch size) and `test_review_fixes.py`
-(regression tests for the engine review, ENG-a … ENG-i).
+(regression tests for the engine reviews, ENG-a … ENG-i and R2-D1/R2-E3 … R2-E10). The counts above are
+also checked against PITCH.md, QA.md, SKILL.md and README.md by `tests_app/test_docs_numbers.py` (R2-D2).
 
 ## Random differential testing
 
