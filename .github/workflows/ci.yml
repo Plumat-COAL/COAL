@@ -35,8 +35,8 @@ jobs:
       # failed); now also runs after a failed earlier step. The job still fails if any test step failed.
       # See overnight/integration/CHANGES.md
       - name: Desktop wrapper tests
+        # CHANGED(FINAL-1): was continue-on-error on Windows (never run there); green on windows-latest in run 39006043852, so now required.
         if: ${{ !cancelled() && matrix.os != 'macos-latest' }}
-        continue-on-error: ${{ matrix.os == 'windows-latest' }}
         working-directory: desktop
         env:
           GRADIO_ANALYTICS_ENABLED: "False"
@@ -49,7 +49,7 @@ jobs:
     name: GUI extra (.[gui], real Gradio) on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
-    continue-on-error: ${{ matrix.os == 'windows-latest' }}
+    # CHANGED(FINAL-1): was continue-on-error on windows-latest (never run there); green in run 39006043852, so now required.
     strategy:
       fail-fast: false
       matrix:

@@ -49,8 +49,9 @@ risk, not value. `-nogap` removes gap and stop-codon columns, as many dN/dS setu
 Much of it was written with AI assistance (Claude), and we say so. What makes it maintainable is the
 same as for any code: about 1,300 lines of dependency-free Python in the engine and 2,350 in the app
 layer, a differential test suite against PAL2NAL's real output, more than 170 app tests, CI on Windows, macOS
-and Linux (the Windows job was red until the round-2 fixes: open the latest GitHub Actions run and only say
-"green" if it is), and documented decisions (every deliberate difference from PAL2NAL is written down with its test).
+and Linux (all green in run 39006043852, including the GUI tests against real Gradio on Windows; still open the
+latest GitHub Actions run before you say "green"), and documented decisions (every deliberate difference from PAL2NAL is written down with its test).
+<!-- CHANGED(FINAL-2): was "the Windows job was red until the round-2 fixes" (it was still red after round 2); now cites green run 39006043852. -->
 <!-- CHANGED(R2-D2, R2-D3): was "about 1,050 lines ... 2,150 ... 115 app tests ... green on the app branch; the new GUI and MCP jobs have not run yet" (both false). See overnight/integration/CHANGES.md -->
 <!-- CHANGED(R3-D4b): app test count 140 -> 170 (round 3 added tests; the docs guard requires it). See overnight/integration/CHANGES.md -->
 *[Team: say who reviewed which parts. Only claim review you actually did.]*
