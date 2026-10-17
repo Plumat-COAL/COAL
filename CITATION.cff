@@ -1,0 +1,29 @@
+# WEB-11: new file. See overnight/integration/CHANGES.md
+cff-version: 1.2.0
+message: "If you use COAL in published work, please cite the version you used, and please cite PAL2NAL too."
+title: "COAL: codon alignments from protein alignments"
+type: software
+authors:
+  - given-names: Chloe
+    family-names: Newton
+  - given-names: Keanu
+    family-names: Murati
+version: 0.4.0
+license: MIT
+repository-code: "https://github.com/plumat-coal/COAL"
+url: "https://plumat-coal.github.io/COAL/"
+references:
+  - type: article
+    authors:
+      - family-names: Suyama
+        given-names: M.
+      - family-names: Torrents
+        given-names: D.
+      - family-names: Bork
+        given-names: P.
+    title: "PAL2NAL: robust conversion of protein sequence alignments into the corresponding codon alignments"
+    journal: "Nucleic Acids Research"
+    volume: 34
+    start: W609
+    end: W612
+    year: 2006

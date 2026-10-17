@@ -292,9 +292,14 @@ class TestSiteFiles(unittest.TestCase):
 
     def test_unsigned_and_smart_app_control_explained(self):
         for must in ("Windows protected your PC", "More info", "Run anyway", "Unknown publisher", "Smart App Control",
-                     "Get-FileHash", "sha256sum", "coal-gui", "SKILL.md", "/issues", "MIT", "Zenodo",
-                     "placeholder"):
+                     "Get-FileHash", "sha256sum", "coal-gui", "SKILL.md", "/issues", "MIT",
+                     # CHANGED(WEB-11): was "Zenodo", "placeholder" (the DOI placeholder); the owner asked for no DOI
+                     # and named authors, so the page cites Newton and Murati and points to CITATION.cff
+                     "Newton C, Murati K (2026)", "CITATION.cff"):
             self.assertIn(must, self.index)
+        # CHANGED(WEB-11): new; the owner asked for no DOI or Zenodo mention and for the large sidebar logo to go
+        for gone in ("Zenodo", "placeholder", "DOI", 'class="logo"', "coal-logo.png"):
+            self.assertNotIn(gone, self.index)
 
     def test_accessibility_basics(self):
         self.assertRegex(self.index, r'<html lang="en">')

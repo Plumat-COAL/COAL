@@ -3,10 +3,10 @@
 // from github.com are never touched.
 "use strict";
 // CHANGED(WEB-8): was coal-site-v1 with img/broken-gene.png; now v2 with the logo assets and the WebP screenshot.
-var CACHE = "coal-site-v2";
+// CHANGED(WEB-11): v3; the page no longer shows the large logo PNGs, so they are not cached.
+var CACHE = "coal-site-v3";
 var FILES = ["./", "index.html", "style.css", "main.js", "favicon.svg", "explainer.html", "img/broken-gene.webp",
-  "assets/coal-mark.svg", "assets/coal-logo.png", "assets/coal-logo@2x.png", "assets/coal-logo-dark.png",
-  "assets/coal-logo-dark@2x.png", "assets/favicon-32.png", "assets/apple-touch-icon.png"];
+  "assets/coal-mark.svg", "assets/favicon-32.png", "assets/apple-touch-icon.png"];
 
 self.addEventListener("install", function (event) {
   event.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(FILES); }).then(function () {
