@@ -100,7 +100,9 @@ jobs:
         run: python scripts/release_version.py $env:TAG --github-output
       - name: Install Inno Setup (pinned)
         run: |
-          choco install innosetup --version=6.4.3 --allow-downgrade -y --no-progress
+          # CHANGED(SHIP-7): was --version=6.4.3, which Chocolatey never published (the v0.4.0 release build failed
+          # here); 6.7.1 is the newest approved InnoSetup package (6.3+ is required by desktop/installer.iss).
+          choco install innosetup --version=6.7.1 --allow-downgrade -y --no-progress
           $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { throw "Inno Setup installed, but $iscc is missing" }
       - name: Create the build venv with this Python (build.ps1 reuses it)
