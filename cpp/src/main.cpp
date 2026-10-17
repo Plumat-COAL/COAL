@@ -85,6 +85,7 @@ struct Options {
     std::string out;
     int jobs = 0;
     bool keep_going = false, progress = false, resume = false, json = false;
+    bool resumable = true;  // CPP-28 (reference MRG-4): false when an input came through a pipe (spooled)
     int max_warnings = 0;
     std::string report;
     std::vector<std::string> argv;  // raw arguments (for the report's "command")
@@ -848,7 +849,12 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
     OutTarget target;
     if (!o.out.empty()) target = resolve_output(o.out);
     const bool direct = !o.out.empty() && target.direct;
-    if (!o.out.empty() && !direct) {
+    // CPP-28 (reference MRG-4): a checkpoint only for an output that is (or will be) a regular file - hard-linked
+    // files included (written in place at the end) - and inputs that are regular files
+    std::error_code ex_ec;
+    const bool want_ck = !o.out.empty() && o.resumable && (target.existing || !fs::exists(target.real, ex_ec));
+    bool ck_registered = false;
+    if (want_ck) {
         std::string canon = "fmt=" + o.fmt + "|table=" + std::to_string(o.table) + "|nogap=" + std::to_string(o.nogap) +
                             "|nomismatch=" + std::to_string(o.nomismatch) + "|blockonly=" + std::to_string(o.blockonly) + "|strict=" + std::to_string(o.strict) + "|keep_going=" +
                             std::to_string(o.keep_going) + "|staged=" + std::to_string(staged);
@@ -869,9 +875,20 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                                                   : "found " + ck->why + ", so nothing can be resumed") +
                      " for " + o.out + "; starting a normal run");
         }
-        if (!resuming) ck->remove(true);  // a stale checkpoint must never describe this run's files
+        if (!resuming) {
+            ck->remove(true);  // a stale checkpoint must never describe this run's files
+            // CPP-28 (reference MRG-4 / ENG-f): until a checkpoint describes them, a signal removes these files
+            for (auto* q : {&ck->partial, &ck->stage, &ck->prot, &ck->entries}) register_temp(*q);
+            register_temp(ck->stage + ".grid");
+            ck_registered = true;
+        }
     } else {
-        fs::path d = fs::temp_directory_path();
+        if (o.resume && !o.out.empty())
+            note(o.out + " cannot be resumed (" +
+                 (o.resumable ? "the output is not a regular file" : "an input is not a regular file") +
+                 "); starting a normal run");
+        // the output's temp file goes next to the real target when it is renamed onto it (same file system)
+        fs::path d = (!o.out.empty() && !direct) ? fs::path(target.real).parent_path() : fs::temp_directory_path();
         out_tmp = (d / (".coal_" + unique_suffix() + ".tmp")).string();
         if (staged) stage_path = (d / (".coal_rows_" + unique_suffix() + ".tmp")).string();
         if (o.fmt == "codon") prot_path = (d / (".coal_prot_" + unique_suffix() + ".tmp")).string();
@@ -886,8 +903,13 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         ~Cleanup() { fn(); }
     } cleanup{[&]() {
         if (ck) {
-            if (finished || failed) ck->remove();
-            // otherwise (crash, kill, disk full ...) keep partial + checkpoint for --resume
+            std::error_code ec;
+            // otherwise (crash, kill, disk full ...) keep partial + checkpoint for --resume, if one was written
+            if (finished || failed || !fs::exists(ck->path, ec)) ck->remove();
+            if (ck_registered) {
+                for (auto* q : {&ck->partial, &ck->stage, &ck->prot, &ck->entries}) unregister_temp(*q);
+                unregister_temp(ck->stage + ".grid");
+            }
         } else {
             std::error_code ec;
             for (auto* p : {&out_tmp, &stage_path, &prot_path})
@@ -1029,6 +1051,11 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
             }
             std::cerr.flush();
             if (prog) prog->update(done);
+            if (ck && ck->count == 0 && done < nseq && std::getenv("COAL_TEST_PAUSE_BEFORE_CHECKPOINT")) {
+                sink.f.flush();  // tests (CPP-28): partial files exist, no checkpoint describes them yet
+                std::cerr << "coal: test: paused before any checkpoint" << std::endl;
+                std::this_thread::sleep_for(std::chrono::seconds(3600));
+            }
             if (ck && done < nseq &&
                 std::chrono::duration<double>(std::chrono::steady_clock::now() - last_ck).count() >= CHECKPOINT_EVERY) {
                 Json st = Json::object();
@@ -1050,6 +1077,11 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                 st.set("skip_idx", sk);
                 st.set("rec", rec.checkpoint_state());
                 ck->save(st);
+                if (ck_registered) {  // CPP-28: a checkpoint describes them now: kept after a signal
+                    for (auto* q : {&ck->partial, &ck->stage, &ck->prot, &ck->entries}) unregister_temp(*q);
+                    unregister_temp(ck->stage + ".grid");
+                    ck_registered = false;
+                }
                 last_ck = std::chrono::steady_clock::now();
                 test_pause(ck->count);
             }
@@ -1213,14 +1245,15 @@ int main(int argc, char** argv) {
     const int a_jobs = ap.add({Kind::Value, {"-j", "--jobs"}, "", true, {}, true});
     const int a_quiet = ap.add({Kind::Flag, {"-q", "--quiet"}, "", false, {}, true});
     const int a_strict = ap.add({Kind::Flag, {"-strict", "--strict"}, "", false, {}, true});
+    // CPP-29 (reference MRG-3/MRG-4 cli.py): the extras are ordinary options of the merged parser, registered in its
+    // order (before --version) and abbreviated like every other option (`--j` is now ambiguous: --jobs, --json)
+    const int a_keep = ap.add({Kind::Flag, {"--keep-going", "-keep-going"}, "", false, {}, true});
+    const int a_maxw = ap.add({Kind::Value, {"--max-warnings"}, "", true, {}, true});
+    const int a_prog = ap.add({Kind::Flag, {"--progress"}, "", false, {}, true});
+    const int a_resume = ap.add({Kind::Flag, {"--resume"}, "", false, {}, true});
+    const int a_report = ap.add({Kind::Value, {"--report"}, "", false, {}, true});
+    const int a_json = ap.add({Kind::Flag, {"--json"}, "", false, {}, true});
     ap.add({Kind::Version, {"--version"}, "", false, {}, true});
-    // C++-only options: exact names (no abbreviations), so they never make a Python command line ambiguous
-    const int a_keep = ap.add({Kind::Flag, {"-keep-going", "--keep-going"}, "", false, {}, false});
-    const int a_maxw = ap.add({Kind::Value, {"--max-warnings"}, "", true, {}, false});
-    const int a_prog = ap.add({Kind::Flag, {"--progress"}, "", false, {}, false});
-    const int a_resume = ap.add({Kind::Flag, {"--resume"}, "", false, {}, false});
-    const int a_report = ap.add({Kind::Value, {"--report"}, "", false, {}, false});
-    const int a_json = ap.add({Kind::Flag, {"--json"}, "", false, {}, false});
 
     coal::args::Result args = ap.parse(o.argv);
     if (args.exit) {
@@ -1249,6 +1282,7 @@ int main(int argc, char** argv) {
         return usage_error("--json requires -o (the alignment and the report cannot both go to stdout)");
     if (o.resume && o.out.empty())
         return usage_error("--resume requires -o (only runs that write to a file can be resumed)");
+    if (o.max_warnings < 0) return usage_error("--max-warnings must be 0 (no limit) or more");  // CPP-29 (MRG-3)
 
     RunReport rec(o.argv, o.pep, o.nucs, o.out, o.fmt, o.table, o.nogap, o.nomismatch, o.keep_going,
                   !o.report.empty() || o.json, o.strict, o.blockonly);
@@ -1289,6 +1323,7 @@ int main(int argc, char** argv) {
         std::vector<std::string> paths = spool_inputs(in_args, spooled);
         ro.pep = paths[0];
         ro.nucs.assign(paths.begin() + 1, paths.end());
+        ro.resumable = spooled.empty();
         rec.set_hash_paths(paths);
         long long skipped = run(ro, rec, rs, warn, note);
         if (skipped) rc = 2;  // partial success

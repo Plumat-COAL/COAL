@@ -4,8 +4,8 @@
 
 static const char* const COAL_HELP = R"COALHELP(usage: coal [-h] [-codontable N] [-nogap] [-nomismatch]
             [-output {fasta,clustal,paml,codon}] [-blockonly] [-o OUT] [-j N]
-            [-q] [-strict] [--version] [-keep-going] [--max-warnings N]
-            [--progress] [--resume] [--report FILE.json] [--json]
+            [-q] [-strict] [--keep-going] [--max-warnings N] [--progress]
+            [--resume] [--report FILE.json] [--json] [--version]
             pep_aln nuc_fasta [nuc_fasta ...]
 
 Convert a protein alignment + unaligned coding DNA into a codon alignment.
@@ -47,21 +47,28 @@ options:
                         told); (3) only some protein IDs are DNA IDs (pairing
                         by order would follow). Without --strict these are
                         notices on stderr
-  --version             show program's version number and exit
-
-C++ engine extras (exact option names only):
-  -keep-going, --keep-going
-                        skip sequences that cannot be converted; exit code 2
-                        if any were skipped
-  --max-warnings N      print at most N per-codon warning lines (default 0 =
-                        no limit)
-  --progress            percent done and time left on stderr (inputs over
+  --keep-going, -keep-going
+                        skip sequences that cannot be converted (or, with
+                        --strict, are refused) instead of stopping; the others
+                        are written in input order, skipped ones are named on
+                        stderr and in the report; exit code 2 if any was
+                        skipped
+  --max-warnings N      print at most N per-codon warning lines, then a count
+                        of the rest (default 0 = no limit, as PAL2NAL);
+                        notices and errors are always printed
+  --progress            show percent done and time left on stderr (inputs over
                         10,000 sequences)
-  --resume              continue an interrupted -o run from its checkpoint
-                        (same inputs/options); with -nogap, -nomismatch,
-                        clustal or codon output only the first pass resumes
-                        and the final pass is redone
+  --resume              continue an interrupted run (needs -o, same inputs and
+                        options) from its checkpoint <out>.coal-
+                        checkpoint.json; without a checkpoint it runs
+                        normally. Output is identical to an uninterrupted run.
+                        With -nogap, -nomismatch, -blockonly, clustal or codon
+                        output only the first pass resumes; the final pass is
+                        redone. Not for piped inputs or an output that is not
+                        a regular file
   --report FILE.json    write a JSON run report (schema coal.report/1), also
                         when the run fails
-  --json                print the run report to stdout (requires -o)
+  --json                print the run report to stdout (requires -o, so stdout
+                        is free)
+  --version             show program's version number and exit
 )COALHELP";
