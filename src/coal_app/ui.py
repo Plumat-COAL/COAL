@@ -116,10 +116,8 @@ def run_ui(protein, dna, fmt, code, nogap, nomismatch, protein_path="", dna_path
     banner = f"{head}\n{core.summary_sentence(r.report)}"
     view_html, view_path = "", None
     try:
-        view_html = viewer.view(protein, r.output_path, r.report, dna, int(code), page=False)
-        view_path = os.path.join(out_dir, "alignment_view.html")
-        with open(view_path, "w", encoding="utf-8") as fh:
-            fh.write(viewer.view(protein, r.output_path, r.report, dna, int(code), page=True))
+        # CHANGED(R2-A3): was viewer.view twice (fragment + page); now rendered once
+        view_html, view_path = viewer.render_run(protein, r.output_path, r.report, dna, int(code), out_dir)
     except (OSError, ValueError) as e:
         view_html = f"<p>Could not draw the alignment: {e}</p>"
     return _results(r.report, r.output_path, r.report_path, r.coal_cmd, r.pal2nal_cmd, r.stderr, banner,

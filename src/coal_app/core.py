@@ -1033,6 +1033,9 @@ def _jump_links(seq: dict, limit: int = 12) -> str:
     return f'<br><span class="coal-small">Show in alignment: {links}{more}</span>'
 
 
+HEALTH_MAX_ROWS = 200
+
+
 def health_table_html(report: dict, links: bool = False) -> str:
     """Accessible HTML table (icon + word + sentence, never colour alone).
     With links=True, problem columns link to the alignment viewer's cells (same page). No links when
@@ -1041,7 +1044,11 @@ def health_table_html(report: dict, links: bool = False) -> str:
     if opts.get("nogap") or opts.get("nomismatch"):  # CHANGED(APP-1): no jump links in codon-only mode
         links = False
     order = {"failed": 0, "warning": 1, "not_checked": 2, "ok": 3}
-    seqs = sorted(report.get("sequences", []), key=lambda s: order.get(s.get("status"), 4))
+    allseqs = sorted(report.get("sequences", []), key=lambda s: order.get(s.get("status"), 4))
+    # CHANGED(R2-A3): was one row per sequence (22,000 rows = 4.2 MB of HTML); now at most HEALTH_MAX_ROWS rows,
+    # problems first, then one summary row for the rest. See overnight/integration/CHANGES.md
+    seqs = allseqs[:HEALTH_MAX_ROWS]
+    rest = allseqs[HEALTH_MAX_ROWS:]
     out = ['<table class="coal-health"><caption>Sequence health, problems first</caption>',
            '<thead><tr><th scope="col">Status</th><th scope="col">Sequence</th>'
            '<th scope="col">What this means</th></tr></thead><tbody>']
@@ -1054,6 +1061,13 @@ def health_table_html(report: dict, links: bool = False) -> str:
             f'<tr class="coal-{cls}"><td><span class="coal-badge coal-{cls}" aria-hidden="true">{icon}</span> '
             f'<strong>{word}</strong></td><td><code>{html.escape(str(s.get("id", "")))}</code>{pair}</td>'
             f'<td>{html.escape(sequence_sentence(s))}{_jump_links(s) if links else ""}</td></tr>')
+    if rest:
+        kinds = {}
+        for s in rest:
+            kinds[s.get("status")] = kinds.get(s.get("status"), 0) + 1
+        what = ", ".join(f"{n:,} {STATUS.get(k, ('', str(k), ''))[1]}" for k, n in kinds.items())
+        out.append(f'<tr><td colspan="3">… and {len(rest):,} more sequences ({what}); the report JSON lists '
+                   f'every sequence.</td></tr>')
     out.append("</tbody></table>")
     return "".join(out)
 

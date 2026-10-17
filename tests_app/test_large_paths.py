@@ -85,6 +85,27 @@ class TestLargeInputByPath(unittest.TestCase):
             self.assertEqual(out[sid], "".join(want), sid)
         self.assertEqual(len(out), 22000)
 
+    def test_gui_rendering_is_fast_and_small(self):  # R2-A3
+        import tracemalloc
+        out_dir = tempfile.mkdtemp(prefix="coal_test_render_")
+        self.addCleanup(shutil.rmtree, out_dir, True)
+        r = core.run_coal(self.pep, self.nuc, out_dir=out_dir, probe_codes=False)
+        tracemalloc.start()
+        t = time.perf_counter()
+        try:
+            frag, page_path = viewer.render_run(self.pep, r.output_path, r.report, self.nuc, 1, out_dir)
+            table = core.health_table_html(r.report, links=True)
+            elapsed = time.perf_counter() - t
+            peak = tracemalloc.get_traced_memory()[1]
+        finally:
+            tracemalloc.stop()
+        self.assertLess(elapsed, 20.0)  # ~5 s here under tracemalloc; was ~46 s without it
+        self.assertLess(peak, 500_000_000)
+        self.assertTrue(os.path.isfile(page_path))
+        self.assertIn("showing the first 200 of 22000 sequences", frag)
+        self.assertLess(len(table), 300_000)
+        self.assertIn("21,800 more sequences", table)
+
     def test_gui_path_resolution_reads_in_place(self):
         p, info = core.resolve_input(None, f'  "{self.nuc}"  ')  # pasted with quotes
         self.assertEqual(p, self.nuc)

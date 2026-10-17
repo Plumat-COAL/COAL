@@ -386,11 +386,19 @@ _ICON = {"ok": ("✔", "OK"), "warning": ("⚠", "Warning"), "failed": ("✖", "
          "not_checked": ("–", "Not checked")}
 
 
-def _issues(rows: list[dict], report: dict | None, shown_cols: int) -> str:
+HIDDEN_ISSUES_MAX = 200  # CHANGED(R2-A3): problems of sequences beyond the drawn rows, listed from the report
+
+
+def _issues(rows: list[dict], report: dict | None, shown_cols: int, drawn: set | None = None) -> str:
     sentences = {}
+    hidden = []
     if report:
         from . import core
-        sentences = {s.get("id"): core.sequence_sentence(s) for s in report.get("sequences", [])}
+        sentences = {s.get("id"): core.sequence_sentence(s) for s in report.get("sequences", [])
+                     if s.get("status") not in ("ok", None)}
+        if drawn is not None:
+            hidden = [s for s in report.get("sequences", []) if s.get("id") not in drawn
+                      and s.get("status") in ("failed", "warning")]
     items = []
     unchecked = 0
     for r in rows:
@@ -415,6 +423,16 @@ def _issues(rows: list[dict], report: dict | None, shown_cols: int) -> str:
         items.append(f'<li><strong>{icon} {word}</strong> <a href="#{row_id(r["id"])}"><code>'
                      f'{html.escape(r["id"])}</code></a>: {html.escape(text or ev)}'
                      f'{(" " + html.escape(ev)) if ev and text and ev not in text else ""}{jump}</li>')
+    for sq in hidden[:HIDDEN_ISSUES_MAX]:
+        icon, word = _ICON.get(sq.get("status"), ("?", str(sq.get("status"))))
+        items.append(f'<li><strong>{icon} {word}</strong> <code>{html.escape(str(sq.get("id")))}</code> (not drawn '
+                     f'below): {html.escape(sentences.get(sq.get("id"), ""))}</li>')
+    if len(hidden) > HIDDEN_ISSUES_MAX:
+        items.append(f"<li>and {len(hidden) - HIDDEN_ISSUES_MAX:,} more sequences with problems (see the report "
+                     f"JSON or the table above)</li>")
+    if report and drawn is not None:
+        unchecked += sum(1 for sq in report.get("sequences", []) if sq.get("id") not in drawn
+                         and sq.get("status") == "not_checked")
     if unchecked:
         items.append(f"<li><strong>– Not checked</strong>: {unchecked} other sequence"
                      f"{'s' if unchecked != 1 else ''} (COAL stopped at an earlier error). In the view below their "
@@ -428,19 +446,22 @@ def _issues(rows: list[dict], report: dict | None, shown_cols: int) -> str:
 
 
 def render_fragment(rows: list[dict], ncols: int, notes: list[str] | None = None, report: dict | None = None,
-                    title: str = "Codon alignment", max_seqs: int = MAX_SEQS, max_cols: int = MAX_COLS) -> str:
-    """HTML fragment (a <style> plus a <div class="coalv">) for embedding in another page."""
+                    title: str = "Codon alignment", max_seqs: int = MAX_SEQS, max_cols: int = MAX_COLS,
+                    total_rows: int | None = None) -> str:
+    """HTML fragment (a <style> plus a <div class="coalv">) for embedding in another page.
+    total_rows: how many sequences the alignment has when `rows` holds only the first ones (see view())."""
     notes = list(notes or [])
     shown_rows = rows[:max_seqs]
+    total = max(len(rows), total_rows or 0)
     cols = min(ncols, max_cols, max(50, MAX_CELLS // max(1, len(shown_rows))))
-    if len(rows) > len(shown_rows) or ncols > cols:
-        notes.append(f"Large alignment: showing the first {len(shown_rows)} of {len(rows)} sequences and the first "
+    if total > len(shown_rows) or ncols > cols:
+        notes.append(f"Large alignment: showing the first {len(shown_rows)} of {total} sequences and the first "
                      f"{cols} of {ncols} columns, so your browser stays fast. Problems further on are still listed "
                      f"above the table.")
     out = [f"<style>{CSS}</style>", '<div class="coalv">', f"<h2>{html.escape(title)}</h2>"]
     for n in notes:
         out.append(f'<p class="note">{html.escape(n)}</p>')
-    out.append(_issues(rows, report, cols))
+    out.append(_issues(rows, report, cols, {r["id"] for r in rows}))
     out.append('<div class="legend" aria-label="Colour key">')
     for cls, label in LEGEND:
         out.append(f'<span><span class="sw" style="background:var(--{cls})"></span>{label}</span>')
@@ -506,14 +527,40 @@ def view(protein_path: str, codon_path: str | None = None, report: dict | str | 
     protein = read_alignment(protein_path)
     codon = read_alignment(codon_path) if codon_path and os.path.isfile(codon_path) else None
     dna = read_alignment(dna_path) if dna_path and os.path.isfile(dna_path) else None
+    # CHANGED(R2-A3): was rows built for every sequence (22,000 x 600 codons: 29 s, GBs) though only max_seqs
+    # are drawn; now only the drawn sequences are built (problems of the others come from the report).
+    total = len(protein)
+    if total > max_seqs:
+        shown = protein[:max_seqs]
+        want = {p for p, _ in shown}
+        if codon is not None:
+            codon = [(i, r) for i, r in codon if i in want]
+        if dna is not None:
+            dids = {i for i, _ in dna}
+            if all(p in dids for p in want) or len(dna) != total:
+                dna = [(i, r) for i, r in dna if i in want]
+            else:
+                dna = dna[:max_seqs]  # paired by order: keep the same positions
+        protein = shown
     rows, ncols, notes = build_rows(protein, codon, report, dna, codontable)
     if codon is None:
         notes.insert(0, "COAL wrote no codon alignment for this run. Codons below were placed by the viewer, "
                         "only to show where each gene breaks." if dna else
                      "COAL wrote no codon alignment for this run, and no DNA file was given.")
     title = f"Codon alignment: {os.path.basename(protein_path)}"
-    frag = render_fragment(rows, ncols, notes, report, title, max_seqs, max_cols)
+    frag = render_fragment(rows, ncols, notes, report, title, max_seqs, max_cols, total_rows=total)
     return render_page(frag, title) if page else frag
+
+
+def render_run(protein_path: str, output_path: str | None, report: dict, dna_path: str | None, codontable: int,
+               out_dir: str) -> tuple[str, str]:
+    """CHANGED(R2-A3): new; was two full view() calls in ui.run_ui. Renders once: (fragment for the GUI, path of
+    the downloadable page written into out_dir)."""
+    frag = view(protein_path, output_path, report, dna_path, codontable, page=False)
+    path = os.path.join(out_dir, "alignment_view.html")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(render_page(frag, f"Codon alignment: {os.path.basename(protein_path)}"))
+    return frag, path
 
 
 def main(argv=None) -> int:
