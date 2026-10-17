@@ -10,14 +10,14 @@ images. <!-- CHANGED(WEB-8): was "About 50 KB without the screenshot". See overn
 |---|---|
 | `index.html` | the page |
 | `style.css` | styles, light and dark (follows the system setting) |
-| `main.js` | picks the main download for the visitor's system, copy buttons, registers `sw.js` |
+| `main.js` | copy buttons, registers `sw.js` (CHANGED(WEB-11): no longer detects the visitor's system; all three downloads are always shown) |
 | `sw.js` | keeps a copy of the site's own files so it opens offline after one visit (never touches downloads) |
 | `explainer.html` | a copy of `pitch/explainer.html` (the test fails if they differ: copy it again after editing the original) |
 | `img/broken-gene.webp` | screenshot of the alignment view (`pitch/backup/1_broken_gene_frameshift.png`, lossless WebP) |
 | `favicon.svg` | tab icon: one 3 x 3 codon block from the logo (lighter charcoal in a dark browser theme) |
-| `assets/coal-logo*.png` | the owner's logo, 176 px wide at 1x and 2x; `-dark` has the wordmark recoloured to #ECE8E3 |
-| `assets/coal-mark.svg` | the logo's squares as SVG (written by `desktop/make_icon.py --site site`) |
-| `assets/coal-train.svg` | the owner's train drawing as SVG; the page inlines a copy in the footer so CSS can recolour it in dark mode |
+| `assets/coal-logo*.png` | the owner's logo, 176 px wide at 1x and 2x; `-dark` has the wordmark recoloured to #ECE8E3. Not shown on the page since WEB-11 (kept for previews and other uses) |
+| `assets/coal-mark.svg` | the logo's squares as SVG (written by `desktop/make_icon.py --site site`); the small mark in the page header |
+| `assets/coal-train.svg` | the owner's train drawing as SVG; the page inlines a copy in the footer, beside the authors' names, so CSS can recolour it in dark mode |
 | `assets/favicon-32.png`, `apple-touch-icon.png`, `icon-512.png` | PNG icons (written by `desktop/make_icon.py --site site`) |
 
 <!-- CHANGED(WEB-8): logo, mark, train and icon files added; screenshot now WebP. See overnight/integration/CHANGES.md -->
@@ -60,7 +60,8 @@ page (`data-check`) is quoted from `README.md`.
 
 <!-- CHANGED(FIN-A9): order changed: tag and let the Release run publish BEFORE merging to main (merging deploys the
 site at once). See overnight/integration/CHANGES.md -->
-1. Bump the version in `src/coal/__init__.py`, `pyproject.toml` and `index.html` (they must agree), optionally add a
+1. Bump the version in `src/coal/__init__.py`, `pyproject.toml` and `index.html` (they must agree; in `index.html`
+   also the citation's `data-version-ref` span, and `version:` in `CITATION.cff`), optionally add a
    `## <version>` section to `CHANGELOG.md`, and commit.
 2. Tag that commit and push the tag: `git tag v0.4.0 && git push origin v0.4.0`.
 3. The Release workflow builds and checks the wheel, sdist, Windows installer and portable zip, writes
@@ -83,7 +84,8 @@ which `releases/latest` (and so the website) ignores. To rebuild without publish
 
     python -m http.server -d site 8000      # then open http://127.0.0.1:8000/
 
-To see the OS-specific variants, use "Show the download for Windows, macOS or Linux" under the button.
+To see the page as deployed before the first release: copy `site/` somewhere, run
+`python scripts/site_without_release.py <copy>/index.html` and serve the copy.
 
 ## One-time setup (repository admin)
 
@@ -96,7 +98,7 @@ To see the OS-specific variants, use "Show the download for Windows, macOS or Li
       once to see the SmartScreen screens match the drawing on the page.
 - [ ] Optional, later: **custom domain**: Settings > Pages > Custom domain, plus a DNS `CNAME` record. Nothing in
       the site needs changing (links are relative).
-- [ ] Optional: **Zenodo DOI**: connect the repository at Zenodo (GitHub integration), make a release, then replace
-      the placeholder in the "How to cite" section of `index.html` and add a `CITATION.cff`.
+<!-- CHANGED(WEB-11): the Zenodo DOI item is gone: the owner decided on no DOI; the page cites the authors, version
+     and repository, and CITATION.cff is at the repository root -->
 - [ ] Optional: a code-signing certificate would remove the SmartScreen warning; then update the Windows steps and
       the release notes text in `scripts/release_notes.py`.

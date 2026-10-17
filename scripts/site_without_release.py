@@ -17,12 +17,15 @@ PIP = f'pip install "coal[gui] @ git+{REPO}"'
 NOTE = "First release coming soon"
 BANNER = (f'<p class="note" role="status" id="no-release">{NOTE}: there is nothing to download yet. Install from '
           f'source instead (Python 3.10 or newer): <code>{PIP}</code></p>')
-LINK = re.compile(r'<a\b[^>]*href="' + re.escape(REPO) + r'/releases/(?:latest/)?download/[^"]*"[^>]*>.*?</a>', re.S)
+LINK = re.compile(r'<a\b[^>]*href="' + re.escape(REPO) + r'/releases/(?:latest/)?download/[^"]*"[^>]*>(.*?)</a>', re.S)
 
 
 def rewrite(html: str) -> str:
+    # CHANGED(WEB-11): links first, keeping their text ("Download source code: first release coming soon"); was the
+    # sdist URL first, which turned the source-code button into a broken href="git+https://..." link.
+    # See overnight/integration/CHANGES.md
+    html = LINK.sub(lambda m: f'<a class="pending" href="#no-release">{m.group(1)}: {NOTE.lower()}</a>', html)
     html = re.sub(re.escape(REPO) + r"/releases/(?:latest/)?download/coal_src\.tar\.gz", "git+" + REPO, html)
-    html = LINK.sub(f'<a href="#no-release">{NOTE}</a>', html)
     if 'id="no-release"' not in html:
         html = re.sub(r'(<main\b[^>]*>)', lambda m: m.group(1) + "\n" + BANNER, html, count=1)
     return html

@@ -1,11 +1,12 @@
-/* COAL download page. WEB-3: new file. CHANGED(WEB-8): palette and layout rebuilt from the COAL logo
-   (charcoal #2A2A2A, slate #4A4744, ember #FF6A13, amber #FFC24B). See overnight/integration/CHANGES.md
-   Contrast (WCAG 2.1, computed): every text/background pair below is at least 4.5:1, listed in CHANGES.md WEB-8.
-   Ember is never used for text on the light background (2.9:1); it is a fill under dark text, a rule or a marker. */
+/* COAL download page. WEB-3: new file. CHANGED(WEB-8): palette and layout from the COAL logo (charcoal #2A2A2A,
+   slate #4A4744, ember #FF6A13, amber #FFC24B). CHANGED(WEB-11): one column, no sidebar logo, no section markers,
+   three download cards, ember only on the download buttons and link hover. See overnight/integration/CHANGES.md
+   Contrast (WCAG 2.1, computed): every text/background pair below is at least 4.5:1 (figures in CHANGES.md WEB-11).
+   Ember is never used for text on the light background (2.77:1); it is a button fill under dark text. */
 
 :root {
   --paper: #FCFBFA;
-  --ink: #1E1E1E;          /* headings, the wordmark's tone */
+  --ink: #1E1E1E;          /* headings */
   --text: #2A2A2A;         /* charcoal */
   --muted: #4A4744;        /* slate: secondary text */
   --line: #DDD8D2;
@@ -17,8 +18,7 @@
   --amber: #FFC24B;
   --focus: #1E1E1E;
   --ok: #2E6B3A;
-  --sq-c: #2A2A2A;         /* section markers: the logo's squares */
-  --sq-s: #4A4744;
+  --rail: #2A2A2A;
   --tr-body: #1E1E1E;      /* footer train */
   --tr-boiler: #2A2A2A;
   --tr-hub: #4A4744;
@@ -29,6 +29,8 @@
   --sans: Seravek, "Gill Sans Nova", Ubuntu, Calibri, "Segoe UI", "DejaVu Sans", system-ui, sans-serif;
   --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
   --gutter: 16px;
+  --measure: 42rem;
+  --wide: 60rem;
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -42,8 +44,7 @@
     --codon-bg: #2E2B28;
     --focus: #FFC24B;
     --ok: #8FD19E;
-    --sq-c: #5C5753;
-    --sq-s: #8A847D;
+    --rail: #57524D;
     --tr-body: #57524D;
     --tr-boiler: #6A655F;
     --tr-hub: #2A2827;
@@ -59,13 +60,12 @@ body { margin: 0; background: var(--paper); color: var(--text); font-family: var
   line-height: 1.55; overflow-wrap: break-word; }
 @media (min-width: 40rem) { :root { --gutter: 2rem; } }
 img, svg { max-width: 100%; }
-a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--ember); text-decoration-thickness: 2px;
-  text-underline-offset: 0.18em; }
-a:hover { text-decoration-thickness: 3px; }
+a { color: var(--ink); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.15em; }
+a:hover { text-decoration-color: var(--ember); text-decoration-thickness: 2px; }
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 2px; }
-p, ul, ol, figure, blockquote, table, pre { margin: 0 0 1em; }
+p, ul, ol, dl, figure, blockquote, table, pre { margin: 0 0 1em; }
 h1, h2, h3, h4 { color: var(--ink); line-height: 1.25; }
-h3 { font-size: 1.06rem; margin: 1.6em 0 0.4em; }
+h3 { font-size: 1.05rem; margin: 1.6em 0 0.4em; }
 h4 { font-size: 1rem; margin: 0 0 0.4em; }
 code, kbd, samp, pre { font-family: var(--mono); font-size: 0.86em; }
 code { background: var(--code-bg); padding: 0.05em 0.25em; border-radius: 2px; }
@@ -78,92 +78,74 @@ kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3p
 .skip:focus { top: 0.5rem; }
 .fine { font-size: 0.94rem; color: var(--muted); }
 
-/* Header: the mark, the name, five links. */
-.top { width: calc(100% - 2 * var(--gutter)); max-width: calc(72rem - 2 * var(--gutter)); margin: 0 auto; padding: 0.9rem 0; display: flex; flex-wrap: wrap;
-  align-items: center; justify-content: space-between; gap: 0.5rem 1.5rem; border-bottom: 1px solid var(--line); }
-.home { display: inline-flex; align-items: center; gap: 0.55rem; font-weight: 800; font-size: 1.15rem;
+/* Header: the small mark, the name, four links. */
+.top { width: calc(100% - 2 * var(--gutter)); max-width: var(--wide); margin: 0 auto; padding: 0.8rem 0;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1.25rem;
+  border-bottom: 1px solid var(--line); }
+.home { display: inline-flex; align-items: center; gap: 0.5rem; font-weight: 800; font-size: 1.1rem;
   letter-spacing: 0.04em; text-decoration: none; color: var(--ink); }
-.home img { display: block; }
+.home img { display: block; width: 38px; height: 30px; }
+@media (prefers-color-scheme: dark) {
+  /* The mark's charcoal squares would vanish on the dark page: give it the light tile the Windows icon uses. */
+  .home img { background: #F4F2EF; border-radius: 4px; padding: 3px; width: 44px; height: 36px; }
+}
 .top ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.25rem 1.1rem; }
 .top li a { text-decoration-color: transparent; }
 .top li a:hover { text-decoration-color: var(--ember); }
 
-/* The document: a margin column for section names, a text column for the content. */
-main { max-width: 72rem; margin: 0 auto; padding: 0 var(--gutter); }
-.intro, .sec { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.5rem 3rem; }
-.intro { padding: 2rem 0 2.5rem; }
-.sec { padding: 2.25rem 0 1.25rem; border-top: 1px solid var(--line); }
-.intro-text { min-width: 0; max-width: 42rem; }
-.body { min-width: 0; }
-.body > * { max-width: 42rem; }
-.body > pre, .body > figure { max-width: 58rem; }
-@media (min-width: 56rem) {
-  .intro, .sec { grid-template-columns: 11rem minmax(0, 1fr); }
-  .intro { padding: 3.5rem 0 3rem; }
-  .sec h2 { position: relative; top: 0.15rem; }
-}
+/* One column: text at a reading measure, transcripts, tables and figures wider. */
+main { width: calc(100% - 2 * var(--gutter)); max-width: var(--wide); margin: 0 auto; }
+main > * > *, .lede > * { max-width: var(--measure); }
+main > * > pre, main > * > figure, main > * > .table-scroll, .cards { max-width: var(--wide); }
 
-.logo img { display: block; width: 112px; height: auto; }
-@media (min-width: 56rem) { .logo img { width: 176px; } }
-h1 { font-size: 1.55rem; font-weight: 650; letter-spacing: -0.005em; margin: 0.25rem 0 0.9rem; max-width: 34ch; }
-@media (min-width: 40rem) { h1 { font-size: 1.85rem; } }
-.meta { color: var(--muted); }
+.lede { padding: 2.5rem 0 0.5rem; }
+@media (min-width: 40rem) { .lede { padding-top: 3.25rem; } }
+h1 { font-size: 2.25rem; font-weight: 800; letter-spacing: 0.02em; margin: 0 0 0.6rem; }
+.lede p { font-size: 1.12rem; margin-bottom: 0.6rem; }
+.lede p.meta { font-size: 0.97rem; color: var(--muted); margin-top: 0.9rem; }
+.meta a { color: var(--muted); }
 
-/* Section heads carry one row of the logo: three squares, charcoal near the top of the page, ember near the end. */
-.sec h2 { font-size: 1.06rem; margin: 0 0 0.75rem; }
-.sec h2::before { content: ""; display: block; width: 2.05rem; height: 0.55rem; margin-bottom: 0.6rem;
-  background:
-    linear-gradient(var(--q1), var(--q1)) 0 0 / 0.55rem 0.55rem no-repeat,
-    linear-gradient(var(--q2), var(--q2)) 0.75rem 0 / 0.55rem 0.55rem no-repeat,
-    linear-gradient(var(--q3), var(--q3)) 1.5rem 0 / 0.55rem 0.55rem no-repeat; }
-.m1 { --q1: var(--sq-s); --q2: var(--sq-c); --q3: var(--sq-c); }
-.m2 { --q1: var(--sq-c); --q2: var(--sq-c); --q3: var(--sq-s); }
-.m3 { --q1: var(--sq-c); --q2: var(--sq-s); --q3: var(--sq-c); }
-.m4 { --q1: var(--sq-s); --q2: var(--sq-c); --q3: var(--ember); }
-.m5 { --q1: var(--ember); --q2: var(--sq-c); --q3: var(--amber); }
-.m6 { --q1: var(--ember); --q2: var(--ember); --q3: var(--amber); }
-.m7 { --q1: var(--amber); --q2: var(--ember); --q3: var(--amber); }
-
-/* Download */
-.get { display: flex; flex-direction: column; gap: 0.25rem; margin-top: 1.75rem; padding-top: 1.25rem;
-  border-top: 3px solid var(--ember); }
-.btn { display: inline-block; background: var(--ember); color: var(--on-ember); font-weight: 700; font-size: 1.08rem;
-  padding: 0.7rem 1.2rem; border: 2px solid var(--ember); border-radius: 3px; text-decoration: none; }
+/* Download: three equal cards. */
+.download { padding: 1.5rem 0 1.5rem; }
+.cards { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 48rem) { .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.card { border: 1px solid var(--line); border-radius: 4px; padding: 1rem 1.1rem 0.4rem; min-width: 0; }
+.card h3 { font-size: 1rem; font-weight: 700; margin: 0 0 0.7rem; }
+.card p { margin: 0 0 0.7rem; }
+.card .fine { font-size: 0.9rem; }
+.card-sub { color: var(--muted); font-size: 0.94rem; }
+.card .cmd { flex-direction: column; }
+.card .copy { border-left: 0; border-top: 1px solid var(--line); padding: 0.35rem 0.8rem; text-align: left; }
+.btn { display: inline-block; background: var(--ember); color: var(--on-ember); font-weight: 700; font-size: 1rem;
+  padding: 0.6rem 1rem; border: 2px solid var(--ember); border-radius: 3px; text-decoration: none; }
 .btn:hover { background: var(--ember-hover); border-color: var(--ember-hover); }
-.get-win .fine { margin: 0.6rem 0 0; }
-.get-title { font-size: 1.1rem; margin: 0 0 0.25rem; }
-.get-pip-note { margin: 0 0 0.5rem; }
-/* The primary option for the detected system comes first. */
-.get[data-os="macos"] .get-pip, .get[data-os="linux"] .get-pip { order: -1; margin-bottom: 1rem; }
-.get[data-os="macos"] .get-win .btn, .get[data-os="linux"] .get-win .btn { background: transparent; color: var(--ink);
-  border-color: var(--line); font-size: 1rem; padding: 0.4rem 0.9rem; }
-.get[data-os="windows"] .get-pip { display: none; }
-.get-win-sac { display: none; }
-.get[data-os="windows"] .get-win-sac { display: block; }
-.os-line, .other { font-size: 0.94rem; color: var(--muted); margin: 0.5rem 0 0; }
-.status { min-height: 1.5em; font-size: 0.94rem; color: var(--ok); font-weight: 600; margin: 0; }
-.linkish { font: inherit; color: var(--ink); background: none; border: 0; padding: 0; cursor: pointer;
-  text-decoration: underline; text-decoration-color: var(--ember); text-decoration-thickness: 2px;
-  text-underline-offset: 0.18em; }
-.linkish[aria-pressed="true"] { text-decoration: none; font-weight: 700; }
+.also { font-size: 0.94rem; color: var(--muted); margin: 0.9rem 0 0; }
+.also a { color: var(--muted); }
+.status { min-height: 1.5em; font-size: 0.94rem; color: var(--ok); font-weight: 600; margin: 0.25rem 0 0; }
 
 .cmd { display: flex; align-items: stretch; border: 1px solid var(--line); background: var(--code-bg); margin: 0.5rem 0 0.75rem; }
-.cmd code { flex: 1; min-width: 0; padding: 0.6rem 0.75rem; background: none; font-size: 0.84rem; line-height: 1.5;
+.cmd code { flex: 1; min-width: 0; padding: 0.55rem 0.7rem; background: none; font-size: 0.82rem; line-height: 1.5;
   overflow-wrap: anywhere; white-space: pre-wrap; }
 .cmd.block code { white-space: pre; overflow-x: auto; overflow-wrap: normal; }
-.copy { flex: none; font: inherit; font-size: 0.9rem; font-weight: 700; color: var(--ink); background: transparent;
-  border: 0; border-left: 1px solid var(--line); padding: 0 0.9rem; cursor: pointer; min-width: 4.5rem; }
+.copy { flex: none; font: inherit; font-size: 0.88rem; font-weight: 700; color: var(--ink); background: transparent;
+  border: 0; border-left: 1px solid var(--line); padding: 0 0.8rem; cursor: pointer; min-width: 4.25rem; }
 .copy:hover { background: var(--codon-bg); }
 .copy[data-copied] { color: var(--ok); }
 
+/* Sections: a rule, a plain heading. */
+.sec { padding: 2rem 0 1rem; border-top: 1px solid var(--line); }
+.sec > h2 { font-size: 1.35rem; font-weight: 650; margin: 0 0 0.8rem; }
+
 /* Terminal transcripts: exactly what the shell shows. */
 pre.term, pre.code { background: var(--code-bg); color: var(--text); padding: 0.85rem 1rem; overflow-x: auto;
-  line-height: 1.5; font-size: 0.82rem; border-left: 3px solid var(--sq-c); }
+  line-height: 1.5; font-size: 0.82rem; border-left: 3px solid var(--text); }
+pre.term code { white-space: pre-wrap; overflow-wrap: anywhere; }
+pre.term { padding-left: 1rem; }
 pre.code { border-left-color: var(--line); }
 .ps, .cmt { color: var(--muted); user-select: none; }
 .cmt { font-style: italic; }
 
-/* The alignment as the logo draws it: one block per codon. */
+/* The alignment, one block per codon. */
 .aln { margin: 0 0 1.25rem; }
 .aln-scroll, .table-scroll { overflow-x: auto; }
 .triplets { border-collapse: separate; border-spacing: 3px 4px; font-family: var(--mono); font-size: 0.82rem; margin: 0 0 0 -3px; }
@@ -175,21 +157,20 @@ pre.code { border-left-color: var(--line); }
 .triplets td.gap span { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
 figcaption { font-size: 0.94rem; color: var(--muted); margin-top: 0.4rem; }
 
-.said { border-left: 3px solid var(--ember); padding: 0.1rem 0 0.1rem 1rem; margin: 0 0 1.1rem; }
-.said p { margin: 0 0 0.5rem; }
+.said { border-left: 3px solid var(--line); padding: 0.1rem 0 0.1rem 1rem; margin: 0 0 1.1rem; }
+.said p { margin: 0; }
 .said samp { font-family: var(--sans); font-size: 1em; }
 .shot { margin: 1.5rem 0 1rem; }
 .shot img { display: block; width: 100%; height: auto; border: 1px solid var(--line); }
 
-.diffs li, .body > ul li { margin-bottom: 0.4rem; }
-.body > ul, .diffs { padding-left: 1.2rem; }
+.sec ul, .sec ol { padding-left: 1.2rem; }
+.sec li { margin-bottom: 0.4rem; }
 
 .nums { border-collapse: collapse; font-variant-numeric: tabular-nums; min-width: 22rem; }
 .nums caption { text-align: left; font-size: 0.94rem; color: var(--muted); padding-bottom: 0.4rem; }
 .nums th, .nums td { padding: 0.35rem 1.1rem 0.35rem 0; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
-.nums th:first-child, .nums thead th:first-child { text-align: left; }
-.nums thead th { font-size: 0.9rem; color: var(--muted); font-weight: 600; }
-.nums thead th { white-space: normal; vertical-align: bottom; }
+.nums th:first-child { text-align: left; }
+.nums thead th { font-size: 0.9rem; color: var(--muted); font-weight: 600; white-space: normal; vertical-align: bottom; }
 @media (max-width: 30rem) { .nums { min-width: 0; font-size: 0.94rem; } .nums th, .nums td { padding-right: 0.7rem; } }
 .nums tbody th { font-weight: 400; }
 .nums td:last-child { font-weight: 700; color: var(--ink); }
@@ -197,14 +178,18 @@ figcaption { font-size: 0.94rem; color: var(--muted); margin-top: 0.4rem; }
 /* Install */
 .os { margin: 1.75rem 0 1.5rem; }
 .os h3 { margin-top: 0; }
-.yours { font-weight: 400; color: var(--muted); font-size: 0.9em; }
-.steps { padding-left: 1.4rem; }
+.sec .steps { padding-left: 1.4rem; }
 .steps > li { margin-bottom: 0.85rem; padding-left: 0.2rem; }
 .steps > li::marker { font-weight: 700; color: var(--ink); }
 .note { border-left: 3px solid var(--amber); background: var(--code-bg); padding: 0.9rem 1rem 0.2rem; margin: 1.5rem 0; }
+a.pending { color: var(--muted); }  /* scripts/site_without_release.py: a download that does not exist yet */
+main > .note { margin: 1.25rem 0 0; padding-bottom: 0.9rem; max-width: var(--wide); }
 
-.ss { margin: 1rem 0; }
-.ss-pair { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); }
+details.ss { margin: 0.6rem 0 0.25rem; }
+details.ss summary { cursor: pointer; color: var(--ink); text-decoration: underline; text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em; width: fit-content; }
+details.ss[open] summary { margin-bottom: 0.75rem; }
+.ss-pair { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); margin-bottom: 0.5rem; }
 .ss-box { background: var(--ss-blue); color: #FFFFFF; font-family: "Segoe UI", var(--sans); font-size: 0.86rem;
   line-height: 1.4; padding: 1rem 1rem 0.75rem; display: flex; flex-direction: column; }
 .ss-box p { margin: 0 0 0.6rem; }
@@ -219,20 +204,25 @@ figcaption { font-size: 0.94rem; color: var(--muted); margin-top: 0.4rem; }
 .files th, .files td { text-align: left; vertical-align: top; padding: 0.45rem 1rem 0.45rem 0; border-bottom: 1px solid var(--line); }
 .files thead th { font-size: 0.9rem; color: var(--muted); font-weight: 600; }
 .files td:first-child { font-family: var(--mono); font-size: 0.84rem; white-space: nowrap; }
+.verify dt { font-weight: 700; color: var(--ink); margin-top: 0.9rem; }
+.verify dd { margin: 0.3rem 0 0; }
+.verify pre { margin: 0 0 0.4rem; }
 
-.links { list-style: none; padding: 0; }
+.links { list-style: none; }
+.sec .links { padding: 0; }
 .links li { margin-bottom: 0.55rem; }
 .cite { margin: 0 0 1rem; padding: 0.1rem 0 0.1rem 1rem; border-left: 3px solid var(--line); }
 .cite p { margin: 0; }
-.todo { background: var(--amber); color: #1E1E1E; padding: 0 0.2em; }
 
-/* Footer: the credits, then the train on the line that closes the page. */
-.foot { width: calc(100% - 2 * var(--gutter)); max-width: calc(72rem - 2 * var(--gutter)); margin: 2rem auto 0; padding: 1.75rem 0 0; border-top: 1px solid var(--line);
-  display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 0 2rem; }
-.foot-text { max-width: 36rem; font-size: 0.94rem; color: var(--muted); padding-bottom: 1.25rem; }
+/* Footer: the names, and beside them the train on the line that closes the page. */
+.foot { width: calc(100% - 2 * var(--gutter)); max-width: var(--wide); margin: 2rem auto 0; padding: 1.5rem 0 0;
+  border-top: 1px solid var(--line); display: grid; grid-template-columns: minmax(0, 34rem) auto; align-items: end;
+  justify-content: start; gap: 0 2.5rem; }
+@media (max-width: 30rem) { .foot { grid-template-columns: minmax(0, 1fr) auto; gap: 0 1rem; } }
+.foot-text { max-width: 34rem; font-size: 0.94rem; color: var(--muted); padding-bottom: 1rem; }
 .foot-text p { margin: 0 0 0.5rem; }
-.rail { flex: 0 0 auto; width: 13.5rem; margin-left: auto; line-height: 0; }
-.foot::after { content: ""; flex: 1 0 100%; height: 4px; border-radius: 2px; background: var(--tr-body); margin: 0 0 2.5rem; }
+.rail { width: 11rem; line-height: 0; }
+.foot::after { content: ""; grid-column: 1 / -1; height: 4px; border-radius: 2px; background: var(--rail); margin: 0 0 2.5rem; }
 .train { display: block; width: 100%; height: auto; }
 .train .tb { fill: var(--tr-body); }
 .train .tbo { fill: var(--tr-boiler); }
@@ -240,13 +230,13 @@ figcaption { font-size: 0.94rem; color: var(--muted); margin-top: 0.4rem; }
 .train .ts { fill: var(--tr-smoke); }
 .train .tc { fill: var(--tr-coal); }
 .train .tsl { fill: var(--tr-slate); }
-@media (max-width: 30rem) { .rail { width: 10rem; } }
+@media (max-width: 30rem) { .rail { width: 7.5rem; } .foot-text { font-size: 0.9rem; } }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }
 @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 @media print {
-  .get, .top nav, .copy, .rail { display: none; }
+  .download, .top nav, .copy, .rail { display: none; }
   a { text-decoration: none; }
 }
