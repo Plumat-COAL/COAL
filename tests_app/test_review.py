@@ -438,9 +438,10 @@ class TestFinding13ProbeCost(_RunsDir):
         calls = []
         real = core._run_engine
 
-        def spy(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, report_path, timeout=None):
-            calls.append((protein, len(core.read_ids(protein)), timeout))
-            return real(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, report_path, timeout=timeout)
+        def spy(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, report_path, timeout=None, **kw):
+            calls.append((protein, len(core.read_ids(protein)), timeout))  # FIN-A6: **kw (strict, blockonly)
+            return real(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, report_path, timeout=timeout,
+                        **kw)
 
         core._run_engine = spy
         self.addCleanup(setattr, core, "_run_engine", real)

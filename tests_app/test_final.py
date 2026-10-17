@@ -183,5 +183,101 @@ class TestFinA1GeneticCodeHint(Case):  # FIN-A1 / FIN-C4 / FIN-C5 / FIN-C6 / FIN
         self.assertIsNone(_hint(r), r.hints)
 
 
+class TestFinA4ViewerOtherFormats(Case):  # FIN-A4
+    def test_paml_and_codon_output_are_drawn(self):
+        from coal_app import viewer
+        for fmt in ("paml", "codon", "clustal"):
+            with self.subTest(fmt=fmt):
+                od = os.path.join(self.d, "v_" + fmt)
+                r = core.run_coal(CLEAN_P, CLEAN_D, fmt, out_dir=od, probe_codes=False)
+                frag, path = viewer.render_run(CLEAN_P, r.output_path, r.report, CLEAN_D, 1, od)
+                self.assertIn("gene01", frag)
+                self.assertNotIn("not FASTA or CLUSTAL", frag)
+                self.assertNotIn(od, frag)  # no server path
+                self.assertIn("ATG", frag)
+                self.assertEqual([f for f in os.listdir(od) if f.startswith(".view")], [])
+
+    def test_error_text_has_no_server_path(self):
+        self.assertEqual(core.public_error(ValueError("/srv/run_x/a.paml: not FASTA"), ["/srv/run_x/a.paml"]),
+                         "a.paml: not FASTA")
+
+
+class TestFinA7ViewerNote(Case):  # FIN-A7
+    def test_wide_frameshift_column_is_not_called_nogap(self):
+        from coal_app import viewer
+
+        # protein M4..., DNA with 4 extra bases after the first codon: a widened column (digit >= 4)
+        p = _read_fasta(CLEAN_P)
+        d = _read_fasta(CLEAN_D)
+        p = [[n, s[0] + ("4" if i == 0 else "-") + s[1:]] for i, (n, s) in enumerate(p)]
+        d[0][1] = d[0][1][:3] + "ACGT" + d[0][1][3:]
+        pp, dd = os.path.join(self.d, "fs.pep"), os.path.join(self.d, "fs.dna")
+        _write_fasta(pp, p)
+        _write_fasta(dd, d)
+        od = os.path.join(self.d, "fs")
+        r = core.run_coal(pp, dd, out_dir=od, probe_codes=False)
+        self.assertEqual(r.exit_code, 0, r.stderr)
+        frag, _ = viewer.render_run(pp, r.output_path, r.report, dd, 1, od)
+        self.assertNotIn("-nogap or -nomismatch", frag)
+
+
+class TestFinA5ClosestPal2nalCommand(Case):  # FIN-A5 / FIN-C8
+    def test_label_and_caveats(self):
+        text = core.commands_text("coal a b -o x", "pal2nal.pl a b -output fasta > x", {"codontable": 1})
+        self.assertIn("# Closest PAL2NAL v14 command", text)
+        self.assertNotIn("Same run", text)
+        mito = core.commands_text("c", "p", {"codontable": 2, "nogap": True})
+        self.assertIn("-nogap", mito)
+        self.assertIn("stop codons", mito)
+        for n in (3, 10, 11, 13):
+            self.assertIn(f"code {n}", core.pal2nal_caveats({"codontable": n})[0])
+        self.assertEqual(core.pal2nal_caveats({"codontable": 2}), [])
+        self.assertTrue(any("--strict" in c for c in core.pal2nal_caveats({"strict": True})))
+
+    def test_tool_returns_the_caveats(self):
+        from coal_app import tools
+        p, d = core.example_paths("mito")
+        r = tools.codon_align(p, d, codontable=2, nogap=True)
+        self.assertTrue(any("-nogap" in c for c in r["pal2nal_caveats"]), r["pal2nal_caveats"])
+        self.assertIn("closest", tools.codon_align.__doc__)
+        self.assertNotIn("equivalent command lines", tools.codon_align.__doc__)
+
+
+class TestFinA6StrictAndBlockonly(Case):  # FIN-A6
+    def test_strict_refuses_a_probably_wrong_gene(self):
+        p, d = self.variant(dna=_randomise(2))
+        r = core.run_coal(p, d, out_dir=os.path.join(self.d, "s"), probe_codes=False, strict=True)
+        self.assertIsNone(r.output_path)
+        self.assertIn("--strict", r.coal_cmd)
+        self.assertTrue(r.report["options"]["strict"])
+        g = next(x for x in r.report["sequences"] if x["id"] == "gene03")
+        self.assertEqual(g["status"], "failed")
+
+    def test_blockonly_keeps_marked_columns(self):
+        aln = os.path.join(self.d, "p.aln")
+        with open(aln, "w") as fh:
+            fh.write("CLUSTAL W\n\na    MKVL\nb    MKVL\n     ##  \n\n")
+        dna = os.path.join(self.d, "d.fa")
+        with open(dna, "w") as fh:
+            fh.write(">a\nATGAAAGTTCTG\n>b\nATGAAGGTGCTT\n")
+        r = core.run_coal(aln, dna, out_dir=os.path.join(self.d, "b"), probe_codes=False, blockonly=True)
+        with open(r.output_path) as fh:
+            self.assertEqual(fh.read(), ">a\nATGAAA\n>b\nATGAAG\n")
+        self.assertIn("-blockonly", r.pal2nal_cmd)
+
+    def test_mcp_tool_has_the_options(self):
+        from coal_app import tools
+        import inspect
+        sig = inspect.signature(tools.codon_align)
+        self.assertIn("strict", sig.parameters)
+        self.assertIn("blockonly", sig.parameters)
+        p, d = self.variant(dna=_randomise(2))
+        r = tools.codon_align(p, d, strict=True)
+        self.assertFalse(r["ok"])
+        r = tools.codon_align(p, d)
+        self.assertTrue(r["ok"])
+        self.assertTrue(any("strict" in pr["explanation"] for pr in r["problems"]))
+
+
 if __name__ == "__main__":
     unittest.main()

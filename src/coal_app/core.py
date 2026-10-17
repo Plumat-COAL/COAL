@@ -325,7 +325,8 @@ def _q(p: str) -> str:
 
 
 def coal_command(protein: str, dna: str, output_format="fasta", codontable=1, nogap=False,
-                 nomismatch=False, out="codon_aln.fasta", keep_going=False, report: str | None = None) -> str:
+                 nomismatch=False, out="codon_aln.fasta", keep_going=False, report: str | None = None,
+                 strict=False, blockonly=False) -> str:  # CHANGED(FIN-A6): strict, blockonly
     parts = ["coal", _q(protein), _q(dna)]
     if output_format != "fasta":
         parts += ["-output", output_format]
@@ -335,6 +336,10 @@ def coal_command(protein: str, dna: str, output_format="fasta", codontable=1, no
         parts.append("-nogap")
     if nomismatch:
         parts.append("-nomismatch")
+    if blockonly:
+        parts.append("-blockonly")
+    if strict:
+        parts.append("--strict")
     if keep_going:
         parts.append("--keep-going")
     if report:
@@ -344,7 +349,8 @@ def coal_command(protein: str, dna: str, output_format="fasta", codontable=1, no
 
 
 def pal2nal_command(protein: str, dna: str, output_format="fasta", codontable=1, nogap=False,
-                    nomismatch=False, out="codon_aln.fasta") -> str:
+                    nomismatch=False, out="codon_aln.fasta", blockonly=False) -> str:
+    """The closest PAL2NAL v14 command line (see pal2nal_caveats for when it is not the same run)."""
     parts = ["pal2nal.pl", _q(protein), _q(dna), "-output", output_format]
     if int(codontable) != 1:
         parts += ["-codontable", str(int(codontable))]
@@ -352,7 +358,38 @@ def pal2nal_command(protein: str, dna: str, output_format="fasta", codontable=1,
         parts.append("-nogap")
     if nomismatch:
         parts.append("-nomismatch")
+    if blockonly:  # CHANGED(FIN-A6)
+        parts.append("-blockonly")
     return " ".join(parts) + f" > {_q(out)}"
+
+
+def pal2nal_caveats(opts: dict) -> list[str]:
+    """CHANGED(FIN-A5/FIN-C8): new. When the closest PAL2NAL v14 command does not do the same as this COAL run.
+    See overnight/integration/CHANGES.md"""
+    n = int(opts.get("codontable") or 1)
+    out = []
+    old = {3: "accepts only ATA/ATG as start codons (current NCBI table 3 also GTG)",
+           10: "reads TGA as a stop codon (current NCBI table 10: Cys)",
+           11: "lacks the start codons ATT, ATC and ATA of the current NCBI table 11",
+           13: "lacks the start codon ATA of the current NCBI table 13"}
+    if n in old:
+        out.append(f"Genetic code {n}: PAL2NAL v14's table {old[n]}, so the two tools can differ (warnings, "
+                   f"and the columns removed by -nomismatch).")
+    if opts.get("nogap") and n != 1:
+        out.append("-nogap: PAL2NAL v14 removes the standard code's stop codons (TAA/TAG/TGA) whatever "
+                   "-codontable says, so its output differs from COAL's, which removes this code's stop codons.")
+    if opts.get("strict"):
+        out.append("--strict is COAL's own option: PAL2NAL v14 has no way to refuse probably-wrong genes.")
+    return out
+
+
+def commands_text(coal_cmd: str, pal2nal_cmd: str, opts: dict) -> str:
+    """CHANGED(FIN-A5/FIN-C8): new; was "# Same run with PAL2NAL" in ui.py, which was not the same run with -nogap
+    and another code. The command box of the GUI."""
+    cav = pal2nal_caveats(opts or {})
+    notes = "".join(f"# Note: {c}\n" for c in cav)
+    return (f"# COAL\n{coal_cmd}\n\n# Closest PAL2NAL v14 command (COAL's documented deliberate differences from "
+            f"PAL2NAL apply)\n{notes}{pal2nal_cmd}")
 
 
 # ---------------------------------------------------------------- running
@@ -435,13 +472,14 @@ def _parse_warning(line: str) -> tuple[str, dict] | None:
                      "text": (f"Column {col}: '{aa}'" + (f" ({what})" if what else "") + " is not one of the 20 "
                               f"standard amino acids, so COAL did not check its codon (any codon accepted).")}
     m = _WARN_UNRELATED.match(line)
+    # CHANGED(FIN-A6): the --strict advice now also names the app's option (the GUI and the MCP tool have it now)
     if m:  # CHANGED(DEC-1): new
         sid, nbad, nchk = m.groups()
         return sid, {"code": "suspect_unrelated",
                      "text": (f"{nbad} of the {nchk} codons COAL could check do not match this protein, so this is "
                               f"almost certainly the wrong DNA for it (or the wrong genetic code). COAL still wrote "
                               f"its row, codon by position, as PAL2NAL does: do not trust it. Run COAL with --strict "
-                              f"to refuse such genes.")}
+                              f"(in the app: 'Refuse probably-wrong genes') to refuse such genes.")}
     m = _WARN_GUESS.match(line)
     if m:  # CHANGED(DEC-1): new
         sid, nchk, nres, short = m.groups()
@@ -451,8 +489,8 @@ def _parse_warning(line: str) -> tuple[str, dict] | None:
                      "text": (f"{why}"
                               f"10-residue stretch of the protein was found in the DNA, so COAL cannot tell where "
                               f"the gene starts in the longer DNA. Its row was taken from the start of the DNA (as "
-                              f"PAL2NAL does) and may be shifted: do not trust it. Run COAL with --strict to refuse "
-                              f"such genes.")}
+                              f"PAL2NAL does) and may be shifted: do not trust it. Run COAL with --strict (in the app: "
+                              f"'Refuse probably-wrong genes') to refuse such genes.")}
     m = _WARN_NOANCHOR.match(line)
     if m:
         sid, nbad, nres, namb = m.groups()
@@ -492,7 +530,8 @@ def pairing_warning(line: str) -> dict | None:
 _EXT = {"fasta": "fasta", "clustal": "aln", "paml": "paml", "codon": "codon.txt"}
 
 
-def _run_engine(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, report_path, timeout=None):
+def _run_engine(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, report_path, timeout=None,
+                strict=False, blockonly=False):  # CHANGED(FIN-A6): strict, blockonly
     f = detect_features()
     timeout = timeout or ENGINE_TIMEOUT
     cmd = _coal_cmd() + ["-o", out, "-codontable", str(int(table))]
@@ -502,6 +541,10 @@ def _run_engine(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, re
         cmd.append("-nogap")
     if nomismatch:
         cmd.append("-nomismatch")
+    if blockonly:
+        cmd.append("-blockonly")
+    if strict:
+        cmd.append("--strict")
     if keep_going and f.keep_going:
         cmd.append("--keep-going")
     if report_path and f.report:
@@ -583,6 +626,15 @@ def run_engine_command(cmd: list, timeout: float, temp_dir: str | None = None) -
     return p.returncode, out, err
 
 
+def public_error(e, paths=()) -> str:
+    """CHANGED(FIN-A4): new. An error message for the user with every given path shown as its file name only (no
+    server folders, e.g. on the hosted Space). See overnight/integration/CHANGES.md"""
+    text = str(e)
+    for p in sorted((p for p in paths if p), key=len, reverse=True):
+        text = text.replace(p, os.path.basename(p))
+    return text
+
+
 def _classify_error(text: str) -> str:
     t = text.lower()
     if "inconsistent" in t or "no match" in t:
@@ -599,7 +651,7 @@ def _classify_error(text: str) -> str:
 
 
 def build_fallback_report(protein, dna, out, fmt, table, nogap, nomismatch, keep_going,
-                          code, stderr, runtime) -> dict:
+                          code, stderr, runtime, strict=False, blockonly=False) -> dict:
     """Build a coal.report/1 report from COAL's stderr (for engines without --report)."""
     try:
         pids = read_ids(protein)
@@ -686,10 +738,13 @@ def build_fallback_report(protein, dna, out, fmt, table, nogap, nomismatch, keep
         "schema": "coal.report/1",
         "coal_version": detect_features().version,
         "source": "coal_app (built from COAL's messages; this engine has no --report yet)",
-        "command": coal_command(protein, dna, fmt, table, nogap, nomismatch, out, keep_going),
-        "pal2nal_equivalent": pal2nal_command(protein, dna, fmt, table, nogap, nomismatch, out),
+        "command": coal_command(protein, dna, fmt, table, nogap, nomismatch, out, keep_going,
+                                strict=strict, blockonly=blockonly),
+        "pal2nal_equivalent": pal2nal_command(protein, dna, fmt, table, nogap, nomismatch, out, blockonly),
+        # CHANGED(FIN-A6): strict and blockonly are new option fields
         "options": {"output_format": fmt, "codontable": int(table), "nogap": bool(nogap),
-                    "nomismatch": bool(nomismatch), "keep_going": bool(keep_going)},
+                    "nomismatch": bool(nomismatch), "keep_going": bool(keep_going), "strict": bool(strict),
+                    "blockonly": bool(blockonly)},
         "inputs": [
             {"role": "protein", "path": protein, "sha256": _safe_sha(protein), "sequences": len(pids)},
             {"role": "dna", "path": dna, "sha256": _safe_sha(dna), "sequences": len(dids)},
@@ -954,7 +1009,7 @@ def genetic_code_hint(protein, dna, table, report, work_dir) -> dict | None:
     return {"code": "genetic_code", "text": text, "suggested_codontable": c}
 
 
-def mismatch_probe(protein, dna, table, keep_going, report, work_dir) -> dict:
+def mismatch_probe(protein, dna, table, keep_going, report, work_dir, blockonly=False) -> dict:
     """CHANGED(R2-A1/R2-D5/R2-E1): new. With -nomismatch the engine (like PAL2NAL) prints no mismatch
     warnings, so the report said every gene matched. This re-runs the same inputs without -nomismatch (output
     to a temporary file, deleted) to find which genes had mismatching codons, marks them "warning" (columns
@@ -964,7 +1019,7 @@ def mismatch_probe(protein, dna, table, keep_going, report, work_dir) -> dict:
     probe_dir = tempfile.mkdtemp(prefix="probe_nomismatch_", dir=work_dir)
     try:
         code, err, _ = _run_engine(protein, dna, os.path.join(probe_dir, "probe.fasta"), "fasta", table,
-                                   False, False, keep_going, None)
+                                   False, False, keep_going, None, blockonly=blockonly)
     finally:
         shutil.rmtree(probe_dir, ignore_errors=True)
     if code != 0:
@@ -1014,8 +1069,10 @@ def banner_head(ok: bool, summary: dict, hints=()) -> str:
 
 def run_coal(protein_path: str, dna_path: str, output_format: str = "fasta", codontable: int = 1,
              nogap: bool = False, nomismatch: bool = False, keep_going: bool = True,
-             out_dir: str | None = None, probe_codes: bool = True) -> RunResult:
-    """Run COAL once and return the output, a coal.report/1 report and hints."""
+             out_dir: str | None = None, probe_codes: bool = True, strict: bool = False,
+             blockonly: bool = False) -> RunResult:
+    """Run COAL once and return the output, a coal.report/1 report and hints.
+    CHANGED(FIN-A6): strict (COAL's --strict: refuse probably-wrong genes) and blockonly (-blockonly) are new."""
     f = detect_features()
     if output_format not in f.output_formats:
         raise ValueError(f"output format '{output_format}' is not supported by this COAL "
@@ -1030,7 +1087,7 @@ def run_coal(protein_path: str, dna_path: str, output_format: str = "fasta", cod
     if os.path.exists(report_path):
         os.remove(report_path)
     code, err, runtime = _run_engine(protein_path, dna_path, out, output_format, codontable,
-                                     nogap, nomismatch, keep_going, report_path)
+                                     nogap, nomismatch, keep_going, report_path, strict=strict, blockonly=blockonly)
     report = None
     if f.report and os.path.exists(report_path):
         try:
@@ -1040,9 +1097,9 @@ def run_coal(protein_path: str, dna_path: str, output_format: str = "fasta", cod
             report = None
     if report is None:
         report = build_fallback_report(protein_path, dna_path, out, output_format, codontable, nogap,
-                                       nomismatch, keep_going, code, err, runtime)
+                                       nomismatch, keep_going, code, err, runtime, strict=strict, blockonly=blockonly)
         if nomismatch and code == 0:
-            mismatch_probe(protein_path, dna_path, codontable, keep_going, report, out_dir)
+            mismatch_probe(protein_path, dna_path, codontable, keep_going, report, out_dir, blockonly=blockonly)
         from .viewer import locate_breaks
         locate_breaks(protein_path, dna_path, report)
         annotate_mismatch_patterns(protein_path, report)  # CHANGED(FIN-C6/FIN-C9)
@@ -1063,9 +1120,9 @@ def run_coal(protein_path: str, dna_path: str, output_format: str = "fasta", cod
         stderr=err,
         coal_cmd=coal_command(os.path.basename(protein_path), os.path.basename(dna_path), output_format,
                               codontable, nogap, nomismatch, os.path.basename(out),
-                              keep_going and f.keep_going),
+                              keep_going and f.keep_going, strict=strict, blockonly=blockonly),
         pal2nal_cmd=pal2nal_command(os.path.basename(protein_path), os.path.basename(dna_path),
-                                    output_format, codontable, nogap, nomismatch, os.path.basename(out)),
+                                    output_format, codontable, nogap, nomismatch, os.path.basename(out), blockonly),
         hints=list(report.get("hints") or []),
     )
 

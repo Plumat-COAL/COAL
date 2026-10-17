@@ -9,7 +9,9 @@
     "codontable": 1,
     "nogap": false,
     "nomismatch": false,
-    "keep_going": false
+    "keep_going": false,
+    "strict": false,
+    "blockonly": false
   },
   "inputs": [
     {
