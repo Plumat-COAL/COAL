@@ -27,14 +27,16 @@ struct Threaded {
     std::string dna;                    // matched DNA, original case
     std::vector<std::string> warnings;  // without the leading sequence ID
     std::vector<int> mismatch_cols;     // 1-based alignment columns
+    std::vector<std::string> notices;   // CPP-15: probably-wrong data (with the sequence ID), as the reference
 };
 
 // Upper-case the row and turn '.' into '-' (as prepare_row in core.py).
 std::string prepare_row(const std::string& aln);
 
-// Throws CoalError (message starts with seq_id) when the sequence cannot be threaded.
+// Throws CoalError (message starts with seq_id) when the sequence cannot be threaded. strict (--strict, reference
+// DEC-1): probably-wrong data is an error instead of a notice.
 Threaded thread_one(const std::string& seq_id, const std::string& row, const std::string& raw_dna,
-                    const GeneticCode& code);
+                    const GeneticCode& code, bool strict = false);
 
 // Widen columns for frameshift digits: width 3*ceil(N/3) (min 3).
 void update_column_widths(std::vector<int>& widths, const std::string& row);

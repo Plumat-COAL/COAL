@@ -8,6 +8,8 @@ namespace {
 
 enum Mode { NORMAL = 0, START = 1, ANCHOR_START = 2 };
 constexpr int ANCHOR = 10;
+constexpr int MIN_CHECKABLE = 10;            // reference R3-E1
+constexpr int AMBIGUOUS_MAX_RESIDUES = 3;    // reference FZ-6
 
 inline bool is_digit(char c) { return c >= '0' && c <= '9'; }
 inline bool as_x(char c) { return c == 'B' || c == 'Z' || c == 'J' || c == 'O' || c == 'U'; }
@@ -192,8 +194,23 @@ std::string prepare_row(const std::string& aln) {
     return r;
 }
 
+// CPP-15 (reference FZ-6): a protein of at most 3 residues that fits in several places of the DNA gets a notice;
+// the leftmost is used, as PAL2NAL. stdout is unchanged.
+static void note_ambiguous(Threaded& res, const std::string& seq_id, const Target& target,
+                           const std::vector<Token>& toks) {
+    long long nres = 0;
+    for (const Token& t : toks) nres += t.residue;
+    if (nres > AMBIGUOUS_MAX_RESIDUES) return;
+    long long last = (long long)target.code.size() - total_length(toks), n = 0;
+    for (long long st = 0; st <= last; ++st) n += matches_at(target, st, toks);
+    if (n > 1)
+        res.notices.push_back(seq_id + ": placement is ambiguous: " + std::to_string(n) +
+                              " possible positions in the DNA for this " + std::to_string(nres) +
+                              "-residue protein; used the leftmost (as PAL2NAL)");
+}
+
 Threaded thread_one(const std::string& seq_id, const std::string& row, const std::string& raw_dna,
-                    const GeneticCode& code) {
+                    const GeneticCode& code, bool strict) {
     std::set<unsigned char> bad;
     for (char c : row)
         if (!valid_char(c)) bad.insert((unsigned char)c);
@@ -246,6 +263,7 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
     long long s = find(target, toks);
     if (s >= 0) {
         res.dna = raw_dna.substr((size_t)s, (size_t)len);
+        note_ambiguous(res, seq_id, target, toks);
         return res;
     }
 
@@ -254,10 +272,12 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
     if (ranges.empty()) throw CoalError(seq_id + ": protein and DNA are inconsistent (no match found)", "no_match", seq_id);
     std::vector<Token> pattern;
     int col = 1;
+    bool found_any = false;
     for (size_t k = 0; k < ranges.size(); ++k) {
         auto [a, b] = ranges[k];
         std::vector<Token> at = tokens(row, a, b, k == 0 ? ANCHOR_START : NORMAL, col, code);
         bool found = find(target, at) >= 0;
+        found_any = found_any || found;
         for (Token& t : at) {
             if (!found) {  // wildcard of the same length
                 t.residue = false;
@@ -272,7 +292,7 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
     res.dna = raw_dna.substr((size_t)s, (size_t)len);
 
     // mismatch report: first residue Met -> ATG/CTG/GTG, others -> genetic code
-    long long pos = 0;
+    long long pos = 0, nres = 0, nchk = 0, nbad_chk = 0;  // CPP-15: checkable = A/C/G/T(U) bases only
     bool first = true;
     for (const Token& t : toks) {
         if (!t.residue) {
@@ -280,6 +300,14 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
             continue;
         }
         int mode = (first && t.aa == 'M') ? ANCHOR_START : NORMAL;
+        ++nres;
+        bool checkable = true;
+        for (long long q = 0; q < 3; ++q) {
+            char ch = (size_t)(pos + q) < res.dna.size() ? res.dna[(size_t)(pos + q)] : 'A';
+            if (ch >= 'a' && ch <= 'z') ch = char(ch - 32);
+            if (ch != 'A' && ch != 'C' && ch != 'G' && ch != 'T' && ch != 'U') checkable = false;
+        }
+        nchk += checkable;
         bool ok;
         if (t.any) {
             ok = true;
@@ -290,10 +318,45 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
             res.warnings.push_back("pepAlnPos " + std::to_string(t.col) + ": " + row[t.col - 1] +
                                    " does not correspond to " + res.dna.substr((size_t)pos, 3));
             res.mismatch_cols.push_back(t.col);
+            nbad_chk += checkable;
         }
         first = false;
         pos += 3;
     }
+    // CPP-15 (reference DEC-1 with ENG-c, R2-E3, R3-E1, FZ-4): probably-wrong data. By default the row is written as
+    // PAL2NAL writes it, with a notice; --strict makes the first two rules errors.
+    const long long namb = nres - nchk;
+    const std::string N = std::to_string(nres), K = std::to_string(nchk), B = std::to_string(nbad_chk);
+    if (nchk && 2 * nbad_chk > nchk) {
+        if (strict)
+            throw CoalError(seq_id + ": protein and DNA are inconsistent (" + B + " of " + K +
+                                " checkable codons do not match the protein)",
+                            "unrelated", seq_id);
+        res.notices.push_back(seq_id + ": protein and DNA are probably unrelated: " + B + " of " + K +
+                              " checkable codons do not match the protein. The row was written as PAL2NAL writes "
+                              "it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an "
+                              "error)");
+        return res;
+    }
+    if (!found_any && (long long)raw_dna.size() > len && nchk < MIN_CHECKABLE) {
+        const std::string few = namb ? "only " + K + " of " + N + " codons have no ambiguous bases"
+                                     : "the gene has only " + N + " codons";
+        const std::string what = namb ? "the gene" : "it";
+        if (strict)
+            throw CoalError(seq_id + ": protein and DNA are inconsistent (no 10-residue segment of the protein was "
+                                "found in the DNA and " + few + ": too few to tell where " + what +
+                                " starts in the longer DNA)",
+                            "position_guess", seq_id);
+        res.notices.push_back(seq_id + ": position of the gene in the DNA is a guess: no 10-residue segment of the "
+                              "protein was found in the DNA and " + few + ", too few to tell where " + what +
+                              " starts in the longer DNA. The codons were taken from the start of the DNA as PAL2NAL "
+                              "does, so the row may be shifted (--strict makes this an error)");
+        return res;
+    }
+    if (!found_any)
+        res.notices.push_back(seq_id + ": no 10-residue segment of the protein was found in the DNA; codons were "
+                              "assigned by position (" + B + " of " + K + " checkable codons do not match" +
+                              (namb ? "; " + std::to_string(namb) + " contain N or other ambiguous bases" : "") + ")");
     return res;
 }
 

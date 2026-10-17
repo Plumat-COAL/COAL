@@ -37,6 +37,7 @@
 #include "json.hpp"
 #include "report.hpp"
 #include "seqio.hpp"
+#include "sysio.hpp"
 #include "tables.hpp"
 
 #ifdef _WIN32
@@ -71,6 +72,9 @@ static double env_double(const char* name, double dflt) {
 }
 // Same batch boundaries as pipeline.py (COAL_BATCH_NT overrides, for tests/tuning).
 static const long long BATCH_NT = env_ll("COAL_BATCH_NT", 2000000);
+// COAL_CPP_ONLY_LINES=0 (CPP-18, for comparing with the reference engine in tests): leave out the stderr lines only
+// coal-cpp prints ("coal: summary:" lines, the no-ID-match pairing warning).
+static const bool CPP_ONLY_LINES = env_ll("COAL_CPP_ONLY_LINES", 1) != 0;
 static const int WRAP = 60;
 static const char* const MISMATCH_WARNING = " does not correspond to ";
 static const long long BLOCK_CACHE = 64LL << 20;  // bytes of rows held while writing blocks
@@ -79,7 +83,7 @@ struct Options {
     std::string pep;
     std::vector<std::string> nucs;
     int table = 1;
-    bool nogap = false, nomismatch = false, quiet = false, blockonly = false;
+    bool nogap = false, nomismatch = false, quiet = false, blockonly = false, strict = false;
     std::string fmt = "fasta";
     std::string out;
     int jobs = 0;
@@ -241,6 +245,7 @@ struct Item {
     std::string out;           // finished record, or the expanded row when staged
     std::vector<std::string> warnings;
     std::vector<int> mcols;
+    std::vector<std::string> notices;  // CPP-15
     bool failed = false;
     std::string error, error_code;
 };
@@ -250,14 +255,16 @@ struct Ctx {
     std::vector<int> widths;
     bool staged;
     std::string fmt;
+    bool strict;  // CPP-15
 };
 
 static void work(Item& it, const Ctx& c) {
     try {
-        Threaded t = thread_one(it.id, it.row, it.dna, *c.code);
+        Threaded t = thread_one(it.id, it.row, it.dna, *c.code, c.strict);
         std::string exp = expand(it.row, t.dna, c.widths);
         it.warnings = std::move(t.warnings);
         it.mcols = std::move(t.mismatch_cols);
+        it.notices = std::move(t.notices);
         if (c.staged) {
             it.out = std::move(exp);
         } else {
@@ -661,7 +668,31 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
     std::vector<std::string> per_seq;
     std::string mode = pair_ids(ids, dna.ids(), dna.pos(), rs.pairing, per_seq);
     const std::vector<size_t>& pairing = rs.pairing;
-    if (mode == "order") warn(order_pairing_warning(ids, dna.ids()));
+    if (mode == "order") {
+        // CPP-15 (reference ENG-d, DEC-1): some but not all protein IDs are DNA IDs: a notice (an error with
+        // --strict). No ID matching at all keeps coal-cpp's own pairing warning (see LOG, needs reconciling).
+        long long hits = 0;
+        for (auto& p : ids) hits += dna.pos().count(p) ? 1 : 0;
+        if (hits) {
+            std::string p, d;
+            for (size_t k = 0; k < ids.size(); ++k)
+                if (ids[k] != dna.ids()[k]) {
+                    p = ids[k];
+                    d = dna.ids()[k];
+                    break;
+                }
+            const std::string H = std::to_string(hits), T = std::to_string(ids.size());
+            if (o.strict)
+                throw CoalError("only " + H + " of " + T + " protein IDs are DNA IDs, so sequences would be paired by "
+                                    "order (e.g. protein '" + p + "' with DNA '" + d + "'); make the IDs match, or "
+                                    "run without --strict to pair by order as PAL2NAL does",
+                                "partial_ids");
+            warn("only " + H + " of " + T + " protein IDs are DNA IDs; pairing sequences by order instead (e.g. "
+                 "protein '" + p + "' gets DNA '" + d + "') (--strict makes this an error)");
+        } else {
+            if (CPP_ONLY_LINES) warn(order_pairing_warning(ids, dna.ids()));
+        }
+    }
     std::string ex_prot, ex_dna;
     for (size_t k = 0; k < per_seq.size(); ++k)
         if (per_seq[k] == "normalised") {
@@ -679,20 +710,25 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
     long long wtotal = 0;
     for (int w : widths) wtotal += w;
 
-    Ctx ctx{code, widths, staged, o.fmt};
+    Ctx ctx{code, widths, staged, o.fmt, o.strict};
 
     // ---- files: deterministic names next to -o (resumable), temp files for stdout
     std::unique_ptr<Checkpoint> ck;
     Json state;
     bool resuming = false;
     std::string out_tmp, stage_path, prot_path;
-    if (!o.out.empty()) {
+    // CPP-16 (reference ENG-a, R2-E5, R3-E2): -o PATH is checked before any work. Symlinks are written through;
+    // FIFOs, devices and files with other hard links are written in place (from a temp file, no checkpoint).
+    OutTarget target;
+    if (!o.out.empty()) target = resolve_output(o.out);
+    const bool direct = !o.out.empty() && target.direct;
+    if (!o.out.empty() && !direct) {
         std::string canon = "fmt=" + o.fmt + "|table=" + std::to_string(o.table) + "|nogap=" + std::to_string(o.nogap) +
                             "|nomismatch=" + std::to_string(o.nomismatch) + "|blockonly=" + std::to_string(o.blockonly) + "|keep_going=" +
                             std::to_string(o.keep_going) + "|staged=" + std::to_string(staged);
         std::vector<std::string> inputs{o.pep};
         inputs.insert(inputs.end(), o.nucs.begin(), o.nucs.end());
-        ck = std::make_unique<Checkpoint>(o.out, canon, inputs);
+        ck = std::make_unique<Checkpoint>(target.real, canon, inputs);
         out_tmp = ck->partial;
         if (staged) stage_path = ck->stage;
         if (o.fmt == "codon") prot_path = ck->prot;
@@ -713,6 +749,9 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         out_tmp = (d / (".coal_" + unique_suffix() + ".tmp")).string();
         if (staged) stage_path = (d / (".coal_rows_" + unique_suffix() + ".tmp")).string();
         if (o.fmt == "codon") prot_path = (d / (".coal_prot_" + unique_suffix() + ".tmp")).string();
+        // CPP-18: removed by the signal handlers too (ENG-f, R2-E8)
+        for (auto* q : {&out_tmp, &stage_path, &prot_path}) register_temp(*q);
+        if (!stage_path.empty()) register_temp(stage_path + ".grid");
     }
     const std::string sink_path = staged ? stage_path : out_tmp;
     bool finished = false, failed = false;
@@ -726,8 +765,14 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         } else {
             std::error_code ec;
             for (auto* p : {&out_tmp, &stage_path, &prot_path})
-                if (!p->empty()) fs::remove(*p, ec);
-            if (!stage_path.empty()) fs::remove(stage_path + ".grid", ec);
+                if (!p->empty()) {
+                    fs::remove(*p, ec);
+                    unregister_temp(*p);
+                }
+            if (!stage_path.empty()) {
+                fs::remove(stage_path + ".grid", ec);
+                unregister_temp(stage_path + ".grid");
+            }
         }
     }};
 
@@ -820,11 +865,16 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                         rec.add_sequence(cur[i].id, {}, cur[i].error_code, cur[i].error, done + (long long)i);
                         throw CoalError(cur[i].error, cur[i].error_code, cur[i].id);
                     }
+            // CPP-15: as the reference, a batch's per-codon warnings first, then its notices
             for (Item& it : cur) {
                 for (auto& w : it.warnings)  // CPP-11 (ENG-i2): no mismatch warnings with -nomismatch, as PAL2NAL
                     if (!(o.nomismatch && w.find(MISMATCH_WARNING) != std::string::npos) && kept_col(w))
                         warn(it.id + " " + w);
                 if (it.failed) warn("skipped " + it.error);
+            }
+            for (Item& it : cur)
+                for (auto& n : it.notices) warn(n);
+            for (Item& it : cur) {
                 const Entry* e = rec.add_sequence(it.id, it.warnings, it.failed ? it.error_code : "",
                                                   it.failed ? it.error : "", done);
                 if (ck && e && e->status != "ok") entries.f << json_dump(e->to_json()) << '\n';
@@ -940,10 +990,18 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         prot.f.close();
         // hashing a big output takes time: only when a report was asked for
         rec.set_output(o.out, rec.keep_entries ? sha256_file(out_tmp) : std::string(), nout);
-        if (!o.out.empty()) {
+        if (!o.out.empty() && !direct) {
             std::error_code ec;
-            fs::rename(out_tmp, o.out, ec);
+            if (target.existing) copy_mode(target.real, out_tmp);  // CPP-16 (R2-E5): keep its permissions
+            fs::rename(out_tmp, target.real, ec);
             if (ec) throw CoalError("could not write " + o.out + ": " + ec.message(), "file_error");
+        } else if (direct) {  // CPP-16: FIFO / device / hard-linked file: written in place
+            std::ifstream in(out_tmp, std::ios::binary);
+            std::ofstream dst(o.out, std::ios::binary | std::ios::trunc);
+            if (!dst) throw CoalError("cannot write " + o.out + ": " + std::strerror(errno), "file_error");
+            dst << in.rdbuf();
+            dst.flush();
+            if (!dst) throw CoalError("could not write " + o.out + " (disk full?)", "file_error");
         } else {
 #ifdef _WIN32
             _setmode(_fileno(stdout), _O_BINARY);
@@ -954,9 +1012,9 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                 in.read(buf.data(), (std::streamsize)buf.size());
                 std::streamsize n = in.gcount();
                 if (n <= 0) break;
-                std::fwrite(buf.data(), 1, (size_t)n, stdout);
+                write_stdout(buf.data(), (size_t)n);  // CPP-18: closed pipe -> BrokenPipe (exit 141)
             }
-            std::fflush(stdout);
+            flush_stdout();
         }
         finished = true;
         return skipped;
@@ -1085,9 +1143,7 @@ int main(int argc, char** argv) {
     o.resume = args.given(a_resume);
     if (args.given(a_report)) o.report = args.get(a_report);
     o.json = args.given(a_json);
-    if (args.given(a_strict))
-        return usage_error("argument -strict/--strict: not implemented yet in coal-cpp "
-                           "(the Python engine has it: python -m coal --strict)");
+    o.strict = args.given(a_strict);  // CPP-15 (reference DEC-1)
     if (o.json && o.out.empty())
         return usage_error("--json requires -o (the alignment and the report cannot both go to stdout)");
     if (o.resume && o.out.empty())
@@ -1095,6 +1151,19 @@ int main(int argc, char** argv) {
 
     RunReport rec(o.argv, o.pep, o.nucs, o.out, o.fmt, o.table, o.nogap, o.nomismatch, o.keep_going,
                   !o.report.empty() || o.json);
+    install_signal_handlers();  // CPP-18 (reference ENG-f, R2-E8, DEC-3)
+    // CPP-17 (reference ENG-b, R2-E7): pipes, /dev/stdin and FIFOs are copied to temp files first; messages name
+    // the argument, not the temp copy
+    std::vector<std::pair<std::string, std::string>> spooled;
+    struct SpoolCleanup {
+        std::vector<std::pair<std::string, std::string>>& s;
+        ~SpoolCleanup() { remove_spooled(s); }
+    } spool_cleanup{spooled};
+    auto restore_names = [&](std::string msg) {
+        for (auto& sp : spooled)
+            for (size_t at; (at = msg.find(sp.first)) != std::string::npos;) msg.replace(at, sp.first.size(), sp.second);
+        return msg;
+    };
     long long shown = 0, hidden = 0;
     WarnFn warn = [&](const std::string& w) {
         if (o.quiet) return;
@@ -1112,21 +1181,30 @@ int main(int argc, char** argv) {
     };
     RunState rs;
     int rc = 0;
+    Options ro = o;  // the same options, reading the (possibly spooled) input copies
     try {
-        long long skipped = run(o, rec, rs, warn, note);
+        std::vector<std::string> in_args{o.pep};
+        in_args.insert(in_args.end(), o.nucs.begin(), o.nucs.end());
+        std::vector<std::string> paths = spool_inputs(in_args, spooled);
+        ro.pep = paths[0];
+        ro.nucs.assign(paths.begin() + 1, paths.end());
+        rec.set_hash_paths(paths);
+        long long skipped = run(ro, rec, rs, warn, note);
         if (skipped) rc = 2;  // partial success
+    } catch (const BrokenPipe&) {
+        return 141;  // CPP-18 (reference DEC-3): a closed stdout pipe ends the run silently; temp files are gone
     } catch (const CoalError& e) {
-        std::cerr << "coal: error: " << e.what() << '\n';
+        std::cerr << "coal: error: " << restore_names(e.what()) << '\n';
         rc = 1;
-        rec.fail(e.code, e.what());
+        rec.fail(e.code, restore_names(e.what()));
     } catch (const InputError& e) {
-        std::cerr << "coal: error: " << e.what() << '\n';
+        std::cerr << "coal: error: " << restore_names(e.what()) << '\n';
         rc = 1;
-        rec.fail(e.code, e.what());
+        rec.fail(e.code, restore_names(e.what()));
     } catch (const std::exception& e) {
-        std::cerr << "coal: error: " << e.what() << '\n';
+        std::cerr << "coal: error: " << restore_names(e.what()) << '\n';
         rc = 1;
-        rec.fail("file_error", e.what());
+        rec.fail("file_error", restore_names(e.what()));
     }
     if (hidden) {
         std::string where = (!o.report.empty() || o.json) ? "see the report" : "see them all with --report FILE.json";
@@ -1134,12 +1212,13 @@ int main(int argc, char** argv) {
     }
     rec.exit_code = rc;
     try {
-        compute_hints(o, rec, rs);
+        compute_hints(ro, rec, rs);
     } catch (...) {
         // a hint is optional; never let it hide the real result
     }
     if (!o.quiet)
-        for (auto& l : rec.summary_lines()) std::cerr << "coal: summary: " << l << '\n';
+        for (auto& l : rec.summary_lines())
+            if (CPP_ONLY_LINES) std::cerr << "coal: summary: " << l << '\n';
     std::cerr.flush();
     if (!o.report.empty()) {
         std::string tmp = o.report + ".tmp" + unique_suffix();

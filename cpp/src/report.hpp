@@ -42,6 +42,8 @@ public:
               const std::string& out, const std::string& fmt, int table, bool nogap, bool nomismatch,
               bool keep_going, bool keep_entries);
 
+    // CPP-17: hash these files instead of the arguments (piped inputs are read from their temp copies).
+    void set_hash_paths(std::vector<std::string> p) { hash_paths_ = std::move(p); }
     void set_inputs(long long n_protein, const std::vector<long long>& dna_counts);
     void set_pairing(const std::string& mode, const std::vector<std::string>* dna_ids,
                      const std::vector<size_t>* dna_index, const std::vector<std::string>& per_seq,
@@ -78,6 +80,7 @@ private:
     std::chrono::steady_clock::time_point t0_;
     std::string pep_, out_, fmt_, command_, pal2nal_;
     std::vector<std::string> nucs_;
+    std::vector<std::string> hash_paths_;  // CPP-17: files to hash (spooled copies of piped inputs)
     int table_;
     bool nogap_, nomismatch_, keep_going_;
     std::vector<long long> dna_counts_;

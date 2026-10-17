@@ -222,6 +222,7 @@ tests/test_cpp_vs_reference.py (reference goldens + reference fuzz vs PAL2NAL, c
 - 2026-10-17 12:25 UTC | CPP-10 FZ-5, CPP-11 ENG-i2 + DEC-4f | reference goldens 279/279 (was 248); random vs reference 887/1000 (was 739); fuzz unexplained 431 (was 440; -nogap differences now counted as deliberate).
 - 2026-10-17 12:30 UTC | CPP-12 FZ-1/FZ-2 readers, CPP-13 -blockonly + mark lines | goldens 279/279; random vs reference 892/1000; fuzz unexplained 76 (clustal/paml/fasta 22 each, codon 10).
 - 2026-10-17 12:32 UTC | CPP-14 FZ-3 tfastx | fuzz vs real PAL2NAL 1000 cases x 4 formats: 0 unexplained differences; goldens 279/279.
+- 2026-10-17 12:49 UTC | CPP-15 DEC-1 notices/--strict, CPP-16 -o, CPP-17 piped inputs, CPP-18 signals/pipe | goldens 279/279; random vs reference 1000/1000 (with --strict/-q); fuzz 0 unexplained; reference tests run against coal-cpp through a shim (tests/test_cpp_vs_reference.py reftests): test_review_fixes 43/43, test_fuzz_findings 17/17, test_decisions 19/24 (4 in-process DEC-3 mocks not applicable, 1 help text: next item).
 
 ## Run 3 progress (C++ foundations brief: build, readers, tables, CLI, pool, test hookup)
 
