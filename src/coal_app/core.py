@@ -26,9 +26,21 @@ SAMPLE_REPORT = os.path.join(HERE, "sample_report.json")
 
 
 def _find_examples() -> str:
-    # repo checkout: <root>/src/coal_app -> <root>/examples
-    cand = os.path.normpath(os.path.join(HERE, "..", "..", "examples"))
-    return cand
+    """CHANGED(APP-C12): was only <repo>/examples; now COAL_EXAMPLES_DIR, then a repo checkout, then the copy a
+    wheel installs under <prefix>/share/coal/examples. See overnight/app/CHANGES.md"""
+    import sysconfig
+    env = os.environ.get("COAL_EXAMPLES_DIR")
+    if env:
+        return os.path.normpath(env)
+    repo = os.path.normpath(os.path.join(HERE, "..", "..", "examples"))  # <root>/src/coal_app -> <root>/examples
+    cands = [repo]
+    for base in (sys.prefix, sysconfig.get_path("data"), getattr(sys, "base_prefix", sys.prefix)):
+        if base:
+            cands.append(os.path.join(base, "share", "coal", "examples"))
+    for c in cands:
+        if os.path.isdir(os.path.join(c, "clean")):
+            return c
+    return repo
 
 
 EXAMPLES_DIR = _find_examples()

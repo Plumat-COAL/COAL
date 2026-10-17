@@ -32,3 +32,11 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 coal_app = ["*.json"]
+
+# CHANGED(APP-C12): was not shipped (an installed wheel found no examples); now installed under
+# <prefix>/share/coal/examples, where coal_app.core looks after COAL_EXAMPLES_DIR and a repo checkout.
+[tool.setuptools.data-files]
+"share/coal/examples/clean" = ["examples/clean/README.md", "examples/clean/dna.fasta", "examples/clean/protein.aln.fasta"]
+"share/coal/examples/mito" = ["examples/mito/README.md", "examples/mito/dna.fasta", "examples/mito/protein.aln.fasta"]
+"share/coal/examples/messy_ids" = ["examples/messy_ids/README.md", "examples/messy_ids/dna.fasta", "examples/messy_ids/protein.aln.fasta"]
+"share/coal/examples/one_broken_gene" = ["examples/one_broken_gene/README.md", "examples/one_broken_gene/dna.fasta", "examples/one_broken_gene/protein.aln.fasta"]
