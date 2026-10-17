@@ -1,0 +1,84 @@
+// Readers matching src/coal/seqio.py: FASTA / CLUSTAL protein alignments and an
+// on-disk index of DNA FASTA files (IDs + byte offsets only).
+#pragma once
+#include <cstdint>
+#include <fstream>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
+namespace coal {
+
+struct InputError : std::runtime_error {
+    using std::runtime_error::runtime_error;
+};
+
+// Python's repr() of an ID string ('abc', or "it's").
+std::string py_repr(const std::string& s);
+// Python str.split() whitespace (ASCII).
+bool py_space(unsigned char c);
+
+// Reads lines with Python "universal newlines" (\n, \r\n or \r end a line).
+class LineReader {
+public:
+    explicit LineReader(const std::string& path);
+    bool next(std::string& line);  // line without its terminator
+    long long lineno() const { return lineno_; }
+
+private:
+    bool fill();
+    std::string path_;
+    std::ifstream in_;
+    std::vector<char> buf_;
+    size_t pos_ = 0, len_ = 0;
+    long long offset_ = 0, lineno_ = 0;
+    bool eof_ = false;
+};
+
+// Streaming protein alignment reader: FASTA (one record at a time) or CLUSTAL
+// (read whole, as the Python version does).
+class ProteinReader {
+public:
+    explicit ProteinReader(const std::string& path);
+    bool next(std::string& id, std::string& row);  // raw row (not yet prepared)
+
+private:
+    std::string path_;
+    bool clustal_ = false;
+    std::vector<std::pair<std::string, std::string>> clustal_recs_;
+    size_t ci_ = 0;
+    std::unique_ptr<LineReader> lr_;
+    std::string pending_id_;
+    bool have_pending_ = false;
+    std::unordered_map<std::string, int> seen_;
+};
+
+bool is_clustal(const std::string& path);
+
+class DnaIndex {
+public:
+    explicit DnaIndex(const std::vector<std::string>& paths);
+    size_t size() const { return start_.size(); }
+    const std::vector<std::string>& ids() const { return ids_; }
+    const std::unordered_map<std::string, size_t>& pos() const { return pos_; }
+    void forget_ids();
+    // Sequence i: '#' lines skipped, every non-letter removed (as PAL2NAL).
+    std::string get(size_t i);
+    // Length of record i before cleaning (bytes between header and next record).
+    long long raw_size(size_t i) const { return end_[i] - start_[i]; }
+
+private:
+    void scan(int fno, const std::string& path);
+    std::vector<std::string> paths_;
+    std::vector<std::string> ids_;
+    std::unordered_map<std::string, size_t> pos_;
+    std::vector<uint16_t> fno_;
+    std::vector<long long> start_, end_;
+    std::vector<std::unique_ptr<std::ifstream>> fh_;
+    std::string raw_;
+};
+
+}  // namespace coal
