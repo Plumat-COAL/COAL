@@ -1190,6 +1190,53 @@ def _report_completed(report: dict) -> bool:
         (e or {}).get("code") == "stopped" for e in report.get("errors") or [])
 
 
+# CHANGED(FIN-C11): new. The code names as they read inside a sentence: common words lower case, genus names
+# capitalised (NCBI: "The Scenedesmus obliquus Mitochondrial Code", "... and the Mycoplasma/Spiroplasma Code").
+METHODS_CODE_NAMES: dict[int, str] = {
+    1: "standard genetic code",
+    2: "vertebrate mitochondrial genetic code",
+    3: "yeast mitochondrial genetic code",
+    4: "mold, protozoan and coelenterate mitochondrial and Mycoplasma/Spiroplasma genetic code",
+    5: "invertebrate mitochondrial genetic code",
+    6: "ciliate, dasycladacean and Hexamita nuclear genetic code",
+    9: "echinoderm and flatworm mitochondrial genetic code",
+    10: "euplotid nuclear genetic code",
+    11: "bacterial, archaeal and plant plastid genetic code",
+    12: "alternative yeast nuclear genetic code",
+    13: "ascidian mitochondrial genetic code",
+    14: "alternative flatworm mitochondrial genetic code",
+    15: "Blepharisma nuclear genetic code",
+    16: "chlorophycean mitochondrial genetic code",
+    21: "trematode mitochondrial genetic code",
+    22: "Scenedesmus obliquus mitochondrial genetic code",
+    23: "Thraustochytrium mitochondrial genetic code",
+}
+
+
+def real_mismatches(seq: dict) -> list[dict]:
+    """CHANGED(FIN-A1/FIN-C1): new. The gene's mismatch messages with a definite (A/C/G/T) codon."""
+    return [m for m in seq.get("messages") or []
+            if m.get("code") == "mismatch" and not is_ambiguous_codon(m.get("codon"))]
+
+
+def gene_kind(seq: dict) -> str:
+    """CHANGED(FIN-C1/FIN-A2): new. What happened to one gene, by its messages: 'ok', 'mismatch' (definite
+    mismatching codons), 'unchecked' (only codons with unknown/ambiguous bases), 'other' (other warnings: non-standard
+    residues, pairing by order, ambiguous placement), 'flagged' (written but probably wrong, DEC-1), 'excluded'
+    (failed, no row in the output) or 'not_checked'."""
+    st = seq.get("status")
+    msgs = seq.get("messages") or []
+    if st == "failed":
+        return "flagged" if any(m.get("code") in SUSPECT_CODES + ("suspect_pairing",) for m in msgs) else "excluded"
+    if st == "warning":
+        if real_mismatches(seq):
+            return "mismatch"
+        if any(m.get("code") == "mismatch" for m in msgs):
+            return "unchecked"
+        return "other"
+    return st if st in ("ok", "not_checked") else "other"
+
+
 def methods_text(report: dict) -> str:
     """A ready-to-paste methods sentence for a run (report["methods_text"] if the engine wrote one)."""
     if report.get("methods_text"):
@@ -1199,25 +1246,66 @@ def methods_text(report: dict) -> str:
     opts = report.get("options") or {}
     s = report.get("summary") or {}
     n = int(opts.get("codontable") or 1)
-    name = GENETIC_CODES.get(n, f"NCBI code {n}")
     ver = report.get("coal_version") or "unknown"
-    total, ok, warn, failed = (s.get(k, 0) for k in ("total", "ok", "warning", "failed"))
+    total, ok = s.get("total", 0), s.get("ok", 0)
+    # CHANGED(FIN-C11): was the plain name lower-cased ("scenedesmus obliquus", "hexamita"); now METHODS_CODE_NAMES,
+    # with genus names capitalised as NCBI writes them. See overnight/integration/CHANGES.md
+    phrase = METHODS_CODE_NAMES.get(n, f"NCBI genetic code {n}")
     # CHANGED(APP-15): was always "COAL v<version>"; a non-numeric version (the demo sample) is shown in brackets
     shown = f"COAL v{ver}" if ver[:1].isdigit() else f"COAL ({ver})"
     parts = [f"Codon alignments were built with {shown} (https://github.com/plumat-coal/COAL), which places "
              f"each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method "
-             f"of PAL2NAL; Suyama et al. 2006), using the {name.split(' (')[0].lower()} genetic code "
-             f"(NCBI translation table {n})."]
+             f"of PAL2NAL; Suyama et al. 2006), using the {phrase} (NCBI translation table {n})."]
+    # CHANGED(FIN-C1/FIN-A2): was every "warning" gene "contained codons that did not match" and every "failed" gene
+    # "could not be aligned and was excluded" (false for U/B/Z-only and pairing-only genes, and for DEC-1 suspect
+    # genes, which ARE written); now counted by message code. See overnight/integration/CHANGES.md
+    kinds = {}
+    for sq in report.get("sequences") or []:
+        k = gene_kind(sq)
+        kinds.setdefault(k, []).append(sq)
+    nomm = opts.get("nomismatch")
+    clauses = []
+
+    def were(k):
+        return "was" if k == 1 else "were"
+    if kinds.get("mismatch"):
+        k = len(kinds["mismatch"])
+        clauses.append(f"{k} contained codons that did not match the aligned amino acid"
+                       + ("" if nomm else " (kept in the alignment)"))
+    if kinds.get("unchecked"):
+        k = len(kinds["unchecked"])
+        clauses.append(f"{k} contained codons with unknown or ambiguous bases (e.g. N) that could not be checked"
+                       + ("" if nomm else " (kept in the alignment)"))
+    other = kinds.get("other") or []
+    if other:
+        codes = {m.get("code") for sq in other for m in sq.get("messages") or []}
+        why = []
+        if "unknown_aa" in codes:
+            why.append("contained non-standard amino acids (such as U, B or Z) whose codons were not checked")
+        if "suspect_pairing" in codes:
+            why.append("were paired with their DNA only by their order in the files")
+        if codes - {"unknown_aa", "suspect_pairing"}:
+            why.append("had other warnings (see the report)")
+        k = len(other)
+        lead = f"{k} " + (why[0] if len(why) == 1 else "had warnings: they " + " or ".join(why))
+        clauses.append(lead)
+    if kinds.get("flagged"):
+        k = len(kinds["flagged"])
+        clauses.append(f"{k} {were(k)} written to the output but flagged as probably wrong (most likely the wrong "
+                       f"DNA, a shifted position or the wrong genetic code); remove "
+                       f"{'it' if k == 1 else 'them'} before analysis")
+    if kinds.get("excluded"):
+        k = len(kinds["excluded"])
+        clauses.append(f"{k} could not be aligned and {were(k)} excluded")
     counts = f"Of {total} sequences, {ok} matched their protein exactly"
-    if warn:
-        removed = s.get("columns_removed")
-        counts += (f", {warn} contained codons that did not match the aligned amino acid"
-                   + ((f" (those {removed} codon columns were removed)" if removed else
-                       " (those alignment columns were removed)") if opts.get("nomismatch") else
-                      " (kept in the alignment)"))
-    if failed:
-        counts += f", and {failed} could not be aligned and {'was' if failed == 1 else 'were'} excluded"
+    if clauses:
+        counts += ("; " + "; ".join(clauses[:-1]) + "; and " + clauses[-1] if len(clauses) > 1
+                   else ("; " if kinds.get("flagged") else ", and ") + clauses[0])
     parts.append(counts + ".")
+    removed = s.get("columns_removed")
+    if nomm and (kinds.get("mismatch") or kinds.get("unchecked")):
+        parts.append(f"The {removed} codon columns holding such codons were removed (-nomismatch)." if removed
+                     else "The alignment columns holding such codons were removed (-nomismatch).")
     if opts.get("nogap"):
         parts.append("Codon columns containing gaps or stop codons were removed.")
     cmd = report.get("command") or ""

@@ -1,5 +1,17 @@
 # Integration changes (keanu_overnight/integration = app + windows-app + engine-fixes)
 
+## Final fixes (branch fix/final, from keanu_overnight/integration bb80bde)
+
+<!-- FINAL-STATUS -->
+
+### Final-fix rows
+
+| ID | Where (file:function) | Before | After | Why (finding / decision, with evidence) | Test proving it | Merge note |
+|---|---|---|---|---|---|---|
+| FIN-C1 / FIN-A2 | src/coal_app/core.py `methods_text`, new `gene_kind`, `real_mismatches` | Every `warning` gene was "contained codons that did not match the aligned amino acid" (also U/B/Z-only and pairing-only genes); every `failed` gene "could not be aligned and was excluded" (also DEC-1 suspect genes, which are written: examples/clean with gene03's DNA randomised → output has 8 rows, text said "1 ... excluded") | Counted by message code: definite mismatches; codons with unknown/ambiguous bases; other warnings (non-standard amino acids, pairing by order, other); "written to the output but flagged as probably wrong ...; remove it before analysis" (suspect); "excluded" only for failed genes without a row. With -nomismatch a separate sentence says the N columns were removed | Final claims review FIN-C1, app review FIN-A2 | tests_app/test_final.py `TestFinC1MethodsText` | App only. |
+| FIN-C11 | src/coal_app/core.py new `METHODS_CODE_NAMES`, `methods_text` | Code name lower-cased in the methods text ("scenedesmus obliquus", "hexamita", "mycoplasma") | Genus names capitalised as NCBI writes them; code 4 says "... and Mycoplasma/Spiroplasma genetic code" | FIN-C11 | `TestFinC1MethodsText.test_proper_names_keep_their_capitals` | — |
+| FIN-N1 | pitch/QA.md (line and test counts) | "2,350 in the app", "more than 170 app tests" | "2,600", "more than 200" | Documented numbers drifted with the new code and tests (guard test_docs_numbers) | tests_app/test_docs_numbers.py `test_qa_line_and_test_counts` | Re-check if more tests are added. |
+
 ## Decisions (branch fix/decisions, from keanu_overnight/integration 2f87eb8)
 
 The user decided four open questions by industry-standard practice for a drop-in replacement: default behaviour
