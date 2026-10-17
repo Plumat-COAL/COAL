@@ -148,5 +148,147 @@ class TestReleaseWorkflow(unittest.TestCase):
         self.assertIn("> SHA256SUMS.txt", sums)
 
 
+class TestPagesWorkflow(unittest.TestCase):
+    def test_deploys_site_on_main_with_minimal_permissions(self):
+        wf = _workflow("pages.yml")
+        on = wf.get("on", wf.get(True))
+        self.assertEqual(on["push"]["branches"], ["main"])
+        self.assertIn("site/**", on["push"]["paths"])
+        self.assertIn("workflow_dispatch", on)
+        self.assertEqual(wf["permissions"], {"contents": "read"})
+        self.assertNotIn("permissions", wf["jobs"]["build"])
+        self.assertEqual(wf["jobs"]["deploy"]["permissions"], {"pages": "write", "id-token": "write"})
+        self.assertEqual(wf["jobs"]["deploy"]["environment"]["name"], "github-pages")
+        uses = [s.get("uses", "") for j in wf["jobs"].values() for s in j["steps"]]
+        self.assertTrue(any(u.startswith("actions/upload-pages-artifact@") for u in uses))
+        self.assertTrue(any(u.startswith("actions/deploy-pages@") for u in uses))
+        build = "\n".join(s.get("run", "") for s in wf["jobs"]["build"]["steps"])
+        self.assertIn("cp -R site/. _site/", build)
+        self.assertIn("test_site.py", build)
+
+
+SITE_FILES = ("index.html", "style.css", "main.js", "sw.js", "favicon.svg", "explainer.html", "img/broken-gene.png")
+TEXT_EXT = (".html", ".css", ".js", ".svg", ".txt", ".json", ".webmanifest")
+# Not requests: the SVG namespace, and the local app's address shown as text for people to open.
+ALLOWED_NON_REPO_URLS = ("http://www.w3.org/2000/svg", "http://127.0.0.1:7860")
+
+
+def site_text_files():
+    out = []
+    for d, _, files in os.walk(SITE):
+        for f in files:
+            if f.endswith(TEXT_EXT):
+                out.append(os.path.join(d, f))
+    return sorted(out)
+
+
+def site_links(html):
+    return re.findall(r'(?:href|src)\s*=\s*"([^"]*)"', html)
+
+
+class TestSiteFiles(unittest.TestCase):
+    def setUp(self):
+        self.index = _read("site", "index.html")
+
+    def test_files_exist(self):
+        for f in SITE_FILES + ("README.md",):
+            self.assertTrue(os.path.isfile(os.path.join(SITE, f)), f"site/{f} is missing")
+
+    def test_explainer_copy_is_current(self):
+        # The site serves a copy (Pages deploys site/ only); it must not drift from the tested original.
+        with open(os.path.join(ROOT, "pitch", "explainer.html"), "rb") as a, \
+                open(os.path.join(SITE, "explainer.html"), "rb") as b:
+            self.assertEqual(a.read(), b.read(), "site/explainer.html differs from pitch/explainer.html: copy it again")
+
+    def test_no_external_urls(self):
+        """Only links to github.com/plumat-coal/COAL; nothing else may be referenced (no CDNs, fonts, trackers)."""
+        for path in site_text_files():
+            with open(path, encoding="utf-8") as fh:
+                text = fh.read()
+            rel = os.path.relpath(path, ROOT)
+            for url in re.findall(r"""(?:https?:)?//[^\s"'<>()]+""", text):
+                url = url.rstrip(".,;:")  # sentence punctuation after a URL in running text
+                if url in ALLOWED_NON_REPO_URLS or url.startswith(ALLOWED_NON_REPO_URLS):
+                    continue
+                if url.startswith("//") and not url.startswith("//www") and "." not in url.split("/")[2]:
+                    continue  # a JS comment ("// ..."), not a protocol-relative URL
+                self.assertRegex(url, r"^https://github\.com/plumat-coal/COAL(?:[/#?]|$)", f"{rel}: external URL {url}")
+            for link in site_links(text):
+                self.assertFalse(link.startswith("//"), f"{rel}: protocol-relative link {link}")
+                if not link.startswith(("https://", "#", "mailto:")):
+                    self.assertFalse(link.startswith("/"), f"{rel}: {link} must be relative (site may move to a custom domain)")
+
+    def test_internal_links_resolve(self):
+        ids = set(re.findall(r'\sid="([^"]+)"', self.index))
+        for link in site_links(self.index):
+            if link.startswith("#"):
+                self.assertIn(link[1:], ids, f"anchor {link} has no target")
+            elif not link.startswith("https://"):
+                target = link.split("#")[0].split("?")[0] or "index.html"
+                if target in ("./", "."):
+                    target = "index.html"
+                self.assertTrue(os.path.isfile(os.path.join(SITE, target)), f"link {link}: site/{target} missing")
+        sw = _read("site", "sw.js")
+        for f in re.search(r"FILES\s*=\s*\[(.*?)\]", sw, re.S).group(1).replace('"', "").split(","):
+            f = f.strip()
+            if f not in ("./", ""):
+                self.assertTrue(os.path.isfile(os.path.join(SITE, f)), f"sw.js caches missing file {f}")
+
+    def test_download_links_match_release_files(self):
+        names = set(release_file_names())
+        latest = re.findall(r"https://github\.com/plumat-coal/COAL/releases/latest/download/([^\"'\s<]+)", self.index)
+        self.assertGreaterEqual(len(set(latest)), 4, "expected installer, zip, sdist and checksum links")
+        for f in latest:
+            self.assertIn(f, names, f"site links to {f}, which the release workflow does not upload")
+            self.assertNotRegex(f, r"\d+\.\d+", f"{f}: latest/download links need version-free names")
+        self.assertNotIn("/releases/download/", self.index, "versioned download links go stale; use releases/latest")
+        self.assertIn('id="win-download" href="https://github.com/plumat-coal/COAL/releases/latest/download/'
+                      'COAL-Setup-windows-x64.exe"', self.index)
+
+    def test_pip_commands_use_the_cache_safe_sdist(self):
+        cmds = re.findall(r'"coal(?:\[gui\])? @ ([^"]+)"', self.index)
+        self.assertGreaterEqual(len(cmds), 4)
+        for url in cmds:
+            self.assertTrue(url.endswith("/releases/latest/download/coal_src.tar.gz"), url)
+        # pip caches wheels built from URLs whose file name looks like name-version (WEB-1); the alias must not.
+        self.assertNotIn("-", "coal_src")
+
+    def test_claims_are_in_the_readme(self):
+        """Every measured number on the page (data-check) is quoted from README.md, which test_docs_numbers guards."""
+        readme = re.sub(r"\s+", " ", _read("README.md")).replace("**", "")
+        claims = re.findall(r'data-check="([^"]+)">([^<]*)<', self.index)
+        self.assertGreaterEqual(len(claims), 10)
+        for value, shown in claims:
+            self.assertEqual(value, shown, "data-check value and the text shown differ")
+            self.assertIn(value, readme, f"site claims {value!r}, which README.md does not say")
+        self.assertIn("Measured on", self.index)
+
+    def test_unsigned_and_smart_app_control_explained(self):
+        for must in ("Windows protected your PC", "More info", "Run anyway", "Unknown publisher", "Smart App Control",
+                     "Get-FileHash", "sha256sum", "coal-gui", "SKILL.md", "/issues", "MIT", "Zenodo",
+                     "placeholder"):
+            self.assertIn(must, self.index)
+
+    def test_accessibility_basics(self):
+        self.assertRegex(self.index, r'<html lang="en">')
+        self.assertEqual(len(re.findall(r"<h1[\s>]", self.index)), 1)
+        self.assertIn('<main id="main">', self.index)
+        self.assertIn('href="#main"', self.index)
+        for img in re.findall(r"<img\b[^>]*>", self.index):
+            self.assertRegex(img, r'\salt="[^"]{10,}"', img)
+        css = _read("site", "style.css")
+        self.assertIn("prefers-reduced-motion", css)
+        self.assertIn("prefers-color-scheme: dark", css)
+        self.assertIn(":focus-visible", css)
+
+    def test_size_budget(self):
+        total = 0
+        for d, _, files in os.walk(SITE):
+            for f in files:
+                if not f.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif", ".md")):
+                    total += os.path.getsize(os.path.join(d, f))
+        self.assertLess(total, 200 * 1024, f"site is {total} bytes without images (budget 200 KB)")
+
+
 if __name__ == "__main__":
     unittest.main()

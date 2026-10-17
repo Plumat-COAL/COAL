@@ -1,0 +1,224 @@
+/* COAL download site. WEB-3: new file. See overnight/integration/CHANGES.md
+   Palette: Okabe-Ito (colour-blind safe, the one many biologists already use for figures). Blue = actions and amino
+   acids, orange = a codon that doesn't match, green = OK. No web fonts: humanist system faces, monospace only for
+   sequences and commands. */
+:root {
+  --paper: #f6f8f9;
+  --surface: #ffffff;
+  --band: #edf2f5;
+  --ink: #12222e;
+  --muted: #475966;
+  --line: #cfd9df;
+  --action: #0072b2;
+  --action-hover: #005f94;
+  --action-ink: #ffffff;
+  --link: #005a8c;
+  --aa: #0072b2;
+  --mis: #e69f00;
+  --mis-text: #8a5a00;
+  --mis-wash: #fdf1d9;
+  --ok: #00785a;
+  --focus: #0072b2;
+  --ss-blue: #0b5cad;
+  --sans: Seravek, "Gill Sans Nova", Ubuntu, Calibri, "DejaVu Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  --measure: 44rem;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #0e1b24;
+    --surface: #142531;
+    --band: #12212c;
+    --ink: #e8eef2;
+    --muted: #a9b8c3;
+    --line: #2b4150;
+    --action: #56b4e9;
+    --action-hover: #7cc8f0;
+    --action-ink: #0b1720;
+    --link: #7cc8f0;
+    --aa: #56b4e9;
+    --mis: #e69f00;
+    --mis-text: #f0b84a;
+    --mis-wash: #3a2c10;
+    --ok: #3cc59c;
+    --focus: #7cc8f0;
+    --ss-blue: #0b5cad;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-padding-top: 4.5rem; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 1.0625rem;
+  line-height: 1.55;
+  overflow-wrap: break-word;
+}
+img { max-width: 100%; height: auto; display: block; }
+a { color: var(--link); text-underline-offset: 0.15em; }
+a:hover { text-decoration-thickness: 2px; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 2px; }
+code, kbd, samp, pre { font-family: var(--mono); font-size: 0.9em; }
+:not(pre) > code { background: var(--band); border: 1px solid var(--line); border-radius: 4px; padding: 0 0.25em;
+  overflow-wrap: anywhere; }
+kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 0.3em; background: var(--surface); }
+h1, h2, h3, h4 { line-height: 1.2; margin: 0 0 0.6em; font-weight: 700; }
+h2 { font-size: 1.95rem; letter-spacing: -0.01em; }
+h3 { font-size: 1.3rem; margin-top: 2em; }
+h4 { font-size: 1.0625rem; }
+p, ul, ol, dl, figure, blockquote, table, pre { margin: 0 0 1em; }
+.visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);
+  white-space: nowrap; }
+.skip { position: absolute; left: 1rem; top: -4rem; background: var(--action); color: var(--action-ink);
+  padding: 0.5rem 1rem; z-index: 10; border-radius: 4px; }
+.skip:focus { top: 0.5rem; }
+
+.wrap { max-width: 72rem; margin: 0 auto; padding: 0 16px; }
+@media (min-width: 40rem) { .wrap { padding: 0 2rem; } }
+.prose > * { max-width: var(--measure); }
+.prose > .files { max-width: 52rem; }
+section { padding: 3.5rem 0; }
+section section { padding: 0; }
+.band { background: var(--band); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+
+/* Header */
+.top { border-bottom: 1px solid var(--line); background: var(--paper); }
+.top-in { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.25rem 1.5rem;
+  padding-top: 0.75rem; padding-bottom: 0.75rem; }
+.mark { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--ink); text-decoration: none;
+  font-weight: 800; font-size: 1.35rem; letter-spacing: 0.04em; }
+.mark-icon { width: 1.5rem; height: 1.5rem; fill: var(--aa); }
+.mark-icon rect:nth-child(2) { fill: var(--ok); }
+.mark-icon rect:nth-child(3) { fill: var(--mis); }
+.nav { list-style: none; display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; margin: 0; padding: 0; }
+.nav a { color: var(--ink); text-decoration: none; padding: 0.25rem 0; display: inline-block; }
+.nav a:hover { color: var(--link); text-decoration: underline; }
+
+/* Hero */
+.hero { padding: 3rem 0 3.5rem; }
+.hero-in { display: grid; gap: 2.5rem; align-items: center; }
+@media (min-width: 62rem) { .hero-in { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 3.5rem; } }
+.hero h1 { font-size: clamp(1.95rem, 1.2rem + 3vw, 3.05rem); letter-spacing: -0.02em; line-height: 1.08;
+  max-width: 16ch; margin-bottom: 0.5em; }
+.lead { font-size: 1.2rem; color: var(--ink); max-width: 36rem; }
+
+.get { margin-top: 1.75rem; display: flex; flex-direction: column; gap: 1.25rem; max-width: 36rem; }
+.get > * { margin: 0; }
+.btn { display: inline-block; background: var(--action); color: var(--action-ink); font-weight: 700;
+  font-size: 1.2rem; text-decoration: none; padding: 0.8rem 1.6rem; border-radius: 6px; border: 2px solid transparent; }
+.btn:hover { background: var(--action-hover); text-decoration: none; }
+.fine { font-size: 0.94rem; color: var(--muted); margin-top: 0.5rem; }
+.get-title { font-size: 1.2rem; margin: 0 0 0.25rem; }
+.get-pip-note { margin-top: 0; margin-bottom: 0.6rem; }
+/* Order by detected OS: the primary option comes first and is the large one. */
+.get[data-os="macos"] .get-pip, .get[data-os="linux"] .get-pip { order: -1; }
+.get[data-os="macos"] .get-pip .get-title, .get[data-os="linux"] .get-pip .get-title { font-size: 1.45rem; }
+.get[data-os="macos"] .get-win .btn, .get[data-os="linux"] .get-win .btn {
+  background: transparent; color: var(--link); border-color: var(--line); font-size: 1rem; padding: 0.45rem 1rem; }
+/* Windows: the installer stands alone; pip is one click away (Smart App Control note, "Show the download for"). */
+.get[data-os="windows"] .get-pip { display: none; }
+.get-win-sac { display: none; }
+.get[data-os="windows"] .get-win-sac { display: block; margin-top: 0.25rem; }
+.os-line { font-size: 0.94rem; color: var(--muted); }
+.other { font-weight: 600; }
+.status { min-height: 1.5em; font-size: 0.94rem; color: var(--ok); font-weight: 600; }
+.linkish { font: inherit; color: var(--link); background: none; border: 0; padding: 0; text-decoration: underline;
+  text-underline-offset: 0.15em; cursor: pointer; }
+.linkish[aria-pressed="true"] { color: var(--ink); text-decoration: none; font-weight: 700; }
+
+.cmd { display: flex; align-items: stretch; border: 1px solid var(--line); border-radius: 6px; background: var(--surface);
+  margin: 0.5rem 0 0.75rem; }
+.cmd code { flex: 1; min-width: 0; padding: 0.65rem 0.8rem; background: none; border: 0; font-size: 0.86rem;
+  line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }
+.copy { flex: none; font: inherit; font-weight: 700; font-size: 0.94rem; color: var(--action-ink); background: var(--action);
+  border: 0; border-radius: 0 5px 5px 0; padding: 0 1rem; cursor: pointer; min-width: 4.75rem; }
+.copy:hover { background: var(--action-hover); }
+.copy[data-copied] { background: var(--ok); color: var(--action-ink); }
+
+/* The alignment strip: the one decorative element, and it is real data (the explainer's two genes). */
+.strip { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 1.25rem 1rem 1rem;
+  min-width: 0; }
+.strip-grid { display: grid; grid-template-columns: auto repeat(7, minmax(0, 1fr)); gap: 1.1rem 0.3rem; align-items: end;
+  font-family: var(--mono); font-size: clamp(0.8rem, 0.55rem + 1.2vw, 1.15rem); }
+.sp { font-family: var(--sans); font-size: 0.8em; color: var(--muted); padding-right: 0.4rem; align-self: center; }
+.col { display: flex; flex-direction: column; align-items: center; gap: 0.15rem; padding: 0.25rem 0 0.3rem;
+  border-radius: 5px; border: 2px solid transparent; }
+.col b { color: var(--aa); font-size: 0.85em; }
+.col i { font-style: normal; letter-spacing: 0.02em; }
+.col.gap b, .col.gap i { color: var(--muted); }
+.col.bad { border-color: var(--mis); background: var(--mis-wash); }
+.col.bad i { color: var(--mis-text); font-weight: 700; }
+.strip figcaption { margin-top: 1rem; font-size: 0.94rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: 0.75rem; }
+
+/* Downloads table */
+.files { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); }
+.files th, .files td { text-align: left; vertical-align: top; padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--line); }
+.files th { font-size: 0.94rem; color: var(--muted); font-weight: 600; }
+.files td:first-child { font-family: var(--mono); font-size: 0.86rem; overflow-wrap: anywhere; width: 40%; }
+@media (max-width: 34rem) {
+  .files thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .files tr, .files td { display: block; width: auto !important; }
+  .files td { border-bottom: 0; padding-bottom: 0.2rem; }
+  .files td + td { padding-top: 0; padding-bottom: 0.75rem; border-bottom: 1px solid var(--line); }
+}
+
+/* Install */
+.os-tabs { color: var(--muted); }
+.os { border-left: 4px solid var(--line); padding-left: 1.25rem; margin: 2.25rem 0; }
+.os h3 { margin-top: 0; }
+.yours { font-weight: 400; color: var(--ok); font-size: 0.85em; }
+.os:has(.yours:not([hidden])) { border-left-color: var(--action); }
+.steps { padding-left: 1.4rem; }
+.steps > li { margin-bottom: 0.9rem; padding-left: 0.25rem; }
+.steps > li::marker { font-weight: 700; color: var(--aa); }
+.note { background: var(--mis-wash); border: 1px solid var(--mis); border-radius: 6px; padding: 1rem 1.1rem 0.25rem; margin: 1.5rem 0; }
+.cmd.block code { white-space: pre; overflow-x: auto; overflow-wrap: normal; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 0.75rem 0.9rem;
+  overflow-x: auto; line-height: 1.5; }
+
+/* Drawn SmartScreen dialog (not a screenshot) */
+.ss { margin: 1rem 0; }
+.ss-pair { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
+.ss-box { background: var(--ss-blue); color: #ffffff; font-family: "Segoe UI", var(--sans); font-size: 0.86rem; line-height: 1.4;
+  padding: 1rem 1rem 0.75rem; border-radius: 2px; display: flex; flex-direction: column; }
+.ss-box p { margin: 0 0 0.6rem; }
+.ss-title { font-size: 1.3rem; font-weight: 300; line-height: 1.2; }
+.ss-link { text-decoration: underline; }
+.ss-meta span { font-weight: 600; }
+.ss-buttons { margin-top: auto !important; display: flex; justify-content: flex-end; gap: 0.4rem; padding-top: 0.5rem; }
+.ss-btn { border: 2px solid #ffffff; padding: 0.2rem 0.9rem; }
+.ss-go { background: #ffffff; color: var(--ss-blue); font-weight: 600; }
+.ss figcaption, .shot figcaption { font-size: 0.94rem; color: var(--muted); margin-top: 0.5rem; }
+
+/* Why */
+.facts > div { padding: 0.9rem 0; border-top: 1px solid var(--line); }
+.facts > div:last-child { border-bottom: 1px solid var(--line); }
+.facts dt { font-weight: 700; font-size: 1.1rem; margin-bottom: 0.2rem; }
+.facts dd { margin: 0; }
+.shot { margin: 2rem 0 1rem; }
+.shot img { border: 1px solid var(--line); border-radius: 6px; }
+
+/* Docs, cite */
+.links { padding-left: 1.2rem; }
+.links li { margin-bottom: 0.5rem; }
+#cite { margin-top: 2.5rem; }
+.cite { margin-left: 0; padding: 0.75rem 1rem; border-left: 4px solid var(--aa); background: var(--surface); }
+.cite p { margin: 0; }
+mark.todo { background: var(--mis-wash); color: var(--mis-text); font-weight: 700; padding: 0 0.2em;
+  outline: 1px dashed var(--mis); }
+
+.foot { border-top: 1px solid var(--line); padding: 1.75rem 0 2.5rem; color: var(--muted); font-size: 0.94rem; }
+.foot p { margin: 0 0 0.4rem; max-width: var(--measure); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+@media (forced-colors: active) {
+  .col.bad { border-color: Highlight; }
+  .btn, .copy { border: 2px solid ButtonText; }
+}
