@@ -88,6 +88,61 @@ class TestEngA_OutputPath(TempDirCase):
         self.assertEqual(self.leftovers(), [])
 
 
+@unittest.skipIf(WINDOWS, "R2-E5: POSIX permissions / links")
+class TestR2E5_ExistingOutput(TempDirCase):  # R2-E5
+    def test_existing_file_keeps_its_permissions(self):
+        out = self.d / "out.fa"
+        out.write_text("old\n")
+        os.chmod(out, 0o600)
+        old = os.umask(0o022)
+        try:
+            r = coal(["p.fa", "n.fa", "-o", "out.fa"], self.d)
+        finally:
+            os.umask(old)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(out.read_text(), EXPECTED)
+        self.assertEqual(stat.S_IMODE(out.stat().st_mode), 0o600)
+
+    def test_hard_link_is_written_in_place(self):
+        out, other = self.d / "out.fa", self.d / "hl2.fa"
+        out.write_text("old\n")
+        os.link(out, other)
+        r = coal(["p.fa", "n.fa", "-o", "out.fa"], self.d)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(other.read_text(), EXPECTED)
+        self.assertEqual(out.stat().st_ino, other.stat().st_ino)
+        self.assertEqual(self.leftovers(), [])
+
+    def test_symlink_loop_is_a_clear_error(self):
+        a, b = self.d / "a.fa", self.d / "b.fa"
+        a.symlink_to(b)
+        b.symlink_to(a)
+        r = coal(["p.fa", "n.fa", "-o", "a.fa"], self.d)
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("symbolic link", r.stderr)
+        self.assertTrue(a.is_symlink() and b.is_symlink())
+        self.assertEqual(self.leftovers(), [])
+
+
+class TestR2E6_BadByteLine(TempDirCase):  # R2-E6
+    def test_latin1_byte_reports_its_line(self):
+        lines = [">s1"] + ["MKVAL"] * 399 + ["MK\xe9AL"]
+        (self.d / "lat.fa").write_bytes(("\n".join(lines) + "\n").encode("latin-1"))
+        r = coal(["lat.fa", "n.fa"], self.d)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("lat.fa:401", r.stderr)
+        self.assertNotIn("Traceback", r.stderr)
+
+
+@unittest.skipUnless(os.path.exists("/dev/stdin"), "R2-E7: no /dev/stdin (Windows)")
+class TestR2E7_PipeNames(TempDirCase):  # R2-E7
+    def test_error_in_piped_input_names_the_argument(self):
+        r = coal(["/dev/stdin", "n.fa"], self.d, stdin=">s1\nMKV-AL\n>s1\nMKVSAL\n")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("/dev/stdin", r.stderr)
+        self.assertNotIn(".coal_in_", r.stderr)
+
+
 # ---------------------------------------------------------------- ENG-b
 @unittest.skipUnless(os.path.exists("/dev/stdin"), "R2-D1: no /dev/stdin (Windows)")
 class TestEngB_StreamInputs(TempDirCase):
@@ -229,7 +284,27 @@ class TestEngE_LongFallback(unittest.TestCase):
         dt = time.perf_counter() - t
         self.assertEqual(r.dna, dna)
         self.assertEqual(r.mismatch_cols, {50_001})
-        self.assertLess(dt, 1.0)
+        self.assertLess(dt, 3.0)  # R2-E10: was 1.0 (flaky on slow CI); ~0.1 s here, quadratic was ~10 s
+
+    def test_many_failed_anchors_with_n_are_fast(self):  # R2-E9
+        sys.path.insert(0, str(SRC))
+        import time
+        from coal.core import thread_one
+        from coal.tables import get_code
+        code = get_code(1).code
+        sense = sorted(c for c, a in code.items() if a != "*")
+        rng = random.Random(5)
+        cod = ["ATG"] + [rng.choice(sense) for _ in range(99_999)]
+        prot = "".join(code[c] for c in cod)
+        for i in range(50, len(cod), 100):
+            cod[i] = "NNN"
+        dna = "".join(cod)
+        t = time.perf_counter()
+        r = thread_one("g", prot, dna, 1)
+        dt = time.perf_counter() - t
+        self.assertEqual(r.dna, dna)
+        self.assertEqual(len(r.mismatch_cols), 1000)
+        self.assertLess(dt, 2.5)  # ~0.5 s here; was ~5 s
 
 
 # ---------------------------------------------------------------- ENG-f
@@ -262,7 +337,17 @@ class TestEngF_Interrupts(TempDirCase):
             if p.poll() is None:
                 p.kill()
                 p.wait()
+            p.stderr.close()  # R2-E10
         return p.returncode, err
+
+    @unittest.skipUnless(hasattr(__import__("signal"), "SIGHUP"), "R2-E8: no SIGHUP here")
+    def test_sighup_cleans_up(self):  # R2-E8
+        import signal
+        p = self.start()
+        rc, err = self.stop(p, signal.SIGHUP)
+        self.assertEqual(rc, 128 + signal.SIGHUP, err)
+        self.assertNotIn("Traceback", err)
+        self.assertEqual(list(self.tmpdir.iterdir()), [])
 
     @unittest.skipIf(WINDOWS, "R2-D1: Windows has no SIGTERM handler (send_signal = TerminateProcess)")
     def test_sigterm_cleans_up(self):
@@ -298,6 +383,7 @@ class TestEngF_Interrupts(TempDirCase):
             if p.poll() is None:
                 p.kill()
                 p.wait()
+            p.stderr.close()  # R2-E10
         self.assertEqual(err, "")
         self.assertEqual(p.returncode, 141)
         self.assertEqual(list(self.tmpdir.iterdir()), [])

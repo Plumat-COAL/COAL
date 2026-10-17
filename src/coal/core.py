@@ -141,9 +141,27 @@ class _Target:
 
     def frames(self) -> list[str]:
         if self._frames is None:
-            get = fast_code(self.table).__getitem__
-            self._frames = ["".join(map(get, _CODON.findall(self.dna, f))) for f in range(3)]
+            if self.plain:
+                get = fast_code(self.table).__getitem__
+                self._frames = ["".join(map(get, _CODON.findall(self.dna, f))) for f in range(3)]
+            else:
+                # CHANGED(R2-E9): new. DNA with N/IUPAC codes: a triplet translates to the one residue whose
+                # accepted() set contains it, else '?', so the frame search stays exact (candidates are verified
+                # by _matches_at as before). Was: no frame search at all for such DNA (regex scans, ~quadratic
+                # when many anchors fail). See overnight/integration/CHANGES.md
+                get = _iupac_code(self.table).get
+                self._frames = ["".join([get(c, "?") for c in _CODON.findall(self.dna, f)]) for f in range(3)]
         return self._frames
+
+
+@lru_cache(maxsize=None)
+def _iupac_code(table: int) -> dict[str, str]:
+    """Every upper-case IUPAC triplet that encodes exactly one residue (NORMAL mode) -> that residue."""
+    out: dict[str, str] = {}
+    for aa in get_code(table).codons:
+        for trip in accepted(table, aa, NORMAL):
+            out[trip] = aa
+    return out
 
 
 def _plain_run(toks):
@@ -178,7 +196,7 @@ def _find(target: _Target, toks) -> int:
     last = len(dna) - total
     if last < 0:
         return -1
-    run = _plain_run(toks) if target.plain else None
+    run = _plain_run(toks)  # CHANGED(R2-E9): was only for DNA without N/IUPAC codes
     if run:
         # Every token has a fixed length, so the run sits at a fixed offset from
         # the start: find the run in the translated frames, then verify.

@@ -20,7 +20,10 @@ class InputFormatError(ValueError):
 @contextmanager
 def _text(path):
     """Lines of a text input: BOM skipped; \\n, \\r\\n and \\r all end a line."""
-    fh = open(path, encoding="utf-8-sig", errors="strict")
+    # CHANGED(R2-E6): was errors="strict": a bad byte failed the decoder on its 8 kB chunk before the line was
+    # counted ("near line 1"); now bad bytes become surrogates and the line check names the right line.
+    # See overnight/integration/CHANGES.md
+    fh = open(path, encoding="utf-8-sig", errors="surrogateescape")
     try:
         yield _ascii_lines(fh, path)
     finally:

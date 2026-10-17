@@ -54,6 +54,8 @@ def main(argv=None) -> int:
     # (cleanup runs, exit 143), Ctrl-C -> "coal: interrupted", exit 130, broken pipe -> silent exit 141.
     # See overnight/engine-fixes/CHANGES.md
     signal.signal(signal.SIGTERM, _on_sigterm)
+    if hasattr(signal, "SIGHUP"):  # CHANGED(R2-E8): terminal closed -> same cleanup, exit 129
+        signal.signal(signal.SIGHUP, _on_sigterm)
     try:
         run(args.pep_aln, args.nuc_fasta, out_path=args.out, table=args.codontable,
             nogap=args.nogap, nomismatch=args.nomismatch, jobs=args.jobs, warn=warn, notice=notice)

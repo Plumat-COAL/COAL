@@ -29,7 +29,7 @@ from .core import (
     MISMATCH_WARNING, CoalError, apply_slices, column_widths, expand, keep_slices, nogap_bad_triplets,
     pair_sequences, prepare_row, thread_one,
 )
-from .seqio import DnaIndex, is_clustal, iter_fasta, read_clustal
+from .seqio import DnaIndex, InputFormatError, is_clustal, iter_fasta, read_clustal
 from .tables import get_code
 
 WRAP = 60
@@ -158,10 +158,23 @@ def run(pep_path, nuc_paths, *args, **kw) -> int:
     # "protein: 0" or "not seekable"); now non-regular inputs are copied to temp files
     # first and removed afterwards. See overnight/engine-fixes/CHANGES.md
     spooled: list = []
+    names = {}  # CHANGED(R2-E7): temp copy -> the argument it came from, for error messages
     try:
-        pep_path = _spool(pep_path, spooled)
-        nuc_paths = [_spool(p, spooled) for p in nuc_paths]
-        return _run(pep_path, nuc_paths, *args, **kw)
+        sp = _spool(pep_path, spooled)
+        names[sp] = str(pep_path)
+        nps = []
+        for p in nuc_paths:
+            nps.append(_spool(p, spooled))
+            names[nps[-1]] = str(p)
+        try:
+            return _run(sp, nps, *args, **kw)
+        except (CoalError, InputFormatError) as e:
+            msg = str(e)
+            for tmp_name in spooled:
+                msg = msg.replace(tmp_name, names[tmp_name])
+            if msg != str(e):
+                raise type(e)(msg) from None
+            raise
     finally:
         for name in spooled:
             try:
@@ -207,8 +220,19 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
         # CHANGED(ENG-a): was always temp-file-then-rename next to out_path (replaced symlinks,
         # FIFOs and devices; mode 0600); now renames only onto a regular/new file (symlinks
         # resolved), writes other paths directly. See overnight/engine-fixes/CHANGES.md
+        # CHANGED(R2-E5): a symlink loop was silently replaced by a regular file; now a clear error. An existing
+        # file with other hard links is written in place (renaming broke the links), and an existing file keeps
+        # its permission bits (was widened to 0666 & ~umask). See overnight/integration/CHANGES.md
+        if out_path and os.path.islink(out_path):
+            try:
+                os.stat(out_path)
+            except OSError as e:
+                if e.errno == errno.ELOOP or getattr(e, "winerror", None) == 1921:
+                    raise CoalError(f"{out_path}: symbolic link loop; cannot write the output there") from None
         real_out = os.path.realpath(out_path) if out_path else None
-        direct = bool(real_out) and os.path.exists(real_out) and not os.path.isfile(real_out)
+        existing = bool(real_out) and os.path.isfile(real_out)
+        direct = bool(real_out) and os.path.exists(real_out) and (
+            not existing or os.stat(real_out).st_nlink > 1)
         dest_dir = os.path.dirname(real_out) if out_path and not direct else None
         tmp = tempfile.NamedTemporaryFile("w", delete=False, newline="\n", dir=dest_dir,
                                           prefix=".coal_", suffix=".tmp", encoding="ascii")
@@ -240,9 +264,12 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                     tmp.file.write(fasta_record(pid, apply_slices(exp, sl)))
             tmp.close()
             if out_path and not direct:
-                umask = os.umask(0)
-                os.umask(umask)
-                os.chmod(tmp.name, 0o666 & ~umask)  # CHANGED(ENG-a): was 0600; see CHANGES.md
+                if existing:
+                    shutil.copymode(real_out, tmp.name)  # CHANGED(R2-E5): keep the existing file's mode
+                else:
+                    umask = os.umask(0)
+                    os.umask(umask)
+                    os.chmod(tmp.name, 0o666 & ~umask)  # CHANGED(ENG-a): was 0600; see CHANGES.md
                 os.replace(tmp.name, real_out)
             elif out_path:
                 with open(tmp.name, "r", encoding="ascii", newline="\n") as fh, \
