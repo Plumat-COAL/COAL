@@ -1,6 +1,6 @@
 # COAL
 
-A fast, c++ alternative to [PAL2NAL](https://www.bork.embl.de/pal2nal/):
+A fast, python & c++ alternative to [PAL2NAL](https://www.bork.embl.de/pal2nal/):
 it maps unaligned coding DNA onto an existing protein multiple sequence alignment
 to produce a codon alignment.
 
