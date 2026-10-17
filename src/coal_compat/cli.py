@@ -1,11 +1,14 @@
 """``pal2nal``: accepts PAL2NAL v14's command line and runs COAL instead.
 
     pal2nal pep.aln nuc.fasta [nuc.fasta ...] [-output clustal|paml|fasta|codon]
-            [-codontable N] [-nogap] [-nomismatch] [-blockonly] [-html] [-h]
+            [-codontable N] [-nogap] [-nomismatch] [-nostderr] [-blockonly] [-html] [-h]
 
-Old pipelines can swap ``pal2nal.pl`` for ``pal2nal`` (or ``python -m coal_compat``)
-unchanged: the codon alignment goes to standard output, messages to standard error.
-Options COAL cannot honour give a clear error instead of being silently ignored.
+Pipelines that already call PAL2NAL with ``-output fasta`` can swap ``pal2nal.pl`` for
+``pal2nal`` (or ``python -m coal_compat``): the codon alignment goes to standard output,
+messages to standard error. Pipelines relying on PAL2NAL's default (clustal) output must add
+``-output fasta`` until COAL writes clustal. ``-nostderr`` is accepted (COAL's ``-q``).
+Options COAL cannot honour (including ``-verbose``) give a clear error instead of being
+silently ignored.
 
 Differences from PAL2NAL: the exit code is non-zero on errors (PAL2NAL always exits 0),
 and the default output format is PAL2NAL's (clustal), so when this COAL can only write
@@ -24,8 +27,10 @@ VALUE_OPTS = {"-output", "-codontable"}
 FLAG_OPTS = {"-nogap", "-nomismatch"}
 UNSUPPORTED = {
     "-blockonly": "-blockonly (Gblocks-style blocks) is not supported by COAL yet.",
-    "-html": "-html output is not supported by COAL; use -output fasta or clustal.",
+    # CHANGED(APP-C2): was "use -output fasta or clustal" (clustal is not supported yet); now only what works
+    "-html": "-html output is not supported by COAL; use -output fasta.",
 }
+QUIET_OPTS = {"-nostderr"}  # CHANGED(APP-C2): was rejected as unknown; now mapped to coal -q
 FORMATS = ("clustal", "paml", "fasta", "codon")
 
 
@@ -61,9 +66,12 @@ def translate(argv: list[str], supported_formats=("fasta",)) -> list[str]:
             continue
         if a in FLAG_OPTS:
             flags.append(a)
+        elif a in QUIET_OPTS:
+            if "-q" not in flags:
+                flags.append("-q")
         elif a.startswith("-") and len(a) > 1:
             raise UsageError(f"unknown option {a} (PAL2NAL options: -output, -codontable, -nogap, -nomismatch, "
-                             f"-blockonly, -html, -h)")
+                             f"-nostderr, -blockonly, -html, -h)")
         else:
             files.append(a)
         i += 1

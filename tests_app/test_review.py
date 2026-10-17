@@ -607,5 +607,27 @@ class TestFinding16AndC4C5Ci(unittest.TestCase):
             self.assertNotIn("skipped", r.stderr)
 
 
+class TestC2CompatClaims(unittest.TestCase):
+    def test_docstring_and_html_error_dont_promise_clustal(self):
+        from coal_compat import cli
+        doc = " ".join(cli.__doc__.split())
+        self.assertNotIn("unchanged:", doc)
+        self.assertIn("-output fasta", doc)
+        with self.assertRaises(cli.UsageError) as cm:
+            cli.translate(["p", "n", "-html"], ("fasta",))
+        self.assertNotIn("clustal", str(cm.exception))
+        self.assertIn("-output fasta", str(cm.exception))
+
+    def test_nostderr_is_accepted_as_quiet(self):
+        from coal_compat import cli
+        self.assertEqual(cli.translate(["p", "n", "-output", "fasta", "-nostderr"], ("fasta",)), ["p", "n", "-q"])
+
+    def test_qa_says_which_pipelines_can_switch(self):
+        with open(os.path.join(ROOT, "pitch", "QA.md"), encoding="utf-8") as fh:
+            qa = " ".join(fh.read().split())
+        self.assertNotIn("a pipeline can switch without being rewritten", qa)
+        self.assertIn("-output fasta", qa)
+
+
 if __name__ == "__main__":
     unittest.main()

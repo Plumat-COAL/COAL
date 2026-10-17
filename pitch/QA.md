@@ -28,8 +28,9 @@ after removing version suffixes, and `--keep-going` so one bad gene doesn't stop
 **4. Why not just use PAL2NAL?**
 It works, and we treat it as the reference. But it always exits 0 even on errors, prints cryptic messages,
 needs Perl on a Linux-style command line, and has no interface for bench scientists or AI agents. COAL
-accepts PAL2NAL's options (there is even a drop-in `pal2nal` command), so a pipeline can switch without
-being rewritten. PAL2NAL is GPL; COAL is an independent MIT implementation and contains none of its code.
+accepts PAL2NAL's options (there is even a drop-in `pal2nal` command), so a pipeline that already calls
+PAL2NAL with `-output fasta` can switch by changing the command name; pipelines that rely on PAL2NAL's
+default clustal output must add `-output fasta` until COAL writes clustal. PAL2NAL is GPL; COAL is an independent MIT implementation and contains none of its code.
 
 **5. What about dN/dS?**
 COAL produces the input that PAML (codeml), HyPhy and KaKs_Calculator need, and deliberately does not
