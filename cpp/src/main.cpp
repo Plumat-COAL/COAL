@@ -872,6 +872,25 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
     const std::vector<size_t>& pairing = rs.pairing;
     for (auto& n : pair_notes) warn(n);
     rec.set_pairing(mode, per_seq, pairing, pair_notes);
+    // CHANGED(ENG-UX-18): sequences paired by file order whose IDs differ: a failure names the DNA record used
+    // (pipeline.py _paired)
+    std::string order_why;
+    std::vector<std::string> order_dna;
+    if (mode == "order") {
+        long long hits = 0;
+        for (auto& p : ids) hits += dna.pos().count(p) ? 1 : 0;
+        order_why = hits ? "because only " + std::to_string(hits) + " of " + std::to_string(ids.size()) +
+                               " protein IDs are DNA IDs"
+                         : std::string("because no protein ID matches a DNA ID");
+        order_dna.resize(ids.size());
+        for (size_t k = 0; k < ids.size(); ++k)
+            if (dna.ids()[pairing[k]] != ids[k]) order_dna[k] = dna.ids()[pairing[k]];
+    }
+    auto paired = [&](long long k, const std::string& ecode, const std::string& msg) {
+        if (!order_why.empty() && ecode == "inconsistent" && !order_dna[(size_t)k].empty())
+            return msg + " (paired by file order with DNA '" + order_dna[(size_t)k] + "', " + order_why + ")";
+        return msg;
+    };
     dna.forget_ids();
     const long long nseq = (long long)ids.size();
     long long wtotal = 0;
@@ -1069,6 +1088,8 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
             return v;
         };
         auto emit = [&](std::vector<Item>& cur) {
+            for (size_t i = 0; i < cur.size(); ++i)
+                if (cur[i].failed) cur[i].error = paired(done + (long long)i, cur[i].error_code, cur[i].error);
             if (!o.keep_going)
                 for (size_t i = 0; i < cur.size(); ++i)
                     if (cur[i].failed) {

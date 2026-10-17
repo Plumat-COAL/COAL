@@ -515,6 +515,19 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
             for n in pair_notes:
                 notice(n)
         nseq = len(ids)
+        # CHANGED(ENG-UX-18): sequences paired by file order whose IDs differ: a failure names the DNA record used
+        # (ENG-d: a run where every gene fits stays silent). See overnight/integration/CHANGES.md
+        order_why = None
+        if mode == "order":
+            hits = sum(1 for p in ids if p in dna.pos)
+            order_why = ("because no protein ID matches a DNA ID" if not hits else
+                         f"because only {hits} of {nseq} protein IDs are DNA IDs")
+            order_dna = [dna.ids[j] if dna.ids[j] != ids[k] else None for k, j in enumerate(pairing)]
+
+        def _paired(k: int, code: str, msg: str) -> str:
+            if order_why and code == "inconsistent" and order_dna[k] is not None:
+                return f"{msg} (paired by file order with DNA '{order_dna[k]}', {order_why})"
+            return msg
         if rec is not None:
             rec.set_pairing(mode, per_seq, [dna.ids[j] for j in pairing], pair_notes)
         block_ids = ids if out_format in BLOCK_FORMATS else None  # interleaved formats need every ID at the end
@@ -646,14 +659,21 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                 except CoalError as e:
                     if e.seq_id is not None:
                         e.index = done + (e.index or 0)
+                        msg = _paired(e.index, e.code, str(e))
+                        if msg != str(e):
+                            e2 = CoalError(msg, e.code, e.seq_id, e.index)
+                            e2.done_items = getattr(e, "done_items", ())
+                            e = e2
                         if rec is not None:
                             # the sequences before it in its batch were checked (not written): report only, stderr
                             # stays as it was (they were never printed)
                             for k, (pid, warns, notes, _f) in enumerate(getattr(e, "done_items", ())):
                                 rec.add_sequence(done + k, pid, _shown(warns), notes, None)
                             rec.add_sequence(e.index, e.seq_id, [], [], (e.code, str(e)))
-                    raise
+                    raise e from None
                 for pid, warns, notes, failure in items:
+                    if failure:
+                        failure = (failure[0], _paired(done, *failure))
                     for w in warns:
                         printed = not (nomismatch and MISMATCH_WARNING in w)
                         if keep_col:  # CHANGED(DEC-4): -blockonly: as PAL2NAL, only warnings in kept columns

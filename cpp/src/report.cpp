@@ -470,6 +470,9 @@ static bool aa_ok(char aa, const std::string& dna, long long pos, const GeneticC
     return (mask & ~ok) == 0;
 }
 
+// CHANGED(ENG-UX-19): as report.py break_event: the earliest credible start, a shift must hold for the next 20
+// residues and may include a lost / extra codon (+-4, +-5), "at" vs "near" column, "the DNA ends" only after a
+// credible walk. See overnight/integration/CHANGES.md
 static bool break_event(const std::string& row, const std::string& raw_dna, int table, Json& ev) {
     const GeneticCode& code = *get_code(table);
     std::string dna;
@@ -484,6 +487,7 @@ static bool break_event(const std::string& row, const std::string& raw_dna, int 
     if (res.empty() || dna.size() < 3) return false;
     const long long nres = (long long)res.size(), nd = (long long)dna.size();
     long long want = std::min<long long>(nres, 12), allowed = std::max<long long>(0, want / 4);
+    const long long need = std::max(std::min<long long>(3, nres), want - allowed);
     long long best_off = 0, best_score = -1;
     for (long long off = 0; off < nd - 2; ++off) {
         long long score = 0;
@@ -491,10 +495,14 @@ static bool break_event(const std::string& row, const std::string& raw_dna, int 
             if (aa_ok(res[(size_t)k].second, dna, off + 3 * k, code, k == 0)) ++score;
             else if (k + 1 - score > allowed) break;
         }
+        if (score >= need) {  // the earliest credible start
+            best_off = off;
+            best_score = score;
+            break;
+        }
         if (score > best_score) {
             best_off = off;
             best_score = score;
-            if (score == want) break;
         }
     }
     auto event = [&](const char* c, long long col, const std::string& text) {
@@ -503,23 +511,34 @@ static bool break_event(const std::string& row, const std::string& raw_dna, int 
         ev.set("column", col);
         ev.set("text", text);
     };
-    if (best_score < std::max(std::min<long long>(3, nres), want - allowed)) {
+    if (best_score < need) {
         event("inconsistent", res[0].first, "The DNA does not spell the start of this protein in any reading frame.");
         return true;
     }
-    long long pos = best_off, k = 0;
+    auto hits = [&](long long start, long long k0, long long n) {
+        long long h = 0;
+        for (long long j = 0; j < n && k0 + j < nres; ++j)
+            h += aa_ok(res[(size_t)(k0 + j)].second, dna, start + 3 * j, code, false);
+        return h;
+    };
+    long long pos = best_off, k = 0, matched = 0, last_good = -1;
     std::map<long long, std::string> flags;
     while (k < nres) {
         long long col = res[(size_t)k].first;
         char aa = res[(size_t)k].second;
         if (pos + 3 > nd) {
-            event("missing_dna", col, "The DNA ends before the protein does (at column " + std::to_string(col) + ").");
-            return true;
+            if (k && 5 * matched >= 4 * k) {
+                event("missing_dna", col, "The DNA ends before the protein does (at column " + std::to_string(col) + ").");
+                return true;
+            }
+            return false;
         }
         if (aa_ok(aa, dna, pos, code, k == 0)) {
             flags[col] = "";
             pos += 3;
             ++k;
+            ++matched;
+            last_good = k - 1;
             continue;
         }
         long long ahead = 0;
@@ -534,13 +553,11 @@ static bool break_event(const std::string& row, const std::string& raw_dna, int 
         }
         int shifted = 0;
         bool have = false;
-        for (int s : {-1, 1, -2, 2}) {
-            long long n = std::min<long long>(10, nres - k - 1);
+        const long long n = std::min<long long>(10, nres - k - 1), n2 = std::min<long long>(20, nres - k - 1);
+        for (int s : {-1, 1, -2, 2, -4, 4, -5, 5}) {
             if (n <= 0) break;
-            long long hits = 0;
-            for (long long j = 0; j < n; ++j)
-                hits += aa_ok(res[(size_t)(k + 1 + j)].second, dna, pos + 3 + s + 3 * j, code, false);
-            if (hits >= std::max<long long>(1, (long long)(0.8 * (double)n))) {
+            if (hits(pos + 3 + s, k + 1, n) >= std::max<long long>(1, (long long)(0.8 * (double)n)) &&
+                (double)hits(pos + 3 + s, k + 1, n2) >= 0.8 * (double)n2) {
                 shifted = s;
                 have = true;
                 break;
@@ -550,13 +567,18 @@ static bool break_event(const std::string& row, const std::string& raw_dna, int 
             const char* what = shifted == -1   ? "one base is missing"
                                : shifted == -2 ? "two bases are missing"
                                : shifted == 1  ? "there is one extra base"
-                                               : "there are two extra bases";
+                               : shifted == 2  ? "there are two extra bases"
+                               : shifted == -4 ? "four bases are missing"
+                               : shifted == -5 ? "five bases are missing"
+                               : shifted == 4  ? "there are four extra bases"
+                                               : "there are five extra bases";
+            bool exact = last_good == k - 1 && aa_ok(res[(size_t)(k + 1)].second, dna, pos + 3 + shifted, code, false);
             ev = Json::object();
             ev.set("code", "frameshift");
             ev.set("column", col);
             ev.set("shift", (long long)shifted);
-            ev.set("text", "Frameshift at column " + std::to_string(col) + ": " + what +
-                               " in the DNA, so from here on the codons are read out of step.");
+            ev.set("text", std::string("Frameshift ") + (exact ? "at" : "near") + " column " + std::to_string(col) +
+                               ": " + what + " in the DNA, so from here on the codons are read out of step.");
             return true;
         }
         flags[col] = "mismatch";
@@ -568,8 +590,8 @@ static bool break_event(const std::string& row, const std::string& raw_dna, int 
         auto it = flags.find(res[(size_t)i].first);
         std::string f = it == flags.end() ? "missing" : it->second;
         bad_after += (f == "mismatch" || f == "missing");
-        long long n = nres - i;
-        if (f == "mismatch" && n >= 10 && 2 * bad_after > n) first = i;
+        long long nn = nres - i;
+        if (f == "mismatch" && nn >= 10 && 2 * bad_after > nn) first = i;
     }
     if (first >= 0) {
         long long col = res[(size_t)first].first;

@@ -236,9 +236,22 @@ def _ok(aa, codon, code, starts, first) -> bool:
     return bool(exp) and all(code.get(c) == aa or (first and aa == "M" and c in starts) for c in exp)
 
 
+SHIFTS = (-1, 1, -2, 2, -4, 4, -5, 5)  # ENG-UX-19: +-4 / +-5 = a frameshift together with a lost or extra codon
+SHIFT_WORDS = {-1: "one base is missing", -2: "two bases are missing", 1: "there is one extra base",
+               2: "there are two extra bases", -4: "four bases are missing", -5: "five bases are missing",
+               4: "there are four extra bases", 5: "there are five extra bases"}
+
+
 def break_event(row: str, dna: str, table: int) -> dict | None:
     """The first event of the app viewer's diagnose(): where a failed gene stops matching (frameshift, missing
-    DNA, or the column from which the DNA no longer spells the protein). Same algorithm, so the GUI says the same."""
+    DNA, or the column from which the DNA no longer spells the protein). Same algorithm, so the GUI says the same.
+    CHANGED(ENG-UX-19): on real data it named wrong columns (a camelid gene with partial codons at columns 21 and 24:
+    "Frameshift at column 94"; a gene missing its first 2 nt, with a duplicated stretch: "The DNA ends before the
+    protein does (at column 3344)"). Now: the earliest credible start (not the best-scoring one, which can be a
+    duplicated stretch further on); a shift must also hold for the next 20 residues and may include a whole lost or
+    extra codon (+-4, +-5); "at column N" only when the old frame holds up to N and the new one from the next
+    residue, else "near column N"; "the DNA ends" only after a walk where most codons matched (else no location).
+    teammate's C++ mirrors it (cpp/src/report.cpp). See overnight/integration/CHANGES.md"""
     gc = get_code(table)
     code, starts = gc.code, gc.starts
     dna = re.sub(r"[^A-Za-z]", "", dna).upper().replace("U", "T")
@@ -247,6 +260,7 @@ def break_event(row: str, dna: str, table: int) -> dict | None:
         return None
     want = min(len(res), 12)
     allowed = max(0, want // 4)
+    need = max(min(3, len(res)), want - allowed)
     best = (0, -1)
     for off in range(0, len(dna) - 2):
         score = 0
@@ -255,24 +269,34 @@ def break_event(row: str, dna: str, table: int) -> dict | None:
                 score += 1
             elif k + 1 - score > allowed:
                 break
+        if score >= need:  # ENG-UX-19: the earliest credible start
+            best = (off, score)
+            break
         if score > best[1]:
             best = (off, score)
-            if score == want:
-                break
-    if best[1] < max(min(3, len(res)), want - allowed):
+    if best[1] < need:
         return {"code": "inconsistent", "column": res[0][0],
                 "text": "The DNA does not spell the start of this protein in any reading frame."}
+
+    def hits(start, k0, n):
+        return sum(_ok(a, dna[start + 3 * j: start + 3 * j + 3], code, starts, False)
+                   for j, (_, a) in enumerate(res[k0:k0 + n]))
     pos, k, flags = best[0], 0, {}
+    matched, last_good = 0, -1
     while k < len(res):
         col, aa = res[k]
         codon = dna[pos:pos + 3]
         if len(codon) < 3:
-            return {"code": "missing_dna", "column": col, "text": f"The DNA ends before the protein does (at column "
-                                                                  f"{col})."}
+            if k and 5 * matched >= 4 * k:  # ENG-UX-19: only after a credible walk
+                return {"code": "missing_dna", "column": col, "text": f"The DNA ends before the protein does (at "
+                                                                      f"column {col})."}
+            return None
         if _ok(aa, codon, code, starts, k == 0):
             flags[col] = ""
             pos += 3
             k += 1
+            matched += 1
+            last_good = k - 1
             continue
         ahead = sum(_ok(a, dna[pos + 3 * j: pos + 3 * j + 3], code, starts, False)
                     for j, (_, a) in enumerate(res[k + 1:k + 6], 1))
@@ -283,21 +307,20 @@ def break_event(row: str, dna: str, table: int) -> dict | None:
             k += 1
             continue
         shifted = None
-        for s in (-1, 1, -2, 2):
-            n = min(10, len(res) - k - 1)
+        n = min(10, len(res) - k - 1)
+        n2 = min(20, len(res) - k - 1)
+        for s in SHIFTS:
             if n <= 0:
                 break
-            hits = sum(_ok(a, dna[pos + 3 + s + 3 * j: pos + 3 + s + 3 * j + 3], code, starts, False)
-                       for j, (_, a) in enumerate(res[k + 1:k + 1 + n]))
-            if hits >= max(1, int(0.8 * n)):
+            if hits(pos + 3 + s, k + 1, n) >= max(1, int(0.8 * n)) and hits(pos + 3 + s, k + 1, n2) >= 0.8 * n2:
                 shifted = s
                 break
         if shifted is not None:
-            what = {-1: "one base is missing", -2: "two bases are missing",
-                    1: "there is one extra base", 2: "there are two extra bases"}[shifted]
+            exact = last_good == k - 1 and _ok(res[k + 1][1], dna[pos + 3 + shifted: pos + 6 + shifted], code,
+                                               starts, False)
             return {"code": "frameshift", "column": col, "shift": shifted,
-                    "text": f"Frameshift at column {col}: {what} in the DNA, so from here on the codons are read out "
-                            f"of step."}
+                    "text": f"Frameshift {'at' if exact else 'near'} column {col}: {SHIFT_WORDS[shifted]} in the DNA, "
+                            f"so from here on the codons are read out of step."}
         flags[col] = "mismatch"
         pos += 3
         k += 1

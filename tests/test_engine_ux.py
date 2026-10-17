@@ -87,6 +87,39 @@ CASES = {
     "resume_notice": ({"p.fa": P, "d.fa": D}, ["p.fa", "d.fa", "-o", "o.fa", "--resume"],
                       ["coal: notice: no checkpoint to resume for o.fa; starting a normal run\n"]),
 }
+# ENG-UX-18 / ENG-UX-19: real-data findings (REAL-1 review). A camelid VH gene (HyPhy camelid set, LGL237335) whose
+# partial codons sit at alignment columns 21 and 24 was "Frameshift at column 94".
+FS_PEP = ">s\n---LQQSGGGLVQAGGSLRL-CV-SGIIASDSAMAWYRQAPGKGREYVA-HITAGGLSNYEDFVNGRFTISRDNARNTMYLQMNSLKPEDTAVYYC\n"
+FS_NUC = (">s\nCTGCAGCAGTCTGGGGGAGGCTTGGTGCAGGCTGGGGGGTCTCTGAGACTCTCTGTGTAGCTCTGGAATAATCGCCAGCGACAGTGCCATGGCCTGGTACCGC"
+          "CAGGCTCCAGGGAAGGGGCGCGAGTATGTCGCACATATCACAGCTGGTGGTCTTTCAAATTATGAAGACTTCGTGAACGGCCGATTCACCATCTCCAGAGACAAC"
+          "GCCAGGAACACCATGTATCTGCAAATGAACAGCCTGAAACCTGAGGACACGGCCGTCTATTATTGT\n")
+
+
+def _dup_case():
+    """A gene whose first 30 residues (and codons) recur later, its DNA missing the first 2 nt: was "The DNA ends
+    before the protein does (at column 181)"."""
+    import random
+    from coal.tables import get_code
+    rng, code = random.Random(5), get_code(1)
+    aas = sorted(a for a in code.codons if a not in "*M")
+    head = ["M"] + [rng.choice(aas) for _ in range(29)]
+    prot = head + [rng.choice(aas) for _ in range(120)] + head[1:] + [rng.choice(aas) for _ in range(150)]
+    codons = [rng.choice(sorted(code.codons[a])) for a in prot]
+    for i in range(1, 30):
+        codons[149 + i] = codons[i]
+    return "".join(prot), "".join(codons)[2:]
+
+
+DUP_ROW, DUP_DNA = _dup_case()
+CASES["order_failure"] = ({"p.fa": ">NP_1.1\nMKVLDEWAGH\n>NP_2.1\nMPPQRSTV--\n",
+                           "d.fa": ">NM_2.3 gene two mRNA\nATGCCGCCGCAGCGTTCTACCGTA\n>NM_1.3 gene one mRNA\n"
+                                   "ATGAAAGTTCTGGACGAATGGGCAGGTCAT\n"}, ["p.fa", "d.fa"],
+                          ["coal: error: NP_1.1: protein and DNA are inconsistent (no match found) (paired by file "
+                           "order with DNA 'NM_2.3', because no protein ID matches a DNA ID)\n"])
+CASES["frameshift_near"] = ({"p.fa": FS_PEP, "d.fa": FS_NUC}, ["p.fa", "d.fa"],
+                            ["coal: summary: s: Frameshift near column 22: there are four extra bases in the DNA"])
+CASES["no_false_location"] = ({"p.fa": f">g\n{DUP_ROW}\n", "d.fa": f">g\n{DUP_DNA}\n"}, ["p.fa", "d.fa"],
+                              ["coal: summary: The run stopped at g, so no output was written.\n"])
 if sys.platform.startswith("linux") and os.path.isdir("/proc"):
     CASES["out_proc"] = ({"p.fa": P, "d.fa": D}, ["p.fa", "d.fa", "-o", "/proc/coal-x.fa"],
                          ["coal: error: cannot write /proc/coal-x.fa: No such file or directory\n"])  # folder exists
@@ -188,6 +221,23 @@ class TestMessages(unittest.TestCase):
         rc, _, _ = run_py(ROOT, [str(EX / "clean" / "protein.aln.fasta"), str(EX / "clean" / "dna.fasta"),
                                  "-o", str(out), "--report", str(rep)])
         self.assertTrue(json.loads(rep.read_text())["methods_text"].startswith("Codon alignments were built"))
+
+    def test_break_locations_are_not_wrong(self):  # ENG-UX-19
+        from coal.report import break_event
+        self.assertIsNone(break_event(DUP_ROW, DUP_DNA, 1))  # no evidence for a column: no column
+        ev = break_event(FS_PEP.split("\n")[1], FS_NUC.split("\n")[1], 1)
+        self.assertEqual((ev["code"], ev["column"], ev["shift"]), ("frameshift", 22, 4))
+        self.assertTrue(ev["text"].startswith("Frameshift near column 22"))
+
+    def test_order_pairing_named_only_on_failure(self):  # ENG-UX-18 (ENG-d: silent when every gene fits)
+        make(self.d, {"p.fa": ">x\nMKV-L\n>y\nMKVAL\n", "d.fa": D})
+        rc, _, err = run_py(self.d, ["p.fa", "d.fa"])
+        self.assertEqual((rc, err), (0, ""))
+        make(self.d, {"p.fa": ">x\nMKV-L\n>y\nMKWAL\n>z\nMKVAL\n", "d.fa": D + ">z\nCCCCCC\n"})
+        rc, _, err = run_py(self.d, ["p.fa", "d.fa", "--keep-going"])
+        self.assertIn("coal: warning: skipped y: protein and DNA are inconsistent (no match found) (paired by file "
+                      "order with DNA 'b', because only 1 of 3 protein IDs are DNA IDs)", err)
+        self.assertNotIn("skipped z: protein and DNA are inconsistent (no match found) (paired", err)  # same ID
 
     def test_clean_example_readme_counts(self):  # ENG-UX-8
         text = (EX / "clean" / "README.md").read_text()
