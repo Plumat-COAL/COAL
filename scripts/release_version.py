@@ -1,7 +1,7 @@
 """Check a release tag against the version in the source and print the version (used by .github/workflows/release.yml).
 
-    python scripts/release_version.py v0.3.0      -> prints 0.3.0, exit 0
-    python scripts/release_version.py v0.4.0      -> error (source says 0.3.0), exit 1
+    python scripts/release_version.py v0.4.0      -> prints 0.4.0, exit 0
+    python scripts/release_version.py v0.5.0      -> error (source says 0.4.0), exit 1
 
 The tag must be "v" + the version in both src/coal/__init__.py and pyproject.toml, so a release can never ship
 files whose name, metadata and `coal --version` disagree. Prints `prerelease=true|false` too with --github-output.

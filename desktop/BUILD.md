@@ -49,11 +49,11 @@ desktop\.venv\Scripts\python desktop\coal_desktop.py          # try the window f
 desktop\.venv\Scripts\python -m PyInstaller --noconfirm --clean desktop\coal_desktop.spec --distpath desktop\dist --workpath desktop\build
 desktop\dist\COAL\COAL.exe                                       # try the built app
 $env:COAL_SMOKE_EXE = "$PWD\desktop\dist\COAL\COAL.exe"; desktop\.venv\Scripts\python -m unittest desktop\test_smoke.py -v; Remove-Item Env:\COAL_SMOKE_EXE
-& "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" /DAppVersion=0.3.0 desktop\installer.iss
+& "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" /DAppVersion=0.4.0 desktop\installer.iss
 ```
 
 (For a machine-wide Inno Setup the last line is
-`& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=0.3.0 desktop\installer.iss`.)
+`& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=0.4.0 desktop\installer.iss`.)
 
 ## Pinned versions: verify on the first build
 

@@ -186,7 +186,8 @@ def make_case(rng: random.Random) -> Case:
         k, i = rng.randrange(nseq), rng.randrange(len(rows[0]))
         if rows[k][i] != "-" and i > 0:
             rows[k][i] = str(rng.choice((1, 2, 4, 5)))
-    if rng.random() < 0.04:  # tfastx/tfasty frameshift notation: '\\' = 1 base, '/' + residue = gap + 2 bases
+    # CHANGED(MRG-1): `and len(rows[0]) > 1` (randrange(1, 1) crashed on a one-column alignment)
+    if rng.random() < 0.04 and len(rows[0]) > 1:  # tfastx/tfasty frameshift notation: '\\' = 1 base, '/' + residue = gap + 2 bases
         k, i = rng.randrange(nseq), rng.randrange(1, len(rows[0]))
         j = next((j for j in range(i + 1, len(rows[0])) if rows[k][j] != "-"), None)
         if rows[k][i].isalpha():
@@ -622,11 +623,13 @@ def fuzz(pal2nal, n, seed, report=print, keep_dir=None, formats=FORMATS):
 
             def verified(fmt, rc, out, case=case):
                 """None if the difference is exactly a documented one (either reference), else why not."""
-                if case.features & set(DELIBERATE) == {"normalised_ids"}:  # CHANGED(MRG-1): exact, byte for byte
+                if "normalised_ids" in case.features:  # CHANGED(MRG-1): exact, byte for byte
                     ref = reference(fmt, 2)
                     if (rc == 0 and out == ref != "") or (ref == "" and rc != 0 and out == ""):
                         return None
-                    return "normalised IDs: COAL's output is not PAL2NAL's on the DNA in protein order"
+                    if case.features & set(DELIBERATE) == {"normalised_ids"}:
+                        return "normalised IDs: COAL's output is not PAL2NAL's on the DNA in protein order"
+                    # with other deliberate features too: the neutralised references below (DNA also in protein order)
                 why = check_deliberate(case, fmt, rc, out, reference(fmt, 0))
                 if why is not None and case.ref_files_b != case.ref_files:
                     if check_deliberate(case, fmt, rc, out, reference(fmt, 1)) is None:

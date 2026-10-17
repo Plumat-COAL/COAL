@@ -46,7 +46,7 @@
     <p>It is a drop-in replacement for <a href="#pal2nal">PAL2NAL</a>. It reads the same input and takes PAL2NAL's
       options, and on well-formed input it writes the same output in all four of PAL2NAL's formats (FASTA, CLUSTAL, PAML and codon). When a gene does not fit, it tells you which
       one and why.</p>
-    <p class="meta">Version <span id="version" data-version="0.3.0">0.3.0</span>. MIT licence.
+    <p class="meta">Version <span id="version" data-version="0.4.0">0.4.0</span>. MIT licence.
       Python 3.10 or newer on any system, or a Windows app that needs nothing else installed.</p>
 
     <div class="get" id="get" data-os="unknown">
@@ -165,10 +165,11 @@ coal: error: OG0001_sp14: protein and DNA are inconsistent (no match found)
       compare outputs.</p>
     <p>On well-formed input COAL's output is identical to PAL2NAL's. Where PAL2NAL silently gives wrong output,
       COAL deliberately differs and documents why.</p>
+    <!-- CHANGED(MRG-5): 38 -> 39 cases, 279 -> 285 checks, 232 -> 238; version 0.3.0 -> 0.4.0 (MRG-8) -->
     <!-- CHANGED(INT-3): was "38 input cases and every FASTA option, 165 checks ... 147 ... 12 ... 12"; the harness now covers all four formats. -->
-    <p>The test suite compares COAL with stored PAL2NAL v14 output on <span data-check="38 input cases">38 input cases</span>
-      with every option combination in all four output formats, <span data-check="279 checks">279 checks</span> in all.
-      Standard output is <span data-check="byte-identical in 232 checks">byte-identical in 232 checks</span>;
+    <p>The test suite compares COAL with stored PAL2NAL v14 output on <span data-check="39 input cases">39 input cases</span>
+      with every option combination in all four output formats, <span data-check="285 checks">285 checks</span> in all.
+      Standard output is <span data-check="byte-identical in 238 checks">byte-identical in 238 checks</span>;
       <span data-check="in 24 both tools fail">in 24 both tools fail</span>; and
       <span data-check="29 checks are deliberate differences">29 checks are deliberate differences</span>. Some of them:</p>
     <ul class="diffs">

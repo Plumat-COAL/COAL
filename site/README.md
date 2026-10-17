@@ -60,7 +60,7 @@ page (`data-check`) is quoted from `README.md`.
 
 1. Bump the version in `src/coal/__init__.py`, `pyproject.toml` and `index.html` (they must agree), optionally add a
    `## <version>` section to `CHANGELOG.md`, commit, and merge to `main`.
-2. Tag and push: `git tag v0.3.0 && git push origin v0.3.0`.
+2. Tag and push: `git tag v0.4.0 && git push origin v0.4.0`.
 3. The Release workflow builds and checks the wheel, sdist, Windows installer and portable zip, writes
    `SHA256SUMS.txt` and publishes the GitHub Release. The website's buttons point at it as soon as it is published.
 
@@ -83,7 +83,7 @@ To see the OS-specific variants, use "Show the download for Windows, macOS or Li
 
 - [ ] **Enable Pages:** Settings > Pages > Build and deployment > Source: **GitHub Actions**. Then run Actions >
       Pages > Run workflow once (or push to `main`).
-- [ ] **First release:** push a tag `v<version>` matching `src/coal/__init__.py` (now `v0.3.0`). Until a release
+- [ ] **First release:** push a tag `v<version>` matching `src/coal/__init__.py` (now `v0.4.0`). Until a release
       exists, every download link on the site gives a 404.
 - [ ] Check the first release run's Windows job log (the build has never run on GitHub) and download the installer
       once to see the SmartScreen screens match the drawing on the page.

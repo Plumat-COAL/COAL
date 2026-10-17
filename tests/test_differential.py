@@ -213,6 +213,26 @@ class TestCoalOwnBehaviour(unittest.TestCase):
             self.assertTrue(out.startswith(">s0\nATA"), out[:20])
             self.assertNotIn("does not correspond", err)
 
+    def test_codon_format_rejects_column_removal(self):  # teammate's test (MRG-5)
+        # PAL2NAL refuses "-output codon" with -nogap / -nomismatch; so does COAL.
+        for flag in ("-nogap", "-nomismatch"):
+            rc, out, err = run_coal("clean", ["-output", "codon", flag])
+            self.assertEqual(rc, 1)
+            self.assertEqual(out, "")
+
+    def test_paml_and_clustal_with_column_removal(self):  # teammate's test (MRG-5; PAML header as PAL2NAL, DEC-4)
+        # Not covered by the goldens: same rows as FASTA, different layout.
+        for flag in ("-nogap", "-nomismatch"):
+            _, fa, _ = run_coal("inframe_stop", ["-output", "fasta", flag])
+            seqs = [l for l in fa.splitlines() if not l.startswith(">")]
+            rc, pm, _ = run_coal("inframe_stop", ["-output", "paml", flag])
+            self.assertEqual(rc, 0)
+            self.assertEqual(pm.splitlines()[0], " %3d %6d" % (len(seqs), len(seqs[0])))
+            self.assertEqual(pm.splitlines()[2::2], seqs)
+            rc, cl, _ = run_coal("inframe_stop", ["-output", "clustal", flag])
+            self.assertEqual(rc, 0)
+            self.assertEqual([l.split()[1] for l in cl.splitlines()[2:] if l], seqs)
+
     def test_unknown_table_rejected(self):
         rc, _, _ = run_coal("clean", ["-codontable", "7"])
         self.assertNotEqual(rc, 0)

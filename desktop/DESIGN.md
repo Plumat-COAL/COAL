@@ -94,7 +94,7 @@ current local app (`coal_app/ui.py`) already does; the rest is target behaviour.
 
 ### 3.1 First launch
 
-1. **Downloads `COAL-Setup-0.3.0.exe` and double-clicks it.** Edge may first say the file "isn't
+1. **Downloads `COAL-Setup-0.4.0.exe` and double-clicks it.** Edge may first say the file "isn't
    commonly downloaded" (section 5.7 has the exact clicks).
 2. Windows shows "Windows protected your PC". **Clicks "More info", then "Run anyway".**
 3. Installer: one page "Install COAL for you only (no administrator needed)", with two
@@ -301,7 +301,7 @@ Collapsed by default under one summary line, because defaults are right for most
 | Downloads:  [Codon alignment]  [Report (JSON)]                          |
 +-------------------------------------------------------------------------+
 | Methods paragraph                                             [Copy]    |
-|  Codon alignments were built with COAL 0.3.0 (genetic code 1, ...)      |
+|  Codon alignments were built with COAL 0.4.0 (genetic code 1, ...)      |
 +-------------------------------------------------------------------------+
 | Equivalent commands                                           [Copy]    |
 |  coal OG0001.aln.fasta OG0001.cds.fasta --keep-going -o ...             |
@@ -343,7 +343,7 @@ Small, because every setting is a support question. Stored in
 
 ```
 +---------------------------- About COAL ---------------------------------+
-| COAL 0.3.0 (engine: Python 0.3.0)          MIT licence                   |
+| COAL 0.4.0 (engine: Python 0.4.0)          MIT licence                   |
 | A fast, open reimplementation of PAL2NAL. Works offline. Nothing you     |
 | open in COAL leaves this computer.                                       |
 | How to cite: ... [Copy]                                                  |
@@ -497,13 +497,13 @@ COAL.exe (wrapper: window + single-instance lock)        main thread: pywebview 
 **Hackathon: unsigned.** Signing needs an identity-validated certificate or a service account,
 which takes days to weeks. What people will see, in order:
 
-1. **Edge, after download** (sometimes): "COAL-Setup-0.3.0.exe isn't commonly downloaded.
-   Make sure you trust COAL-Setup-0.3.0.exe before you open it." Click the **"…"** (More
+1. **Edge, after download** (sometimes): "COAL-Setup-0.4.0.exe isn't commonly downloaded.
+   Make sure you trust COAL-Setup-0.4.0.exe before you open it." Click the **"…"** (More
    actions) next to the warning, then **"Keep"**; if asked again, **"Show more"**, then **"Keep
    anyway"**.
 2. **Running the installer:** a blue box titled **"Windows protected your PC"**: "Microsoft
    Defender SmartScreen prevented an unrecognized app from starting. Running this app might
-   put your PC at risk." Click **"More info"**: it shows "App: COAL-Setup-0.3.0.exe,
+   put your PC at risk." Click **"More info"**: it shows "App: COAL-Setup-0.4.0.exe,
    Publisher: Unknown publisher". Click **"Run anyway"**.
 3. No UAC prompt follows, because the installer is per-user.
 4. **Windows 11 with Smart App Control on** (on by default only on fresh installs of 22H2 and

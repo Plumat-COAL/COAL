@@ -6,13 +6,13 @@ isn't in (the engine-fixes branch is already merged). <!-- CHANGED(R2-D12): was 
 
 **1. How do you know it's correct on my data?**
 We compared COAL with PAL2NAL v14's real output on 38 hand-made inputs covering every behaviour we found
-(UTRs, frameshift codes, all 17 genetic codes, ambiguous bases, ID mismatches): 279 checks on 38 hand-made
-inputs, in all four output formats. 232 compare COAL's output with PAL2NAL's byte for byte, and 228 of those also
+(UTRs, frameshift codes, all 17 genetic codes, ambiguous bases, ID mismatches): 285 checks on 39 hand-made
+inputs, in all four output formats. 238 compare COAL's output with PAL2NAL's byte for byte, and 234 of those also
 compare the warnings; 24 check that COAL rejects the inputs PAL2NAL fails on (exit code only, not the message); 23 are
 documented, deliberate differences (14 of them `-nogap` with another genetic code: COAL removes that code's stop codons) <!-- CHANGED(FZ-5): was 246/240/9 -->, where we check COAL's own behaviour instead. On every change, CI also runs both
 tools on 3,000 random inputs x 4 formats (wrong DNA, masked genes, UTRs, frameshifts, every genetic code, -nogap,
 -nomismatch, -blockonly): identical apart from the documented differences. <!-- CHANGED(DEC-4): was 165/147/141/12/6 -->
-In one sentence: COAL is byte-identical to PAL2NAL v14 on well-formed input: all 279 stored reference checks pass (232 byte-identical, 24 where both tools fail, 23 documented deliberate differences), and in 20,000 random comparisons (5,000 cases x 4 output formats) and 6,000 independent stratified cases every difference from PAL2NAL is a documented, deliberate one, where PAL2NAL silently produces wrong or malformed output; 0 undocumented differences. <!-- CHANGED(FZ-claim) -->
+In one sentence: COAL is byte-identical to PAL2NAL v14 on well-formed input: all 285 stored reference checks pass (238 byte-identical, 24 where both tools fail, 23 documented deliberate differences), and in 20,000 random comparisons (5,000 cases x 4 output formats) and 6,000 independent stratified cases every difference from PAL2NAL is a documented, deliberate one, where PAL2NAL silently produces wrong or malformed output; 0 undocumented differences. <!-- CHANGED(FZ-claim) -->
 On your data, COAL checks every
 <!-- CHANGED(R2-D2): was 143 / 94 / 10; guarded by tests_app/test_docs_numbers.py -->
 codon against its amino acid and tells you per gene if it doesn't fit, with the column, so problems can't
@@ -54,7 +54,7 @@ writes codeml's input directly. <!-- CHANGED(DEC-4): PAML output was "[after the
 
 **6. Is this AI-generated code you can't maintain?**
 Much of it was written with AI assistance (Claude), and we say so. What makes it maintainable is the
-same as for any code: about 1,550 lines of dependency-free Python in the engine and 2,600 in the app
+same as for any code: about 3,000 lines of dependency-free Python in the engine and 2,600 in the app
 layer, a differential test suite against PAL2NAL's real output, more than 200 app tests, CI on Windows, macOS
 and Linux (all green in run 39006043852, including the GUI tests against real Gradio on Windows; still open the
 latest GitHub Actions run before you say "green"), and documented decisions (every deliberate difference from PAL2NAL is written down with its test).
@@ -62,6 +62,7 @@ latest GitHub Actions run before you say "green"), and documented decisions (eve
 <!-- CHANGED(R2-D2, R2-D3): was "about 1,050 lines ... 2,150 ... 115 app tests ... green on the app branch; the new GUI and MCP jobs have not run yet" (both false). See overnight/integration/CHANGES.md -->
 <!-- CHANGED(R3-D4b): app test count 140 -> 170 (round 3 added tests; the docs guard requires it). See overnight/integration/CHANGES.md -->
 <!-- CHANGED(DEC-4): engine line count 1,300 -> 1,550 (output formats; the docs guard requires it). See overnight/integration/CHANGES.md -->
+<!-- CHANGED(MRG-2..4): engine line count 1,550 -> 3,000 (run report, keep-going, resume, progress from the merged branch) -->
 *[Team: say who reviewed which parts. Only claim review you actually did.]*
 
 **7. How will this be maintained after the weekend?**

@@ -14,7 +14,7 @@ exit 2 = usage error today, extras in separate environments. See overnight/app/C
 - You have **aligned proteins** (from MAFFT, MUSCLE, Clustal...) and the **unaligned CDS/DNA** of the same genes,
   and need the DNA aligned codon by codon (the input for dN/dS, selection scans, codon-aware trees).
 - Someone mentions PAL2NAL: COAL accepts the same options (`-codontable`, `-nogap`, `-nomismatch`, `-blockonly`,
-  `-output clustal|paml|fasta|codon`) and gave the same output as PAL2NAL v14 in all 232 byte-for-byte comparisons
+  `-output clustal|paml|fasta|codon`) and gave the same output as PAL2NAL v14 in all 238 byte-for-byte comparisons
   of its test suite (all four formats), plus a random differential test against the real PAL2NAL; it is much faster
   on big inputs. The `pal2nal` command takes an unchanged PAL2NAL command line (default clustal, like PAL2NAL).
   <!-- CHANGED(R2-D2): was 143 --> <!-- CHANGED(DEC-4): was "-output fasta ... same FASTA output ... 147" --> <!-- CHANGED(FZ-5): 246 -> 232 -->
@@ -54,7 +54,7 @@ coal pep.aln nuc.fasta --strict -o codon.fasta           # 7. pipelines: stop on
 See overnight/integration/CHANGES.md -->
 <!-- CHANGED(DEC-4): was "Output is FASTA only" -->
 Output formats: `-output fasta` (the default of `coal`), `clustal`, `paml`, `codon`, as PAL2NAL v14 writes them.
-COAL is byte-identical to PAL2NAL v14 on well-formed input: all 279 stored reference checks pass (232 byte-identical, 24 where both tools fail, 23 documented deliberate differences), and in 20,000 random comparisons (5,000 cases x 4 output formats) and 6,000 independent stratified cases every difference from PAL2NAL is a documented, deliberate one, where PAL2NAL silently produces wrong or malformed output; 0 undocumented differences (list in README.md). <!-- CHANGED(FZ-claim) --> (`codon` cannot be combined with `-nogap`/`-nomismatch`/`-blockonly`, as in PAL2NAL). `-blockonly` keeps
+COAL is byte-identical to PAL2NAL v14 on well-formed input: all 285 stored reference checks pass (238 byte-identical, 24 where both tools fail, 23 documented deliberate differences), and in 20,000 random comparisons (5,000 cases x 4 output formats) and 6,000 independent stratified cases every difference from PAL2NAL is a documented, deliberate one, where PAL2NAL silently produces wrong or malformed output; 0 undocumented differences (list in README.md). <!-- CHANGED(FZ-claim) --> (`codon` cannot be combined with `-nogap`/`-nomismatch`/`-blockonly`, as in PAL2NAL). `-blockonly` keeps
 only the columns marked `#` under the blocks of a CLUSTAL input. Per-codon warnings (`coal: warning: <id> pepAlnPos N: ...`)
 go to stderr, and so do **notices about probably-wrong data** (below). `-q` silences warnings and notices alike
 (errors are always printed), so **don't use `-q` when you need to know about bad genes**; use `--strict` to stop on

@@ -6,10 +6,10 @@ to produce a codon alignment.
 
 Built at the Reinvent the Wheel AI × Science Tool-building Hackathon, London, October 2026.
 
-> **Status:** v0.3 (pure Python, no required dependencies; numpy optional). Up to **~119× faster** than PAL2NAL
+> **Status:** v0.4 (pure Python, no required dependencies; numpy optional). Up to **~119× faster** than PAL2NAL
 > with byte-identical output on the benchmarked datasets — see [Benchmark results](#benchmark-results).
 >
-> **Compatibility:** COAL is byte-identical to PAL2NAL v14 on well-formed input: all 279 stored reference checks pass (232 byte-identical, 24 where both tools fail, 23 documented deliberate differences), and in 20,000 random comparisons (5,000 cases x 4 output formats) and 6,000 independent stratified cases every difference from PAL2NAL is a documented, deliberate one, where PAL2NAL silently produces wrong or malformed output; 0 undocumented differences. See
+> **Compatibility:** COAL is byte-identical to PAL2NAL v14 on well-formed input: all 285 stored reference checks pass (238 byte-identical, 24 where both tools fail, 23 documented deliberate differences), and in 20,000 random comparisons (5,000 cases x 4 output formats) and 6,000 independent stratified cases every difference from PAL2NAL is a documented, deliberate one, where PAL2NAL silently produces wrong or malformed output; 0 undocumented differences. See
 > [Deliberate differences](#deliberate-differences-from-pal2nal) and [Tests](#tests).
 > <!-- CHANGED(FZ-claim): new; was unqualified "byte-identical" wording elsewhere. See overnight/integration/CHANGES.md -->
 
@@ -30,7 +30,10 @@ pip install -e .[fast]                              # optional numpy speed-up fo
   (codeml's input) or `codon` (amino acids above their codons; not combinable with `-nogap`/`-nomismatch`/`-blockonly`,
   as in PAL2NAL). The drop-in `pal2nal` command defaults to clustal, like PAL2NAL.
   <!-- CHANGED(DEC-4): was "a codon alignment in FASTA format". See overnight/integration/CHANGES.md -->
-- **Pairing:** sequences are matched by ID if every protein ID is in the DNA file(s), otherwise by order.
+- **Pairing:** sequences are matched by ID if every protein ID is in the DNA file(s), otherwise by order, as in
+  PAL2NAL; except that where the order would give a protein the DNA of another gene whose ID matches it after
+  normalising (version suffix such as `.1`, upper/lower case, `sp|…|` database fields; one-to-one only), COAL pairs
+  by those IDs and says so (a deliberate difference, below). <!-- CHANGED(MRG-1): normalised pairing is new -->
 - **Extra sequence around the gene** (UTRs, stop codon, poly-A) is skipped: COAL finds the leftmost place in the
   DNA, in any reading frame, where the whole protein fits.
 - **Genetic codes:** `-codontable N` for the 17 NCBI codes PAL2NAL supports
@@ -144,6 +147,11 @@ Details and evidence in `tests/README.md`:
 - Ambiguity codes include plain N: a codon is accepted when every reading gives the residue, e.g. `NTG` as the first
   Met in table 4 (all of ATG/CTG/GTG/TTG are table-4 starts). PAL2NAL's fixed list misses it and falls back to
   another, frame-shifted placement. <!-- CHANGED(FZ-D8) -->
+- IDs that match only after normalising (e.g. protein `AT1G01010.1`, DNA `AT1G01010`) in another order: PAL2NAL pairs
+  by file order, so proteins get the DNA of other genes; COAL pairs by the normalised IDs (with a notice), because a
+  codon alignment built from another gene's DNA is wrong by definition. Where the file order already pairs them
+  correctly, COAL's pairing, output and messages are PAL2NAL's. `--strict` still refuses a partial exact-ID match.
+  Example: `examples/messy_ids`. <!-- CHANGED(MRG-1): new deliberate difference -->
 - `coal`'s own default output format is FASTA (PAL2NAL's is clustal); the drop-in `pal2nal` command uses clustal.
 - `-nogap` removes the stop codons **of the selected genetic code**, in upper or lower case. PAL2NAL always removes
   the standard code's TAA/TAG/TGA, upper case only, whatever `-codontable` says: with `-codontable 2` (vertebrate
@@ -151,6 +159,24 @@ Details and evidence in `tests/README.md`:
   removed. Repro: protein `MW*`, DNA `ATGTGAAGA`, `-codontable 2 -nogap`: PAL2NAL `ATGAGA`, COAL `ATGTGA`.
   <!-- CHANGED(FZ-5): new deliberate difference -->
 <!-- CHANGED(R2-D6): ENG-c, ENG-d, ENG-g, ENG-i2 added. See overnight/integration/CHANGES.md -->
+
+### Run report and long runs
+
+<!-- CHANGED(MRG-2, MRG-3, MRG-4): new section (options from the merged extras branch). See overnight/integration/CHANGES.md -->
+- `--report FILE.json` writes a run report (schema `coal.report/1`, the one the GUI reads), also when the run fails:
+  every sequence's status (`ok`, `warning`, `failed` = written but probably wrong, or left out; `not_checked`), its
+  messages, the pairing, a genetic-code suggestion and a ready-to-paste methods sentence. `--json` prints it to
+  stdout (needs `-o`). At the end of a run with problems, `coal: summary:` lines on stderr sum them up (nothing about
+  mismatches with `-nomismatch`, which like PAL2NAL prints none; `-q` silences them).
+- `--keep-going` skips sequences that cannot be converted (or, with `--strict`, are refused) instead of stopping:
+  the others are written in order, each skipped one is named on stderr, exit status 2. A frameshift digit of a
+  skipped row still widens its column for the others.
+- `--max-warnings N` prints at most N per-codon warnings, then a count (notices and errors are never capped).
+- `--progress` shows percent done and time left on stderr for inputs over 10,000 sequences.
+- `--resume` continues an interrupted `-o` run from `<out>.coal-checkpoint.json` (written at most every 2 s next to
+  the real output file); the output is byte-identical to an uninterrupted run. If no checkpoint was written yet, an
+  interrupted run leaves nothing behind. Not for piped inputs or an output that is not a regular file (COAL says so
+  and runs normally).
 
 ## Ways to use COAL
 
@@ -178,14 +204,14 @@ python -m unittest discover -s tests -v
 <!-- CHANGED(ENG-i4): was "165 checks. COAL's output must be byte-identical, and its mismatch warnings must equal PAL2NAL's" (rc files were not read, warnings not compared with -nomismatch, 4 checks compared only the exit code). See overnight/engine-fixes/CHANGES.md -->
 <!-- CHANGED(DEC-4): was "all FASTA option combinations = 165 checks ... 3 invalid_chars ... other 162 ... 147 ... 141 ... 12 ... 12 checks
 ... 3 where COAL deliberately fails"; now every stored golden in all four formats. See overnight/integration/CHANGES.md -->
-Compares COAL with stored PAL2NAL v14 outputs (`tests/golden/`): 38 input cases × all option combinations in all
-four output formats = 279 checks (the test prints these counts). In the 6 `invalid_chars` checks COAL deliberately
-fails (see below). Exit status in the other 273: PAL2NAL always exits 0, so COAL must exit 0 exactly when PAL2NAL
-produced output.<!-- CHANGED(R3-D5): was "in all 165" checks; the harness checks exit status in 162. See overnight/integration/CHANGES.md --> stdout is byte-identical in 232 checks, and the per-codon warnings
-are identical in 228 of them (47 with `-nomismatch`); in 24 both tools fail. 29 checks are deliberate differences:
-the other 4 of the 232 (same output, different warnings), 3 with different output, 14 `-nogap` checks with another
+Compares COAL with stored PAL2NAL v14 outputs (`tests/golden/`): 39 input cases × all option combinations in all
+four output formats = 285 checks (the test prints these counts). In the 6 `invalid_chars` checks COAL deliberately
+fails (see below). Exit status in the other 279: PAL2NAL always exits 0, so COAL must exit 0 exactly when PAL2NAL
+produced output.<!-- CHANGED(R3-D5): was "in all 165" checks; the harness checks exit status in 162. See overnight/integration/CHANGES.md --> stdout is byte-identical in 238 checks, and the per-codon warnings
+are identical in 234 of them (48 with `-nomismatch`); in 24 both tools fail. 29 checks are deliberate differences:
+the other 4 of the 238 (same output, different warnings), 3 with different output, 14 `-nogap` checks with another
 genetic code (COAL's output must equal PAL2NAL's output without `-nogap` with that code's stop columns removed) and
-6 where COAL deliberately fails. <!-- CHANGED(FZ-5): was 246 / 240 / 15 / 6 of the 246 --> See `tests/README.md` for exactly what is compared and for the list of deliberate differences.
+6 where COAL deliberately fails. <!-- CHANGED(FZ-5): was 246 / 240 / 15 / 6 of the 246 --> <!-- CHANGED(MRG-5): was 38 cases / 279 / 273 / 232 / 228 / 47 (the teammate's frameshift_codon_line case adds 6 checks) --> See `tests/README.md` for exactly what is compared and for the list of deliberate differences.
 
 **Random differential test against the real PAL2NAL** (needs Perl; PAL2NAL is fetched, never committed):
 
@@ -317,7 +343,7 @@ Tag, and everything else is automatic:
    `site/index.html` (a test fails if they differ) (optionally add a `## <version>` section to
    `CHANGELOG.md` for the release notes; without one, GitHub generates notes from merged pull requests), commit,
    merge to `main`.
-2. `git tag v0.3.0 && git push origin v0.3.0`
+2. `git tag v0.4.0 && git push origin v0.4.0`
 3. `.github/workflows/release.yml` checks the tag against the source version, builds and checks the wheel, the sdist
    and the Windows app (`desktop/build.ps1`: tests, PyInstaller, frozen-engine check, Inno Setup installer), writes
    `SHA256SUMS.txt` and publishes the GitHub Release, with version-free copies of the downloads.

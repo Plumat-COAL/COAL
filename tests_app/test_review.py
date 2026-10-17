@@ -190,12 +190,15 @@ class TestFinding7IdHint(unittest.TestCase):
         self.assertIn("every pair matched", texts[0])
 
     def test_failed_run_keeps_the_warning(self):
+        # CHANGED(MRG-1): was a failed run (the engine paired messy_ids by order, the wrong DNA) with an id_mismatch
+        # hint saying the pairing is probably wrong; the merged engine pairs these IDs by their normalised form
+        # (order would mispair), so every gene aligns and the report says how they were paired
         p, d = core.example_paths("messy_ids")
         r = core.run_coal(p, d, out_dir=_tmp(self), probe_codes=False)
-        self.assertNotEqual(r.exit_code, 0)
-        texts = [h["text"] for h in r.hints if h["code"] == "id_mismatch"]
-        self.assertEqual(len(texts), 1)
-        self.assertIn("probably wrong", texts[0])
+        self.assertEqual(r.exit_code, 0)
+        self.assertEqual(r.report["summary"]["pairing"], "normalised")
+        self.assertEqual(r.report["summary"]["ok"], 10)
+        self.assertEqual([h["code"] for h in r.hints], ["normalised_ids"])
 
 
 def _load(name, path):
@@ -444,6 +447,14 @@ class TestFinding13ProbeCost(_RunsDir):
 
         core._run_engine = spy
         self.addCleanup(setattr, core, "_run_engine", real)
+        # CHANGED(MRG-2): the app probes only in its fallback path (an engine without --report); the merged engine
+        # writes the report itself (and has --keep-going, whose "skipped" lines the fallback does not parse), so this
+        # test of the fallback's probe cost pins that path
+        import dataclasses
+        feats = dataclasses.replace(core.detect_features(), report=False, keep_going=False)
+        real_df = core.detect_features
+        core.detect_features = lambda: feats
+        self.addCleanup(setattr, core, "detect_features", real_df)
         # 250 sequences, every one with a TGA (W in code 2, stop in code 1): more than the 200-sequence sample
         t = _tmp(self)
         prot, dna = [], []

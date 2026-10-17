@@ -1,6 +1,6 @@
 """Write the GitHub Release notes for one version (used by .github/workflows/release.yml).
 
-    python scripts/release_notes.py 0.3.0 notes.md
+    python scripts/release_notes.py 0.4.0 notes.md
 
 Notes = a fixed part (what to download, "not code-signed" with the SmartScreen / Smart App Control caveat, the pip
 alternative, how to check SHA256SUMS.txt) + the "## <version>" section of CHANGELOG.md if there is one.

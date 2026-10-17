@@ -35,9 +35,14 @@ def build() -> dict:
         if item.get("path"):
             names[item["path"]] = os.path.basename(item["path"])
             item["path"] = names[item["path"]]
-    for k in ("command", "pal2nal_equivalent"):
+    # CHANGED(MRG-2): "command_line" is new (the engine's own report: the exact argv, with the run folder's paths)
+    for k in ("command", "pal2nal_equivalent", "command_line"):
+        if k not in rep:
+            continue
         for full, base in names.items():
             rep[k] = rep[k].replace(core._q(full), base).replace(full, base)
+        if k == "command_line":
+            rep[k] = rep[k].replace(core._q(os.path.join(t, "")), "").replace(os.path.join(t, ""), "")
     rep["coal_version"] = "demo"
     rep["source"] = DEMO_SOURCE
     rep["demo"] = True

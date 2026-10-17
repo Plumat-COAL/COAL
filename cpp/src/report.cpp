@@ -406,14 +406,14 @@ Json RunReport::to_json() const {
     Json pin = Json::object();
     pin.set("role", "protein");
     pin.set("path", pep_);
-    pin.set("sha256", sha_or_null(pep_));
+    pin.set("sha256", sha_or_null(hash_paths_.size() == nucs_.size() + 1 ? hash_paths_[0] : pep_));
     pin.set("sequences", n_protein >= 0 ? Json(n_protein) : Json());
     inputs.push(pin);
     for (size_t i = 0; i < nucs_.size(); ++i) {
         Json x = Json::object();
         x.set("role", "dna");
         x.set("path", nucs_[i]);
-        x.set("sha256", sha_or_null(nucs_[i]));
+        x.set("sha256", sha_or_null(hash_paths_.size() == nucs_.size() + 1 ? hash_paths_[i + 1] : nucs_[i]));
         x.set("sequences", has_dna_counts_ ? Json(dna_counts_[i]) : Json());
         inputs.push(x);
     }

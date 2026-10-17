@@ -13,6 +13,12 @@ except runtime_seconds) and the output file.
 
 Skipped if the binary is not built (COAL_CPP_BIN, default ./build/coal-cpp).
 COAL_RANDOM_CHUNK=0..3 runs one quarter of the inputs; COAL_RANDOM_N changes the count.
+
+COAL_REF_SRC=<dir> (CPP-9): compare against the Python engine in that src directory instead of this branch's
+(e.g. a worktree of the reviewed engine: COAL_REF_SRC=../coal-ref/src). The same random inputs are generated;
+options the reference does not have (--keep-going, --max-warnings, --json) are left out, coal-cpp's own
+"coal: summary:" and "IDs don't match ... paired by file order" lines are not compared, and the cases whose DNA IDs
+only match after normalising use plain IDs (ID normalisation is coal-cpp's own; see LOG "Needs reconciling").
 """
 from __future__ import annotations
 
@@ -24,11 +30,15 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zlib
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
+REF_SRC = os.environ.get("COAL_REF_SRC")  # CPP-9
+if REF_SRC:
+    sys.path.insert(0, str(Path(REF_SRC).resolve()))
 sys.path.insert(0, str(ROOT / "tests"))
 from coal.cli import main as coal_main  # noqa: E402
 from coal.tables import SUPPORTED, get_code  # noqa: E402
@@ -118,6 +128,8 @@ def make_case(rng: random.Random):
         dna_ids = [x.upper() for x in ids]
         if nseq > 1 and rng.random() < 0.3:
             dna_ids[1] = dna_ids[0].lower() + ".2"
+    if REF_SRC and 0.2 <= r < 0.33:  # CPP-15: ID normalisation is coal-cpp's own (safe ID pairing): plain IDs
+        dna_ids = list(ids)
     pep = "".join(f">{ids[i]}\n{rows[i]}\n" for i in range(nseq))
     nuc = "".join(f">{dna_ids[i]} desc\n{dnas[i]}\n" for i in order)
     if rng.random() < 0.01:
@@ -138,6 +150,13 @@ def make_case(rng: random.Random):
         opts += ["--max-warnings", str(rng.randint(0, 3))]
     if rng.random() < 0.25:
         opts += ["-o", "out.txt", "--json"]       # compare the run reports too
+    if REF_SRC:  # CPP-15: --strict on a fifth and -q on a seventh of the cases (chosen without drawing from rng)
+        h = zlib.crc32(pep.encode() + nuc.encode())
+        opts += ["--strict"] * (h % 5 == 0) + ["-q"] * (h % 7 == 0)
+    if REF_SRC:  # CPP-9: the reference has none of the C++-only options
+        # (-o out.txt only comes with --json here: dropped too, so stdout is compared)
+        opts = [o for k, o in enumerate(opts) if o not in ("--keep-going", "--json", "--max-warnings", "-o")
+                and not (k > 0 and opts[k - 1] in ("--max-warnings", "-o"))]
     return pep, nuc, opts
 
 
@@ -159,7 +178,11 @@ def run_python(d: Path, opts):
 def run_cpp(binary: Path, d: Path, opts):
     r = subprocess.run([str(binary), "pep.fasta", "nuc.fasta", *opts], cwd=d, capture_output=True, timeout=60)
     # stderr is text (CRLF on Windows, as Python's own stderr): compare lines (CPP-8)
-    return r.returncode, r.stdout.decode("ascii"), r.stderr.decode("ascii", "replace").replace("\r\n", "\n")
+    err = r.stderr.decode("ascii", "replace").replace("\r\n", "\n")
+    if REF_SRC:  # CPP-9: summary lines are coal-cpp's own
+        err = "".join(ln for ln in err.splitlines(True) if not ln.startswith(
+            ("coal: summary:", "coal: warning: IDs don't match, so sequences were paired by file order")))
+    return r.returncode, r.stdout.decode("ascii", "replace"), err
 
 
 def normalise(res, d: Path, opts):
@@ -247,7 +270,9 @@ class TestCppThreads(unittest.TestCase):
                          ["-output", "codon"], ["-output", "fasta", "-nomismatch"]):
                 ref = run_cpp(binary, d, [*opts, "-j", "1"])
                 self.assertEqual(ref[0], 0, ref[2][:300])
-                self.assertEqual(ref[2].count("does not correspond"), 3, ref[2][:300])
+                # CPP-11 (reference ENG-i2): no mismatch warnings with -nomismatch, as PAL2NAL
+                want = 0 if "-nomismatch" in opts else 3
+                self.assertEqual(ref[2].count("does not correspond"), want, ref[2][:300])
                 for j in ("2", "3"):
                     with self.subTest(opts=opts, j=j):
                         self.assertEqual(run_cpp(binary, d, [*opts, "-j", j]), ref)

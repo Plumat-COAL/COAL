@@ -8,6 +8,8 @@ namespace {
 
 enum Mode { NORMAL = 0, START = 1, ANCHOR_START = 2 };
 constexpr int ANCHOR = 10;
+constexpr int MIN_CHECKABLE = 10;            // reference R3-E1
+constexpr int AMBIGUOUS_MAX_RESIDUES = 3;    // reference FZ-6
 
 inline bool is_digit(char c) { return c >= '0' && c <= '9'; }
 inline bool as_x(char c) { return c == 'B' || c == 'Z' || c == 'J' || c == 'O' || c == 'U'; }
@@ -153,15 +155,62 @@ std::string py_repr_char(unsigned char c) {
 
 std::string prepare_row(const std::string& aln) {
     std::string r = aln;
+    bool tfastx = false;
     for (char& c : r) {
         if (c >= 'a' && c <= 'z') c = char(c - 32);
-        else if (c == '.') c = '-';
+        else if (c == '\\' || c == '/') tfastx = true;
     }
+    if (tfastx) {
+        // CPP-14 (reference FZ-3): tfastx/tfasty frameshift notation, read as PAL2NAL v14 reads it: '\\' = 1 base
+        // (digit 1); '/' + gaps + residue = a gap, the gaps, then 2 bases (digit 2). Any other '/' stays (invalid).
+        std::string t;
+        t.reserve(r.size());
+        for (size_t i = 0; i < r.size();) {
+            char c = r[i];
+            if (c == '\\') {
+                t += '1';
+                ++i;
+            } else if (c == '/') {
+                size_t j = i + 1;
+                while (j < r.size() && r[j] == '-') ++j;
+                if (j < r.size() && ((r[j] >= 'A' && r[j] <= 'Z') || r[j] == '*')) {
+                    t += '-';
+                    t.append(r, i + 1, j - i - 1);
+                    t += '2';
+                    i = j + 1;
+                } else {
+                    t += '/';
+                    ++i;
+                }
+            } else {
+                t += c;
+                ++i;
+            }
+        }
+        r.swap(t);
+    }
+    for (char& c : r)
+        if (c == '.') c = '-';
     return r;
 }
 
+// CPP-15 (reference FZ-6): a protein of at most 3 residues that fits in several places of the DNA gets a notice;
+// the leftmost is used, as PAL2NAL. stdout is unchanged.
+static void note_ambiguous(Threaded& res, const std::string& seq_id, const Target& target,
+                           const std::vector<Token>& toks) {
+    long long nres = 0;
+    for (const Token& t : toks) nres += t.residue;
+    if (nres > AMBIGUOUS_MAX_RESIDUES) return;
+    long long last = (long long)target.code.size() - total_length(toks), n = 0;
+    for (long long st = 0; st <= last; ++st) n += matches_at(target, st, toks);
+    if (n > 1)
+        res.notices.push_back(seq_id + ": placement is ambiguous: " + std::to_string(n) +
+                              " possible positions in the DNA for this " + std::to_string(nres) +
+                              "-residue protein; used the leftmost (as PAL2NAL)");
+}
+
 Threaded thread_one(const std::string& seq_id, const std::string& row, const std::string& raw_dna,
-                    const GeneticCode& code) {
+                    const GeneticCode& code, bool strict) {
     std::set<unsigned char> bad;
     for (char c : row)
         if (!valid_char(c)) bad.insert((unsigned char)c);
@@ -178,9 +227,11 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
 
     Threaded res;
     for (size_t i = 0; i < row.size(); ++i)
-        if (as_x(row[i]))
+        if (as_x(row[i])) {
             res.warnings.push_back("pepAlnPos " + std::to_string(i + 1) + ": " + row[i] +
                                    " unknown AA type. Taken as 'X'");
+            res.mismatch_cols.push_back(int(i + 1));  // CPP-11 (DEC-4f): -nomismatch removes it, as PAL2NAL
+        }
 
     bool any_residue = false;
     for (char c : row)
@@ -212,6 +263,7 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
     long long s = find(target, toks);
     if (s >= 0) {
         res.dna = raw_dna.substr((size_t)s, (size_t)len);
+        note_ambiguous(res, seq_id, target, toks);
         return res;
     }
 
@@ -220,10 +272,12 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
     if (ranges.empty()) throw CoalError(seq_id + ": protein and DNA are inconsistent (no match found)", "no_match", seq_id);
     std::vector<Token> pattern;
     int col = 1;
+    bool found_any = false;
     for (size_t k = 0; k < ranges.size(); ++k) {
         auto [a, b] = ranges[k];
         std::vector<Token> at = tokens(row, a, b, k == 0 ? ANCHOR_START : NORMAL, col, code);
         bool found = find(target, at) >= 0;
+        found_any = found_any || found;
         for (Token& t : at) {
             if (!found) {  // wildcard of the same length
                 t.residue = false;
@@ -238,7 +292,7 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
     res.dna = raw_dna.substr((size_t)s, (size_t)len);
 
     // mismatch report: first residue Met -> ATG/CTG/GTG, others -> genetic code
-    long long pos = 0;
+    long long pos = 0, nres = 0, nchk = 0, nbad_chk = 0;  // CPP-15: checkable = A/C/G/T(U) bases only
     bool first = true;
     for (const Token& t : toks) {
         if (!t.residue) {
@@ -246,6 +300,14 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
             continue;
         }
         int mode = (first && t.aa == 'M') ? ANCHOR_START : NORMAL;
+        ++nres;
+        bool checkable = true;
+        for (long long q = 0; q < 3; ++q) {
+            char ch = (size_t)(pos + q) < res.dna.size() ? res.dna[(size_t)(pos + q)] : 'A';
+            if (ch >= 'a' && ch <= 'z') ch = char(ch - 32);
+            if (ch != 'A' && ch != 'C' && ch != 'G' && ch != 'T' && ch != 'U') checkable = false;
+        }
+        nchk += checkable;
         bool ok;
         if (t.any) {
             ok = true;
@@ -256,10 +318,45 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
             res.warnings.push_back("pepAlnPos " + std::to_string(t.col) + ": " + row[t.col - 1] +
                                    " does not correspond to " + res.dna.substr((size_t)pos, 3));
             res.mismatch_cols.push_back(t.col);
+            nbad_chk += checkable;
         }
         first = false;
         pos += 3;
     }
+    // CPP-15 (reference DEC-1 with ENG-c, R2-E3, R3-E1, FZ-4): probably-wrong data. By default the row is written as
+    // PAL2NAL writes it, with a notice; --strict makes the first two rules errors.
+    const long long namb = nres - nchk;
+    const std::string N = std::to_string(nres), K = std::to_string(nchk), B = std::to_string(nbad_chk);
+    if (nchk && 2 * nbad_chk > nchk) {
+        if (strict)
+            throw CoalError(seq_id + ": protein and DNA are inconsistent (" + B + " of " + K +
+                                " checkable codons do not match the protein)",
+                            "unrelated", seq_id);
+        res.notices.push_back(seq_id + ": protein and DNA are probably unrelated: " + B + " of " + K +
+                              " checkable codons do not match the protein. The row was written as PAL2NAL writes "
+                              "it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an "
+                              "error)");
+        return res;
+    }
+    if (!found_any && (long long)raw_dna.size() > len && nchk < MIN_CHECKABLE) {
+        const std::string few = namb ? "only " + K + " of " + N + " codons have no ambiguous bases"
+                                     : "the gene has only " + N + " codons";
+        const std::string what = namb ? "the gene" : "it";
+        if (strict)
+            throw CoalError(seq_id + ": protein and DNA are inconsistent (no 10-residue segment of the protein was "
+                                "found in the DNA and " + few + ": too few to tell where " + what +
+                                " starts in the longer DNA)",
+                            "position_guess", seq_id);
+        res.notices.push_back(seq_id + ": position of the gene in the DNA is a guess: no 10-residue segment of the "
+                              "protein was found in the DNA and " + few + ", too few to tell where " + what +
+                              " starts in the longer DNA. The codons were taken from the start of the DNA as PAL2NAL "
+                              "does, so the row may be shifted (--strict makes this an error)");
+        return res;
+    }
+    if (!found_any)
+        res.notices.push_back(seq_id + ": no 10-residue segment of the protein was found in the DNA; codons were "
+                              "assigned by position (" + B + " of " + K + " checkable codons do not match" +
+                              (namb ? "; " + std::to_string(namb) + " contain N or other ambiguous bases" : "") + ")");
     return res;
 }
 
@@ -313,18 +410,27 @@ std::string expand(const std::string& row, const std::string& dna, const std::ve
     return out;
 }
 
-void mark_nogap_triplets(const std::string& e, std::vector<char>& bad) {
+void mark_nogap_triplets(const std::string& e, std::vector<char>& bad, const GeneticCode& code) {
     size_t n = e.size() / 3;
     if (bad.size() < n) bad.resize(n, 0);
+    const uint8_t* iu = iupac_table();
+    const uint64_t* trip = iupac_triplet_table();
+    const uint64_t stops = code.codons[(unsigned char)'*'];
+    auto norm = [&](char ch) -> uint8_t {
+        int u = (unsigned char)ch;
+        if (u >= 'a' && u <= 'z') u -= 32;
+        if (u == 'U') u = 'T';
+        return iu[u];
+    };
     for (size_t k = 0; k < n; ++k) {
         const char* t = e.data() + 3 * k;
         if (t[0] == '-' || t[1] == '-' || t[2] == '-') {
             bad[k] = 1;
             continue;
         }
-        bool tu = t[0] == 'T' || t[0] == 'U';
-        if (tu && ((t[1] == 'A' && (t[2] == 'A' || t[2] == 'G' || t[2] == 'R')) || (t[1] == 'G' && t[2] == 'A')))
-            bad[k] = 1;
+        uint8_t a = norm(t[0]), b = norm(t[1]), c = norm(t[2]);
+        if ((a | b | c) & 0xF0) continue;  // not an IUPAC triplet
+        if (stops && (trip[a * 225 + b * 15 + c] & ~stops) == 0) bad[k] = 1;
     }
 }
 

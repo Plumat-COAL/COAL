@@ -35,6 +35,7 @@ static int dump_protein(const std::string& path) {
     }
     Json out = Json::object();
     out.set("records", recs);
+    if (is_clustal(path)) out.set("mask", clustal_mask(path));  // CPP-13
     std::cout << json_dump(out) << '\n';
     return 0;
 }

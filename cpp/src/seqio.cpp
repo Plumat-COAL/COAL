@@ -33,11 +33,46 @@ static std::string no_such_file(const std::string& path) {
     return "[Errno 2] No such file or directory: " + py_repr(path);
 }
 
-// Text inputs must be ASCII (a UTF-8 BOM is skipped): "<file>:<line>: non-ASCII character",
-// as the Python engine (ENG-h / R2-E6).
-static void check_ascii(const std::string& s, const std::string& path, long long lineno) {
+// Length of the Python str.split() whitespace character (ASCII or UTF-8 encoded) at s[i], or 0.
+static size_t uni_space(const std::string& s, size_t i) {
+    unsigned char c = (unsigned char)s[i];
+    if (c < 128) return py_space(c) ? 1 : 0;
+    auto at = [&](size_t k) -> unsigned char { return i + k < s.size() ? (unsigned char)s[i + k] : 0; };
+    if (c == 0xC2 && (at(1) == 0x85 || at(1) == 0xA0)) return 2;                    // U+0085, U+00A0
+    if (c == 0xE1 && at(1) == 0x9A && at(2) == 0x80) return 3;                      // U+1680
+    if (c == 0xE2 && at(1) == 0x80 && (at(2) <= 0x8A || at(2) == 0xA8 || at(2) == 0xA9 || at(2) == 0xAF) &&
+        at(2) >= 0x80)
+        return 3;                                                                    // U+2000-200A, 2028, 2029, 202F
+    if (c == 0xE2 && at(1) == 0x81 && at(2) == 0x9F) return 3;                      // U+205F
+    if (c == 0xE3 && at(1) == 0x80 && at(2) == 0x80) return 3;                      // U+3000
+    return 0;
+}
+
+// Text inputs must be ASCII (a UTF-8 BOM is skipped): "<file>:<line>: non-ASCII character", as the reference
+// engine (ENG-h / R2-E6). CPP-12 (reference FZ-2): a header's description (after the ID) may hold any text: the
+// line becomes ">ID"; a non-ASCII ID is "<file>:<line>: non-ASCII character in the sequence ID".
+static void check_ascii(std::string& s, const std::string& path, long long lineno) {
+    bool ascii = true;
     for (unsigned char c : s)
-        if (c > 127) throw InputError(path + ":" + std::to_string(lineno) + ": non-ASCII character");
+        if (c > 127) {
+            ascii = false;
+            break;
+        }
+    if (ascii) return;
+    if (!s.empty() && s[0] == '>') {
+        size_t i = 1, n = s.size(), w;
+        while (i < n && (w = uni_space(s, i)) > 0) i += w;
+        size_t j = i;
+        while (j < n && uni_space(s, j) == 0) ++j;
+        bool id_ascii = j > i;
+        for (size_t k = i; k < j && id_ascii; ++k) id_ascii = (unsigned char)s[k] < 128;
+        if (id_ascii) {
+            s = ">" + s.substr(i, j - i);
+            return;
+        }
+        throw InputError(path + ":" + std::to_string(lineno) + ": non-ASCII character in the sequence ID");
+    }
+    throw InputError(path + ":" + std::to_string(lineno) + ": non-ASCII character");
 }
 
 // ------------------------------------------------------------------ LineReader
@@ -92,11 +127,15 @@ bool LineReader::next(std::string& line) {
 
 // ------------------------------------------------------------------ protein
 
+static bool blank(const std::string& s);
+
+// CPP-12 (reference FZ-1): the first non-blank line starts with CLUSTAL (was: the first line).
 bool is_clustal(const std::string& path) {
     LineReader lr(path);
-    std::string first;
-    lr.next(first);
-    return first.compare(0, 7, "CLUSTAL") == 0;
+    std::string line;
+    while (lr.next(line))
+        if (!blank(line)) return line.compare(0, 7, "CLUSTAL") == 0;
+    return false;
 }
 
 static std::vector<std::string> split_ws(const std::string& s, size_t from = 0) {
@@ -123,11 +162,14 @@ ProteinReader::ProteinReader(const std::string& path) : path_(path) {
     if (clustal_) {
         LineReader lr(path);
         std::string line;
-        lr.next(line);
+        while (lr.next(line) && blank(line)) {
+        }
         std::vector<std::string> order;
         std::unordered_map<std::string, std::string> seqs;
         while (lr.next(line)) {
-            if (blank(line) || line[0] == ' ' || line[0] == '\t') continue;
+            // CPP-12 (reference FZ-1): '#' mark lines and repeated CLUSTAL header lines are skipped too
+            if (blank(line) || line[0] == ' ' || line[0] == '\t' || line[0] == '#' || line.compare(0, 7, "CLUSTAL") == 0)
+                continue;
             auto parts = split_ws(line);
             if (parts.size() < 2) throw InputError(path + ": malformed CLUSTAL line: " + py_repr(line));
             auto it = seqs.find(parts[0]);
@@ -190,6 +232,46 @@ bool ProteinReader::next(std::string& id, std::string& row) {
     }
     have_pending_ = false;
     return in_rec;
+}
+
+// CPP-13 (reference DEC-4 clustal_mask): PAL2NAL's '#' mark line, one character per alignment column. After
+// each sequence line, the next line that is not a sequence line is padded with spaces to that sequence line's
+// length and the part under its sequence is appended. A block whose last sequence line ends the file adds nothing.
+std::string clustal_mask(const std::string& path) {
+    std::vector<std::string> lines;
+    {
+        LineReader lr(path);
+        std::string line;
+        while (lr.next(line)) lines.push_back(line);
+    }
+    while (!lines.empty() && lines.back().empty()) lines.pop_back();
+    std::string mask;
+    bool get = false;
+    size_t tmplen = 0, idspc = 0, sublen = 0;
+    for (std::string line : lines) {
+        unsigned char c0 = line.empty() ? 0 : (unsigned char)line[0];
+        bool seq_line = line.compare(0, 7, "CLUSTAL") != 0 && !line.empty() && c0 != '#' && !py_space(c0);
+        if (seq_line) {
+            size_t e = line.size();
+            while (e > 0 && py_space((unsigned char)line[e - 1])) --e;
+            line.resize(e);
+            tmplen = line.size();
+            size_t i = 0;
+            while (i < line.size() && !py_space((unsigned char)line[i])) ++i;
+            if (i > 0 && i < line.size()) {  // re.match(r"\S+\s+")
+                while (i < line.size() && py_space((unsigned char)line[i])) ++i;
+                idspc = i;
+            }
+            auto parts = split_ws(line);
+            sublen = parts.size() > 1 ? parts[1].size() : 0;
+            get = true;
+        } else if (get) {
+            if (line.size() < tmplen) line.append(tmplen - line.size(), ' ');
+            if (idspc < line.size()) mask += line.substr(idspc, sublen);
+            get = false;
+        }
+    }
+    return mask;
 }
 
 // ------------------------------------------------------------------ DNA index

@@ -15,7 +15,7 @@ words when a gene doesn't fit.
 
 ## Install
 
-1. Download `COAL-Setup-0.3.0.exe`.
+1. Download `COAL-Setup-0.4.0.exe`.
 2. Edge may say the file **"isn't commonly downloaded"**. Click the **…** next to the message,
    then **Keep**, then **Show more** and **Keep anyway**.
 3. Double-click the file. Windows shows a blue box, **"Windows protected your PC"**. Click

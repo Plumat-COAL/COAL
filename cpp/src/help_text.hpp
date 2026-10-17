@@ -3,8 +3,8 @@
 #pragma once
 
 static const char* const COAL_HELP = R"COALHELP(usage: coal [-h] [-codontable N] [-nogap] [-nomismatch]
-            [-output {fasta,clustal,paml,codon}] [-o OUT] [-j N] [-q]
-            [-strict] [--version] [-keep-going] [--max-warnings N]
+            [-output {fasta,clustal,paml,codon}] [-blockonly] [-o OUT] [-j N]
+            [-q] [-strict] [--version] [-keep-going] [--max-warnings N]
             [--progress] [--resume] [--report FILE.json] [--json]
             pep_aln nuc_fasta [nuc_fasta ...]
 
@@ -20,26 +20,33 @@ options:
                         NCBI genetic code (default 1); one of 1, 2, 3, 4, 5,
                         6, 9, 10, 11, 12, 13, 14, 15, 16, 21, 22, 23
   -nogap, --nogap       remove codon columns containing gaps or stop codons
+                        (stop codons of the -codontable code, any case;
+                        PAL2NAL uses the standard code's TAA/TAG/TGA, upper
+                        case only)
   -nomismatch, --nomismatch
                         remove alignment columns where a codon does not match
                         its residue
   -output {fasta,clustal,paml,codon}, --output-format {fasta,clustal,paml,codon}
-                        output format (fasta, clustal, paml or codon)
+                        output format, as PAL2NAL v14 writes it (default
+                        fasta; PAL2NAL's default is clustal)
+  -blockonly, --blockonly
+                        keep only the columns marked '#' in the CLUSTAL
+                        input's conservation lines (PAL2NAL's -blockonly; no
+                        effect if the input has no '#' marks)
   -o OUT, --out OUT     output file (default: stdout)
   -j N, --jobs N        worker threads (default 0 = all hardware threads)
   -q, --quiet           do not print warnings or notices (errors are always
                         printed)
-  -strict, --strict     NOT IMPLEMENTED YET in coal-cpp (exits with an error).
-                        In the Python engine: refuse probably-wrong data
-                        instead of writing it as PAL2NAL does (PAL2NAL never
-                        refuses): exit 1 with no output if (1) more than half
-                        of a sequence's checkable codons (A/C/G/T only) do not
-                        match its protein; (2) no 10-residue segment of a
-                        protein is found in its DNA, the DNA is longer than
-                        the gene and fewer than 10 codons are checkable (where
-                        the gene starts can't be told); (3) only some protein
-                        IDs are DNA IDs (pairing by order would follow).
-                        Without --strict these are notices on stderr
+  -strict, --strict     refuse probably-wrong data instead of writing it as
+                        PAL2NAL does (PAL2NAL never refuses): exit 1 with no
+                        output if (1) more than half of a sequence's checkable
+                        codons (A/C/G/T only) do not match its protein; (2) no
+                        10-residue segment of a protein is found in its DNA,
+                        the DNA is longer than the gene and fewer than 10
+                        codons are checkable (where the gene starts can't be
+                        told); (3) only some protein IDs are DNA IDs (pairing
+                        by order would follow). Without --strict these are
+                        notices on stderr
   --version             show program's version number and exit
 
 C++ engine extras (exact option names only):
