@@ -167,7 +167,11 @@ class TestPagesWorkflow(unittest.TestCase):
         self.assertIn("test_site.py", build)
 
 
-SITE_FILES = ("index.html", "style.css", "main.js", "sw.js", "favicon.svg", "explainer.html", "img/broken-gene.png")
+# WEB-8: screenshot now WebP (lossless, 51 KB instead of 234 KB); logo, mark and icons added.
+SITE_FILES = ("index.html", "style.css", "main.js", "sw.js", "favicon.svg", "explainer.html", "img/broken-gene.webp",
+              "assets/coal-mark.svg", "assets/coal-logo.png", "assets/coal-logo@2x.png", "assets/coal-logo-dark.png",
+              "assets/coal-logo-dark@2x.png", "assets/favicon-32.png", "assets/apple-touch-icon.png",
+              "assets/icon-512.png", "assets/coal-train.svg")
 TEXT_EXT = (".html", ".css", ".js", ".svg", ".txt", ".json", ".webmanifest")
 # Not requests: the SVG namespace, and the local app's address shown as text for people to open.
 ALLOWED_NON_REPO_URLS = ("http://www.w3.org/2000/svg", "http://127.0.0.1:7860")
@@ -263,6 +267,27 @@ class TestSiteFiles(unittest.TestCase):
             self.assertIn(value, readme, f"site claims {value!r}, which README.md does not say")
         self.assertIn("Measured on", self.index)
 
+    def test_version_is_current(self):
+        """WEB-8: the page names the current version; it must match the package."""
+        init = re.search(r'__version__ = "([^"]+)"', _read("src", "coal", "__init__.py")).group(1)
+        shown = re.search(r'<span id="version" data-version="([^"]+)">([^<]+)</span>', self.index)
+        self.assertIsNotNone(shown, "version span missing")
+        self.assertEqual(shown.group(1), shown.group(2))
+        self.assertEqual(shown.group(1), init, "site/index.html names another version than src/coal/__init__.py")
+
+    def test_pal2nal_relationship_and_citation(self):
+        """WEB-8: the qualified PAL2NAL wording, the licences and the reference."""
+        for must in ("On well-formed input COAL's output is identical to PAL2NAL's",
+                     "COAL deliberately differs and documents why", "GPL-2.0", "contains none of PAL2NAL's code",
+                     "Suyama M, Torrents D, Bork P (2006)", "34:W609"):
+            self.assertIn(must, self.index)
+
+    def test_size_budget_with_images(self):
+        """WEB-8: the whole site, images included, stays under 250 KB (README.md excluded: not deployed)."""
+        total = sum(os.path.getsize(os.path.join(d, f)) for d, _, files in os.walk(SITE) for f in files
+                    if f != "README.md")
+        self.assertLess(total, 250 * 1024, f"site is {total} bytes (budget 250 KB)")
+
     def test_unsigned_and_smart_app_control_explained(self):
         for must in ("Windows protected your PC", "More info", "Run anyway", "Unknown publisher", "Smart App Control",
                      "Get-FileHash", "sha256sum", "coal-gui", "SKILL.md", "/issues", "MIT", "Zenodo",
@@ -275,7 +300,11 @@ class TestSiteFiles(unittest.TestCase):
         self.assertIn('<main id="main">', self.index)
         self.assertIn('href="#main"', self.index)
         for img in re.findall(r"<img\b[^>]*>", self.index):
+            if 'src="assets/coal-mark.svg"' in img:  # WEB-8: decorative, next to the text "COAL" in the same link
+                self.assertIn('alt=""', img)
+                continue
             self.assertRegex(img, r'\salt="[^"]{10,}"', img)
+        self.assertRegex(self.index, r'<a class="home" href="\./"><img src="assets/coal-mark\.svg"[^>]*><span>COAL</span></a>')
         css = _read("site", "style.css")
         self.assertIn("prefers-reduced-motion", css)
         self.assertIn("prefers-color-scheme: dark", css)

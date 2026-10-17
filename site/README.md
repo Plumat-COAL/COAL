@@ -3,7 +3,8 @@
 <!-- WEB-5: new file. See overnight/integration/CHANGES.md -->
 
 `site/` is the download page at **https://plumat-coal.github.io/COAL/**: plain HTML, CSS and JavaScript, no build
-step, nothing loaded from other sites (no CDNs, fonts, trackers or analytics). About 50 KB without the screenshot.
+step, nothing loaded from other sites (no CDNs, fonts, trackers or analytics). About 170 KB in all, 67 KB without
+images. <!-- CHANGED(WEB-8): was "About 50 KB without the screenshot". See overnight/integration/CHANGES.md -->
 
 | File | What it is |
 |---|---|
@@ -12,14 +13,23 @@ step, nothing loaded from other sites (no CDNs, fonts, trackers or analytics). A
 | `main.js` | picks the main download for the visitor's system, copy buttons, registers `sw.js` |
 | `sw.js` | keeps a copy of the site's own files so it opens offline after one visit (never touches downloads) |
 | `explainer.html` | a copy of `pitch/explainer.html` (the test fails if they differ: copy it again after editing the original) |
-| `img/broken-gene.png` | screenshot of the alignment view (from `pitch/backup/`) |
-| `favicon.svg` | icon |
+| `img/broken-gene.webp` | screenshot of the alignment view (`pitch/backup/1_broken_gene_frameshift.png`, lossless WebP) |
+| `favicon.svg` | tab icon: one 3 x 3 codon block from the logo (lighter charcoal in a dark browser theme) |
+| `assets/coal-logo*.png` | the owner's logo, 176 px wide at 1x and 2x; `-dark` has the wordmark recoloured to #ECE8E3 |
+| `assets/coal-mark.svg` | the logo's squares as SVG (written by `desktop/make_icon.py --site site`) |
+| `assets/coal-train.svg` | the owner's train drawing as SVG; the page inlines a copy in the footer so CSS can recolour it in dark mode |
+| `assets/favicon-32.png`, `apple-touch-icon.png`, `icon-512.png` | PNG icons (written by `desktop/make_icon.py --site site`) |
+
+<!-- CHANGED(WEB-8): logo, mark, train and icon files added; screenshot now WebP. See overnight/integration/CHANGES.md -->
 
 All internal links are relative, so the same files work at `/COAL/` and later at a custom domain.
 
 ## How downloads stay current
 
-The page never names a version. Every download link has the form
+The download links never name a version. The page shows the current version once (`<span id="version">`), and
+`tests_app/test_site.py` fails when it differs from `src/coal/__init__.py`, so bump it together with the package.
+<!-- CHANGED(WEB-8): was "The page never names a version." See overnight/integration/CHANGES.md -->
+Every download link has the form
 
     https://github.com/plumat-coal/COAL/releases/latest/download/<file>
 
@@ -48,7 +58,7 @@ page (`data-check`) is quoted from `README.md`.
 
 ## Releasing
 
-1. Bump the version in `src/coal/__init__.py` and `pyproject.toml` (they must agree), optionally add a
+1. Bump the version in `src/coal/__init__.py`, `pyproject.toml` and `index.html` (they must agree), optionally add a
    `## <version>` section to `CHANGELOG.md`, commit, and merge to `main`.
 2. Tag and push: `git tag v0.3.0 && git push origin v0.3.0`.
 3. The Release workflow builds and checks the wheel, sdist, Windows installer and portable zip, writes

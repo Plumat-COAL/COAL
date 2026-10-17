@@ -214,7 +214,8 @@ protein sequence alignments into the corresponding codon alignments.
 <!-- WEB-5: new section. See overnight/integration/CHANGES.md -->
 Tag, and everything else is automatic:
 
-1. Set the same version in `src/coal/__init__.py` and `pyproject.toml` (optionally add a `## <version>` section to
+1. Set the same version in `src/coal/__init__.py`, `pyproject.toml` and the `id="version"` span in
+   `site/index.html` (a test fails if they differ) (optionally add a `## <version>` section to
    `CHANGELOG.md` for the release notes; without one, GitHub generates notes from merged pull requests), commit,
    merge to `main`.
 2. `git tag v0.3.0 && git push origin v0.3.0`
@@ -222,7 +223,9 @@ Tag, and everything else is automatic:
    and the Windows app (`desktop/build.ps1`: tests, PyInstaller, frozen-engine check, Inno Setup installer), writes
    `SHA256SUMS.txt` and publishes the GitHub Release, with version-free copies of the downloads.
 4. The website (https://plumat-coal.github.io/COAL/, from `site/`) links to
-   `releases/latest/download/<version-free name>`, so it offers the new release at once; nothing to edit.
+   `releases/latest/download/<version-free name>`, so it offers the new release at once; only the version shown
+   on the page is edited by hand (step 1).<!-- CHANGED(WEB-8): was "nothing to edit"; the page now names the
+   current version. See overnight/integration/CHANGES.md -->
    The site itself is redeployed by `.github/workflows/pages.yml` when `site/` changes on `main`.
 
 The Windows app is not code-signed yet (the release notes say so, with the SmartScreen and Smart App Control

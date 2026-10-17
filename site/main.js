@@ -1,5 +1,6 @@
 // COAL download site: pick the main download for the visitor's system, copy buttons, offline cache.
 // WEB-3: new file. See overnight/integration/CHANGES.md
+// CHANGED(WEB-8): was "COAL runs on Windows, macOS and Linux computers." for other systems; now says a computer is needed.
 // No external requests. Without JavaScript the page shows both options (Windows installer and pip).
 (function () {
   "use strict";
@@ -32,7 +33,7 @@
     if (NAMES[os]) {
       label.textContent = (detected ? "For " + NAMES[os] + " (detected)." : "For " + NAMES[os] + ".");
     } else {
-      label.textContent = "COAL runs on Windows, macOS and Linux computers.";
+      label.textContent = "COAL needs a Windows, macOS or Linux computer.";
     }
     var picks = document.querySelectorAll("[data-os-pick]");
     for (var i = 0; i < picks.length; i++) {
