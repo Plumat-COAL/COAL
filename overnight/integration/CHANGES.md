@@ -2,7 +2,50 @@
 
 ## Final fixes (branch fix/final, from keanu_overnight/integration bb80bde)
 
-<!-- FINAL-STATUS -->
+Last fix round before judges and scientists see it. Findings: final app/site/CI review (FIN-A1..A10), final claims
+review (FIN-C1..C20), final engine review (FIN-E1..E3); overlapping findings fixed once (A2 = C1, A3 = C2, A5 = C8,
+A1 ~ C4/C5/C6). Reference: the real PAL2NAL v14 (run as a black box, never copied). Engine changes are marked
+"teammate's engine/C++ must mirror" (FIN-E1, FIN-E2, FIN-C14; FIN-E3 is the Python drop-in).
+
+| ID | Finding | Status | Commit |
+|---|---|---|---|
+| FIN-C1 / FIN-A2 | Methods text: suspect genes "excluded", every warning a "mismatch" | fixed | 7117498 |
+| FIN-C2 / FIN-A3 | 29 vs 23 deliberate checks; 232 + 24 + 29 ≠ 279 | fixed (one breakdown, guard checks sums incl. site) | c27613d |
+| FIN-C3 | "byte-identical on well-formed input" / "PAL2NAL silently wrong" claims | fixed (documented exceptions, reference points, v14) | c27613d (+ 049a8fb drop-in docstring) |
+| FIN-A1 / FIN-C4 / FIN-C5 / FIN-C6 | Genetic-code hint: wrong problem genes, untested "All", wording, start codon → code 4 | fixed | 30afe46 |
+| FIN-A4 | Viewer fails on paml/codon output, leaks server path, links on | fixed | a68d09e |
+| FIN-A5 / FIN-C8 | "Same run with PAL2NAL" not the same run | fixed (closest PAL2NAL v14 command + caveats) | a68d09e |
+| FIN-A6 | --strict advised but not available in GUI/MCP | fixed (strict and blockonly added) | a68d09e |
+| FIN-A7 | Viewer "-nogap or -nomismatch" note for wide frameshift columns | fixed | a68d09e |
+| FIN-A8 | Installer "Open with" text stale | fixed | 1a8de87 |
+| FIN-A9 | Site deploys with 404 download buttons before a release | fixed (release check in pages.yml + checklist order) | 1a8de87 |
+| FIN-A10 | ci.yml permissions and unpinned actions | fixed | 1a8de87 |
+| FIN-C7 | "Not checked" for genes before the failing gene | fixed | 0335a8f |
+| FIN-C9 | Frameshift near the end → "check the genetic code"; site sentence | fixed (app + site) | 30afe46, c27613d |
+| FIN-C10 | Fuzz accepted any difference in a case with a deliberate feature | fixed (exact check against a neutralised PAL2NAL run); harness follow-up FIN-C10b from the coordinator's case 440 | 049a8fb, 0f0330f |
+| FIN-C11 | Methods text lower-cases proper names | fixed | 7117498 |
+| FIN-C12 | messy_ids "DNA looks truncated" | fixed | 0335a8f |
+| FIN-C13 | Advice to use a non-existent COAL version | fixed | 0335a8f |
+| FIN-C14 | "U unknown AA type" for selenocysteine | fixed (engine + app wording) | 049a8fb |
+| FIN-C15 | Stale "v0.1 doesn't support", "to be decided", "to be characterised" | fixed | c27613d |
+| FIN-C16 | "eight genes of 150 codons" | fixed | c27613d |
+| FIN-C17 | QA: PAL2NAL "never refuses" | fixed | c27613d |
+| FIN-C18 | Smart App Control advice inconsistent | fixed | c27613d |
+| FIN-C19 | `> id`: PAL2NAL "takes the header as sequence" | fixed (measured: reads 0 proteins) | 049a8fb |
+| FIN-C20 | 6,000-case stratified run not reproducible | fixed (claim removed) | c27613d |
+| FIN-E1 | Fallback first Met ignores the selected code | fixed (deliberate difference, exact fuzz check) | 049a8fb |
+| FIN-E2 | clustal/codon memory grows with sequence count | fixed (320 → 139 MB, 533 → 145 MB; same bytes) | 049a8fb |
+| FIN-E3 | Drop-in refuses command lines PAL2NAL v14 runs; exit-code docs | fixed | 049a8fb |
+
+Final fuzz against the real PAL2NAL v14 (seed 20261017, 5,000 cases × 4 formats = 20,000 comparisons): 14,269
+byte-identical, 4,692 both fail, 1,039 deliberate differences (each checked to be exactly the documented one),
+0 unexplained; seeds 4242 (1,500 cases) and 777 (3,000 cases): 0 unexplained. Test counts at the end: tests 113,
+tests_app 235 (5 skipped: Gradio / MCP extras not installed here), desktop test_wrapper + test_smoke 67 (5 skipped).
+
+Needs a human: the CI workflows (pages.yml release check, ci.yml pinned actions) have not run on GitHub; the GUI
+checkboxes were smoke-tested with a stub, not with Gradio (no PyPI access here; tests_app/test_gui.py skipped as
+before); the installer text was not compiled (no Inno Setup); site/index.html will be rewritten from its own brief:
+keep the data-check spans (the guard now checks they add up to 279).
 
 ### Final-fix rows
 
@@ -42,6 +85,7 @@
 | FIN-A8 | desktop/installer.iss (`openwith` task) | "... opens COAL and tells you which box to drag the file onto; it can't load the file by itself yet ..." (stale since R2-A9) | "... opens COAL with that file filled in, read in place; your default programs don't change" | FIN-A8 | tests_app/test_final.py `TestFinA8InstallerText` | Windows branch: the installer was never compiled here (no Inno Setup). |
 | FIN-A9 | .github/workflows/pages.yml (new step "Download buttons only when a release exists"); new scripts/site_without_release.py; site/README.md (Releasing, one-time checklist); README.md (Releasing COAL) | Merging to `main` deployed the site at once; with no release yet every `releases/latest/download/...` button gave a 404; the checklist said "merge to main, then tag" | The deploy job asks `gh release view` (GITHUB_TOKEN, contents: read); without a published release the deployed copy (never `site/` itself) gets a "First release coming soon" notice at the top, the download links point at it and the pip commands become `pip install "coal[gui] @ git+https://github.com/plumat-coal/COAL"`. Checklists: tag, wait for the Release run to publish, then merge to `main` | FIN-A9 (both the safety check and the order) | tests_app/test_final.py `TestFinA9NoReleaseYet` (rewrite of the real page: no release links left, notice and pip line present, idempotent; workflow and checklist wording) | CI results can't be read from this session: the workflow step was not run on GitHub. If `gh` fails for another reason, the safe notice is deployed. |
 | FIN-A10 | .github/workflows/ci.yml | No `permissions:` block (default token permissions); `actions/checkout@v4`, `actions/setup-python@v5` unpinned | `permissions: contents: read`; both actions pinned to the SHAs release.yml and pages.yml use (checkout v7.0.1, setup-python v7.0.0) | FIN-A10 | tests_app/test_final.py `TestFinA10CiHygiene` (every `uses:` pinned to 40 hex digits and equal to release.yml's) | Major-version bump of both actions (same inputs used); check the first CI run. |
+| FIN-C3-QA | pitch/QA.md (question on why COAL) | "writes all four of its output formats byte for byte" | "... as PAL2NAL v14 does, byte for byte apart from the documented differences" | FIN-C3 sweep | — | — |
 | FIN-N1 | pitch/QA.md (line and test counts) | "2,350 in the app", "more than 170 app tests" | "2,600", "more than 200" | Documented numbers drifted with the new code and tests (guard test_docs_numbers) | tests_app/test_docs_numbers.py `test_qa_line_and_test_counts` | Re-check if more tests are added. |
 
 ## Decisions (branch fix/decisions, from keanu_overnight/integration 2f87eb8)

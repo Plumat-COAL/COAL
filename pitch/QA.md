@@ -42,7 +42,8 @@ after removing version suffixes, and `--keep-going` so one bad gene doesn't stop
 It works, and we treat it as the reference. But it always exits 0 even on errors, prints cryptic messages,
 is a Perl script (or a web form that takes one alignment at a time and can't be used from a pipeline), and
 explains nothing to bench scientists or AI agents. COAL
-accepts PAL2NAL's options and writes all four of its output formats byte for byte, and the drop-in `pal2nal`
+accepts PAL2NAL's options and writes all four of its output formats as PAL2NAL v14 does, byte for byte apart from
+the documented differences, and the drop-in `pal2nal` <!-- CHANGED(FIN-C3): was "byte for byte" without the exceptions -->
 command defaults to clustal like PAL2NAL, so an unchanged PAL2NAL command line works: a pipeline switches by changing
 the command name. <!-- CHANGED(DEC-4): was "pipelines that rely on PAL2NAL's default clustal output must add
 -output fasta" --> PAL2NAL is GPL; COAL is an independent MIT implementation and contains none of its code.
