@@ -157,7 +157,7 @@ class TestReport(unittest.TestCase):
         self.assertEqual([s["id"] for s in failed], ["g2"])
         self.assertIn("could not be found", failed[0]["messages"][0]["text"])
         self.assertEqual(r["summary"]["failed"], 1)
-        self.assertIn("coal: summary: 1 sequence could not be converted (first: g2:", err)
+        self.assertIn("coal: summary: 1 sequence of 4 could not be converted (first: g2:", err)
 
     def test_input_error_report(self):
         write_genes(self.d, 3)

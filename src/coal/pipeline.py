@@ -65,16 +65,18 @@ def _protein_rows(path):
 _W: dict = {}
 
 
-def _init_worker(table, widths, two_pass, nogap, fmt="fasta"):
+def _init_worker(table, widths, two_pass, nogap, fmt="fasta", keep_going=False):
     _W.update(table=table, widths=widths, wide=any(w != 3 for w in widths),
-              two_pass=two_pass, nogap=nogap, fmt=fmt)
+              two_pass=two_pass, nogap=nogap, fmt=fmt, keep_going=keep_going)
 
 
 def _work(batch):
-    """Thread one batch. Returns (text, warnings, mismatch columns, nogap triplets, IDs):
-    text is finished FASTA, or 'id<TAB>row' lines for the column-removal pass.
-    A CoalError gets .index = position of the failing sequence in the batch."""
-    parts, warns, mcols, bad, pids = [], [], set(), set(), []
+    """Thread one batch. Returns (text, warnings, mismatch columns, nogap triplets, items):
+    text is finished FASTA, or 'id<TAB>row' lines for the column-removal pass;
+    items = [(id, None | (error code, message))] for every sequence, in order.
+    Without keep_going a CoalError is raised, with .index = position in the batch."""
+    parts, warns, mcols, bad, items = [], [], set(), set(), []
+    keep_going = _W.get("keep_going", False)
     two_pass = _W["two_pass"]
     fmt = _W.get("fmt", "fasta")
     record = paml_record if fmt == "paml" else fasta_record
@@ -82,9 +84,12 @@ def _work(batch):
         try:
             it = thread_one(pid, row, dna, _W["table"])
         except CoalError as e:
+            if keep_going and e.seq_id is not None:
+                items.append((pid, (e.code, str(e))))
+                continue
             e.index = i
             raise
-        pids.append(pid)
+        items.append((pid, None))
         exp = expand(it, _W["widths"], _W["wide"])
         warns += [f"{pid} {w}" for w in it.warnings]
         if two_pass:
@@ -95,7 +100,7 @@ def _work(batch):
                 bad |= nogap_bad_triplets(exp)
         else:
             parts.append(record(pid, exp))
-    return "".join(parts), warns, mcols, bad, pids
+    return "".join(parts), warns, mcols, bad, items
 
 
 # ------------------------------------------------------------------ main side
@@ -221,12 +226,14 @@ def _results(batches, jobs: int, init_args):
 
 def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
         nomismatch: bool = False, jobs: int = 0, warn=None, min_nt_per_job: int | None = None,
-        fmt: str = "fasta", rec=None) -> int:
+        fmt: str = "fasta", rec=None, keep_going: bool = False) -> int:
     """Convert; write the alignment (fmt: fasta, clustal, paml or codon) to out_path (or stdout).
 
     jobs: 0 = automatic (up to all cores), N = at most N processes. Small inputs
     always run in one process (see MIN_NT_PER_JOB). rec: optional report.RunReport
-    that collects per-sequence results for the run report."""
+    that collects per-sequence results for the run report.
+    keep_going: skip sequences that cannot be threaded (written: all the others, in
+    order). Returns the number of skipped sequences (0 without keep_going)."""
     get_code(table)
     if fmt not in FORMATS:
         raise CoalError(f"unknown output format {fmt!r}; one of {', '.join(FORMATS)}")
@@ -264,7 +271,8 @@ def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
         jobs = effective_jobs(jobs, dna.total_bytes(), min_nt_per_job)
         widths = column_widths(digit_rows, ncol)
         two_pass = nogap or nomismatch
-        staged = two_pass or fmt in BLOCK_FORMATS
+        # keep_going + paml: the header needs the final count, so stage the rows
+        staged = two_pass or fmt in BLOCK_FORMATS or (keep_going and fmt == "paml")
 
         dest_dir = os.path.dirname(os.path.abspath(out_path)) if out_path else None
         tmp = tempfile.NamedTemporaryFile("w", delete=False, newline="\n", dir=dest_dir,
@@ -273,15 +281,15 @@ def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
                                             encoding="ascii") if staged else None
         try:
             drop, bad = set(), set()
-            init = (table, widths, staged, nogap, fmt)
+            init = (table, widths, staged, nogap, fmt, keep_going)
             sink = stage.file if staged else tmp.file   # skip tempfile's per-call wrapper
             if fmt == "paml" and not staged:
                 tmp.file.write(paml_header(nseq, sum(widths)))
-            done = 0
+            done = skipped = 0
             results = _results(_batches(rows(), dna, pairing), jobs, init)
             while True:
                 try:
-                    text, warns, mcols, badt, pids = next(results)
+                    text, warns, mcols, badt, items = next(results)
                 except StopIteration:
                     break
                 except CoalError as e:
@@ -289,24 +297,27 @@ def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
                         e.index = done + (e.index or 0)
                         rec.add_sequence(e.seq_id, [], failure=(e.code, str(e)), k=e.index)
                     raise
-                if warn:
-                    for w in warns:
-                        warn(w)
-                if rec is not None:
-                    wi = 0
-                    for pid in pids:
-                        mine, pre = [], pid + " "
-                        while wi < len(warns) and warns[wi].startswith(pre):
-                            mine.append(warns[wi][len(pre):])
-                            wi += 1
-                        rec.add_sequence(pid, mine, k=done)
-                        done += 1
-                else:
-                    done += len(pids)
+                wi = 0
+                for pid, failure in items:
+                    mine, pre = [], pid + " "
+                    while wi < len(warns) and warns[wi].startswith(pre):
+                        mine.append(warns[wi])
+                        wi += 1
+                    if warn:
+                        for w in mine:
+                            warn(w)
+                        if failure:
+                            warn(f"skipped {failure[1]}")
+                    if rec is not None:
+                        rec.add_sequence(pid, [w[len(pre):] for w in mine], failure=failure, k=done)
+                    done += 1
+                    skipped += failure is not None
                 sink.write(text)
                 if nomismatch:
                     drop.update(c - 1 for c in mcols)
                 bad |= badt
+            if keep_going and skipped == nseq:
+                raise CoalError(f"none of the {nseq} sequences could be converted", code="all_failed")
             if staged:
                 if two_pass:
                     sl = keep_slices(widths, drop if nomismatch else (), bad)
@@ -318,7 +329,7 @@ def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
                     write_blocks(stage.file, tmp.file, fmt, sl, length, ncol)
                 else:
                     if fmt == "paml":
-                        tmp.file.write(paml_header(nseq, length))
+                        tmp.file.write(paml_header(nseq - skipped, length))
                     record = paml_record if fmt == "paml" else fasta_record
                     for line in stage.file:
                         pid, exp = line.rstrip("\n").split("\t", 1)
@@ -326,7 +337,7 @@ def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
             tmp.close()
             if rec is not None:
                 from .report import sha256_file
-                rec.set_output(out_path, sha256_file(tmp.name), nseq)
+                rec.set_output(out_path, sha256_file(tmp.name), nseq - skipped)
             if out_path:
                 os.replace(tmp.name, out_path)
             else:
@@ -336,7 +347,7 @@ def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
                         out.reconfigure(newline="\n")
                     shutil.copyfileobj(fh, out, 1 << 20)
                     out.flush()
-            return 0
+            return skipped
         finally:
             for f in (tmp, stage):
                 if f is not None:

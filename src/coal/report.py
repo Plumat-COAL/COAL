@@ -46,6 +46,7 @@ _REASONS = {
     "row_lengths": "The protein alignment rows have different lengths ({detail}), so it is not an alignment.",
     "input_format": "An input file could not be read: {detail}.",
     "file_error": "A file could not be opened or written: {detail}.",
+    "all_failed": "None of the sequences could be converted, so no output was written.",
 }
 
 
@@ -216,7 +217,9 @@ class RunReport:
         failed = self.failed_entries
         if failed:
             first = failed[0]
-            s = (f"{_seqs(len(failed))} could not be converted (first: {first['id']}: "
+            left_out = " and " + ("was" if len(failed) == 1 else "were") + " left out" \
+                if self.keep_going and not self.error else ""
+            s = (f"{_seqs(len(failed))} of {_n(total)} could not be converted{left_out} (first: {first['id']}: "
                  f"{first['messages'][-1]['text']})")
             if hint and not mism:
                 s += " " + hint["summary"]

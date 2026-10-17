@@ -39,6 +39,9 @@ def main(argv=None) -> int:
                     help="maximum worker processes (default 0 = automatic: all CPU cores for large "
                          "inputs, one process for small ones; 1 = never use extra processes)")
     ap.add_argument("-q", "--quiet", action="store_true", help="do not print warnings")
+    ap.add_argument("--keep-going", "-keep-going", action="store_true",
+                    help="skip sequences that cannot be converted instead of stopping; the others are "
+                         "written in input order, skipped ones are listed in the summary/report; exit code 2")
     ap.add_argument("--report", metavar="FILE.json",
                     help="write a JSON run report (schema coal.report/1), also when the run fails")
     ap.add_argument("--json", action="store_true",
@@ -51,13 +54,16 @@ def main(argv=None) -> int:
 
     # Always collected: it also drives the end-of-run "coal: summary:" lines.
     rec = RunReport(argv, args.pep_aln, args.nuc_fasta, args.out, args.output_format, args.codontable,
-                    args.nogap, args.nomismatch, keep_entries=bool(args.report or args.json))
+                    args.nogap, args.nomismatch, keep_going=args.keep_going,
+                    keep_entries=bool(args.report or args.json))
     warn = None if args.quiet else (lambda w: print(f"coal: warning: {w}", file=sys.stderr))
     rc = 0
     try:
-        run(args.pep_aln, args.nuc_fasta, out_path=args.out, table=args.codontable,
-            nogap=args.nogap, nomismatch=args.nomismatch, jobs=args.jobs, warn=warn,
-            fmt=args.output_format, rec=rec)
+        skipped = run(args.pep_aln, args.nuc_fasta, out_path=args.out, table=args.codontable,
+                      nogap=args.nogap, nomismatch=args.nomismatch, jobs=args.jobs, warn=warn,
+                      fmt=args.output_format, rec=rec, keep_going=args.keep_going)
+        if skipped:
+            rc = 2   # partial success
     except (CoalError, InputFormatError, UnicodeDecodeError, OSError) as e:
         print(f"coal: error: {e}", file=sys.stderr)
         rc = 1

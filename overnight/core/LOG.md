@@ -58,6 +58,11 @@ Push when happy: `git push -u origin overnight/core`
 - 2026-10-17 01:34 UTC | task 2 done | Python 279/279, C++ 279/279, random 1000/1000 | expand() fast path, token reserve. Measured (2-core VM, local disk, medians): 10k x 500 Python 0.593 s / C++ 0.097 s (6.1x); 100 x 10k 0.149 / 0.023 (6.4x); 100k x 500 3.559 / 0.881 (4.0x); C++ peak < 30 MB. Results in benchmarks/results/cpp_vs_python_linux.md (+ csv/txt).
 - 2026-10-17 01:40 UTC | tasks 3+4 | Python 279/279, C++ 279/279, random 1000/1000, all suites OK | src/coal/report.py: --report FILE.json / --json (needs -o), schema coal.report/1 exactly as specified plus extra fields (sequences[].index, summary.not_processed, summary_text, error{code,text,detail}, hints[].checked/fit/fit_current); report written on failed runs too (plain-English reason per error code). End-of-run 'coal: summary:' lines + genetic-code hint (>20% mismatching/failed -> re-test up to 200 of them with all 17 codes; suggest only if it fits >=80% and >=20 points more than the current code; ties -> lowest table number). The summary is collected on every run with counters only (per-sequence entries only kept when a report is requested). -q suppresses summary lines. tests/test_report.py (10 tests), tests/report_example.json (real run: 6 mito genes with code 1 -> hint code 2). C++ does not print summary lines yet; test_cpp_vs_python ignores 'coal: summary:' lines (allowed by the task).
 
+## Run 2 progress (engine extras prompt)
+
+- run 2 task 1 (summary + genetic-code hints): already done in run 1 (f1373a2); skipped.
+- 2026-10-17 01:43 UTC | run2 task 2 --keep-going | Python 279/279, all suites OK | failing sequences are skipped ('coal: warning: skipped <msg>' in input order), others written in order, exit 2, report/summary list them; works with -j>1 and all formats (paml stages rows so the header count is right); -nogap/-nomismatch columns come from the sequences that succeeded. Decisions: if every sequence fails -> error, exit 1, no output; frameshift column widths still come from the whole protein alignment (a failed row's digit can widen a column for the others).
+
 ## Decisions
 
 - Output-format conventions were taken from the goldens, plus a few black-box runs of PAL2NAL v14 in a scratch folder outside the repo (only its *output* was looked at; no code read or copied, nothing from it committed):
