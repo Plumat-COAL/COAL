@@ -40,7 +40,7 @@ C++ peak memory < 30 MB on a 137 MB input. Re-checked after all the changes: sti
 - `-output codon` residue-line quirk of PAL2NAL with frameshift digits 4/5. No golden covers it; see Decisions.
 
 ### Needs a human decision
-- Add `build/` to .gitignore.
+- ~~Add `build/` to .gitignore.~~ Done (Chloe asked, next morning).
 - An untracked `Claude outputs/` folder sits in the repo root. It isn't mine, so I left it alone.
 - Bump the version to 0.4.0: `pyproject.toml` (off limits for me) and `src/coal/__init__.py`. `methods_text` currently says v0.3.0.
 - coal-cpp has not been compiled with MSVC on Windows (no compiler here). It is written to standard C++17, but try the Windows build below.
@@ -170,5 +170,5 @@ Push when happy: `git push -u origin overnight/core`
 
 ## Needs a human decision
 
-- `build/` should be added to .gitignore (I may not edit .gitignore).
+- ~~`build/` should be added to .gitignore~~ Done.
 - An untracked `Claude outputs/` folder exists in the repo root (not created by this session); left untouched.

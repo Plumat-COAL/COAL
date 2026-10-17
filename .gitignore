@@ -33,3 +33,6 @@ tmpwhich.*
 erraafile.*
 errnucfile.*
 tbln.out.*
+
+# C++ build output (cmake -S . -B build)
+build/
