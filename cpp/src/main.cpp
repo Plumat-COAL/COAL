@@ -419,6 +419,7 @@ struct Checkpoint {
     std::string partial, stage, prot, entries, path, options_hash;
     std::vector<std::string> inputs;
     int count = 0;
+    std::string why = "no checkpoint";  // why load_for_resume() returned false
 
     Checkpoint(const std::string& out, const std::string& canon, const std::vector<std::string>& in) : inputs(in) {
         std::string base = fs::absolute(fs::path(out)).string();
@@ -449,11 +450,19 @@ struct Checkpoint {
     // Throws CoalError(resume_mismatch) if inputs or options changed.
     bool load_for_resume(Json& st, const std::vector<std::string>& needed) {
         std::ifstream in(path, std::ios::binary);
-        if (!in) return false;
+        if (!in) {
+            why = "no checkpoint";
+            return false;
+        }
         std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
         try {
             st = json_parse(text);
         } catch (...) {
+            why = "an unreadable checkpoint";
+            return false;
+        }
+        if (st.type != Json::Object) {
+            why = "an unreadable checkpoint";
             return false;
         }
         auto str = [&](const char* k) {
@@ -464,6 +473,7 @@ struct Checkpoint {
         if (str("engine") != "coal-cpp" || str("coal_version") != VERSION || str("options_hash") != options_hash ||
             !ins || json_dump(*ins) != json_dump(signature()))
             throw CoalError(CHANGED, "resume_mismatch");
+        why = "a checkpoint whose partial output is missing or incomplete";
         static const char* keys[] = {"sink_bytes", "entries_bytes", "prot_bytes"};
         for (size_t i = 0; i < needed.size(); ++i) {
             if (needed[i].empty()) continue;
@@ -662,7 +672,9 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                      " sequences were already done" +
                      (staged ? " (this format/option needs a second pass, which is redone in full)" : ""));
             else
-                note("no checkpoint to resume for " + o.out + "; starting a normal run");
+                note((ck->why == "no checkpoint" ? std::string("no checkpoint to resume")
+                                                  : "found " + ck->why + ", so nothing can be resumed") +
+                     " for " + o.out + "; starting a normal run");
         }
         if (!resuming) ck->remove(true);  // a stale checkpoint must never describe this run's files
     } else {

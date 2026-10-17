@@ -349,7 +349,8 @@ def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
                         note(f"resuming {out_path}: {state['completed']:,} of {nseq:,} sequences were already done"
                              + (" (this format/option needs a second pass, which is redone in full)" if staged else ""))
                     else:
-                        note(f"no checkpoint to resume for {out_path}; starting a normal run")
+                        note(("no checkpoint to resume" if ck.why == "no checkpoint" else
+                              f"found {ck.why}, so nothing can be resumed") + f" for {out_path}; starting a normal run")
             if state is None:
                 ck.remove(keep_partial=True)   # a stale checkpoint must never describe this run's files
         else:

@@ -38,6 +38,7 @@ class Checkpoint:
         self.options_hash = hashlib.sha256(json.dumps(opts, sort_keys=True).encode()).hexdigest()
         self.inputs = inputs
         self.count = 0
+        self.why = "no checkpoint"   # why load_for_resume() returned None
 
     def _signature(self):
         sig = []
@@ -49,20 +50,25 @@ class Checkpoint:
     def load_for_resume(self, sink_path: str) -> dict | None:
         """The saved state if this run can resume, None if there is nothing to resume.
         Raises CoalError(code="resume_mismatch") if inputs or options changed."""
+        if not os.path.exists(self.path):
+            self.why = "no checkpoint"
+            return None
         try:
             with open(self.path, encoding="utf-8") as fh:
                 st = json.load(fh)
         except (OSError, ValueError):
+            self.why = "an unreadable checkpoint"
             return None
         if (st.get("engine") != ENGINE or st.get("coal_version") != __version__
                 or st.get("options_hash") != self.options_hash or st.get("inputs") != self._signature()):
             raise CoalError(CHANGED, code="resume_mismatch")
+        self.why = "a checkpoint whose partial output is missing or incomplete"
         try:
             if os.path.getsize(sink_path) < st["sink_bytes"]:
                 return None
             if st.get("entries_bytes") and os.path.getsize(self.entries) < st["entries_bytes"]:
                 return None
-        except OSError:
+        except (OSError, KeyError):
             return None
         return st
 

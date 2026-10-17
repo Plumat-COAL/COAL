@@ -379,6 +379,16 @@ class TestResume(unittest.TestCase):
         r2 = run_sub(coal_cmd("pep.fasta", "nuc.fasta"), self.d)
         self.assertEqual((self.d / "fresh.fa").read_bytes(), r2.stdout)
 
+    def test_unusable_checkpoint_runs_normally(self):
+        cmd = coal_cmd("pep.fasta", "nuc.fasta", "-o", "bad.fa")
+        self.assertTrue(interrupt(cmd, self.d))
+        (self.d / "bad.fa.coal-checkpoint.json").write_text("not json")
+        r = run_sub(cmd + ["--resume"], self.d)
+        self.assertEqual(r.returncode, 0)
+        self.assertIn(b"coal: note: found an unreadable checkpoint, so nothing can be resumed for bad.fa; "
+                      b"starting a normal run", r.stderr)
+        self.assertEqual((self.d / "bad.fa").read_bytes(), run_sub(coal_cmd("pep.fasta", "nuc.fasta"), self.d).stdout)
+
     def test_resume_needs_output_file(self):
         r = run_sub(coal_cmd("pep.fasta", "nuc.fasta", "--resume"), self.d)
         self.assertEqual(r.returncode, 2)
