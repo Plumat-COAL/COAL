@@ -125,7 +125,7 @@ static void record_into(std::string& out, const std::string& fmt, const std::str
 
 static std::string paml_header(long long n, long long len) {
     char b[64];
-    std::snprintf(b, sizeof b, "%4lld%7lld\n", n, len);
+    std::snprintf(b, sizeof b, " %3lld %6lld\n", n, len);  // CPP-20: as PAL2NAL (was %4lld%7lld: 1,000+ sequences)
     return b;
 }
 

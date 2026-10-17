@@ -197,6 +197,35 @@ class TestCppVsReferenceGolden(unittest.TestCase):
         self.assertEqual(failures, [], f"{len(failures)} failing golden checks, first: {failures[:3]}")
 
 
+@unittest.skipIf(_skip_reason(), _skip_reason() or "")
+class TestCppVsReferenceLarge(unittest.TestCase):
+    """CPP-20: 1,200 sequences (PAML header widths), every format, coal-cpp vs the reference Python engine."""
+
+    def test_many_sequences_every_format(self):
+        import random
+        import tempfile
+        rng = random.Random(11)
+        code = {"A": "GCT", "C": "TGT", "D": "GAT", "E": "GAA", "F": "TTT", "G": "GGT", "H": "CAT", "I": "ATT",
+                "K": "AAA", "L": "CTG", "M": "ATG", "N": "AAT", "P": "CCG", "Q": "CAG", "R": "CGT", "S": "TCT",
+                "T": "ACT", "V": "GTT", "W": "TGG", "Y": "TAT"}
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            pep, nuc = [], []
+            for k in range(1200):
+                prot = "M" + "".join(rng.choice(sorted(code)) for _ in range(29))
+                pep.append(f">s{k}\n{prot}\n")
+                nuc.append(f">s{k}\n{''.join(code[a] for a in prot)}\n")
+            (d / "p.fa").write_text("".join(pep))
+            (d / "n.fa").write_text("".join(nuc))
+            env = dict(os.environ, PYTHONPATH=str(REF_SRC))
+            for fmt in ("paml", "fasta", "clustal", "codon"):
+                with self.subTest(fmt=fmt):
+                    ref = subprocess.run([sys.executable, "-m", "coal", "p.fa", "n.fa", "-output", fmt], cwd=d,
+                                         env=env, capture_output=True, timeout=TIMEOUT)
+                    rc, out, _ = run_cpp(["p.fa", "n.fa", "-output", fmt], d)
+                    self.assertEqual((rc, out), (ref.returncode, ref.stdout.decode("latin-1")))
+
+
 @unittest.skipIf(_skip_reason() or not os.environ.get("PAL2NAL"),
                  _skip_reason() or "set PAL2NAL=/path/to/pal2nal.pl (reference scripts/fetch_pal2nal.py)")
 class TestCppVsPal2nalFuzz(unittest.TestCase):
