@@ -1,5 +1,52 @@
 # Overnight log: core (branch overnight/core)
 
+## Run 5 step 3 summary: coal-cpp mirrors the merge (2026-10-17 15:40 UTC)
+
+`overnight/core` was fast-forwarded to Keanu's merge `origin/keanu_overnight/integration` 0729829 (it already contains
+51b8092, so no merge commit), then each MRG decision was mirrored in coal-cpp. Every change has a CHANGES row citing
+its MRG row. **Not pushed from here** (no credentials): `git push origin overnight/core` from Chloe's terminal.
+
+| MRG decision | Status (commit) |
+|---|---|
+| MRG-1 safe ID pairing: exact, normalised only when it changes the pairing (notice), ENG-d notice on a partial match, silent when no ID matches, `partial_id_match` error with --strict | done: CPP-25 (3bfba03); the C++-only pairing warning, `coal: summary:` C++ lines and `COAL_CPP_ONLY_LINES` are gone |
+| MRG-2 / MRG-2b report: notices, summary / methods text, hints, aborted-run entries, `options.strict/blockonly`, error codes | done: CPP-27 (3bfba03), full port of report.py; C++ error codes = Python's (CPP-26) |
+| MRG-3 `--keep-going` with `--strict` (a refused sequence is skipped, exit 2), per-item stderr order, `--max-warnings` caps per-codon lines only (notices never) | done: CPP-26 (3bfba03); max-warnings below 0 is an error: CPP-29 |
+| MRG-4 `--resume` vs cleanup: checkpoint only for regular/new outputs (hard links in place) and regular inputs, "cannot be resumed (...)" notes, partial files kept after a signal only once a checkpoint exists | done: CPP-28 (4256784) |
+| MRG-3/4 CLI: extras are ordinary abbreviable options in the merged order (`--j` now ambiguous, as in Python); help regenerated | done: CPP-29 (4256784) |
+| MRG-8 version 0.4.0; `-j` help | already 0.4.0 in CMake/C++ (Keanu's merge); C++ keeps "worker threads" in the -j help, as MRG-8 documents |
+| MRG-6 tests: the merged branch's own tests are the default for C++ | done: CPP-30 (4256784): test_merge, test_report, test_engine_extras added to the shim; `COAL_REF_SRC` kept only as an override (MRG-6) |
+| 32-bit conversion in the new report code | fixed: CPP-31 (47d2168) |
+
+**Results (Linux, GCC 11 Release `-Werror`, at 47d2168):**
+- Goldens with `COAL_IMPL=cpp` (test_differential): **285/285**.
+- Random C++ vs merged Python, report JSON included: **3000/3000** for seed 20261017 and **3000/3000** for seed 777 (213/1000 right after the merge, before CPP-25..27).
+- Fuzz vs real PAL2NAL v14 through the merged harness (normalised_ids feature etc.), FUZZ_N=1500, 4 formats: seeds 20261017, 777, 4242: **0 unexplained** each.
+- The merged branch's own engine tests with coal-cpp as `coal`: **151 tests, all pass except the 2 in-process DEC-3 mocks** (not applicable to a binary). Tests calling `pipeline.run` in-process (TestMrg3KeepGoing matrix, TestKeepGoing -j) still exercise Python; the C++ side of those is covered by the random test and TestCppThreads.
+- Full suite: tests/ (16 modules, run in parts for the 180 s cap) all OK; tests_app 235 tests OK (7 skipped), with `PYTHONPATH=src` as CI's editable install.
+- ASan/UBSan: goldens 285/285, the 151 reference tests, random 600, resume/threads tests: clean. TSan: 20,000 sequences, -j 3/4, fasta / clustal+--keep-going+--strict / codon+report / paml+--keep-going+--progress: clean; codon -j4 output = -j1.
+- Cross-compile (cache-busted): Windows x86 / x64, macOS arm64: 0 warnings after CPP-31.
+- Windows (Chloe, MSVC 19.51 x86 /WX) at 4256784: build clean incl. report.cpp. Her test run still had `COAL_REF_SRC` pointing at the pre-merge reference (279 goldens, 4 stderr-order differences = the old order); to be re-run with the variable cleared.
+
+**Parked:** nothing.
+
+**Needs a human decision:**
+- Push: `git push origin overnight/core`.
+- Re-run on Windows with `set COAL_REF_SRC=` (expected 285/285 and random OK).
+- `--version`: C++ prints `coal 0.4.0 (C++)`, Python `coal 0.4.0` (tests only check the prefix); keep the suffix?
+
+### Step 4 (benchmarks) and CPP-32/CPP-33 (2026-10-17 16:00 UTC)
+- The first step-4 run showed C++ peak memory on 100,000 x 500 at 152 MB (26 MB before the merge): the ported
+  report built a view of every entry at the end of the run, and the IDs were held 3-4 times. Fixed in CPP-32 /
+  CPP-33 (4084d1f), guarded by TestCppMemory (fails with the old code: 1,455 bytes per extra sequence; now ~300).
+  500,000 x 150: fasta 110 MB / 2.4 s, clustal 134 MB, codon 146 MB. All step-3 checks re-run green on 4084d1f
+  (goldens 285/285, random 3000/3000 x 2 seeds, 151 reference tests, ASan/UBSan, TSan, cross-compile 0 warnings).
+- Benchmarks at 4084d1f, `--impl both --coal-jobs 0` (2-core / 4 GB VM): `benchmarks/results/cpp_vs_python_linux_4084d1f.md`.
+  10,000 x 500: Python 0.682 s (-j 1) / 0.651 s (default), C++ 0.125 / 0.109 s (5.5x / 6.0x).
+  100 x 10,000: 0.176 / 0.175 vs 0.033 / 0.028 s (5.3x / 6.3x). 100,000 x 500: 4.213 / 2.945 vs 1.050 / 0.964 s
+  (4.0x / 3.1x); C++ peak 35-37 MB vs Python 105-125 MB. Outputs byte-identical everywhere.
+- Needs a human: push; the same benchmark on a machine with more cores for headline numbers; Windows tests with
+  `COAL_REF_SRC` cleared.
+
 ## Run 5 progress (final engine fixes; reference 0f0330f)
 - 2026-10-17 13:21 UTC | CPP-22 FIN-E1, CPP-23 FIN-C14 | reference goldens 279/279; random vs reference 3000/3000 (seed 20261017) and 3000/3000 (seed 777); fuzz vs real PAL2NAL through the reference's updated harness, FUZZ_N=1500: seeds 20261017, 777, 4242: 0 unexplained each; reference tests via shim 94/96 (the same 2 in-process DEC-3 mocks; test_final_fixes added, all pass). FIN-E3 (drop-in argument parsing) is Python-only: coal-cpp is not used as the drop-in, nothing to port.
 - 2026-10-17 13:35 UTC | CPP-24 FIN-E2 bounded clustal/codon writer | peak memory and time, 500,000 x 150 codons (2-core VM): fasta -j1 2.26 s / 88 MB, -j0 2.41 s / 89 MB; clustal -j1 2.42 s / 114 MB, -j0 2.61 s / 115 MB (was 76.7 s / 256 MB); codon -j1 3.27 s / 126 MB, -j0 3.46 s / 125 MB. 250,000: fasta 53 MB, clustal 78 MB, codon 91 MB, so each format grows by ~35 MB per 250k sequences, the IDs.

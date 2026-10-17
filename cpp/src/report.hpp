@@ -1,98 +1,108 @@
-// Run report (schema coal.report/1), end-of-run summary lines, genetic-code hint
-// and methods text. Same content as src/coal/report.py.
+// Run report (schema coal.report/1), the "coal: summary:" lines, the genetic-code hint and the methods text.
+// CPP-27: rewritten to mirror src/coal/report.py of the merged engine (MRG-2, MRG-2b): the app's message codes and
+// texts, statuses (ok / warning / failed / not_checked), where a failed gene breaks (the app viewer's rule),
+// start-codon and frameshift-like mismatch patterns, the hint rule and wording, the methods text.
 #pragma once
 #include <chrono>
+#include <functional>
+#include <map>
+#include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "json.hpp"
 
 namespace coal {
 
-struct Message {
-    std::string code, text;
-    int column = 0;  // 0 = none
-};
-
-struct Entry {
-    std::string id;
-    long long index = 0;
-    std::string dna_id;
-    bool has_dna_id = false;
-    std::string pairing;
-    std::string status;  // ok | warning | failed
-    std::vector<Message> messages;
-    Json to_json() const;
-    static Entry from_json(const Json& j);
-};
-
-struct Hint {
-    int table = 0, checked = 0, fit = 0, fit_current = 0;
-    std::string text, summary;
-};
-
-std::string plain_reason(const std::string& code, const std::string& message);
 std::string fmt_n(long long x);  // 1234567 -> "1,234,567"
 std::string shlex_join(const std::vector<std::string>& args);
-extern const char* const TABLE_NAMES[];  // index by table number (nullptr if unsupported)
+
+// Rows of the protein alignment for the end-of-run extras: call fn(k, id, prepared row) for every sequence in input
+// order until it returns false.
+using RowsFn = std::function<void(const std::function<bool(long long, const std::string&, const std::string&)>&)>;
+using DnaFn = std::function<std::string(long long)>;  // DNA paired with sequence k
 
 class RunReport {
 public:
     RunReport(const std::vector<std::string>& argv, const std::string& pep, const std::vector<std::string>& nucs,
               const std::string& out, const std::string& fmt, int table, bool nogap, bool nomismatch,
-              bool keep_going, bool keep_entries);
+              bool keep_going, bool keep_entries, bool strict, bool blockonly);
 
-    // CPP-17: hash these files instead of the arguments (piped inputs are read from their temp copies).
-    void set_hash_paths(std::vector<std::string> p) { hash_paths_ = std::move(p); }
-    void set_inputs(long long n_protein, const std::vector<long long>& dna_counts);
-    void set_pairing(const std::string& mode, const std::vector<std::string>* dna_ids,
-                     const std::vector<size_t>* dna_index, const std::vector<std::string>& per_seq,
-                     const std::string& ex_prot, const std::string& ex_dna);
-    // Returns the entry when one was built (not for ok sequences without keep_entries).
-    const Entry* add_sequence(const std::string& pid, const std::vector<std::string>& warnings,
-                              const std::string& fail_code, const std::string& fail_msg, long long k);
-    void fail(const std::string& code, const std::string& message);
+    void set_hash_paths(std::vector<std::string> p) { hash_paths_ = std::move(p); }  // CPP-17
+    // CPP-33: the report owns the protein IDs (the pipeline reads them through ids()), one copy per run
+    void set_inputs(std::vector<std::string>&& ids);
+    const std::vector<std::string>& ids() const { return ids_; }
+    void set_dna_inputs(const std::vector<long long>& dna_counts, const std::vector<std::string>& dna_file_ids);
+    // mode id / order / normalised; per_seq: per-protein "id"/"normalised" (empty unless normalised);
+    // pairing[k] = the DNA record (index into dna_file_ids) of protein k
+    void set_pairing(const std::string& mode, const std::vector<std::string>& per_seq,
+                     const std::vector<size_t>& pairing, const std::vector<std::string>& notes);
+    // warnings: thread_one's ("pepAlnPos ..."); notices: with the ID; failure: code + message (code empty = none).
+    // Returns the entry (nullptr for an ok sequence).
+    const Json* add_sequence(long long k, const std::string& pid, const std::vector<std::string>& warnings,
+                             const std::vector<std::string>& notices, const std::string& fail_code = "",
+                             const std::string& fail_msg = "");
+    void fail(const std::string& code, const std::string& message, bool has_seq_id);
     void set_output(const std::string& path, const std::string& sha, long long n);
-    // Genetic-code hint: needs_hint() says whether to re-test the problem sequences;
-    // apply_fits() takes (table, number of them that thread with no mismatch) for every table.
-    bool needs_hint() const;
-    void apply_fits(const std::vector<std::pair<int, int>>& fits);
+    // End of run, inputs still open: break locations, mismatch patterns, genetic-code hint.
+    void finish(const RowsFn& rows, const DnaFn& dna, bool aborted = false);
     std::vector<std::string> summary_lines() const;
-    std::string methods_text() const;
-    Json to_json() const;
-    // --resume support
+    Json to_dict() const;
+    // --resume
     Json checkpoint_state() const;
-    void restore(const Json& state, const std::vector<Entry>& nonok, long long completed,
-                 const std::vector<std::string>& prot_ids);
+    void restore(const Json& state, const std::vector<Json>& nonok, long long completed);
 
     bool keep_entries;
+    bool finished = false;
     int exit_code = 0;
-    std::vector<long long> problems;  // input positions of mismatching / failed sequences (<= 200)
-    long long n_ok = 0, n_warning = 0, n_failed = 0, n_mismatch = 0, n_unknown = 0;
-    long long n_protein = -1;         // -1 = unknown
-    long long resumed_from = -1;
-    bool has_error = false;
-    bool pairing_set = false;
-    std::string error_code, error_text, error_detail;
-    std::vector<Hint> hints;
 
 private:
+    long long total() const;
+    std::string command() const;
+    Json entry_view(long long k, int aborted = -1) const;  // -1: aborted = no output
+    long long first_fail() const;
+    std::map<std::string, long long> counts(const std::vector<Json>* entries = nullptr) const;
+    std::vector<Json> all_entries() const;
+    std::vector<Json> id_hints() const;
+    std::vector<Json> hints() const;
+    bool completed() const;
+    std::string methods_text(const Json& rep) const;
+    void finish_impl(const RowsFn& rows, const DnaFn& dna, bool aborted);
+    void set_kind(long long k, char ch);
+
     std::chrono::steady_clock::time_point t0_;
-    std::string pep_, out_, fmt_, command_, pal2nal_;
-    std::vector<std::string> nucs_;
-    std::vector<std::string> hash_paths_;  // CPP-17: files to hash (spooled copies of piped inputs)
+    std::vector<std::string> argv_;
+    std::string pep_, out_, fmt_;
+    std::vector<std::string> nucs_, hash_paths_;
     int table_;
-    bool nogap_, nomismatch_, keep_going_;
-    std::vector<long long> dna_counts_;
+    bool nogap_, nomismatch_, keep_going_, strict_, blockonly_;
+    bool has_ids_ = false;
+    std::vector<std::string> ids_;
     bool has_dna_counts_ = false;
-    std::string pairing_;
-    const std::vector<std::string>* dna_ids_ = nullptr;
+    std::vector<long long> dna_counts_;
+    bool has_dna_file_ids_ = false;
+    std::vector<std::string> dna_file_ids_;
+    std::string pairing_;  // empty = not paired
     std::vector<std::string> seq_pairing_;
-    std::string ex_prot_, ex_dna_;
-    std::vector<Entry> entries_, failed_entries_;
+    bool has_dna_ids_ = false;
+    std::vector<size_t> pair_idx_;  // CPP-33: protein k's DNA ID is dna_file_ids_[pair_idx_[k]]
+    const std::string& dna_id(size_t k) const { return dna_file_ids_[pair_idx_[k]]; }
+    mutable std::set<std::string> paired_set_;  // built on first use (suspect_pairing text)
+    mutable bool paired_set_built_ = false;
+    std::vector<Json> pair_hints_;
+    bool partial_ = false;
+    std::string kinds_;
+    std::map<long long, Json> entries_;
+    std::vector<long long> cols_, real_cols_;  // sorted unique
+    bool has_error_ = false;
+    Json error_;
+    std::vector<Json> errors_;
     bool has_output_ = false;
-    std::string out_path_, out_sha_;
-    long long out_n_ = 0;
+    Json output_;
+    bool has_gc_hint_ = false;
+    Json gc_hint_;
+    long long resumed_from_ = -1;
 };
 
 }  // namespace coal

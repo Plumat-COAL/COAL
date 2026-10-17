@@ -72,9 +72,6 @@ static double env_double(const char* name, double dflt) {
 }
 // Same batch boundaries as pipeline.py (COAL_BATCH_NT overrides, for tests/tuning).
 static const long long BATCH_NT = env_ll("COAL_BATCH_NT", 2000000);
-// COAL_CPP_ONLY_LINES=0 (CPP-18, for comparing with the reference engine in tests): leave out the stderr lines only
-// coal-cpp prints ("coal: summary:" lines, the no-ID-match pairing warning).
-static const bool CPP_ONLY_LINES = env_ll("COAL_CPP_ONLY_LINES", 1) != 0;
 static const int WRAP = 60;
 static const char* const MISMATCH_WARNING = " does not correspond to ";
 static const long long BLOCK_CACHE = 64LL << 20;  // bytes of rows held while writing blocks
@@ -88,6 +85,7 @@ struct Options {
     std::string out;
     int jobs = 0;
     bool keep_going = false, progress = false, resume = false, json = false;
+    bool resumable = true;  // CPP-28 (reference MRG-4): false when an input came through a pipe (spooled)
     int max_warnings = 0;
     std::string report;
     std::vector<std::string> argv;  // raw arguments (for the report's "command")
@@ -170,37 +168,61 @@ static std::vector<std::string> id_keys(const std::string& rid) {
     return keys;
 }
 
-// Returns mode "id", "normalised" or "order"; fills idx (and per_seq for "normalised").
+// CPP-25 (reference MRG-1, core.py pair_ids): returns "id", "normalised" or "order"; fills idx, per_seq (only for
+// "normalised") and the notices.
 static std::string pair_ids(const std::vector<std::string>& prot, const std::vector<std::string>& dna_ids,
                             const std::unordered_map<std::string, size_t>& pos, std::vector<size_t>& idx,
-                            std::vector<std::string>& per_seq) {
+                            std::vector<std::string>& per_seq, std::vector<std::string>& notes, bool strict) {
+    if (prot.size() != dna_ids.size())
+        throw CoalError("number of sequences differs (protein: " + std::to_string(prot.size()) +
+                            ", DNA: " + std::to_string(dna_ids.size()) + ")",
+                        "count_mismatch");
+    if (prot.empty()) throw CoalError("no sequences in input", "no_sequences");
     idx.assign(prot.size(), 0);
     per_seq.clear();
-    bool all = true;
-    for (auto& p : prot)
-        if (!pos.count(p)) {
-            all = false;
-            break;
+    long long hits = 0;
+    for (size_t k = 0; k < prot.size(); ++k) {
+        auto it = pos.find(prot[k]);
+        if (it != pos.end()) {
+            idx[k] = it->second;
+            ++hits;
         }
-    if (all) {
-        for (size_t k = 0; k < prot.size(); ++k) idx[k] = pos.at(prot[k]);
-        return "id";
     }
+    if (hits == (long long)prot.size()) return "id";
+    auto first_diff = [&](std::string& p, std::string& d) {
+        for (size_t k = 0; k < prot.size(); ++k)
+            if (prot[k] != dna_ids[k]) {
+                p = prot[k];
+                d = dna_ids[k];
+                return;
+            }
+    };
+    const std::string H = std::to_string(hits), T = std::to_string(prot.size());
+    if (hits && strict) {
+        std::string p, d;
+        first_diff(p, d);
+        throw CoalError("only " + H + " of " + T + " protein IDs are DNA IDs, so sequences would be paired by order "
+                            "(e.g. protein '" + p + "' with DNA '" + d + "'); make the IDs match, or run without "
+                            "--strict to pair by order as PAL2NAL does",
+                        "partial_id_match");
+    }
+    // normalised_pairing: one candidate per protein (an exact ID wins), one-to-one
     std::unordered_map<std::string, std::vector<size_t>> by_key;
     for (size_t i = 0; i < dna_ids.size(); ++i)
         for (auto& key : id_keys(dna_ids[i])) {
             auto& v = by_key[key];
             if (v.empty() || v.back() != i) v.push_back(i);
         }
+    std::vector<size_t> nidx(prot.size());
+    std::vector<std::string> modes;
     std::vector<char> used(dna_ids.size(), 0);
     bool ok = true;
     for (size_t k = 0; k < prot.size() && ok; ++k) {
         size_t j;
-        std::string m;
         auto it = pos.find(prot[k]);
         if (it != pos.end()) {
             j = it->second;
-            m = "id";
+            modes.push_back("id");
         } else {
             std::set<size_t> cands;
             for (auto& key : id_keys(prot[k])) {
@@ -212,30 +234,44 @@ static std::string pair_ids(const std::vector<std::string>& prot, const std::vec
                 break;
             }
             j = *cands.begin();
-            m = "normalised";
+            modes.push_back("normalised");
         }
         if (used[j]) {
             ok = false;
             break;
         }
         used[j] = 1;
-        idx[k] = j;
-        per_seq.push_back(m);
+        nidx[k] = j;
     }
-    if (ok) return "normalised";
+    bool moved_any = false;
+    for (size_t k = 0; ok && k < prot.size(); ++k) moved_any = moved_any || nidx[k] != k;
+    if (ok && moved_any) {
+        long long nn = 0, nmoved = 0;
+        size_t first = prot.size();
+        for (size_t k = 0; k < prot.size(); ++k) {
+            nn += modes[k] == "normalised";
+            if (nidx[k] != k) {
+                ++nmoved;
+                if (first == prot.size()) first = k;
+            }
+        }
+        notes.push_back(std::to_string(nn) + " of " + T + " protein IDs match a DNA ID only after normalising (version "
+                        "suffix, case or database fields), so sequences were paired by those IDs, not by file order "
+                        "as PAL2NAL pairs them: by order, " + std::to_string(nmoved) + " of " + T +
+                        " proteins would get the DNA of another gene (e.g. protein '" + prot[first] + "' gets DNA '" +
+                        dna_ids[nidx[first]] + "', not '" + dna_ids[first] + "')");
+        idx = nidx;
+        per_seq = modes;
+        return "normalised";
+    }
+    if (hits) {
+        std::string p, d;
+        first_diff(p, d);
+        notes.push_back("only " + H + " of " + T + " protein IDs are DNA IDs; pairing sequences by order instead (e.g. "
+                        "protein '" + p + "' gets DNA '" + d + "') (--strict makes this an error)");
+    }
     for (size_t k = 0; k < prot.size(); ++k) idx[k] = k;
-    per_seq.clear();
     return "order";
-}
-
-static std::string order_pairing_warning(const std::vector<std::string>& prot, const std::vector<std::string>& dna) {
-    std::string pairs;
-    for (size_t i = 0; i < std::min<size_t>(2, prot.size()); ++i) {
-        if (i) pairs += ", ";
-        pairs += prot[i] + (i == 0 ? " <-> DNA " : " <-> ") + dna[i];
-    }
-    return "IDs don't match, so sequences were paired by file order (protein " + pairs +
-           (prot.size() > 2 ? ", ..." : "") + "). Check this is what you want.";
 }
 
 // ------------------------------------------------------------------ pipeline
@@ -752,7 +788,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
     const bool staged = two_pass || block || (o.keep_going && o.fmt == "paml");
 
     // pass 1: protein IDs, row length, frameshift column widths
-    std::vector<std::string> ids;
+    std::vector<std::string> ids_read;
     long long ncol = -1;
     std::vector<int> widths;
     {
@@ -769,62 +805,35 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                                 "row_lengths");
             }
             update_column_widths(widths, row);
-            ids.push_back(id);
+            ids_read.push_back(id);
         }
     }
+    rec.set_inputs(std::move(ids_read));
+    const std::vector<std::string>& ids = rec.ids();  // CPP-33: one copy, owned by the report
     DnaIndex dna(o.nucs);
-    rec.set_inputs((long long)ids.size(), dna.counts_per_file());
-    if (ids.size() != dna.size())
-        throw CoalError("number of sequences differs (protein: " + std::to_string(ids.size()) +
-                            ", DNA: " + std::to_string(dna.size()) + ")",
-                        "count_mismatch");
-    if (ids.empty()) throw CoalError("no sequences in input", "no_sequences");
-    std::vector<std::string> per_seq;
-    std::string mode = pair_ids(ids, dna.ids(), dna.pos(), rs.pairing, per_seq);
+    rec.set_dna_inputs(dna.counts_per_file(), dna.ids());
+    // CPP-25 (reference MRG-1): exact IDs; else (--strict: a partial exact match is an error) normalised IDs only
+    // where file order would give a protein another gene's DNA, with a notice; else file order (ENG-d notice when
+    // some IDs match, silent when none do)
+    std::vector<std::string> per_seq, pair_notes;
+    std::string mode = pair_ids(ids, dna.ids(), dna.pos(), rs.pairing, per_seq, pair_notes, o.strict);
     const std::vector<size_t>& pairing = rs.pairing;
-    if (mode == "order") {
-        // CPP-15 (reference ENG-d, DEC-1): some but not all protein IDs are DNA IDs: a notice (an error with
-        // --strict). No ID matching at all keeps coal-cpp's own pairing warning (see LOG, needs reconciling).
-        long long hits = 0;
-        for (auto& p : ids) hits += dna.pos().count(p) ? 1 : 0;
-        if (hits) {
-            std::string p, d;
-            for (size_t k = 0; k < ids.size(); ++k)
-                if (ids[k] != dna.ids()[k]) {
-                    p = ids[k];
-                    d = dna.ids()[k];
-                    break;
-                }
-            const std::string H = std::to_string(hits), T = std::to_string(ids.size());
-            if (o.strict)
-                throw CoalError("only " + H + " of " + T + " protein IDs are DNA IDs, so sequences would be paired by "
-                                    "order (e.g. protein '" + p + "' with DNA '" + d + "'); make the IDs match, or "
-                                    "run without --strict to pair by order as PAL2NAL does",
-                                "partial_ids");
-            warn("only " + H + " of " + T + " protein IDs are DNA IDs; pairing sequences by order instead (e.g. "
-                 "protein '" + p + "' gets DNA '" + d + "') (--strict makes this an error)");
-        } else {
-            if (CPP_ONLY_LINES) warn(order_pairing_warning(ids, dna.ids()));
-        }
-    }
-    std::string ex_prot, ex_dna;
-    for (size_t k = 0; k < per_seq.size(); ++k)
-        if (per_seq[k] == "normalised") {
-            ex_prot = ids[k];
-            ex_dna = dna.ids()[pairing[k]];
-            break;
-        }
-    if (rec.keep_entries) {
-        rs.dna_ids_paired.reserve(ids.size());
-        for (size_t k = 0; k < ids.size(); ++k) rs.dna_ids_paired.push_back(dna.ids()[pairing[k]]);
-    }
-    rec.set_pairing(mode, rec.keep_entries ? &rs.dna_ids_paired : nullptr, &rs.pairing, per_seq, ex_prot, ex_dna);
+    for (auto& n : pair_notes) warn(n);
+    rec.set_pairing(mode, per_seq, pairing, pair_notes);
     dna.forget_ids();
     const long long nseq = (long long)ids.size();
     long long wtotal = 0;
     for (int w : widths) wtotal += w;
 
     Ctx ctx{code, widths, staged, o.fmt, o.strict};
+    // CPP-27: the report's end-of-run extras read the protein rows and the paired DNA again
+    RowsFn rows_fn = [&](const std::function<bool(long long, const std::string&, const std::string&)>& fn) {
+        ProteinReader rr(o.pep);
+        std::string id, row;
+        for (long long k = 0; rr.next(id, row); ++k)
+            if (!fn(k, id, prepare_row(row))) break;
+    };
+    DnaFn dna_fn = [&](long long k) { return dna.get(pairing[(size_t)k]); };
 
     // ---- files: deterministic names next to -o (resumable), temp files for stdout
     std::unique_ptr<Checkpoint> ck;
@@ -836,9 +845,14 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
     OutTarget target;
     if (!o.out.empty()) target = resolve_output(o.out);
     const bool direct = !o.out.empty() && target.direct;
-    if (!o.out.empty() && !direct) {
+    // CPP-28 (reference MRG-4): a checkpoint only for an output that is (or will be) a regular file - hard-linked
+    // files included (written in place at the end) - and inputs that are regular files
+    std::error_code ex_ec;
+    const bool want_ck = !o.out.empty() && o.resumable && (target.existing || !fs::exists(target.real, ex_ec));
+    bool ck_registered = false;
+    if (want_ck) {
         std::string canon = "fmt=" + o.fmt + "|table=" + std::to_string(o.table) + "|nogap=" + std::to_string(o.nogap) +
-                            "|nomismatch=" + std::to_string(o.nomismatch) + "|blockonly=" + std::to_string(o.blockonly) + "|keep_going=" +
+                            "|nomismatch=" + std::to_string(o.nomismatch) + "|blockonly=" + std::to_string(o.blockonly) + "|strict=" + std::to_string(o.strict) + "|keep_going=" +
                             std::to_string(o.keep_going) + "|staged=" + std::to_string(staged);
         std::vector<std::string> inputs{o.pep};
         inputs.insert(inputs.end(), o.nucs.begin(), o.nucs.end());
@@ -857,9 +871,20 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                                                   : "found " + ck->why + ", so nothing can be resumed") +
                      " for " + o.out + "; starting a normal run");
         }
-        if (!resuming) ck->remove(true);  // a stale checkpoint must never describe this run's files
+        if (!resuming) {
+            ck->remove(true);  // a stale checkpoint must never describe this run's files
+            // CPP-28 (reference MRG-4 / ENG-f): until a checkpoint describes them, a signal removes these files
+            for (auto* q : {&ck->partial, &ck->stage, &ck->prot, &ck->entries}) register_temp(*q);
+            register_temp(ck->stage + ".grid");
+            ck_registered = true;
+        }
     } else {
-        fs::path d = fs::temp_directory_path();
+        if (o.resume && !o.out.empty())
+            note(o.out + " cannot be resumed (" +
+                 (o.resumable ? "the output is not a regular file" : "an input is not a regular file") +
+                 "); starting a normal run");
+        // the output's temp file goes next to the real target when it is renamed onto it (same file system)
+        fs::path d = (!o.out.empty() && !direct) ? fs::path(target.real).parent_path() : fs::temp_directory_path();
         out_tmp = (d / (".coal_" + unique_suffix() + ".tmp")).string();
         if (staged) stage_path = (d / (".coal_rows_" + unique_suffix() + ".tmp")).string();
         if (o.fmt == "codon") prot_path = (d / (".coal_prot_" + unique_suffix() + ".tmp")).string();
@@ -874,8 +899,13 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         ~Cleanup() { fn(); }
     } cleanup{[&]() {
         if (ck) {
-            if (finished || failed) ck->remove();
-            // otherwise (crash, kill, disk full ...) keep partial + checkpoint for --resume
+            std::error_code ec;
+            // otherwise (crash, kill, disk full ...) keep partial + checkpoint for --resume, if one was written
+            if (finished || failed || !fs::exists(ck->path, ec)) ck->remove();
+            if (ck_registered) {
+                for (auto* q : {&ck->partial, &ck->stage, &ck->prot, &ck->entries}) unregister_temp(*q);
+                unregister_temp(ck->stage + ".grid");
+            }
         } else {
             std::error_code ec;
             for (auto* p : {&out_tmp, &stage_path, &prot_path})
@@ -902,7 +932,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         if (!prot_path.empty()) prot.open(prot_path, resuming ? get("prot_bytes") : -1);
         std::vector<char> drop((o.nomismatch || block_cols) ? (size_t)ncol : 0, 0), bad;
         long long skipped = 0;
-        std::vector<std::string> out_ids;  // staged formats: IDs of the written sequences, in order
+        std::set<long long> skip_idx;       // sequences skipped by --keep-going (resume)
         if (resuming) {
             skipped = get("skipped");
             if (const Json* v = state.get("drop"))
@@ -916,22 +946,17 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                         bad[(size_t)t] = 1;
                     }
                 }
-            std::vector<Entry> nonok;
+            std::vector<Json> nonok;
             {
                 std::ifstream in(ck->entries, std::ios::binary);
                 std::string line;
                 while (std::getline(in, line))
-                    if (!line.empty()) nonok.push_back(Entry::from_json(json_parse(line)));
+                    if (!line.empty()) nonok.push_back(json_parse(line));
             }
             const Json* rst = state.get("rec");
-            rec.restore(rst ? *rst : Json::object(), nonok, start, ids);
-            if (staged) {
-                std::vector<char> is_failed((size_t)start, 0);
-                for (auto& e : nonok)
-                    if (e.status == "failed" && e.index >= 0 && e.index < start) is_failed[(size_t)e.index] = 1;
-                for (long long k = 0; k < start; ++k)
-                    if (!is_failed[(size_t)k]) out_ids.push_back(ids[(size_t)k]);
-            }
+            rec.restore(rst ? *rst : Json::object(), nonok, start);
+            if (const Json* v = state.get("skip_idx"))
+                for (auto& x : v->a) skip_idx.insert(x.as_int());
         } else if (o.fmt == "paml" && !staged) {
             sink.f << paml_header(nseq, wtotal);
         }
@@ -972,44 +997,56 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
             if (i == 10 || i >= w.size() || w[i] != ':') return true;
             return c >= 1 && c <= (long long)mask.size() && mask[(size_t)(c - 1)] == '#';
         };
+        auto shown = [&](const std::vector<std::string>& ws) {  // the warnings -blockonly keeps (as on stderr)
+            std::vector<std::string> v;
+            for (auto& w : ws)
+                if (kept_col(w)) v.push_back(w);
+            return v;
+        };
         auto emit = [&](std::vector<Item>& cur) {
             if (!o.keep_going)
                 for (size_t i = 0; i < cur.size(); ++i)
                     if (cur[i].failed) {
-                        rec.add_sequence(cur[i].id, {}, cur[i].error_code, cur[i].error, done + (long long)i);
+                        // the sequences before it in its batch were checked (not written): report only
+                        for (size_t j = 0; j < i; ++j)
+                            rec.add_sequence(done + (long long)j, cur[j].id, shown(cur[j].warnings), cur[j].notices);
+                        rec.add_sequence(done + (long long)i, cur[i].id, {}, {}, cur[i].error_code, cur[i].error);
                         throw CoalError(cur[i].error, cur[i].error_code, cur[i].id);
                     }
-            // CPP-15: as the reference, a batch's per-codon warnings first, then its notices
             for (Item& it : cur) {
+                // CPP-26 (reference MRG-3): per sequence its warnings, its notices, then "skipped ..." (--keep-going)
                 for (auto& w : it.warnings)  // CPP-11 (ENG-i2): no mismatch warnings with -nomismatch, as PAL2NAL
                     if (!(o.nomismatch && w.find(MISMATCH_WARNING) != std::string::npos) && kept_col(w))
                         warn(it.id + " " + w);
-                if (it.failed) warn("skipped " + it.error);
-            }
-            for (Item& it : cur)
                 for (auto& n : it.notices) warn(n);
-            for (Item& it : cur) {
-                const Entry* e = rec.add_sequence(it.id, it.warnings, it.failed ? it.error_code : "",
-                                                  it.failed ? it.error : "", done);
-                if (ck && e && e->status != "ok") entries.f << json_dump(e->to_json()) << '\n';
-                ++done;
+                if (it.failed) warn("skipped " + it.error);
+                const Json* e = it.failed ? rec.add_sequence(done, it.id, {}, {}, it.error_code, it.error)
+                                          : rec.add_sequence(done, it.id, shown(it.warnings), it.notices);
+                if (ck && e) entries.f << json_dump(*e) << '\n';
                 if (it.failed) {
                     ++skipped;
+                    skip_idx.insert(done);
+                    ++done;
                     continue;
                 }
+                ++done;
                 if (staged) {
                     sink.f.write(it.out.data(), (std::streamsize)it.out.size());
                     if (!prot_path.empty()) prot.f.write(it.row.data(), (std::streamsize)it.row.size());
                     if (o.nogap) mark_nogap_triplets(it.out, bad, *code);
                     if (o.nomismatch)
                         for (int c : it.mcols) drop[(size_t)(c - 1)] = 1;
-                    out_ids.push_back(it.id);
                 } else {
                     sink.f.write(it.out.data(), (std::streamsize)it.out.size());
                 }
             }
             std::cerr.flush();
             if (prog) prog->update(done);
+            if (ck && ck->count == 0 && done < nseq && std::getenv("COAL_TEST_PAUSE_BEFORE_CHECKPOINT")) {
+                sink.f.flush();  // tests (CPP-28): partial files exist, no checkpoint describes them yet
+                std::cerr << "coal: test: paused before any checkpoint" << std::endl;
+                std::this_thread::sleep_for(std::chrono::seconds(3600));
+            }
             if (ck && done < nseq &&
                 std::chrono::duration<double>(std::chrono::steady_clock::now() - last_ck).count() >= CHECKPOINT_EVERY) {
                 Json st = Json::object();
@@ -1026,18 +1063,35 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                     if (bad[i]) bl.push((long long)i);
                 st.set("drop", dl);
                 st.set("bad", bl);
+                Json sk = Json::array();
+                for (long long x : skip_idx) sk.push(x);
+                st.set("skip_idx", sk);
                 st.set("rec", rec.checkpoint_state());
                 ck->save(st);
+                if (ck_registered) {  // CPP-28: a checkpoint describes them now: kept after a signal
+                    for (auto* q : {&ck->partial, &ck->stage, &ck->prot, &ck->entries}) unregister_temp(*q);
+                    unregister_temp(ck->stage + ".grid");
+                    ck_registered = false;
+                }
                 last_ck = std::chrono::steady_clock::now();
                 test_pause(ck->count);
             }
         };
         run_ordered<Item>(read_batch, [&](Item& it) { work(it, ctx); }, emit, o.jobs);
-        if (staged) std::vector<std::string>().swap(ids);  // CPP-24: out_ids has what the final pass needs
         if (prog && prog->printed) prog->update(done, true);
         if (o.keep_going && skipped == nseq)
             throw CoalError("none of the " + std::to_string(nseq) + " sequences could be converted", "all_failed");
+        rec.finish(rows_fn, dna_fn);  // CPP-27: break locations, mismatch patterns, genetic-code hint
         const long long nout = nseq - skipped;
+        // CPP-33: the final pass names the written sequences: the report's IDs, or (--keep-going skipped some)
+        // a list without the skipped ones
+        std::vector<std::string> kept_ids;
+        if (staged && !skip_idx.empty()) {
+            kept_ids.reserve((size_t)nout);
+            for (long long q = 0; q < nseq; ++q)
+                if (!skip_idx.count(q)) kept_ids.push_back(ids[(size_t)q]);
+        }
+        const std::vector<std::string>& out_ids = skip_idx.empty() ? ids : kept_ids;
 
         OutFile out;
         if (staged) {
@@ -1135,48 +1189,11 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         return skipped;
     } catch (const CoalError&) {
         failed = true;  // a real error: nothing to resume
+        if (!rec.finished) rec.finish(rows_fn, dna_fn, true);
         throw;
     }
 }
 
-// Genetic-code hint: re-test the problem sequences with every supported code.
-static void compute_hints(const Options& o, RunReport& rec, const RunState& rs) {
-    if (!rec.needs_hint() || rs.pairing.empty()) return;
-    std::vector<long long> want = rec.problems;
-    std::sort(want.begin(), want.end());
-    std::vector<std::pair<std::string, std::string>> rows;  // (id, row) for wanted positions in order
-    std::vector<long long> pos;
-    {
-        ProteinReader pr(o.pep);
-        std::string id, row;
-        long long k = 0;
-        size_t w = 0;
-        while (w < want.size() && pr.next(id, row)) {
-            if (k == want[w]) {
-                rows.push_back({id, prepare_row(row)});
-                pos.push_back(k);
-                ++w;
-            }
-            ++k;
-        }
-    }
-    DnaIndex dna(o.nucs);
-    std::vector<std::string> seqs;
-    for (long long k : pos) seqs.push_back(dna.get(rs.pairing[(size_t)k]));
-    std::vector<std::pair<int, int>> fits;
-    for (int t : supported_tables()) {
-        const GeneticCode* g = get_code(t);
-        int n = 0;
-        for (size_t i = 0; i < rows.size(); ++i) {
-            try {
-                if (thread_one(rows[i].first, rows[i].second, seqs[i], *g).mismatch_cols.empty()) ++n;
-            } catch (const CoalError&) {
-            }
-        }
-        fits.push_back({t, n});
-    }
-    rec.apply_fits(fits);
-}
 
 // ------------------------------------------------------------------ CLI
 
@@ -1227,14 +1244,15 @@ int main(int argc, char** argv) {
     const int a_jobs = ap.add({Kind::Value, {"-j", "--jobs"}, "", true, {}, true});
     const int a_quiet = ap.add({Kind::Flag, {"-q", "--quiet"}, "", false, {}, true});
     const int a_strict = ap.add({Kind::Flag, {"-strict", "--strict"}, "", false, {}, true});
+    // CPP-29 (reference MRG-3/MRG-4 cli.py): the extras are ordinary options of the merged parser, registered in its
+    // order (before --version) and abbreviated like every other option (`--j` is now ambiguous: --jobs, --json)
+    const int a_keep = ap.add({Kind::Flag, {"--keep-going", "-keep-going"}, "", false, {}, true});
+    const int a_maxw = ap.add({Kind::Value, {"--max-warnings"}, "", true, {}, true});
+    const int a_prog = ap.add({Kind::Flag, {"--progress"}, "", false, {}, true});
+    const int a_resume = ap.add({Kind::Flag, {"--resume"}, "", false, {}, true});
+    const int a_report = ap.add({Kind::Value, {"--report"}, "", false, {}, true});
+    const int a_json = ap.add({Kind::Flag, {"--json"}, "", false, {}, true});
     ap.add({Kind::Version, {"--version"}, "", false, {}, true});
-    // C++-only options: exact names (no abbreviations), so they never make a Python command line ambiguous
-    const int a_keep = ap.add({Kind::Flag, {"-keep-going", "--keep-going"}, "", false, {}, false});
-    const int a_maxw = ap.add({Kind::Value, {"--max-warnings"}, "", true, {}, false});
-    const int a_prog = ap.add({Kind::Flag, {"--progress"}, "", false, {}, false});
-    const int a_resume = ap.add({Kind::Flag, {"--resume"}, "", false, {}, false});
-    const int a_report = ap.add({Kind::Value, {"--report"}, "", false, {}, false});
-    const int a_json = ap.add({Kind::Flag, {"--json"}, "", false, {}, false});
 
     coal::args::Result args = ap.parse(o.argv);
     if (args.exit) {
@@ -1263,9 +1281,10 @@ int main(int argc, char** argv) {
         return usage_error("--json requires -o (the alignment and the report cannot both go to stdout)");
     if (o.resume && o.out.empty())
         return usage_error("--resume requires -o (only runs that write to a file can be resumed)");
+    if (o.max_warnings < 0) return usage_error("--max-warnings must be 0 (no limit) or more");  // CPP-29 (MRG-3)
 
     RunReport rec(o.argv, o.pep, o.nucs, o.out, o.fmt, o.table, o.nogap, o.nomismatch, o.keep_going,
-                  !o.report.empty() || o.json);
+                  !o.report.empty() || o.json, o.strict, o.blockonly);
     install_signal_handlers();  // CPP-18 (reference ENG-f, R2-E8, DEC-3)
     // CPP-17 (reference ENG-b, R2-E7): pipes, /dev/stdin and FIFOs are copied to temp files first; messages name
     // the argument, not the temp copy
@@ -1303,6 +1322,7 @@ int main(int argc, char** argv) {
         std::vector<std::string> paths = spool_inputs(in_args, spooled);
         ro.pep = paths[0];
         ro.nucs.assign(paths.begin() + 1, paths.end());
+        ro.resumable = spooled.empty();
         rec.set_hash_paths(paths);
         long long skipped = run(ro, rec, rs, warn, note);
         if (skipped) rc = 2;  // partial success
@@ -1311,36 +1331,30 @@ int main(int argc, char** argv) {
     } catch (const CoalError& e) {
         std::cerr << "coal: error: " << restore_names(e.what()) << '\n';
         rc = 1;
-        rec.fail(e.code, restore_names(e.what()));
+        rec.fail(e.code, restore_names(e.what()), !e.seq_id.empty());
     } catch (const InputError& e) {
         std::cerr << "coal: error: " << restore_names(e.what()) << '\n';
         rc = 1;
-        rec.fail(e.code, restore_names(e.what()));
+        rec.fail(e.code, restore_names(e.what()), false);
     } catch (const std::exception& e) {
         std::cerr << "coal: error: " << restore_names(e.what()) << '\n';
         rc = 1;
-        rec.fail("file_error", restore_names(e.what()));
+        rec.fail("file_error", restore_names(e.what()), false);
     }
     if (hidden) {
         std::string where = (!o.report.empty() || o.json) ? "see the report" : "see them all with --report FILE.json";
         std::cerr << "coal: warning: ... and " << fmt_n(hidden) << " more warnings (" << where << ")\n";
     }
     rec.exit_code = rc;
-    try {
-        compute_hints(ro, rec, rs);
-    } catch (...) {
-        // a hint is optional; never let it hide the real result
-    }
     if (!o.quiet)
-        for (auto& l : rec.summary_lines())
-            if (CPP_ONLY_LINES) std::cerr << "coal: summary: " << l << '\n';
+        for (auto& l : rec.summary_lines()) std::cerr << "coal: summary: " << l << '\n';
     std::cerr.flush();
     if (!o.report.empty()) {
         std::string tmp = o.report + ".tmp" + unique_suffix();
         bool ok;
         {
             std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
-            f << json_dump(rec.to_json(), 1) << '\n';
+            f << json_dump(rec.to_dict(), 1) << '\n';
             f.flush();
             ok = (bool)f;
         }
@@ -1352,6 +1366,6 @@ int main(int argc, char** argv) {
             if (!rc) rc = 1;
         }
     }
-    if (o.json) std::cout << json_dump(rec.to_json(), 1) << '\n' << std::flush;
+    if (o.json) std::cout << json_dump(rec.to_dict(), 1) << '\n' << std::flush;
     return rc;
 }
