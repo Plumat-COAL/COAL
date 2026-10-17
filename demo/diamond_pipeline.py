@@ -298,6 +298,7 @@ def main(argv=None) -> int:
         print("No reciprocal best hits, nothing to align.")
         return 0
 
+    cds = {"a": species["a"]["cds"], "b": species["b"]["cds"]}
     pa = {tid: seq for tid, seq in species["a"]["iso"].values()}
     pb = {tid: seq for tid, seq in species["b"]["iso"].values()}
     aligned, skipped = [], []
@@ -317,53 +318,112 @@ def main(argv=None) -> int:
         return 1
 
     # one batch: every pair padded with trailing gaps to the same length, unique IDs per row
-    width = max(len(ra) for _, _, ra, _ in aligned)
-    pep, nuc, ids = [], [], []
+    h = coal_help()
+    stderr_log = []
+    # CHANGED(R2-A5): was one COAL run for all pairs; without --keep-going one bad CDS (or one pair with more
+    # than half the codons mismatching, ENG-c) gave exit 1 and 0 of N pairs written. Now the pair COAL names in
+    # its error is dropped (and reported) and the rest re-run; after MAX_DROPS drops the remaining pairs are run
+    # one at a time. See overnight/integration/CHANGES.md
+    todo = list(aligned)
+    codon, dropped, rc_worst = {}, [], 0
+    drops = 0
+    while todo:
+        if drops >= MAX_DROPS:
+            print(f"more than {MAX_DROPS} pairs failed; running the remaining {len(todo)} pairs one at a time")
+            for item in todo:
+                res = run_batch([item], a, h, "pair", stderr_log, cds)
+                if isinstance(res, dict):
+                    codon.update(res)
+                else:
+                    dropped.append((item[0], item[1], res[1]))
+            todo = []
+            break
+        res = run_batch(todo, a, h, "batch", stderr_log, cds)
+        if isinstance(res, dict):
+            codon.update(res)
+            if any(f"{a.a_name}__{x}" not in res for x, *_ in todo):
+                rc_worst = 2  # --keep-going left some pairs out
+            break
+        bad_id, why = res
+        hit = next((it for it in todo if bad_id in (f"{a.a_name}__{it[0]}", f"{a.b_name}__{it[1]}")), None)
+        if hit is None:  # COAL failed for a reason that is not one pair: stop, as before
+            print(f"COAL failed:\n{why[-1500:]}", file=sys.stderr)
+            print("Tip: open the batch in the COAL GUI or run `python -m coal_app.viewer "
+                  f"{os.path.join(a.out, 'batch.pep.fasta')} --dna {os.path.join(a.out, 'batch.cds.fasta')} "
+                  f"-o view.html` to see which pair breaks.", file=sys.stderr)
+            with open(os.path.join(a.out, "coal.stderr.txt"), "w", encoding="utf-8") as fh:
+                fh.write("".join(stderr_log))
+            return 1
+        dropped.append((hit[0], hit[1], why.strip().splitlines()[-1] if why.strip() else "COAL error"))
+        todo.remove(hit)
+        drops += 1
+    with open(os.path.join(a.out, "coal.stderr.txt"), "w", encoding="utf-8") as fh:  # CHANGED(APP-18): utf-8
+        fh.write("".join(stderr_log))
+    written = 0
     for x, y, ra, rb in aligned:
         ia, ib = f"{a.a_name}__{x}", f"{a.b_name}__{y}"
-        pep += [(ia, ra.ljust(width, "-")), (ib, rb.ljust(width, "-"))]
-        nuc += [(ia, species["a"]["cds"][x]), (ib, species["b"]["cds"][y])]
-        ids.append((ia, ib, len(ra)))
-    batch_pep = os.path.join(a.out, "batch.pep.fasta")
-    batch_cds = os.path.join(a.out, "batch.cds.fasta")
-    batch_out = os.path.join(a.out, "batch.codon.fasta")
-    write_fasta(batch_pep, pep)
-    write_fasta(batch_cds, nuc)
-
-    cmd = [sys.executable, "-m", "coal", batch_pep, batch_cds, "-codontable", str(a.codontable), "-o", batch_out]
-    h = coal_help()
-    if "--keep-going" in h:
-        cmd.append("--keep-going")
-    if "--report" in h:
-        cmd += ["--report", os.path.join(a.out, "batch.report.json")]
-    print(f"running COAL once on {len(pep)} sequences ({len(aligned)} pairs)")
-    try:
-        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
-                           timeout=a.timeout)
-    except subprocess.TimeoutExpired:
-        print("error: COAL did not finish in time", file=sys.stderr)
-        return 1
-    with open(os.path.join(a.out, "coal.stderr.txt"), "w", encoding="utf-8") as fh:  # CHANGED(APP-18): utf-8
-        fh.write(r.stderr)
-    if r.returncode not in (0, 2) or not os.path.exists(batch_out):
-        print(f"COAL failed (exit {r.returncode}):\n{r.stderr.strip()[-1500:]}", file=sys.stderr)
-        print("Tip: open the batch in the COAL GUI or run `python -m coal_app.viewer "
-              f"{batch_pep} --dna {batch_cds} -o view.html` to see which pair breaks.", file=sys.stderr)
-        return 1
-    codon = {i: seq for i, _, seq in read_fasta(batch_out)}
-    written = 0
-    for ia, ib, n in ids:
         if ia not in codon or ib not in codon:
-            continue  # failed pair (with --keep-going)
+            continue
+        n = len(ra)
         name = f"{ia}__{ib.split('__', 1)[1]}".replace("/", "_")
         write_fasta(os.path.join(a.out, "pairs", f"{name}.codon.fasta"),
                     [(ia, codon[ia][:3 * n]), (ib, codon[ib][:3 * n])])
         written += 1
-    warn = sum(1 for line in r.stderr.splitlines() if "warning" in line)
+    if dropped:
+        with open(os.path.join(a.out, "dropped_pairs.tsv"), "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(f"{a.a_name}\t{a.b_name}\treason\n")
+            for x, y, why in dropped:
+                fh.write(f"{x}\t{y}\t{why}\n")
+        print(f"dropped {len(dropped)} pair{'s' if len(dropped) != 1 else ''} COAL could not align "
+              f"(see dropped_pairs.tsv):")
+        for x, y, why in dropped[:20]:
+            print(f"  {x} / {y}: {why}")
+        if len(dropped) > 20:
+            print(f"  ... and {len(dropped) - 20} more")
+    warn = sum(1 for line in "".join(stderr_log).splitlines() if "warning" in line)
     print(f"done: {written} pairwise codon alignments in {os.path.join(a.out, 'pairs')}"
           + (f" ({warn} COAL warnings, see coal.stderr.txt)" if warn else ""))
-    return 0 if r.returncode == 0 else 2
+    return 2 if (dropped or rc_worst) else 0
 
+
+MAX_DROPS = 20
+
+
+def run_batch(items, a, h, tag, stderr_log, cds):
+    """One COAL run on `items` (pairs). Returns {id: codon row} on success, else (sequence id COAL named or "",
+    its stderr)."""
+    width = max(len(ra) for _, _, ra, _ in items)
+    pep, nuc = [], []
+    for x, y, ra, rb in items:
+        ia, ib = f"{a.a_name}__{x}", f"{a.b_name}__{y}"
+        pep += [(ia, ra.ljust(width, "-")), (ib, rb.ljust(width, "-"))]
+        nuc += [(ia, cds["a"][x]), (ib, cds["b"][y])]
+    batch_pep = os.path.join(a.out, f"{tag}.pep.fasta")
+    batch_cds = os.path.join(a.out, f"{tag}.cds.fasta")
+    batch_out = os.path.join(a.out, f"{tag}.codon.fasta")
+    write_fasta(batch_pep, pep)
+    write_fasta(batch_cds, nuc)
+    if os.path.exists(batch_out):
+        os.remove(batch_out)
+    cmd = [sys.executable, "-m", "coal", "-codontable", str(a.codontable), "-o", batch_out]
+    if "--keep-going" in h:
+        cmd.append("--keep-going")
+    if "--report" in h:
+        cmd += ["--report", os.path.join(a.out, f"{tag}.report.json")]
+    cmd += ["--", batch_pep, batch_cds]
+    if tag == "batch":
+        print(f"running COAL on {len(pep)} sequences ({len(items)} pairs)")
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           timeout=a.timeout)
+    except subprocess.TimeoutExpired:
+        return "", "coal: error: COAL did not finish in time\n"
+    stderr_log.append(r.stderr)
+    ok = r.returncode == 0 or (r.returncode == 2 and "--keep-going" in h and "usage:" not in r.stderr)
+    if not ok or not os.path.exists(batch_out):
+        m = re.search(r"^coal: error: (\S+?): ", r.stderr, re.M)
+        return (m.group(1) if m else ""), r.stderr
+    return {i: seq for i, _, seq in read_fasta(batch_out)}
 
 if __name__ == "__main__":
     sys.exit(main())

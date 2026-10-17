@@ -93,6 +93,43 @@ class TestDiamondPipeline(unittest.TestCase):
                     aa = "".join(code[seq[i:i + 3]] for i in range(0, len(seq), 3) if seq[i:i + 3] != "---")
                     self.assertEqual(aa, prots[tid])
 
+    def test_one_broken_pair_is_dropped_not_fatal(self):  # R2-A5
+        self._broken_pair_run()
+
+    def test_per_pair_fallback_after_too_many_drops(self):  # R2-A5
+        from unittest import mock
+        import contextlib, io
+        with mock.patch.object(dp, "MAX_DROPS", 0), contextlib.redirect_stdout(io.StringIO()) as buf:
+            self._broken_pair_run(in_process=True)
+        self.assertIn("one at a time", buf.getvalue())
+
+    def _broken_pair_run(self, in_process=False):
+        with tempfile.TemporaryDirectory() as t:
+            p = make_input(t)
+            recs = dp.read_fasta(p["bc"])
+            rng = random.Random(9)
+            with open(p["bc"], "w", encoding="utf-8") as fh:
+                for rid, _, seq in recs:
+                    if rid == "Mm2-PA":
+                        seq = "ATG" + "".join(rng.choice("ACGT") for _ in range(len(seq) - 3))
+                    fh.write(f">{rid}\n{seq}\n")
+            out = os.path.join(t, "o")
+            args = ["--a-protein", p["ap"], "--a-cds", p["ac"], "--a-name", "human",
+                    "--b-protein", p["bp"], "--b-cds", p["bc"], "--b-name", "mouse",
+                    "--out", out, "--diamond", STUB, "--threads", "1"]
+            if in_process:
+                self.assertEqual(dp.main(args), 2)
+            else:
+                r = subprocess.run([sys.executable, SCRIPT, *args], capture_output=True, text=True, timeout=300)
+                self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+                self.assertIn("dropped 1 pair", r.stdout)
+                self.assertIn("Mm2-PA", r.stdout)
+            pairs = sorted(os.listdir(os.path.join(out, "pairs")))
+            self.assertEqual(len(pairs), 4, pairs)
+            self.assertFalse(any("Mm2-PA" in f for f in pairs))
+            with open(os.path.join(out, "dropped_pairs.tsv"), encoding="utf-8") as fh:
+                self.assertIn("Mm2-PA", fh.read())
+
 
 if __name__ == "__main__":
     unittest.main()
