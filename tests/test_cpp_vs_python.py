@@ -270,7 +270,9 @@ class TestCppThreads(unittest.TestCase):
                          ["-output", "codon"], ["-output", "fasta", "-nomismatch"]):
                 ref = run_cpp(binary, d, [*opts, "-j", "1"])
                 self.assertEqual(ref[0], 0, ref[2][:300])
-                self.assertEqual(ref[2].count("does not correspond"), 3, ref[2][:300])
+                # CPP-11 (reference ENG-i2): no mismatch warnings with -nomismatch, as PAL2NAL
+                want = 0 if "-nomismatch" in opts else 3
+                self.assertEqual(ref[2].count("does not correspond"), want, ref[2][:300])
                 for j in ("2", "3"):
                     with self.subTest(opts=opts, j=j):
                         self.assertEqual(run_cpp(binary, d, [*opts, "-j", j]), ref)

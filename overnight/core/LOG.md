@@ -1,5 +1,66 @@
 # Overnight log: core (branch overnight/core)
 
+## Run 4 summary: coal-cpp mirrors the reviewed reference engine (2026-10-17 13:01 UTC)
+
+Reference: `origin/keanu_overnight/integration` at bb80bde, in a read-only worktree (`~/coal-ref`, not merged; `overnight/merged` untouched). Every change has a row in `overnight/core/CHANGES.md` (CPP-9 .. CPP-21, each citing the reference row it mirrors). **Not pushed from here** (no GitHub credentials on this machine): push with `git push origin overnight/core` from Chloe's terminal.
+
+| Brief item | Reference rows | Status (commit) |
+|---|---|---|
+| Harness: random test + goldens + PAL2NAL fuzz against the reference (`COAL_REF_SRC`) | – | done: CPP-9 (5e233d1), CPP-21 reference tests via a shim (bc73ab6) |
+| FZ-5 -nogap: the selected code's stops | FZ-5 | done: CPP-10 (11be0b2) |
+| -nomismatch: no mismatch warnings; B/Z/J/O/U columns removed | ENG-i2, DEC-4f | done: CPP-11 (11be0b2) |
+| Readers: CLUSTAL '#' lines, repeated headers, leading blanks; non-ASCII descriptions | FZ-1, FZ-2 (ENG-h, R2-E6, R3-E3 already matched) | done: CPP-12 (004fafb) |
+| -blockonly and '#' mark lines; codon + -blockonly error | DEC-4 | done: CPP-13 (004fafb) |
+| tfastx `\` and `/` | FZ-3 | done: CPP-14 (d384d30) |
+| --strict and the notices (>half checkable mismatch, position guess, no anchor, short ambiguous protein, partial ID match); -q silences notices | DEC-1, ENG-c, R2-E3, R3-E1, ENG-d, FZ-4, FZ-6, DEC-2 | done: CPP-15 (13f88bc) |
+| -o: symlinks, FIFOs/devices, hard links, permissions, loop / missing-folder errors | ENG-a, R2-E5, R3-E2 | done: CPP-16 (13f88bc) |
+| Piped / FIFO inputs; errors name the argument | ENG-b, R2-E7 | done: CPP-17 (13f88bc) |
+| SIGTERM 143, SIGHUP 129, Ctrl-C 130, closed pipe 141 (Windows EINVAL too) | ENG-f, R2-E8, DEC-3, R2-D1b | done: CPP-18 (13f88bc) |
+| CLI help / messages as the reference (-blockonly, -strict, formats) | DEC-1, DEC-4, FZ-5 help | done: CPP-19 (bacdf2d) |
+| Table 3 GTG start | ENG-g | already done (CPP-3) |
+| R2-E9 (IUPAC frame search) | R2-E9 | nothing to port: performance only, the C++ search already handles IUPAC DNA directly |
+| First-Met start codons in the anchor fallback | (being changed in the reference) | not changed, as the brief says |
+| Extra: PAML header for 1,000+ sequences (` %3d %6d`, as PAL2NAL) | – | fixed: CPP-20 (4f0d73d), found by a new large-input test |
+
+**Results (Linux, GCC 11, Release, at the end of the run):**
+- Reference goldens (the reference's own harness, coal-cpp swapped in): **279/279** (start: 248).
+- Random C++ vs reference Python: **3000/3000** identical (`COAL_RANDOM_N=3000`; 1000/1000 at the default; includes `--strict` on 1/5 and `-q` on 1/7 of the cases). Start: 739/1000.
+- Fuzz vs the real PAL2NAL v14: **0 unexplained differences** for FUZZ_N=1000 (seed 20261017) and FUZZ_N=2500 (seed 7), 4 formats each. Start: 440.
+- The reference's own engine tests run against coal-cpp: test_review_fixes 43/43, test_fuzz_findings 17/17, test_decisions 22/24 (the 2 others mock sys.stdout inside the Python process: not applicable to a binary; the real closed-pipe test in test_review_fixes passes).
+- -j 1/2/4: identical in every format (reference TestDec4ParallelAndBlocks via the shim; test_cpp_pool; TestCppThreads).
+- Builds: `-DCOAL_WARNINGS_AS_ERRORS=ON` clean (GCC); clang `-Werror` clean for Windows x64, Windows x86 (+ `-Wshorten-64-to-32 -Wconversion`) and macOS arm64. Sanitizers: random + goldens + reference tests + fuzz 400 under ASan/UBSan, pool + random 300 under TSan: clean. **MSVC not re-run since CPP-7** (new file cpp/src/sysio.cpp): please rebuild once on Windows.
+- This branch's own suite (`python -m unittest discover -s tests`, local mode): 81 tests, 2 fail **by design**: test_cpp_vs_python's random and resume tests compare with this branch's old Python engine, which the reference supersedes (see below). Local goldens with COAL_IMPL=cpp: 272/285, the 13 failures are all `fasta_nogap_ct<N>` (this branch's harness still expects PAL2NAL's -nogap rule; the reference harness expects FZ-5).
+
+**Parked:** nothing.
+
+### Needs reconciling after the merge
+1. **Safe ID pairing vs ENG-d.** coal-cpp pairs IDs that only match after normalising (version suffix, `sp|..|..` headers, case) one-to-one; the reference pairs those by order (silently when no ID matches exactly, with the partial-ID notice when some do). Different output for such inputs; with --strict the reference errors on a partial match where coal-cpp pairs by normalised ID. The random test uses plain IDs for those cases in reference mode.
+2. **No ID matches at all:** coal-cpp warns "IDs don't match, so sequences were paired by file order ..."; the reference is silent (reference test `test_no_ids_match_stays_silent`).
+3. **`coal: summary:` lines and the genetic-code hint** exist only in coal-cpp. Items 2-3 can be switched off with `COAL_CPP_ONLY_LINES=0` (used by the comparisons); decide whether to keep them, or move them to the Python engine too.
+4. **--resume vs ENG-f cleanup:** with `-o`, an interrupted coal-cpp run (SIGTERM / SIGHUP / Ctrl-C) keeps `<out>.coal-partial` and its checkpoint for `--resume`; the reference removes everything. Stdout runs and `-o` into a FIFO/device/hard link clean up as the reference.
+5. **Run report / --json:** notices are not recorded in the report entries (a probably-unrelated sequence still counts as "warning" via its codon warnings, not via the notice); `strict` and `blockonly` are not in `options`; methods_text unchanged.
+6. **--keep-going with --strict:** a --strict error skips that sequence (exit 2) instead of stopping the run (exit 1).
+7. **--max-warnings** limits per-codon warnings only; notices are never hidden.
+8. `--version` prints `coal 0.4.0 (C++)`; the reference prints `coal 0.3.0`. `-j` help says threads (coal-cpp) instead of processes.
+9. After the merge, this branch's local tests (test_differential DELIBERATE rules, test_cpp_vs_python local mode, the frameshift_codon_line golden) should be re-pointed at the merged engine; the reference-mode harness (`COAL_REF_SRC`) can then become the default.
+
+### Needs a human decision
+- Push `overnight/core` (needs credentials): `git push origin overnight/core`.
+- One MSVC build on Windows (new sysio.cpp): `cmake -S . -B build-win -DCOAL_WARNINGS_AS_ERRORS=ON -DCMAKE_BUILD_TYPE=Release && cmake --build build-win`.
+- Windows signals: SIGTERM cannot be caught there (TerminateProcess); the Windows closed-pipe (EINVAL) path is written but only testable natively.
+- Keep or drop the test switch `COAL_CPP_ONLY_LINES` after the reconciliation above.
+
+### How to run the comparisons
+```
+git worktree add --detach ~/coal-ref origin/keanu_overnight/integration
+python ~/coal-ref/scripts/fetch_pal2nal.py
+export COAL_REF_SRC=~/coal-ref/src PAL2NAL=~/coal-ref/PAL2NAL/pal2nal.v14/pal2nal.pl
+python tests/test_cpp_vs_reference.py golden      # reference goldens
+python tests/test_cpp_vs_python.py                # random vs reference Python
+FUZZ_N=1000 python tests/test_cpp_vs_reference.py fuzz
+python tests/test_cpp_vs_reference.py reftests    # the reference's own engine tests with coal-cpp
+```
+
 ## Run 3 summary: C++ foundations brief (2026-10-17 11:08 UTC)
 
 All six items are done. They are committed on the local branch `overnight/core`. The branch is **not pushed**: `git push origin overnight/core` failed with "could not read Username", because this machine has no GitHub credentials. Push it from a machine that has them. `main` was not touched, and `origin/keanu_overnight/integration` was not merged (it was only read with `git show`). Every change has a row in `overnight/core/CHANGES.md`, and its ID starts the commit message.
