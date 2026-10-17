@@ -172,7 +172,7 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
             list += py_repr_char(c);
             firstc = false;
         }
-        throw CoalError(seq_id + ": invalid protein alignment characters " + list + "]");
+        throw CoalError(seq_id + ": invalid protein alignment characters " + list + "]", "invalid_chars", seq_id);
     }
 
     Threaded res;
@@ -187,7 +187,7 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
             any_residue = true;
             break;
         }
-    if (!any_residue) throw CoalError(seq_id + ": protein sequence is empty");
+    if (!any_residue) throw CoalError(seq_id + ": protein sequence is empty", "empty_protein", seq_id);
 
     Target target;
     target.code.resize(raw_dna.size());
@@ -216,7 +216,7 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
 
     // 2. anchor fallback
     auto ranges = anchors(row);
-    if (ranges.empty()) throw CoalError(seq_id + ": protein and DNA are inconsistent (no match found)");
+    if (ranges.empty()) throw CoalError(seq_id + ": protein and DNA are inconsistent (no match found)", "no_match", seq_id);
     std::vector<Token> pattern;
     int col = 1;
     for (size_t k = 0; k < ranges.size(); ++k) {
@@ -233,7 +233,7 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
         col += int(b - a);
     }
     s = find(target, pattern);
-    if (s < 0) throw CoalError(seq_id + ": protein and DNA are inconsistent (no match found)");
+    if (s < 0) throw CoalError(seq_id + ": protein and DNA are inconsistent (no match found)", "no_match", seq_id);
     res.dna = raw_dna.substr((size_t)s, (size_t)len);
 
     // mismatch report: first residue Met -> ATG/CTG/GTG, others -> genetic code

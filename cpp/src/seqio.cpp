@@ -47,7 +47,7 @@ static void check_ascii(const std::string& s, long long offset) {
 // ------------------------------------------------------------------ LineReader
 
 LineReader::LineReader(const std::string& path) : path_(path), in_(path, std::ios::binary), buf_(1 << 16) {
-    if (!in_) throw InputError(no_such_file(path));
+    if (!in_) throw InputError(no_such_file(path), "file_error");
 }
 
 bool LineReader::fill() {
@@ -95,7 +95,7 @@ bool LineReader::next(std::string& line) {
 
 bool is_clustal(const std::string& path) {
     std::ifstream in(path, std::ios::binary);
-    if (!in) throw InputError(no_such_file(path));
+    if (!in) throw InputError(no_such_file(path), "file_error");
     char head[7] = {};
     in.read(head, 7);
     return in.gcount() == 7 && std::memcmp(head, "CLUSTAL", 7) == 0;
@@ -203,7 +203,7 @@ DnaIndex::DnaIndex(const std::vector<std::string>& paths) : paths_(paths) {
 
 void DnaIndex::scan(int fno, const std::string& path) {
     std::ifstream in(path, std::ios::binary);
-    if (!in) throw InputError(no_such_file(path));
+    if (!in) throw InputError(no_such_file(path), "file_error");
     std::vector<char> buf(1 << 20);
     long long offset = 0, start = -1;
     std::string line;  // current line (only the first bytes are kept for long lines)

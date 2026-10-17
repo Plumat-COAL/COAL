@@ -11,7 +11,7 @@ endif()
 find_package(Threads REQUIRED)
 
 # Core algorithm as a library (no I/O policy), so it can be reused, e.g. in DIAMOND.
-add_library(coal_core STATIC cpp/src/tables.cpp cpp/src/core.cpp cpp/src/seqio.cpp)
+add_library(coal_core STATIC cpp/src/tables.cpp cpp/src/core.cpp cpp/src/seqio.cpp cpp/src/json.cpp cpp/src/report.cpp)
 target_include_directories(coal_core PUBLIC cpp/src)
 
 add_executable(coal-cpp cpp/src/main.cpp)

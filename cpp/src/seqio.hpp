@@ -12,8 +12,11 @@
 
 namespace coal {
 
+// code: "input_format" (unreadable/malformed input) or "file_error" (cannot open), as in the Python engine.
 struct InputError : std::runtime_error {
-    using std::runtime_error::runtime_error;
+    std::string code = "input_format";
+    explicit InputError(const std::string& msg, std::string c = "input_format")
+        : std::runtime_error(msg), code(std::move(c)) {}
 };
 
 // Python's repr() of an ID string ('abc', or "it's").
@@ -67,6 +70,12 @@ public:
     void forget_ids();
     // Sequence i: '#' lines skipped, every non-letter removed (as PAL2NAL).
     std::string get(size_t i);
+    // Number of records in each input file.
+    std::vector<long long> counts_per_file() const {
+        std::vector<long long> c(paths_.size(), 0);
+        for (auto f : fno_) ++c[f];
+        return c;
+    }
     // Length of record i before cleaning (bytes between header and next record).
     long long raw_size(size_t i) const { return end_[i] - start_[i]; }
 

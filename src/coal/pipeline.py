@@ -447,7 +447,8 @@ def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
                             out.write(record(pid, apply_slices(exp, sl)))
             if rec is not None:
                 from .report import sha256_file
-                rec.set_output(out_path, sha256_file(out_tmp), nseq - skipped)
+                # hashing a big output takes time: only when a report was asked for
+                rec.set_output(out_path, sha256_file(out_tmp) if rec.keep_entries else None, nseq - skipped)
             if out_path:
                 os.replace(out_tmp, out_path)
             else:

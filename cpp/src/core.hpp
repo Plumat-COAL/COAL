@@ -14,8 +14,13 @@
 
 namespace coal {
 
+// An error reported to the user. `code` is the stable reason used in the run
+// report (same codes as the Python engine); `seq_id` is set when one sequence failed.
 struct CoalError : std::runtime_error {
-    using std::runtime_error::runtime_error;
+    std::string code = "error";
+    std::string seq_id;
+    explicit CoalError(const std::string& msg, std::string c = "error", std::string sid = "")
+        : std::runtime_error(msg), code(std::move(c)), seq_id(std::move(sid)) {}
 };
 
 struct Threaded {
