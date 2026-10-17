@@ -44,6 +44,9 @@ def build() -> dict:
         if k == "command_line":
             rep[k] = rep[k].replace(core._q(os.path.join(t, "")), "").replace(os.path.join(t, ""), "")
     rep["coal_version"] = "demo"
+    # CHANGED(MRG-10): was kept; the merged engine now writes its own methods_text naming "COAL v0.4.0", which
+    # contradicts coal_version "demo" and overrides the app's methods_text (APP-15, FIN-C11), so the sample drops it
+    rep.pop("methods_text", None)
     rep["source"] = DEMO_SOURCE
     rep["demo"] = True
     rep["runtime_seconds"] = 0.0

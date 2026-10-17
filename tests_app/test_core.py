@@ -141,7 +141,8 @@ class TestMethodsText(unittest.TestCase):
         self.assertIn("standard genetic code (NCBI translation table 1)", m)
         self.assertIn("Of 24 sequences, 0 matched", m)
         self.assertIn("24 contained codons that did not match", m)
-        self.assertIn("Command: coal protein.aln.fasta dna.fasta -o protein.codon.fasta", m)
+        # CHANGED(MRG-10): was "... dna.fasta -o ..."; the app now passes --keep-going to the merged engine (MRG-6/2)
+        self.assertIn("Command: coal protein.aln.fasta dna.fasta --keep-going -o protein.codon.fasta", m)
 
     def test_engine_text_wins(self):
         rep = dict(core.load_sample_report(), methods_text="Engine sentence.")
