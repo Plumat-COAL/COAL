@@ -128,3 +128,32 @@ sequences that means 9.0-10.8 GB, against 0.69 GB at `-j1`, for a 1.9x speedup. 
   above).
 
 **Not changed in this benchmark run.** COAL is frozen at `47f57f1`.
+
+**Update after the 1M run (20:05): the prediction was wrong, so the numpy explanation is incomplete.** Using the
+mechanism above I predicted about 13-14 GB for coal-py default at 1M (all 20 workers importing numpy at about 636 MB
+each). The measured single run peaked at **8,032 MB** (OK, 26.4 s). That is below n100k's 9.0-10.8 GB, even though
+more workers must have crossed the 2 M-codon threshold. So the per-process cost is not a fixed ~636 MB. The
+threshold logic in `core.py` stands (read from code), but the size of the per-process cost, and the OpenBLAS
+explanation for it, are **unverified**. The verification steps above still apply. Reported in SUMMARY as measured.
+
+## Deadline queue (user instruction at 19:5x; finish by 21:45)
+
+- Tier C timing was stopped at 19:57. The families/2000 batch is tagged INCOMPLETE in `runs.csv` (only
+  coal-cpp@jdefault finished it).
+- Reduced queue run by `benchmarks/deadline.py`, one step per process, strictly sequential, 1 warm-up + 3 timed
+  throughout. Every step stops itself at 21:15.
+- p2n16 1M: one run, no warm-up, 24 GB cap, 900 s timeout (user addition). Result: TIMEOUT at 900 s with 3.7 GB
+  committed at the kill.
+
+### Addendum to the GitHub issue draft (coal-py memory)
+
+- **Peak memory at default `-j` goes down as input grows:** 10.3 GB at n100000_L400 (Tier E; 9.0–10.8 GB across Tier
+  B runs) against **8.0 GB at n1000000_L400** (single run), both with 20 workers. A cost per worker should not shrink
+  with 10× more input, so **how workers and work are sized needs investigating**: batch size (`BATCH_NT`), the
+  2×jobs in-flight queue, when each worker crosses the 2 M-codon numpy threshold, and the start-up cost of each
+  worker.
+- **Suggested: a lower default `-j` for coal-py.** At n100k the default (20) gives 1.92× over -j1. -j12 gives 2.01× at
+  7.7 GB. Tier B and E show no gain above about -j12, and Tier E's coal-cpp shows threads level off early. A default
+  of about `min(8, cores // 2)`, or a memory-aware cap (fix 3 above), would keep most of the speed-up at a fraction
+  of the memory. The memory-per-`-j` curve was not measured (deadline), so that value is a suggestion to benchmark,
+  not a measured optimum.

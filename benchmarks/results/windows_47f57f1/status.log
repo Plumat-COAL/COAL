@@ -1,0 +1,914 @@
+[2026-10-17 17:32:59] Tier A start: 412 cases x 6 configs, workers=10
+[2026-10-17 17:33:40] Tier A done in 41s; wrote correctness_A.csv, tierA_table.md
+[2026-10-17 17:48:21] clock reference: 132.7% of nominal (single-thread probe)
+[2026-10-17 17:48:22] baseline p2n16: median 0.0648s peak 10.7 MB
+[2026-10-17 17:48:22] baseline coal-cpp@jdefault: median 0.0088s peak 6.4 MB
+[2026-10-17 17:48:22] baseline coal-cpp@j1: median 0.0087s peak 6.4 MB
+[2026-10-17 17:48:23] baseline coal-py@jdefault: median 0.0925s peak 13.0 MB
+[2026-10-17 17:48:23] baseline p2n14: median 0.0239s peak 6.0 MB
+[2026-10-17 17:48:24] baseline coal-py@j1: median 0.0925s peak 13.2 MB
+[2026-10-17 17:48:27] clock reference: 133.5% of nominal (single-thread probe)
+[2026-10-17 17:48:27] Tier B start (seed 20261017): 8 cases
+[2026-10-17 17:48:28] drift check B/start: coal-cpp -j1 n10000_L400 median 0.1320s
+[2026-10-17 17:49:32] B n1000_L10000 p2n16: median 10.678s
+[2026-10-17 17:49:34] B n1000_L10000 coal-cpp@j12: median 0.219s
+[2026-10-17 17:49:36] B n1000_L10000 coal-cpp@jdefault: median 0.218s
+[2026-10-17 17:59:46] clock reference: 133.5% of nominal (single-thread probe)
+[2026-10-17 17:59:46] Tier B start (seed 20261017): 8 cases
+[2026-10-17 17:59:47] drift check B/start: coal-cpp -j1 n10000_L400 median 0.1279s peak 16.4 MB
+[2026-10-17 18:00:49] B n1000_L10000 p2n16: median 10.388s
+[2026-10-17 18:00:51] B n1000_L10000 coal-cpp@j12: median 0.213s
+[2026-10-17 18:00:52] B n1000_L10000 coal-cpp@jdefault: median 0.216s
+[2026-10-17 18:28:51] B n1000_L10000 p2n14: median 279.529s
+[2026-10-17 18:28:57] B n1000_L10000 coal-py@j12: median 0.866s
+[2026-10-17 18:28:59] B n1000_L10000 coal-cpp@j1: median 0.251s
+[2026-10-17 18:29:04] B n1000_L10000 coal-py@jdefault: median 0.861s
+[2026-10-17 18:29:10] B n1000_L10000 coal-py@j1: median 0.958s
+[2026-10-17 18:29:18] B n100000_L400 coal-cpp@j1: median 1.074s
+[2026-10-17 18:33:19] clock check: 133.1% (start 133.5%)
+[2026-10-17 18:53:13] B n100000_L400 p2n14: median 238.624s
+[2026-10-17 18:53:19] B n100000_L400 coal-cpp@jdefault: median 0.885s
+[2026-10-17 19:03:23] B n100000_L400 p2n16: median 98.895s
+[2026-10-17 19:03:25] clock check: 132.9% (start 133.5%)
+[2026-10-17 19:03:43] B n100000_L400 coal-py@jdefault: median 2.635s
+[2026-10-17 19:04:00] B n100000_L400 coal-py@j12: median 2.503s
+[2026-10-17 19:04:07] B n100000_L400 coal-cpp@j12: median 0.919s
+[2026-10-17 19:04:39] B n100000_L400 coal-py@j1: median 5.043s
+[2026-10-17 19:04:40] B n10_L35000 coal-py@jdefault: median 0.158s
+[2026-10-17 19:04:41] B n10_L35000 coal-py@j1: median 0.157s
+[2026-10-17 19:04:42] B n10_L35000 coal-py@j12: median 0.157s
+[2026-10-17 19:04:42] B n10_L35000 coal-cpp@j12: median 0.027s
+[2026-10-17 19:04:42] B n10_L35000 coal-cpp@j1: median 0.029s
+[2026-10-17 19:04:45] B n10_L35000 p2n14: ERROR exit=255: Too many capture groups (limit is 65535) in regex m/((U|T|C|Y|A)(U|T)G)(G(U|T).)((U|T)G(U|T|C|Y))((C(U|T).)|((U|T)(U|T)(A|G|R)))((C(U|T).)|((U|T)(U|T)(A|G|R)))(GG.)(AA(A.../ at C:\coalbench\COAL\PAL2N
+[2026-10-17 19:04:49] B n10_L35000 p2n16: median 0.628s
+[2026-10-17 19:04:49] B n10_L35000 coal-cpp@jdefault: median 0.026s
+[2026-10-17 19:05:23] B n100_L35000 p2n16: median 5.653s
+[2026-10-17 19:05:24] B n100_L35000 coal-cpp@jdefault: median 0.086s
+[2026-10-17 19:05:27] B n100_L35000 p2n14: ERROR exit=255: Too many capture groups (limit is 65535) in regex m/((U|T|C|Y|A)(U|T)G)(G(U|T).)((CG.)|(AG(A|G|R)))(AA(U|T|C|Y))(CA(U|T|C|Y))((C(U|T).)|((U|T)(U|T)(A|G|R)))((CG.)|(AG(A|.../ at C:\coalbench\COAL\PAL2N
+[2026-10-17 19:05:27] B n100_L35000 coal-cpp@j12: median 0.086s
+[2026-10-17 19:05:31] B n100_L35000 coal-py@jdefault: median 0.646s
+[2026-10-17 19:05:35] B n100_L35000 coal-py@j1: median 0.604s
+[2026-10-17 19:05:36] B n100_L35000 coal-cpp@j1: median 0.125s
+[2026-10-17 19:05:40] B n100_L35000 coal-py@j12: median 0.642s
+[2026-10-17 19:08:12] B n10000_L400 p2n14: median 25.214s
+[2026-10-17 19:08:13] B n10000_L400 coal-cpp@j12: median 0.111s
+[2026-10-17 19:08:40] B n10000_L400 p2n16: median 4.433s
+[2026-10-17 19:08:40] B n10000_L400 coal-cpp@jdefault: median 0.112s
+[2026-10-17 19:08:44] B n10000_L400 coal-py@jdefault: median 0.559s
+[2026-10-17 19:08:47] B n10000_L400 coal-py@j12: median 0.559s
+[2026-10-17 19:08:52] B n10000_L400 coal-py@j1: median 0.736s
+[2026-10-17 19:08:53] B n10000_L400 coal-cpp@j1: median 0.133s
+[2026-10-17 19:08:54] B n1000_L100 coal-py@j12: median 0.135s
+[2026-10-17 19:08:55] B n1000_L100 coal-py@jdefault: median 0.134s
+[2026-10-17 19:08:56] B n1000_L100 coal-py@j1: median 0.134s
+[2026-10-17 19:08:56] B n1000_L100 coal-cpp@j12: median 0.024s
+[2026-10-17 19:08:56] B n1000_L100 coal-cpp@j1: median 0.026s
+[2026-10-17 19:08:57] B n1000_L100 p2n16: median 0.178s
+[2026-10-17 19:09:01] B n1000_L100 p2n14: median 0.634s
+[2026-10-17 19:09:01] B n1000_L100 coal-cpp@jdefault: median 0.025s
+[2026-10-17 19:09:01] B n1000_L400 coal-cpp@j12: median 0.026s
+[2026-10-17 19:09:02] B n1000_L400 coal-cpp@jdefault: median 0.027s
+[2026-10-17 19:09:04] B n1000_L400 p2n16: median 0.434s
+[2026-10-17 19:09:04] B n1000_L400 coal-cpp@j1: median 0.031s
+[2026-10-17 19:09:05] B n1000_L400 coal-py@j1: median 0.185s
+[2026-10-17 19:09:19] B n1000_L400 p2n14: median 2.311s
+[2026-10-17 19:09:21] B n1000_L400 coal-py@jdefault: median 0.180s
+[2026-10-17 19:09:22] B n1000_L400 coal-py@j12: median 0.185s
+[2026-10-17 19:09:23] B n1000_L1000 coal-py@j1: median 0.272s
+[2026-10-17 19:09:29] B n1000_L1000 p2n16: median 0.915s
+[2026-10-17 19:09:29] B n1000_L1000 coal-cpp@j12: median 0.038s
+[2026-10-17 19:10:08] B n1000_L1000 p2n14: median 6.457s
+[2026-10-17 19:10:09] B n1000_L1000 coal-py@j12: median 0.264s
+[2026-10-17 19:10:10] B n1000_L1000 coal-cpp@jdefault: median 0.039s
+[2026-10-17 19:10:11] B n1000_L1000 coal-py@jdefault: median 0.265s
+[2026-10-17 19:10:12] B n1000_L1000 coal-cpp@j1: median 0.048s
+[2026-10-17 19:10:13] drift check B/end: coal-cpp -j1 n10000_L400 median 0.1295s peak 16.2 MB
+[2026-10-17 19:10:13] Tier B done
+[2026-10-17 19:10:13] STEP B FINISHED status=OK harness_commit=ab92b8e18005
+[2026-10-17 19:10:15] clock reference: 131.8% of nominal (single-thread probe)
+[2026-10-17 19:10:15] Tier B cold block start (seed 20261017): 8 cases x 6 configs
+[2026-10-17 19:15:10] cold n1000_L10000 p2n14: OK 292.0876s 
+[2026-10-17 19:15:13] cold n1000_L10000 coal-cpp@jdefault: OK 0.2735s 
+[2026-10-17 19:15:16] cold n1000_L10000 coal-py@j1: OK 1.0647s 
+[2026-10-17 19:15:19] cold n1000_L10000 coal-py@jdefault: OK 1.0179s 
+[2026-10-17 19:15:33] cold n1000_L10000 p2n16: OK 11.0073s 
+[2026-10-17 19:15:35] cold n1000_L10000 coal-cpp@j1: OK 0.3024s 
+[2026-10-17 19:17:16] cold n100000_L400 p2n16: OK 97.2591s 
+[2026-10-17 19:17:24] cold n100000_L400 coal-py@j1: OK 4.9903s 
+[2026-10-17 19:17:32] cold n100000_L400 coal-py@jdefault: OK 4.3708s 
+[2026-10-17 19:23:32] cold n100000_L400 p2n14: OK 356.555s 
+[2026-10-17 19:23:38] cold n100000_L400 coal-cpp@jdefault: OK 1.2966s 
+[2026-10-17 19:23:43] cold n100000_L400 coal-cpp@j1: OK 1.2706s 
+[2026-10-17 19:23:46] cold n10_L35000 coal-py@jdefault: OK 0.1958s 
+[2026-10-17 19:23:51] cold n10_L35000 p2n14: ERROR 2.9767s exit=255: Too many capture groups (limit is 65535) in regex m/((U|T|C|Y|A)(U|T)G)(G(U|T).)((U|T)G(U|T|C|Y))((C(U|T).)|((U|T)(U|T)(A|G|R)))((C(U|T).)|((U|T)(U|T)(A|G|R)))(GG.)(AA(A.../ at C:\coalbench\COAL\PAL2N
+[2026-10-17 19:23:53] cold n10_L35000 coal-cpp@jdefault: OK 0.0354s 
+[2026-10-17 19:23:55] cold n10_L35000 coal-cpp@j1: OK 0.0393s 
+[2026-10-17 19:23:57] cold n10_L35000 coal-py@j1: OK 0.1749s 
+[2026-10-17 19:24:00] cold n10_L35000 p2n16: OK 0.6527s 
+[2026-10-17 19:24:10] cold n100_L35000 p2n16: OK 7.8155s 
+[2026-10-17 19:24:13] cold n100_L35000 coal-py@jdefault: OK 0.7171s 
+[2026-10-17 19:24:15] cold n100_L35000 coal-cpp@j1: OK 0.1461s 
+[2026-10-17 19:24:18] cold n100_L35000 coal-py@j1: OK 0.709s 
+[2026-10-17 19:24:23] cold n100_L35000 p2n14: ERROR 2.8258s exit=255: Too many capture groups (limit is 65535) in regex m/((U|T|C|Y|A)(U|T)G)(G(U|T).)((CG.)|(AG(A|G|R)))(AA(U|T|C|Y))(CA(U|T|C|Y))((C(U|T).)|((U|T)(U|T)(A|G|R)))((CG.)|(AG(A|.../ at C:\coalbench\COAL\PAL2N
+[2026-10-17 19:24:25] cold n100_L35000 coal-cpp@jdefault: OK 0.109s 
+[2026-10-17 19:24:27] cold n10000_L400 coal-cpp@jdefault: OK 0.1334s 
+[2026-10-17 19:24:30] cold n10000_L400 coal-py@jdefault: OK 0.6272s 
+[2026-10-17 19:24:38] cold n10000_L400 p2n16: OK 5.6551s 
+[2026-10-17 19:24:41] cold n10000_L400 coal-py@j1: OK 0.7899s 
+[2026-10-17 19:25:32] cold n10000_L400 p2n14: OK 48.7295s 
+[2026-10-17 19:25:34] cold n10000_L400 coal-cpp@j1: OK 0.1517s 
+[2026-10-17 19:25:36] cold n1000_L100 coal-cpp@jdefault: OK 0.0322s 
+[2026-10-17 19:25:39] cold n1000_L100 p2n14: OK 0.6756s 
+[2026-10-17 19:25:41] cold n1000_L100 p2n16: OK 0.2018s 
+[2026-10-17 19:25:43] cold n1000_L100 coal-py@jdefault: OK 0.1475s 
+[2026-10-17 19:25:46] cold n1000_L100 coal-py@j1: OK 0.1562s 
+[2026-10-17 19:25:48] cold n1000_L100 coal-cpp@j1: OK 0.0368s 
+[2026-10-17 19:25:52] cold n1000_L400 p2n14: OK 2.38s 
+[2026-10-17 19:25:54] cold n1000_L400 coal-py@jdefault: OK 0.2168s 
+[2026-10-17 19:25:56] cold n1000_L400 coal-cpp@jdefault: OK 0.0401s 
+[2026-10-17 19:25:59] cold n1000_L400 coal-cpp@j1: OK 0.0493s 
+[2026-10-17 19:26:01] cold n1000_L400 coal-py@j1: OK 0.1959s 
+[2026-10-17 19:26:03] cold n1000_L400 p2n16: OK 0.4374s 
+[2026-10-17 19:26:05] cold n1000_L1000 coal-cpp@j1: OK 0.0593s 
+[2026-10-17 19:26:18] cold n1000_L1000 p2n14: OK 10.1147s 
+[2026-10-17 19:26:21] cold n1000_L1000 p2n16: OK 0.9107s 
+[2026-10-17 19:26:23] cold n1000_L1000 coal-cpp@jdefault: OK 0.0485s 
+[2026-10-17 19:26:25] cold n1000_L1000 coal-py@jdefault: OK 0.2908s 
+[2026-10-17 19:26:27] cold n1000_L1000 coal-py@j1: OK 0.2847s 
+[2026-10-17 19:26:27] Tier B cold block done
+[2026-10-17 19:26:27] STEP B cold-only FINISHED status=OK harness_commit=ab92b8e18005-dirty
+[2026-10-17 19:26:28] Tier C grading families: 2000 cases x 6 configs, workers=10
+[2026-10-17 19:29:16] Tier C grading families done
+[2026-10-17 19:29:16] Tier C grading ncbi: 3437 cases x 6 configs, workers=10
+[2026-10-17 19:35:34] Tier C grading ncbi done
+[2026-10-17 19:35:35] STEP C grade-only FINISHED status=OK harness_commit=ab92b8e18005-dirty
+[2026-10-17 19:50:52] Tier C reclassify: re-applying input_invalid.csv and documented-v14-failure rules to recorded grading
+[2026-10-17 19:50:52] Tier C grading families done
+[2026-10-17 19:50:53] Tier C grading ncbi done
+[2026-10-17 19:50:53] STEP C grade-only FINISHED status=OK harness_commit=ab92b8e18005-dirty
+[2026-10-17 19:52:29] clock reference: 133.2% of nominal (single-thread probe)
+[2026-10-17 19:52:29] Tier C timing start (seed 20261017); runs: 1 warm-up + 5 for batch 1/10/100, 1 warm-up + 3 for 1000/all
+[2026-10-17 19:52:30] drift check C/start: coal-cpp -j1 n10000_L400 median 0.1281s peak 16.0 MB
+[2026-10-17 19:52:30] Tier C families: 2000/2000 cases passed grading for every timed config (excluded 0, not timed for any tool)
+[2026-10-17 19:55:18] C families batch=2000 per_file_loop coal-cpp@jdefault: median 41.45s
+[2026-10-17 19:57:23] STEP C timing STOPPED by user (deadline) at 19:57; families batch=2000 tagged INCOMPLETE (coal-cpp@jdefault 1+3 done; next config wrote no rows); ncbi not started
+[2026-10-17 19:59:20] clock reference: 130.5% of nominal (single-thread probe)
+[2026-10-17 19:59:21] drift check 1m/start: coal-cpp -j1 n10000_L400 median 0.1300s peak 16.0 MB
+[2026-10-17 19:59:21] 1M (COAL only, no PAL2NAL): 1 warm-up + 3 timed; then coal-py default as a single run under the 24 GB cap
+[2026-10-17 20:00:28] B n1000000_L400 coal-cpp@j1: median 12.5198s peak 171.7 MB
+[2026-10-17 20:01:15] B n1000000_L400 coal-cpp@jdefault: median 10.7149s peak 171.5 MB
+[2026-10-17 20:04:51] B n1000000_L400 coal-py@j1: median 50.2679s peak 1175.6 MB
+[2026-10-17 20:05:18] B n1000000_L400 (single run, 24 GB cap test) coal-py@jdefault: OK 26.43s peak 8032.0 MB 
+[2026-10-17 20:05:19] drift check 1m/end: coal-cpp -j1 n10000_L400 median 0.1325s peak 16.5 MB
+[2026-10-17 20:05:19] STEP deadline-1m FINISHED harness_commit=16c69fda79d9
+[2026-10-17 20:05:30] clock reference: 133.3% of nominal (single-thread probe)
+[2026-10-17 20:05:31] drift check E/start: coal-cpp -j1 n10000_L400 median 0.1341s peak 16.5 MB
+[2026-10-17 20:05:31] Tier E (reduced): coal-cpp -j 1,2,4,8,12,20 on n100000_L400 and n1000000_L400; coal-py -j1/default on n100000_L400
+[2026-10-17 20:05:38] E n100000_L400 coal-cpp@j1: median 1.1947s peak 30.9 MB
+[2026-10-17 20:05:42] E n100000_L400 coal-cpp@j2: median 0.9890s peak 33.7 MB
+[2026-10-17 20:05:46] E n100000_L400 coal-cpp@j4: median 0.9755s peak 33.4 MB
+[2026-10-17 20:05:51] E n100000_L400 coal-cpp@j8: median 0.9570s peak 33.5 MB
+[2026-10-17 20:05:55] E n100000_L400 coal-cpp@j12: median 1.0042s peak 33.1 MB
+[2026-10-17 20:06:00] E n100000_L400 coal-cpp@j20: median 1.0179s peak 33.6 MB
+[2026-10-17 20:07:04] E n1000000_L400 coal-cpp@j1: median 12.4183s peak 171.8 MB
+[2026-10-17 20:07:49] E n1000000_L400 coal-cpp@j2: median 10.1742s peak 171.8 MB
+[2026-10-17 20:08:37] E n1000000_L400 coal-cpp@j4: median 10.7355s peak 171.9 MB
+[2026-10-17 20:09:25] E n1000000_L400 coal-cpp@j8: median 10.8493s peak 171.8 MB
+[2026-10-17 20:10:14] E n1000000_L400 coal-cpp@j12: median 10.8756s peak 171.8 MB
+[2026-10-17 20:11:03] E n1000000_L400 coal-cpp@j20: median 10.8253s peak 171.8 MB
+[2026-10-17 20:11:25] E n100000_L400 coal-py@j1: median 4.9085s peak 689.2 MB
+[2026-10-17 20:11:35] E n100000_L400 coal-py@jdefault: median 2.5564s peak 10327.0 MB
+[2026-10-17 20:11:36] drift check E/end: coal-cpp -j1 n10000_L400 median 0.1286s peak 16.0 MB
+[2026-10-17 20:11:36] STEP deadline-E FINISHED harness_commit=16c69fda79d9
+[2026-10-17 20:11:43] clock reference: 131.4% of nominal (single-thread probe)
+[2026-10-17 20:11:44] drift check C/start: coal-cpp -j1 n10000_L400 median 0.1319s peak 16.1 MB
+[2026-10-17 20:11:44] Tier C (reduced): ncbi, one fixed-seed batch of 100 from 3273 cases valid for all 6 configs (INPUT_INVALID and p2n14-failing SELD/FDHF excluded); per-file loop; 1 warm-up + 3 timed
+[2026-10-17 20:12:21] C ncbi batch=100 per_file_loop p2n16: median 9.05s (90 ms/file)
+[2026-10-17 20:12:29] C ncbi batch=100 per_file_loop coal-cpp@jdefault: median 1.84s (18 ms/file)
+[2026-10-17 20:12:36] C ncbi batch=100 per_file_loop coal-cpp@j1: median 1.84s (18 ms/file)
+[2026-10-17 20:13:50] C ncbi batch=100 per_file_loop coal-py@jdefault: median 18.44s (184 ms/file)
+[2026-10-17 20:14:40] C ncbi batch=100 per_file_loop p2n14: median 12.52s (125 ms/file)
+[2026-10-17 20:15:54] C ncbi batch=100 per_file_loop coal-py@j1: median 18.43s (184 ms/file)
+[2026-10-17 20:15:55] drift check C/end: coal-cpp -j1 n10000_L400 median 0.1335s peak 17.3 MB
+[2026-10-17 20:15:55] STEP deadline-C FINISHED harness_commit=16c69fda79d9
+[2026-10-17 20:16:06] clock reference: 133.0% of nominal (single-thread probe)
+[2026-10-17 20:16:07] drift check 1m_p2n16/start: coal-cpp -j1 n10000_L400 median 0.1351s peak 16.3 MB
+[2026-10-17 20:16:07] 1M p2n16: single run, no warm-up, 24 GB cap, 15-min timeout
+[2026-10-17 20:31:07] B n1000000_L400 (single run, 24 GB cap, 900 s timeout) p2n16: TIMEOUT 900.0143s peak 3742.7 MB timeout=900s
+[2026-10-17 20:31:08] drift check 1m_p2n16/end: coal-cpp -j1 n10000_L400 median 0.1379s peak 16.6 MB
+[2026-10-17 20:31:08] STEP deadline-1m_p2n16 FINISHED harness_commit=3064d324a35b
+[2026-10-17 20:31:15] clock reference: 133.4% of nominal (single-thread probe)
+[2026-10-17 20:31:15] Tier D correctness: 2634 trees x 6 configs, workers=10, 10 largest serial; stops between chunks at 21:00
+[2026-10-17 20:31:44] D correctness bin0_2-10: 482/482 trees
+[2026-10-17 20:32:20] D correctness bin1_11-50: 449/449 trees
+[2026-10-17 20:34:48] D correctness bin2_51-200: 656/656 trees
+[2026-10-17 20:42:47] D correctness bin3_201-1000: 758/758 trees
+[2026-10-17 21:02:03] D correctness bin4_1001-99999: 250/289 trees (stopped at 21:00: rest not run (time))
+[2026-10-17 21:02:03] STEP deadline-Dcorr FINISHED harness_commit=3064d324a35b
+[2026-10-17 21:02:11] clock reference: 132.0% of nominal (single-thread probe)
+[2026-10-17 21:02:12] drift check Dtime/start: coal-cpp -j1 n10000_L400 median 0.1304s peak 16.2 MB
+[2026-10-17 21:02:12] Tier D timing: 110 trees (20 per bin + the 10 largest), all 6 configs, 1 warm-up + 3; stops at 21:30
+[2026-10-17 21:02:13] D bin0_2-10 t033305 coal-py@j1: median 0.1004s peak 13.0 MB
+[2026-10-17 21:02:13] D bin0_2-10 t033305 p2n16: median 0.0654s peak 10.7 MB
+[2026-10-17 21:02:13] D bin0_2-10 t033305 coal-py@jdefault: median 0.0921s peak 13.1 MB
+[2026-10-17 21:02:13] D bin0_2-10 t033305 coal-cpp@jdefault: median 0.0087s peak 6.5 MB
+[2026-10-17 21:02:13] D bin0_2-10 t033305 coal-cpp@j1: median 0.0085s peak 6.4 MB
+[2026-10-17 21:02:14] D bin0_2-10 t033305 p2n14: median 0.0199s peak 3.7 MB
+[2026-10-17 21:02:14] D timing bin0_2-10: 1/20 trees done
+[2026-10-17 21:02:14] D bin0_2-10 t019614 p2n16: median 0.0644s peak 11.8 MB
+[2026-10-17 21:02:14] D bin0_2-10 t019614 coal-py@j1: median 0.0988s peak 14.0 MB
+[2026-10-17 21:02:14] D bin0_2-10 t019614 coal-cpp@j1: median 0.0151s peak 6.4 MB
+[2026-10-17 21:02:14] D bin0_2-10 t019614 p2n14: median 0.0274s peak 5.8 MB
+[2026-10-17 21:02:15] D bin0_2-10 t019614 coal-py@jdefault: median 0.0985s peak 14.0 MB
+[2026-10-17 21:02:15] D bin0_2-10 t019614 coal-cpp@jdefault: median 0.0158s peak 6.5 MB
+[2026-10-17 21:02:15] D timing bin0_2-10: 2/20 trees done
+[2026-10-17 21:02:15] D bin0_2-10 t038489 p2n16: median 0.0645s peak 10.6 MB
+[2026-10-17 21:02:15] D bin0_2-10 t038489 coal-cpp@jdefault: median 0.0089s peak 6.4 MB
+[2026-10-17 21:02:16] D bin0_2-10 t038489 coal-py@jdefault: median 0.0907s peak 13.0 MB
+[2026-10-17 21:02:16] D bin0_2-10 t038489 p2n14: median 0.0188s peak 3.6 MB
+[2026-10-17 21:02:16] D bin0_2-10 t038489 coal-py@j1: median 0.0915s peak 13.1 MB
+[2026-10-17 21:02:16] D bin0_2-10 t038489 coal-cpp@j1: median 0.0086s peak 6.4 MB
+[2026-10-17 21:02:16] D timing bin0_2-10: 3/20 trees done
+[2026-10-17 21:02:16] D bin0_2-10 t029857 coal-cpp@jdefault: median 0.0090s peak 6.5 MB
+[2026-10-17 21:02:17] D bin0_2-10 t029857 coal-py@jdefault: median 0.1466s peak 14.1 MB
+[2026-10-17 21:02:17] D bin0_2-10 t029857 coal-py@j1: median 0.1486s peak 14.0 MB
+[2026-10-17 21:02:18] D bin0_2-10 t029857 coal-cpp@j1: median 0.0091s peak 6.4 MB
+[2026-10-17 21:02:18] D bin0_2-10 t029857 p2n14: median 0.0213s peak 3.6 MB
+[2026-10-17 21:02:18] D bin0_2-10 t029857 p2n16: median 0.0675s peak 10.6 MB
+[2026-10-17 21:02:18] D timing bin0_2-10: 4/20 trees done
+[2026-10-17 21:02:18] D bin0_2-10 t044990 coal-py@j1: median 0.0996s peak 13.0 MB
+[2026-10-17 21:02:18] D bin0_2-10 t044990 p2n14: median 0.0186s peak 3.6 MB
+[2026-10-17 21:02:19] D bin0_2-10 t044990 p2n16: median 0.0677s peak 10.6 MB
+[2026-10-17 21:02:19] D bin0_2-10 t044990 coal-cpp@jdefault: median 0.0089s peak 6.4 MB
+[2026-10-17 21:02:19] D bin0_2-10 t044990 coal-py@jdefault: median 0.0909s peak 13.1 MB
+[2026-10-17 21:02:19] D bin0_2-10 t044990 coal-cpp@j1: median 0.0093s peak 6.4 MB
+[2026-10-17 21:02:19] D timing bin0_2-10: 5/20 trees done
+[2026-10-17 21:02:19] D bin0_2-10 t022569 p2n14: median 0.0195s peak 4.3 MB
+[2026-10-17 21:02:19] D bin0_2-10 t022569 coal-cpp@jdefault: median 0.0083s peak 6.4 MB
+[2026-10-17 21:02:20] D bin0_2-10 t022569 p2n16: median 0.0640s peak 10.6 MB
+[2026-10-17 21:02:20] D bin0_2-10 t022569 coal-py@jdefault: median 0.0908s peak 13.0 MB
+[2026-10-17 21:02:20] D bin0_2-10 t022569 coal-py@j1: median 0.0923s peak 13.1 MB
+[2026-10-17 21:02:20] D bin0_2-10 t022569 coal-cpp@j1: median 0.0083s peak 6.4 MB
+[2026-10-17 21:02:20] D timing bin0_2-10: 6/20 trees done
+[2026-10-17 21:02:20] D bin0_2-10 t039720 coal-cpp@jdefault: median 0.0085s peak 6.4 MB
+[2026-10-17 21:02:21] D bin0_2-10 t039720 coal-py@j1: median 0.0931s peak 12.9 MB
+[2026-10-17 21:02:21] D bin0_2-10 t039720 p2n16: median 0.0630s peak 10.6 MB
+[2026-10-17 21:02:21] D bin0_2-10 t039720 coal-cpp@j1: median 0.0087s peak 6.4 MB
+[2026-10-17 21:02:22] D bin0_2-10 t039720 coal-py@jdefault: median 0.0910s peak 13.1 MB
+[2026-10-17 21:02:22] D bin0_2-10 t039720 p2n14: median 0.0196s peak 3.9 MB
+[2026-10-17 21:02:22] D timing bin0_2-10: 7/20 trees done
+[2026-10-17 21:02:22] D bin0_2-10 t052294 coal-cpp@jdefault: median 0.0096s peak 6.4 MB
+[2026-10-17 21:02:22] D bin0_2-10 t052294 p2n16: median 0.0656s peak 10.7 MB
+[2026-10-17 21:02:22] D bin0_2-10 t052294 coal-py@jdefault: median 0.0916s peak 13.0 MB
+[2026-10-17 21:02:22] D bin0_2-10 t052294 p2n14: median 0.0163s peak 3.1 MB
+[2026-10-17 21:02:23] D bin0_2-10 t052294 coal-py@j1: median 0.0899s peak 13.1 MB
+[2026-10-17 21:02:23] D bin0_2-10 t052294 coal-cpp@j1: median 0.0086s peak 6.4 MB
+[2026-10-17 21:02:23] D timing bin0_2-10: 8/20 trees done
+[2026-10-17 21:02:23] D bin0_2-10 t049322 coal-py@jdefault: median 0.0912s peak 13.0 MB
+[2026-10-17 21:02:24] D bin0_2-10 t049322 coal-py@j1: median 0.0909s peak 13.1 MB
+[2026-10-17 21:02:24] D bin0_2-10 t049322 p2n14: median 0.0163s peak 3.1 MB
+[2026-10-17 21:02:24] D bin0_2-10 t049322 coal-cpp@j1: median 0.0091s peak 6.4 MB
+[2026-10-17 21:02:24] D bin0_2-10 t049322 p2n16: median 0.0716s peak 10.6 MB
+[2026-10-17 21:02:24] D bin0_2-10 t049322 coal-cpp@jdefault: median 0.0085s peak 6.4 MB
+[2026-10-17 21:02:24] D timing bin0_2-10: 9/20 trees done
+[2026-10-17 21:02:24] D bin0_2-10 t040671 p2n16: median 0.0667s peak 10.7 MB
+[2026-10-17 21:02:24] D bin0_2-10 t040671 coal-cpp@jdefault: median 0.0085s peak 6.5 MB
+[2026-10-17 21:02:24] D bin0_2-10 t040671 coal-cpp@j1: median 0.0086s peak 6.4 MB
+[2026-10-17 21:02:25] D bin0_2-10 t040671 p2n14: median 0.0209s peak 4.5 MB
+[2026-10-17 21:02:25] D bin0_2-10 t040671 coal-py@j1: median 0.0933s peak 13.1 MB
+[2026-10-17 21:02:25] D bin0_2-10 t040671 coal-py@jdefault: median 0.0903s peak 13.0 MB
+[2026-10-17 21:02:25] D timing bin0_2-10: 10/20 trees done
+[2026-10-17 21:02:26] D bin0_2-10 t053820 coal-py@j1: median 0.1455s peak 14.0 MB
+[2026-10-17 21:02:26] D bin0_2-10 t053820 p2n16: median 0.0661s peak 10.6 MB
+[2026-10-17 21:02:26] D bin0_2-10 t053820 coal-cpp@jdefault: median 0.0096s peak 6.4 MB
+[2026-10-17 21:02:27] D bin0_2-10 t053820 coal-py@jdefault: median 0.1520s peak 13.9 MB
+[2026-10-17 21:02:27] D bin0_2-10 t053820 coal-cpp@j1: median 0.0083s peak 6.4 MB
+[2026-10-17 21:02:27] D bin0_2-10 t053820 p2n14: median 0.0158s peak 2.8 MB
+[2026-10-17 21:02:27] D timing bin0_2-10: 11/20 trees done
+[2026-10-17 21:02:27] D bin0_2-10 t040790 p2n16: median 0.0665s peak 10.7 MB
+[2026-10-17 21:02:28] D bin0_2-10 t040790 coal-py@j1: median 0.0912s peak 13.1 MB
+[2026-10-17 21:02:28] D bin0_2-10 t040790 p2n14: median 0.0233s peak 5.1 MB
+[2026-10-17 21:02:28] D bin0_2-10 t040790 coal-cpp@j1: median 0.0083s peak 6.4 MB
+[2026-10-17 21:02:28] D bin0_2-10 t040790 coal-py@jdefault: median 0.0940s peak 13.0 MB
+[2026-10-17 21:02:28] D bin0_2-10 t040790 coal-cpp@jdefault: median 0.0090s peak 6.4 MB
+[2026-10-17 21:02:28] D timing bin0_2-10: 12/20 trees done
+[2026-10-17 21:02:28] D bin0_2-10 t040667 coal-cpp@j1: median 0.0088s peak 6.4 MB
+[2026-10-17 21:02:28] D bin0_2-10 t040667 coal-cpp@jdefault: median 0.0092s peak 6.4 MB
+[2026-10-17 21:02:29] D bin0_2-10 t040667 p2n16: median 0.0645s peak 10.7 MB
+[2026-10-17 21:02:29] D bin0_2-10 t040667 coal-py@j1: median 0.0953s peak 13.0 MB
+[2026-10-17 21:02:29] D bin0_2-10 t040667 coal-py@jdefault: median 0.0896s peak 13.1 MB
+[2026-10-17 21:02:29] D bin0_2-10 t040667 p2n14: median 0.0192s peak 3.5 MB
+[2026-10-17 21:02:29] D timing bin0_2-10: 13/20 trees done
+[2026-10-17 21:02:29] D bin0_2-10 t047967 coal-cpp@jdefault: median 0.0091s peak 6.4 MB
+[2026-10-17 21:02:30] D bin0_2-10 t047967 p2n14: median 0.0163s peak 3.1 MB
+[2026-10-17 21:02:30] D bin0_2-10 t047967 coal-py@j1: median 0.0909s peak 13.1 MB
+[2026-10-17 21:02:30] D bin0_2-10 t047967 coal-py@jdefault: median 0.0923s peak 13.0 MB
+[2026-10-17 21:02:31] D bin0_2-10 t047967 p2n16: median 0.0636s peak 10.7 MB
+[2026-10-17 21:02:31] D bin0_2-10 t047967 coal-cpp@j1: median 0.0088s peak 6.4 MB
+[2026-10-17 21:02:31] D timing bin0_2-10: 14/20 trees done
+[2026-10-17 21:02:31] D bin0_2-10 t041686 p2n14: median 0.0213s peak 4.4 MB
+[2026-10-17 21:02:31] D bin0_2-10 t041686 coal-py@jdefault: median 0.0913s peak 13.0 MB
+[2026-10-17 21:02:31] D bin0_2-10 t041686 p2n16: median 0.0671s peak 10.7 MB
+[2026-10-17 21:02:31] D bin0_2-10 t041686 coal-cpp@jdefault: median 0.0086s peak 6.4 MB
+[2026-10-17 21:02:31] D bin0_2-10 t041686 coal-cpp@j1: median 0.0089s peak 6.4 MB
+[2026-10-17 21:02:32] D bin0_2-10 t041686 coal-py@j1: median 0.0899s peak 13.1 MB
+[2026-10-17 21:02:32] D timing bin0_2-10: 15/20 trees done
+[2026-10-17 21:02:32] D bin0_2-10 t041676 p2n14: median 0.0171s peak 3.4 MB
+[2026-10-17 21:02:32] D bin0_2-10 t041676 coal-cpp@jdefault: median 0.0088s peak 6.4 MB
+[2026-10-17 21:02:32] D bin0_2-10 t041676 p2n16: median 0.0664s peak 10.6 MB
+[2026-10-17 21:02:33] D bin0_2-10 t041676 coal-py@j1: median 0.0911s peak 13.1 MB
+[2026-10-17 21:02:33] D bin0_2-10 t041676 coal-py@jdefault: median 0.0916s peak 13.0 MB
+[2026-10-17 21:02:33] D bin0_2-10 t041676 coal-cpp@j1: median 0.0086s peak 6.4 MB
+[2026-10-17 21:02:33] D timing bin0_2-10: 16/20 trees done
+[2026-10-17 21:02:33] D bin0_2-10 t051012 p2n16: median 0.0638s peak 10.6 MB
+[2026-10-17 21:02:33] D bin0_2-10 t051012 p2n14: median 0.0167s peak 3.4 MB
+[2026-10-17 21:02:34] D bin0_2-10 t051012 coal-py@j1: median 0.0913s peak 13.0 MB
+[2026-10-17 21:02:34] D bin0_2-10 t051012 coal-cpp@jdefault: median 0.0086s peak 6.4 MB
+[2026-10-17 21:02:34] D bin0_2-10 t051012 coal-py@jdefault: median 0.0949s peak 13.0 MB
+[2026-10-17 21:02:34] D bin0_2-10 t051012 coal-cpp@j1: median 0.0087s peak 6.4 MB
+[2026-10-17 21:02:34] D timing bin0_2-10: 17/20 trees done
+[2026-10-17 21:02:35] D bin0_2-10 t035012 p2n16: median 0.0690s peak 10.7 MB
+[2026-10-17 21:02:35] D bin0_2-10 t035012 p2n14: median 0.0181s peak 3.3 MB
+[2026-10-17 21:02:35] D bin0_2-10 t035012 coal-cpp@jdefault: median 0.0091s peak 6.4 MB
+[2026-10-17 21:02:35] D bin0_2-10 t035012 coal-py@jdefault: median 0.1518s peak 14.1 MB
+[2026-10-17 21:02:36] D bin0_2-10 t035012 coal-py@j1: median 0.1463s peak 14.1 MB
+[2026-10-17 21:02:36] D bin0_2-10 t035012 coal-cpp@j1: median 0.0088s peak 6.4 MB
+[2026-10-17 21:02:36] D timing bin0_2-10: 18/20 trees done
+[2026-10-17 21:02:36] D bin0_2-10 t042545 p2n16: median 0.0665s peak 12.3 MB
+[2026-10-17 21:02:36] D bin0_2-10 t042545 p2n14: median 0.0368s peak 7.9 MB
+[2026-10-17 21:02:36] D bin0_2-10 t042545 coal-cpp@jdefault: median 0.0148s peak 6.6 MB
+[2026-10-17 21:02:37] D bin0_2-10 t042545 coal-py@j1: median 0.1003s peak 15.3 MB
+[2026-10-17 21:02:37] D bin0_2-10 t042545 coal-cpp@j1: median 0.0150s peak 6.5 MB
+[2026-10-17 21:02:37] D bin0_2-10 t042545 coal-py@jdefault: median 0.1020s peak 15.2 MB
+[2026-10-17 21:02:37] D timing bin0_2-10: 19/20 trees done
+[2026-10-17 21:02:37] D bin0_2-10 t029672 coal-cpp@jdefault: median 0.0089s peak 6.4 MB
+[2026-10-17 21:02:38] D bin0_2-10 t029672 coal-py@j1: median 0.0935s peak 13.1 MB
+[2026-10-17 21:02:38] D bin0_2-10 t029672 p2n16: median 0.0665s peak 10.6 MB
+[2026-10-17 21:02:39] D bin0_2-10 t029672 coal-py@jdefault: median 0.0989s peak 13.0 MB
+[2026-10-17 21:02:39] D bin0_2-10 t029672 coal-cpp@j1: median 0.0133s peak 6.4 MB
+[2026-10-17 21:02:39] D bin0_2-10 t029672 p2n14: median 0.0202s peak 3.6 MB
+[2026-10-17 21:02:39] D timing bin0_2-10: 20/20 trees done
+[2026-10-17 21:02:39] D bin1_11-50 t024737 p2n14: median 0.0462s peak 4.9 MB
+[2026-10-17 21:02:39] D bin1_11-50 t024737 p2n16: median 0.0692s peak 12.1 MB
+[2026-10-17 21:02:39] D bin1_11-50 t024737 coal-cpp@j1: median 0.0171s peak 6.4 MB
+[2026-10-17 21:02:40] D bin1_11-50 t024737 coal-py@jdefault: median 0.1009s peak 14.0 MB
+[2026-10-17 21:02:40] D bin1_11-50 t024737 coal-cpp@jdefault: median 0.0188s peak 6.9 MB
+[2026-10-17 21:02:40] D bin1_11-50 t024737 coal-py@j1: median 0.1065s peak 14.1 MB
+[2026-10-17 21:02:40] D timing bin1_11-50: 1/20 trees done
+[2026-10-17 21:02:41] D bin1_11-50 t025034 coal-py@j1: median 0.1078s peak 14.2 MB
+[2026-10-17 21:02:41] D bin1_11-50 t025034 p2n14: median 0.0701s peak 5.8 MB
+[2026-10-17 21:02:41] D bin1_11-50 t025034 p2n16: median 0.0808s peak 13.6 MB
+[2026-10-17 21:02:41] D bin1_11-50 t025034 coal-cpp@jdefault: median 0.0204s peak 6.8 MB
+[2026-10-17 21:02:42] D bin1_11-50 t025034 coal-py@jdefault: median 0.1015s peak 14.2 MB
+[2026-10-17 21:02:42] D bin1_11-50 t025034 coal-cpp@j1: median 0.0198s peak 6.4 MB
+[2026-10-17 21:02:42] D timing bin1_11-50: 2/20 trees done
+[2026-10-17 21:02:42] D bin1_11-50 t024063 coal-cpp@j1: median 0.0169s peak 6.4 MB
+[2026-10-17 21:02:42] D bin1_11-50 t024063 p2n14: median 0.0386s peak 4.2 MB
+[2026-10-17 21:02:43] D bin1_11-50 t024063 coal-py@jdefault: median 0.0997s peak 13.9 MB
+[2026-10-17 21:02:43] D bin1_11-50 t024063 coal-py@j1: median 0.0967s peak 14.1 MB
+[2026-10-17 21:02:43] D bin1_11-50 t024063 coal-cpp@jdefault: median 0.0178s peak 6.7 MB
+[2026-10-17 21:02:43] D bin1_11-50 t024063 p2n16: median 0.0678s peak 11.9 MB
+[2026-10-17 21:02:43] D timing bin1_11-50: 3/20 trees done
+[2026-10-17 21:02:43] D bin1_11-50 t025333 coal-cpp@jdefault: median 0.0229s peak 6.9 MB
+[2026-10-17 21:02:44] D bin1_11-50 t025333 coal-py@j1: median 0.1027s peak 14.2 MB
+[2026-10-17 21:02:44] D bin1_11-50 t025333 p2n16: median 0.0765s peak 15.1 MB
+[2026-10-17 21:02:45] D bin1_11-50 t025333 coal-py@jdefault: median 0.1078s peak 14.3 MB
+[2026-10-17 21:02:45] D bin1_11-50 t025333 coal-cpp@j1: median 0.0232s peak 6.4 MB
+[2026-10-17 21:02:45] D bin1_11-50 t025333 p2n14: median 0.0880s peak 7.0 MB
+[2026-10-17 21:02:45] D timing bin1_11-50: 4/20 trees done
+[2026-10-17 21:02:45] D bin1_11-50 t025437 coal-cpp@j1: median 0.0182s peak 6.4 MB
+[2026-10-17 21:02:45] D bin1_11-50 t025437 coal-cpp@jdefault: median 0.0166s peak 6.9 MB
+[2026-10-17 21:02:45] D bin1_11-50 t025437 p2n14: median 0.0341s peak 4.3 MB
+[2026-10-17 21:02:46] D bin1_11-50 t025437 coal-py@j1: median 0.1028s peak 14.0 MB
+[2026-10-17 21:02:46] D bin1_11-50 t025437 coal-py@jdefault: median 0.0987s peak 14.0 MB
+[2026-10-17 21:02:47] D bin1_11-50 t025437 p2n16: median 0.0735s peak 11.8 MB
+[2026-10-17 21:02:47] D timing bin1_11-50: 5/20 trees done
+[2026-10-17 21:02:47] D bin1_11-50 t017202 p2n14: median 0.0783s peak 5.1 MB
+[2026-10-17 21:02:47] D bin1_11-50 t017202 p2n16: median 0.0738s peak 13.1 MB
+[2026-10-17 21:02:48] D bin1_11-50 t017202 coal-py@j1: median 0.1632s peak 15.2 MB
+[2026-10-17 21:02:49] D bin1_11-50 t017202 coal-py@jdefault: median 0.1636s peak 15.1 MB
+[2026-10-17 21:02:49] D bin1_11-50 t017202 coal-cpp@jdefault: median 0.0193s peak 7.3 MB
+[2026-10-17 21:02:49] D bin1_11-50 t017202 coal-cpp@j1: median 0.0184s peak 6.5 MB
+[2026-10-17 21:02:49] D timing bin1_11-50: 6/20 trees done
+[2026-10-17 21:02:49] D bin1_11-50 t017843 p2n14: median 0.0677s peak 6.3 MB
+[2026-10-17 21:02:50] D bin1_11-50 t017843 coal-py@j1: median 0.1774s peak 15.2 MB
+[2026-10-17 21:02:50] D bin1_11-50 t017843 p2n16: median 0.0724s peak 13.7 MB
+[2026-10-17 21:02:50] D bin1_11-50 t017843 coal-cpp@j1: median 0.0184s peak 6.4 MB
+[2026-10-17 21:02:50] D bin1_11-50 t017843 coal-cpp@jdefault: median 0.0195s peak 6.8 MB
+[2026-10-17 21:02:51] D bin1_11-50 t017843 coal-py@jdefault: median 0.1647s peak 15.3 MB
+[2026-10-17 21:02:51] D timing bin1_11-50: 7/20 trees done
+[2026-10-17 21:02:51] D bin1_11-50 t026809 coal-py@j1: median 0.1598s peak 15.3 MB
+[2026-10-17 21:02:52] D bin1_11-50 t026809 coal-cpp@j1: median 0.0153s peak 6.5 MB
+[2026-10-17 21:02:52] D bin1_11-50 t026809 p2n14: median 0.0612s peak 7.5 MB
+[2026-10-17 21:02:52] D bin1_11-50 t026809 coal-cpp@jdefault: median 0.0164s peak 6.9 MB
+[2026-10-17 21:02:53] D bin1_11-50 t026809 coal-py@jdefault: median 0.1590s peak 15.4 MB
+[2026-10-17 21:02:53] D bin1_11-50 t026809 p2n16: median 0.0762s peak 14.0 MB
+[2026-10-17 21:02:53] D timing bin1_11-50: 8/20 trees done
+[2026-10-17 21:02:53] D bin1_11-50 t017890 coal-cpp@jdefault: median 0.0190s peak 6.6 MB
+[2026-10-17 21:02:53] D bin1_11-50 t017890 p2n14: median 0.0292s peak 3.7 MB
+[2026-10-17 21:02:54] D bin1_11-50 t017890 coal-py@j1: median 0.1510s peak 15.1 MB
+[2026-10-17 21:02:54] D bin1_11-50 t017890 coal-py@jdefault: median 0.1523s peak 15.0 MB
+[2026-10-17 21:02:54] D bin1_11-50 t017890 coal-cpp@j1: median 0.0153s peak 6.4 MB
+[2026-10-17 21:02:55] D bin1_11-50 t017890 p2n16: median 0.0694s peak 11.7 MB
+[2026-10-17 21:02:55] D timing bin1_11-50: 9/20 trees done
+[2026-10-17 21:02:55] D bin1_11-50 t017735 coal-cpp@j1: median 0.0204s peak 6.6 MB
+[2026-10-17 21:02:55] D bin1_11-50 t017735 coal-cpp@jdefault: median 0.0206s peak 7.1 MB
+[2026-10-17 21:02:55] D bin1_11-50 t017735 p2n14: median 0.1471s peak 8.4 MB
+[2026-10-17 21:02:56] D bin1_11-50 t017735 coal-py@j1: median 0.1625s peak 15.6 MB
+[2026-10-17 21:02:57] D bin1_11-50 t017735 coal-py@jdefault: median 0.1660s peak 15.7 MB
+[2026-10-17 21:02:57] D bin1_11-50 t017735 p2n16: median 0.0862s peak 16.8 MB
+[2026-10-17 21:02:57] D timing bin1_11-50: 10/20 trees done
+[2026-10-17 21:02:58] D bin1_11-50 t018514 p2n14: median 0.1029s peak 8.6 MB
+[2026-10-17 21:02:58] D bin1_11-50 t018514 coal-py@j1: median 0.1067s peak 14.7 MB
+[2026-10-17 21:02:58] D bin1_11-50 t018514 coal-cpp@j1: median 0.0203s peak 6.6 MB
+[2026-10-17 21:02:58] D bin1_11-50 t018514 p2n16: median 0.0793s peak 14.9 MB
+[2026-10-17 21:02:59] D bin1_11-50 t018514 coal-cpp@jdefault: median 0.0192s peak 7.2 MB
+[2026-10-17 21:02:59] D bin1_11-50 t018514 coal-py@jdefault: median 0.1015s peak 14.7 MB
+[2026-10-17 21:02:59] D timing bin1_11-50: 11/20 trees done
+[2026-10-17 21:02:59] D bin1_11-50 t023439 coal-cpp@jdefault: median 0.0192s peak 6.8 MB
+[2026-10-17 21:02:59] D bin1_11-50 t023439 p2n14: median 0.0457s peak 4.3 MB
+[2026-10-17 21:03:00] D bin1_11-50 t023439 p2n16: median 0.0707s peak 11.9 MB
+[2026-10-17 21:03:00] D bin1_11-50 t023439 coal-py@jdefault: median 0.0969s peak 14.0 MB
+[2026-10-17 21:03:00] D bin1_11-50 t023439 coal-py@j1: median 0.1037s peak 14.1 MB
+[2026-10-17 21:03:00] D bin1_11-50 t023439 coal-cpp@j1: median 0.0157s peak 6.4 MB
+[2026-10-17 21:03:00] D timing bin1_11-50: 12/20 trees done
+[2026-10-17 21:03:01] D bin1_11-50 t024564 p2n14: median 0.0283s peak 3.8 MB
+[2026-10-17 21:03:01] D bin1_11-50 t024564 coal-cpp@j1: median 0.0175s peak 6.4 MB
+[2026-10-17 21:03:01] D bin1_11-50 t024564 p2n16: median 0.0667s peak 11.7 MB
+[2026-10-17 21:03:01] D bin1_11-50 t024564 coal-cpp@jdefault: median 0.0175s peak 6.7 MB
+[2026-10-17 21:03:01] D bin1_11-50 t024564 coal-py@j1: median 0.0977s peak 14.1 MB
+[2026-10-17 21:03:02] D bin1_11-50 t024564 coal-py@jdefault: median 0.0978s peak 13.9 MB
+[2026-10-17 21:03:02] D timing bin1_11-50: 13/20 trees done
+[2026-10-17 21:03:02] D bin1_11-50 t027350 coal-cpp@j1: median 0.0086s peak 6.4 MB
+[2026-10-17 21:03:02] D bin1_11-50 t027350 coal-cpp@jdefault: median 0.0090s peak 6.6 MB
+[2026-10-17 21:03:02] D bin1_11-50 t027350 coal-py@j1: median 0.0923s peak 12.9 MB
+[2026-10-17 21:03:03] D bin1_11-50 t027350 coal-py@jdefault: median 0.0931s peak 13.0 MB
+[2026-10-17 21:03:03] D bin1_11-50 t027350 p2n16: median 0.0648s peak 10.7 MB
+[2026-10-17 21:03:03] D bin1_11-50 t027350 p2n14: median 0.0241s peak 4.0 MB
+[2026-10-17 21:03:03] D timing bin1_11-50: 14/20 trees done
+[2026-10-17 21:03:04] D bin1_11-50 t025445 coal-py@j1: median 0.1580s peak 15.0 MB
+[2026-10-17 21:03:04] D bin1_11-50 t025445 p2n16: median 0.0680s peak 11.8 MB
+[2026-10-17 21:03:04] D bin1_11-50 t025445 coal-cpp@j1: median 0.0165s peak 6.4 MB
+[2026-10-17 21:03:04] D bin1_11-50 t025445 coal-cpp@jdefault: median 0.0172s peak 6.8 MB
+[2026-10-17 21:03:04] D bin1_11-50 t025445 p2n14: median 0.0352s peak 4.4 MB
+[2026-10-17 21:03:05] D bin1_11-50 t025445 coal-py@jdefault: median 0.1588s peak 15.1 MB
+[2026-10-17 21:03:05] D timing bin1_11-50: 15/20 trees done
+[2026-10-17 21:03:05] D bin1_11-50 t017482 coal-cpp@jdefault: median 0.0166s peak 6.9 MB
+[2026-10-17 21:03:05] D bin1_11-50 t017482 p2n14: median 0.0367s peak 4.2 MB
+[2026-10-17 21:03:05] D bin1_11-50 t017482 coal-cpp@j1: median 0.0157s peak 6.4 MB
+[2026-10-17 21:03:06] D bin1_11-50 t017482 p2n16: median 0.0830s peak 11.9 MB
+[2026-10-17 21:03:06] D bin1_11-50 t017482 coal-py@j1: median 0.1017s peak 14.0 MB
+[2026-10-17 21:03:07] D bin1_11-50 t017482 coal-py@jdefault: median 0.1000s peak 14.0 MB
+[2026-10-17 21:03:07] D timing bin1_11-50: 16/20 trees done
+[2026-10-17 21:03:07] D bin1_11-50 t028145 p2n14: median 0.0493s peak 6.3 MB
+[2026-10-17 21:03:07] D bin1_11-50 t028145 coal-cpp@jdefault: median 0.0169s peak 6.5 MB
+[2026-10-17 21:03:07] D bin1_11-50 t028145 coal-py@j1: median 0.1036s peak 14.0 MB
+[2026-10-17 21:03:08] D bin1_11-50 t028145 coal-py@jdefault: median 0.0989s peak 14.1 MB
+[2026-10-17 21:03:08] D bin1_11-50 t028145 coal-cpp@j1: median 0.0170s peak 6.4 MB
+[2026-10-17 21:03:08] D bin1_11-50 t028145 p2n16: median 0.0718s peak 12.3 MB
+[2026-10-17 21:03:08] D timing bin1_11-50: 17/20 trees done
+[2026-10-17 21:03:09] D bin1_11-50 t016464 p2n16: median 0.1282s peak 32.4 MB
+[2026-10-17 21:03:09] D bin1_11-50 t016464 coal-py@j1: median 0.1810s peak 16.6 MB
+[2026-10-17 21:03:09] D bin1_11-50 t016464 coal-cpp@j1: median 0.0235s peak 7.2 MB
+[2026-10-17 21:03:10] D bin1_11-50 t016464 coal-cpp@jdefault: median 0.0204s peak 8.3 MB
+[2026-10-17 21:03:10] D bin1_11-50 t016464 coal-py@jdefault: median 0.1847s peak 16.9 MB
+[2026-10-17 21:03:12] D bin1_11-50 t016464 p2n14: median 0.3530s peak 11.8 MB
+[2026-10-17 21:03:12] D timing bin1_11-50: 18/20 trees done
+[2026-10-17 21:03:12] D bin1_11-50 t023571 p2n16: median 0.0757s peak 11.8 MB
+[2026-10-17 21:03:12] D bin1_11-50 t023571 coal-cpp@j1: median 0.0175s peak 6.4 MB
+[2026-10-17 21:03:12] D bin1_11-50 t023571 p2n14: median 0.0314s peak 3.8 MB
+[2026-10-17 21:03:12] D bin1_11-50 t023571 coal-cpp@jdefault: median 0.0160s peak 6.8 MB
+[2026-10-17 21:03:13] D bin1_11-50 t023571 coal-py@j1: median 0.1007s peak 14.0 MB
+[2026-10-17 21:03:13] D bin1_11-50 t023571 coal-py@jdefault: median 0.0999s peak 14.1 MB
+[2026-10-17 21:03:13] D timing bin1_11-50: 19/20 trees done
+[2026-10-17 21:03:13] D bin1_11-50 t027689 coal-cpp@jdefault: median 0.0090s peak 6.6 MB
+[2026-10-17 21:03:13] D bin1_11-50 t027689 p2n14: median 0.0218s peak 3.7 MB
+[2026-10-17 21:03:14] D bin1_11-50 t027689 p2n16: median 0.0670s peak 10.7 MB
+[2026-10-17 21:03:14] D bin1_11-50 t027689 coal-py@j1: median 0.0909s peak 13.1 MB
+[2026-10-17 21:03:14] D bin1_11-50 t027689 coal-py@jdefault: median 0.0917s peak 13.0 MB
+[2026-10-17 21:03:14] D bin1_11-50 t027689 coal-cpp@j1: median 0.0084s peak 6.4 MB
+[2026-10-17 21:03:14] D timing bin1_11-50: 20/20 trees done
+[2026-10-17 21:03:18] D bin2_51-200 t007792 p2n14: median 0.9118s peak 16.8 MB
+[2026-10-17 21:03:18] D bin2_51-200 t007792 coal-cpp@jdefault: median 0.0215s peak 9.4 MB
+[2026-10-17 21:03:18] D bin2_51-200 t007792 coal-cpp@j1: median 0.0228s peak 7.0 MB
+[2026-10-17 21:03:19] D bin2_51-200 t007792 p2n16: median 0.2120s peak 52.7 MB
+[2026-10-17 21:03:20] D bin2_51-200 t007792 coal-py@jdefault: median 0.2043s peak 17.3 MB
+[2026-10-17 21:03:21] D bin2_51-200 t007792 coal-py@j1: median 0.2043s peak 17.6 MB
+[2026-10-17 21:03:21] D timing bin2_51-200: 1/20 trees done
+[2026-10-17 21:03:21] D bin2_51-200 t015462 p2n16: median 0.1267s peak 27.0 MB
+[2026-10-17 21:03:22] D bin2_51-200 t015462 coal-cpp@jdefault: median 0.0217s peak 7.5 MB
+[2026-10-17 21:03:22] D bin2_51-200 t015462 coal-py@j1: median 0.1740s peak 16.0 MB
+[2026-10-17 21:03:24] D bin2_51-200 t015462 p2n14: median 0.5171s peak 11.2 MB
+[2026-10-17 21:03:24] D bin2_51-200 t015462 coal-cpp@j1: median 0.0223s peak 7.1 MB
+[2026-10-17 21:03:25] D bin2_51-200 t015462 coal-py@jdefault: median 0.1859s peak 16.2 MB
+[2026-10-17 21:03:25] D timing bin2_51-200: 2/20 trees done
+[2026-10-17 21:03:25] D bin2_51-200 t009353 coal-cpp@jdefault: median 0.0217s peak 10.9 MB
+[2026-10-17 21:03:28] D bin2_51-200 t009353 p2n14: median 0.6483s peak 18.5 MB
+[2026-10-17 21:03:29] D bin2_51-200 t009353 p2n16: median 0.2184s peak 70.5 MB
+[2026-10-17 21:03:30] D bin2_51-200 t009353 coal-py@j1: median 0.2131s peak 19.0 MB
+[2026-10-17 21:03:31] D bin2_51-200 t009353 coal-py@jdefault: median 0.2130s peak 19.0 MB
+[2026-10-17 21:03:31] D bin2_51-200 t009353 coal-cpp@j1: median 0.0241s peak 7.4 MB
+[2026-10-17 21:03:31] D timing bin2_51-200: 3/20 trees done
+[2026-10-17 21:03:31] D bin2_51-200 t012829 p2n16: median 0.0976s peak 20.7 MB
+[2026-10-17 21:03:32] D bin2_51-200 t012829 coal-py@jdefault: median 0.1676s peak 15.3 MB
+[2026-10-17 21:03:32] D bin2_51-200 t012829 coal-py@j1: median 0.1682s peak 15.5 MB
+[2026-10-17 21:03:33] D bin2_51-200 t012829 p2n14: median 0.1173s peak 6.3 MB
+[2026-10-17 21:03:33] D bin2_51-200 t012829 coal-cpp@jdefault: median 0.0196s peak 8.6 MB
+[2026-10-17 21:03:33] D bin2_51-200 t012829 coal-cpp@j1: median 0.0184s peak 6.6 MB
+[2026-10-17 21:03:33] D timing bin2_51-200: 4/20 trees done
+[2026-10-17 21:03:34] D bin2_51-200 t012409 p2n16: median 0.1619s peak 41.7 MB
+[2026-10-17 21:03:34] D bin2_51-200 t012409 coal-cpp@j1: median 0.0190s peak 6.8 MB
+[2026-10-17 21:03:34] D bin2_51-200 t012409 coal-cpp@jdefault: median 0.0192s peak 8.3 MB
+[2026-10-17 21:03:35] D bin2_51-200 t012409 coal-py@jdefault: median 0.1902s peak 16.8 MB
+[2026-10-17 21:03:35] D bin2_51-200 t012409 coal-py@j1: median 0.1860s peak 16.0 MB
+[2026-10-17 21:03:38] D bin2_51-200 t012409 p2n14: median 0.5551s peak 13.0 MB
+[2026-10-17 21:03:38] D timing bin2_51-200: 5/20 trees done
+[2026-10-17 21:03:38] D bin2_51-200 t013046 coal-cpp@jdefault: median 0.0243s peak 7.3 MB
+[2026-10-17 21:03:39] D bin2_51-200 t013046 p2n14: median 0.1870s peak 7.5 MB
+[2026-10-17 21:03:39] D bin2_51-200 t013046 p2n16: median 0.1004s peak 22.9 MB
+[2026-10-17 21:03:39] D bin2_51-200 t013046 coal-cpp@j1: median 0.0235s peak 6.7 MB
+[2026-10-17 21:03:40] D bin2_51-200 t013046 coal-py@j1: median 0.1711s peak 15.8 MB
+[2026-10-17 21:03:41] D bin2_51-200 t013046 coal-py@jdefault: median 0.1740s peak 15.6 MB
+[2026-10-17 21:03:41] D timing bin2_51-200: 6/20 trees done
+[2026-10-17 21:03:42] D bin2_51-200 t014679 p2n14: median 0.3924s peak 12.0 MB
+[2026-10-17 21:03:43] D bin2_51-200 t014679 coal-py@jdefault: median 0.1850s peak 16.2 MB
+[2026-10-17 21:03:43] D bin2_51-200 t014679 coal-cpp@j1: median 0.0238s peak 7.3 MB
+[2026-10-17 21:03:44] D bin2_51-200 t014679 p2n16: median 0.1375s peak 36.2 MB
+[2026-10-17 21:03:44] D bin2_51-200 t014679 coal-cpp@jdefault: median 0.0223s peak 8.5 MB
+[2026-10-17 21:03:44] D bin2_51-200 t014679 coal-py@j1: median 0.1854s peak 16.4 MB
+[2026-10-17 21:03:44] D timing bin2_51-200: 7/20 trees done
+[2026-10-17 21:03:45] D bin2_51-200 t012646 coal-py@j1: median 0.1692s peak 15.4 MB
+[2026-10-17 21:03:45] D bin2_51-200 t012646 p2n16: median 0.0909s peak 18.0 MB
+[2026-10-17 21:03:46] D bin2_51-200 t012646 coal-py@jdefault: median 0.1725s peak 15.3 MB
+[2026-10-17 21:03:46] D bin2_51-200 t012646 coal-cpp@jdefault: median 0.0199s peak 7.9 MB
+[2026-10-17 21:03:46] D bin2_51-200 t012646 coal-cpp@j1: median 0.0199s peak 6.6 MB
+[2026-10-17 21:03:47] D bin2_51-200 t012646 p2n14: median 0.1318s peak 5.9 MB
+[2026-10-17 21:03:47] D timing bin2_51-200: 8/20 trees done
+[2026-10-17 21:03:48] D bin2_51-200 t014440 coal-py@j1: median 0.1728s peak 15.7 MB
+[2026-10-17 21:03:48] D bin2_51-200 t014440 coal-py@jdefault: median 0.1770s peak 15.9 MB
+[2026-10-17 21:03:48] D bin2_51-200 t014440 coal-cpp@jdefault: median 0.0203s peak 8.0 MB
+[2026-10-17 21:03:49] D bin2_51-200 t014440 coal-cpp@j1: median 0.0197s peak 6.7 MB
+[2026-10-17 21:03:49] D bin2_51-200 t014440 p2n16: median 0.1049s peak 23.7 MB
+[2026-10-17 21:03:50] D bin2_51-200 t014440 p2n14: median 0.2036s peak 8.0 MB
+[2026-10-17 21:03:50] D timing bin2_51-200: 9/20 trees done
+[2026-10-17 21:03:50] D bin2_51-200 t013022 p2n16: median 0.1273s peak 31.6 MB
+[2026-10-17 21:03:52] D bin2_51-200 t013022 p2n14: median 0.3476s peak 10.0 MB
+[2026-10-17 21:03:52] D bin2_51-200 t013022 coal-cpp@j1: median 0.0279s peak 6.7 MB
+[2026-10-17 21:03:53] D bin2_51-200 t013022 coal-py@j1: median 0.1852s peak 15.9 MB
+[2026-10-17 21:03:53] D bin2_51-200 t013022 coal-cpp@jdefault: median 0.0252s peak 8.3 MB
+[2026-10-17 21:03:53] D bin2_51-200 t013022 coal-py@jdefault: median 0.1874s peak 15.9 MB
+[2026-10-17 21:03:53] D timing bin2_51-200: 10/20 trees done
+[2026-10-17 21:03:55] D bin2_51-200 t010416 p2n16: median 0.2529s peak 66.9 MB
+[2026-10-17 21:03:55] D bin2_51-200 t010416 coal-py@j1: median 0.2170s peak 18.2 MB
+[2026-10-17 21:03:56] D bin2_51-200 t010416 coal-cpp@j1: median 0.0240s peak 7.8 MB
+[2026-10-17 21:04:01] D bin2_51-200 t010416 p2n14: median 1.2715s peak 19.6 MB
+[2026-10-17 21:04:02] D bin2_51-200 t010416 coal-py@jdefault: median 0.2140s peak 18.6 MB
+[2026-10-17 21:04:02] D bin2_51-200 t010416 coal-cpp@jdefault: median 0.0223s peak 11.3 MB
+[2026-10-17 21:04:02] D timing bin2_51-200: 11/20 trees done
+[2026-10-17 21:04:03] D bin2_51-200 t011271 coal-py@jdefault: median 0.2220s peak 18.9 MB
+[2026-10-17 21:04:04] D bin2_51-200 t011271 p2n16: median 0.2583s peak 74.4 MB
+[2026-10-17 21:04:05] D bin2_51-200 t011271 coal-py@j1: median 0.2229s peak 18.8 MB
+[2026-10-17 21:04:05] D bin2_51-200 t011271 coal-cpp@j1: median 0.0237s peak 7.2 MB
+[2026-10-17 21:04:05] D bin2_51-200 t011271 coal-cpp@jdefault: median 0.0239s peak 11.3 MB
+[2026-10-17 21:04:09] D bin2_51-200 t011271 p2n14: median 1.1199s peak 21.4 MB
+[2026-10-17 21:04:09] D timing bin2_51-200: 12/20 trees done
+[2026-10-17 21:04:09] D bin2_51-200 t012182 coal-cpp@jdefault: median 0.0213s peak 9.7 MB
+[2026-10-17 21:04:13] D bin2_51-200 t012182 p2n14: median 0.8077s peak 15.7 MB
+[2026-10-17 21:04:13] D bin2_51-200 t012182 p2n16: median 0.1934s peak 48.8 MB
+[2026-10-17 21:04:13] D bin2_51-200 t012182 coal-cpp@j1: median 0.0209s peak 7.3 MB
+[2026-10-17 21:04:14] D bin2_51-200 t012182 coal-py@j1: median 0.1987s peak 17.2 MB
+[2026-10-17 21:04:15] D bin2_51-200 t012182 coal-py@jdefault: median 0.1963s peak 17.9 MB
+[2026-10-17 21:04:15] D timing bin2_51-200: 13/20 trees done
+[2026-10-17 21:04:18] D bin2_51-200 t012404 p2n14: median 0.6504s peak 14.4 MB
+[2026-10-17 21:04:18] D bin2_51-200 t012404 coal-cpp@jdefault: median 0.0212s peak 9.8 MB
+[2026-10-17 21:04:19] D bin2_51-200 t012404 coal-py@jdefault: median 0.1977s peak 17.7 MB
+[2026-10-17 21:04:19] D bin2_51-200 t012404 p2n16: median 0.1861s peak 49.1 MB
+[2026-10-17 21:04:20] D bin2_51-200 t012404 coal-py@j1: median 0.1949s peak 17.2 MB
+[2026-10-17 21:04:20] D bin2_51-200 t012404 coal-cpp@j1: median 0.0210s peak 7.3 MB
+[2026-10-17 21:04:20] D timing bin2_51-200: 14/20 trees done
+[2026-10-17 21:04:20] D bin2_51-200 t012747 coal-cpp@j1: median 0.0259s peak 6.7 MB
+[2026-10-17 21:04:21] D bin2_51-200 t012747 coal-py@jdefault: median 0.1797s peak 15.4 MB
+[2026-10-17 21:04:22] D bin2_51-200 t012747 p2n14: median 0.2890s peak 8.3 MB
+[2026-10-17 21:04:23] D bin2_51-200 t012747 p2n16: median 0.1157s peak 25.4 MB
+[2026-10-17 21:04:23] D bin2_51-200 t012747 coal-cpp@jdefault: median 0.0234s peak 7.8 MB
+[2026-10-17 21:04:24] D bin2_51-200 t012747 coal-py@j1: median 0.1795s peak 15.7 MB
+[2026-10-17 21:04:24] D timing bin2_51-200: 15/20 trees done
+[2026-10-17 21:04:24] D bin2_51-200 t013255 coal-cpp@j1: median 0.0222s peak 6.7 MB
+[2026-10-17 21:04:24] D bin2_51-200 t013255 coal-py@j1: median 0.1749s peak 15.8 MB
+[2026-10-17 21:04:25] D bin2_51-200 t013255 p2n16: median 0.1069s peak 25.1 MB
+[2026-10-17 21:04:25] D bin2_51-200 t013255 coal-cpp@jdefault: median 0.0218s peak 7.5 MB
+[2026-10-17 21:04:26] D bin2_51-200 t013255 p2n14: median 0.2142s peak 8.7 MB
+[2026-10-17 21:04:27] D bin2_51-200 t013255 coal-py@jdefault: median 0.1797s peak 15.5 MB
+[2026-10-17 21:04:27] D timing bin2_51-200: 16/20 trees done
+[2026-10-17 21:04:27] D bin2_51-200 t012381 coal-py@jdefault: median 0.1899s peak 16.2 MB
+[2026-10-17 21:04:27] D bin2_51-200 t012381 coal-cpp@j1: median 0.0211s peak 7.0 MB
+[2026-10-17 21:04:28] D bin2_51-200 t012381 coal-py@j1: median 0.1900s peak 16.2 MB
+[2026-10-17 21:04:29] D bin2_51-200 t012381 p2n16: median 0.1646s peak 43.6 MB
+[2026-10-17 21:04:31] D bin2_51-200 t012381 p2n14: median 0.5041s peak 13.2 MB
+[2026-10-17 21:04:31] D bin2_51-200 t012381 coal-cpp@jdefault: median 0.0196s peak 9.0 MB
+[2026-10-17 21:04:31] D timing bin2_51-200: 17/20 trees done
+[2026-10-17 21:04:31] D bin2_51-200 t013593 coal-cpp@j1: median 0.0244s peak 6.8 MB
+[2026-10-17 21:04:32] D bin2_51-200 t013593 p2n16: median 0.1235s peak 31.0 MB
+[2026-10-17 21:04:32] D bin2_51-200 t013593 coal-py@j1: median 0.1835s peak 16.1 MB
+[2026-10-17 21:04:33] D bin2_51-200 t013593 coal-py@jdefault: median 0.1827s peak 16.3 MB
+[2026-10-17 21:04:33] D bin2_51-200 t013593 coal-cpp@jdefault: median 0.0212s peak 7.9 MB
+[2026-10-17 21:04:35] D bin2_51-200 t013593 p2n14: median 0.3461s peak 10.1 MB
+[2026-10-17 21:04:35] D timing bin2_51-200: 18/20 trees done
+[2026-10-17 21:04:35] D bin2_51-200 t012076 coal-cpp@jdefault: median 0.0217s peak 7.7 MB
+[2026-10-17 21:04:36] D bin2_51-200 t012076 coal-py@jdefault: median 0.1787s peak 15.6 MB
+[2026-10-17 21:04:36] D bin2_51-200 t012076 coal-py@j1: median 0.1787s peak 15.8 MB
+[2026-10-17 21:04:36] D bin2_51-200 t012076 coal-cpp@j1: median 0.0206s peak 6.7 MB
+[2026-10-17 21:04:37] D bin2_51-200 t012076 p2n16: median 0.1044s peak 27.7 MB
+[2026-10-17 21:04:37] D bin2_51-200 t012076 p2n14: median 0.1788s peak 8.1 MB
+[2026-10-17 21:04:37] D timing bin2_51-200: 19/20 trees done
+[2026-10-17 21:04:40] D bin2_51-200 t012870 p2n14: median 0.7485s peak 14.3 MB
+[2026-10-17 21:04:41] D bin2_51-200 t012870 coal-cpp@jdefault: median 0.0213s peak 8.6 MB
+[2026-10-17 21:04:41] D bin2_51-200 t012870 coal-py@jdefault: median 0.1943s peak 16.2 MB
+[2026-10-17 21:04:42] D bin2_51-200 t012870 coal-py@j1: median 0.1915s peak 16.2 MB
+[2026-10-17 21:04:43] D bin2_51-200 t012870 p2n16: median 0.1757s peak 41.5 MB
+[2026-10-17 21:04:43] D bin2_51-200 t012870 coal-cpp@j1: median 0.0197s peak 6.8 MB
+[2026-10-17 21:04:43] D timing bin2_51-200: 20/20 trees done
+[2026-10-17 21:04:46] D bin3_201-1000 t000710 coal-py@jdefault: median 0.6316s peak 41.1 MB
+[2026-10-17 21:04:48] D bin3_201-1000 t000710 coal-py@j1: median 0.6363s peak 40.8 MB
+[2026-10-17 21:04:49] D bin3_201-1000 t000710 coal-cpp@j1: median 0.0734s peak 22.8 MB
+[2026-10-17 21:04:49] D bin3_201-1000 t000710 coal-cpp@jdefault: median 0.0575s peak 28.4 MB
+[2026-10-17 21:04:55] D bin3_201-1000 t000710 p2n16: median 1.5210s peak 525.3 MB
+[2026-10-17 21:05:16] D bin3_201-1000 t000710 p2n14: median 5.0689s peak 108.4 MB
+[2026-10-17 21:05:16] D timing bin3_201-1000: 1/20 trees done
+[2026-10-17 21:05:16] D bin3_201-1000 t001447 coal-cpp@jdefault: median 0.0215s peak 9.6 MB
+[2026-10-17 21:05:16] D bin3_201-1000 t001447 coal-py@jdefault: median 0.2072s peak 17.9 MB
+[2026-10-17 21:05:17] D bin3_201-1000 t001447 p2n16: median 0.1975s peak 64.1 MB
+[2026-10-17 21:05:18] D bin3_201-1000 t001447 coal-py@j1: median 0.2132s peak 17.8 MB
+[2026-10-17 21:05:20] D bin3_201-1000 t001447 p2n14: median 0.4703s peak 15.8 MB
+[2026-10-17 21:05:20] D bin3_201-1000 t001447 coal-cpp@j1: median 0.0239s peak 7.1 MB
+[2026-10-17 21:05:20] D timing bin3_201-1000: 2/20 trees done
+[2026-10-17 21:05:26] D bin3_201-1000 t006530 p2n14: median 1.4099s peak 26.8 MB
+[2026-10-17 21:05:26] D bin3_201-1000 t006530 coal-cpp@j1: median 0.0311s peak 9.1 MB
+[2026-10-17 21:05:27] D bin3_201-1000 t006530 coal-py@jdefault: median 0.2637s peak 20.0 MB
+[2026-10-17 21:05:28] D bin3_201-1000 t006530 coal-py@j1: median 0.2521s peak 20.1 MB
+[2026-10-17 21:05:28] D bin3_201-1000 t006530 coal-cpp@jdefault: median 0.0249s peak 12.8 MB
+[2026-10-17 21:05:30] D bin3_201-1000 t006530 p2n16: median 0.3533s peak 103.2 MB
+[2026-10-17 21:05:30] D timing bin3_201-1000: 3/20 trees done
+[2026-10-17 21:05:32] D bin3_201-1000 t001710 p2n16: median 0.5757s peak 179.2 MB
+[2026-10-17 21:05:33] D bin3_201-1000 t001710 coal-py@j1: median 0.3182s peak 24.4 MB
+[2026-10-17 21:05:43] D bin3_201-1000 t001710 p2n14: median 2.5027s peak 44.7 MB
+[2026-10-17 21:05:44] D bin3_201-1000 t001710 coal-cpp@jdefault: median 0.0341s peak 16.7 MB
+[2026-10-17 21:05:44] D bin3_201-1000 t001710 coal-cpp@j1: median 0.0384s peak 11.4 MB
+[2026-10-17 21:05:45] D bin3_201-1000 t001710 coal-py@jdefault: median 0.3239s peak 24.4 MB
+[2026-10-17 21:05:45] D timing bin3_201-1000: 4/20 trees done
+[2026-10-17 21:05:46] D bin3_201-1000 t006491 coal-py@j1: median 0.2446s peak 19.9 MB
+[2026-10-17 21:05:48] D bin3_201-1000 t006491 p2n16: median 0.3555s peak 89.5 MB
+[2026-10-17 21:05:49] D bin3_201-1000 t006491 coal-py@jdefault: median 0.2455s peak 20.1 MB
+[2026-10-17 21:05:49] D bin3_201-1000 t006491 coal-cpp@j1: median 0.0275s peak 7.6 MB
+[2026-10-17 21:05:57] D bin3_201-1000 t006491 p2n14: median 2.1040s peak 25.8 MB
+[2026-10-17 21:05:57] D bin3_201-1000 t006491 coal-cpp@jdefault: median 0.0256s peak 10.9 MB
+[2026-10-17 21:05:57] D timing bin3_201-1000: 5/20 trees done
+[2026-10-17 21:05:59] D bin3_201-1000 t009972 p2n16: median 0.3242s peak 82.4 MB
+[2026-10-17 21:05:59] D bin3_201-1000 t009972 coal-cpp@jdefault: median 0.0261s peak 12.3 MB
+[2026-10-17 21:06:00] D bin3_201-1000 t009972 coal-py@jdefault: median 0.2390s peak 18.9 MB
+[2026-10-17 21:06:01] D bin3_201-1000 t009972 coal-py@j1: median 0.2392s peak 19.0 MB
+[2026-10-17 21:06:01] D bin3_201-1000 t009972 coal-cpp@j1: median 0.0268s peak 7.6 MB
+[2026-10-17 21:06:07] D bin3_201-1000 t009972 p2n14: median 1.5974s peak 24.2 MB
+[2026-10-17 21:06:07] D timing bin3_201-1000: 6/20 trees done
+[2026-10-17 21:06:09] D bin3_201-1000 t003917 p2n16: median 0.3279s peak 103.5 MB
+[2026-10-17 21:06:10] D bin3_201-1000 t003917 coal-py@j1: median 0.2484s peak 20.6 MB
+[2026-10-17 21:06:11] D bin3_201-1000 t003917 coal-py@jdefault: median 0.2470s peak 20.4 MB
+[2026-10-17 21:06:11] D bin3_201-1000 t003917 coal-cpp@jdefault: median 0.0253s peak 12.7 MB
+[2026-10-17 21:06:15] D bin3_201-1000 t003917 p2n14: median 1.1093s peak 25.5 MB
+[2026-10-17 21:06:15] D bin3_201-1000 t003917 coal-cpp@j1: median 0.0286s peak 8.2 MB
+[2026-10-17 21:06:15] D timing bin3_201-1000: 7/20 trees done
+[2026-10-17 21:06:15] D bin3_201-1000 t004705 coal-cpp@jdefault: median 0.0206s peak 9.9 MB
+[2026-10-17 21:06:16] D bin3_201-1000 t004705 coal-py@jdefault: median 0.1993s peak 17.7 MB
+[2026-10-17 21:06:17] D bin3_201-1000 t004705 coal-py@j1: median 0.2002s peak 17.8 MB
+[2026-10-17 21:06:17] D bin3_201-1000 t004705 coal-cpp@j1: median 0.0245s peak 7.1 MB
+[2026-10-17 21:06:18] D bin3_201-1000 t004705 p2n16: median 0.1964s peak 59.7 MB
+[2026-10-17 21:06:20] D bin3_201-1000 t004705 p2n14: median 0.5469s peak 15.9 MB
+[2026-10-17 21:06:20] D timing bin3_201-1000: 8/20 trees done
+[2026-10-17 21:06:23] D bin3_201-1000 t004374 p2n16: median 0.6602s peak 174.4 MB
+[2026-10-17 21:06:24] D bin3_201-1000 t004374 coal-py@jdefault: median 0.3309s peak 24.1 MB
+[2026-10-17 21:06:26] D bin3_201-1000 t004374 coal-py@j1: median 0.3297s peak 24.0 MB
+[2026-10-17 21:06:26] D bin3_201-1000 t004374 coal-cpp@j1: median 0.0426s peak 10.6 MB
+[2026-10-17 21:06:40] D bin3_201-1000 t004374 p2n14: median 3.6400s peak 43.4 MB
+[2026-10-17 21:06:41] D bin3_201-1000 t004374 coal-cpp@jdefault: median 0.0334s peak 16.0 MB
+[2026-10-17 21:06:41] D timing bin3_201-1000: 9/20 trees done
+[2026-10-17 21:06:55] D bin3_201-1000 t000475 p2n14: median 3.5283s peak 85.0 MB
+[2026-10-17 21:06:55] D bin3_201-1000 t000475 coal-cpp@j1: median 0.0615s peak 19.1 MB
+[2026-10-17 21:06:55] D bin3_201-1000 t000475 coal-cpp@jdefault: median 0.0501s peak 25.6 MB
+[2026-10-17 21:07:00] D bin3_201-1000 t000475 p2n16: median 1.1109s peak 401.0 MB
+[2026-10-17 21:07:02] D bin3_201-1000 t000475 coal-py@jdefault: median 0.5183s peak 34.6 MB
+[2026-10-17 21:07:04] D bin3_201-1000 t000475 coal-py@j1: median 0.5125s peak 34.5 MB
+[2026-10-17 21:07:04] D timing bin3_201-1000: 10/20 trees done
+[2026-10-17 21:07:04] D bin3_201-1000 t003072 coal-cpp@jdefault: median 0.0260s peak 12.7 MB
+[2026-10-17 21:07:07] D bin3_201-1000 t003072 p2n14: median 0.7789s peak 26.7 MB
+[2026-10-17 21:07:09] D bin3_201-1000 t003072 p2n16: median 0.3057s peak 110.7 MB
+[2026-10-17 21:07:09] D bin3_201-1000 t003072 coal-cpp@j1: median 0.0278s peak 7.9 MB
+[2026-10-17 21:07:10] D bin3_201-1000 t003072 coal-py@jdefault: median 0.2464s peak 20.7 MB
+[2026-10-17 21:07:11] D bin3_201-1000 t003072 coal-py@j1: median 0.2489s peak 20.6 MB
+[2026-10-17 21:07:11] D timing bin3_201-1000: 11/20 trees done
+[2026-10-17 21:07:14] D bin3_201-1000 t007223 p2n14: median 0.6899s peak 16.4 MB
+[2026-10-17 21:07:14] D bin3_201-1000 t007223 p2n16: median 0.2052s peak 58.0 MB
+[2026-10-17 21:07:15] D bin3_201-1000 t007223 coal-py@j1: median 0.2035s peak 17.9 MB
+[2026-10-17 21:07:15] D bin3_201-1000 t007223 coal-cpp@jdefault: median 0.0214s peak 9.9 MB
+[2026-10-17 21:07:16] D bin3_201-1000 t007223 coal-cpp@j1: median 0.0225s peak 6.8 MB
+[2026-10-17 21:07:16] D bin3_201-1000 t007223 coal-py@jdefault: median 0.2052s peak 18.1 MB
+[2026-10-17 21:07:16] D timing bin3_201-1000: 12/20 trees done
+[2026-10-17 21:07:17] D bin3_201-1000 t003201 coal-py@j1: median 0.2387s peak 19.0 MB
+[2026-10-17 21:07:22] D bin3_201-1000 t003201 p2n14: median 1.0529s peak 23.2 MB
+[2026-10-17 21:07:23] D bin3_201-1000 t003201 p2n16: median 0.2979s peak 88.2 MB
+[2026-10-17 21:07:23] D bin3_201-1000 t003201 coal-cpp@j1: median 0.0264s peak 8.0 MB
+[2026-10-17 21:07:24] D bin3_201-1000 t003201 coal-py@jdefault: median 0.2330s peak 19.1 MB
+[2026-10-17 21:07:24] D bin3_201-1000 t003201 coal-cpp@jdefault: median 0.0250s peak 13.1 MB
+[2026-10-17 21:07:24] D timing bin3_201-1000: 13/20 trees done
+[2026-10-17 21:07:24] D bin3_201-1000 t003380 coal-cpp@j1: median 0.0205s peak 7.0 MB
+[2026-10-17 21:07:24] D bin3_201-1000 t003380 coal-cpp@jdefault: median 0.0208s peak 9.0 MB
+[2026-10-17 21:07:26] D bin3_201-1000 t003380 p2n14: median 0.4204s peak 12.7 MB
+[2026-10-17 21:07:27] D bin3_201-1000 t003380 coal-py@j1: median 0.1960s peak 16.2 MB
+[2026-10-17 21:07:27] D bin3_201-1000 t003380 p2n16: median 0.1775s peak 47.7 MB
+[2026-10-17 21:07:28] D bin3_201-1000 t003380 coal-py@jdefault: median 0.1969s peak 16.0 MB
+[2026-10-17 21:07:28] D timing bin3_201-1000: 14/20 trees done
+[2026-10-17 21:07:28] D bin3_201-1000 t001594 coal-cpp@j1: median 0.0383s peak 11.5 MB
+[2026-10-17 21:07:29] D bin3_201-1000 t001594 coal-cpp@jdefault: median 0.0320s peak 16.5 MB
+[2026-10-17 21:07:30] D bin3_201-1000 t001594 coal-py@j1: median 0.3139s peak 23.2 MB
+[2026-10-17 21:07:32] D bin3_201-1000 t001594 p2n16: median 0.5249s peak 158.9 MB
+[2026-10-17 21:07:41] D bin3_201-1000 t001594 p2n14: median 2.1572s peak 39.2 MB
+[2026-10-17 21:07:42] D bin3_201-1000 t001594 coal-py@jdefault: median 0.3165s peak 22.9 MB
+[2026-10-17 21:07:42] D timing bin3_201-1000: 15/20 trees done
+[2026-10-17 21:07:42] D bin3_201-1000 t003332 coal-cpp@j1: median 0.0321s peak 8.8 MB
+[2026-10-17 21:07:43] D bin3_201-1000 t003332 coal-py@j1: median 0.2773s peak 21.8 MB
+[2026-10-17 21:07:51] D bin3_201-1000 t003332 p2n14: median 1.8135s peak 32.3 MB
+[2026-10-17 21:07:51] D bin3_201-1000 t003332 coal-cpp@jdefault: median 0.0277s peak 14.7 MB
+[2026-10-17 21:07:52] D bin3_201-1000 t003332 p2n16: median 0.4391s peak 124.4 MB
+[2026-10-17 21:07:54] D bin3_201-1000 t003332 coal-py@jdefault: median 0.2731s peak 21.2 MB
+[2026-10-17 21:07:54] D timing bin3_201-1000: 16/20 trees done
+[2026-10-17 21:07:54] D bin3_201-1000 t004786 coal-py@jdefault: median 0.2165s peak 19.0 MB
+[2026-10-17 21:07:55] D bin3_201-1000 t004786 coal-cpp@j1: median 0.0226s peak 7.0 MB
+[2026-10-17 21:07:55] D bin3_201-1000 t004786 coal-py@j1: median 0.2135s peak 18.6 MB
+[2026-10-17 21:07:56] D bin3_201-1000 t004786 coal-cpp@jdefault: median 0.0212s peak 9.3 MB
+[2026-10-17 21:07:58] D bin3_201-1000 t004786 p2n14: median 0.5497s peak 18.8 MB
+[2026-10-17 21:07:59] D bin3_201-1000 t004786 p2n16: median 0.2243s peak 73.2 MB
+[2026-10-17 21:07:59] D timing bin3_201-1000: 17/20 trees done
+[2026-10-17 21:07:59] D bin3_201-1000 t007995 coal-cpp@j1: median 0.0549s peak 12.0 MB
+[2026-10-17 21:08:55] D bin3_201-1000 t007995 p2n14: median 14.1337s peak 70.8 MB
+[2026-10-17 21:09:00] D bin3_201-1000 t007995 p2n16: median 1.1903s peak 260.4 MB
+[2026-10-17 21:09:02] D bin3_201-1000 t007995 coal-py@jdefault: median 0.4415s peak 26.5 MB
+[2026-10-17 21:09:02] D bin3_201-1000 t007995 coal-cpp@jdefault: median 0.0453s peak 15.5 MB
+[2026-10-17 21:09:04] D bin3_201-1000 t007995 coal-py@j1: median 0.4462s peak 26.0 MB
+[2026-10-17 21:09:04] D timing bin3_201-1000: 18/20 trees done
+[2026-10-17 21:09:06] D bin3_201-1000 t005114 p2n14: median 0.4806s peak 12.9 MB
+[2026-10-17 21:09:07] D bin3_201-1000 t005114 coal-py@jdefault: median 0.1966s peak 17.1 MB
+[2026-10-17 21:09:08] D bin3_201-1000 t005114 coal-py@j1: median 0.1902s peak 16.2 MB
+[2026-10-17 21:09:08] D bin3_201-1000 t005114 coal-cpp@j1: median 0.0234s peak 6.9 MB
+[2026-10-17 21:09:08] D bin3_201-1000 t005114 p2n16: median 0.1721s peak 48.0 MB
+[2026-10-17 21:09:09] D bin3_201-1000 t005114 coal-cpp@jdefault: median 0.0225s peak 8.5 MB
+[2026-10-17 21:09:09] D timing bin3_201-1000: 19/20 trees done
+[2026-10-17 21:09:11] D bin3_201-1000 t000795 p2n16: median 0.7004s peak 249.0 MB
+[2026-10-17 21:09:12] D bin3_201-1000 t000795 coal-cpp@jdefault: median 0.0398s peak 19.9 MB
+[2026-10-17 21:09:12] D bin3_201-1000 t000795 coal-cpp@j1: median 0.0443s peak 13.5 MB
+[2026-10-17 21:09:20] D bin3_201-1000 t000795 p2n14: median 2.0702s peak 55.5 MB
+[2026-10-17 21:09:22] D bin3_201-1000 t000795 coal-py@j1: median 0.3811s peak 27.1 MB
+[2026-10-17 21:09:23] D bin3_201-1000 t000795 coal-py@jdefault: median 0.3785s peak 27.4 MB
+[2026-10-17 21:09:23] D timing bin3_201-1000: 20/20 trees done
+[2026-10-17 21:09:24] D bin4_1001-99999 t000082 coal-cpp@j1: median 0.0894s peak 24.8 MB
+[2026-10-17 21:09:45] D bin4_1001-99999 t000082 p2n14: median 5.1994s peak 127.0 MB
+[2026-10-17 21:09:45] D bin4_1001-99999 t000082 coal-cpp@jdefault: median 0.0682s peak 33.3 MB
+[2026-10-17 21:10:01] D bin4_1001-99999 t000082 coal-py@j1: median 3.9109s peak 44.6 MB
+[2026-10-17 21:10:07] D bin4_1001-99999 t000082 p2n16: median 1.6171s peak 604.2 MB
+[2026-10-17 21:10:23] D bin4_1001-99999 t000082 coal-py@jdefault: median 3.8998s peak 44.2 MB
+[2026-10-17 21:10:23] D timing bin4_1001-99999: 1/20 trees done
+[2026-10-17 21:10:25] D bin4_1001-99999 t054190 coal-cpp@j1: median 0.4213s peak 149.8 MB
+[2026-10-17 21:12:28] D bin4_1001-99999 t054190 p2n14: median 30.3298s peak 850.4 MB
+[2026-10-17 21:12:29] D bin4_1001-99999 t054190 coal-cpp@jdefault: median 0.3034s peak 163.8 MB
+[2026-10-17 21:12:45] D bin4_1001-99999 t054190 coal-py@jdefault: median 3.8949s peak 218.6 MB
+[2026-10-17 21:13:36] D bin4_1001-99999 t054190 p2n16: median 12.3667s peak 4271.2 MB
+[2026-10-17 21:13:52] D bin4_1001-99999 t054190 coal-py@j1: median 3.8693s peak 219.0 MB
+[2026-10-17 21:13:52] D timing bin4_1001-99999: 2/20 trees done
+[2026-10-17 21:13:53] D bin4_1001-99999 t000003 coal-cpp@jdefault: median 0.1055s peak 48.4 MB
+[2026-10-17 21:14:30] D bin4_1001-99999 t000003 p2n14: median 9.1514s peak 216.4 MB
+[2026-10-17 21:14:30] D bin4_1001-99999 t000003 coal-cpp@j1: median 0.1423s peak 39.8 MB
+[2026-10-17 21:14:42] D bin4_1001-99999 t000003 p2n16: median 2.9084s peak 1046.6 MB
+[2026-10-17 21:14:47] D bin4_1001-99999 t000003 coal-py@jdefault: median 1.1062s peak 67.0 MB
+[2026-10-17 21:14:51] D bin4_1001-99999 t000003 coal-py@j1: median 1.1069s peak 67.0 MB
+[2026-10-17 21:14:51] D timing bin4_1001-99999: 3/20 trees done
+[2026-10-17 21:14:53] D bin4_1001-99999 t054081 coal-cpp@jdefault: median 0.1983s peak 93.7 MB
+[2026-10-17 21:16:06] D bin4_1001-99999 t054081 p2n14: median 18.2968s peak 508.3 MB
+[2026-10-17 21:16:16] D bin4_1001-99999 t054081 coal-py@j1: median 2.3485s peak 136.5 MB
+[2026-10-17 21:16:17] D bin4_1001-99999 t054081 coal-cpp@j1: median 0.2676s peak 83.6 MB
+[2026-10-17 21:16:27] D bin4_1001-99999 t054081 coal-py@jdefault: median 2.3457s peak 135.8 MB
+[2026-10-17 21:16:54] D bin4_1001-99999 t054081 p2n16: median 6.6860s peak 2503.2 MB
+[2026-10-17 21:16:54] D timing bin4_1001-99999: 4/20 trees done
+[2026-10-17 21:16:58] D bin4_1001-99999 t054264 coal-py@j1: median 0.8782s peak 54.1 MB
+[2026-10-17 21:17:24] D bin4_1001-99999 t054264 p2n14: median 6.4857s peak 156.4 MB
+[2026-10-17 21:17:33] D bin4_1001-99999 t054264 p2n16: median 2.1966s peak 799.3 MB
+[2026-10-17 21:17:33] D bin4_1001-99999 t054264 coal-cpp@jdefault: median 0.0854s peak 38.1 MB
+[2026-10-17 21:17:37] D bin4_1001-99999 t054264 coal-py@jdefault: median 0.8742s peak 54.1 MB
+[2026-10-17 21:17:38] D bin4_1001-99999 t054264 coal-cpp@j1: median 0.1158s peak 31.3 MB
+[2026-10-17 21:17:38] D timing bin4_1001-99999: 5/20 trees done
+[2026-10-17 21:17:38] D bin4_1001-99999 t054130 coal-cpp@j1: median 0.1121s peak 32.8 MB
+[2026-10-17 21:17:39] D bin4_1001-99999 t054130 coal-cpp@jdefault: median 0.0851s peak 40.1 MB
+[2026-10-17 21:17:42] D bin4_1001-99999 t054130 coal-py@j1: median 0.8571s peak 52.9 MB
+[2026-10-17 21:17:50] D bin4_1001-99999 t054130 p2n16: median 2.0198s peak 760.9 MB
+[2026-10-17 21:18:15] D bin4_1001-99999 t054130 p2n14: median 6.2474s peak 157.6 MB
+[2026-10-17 21:18:19] D bin4_1001-99999 t054130 coal-py@jdefault: median 0.8556s peak 52.8 MB
+[2026-10-17 21:18:19] D timing bin4_1001-99999: 6/20 trees done
+[2026-10-17 21:18:20] D bin4_1001-99999 t000069 coal-cpp@jdefault: median 0.1046s peak 48.3 MB
+[2026-10-17 21:18:24] D bin4_1001-99999 t000069 coal-py@j1: median 1.1598s peak 60.4 MB
+[2026-10-17 21:18:29] D bin4_1001-99999 t000069 coal-py@jdefault: median 1.1704s peak 59.8 MB
+[2026-10-17 21:18:30] D bin4_1001-99999 t000069 coal-cpp@j1: median 0.1445s peak 40.0 MB
+[2026-10-17 21:18:42] D bin4_1001-99999 t000069 p2n16: median 2.9754s peak 1073.1 MB
+[2026-10-17 21:19:24] D bin4_1001-99999 t000069 p2n14: median 10.4586s peak 224.0 MB
+[2026-10-17 21:19:24] D timing bin4_1001-99999: 7/20 trees done
+[2026-10-17 21:19:43] D bin4_1001-99999 t000048 p2n14: median 4.7104s peak 106.2 MB
+[2026-10-17 21:19:49] D bin4_1001-99999 t000048 p2n16: median 1.3685s peak 483.2 MB
+[2026-10-17 21:19:49] D bin4_1001-99999 t000048 coal-cpp@j1: median 0.0806s peak 25.3 MB
+[2026-10-17 21:19:52] D bin4_1001-99999 t000048 coal-py@jdefault: median 0.6085s peak 38.7 MB
+[2026-10-17 21:19:54] D bin4_1001-99999 t000048 coal-py@j1: median 0.6085s peak 38.7 MB
+[2026-10-17 21:19:54] D bin4_1001-99999 t000048 coal-cpp@jdefault: median 0.0622s peak 30.2 MB
+[2026-10-17 21:19:54] D timing bin4_1001-99999: 8/20 trees done
+[2026-10-17 21:20:20] D bin4_1001-99999 t000067 p2n14: median 6.4068s peak 129.1 MB
+[2026-10-17 21:20:20] D bin4_1001-99999 t000067 coal-cpp@jdefault: median 0.0700s peak 31.8 MB
+[2026-10-17 21:20:24] D bin4_1001-99999 t000067 coal-py@j1: median 0.7347s peak 45.5 MB
+[2026-10-17 21:20:24] D bin4_1001-99999 t000067 coal-cpp@j1: median 0.0966s peak 26.1 MB
+[2026-10-17 21:20:31] D bin4_1001-99999 t000067 p2n16: median 1.7788s peak 610.1 MB
+[2026-10-17 21:20:34] D bin4_1001-99999 t000067 coal-py@jdefault: median 0.7330s peak 45.5 MB
+[2026-10-17 21:20:34] D timing bin4_1001-99999: 9/20 trees done
+[2026-10-17 21:20:36] D bin4_1001-99999 t054160 coal-py@jdefault: median 0.4492s peak 29.6 MB
+[2026-10-17 21:20:36] D bin4_1001-99999 t054160 coal-cpp@j1: median 0.0592s peak 16.4 MB
+[2026-10-17 21:20:47] D bin4_1001-99999 t054160 p2n14: median 2.5436s peak 68.7 MB
+[2026-10-17 21:20:50] D bin4_1001-99999 t054160 p2n16: median 0.8525s peak 309.8 MB
+[2026-10-17 21:20:50] D bin4_1001-99999 t054160 coal-cpp@jdefault: median 0.0457s peak 21.0 MB
+[2026-10-17 21:20:52] D bin4_1001-99999 t054160 coal-py@j1: median 0.4479s peak 30.0 MB
+[2026-10-17 21:20:52] D timing bin4_1001-99999: 10/20 trees done
+[2026-10-17 21:21:49] D bin4_1001-99999 t000094 p2n14: median 14.1263s peak 294.0 MB
+[2026-10-17 21:21:50] D bin4_1001-99999 t000094 coal-cpp@j1: median 0.1678s peak 36.7 MB
+[2026-10-17 21:22:07] D bin4_1001-99999 t000094 p2n16: median 4.1112s peak 1444.3 MB
+[2026-10-17 21:22:13] D bin4_1001-99999 t000094 coal-py@jdefault: median 1.5217s peak 60.7 MB
+[2026-10-17 21:22:20] D bin4_1001-99999 t000094 coal-py@j1: median 1.5292s peak 61.3 MB
+[2026-10-17 21:22:20] D bin4_1001-99999 t000094 coal-cpp@jdefault: median 0.1307s peak 41.6 MB
+[2026-10-17 21:22:20] D timing bin4_1001-99999: 11/20 trees done
+[2026-10-17 21:22:21] D bin4_1001-99999 t054122 coal-cpp@jdefault: median 0.0741s peak 34.9 MB
+[2026-10-17 21:22:21] D bin4_1001-99999 t054122 coal-cpp@j1: median 0.1068s peak 27.9 MB
+[2026-10-17 21:22:53] D bin4_1001-99999 t054122 p2n14: median 7.8508s peak 150.3 MB
+[2026-10-17 21:23:01] D bin4_1001-99999 t054122 p2n16: median 2.0579s peak 696.7 MB
+[2026-10-17 21:23:04] D bin4_1001-99999 t054122 coal-py@j1: median 0.8195s peak 45.8 MB
+[2026-10-17 21:23:08] D bin4_1001-99999 t054122 coal-py@jdefault: median 0.8151s peak 46.1 MB
+[2026-10-17 21:23:08] D timing bin4_1001-99999: 12/20 trees done
+[2026-10-17 21:23:11] D bin4_1001-99999 t000050 coal-py@j1: median 0.7638s peak 47.6 MB
+[2026-10-17 21:23:18] D bin4_1001-99999 t000050 p2n16: median 1.7755s peak 646.1 MB
+[2026-10-17 21:23:19] D bin4_1001-99999 t000050 coal-cpp@j1: median 0.0976s peak 27.1 MB
+[2026-10-17 21:23:22] D bin4_1001-99999 t000050 coal-py@jdefault: median 0.7578s peak 47.6 MB
+[2026-10-17 21:23:44] D bin4_1001-99999 t000050 p2n14: median 5.4972s peak 134.7 MB
+[2026-10-17 21:23:44] D bin4_1001-99999 t000050 coal-cpp@jdefault: median 0.0706s peak 35.8 MB
+[2026-10-17 21:23:44] D timing bin4_1001-99999: 13/20 trees done
+[2026-10-17 21:23:45] D bin4_1001-99999 t054261 coal-cpp@jdefault: median 0.0710s peak 34.0 MB
+[2026-10-17 21:23:45] D bin4_1001-99999 t054261 coal-cpp@j1: median 0.0936s peak 25.9 MB
+[2026-10-17 21:23:52] D bin4_1001-99999 t054261 p2n16: median 1.6901s peak 641.9 MB
+[2026-10-17 21:23:55] D bin4_1001-99999 t054261 coal-py@jdefault: median 0.7360s peak 46.6 MB
+[2026-10-17 21:23:58] D bin4_1001-99999 t054261 coal-py@j1: median 0.7334s peak 46.4 MB
+[2026-10-17 21:24:19] D bin4_1001-99999 t054261 p2n14: median 5.1521s peak 138.3 MB
+[2026-10-17 21:24:19] D timing bin4_1001-99999: 14/20 trees done
+[2026-10-17 21:24:20] D bin4_1001-99999 t000081 coal-cpp@jdefault: median 0.1008s peak 39.0 MB
+[2026-10-17 21:24:24] D bin4_1001-99999 t000081 coal-py@jdefault: median 1.1419s peak 49.2 MB
+[2026-10-17 21:24:37] D bin4_1001-99999 t000081 p2n16: median 2.9851s peak 1034.0 MB
+[2026-10-17 21:24:37] D bin4_1001-99999 t000081 coal-cpp@j1: median 0.1372s peak 33.1 MB
+[2026-10-17 21:24:42] D bin4_1001-99999 t000081 coal-py@j1: median 1.1490s peak 48.8 MB
+[2026-10-17 21:25:28] D bin4_1001-99999 t000081 p2n14: median 11.5907s peak 217.5 MB
+[2026-10-17 21:25:28] D timing bin4_1001-99999: 15/20 trees done
+[2026-10-17 21:25:33] D bin4_1001-99999 t000031 coal-py@jdefault: median 1.1744s peak 52.5 MB
+[2026-10-17 21:25:38] D bin4_1001-99999 t000031 coal-py@j1: median 1.1803s peak 51.5 MB
+[2026-10-17 21:25:51] D bin4_1001-99999 t000031 p2n16: median 3.1902s peak 1075.6 MB
+[2026-10-17 21:25:52] D bin4_1001-99999 t000031 coal-cpp@jdefault: median 0.1043s peak 37.4 MB
+[2026-10-17 21:26:38] D bin4_1001-99999 t000031 p2n14: median 11.4171s peak 221.8 MB
+[2026-10-17 21:26:38] D bin4_1001-99999 t000031 coal-cpp@j1: median 0.1391s peak 30.9 MB
+[2026-10-17 21:26:38] D timing bin4_1001-99999: 16/20 trees done
+[2026-10-17 21:26:39] D bin4_1001-99999 t000105 coal-cpp@j1: median 0.0976s peak 29.2 MB
+[2026-10-17 21:27:03] D bin4_1001-99999 t000105 p2n14: median 5.9098s peak 138.6 MB
+[2026-10-17 21:27:06] D bin4_1001-99999 t000105 coal-py@jdefault: median 0.7570s peak 48.0 MB
+[2026-10-17 21:27:09] D bin4_1001-99999 t000105 coal-py@j1: median 0.7563s peak 48.9 MB
+[2026-10-17 21:27:16] D bin4_1001-99999 t000105 p2n16: median 1.7850s peak 662.1 MB
+[2026-10-17 21:27:16] D bin4_1001-99999 t000105 coal-cpp@jdefault: median 0.0744s peak 36.0 MB
+[2026-10-17 21:27:16] D timing bin4_1001-99999: 17/20 trees done
+[2026-10-17 21:27:17] D bin4_1001-99999 t054268 coal-cpp@jdefault: median 0.0597s peak 26.7 MB
+[2026-10-17 21:27:19] D bin4_1001-99999 t054268 coal-py@jdefault: median 0.5801s peak 39.0 MB
+[2026-10-17 21:27:22] D bin4_1001-99999 t054268 coal-py@j1: median 0.5876s peak 38.2 MB
+[2026-10-17 21:27:41] D bin4_1001-99999 t054268 p2n14: median 4.8220s peak 100.8 MB
+[2026-10-17 21:27:46] D bin4_1001-99999 t054268 p2n16: median 1.3248s peak 456.0 MB
+[2026-10-17 21:27:47] D bin4_1001-99999 t054268 coal-cpp@j1: median 0.0788s peak 22.4 MB
+[2026-10-17 21:27:47] D timing bin4_1001-99999: 18/20 trees done
+[2026-10-17 21:27:50] D bin4_1001-99999 t000026 coal-py@j1: median 0.8743s peak 53.5 MB
+[2026-10-17 21:27:51] D bin4_1001-99999 t000026 coal-cpp@j1: median 0.1141s peak 30.3 MB
+[2026-10-17 21:28:17] D bin4_1001-99999 t000026 p2n14: median 6.4767s peak 168.5 MB
+[2026-10-17 21:28:21] D bin4_1001-99999 t000026 coal-py@jdefault: median 0.8741s peak 54.5 MB
+[2026-10-17 21:28:29] D bin4_1001-99999 t000026 p2n16: median 2.0877s peak 786.4 MB
+[2026-10-17 21:28:30] D bin4_1001-99999 t000026 coal-cpp@jdefault: median 0.0888s peak 38.7 MB
+[2026-10-17 21:28:30] D timing bin4_1001-99999: 19/20 trees done
+[2026-10-17 21:29:17] D bin4_1001-99999 t054147 p2n14: median 11.7671s peak 315.7 MB
+[2026-10-17 21:29:23] D bin4_1001-99999 t054147 coal-py@j1: median 1.5315s peak 90.5 MB
+[2026-10-17 21:29:40] D bin4_1001-99999 t054147 p2n16: median 4.0657s peak 1576.2 MB
+[2026-10-17 21:29:46] D bin4_1001-99999 t054147 coal-py@jdefault: median 1.5151s peak 90.7 MB
+[2026-10-17 21:29:47] D bin4_1001-99999 t054147 coal-cpp@jdefault: median 0.1301s peak 70.4 MB
+[2026-10-17 21:29:48] D bin4_1001-99999 t054147 coal-cpp@j1: median 0.1741s peak 61.1 MB
+[2026-10-17 21:29:48] D timing bin4_1001-99999: 20/20 trees done
+[2026-10-17 21:29:55] D largest10 t000052 coal-py@j1: median 1.6465s peak 657.3 MB
+[2026-10-17 21:29:56] D largest10 t000052 coal-cpp@jdefault: median 0.1445s peak 29.5 MB
+[2026-10-17 21:29:57] D largest10 t000052 coal-cpp@j1: median 0.1851s peak 23.7 MB
+[2026-10-17 21:30:04] STEP Dtime HARD STOP at 21:30 (deadline): run in flight discarded, rows already written kept
