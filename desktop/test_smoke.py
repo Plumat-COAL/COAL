@@ -182,7 +182,7 @@ class WindowsFileQuirks(unittest.TestCase):
         with open(ref, "rb") as a, open(out, "rb") as b:
             self.assertEqual(a.read(), b.read())
 
-    @unittest.expectedFailure  # engine reads input as strict ASCII; fix proposed in LOG.md
+    # CHANGED(INT-2): was @unittest.expectedFailure; the engine now skips a UTF-8 BOM (ENG-h), so this must pass.
     def test_utf8_bom_is_accepted(self):
         p, d = core.example_paths("clean")
         r = self.run_engine(self.copy(p, "bom.aln.fasta", bom=True), d, os.path.join(self.dir, "o.fasta"))

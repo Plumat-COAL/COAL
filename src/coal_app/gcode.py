@@ -16,8 +16,9 @@ _RAW = {
          "---M------**--*----M---------------M----------------------------"),
     2:  ("FFLLSSSSYY**CCWWLLLLPPPPHHQQRRRRIIMMTTTTNNKKSS**VVVVAAAADDEEGGGG",
          "----------**--------------------MMMM----------**---M------------"),
+    # CHANGED(INT-1): was no GTG start in table 3; now ATA/ATG/GTG, matching the engine's ENG-g fix. See overnight/integration/CHANGES.md
     3:  ("FFLLSSSSYY**CCWWTTTTPPPPHHQQRRRRIIMMTTTTNNKKSSRRVVVVAAAADDEEGGGG",
-         "----------**----------------------MM----------------------------"),
+         "----------**----------------------MM---------------M------------"),
     4:  ("FFLLSSSSYY**CCWWLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG",
          "--MM------**-------M------------MMMM---------------M------------"),
     5:  ("FFLLSSSSYY**CCWWLLLLPPPPHHQQRRRRIIMMTTTTNNKKSSSSVVVVAAAADDEEGGGG",
