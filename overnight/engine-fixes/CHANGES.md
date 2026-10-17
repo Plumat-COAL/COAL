@@ -2,7 +2,31 @@
 
 ## Summary
 
-(written at the end of the run)
+All nine review findings (a–i) fixed, each with a failing-first test, one local commit per finding, nothing parked.
+Final state: `PYTHONPATH=src python -m unittest discover -s tests` → 32 tests OK (11 original + 21 in
+`tests/test_review_fixes.py`). Harness line: `38 cases, 165 checks: golden rc = 0 165, COAL exit status 162,
+stdout byte-identical 147, warnings identical 141, with -nomismatch 47, both fail 12, deliberate error 3,
+deliberate same_output 6, deliberate differs 3`. Extra equivalence check (scratch only, not in repo): 3,000 random
+inputs × 3 variants, original v0.3 engine vs this branch → 6,129 identical, 0 unexpected differences, 2,871 now
+rejected by ENG-c's "> half the codons mismatch" rule.
+
+| ID | Status | Commit |
+|---|---|---|
+| ENG-a `-o` symlink/FIFO/device/mode | fixed | 6ea3c67 |
+| ENG-b piped / FIFO inputs | fixed | e17631f |
+| ENG-c unrelated protein + DNA | fixed (error > 50 % mismatch; notice when no anchor) — **deliberate difference, needs a human OK of the threshold** | 808a038 |
+| ENG-d partial ID match | fixed (warning, not silenced by `-q` — human decision) | e4f395d |
+| ENG-e quadratic fallback | fixed (27 s → 0.35 s, output unchanged) | 60d4ace |
+| ENG-f SIGTERM / Ctrl-C / broken pipe | fixed (exit 143 / 130 / 141 — 141 is a human decision) | 8a25509 |
+| ENG-g table 3 GTG start | fixed — possible deliberate difference (PAL2NAL's table 3 unverified) | 3e49d87 |
+| ENG-h BOM / CR / '#' / file names | fixed | a0706b4 |
+| ENG-i harness + docs (i1–i5) | fixed; `-nomismatch` warnings now match PAL2NAL | 8a47462 |
+
+Behaviour changes vs PAL2NAL (in tests/README.md's deliberate-differences table): ENG-c (error and notice), ENG-d
+(extra stderr warning), ENG-g (GTG start, unverified), ENG-i2 (unknown-AA warnings still printed with
+`-nomismatch`). None of them touches a golden case, so `DELIBERATE` in test_differential.py needed no new entries
+(only ENG-i3's reclassification). README.md's own deliberate-differences list was not edited (out of scope): add
+these when merging.
 
 ## Changes
 
