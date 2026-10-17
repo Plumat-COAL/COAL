@@ -229,5 +229,93 @@ class TestR2A11PastedPaths(unittest.TestCase):  # R2-A11
             core.resolve_input(None, "file:///no/such%20file.fa")
 
 
+def _procs_mentioning(text):
+    """PIDs of live processes whose command line contains `text` (Linux /proc)."""
+    found = []
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit() or int(pid) == os.getpid():
+            continue
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as fh:
+                cmd = fh.read().decode("utf-8", "replace")
+            with open(f"/proc/{pid}/stat", "rb") as fh:
+                state = fh.read().decode().rsplit(")", 1)[1].split()[0]
+        except OSError:
+            continue
+        if text in cmd and state != "Z":
+            found.append(int(pid))
+    return found
+
+
+def _wait_gone(text, limit=10.0):
+    import time
+    end = time.monotonic() + limit
+    left = _procs_mentioning(text)
+    while left and time.monotonic() < end:
+        time.sleep(0.2)
+        left = _procs_mentioning(text)
+    return left
+
+
+@unittest.skipUnless(os.path.isdir("/proc/self") and os.name != "nt", "R2-A4: needs Linux /proc and POSIX signals")
+class TestR2A4NoOrphans(unittest.TestCase):  # R2-A4
+    @classmethod
+    def setUpClass(cls):
+        import subprocess, sys
+        cls.data = tempfile.mkdtemp(prefix="coal_test_orphans_")
+        r = subprocess.run([sys.executable, os.path.join(ROOT, "benchmarks", "gen_data.py"), "40000", "600",
+                            cls.data], capture_output=True, text=True, timeout=300)
+        assert r.returncode == 0, r.stderr
+        cls.pep, cls.nuc = os.path.join(cls.data, "pep.fasta"), os.path.join(cls.data, "nuc.fasta")
+
+    @classmethod
+    def tearDownClass(cls):
+        for pid in _procs_mentioning(cls.data):
+            try:
+                os.kill(pid, 9)
+            except OSError:
+                pass
+        shutil.rmtree(cls.data, True)
+
+    def test_app_timeout_leaves_no_processes_or_temp_files(self):
+        out_dir = tempfile.mkdtemp(prefix="coal_test_orphan_out_")
+        self.addCleanup(shutil.rmtree, out_dir, True)
+        code, err, _ = core._run_engine(self.pep, self.nuc, os.path.join(out_dir, "o.fasta"), "fasta", 1,
+                                        False, True, False, None, timeout=0.8)
+        self.assertNotEqual(code, 0)
+        self.assertIn("did not finish within", err)
+        self.assertEqual(_wait_gone(self.data), [])
+        self.assertEqual([n for n in os.listdir(out_dir) if n.startswith(".coal_")], [])
+
+    def _compat(self, sig):
+        import signal, subprocess, sys, time
+        p = subprocess.Popen([sys.executable, "-m", "coal_compat", self.pep, self.nuc, "-output", "fasta",
+                              "-nomismatch"], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        try:
+            time.sleep(0.8)  # let the engine start its work (a full run takes ~2.5 s)
+            p.send_signal(sig)
+            err = p.communicate(timeout=60)[1].decode()
+        finally:
+            if p.poll() is None:
+                p.kill()
+                p.communicate(timeout=60)
+        return p.returncode, err
+
+    def test_compat_ctrl_c(self):
+        import signal
+        rc, err = self._compat(signal.SIGINT)
+        self.assertEqual(rc, 130, err)
+        self.assertNotIn("Traceback", err)
+        self.assertIn("coal: interrupted", err)
+        self.assertEqual(_wait_gone(self.data), [])
+
+    def test_compat_sigterm_stops_the_engine(self):
+        import signal
+        rc, err = self._compat(signal.SIGTERM)
+        self.assertEqual(rc, 128 + signal.SIGTERM, err)
+        self.assertNotIn("Traceback", err)
+        self.assertEqual(_wait_gone(self.data), [])
+
+
 if __name__ == "__main__":
     unittest.main()

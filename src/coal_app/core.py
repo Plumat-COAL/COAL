@@ -488,13 +488,55 @@ def _run_engine(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, re
         cmd += ["--report", report_path]
     cmd += ["--", protein, dna]  # CHANGED(R2-A7): was positional first, so a file named '-p.fa' was an option
     t0 = time.perf_counter()
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8",
+                         errors="replace")
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
-                           timeout=timeout)
-        code, err = p.returncode, p.stderr
+        _, err = p.communicate(timeout=timeout)
+        code = p.returncode
     except subprocess.TimeoutExpired:
+        stop_engine(p)
+        _remove_engine_temp(os.path.dirname(os.path.abspath(out)))
         code, err = 1, f"coal: error: COAL did not finish within {timeout:g} seconds\n"
+    except BaseException:  # e.g. KeyboardInterrupt in the app: never leave the engine running
+        stop_engine(p)
+        raise
     return code, err, time.perf_counter() - t0
+
+
+def stop_engine(p: subprocess.Popen, grace: float = 5.0) -> None:
+    """CHANGED(R2-A4): was subprocess.run(timeout=) = SIGKILL of the engine only (its worker processes were
+    orphaned, its .coal_*.tmp left behind). Now: POSIX SIGTERM (the engine cleans up, stops its workers, exits
+    143), wait `grace` seconds, then SIGKILL; Windows: taskkill /T /F (the whole process tree), then kill().
+    See overnight/integration/CHANGES.md"""
+    if p.poll() is not None:
+        p.communicate()
+        return
+    if os.name == "nt":
+        try:
+            subprocess.run(["taskkill", "/T", "/F", "/PID", str(p.pid)], capture_output=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            pass
+    else:
+        p.terminate()
+    try:
+        p.communicate(timeout=grace)
+    except subprocess.TimeoutExpired:
+        p.kill()
+        p.communicate()
+
+
+def _remove_engine_temp(folder: str) -> None:
+    """After a forced stop: remove the engine's unfinished .coal_*.tmp files in our own run folder."""
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return
+    for n in names:
+        if n.startswith(".coal_") and n.endswith(".tmp"):
+            try:
+                os.remove(os.path.join(folder, n))
+            except OSError:
+                pass
 
 
 def _classify_error(text: str) -> str:

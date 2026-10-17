@@ -16,7 +16,6 @@ FASTA you must pass ``-output fasta`` (we will not silently change the format).
 """
 from __future__ import annotations
 
-import subprocess
 import sys
 
 from coal_app.core import detect_features
@@ -91,6 +90,9 @@ def translate(argv: list[str], supported_formats=("fasta",)) -> list[str]:
 
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
+    import signal
+    from coal.cli import _on_sigterm
+    signal.signal(signal.SIGTERM, _on_sigterm)  # CHANGED(R2-A4): SIGTERM before the engine starts -> exit 143 too
     if not argv or argv[0] in ("-h", "-help", "--help"):
         print(USAGE)
         return 0
@@ -99,4 +101,9 @@ def main(argv=None) -> int:
     except UsageError as e:
         print(f"pal2nal (COAL): error: {e}", file=sys.stderr)
         return 1
-    return subprocess.call([sys.executable, "-m", "coal", *coal_args])
+    # CHANGED(R2-A4): was subprocess.call(python -m coal ...): Ctrl-C gave a traceback and exit -2, SIGTERM
+    # stopped only this wrapper (the engine kept running and writing), and the engine's workers and temp
+    # files were orphaned. Now the engine runs in this process, so its own signal handling applies
+    # (Ctrl-C -> "coal: interrupted", 130; SIGTERM -> cleanup, 143). See overnight/integration/CHANGES.md
+    from coal.cli import main as coal_main
+    return coal_main(coal_args)
