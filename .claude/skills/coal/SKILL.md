@@ -49,7 +49,9 @@ coal pep.aln nuc.fasta -j 4 -o codon.fasta               # 5. big inputs: up to 
 "always count the warnings per gene" (none are printed with -nomismatch) and exit codes 0/1/2 only.
 See overnight/integration/CHANGES.md -->
 Output is FASTA only (`-output fasta`, the default). Per-codon warnings (`coal: warning: <id> pepAlnPos N: ...`)
-go to stderr; `-q` silences those, but **notices about probably-wrong data are always printed**:
+go to stderr, and so do **notices about probably-wrong data** (below). `-q` silences warnings and notices alike
+(errors are always printed), so **don't use `-q` when you need to know about bad genes**; use `--strict` to stop on
+them instead. <!-- CHANGED(DEC-2): was "-q silences those, but notices ... are always printed" --> The notices:
 `<id>: no 10-residue segment of the protein was found in the DNA; codons were assigned by position (K of N
 checkable codons do not match; A contain N or other ambiguous bases)` (the last part only when A > 0) and `only K of N protein IDs are DNA IDs; pairing sequences by order instead (e.g. protein 'A'
 gets DNA 'B')` (some proteins are then almost certainly paired with the wrong DNA: fix the IDs).

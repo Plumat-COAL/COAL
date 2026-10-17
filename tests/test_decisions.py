@@ -111,5 +111,33 @@ class TestDec1Strict(Tmp):  # DEC-1
             self.assertIn(phrase, h)
 
 
+class TestDec2Quiet(Tmp):  # DEC-2
+    def test_quiet_silences_warnings_and_notices_but_not_stdout(self):
+        for pep, nuc in (("up.fa", "un.fa"), ("mp.fa", "mn.fa"), ("ip.fa", "in.fa")):
+            loud = coal([pep, nuc], self.d)
+            for q in ("-q", "--quiet"):
+                with self.subTest(pep=pep, q=q):
+                    r = coal([pep, nuc, q], self.d)
+                    self.assertEqual((r.returncode, r.stdout, r.stderr), (0, loud.stdout, ""))
+                    self.assertNotEqual(loud.stderr, "")
+
+    def test_errors_are_always_printed(self):
+        r = coal(["up.fa", "un.fa", "-q", "--strict"], self.d)
+        self.assertEqual((r.returncode, r.stdout), (1, ""))
+        self.assertIn("coal: error: u: protein and DNA are inconsistent", r.stderr)
+        r = coal(["up.fa", "missing.fa", "-q"], self.d)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("coal: error:", r.stderr)
+
+    def test_help_says_errors_are_still_printed(self):
+        h = " ".join(coal(["--help"], self.d).stdout.split())
+        self.assertIn("-q, --quiet do not print warnings or notices (errors are always printed)", h)
+
+    def test_nostderr_is_quiet_in_the_drop_in(self):
+        r = run("coal_compat", ["up.fa", "un.fa", "-output", "fasta", "-nostderr"], self.d)
+        self.assertEqual((r.returncode, r.stderr), (0, ""))
+        self.assertTrue(r.stdout.startswith(">u\n"))
+
+
 if __name__ == "__main__":
     unittest.main()

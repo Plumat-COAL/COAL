@@ -236,16 +236,17 @@ class TestEngC_Unrelated(TempDirCase):
             self.assertEqual(r.stdout, "")
             self.assertIn("g1: protein and DNA are inconsistent", r.stderr)
 
-    def test_no_anchor_matched_warns_even_with_q(self):
+    def test_no_anchor_matched_warns_and_q_silences_it(self):  # DEC-2
         # Golden table3/fasta: PAL2NAL succeeds although no 10-residue anchor matches
         # (7 of 25 codons differ under table 1), so this stays a success, with a notice.
         fx = ROOT / "tests" / "fixtures" / "table3"
         gold = (ROOT / "tests" / "golden" / "table3" / "fasta.stdout").read_text()
-        r = coal([str(fx / "pep.fasta"), str(fx / "nuc.fasta"), "-q"], self.d)
+        r = coal([str(fx / "pep.fasta"), str(fx / "nuc.fasta")], self.d)
         self.assertEqual((r.returncode, r.stdout), (0, gold), r.stderr)
         self.assertIn("s0: no 10-residue segment", r.stderr)
         self.assertIn("7 of 25", r.stderr)
-        self.assertNotIn("pepAlnPos", r.stderr)
+        r = coal([str(fx / "pep.fasta"), str(fx / "nuc.fasta"), "-q"], self.d)
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, gold, ""))
 
 
 class TestR2E3_AmbiguousCodons(TempDirCase):  # R2-E3
@@ -353,7 +354,7 @@ class TestR3E1_MaskedGeneWithUTR(TempDirCase):  # R3-E1
     def test_notice_counts_checkable_codons(self):
         # golden table3: no anchor, 7 of 25 checkable codons differ, none ambiguous
         fx = ROOT / "tests" / "fixtures" / "table3"
-        r = coal([str(fx / "pep.fasta"), str(fx / "nuc.fasta"), "-q"], self.d)
+        r = coal([str(fx / "pep.fasta"), str(fx / "nuc.fasta")], self.d)  # DEC-2: was with -q
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("(7 of 25 checkable codons do not match)", r.stderr)
 
@@ -363,12 +364,13 @@ class TestEngD_PartialIdMatch(TempDirCase):
     def test_some_ids_match_warns_and_pairs_by_order(self):
         (self.d / "ip.fa").write_text(">geneA\nMKVAL\n>geneB\nMKVAL\n")
         (self.d / "in.fa").write_text(">geneB\nATGAAAGTTGCTCTG\n>geneX\nATGAAGGTCGCACTA\n")
-        for extra in ([], ["-q"]):
-            r = coal(["ip.fa", "in.fa", *extra], self.d)
-            self.assertEqual(r.returncode, 0, r.stderr)
-            self.assertEqual(r.stdout, ">geneA\nATGAAAGTTGCTCTG\n>geneB\nATGAAGGTCGCACTA\n")
-            self.assertIn("1 of 2 protein IDs", r.stderr)
-            self.assertIn("'geneA' gets DNA 'geneB'", r.stderr)
+        r = coal(["ip.fa", "in.fa"], self.d)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout, ">geneA\nATGAAAGTTGCTCTG\n>geneB\nATGAAGGTCGCACTA\n")
+        self.assertIn("1 of 2 protein IDs", r.stderr)
+        self.assertIn("'geneA' gets DNA 'geneB'", r.stderr)
+        r = coal(["ip.fa", "in.fa", "-q"], self.d)  # DEC-2
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, ">geneA\nATGAAAGTTGCTCTG\n>geneB\nATGAAGGTCGCACTA\n", ""))
 
     def test_no_ids_match_stays_silent(self):  # golden id_mismatch_same_order: PAL2NAL pairs by order
         (self.d / "ip.fa").write_text(">a\nMKVAL\n>b\nMKVAL\n")

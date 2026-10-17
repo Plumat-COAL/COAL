@@ -43,8 +43,9 @@ def main(argv=None) -> int:
                     help="maximum worker processes (default 0 = automatic: all CPU cores for large "
                          "inputs, one process for small ones; 1 = never use extra processes)")
     # CHANGED(R2-E4): help was "do not print warnings" (notices are printed anyway)
+    # CHANGED(DEC-2): was "notices about probably-wrong data are still printed"; now -q silences them too
     ap.add_argument("-q", "--quiet", action="store_true",
-                    help="do not print per-codon warnings (notices about probably-wrong data are still printed)")
+                    help="do not print warnings or notices (errors are always printed)")
     # CHANGED(DEC-1): new. Was: these three rules were always errors (ENG-c, R3-E1) or a warning (ENG-d). Now
     # PAL2NAL's behaviour by default (output + notice) and errors only with --strict. See overnight/integration/CHANGES.md
     ap.add_argument("-strict", "--strict", action="store_true",
@@ -59,7 +60,9 @@ def main(argv=None) -> int:
 
     warn = None if args.quiet else (lambda w: print(f"coal: warning: {w}", file=sys.stderr))
     # CHANGED(ENG-c): new; notices are printed even with -q. See overnight/engine-fixes/CHANGES.md
-    notice = lambda w: print(f"coal: warning: {w}", file=sys.stderr)  # noqa: E731
+    # CHANGED(DEC-2): was printed even with -q; now -q silences notices too (GNU / clig.dev "quiet", and PAL2NAL's
+    # -nostderr). Errors are still printed. See overnight/integration/CHANGES.md
+    notice = warn
     # CHANGED(ENG-f): was default signal handling (SIGTERM left .coal_*.tmp files; Ctrl-C printed a
     # traceback; a closed stdout pipe gave "[Errno 32] Broken pipe", exit 1); now SIGTERM -> SystemExit
     # (cleanup runs, exit 143), Ctrl-C -> "coal: interrupted", exit 130, broken pipe -> silent exit 141.
