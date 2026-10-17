@@ -102,17 +102,28 @@ about 5% deleted; no UTRs or frameshifts, which COAL v0.1 doesn't support); one 
 
 ### Scaling (v0.3)
 
-Synthetic data, 500 codons per gene. Measured on the 2-core Linux machine used for development (not the
-Windows machine above); peak memory as reported by `/usr/bin/time`. Output was byte-identical in every configuration.
+Synthetic data, 500 codons per gene, on the same Windows 11 machine as above (20 logical CPUs). One run per
+configuration. All outputs were byte-identical.
 
-| Sequences | Input size | v0.2 | v0.3 `-j 1` | v0.3 `-j 2` | Peak memory v0.2 → v0.3 |
+| Sequences | Input size | 1 process | 4 processes | All cores (20) | Peak memory, 1 process |
 |---:|---:|---:|---:|---:|---:|
-| 100,000 | 194 MB | 6.3 s | 3.6 s | 2.2 s | 515 MB → 87 MB |
-| 500,000 | 974 MB | 32.0 s | 17.0 s | 10.5 s | 2,523 MB → 143 MB |
+| 100,000 | 194 MB | 7.1 s | 2.4 s | 2.5 s | 55 MB |
+| 500,000 | 974 MB | 25.2 s | 9.8 s | 10.0 s | 131 MB |
 
-PAL2NAL was not run at these sizes. From its 10,000-sequence time (24.7 s on Windows), and assuming it grows
-in proportion, it would need roughly 4 and 20 minutes. Reproduce with
-`python benchmarks/run_bench.py --no-pal2nal --sizes 100000x500 500000x500 --coal-jobs 2 4 0`.
+- **Memory** stays small: v0.2 needed about 2.5 GB for the 500,000-sequence input (measured on Linux).
+- **Throughput** is about 100 MB of input per second with 4 processes. PAL2NAL was not run at these sizes; from its
+  10,000-sequence time (27 s), and assuming it grows in proportion, it would need roughly 4.5 and 22 minutes.
+- **More than 4 processes don't help yet.** The main process reads all the DNA, passes it to the workers and writes
+  all the output, and that is now the bottleneck.
+
+Raw data: `benchmarks/results/bench_windows_20261017_0059.csv` (500,000) and the 100,000 row of
+`bench_windows_20261017_0055.csv`. That file's 500,000 row is not used: its 1-process column was accidentally
+timed with automatic `-j`. Memory is measured for the main process only.
+
+On the 2-core Linux development machine (v0.2 → v0.3, 1 process): 100,000 sequences 6.3 s → 3.6 s,
+515 → 87 MB; 500,000 sequences 32.0 s → 17.0 s, 2,523 → 143 MB.
+
+Reproduce with `python benchmarks/run_bench.py --no-pal2nal --sizes 100000x500 500000x500 --coal-jobs 4 0`.
 
 ### Reproduce
 
