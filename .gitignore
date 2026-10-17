@@ -33,3 +33,6 @@ tmpwhich.*
 erraafile.*
 errnucfile.*
 tbln.out.*
+
+# Validation run outputs (data itself is under validation/data/, ignored by data/ above)
+validation/results/
