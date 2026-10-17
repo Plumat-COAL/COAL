@@ -181,3 +181,55 @@ normalised IDs 399, more than one 60-nt block 3,885. Other seed after the merge:
 output.) Before DEC-4 the same harness found, besides the missing formats and `-blockonly`, two engine differences,
 both fixed or documented: B/Z/J/O/U columns kept by `-nomismatch` (fixed, DEC-4f) and the `U`-residue / RNA-first-Met
 behaviour of PAL2NAL (documented above).
+
+## Real data (`test_realdata.py`, REAL-1)
+
+<!-- CHANGED(REAL-1): new section. See overnight/integration/CHANGES.md -->
+Every other test uses hand-made or random inputs. `tests/realdata/` holds 12 published datasets (gzipped, unchanged
+files; 0.36 MB in all), each with a `SOURCE.md` giving the repository, commit, path, sha256 and licence:
+10 codon alignments from HyPhy's test data (MIT) and 2 protein-alignment + mRNA/gene pairs from Biopython's
+`Tests/codonalign` (Biopython licence / BSD 3-Clause). `datasets.json` lists them; `realdata_lib.py` reads FASTA,
+NEXUS and PAML files and translates with its own copy of the NCBI tables (not COAL's).
+
+| Dataset | Gene, organisms | Sequences × codons | Code | What it exercises |
+|---|---|---:|---:|---|
+| cd2 | CD2, 10 mammals | 10 × 187 | 1 | small nuclear gene |
+| ciliates | ortholog group from ciliate transcriptomes | 16 × 153 | 6 | code 6 (no TAA/TAG in the data, so it does not tell 6 from 1) |
+| algae_coxI | mitochondrial COX1, algae | 19 × 214 | 4 | TGA = Trp |
+| coxI_mammals | mitochondrial COX1, primates and rodents | 21 × 510 | 2 | code 2, CR-only line endings |
+| pts_bacteria | PTS trehalose transporter, bacteria | 16 × 639 | 11 | bacterial code |
+| rem2_mammals | REM2, mammals | 175 × 656 | 1 | RefSeq accessions and descriptions in the IDs, many gaps |
+| mtdna_carnivores | concatenated mitochondrial genes, carnivores | 62 × 3,623 | 2 | long genes, internal stop columns, N/IUPAC |
+| rbcL_plants | plastid rbcL, seed plants | 483 × 466 | 11 | many sequences, 7,746 ambiguous codons |
+| hiv_rt | HIV-1 reverse transcriptase | 476 × 335 | 1 | 3,110 IUPAC codons (population sequencing) |
+| vwf_mammals | von Willebrand factor, mammals | 62 × 392 | 1 | fragments whose ends are partly gapped codons |
+| egfr | EGFR, 6 species | 6 proteins, 1,482 columns | 1 | real mRNAs with UTRs, protein and mRNA IDs differ (ID map) |
+| adh_drosophila | Adh, 27 *Drosophila* | 27 proteins, 256 columns | 1 | real protein alignment + coding DNA |
+
+Checks (Python in-process, or `COAL_IMPL=cpp` + `COAL_CPP_BIN` as in `test_differential.py`; a dataset whose files
+are missing is skipped):
+
+1. **Round trip** (codon alignments): the protein alignment (codon columns translated, `---` → `-`) and the unaligned
+   DNA are derived from the codon alignment; COAL with the dataset's `-codontable` must rebuild it exactly in all four
+   output formats, with no per-codon warning, and `-nogap` must drop exactly the columns with a gap or a stop codon of
+   that code. vwf: a partly gapped codon becomes a protein gap and its bases stay in the DNA (each fragment translated
+   in its own frame); COAL skips them like a UTR.
+2. **Real pairs**: COAL's output must translate back to the protein alignment, with exactly the expected warnings
+   (egfr 1, adh 0). egfr without its ID map pairs by file order and must fail.
+3. **Messy input** built from coxI_mammals: UTRs + stop + poly-A around every gene, stop codon in both files,
+   `.1` protein IDs with the DNA in reverse order (normalised pairing notice), DNA headers with descriptions, lower
+   case + CRLF, the default code on code-2 genes (the notice must name code 2), one gene 30 nt short (error naming
+   it); and on rem2_mammals, gap runs moved by one residue (another aligner's equally good alignment).
+
+`tests/realdata/` is not a test package: only `test_realdata.py` is collected. Breaking the engine is caught: a
+`coal-cpp` wrapper that drops `-codontable` fails 19 checks (every code-2/4 dataset and the messy tests).
+
+Run only locally (not redistributable or not committed): PAML's examples (GPL-3: lysozyme, HIV env, mtCDNA primates,
+MouseLemurs, lysin, MHC; `abglobin.nuc` was not read: interleaved with `.` match characters), PAL2NAL's own
+`test.aln`/`test.nuc` (GPL), HyPhy's SARS-CoV-2 spike (GISAID-derived IDs), influenza HA and camelid VHH sets.
+Result on all 17 local codon alignments plus the 8 pairs: COAL Python, COAL C++ and PAL2NAL v14 wrote the same stdout
+in all four formats on every input that rebuilds without frameshifts. stderr differs only as documented: PAL2NAL v14's
+fixed IUPAC list gave 113 spurious warnings on hiv_rt and 3 on influenza HA (YTA/YTG for L, ATM/ATW for I, MGA/MGG for R),
+COAL none. With `-nogap` on code-2/4 data PAL2NAL v14 also removes the columns with TGA (Trp there): it keeps 493 of 510
+columns of coxI_mammals (COAL 510), 3,232 of 3,331 of the PAML primate mtDNA (COAL 3,331), 3,513 of 3,623 of
+mtdna_carnivores (COAL 3,618: its 5 columns with a code-2 stop go) and 193 of 214 of algae_coxI (COAL 197) (FZ-5).
