@@ -222,3 +222,46 @@ jobs:
           if grep -iE "\.\.\. skipped" cpp_tests.txt | grep -viqE "live comparison needs Python|peak memory read with getrusage|POSIX"; then
             echo "::error::C++ tests were skipped, so the C++ engine was not fully exercised"; exit 1
           fi
+
+  # CHANGED(SHIP-9): new. The packaged Windows app (PyInstaller + Inno Setup, desktop\build.ps1) was only ever built
+  # by release.yml, i.e. after a tag; the first real build (v0.4.0) failed twice on unverified pins (SHIP-7, SHIP-8).
+  # Building it on every push to main / keanu_overnight/* catches that before a release, and the installer is kept
+  # as a workflow artifact for testing. See overnight/integration/CHANGES.md
+  windows-app:
+    name: Windows app build (installer + portable)
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/keanu_overnight/'))
+    runs-on: windows-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install Inno Setup (pinned, as release.yml)
+        run: |
+          choco install innosetup --version=6.7.1 --allow-downgrade -y --no-progress
+          $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "Inno Setup installed, but $iscc is missing" }
+      - name: Create the build venv
+        run: python -m venv desktop\.venv
+      - name: Build (desktop\build.ps1)
+        timeout-minutes: 75
+        env:
+          GRADIO_ANALYTICS_ENABLED: "False"
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File desktop\build.ps1
+      - name: Installer was made
+        run: |
+          $s = Get-ChildItem desktop\dist\COAL-Setup-*.exe
+          if (-not $s) { throw "desktop\build.ps1 made no installer" }
+          $s | Format-Table Name, Length
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: coal-windows-ci
+          path: desktop/dist/COAL-Setup-*.exe
+          if-no-files-found: error
+          retention-days: 7
