@@ -64,3 +64,26 @@ Rules that follow, for any later change: a new line of text on the main form nee
 numbers ("1.", "2.") only for real sequences of steps; one sentence per fact on screen (the banner, the table and
 the alignment view must not say the same thing twice); explanations belong in the glossary, the docs or the About
 line, not under a field.
+
+## Round 4 polish
+
+Written for v0.4.1 (rows POL-1 to POL-6 in overnight/integration/CHANGES.md). The owner, after running the desktop
+app on Windows: cut the reassurance lines, give each section a clear hierarchy as on the website, emphasise the
+genetic code, and replace "Results appear here." Three reference points, and what was taken from each:
+
+| Reference | Convention | Applied in COAL |
+|---|---|---|
+| [Squoosh](https://squoosh.app/) | The options panel is grouped under short section headings ("Edit", "Compress"), with lighter option labels under them; there is no result panel until an image is open. | Headings "Files", "Genetic code", "Output", "Results" (h2, the site's h3 size), field labels one step lighter. The results area (heading, banner, view, methods) is hidden until there is a result. |
+| GitHub [Primer forms](https://primer.style/product/ui-patterns/forms/) | Related fields grouped under one heading; field width fits the expected value; no caption unless the label is not enough. | One heading per group; the genetic-code box is at most 640 px and the output-format box 320 px wide; one hint line on the genetic code only. |
+| MEGA (Kumar et al.) and other codon-aware tools | The genetic code is a first-class choice for coding data (MEGA asks for it when coding sequences are opened), not a detail next to the file format. | The genetic code is its own section, first after the files, its label drawn as the heading, a larger value, and one line: "Mitochondrial, bacterial and plastid genes need their own code." Output format is secondary, under "Output". |
+
+Also: NN/g, [empty states in complex applications](https://www.nngroup.com/articles/empty-state-interface-design/):
+an empty state should help people act. Here the form above already names the next step (the button), so a
+placeholder under it added nothing; the area is simply absent until it has content.
+
+Removed: the splash line "This computer only. No internet needed." and the footer "Nothing leaves your computer:
+COAL runs here, on this machine." (reassurance, not something to act on; the facts stay in README.md,
+desktop/README.md and on the site; the hosted Space keeps its note, because there files do go to a server). Gradio's
+own footer link "Settings" (display language and theme for Gradio's labels only) is hidden, so COAL has one
+settings place, its Settings tab; "Use via API or MCP" stays. The round 3 rows above that mention the footer note
+and "Results appear here." describe that round.

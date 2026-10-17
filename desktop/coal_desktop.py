@@ -813,6 +813,8 @@ def run_engine(args: list[str], module: str = "coal") -> int:
 
 # ============================================================== window (pywebview; untested here)
 
+# CHANGED(POL-1): the line "This computer only. No internet needed." under the title is gone (owner: cut the
+# reassurance texts; the privacy facts stay in desktop/README.md and on the site)
 SPLASH = """<!doctype html><html><head><meta charset="utf-8"><title>COAL</title>
 <style>
 :root { color-scheme: light dark; }
@@ -820,7 +822,7 @@ body { font: 18px system-ui, "Segoe UI", sans-serif; display:flex; align-items:c
        justify-content:center; height:100vh; margin:0; background:Canvas; color:CanvasText; }
 main { text-align:center; } p { opacity:.8; }
 </style></head><body><main role="status" aria-live="polite">
-<h1>Starting COAL&hellip;</h1><p>This computer only. No internet needed.</p>
+<h1>Starting COAL&hellip;</h1>
 <p id="slow" hidden>First launch can take a minute while Windows checks the app.</p></main>
 <script>setTimeout(function () { document.getElementById("slow").hidden = false; }, 10000);</script>
 </body></html>"""
