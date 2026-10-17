@@ -3,7 +3,7 @@
     coal PEP_ALN NUC_FASTA [NUC_FASTA ...] [-codontable N] [-nogap] [-nomismatch] [-o OUT]
 
 PAL2NAL-style single-dash options are accepted, so COAL can be dropped into
-existing pipelines (only '-output fasta' is implemented so far).
+existing pipelines. Output formats: fasta (default), clustal, paml, codon.
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import sys
 
 from . import __version__
 from .core import CoalError
-from .pipeline import run
+from .pipeline import FORMATS, run
 from .seqio import InputFormatError
 from .tables import SUPPORTED
 
@@ -30,8 +30,8 @@ def main(argv=None) -> int:
                     help="remove codon columns containing gaps or stop codons")
     ap.add_argument("-nomismatch", "--nomismatch", action="store_true",
                     help="remove alignment columns where a codon does not match its residue")
-    ap.add_argument("-output", "--output-format", default="fasta", choices=["fasta"],
-                    help="output format (only fasta so far)")
+    ap.add_argument("-output", "--output-format", default="fasta", choices=list(FORMATS),
+                    help="output format: fasta (default), clustal, paml or codon")
     ap.add_argument("-o", "--out", help="output file (default: stdout)")
     ap.add_argument("-j", "--jobs", type=int, default=0, metavar="N",
                     help="maximum worker processes (default 0 = automatic: all CPU cores for large "
@@ -43,7 +43,8 @@ def main(argv=None) -> int:
     warn = None if args.quiet else (lambda w: print(f"coal: warning: {w}", file=sys.stderr))
     try:
         run(args.pep_aln, args.nuc_fasta, out_path=args.out, table=args.codontable,
-            nogap=args.nogap, nomismatch=args.nomismatch, jobs=args.jobs, warn=warn)
+            nogap=args.nogap, nomismatch=args.nomismatch, jobs=args.jobs, warn=warn,
+            fmt=args.output_format)
     except (CoalError, InputFormatError, UnicodeDecodeError, OSError) as e:
         print(f"coal: error: {e}", file=sys.stderr)
         return 1

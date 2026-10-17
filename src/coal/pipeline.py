@@ -15,6 +15,7 @@ destination when everything succeeded, so an error never leaves partial output
 """
 from __future__ import annotations
 
+import mmap
 import os
 import re
 from array import array
@@ -31,6 +32,10 @@ from .seqio import DnaIndex, is_clustal, iter_fasta, read_clustal
 from .tables import get_code
 
 WRAP = 60
+FORMATS = ("fasta", "clustal", "paml", "codon")
+BLOCK_FORMATS = ("clustal", "codon")   # interleaved blocks: need every row before writing
+CLUSTAL_BLOCK = 60      # nucleotides per CLUSTAL block
+CODON_BLOCK = 20        # residues / codons per "-output codon" block
 _DIGIT = re.compile(r"[0-9]")
 BATCH_NT = 2_000_000      # target DNA per work batch (keeps IPC overhead low)
 # Starting worker processes costs ~0.1-0.2 s (more on Windows), about the time one
@@ -60,9 +65,9 @@ def _protein_rows(path):
 _W: dict = {}
 
 
-def _init_worker(table, widths, two_pass, nogap):
+def _init_worker(table, widths, two_pass, nogap, fmt="fasta"):
     _W.update(table=table, widths=widths, wide=any(w != 3 for w in widths),
-              two_pass=two_pass, nogap=nogap)
+              two_pass=two_pass, nogap=nogap, fmt=fmt)
 
 
 def _work(batch):
@@ -70,17 +75,20 @@ def _work(batch):
     text is finished FASTA, or 'id<TAB>row' lines for the column-removal pass."""
     parts, warns, mcols, bad = [], [], set(), set()
     two_pass = _W["two_pass"]
+    fmt = _W.get("fmt", "fasta")
+    record = paml_record if fmt == "paml" else fasta_record
     for pid, row, dna in batch:
         it = thread_one(pid, row, dna, _W["table"])
         exp = expand(it, _W["widths"], _W["wide"])
         warns += [f"{pid} {w}" for w in it.warnings]
         if two_pass:
-            parts.append(f"{pid}\t{exp}\n")
+            # staged for a later pass; "-output codon" also needs the protein row
+            parts.append(f"{pid}\t{row}\t{exp}\n" if fmt == "codon" else f"{pid}\t{exp}\n")
             mcols |= it.mismatch_cols
             if _W["nogap"]:
                 bad |= nogap_bad_triplets(exp)
         else:
-            parts.append(fasta_record(pid, exp))
+            parts.append(record(pid, exp))
     return "".join(parts), warns, mcols, bad
 
 
@@ -91,6 +99,86 @@ def fasta_record(rid: str, seq: str) -> str:
     if len(seq) <= WRAP:
         return f">{rid}\n{seq}\n"
     return f">{rid}\n" + "\n".join([seq[i:i + WRAP] for i in range(0, len(seq), WRAP)]) + "\n"
+
+
+def _wrap(seq: str) -> str:
+    if len(seq) <= WRAP:
+        return seq + "\n"
+    return "\n".join([seq[i:i + WRAP] for i in range(0, len(seq), WRAP)]) + "\n"
+
+
+def paml_record(rid: str, seq: str) -> str:
+    """PAML (PHYLIP-like) record: ID line, then the sequence wrapped at 60."""
+    return f"{rid}\n" + _wrap(seq)
+
+
+def paml_header(nseq: int, length: int) -> str:
+    return f"{nseq:4d}{length:7d}\n"
+
+
+def name_width(ids) -> int:
+    """Name column of CLUSTAL / codon output: longest ID (at least 10) + 4 spaces."""
+    return max(10, max(map(len, ids), default=0)) + 4
+
+
+def _view(f, size):
+    f.flush()
+    return mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) if size else b""
+
+
+def write_blocks(stage, out, fmt: str, slices, length: int, ncol: int) -> None:
+    """Write CLUSTAL or codon output from the staged rows.
+
+    Every output row has the same length, so the rows are copied into a
+    fixed-stride scratch file and read back block by block through mmap:
+    memory holds the IDs only, never the whole alignment."""
+    ids = []
+    grid = tempfile.TemporaryFile("w+b", prefix=".coal_grid_")
+    prot = tempfile.TemporaryFile("w+b", prefix=".coal_prot_") if fmt == "codon" else None
+    try:
+        for line in stage:
+            parts = line.rstrip("\n").split("\t")
+            ids.append(parts[0])
+            grid.write(apply_slices(parts[-1], slices).encode("ascii"))
+            if prot is not None:
+                prot.write(parts[1].encode("ascii"))
+        n = len(ids)
+        gm = _view(grid, n * length)
+        width = name_width(ids)
+        names = [i.ljust(width) for i in ids]
+        if fmt == "clustal":
+            out.write("CLUSTAL W multiple sequence alignment\n\n")
+            for s in range(0, length, CLUSTAL_BLOCK):
+                e = min(s + CLUSTAL_BLOCK, length)
+                out.write("".join([f"{names[k]}{gm[k * length + s:k * length + e].decode('ascii')}\n"
+                                   for k in range(n)]))
+                out.write("\n")
+        else:
+            pm = _view(prot, n * ncol)
+            pad = " " * width
+            ntrip = length // 3
+            # The residue line and the codon line are cut into blocks of 20 separately
+            # (as PAL2NAL does), so a widened frameshift column shifts the residues.
+            nblk = max(-(-ncol // CODON_BLOCK), -(-ntrip // CODON_BLOCK))
+            for b in range(nblk):
+                a0, a1 = min(b * CODON_BLOCK, ncol), min((b + 1) * CODON_BLOCK, ncol)
+                d0, d1 = min(3 * b * CODON_BLOCK, length), min(3 * (b + 1) * CODON_BLOCK, length)
+                lines = []
+                for k in range(n):
+                    aa = pm[k * ncol + a0:k * ncol + a1].decode("ascii")
+                    dna = gm[k * length + d0:k * length + d1].decode("ascii")
+                    lines.append(pad + "   ".join(aa) + "\n")
+                    lines.append(names[k] + " ".join([dna[i:i + 3] for i in range(0, len(dna), 3)]) + "\n")
+                out.write("".join(lines))
+                out.write("\n")
+            if isinstance(pm, mmap.mmap):
+                pm.close()
+        if isinstance(gm, mmap.mmap):
+            gm.close()
+    finally:
+        grid.close()
+        if prot is not None:
+            prot.close()
 
 
 def _batches(rows, dna: DnaIndex, pairing):
@@ -126,12 +214,17 @@ def _results(batches, jobs: int, init_args):
 
 
 def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
-        nomismatch: bool = False, jobs: int = 0, warn=None, min_nt_per_job: int | None = None) -> int:
-    """Convert; write FASTA to out_path (or stdout).
+        nomismatch: bool = False, jobs: int = 0, warn=None, min_nt_per_job: int | None = None,
+        fmt: str = "fasta") -> int:
+    """Convert; write the alignment (fmt: fasta, clustal, paml or codon) to out_path (or stdout).
 
     jobs: 0 = automatic (up to all cores), N = at most N processes. Small inputs
     always run in one process (see MIN_NT_PER_JOB)."""
     get_code(table)
+    if fmt not in FORMATS:
+        raise CoalError(f"unknown output format {fmt!r}; one of {', '.join(FORMATS)}")
+    if fmt == "codon" and (nogap or nomismatch):
+        raise CoalError('"-output codon" cannot be combined with -nogap or -nomismatch (as in PAL2NAL)')
     rows = _protein_rows(pep_path)
 
     # pass 1: protein IDs, row length, frameshift column widths
@@ -149,21 +242,25 @@ def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
     try:
         # DNA record number for each protein, as a compact array; then free the ID tables
         pairing = array("q", pair_sequences(ids, dna.ids, dna.pos))
+        nseq = len(pairing)
         del ids
         dna.forget_ids()
         jobs = effective_jobs(jobs, dna.total_bytes(), min_nt_per_job)
         widths = column_widths(digit_rows, ncol)
         two_pass = nogap or nomismatch
+        staged = two_pass or fmt in BLOCK_FORMATS
 
         dest_dir = os.path.dirname(os.path.abspath(out_path)) if out_path else None
         tmp = tempfile.NamedTemporaryFile("w", delete=False, newline="\n", dir=dest_dir,
                                           prefix=".coal_", suffix=".tmp", encoding="ascii")
         stage = tempfile.NamedTemporaryFile("w+", delete=False, newline="\n", prefix=".coal_rows_",
-                                            encoding="ascii") if two_pass else None
+                                            encoding="ascii") if staged else None
         try:
             drop, bad = set(), set()
-            init = (table, widths, two_pass, nogap)
-            sink = stage.file if two_pass else tmp.file   # skip tempfile's per-call wrapper
+            init = (table, widths, staged, nogap, fmt)
+            sink = stage.file if staged else tmp.file   # skip tempfile's per-call wrapper
+            if fmt == "paml" and not staged:
+                tmp.file.write(paml_header(nseq, sum(widths)))
             for text, warns, mcols, badt in _results(_batches(rows(), dna, pairing), jobs, init):
                 if warn:
                     for w in warns:
@@ -172,12 +269,22 @@ def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
                 if nomismatch:
                     drop.update(c - 1 for c in mcols)
                 bad |= badt
-            if two_pass:
-                sl = keep_slices(widths, drop if nomismatch else (), bad)
+            if staged:
+                if two_pass:
+                    sl = keep_slices(widths, drop if nomismatch else (), bad)
+                else:
+                    sl = [(0, sum(widths))]
+                length = sum(b - a for a, b in sl)
                 stage.seek(0)
-                for line in stage.file:
-                    pid, exp = line.rstrip("\n").split("\t", 1)
-                    tmp.file.write(fasta_record(pid, apply_slices(exp, sl)))
+                if fmt in BLOCK_FORMATS:
+                    write_blocks(stage.file, tmp.file, fmt, sl, length, ncol)
+                else:
+                    if fmt == "paml":
+                        tmp.file.write(paml_header(nseq, length))
+                    record = paml_record if fmt == "paml" else fasta_record
+                    for line in stage.file:
+                        pid, exp = line.rstrip("\n").split("\t", 1)
+                        tmp.file.write(record(pid, apply_slices(exp, sl)))
             tmp.close()
             if out_path:
                 os.replace(tmp.name, out_path)

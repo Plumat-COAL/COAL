@@ -58,7 +58,9 @@ class TestParallelEqualsSerial(unittest.TestCase):
             for case in self.CASES:
                 spec = CASES[case]
                 args = (FIX / case, spec["pep"], spec.get("nuc", ["nuc.fasta"]))
-                for opts in ({}, {"nogap": True}, {"nomismatch": True}):
+                for opts in ({}, {"nogap": True}, {"nomismatch": True},
+                             {"fmt": "clustal"}, {"fmt": "paml"}, {"fmt": "codon"},
+                             {"fmt": "paml", "nogap": True}, {"fmt": "clustal", "nomismatch": True}):
                     pipeline.BATCH_NT = 2_000_000
                     ref = run(*args, jobs=1, **opts)
                     pipeline.BATCH_NT = 1           # one sequence per batch: stresses ordering
@@ -78,6 +80,14 @@ class TestParallelEqualsSerial(unittest.TestCase):
             finally:
                 pipeline.BATCH_NT = old
             self.assertEqual(ref.count(">"), 300)
+            for fmt in ("clustal", "paml", "codon"):
+                ref = run(d, "pep.fasta", ["nuc.fasta"], jobs=1, fmt=fmt)
+                pipeline.BATCH_NT = 5000
+                try:
+                    with self.subTest(fmt=fmt):
+                        self.assertEqual(run(d, "pep.fasta", ["nuc.fasta"], jobs=2, min_nt_per_job=0, fmt=fmt), ref)
+                finally:
+                    pipeline.BATCH_NT = old
 
     def test_worker_error_propagates_and_no_partial_output(self):
         with self.assertRaises(CoalError):
