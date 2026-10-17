@@ -222,6 +222,29 @@ class TestMessages(unittest.TestCase):
                                  "-o", str(out), "--report", str(rep)])
         self.assertTrue(json.loads(rep.read_text())["methods_text"].startswith("Codon alignments were built"))
 
+    def test_standard_code_is_suggested_when_it_fits(self):  # PRE-4
+        # one_broken_gene run with code 2: codes 1, 4, 6, 10, 11, 15 and 16 all fit the 19 healthy genes; the
+        # hint said "code 4 ... differs least from code 2"; now code 1, the standard code
+        rep = self.d / "r.json"
+        args = [str(EX / "one_broken_gene" / "protein.aln.fasta"), str(EX / "one_broken_gene" / "dna.fasta"),
+                "-codontable", "2", "--keep-going", "-o", str(self.d / "o.fa"), "--report", str(rep)]
+        rc, _, err = run_py(ROOT, args)
+        self.assertIn("Under genetic code 1 (Standard (nuclear genes of most organisms)), 19 of 20 sequences match "
+                      "their protein; under code 2, none do. Codes 4, 10, 11, 15, 16 and 6 fit as well, but code 1 "
+                      "is the standard code, used by most nuclear genes. Re-run with -codontable 1.\n", err)
+        self.assertNotIn("differs least", err)
+        hint = next(h for h in json.loads(rep.read_text())["hints"] if h["code"] == "genetic_code")
+        self.assertEqual(hint["suggested_codontable"], 1)
+        self.assertTrue(hint["text"].endswith("but code 1 is the standard code, used by most nuclear genes. "
+                                              "Re-run with code 1?"), hint["text"])
+        # the mito case is unchanged: run with 1, code 2 suggested, 5 and 13 named
+        args = [str(EX / "mito" / "protein.aln.fasta"), str(EX / "mito" / "dna.fasta"), "-o", str(self.d / "o.fa"),
+                "--report", str(rep)]
+        rc, _, err = run_py(ROOT, args)
+        self.assertIn("Under genetic code 2 (Vertebrate mitochondrial), all 24 sequences match their protein; under "
+                      "code 1, none do. Codes 5 and 13 fit these sequences too: choose the code of the organism and "
+                      "organelle the genes come from. Re-run with -codontable 2.\n", err)
+
     def test_break_locations_are_not_wrong(self):  # ENG-UX-19
         from coal.report import break_event
         self.assertIsNone(break_event(DUP_ROW, DUP_DNA, 1))  # no evidence for a column: no column
@@ -267,6 +290,10 @@ class TestCppSaysTheSame(unittest.TestCase):
             runs = [(n, f, a) for n, (f, a, _) in CASES.items()]
             for ex in ("messy_ids", "one_broken_gene", "mito"):
                 runs.append((ex, {}, [str(EX / ex / "protein.aln.fasta"), str(EX / ex / "dna.fasta"), "-o", "o.fa"]))
+            # PRE-4: the standard-code preference (one_broken_gene and clean run with code 2)
+            for ex in ("one_broken_gene", "clean"):
+                runs.append((ex + "-code2", {}, [str(EX / ex / "protein.aln.fasta"), str(EX / ex / "dna.fasta"),
+                                                 "-o", "o.fa", "-codontable", "2", "--keep-going"]))
             for name, files, args in runs:
                 with self.subTest(case=name):
                     d = Path(tmp) / name
@@ -280,6 +307,22 @@ class TestCppSaysTheSame(unittest.TestCase):
                     cerr = r.stderr.decode("utf-8", "replace").replace("\r\n", "\n")
                     self.assertEqual((r.returncode, cerr), (rc, err))
 
+
+    def test_same_genetic_code_hint_in_the_report(self):  # PRE-4
+        binary = str(cpp_binary())
+        with tempfile.TemporaryDirectory() as tmp:
+            for ex, code in (("one_broken_gene", "2"), ("clean", "2"), ("mito", "1")):
+                with self.subTest(example=ex, code=code):
+                    d = Path(tmp)
+                    args = [str(EX / ex / "protein.aln.fasta"), str(EX / ex / "dna.fasta"), "-o", "o.fa",
+                            "-codontable", code, "--keep-going", "--report", "r.json"]
+                    run_py(d, args)
+                    py = json.loads((d / "r.json").read_text())
+                    subprocess.run([binary, *args], cwd=d, capture_output=True, timeout=60)
+                    cpp = json.loads((d / "r.json").read_text())
+                    self.assertEqual(cpp["hints"], py["hints"])
+                    hint = next(h for h in py["hints"] if h["code"] == "genetic_code")
+                    self.assertEqual(hint["suggested_codontable"], {"1": 2, "2": 1}[code])
 
 if __name__ == "__main__":
     unittest.main()

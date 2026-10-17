@@ -989,6 +989,12 @@ void RunReport::finish_impl(const RowsFn& rows, const DnaFn& dna, bool aborted) 
     std::stable_sort(tied.begin(), tied.end(), [&](int a, int b) {
         return std::make_pair(code_distance(table_, a), a) < std::make_pair(code_distance(table_, b), b);
     });
+    // CHANGED(PRE-4): the standard code 1 first when it is among the tied codes (as report.py)
+    bool standard = tied.size() > 1 && std::find(tied.begin(), tied.end(), 1) != tied.end();
+    if (standard) {
+        tied.erase(std::find(tied.begin(), tied.end(), 1));
+        tied.insert(tied.begin(), 1);
+    }
     int c = tied[0];
     long long nt = (long long)tested.size();
     std::string name = app_code_name(c);
@@ -1033,8 +1039,9 @@ void RunReport::finish_impl(const RowsFn& rows, const DnaFn& dna, bool aborted) 
         }
         bool closer = code_distance(table_, c) < code_distance(table_, tied[1]);
         text += std::string(" Code") + (tied.size() > 2 ? "s" : "") + " " + others + " fit" + (tied.size() > 2 ? "" : "s") + " " +
-                (closer ? "as well, but code " + C + " differs least from code " + T + "."
-                        : std::string("these sequences too: choose the code of the organism and organelle the genes come from."));
+                (standard ? std::string("as well, but code 1 is the standard code, used by most nuclear genes.")
+                 : closer ? "as well, but code " + C + " differs least from code " + T + "."
+                          : std::string("these sequences too: choose the code of the organism and organelle the genes come from."));
     }
     // CHANGED(ENG-UX-7): the summary line names the option; the report keeps the app's text (report.py)
     gc_hint_cli_ = text + " Re-run with -codontable " + C + ".";

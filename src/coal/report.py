@@ -588,6 +588,12 @@ class RunReport:
             return
         top = max(f for f, _ in results)
         tied = sorted((c for f, c in results if f == top), key=lambda c: (code_distance(self.table, c)[0], c))
+        # CHANGED(PRE-4): was always the tied code that differs least from the one used (one_broken_gene run with
+        # code 2: "code 4 ... Codes 1, 10, 11, 15, 16 and 6 fit as well"); now the standard code 1 when it is among
+        # them (by far the most common right answer for nuclear genes). See overnight/integration/CHANGES.md
+        standard = 1 in tied and len(tied) > 1
+        if standard:
+            tied = [1] + [x for x in tied if x != 1]
         c = tied[0]
         nt, total, table = len(tested), n, self.table
         name = APP_CODE_NAMES[c]
@@ -614,7 +620,8 @@ class RunReport:
                                   else [str(tied[1])])
             closer = code_distance(table, c)[0] < code_distance(table, tied[1])[0]
             text += (f" Code{'s' if len(tied) > 2 else ''} {others} fit{'' if len(tied) > 2 else 's'} "
-                     + (f"as well, but code {c} differs least from code {table}." if closer else
+                     + ("as well, but code 1 is the standard code, used by most nuclear genes." if standard else
+                        f"as well, but code {c} differs least from code {table}." if closer else
                         "these sequences too: choose the code of the organism and organelle the genes come from."))
         # CHANGED(ENG-UX-7): the summary line said "Re-run with code 2?" (the app's button wording); on the command line
         # it now names the option. The report keeps the app's text (the app shows its own button; contract
