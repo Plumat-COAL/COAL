@@ -426,10 +426,15 @@ def _parse_warning(line: str) -> tuple[str, dict] | None:
     if m:
         sid, nbad, nres, namb = m.groups()
         amb = f"; {namb} contain N or other ambiguous bases" if namb else ""
+        # CHANGED(R3-A2): was always "... and the right genetic code?"; when every checkable codon matches and the
+        # rest are ambiguous, the placement is fine and the code is not the problem. See overnight/integration/CHANGES.md
+        if namb and int(nbad) == 0:
+            ask = "Every codon COAL could check matches, so the placement looks right."
+        else:
+            ask = "Is this the right DNA for this protein, and the right genetic code?"
         return sid, {"code": "no_anchor",
                      "text": (f"No 10-residue stretch of the protein was found in the DNA, so codons were assigned "
-                              f"by position ({nbad} of {nres} checkable codons do not match{amb}). Is this the right "
-                              f"DNA for this protein, and the right genetic code?")}
+                              f"by position ({nbad} of {nres} checkable codons do not match{amb}). {ask}")}
     if _WARN_PAIRING.match(line):
         return None  # run-level; see pairing_warning()
     m = _WARN_ANY.match(line)
@@ -719,7 +724,10 @@ def genetic_code_hint(protein, dna, table, report, work_dir) -> dict | None:
     short time limit and all probes within PROBE_BUDGET seconds; every probe file is deleted afterwards."""
     import shutil
     seqs = report.get("sequences", [])
-    bad_ids = [s["id"] for s in seqs if s["status"] in ("warning", "failed")]
+    # CHANGED(R3-A2): was every warning gene; genes whose only problem is codons with unknown/ambiguous bases
+    # can't be fixed by another code, so they no longer take part. See overnight/integration/CHANGES.md
+    bad_ids = [s["id"] for s in seqs if s["status"] == "failed" or (s["status"] == "warning" and not all(
+        m.get("code") == "mismatch" and is_ambiguous_codon(m.get("codon")) for m in s.get("messages") or []))]
     if not seqs or not bad_ids:
         return None
     # sequences COAL never reached (it stopped at an error) may fit another code too
@@ -750,7 +758,8 @@ def genetic_code_hint(protein, dna, table, report, work_dir) -> dict | None:
                 os.remove(out)
             if code != 0:  # CHANGED(R2-A7): was (0, 2)
                 continue
-            warned = {w[0] for w in map(_parse_warning, err.splitlines()) if w}
+            warned = {w[0] for w in map(_parse_warning, err.splitlines())  # CHANGED(R3-A2): ambiguous don't count
+                      if w and not (w[1].get("code") == "mismatch" and is_ambiguous_codon(w[1].get("codon")))}
             fixed = sum(1 for i in sample if i not in warned)
             if best is None or fixed > best[1]:
                 best = (c, fixed)
@@ -793,12 +802,15 @@ def mismatch_probe(protein, dna, table, keep_going, report, work_dir) -> dict:
         return report
     per: dict[str, list[dict]] = {}
     cols: set[int] = set()
+    real_cols: set[int] = set()  # CHANGED(R3-A2): columns with at least one definite (A/C/G/T) mismatch
     for line in err.splitlines():
         w = _parse_warning(line)
         if w and w[1].get("code") == "mismatch":
             m = dict(w[1], removed=True)
             per.setdefault(w[0], []).append(m)
             cols.add(m["column"])
+            if not is_ambiguous_codon(m.get("codon")):
+                real_cols.add(m["column"])
     for sq in report.get("sequences", []):
         mm = per.get(sq["id"])
         if mm and sq["status"] in ("ok", "warning"):
@@ -808,6 +820,7 @@ def mismatch_probe(protein, dna, table, keep_going, report, work_dir) -> dict:
     for k in ("ok", "warning"):
         summ[k] = sum(1 for x in report.get("sequences", []) if x["status"] == k)
     summ["columns_removed"] = len(cols)
+    summ["columns_removed_ambiguous"] = len(cols - real_cols)  # CHANGED(R3-A2)
     return report
 
 
@@ -946,18 +959,40 @@ def _mismatch_sentence(msgs: list[dict]) -> str:
     return _mm_sentence(mm) + (" " + others if others else "")
 
 
+def is_ambiguous_codon(codon) -> bool:
+    """True if a codon has a base other than A/C/G/T(U) (N, IUPAC codes, ...): COAL can't check it."""
+    return bool(codon) and bool(str(codon).upper().replace("U", "T").strip("ACGT"))
+
+
 def _mm_sentence(mm: list[dict]) -> str:
-    first = mm[0]
-    n = len(mm)
-    where = f" (first at column {first['column']})" if first.get("column") else ""
-    detail = ""
-    if first.get("residue") and first.get("codon"):
-        detail = f": the protein says {first['residue']} but the DNA has {first['codon']}"
-    # CHANGED(R2-A1): mismatches found by the -nomismatch probe say their columns were removed
-    fate = ("Those columns were removed from the alignment (-nomismatch)" if first.get("removed")
-            else "Kept in the alignment")
-    return (f"{n} codon{'s' if n != 1 else ''} {'do' if n != 1 else 'does'} not match "
-            f"{'their' if n != 1 else 'its'} amino acid{where}{detail}. {fate}; check the genetic code.")
+    # CHANGED(R3-A2): was every mismatch explained as a genetic-code problem ("55 codons do not match ... the DNA
+    # has NNN ... check the genetic code"); now codons with unknown/ambiguous bases get their own sentence and
+    # no genetic-code advice. See overnight/integration/CHANGES.md
+    amb = [m for m in mm if is_ambiguous_codon(m.get("codon"))]
+    real = [m for m in mm if not is_ambiguous_codon(m.get("codon"))]
+    removed = any(m.get("removed") for m in mm)
+    out = []
+    if real:
+        first, n = real[0], len(real)
+        where = f" (first at column {first['column']})" if first.get("column") else ""
+        detail = ""
+        if first.get("residue") and first.get("codon"):
+            detail = f": the protein says {first['residue']} but the DNA has {first['codon']}"
+        # CHANGED(R2-A1): mismatches found by the -nomismatch probe say their columns were removed
+        fate = ("Those columns were removed from the alignment (-nomismatch)" if first.get("removed")
+                else "Kept in the alignment")
+        out.append(f"{n} codon{'s' if n != 1 else ''} {'do' if n != 1 else 'does'} not match "
+                   f"{'their' if n != 1 else 'its'} amino acid{where}{detail}. {fate}; check the genetic code.")
+    if amb:
+        first, n = amb[0], len(amb)
+        where = f" (first at column {first['column']}: {first['codon']})" if first.get("column") else ""
+        fate = ("Those columns were removed from the alignment (-nomismatch)." if removed
+                else "Kept in the alignment.")
+        out.append(f"{n} codon{'s' if n != 1 else ''} {'contain' if n != 1 else 'contains'} unknown or ambiguous "
+                   f"bases (e.g. N){where}, so COAL could not check {'them' if n != 1 else 'it'} against the "
+                   f"protein. {fate} This is missing sequence data (masked or low-coverage DNA), not a "
+                   f"genetic-code problem.")
+    return " ".join(out)
 
 
 _FAIL_SENTENCES = {
@@ -1065,8 +1100,18 @@ def summary_sentence(report: dict) -> str:
     text = f"{total} sequence{'s' if total != 1 else ''}: " + ", ".join(parts) + "."
     if s.get("columns_removed"):  # CHANGED(R2-A1): say how much -nomismatch removed
         n = s["columns_removed"]
-        text += (f" {n} codon column{'s were' if n != 1 else ' was'} removed because "
-                 f"{'they' if n != 1 else 'it'} didn't match (-nomismatch).")
+        # CHANGED(R3-A2): was always "because they didn't match"; columns removed only for codons with unknown or
+        # ambiguous bases are now named as such. See overnight/integration/CHANGES.md
+        a = int(s.get("columns_removed_ambiguous") or 0)
+        if a >= n:
+            why = (f"{'they' if n != 1 else 'it'} had codons with unknown or ambiguous bases (e.g. N) that COAL "
+                   f"could not check")
+        elif a:
+            why = (f"{'they' if n != 1 else 'it'} didn't match ({a} of them only because of codons with unknown or "
+                   f"ambiguous bases, e.g. N)")
+        else:
+            why = f"{'they' if n != 1 else 'it'} didn't match"
+        text += f" {n} codon column{'s were' if n != 1 else ' was'} removed because {why} (-nomismatch)."
     return text
 
 

@@ -172,6 +172,63 @@ class TestR3A1ReadersMirrorEngine(RunsDirCase):  # R3-A1
                 self.assertNotIn("Of 0 sequences", r["methods_text"])
 
 
+def _masked_files(d, frac=0.55, n=100, seed=7):
+    """One gene with `frac` of its codons NNN (correctly placed) plus one clean gene."""
+    import random
+    from coal_app import gcode
+    sense = sorted(c for c in (a + b + e for a in "TCAG" for b in "TCAG" for e in "TCAG")
+                   if gcode.translate(c, 1) not in ("*", "M"))
+    rng = random.Random(seed)
+    cod = ["ATG"] + [rng.choice(sense) for _ in range(n - 1)]
+    prot = "".join(gcode.translate(c, 1) for c in cod)
+    for i in rng.sample(range(1, n), int(frac * n)):
+        cod[i] = "NNN"
+    p, q = os.path.join(d, "p.fa"), os.path.join(d, "n.fa")
+    with open(p, "w", encoding="utf-8") as fh:
+        fh.write(f">masked\n{prot}\n>clean\nMKVAL{'-' * (n - 5)}\n")
+    with open(q, "w", encoding="utf-8") as fh:
+        fh.write(f">masked\n{''.join(cod)}\n>clean\nATGAAAGTTGCTCTG\n")
+    return p, q, int(frac * n)
+
+
+class TestR3A2AmbiguousCodons(RunsDirCase):  # R3-A2
+    def test_nnn_codons_are_not_called_a_genetic_code_problem(self):
+        p, q, k = _masked_files(self.tmp())
+        r = tools.codon_align(p, q)
+        self.assertTrue(r["ok"], r.get("error"))
+        prob = next(x for x in r["problems"] if x["id"] == "masked")
+        self.assertIn("unknown or ambiguous bases", prob["explanation"])
+        self.assertIn(f"{k} codons", prob["explanation"])
+        self.assertNotIn("genetic code", prob["explanation"])
+        self.assertNotIn("do not match their amino acid", prob["explanation"])
+        self.assertFalse([h for h in r["hints"] if h.get("code") == "genetic_code"], r["hints"])
+
+    def test_nomismatch_says_why_columns_were_removed(self):
+        p, q, k = _masked_files(self.tmp())
+        r = tools.codon_align(p, q, nomismatch=True)
+        self.assertTrue(r["ok"], r.get("error"))
+        self.assertIn(f"{k} codon columns were removed", r["summary_text"])
+        self.assertIn("unknown or ambiguous bases", r["summary_text"])
+        self.assertNotIn("because they didn't match", r["summary_text"])
+        prob = next(x for x in r["problems"] if x["id"] == "masked")
+        self.assertIn("removed", prob["explanation"])
+        self.assertNotIn("genetic code", prob["explanation"])
+
+    def test_mixed_definite_and_ambiguous(self):
+        msgs = [{"code": "mismatch", "column": 3, "residue": "G", "codon": "NNN"},
+                {"code": "mismatch", "column": 7, "residue": "W", "codon": "TGA"}]
+        text = core.sequence_sentence({"status": "warning", "messages": msgs})
+        self.assertIn("1 codon does not match its amino acid (first at column 7", text)
+        self.assertIn("1 codon contains unknown or ambiguous bases", text)
+        self.assertIn("genetic code", text)
+
+    def test_real_mismatches_keep_the_genetic_code_wording(self):  # mito example under code 1
+        p, d = core.example_paths("mito")
+        r = tools.codon_align(p, d, codontable=1)
+        self.assertTrue(any(h.get("suggested_codontable") == 2 for h in r["hints"]), r["hints"])
+        self.assertTrue(all("genetic code" in x["explanation"] for x in r["problems"]))
+
+
 class TestR3E1AppParsesNewNotice(unittest.TestCase):  # R3-E1
     def test_new_notice_with_ambiguous_count(self):
         line = ("coal: warning: g: no 10-residue segment of the protein was found in the DNA; codons were assigned "
