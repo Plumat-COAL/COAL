@@ -648,10 +648,10 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                     _test_pause(ck.count)
             if prog and prog.printed:
                 prog.update(done, final=True)
-            if rec is not None:
-                rec.finish(rows, dna, pairing)
             if keep_going and skipped == nseq:
                 raise CoalError(f"none of the {nseq} sequences could be converted", code="all_failed")
+            if rec is not None:
+                rec.finish(rows, dna, pairing)
             if two_pass:
                 if block_cols:  # CHANGED(DEC-4): -blockonly drops the columns not marked '#'
                     drop.update(i for i in range(ncol) if mask[i:i + 1] != "#")
@@ -709,7 +709,7 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
         except CoalError:
             failed = True  # a real error: nothing to resume
             if rec is not None and not rec.finished:
-                rec.finish(rows, dna, pairing)
+                rec.finish(rows, dna, pairing, aborted=True)
             raise
         finally:
             for f in (tmp, stage, entries_fh):

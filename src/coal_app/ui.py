@@ -73,9 +73,11 @@ def _hint_parts(report):
 
 
 def _results(report, output_path, report_path, coal_cmd, pal2nal_cmd, stderr, banner,
-             view_html="", view_path=None):
+             view_html="", view_path=None, view_ok=False):
     hint_md, hint_btn, code = _hint_parts(report)
-    cmds = f"# COAL\n{coal_cmd}\n\n# Same run with PAL2NAL\n{pal2nal_cmd}"
+    # CHANGED(FIN-A5/FIN-C8): was "# Same run with PAL2NAL" (not the same run with -nogap and another code); now
+    # "Closest PAL2NAL v14 command" with the caveats. See overnight/integration/CHANGES.md
+    cmds = core.commands_text(coal_cmd, pal2nal_cmd, (report or {}).get("options") or {})
     return (
         gr.update(value=banner),
         hint_md,
@@ -83,7 +85,7 @@ def _results(report, output_path, report_path, coal_cmd, pal2nal_cmd, stderr, ba
         code,
         gr.update(value=output_path, visible=bool(output_path)),
         gr.update(value=report_path, visible=bool(report_path)),
-        gr.update(value=core.health_table_html(report, links=bool(view_html))),
+        gr.update(value=core.health_table_html(report, links=view_ok)),  # CHANGED(FIN-A4): only if the view rendered
         gr.update(value=cmds),
         gr.update(value=stderr or "(no messages)"),
         gr.update(value=view_html or "<p>Run COAL to see the alignment here.</p>"),
@@ -93,7 +95,7 @@ def _results(report, output_path, report_path, coal_cmd, pal2nal_cmd, stderr, ba
     )
 
 
-def run_ui(protein, dna, fmt, code, nogap, nomismatch, protein_path="", dna_path=""):
+def run_ui(protein, dna, fmt, code, nogap, nomismatch, protein_path="", dna_path="", strict=False, blockonly=False):
     # CHANGED(APP-L1): was uploads only; now a typed/pasted path (local only) wins over an upload and is read
     # in place, never copied. See overnight/app/CHANGES.md
     try:
@@ -108,7 +110,9 @@ def run_ui(protein, dna, fmt, code, nogap, nomismatch, protein_path="", dna_path
                         f"### ⚠ Please add both files\n{how}, or press one of the **Try an example** buttons.")
     out_dir = core.new_run_dir()  # CHANGED(APP-12): runs older than 24 h are pruned
     try:
-        r = core.run_coal(protein, dna, fmt, int(code), bool(nogap), bool(nomismatch), out_dir=out_dir)
+        # CHANGED(FIN-A6): strict and blockonly options (the app advised --strict but had no way to use it)
+        r = core.run_coal(protein, dna, fmt, int(code), bool(nogap), bool(nomismatch), out_dir=out_dir,
+                          strict=bool(strict), blockonly=bool(blockonly))
     except ValueError as e:
         return _results({}, None, None, "", "", str(e), f"### ✖ Could not run\n{e}")
     s = r.report.get("summary", {})
@@ -116,14 +120,18 @@ def run_ui(protein, dna, fmt, code, nogap, nomismatch, protein_path="", dna_path
     # CHANGED(R3-A5): was no file names in the banner; now it says which files were used (path box or upload).
     # See overnight/integration/CHANGES.md
     banner = f"{head}\n{core.summary_sentence(r.report)}\n\nFiles used: protein {p_desc}; DNA {d_desc}."
-    view_html, view_path = "", None
+    view_html, view_path, view_ok = "", None, False
     try:
         # CHANGED(R2-A3): was viewer.view twice (fragment + page); now rendered once
         view_html, view_path = viewer.render_run(protein, r.output_path, r.report, dna, int(code), out_dir)
+        view_ok = True
     except (OSError, ValueError) as e:
-        view_html = f"<p>Could not draw the alignment: {e}</p>"
+        # CHANGED(FIN-A4): was the full server path in the message; now file names only
+        import html as _html
+        view_html = ("<p>Could not draw the alignment: "
+                     f"{_html.escape(core.public_error(e, [protein, dna, r.output_path, out_dir]))}</p>")
     return _results(r.report, r.output_path, r.report_path, r.coal_cmd, r.pal2nal_cmd, r.stderr, banner,
-                    view_html, view_path)
+                    view_html, view_path, view_ok)
 
 
 def _clear_path(_upload):
@@ -173,6 +181,11 @@ def build(demo_mode: bool = False) -> gr.Blocks:
                                 info="Drop columns with a gap or stop codon in any sequence.")
             nomismatch = gr.Checkbox(label="Remove mismatched columns (-nomismatch)",
                                      info="Drop columns where a codon doesn't match its amino acid.")
+        with gr.Row():  # CHANGED(FIN-A6): new options
+            strict = gr.Checkbox(label="Refuse probably-wrong genes (--strict)",
+                                 info="Stop with an error instead of writing genes whose DNA is probably wrong.")
+            blockonly = gr.Checkbox(label="Keep only '#'-marked columns (-blockonly)",
+                                    info="CLUSTAL input with '#' marks under the blocks (e.g. Gblocks positions).")
         run_btn = gr.Button("Make codon alignment", variant="primary")
 
         with gr.Row():
@@ -201,7 +214,7 @@ def build(demo_mode: bool = False) -> gr.Blocks:
             gr.Markdown(GLOSSARY)
 
         outputs = [banner, hint_md, hint_btn, hint_code, dl_out, dl_rep, table, cmds, raw, view, dl_view, methods]
-        inputs = [protein, dna, fmt, code, nogap, nomismatch, protein_path, dna_path]
+        inputs = [protein, dna, fmt, code, nogap, nomismatch, protein_path, dna_path, strict, blockonly]
         run_btn.click(run_ui, inputs, outputs, show_api=False)
         protein_path.change(core.path_status, protein_path, protein_info, show_api=False)
         dna_path.change(core.path_status, dna_path, dna_info, show_api=False)

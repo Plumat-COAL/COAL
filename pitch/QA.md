@@ -5,14 +5,14 @@ Judges: Apheris, PDBe, the Ellison Institute, CuspAI, Inherent, UCL. Rule: if a 
 isn't in (the engine-fixes branch is already merged). <!-- CHANGED(R2-D12): was "[after merge]" -->
 
 **1. How do you know it's correct on my data?**
-We compared COAL with PAL2NAL v14's real output on 38 hand-made inputs covering every behaviour we found
+We compared COAL with PAL2NAL v14's real output on 39 hand-made inputs covering every behaviour we found
 (UTRs, frameshift codes, all 17 genetic codes, ambiguous bases, ID mismatches): 285 checks on 39 hand-made
 inputs, in all four output formats. 238 compare COAL's output with PAL2NAL's byte for byte, and 234 of those also
 compare the warnings; 24 check that COAL rejects the inputs PAL2NAL fails on (exit code only, not the message); 23 are
 documented, deliberate differences (14 of them `-nogap` with another genetic code: COAL removes that code's stop codons) <!-- CHANGED(FZ-5): was 246/240/9 -->, where we check COAL's own behaviour instead. On every change, CI also runs both
 tools on 3,000 random inputs x 4 formats (wrong DNA, masked genes, UTRs, frameshifts, every genetic code, -nogap,
 -nomismatch, -blockonly): identical apart from the documented differences. <!-- CHANGED(DEC-4): was 165/147/141/12/6 -->
-In one sentence: COAL is byte-identical to PAL2NAL v14 on well-formed input: all 285 stored reference checks pass (238 byte-identical, 24 where both tools fail, 23 documented deliberate differences), and in 20,000 random comparisons (5,000 cases x 4 output formats) and 6,000 independent stratified cases every difference from PAL2NAL is a documented, deliberate one, where PAL2NAL silently produces wrong or malformed output; 0 undocumented differences. <!-- CHANGED(FZ-claim) -->
+In one sentence: COAL's output is identical to PAL2NAL v14's except for a short list of documented, deliberate differences (newer NCBI genetic-code tables for codes 3, 10, 11 and 13; `-nogap` removing the selected code's stop codons; the selected code's start codons for the first Met; pairing by IDs that match only after normalising where PAL2NAL v14's file order would give a protein another gene's DNA; and inputs where PAL2NAL v14 writes malformed output or fails). Tested: all 285 stored reference checks pass (238 byte-identical, 4 of them with deliberately different warnings; 24 where both tools fail; 23 deliberate output or exit-status differences: 6 deliberate errors, 3 different outputs, 14 `-nogap` checks with a non-standard code), and in 20,000 random comparisons with the real PAL2NAL v14 (5,000 cases x 4 output formats) 13,826 were byte-identical, 4,681 both failed and 1,493 were deliberate differences, each checked to be exactly the documented change; 0 unexplained differences. <!-- CHANGED(FIN-C2/FIN-C3/FIN-C10/FIN-C20): was the "byte-identical ... (well-formed input)" claim, "every difference is one where PAL2NAL silently produces wrong output" and a 6,000-case run not reproducible from the repo; now the documented exceptions and the FIN-C10 fuzz numbers --> <!-- CHANGED(FZ-claim) -->
 On your data, COAL checks every
 <!-- CHANGED(R2-D2): was 143 / 94 / 10; guarded by tests_app/test_docs_numbers.py -->
 codon against its amino acid and tells you per gene if it doesn't fit, with the column, so problems can't
@@ -32,7 +32,8 @@ instead of silent.
 Built today: wrong genetic code -> COAL tests other codes and suggests the one that fits (one-click re-run
 in the GUI). A frameshift -> the gene and column are named and shown in the alignment view. Invalid
 characters -> a clear error (PAL2NAL silently drops a codon). DNA that doesn't belong to the protein -> the same
-output as PAL2NAL (it never refuses), plus a plain warning naming the gene, and the GUI marks it failed;
+output as PAL2NAL v14 where PAL2NAL writes one (it refuses only some short or frameshifted genes, with
+"inconsistency"), plus <!-- CHANGED(FIN-C17): was "(it never refuses)" --> a plain warning naming the gene, and the GUI marks it failed;
 `--strict` makes it an error instead. <!-- CHANGED(DEC-1): new sentence --> Protein IDs like AT1G01010.1 vs DNA IDs
 AT1G01010 -> COAL explains the mismatch. Errors give a non-zero exit code. **[after the C++/formats branch is merged]** IDs matched
 after removing version suffixes, and `--keep-going` so one bad gene doesn't stop the rest.
@@ -41,7 +42,8 @@ after removing version suffixes, and `--keep-going` so one bad gene doesn't stop
 It works, and we treat it as the reference. But it always exits 0 even on errors, prints cryptic messages,
 is a Perl script (or a web form that takes one alignment at a time and can't be used from a pipeline), and
 explains nothing to bench scientists or AI agents. COAL
-accepts PAL2NAL's options and writes all four of its output formats byte for byte, and the drop-in `pal2nal`
+accepts PAL2NAL's options and writes all four of its output formats as PAL2NAL v14 does, byte for byte apart from
+the documented differences, and the drop-in `pal2nal` <!-- CHANGED(FIN-C3): was "byte for byte" without the exceptions -->
 command defaults to clustal like PAL2NAL, so an unchanged PAL2NAL command line works: a pipeline switches by changing
 the command name. <!-- CHANGED(DEC-4): was "pipelines that rely on PAL2NAL's default clustal output must add
 -output fasta" --> PAL2NAL is GPL; COAL is an independent MIT implementation and contains none of its code.
@@ -54,7 +56,7 @@ writes codeml's input directly. <!-- CHANGED(DEC-4): PAML output was "[after the
 
 **6. Is this AI-generated code you can't maintain?**
 Much of it was written with AI assistance (Claude), and we say so. What makes it maintainable is the
-same as for any code: about 3,000 lines of dependency-free Python in the engine and 2,600 in the app
+same as for any code: about 3,100 lines of dependency-free Python in the engine and 2,600 in the app
 layer, a differential test suite against PAL2NAL's real output, more than 200 app tests, CI on Windows, macOS
 and Linux (all green in run 39006043852, including the GUI tests against real Gradio on Windows; still open the
 latest GitHub Actions run before you say "green"), and documented decisions (every deliberate difference from PAL2NAL is written down with its test).
@@ -62,7 +64,7 @@ latest GitHub Actions run before you say "green"), and documented decisions (eve
 <!-- CHANGED(R2-D2, R2-D3): was "about 1,050 lines ... 2,150 ... 115 app tests ... green on the app branch; the new GUI and MCP jobs have not run yet" (both false). See overnight/integration/CHANGES.md -->
 <!-- CHANGED(R3-D4b): app test count 140 -> 170 (round 3 added tests; the docs guard requires it). See overnight/integration/CHANGES.md -->
 <!-- CHANGED(DEC-4): engine line count 1,300 -> 1,550 (output formats; the docs guard requires it). See overnight/integration/CHANGES.md -->
-<!-- CHANGED(MRG-2..4): engine line count 1,550 -> 3,000 (run report, keep-going, resume, progress from the merged branch) -->
+<!-- CHANGED(MRG-2..4): engine line count 1,550 -> 3,100 (run report, keep-going, resume, progress from the merged branch) -->
 *[Team: say who reviewed which parts. Only claim review you actually did.]*
 
 **7. How will this be maintained after the weekend?**

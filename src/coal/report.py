@@ -29,8 +29,7 @@ from .tables import SUPPORTED, get_code
 
 SCHEMA = "coal.report/1"
 REPO_URL = "https://github.com/plumat-coal/COAL"  # CHANGED(MRG-2): was github.com/chloe-newt/COAL (WEB-7)
-HINT_ALL_MAX = 2000        # up to this many sequences, the genetic-code hint re-tests every sequence
-HINT_SAMPLE = 200          # above it: this many problem sequences + this many others
+HINT_SAMPLE = 200          # the genetic-code hint re-tests at most this many sequences, problem genes first (app)
 
 # Names inside a sentence: common words lower case, genus names capitalised as NCBI writes them (FIN-C11)
 CODE_NAMES = {
@@ -99,7 +98,7 @@ def notice_message(pid: str, n: str) -> dict:
                 "text": (f"{nbad} of the {nchk} codons COAL could check do not match this protein, so this is "
                          f"almost certainly the wrong DNA for it (or the wrong genetic code). COAL still wrote "
                          f"its row, codon by position, as PAL2NAL does: do not trust it. Run COAL with --strict "
-                         f"to refuse such genes.")}
+                         f"(in the app: 'Refuse probably-wrong genes') to refuse such genes.")}
     m = _GUESS.match(rest)
     if m:
         nchk, nres, short = m.groups()
@@ -108,8 +107,8 @@ def notice_message(pid: str, n: str) -> dict:
         return {"code": "suspect_position",
                 "text": (f"{why}10-residue stretch of the protein was found in the DNA, so COAL cannot tell where "
                          f"the gene starts in the longer DNA. Its row was taken from the start of the DNA (as "
-                         f"PAL2NAL does) and may be shifted: do not trust it. Run COAL with --strict to refuse "
-                         f"such genes.")}
+                         f"PAL2NAL does) and may be shifted: do not trust it. Run COAL with --strict (in the app: "
+                         f"'Refuse probably-wrong genes') to refuse such genes.")}
     m = _NOANCHOR.match(rest)
     if m:
         nbad, nres, namb = m.groups()
@@ -141,6 +140,79 @@ def gene_kind(entry: dict) -> str:
             return "unchecked"
         return "other"
     return st
+
+
+# CHANGED(MRG-2b): the app's FIN-C4/C5/C6/C7/C9 rules (src/coal_app/core.py real_mismatches, _fixable, _fits_now,
+# _code_distance, annotate_mismatch_patterns, GENETIC_CODES), so the engine's report says what the app's would.
+APP_CODE_NAMES = {
+    1: "Standard (nuclear genes of most organisms)", 2: "Vertebrate mitochondrial", 3: "Yeast mitochondrial",
+    4: "Mold, protozoan and coelenterate mitochondrial; Mycoplasma", 5: "Invertebrate mitochondrial",
+    6: "Ciliate, dasycladacean and Hexamita nuclear", 9: "Echinoderm and flatworm mitochondrial",
+    10: "Euplotid nuclear", 11: "Bacterial, archaeal and plant plastid", 12: "Alternative yeast nuclear",
+    13: "Ascidian mitochondrial", 14: "Alternative flatworm mitochondrial", 15: "Blepharisma nuclear",
+    16: "Chlorophycean mitochondrial", 21: "Trematode mitochondrial", 22: "Scenedesmus obliquus mitochondrial",
+    23: "Thraustochytrium mitochondrial",
+}
+
+
+def real_mismatches(e: dict) -> list[dict]:
+    return [m for m in e.get("messages") or [] if m.get("code") == "mismatch" and not is_ambiguous_codon(m.get("codon"))]
+
+
+def fixable(e: dict) -> bool:
+    """A gene another genetic code might fix (the app's _fixable)."""
+    k = gene_kind(e)
+    if k == "mismatch":
+        return not any(m.get("code") == "possible_frameshift" for m in e.get("messages") or [])
+    if k == "flagged":
+        return any(m.get("code") == "suspect_unrelated" for m in e.get("messages") or []) or bool(real_mismatches(e))
+    if k == "not_checked":
+        written = any(m.get("code") == "not_written" for m in e.get("messages") or [])
+        return bool(real_mismatches(e)) if written else True
+    return k == "excluded"
+
+
+def code_distance(a: int, b: int) -> tuple[int, int]:
+    ca, cb = get_code(a), get_code(b)
+    return (sum(ca.code[x] != cb.code[x] for x in ca.code), len(ca.starts ^ cb.starts))
+
+
+def annotate_mismatch_pattern(row: str, e: dict) -> None:
+    """The app's annotate_mismatch_patterns for one gene: a first-Met-only mismatch gets start_codon = True; a dense
+    run of definite mismatches gets a possible_frameshift message."""
+    index, k = {}, 0
+    for c, ch in enumerate(row, 1):
+        if ch not in "-.":
+            index[c] = k
+            k += 1
+    mm = real_mismatches(e)
+    idx = sorted({index[m["column"]] for m in mm if m.get("column") in index})
+    if not idx:
+        return
+    if idx == [0] and all(m.get("residue", "").upper() == "M" for m in mm):
+        for m in mm:
+            m["start_codon"] = True
+        return
+    runs, cur = [], [idx[0]]
+    for i in idx[1:]:
+        if i - cur[-1] <= 2:
+            cur.append(i)
+        else:
+            runs.append(cur)
+            cur = [i]
+    runs.append(cur)
+    best = max(runs, key=len)
+    span = best[-1] - best[0] + 1
+    to_end = best[-1] >= k - 2
+    if len(best) >= 3 and len(best) / span >= 0.6 and 2 * len(best) >= len(idx) and (to_end or len(best) >= 4):
+        col_of = {v: c for c, v in index.items()}
+        c0, c1 = col_of[best[0]], col_of[best[-1]]
+        where = "to the end of the gene" if to_end else f"up to column {c1}"
+        e.setdefault("messages", []).append({
+            "code": "possible_frameshift", "column": c0, "end_column": c1,
+            "text": (f"The mismatches form one run, from column {c0} {where}: this looks like a missing or extra "
+                     f"base (a frameshift) or a small insertion/deletion in the DNA near column {c0}, not a "
+                     f"genetic-code problem. Check the DNA there (a sequencing or assembly error?).")})
 
 
 # ------------------------------------------------------------------ where a failed gene breaks (app viewer rule)
@@ -415,129 +487,151 @@ class RunReport:
         self.resumed_from = completed
 
     # -------------------------------------------------- end of run (called inside the pipeline, inputs open)
-    def finish(self, rows, dna, pairing):
-        """Locate where failed genes break and compute the genetic-code hint, while the inputs are open.
-        rows: callable giving (id, prepared row) in input order; dna: the DnaIndex; pairing: DNA index per protein."""
+    def finish(self, rows, dna, pairing, aborted: bool = False):
+        """Locate where failed genes break, mark mismatch patterns and compute the genetic-code hint, while the
+        inputs are open. rows: callable giving (id, prepared row) in input order; dna: the DnaIndex; pairing: DNA
+        index per protein; aborted: the run stops with an error (no output)."""
         self.finished = True
         try:
-            self._finish(rows, dna, pairing)
+            self._finish(rows, dna, pairing, aborted)
         except Exception:  # noqa: BLE001 - extras must never hide the real result
             pass
 
-    def _finish(self, rows, dna, pairing):
-        from .core import CoalError, MISMATCH_WARNING, thread_one
+    def _finish(self, rows, dna, pairing, aborted):
+        from .core import CoalError, thread_one
         n = len(self.ids) if self.ids is not None else len(self.kinds)
-        kinds = self.kinds
-        failed = [k for k, e in self.entries.items() if e["status"] == "failed"
-                  and not any(isinstance(m.get("column"), int) for m in e["messages"])]
-        problems = sorted(k for k, ch in enumerate(kinds) if chr(ch) in "mfe"
-                          and not (chr(ch) == "e" and self.entries[k]["messages"][0]["code"] in ("invalid_protein",
-                                                                                                  "empty")))
-        if not failed and not problems:
+        failed = {k for k, e in self.entries.items() if e["status"] == "failed"
+                  and not any(isinstance(m.get("column"), int) for m in e["messages"])}
+        marks = {k for k, e in self.entries.items() if real_mismatches(e)}
+        need = set(sorted(failed)[:HINT_SAMPLE]) | marks
+        rowof = {}
+        if need:
+            for k, (pid, row) in enumerate(rows()):
+                if k in need:
+                    rowof[k] = row
+                    if k in failed:
+                        ev = break_event(row, dna.get(pairing[k]), self.table)
+                        if ev:
+                            self.entries[k]["messages"].insert(0, ev)
+                    if k in marks:
+                        annotate_mismatch_pattern(row, self.entries[k])
+        # CHANGED(MRG-2b): the app's FIN-A1/FIN-C4/FIN-C5 hint (src/coal_app/core.py genetic_code_hint), computed here
+        view = [self.entry_view(k, aborted) for k in range(n)]
+        problems = [k for k, e in enumerate(view) if fixable(e)]
+        if not problems:
             return
-        if n <= HINT_ALL_MAX:
-            test = list(range(n))
-        else:
-            others = [k for k, ch in enumerate(kinds) if chr(ch) == "o"][:HINT_SAMPLE]
-            test = sorted(set(problems[:HINT_SAMPLE]) | set(others))
-        want = set(test) | set(failed)
+        pset = set(problems)
+        tested = (problems + [k for k in range(n) if k not in pset])[:HINT_SAMPLE]
         data = {}
+        want = set(tested)
+        if not want:
+            return
         for k, (pid, row) in enumerate(rows()):
             if k in want:
                 data[k] = (pid, row, dna.get(pairing[k]))
             if len(data) == len(want):
                 break
-        for k in failed[:HINT_SAMPLE]:
-            ev = break_event(data[k][1], data[k][2], self.table)
-            if ev:
-                self.entries[k]["messages"].insert(0, ev)
-        if not problems:
-            return
-
-        def fits(t):
-            good = set()
-            for k in test:
+        def bad_under(c):
+            bad = set()
+            for k in tested:
                 pid, row, s = data[k]
                 try:
-                    it = thread_one(pid, row, s, t)
+                    it = thread_one(pid, row, s, c)
                 except CoalError:
+                    bad.add(k)  # (the app drops the whole code when one gene fails: --keep-going exits 2)
                     continue
-                if any(MISMATCH_WARNING in w and not is_ambiguous_codon(w.rsplit(" ", 1)[-1]) for w in it.warnings):
-                    continue
-                if any(": protein and DNA are probably unrelated" in x or ": position of the gene" in x
-                       for x in it.notices):
-                    continue
-                good.add(k)
-            return good
-        cur = fits(self.table)
-        res = {t: fits(t) for t in SUPPORTED if t != self.table}
-        if not res:
+                if any(_MISMATCH.match(w) and not is_ambiguous_codon(w.rsplit(" ", 1)[-1]) for w in it.warnings) or \
+                        any(notice_message(pid, x)["code"] in SUSPECT_CODES for x in it.notices):
+                    bad.add(k)
+            return bad
+        # fits under the code used: the same test (not the statuses; in a stopped run the genes never reached
+        # would otherwise count as fixed by any code)
+        bad_now = bad_under(self.table)
+        fits_now = sum(1 for k in tested if k not in bad_now)
+        results = []
+        for c in SUPPORTED:
+            if c == self.table:
+                continue
+            bad = bad_under(c)
+            fit = sum(1 for k in tested if k not in bad)
+            fixed = sum(1 for k in problems if k in bad_now and k not in bad)
+            if fixed and fit > fits_now:
+                results.append((fit, c))
+        if not results:
             return
-        top = max(len(v) for v in res.values())
-        if top <= len(cur):
-            return
-        tested_problems = [k for k in test if k in set(problems)]
-        tied = sorted(t for t, v in res.items() if len(v) == top)
-        best = tied[0]
-        if 11 in tied and len(tied) > 1 and self._start_only(tested_problems):
-            best = 11
-        fixed = len(res[best] & set(tested_problems))
-        if 2 * fixed < len(tested_problems):
-            return
-        k, c, total = top, len(cur), len(test)
-        allof = len(test) == n
-        if allof:
-            got = f"all {_n(total)} sequences match" if k == total else f"{_n(k)} of the {_n(total)} sequences match"
-            now = "none do" if c == 0 else f"{'only ' if c * 2 < total else ''}{_n(c)} {'does' if c == 1 else 'do'}"
-        else:
-            got = f"{_n(k)} of the {_n(total)} sequences tested (a sample of the {_n(n)}) match"
-            now = "none do" if c == 0 else f"{_n(c)} {'does' if c == 1 else 'do'}"
-        name = CODE_NAMES[best]
-        others = [t for t in tied if t != best]
-        also = ""
-        if others:
-            ts = [str(t) for t in others]
-            also = (f" Code{'s' if len(ts) > 1 else ''} {', '.join(ts[:-1]) + ' and ' + ts[-1] if len(ts) > 1 else ts[0]}"
-                    f" fit{'' if len(ts) > 1 else 's'} these sequences equally well.")
-        text = (f"With genetic code {best} ({name}), {got} their protein codon for codon; with code {self.table} "
-                f"({CODE_NAMES[self.table]}), the one used, {now}. Re-run with code {best} (-codontable {best})."
-                + also)
-        self.gc_hint = {"code": "genetic_code", "text": text, "suggested_codontable": best,
-                        "checked": total, "fit": k, "fit_current": c}
+        top = max(f for f, _ in results)
+        tied = sorted((c for f, c in results if f == top), key=lambda c: (code_distance(self.table, c)[0], c))
+        c = tied[0]
+        nt, total, table = len(tested), n, self.table
+        name = APP_CODE_NAMES[c]
 
-    def _start_only(self, problems) -> bool:
-        """True if every definite mismatch of the problem genes is at the gene's first residue (a start codon)."""
-        seen = False
-        for k in problems:
-            e = self.entries.get(k)
-            if e is None:
-                return False
-            mm = [m for m in e["messages"] if m.get("code") == "mismatch" and not is_ambiguous_codon(m.get("codon"))]
-            if not mm or e["status"] == "failed":
-                return False
-            firstcol = min(m["column"] for m in mm)
-            if any(m["column"] != firstcol for m in mm) or mm[0].get("residue", "").upper() != "M":
-                return False
-            seen = True
-        return seen
+        def do(k):
+            return "none do" if k == 0 else ("only 1 does" if k == 1 else f"{k} do")
+        if nt == total:
+            who = f"all {total} sequences match" if top == total else f"{top} of {total} sequences match"
+            text = f"Under genetic code {c} ({name}), {who} their protein; under code {table}, {do(fits_now)}."
+        else:
+            which = (f"a sample of the {len(problems)} with problems" if len(problems) >= nt
+                     else f"all {len(problems)} with problems, then others")
+            text = (f"COAL tested {nt} of the {total} sequences ({which}): under "
+                    f"genetic code {c} ({name}), {top} of them match their protein; under code {table}, "
+                    f"{do(fits_now)}.")
+        starts = [m for k in problems for m in real_mismatches(view[k])]
+        if starts and all(m.get("start_codon") for m in starts):
+            ex = starts[0]
+            text = (f"The only mismatches are at the first codon of {len(pset)} sequence{'s' if len(pset) != 1 else ''}"
+                    f" (for example {ex.get('codon')} where the protein starts with M): an alternative start codon, "
+                    f"which code {c} accepts. " + text)
+        if len(tied) > 1:
+            others = " and ".join([", ".join(str(x) for x in tied[1:-1]), str(tied[-1])] if len(tied) > 2
+                                  else [str(tied[1])])
+            closer = code_distance(table, c)[0] < code_distance(table, tied[1])[0]
+            text += (f" Code{'s' if len(tied) > 2 else ''} {others} fit{'' if len(tied) > 2 else 's'} "
+                     + (f"as well, but code {c} differs least from code {table}." if closer else
+                        "these sequences too: choose the code of the organism and organelle the genes come from."))
+        text += f" Re-run with code {c}?"
+        self.gc_hint = {"code": "genetic_code", "text": text, "suggested_codontable": c,
+                        "checked": nt, "fit": top, "fit_current": fits_now}
+
+    def entry_view(self, k: int, aborted: bool | None = None) -> dict:
+        """Sequence k as the report shows it. In a run that stopped at an error (no output), as the app's FIN-C7:
+        genes before the first failed gene are 'not_checked' with a 'not_written' message (and their own messages),
+        genes after it 'not_checked' with 'not_reached'; failed genes stay failed."""
+        if aborted is None:
+            aborted = self.output is None
+        e = self.entries.get(k)
+        if e is None:
+            pid = self.ids[k] if self.ids is not None else None
+            st = "ok" if k < len(self.kinds) and chr(self.kinds[k]) == "o" else "not_checked"
+            e = {"id": pid, "index": k, "dna_id": self._dna_of(k) if self.pairing else None,
+                 "pairing": self._pairing_of(k) if self.pairing else None, "status": st, "messages": []}
+        if not aborted or (k < len(self.kinds) and chr(self.kinds[k]) == "e"):
+            return e
+        ff = self._first_fail()
+        own = [m for m in e["messages"] if m.get("code") != "suspect_pairing"]
+        if ff is None:
+            msgs = []
+        elif k < ff:
+            msgs = [{"code": "not_written", "failed_id": self.entries[ff]["id"]}] + own
+        else:
+            msgs = [{"code": "not_reached", "failed_id": self.entries[ff]["id"]}]
+        return dict(e, status="not_checked", messages=msgs)
+
+    def _first_fail(self):
+        return next((k for k, ch in enumerate(self.kinds) if chr(ch) == "e"), None)
 
     # -------------------------------------------------- views
     def _all_entries(self) -> list[dict]:
         n = len(self.ids) if self.ids is not None else len(self.kinds)
-        out = []
-        for k in range(n):
-            e = self.entries.get(k)
-            if e is None:
-                pid = self.ids[k] if self.ids is not None else None
-                st = "ok" if k < len(self.kinds) and chr(self.kinds[k]) == "o" else "not_checked"
-                e = {"id": pid, "index": k, "dna_id": self._dna_of(k) if self.pairing else None,
-                     "pairing": self._pairing_of(k) if self.pairing else None, "status": st, "messages": []}
-            out.append(e)
-        return out
+        return [self.entry_view(k) for k in range(n)]
 
-    def counts(self) -> dict:
-        n = len(self.ids) if self.ids is not None else len(self.kinds)
+    def counts(self, entries=None) -> dict:
         c = dict.fromkeys(STATUSES, 0)
+        if entries is not None:
+            for e in entries:
+                c[e["status"]] += 1
+            return c
+        n = len(self.ids) if self.ids is not None else len(self.kinds)
         st = {"o": "ok", "m": "warning", "u": "warning", "x": "warning", "f": "failed", "e": "failed",
               "n": "not_checked"}
         for ch in self.kinds:
@@ -580,8 +674,9 @@ class RunReport:
             return [{"code": "id_mismatch",
                      "text": (f"The protein IDs don't exactly match the DNA IDs: they differ only by a version "
                               f"suffix (for example protein '{ex}' vs DNA '{dnorm[strip_version(ex)]}'). {verdict} "
-                              f"Remove the '.1'-style suffixes so the names match, or use a COAL version that "
-                              f"matches IDs after normalising them.")}]
+                              f"Rename the sequences so the IDs match exactly, for example by removing the '.1'-style "
+                              f"version suffixes from the protein alignment ('{ex}' -> '{strip_version(ex)}'), then "
+                              f"run again.")}]
         return [{"code": "id_mismatch",
                  "text": (f"{len(missing)} protein ID(s) were not found in the DNA file (for example "
                           f"'{missing[0]}'). {verdict} Check that both files describe the same genes, in the same "
@@ -739,7 +834,8 @@ class RunReport:
         return " ".join(parts)
 
     def to_dict(self, methods: bool = True) -> dict:
-        c = self.counts()
+        entries = self._all_entries()
+        c = self.counts(entries)
         n = len(self.ids) if self.ids is not None else len(self.kinds)
         inputs = [{"role": "protein", "path": self.pep, "sha256": sha256_file(self.pep),
                    "sequences": len(self.ids) if self.ids is not None else None}]
@@ -774,7 +870,7 @@ class RunReport:
             "summary": summary,
             "hints": self.hints(),
             "errors": list(self.errors),
-            "sequences": self._all_entries(),
+            "sequences": entries,
             "runtime_seconds": round(time.perf_counter() - self.t0, 3),
             "exit_code": self.exit_code,
         }

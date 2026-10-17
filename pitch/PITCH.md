@@ -42,11 +42,12 @@ browser to 125-150 %. Run "One broken gene" once beforehand so nothing is cold.
 | 1:30 | Scroll up, **Try an example: Mitochondrial genes** | "Now a classic mistake: mitochondrial genes run with the standard genetic code." |
 | 1:38 | Point at the tip banner | "COAL notices that every gene fits the vertebrate mitochondrial code and offers to fix it." |
 | 1:45 | Click **Re-run with genetic code 2** | "One click. Everything matches." |
-| 1:52 | Point at the methods box, click copy | "And it writes the methods sentence for your paper, plus the exact command for your pipeline, and the PAL2NAL equivalent." |
+| 1:52 | Point at the methods box, click copy | "And it writes the methods sentence for your paper, plus the exact command for your pipeline, and the closest PAL2NAL command." <!-- CHANGED(FIN-A5) --> |
 | 2:00 | (one sentence) | "AI assistants get the same thing through MCP: two tools, `codon_align` and `explain_report`." |
 
 On the current engine the broken-gene run stops at the bad gene ("COAL stopped: no alignment was written")
-and the other 19 show as "not checked". **[after the C++/formats branch is merged]** With `--keep-going` the same click writes the 19
+and the other 19 show as not written (the 13 before it: "this gene itself had no problem") or "not checked" (the 6
+after it). <!-- CHANGED(FIN-C7): was "the other 19 show as \"not checked\"" --> **[after the C++/formats branch is merged]** With `--keep-going` the same click writes the 19
 good genes and flags the one bad one; say "the other 19 are aligned" only if you see it on screen.
 
 ## 2:05-2:35 Proof
@@ -54,9 +55,9 @@ good genes and flags the one bad one; say "the other 19 are aligned" only if you
 <!-- CHANGED(R2-D2): was 143 / 94 / 10 (stale after the engine merge); now the harness's current counts, guarded by tests_app/test_docs_numbers.py. See overnight/integration/CHANGES.md -->
 - "Correctness: we test COAL against PAL2NAL version 14's own output: 285 checks on 39 hand-made inputs, in
   all four output formats. 238 compare the output byte for byte, and 234 of those also compare the warnings.
-  24 check that COAL rejects the inputs PAL2NAL fails on. 23 are documented, deliberate differences where
-  we think PAL2NAL is wrong, such as that dropped codon or `-nogap` ignoring the genetic code; for those we check COAL's own behaviour. And on every
-  change, CI runs both tools on 3,000 random inputs in every format. In short: COAL is byte-identical to PAL2NAL v14 on well-formed input: all 285 stored reference checks pass (238 byte-identical, 24 where both tools fail, 23 documented deliberate differences), and in 20,000 random comparisons (5,000 cases x 4 output formats) and 6,000 independent stratified cases every difference from PAL2NAL is a documented, deliberate one, where PAL2NAL silently produces wrong or malformed output; 0 undocumented differences." <!-- CHANGED(FZ-claim) --> <!-- CHANGED(DEC-4): was 165 / 147 / 141 / 12 / 6, FASTA only; fuzz sentence new --> <!-- CHANGED(FZ-5): 246/240/9 -> 232/228/23 -->
+  24 check that COAL rejects the inputs PAL2NAL fails on. 23 are documented, deliberate differences, such as that dropped codon, newer genetic-code tables or `-nogap` using
+  the chosen genetic code; for those we check COAL's own behaviour. <!-- CHANGED(FIN-C3): was "where we think PAL2NAL is wrong" (not true of every one) --> And on every
+  change, CI runs both tools on 3,000 random inputs in every format. In short: COAL's output is identical to PAL2NAL v14's except for a short list of documented, deliberate differences (newer NCBI genetic-code tables for codes 3, 10, 11 and 13; `-nogap` removing the selected code's stop codons; the selected code's start codons for the first Met; pairing by IDs that match only after normalising where PAL2NAL v14's file order would give a protein another gene's DNA; and inputs where PAL2NAL v14 writes malformed output or fails). Tested: all 285 stored reference checks pass (238 byte-identical, 4 of them with deliberately different warnings; 24 where both tools fail; 23 deliberate output or exit-status differences: 6 deliberate errors, 3 different outputs, 14 `-nogap` checks with a non-standard code), and in 20,000 random comparisons with the real PAL2NAL v14 (5,000 cases x 4 output formats) 13,826 were byte-identical, 4,681 both failed and 1,493 were deliberate differences, each checked to be exactly the documented change; 0 unexplained differences." <!-- CHANGED(FIN-C2/FIN-C3/FIN-C10/FIN-C20): was the "byte-identical ... (well-formed input)" claim, "every difference is one where PAL2NAL silently produces wrong output" and a 6,000-case run not reproducible from the repo; now the documented exceptions and the FIN-C10 fuzz numbers --> <!-- CHANGED(FZ-claim) --> <!-- CHANGED(DEC-4): was 165 / 147 / 141 / 12 / 6, FASTA only; fuzz sentence new --> <!-- CHANGED(FZ-5): 246/240/9 -> 232/228/23 -->
 - "Speed, measured on one Windows laptop, end to end: 100 genes of 10,000 codons, PAL2NAL 24.5 seconds,
   COAL 0.2 seconds, 119 times faster. Ten thousand genes: 25 seconds down to under one second.
   Half a million genes, nearly a gigabyte: 10 seconds with 4 processes, 25 on one. For tiny inputs both take about 0.05 seconds; we

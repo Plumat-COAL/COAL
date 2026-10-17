@@ -277,8 +277,10 @@ class TestSiteFiles(unittest.TestCase):
 
     def test_pal2nal_relationship_and_citation(self):
         """WEB-8: the qualified PAL2NAL wording, the licences and the reference."""
-        for must in ("On well-formed input COAL's output is identical to PAL2NAL's",
-                     "COAL deliberately differs and documents why", "GPL-2.0", "contains none of PAL2NAL's code",
+        # FIN-C3: was "On well-formed input COAL's output is identical to PAL2NAL's" / "COAL deliberately differs and
+        # documents why" (false claim); now the documented-exceptions wording
+        for must in ("COAL's output is identical to PAL2NAL v14's except for a short list of documented, deliberate "
+                     "differences", "GPL-2.0", "contains none of PAL2NAL's code",
                      "Suyama M, Torrents D, Bork P (2006)", "34:W609"):
             self.assertIn(must, self.index)
 

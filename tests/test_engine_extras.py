@@ -37,9 +37,10 @@ class TestSummaryHint(unittest.TestCase):
             write_genes(d, 40, table=2, mito=True, seed=9)
             rc, _, err = run(d, ["pep.fasta", "nuc.fasta", "-o", "o.fa", "--report", "r.json"])
             self.assertIn("coal: summary: 40 of 40 sequences have codons that do not match their amino acid (kept "
-                          "in the alignment). With genetic code 2 (vertebrate mitochondrial), all 40 sequences match "
-                          "their protein codon for codon; with code 1 (standard), the one used, none do. Re-run with "
-                          "code 2 (-codontable 2).", err)  # MRG-2: wording
+                          "in the alignment). Under genetic code 2 (Vertebrate mitochondrial), all 40 sequences match "
+                          "their protein; under code 1, none do. Codes 5 and 13 fit these sequences too: choose the "
+                          "code of the organism and organelle the genes come from. Re-run with code 2?", err)
+            # MRG-2/MRG-2b: the app's wording
             r = json.loads((d / "r.json").read_text())
             self.assertEqual(r["hints"][0]["suggested_codontable"], 2)
 

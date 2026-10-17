@@ -325,7 +325,8 @@ def _q(p: str) -> str:
 
 
 def coal_command(protein: str, dna: str, output_format="fasta", codontable=1, nogap=False,
-                 nomismatch=False, out="codon_aln.fasta", keep_going=False, report: str | None = None) -> str:
+                 nomismatch=False, out="codon_aln.fasta", keep_going=False, report: str | None = None,
+                 strict=False, blockonly=False) -> str:  # CHANGED(FIN-A6): strict, blockonly
     parts = ["coal", _q(protein), _q(dna)]
     if output_format != "fasta":
         parts += ["-output", output_format]
@@ -335,6 +336,10 @@ def coal_command(protein: str, dna: str, output_format="fasta", codontable=1, no
         parts.append("-nogap")
     if nomismatch:
         parts.append("-nomismatch")
+    if blockonly:
+        parts.append("-blockonly")
+    if strict:
+        parts.append("--strict")
     if keep_going:
         parts.append("--keep-going")
     if report:
@@ -344,7 +349,8 @@ def coal_command(protein: str, dna: str, output_format="fasta", codontable=1, no
 
 
 def pal2nal_command(protein: str, dna: str, output_format="fasta", codontable=1, nogap=False,
-                    nomismatch=False, out="codon_aln.fasta") -> str:
+                    nomismatch=False, out="codon_aln.fasta", blockonly=False) -> str:
+    """The closest PAL2NAL v14 command line (see pal2nal_caveats for when it is not the same run)."""
     parts = ["pal2nal.pl", _q(protein), _q(dna), "-output", output_format]
     if int(codontable) != 1:
         parts += ["-codontable", str(int(codontable))]
@@ -352,7 +358,38 @@ def pal2nal_command(protein: str, dna: str, output_format="fasta", codontable=1,
         parts.append("-nogap")
     if nomismatch:
         parts.append("-nomismatch")
+    if blockonly:  # CHANGED(FIN-A6)
+        parts.append("-blockonly")
     return " ".join(parts) + f" > {_q(out)}"
+
+
+def pal2nal_caveats(opts: dict) -> list[str]:
+    """CHANGED(FIN-A5/FIN-C8): new. When the closest PAL2NAL v14 command does not do the same as this COAL run.
+    See overnight/integration/CHANGES.md"""
+    n = int(opts.get("codontable") or 1)
+    out = []
+    old = {3: "accepts only ATA/ATG as start codons (current NCBI table 3 also GTG)",
+           10: "reads TGA as a stop codon (current NCBI table 10: Cys)",
+           11: "lacks the start codons ATT, ATC and ATA of the current NCBI table 11",
+           13: "lacks the start codon ATA of the current NCBI table 13"}
+    if n in old:
+        out.append(f"Genetic code {n}: PAL2NAL v14's table {old[n]}, so the two tools can differ (warnings, "
+                   f"and the columns removed by -nomismatch).")
+    if opts.get("nogap") and n != 1:
+        out.append("-nogap: PAL2NAL v14 removes the standard code's stop codons (TAA/TAG/TGA) whatever "
+                   "-codontable says, so its output differs from COAL's, which removes this code's stop codons.")
+    if opts.get("strict"):
+        out.append("--strict is COAL's own option: PAL2NAL v14 has no way to refuse probably-wrong genes.")
+    return out
+
+
+def commands_text(coal_cmd: str, pal2nal_cmd: str, opts: dict) -> str:
+    """CHANGED(FIN-A5/FIN-C8): new; was "# Same run with PAL2NAL" in ui.py, which was not the same run with -nogap
+    and another code. The command box of the GUI."""
+    cav = pal2nal_caveats(opts or {})
+    notes = "".join(f"# Note: {c}\n" for c in cav)
+    return (f"# COAL\n{coal_cmd}\n\n# Closest PAL2NAL v14 command (COAL's documented deliberate differences from "
+            f"PAL2NAL apply)\n{notes}{pal2nal_cmd}")
 
 
 # ---------------------------------------------------------------- running
@@ -435,13 +472,14 @@ def _parse_warning(line: str) -> tuple[str, dict] | None:
                      "text": (f"Column {col}: '{aa}'" + (f" ({what})" if what else "") + " is not one of the 20 "
                               f"standard amino acids, so COAL did not check its codon (any codon accepted).")}
     m = _WARN_UNRELATED.match(line)
+    # CHANGED(FIN-A6): the --strict advice now also names the app's option (the GUI and the MCP tool have it now)
     if m:  # CHANGED(DEC-1): new
         sid, nbad, nchk = m.groups()
         return sid, {"code": "suspect_unrelated",
                      "text": (f"{nbad} of the {nchk} codons COAL could check do not match this protein, so this is "
                               f"almost certainly the wrong DNA for it (or the wrong genetic code). COAL still wrote "
                               f"its row, codon by position, as PAL2NAL does: do not trust it. Run COAL with --strict "
-                              f"to refuse such genes.")}
+                              f"(in the app: 'Refuse probably-wrong genes') to refuse such genes.")}
     m = _WARN_GUESS.match(line)
     if m:  # CHANGED(DEC-1): new
         sid, nchk, nres, short = m.groups()
@@ -451,8 +489,8 @@ def _parse_warning(line: str) -> tuple[str, dict] | None:
                      "text": (f"{why}"
                               f"10-residue stretch of the protein was found in the DNA, so COAL cannot tell where "
                               f"the gene starts in the longer DNA. Its row was taken from the start of the DNA (as "
-                              f"PAL2NAL does) and may be shifted: do not trust it. Run COAL with --strict to refuse "
-                              f"such genes.")}
+                              f"PAL2NAL does) and may be shifted: do not trust it. Run COAL with --strict (in the app: "
+                              f"'Refuse probably-wrong genes') to refuse such genes.")}
     m = _WARN_NOANCHOR.match(line)
     if m:
         sid, nbad, nres, namb = m.groups()
@@ -492,7 +530,8 @@ def pairing_warning(line: str) -> dict | None:
 _EXT = {"fasta": "fasta", "clustal": "aln", "paml": "paml", "codon": "codon.txt"}
 
 
-def _run_engine(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, report_path, timeout=None):
+def _run_engine(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, report_path, timeout=None,
+                strict=False, blockonly=False):  # CHANGED(FIN-A6): strict, blockonly
     f = detect_features()
     timeout = timeout or ENGINE_TIMEOUT
     cmd = _coal_cmd() + ["-o", out, "-codontable", str(int(table))]
@@ -502,6 +541,10 @@ def _run_engine(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, re
         cmd.append("-nogap")
     if nomismatch:
         cmd.append("-nomismatch")
+    if blockonly:
+        cmd.append("-blockonly")
+    if strict:
+        cmd.append("--strict")
     if keep_going and f.keep_going:
         cmd.append("--keep-going")
     if report_path and f.report:
@@ -583,6 +626,15 @@ def run_engine_command(cmd: list, timeout: float, temp_dir: str | None = None) -
     return p.returncode, out, err
 
 
+def public_error(e, paths=()) -> str:
+    """CHANGED(FIN-A4): new. An error message for the user with every given path shown as its file name only (no
+    server folders, e.g. on the hosted Space). See overnight/integration/CHANGES.md"""
+    text = str(e)
+    for p in sorted((p for p in paths if p), key=len, reverse=True):
+        text = text.replace(p, os.path.basename(p))
+    return text
+
+
 def _classify_error(text: str) -> str:
     t = text.lower()
     if "inconsistent" in t or "no match" in t:
@@ -599,7 +651,7 @@ def _classify_error(text: str) -> str:
 
 
 def build_fallback_report(protein, dna, out, fmt, table, nogap, nomismatch, keep_going,
-                          code, stderr, runtime) -> dict:
+                          code, stderr, runtime, strict=False, blockonly=False) -> dict:
     """Build a coal.report/1 report from COAL's stderr (for engines without --report)."""
     try:
         pids = read_ids(protein)
@@ -649,6 +701,11 @@ def build_fallback_report(protein, dna, out, fmt, table, nogap, nomismatch, keep
         pairing = None  # COAL stopped before pairing anything (e.g. counts differ, unreadable input)
     keep_going = bool(keep_going and detect_features().keep_going)  # only what was really passed
     seqs = []
+    # CHANGED(FIN-C7): was "Not checked: COAL stopped at an earlier error" for every gene of a stopped run, also for
+    # the genes before the failing one (they were processed fine; their warnings were dropped). Now genes before it
+    # say "Not written ..." (with their own warnings) and genes after it name the failing gene.
+    # See overnight/integration/CHANGES.md
+    first_fail = next((i for i, p in enumerate(pids) if p in failed), None) if aborted else None
     for i, p in enumerate(pids):
         if pairing is None:
             d = None
@@ -670,6 +727,12 @@ def build_fallback_report(protein, dna, out, fmt, table, nogap, nomismatch, keep
             status, msgs = "failed", failed[p]
         elif aborted:
             status, msgs = "not_checked", []
+            if first_fail is not None:
+                fid = pids[first_fail]
+                if i < first_fail:
+                    msgs = [{"code": "not_written", "failed_id": fid}] + list(per.get(p) or [])
+                else:
+                    msgs = [{"code": "not_reached", "failed_id": fid}]
         elif any(m.get("code") in SUSPECT_CODES for m in msgs_p) or (  # CHANGED(DEC-1): probably wrong data
                 mispaired and any(m.get("code") == "mismatch" for m in msgs_p)):
             status = "failed"
@@ -686,10 +749,13 @@ def build_fallback_report(protein, dna, out, fmt, table, nogap, nomismatch, keep
         "schema": "coal.report/1",
         "coal_version": detect_features().version,
         "source": "coal_app (built from COAL's messages; this engine has no --report yet)",
-        "command": coal_command(protein, dna, fmt, table, nogap, nomismatch, out, keep_going),
-        "pal2nal_equivalent": pal2nal_command(protein, dna, fmt, table, nogap, nomismatch, out),
+        "command": coal_command(protein, dna, fmt, table, nogap, nomismatch, out, keep_going,
+                                strict=strict, blockonly=blockonly),
+        "pal2nal_equivalent": pal2nal_command(protein, dna, fmt, table, nogap, nomismatch, out, blockonly),
+        # CHANGED(FIN-A6): strict and blockonly are new option fields
         "options": {"output_format": fmt, "codontable": int(table), "nogap": bool(nogap),
-                    "nomismatch": bool(nomismatch), "keep_going": bool(keep_going)},
+                    "nomismatch": bool(nomismatch), "keep_going": bool(keep_going), "strict": bool(strict),
+                    "blockonly": bool(blockonly)},
         "inputs": [
             {"role": "protein", "path": protein, "sha256": _safe_sha(protein), "sequences": len(pids)},
             {"role": "dna", "path": dna, "sha256": _safe_sha(dna), "sequences": len(dids)},
@@ -756,8 +822,11 @@ def id_hints(protein: str, dna: str, report: dict | None = None) -> list[dict]:
         return [{"code": "id_mismatch",
                  "text": (f"The protein IDs don't exactly match the DNA IDs: they differ only by a version "
                           f"suffix (for example protein '{ex}' vs DNA '{dnorm[strip_version(ex)]}'). {verdict} "
-                          f"Remove the '.1'-style suffixes so the names match, or use a COAL version that "
-                          f"matches IDs after normalising them.")}]
+                          # CHANGED(FIN-C13): was "... or use a COAL version that matches IDs after normalising
+                          # them" (no such version exists); now concrete advice
+                          f"Rename the sequences so the IDs match exactly, for example by removing the '.1'-style "
+                          f"version suffixes from the protein alignment ('{ex}' -> '{strip_version(ex)}'), then "
+                          f"run again.")}]
     return [{"code": "id_mismatch",
              "text": (f"{len(missing)} protein ID(s) were not found in the DNA file (for example '{missing[0]}'). "
                       f"{verdict} Check that both files describe the same genes, in the same order.")}]
@@ -785,41 +854,125 @@ def _write_sample(protein, dna, ids, report, work_dir):
     return ps, ds
 
 
+def annotate_mismatch_patterns(protein: str, report: dict) -> None:
+    """CHANGED(FIN-C6/FIN-C9): new. Marks, in place, the mismatch patterns that are not a genetic-code question:
+    a gene whose only definite mismatch is its first Met gets m["start_codon"] = True; a gene whose definite mismatches
+    form a dense run (to the end of the gene, or a block of 4 or more) gets a "possible_frameshift" message (a missing
+    or extra base, or an indel, then in-frame again or the gene ends). See overnight/integration/CHANGES.md"""
+    want = {sq["id"]: sq for sq in report.get("sequences") or [] if real_mismatches(sq)}
+    if not want:
+        return
+    from .viewer import read_alignment
+    try:
+        rows = {i: r for i, r in read_alignment(protein) if i in want}
+    except (OSError, ValueError):
+        return
+    for sid, sq in want.items():
+        row = rows.get(sid)
+        if row is None:
+            continue
+        index, k = {}, 0  # alignment column (1-based) -> residue index in the gene
+        for c, ch in enumerate(row, 1):
+            if ch not in "-.":
+                index[c] = k
+                k += 1
+        mm = real_mismatches(sq)
+        idx = sorted({index[m["column"]] for m in mm if m.get("column") in index})
+        if not idx:
+            continue
+        if idx == [0] and all(m.get("residue", "").upper() == "M" for m in mm):
+            for m in mm:
+                m["start_codon"] = True
+            continue
+        runs, cur = [], [idx[0]]
+        for i in idx[1:]:
+            if i - cur[-1] <= 2:  # at most one matching codon in between
+                cur.append(i)
+            else:
+                runs.append(cur)
+                cur = [i]
+        runs.append(cur)
+        best = max(runs, key=len)
+        span = best[-1] - best[0] + 1
+        to_end = best[-1] >= k - 2
+        if len(best) >= 3 and len(best) / span >= 0.6 and 2 * len(best) >= len(idx) and (to_end or len(best) >= 4):
+            col_of = {v: c for c, v in index.items()}
+            c0, c1 = col_of[best[0]], col_of[best[-1]]
+            where = "to the end of the gene" if to_end else f"up to column {c1}"
+            sq.setdefault("messages", []).append({
+                "code": "possible_frameshift", "column": c0, "end_column": c1,
+                "text": (f"The mismatches form one run, from column {c0} {where}: this looks like a missing or extra "
+                         f"base (a frameshift) or a small insertion/deletion in the DNA near column {c0}, not a "
+                         f"genetic-code problem. Check the DNA there (a sequencing or assembly error?).")})
+
+
+def _code_distance(a: int, b: int) -> tuple[int, int]:
+    """(codons with a different amino acid, codons with a different start flag) between two genetic codes."""
+    from coal.tables import get_code
+    ca, cb = get_code(a), get_code(b)
+    return (sum(ca.code[x] != cb.code[x] for x in ca.code), len(ca.starts ^ cb.starts))
+
+
+def _fits_now(sq: dict) -> bool:
+    if sq.get("status") == "not_checked":  # FIN-C7: processed before the error, without a definite mismatch
+        return any(m.get("code") == "not_written" for m in sq.get("messages") or []) and not real_mismatches(sq)
+    return gene_kind(sq) in ("ok", "unchecked", "other")
+
+
+def _fixable(sq: dict) -> bool:
+    """A gene another genetic code might fix: definite mismatches (not a run that looks like a frameshift), probably
+    unrelated, excluded or never checked. Not: pairing-only, non-standard residues, ambiguous bases."""
+    k = gene_kind(sq)
+    if k == "mismatch":
+        return not any(m.get("code") == "possible_frameshift" for m in sq.get("messages") or [])
+    if k == "flagged":
+        return any(m.get("code") == "suspect_unrelated" for m in sq.get("messages") or []) or bool(
+            real_mismatches(sq))
+    if k == "not_checked":  # CHANGED(FIN-C7): a gene processed before the error is fixable only if it mismatched
+        written = any(m.get("code") == "not_written" for m in sq.get("messages") or [])
+        return bool(real_mismatches(sq)) if written else True
+    return k == "excluded"
+
+
 def genetic_code_hint(protein, dna, table, report, work_dir) -> dict | None:
     """If sequences have mismatches, see whether another genetic code fits more of them.
     CHANGED(APP-13): was 9 full-input engine runs (600 s limit each, probe files left behind); now as below.
-    See overnight/app/CHANGES.md.
+    CHANGED(FIN-A1/FIN-C4/FIN-C5/FIN-C6/FIN-C9): was every "warning" gene a problem gene (pairing-only, U/B/Z-only
+    and ambiguous-placement genes were "fixed" by any code: "All sequences fit code 4"), and the count assumed genes
+    fine under the current code stay fine ("All ..." although one gene broke). Now only genes with definite
+    mismatches (not a frameshift-like run), probably-unrelated, excluded or unchecked genes ask for a hint; every gene
+    (up to PROBE_SAMPLE, problem genes first) is re-run under each candidate code; a gene fits when it has no definite
+    mismatch and no probably-unrelated notice; the text says what was tested; ties go to the code closest to the
+    current one, and other codes that fit as well are named; a start-codon-only problem says so.
+    See overnight/integration/CHANGES.md
 
-    Each candidate code is tried on (at most PROBE_SAMPLE of) the problem sequences only, each probe with a
-    short time limit and all probes within PROBE_BUDGET seconds; every probe file is deleted afterwards."""
+    Each probe has a short time limit and all probes run within PROBE_BUDGET seconds; every probe file is deleted."""
     import shutil
     seqs = report.get("sequences", [])
-    # CHANGED(R3-A2): was every warning gene; genes whose only problem is codons with unknown/ambiguous bases
-    # can't be fixed by another code, so they no longer take part. See overnight/integration/CHANGES.md
-    bad_ids = [s["id"] for s in seqs if s["status"] == "failed" or (s["status"] == "warning" and not all(
-        m.get("code") == "mismatch" and is_ambiguous_codon(m.get("codon")) for m in s.get("messages") or []))]
-    if not seqs or not bad_ids:
+    problems = [sq["id"] for sq in seqs if _fixable(sq)]
+    if not seqs or not problems:
         return None
-    # sequences COAL never reached (it stopped at an error) may fit another code too
-    bad_ids += [s["id"] for s in seqs if s["status"] == "not_checked"]
     try:
         if os.path.getsize(protein) + os.path.getsize(dna) > 50_000_000:
             return None  # keep the GUI responsive on very big inputs
     except OSError:
         return None
-    sample = bad_ids[:PROBE_SAMPLE]
-    current_ok = sum(1 for s in seqs if s["status"] == "ok")
+    pset = set(problems)
+    tested = (problems + [sq["id"] for sq in seqs if sq["id"] not in pset])[:PROBE_SAMPLE]
+    tset = set(tested)
+    fits_now = sum(1 for sq in seqs if sq["id"] in tset and _fits_now(sq))
+    table = int(table)
     probe_dir = tempfile.mkdtemp(prefix="probe_", dir=work_dir)
-    best = None
+    results = []
     try:
-        files = _write_sample(protein, dna, sample, report, probe_dir)
+        files = _write_sample(protein, dna, tested, report, probe_dir)
         if files is None:
             return None
         ps, ds = files
         t_end = time.perf_counter() + PROBE_BUDGET
         for c in CANDIDATE_CODES:
             left = t_end - time.perf_counter()
-            if c == int(table) or left <= 1:
+            if c == table or left <= 1:
                 continue
             out = os.path.join(probe_dir, f"probe_{c}.fasta")
             code, err, _ = _run_engine(ps, ds, out, "fasta", c, False, False, True, None,
@@ -828,30 +981,54 @@ def genetic_code_hint(protein, dna, table, report, work_dir) -> dict | None:
                 os.remove(out)
             if code != 0:  # CHANGED(R2-A7): was (0, 2)
                 continue
-            warned = {w[0] for w in map(_parse_warning, err.splitlines())  # CHANGED(R3-A2): ambiguous don't count
-                      if w and not (w[1].get("code") == "mismatch" and is_ambiguous_codon(w[1].get("codon")))}
-            fixed = sum(1 for i in sample if i not in warned)
-            if best is None or fixed > best[1]:
-                best = (c, fixed)
+            bad = set()
+            for w in map(_parse_warning, err.splitlines()):
+                if w and ((w[1].get("code") == "mismatch" and not is_ambiguous_codon(w[1].get("codon")))
+                          or w[1].get("code") in SUSPECT_CODES):
+                    bad.add(w[0])
+            fit = sum(1 for i in tested if i not in bad)
+            fixed = sum(1 for i in problems if i in tset and i not in bad)
+            if fixed and fit > fits_now:
+                results.append((fit, c))
     finally:
         shutil.rmtree(probe_dir, ignore_errors=True)
-    if not best or best[1] == 0:
+    if not results:
         return None
-    c, fixed = best
-    if len(sample) == len(bad_ids):
-        n_ok = current_ok + fixed
-        most = "All" if n_ok == len(seqs) else ("Most" if n_ok * 2 > len(seqs) else f"{n_ok} of {len(seqs)}")
-        text = (f"{most} sequences fit genetic code {c} ({GENETIC_CODES[c]}) without any mismatches, "
-                f"compared with {current_ok} under code {int(table)}. Re-run with code {c}?")
+    top = max(f for f, _ in results)
+    tied = sorted((c for f, c in results if f == top),
+                  key=lambda c: (_code_distance(table, c)[0], CANDIDATE_CODES.index(c)))
+    c = tied[0]
+    n, total = len(tested), len(seqs)
+    name = GENETIC_CODES[c]
+
+    def do(k):
+        return "none do" if k == 0 else ("only 1 does" if k == 1 else f"{k} do")
+    if n == total:
+        who = f"all {total} sequences match" if top == total else f"{top} of {total} sequences match"
+        text = f"Under genetic code {c} ({name}), {who} their protein; under code {table}, {do(fits_now)}."
     else:
-        text = (f"{fixed} of {len(sample)} sequences checked (a sample of the {len(bad_ids)} with problems or "
-                f"not checked) fit genetic code {c} "
-                f"({GENETIC_CODES[c]}) without any mismatches; {current_ok} of {len(seqs)} sequences fit code "
-                f"{int(table)}. Re-run with code {c}?")
+        which = (f"a sample of the {len(problems)} with problems" if len(problems) >= n
+                 else f"all {len(problems)} with problems, then others")
+        text = (f"COAL tested {n} of the {total} sequences ({which}): under "
+                f"genetic code {c} ({name}), {top} of them match their protein; under code {table}, {do(fits_now)}.")
+    starts = [m for sq in seqs if sq["id"] in pset for m in real_mismatches(sq)]
+    if starts and all(m.get("start_codon") for m in starts):
+        ex = starts[0]
+        text = (f"The only mismatches are at the first codon of {len(pset)} sequence{'s' if len(pset) != 1 else ''} "
+                f"(for example {ex.get('codon')} where the protein starts with M): an alternative start codon, which "
+                f"code {c} accepts. " + text)
+    if len(tied) > 1:
+        others = " and ".join([", ".join(str(x) for x in tied[1:-1]), str(tied[-1])] if len(tied) > 2
+                              else [str(tied[1])])
+        closer = _code_distance(table, c)[0] < _code_distance(table, tied[1])[0]
+        text += (f" Code{'s' if len(tied) > 2 else ''} {others} fit{'' if len(tied) > 2 else 's'} "
+                 + (f"as well, but code {c} differs least from code {table}." if closer else
+                    "these sequences too: choose the code of the organism and organelle the genes come from."))
+    text += f" Re-run with code {c}?"
     return {"code": "genetic_code", "text": text, "suggested_codontable": c}
 
 
-def mismatch_probe(protein, dna, table, keep_going, report, work_dir) -> dict:
+def mismatch_probe(protein, dna, table, keep_going, report, work_dir, blockonly=False) -> dict:
     """CHANGED(R2-A1/R2-D5/R2-E1): new. With -nomismatch the engine (like PAL2NAL) prints no mismatch
     warnings, so the report said every gene matched. This re-runs the same inputs without -nomismatch (output
     to a temporary file, deleted) to find which genes had mismatching codons, marks them "warning" (columns
@@ -861,7 +1038,7 @@ def mismatch_probe(protein, dna, table, keep_going, report, work_dir) -> dict:
     probe_dir = tempfile.mkdtemp(prefix="probe_nomismatch_", dir=work_dir)
     try:
         code, err, _ = _run_engine(protein, dna, os.path.join(probe_dir, "probe.fasta"), "fasta", table,
-                                   False, False, keep_going, None)
+                                   False, False, keep_going, None, blockonly=blockonly)
     finally:
         shutil.rmtree(probe_dir, ignore_errors=True)
     if code != 0:
@@ -911,8 +1088,10 @@ def banner_head(ok: bool, summary: dict, hints=()) -> str:
 
 def run_coal(protein_path: str, dna_path: str, output_format: str = "fasta", codontable: int = 1,
              nogap: bool = False, nomismatch: bool = False, keep_going: bool = True,
-             out_dir: str | None = None, probe_codes: bool = True) -> RunResult:
-    """Run COAL once and return the output, a coal.report/1 report and hints."""
+             out_dir: str | None = None, probe_codes: bool = True, strict: bool = False,
+             blockonly: bool = False) -> RunResult:
+    """Run COAL once and return the output, a coal.report/1 report and hints.
+    CHANGED(FIN-A6): strict (COAL's --strict: refuse probably-wrong genes) and blockonly (-blockonly) are new."""
     f = detect_features()
     if output_format not in f.output_formats:
         raise ValueError(f"output format '{output_format}' is not supported by this COAL "
@@ -927,7 +1106,7 @@ def run_coal(protein_path: str, dna_path: str, output_format: str = "fasta", cod
     if os.path.exists(report_path):
         os.remove(report_path)
     code, err, runtime = _run_engine(protein_path, dna_path, out, output_format, codontable,
-                                     nogap, nomismatch, keep_going, report_path)
+                                     nogap, nomismatch, keep_going, report_path, strict=strict, blockonly=blockonly)
     report = None
     if f.report and os.path.exists(report_path):
         try:
@@ -937,11 +1116,12 @@ def run_coal(protein_path: str, dna_path: str, output_format: str = "fasta", cod
             report = None
     if report is None:
         report = build_fallback_report(protein_path, dna_path, out, output_format, codontable, nogap,
-                                       nomismatch, keep_going, code, err, runtime)
+                                       nomismatch, keep_going, code, err, runtime, strict=strict, blockonly=blockonly)
         if nomismatch and code == 0:
-            mismatch_probe(protein_path, dna_path, codontable, keep_going, report, out_dir)
+            mismatch_probe(protein_path, dna_path, codontable, keep_going, report, out_dir, blockonly=blockonly)
         from .viewer import locate_breaks
         locate_breaks(protein_path, dna_path, report)
+        annotate_mismatch_patterns(protein_path, report)  # CHANGED(FIN-C6/FIN-C9)
         hints = list(report.get("hints") or []) + id_hints(protein_path, dna_path, report)
         if probe_codes:
             h = genetic_code_hint(protein_path, dna_path, codontable, report, out_dir)
@@ -959,9 +1139,9 @@ def run_coal(protein_path: str, dna_path: str, output_format: str = "fasta", cod
         stderr=err,
         coal_cmd=coal_command(os.path.basename(protein_path), os.path.basename(dna_path), output_format,
                               codontable, nogap, nomismatch, os.path.basename(out),
-                              keep_going and f.keep_going),
+                              keep_going and f.keep_going, strict=strict, blockonly=blockonly),
         pal2nal_cmd=pal2nal_command(os.path.basename(protein_path), os.path.basename(dna_path),
-                                    output_format, codontable, nogap, nomismatch, os.path.basename(out)),
+                                    output_format, codontable, nogap, nomismatch, os.path.basename(out), blockonly),
         hints=list(report.get("hints") or []),
     )
 
@@ -1026,7 +1206,9 @@ def _mismatch_sentence(msgs: list[dict]) -> str:
     others = " ".join(m.get("text", "") for m in msgs if m.get("code") != "mismatch")
     if not mm:
         return others or "COAL printed a warning for this sequence."
-    return _mm_sentence(mm) + (" " + others if others else "")
+    # CHANGED(FIN-C9): a frameshift-like run of mismatches gets no genetic-code advice
+    fs = any(m.get("code") == "possible_frameshift" for m in msgs)
+    return _mm_sentence(mm, code_advice=not fs) + (" " + others if others else "")
 
 
 def is_ambiguous_codon(codon) -> bool:
@@ -1034,7 +1216,7 @@ def is_ambiguous_codon(codon) -> bool:
     return bool(codon) and bool(str(codon).upper().replace("U", "T").strip("ACGT"))
 
 
-def _mm_sentence(mm: list[dict]) -> str:
+def _mm_sentence(mm: list[dict], code_advice: bool = True) -> str:
     # CHANGED(R3-A2): was every mismatch explained as a genetic-code problem ("55 codons do not match ... the DNA
     # has NNN ... check the genetic code"); now codons with unknown/ambiguous bases get their own sentence and
     # no genetic-code advice. See overnight/integration/CHANGES.md
@@ -1051,8 +1233,14 @@ def _mm_sentence(mm: list[dict]) -> str:
         # CHANGED(R2-A1): mismatches found by the -nomismatch probe say their columns were removed
         fate = ("Those columns were removed from the alignment (-nomismatch)" if first.get("removed")
                 else "Kept in the alignment")
-        out.append(f"{n} codon{'s' if n != 1 else ''} {'do' if n != 1 else 'does'} not match "
-                   f"{'their' if n != 1 else 'its'} amino acid{where}{detail}. {fate}; check the genetic code.")
+        if n == 1 and first.get("start_codon"):  # CHANGED(FIN-C6)
+            out.append(f"The first codon, {first.get('codon')}, is not a start codon of this genetic code, although "
+                       f"the protein starts with M: probably an alternative start codon (some codes accept it). "
+                       f"{fate}.")
+        else:
+            out.append(f"{n} codon{'s' if n != 1 else ''} {'do' if n != 1 else 'does'} not match "
+                       f"{'their' if n != 1 else 'its'} amino acid{where}{detail}. {fate}"
+                       + ("; check the genetic code." if code_advice else "."))
     if amb:
         first, n = amb[0], len(amb)
         where = f" (first at column {first['column']}: {first['codon']})" if first.get("column") else ""
@@ -1083,7 +1271,19 @@ def sequence_sentence(seq: dict) -> str:
     if st == "ok":
         return "Protein and DNA match codon for codon."
     if st == "not_checked":
-        return "Not checked: COAL stopped at an earlier error."
+        # CHANGED(FIN-C7): genes before / after the gene that stopped the run
+        mark = next((m for m in msgs if m.get("code") in ("not_written", "not_reached")), None)
+        if mark is None:
+            return "Not checked: COAL stopped at an earlier error."
+        fid = mark.get("failed_id")
+        if mark["code"] == "not_reached":
+            return f"Not checked: COAL stopped at an error in {fid} before reaching this gene."
+        own = [m for m in msgs if m is not mark]
+        if not own:
+            return (f"Not written: COAL stopped at an error in {fid}, so no alignment was written; this gene itself "
+                    f"had no problem.")
+        return f"Not written: COAL stopped at an error in {fid}, so no alignment was written. " + \
+            _mismatch_sentence(own)
     if st == "warning":
         return _mismatch_sentence(msgs)
     if st == "failed":
@@ -1095,6 +1295,10 @@ def sequence_sentence(seq: dict) -> str:
                 tail = {"frameshift": " Check the DNA near there (a sequencing or assembly error?).",
                         "inconsistent": " Is this the right DNA for this protein, and the right genetic code?",
                         "missing_dna": " The DNA looks truncated."}[m["code"]]
+                if seq.get("pairing") == "order" and seq.get("dna_id") and seq.get("dna_id") != seq.get("id"):
+                    # CHANGED(FIN-C12): was "The DNA looks truncated" also when the cause is pairing by order
+                    tail = (f" It was paired with DNA '{seq['dna_id']}' only by their order in the files (the IDs "
+                            f"don't match), so this is most likely the wrong DNA for it: make the IDs match.")
                 return m.get("text", "") + tail
         for m in msgs:
             if m.get("code") in _FAIL_SENTENCES:

@@ -162,8 +162,10 @@ class TestReport(unittest.TestCase):
         # MRG-2: where the gene breaks comes first (as the app's locate_breaks), then the engine's reason
         self.assertEqual([m["code"] for m in failed[0]["messages"]], ["frameshift", "inconsistent"])
         self.assertIn("Frameshift at column 14", failed[0]["messages"][0]["text"])
-        # g0 and g1 were checked (not written), g3 was never reached
-        self.assertEqual([s["status"] for s in r["sequences"]], ["ok", "ok", "failed", "not_checked"])
+        # as the app (FIN-C7): g0 and g1 were checked but not written, g3 was never reached
+        self.assertEqual([(s["status"], [m["code"] for m in s["messages"]]) for s in r["sequences"]],
+                         [("not_checked", ["not_written"]), ("not_checked", ["not_written"]),
+                          ("failed", ["frameshift", "inconsistent"]), ("not_checked", ["not_reached"])])
         self.assertIsNone(r["output"])
         self.assertEqual(r["summary"]["failed"], 1)
         self.assertIn("coal: summary: 1 sequence of 4 could not be converted (first: g2:", err)
@@ -203,12 +205,13 @@ class TestSummaryAndHints(unittest.TestCase):
             hints = [h for h in r["hints"] if h["code"] == "genetic_code"]
             self.assertEqual(len(hints), 1, err)
             self.assertEqual(hints[0]["suggested_codontable"], 2)
-            self.assertIn("vertebrate mitochondrial", hints[0]["text"])
-            self.assertIn("Re-run with code 2 (-codontable 2).", err)
+            self.assertIn("Vertebrate mitochondrial", hints[0]["text"])
+            self.assertIn("Re-run with code 2?", err)
+            # MRG-2b: the app's FIN-A1/FIN-C5 wording
             self.assertIn("coal: summary: 30 of 30 sequences have codons that do not match their amino acid (kept "
-                          "in the alignment). With genetic code 2 (vertebrate mitochondrial), all 30 sequences match "
-                          "their protein codon for codon; with code 1 (standard), the one used, none do. Re-run with "
-                          "code 2 (-codontable 2).", err)
+                          "in the alignment). Under genetic code 2 (Vertebrate mitochondrial), all 30 sequences match "
+                          "their protein; under code 1, none do. Codes 5 and 13 fit these sequences too: choose the "
+                          "code of the organism and organelle the genes come from. Re-run with code 2?", err)
             self.assertEqual((hints[0]["checked"], hints[0]["fit"], hints[0]["fit_current"]), (30, 30, 0))
             # with the right code: clean run, no summary, no hint
             rc, _, err = run(d, ["pep.fasta", "nuc.fasta", "-codontable", "2", "-o", "o.fa", "--report", "r.json"])

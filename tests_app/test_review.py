@@ -441,9 +441,10 @@ class TestFinding13ProbeCost(_RunsDir):
         calls = []
         real = core._run_engine
 
-        def spy(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, report_path, timeout=None):
-            calls.append((protein, len(core.read_ids(protein)), timeout))
-            return real(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, report_path, timeout=timeout)
+        def spy(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, report_path, timeout=None, **kw):
+            calls.append((protein, len(core.read_ids(protein)), timeout))  # FIN-A6: **kw (strict, blockonly)
+            return real(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, report_path, timeout=timeout,
+                        **kw)
 
         core._run_engine = spy
         self.addCleanup(setattr, core, "_run_engine", real)
@@ -474,8 +475,10 @@ class TestFinding13ProbeCost(_RunsDir):
             self.assertLessEqual(timeout, core.PROBE_TIMEOUT)
         self.assertLessEqual(core.PROBE_TIMEOUT, 30)
         hint = [h for h in r.hints if h["code"] == "genetic_code"]
-        self.assertEqual(hint[0]["suggested_codontable"], 2)
-        self.assertIn("200 of 200 sequences checked (a sample of the 250", hint[0]["text"])
+        # FIN-A1/FIN-C6: only TGA = Trp is needed, so code 4 (which differs from code 1 only there) is the closest
+        self.assertEqual(hint[0]["suggested_codontable"], 4)
+        self.assertIn("COAL tested 200 of the 250 sequences", hint[0]["text"])  # FIN-C4/FIN-C5: what was tested
+        self.assertIn("200 of them match their protein", hint[0]["text"])
         self.assertEqual([f for f in os.listdir(t) if f.startswith("probe")], [])
 
 

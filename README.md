@@ -9,7 +9,7 @@ Built at the Reinvent the Wheel AI × Science Tool-building Hackathon, London, O
 > **Status:** v0.4 (pure Python, no required dependencies; numpy optional). Up to **~119× faster** than PAL2NAL
 > with byte-identical output on the benchmarked datasets — see [Benchmark results](#benchmark-results).
 >
-> **Compatibility:** COAL is byte-identical to PAL2NAL v14 on well-formed input: all 285 stored reference checks pass (238 byte-identical, 24 where both tools fail, 23 documented deliberate differences), and in 20,000 random comparisons (5,000 cases x 4 output formats) and 6,000 independent stratified cases every difference from PAL2NAL is a documented, deliberate one, where PAL2NAL silently produces wrong or malformed output; 0 undocumented differences. See
+> **Compatibility:** COAL's output is identical to PAL2NAL v14's except for a short list of documented, deliberate differences (newer NCBI genetic-code tables for codes 3, 10, 11 and 13; `-nogap` removing the selected code's stop codons; the selected code's start codons for the first Met; pairing by IDs that match only after normalising where PAL2NAL v14's file order would give a protein another gene's DNA; and inputs where PAL2NAL v14 writes malformed output or fails). Tested: all 285 stored reference checks pass (238 byte-identical, 4 of them with deliberately different warnings; 24 where both tools fail; 23 deliberate output or exit-status differences: 6 deliberate errors, 3 different outputs, 14 `-nogap` checks with a non-standard code), and in 20,000 random comparisons with the real PAL2NAL v14 (5,000 cases x 4 output formats) 13,826 were byte-identical, 4,681 both failed and 1,493 were deliberate differences, each checked to be exactly the documented change; 0 unexplained differences. <!-- CHANGED(FIN-C2/FIN-C3/FIN-C10/FIN-C20): was the "byte-identical ... (well-formed input)" claim, "every difference is one where PAL2NAL silently produces wrong output" and a 6,000-case run not reproducible from the repo; now the documented exceptions and the FIN-C10 fuzz numbers --> See
 > [Deliberate differences](#deliberate-differences-from-pal2nal) and [Tests](#tests).
 > <!-- CHANGED(FZ-claim): new; was unqualified "byte-identical" wording elsewhere. See overnight/integration/CHANGES.md -->
 
@@ -26,7 +26,7 @@ pip install -e .[fast]                              # optional numpy speed-up fo
 - **Input:** a protein alignment (FASTA or CLUSTAL) and the unaligned coding DNA (FASTA, one or more files).
   Non-letters in the DNA (gaps, digits, spaces) are ignored, as in PAL2NAL.
 - **Output:** a codon alignment, using the protein-alignment IDs, in any of PAL2NAL v14's formats, as PAL2NAL writes
-  them (byte for byte on well-formed input; see Compatibility above): `-output fasta` (COAL's default; 60 columns per line), `clustal` (PAL2NAL's default), `paml`
+  them (byte for byte, apart from the documented differences; see Compatibility above) <!-- CHANGED(FIN-C3) -->: `-output fasta` (COAL's default; 60 columns per line), `clustal` (PAL2NAL's default), `paml`
   (codeml's input) or `codon` (amino acids above their codons; not combinable with `-nogap`/`-nomismatch`/`-blockonly`,
   as in PAL2NAL). The drop-in `pal2nal` command defaults to clustal, like PAL2NAL.
   <!-- CHANGED(DEC-4): was "a codon alignment in FASTA format". See overnight/integration/CHANGES.md -->
@@ -96,6 +96,17 @@ if the whole run succeeds, so an error never leaves a partial file. Notes:
 <!-- CHANGED(DEC-4): was "output formats other than FASTA (clustal, paml, codon), and -blockonly/Gblocks input" -->
 
 ### Deliberate differences from PAL2NAL
+
+Each difference has a reference point other than PAL2NAL v14 itself:
+**NCBI** (the current genetic-code tables: codes 3, 10, 11 and 13; the selected code's start codons for the first Met
+in the fallback; `-nogap` removing the selected code's stop codons), **the sequence formats' definitions** (`.` as a
+gap, IUPAC ambiguity codes, `U` = selenocysteine, RNA read as DNA, FASTA with a BOM, a blank first line or `> id`),
+**PAL2NAL's own consistency** (its fallback treats the first Met, RNA and B/Z/J/O differently from its exact-fit
+path; rows of different lengths; duplicate IDs) or **policy**, a choice of COAL's and not a PAL2NAL error (malformed
+input is an error instead of output, `coal` writes FASTA by default, COAL's own wording of warnings). Some inputs make
+PAL2NAL v14 fail with an ERROR (a BOM, a blank first line), others make it print a warning (codes 10, 11, 13):
+not every difference is a silent one. <!-- CHANGED(FIN-C3): new; was implied that every difference is PAL2NAL silently
+writing wrong output. See overnight/integration/CHANGES.md -->
 
 Details and evidence in `tests/README.md`:
 
@@ -208,10 +219,12 @@ Compares COAL with stored PAL2NAL v14 outputs (`tests/golden/`): 39 input cases 
 four output formats = 285 checks (the test prints these counts). In the 6 `invalid_chars` checks COAL deliberately
 fails (see below). Exit status in the other 279: PAL2NAL always exits 0, so COAL must exit 0 exactly when PAL2NAL
 produced output.<!-- CHANGED(R3-D5): was "in all 165" checks; the harness checks exit status in 162. See overnight/integration/CHANGES.md --> stdout is byte-identical in 238 checks, and the per-codon warnings
-are identical in 234 of them (48 with `-nomismatch`); in 24 both tools fail. 29 checks are deliberate differences:
-the other 4 of the 238 (same output, different warnings), 3 with different output, 14 `-nogap` checks with another
-genetic code (COAL's output must equal PAL2NAL's output without `-nogap` with that code's stop columns removed) and
-6 where COAL deliberately fails. <!-- CHANGED(FZ-5): was 246 / 240 / 15 / 6 of the 246 --> <!-- CHANGED(MRG-5): was 38 cases / 279 / 273 / 232 / 228 / 47 (the teammate's frameshift_codon_line case adds 6 checks) --> See `tests/README.md` for exactly what is compared and for the list of deliberate differences.
+are identical in 234 of them (48 with `-nomismatch`); in the other 4 the warnings differ deliberately (NCBI tables
+10, 11 and 13); in 24 both tools fail. 23 checks are deliberate output or exit-status differences: 6 deliberate errors
+(`invalid_chars`, where COAL refuses), 3 with different output and 14 `-nogap` checks with a non-standard genetic code
+(COAL's output must equal PAL2NAL's output without `-nogap` with that code's stop columns removed). 238 + 24 + 23 =
+285. <!-- CHANGED(MRG-5): was 38 cases / 279 / 273 / 232 / 228 / 47 (the teammate's frameshift_codon_line case adds 6 checks) --> <!-- CHANGED(FIN-C2/FIN-A3): was "29 ... deliberate differences" (counted the 4 warning-only checks
+twice: 232 + 24 + 29 = 285); now one breakdown everywhere, guarded by tests_app/test_docs_numbers.py --> <!-- CHANGED(FZ-5): was 246 / 240 / 15 / 6 of the 246 --> See `tests/README.md` for exactly what is compared and for the list of deliberate differences.
 
 **Random differential test against the real PAL2NAL** (needs Perl; PAL2NAL is fetched, never committed):
 
@@ -224,21 +237,21 @@ Each random case (FASTA or CLUSTAL input, sometimes with `#` marks; clean, misma
 wrong-code DNA; UTRs, stops, frameshift digits, RNA, lower case; same, shuffled, different or partly matching IDs;
 random `-codontable`, `-nogap`, `-nomismatch`, `-blockonly`) runs through PAL2NAL and the drop-in `pal2nal` with the
 same command line in all four formats, and stdout must be byte-identical, or both must fail, except for the
-deliberate differences listed in the script (each is in the list above). CI runs it on every push (job
-`pal2nal-fuzz`). Result here, seed 20261017, 5,000 cases: 20,000 comparisons, 13,826 byte-identical, 4,681 where
-both fail, 1,487 in cases with a documented deliberate difference, 0 undocumented engine differences (per-format counts
-in `tests/README.md`; 6 comparisons in 2 cases are flagged by the harness itself: an IUPAC codon such as `TGD` under
-`-nogap`, which COAL keeps by its documented rule because not every reading is a stop, while the harness's neutralised
-reference reads it as a stop; COAL's output there is unchanged from before the merge, and the harness is being
-corrected). <!-- CHANGED(MRG-1): was 14,368 / 4,723 / 909 (the generator gained the normalised-ID mode) --> The independent tester's stratified generator (26 strata, FASTA output) gave, on 6,000 cases:
-4,625 byte-identical stdout, 631 both fail, 744 documented deliberate differences, 0 undocumented.
+deliberate differences listed in the script (each is in the list above). A difference counts as deliberate only if
+it is exactly the documented one: the script also runs PAL2NAL on a copy of the case with that feature neutralised
+(e.g. `U` → `B`, RNA → DNA, an alternative start codon → ATG) and COAL's output must equal that, apart from the
+documented change. CI runs it on every push (job `pal2nal-fuzz`). Result here, seed 20261017, 5,000 cases: 20,000
+comparisons, 13,826 byte-identical, 4,681 where both fail, 1,493 deliberate differences (each checked), 0
+unexplained (per-format counts in `tests/README.md`; seeds 4242 and 777 also give 0 unexplained).
+<!-- CHANGED(FIN-C10/FIN-C20): was the run before FIN-C10/FIN-E1 (14,368 / 4,723 / 909 "in cases with a documented
+deliberate difference", i.e. not checked) and a 6,000-case run whose generator is not in the repo -->
 <!-- CHANGED(DEC-4): new --> <!-- CHANGED(FZ-claim): was "3,000 cases: no unexplained difference" -->
 
 ## Benchmark results
 
 COAL vs PAL2NAL v14 on synthetic datasets (see `benchmarks/README.md`). Each run is one
 command-line process, timed from start to finish (including Perl/Python start-up).
-Times are the median of 3 runs. **On these benchmark datasets every COAL output was byte-identical to PAL2NAL's.** <!-- CHANGED(FZ-claim): qualified -->
+Times are the median of 3 runs. **On these benchmark datasets every COAL output was byte-identical to PAL2NAL v14's.** <!-- CHANGED(FIN-C3): v14 --> <!-- CHANGED(FZ-claim): qualified -->
 
 | Sequences × codons | Total codons | PAL2NAL | COAL | Speedup | Peak memory PAL2NAL / COAL |
 |---|---:|---:|---:|---:|---:|
@@ -262,7 +275,8 @@ Machine: Windows 11, Intel 64-bit CPU (Family 6 Model 183), Python 3.13.9, Straw
 `58a1219`. Raw data: `benchmarks/results/bench_windows_20261016_2356.{csv,txt}`.
 
 **Limitations:** synthetic data only (random ancestral gene, about 10% of codons changed,
-about 5% deleted; no UTRs or frameshifts, which COAL v0.1 doesn't support); one machine;
+about 5% deleted; no UTRs or frameshifts in the benchmark data, although COAL handles both); one machine;
+<!-- CHANGED(FIN-C15): was "no UTRs or frameshifts, which COAL v0.1 doesn't support" (stale: both are supported) -->
 3 repeats. Speedups depend on the machine and dataset.
 
 ### Scaling (v0.3)
@@ -344,12 +358,14 @@ Tag, and everything else is automatic:
 
 1. Set the same version in `src/coal/__init__.py`, `pyproject.toml` and the `id="version"` span in
    `site/index.html` (a test fails if they differ) (optionally add a `## <version>` section to
-   `CHANGELOG.md` for the release notes; without one, GitHub generates notes from merged pull requests), commit,
-   merge to `main`.
-2. `git tag v0.4.0 && git push origin v0.4.0`
+   `CHANGELOG.md` for the release notes; without one, GitHub generates notes from merged pull requests), commit.
+2. Tag that commit: `git tag v0.4.0 && git push origin v0.4.0`
 3. `.github/workflows/release.yml` checks the tag against the source version, builds and checks the wheel, the sdist
    and the Windows app (`desktop/build.ps1`: tests, PyInstaller, frozen-engine check, Inno Setup installer), writes
-   `SHA256SUMS.txt` and publishes the GitHub Release, with version-free copies of the downloads.
+   `SHA256SUMS.txt` and publishes the GitHub Release, with version-free copies of the downloads. **Wait until it has
+   published, then merge to `main`** (merging deploys the website at once). If the site is deployed while no release
+   exists, its download buttons are replaced by a "First release coming soon" note with a pip install from the
+   repository. <!-- CHANGED(FIN-A9): was "commit, merge to main" before tagging (the site's buttons 404 until a release exists) -->
 4. The website (https://plumat-coal.github.io/COAL/, from `site/`) links to
    `releases/latest/download/<version-free name>`, so it offers the new release at once; only the version shown
    on the page is edited by hand (step 1).<!-- CHANGED(WEB-8): was "nothing to edit"; the page now names the

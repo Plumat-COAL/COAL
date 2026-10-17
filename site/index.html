@@ -44,7 +44,7 @@
   <div class="intro-text">
     <h1>COAL converts a protein multiple sequence alignment and the matching coding DNA into a codon alignment.</h1>
     <p>It is a drop-in replacement for <a href="#pal2nal">PAL2NAL</a>. It reads the same input and takes PAL2NAL's
-      options, and on well-formed input it writes the same output in all four of PAL2NAL's formats (FASTA, CLUSTAL, PAML and codon). When a gene does not fit, it tells you which
+      options, and it writes the same output as PAL2NAL v14 in all four of its formats (FASTA, CLUSTAL, PAML and codon), apart from a short list of documented differences. <!-- CHANGED(FIN-C3): was the "same output (well-formed input)" claim --> When a gene does not fit, it tells you which
       one and why.</p>
     <p class="meta">Version <span id="version" data-version="0.4.0">0.4.0</span>. MIT licence.
       Python 3.10 or newer on any system, or a Windows app that needs nothing else installed.</p>
@@ -81,7 +81,8 @@
 <section class="sec m1" id="example" aria-labelledby="example-title">
   <h2 id="example-title">Example</h2>
   <div class="body">
-    <p>The <code>clean</code> example in the repository has eight genes of 150 codons. The protein alignment has
+    <p>The <code>clean</code> example in the repository has eight genes of 140 to 144 codons (plus a stop codon),
+      aligned in 150 columns. The protein alignment has <!-- CHANGED(FIN-C16): was "eight genes of 150 codons" -->
       gaps, the DNA has none.</p>
 <pre class="term" tabindex="0" aria-label="Terminal: running COAL on the clean example"><code><span class="ps">$</span> coal examples/clean/protein.aln.fasta examples/clean/dna.fasta -o codon.aln.fasta
 <span class="ps">$</span> echo $?
@@ -131,11 +132,15 @@ coal: warning: Homo_COX1 pepAlnPos 36: W does not correspond to TGA
     <div class="said" role="group" aria-label="What the COAL app shows for the mito example">
       <p><samp>Homo_COX1: 7 codons do not match their amino acid (first at column 1): the protein says M but the DNA
         has ATA. Kept in the alignment; check the genetic code.</samp></p>
-      <p><samp>All sequences fit genetic code 2 (Vertebrate mitochondrial) without any mismatches, compared with 0
-        under code 1. Re-run with code 2?</samp></p>
+      <p><samp>Under genetic code 2 (Vertebrate mitochondrial), all 24 sequences match their protein; under code 1,
+        none do. Codes 5 and 13 fit these sequences too: choose the code of the organism and organelle the genes come
+        from. Re-run with code 2?</samp></p>
+      <!-- CHANGED(FIN-C5): the app's new wording (was "All sequences fit ... compared with 0 under code 1") -->
     </div>
-    <p>A frameshift is an error, not a warning. In the <code>one_broken_gene</code> example one base is missing
-      from one of 20 genes:</p>
+    <p>A frameshift inside a gene is usually an error, not a warning. (A base missing near the end of a gene can
+      still let the gene fit, with a few mismatch warnings; the app then says the run of mismatches looks like a
+      frameshift.) In the <code>one_broken_gene</code> example one base is missing from one of 20 genes:</p>
+    <!-- CHANGED(FIN-C9): was "A frameshift is an error, not a warning" (not always) -->
 <pre class="term" tabindex="0" aria-label="Terminal: the one_broken_gene example stops with an error"><code><span class="ps">$</span> coal examples/one_broken_gene/protein.aln.fasta examples/one_broken_gene/dna.fasta -o codon.aln.fasta
 coal: error: OG0001_sp14: protein and DNA are inconsistent (no match found)
 <span class="ps">$</span> echo $?
@@ -163,15 +168,21 @@ coal: error: OG0001_sp14: protein and DNA are inconsistent (no match found)
       published. COAL is an independent reimplementation in Python. PAL2NAL is licensed under the GPL-2.0 and COAL
       under MIT. COAL contains none of PAL2NAL's code: we ran PAL2NAL version 14 as a separate program, only to
       compare outputs.</p>
-    <p>On well-formed input COAL's output is identical to PAL2NAL's. Where PAL2NAL silently gives wrong output,
-      COAL deliberately differs and documents why.</p>
-    <!-- CHANGED(MRG-5): 38 -> 39 cases, 279 -> 285 checks, 232 -> 238; version 0.3.0 -> 0.4.0 (MRG-8) -->
+    <p>COAL's output is identical to PAL2NAL v14's except for a short list of documented, deliberate differences:
+      newer NCBI genetic-code tables (codes 3, 10, 11 and 13), <code>-nogap</code> removing the chosen code's stop
+      codons, the chosen code's start codons for the first Met, pairing by IDs that match only after normalising where
+      PAL2NAL v14's file order would give a protein another gene's DNA, and inputs where PAL2NAL v14 writes malformed
+      output or fails.</p>
+    <!-- CHANGED(FIN-C3): was "identical (well-formed input) ... where PAL2NAL silently gives wrong output" (false:
+      well-formed mito -codontable 2 -nogap differs; not every difference is silent) -->
+    <!-- CHANGED(MRG-5, MRG-8): 38 -> 39 cases, 279 -> 285 checks, 232 -> 238; version 0.3.0 -> 0.4.0; MRG-1 pairing item -->
     <!-- CHANGED(INT-3): was "38 input cases and every FASTA option, 165 checks ... 147 ... 12 ... 12"; the harness now covers all four formats. -->
     <p>The test suite compares COAL with stored PAL2NAL v14 output on <span data-check="39 input cases">39 input cases</span>
       with every option combination in all four output formats, <span data-check="285 checks">285 checks</span> in all.
-      Standard output is <span data-check="byte-identical in 238 checks">byte-identical in 238 checks</span>;
-      <span data-check="in 24 both tools fail">in 24 both tools fail</span>; and
-      <span data-check="29 checks are deliberate differences">29 checks are deliberate differences</span>. Some of them:</p>
+      Standard output is <span data-check="byte-identical in 238 checks">byte-identical in 238 checks</span> (in 4 of
+      them the warnings differ deliberately); <span data-check="in 24 both tools fail">in 24 both tools fail</span>; and
+      <span data-check="23 checks are deliberate output or exit-status differences">23 checks are deliberate output or exit-status differences</span>. Some of them:</p>
+    <!-- CHANGED(FIN-C2/FIN-A3): was "29 ... deliberate differences" (232 + 24 + 29 = 285, not 279) -->
     <ul class="diffs">
       <li>An invalid character in the protein alignment is an error. PAL2NAL silently drops a codon.</li>
       <li><code>.</code> is read as a gap. In PAL2NAL it misaligns the output row.</li>
@@ -280,8 +291,10 @@ coal: error: OG0001_sp14: protein and DNA are inconsistent (no match found)
       <div class="note" id="smart-app-control">
         <h4>If Smart App Control blocked COAL</h4>
         <p>Smart App Control on Windows 11 blocks unsigned apps. It has no <q>Run anyway</q> button and no way to
-          allow a single app, and on many Windows versions it cannot be switched back on once it is off. Leave it
-          on and install with pip instead. In PowerShell, with Python 3.10 or newer from python.org:</p>
+          allow a single app. You can switch it off, but on some Windows versions it can then only be switched back
+          on by resetting or reinstalling Windows. Leave it on and install with pip instead. In PowerShell, with
+          Python 3.10 or newer from python.org:</p>
+        <!-- CHANGED(FIN-C18): was "on many Windows versions it cannot be switched back on once it is off" -->
         <div class="cmd block" data-copy-group>
           <code id="win-pip">py -m venv $HOME\coal-env
 &amp; $HOME\coal-env\Scripts\python -m pip install "coal[gui] @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz"

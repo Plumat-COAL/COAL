@@ -9,7 +9,9 @@
     "codontable": 1,
     "nogap": false,
     "nomismatch": false,
-    "keep_going": false
+    "keep_going": false,
+    "strict": false,
+    "blockonly": false
   },
   "inputs": [
     {
@@ -41,7 +43,7 @@
   "hints": [
     {
       "code": "genetic_code",
-      "text": "All sequences fit genetic code 2 (Vertebrate mitochondrial) without any mismatches, compared with 0 under code 1. Re-run with code 2?",
+      "text": "Under genetic code 2 (Vertebrate mitochondrial), all 24 sequences match their protein; under code 1, none do. Codes 5 and 13 fit these sequences too: choose the code of the organism and organelle the genes come from. Re-run with code 2?",
       "suggested_codontable": 2
     }
   ],

@@ -26,7 +26,8 @@ class TestSampleReport(unittest.TestCase):
         for k in ("coal_version", "command", "pal2nal_equivalent", "options", "inputs", "output",
                   "summary", "hints", "sequences", "runtime_seconds", "exit_code"):
             self.assertIn(k, r)
-        self.assertEqual(set(r["options"]), {"output_format", "codontable", "nogap", "nomismatch", "keep_going"})
+        self.assertEqual(set(r["options"]), {"output_format", "codontable", "nogap", "nomismatch", "keep_going",
+                                             "strict", "blockonly"})  # FIN-A6: strict, blockonly
         self.assertEqual({i["role"] for i in r["inputs"]}, {"protein", "dna"})
 
     def test_counts(self):  # APP-15: the sample is now a real run of examples/mito with code 1

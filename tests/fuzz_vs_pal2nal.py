@@ -186,8 +186,7 @@ def make_case(rng: random.Random) -> Case:
         k, i = rng.randrange(nseq), rng.randrange(len(rows[0]))
         if rows[k][i] != "-" and i > 0:
             rows[k][i] = str(rng.choice((1, 2, 4, 5)))
-    # CHANGED(MRG-1): `and len(rows[0]) > 1` (randrange(1, 1) crashed on a one-column alignment)
-    if rng.random() < 0.04 and len(rows[0]) > 1:  # tfastx/tfasty frameshift notation: '\\' = 1 base, '/' + residue = gap + 2 bases
+    if rng.random() < 0.04 and len(rows[0]) > 1:  # tfastx/tfasty frameshift notation (FIN-C10: 1-column guard): '\\' = 1 base, '/' + residue = gap + 2 bases
         k, i = rng.randrange(nseq), rng.randrange(1, len(rows[0]))
         j = next((j for j in range(i + 1, len(rows[0])) if rows[k][j] != "-"), None)
         if rows[k][i].isalpha():
@@ -515,10 +514,11 @@ def _allowed_codon(table, coal3, ref3):
     """CHANGED(FIN-C10/FIN-E1): new. True if a substituted reference codon `ref3` is the documented neutralisation of
     COAL's codon `coal3`: one of its IUPAC readings, TGC for table 10's TGA, or ATG for a first-Met codon that is a
     start or Met codon of the selected code."""
-    reads = _readings(coal3.upper().replace("U", "T"))
+    c = coal3.upper().replace("U", "T")
     r = ref3.upper()
-    if r in reads:
-        return True
+    if len(c) == len(r) and all(a == b or b in IUPAC.get(a, a) for a, b in zip(c, r)):
+        return True  # base by base: equal, or the reference has one reading of COAL's IUPAC base
+    reads = _readings(c)
     if table in TABLE_CODONS and r == "TGC" and "TGA" in reads:
         return True
     return r == "ATG" and any(x in FIRST_MET(table) for x in reads)
@@ -529,9 +529,35 @@ def FIRST_MET(table):
     return code.starts | code.codons.get("M", frozenset())
 
 
-def check_deliberate(case, fmt, rc, out, ref_out):
+def _nogap_rule(fmt, text, table):
+    """COAL's documented -nogap rule applied to an output without -nogap: [(id, row)] with every 3-nt column that
+    holds a gap or a stop codon of `table` (any case, U as T, IUPAC triplets whose every reading is a stop) removed."""
+    rows = parse_output(fmt, text)
+    bad = set().union(*(nogap_bad_triplets(sq, table) for _, sq in rows)) if rows else set()
+    return [(i, "".join(sq[k:k + 3] for k in range(0, len(sq), 3) if k // 3 not in bad)) for i, sq in rows]
+
+
+def check_deliberate(case, fmt, rc, out, ref_out, coal_without_nogap=None):
     """CHANGED(FIN-C10): new. None if COAL's result is exactly the documented deliberate difference for this case,
-    else the reason it is not. `ref_out`: PAL2NAL's stdout on the neutralised case (without -nogap)."""
+    else the reason it is not. `ref_out`: PAL2NAL's stdout on the neutralised case (without -nogap).
+    With -nogap, `coal_without_nogap()` gives COAL's (rc, stdout) for the same case without -nogap: that must match
+    the reference, and COAL's -nogap output must be the documented -nogap rule applied to it (so an IUPAC codon's
+    stop status is judged on COAL's own letters, e.g. TRA, and not on the reference's reading)."""
+    table = int(case.opts[case.opts.index("-codontable") + 1]) if "-codontable" in case.opts else 1
+    if "-nogap" in case.opts and "invalid_char" not in case.features:
+        rc0, out0 = coal_without_nogap()
+        why = check_deliberate(_without_nogap(case), fmt, rc0, out0, ref_out)
+        if why is not None:
+            return "without -nogap: " + why
+        if (rc0 == 0) != (rc == 0):
+            return "COAL succeeds with or without -nogap, not both"
+        if rc != 0:
+            return None if out == "" else "COAL failed but wrote output"
+        try:
+            return None if parse_output(fmt, out) == _nogap_rule(fmt, out0, table) else (
+                "-nogap output is not the documented rule applied to the output without -nogap")
+        except (ValueError, IndexError) as e:
+            return f"could not parse output ({e})"
     if "invalid_char" in case.features:
         return None if rc != 0 and out == "" else "invalid protein character but COAL did not refuse"
     if ref_out == "":
@@ -542,10 +568,6 @@ def check_deliberate(case, fmt, rc, out, ref_out):
         want, got = parse_output(fmt, ref_out), parse_output(fmt, out)
     except (ValueError, IndexError) as e:
         return f"could not parse output ({e})"
-    table = int(case.opts[case.opts.index("-codontable") + 1]) if "-codontable" in case.opts else 1
-    if "-nogap" in case.opts:  # COAL's documented rule applied to PAL2NAL's output without -nogap
-        bad = set().union(*(nogap_bad_triplets(sq, table) for _, sq in want)) if want else set()
-        want = [(i, "".join(sq[k:k + 3] for k in range(0, len(sq), 3) if k // 3 not in bad)) for i, sq in want]
     if [i for i, _ in want] != [i for i, _ in got]:
         return "different IDs or order"
     for (sid, w), (_, g) in zip(want, got):
@@ -560,6 +582,64 @@ def check_deliberate(case, fmt, rc, out, ref_out):
                 continue
             return f"{sid} at nt {k + 1}: COAL {c3}, expected {r3}"
     return None
+
+
+def _fasta_records(text):
+    """[(header line, sequence)] of a FASTA text (lines joined)."""
+    recs = []
+    for ln in text.split("\n"):
+        if ln.startswith(">"):
+            recs.append([ln, ""])
+        elif recs:
+            recs[-1][1] += ln.strip()
+    return recs
+
+
+def placed_first_met_files(case, coal_fasta):
+    """CHANGED(FIN-C10/FIN-E1): new. A third neutralised copy (from the copy without first-Met substitutions), built
+    after the run: for every gene that starts with M,
+    find where COAL placed it (its ungapped output row is a contiguous piece of its DNA) and, if that first codon is
+    a start or Met codon of the selected code other than ATG, write a marked ATG there. Needed when a gene is placed
+    off the generator's own frame (e.g. an unrelated DNA), where the first Met falls on another codon. None if
+    nothing would change."""
+    table = int(case.opts[case.opts.index("-codontable") + 1]) if "-codontable" in case.opts else 1
+    pfmt = "clustal" if case.pep.endswith(".aln") else "fasta"
+    prot = {i: r.upper() for i, r in parse_output(pfmt, case.files[case.pep])}
+    files = dict(case.ref_files_b)  # no first-Met substitution in the generator's frame: only where COAL placed it
+    changed = False
+    for sid, row in parse_output("fasta", coal_fasta):
+        prow = prot.get(sid, "")
+        first = next((ch for ch in prow if ch != "-"), "")
+        ungapped = row.replace("-", "")
+        if first != "M" or len(ungapped) < 3:
+            continue
+        cod = ungapped[:3].upper().replace("U", "T")
+        if cod == "ATG" or cod not in FIRST_MET(table):
+            continue
+        for name in case.nucs:
+            real = _fasta_records(case.files[name])
+            ref = _fasta_records(files[name])
+            for k, (hdr, seq) in enumerate(real):
+                pos = seq.find(ungapped)
+                if pos < 0:
+                    continue
+                r = ref[k][1]
+                atg = "atg" if seq[pos:pos + 3].isupper() else "ATG"  # the other case than the real DNA
+                ref[k][1] = r[:pos] + atg + r[pos + 3:]
+                files[name] = "".join(f"{h}\n{q}\n" for h, q in ref)
+                changed = True
+                break
+            else:
+                continue
+            break
+    return files if changed else None
+
+
+def _without_nogap(case):
+    c = Case()
+    c.__dict__.update(case.__dict__)
+    c.opts = [o for o in case.opts if o != "-nogap"]
+    return c
 
 
 def run_pal2nal(pal2nal, d, args):
@@ -609,31 +689,48 @@ def fuzz(pal2nal, n, seed, report=print, keep_dir=None, formats=FORMATS):
             refs = {}
 
             def reference(fmt, variant, case=case, d=d, refs=refs):
-                """PAL2NAL's stdout on a neutralised copy of the case, without -nogap (FIN-C10); variant 2: the case
+                """PAL2NAL's stdout on a neutralised copy of the case, without -nogap (FIN-C10); variant 3: the case
                 itself with only the DNA records reordered, with every option (MRG-1)."""
                 if (fmt, variant) not in refs:
                     rd = os.path.join(d, f"ref{variant}")
                     os.makedirs(rd, exist_ok=True)
-                    for name, text in (case.ref_files, case.ref_files_b, case.ref_files_p)[variant].items():
+                    for name, text in (case.ref_files, case.ref_files_b, getattr(case, "ref_files_c", None),
+                                       case.ref_files_p)[variant].items():  # CHANGED(MRG-1): variant 3
                         with open(os.path.join(rd, name), "w", newline="\n") as fh:
                             fh.write(text)
-                    opts = [o for o in case.opts if o != "-nogap" or variant == 2]
+                    opts = [o for o in case.opts if o != "-nogap" or variant == 3]
                     refs[fmt, variant] = run_pal2nal(pal2nal, rd, [case.pep, *case.nucs, "-output", fmt, *opts])[1]
                 return refs[fmt, variant]
 
-            def verified(fmt, rc, out, case=case):
+            def verified(fmt, rc, out, case=case, d=d):
                 """None if the difference is exactly a documented one (either reference), else why not."""
                 if "normalised_ids" in case.features:  # CHANGED(MRG-1): exact, byte for byte
-                    ref = reference(fmt, 2)
+                    ref = reference(fmt, 3)
                     if (rc == 0 and out == ref != "") or (ref == "" and rc != 0 and out == ""):
                         return None
                     if case.features & set(DELIBERATE) == {"normalised_ids"}:
                         return "normalised IDs: COAL's output is not PAL2NAL's on the DNA in protein order"
                     # with other deliberate features too: the neutralised references below (DNA also in protein order)
-                why = check_deliberate(case, fmt, rc, out, reference(fmt, 0))
-                if why is not None and case.ref_files_b != case.ref_files:
-                    if check_deliberate(case, fmt, rc, out, reference(fmt, 1)) is None:
+                def base():
+                    a = [case.pep, *case.nucs, "-output", fmt, *[o for o in case.opts if o != "-nogap"]]
+                    r = run_coal(d, a)
+                    return r[0], r[1]
+                why = "no deliberate feature"
+                if case.features & set(DELIBERATE):  # a case without one must be byte-identical (or both fail)
+                    why = check_deliberate(case, fmt, rc, out, reference(fmt, 0), base)
+                if why is not None and case.features & set(DELIBERATE) and case.ref_files_b != case.ref_files:
+                    if check_deliberate(case, fmt, rc, out, reference(fmt, 1), base) is None:
                         return None
+                if why is not None:  # the first Met where COAL placed the gene (FIN-E1)
+                    if not hasattr(case, "ref_files_c"):
+                        a = [case.pep, *case.nucs, "-output", "fasta", *[o for o in case.opts
+                                                                        if o not in ("-nogap", "-nomismatch")]]
+                        r = run_coal(d, a)
+                        case.ref_files_c = placed_first_met_files(case, r[1]) if r[0] == 0 else None
+                    if case.ref_files_c is not None:
+                        if check_deliberate(case, fmt, rc, out, reference(fmt, 2), base) is None:
+                            case.features.add("first_met_code")
+                            return None
                 return why
             why = None
             for fmt in formats:
@@ -652,7 +749,7 @@ def fuzz(pal2nal, n, seed, report=print, keep_dir=None, formats=FORMATS):
                     cnt["identical"] += 1
                 elif not pal_ok and rc != 0 and out == "":
                     cnt["both_fail"] += 1
-                elif case.features & set(DELIBERATE) and (why := verified(fmt, rc, out)) is None:
+                elif (why := verified(fmt, rc, out)) is None:  # FIN-C10/FIN-E1: every difference is checked
                     # CHANGED(FIN-C10): was accepted unchecked
                     cnt["deliberate"] += 1
                     for f in case.features & set(DELIBERATE):
@@ -662,7 +759,7 @@ def fuzz(pal2nal, n, seed, report=print, keep_dir=None, formats=FORMATS):
                     keep = True
                     bad.append({"case": i, "dir": d, "args": args, "pal2nal_ok": pal_ok, "coal_rc": rc,
                                 "features": sorted(case.features),
-                                "why": why if case.features & set(DELIBERATE) else "no deliberate feature",
+                                "why": why,
                                 "pal2nal_stdout": pout[:400], "coal_stdout": out[:400],
                                 "coal_stderr": err[-400:], "pal2nal_stderr": perr.decode("latin-1")[-400:]})
             if keep and keep_dir:

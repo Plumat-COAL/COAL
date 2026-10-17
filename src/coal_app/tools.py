@@ -9,7 +9,8 @@ from . import core
 
 
 def codon_align(protein_alignment_path: str, dna_fasta_path: str, output_format: str = "fasta",
-                codontable: int = 1, nogap: bool = False, nomismatch: bool = False) -> dict:
+                codontable: int = 1, nogap: bool = False, nomismatch: bool = False, strict: bool = False,
+                blockonly: bool = False) -> dict:
     """Build a codon alignment from a protein alignment and the matching unaligned coding DNA (PAL2NAL replacement).
 
     Use this when you have aligned protein sequences and the DNA (CDS) of the same genes and need
@@ -24,6 +25,10 @@ def codon_align(protein_alignment_path: str, dna_fasta_path: str, output_format:
             5 = invertebrate mitochondrial, 11 = bacteria/plastids. Also 3, 4, 6, 9, 10, 12-16, 21-23.
         nogap: If true, remove codon columns that contain a gap or a stop codon.
         nomismatch: If true, remove columns where a codon doesn't match its amino acid.
+        strict: If true, refuse probably-wrong genes (protein and DNA probably unrelated, position of the gene a
+            guess, or sequences paired by order after a partial ID match): the run stops with an error and no
+            alignment is written. By default such genes are written, as PAL2NAL does, and reported as failed.
+        blockonly: If true, keep only the columns marked '#' under the blocks of a CLUSTAL protein alignment.
 
     Returns:
         A dict with: ok (bool), output_path (str or None; the codon alignment file), report_path
@@ -31,8 +36,9 @@ def codon_align(protein_alignment_path: str, dna_fasta_path: str, output_format:
         failed sequences and how they were paired), hints (list of suggestions, e.g. a better genetic
         code as {"code": "genetic_code", "suggested_codontable": 2, "text": ...}), problems (list of
         {id, status, explanation} for every sequence with a warning or failure; sequences COAL never
-        reached after a fatal error are only counted in summary.not_checked), coal_command and pal2nal_command
-        (the equivalent command lines), methods_text (a ready-to-paste methods sentence, empty if
+        reached after a fatal error are only counted in summary.not_checked), coal_command, pal2nal_command
+        (the closest PAL2NAL v14 command line) and pal2nal_caveats (when that command does not do the same, e.g.
+        -nogap with another genetic code), methods_text (a ready-to-paste methods sentence, empty if
         nothing was aligned), and stderr (COAL's raw messages).
     """
     for p in (protein_alignment_path, dna_fasta_path):
@@ -44,8 +50,10 @@ def codon_align(protein_alignment_path: str, dna_fasta_path: str, output_format:
             return {"ok": False, "error": f"file not found: {p}", "output_path": None}
     try:
         # CHANGED(APP-12): was a /tmp/coal_* folder never cleaned; now a pruned folder in core.RUNS_DIR
+        # CHANGED(FIN-A6): strict and blockonly passed on (were not available to agents)
         r = core.run_coal(protein_alignment_path, dna_fasta_path, output_format, int(codontable),
-                          bool(nogap), bool(nomismatch), out_dir=core.new_run_dir())
+                          bool(nogap), bool(nomismatch), out_dir=core.new_run_dir(), strict=bool(strict),
+                          blockonly=bool(blockonly))
     except ValueError as e:
         return {"ok": False, "error": str(e), "output_path": None}
     problems = [{"id": s.get("id"), "status": s.get("status"), "explanation": core.sequence_sentence(s)}
@@ -62,6 +70,7 @@ def codon_align(protein_alignment_path: str, dna_fasta_path: str, output_format:
         "methods_text": core.methods_text(r.report),
         "coal_command": r.coal_cmd,
         "pal2nal_command": r.pal2nal_cmd,
+        "pal2nal_caveats": core.pal2nal_caveats(r.report.get("options") or {}),  # CHANGED(FIN-A5/FIN-C8)
         "stderr": r.stderr[-4000:],
     }
 

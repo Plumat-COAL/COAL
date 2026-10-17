@@ -16,19 +16,18 @@ Recorded from the golden files, not assumed. COAL must match these, or document 
 | unordered_ids | Sequences matched by ID; output follows protein-alignment order and IDs. |
 | id_mismatch_same_order | Different IDs → matched by position; protein IDs used in output. |
 | id_mismatch_count, empty_protein | `ERROR: number of input seqs differ` on stderr, empty stdout. |
-| codon_mismatch | One mismatched codon in a 5-codon sequence → `ERROR: inconsistency` on stderr, empty stdout. (Bundled long test with one mismatch only gives a WARNING — tolerance threshold still to be characterised.) |
+| codon_mismatch | One mismatched codon in a 5-codon sequence → `ERROR: inconsistency` on stderr, empty stdout. (A long gene with one mismatch only gives a WARNING: PAL2NAL's fallback places a gene by its 10-residue segments, so a gene shorter than about 20 residues with a mismatch fails; see long_mismatch.) <!-- CHANGED(FIN-C15): was "tolerance threshold still to be characterised" --> |
 | inframe_stop | `*` in protein maps to the stop codon. `-nogap` removes the stop column. |
 | terminal_stop, utr | UTRs and trailing stop codon trimmed; only the aligned region is output. |
 | frameshift | `2` → two bases plus one `-` (`GT-`). |
 | frameshift_mixed | Digits 1/2/4/5 in one column: the column is widened to 6 for every sequence (`4` → 4 bases + `--`; ordinary codon → codon + `---`). |
-| frameshift_codon_line | `-output codon`: after a column where the **last** sequence has a digit 4–6 (7–9), every residue line gets one (two) extra `-` token(s); digits in other sequences, gaps or residues in the last one add nothing. Residue tokens and codons are then cut into blocks of 20 separately. Pinned down with black-box runs of PAL2NAL (output only). |
 | utr, utr_frames | Leftmost place in the DNA, in any frame, where the whole protein fits; extra sequence before and after is dropped. Case is kept. |
 | alt_start | The first Met may be any start codon of the genetic code (table 1: TTG/CTG/ATG). GTG is not a table-1 start, so PAL2NAL uses its fallback, which accepts A/C/G-TG for the first Met. No warning. |
 | long_mismatch | One wrong codon in 30 → fallback (10-residue chunks) succeeds, output produced, `WARNING ... V does not correspond to GAT` on stderr. Very short sequences (< 20 residues) with a mismatch fail instead (see codon_mismatch). |
 | two_nuc_files | DNA can be split over several files; all non-letters in the DNA are removed. |
 | table2 … table23 | `-codontable N` for each NCBI code PAL2NAL supports. With the default table these inputs mostly fail or warn. |
 | ambiguous_bases | `X`↔`NNN` and IUPAC `R` in codons accepted and copied. |
-| invalid_chars | `@` warned and treated as `X`. **Output for s1 is `ATGAAAGTTZZZ` — the final codon `CTG` (L) is lost with no warning.** Looks like a PAL2NAL bug; COAL should probably error instead (deliberate difference, to be decided). |
+| invalid_chars | `@` warned and treated as `X`. **Output for s1 is `ATGAAAGTTZZZ` — the final codon `CTG` (L) is lost with no warning.** Looks like a PAL2NAL bug; COAL refuses it with an error (deliberate difference, decided: see below). <!-- CHANGED(FIN-C15): was "to be decided" --> |
 | codontable2 | Default table → `ERROR: inconsistency`; `-codontable 2` → accepted. |
 
 When `-nomismatch` (or `-nogap`) removes every column, PAL2NAL prints an empty line for each sequence; COAL does the same.
@@ -36,6 +35,17 @@ When `-nomismatch` (or `-nogap`) removes every column, PAL2NAL prints an empty l
 **Exit code is always 0, even on ERROR.** Errors are only visible as an empty stdout plus `ERROR` on stderr.
 
 ## Deliberate differences (COAL ≠ PAL2NAL, by design)
+
+Each difference has a reference point other than PAL2NAL v14 itself:
+**NCBI** (the current genetic-code tables: codes 3, 10, 11 and 13; the selected code's start codons for the first Met
+in the fallback; `-nogap` removing the selected code's stop codons), **the sequence formats' definitions** (`.` as a
+gap, IUPAC ambiguity codes, `U` = selenocysteine, RNA read as DNA, FASTA with a BOM, a blank first line or `> id`),
+**PAL2NAL's own consistency** (its fallback treats the first Met, RNA and B/Z/J/O differently from its exact-fit
+path; rows of different lengths; duplicate IDs) or **policy**, a choice of COAL's and not a PAL2NAL error (malformed
+input is an error instead of output, `coal` writes FASTA by default, COAL's own wording of warnings). Some inputs make
+PAL2NAL v14 fail with an ERROR (a BOM, a blank first line), others make it print a warning (codes 10, 11, 13):
+not every difference is a silent one. <!-- CHANGED(FIN-C3): new; was implied that every difference is PAL2NAL silently
+writing wrong output. See overnight/integration/CHANGES.md -->
 
 | Case | PAL2NAL v14 | COAL |
 |---|---|---|
@@ -66,9 +76,9 @@ When `-nomismatch` (or `-nogap`) removes every column, PAL2NAL prints an empty l
 
 <!-- CHANGED(ENG-i1, ENG-i5): this section is new; the "1,300 random inputs / 490 without differences" claim was removed. See overnight/engine-fixes/CHANGES.md -->
 <!-- CHANGED(DEC-4): was "every FASTA variant (the clustal, paml and codon goldens are not compared: COAL has only FASTA
-output)"; now all 279 stored goldens. See overnight/integration/CHANGES.md -->
+output)"; now all 285 stored goldens (MRG-5: was 279). See overnight/integration/CHANGES.md -->
 Every case in `cases.json` × every variant, in all four output formats (`fasta*`, `clustal`, `paml`, `codon`): all
-285 stored goldens.<!-- CHANGED(MRG-5): was 279 --> COAL runs with exactly PAL2NAL's options (`-output X` included). Per check:
+285 stored goldens. COAL runs with exactly PAL2NAL's options (`-output X` included). Per check:
 
 1. **Exit status.** PAL2NAL always exits 0, even on ERROR, so each golden `.rc` is asserted to be `0`, and PAL2NAL
    counts as successful when its stdout is non-empty. COAL must exit 0 exactly when PAL2NAL succeeded
@@ -127,38 +137,45 @@ once per output format. PAL2NAL succeeded (non-empty stdout) → COAL must exit 
 failed → COAL must exit non-zero with empty stdout. stderr is not compared. The only allowed differences are the
 script's `DELIBERATE` features (invalid protein characters; the NCBI-vs-PAL2NAL genetic-code differences, measured
 against the real PAL2NAL for every codon × residue and every first-Met codon: table 10 TGA, table 3 GTG, table 11
-ATT/ATC/ATA and table 13 ATA starts; IUPAC codes other than N; `U` residues; RNA first Met in the fallback; DNA IDs
-that match only after normalising, in another order, MRG-1: COAL's output must be byte-identical to PAL2NAL's on the
-same case with the DNA records in protein order), and a case may differ only if the generator gave it one of them. CI job `pal2nal-fuzz` runs it on every push.
+ATT/ATC/ATA and table 13 ATA starts; the selected code's start and Met codons for the first Met in the fallback
+(FIN-E1); IUPAC codes other than N; `U` residues; RNA first Met in the fallback; `-nogap` with the selected code's
+stops; DNA IDs that match only after normalising, in another order, MRG-1: COAL's output must equal, byte for byte,
+PAL2NAL v14's output on the same case with the DNA records in protein order).
+
+<!-- CHANGED(FIN-C10): was "a case may differ only if the generator gave it one of them" (any difference was accepted) -->
+A difference is accepted only if it is **exactly** the documented one (FIN-C10). The generator also writes a
+neutralised copy of each case: `U` → `B` in the protein (PAL2NAL treats B as COAL treats U), RNA → DNA, an
+alternative or fallback first-Met codon → ATG, a table-10 TGA Cys codon → TGC, each IUPAC codon → one of its readings
+chosen to match the residue (and to be a stop) exactly when COAL's rule says so; substituted bases are written in the
+other letter case so they can be recognised. PAL2NAL is run on that copy without `-nogap`. COAL's output must equal
+that output, base for base, apart from the substituted bases (which must be the documented substitution); with
+`-nogap`, COAL's output without `-nogap` must pass that check and its `-nogap` output must equal the documented rule
+(remove 3-nt columns with a gap or a stop codon of the selected code, any case, U as T, IUPAC triplets whose every
+reading is a stop, e.g. `TRA`) applied to it. A gene placed away from its generated frame (e.g. unrelated DNA) gets
+a third copy with the ATG where COAL placed its first Met. An invalid protein character must be a COAL error. A case
+without a deliberate feature must be byte-identical (or both fail). Anything else is unexplained.
+`tests/test_fuzz_harness.py` checks the checker (no PAL2NAL needed), including the coordinator's case 440.
+CI job `pal2nal-fuzz` runs the fuzz on every push.
 
 Result in this repository (seed 20261017, 5,000 cases, 20,000 comparisons; PAL2NAL v14 sha256 2b419417…; after
-the merge with the teammate's branch, MRG-1: the generator has the normalised-ID mode, so the numbers changed):
-<!-- CHANGED(FZ-claim): was the 3,000-case run before the FZ fixes --> <!-- CHANGED(MRG-1): was 4,096 / 612 / 292 / 0 and 2,080 / 2,887 / 33 / 0 -->
+FIN-E1, FIN-C10 and the merge with the extras/C++ branch, whose generator mode for normalised IDs changes the
+random stream, MRG-9): <!-- CHANGED(MRG-9): re-measured after the merge; was 4,067 / 600 / 333 and codon 2,068 / 2,892 / 40 --> <!-- CHANGED(FIN-C10): was the run before FIN-E1/FIN-C10 (4,096 / 612 / 292; codon 2,080 / 2,887 / 33) -->
 
 | `-output` | cases | identical | both fail | deliberate differences | unexplained |
 |---|---:|---:|---:|---:|---:|
-| clustal | 5,000 | 3,937 | 604 | 457 | 2 |
-| paml | 5,000 | 3,937 | 604 | 457 | 2 |
-| fasta | 5,000 | 3,937 | 604 | 457 | 2 |
+| clustal | 5,000 | 3,937 | 604 | 459 | 0 |
+| paml | 5,000 | 3,937 | 604 | 459 | 0 |
+| fasta | 5,000 | 3,937 | 604 | 459 | 0 |
 | codon | 5,000 | 2,015 | 2,869 | 116 | 0 |
 
-The 2 "unexplained" per format are the harness's own false positive (cases 556 and 1775: an IUPAC codon such as `TGD`,
-read stop/W/C in code 6, under `-nogap`; COAL keeps it by its documented rule, not every reading is a stop, while the
-neutralised reference reads it as a stop). COAL's output in both cases is byte-identical to the engine before the
-merge; the harness is being corrected (same class as the second seed's case 440). Second seed, 4242, 3,000 cases:
-see overnight/integration/CHANGES.md MRG-1.
+Deliberate differences by feature (comparisons; a comparison can have several): first_met_code 327, genetic_code 147,
+invalid_char 153, iupac 235, nogap_code 660, normalised_ids 678, rna_first_met 177, u_residue 21. Cases exercising:
+'#' marks + `-blockonly` 488, '#' marks shown 466, `-nogap` 1,226, `-nomismatch` 1,235, CLUSTAL input 1,773, other
+codes 2,279, frameshift digits 197 (≥ 4: 94), tfastx 161, unrelated DNA 287, masked 583, partly matching IDs 275,
+normalised IDs 399, more than one 60-nt block 3,885. Other seed after the merge: 4242 (3,000 cases, 12,000 comparisons), 0 unexplained (before it: 4242 with 1,500 and
+777 with 3,000 cases, 0 unexplained).
 
-Deliberate differences by feature (cases): first_met_code 327, genetic_code 147, invalid_char 153, iupac 229,
-nogap_code 654, normalised_ids 678, rna_first_met 177, u_residue 21. Cases exercising: '#' marks + `-blockonly` 488,
-'#' marks shown 466, `-nogap` 1,226, `-nomismatch` 1,235, CLUSTAL input 1,773, other codes 2,279, frameshift digits
-197 (≥ 4: 94), tfastx 161, unrelated DNA 287, masked 583, partly matching IDs 275, normalised IDs 399, more than one
-60-nt block 3,885.
-
-The independent tester's stratified generator (26 strata such as BOM, CR line ends, tfastx, IUPAC, wrong code,
-edge cases; FASTA output; script in the tester's notes, not in the repo), re-run on this branch with 6,000 cases:
-4,962 both succeeded, of which 4,625 byte-identical stdout; 631 both fail; 744 differ, every one a documented
-deliberate difference (invalid characters, `.` as gap, NCBI tables, IUPAC, `U`, RNA first Met, B/Z/J/O fallback,
-`-nogap` stops, BOM / blank-line / `> id` input, rows of different lengths); 0 undocumented.
+<!-- CHANGED(FIN-C20): the 6,000-case run of the tester's own generator was removed: that generator is not in the repo, so the numbers could not be reproduced -->
 
 (codon: both fail whenever the case has `-nogap`, `-nomismatch` or `-blockonly`, which PAL2NAL refuses with codon
 output.) Before DEC-4 the same harness found, besides the missing formats and `-blockonly`, two engine differences,

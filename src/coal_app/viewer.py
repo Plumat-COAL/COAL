@@ -213,6 +213,16 @@ def _report_marks(report: dict | None) -> dict[str, dict]:
     return marks
 
 
+def _column_widths(rows, ncol: int) -> list[int]:
+    """nt per alignment column, as the engine writes them: 3, or 3 * ceil(N / 3) for a frameshift digit N."""
+    widths = [3] * ncol
+    for row in rows:
+        for i, ch in enumerate(row):
+            if ch.isdigit():
+                widths[i] = max(widths[i], (max(int(ch) - 1, 0) // 3 + 1) * 3)
+    return widths
+
+
 def build_rows(protein: list[tuple[str, str]], codon: list[tuple[str, str]] | None,
                report: dict | None = None, dna: list[tuple[str, str]] | None = None,
                codontable: int | None = None) -> tuple[list[dict], int, list[str]]:
@@ -225,8 +235,17 @@ def build_rows(protein: list[tuple[str, str]], codon: list[tuple[str, str]] | No
     dnad = dict(dna or [])
     notes: list[str] = []
     ncols = max((len(s) for _, s in protein), default=0)
-    codon_only = bool(codon) and any(
-        pid in cod and len(cod[pid]) != 3 * len(row) for pid, row in protein)
+    # CHANGED(FIN-A7): was "any row length != 3 x columns", so a column widened by a frameshift digit >= 4 looked like
+    # removed columns ("-nogap or -nomismatch" note although neither was used); now the options actually used, or,
+    # without a report, the length expected from the column widths (frameshift digits included).
+    # See overnight/integration/CHANGES.md
+    widths = _column_widths([row for _, row in protein], ncols)
+    opts = (report or {}).get("options") if isinstance((report or {}).get("options"), dict) else None
+    if opts is not None:
+        codon_only = bool(codon) and bool(opts.get("nogap") or opts.get("nomismatch") or opts.get("blockonly"))
+    else:
+        codon_only = bool(codon) and any(pid in cod and len(cod[pid]) != sum(widths[:len(row)])
+                                         for pid, row in protein)
     if codon_only:
         notes.append("Columns were removed from the codon alignment (-nogap or -nomismatch), so columns are "
                      "numbered as in the output and amino acids are translated from the codons. Problems are "
@@ -241,8 +260,12 @@ def build_rows(protein: list[tuple[str, str]], codon: list[tuple[str, str]] | No
             crow = cod[pid].upper()
             n = len(crow) // 3 if codon_only else len(prow)
             first_res = True
+            bounds = None if codon_only else [0]
+            if bounds is not None:  # FIN-A7: cell i holds widths[i] nt (wider for a frameshift digit >= 4)
+                for w in widths[:n]:
+                    bounds.append(bounds[-1] + w)
             for i in range(n):
-                c = crow[3 * i:3 * i + 3]
+                c = crow[3 * i:3 * i + 3] if bounds is None else crow[bounds[i]:bounds[i + 1]]
                 aa = gcode.translate(c, codontable) if codon_only else prow[i].upper()
                 if codon_only and "-" in c:
                     aa = "-"
@@ -534,7 +557,23 @@ def render_run(protein_path: str, output_path: str | None, report: dict, dna_pat
                out_dir: str) -> tuple[str, str]:
     """CHANGED(R2-A3): new; was two full view() calls in ui.run_ui. Renders once: (fragment for the GUI, path of
     the downloadable page written into out_dir)."""
-    frag = view(protein_path, output_path, report, dna_path, codontable, page=False)
+    # CHANGED(FIN-A4): was the output read as FASTA/CLUSTAL whatever its format, so PAML and codon output gave
+    # "<server path>: not FASTA or CLUSTAL"; now those are drawn from a FASTA copy of the same run (same options),
+    # written to a hidden temporary file in out_dir and deleted. See overnight/integration/CHANGES.md
+    opts = (report or {}).get("options") or {}
+    tmp = None
+    if output_path and opts.get("output_format") in ("paml", "codon"):
+        from . import core
+        tmp = os.path.join(out_dir, ".view_copy.fasta")
+        code, _, _ = core._run_engine(protein_path, dna_path, tmp, "fasta", codontable, bool(opts.get("nogap")),
+                                      bool(opts.get("nomismatch")), False, None,
+                                      blockonly=bool(opts.get("blockonly")))
+        output_path = tmp if code == 0 and os.path.isfile(tmp) else None
+    try:
+        frag = view(protein_path, output_path, report, dna_path, codontable, page=False)
+    finally:
+        if tmp and os.path.exists(tmp):
+            os.remove(tmp)
     path = os.path.join(out_dir, "alignment_view.html")
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(render_page(frag, f"Codon alignment: {os.path.basename(protein_path)}"))
