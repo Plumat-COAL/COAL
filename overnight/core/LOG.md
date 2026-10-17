@@ -154,6 +154,11 @@ Push when happy: `git push -u origin overnight/core`
 - 2026-10-17 02:26 UTC | review pass 4 | CLEAN | ASan/UBSan (golden, random, resume, progress) and TSan (3 threads: plain, codon+keep-going, -nomismatch+report) on the final code; 3,000 new random cases (seeds 1-3) identical between engines; pyflakes clean; no TODO/debug leftovers; -X dev with ResourceWarnings: none; full suite 52 tests OK; golden 279/279 both engines; no leaked temp files; benchmarks re-checked (unchanged). Review stops here (clean pass).
 - 2026-10-17 09:40 UTC | morning | codon residue-line quirk FIXED | black-box probing of PAL2NAL (110 + 8 layouts, output only) showed the rule: after a column where the LAST sequence has digit N, each residue line gets 3*ceil(N/3)/3-1 extra '-' tokens (gap/residue there: none). Implemented in both engines (residue_line_blocks / write_blocks), 98/98 probe layouts identical to PAL2NAL for each engine; new fixture tests/fixtures/frameshift_codon_line + PAL2NAL goldens via scripts/make_golden.py (case added to cases.json) -> 285/285 golden checks on both engines; the previous build fails the new codon golden, so the test covers the fix.
 
+## Run 3 progress (C++ foundations brief: build, readers, tables, CLI, pool, test hookup)
+
+- Reconciled with the brief: overnight/core already had the CMake build, the ordered streaming thread pipeline, the COAL_IMPL=cpp hookup and verified output writers (285 golden checks) from runs 1-2; those are kept, not redone. The local branch overnight/merged (merge with Keanu's integration, not pushed) is left untouched, as the brief says not to merge yet.
+- 2026-10-17 10:40 UTC | CPP-1 build setup | CMake options COAL_WARNINGS_AS_ERRORS / COAL_BUILD_TOOLS; stricter flags. GCC 11 -Werror -Wpedantic -Wshadow clean; clang 19 -Werror clean for Windows (MinGW), macOS (arm64) and Linux targets. MSVC not available on this machine: flags set (/W4 /WX /permissive- /utf-8, _CRT_SECURE_NO_WARNINGS); a clang -Wconversion pass (approximating MSVC C4244/C4267 loss-of-data warnings, with 32-bit long as on Windows) found none.
+
 ## Decisions
 
 - Output-format conventions were taken from the goldens, plus a few black-box runs of PAL2NAL v14 in a scratch folder outside the repo (only its *output* was looked at; no code read or copied, nothing from it committed):
