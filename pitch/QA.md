@@ -1,16 +1,20 @@
 # COAL: likely judge questions, short honest answers
 
 Judges: Apheris, PDBe, the Ellison Institute, CuspAI, Inherent, UCL. Rule: if a feature is marked
-**[after merge]**, say "being merged now", or say nothing about it if the engine branch isn't in.
+**[after the C++/formats branch is merged]**, say "being merged now", or say nothing about it if that branch
+isn't in (the engine-fixes branch is already merged). <!-- CHANGED(R2-D12): was "[after merge]" -->
 
 **1. How do you know it's correct on my data?**
 We compared COAL with PAL2NAL v14's real output on 38 hand-made inputs covering every behaviour we found
-(UTRs, frameshift codes, all 17 genetic codes, ambiguous bases, ID mismatches): 165 checks. 143 compare
-COAL's output with PAL2NAL's byte for byte, and 94 of those also compare the warnings; 12 check that COAL
-rejects the inputs PAL2NAL fails on (exit code only, not the message); 10 are documented deliberate
-differences, where we check COAL's own behaviour instead. On your data, COAL checks every
+(UTRs, frameshift codes, all 17 genetic codes, ambiguous bases, ID mismatches): 165 checks on 38 hand-made
+inputs. 147 compare COAL's output with PAL2NAL's byte for byte, and 141 of those also compare the warnings;
+12 check that COAL rejects the inputs PAL2NAL fails on (exit code only, not the message); 6 are documented,
+deliberate differences, where we check COAL's own behaviour instead. On your data, COAL checks every
+<!-- CHANGED(R2-D2): was 143 / 94 / 10; guarded by tests_app/test_docs_numbers.py -->
 codon against its amino acid and tells you per gene if it doesn't fit, with the column, so problems can't
-pass silently. Honest limit: the speed benchmarks use synthetic data, not real genomes, and the reference
+pass silently (with `-nomismatch` the command line, like PAL2NAL, prints no mismatch warnings; the GUI and
+the AI tools re-check and still name the genes and count the removed columns).
+<!-- CHANGED(R2-D5) --> Honest limit: the speed benchmarks use synthetic data, not real genomes, and the reference
 inputs are small and hand-made.
 
 **2. Why does 100x matter if PAL2NAL takes minutes?**
@@ -24,7 +28,7 @@ instead of silent.
 Built today: wrong genetic code -> COAL tests other codes and suggests the one that fits (one-click re-run
 in the GUI). A frameshift -> the gene and column are named and shown in the alignment view. Invalid
 characters -> a clear error (PAL2NAL silently drops a codon). Protein IDs like AT1G01010.1 vs DNA IDs
-AT1G01010 -> COAL explains the mismatch. Errors give a non-zero exit code. **[after merge]** IDs matched
+AT1G01010 -> COAL explains the mismatch. Errors give a non-zero exit code. **[after the C++/formats branch is merged]** IDs matched
 after removing version suffixes, and `--keep-going` so one bad gene doesn't stop the rest.
 
 **4. Why not just use PAL2NAL?**
@@ -39,13 +43,15 @@ default clustal output must add `-output fasta` until COAL writes clustal. PAL2N
 COAL produces the input that PAML (codeml), HyPhy and KaKs_Calculator need, and deliberately does not
 estimate dN/dS itself: those tools are established and well validated, and re-implementing them would add
 risk, not value. `-nogap` removes gap and stop-codon columns, as many dN/dS setups expect;
-**[after merge]** PAML output format directly.
+**[after the C++/formats branch is merged]** PAML output format directly.
 
 **6. Is this AI-generated code you can't maintain?**
 Much of it was written with AI assistance (Claude), and we say so. What makes it maintainable is the
-same as for any code: about 1,050 lines of dependency-free Python in the engine and 2,150 in the app
-layer, a differential test suite against PAL2NAL's real output, 115 app tests, CI on Windows, macOS and
-Linux (green on the app branch; the new GUI and MCP jobs have not run yet: check before claiming them), and documented decisions (every deliberate difference from PAL2NAL is written down with its test).
+same as for any code: about 1,300 lines of dependency-free Python in the engine and 2,350 in the app
+layer, a differential test suite against PAL2NAL's real output, more than 140 app tests, CI on Windows, macOS
+and Linux (the Windows job was red until the round-2 fixes: open the latest GitHub Actions run and only say
+"green" if it is), and documented decisions (every deliberate difference from PAL2NAL is written down with its test).
+<!-- CHANGED(R2-D2, R2-D3): was "about 1,050 lines ... 2,150 ... 115 app tests ... green on the app branch; the new GUI and MCP jobs have not run yet" (both false). See overnight/integration/CHANGES.md -->
 *[Team: say who reviewed which parts. Only claim review you actually did.]*
 
 **7. How will this be maintained after the weekend?**
@@ -65,6 +71,6 @@ with the same columns and gene names a human sees, instead of guessing from raw 
 "fix" a sequence; it can only re-run with options COAL suggests, such as another genetic code.
 
 **10. What doesn't it do yet?**
-CLUSTAL/PAML/codon output formats and `-blockonly` (output formats **[after merge]**); `-blockonly` and
+CLUSTAL/PAML/codon output formats and `-blockonly` (output formats **[after the C++/formats branch is merged]**); `-blockonly` and
 `-html` give clear errors. The web GUI is new and has only been run on *[team: the laptops it was tested on]*; the Space is not deployed. The DIAMOND
-preset has only been tested with a stand-in, not real genomes. The C++ core is **[after merge]**.
+preset has only been tested with a stand-in, not real genomes. The C++ core is **[after the C++/formats branch is merged]**.

@@ -6,7 +6,9 @@
 Pipelines that already call PAL2NAL with ``-output fasta`` can swap ``pal2nal.pl`` for
 ``pal2nal`` (or ``python -m coal_compat``): the codon alignment goes to standard output,
 messages to standard error. Pipelines relying on PAL2NAL's default (clustal) output must add
-``-output fasta`` until COAL writes clustal. ``-nostderr`` is accepted (COAL's ``-q``).
+``-output fasta`` until COAL writes clustal. ``-nostderr`` is accepted and mapped to COAL's ``-q``: per-codon warnings are silenced, but
+COAL's notices about probably-wrong data and its errors still go to standard error (PAL2NAL's ``-nostderr``
+silences everything). CHANGED(R2-A10): was "(COAL's ``-q``)", which implied a silent stderr.
 Options COAL cannot honour (including ``-verbose``) give a clear error instead of being
 silently ignored.
 

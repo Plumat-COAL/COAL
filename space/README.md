@@ -20,7 +20,9 @@ Files you upload are processed on this shared Hugging Face server and deleted wi
 the Space restarts). For unpublished or sensitive data, install COAL on your own computer instead.
 
 AI agents: the MCP tools (`codon_align`, `explain_report`) work on files on the computer that runs them,
-so use them locally (`pip install "coal[mcp]"`, then `python -m coal_app --mcp`, or `coal-gui`, which also
-serves MCP). This public Space does not serve MCP.
+so use them locally: COAL is not on PyPI (a package called "coal" there is something else), so install it
+from the repository (`git clone https://github.com/chloe-newt/COAL`, then `pip install -e "./COAL[mcp]"`),
+then run `python -m coal_app --mcp`, or `coal-gui`, which also serves MCP.
+<!-- CHANGED(R2-D9): was pip install "coal[mcp]" (not on PyPI). See overnight/integration/CHANGES.md --> This public Space does not serve MCP.
 
 Source: https://github.com/chloe-newt/COAL

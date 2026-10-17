@@ -42,7 +42,9 @@ def main(argv=None) -> int:
     ap.add_argument("-j", "--jobs", type=int, default=0, metavar="N",
                     help="maximum worker processes (default 0 = automatic: all CPU cores for large "
                          "inputs, one process for small ones; 1 = never use extra processes)")
-    ap.add_argument("-q", "--quiet", action="store_true", help="do not print warnings")
+    # CHANGED(R2-E4): help was "do not print warnings" (notices are printed anyway)
+    ap.add_argument("-q", "--quiet", action="store_true",
+                    help="do not print per-codon warnings (notices about probably-wrong data are still printed)")
     ap.add_argument("--version", action="version", version=f"coal {__version__}")
     args = ap.parse_args(argv)
 

@@ -31,9 +31,14 @@ pip install -e .[fast]                              # optional numpy speed-up fo
   to the next multiple of 3 for every sequence.
 - **Mismatches:** if the protein doesn't fit exactly, COAL uses PAL2NAL's fallback: it lines up 10-residue
   chunks and prints a warning for each codon that doesn't match its residue. `-nomismatch` removes those
-  columns. If even that fails, it's an error.
+  columns (and, as in PAL2NAL, then prints no mismatch warnings). If even that fails, it's an error. It is also
+  an error if more than half of a gene's checkable codons (made only of A/C/G/T) don't match: that is not the
+  right DNA for the protein. Codons with N or other ambiguity codes don't count, so masked genes still align.
 - **`-nogap`** removes codon columns that contain a gap or a stop codon.
-- **Exit code** is non-zero on any error (PAL2NAL always exits 0). Warnings go to stderr; `-q` silences them.
+- **Exit code** is non-zero on any error (PAL2NAL always exits 0). Warnings go to stderr; `-q` silences the
+  per-codon warnings, but notices about probably-wrong data (no 10-residue segment found, only some IDs
+  matching) are always printed.
+<!-- CHANGED(R2-D6, R2-E4): was "-q silences them" and no mention of the more-than-half rule (ENG-c, as amended by R2-E3). See overnight/integration/CHANGES.md -->
 
 **Large inputs:** COAL streams the data. It reads the protein alignment and indexes the DNA file(s) (IDs and file
 positions only), then handles one sequence at a time, fetching its DNA from disk and writing its output row. So
@@ -58,6 +63,32 @@ if the whole run succeeds, so an error never leaves a partial file. Notes:
 - `.` is treated as a gap. In PAL2NAL it misaligns the output row.
 - Ambiguous DNA bases (IUPAC codes) are accepted when every base they could stand for gives the right amino acid.
   PAL2NAL accepts only some fixed combinations.
+- More than half of a gene's checkable codons not matching is an error (`protein and DNA are inconsistent`).
+  PAL2NAL's fallback method (which COAL otherwise follows) accepts such input and writes unrelated DNA under
+  the protein. Codons containing N/IUPAC codes are not counted.
+- When some but not all protein IDs are DNA IDs, COAL pairs by order like PAL2NAL but prints a notice naming an
+  example pair (PAL2NAL is silent); when no ID matches it stays silent, like PAL2NAL.
+- Genetic code 3 (yeast mitochondrial) also accepts GTG as a start codon (current NCBI table; whether PAL2NAL v14
+  does is unverified, so this is a possible difference).
+- With `-nomismatch`, `unknown AA type. Taken as 'X'` warnings (for B/Z/J/O/U) are still printed; PAL2NAL prints
+  nothing there. Mismatch warnings are not printed, as in PAL2NAL.
+<!-- CHANGED(R2-D6): ENG-c, ENG-d, ENG-g, ENG-i2 added. See overnight/integration/CHANGES.md -->
+
+## Ways to use COAL
+
+<!-- CHANGED(R2-D6): new section. See overnight/integration/CHANGES.md -->
+- **Command line:** `coal` / `python -m coal` (above).
+- **Drop-in for PAL2NAL pipelines:** `pal2nal pep.aln nuc.fasta -output fasta ...` (or `python -m coal_compat`)
+  accepts PAL2NAL's command line and runs COAL (see `src/coal_compat/cli.py` for what is supported).
+- **Web GUI for bench scientists:** `pip install -e .[gui]`, then `python -m coal_app` (or `coal-gui`): runs on
+  this computer at http://127.0.0.1:7860, with a per-gene health check, an alignment view that marks where a
+  gene breaks, genetic-code suggestions and a ready-to-paste methods sentence.
+- **AI agents (MCP):** `pip install -e .[mcp]`, then `python -m coal_app --mcp` (two tools: `codon_align`,
+  `explain_report`); the GUI also serves MCP. Agent instructions: `.claude/skills/coal/SKILL.md`.
+- **Windows app:** a desktop wrapper with an installer, no terminal needed: `desktop/README.md` (users) and
+  `desktop/BUILD.md` (building it).
+- **Hosted demo:** a Hugging Face Space is prepared but not deployed: `space/README.md`, `space/DEPLOY.md`.
+- **Two-species preset:** `demo/diamond_pipeline.py` (DIAMOND reciprocal best hits, then COAL on every pair).
 
 ## Tests
 

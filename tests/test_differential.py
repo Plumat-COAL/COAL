@@ -85,48 +85,61 @@ def fasta_variants():
                 yield case, v, opts
 
 
+COUNT_KEYS = ("golden rc = 0", "COAL exit status", "stdout byte-identical", "warnings identical",
+              "with -nomismatch", "both fail", "deliberate error", "deliberate same_output", "deliberate differs")
+
+
+def compare_all(tc: unittest.TestCase):
+    """Run every check (assertions on `tc`); return (number of cases, number of checks, counts).
+    CHANGED(R2-D2): was inline in test_all_cases; now shared with the docs-numbers guard
+    (tests_app/test_docs_numbers.py). See overnight/integration/CHANGES.md"""
+    n = 0
+    count = dict.fromkeys(COUNT_KEYS, 0)
+    cases = set()
+    for case, v, opts in fasta_variants():
+        with tc.subTest(case=case, variant=v):
+            n += 1
+            cases.add(case)
+            g_out = (GOLD / case / f"{v}.stdout").read_text()
+            g_err = (GOLD / case / f"{v}.stderr").read_text()
+            g_rc = int((GOLD / case / f"{v}.rc").read_text().strip())
+            tc.assertEqual(g_rc, 0, "PAL2NAL is expected to always exit 0")
+            count["golden rc = 0"] += 1
+            pal_ok = g_rc == 0 and g_out != ""
+            rc, out, err = run_coal(case, opts)
+            kind = DELIBERATE.get((case, v))
+            if kind == "error":
+                tc.assertNotEqual(rc, 0)
+                count["deliberate error"] += 1
+                continue
+            tc.assertEqual(rc == 0, pal_ok, err)
+            count["COAL exit status"] += 1
+            if kind == "differs":
+                count["deliberate differs"] += 1
+            elif not pal_ok:
+                tc.assertEqual(out, "")
+                count["both fail"] += 1
+            else:
+                tc.assertEqual(out, g_out)
+                count["stdout byte-identical"] += 1
+                if kind == "same_output":
+                    count["deliberate same_output"] += 1
+                else:
+                    tc.assertEqual(warnings_of(err), warnings_of(g_err))
+                    count["warnings identical"] += 1
+                    count["with -nomismatch"] += "-nomismatch" in opts
+    return len(cases), n, count
+
+
+def summary_line(ncases, n, count) -> str:
+    return f"PAL2NAL comparison: {ncases} cases, {n} checks: " + ", ".join(f"{k} {v}" for k, v in count.items())
+
+
 class TestAgainstPal2nal(unittest.TestCase):
     def test_all_cases(self):
         # CHANGED(ENG-i1, ENG-i2): was: .rc never read, warnings not compared with -nomismatch, no counts.
-        n = 0
-        count = dict.fromkeys(("golden rc = 0", "COAL exit status", "stdout byte-identical",
-                               "warnings identical", "with -nomismatch", "both fail",
-                               "deliberate error", "deliberate same_output", "deliberate differs"), 0)
-        cases = set()
-        for case, v, opts in fasta_variants():
-            with self.subTest(case=case, variant=v):
-                n += 1
-                cases.add(case)
-                g_out = (GOLD / case / f"{v}.stdout").read_text()
-                g_err = (GOLD / case / f"{v}.stderr").read_text()
-                g_rc = int((GOLD / case / f"{v}.rc").read_text().strip())
-                self.assertEqual(g_rc, 0, "PAL2NAL is expected to always exit 0")
-                count["golden rc = 0"] += 1
-                pal_ok = g_rc == 0 and g_out != ""
-                rc, out, err = run_coal(case, opts)
-                kind = DELIBERATE.get((case, v))
-                if kind == "error":
-                    self.assertNotEqual(rc, 0)
-                    count["deliberate error"] += 1
-                    continue
-                self.assertEqual(rc == 0, pal_ok, err)
-                count["COAL exit status"] += 1
-                if kind == "differs":
-                    count["deliberate differs"] += 1
-                elif not pal_ok:
-                    self.assertEqual(out, "")
-                    count["both fail"] += 1
-                else:
-                    self.assertEqual(out, g_out)
-                    count["stdout byte-identical"] += 1
-                    if kind == "same_output":
-                        count["deliberate same_output"] += 1
-                    else:
-                        self.assertEqual(warnings_of(err), warnings_of(g_err))
-                        count["warnings identical"] += 1
-                        count["with -nomismatch"] += "-nomismatch" in opts
-        print(f"\nPAL2NAL comparison: {len(cases)} cases, {n} checks: "
-              + ", ".join(f"{k} {v}" for k, v in count.items()), file=sys.stderr)
+        ncases, n, count = compare_all(self)
+        print("\n" + summary_line(ncases, n, count), file=sys.stderr)
         self.assertGreater(n, 100)
 
 

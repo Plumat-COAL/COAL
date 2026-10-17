@@ -1,8 +1,10 @@
 # COAL: 3-minute pitch ("teach the room")
 
-Rule for the speaker: say only what is on this page. Lines marked **[after merge]** describe engine features
-being built on the engine branch (output formats, `--keep-going`, ID normalisation, C++ core). Say "this is
-landing now", never "it does". If the engine branch is not merged by Sunday 10:00, skip those lines.
+Rule for the speaker: say only what is on this page. Lines marked **[after the C++/formats branch is merged]**
+describe features being built on the teammate's branch (output formats, `--keep-going`, ID normalisation, C++
+core); the engine-fixes branch is already merged, and `coal --help` still lists only `-output fasta`. Say "this is
+landing now", never "it does". If that branch is not merged by Sunday 10:00, skip those lines.
+<!-- CHANGED(R2-D12): was "[after merge]", which read as the (already merged) engine-fixes branch -->
 
 **Before going on:** laptop on mains, browser tabs open in this order: (1) `pitch/explainer.html`,
 (2) the COAL GUI at http://127.0.0.1:7860 (`python -m coal_app`), (3) `pitch/backup/` folder. Zoom the
@@ -43,23 +45,23 @@ browser to 125-150 %. Run "One broken gene" once beforehand so nothing is cold.
 | 2:00 | (one sentence) | "AI assistants get the same thing through MCP: two tools, `codon_align` and `explain_report`." |
 
 On the current engine the broken-gene run stops at the bad gene ("COAL stopped: no alignment was written")
-and the other 19 show as "not checked". **[after merge]** With `--keep-going` the same click writes the 19
+and the other 19 show as "not checked". **[after the C++/formats branch is merged]** With `--keep-going` the same click writes the 19
 good genes and flags the one bad one; say "the other 19 are aligned" only if you see it on screen.
 
 ## 2:05-2:35 Proof
 
+<!-- CHANGED(R2-D2): was 143 / 94 / 10 (stale after the engine merge); now the harness's current counts, guarded by tests_app/test_docs_numbers.py. See overnight/integration/CHANGES.md -->
 - "Correctness: we test COAL against PAL2NAL version 14's own output: 165 checks on 38 hand-made inputs and
-  every FASTA option. 143 checks compare the output byte for byte, and 94 of those also compare the
-  warnings. 12 check that COAL rejects the inputs PAL2NAL fails on. 10 are documented, deliberate
-  differences where we think PAL2NAL is wrong, such as that dropped codon; for those we check COAL's own
-  behaviour."
+  every FASTA option. 147 compare the output byte for byte, and 141 of those also compare the warnings.
+  12 check that COAL rejects the inputs PAL2NAL fails on. 6 are documented, deliberate differences where
+  we think PAL2NAL is wrong, such as that dropped codon; for those we check COAL's own behaviour."
 - "Speed, measured on one Windows laptop, end to end: 100 genes of 10,000 codons, PAL2NAL 24.5 seconds,
   COAL 0.2 seconds, 119 times faster. Ten thousand genes: 25 seconds down to under one second.
   Half a million genes, nearly a gigabyte: 10 seconds with 4 processes, 25 on one. For tiny inputs both take about 0.05 seconds; we
   don't claim a speed-up there."
 - "The engine is pure Python with no dependencies, MIT licence. Continuous integration is set up for Windows, macOS and
   Linux." (Only say "passes on all three" if the GitHub Actions run is green when you present.)
-- **[after merge]** "A C++ core for the largest jobs."
+- **[after the C++/formats branch is merged]** "A C++ core for the largest jobs."
 
 ## 2:35-3:00 Vision
 

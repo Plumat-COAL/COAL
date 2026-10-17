@@ -2,9 +2,11 @@
 
 Everything is prepared; nobody has deployed it. It takes about 5 minutes.
 
-1. **Check the Gradio pin first.** `space/README.md` (`sdk_version`), `space/requirements.txt` and the
-   `gui` extra in `pyproject.toml` all say `5.49.1`. That pin was written without PyPI access. Run the GUI
-   locally (`pip install -e .[gui]`, `python -m coal_app`); if you change the version, change all three.
+1. **The Gradio pin.** `space/README.md` (`sdk_version`), `space/requirements.txt` and the `gui` extra in
+   `pyproject.toml` all say `5.49.1`. CI's `gui` job installs `gradio[mcp]==5.49.1` and passes `pip check` and
+   the GUI tests (verified by CI on Linux). Still run the GUI locally once (`pip install -e .[gui]`,
+   `python -m coal_app`); if you change the version, change all three.
+   <!-- CHANGED(R2-D10): was "That pin was written without PyPI access". See overnight/integration/CHANGES.md -->
 2. **Create the Space**: https://huggingface.co/new-space -> owner + name `coal`, licence MIT,
    SDK **Gradio**, template **Blank**, hardware **CPU basic (free)**, visibility Public. Create.
 3. **Get a write token**: https://huggingface.co/settings/tokens -> New token, role *Write*.

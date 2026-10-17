@@ -14,11 +14,12 @@ dependencies = []
 [project.optional-dependencies]
 fast = ["numpy"]   # optional: speeds up the codon check on large inputs (BSD licence)
 # Web GUI + MCP server for AI agents (python -m coal_app / coal-gui). Pinned exactly.
-# NOTE: pin not verified against PyPI (no PyPI access when written); see overnight/app/LOG.md.
+# CHANGED(R2-D10): was "pin not verified against PyPI"; verified by CI on Linux: the gui job installed
+# gradio[mcp]==5.49.1 and passed pip check (and the mcp job installed mcp==2.2.0). Not yet checked on Windows/macOS.
 gui = ["gradio[mcp]==5.49.1"]
 # Stand-alone stdio MCP server (python -m coal_app --mcp), no Gradio needed.
 # CHANGED(APP-C11): was silent; now documented: install `gui` and `mcp` in SEPARATE environments. gradio[mcp] 5.x
-# probably needs mcp 1.x while this pins 2.2.0 (unverified: no PyPI here). CI installs each extra in its own job
+# probably needs mcp 1.x while this pins 2.2.0 (read CI's info job for the answer). CI installs each extra in its own job
 # and the "Info: gui + mcp extras in one environment" job reports whether they resolve together.
 mcp = ["mcp==2.2.0"]
 

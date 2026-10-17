@@ -14,8 +14,8 @@ exit 2 = usage error today, extras in separate environments. See overnight/app/C
 - You have **aligned proteins** (from MAFFT, MUSCLE, Clustal...) and the **unaligned CDS/DNA** of the same genes,
   and need the DNA aligned codon by codon (the input for dN/dS, selection scans, codon-aware trees).
 - Someone mentions PAL2NAL: COAL accepts the same options (`-codontable`, `-nogap`, `-nomismatch`,
-  `-output fasta`) and gave the same FASTA output as PAL2NAL v14 in all 143 byte-for-byte comparisons of its
-  test suite; it is much faster on big inputs.
+  `-output fasta`) and gave the same FASTA output as PAL2NAL v14 in all 147 byte-for-byte comparisons of its
+  test suite; it is much faster on big inputs. <!-- CHANGED(R2-D2): was 143 -->
 - Not for: aligning sequences from scratch (run an aligner on the proteins first), non-coding DNA, or RNA genes.
 
 ## Install
@@ -45,11 +45,26 @@ coal pep.aln nuc.fasta -nomismatch -o codon.fasta        # 4. drop columns where
 coal pep.aln nuc.fasta -j 4 -o codon.fasta               # 5. big inputs: up to 4 worker processes
 ```
 
-Output is FASTA only (`-output fasta`, the default). Warnings (`coal: warning: <id> pepAlnPos N: ...`) go
-to stderr; `-q` silences them, so don't use `-q` when you need to know which genes don't fit. Exit codes:
-0 = success (warnings possible), 1 = error (nothing written; the first error stops the run), 2 = usage
-error (bad option). Exit 0 does not prove the right DNA was paired with each protein: unrelated sequences
-can still "succeed" with many per-codon warnings, so always count the warnings per gene.
+<!-- CHANGED(R2-A10, R2-D5, R2-D7, R2-E4): was "-q silences them", "unrelated sequences can still succeed",
+"always count the warnings per gene" (none are printed with -nomismatch) and exit codes 0/1/2 only.
+See overnight/integration/CHANGES.md -->
+Output is FASTA only (`-output fasta`, the default). Per-codon warnings (`coal: warning: <id> pepAlnPos N: ...`)
+go to stderr; `-q` silences those, but **notices about probably-wrong data are always printed**:
+`<id>: no 10-residue segment of the protein was found in the DNA; codons were assigned by position (K of N do
+not match)` and `only K of N protein IDs are DNA IDs; pairing sequences by order instead (e.g. protein 'A'
+gets DNA 'B')` (some proteins are then almost certainly paired with the wrong DNA: fix the IDs).
+If more than half of a gene's checkable codons (codons made only of A/C/G/T) don't match, that is an error:
+`<id>: protein and DNA are inconsistent (K of N checkable codons do not match the protein)`.
+
+With `-nomismatch` the engine, like PAL2NAL, prints **no** mismatch warnings, so stderr cannot tell you
+which genes didn't fit. Run once without `-nomismatch` to see them, or use `codon_align`: it re-checks
+without `-nomismatch` and reports per-gene warnings and `summary.columns_removed`.
+
+Exit codes: 0 = success (warnings possible), 1 = error (nothing written; the first error stops the run),
+2 = usage error (bad option or a file name starting with `-`: put `--` before the file names), 130 =
+interrupted (Ctrl-C), 141 = output pipe closed (e.g. `| head`), 143 = stopped by SIGTERM, 129 = SIGHUP;
+in all of these nothing is written. On Windows (expected, not yet verified there): Ctrl-C gives 130 and a
+closed pipe 141, but a process killed from outside (Task Manager, `taskkill /F`) exits 1 without cleaning up.
 
 Genetic codes (`-codontable N`): 1 standard (nuclear), 2 vertebrate mitochondrial, 3 yeast mito,
 4 mold/protozoan mito and Mycoplasma, 5 invertebrate mito, 9 echinoderm/flatworm mito, 11 bacteria, archaea
@@ -69,7 +84,11 @@ COAL's messages).
   (`code`, `text`, `column` = protein-alignment column, 1-based).
   - `warning` + `mismatch`: a codon doesn't code for its amino acid; the row is still in the output.
   - `failed`: COAL could not fit the protein onto the DNA at all; that row is not in the output.
+- `summary.columns_removed` (only with `-nomismatch`): how many codon columns were removed because a codon
+  didn't match; the genes with such codons are `warning`, not `ok`.
 - `hints[]`: suggestions. `genetic_code` comes with `suggested_codontable`; re-run with it.
+  `partial_id_match`: only some protein IDs were found in the DNA, so pairing was by order and is probably
+  wrong for some genes: tell the user, don't trust the alignment. `engine_warning`: any other COAL warning.
 - `output`: path, format and sha256 of the alignment; `null` if nothing was written.
 - `command` / `pal2nal_equivalent`: the exact command lines, for methods sections.
 

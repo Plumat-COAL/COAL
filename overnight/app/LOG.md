@@ -60,6 +60,10 @@ tests_app`: 115 tests OK, 5 skipped here (3 need Gradio, 1 needs a non-root user
 runs and passes. On CI the plain jobs will additionally skip the 2 MCP-server tests (no `mcp`) and the 2
 Playwright explainer tests; the new gui/mcp jobs require their tests. CI did run before these fixes: green
 runs exist for keanu_overnight/app (`gh run list`), each with 3 app tests skipped (2 GUI + 1 MCP), not 2.
+**Update (round 2, R2-D3/R2-D10):** that is no longer true: the app branch went red on windows-latest after
+APP-C12 (venv python path without .exe; fixed in R2-D1 on the integration branch), while the gui and mcp jobs
+ran and are green (gradio[mcp]==5.49.1 and mcp==2.2.0 installed, pip check passed). See
+overnight/integration/CHANGES.md.
 
 **Needs a human**
 1. Push the branch and read the new CI jobs: `gui` (first real run of ui.py and the Gradio 5.49.1 pin, incl.
