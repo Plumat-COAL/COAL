@@ -84,13 +84,8 @@ try:
 except _Got as g:
     ap = g.args[0]
 for act in ap._actions:
-    if act.dest == "output_format":
-        act.choices = ["fasta", "clustal", "paml", "codon"]
-        act.help = "output format (fasta, clustal, paml or codon)"
-    elif act.dest == "jobs":
+    if act.dest == "jobs":  # coal-cpp uses threads (CPP-19: -output, -blockonly and -strict are as the reference)
         act.help = "worker threads (default 0 = all hardware threads)"
-    elif act.dest == "strict":
-        act.help = "NOT IMPLEMENTED YET in coal-cpp (exits with an error). In the Python engine: " + act.help
 g = ap.add_argument_group("C++ engine extras (exact option names only)")
 g.add_argument("-keep-going", "--keep-going", action="store_true",
                help="skip sequences that cannot be converted; exit code 2 if any were skipped")
@@ -138,7 +133,8 @@ ACCEPTED = [
     [P, N, "-q"], [P, N, "-qq"], [P, N, "-qj2"], [P, N, "--qu"],
     ["--", P, N], [P, "--", N], ["-q", "--", P, N], [P, "-o", "x.fa", N], ["-o", "out.fa", P, N],
     [P, N, "-o", "x.fa", "-o", "y.fa"], [P, N, "-output", "fasta"], [P, N, "--output-format=fasta"],
-    [P, N, "--output-f", "fasta"], [P, "--", N, "--"],
+    [P, N, "--output-f", "fasta"], [P, "--", N, "--"], [P, N, "-blockonly"], [P, N, "--block"], [P, N, "-b"],
+    [P, N, "-output", "clustal"], [P, N, "-output", "paml", "-nogap"], [P, N, "-strict"],
 ]
 HELP_CASES = [["-h"], ["--help"], ["--h"], [P, "--he"], ["-qh"], ["--help", "-j", "x"], ["-h", "--foo"]]
 VERSION_CASES = [["--version"], ["--v"], ["--vers", P]]
@@ -155,11 +151,12 @@ ERRORS = [
     [P, N, "--foo"], [P, N, "-x"], [P, N, "-cod=2"], [P, N, "-o", "x.fa", N], [P, N, "-q", N, "-q", N],
     [P, N, "-j", "x", "--help"], [P, N, "-n", "--help"], ["--foo", "-n"],
     [P, N, "-output", "xml"], [P, N, "-output"], [P, N, "--output-format=XML"], [P, N, "-outp", "fasta"],
+    [P, N, "-blockonly=1"], [P, N, "--blockonly=yes"],
 ]
 # The C++ engine accepts four formats, so its -output choices list differs (documented).
 CHOICES_DIFF = "argument -output/--output-format: invalid choice:"
 
-# Pinned: last stderr line of the reference (Python 3.10) for each ERRORS command line; exit code 2.
+# Pinned: last stderr line of the reference (Python 3.10, bb80bde) for each ERRORS command line; exit code 2.
 PINNED = {
     '': 'coal: error: the following arguments are required: pep_aln, nuc_fasta',
     "'pep.fasta'": 'coal: error: the following arguments are required: nuc_fasta',
@@ -207,10 +204,12 @@ PINNED = {
     "'pep.fasta' 'nuc.fasta' '-j' 'x' '--help'": "coal: error: argument -j/--jobs: invalid int value: 'x'",
     "'pep.fasta' 'nuc.fasta' '-n' '--help'": 'coal: error: ambiguous option: -n could match -nogap, -nomismatch',
     "'--foo' '-n'": 'coal: error: ambiguous option: -n could match -nogap, -nomismatch',
-    "'pep.fasta' 'nuc.fasta' '-output' 'xml'": "coal: error: argument -output/--output-format: invalid choice: 'xml' (choose from 'fasta')",
+    "'pep.fasta' 'nuc.fasta' '-output' 'xml'": "coal: error: argument -output/--output-format: invalid choice: 'xml' (choose from 'fasta', 'clustal', 'paml', 'codon')",
     "'pep.fasta' 'nuc.fasta' '-output'": 'coal: error: argument -output/--output-format: expected one argument',
-    "'pep.fasta' 'nuc.fasta' '--output-format=XML'": "coal: error: argument -output/--output-format: invalid choice: 'XML' (choose from 'fasta')",
+    "'pep.fasta' 'nuc.fasta' '--output-format=XML'": "coal: error: argument -output/--output-format: invalid choice: 'XML' (choose from 'fasta', 'clustal', 'paml', 'codon')",
     "'pep.fasta' 'nuc.fasta' '-outp' 'fasta'": 'coal: error: ambiguous option: -outp could match -output, -o',
+    "'pep.fasta' 'nuc.fasta' '-blockonly=1'": "coal: error: argument -blockonly/--blockonly: ignored explicit argument '1'",
+    "'pep.fasta' 'nuc.fasta' '--blockonly=yes'": "coal: error: argument -blockonly/--blockonly: ignored explicit argument 'yes'",
 }
 
 
@@ -331,13 +330,12 @@ class CppOnly(_Base):
         self.assertEqual(last_line(c.stderr), "coal: error: argument -output/--output-format: invalid choice: "
                                               "'xml' (choose from 'fasta', 'clustal', 'paml', 'codon')")
 
-    def test_strict_not_implemented(self):
+    def test_strict_accepted(self):  # CPP-15/CPP-19: implemented (reference DEC-1)
+        plain = self.cpp([P, N])
         for flag in ("-strict", "--strict", "--str"):
             with self.subTest(flag=flag):
                 c = self.cpp([P, N, flag])
-                self.assertEqual(c.returncode, 2)
-                self.assertEqual(c.stdout, "")
-                self.assertIn("not implemented yet", last_line(c.stderr))
+                self.assertEqual((c.returncode, c.stdout), (0, plain.stdout), c.stderr)
 
     def test_extras_exact_names_only(self):
         c = self.cpp([P, N, "--keep"])
