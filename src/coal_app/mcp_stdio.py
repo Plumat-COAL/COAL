@@ -15,7 +15,8 @@ INSTRUCTIONS = (
     "COAL turns a protein multiple sequence alignment plus the unaligned coding DNA of the same genes "
     "into a codon alignment (a fast PAL2NAL replacement). Call codon_align with absolute file paths. "
     "Use the alignment only if all_ok is true; otherwise call explain_report on the returned report_path. "
-    "If suggested_codontable is set, re-run codon_align with it."
+    "If suggested_codontable is set, re-run codon_align with it. "
+    "When the person names a folder, pass save_as with that folder so they find the alignment there."
 )
 
 
