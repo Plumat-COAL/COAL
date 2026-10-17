@@ -114,5 +114,74 @@ class TestFinC1MethodsText(Case):  # FIN-C1 / FIN-A2
             self.assertIn(frag, core.methods_text(r))
 
 
+def _recode(fn, genes=None):
+    """DNA records with codon i of each chosen gene replaced by fn(gene index, codon index, codon)."""
+    def f(recs):
+        for g, rec in enumerate(recs):
+            if genes is None or g in genes:
+                cods = [rec[1][i:i + 3] for i in range(0, len(rec[1]), 3)]
+                rec[1] = "".join(fn(g, i, c) for i, c in enumerate(cods))
+        return recs
+    return f
+
+
+def _hint(r):
+    return next((h for h in r.hints if h.get("code") == "genetic_code"), None)
+
+
+class TestFinA1GeneticCodeHint(Case):  # FIN-A1 / FIN-C4 / FIN-C5 / FIN-C6 / FIN-C9
+    def test_pairing_only_warnings_get_no_code_hint(self):  # FIN-A1
+        def ren(recs):
+            recs[2][0], recs[4][0] = "geneX3", "geneX5"
+            return recs
+        r = self.run_app(*self.variant(dna=ren), probe=True)
+        self.assertIsNone(_hint(r), r.hints)
+
+    def test_hint_counts_what_was_tested(self):  # FIN-C4: gene08 uses AGA for Arg, a stop in code 2
+        def mito(g, i, c):  # read as vertebrate mitochondrial (code 2) genes
+            return {"TGG": "TGA", "AGA": "CGT", "AGG": "CGT", "ATA": "ATT"}.get(c, "ATA" if c == "ATG" and i else c)
+        tga = _recode(mito, genes=range(7))
+        aga = _recode(lambda g, i, c: "AGA" if c in ("CGT", "CGC", "CGA", "CGG") else c, genes={7})
+        r = self.run_app(*self.variant(dna=lambda recs: aga(tga(recs))), probe=True)
+        h = _hint(r)
+        self.assertIsNotNone(h, r.hints)
+        self.assertEqual(h["suggested_codontable"], 2)
+        self.assertNotIn("All", h["text"])
+        self.assertIn("7 of 8 sequences match their protein", h["text"])
+        self.assertNotIn("compared with", h["text"])  # FIN-C5
+
+    def test_mito_example_wording(self):  # FIN-C5
+        p, d = core.example_paths("mito")
+        r = self.run_app(p, d, probe=True)
+        h = _hint(r)
+        self.assertEqual(h["suggested_codontable"], 2)
+        self.assertIn("Under genetic code 2 (Vertebrate mitochondrial), all 24 sequences match their protein; "
+                      "under code 1, none do.", h["text"])
+
+    def test_alternative_start_codon_prefers_the_closest_code(self):  # FIN-C6
+        ata = _recode(lambda g, i, c: "ATA" if i == 0 else c, genes={1, 4})
+        r = self.run_app(*self.variant(dna=ata), probe=True)
+        h = _hint(r)
+        self.assertIsNotNone(h, r.hints)
+        self.assertEqual(h["suggested_codontable"], 11, h["text"])
+        self.assertIn("start codon", h["text"])
+        self.assertNotIn("Mycoplasma", h["text"].split(" Codes")[0].split(" Other")[0])
+
+    def test_frameshift_near_the_end_is_not_a_code_problem(self):  # FIN-C9
+        def fs(recs):
+            s = recs[2][1]
+            k = len(s) - 3 * 6  # delete one base 5 codons before the stop
+            recs[2][1] = s[:k] + s[k + 1:]
+            return recs
+        r = self.run_app(*self.variant(dna=fs), probe=True)
+        self.assertEqual(r.exit_code, 0, r.stderr)
+        g = next(x for x in r.report["sequences"] if x["id"] == "gene03")
+        self.assertEqual(g["status"], "warning")
+        text = core.sequence_sentence(g)
+        self.assertIn("frameshift", text)
+        self.assertNotIn("check the genetic code", text)
+        self.assertIsNone(_hint(r), r.hints)
+
+
 if __name__ == "__main__":
     unittest.main()
