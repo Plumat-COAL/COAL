@@ -83,5 +83,34 @@ class TestEngA_OutputPath(TempDirCase):
         self.assertEqual(self.leftovers(), [])
 
 
+# ---------------------------------------------------------------- ENG-b
+class TestEngB_StreamInputs(TempDirCase):
+    def test_protein_from_pipe(self):
+        r = coal(["/dev/stdin", "n.fa"], self.d, stdin=PEP)
+        self.assertEqual((r.returncode, r.stdout), (0, EXPECTED), r.stderr)
+
+    def test_dna_from_pipe(self):
+        tmp = Path(tempfile.gettempdir())
+        before = set(tmp.glob(".coal_in_*"))
+        r = coal(["p.fa", "/dev/stdin"], self.d, stdin=NUC)
+        self.assertEqual((r.returncode, r.stdout), (0, EXPECTED), r.stderr)
+        self.assertEqual(set(tmp.glob(".coal_in_*")) - before, set())  # spooled copy removed
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "needs FIFOs")
+    def test_fifo_inputs(self):  # what <(cat p.fa) gives
+        os.mkfifo(self.d / "pf")
+        os.mkfifo(self.d / "nf")
+        writer = subprocess.Popen(["sh", "-c", "cat p.fa > pf & cat n.fa > nf & wait"], cwd=self.d)
+        try:
+            r = coal(["pf", "nf"], self.d)
+        finally:
+            try:
+                writer.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                writer.kill()
+                writer.wait()
+        self.assertEqual((r.returncode, r.stdout), (0, EXPECTED), r.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

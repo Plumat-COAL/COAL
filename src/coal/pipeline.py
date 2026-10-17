@@ -125,8 +125,39 @@ def _results(batches, jobs: int, init_args):
             yield pending.popleft().result()
 
 
-def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
-        nomismatch: bool = False, jobs: int = 0, warn=None, min_nt_per_job: int | None = None) -> int:
+def _spool(path, spooled: list) -> str:
+    """A path that can be opened several times and seeked: regular files as they are,
+    anything else (pipe, /dev/stdin, <(...)) copied to a temp file first."""
+    if os.path.isfile(path):
+        return path
+    base = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.basename(str(path)))[-40:]
+    with open(path, "rb") as src, tempfile.NamedTemporaryFile(
+            "wb", delete=False, prefix=".coal_in_", suffix="_" + base) as dst:
+        spooled.append(dst.name)
+        shutil.copyfileobj(src, dst, 1 << 20)
+    return dst.name
+
+
+def run(pep_path, nuc_paths, *args, **kw) -> int:
+    """Convert; write FASTA to out_path (or stdout). Arguments as for _run."""
+    # CHANGED(ENG-b): was opening every input path several times (pipes/FIFOs gave
+    # "protein: 0" or "not seekable"); now non-regular inputs are copied to temp files
+    # first and removed afterwards. See overnight/engine-fixes/CHANGES.md
+    spooled: list = []
+    try:
+        pep_path = _spool(pep_path, spooled)
+        nuc_paths = [_spool(p, spooled) for p in nuc_paths]
+        return _run(pep_path, nuc_paths, *args, **kw)
+    finally:
+        for name in spooled:
+            try:
+                os.unlink(name)
+            except OSError:
+                pass
+
+
+def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
+         nomismatch: bool = False, jobs: int = 0, warn=None, min_nt_per_job: int | None = None) -> int:
     """Convert; write FASTA to out_path (or stdout).
 
     jobs: 0 = automatic (up to all cores), N = at most N processes. Small inputs
