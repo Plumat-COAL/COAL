@@ -1,9 +1,9 @@
 # COAL: 3-minute pitch ("teach the room")
 
 Rule for the speaker: say only what is on this page. `--keep-going`, safe ID pairing and the four output
-formats are merged and tested in the Python engine (MRG-1..MRG-10, DEC-4). Lines marked **[C++ core]** depend on
-the C++ engine passing its comparison tests against the merged code (Person A's step 3): if it hasn't by Sunday
-10:00, skip them. <!-- CHANGED(PITCH-1): was "[after the C++/formats branch is merged]" for --keep-going, ID normalisation and the C++ core; the Python features are merged now --> <!-- CHANGED(DEC-4): was "output formats" on the teammate's branch and "`coal --help` still lists only -output fasta" -->
+formats are merged and tested in the Python engine (MRG-1..MRG-10, DEC-4), and the C++ engine (`coal-cpp`) mirrors
+the merged code: 285/285 golden checks and 3,000/3,000 random C++ vs Python comparisons identical (overnight/core/LOG.md,
+run 5 step 3). <!-- CHANGED(PITCH-2): was "Lines marked **[C++ core]** depend on the C++ engine passing its comparison tests against the merged code (Person A's step 3): if it hasn't by Sunday 10:00, skip them." Step 3 passed at 47d2168 --> <!-- CHANGED(PITCH-1): was "[after the C++/formats branch is merged]" for --keep-going, ID normalisation and the C++ core; the Python features are merged now --> <!-- CHANGED(DEC-4): was "output formats" on the teammate's branch and "`coal --help` still lists only -output fasta" -->
 <!-- CHANGED(R2-D12): was "[after merge]", which read as the (already merged) engine-fixes branch -->
 
 **Before going on:** laptop on mains, browser tabs open in this order: (1) `pitch/explainer.html`,
@@ -56,16 +56,25 @@ rehearsal. <!-- CHANGED(PITCH-1): was "stops at the bad gene" on the pre-merge e
   24 check that COAL rejects the inputs PAL2NAL fails on. 23 are documented, deliberate differences, such as that dropped codon, newer genetic-code tables or `-nogap` using
   the chosen genetic code; for those we check COAL's own behaviour. <!-- CHANGED(FIN-C3): was "where we think PAL2NAL is wrong" (not true of every one) --> And on every
   change, CI runs both tools on 3,000 random inputs in every format. In short: COAL's output is identical to PAL2NAL v14's except for a short list of documented, deliberate differences (newer NCBI genetic-code tables for codes 3, 10, 11 and 13; `-nogap` removing the selected code's stop codons; the selected code's start codons for the first Met; pairing by IDs that match only after normalising where PAL2NAL v14's file order would give a protein another gene's DNA; and inputs where PAL2NAL v14 writes malformed output or fails). Tested: all 285 stored reference checks pass (238 byte-identical, 4 of them with deliberately different warnings; 24 where both tools fail; 23 deliberate output or exit-status differences: 6 deliberate errors, 3 different outputs, 14 `-nogap` checks with a non-standard code), and in 20,000 random comparisons with the real PAL2NAL v14 (5,000 cases x 4 output formats) 13,826 were byte-identical, 4,681 both failed and 1,493 were deliberate differences, each checked to be exactly the documented change; 0 unexplained differences." <!-- CHANGED(FIN-C2/FIN-C3/FIN-C10/FIN-C20): was the "byte-identical ... (well-formed input)" claim, "every difference is one where PAL2NAL silently produces wrong output" and a 6,000-case run not reproducible from the repo; now the documented exceptions and the FIN-C10 fuzz numbers --> <!-- CHANGED(FZ-claim) --> <!-- CHANGED(DEC-4): was 165 / 147 / 141 / 12 / 6, FASTA only; fuzz sentence new --> <!-- CHANGED(FZ-5): 246/240/9 -> 232/228/23 -->
+  **Spoken version (say this; the paragraph above is the reference if a judge asks for detail):** "285 checks
+  against PAL2NAL's own output, all pass. 20,000 random comparisons with the real PAL2NAL: zero unexplained
+  differences. Where we differ on purpose, it's written down and tested." <!-- CHANGED(PITCH-2): new; 285 and 20,000 as in the paragraph above (tests_app/test_docs_numbers.py, README Compatibility) -->
 - "Speed, measured on one Windows laptop, end to end: 100 genes of 10,000 codons, PAL2NAL 24.5 seconds,
   COAL 0.2 seconds, 119 times faster. Ten thousand genes: 25 seconds down to under one second.
   Half a million genes, nearly a gigabyte: 10 seconds with 4 processes, 25 on one. For tiny inputs both take about 0.05 seconds; we
   don't claim a speed-up there."
   (Python engine, benchmarks/results/bench_windows_20261016_2356: measured before the weekend's fixes and the merge.
-  Swap in the numbers from Person A's step-4 re-run on the merged code if they differ. <!-- PITCH-1 -->)
+  Person A's step-4 re-run on the merged code (benchmarks/results/cpp_vs_python_linux_4084d1f.md) compared only
+  Python with C++, not with PAL2NAL. A pre-submission check against the real PAL2NAL v14 on a 2-core Linux VM gave
+  100 x 10,000 codons: PAL2NAL 41.4 s, COAL Python 0.28 s, C++ 0.038 s; 10,000 x 500: PAL2NAL 31.3 s, Python
+  0.99-1.6 s, C++ 0.21 s. These are **provisional and not in the repo: re-measure on the presenting laptop** before
+  quoting any of them. <!-- PITCH-1 --> <!-- CHANGED(PITCH-2): was "Swap in the numbers from Person A's step-4 re-run on the merged code if they differ." -->)
 - "The engine is pure Python with no dependencies, MIT licence. Continuous integration is set up for Windows, macOS and
   Linux." (Only say "passes on all three" if the GitHub Actions run is green when you present.)
-- **[C++ core]** "A C++ core for the largest jobs." (Speed numbers above are for the Python engine; quote C++ numbers
-  only from Person A's step-4 benchmark on the merged code.)
+- "There's also a C++ engine for the largest jobs. It passes all 285 checks, and in 3,000 random comparisons its
+  output is identical to our Python engine's. It's three to six times faster than the Python engine on the
+  same machine." (benchmarks/results/cpp_vs_python_linux_4084d1f.md, 2-core Linux VM: 5.3-6.3x on 100 x 10,000 and 10,000 x 500,
+  3.1-4.0x on 100,000 x 500. It is built from source with CMake; the pip package is the Python engine only.) <!-- CHANGED(PITCH-2): was "**[C++ core]** "A C++ core for the largest jobs." (Speed numbers above are for the Python engine; quote C++ numbers only from Person A's step-4 benchmark on the merged code.)" -->
 
 ## 2:35-3:00 Vision
 

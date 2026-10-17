@@ -1,8 +1,7 @@
 # COAL: likely judge questions, short honest answers
 
-Judges: Apheris, PDBe, the Ellison Institute, CuspAI, Inherent, UCL. Rule: if a feature is marked
-**[after the C++/formats branch is merged]**, say "being merged now", or say nothing about it if that branch
-isn't in (the engine-fixes branch is already merged). <!-- CHANGED(R2-D12): was "[after merge]" -->
+Judges: Apheris, PDBe, the Ellison Institute, CuspAI, Inherent, UCL. Everything below is built and merged
+(engine fixes, the C++/formats branch, --keep-going, safe ID pairing). <!-- CHANGED(PITCH-2): was "Rule: if a feature is marked **[after the C++/formats branch is merged]**, say "being merged now", or say nothing about it if that branch isn't in (the engine-fixes branch is already merged)." The branch is merged (db2f824) --> <!-- CHANGED(R2-D12): was "[after merge]" -->
 
 **1. How do you know it's correct on my data?**
 We compared COAL with PAL2NAL v14's real output on 39 hand-made inputs covering every behaviour we found
@@ -21,11 +20,12 @@ the AI tools re-check and still name the genes and count the removed columns).
 <!-- CHANGED(R2-D5) --> Honest limit: the speed benchmarks use synthetic data, not real genomes, and the reference
 inputs are small and hand-made.
 
-**2. Why does 100x matter if PAL2NAL takes minutes?**
+**2. Why does the speed matter if PAL2NAL takes only seconds per run?** <!-- CHANGED(PITCH-2): was "Why does 100x matter if PAL2NAL takes minutes?" (the answer's own numbers are seconds, 24.5 s vs 0.2 s) -->
 For one alignment it doesn't; small inputs are equally fast (about 0.05 s, measured). It matters at
 tree-of-life scale: pipelines call this step once per gene family, thousands to millions of times, and
 PAL2NAL slows down steeply on long genes (measured: 24.5 s vs 0.2 s for 100 genes x 10,000 codons). Half a
-million sequences take COAL about 10 s with 4 processes (25 s on one). Speed is the second point; the first is that failures are explained
+million sequences take COAL about 10 s with 4 processes (25 s on one). The C++ engine is another three to six times
+faster than the Python engine on the same machine (measured on a 2-core Linux VM, benchmarks/results/cpp_vs_python_linux_4084d1f.md). <!-- CHANGED(PITCH-2): new sentence --> Speed is the second point; the first is that failures are explained
 instead of silent.
 
 **3. What happens with messy input?**
@@ -35,8 +35,10 @@ characters -> a clear error (PAL2NAL silently drops a codon). DNA that doesn't b
 output as PAL2NAL v14 where PAL2NAL writes one (it refuses only some short or frameshifted genes, with
 "inconsistency"), plus <!-- CHANGED(FIN-C17): was "(it never refuses)" --> a plain warning naming the gene, and the GUI marks it failed;
 `--strict` makes it an error instead. <!-- CHANGED(DEC-1): new sentence --> Protein IDs like AT1G01010.1 vs DNA IDs
-AT1G01010 -> COAL explains the mismatch. Errors give a non-zero exit code. **[after the C++/formats branch is merged]** IDs matched
-after removing version suffixes, and `--keep-going` so one bad gene doesn't stop the rest.
+AT1G01010 -> where PAL2NAL's file order would give a protein another gene's DNA, COAL pairs by the IDs after removing
+version suffixes, case and `sp|…|` database fields, and says so. Errors give a non-zero exit code. `--keep-going`
+writes the good genes, names the skipped ones and exits 2, so one bad gene doesn't stop the rest; `--report` /
+`--json` give the same findings as a JSON report. <!-- CHANGED(PITCH-2): was "COAL explains the mismatch. ... **[after the C++/formats branch is merged]** IDs matched after removing version suffixes, and `--keep-going` so one bad gene doesn't stop the rest." Both are merged (`coal --help`, MRG-1, MRG-3) -->
 
 **4. Why not just use PAL2NAL?**
 It works, and we treat it as the reference. But it always exits 0 even on errors, prints cryptic messages,
@@ -86,4 +88,7 @@ with the same columns and gene names a human sees, instead of guessing from raw 
 **10. What doesn't it do yet?**
 PAL2NAL's `-html` web-server mode (a clear error) and Gblocks-format input. <!-- CHANGED(DEC-4): was "CLUSTAL/PAML/codon
 output formats and -blockonly" --> The web GUI is new and has only been run on *[team: the laptops it was tested on]*; the Space is not deployed. The DIAMOND
-preset has only been tested with a stand-in, not real genomes. The C++ core is **[after the C++/formats branch is merged]**.
+preset has only been tested with a stand-in, not real genomes. The C++ engine (`coal-cpp`) is built and checked:
+all 285 golden checks pass with it, 3,000 of 3,000 random inputs give output identical to the Python engine, and it
+builds cleanly with MSVC, GCC and clang. It is not in the pip package: you build it from source with CMake; `pip
+install` gives the Python engine. <!-- CHANGED(PITCH-2): was "The C++ core is **[after the C++/formats branch is merged]**." Source: overnight/core/LOG.md run 5 step 3; release.yml builds only the Python wheel/sdist and the Windows app -->
