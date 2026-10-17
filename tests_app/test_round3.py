@@ -392,8 +392,10 @@ class TestR3A5UploadAfterPath(RunsDirCase):  # R3-A5
             outs = outs if isinstance(outs, (list, tuple)) else [outs]
             fn = kw.get("fn", a[0] if a else None)
             found[self._label(comp)] = ([self._label(o) for o in outs], fn)
-        prot = next((k for k in found if k.startswith("1. Protein")), None)
-        dna = next((k for k in found if k.startswith("2. ")), None)
+        # CHANGED(GUI-13): the labels were "1. Protein alignment (...)" and "2. Coding DNA (...)"; now "Protein
+        # alignment" and "Coding DNA" (the formats are a hint inside the drop zone)
+        prot = next((k for k in found if k.startswith("Protein")), None)
+        dna = next((k for k in found if k.startswith("Coding DNA")), None)
         self.assertIsNotNone(prot, found)
         self.assertIsNotNone(dna, found)
         for k in (prot, dna):

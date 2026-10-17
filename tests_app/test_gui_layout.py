@@ -47,7 +47,11 @@ class TestGui1Banner(unittest.TestCase):  # GUI-1
         html = gui_html.header_html(core.intro_text())
         self.assertNotRegex(html, r"https?://(?!www\.w3\.org/2000/svg)")
         self.assertIn("<svg", html)
-        self.assertIn(core.intro_text(), html)
+        # CHANGED(GUI-13): was the intro text in the header; the header is the mark and "COAL" only (owner: "just
+        # COAL is fine") and the where-the-data-goes note is the page footer
+        self.assertNotIn(core.intro_text(), html)
+        self.assertNotIn("codon alignment", html)
+        self.assertIn(core.intro_text(), gui_html.footer_html(core.intro_text()))
 
 
 class TestGui4HealthTable(unittest.TestCase):  # GUI-4
@@ -159,6 +163,64 @@ class TestGui3Layout(unittest.TestCase):  # GUI-1, GUI-3, GUI-5
         self.assertIn("Please add both files", out[0]._kw["value"])
         self.assertIn("coal-banner", self.ui.show_sample()[0]._kw["value"])
         self.assertIn("not your data", self.ui.show_sample()[0]._kw["value"])
+
+
+
+class TestGui13LessText(unittest.TestCase):  # GUI-13, GUI-14
+    def setUp(self):
+        saved = {k: sys.modules.get(k) for k in ("gradio", "coal_app.ui")}
+
+        def restore():
+            for k, v in saved.items():
+                if v is None:
+                    sys.modules.pop(k, None)
+                else:
+                    sys.modules[k] = v
+        self.addCleanup(restore)
+        sys.modules["gradio"] = _stub_gradio()
+        sys.modules.pop("coal_app.ui", None)
+        import importlib
+        self.ui = importlib.import_module("coal_app.ui")
+        _Comp.REG = []
+
+    def test_banner_does_not_repeat_the_counts(self):
+        rep = {"summary": {"total": 24, "warning": 24}, "sequences": [_seq(i, "warning") for i in range(24)]}
+        sentence = "24 sequences: 0 OK, 24 with warnings, 0 failed."
+        html = gui_html.run_banner("### ⚠ Done, with some problems (see the table)", rep, sentence, "Files used: x")
+        self.assertNotIn("0 OK", html)
+        self.assertNotIn("Done, with some problems", html)
+        self.assertEqual(html.count("24 with warnings"), 1)
+        removed = sentence + " 3 codon columns were removed because they didn't match (-nomismatch)."
+        self.assertIn("3 codon columns were removed", gui_html.run_banner("### ⚠ Done", rep, removed))
+        self.assertEqual(gui_html.extra_sentence("1 sequence: 1 OK, 0 with warnings, 0 failed."), "")
+
+    def test_shared_closing_sentence_is_said_once(self):
+        msg = [{"code": "mismatch", "column": 3, "text": "x"}]
+        rep = {"sequences": [_seq(i, "warning", messages=msg) for i in range(5)]}
+        tail = core._closing_sentence(core.sequence_sentence(rep["sequences"][0]))
+        self.assertTrue(tail)
+        html = core.health_table_html(rep, links=True)
+        self.assertEqual(html.count(tail.replace("'", "&#x27;")), 1)
+        self.assertIn("5 genes:", html)
+        self.assertIn('href="#coalv-g00-c3"', html)
+        self.assertIn("Column ", html)
+        self.assertNotIn("Show in alignment", html)
+
+    def test_form_has_short_labels_and_no_help_lines(self):
+        self.ui.build()
+        import gc
+        comps = [o for o in gc.get_objects() if isinstance(o, _Comp) and o._name in ("Dropdown", "File", "Tab")]
+        labels = {str(c._kw.get("label", c._args[0] if c._args else "")) for c in comps}
+        self.assertTrue({"Protein alignment", "Coding DNA", "Genetic code"} <= labels, labels)
+        with open(self.ui.__file__, encoding="utf-8") as fh:
+            src = fh.read()
+        self.assertIn('gr.Tab("Align"', src)
+        for c in comps:
+            if c._name == "Dropdown" and c._kw.get("label") == "Genetic code":
+                self.assertIsNone(c._kw.get("info"))
+        self.assertIsNone(self.ui._format_info(core.Features(output_formats=("fasta", "paml"))))
+        self.assertIn("Re-run", self.ui._strip_rerun("Use code 2. Re-run with code 2?", 2) + "Re-run")
+        self.assertEqual(self.ui._strip_rerun("Use code 2. Re-run with code 2?", 2), "Use code 2.")
 
 
 if __name__ == "__main__":

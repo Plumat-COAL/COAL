@@ -7,6 +7,7 @@ class (dark), so these fragments follow the app theme. Every status has an icon 
 from __future__ import annotations
 
 import html
+import re
 
 # The COAL mark (site/assets/coal-mark.svg), one class per tile colour so CSS can swap the two greys in dark mode
 # (site/assets/coal-mark-dark.svg uses #8C8782 / #B5AFA8 for them). Decorative: aria-hidden.
@@ -30,17 +31,18 @@ def mark_svg(size: int = 40) -> str:
             f'height="{h}" aria-hidden="true" focusable="false">{groups}</svg>')
 
 
-def header_html(intro: str) -> str:
-    """Short page header: mark, name, one sentence, and where the data goes (core.intro_text())."""
-    return (
-        '<header class="coal-head">'
-        f'{mark_svg()}'
-        '<div><h1>COAL <span class="coal-head-sub">codon alignment</span></h1>'
-        '<p>Give COAL a protein alignment and the DNA of the same genes: it lines the DNA up '
-        '<abbr title="Three DNA letters that code for one amino acid">codon</abbr> by codon and says, in plain '
-        'words, which genes don\'t fit and why.</p>'
-        f'<p class="coal-head-note">{html.escape(intro)}</p></div>'
-        '</header>')
+def header_html(intro: str = "") -> str:
+    """Page header: the COAL mark and the name.
+    CHANGED(GUI-13): was the mark, "COAL codon alignment", a two-line description and the where-the-data-goes note
+    (core.intro_text()). The owner: "just COAL is fine"; the description is gone and the note is in footer_html.
+    `intro` is accepted and ignored so older callers keep working."""
+    return f'<header class="coal-head">{mark_svg(32)}<h1>COAL</h1></header>'
+
+
+def footer_html(intro: str) -> str:
+    """CHANGED(GUI-13): new. The where-the-data-goes note (core.intro_text()), small, at the foot of the page (as
+    Squoosh puts "images never leave your device" below its drop zone, not in its header)."""
+    return f'<p class="coal-foot">{html.escape(intro)}</p>'
 
 
 # ---------------------------------------------------------------- result banner
@@ -110,23 +112,31 @@ def gene_strip(report: dict) -> str:
     return f'<div class="coal-strip" aria-hidden="true">{"".join(tiles)}</div>'
 
 
+def extra_sentence(sentence: str) -> str:
+    """CHANGED(GUI-13): the part of core.summary_sentence that the headline and chips do not already say (the
+    columns removed by -nomismatch); "" when it only repeats the counts ("20 sequences: 19 OK, ...")."""
+    m = re.match(r"\d[\d,]* sequences?: [^.]*\.\s*", sentence or "")
+    return (sentence or "")[m.end():].strip() if m else (sentence or "").strip()
+
+
 def run_banner(head: str, report: dict, sentence: str, files: str = "") -> str:
     """Summary banner after a run. head: core.banner_head(...) (markdown '### ✔ Done ...'); sentence:
-    core.summary_sentence(report); files: 'Files used: ...'."""
+    core.summary_sentence(report); files: 'Files used: ...'.
+    CHANGED(GUI-13): was a status line ("⚠ Done, with some problems (see the table)") above the headline and the
+    summary sentence ("24 sequences: 0 OK, 24 with warnings, 0 failed.") under the tiles, both repeating the
+    headline and the chips. Now: icon + headline, chips, tiles, then only what is new (columns removed) and the
+    files line."""
     kind = _kind_of(head)
     icon, cls = _KIND[kind]
-    status = head.lstrip("# ").lstrip("✔⚠✖ ").strip()
     s = report.get("summary") or {}
     title = headline(s, kind)
-    line = (f'<p class="coal-status"><span class="coal-icon" aria-hidden="true">{icon}</span> '
-            f'{html.escape(status)}</p>') if status != title else ""
-    lead = "" if line else f'<span class="coal-icon" aria-hidden="true">{icon}</span> '
+    extra = extra_sentence(sentence)
     return (
-        f'<div class="coal-banner coal-{cls}" role="status">{line}'
-        f'<p class="coal-headline">{lead}{html.escape(title)}</p>'
+        f'<div class="coal-banner coal-{cls}" role="status">'
+        f'<p class="coal-headline"><span class="coal-icon" aria-hidden="true">{icon}</span> {html.escape(title)}</p>'
         f'<div class="coal-chips">{_chips(s)}</div>'
         f'{gene_strip(report)}'
-        f'<p class="coal-detail">{html.escape(sentence)}</p>'
+        + (f'<p class="coal-detail">{html.escape(extra)}</p>' if extra else "")
         + (f'<p class="coal-files">{html.escape(files)}</p>' if files else "")
         + '</div>')
 
@@ -141,20 +151,23 @@ def message_banner(kind: str, title: str, text: str = "", text_html: str = "") -
 
 
 def empty_banner() -> str:
-    return ('<div class="coal-banner coal-empty" role="status"><p class="coal-detail">Results appear here: add the '
-            'two files (or pick an example) and press <strong>Make codon alignment</strong>.</p></div>')
+    # CHANGED(GUI-13): was a dashed box "Results appear here: add the two files (or pick an example) and press
+    # Make codon alignment." directly under that button; now one quiet line
+    return '<p class="coal-empty-note" role="status">Results appear here.</p>'
 
 
 def sample_banner(report: dict, sentence: str) -> str:
-    """Banner of the demo sample report (core.sample_banner's text, as HTML)."""
+    """Banner of the demo sample report (core.sample_banner's text, as HTML).
+    CHANGED(GUI-13): was "Demo sample, not your data" + a two-sentence explanation + the counts sentence; now the
+    status line, the headline, chips, tiles and one short line (the tip under the banner says what to do)."""
     s = report.get("summary") or {}
     kind = "warning" if (s.get("failed") or s.get("warning")) else "ok"
     return (
         '<div class="coal-banner coal-info" role="status">'
-        '<p class="coal-status"><span class="coal-icon" aria-hidden="true">ℹ</span> Demo sample, not your data</p>'
+        '<p class="coal-status"><span class="coal-icon" aria-hidden="true">ℹ</span> Sample report, not your data</p>'
         f'<p class="coal-headline">{html.escape(headline(s, kind))}</p>'
         f'<div class="coal-chips">{_chips(s)}</div>'
         f'{gene_strip(report)}'
-        '<p class="coal-detail">The 24 mitochondrial genes of the <em>Mitochondrial genes</em> example, run with '
-        'genetic code 1, the wrong code for them: see the tip below to re-run with code 2. '
-        f'{html.escape(sentence)}</p></div>')
+        '<p class="coal-detail">The <em>Mitochondrial genes</em> example, run with the wrong genetic code (1).'
+        + (f' {html.escape(extra_sentence(sentence))}' if extra_sentence(sentence) else "")
+        + '</p></div>')

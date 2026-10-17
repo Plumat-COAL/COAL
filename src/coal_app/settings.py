@@ -32,10 +32,11 @@ PREVIEW_SIZES: dict[str, tuple[int, int, int]] = {
     "standard": (100, 1000, 60_000),
     "large": (200, 2000, 200_000),
 }
+# CHANGED(GUI-13): shorter; the radio's label says what the numbers are ("sequences × columns")
 PREVIEW_LABELS = {
-    "small": "Small: up to 40 sequences and 400 columns (fastest)",
-    "standard": "Standard: up to 100 sequences and 1,000 columns",
-    "large": "Large: up to 200 sequences and 2,000 columns (slow on older computers)",
+    "small": "Small: 40 × 400",
+    "standard": "Standard: 100 × 1,000",
+    "large": "Large: 200 × 2,000 (slower)",
 }
 
 DEFAULTS: dict = {
