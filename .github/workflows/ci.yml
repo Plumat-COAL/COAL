@@ -28,13 +28,29 @@ jobs:
         env:
           GRADIO_ANALYTICS_ENABLED: "False"
         run: python -m unittest discover -s tests_app -v
+      # CHANGED(R2-D11): new; desktop/test_wrapper.py and test_smoke.py never ran in CI. Required on Linux; on
+      # Windows they run for the first time here, so they may not fail the build until a run is green there
+      # (then remove continue-on-error). See overnight/integration/CHANGES.md
+      - name: Desktop wrapper tests
+        if: matrix.os != 'macos-latest'
+        continue-on-error: ${{ matrix.os == 'windows-latest' }}
+        working-directory: desktop
+        env:
+          GRADIO_ANALYTICS_ENABLED: "False"
+        run: python -m unittest test_wrapper test_smoke -v
 
   # CHANGED(APP-16/APP-C5): was no job installing the extras (GUI and MCP tests always skipped); now one job per
   # extra, each in its own environment, with COAL_REQUIRE_EXTRAS making the tests fail instead of skip.
   gui:
-    name: GUI extra (.[gui], real Gradio)
-    runs-on: ubuntu-latest
+    # CHANGED(R2-D11): was ubuntu only; now also windows-latest (first run there: allowed to fail until green).
+    name: GUI extra (.[gui], real Gradio) on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 25
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -49,6 +65,33 @@ jobs:
           GRADIO_ANALYTICS_ENABLED: "False"
           COAL_REQUIRE_EXTRAS: gui
         run: python -m unittest discover -s tests_app -v
+
+  explainer:
+    # CHANGED(R2-D11): new; tests_app/test_explainer.py (pitch/explainer.html in Chromium) always skipped in CI.
+    # First run here, so informational until a run is green (then remove continue-on-error).
+    name: "Explainer page in Chromium (Playwright)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw-browsers
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install COAL and Playwright with Chromium
+        run: |
+          python -m pip install -e . playwright==1.48.0
+          python -m playwright install --with-deps chromium
+      - name: Explainer tests (must not skip)
+        shell: bash
+        run: |
+          python -m unittest discover -s tests_app -p "test_explainer.py" -v 2>&1 | tee explainer.txt
+          test "${PIPESTATUS[0]}" -eq 0
+          if grep -qiE "skipped" explainer.txt; then
+            echo "::error::explainer tests were skipped (Chromium not found)"; exit 1
+          fi
 
   mcp:
     name: MCP extra (.[mcp], stdio server)
@@ -123,7 +166,9 @@ jobs:
         if: steps.detect.outputs.present == 'true'
         shell: bash
         run: |
-          ls cpp/build/coal cpp/build/Release/coal.exe 2>/dev/null | head -n 1 | grep -q . \
+          # CHANGED(R2-D4): was `ls a b | head | grep -q .`, which always failed under bash -eo pipefail (ls exits 2
+          # when one of the two paths is missing); tests_app/test_ci_steps.py runs this script.
+          [ -x cpp/build/coal ] || [ -f cpp/build/Release/coal.exe ] \
             || { echo "::error::cpp/CMakeLists.txt exists but no cpp/build/coal binary was built"; exit 1; }
           test -f tests/test_cpp_vs_python.py \
             || { echo "::error::cpp/ exists but tests/test_cpp_vs_python.py (C++ vs Python comparison) is missing"; exit 1; }
