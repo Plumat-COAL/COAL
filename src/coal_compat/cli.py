@@ -1,36 +1,36 @@
 """``pal2nal``: accepts PAL2NAL v14's command line and runs COAL instead.
 
     pal2nal pep.aln nuc.fasta [nuc.fasta ...] [-output clustal|paml|fasta|codon]
-            [-codontable N] [-nogap] [-nomismatch] [-nostderr] [-blockonly] [-html] [-h]
+            [-codontable N] [-nogap] [-nomismatch] [-blockonly] [-nostderr] [-h]
 
-Pipelines that already call PAL2NAL with ``-output fasta`` can swap ``pal2nal.pl`` for
-``pal2nal`` (or ``python -m coal_compat``): the codon alignment goes to standard output,
-messages to standard error. Pipelines relying on PAL2NAL's default (clustal) output must add
-``-output fasta`` until COAL writes clustal. ``-nostderr`` is accepted and mapped to COAL's ``-q``: warnings and
+An unchanged PAL2NAL command line works: the default output format is clustal, as in PAL2NAL, and all four
+formats, -nogap, -nomismatch, -blockonly and every -codontable give PAL2NAL v14's output byte for byte (apart
+from COAL's documented deliberate differences, see README.md). The codon alignment goes to standard output,
+messages to standard error. ``-nostderr`` is accepted and mapped to COAL's ``-q``: warnings and
 notices are silenced, errors still go to standard error (as with PAL2NAL's ``-nostderr``, which silences its
 warnings but not its ERROR messages). CHANGED(R2-A10): was "(COAL's ``-q``)", which implied a silent stderr.
 CHANGED(DEC-2): was "COAL's notices about probably-wrong data ... still go to standard error".
-Options COAL cannot honour (including ``-verbose``) give a clear error instead of being
-silently ignored.
+``-html`` (PAL2NAL's web-server mode: HTML on standard output, messages included) gives a clear error.
+COAL's own options (``--strict``, ``-j``, ``-o`` ...) are not accepted here; use ``coal`` for those.
 
-Differences from PAL2NAL: the exit code is non-zero on errors (PAL2NAL always exits 0),
-and the default output format is PAL2NAL's (clustal), so when this COAL can only write
-FASTA you must pass ``-output fasta`` (we will not silently change the format).
+Differences from PAL2NAL: the exit code is non-zero on errors (PAL2NAL always exits 0).
+CHANGED(DEC-4): was "the default output format is PAL2NAL's (clustal), so when this COAL can only write FASTA you
+must pass -output fasta"; now clustal/paml/codon are written and the default is clustal.
+See overnight/integration/CHANGES.md
 """
 from __future__ import annotations
 
 import sys
 
-from coal_app.core import detect_features
-
 USAGE = __doc__
 
 VALUE_OPTS = {"-output", "-codontable"}
-FLAG_OPTS = {"-nogap", "-nomismatch"}
+FLAG_OPTS = {"-nogap", "-nomismatch", "-blockonly"}  # CHANGED(DEC-4): -blockonly was rejected as unsupported
 UNSUPPORTED = {
-    "-blockonly": "-blockonly (Gblocks-style blocks) is not supported by COAL yet.",
     # CHANGED(APP-C2): was "use -output fasta or clustal" (clustal is not supported yet); now only what works
-    "-html": "-html output is not supported by COAL; use -output fasta.",
+    # CHANGED(DEC-4): wording; all four formats are supported now
+    "-html": ("-html (PAL2NAL's web-server mode: HTML with <pre> and coloured mismatches on standard output) is not "
+              "supported by COAL; leave it out to get PAL2NAL's plain output."),
 }
 QUIET_OPTS = {"-nostderr"}  # CHANGED(APP-C2): was rejected as unknown; now mapped to coal -q
 FORMATS = ("clustal", "paml", "fasta", "codon")
@@ -40,7 +40,7 @@ class UsageError(Exception):
     pass
 
 
-def translate(argv: list[str], supported_formats=("fasta",)) -> list[str]:
+def translate(argv: list[str], supported_formats=FORMATS) -> list[str]:
     """Turn PAL2NAL arguments into ``coal`` arguments (raises UsageError)."""
     files: list[str] = []
     fmt = "clustal"  # PAL2NAL's default
@@ -67,28 +67,25 @@ def translate(argv: list[str], supported_formats=("fasta",)) -> list[str]:
             i += 2
             continue
         if a in FLAG_OPTS:
-            flags.append(a)
+            if a not in flags:
+                flags.append(a)
         elif a in QUIET_OPTS:
             if "-q" not in flags:
                 flags.append("-q")
         elif a.startswith("-") and len(a) > 1:
             raise UsageError(f"unknown option {a} (PAL2NAL options: -output, -codontable, -nogap, -nomismatch, "
-                             f"-nostderr, -blockonly, -html, -h)")
+                             f"-blockonly, -nostderr, -h)")
         else:
             files.append(a)
         i += 1
     if len(files) < 2:
         raise UsageError("give a protein alignment and at least one DNA file")
     if fmt not in supported_formats:
-        hint = " (PAL2NAL's default is clustal; add '-output fasta')" if fmt == "clustal" else ""
-        raise UsageError(f"this COAL cannot write '{fmt}' output yet{hint}. "
-                         f"Supported: {', '.join(supported_formats)}")
-    out = files[:]
-    if fmt != "fasta":
-        out += ["-output", fmt]
+        raise UsageError(f"this COAL cannot write '{fmt}' output. Supported: {', '.join(supported_formats)}")
+    out = ["-output", fmt]
     if table is not None:
         out += ["-codontable", str(table)]
-    return out + flags
+    return out + flags + ["--"] + files
 
 
 def main(argv=None) -> int:
@@ -99,8 +96,11 @@ def main(argv=None) -> int:
     if not argv or argv[0] in ("-h", "-help", "--help"):
         print(USAGE)
         return 0
+    # CHANGED(DEC-4): was detect_features() (a `python -m coal --help` subprocess) to find the formats; the engine
+    # runs in this process (R2-A4), so its own list is used. See overnight/integration/CHANGES.md
+    from coal.pipeline import FORMATS as ENGINE_FORMATS
     try:
-        coal_args = translate(argv, detect_features().output_formats)
+        coal_args = translate(argv, ENGINE_FORMATS)
     except UsageError as e:
         print(f"pal2nal (COAL): error: {e}", file=sys.stderr)
         return 1

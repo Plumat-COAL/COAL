@@ -187,5 +187,224 @@ class TestDec3ClosedPipe(Tmp):  # DEC-3
                 self.assertNotIn("coal: error", err)
 
 
+# CLUSTAL input with PAL2NAL '#' block marks under each block; expected outputs from the real PAL2NAL v14
+MARKED_ALN = ("CLUSTAL W (1.83) multiple sequence alignment\n\n\ns1      MKV-ALWB\ns2      MKVSALWY\n        ### ## #\n\n"
+              "s1      KDE\ns2      KDE\n         ##\n")
+MARKED_NUC = ">s1\nATGAAAGTTGCTCTGTGGAACAAAGATGAA\n>s2\nATGAAGGTCTCAGCACTATGGTATAAGGACGAG\n"
+MARKED_PAL2NAL = {
+    ("-output", "clustal"): ("CLUSTAL W multiple sequence alignment\n\n"
+                             "s1            ATGAAAGTT---GCTCTGTGGAACAAAGATGAA\n"
+                             "s2            ATGAAGGTCTCAGCACTATGGTATAAGGACGAG\n"
+                             "              #########   ######   ###   ######\n\n"),
+    ("-output", "codon"): ("              M   K   V   -   A   L   W   B   K   D   E\n"
+                           "s1            ATG AAA GTT --- GCT CTG TGG AAC AAA GAT GAA\n"
+                           "              M   K   V   S   A   L   W   Y   K   D   E\n"
+                           "s2            ATG AAG GTC TCA GCA CTA TGG TAT AAG GAC GAG\n"
+                           "              ### ### ###     ### ###     ###     ### ###\n\n"),
+    ("-output", "fasta", "-blockonly"): ">s1\nATGAAAGTTGCTCTGAACGATGAA\n>s2\nATGAAGGTCGCACTATATGACGAG\n",
+    ("-output", "clustal", "-nogap"): ("CLUSTAL W multiple sequence alignment\n\n"
+                                       "s1            ATGAAAGTTGCTCTGTGGAACAAAGATGAA\n"
+                                       "s2            ATGAAGGTCGCACTATGGTATAAGGACGAG\n"
+                                       "              ###############   ###   ######\n\n"),
+    ("-output", "clustal", "-blockonly"): ("CLUSTAL W multiple sequence alignment\n\n"
+                                           "s1            ATGAAAGTTGCTCTGAACGATGAA\n"
+                                           "s2            ATGAAGGTCGCACTATATGACGAG\n\n"),
+    ("-output", "paml", "-nomismatch"): ("   2     30\ns1\nATGAAAGTT---GCTCTGTGGAAAGATGAA\n"
+                                         "s2\nATGAAGGTCTCAGCACTATGGAAGGACGAG\n"),
+}
+
+
+class TestDec4FormatsAndDropIn(Tmp):  # DEC-4
+    def setUp(self):
+        super().setUp()
+        (self.d / "pep.aln").write_text(MARKED_ALN)
+        (self.d / "nuc.fa").write_text(MARKED_NUC)
+
+    def test_marked_clustal_input_in_both_commands(self):
+        for opts, want in MARKED_PAL2NAL.items():
+            for module in ("coal", "coal_compat"):
+                with self.subTest(opts=opts, module=module):
+                    r = run(module, ["pep.aln", "nuc.fa", *opts], self.d)
+                    self.assertEqual((r.returncode, r.stdout), (0, want), r.stderr)
+
+    def test_drop_in_defaults_to_clustal_like_pal2nal(self):
+        fx = ROOT / "tests" / "fixtures" / "clean"
+        gold = (ROOT / "tests" / "golden" / "clean" / "clustal.stdout").read_text()
+        r = run("coal_compat", [str(fx / "pep.fasta"), str(fx / "nuc.fasta")], self.d)
+        self.assertEqual((r.returncode, r.stdout), (0, gold), r.stderr)
+        r = coal([str(fx / "pep.fasta"), str(fx / "nuc.fasta")], self.d)  # coal's own default stays fasta
+        self.assertEqual(r.stdout, (ROOT / "tests" / "golden" / "clean" / "fasta.stdout").read_text())
+
+    def test_codon_with_column_removal_is_an_error_as_in_pal2nal(self):
+        for opt in ("-nogap", "-nomismatch", "-blockonly"):
+            for module in ("coal", "coal_compat"):
+                with self.subTest(opt=opt, module=module):
+                    r = run(module, ["pep.aln", "nuc.fa", "-output", "codon", opt], self.d)
+                    self.assertEqual((r.returncode, r.stdout), (1, ""))
+                    self.assertIn("-output codon cannot be combined", r.stderr)
+
+    def test_html_is_a_clear_error_and_nostderr_is_quiet(self):
+        r = run("coal_compat", ["pep.aln", "nuc.fa", "-html"], self.d)
+        self.assertEqual((r.returncode, r.stdout), (1, ""))
+        self.assertIn("-html", r.stderr)
+        self.assertIn("not supported", r.stderr)
+        r = run("coal_compat", ["pep.aln", "nuc.fa", "-nostderr"], self.d)
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, MARKED_PAL2NAL[("-output", "clustal")], ""))
+
+    def test_unknown_residue_column_removed_by_nomismatch(self):  # DEC-4f; PAL2NAL v14: ATGAAAGTTCTG
+        (self.d / "b.fa").write_text(">a\nMKBVL\n>b\nMKAVL\n")
+        (self.d / "bn.fa").write_text(">a\nATGAAAGATGTTCTG\n>b\nATGAAAGCTGTTCTG\n")
+        r = coal(["b.fa", "bn.fa", "-nomismatch"], self.d)
+        self.assertEqual((r.returncode, r.stdout), (0, ">a\nATGAAAGTTCTG\n>b\nATGAAAGTTCTG\n"), r.stderr)
+
+    def test_help_lists_the_formats_for_the_app(self):
+        h = coal(["--help"], self.d).stdout
+        self.assertIn("{fasta,clustal,paml,codon}", h)
+        self.assertIn("-blockonly", h)
+
+
+class TestDec4ParallelAndBlocks(unittest.TestCase):  # DEC-4
+    @classmethod
+    def setUpClass(cls):
+        import random
+        sys.path.insert(0, str(SRC))
+        from coal.tables import get_code
+        cls._td = tempfile.TemporaryDirectory(prefix="coal_dec_j_")
+        d = Path(cls._td.name)
+        rng = random.Random(4)
+        code = get_code(1).code
+        sense = sorted(c for c, a in code.items() if a != "*")
+        n, L = 40, 150
+        cods = [["ATG"] + [rng.choice(sense) for _ in range(L - 1)] for _ in range(n)]
+        rows = []
+        for k, cs in enumerate(cods):
+            row = [code[c] for c in cs]
+            for i in rng.sample(range(1, L), 10):
+                row[i] = "-"
+            if k % 7 == 3:
+                row[5] = "4"
+            rows.append("".join(row))
+        dna = []
+        for k, (cs, row) in enumerate(zip(cods, rows)):
+            out = []
+            for c, ch in zip(cs, row):
+                out.append("" if ch == "-" else ("ACGT" if ch == "4" else c))
+            if k % 9 == 2:
+                i = next(i for i in range(20, L) if row[i].isalpha())
+                out[i] = "TGG" if row[i] != "W" else "TTT"  # a mismatch
+            dna.append("CC" + "".join(out) + "TAA")
+        mask = "".join(rng.choice("# ") for _ in range(L))
+        text = "CLUSTAL W (1.83) multiple sequence alignment\n\n\n"
+        for b in range(0, L, 60):
+            for k, row in enumerate(rows):
+                text += f"seq{k:<6}{row[b:b + 60]}\n"
+            text += " " * 9 + mask[b:b + 60] + "\n\n"
+        (d / "p.aln").write_text(text)
+        (d / "n.fa").write_text("".join(f">seq{k}\n{s}\n" for k, s in enumerate(dna)))
+        cls.d = d
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._td.cleanup()
+
+    def _run(self, fmt, opts, jobs, memory=None):
+        import io
+        from contextlib import redirect_stdout
+        from unittest import mock
+        from coal import pipeline
+        out = self.d / f"o_{fmt}_{jobs}_{'_'.join(opts)}_{memory}.txt"
+        kw = dict(nogap="-nogap" in opts, nomismatch="-nomismatch" in opts, blockonly="-blockonly" in opts)
+        with mock.patch.object(pipeline, "BATCH_NT", 3000), \
+                mock.patch.object(pipeline, "BLOCK_MEMORY", memory or pipeline.BLOCK_MEMORY):
+            pipeline.run(str(self.d / "p.aln"), [str(self.d / "n.fa")], out_path=str(out), jobs=jobs,
+                         min_nt_per_job=1, out_format=fmt, **kw)
+        return out.read_text()
+
+    def test_jobs_1_2_4_identical_for_every_format_and_option(self):
+        for fmt in ("fasta", "clustal", "paml", "codon"):
+            for opts in ((), ("-nogap",), ("-nomismatch",), ("-blockonly",), ("-nogap", "-nomismatch", "-blockonly")):
+                if fmt == "codon" and opts:
+                    continue
+                with self.subTest(fmt=fmt, opts=opts):
+                    one = self._run(fmt, opts, 1)
+                    self.assertTrue(one)
+                    self.assertEqual(self._run(fmt, opts, 2), one)
+                    self.assertEqual(self._run(fmt, opts, 4), one)
+
+    def test_block_writer_memory_limit_does_not_change_output(self):
+        for fmt in ("clustal", "codon"):
+            with self.subTest(fmt=fmt):
+                self.assertEqual(self._run(fmt, (), 1, memory=1), self._run(fmt, (), 1))
+
+
+class TestDec4FetchPal2nal(unittest.TestCase):  # DEC-4
+    def setUp(self):
+        import hashlib
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("fetch_pal2nal", ROOT / "scripts" / "fetch_pal2nal.py")
+        self.m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.m)
+        self._td = tempfile.TemporaryDirectory(prefix="coal_fetch_")
+        self.m.DEST = Path(self._td.name) / "PAL2NAL"
+        self.fake = b"#!/usr/bin/perl\n# stand-in for pal2nal.pl\n"
+        self.m.SCRIPT_SHA256 = hashlib.sha256(self.fake).hexdigest()
+        self.script = self.m.DEST / "pal2nal.v14" / "pal2nal.pl"
+
+    def tearDown(self):
+        self._td.cleanup()
+
+    def _main(self, download):
+        import contextlib
+        import io
+        from unittest import mock
+        with mock.patch.object(self.m, "_download", download), contextlib.redirect_stdout(io.StringIO()), \
+                contextlib.redirect_stderr(io.StringIO()) as err:
+            try:
+                return self.m.main([]), err.getvalue()
+            except SystemExit as e:
+                return e.code, err.getvalue()
+
+    def test_falls_back_to_github_when_the_official_site_fails(self):
+        def download(url):
+            if url == self.m.URL:
+                raise OSError("403 Forbidden")
+            self.assertEqual(url, self.m.GITHUB_URL)
+            return self.fake
+        rc, err = self._main(download)
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(self.script.read_bytes(), self.fake)
+        self.assertIn("403", err)
+
+    def test_wrong_checksum_from_github_is_refused(self):
+        def download(url):
+            if url == self.m.URL:
+                raise OSError("unreachable")
+            return self.fake + b"tampered\n"
+        rc, err = self._main(download)
+        self.assertNotEqual(rc, 0)
+        self.assertIn("checksum mismatch", str(rc))
+        self.assertFalse(self.script.exists())
+
+    def test_official_tarball_still_used_first(self):
+        import hashlib
+        import io
+        import tarfile
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+            info = tarfile.TarInfo("pal2nal.v14/pal2nal.pl")
+            info.size = len(self.fake)
+            tar.addfile(info, io.BytesIO(self.fake))
+        data = buf.getvalue()
+        self.m.ARCHIVE_SHA256 = hashlib.sha256(data).hexdigest()
+        seen = []
+
+        def download(url):
+            seen.append(url)
+            return data
+        rc, err = self._main(download)
+        self.assertEqual((rc, seen), (0, [self.m.URL]), err)
+        self.assertEqual(self.script.read_bytes(), self.fake)
+
+
 if __name__ == "__main__":
     unittest.main()

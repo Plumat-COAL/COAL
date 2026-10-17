@@ -10,24 +10,27 @@ EX = os.path.join(ROOT, "examples", "clean")
 
 
 class TestTranslate(unittest.TestCase):
-    def test_options_any_order(self):
+    def test_options_any_order(self):  # DEC-4: -output always passed, files after "--"
         self.assertEqual(translate(["-nogap", "p.aln", "-codontable", "2", "n.fa", "-output", "fasta"]),
-                         ["p.aln", "n.fa", "-codontable", "2", "-nogap"])
+                         ["-output", "fasta", "-codontable", "2", "-nogap", "--", "p.aln", "n.fa"])
 
     def test_two_dna_files(self):
-        self.assertEqual(translate(["p", "a.fa", "b.fa", "-output", "fasta"]), ["p", "a.fa", "b.fa"])
+        self.assertEqual(translate(["p", "a.fa", "b.fa", "-output", "fasta"]),
+                         ["-output", "fasta", "--", "p", "a.fa", "b.fa"])
 
-    def test_other_formats_when_supported(self):
-        self.assertEqual(translate(["p", "n", "-output", "paml"], ("fasta", "paml")), ["p", "n", "-output", "paml"])
+    def test_default_is_clustal_and_every_format_passes(self):  # DEC-4
+        self.assertEqual(translate(["p", "n"]), ["-output", "clustal", "--", "p", "n"])
+        for f in ("clustal", "paml", "fasta", "codon"):
+            self.assertEqual(translate(["p", "n", "-output", f]), ["-output", f, "--", "p", "n"])
+        self.assertEqual(translate(["p", "n", "-blockonly"]), ["-output", "clustal", "-blockonly", "--", "p", "n"])
 
     def test_clear_errors(self):
-        for argv, text in ((["p", "n", "-blockonly", "-output", "fasta"], "blockonly"),
-                           (["p", "n", "-html"], "html"),
+        for argv, text in ((["p", "n", "-html"], "html"),
                            (["p", "n", "-foo"], "unknown option"),
                            (["p", "n", "-output", "xml"], "unknown -output"),
                            (["p", "n", "-codontable", "x", "-output", "fasta"], "number"),
                            (["p", "-output", "fasta"], "at least one DNA"),
-                           (["p", "n"], "add '-output fasta'")):
+                           (["p", "n"], "cannot write 'clustal'")):  # DEC-4: only if an engine lacks a format
             with self.assertRaises(UsageError) as cm:
                 translate(argv, ("fasta",))
             self.assertIn(text, str(cm.exception))

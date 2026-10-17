@@ -6,8 +6,11 @@ Memory use does not grow with the number of sequences beyond their IDs:
   pass 2  read protein rows again one at a time, fetch the matching DNA from
           disk, thread codons (in worker processes if jobs > 1, in order), and
           write each output row as soon as it is ready.
-With -nogap / -nomismatch, which depend on every row, pass 2 writes rows to a
-temporary file and a final pass removes the flagged columns.
+With -nogap / -nomismatch / -blockonly, which depend on every row, pass 2 writes rows to a
+temporary file and a final pass removes the flagged columns. The clustal and codon formats
+interleave all sequences block by block, so they also take that path: the final rows go to a
+fixed-width temporary file, which is then read back a group of blocks at a time (memory stays
+bounded by BLOCK_MEMORY, not by the number or length of the sequences).
 
 Output goes to a temporary file first and is only moved/copied to the real
 destination when everything succeeded, so an error never leaves partial output
@@ -29,11 +32,16 @@ from .core import (
     MISMATCH_WARNING, CoalError, apply_slices, column_widths, expand, keep_slices, nogap_bad_triplets,
     pair_sequences, prepare_row, thread_one,
 )
-from .seqio import DnaIndex, InputFormatError, is_clustal, iter_fasta, read_clustal
+from .seqio import DnaIndex, InputFormatError, clustal_mask, is_clustal, iter_fasta, read_clustal
 from .tables import get_code
 
 WRAP = 60
 _DIGIT = re.compile(r"[0-9]")
+# CHANGED(DEC-4): new. Was FASTA only; now PAL2NAL v14's four output formats. See overnight/integration/CHANGES.md
+FORMATS = ("fasta", "clustal", "paml", "codon")
+BLOCK_FORMATS = ("clustal", "codon")  # interleaved blocks of 60 nt
+BLOCK_MEMORY = 16_000_000  # bytes of rows held at once while writing clustal / codon blocks
+_ALNPOS = re.compile(r" pepAlnPos (\d+):")
 BATCH_NT = 2_000_000      # target DNA per work batch (keeps IPC overhead low)
 # Starting worker processes costs ~0.1-0.2 s (more on Windows), about the time one
 # core needs for a few million nucleotides. So each extra worker must have at
@@ -68,13 +76,14 @@ def mp_child() -> bool:
     return multiprocessing.parent_process() is not None
 
 
-def _init_worker(table, widths, two_pass, nogap, strict=False):
+def _init_worker(table, widths, two_pass, nogap, strict=False, out_format="fasta"):
     # CHANGED(ENG-f): workers ignore Ctrl-C (the main process reports it once, no worker
     # tracebacks). See overnight/engine-fixes/CHANGES.md
     if mp_child():
         signal.signal(signal.SIGINT, signal.SIG_IGN)
     _W.update(table=table, widths=widths, wide=any(w != 3 for w in widths),
-              two_pass=two_pass, nogap=nogap, strict=strict)  # CHANGED(DEC-1): strict is new
+              two_pass=two_pass, nogap=nogap, strict=strict,  # CHANGED(DEC-1): strict is new
+              record=paml_record if out_format == "paml" else fasta_record)  # CHANGED(DEC-4)
 
 
 def _work(batch):
@@ -94,7 +103,7 @@ def _work(batch):
             if _W["nogap"]:
                 bad |= nogap_bad_triplets(exp)
         else:
-            parts.append(fasta_record(pid, exp))
+            parts.append(_W["record"](pid, exp))
     return "".join(parts), warns, mcols, bad, notes
 
 
@@ -105,6 +114,83 @@ def fasta_record(rid: str, seq: str) -> str:
     if len(seq) <= WRAP:
         return f">{rid}\n{seq}\n"
     return f">{rid}\n" + "\n".join([seq[i:i + WRAP] for i in range(0, len(seq), WRAP)]) + "\n"
+
+
+def paml_record(rid: str, seq: str) -> str:
+    """One PAML (sequential PHYLIP-like) record as PAL2NAL writes it: the ID on its own line, then the row in
+    lines of 60 (an empty row gives an empty line)."""
+    return fasta_record(rid, seq)[1:]
+
+
+def paml_header(nseq: int, alilen: int) -> str:
+    return " %3d %6d\n" % (nseq, alilen)
+
+
+def codon_aa_widths(ncol: int, digit_rows, last_row: str) -> list[int] | None:
+    """Characters per column of the amino-acid lines of -output codon, as PAL2NAL v14 computes them: 1, except in a
+    column whose largest frameshift digit is 4 or more, where the width comes from the *last* sequence's character
+    in that column (int((d - 1) / 3) + 1 for a digit d, 1 for anything else). None if no row has a digit."""
+    if not digit_rows:
+        return None
+    big = [0] * ncol
+    for row in digit_rows:
+        for m in _DIGIT.finditer(row):
+            big[m.start()] = max(big[m.start()], int(m.group()))
+    out = []
+    for i in range(ncol):
+        c = last_row[i]
+        out.append((int(c) - 1) // 3 + 1 if big[i] >= 4 and c.isdigit() and c != "0" else 1)
+    return out
+
+
+def codon_aa_line(row: str, aa_widths) -> str:
+    """The amino-acid line of -output codon for one row (each residue followed by '-' padding where widened)."""
+    if aa_widths is None:
+        return row
+    return "".join(ch + "-" * (w - 1) for ch, w in zip(row, aa_widths))
+
+
+def write_blocks(out, fmt: str, ids, rows_fh, alilen: int, aa_fh=None, aalen: int = 0, mask: str | None = None,
+                 memory: int = BLOCK_MEMORY) -> None:
+    """Write clustal or codon blocks of 60 nt. rows_fh / aa_fh: binary files holding one fixed-width row per
+    sequence (alilen / aalen bytes each, in `ids` order). Reads a group of blocks for every sequence at a time.
+    mask: the mark line ('#' / ' ', alilen characters) to print under each block, or None."""
+    maxn = max([10] + [len(i) for i in ids])
+    pad = " " * (maxn + 4)
+    names = [i.ljust(maxn) + "    " for i in ids]
+    if fmt == "clustal":
+        out.write("CLUSTAL W multiple sequence alignment\n\n")
+    nblk = -(-alilen // WRAP)
+    n = len(ids)
+    group = max(1, memory // max(1, n * (WRAP + (20 if aa_fh else 0))))
+    for b0 in range(0, nblk, group):
+        b1 = min(nblk, b0 + group)
+        segs, aas = [], []
+        for k in range(n):
+            rows_fh.seek(k * alilen + WRAP * b0)
+            segs.append(rows_fh.read(min(WRAP * b1, alilen) - WRAP * b0).decode("ascii"))
+            if aa_fh is not None:
+                a0, a1 = min(20 * b0, aalen), min(20 * b1, aalen)
+                aa_fh.seek(k * aalen + a0)
+                aas.append(aa_fh.read(a1 - a0).decode("ascii"))
+        buf = []
+        for b in range(b0, b1):
+            o = WRAP * (b - b0)
+            for k in range(n):
+                chunk = segs[k][o:o + WRAP]
+                if fmt == "clustal":
+                    buf.append(names[k] + chunk + "\n")
+                else:
+                    a = aas[k][20 * (b - b0):20 * (b - b0) + 20]
+                    buf.append(pad + "   ".join(a) + "\n")
+                    buf.append(names[k] + " ".join([chunk[i:i + 3] for i in range(0, len(chunk), 3)]) + "\n")
+            if mask is not None:
+                m = mask[WRAP * b:WRAP * b + WRAP]
+                if fmt == "codon":
+                    m = " ".join([m[i:i + 3] for i in range(0, len(m), 3)])
+                buf.append(pad + m + "\n")
+            buf.append("\n")
+        out.write("".join(buf))
 
 
 def _batches(rows, dna: DnaIndex, pairing):
@@ -137,6 +223,35 @@ def _results(batches, jobs: int, init_args):
                 yield pending.popleft().result()
         while pending:
             yield pending.popleft().result()
+
+
+def _expand_mask(mask: str, widths, slices) -> str:
+    """The '#' mark line under clustal / codon blocks, one character per output nucleotide (as PAL2NAL)."""
+    full = "".join(("#" if mask[i:i + 1] == "#" else " ") * w for i, w in enumerate(widths))
+    return apply_slices(full, slices)
+
+
+def _write_block_output(out, fmt, ids, stage, slices, alilen, rows, aa_widths, mask, scratch) -> None:
+    """Final pass for clustal / codon: copy the kept columns of every staged row into a fixed-width binary temp
+    file (and, for codon, the amino-acid lines into another), then write the blocks from those."""
+    def temp():
+        f = tempfile.NamedTemporaryFile("w+b", delete=False, prefix=".coal_rows_")
+        scratch.append(f)
+        return f
+    fixed = temp()
+    for line in stage:
+        fixed.write(apply_slices(line.rstrip("\n").split("\t", 1)[1], slices).encode("ascii"))
+    aa_fh, aalen = None, 0
+    if fmt == "codon":
+        aa_fh = temp()
+        for _pid, row in rows():
+            line = codon_aa_line(row, aa_widths)
+            aalen = len(line)
+            aa_fh.write(line.encode("ascii", "replace"))
+    fixed.flush()
+    if aa_fh is not None:
+        aa_fh.flush()
+    write_blocks(out, fmt, ids, fixed, alilen, aa_fh, aalen, mask)
 
 
 def _spool(path, spooled: list) -> str:
@@ -185,21 +300,34 @@ def run(pep_path, nuc_paths, *args, **kw) -> int:
 
 def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
          nomismatch: bool = False, jobs: int = 0, warn=None, min_nt_per_job: int | None = None,
-         notice=None, strict: bool = False) -> int:
-    """Convert; write FASTA to out_path (or stdout).
+         notice=None, strict: bool = False, out_format: str = "fasta", blockonly: bool = False) -> int:
+    """Convert; write the codon alignment to out_path (or stdout) in out_format (FORMATS).
 
     jobs: 0 = automatic (up to all cores), N = at most N processes. Small inputs
     always run in one process (see MIN_NT_PER_JOB).
-    warn / notice: callables for per-codon warnings / important notices (the CLI
-    passes notice even with -q)."""
+    warn / notice: callables for per-codon warnings / important notices.
+    blockonly: keep only the columns marked '#' in a CLUSTAL input's mark line (PAL2NAL -blockonly)."""
+    # CHANGED(DEC-4): out_format and blockonly are new (was FASTA only, -blockonly rejected).
+    # See overnight/integration/CHANGES.md
+    if out_format not in FORMATS:
+        raise CoalError(f"unknown output format '{out_format}' (one of {', '.join(FORMATS)})")
+    if out_format == "codon" and (nogap or nomismatch or blockonly):
+        raise CoalError("-output codon cannot be combined with -nogap, -nomismatch or -blockonly (as in PAL2NAL)")
     get_code(table)
     rows = _protein_rows(pep_path)
+    # PAL2NAL reads '#' block marks from a CLUSTAL input's conservation lines: -blockonly keeps only those columns,
+    # and clustal / codon output show the marks under each block (when -blockonly is not given)
+    mask = clustal_mask(pep_path) if is_clustal(pep_path) else ""
+    has_marks = "#" in mask
+    block_cols = blockonly and has_marks
 
     # pass 1: protein IDs, row length, frameshift column widths
     ids, ncol = [], None
     digit_rows = []
+    last_row = ""
     for pid, row in rows():
         ids.append(pid)
+        last_row = row
         if ncol is None:
             ncol = len(row)
         elif len(row) != ncol:
@@ -211,11 +339,14 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
         # DNA record number for each protein, as a compact array; then free the ID tables
         # CHANGED(ENG-d): passes notice, so a partial ID match is reported. See overnight/engine-fixes/CHANGES.md
         pairing = array("q", pair_sequences(ids, dna.ids, dna.pos, warn=notice, strict=strict))  # CHANGED(DEC-1)
+        nseq = len(ids)
+        block_ids = ids if out_format in BLOCK_FORMATS else None  # interleaved formats need every ID at the end
         del ids
         dna.forget_ids()
         jobs = effective_jobs(jobs, dna.total_bytes(), min_nt_per_job)
         widths = column_widths(digit_rows, ncol)
-        two_pass = nogap or nomismatch
+        two_pass = nogap or nomismatch or block_cols or out_format in BLOCK_FORMATS
+        keep_col = (lambda c: mask[c - 1:c] == "#") if block_cols else None
 
         # CHANGED(ENG-a): was always temp-file-then-rename next to out_path (replaced symlinks,
         # FIFOs and devices; mode 0600); now renames only onto a regular/new file (symlinks
@@ -253,16 +384,23 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
             raise CoalError(f"cannot write {out_path}: {why}") from None
         stage = tempfile.NamedTemporaryFile("w+", delete=False, newline="\n", prefix=".coal_rows_",
                                             encoding="ascii") if two_pass else None
+        scratch: list = []  # CHANGED(DEC-4): fixed-width temp files of the clustal / codon writer
         try:
             drop, bad = set(), set()
-            init = (table, widths, two_pass, nogap, strict)
+            init = (table, widths, two_pass, nogap, strict, out_format)
             sink = stage.file if two_pass else tmp.file   # skip tempfile's per-call wrapper
+            if not two_pass and out_format == "paml":
+                tmp.file.write(paml_header(nseq, sum(widths)))
             for text, warns, mcols, badt, notes in _results(_batches(rows(), dna, pairing), jobs, init):
                 if warn:
                     for w in warns:
                         # CHANGED(ENG-i2): was printed with -nomismatch too; now, as PAL2NAL, no
                         # mismatch warnings with -nomismatch. See overnight/engine-fixes/CHANGES.md
                         if not (nomismatch and MISMATCH_WARNING in w):
+                            if keep_col:  # CHANGED(DEC-4): -blockonly: as PAL2NAL, only warnings in kept columns
+                                m = _ALNPOS.search(w)
+                                if m and not keep_col(int(m.group(1))):
+                                    continue
                             warn(w)
                 if notice:  # CHANGED(ENG-c): new; see overnight/engine-fixes/CHANGES.md
                     for n in notes:
@@ -272,11 +410,23 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                     drop.update(c - 1 for c in mcols)
                 bad |= badt
             if two_pass:
-                sl = keep_slices(widths, drop if nomismatch else (), bad)
+                if block_cols:  # CHANGED(DEC-4): -blockonly drops the columns not marked '#'
+                    drop.update(i for i in range(ncol) if mask[i:i + 1] != "#")
+                sl = keep_slices(widths, drop, bad)
+                alilen = sum(b - a for a, b in sl)
                 stage.seek(0)
-                for line in stage.file:
-                    pid, exp = line.rstrip("\n").split("\t", 1)
-                    tmp.file.write(fasta_record(pid, apply_slices(exp, sl)))
+                if out_format in BLOCK_FORMATS:
+                    _write_block_output(tmp.file, out_format, block_ids, stage.file, sl, alilen, rows,
+                                        codon_aa_widths(ncol, digit_rows, last_row),
+                                        _expand_mask(mask, widths, sl) if has_marks and not blockonly else None,
+                                        scratch)
+                else:
+                    if out_format == "paml":
+                        tmp.file.write(paml_header(nseq, alilen))
+                    record = paml_record if out_format == "paml" else fasta_record
+                    for line in stage.file:
+                        pid, exp = line.rstrip("\n").split("\t", 1)
+                        tmp.file.write(record(pid, apply_slices(exp, sl)))
             tmp.close()
             if out_path and not direct:
                 if existing:
@@ -307,7 +457,7 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                         raise
             return 0
         finally:
-            for f in (tmp, stage):
+            for f in (tmp, stage, *scratch):
                 if f is not None:
                     f.close()
                     try:

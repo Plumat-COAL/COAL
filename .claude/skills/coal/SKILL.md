@@ -13,9 +13,11 @@ exit 2 = usage error today, extras in separate environments. See overnight/app/C
 
 - You have **aligned proteins** (from MAFFT, MUSCLE, Clustal...) and the **unaligned CDS/DNA** of the same genes,
   and need the DNA aligned codon by codon (the input for dN/dS, selection scans, codon-aware trees).
-- Someone mentions PAL2NAL: COAL accepts the same options (`-codontable`, `-nogap`, `-nomismatch`,
-  `-output fasta`) and gave the same FASTA output as PAL2NAL v14 in all 147 byte-for-byte comparisons of its
-  test suite; it is much faster on big inputs. <!-- CHANGED(R2-D2): was 143 -->
+- Someone mentions PAL2NAL: COAL accepts the same options (`-codontable`, `-nogap`, `-nomismatch`, `-blockonly`,
+  `-output clustal|paml|fasta|codon`) and gave the same output as PAL2NAL v14 in all 246 byte-for-byte comparisons
+  of its test suite (all four formats), plus a random differential test against the real PAL2NAL; it is much faster
+  on big inputs. The `pal2nal` command takes an unchanged PAL2NAL command line (default clustal, like PAL2NAL).
+  <!-- CHANGED(R2-D2): was 143 --> <!-- CHANGED(DEC-4): was "-output fasta ... same FASTA output ... 147" -->
 - Not for: aligning sequences from scratch (run an aligner on the proteins first), non-coding DNA, or RNA genes.
 
 ## Install
@@ -43,12 +45,17 @@ coal pep.aln nuc.fasta -codontable 2 -o codon.fasta      # 2. vertebrate mitocho
 coal pep.aln nuc.fasta -nogap -o codon.fasta             # 3. drop gap/stop columns (for codeml)
 coal pep.aln nuc.fasta -nomismatch -o codon.fasta        # 4. drop columns where a codon doesn't fit
 coal pep.aln nuc.fasta -j 4 -o codon.fasta               # 5. big inputs: up to 4 worker processes
+coal pep.aln nuc.fasta -output paml -o codon.paml        # 6. PAML/codeml input (also -output clustal / codon)
+coal pep.aln nuc.fasta --strict -o codon.fasta           # 7. pipelines: stop on probably-wrong data
 ```
 
 <!-- CHANGED(R2-A10, R2-D5, R2-D7, R2-E4): was "-q silences them", "unrelated sequences can still succeed",
 "always count the warnings per gene" (none are printed with -nomismatch) and exit codes 0/1/2 only.
 See overnight/integration/CHANGES.md -->
-Output is FASTA only (`-output fasta`, the default). Per-codon warnings (`coal: warning: <id> pepAlnPos N: ...`)
+<!-- CHANGED(DEC-4): was "Output is FASTA only" -->
+Output formats: `-output fasta` (the default of `coal`), `clustal`, `paml`, `codon`, each byte-identical to
+PAL2NAL v14 (`codon` cannot be combined with `-nogap`/`-nomismatch`/`-blockonly`, as in PAL2NAL). `-blockonly` keeps
+only the columns marked `#` under the blocks of a CLUSTAL input. Per-codon warnings (`coal: warning: <id> pepAlnPos N: ...`)
 go to stderr, and so do **notices about probably-wrong data** (below). `-q` silences warnings and notices alike
 (errors are always printed), so **don't use `-q` when you need to know about bad genes**; use `--strict` to stop on
 them instead. <!-- CHANGED(DEC-2): was "-q silences those, but notices ... are always printed" --> The notices:
@@ -124,7 +131,6 @@ Never "fix" a mismatch by editing sequences silently: report which genes failed 
 These are being built on the engine branch; do not use them unless `--help` shows them.
 
 ```
-coal pep.aln nuc.fasta -output paml -o codon.paml        # also -output clustal / codon
 coal pep.aln nuc.fasta --keep-going --report run.json -o codon.fasta   # pipelines: keep going, write a report
 ```
 

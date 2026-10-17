@@ -94,6 +94,38 @@ def read_clustal(path: str | Path) -> list[tuple[str, str]]:
     return [(n, "".join(seqs[n])) for n in order]
 
 
+# CHANGED(DEC-4): new. PAL2NAL's '#' block marks (used by -blockonly and shown in clustal/codon output); was not read.
+# See overnight/integration/CHANGES.md
+def clustal_mask(path: str | Path) -> str:
+    """The mark line of a CLUSTAL alignment, one character per alignment column, read the way PAL2NAL v14 reads it:
+    after each sequence line, the next line that is not a sequence line (the conservation line, or a blank line) is
+    padded with spaces to that sequence line's length and the part under its sequence is appended. Only '#' has a
+    meaning (PAL2NAL's -blockonly keeps the '#' columns). A block whose last sequence line ends the file adds
+    nothing, as in PAL2NAL."""
+    with _text(path) as fh:
+        text = "".join(fh)
+    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    while lines and lines[-1] == "":
+        lines.pop()  # Perl's split drops trailing empty fields
+    mask: list[str] = []
+    get, tmplen, idspc, sublen = False, 0, 0, 0
+    for line in lines:
+        if not line.startswith("CLUSTAL") and line[:1] not in ("", " ", "\t", "#") and not line[:1].isspace():
+            line = line.rstrip()
+            parts = line.split()
+            tmplen = len(line)
+            m = re.match(r"\S+\s+", line)
+            if m:
+                idspc = m.end()
+            sublen = len(parts[1]) if len(parts) > 1 else 0
+            get = True
+        elif get:
+            line += " " * (tmplen - len(line))
+            mask.append(line[idspc:idspc + sublen])
+            get = False
+    return "".join(mask)
+
+
 def read_alignment(path: str | Path) -> list[tuple[str, str]]:
     """Read a protein alignment, auto-detecting CLUSTAL vs FASTA."""
     with _text(path) as fh:  # CHANGED(ENG-h)

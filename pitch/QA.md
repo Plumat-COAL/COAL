@@ -6,10 +6,13 @@ isn't in (the engine-fixes branch is already merged). <!-- CHANGED(R2-D12): was 
 
 **1. How do you know it's correct on my data?**
 We compared COAL with PAL2NAL v14's real output on 38 hand-made inputs covering every behaviour we found
-(UTRs, frameshift codes, all 17 genetic codes, ambiguous bases, ID mismatches): 165 checks on 38 hand-made
-inputs. 147 compare COAL's output with PAL2NAL's byte for byte, and 141 of those also compare the warnings;
-12 check that COAL rejects the inputs PAL2NAL fails on (exit code only, not the message); 6 are documented,
-deliberate differences, where we check COAL's own behaviour instead. On your data, COAL checks every
+(UTRs, frameshift codes, all 17 genetic codes, ambiguous bases, ID mismatches): 279 checks on 38 hand-made
+inputs, in all four output formats. 246 compare COAL's output with PAL2NAL's byte for byte, and 240 of those also
+compare the warnings; 24 check that COAL rejects the inputs PAL2NAL fails on (exit code only, not the message); 9 are
+documented, deliberate differences, where we check COAL's own behaviour instead. On every change, CI also runs both
+tools on 3,000 random inputs x 4 formats (wrong DNA, masked genes, UTRs, frameshifts, every genetic code, -nogap,
+-nomismatch, -blockonly): identical apart from the documented differences. <!-- CHANGED(DEC-4): was 165/147/141/12/6 -->
+On your data, COAL checks every
 <!-- CHANGED(R2-D2): was 143 / 94 / 10; guarded by tests_app/test_docs_numbers.py -->
 codon against its amino acid and tells you per gene if it doesn't fit, with the column, so problems can't
 pass silently (with `-nomismatch` the command line, like PAL2NAL, prints no mismatch warnings; the GUI and
@@ -37,25 +40,27 @@ after removing version suffixes, and `--keep-going` so one bad gene doesn't stop
 It works, and we treat it as the reference. But it always exits 0 even on errors, prints cryptic messages,
 is a Perl script (or a web form that takes one alignment at a time and can't be used from a pipeline), and
 explains nothing to bench scientists or AI agents. COAL
-accepts PAL2NAL's options (there is even a drop-in `pal2nal` command), so a pipeline that already calls
-PAL2NAL with `-output fasta` can switch by changing the command name; pipelines that rely on PAL2NAL's
-default clustal output must add `-output fasta` until COAL writes clustal. PAL2NAL is GPL; COAL is an independent MIT implementation and contains none of its code.
+accepts PAL2NAL's options and writes all four of its output formats byte for byte, and the drop-in `pal2nal`
+command defaults to clustal like PAL2NAL, so an unchanged PAL2NAL command line works: a pipeline switches by changing
+the command name. <!-- CHANGED(DEC-4): was "pipelines that rely on PAL2NAL's default clustal output must add
+-output fasta" --> PAL2NAL is GPL; COAL is an independent MIT implementation and contains none of its code.
 
 **5. What about dN/dS?**
 COAL produces the input that PAML (codeml), HyPhy and KaKs_Calculator need, and deliberately does not
 estimate dN/dS itself: those tools are established and well validated, and re-implementing them would add
-risk, not value. `-nogap` removes gap and stop-codon columns, as many dN/dS setups expect;
-**[after the C++/formats branch is merged]** PAML output format directly.
+risk, not value. `-nogap` removes gap and stop-codon columns, as many dN/dS setups expect, and `-output paml`
+writes codeml's input directly. <!-- CHANGED(DEC-4): PAML output was "[after the C++/formats branch is merged]" -->
 
 **6. Is this AI-generated code you can't maintain?**
 Much of it was written with AI assistance (Claude), and we say so. What makes it maintainable is the
-same as for any code: about 1,300 lines of dependency-free Python in the engine and 2,350 in the app
+same as for any code: about 1,550 lines of dependency-free Python in the engine and 2,350 in the app
 layer, a differential test suite against PAL2NAL's real output, more than 170 app tests, CI on Windows, macOS
 and Linux (all green in run 39006043852, including the GUI tests against real Gradio on Windows; still open the
 latest GitHub Actions run before you say "green"), and documented decisions (every deliberate difference from PAL2NAL is written down with its test).
 <!-- CHANGED(FINAL-2): was "the Windows job was red until the round-2 fixes" (it was still red after round 2); now cites green run 39006043852. -->
 <!-- CHANGED(R2-D2, R2-D3): was "about 1,050 lines ... 2,150 ... 115 app tests ... green on the app branch; the new GUI and MCP jobs have not run yet" (both false). See overnight/integration/CHANGES.md -->
 <!-- CHANGED(R3-D4b): app test count 140 -> 170 (round 3 added tests; the docs guard requires it). See overnight/integration/CHANGES.md -->
+<!-- CHANGED(DEC-4): engine line count 1,300 -> 1,550 (output formats; the docs guard requires it). See overnight/integration/CHANGES.md -->
 *[Team: say who reviewed which parts. Only claim review you actually did.]*
 
 **7. How will this be maintained after the weekend?**
@@ -75,6 +80,6 @@ with the same columns and gene names a human sees, instead of guessing from raw 
 "fix" a sequence; it can only re-run with options COAL suggests, such as another genetic code.
 
 **10. What doesn't it do yet?**
-CLUSTAL/PAML/codon output formats and `-blockonly` (output formats **[after the C++/formats branch is merged]**); `-blockonly` and
-`-html` give clear errors. The web GUI is new and has only been run on *[team: the laptops it was tested on]*; the Space is not deployed. The DIAMOND
+PAL2NAL's `-html` web-server mode (a clear error) and Gblocks-format input. <!-- CHANGED(DEC-4): was "CLUSTAL/PAML/codon
+output formats and -blockonly" --> The web GUI is new and has only been run on *[team: the laptops it was tested on]*; the Space is not deployed. The DIAMOND
 preset has only been tested with a stand-in, not real genomes. The C++ core is **[after the C++/formats branch is merged]**.

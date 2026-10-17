@@ -324,6 +324,9 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int, strict: bool = F
     res = Threaded(seq_id, row, "")
     for m in _AS_X.finditer(row):
         res.warnings.append(f"pepAlnPos {m.start() + 1}: {m.group()} unknown AA type. Taken as 'X'")
+        # CHANGED(DEC-4f): was kept by -nomismatch; now removed, as PAL2NAL v14 removes every column it printed a
+        # message for (found by the differential fuzz). See overnight/integration/CHANGES.md
+        res.mismatch_cols.add(m.start() + 1)
 
     dna = raw_dna.upper().replace("U", "T")
     residues = row.replace(GAP, "")

@@ -1,9 +1,10 @@
 # COAL: 3-minute pitch ("teach the room")
 
 Rule for the speaker: say only what is on this page. Lines marked **[after the C++/formats branch is merged]**
-describe features being built on the teammate's branch (output formats, `--keep-going`, ID normalisation, C++
-core); the engine-fixes branch is already merged, and `coal --help` still lists only `-output fasta`. Say "this is
-landing now", never "it does". If that branch is not merged by Sunday 10:00, skip those lines.
+describe features being built on the teammate's branch (`--keep-going`, ID normalisation, C++ core); the
+engine-fixes branch is already merged. The four PAL2NAL output formats (clustal, paml, fasta, codon) are built on this
+branch (DEC-4). Say "this is landing now", never "it does". If that branch is not merged by Sunday 10:00, skip those
+lines. <!-- CHANGED(DEC-4): was "output formats" on the teammate's branch and "`coal --help` still lists only -output fasta" -->
 <!-- CHANGED(R2-D12): was "[after merge]", which read as the (already merged) engine-fixes branch -->
 
 **Before going on:** laptop on mains, browser tabs open in this order: (1) `pitch/explainer.html`,
@@ -51,10 +52,12 @@ good genes and flags the one bad one; say "the other 19 are aligned" only if you
 ## 2:05-2:35 Proof
 
 <!-- CHANGED(R2-D2): was 143 / 94 / 10 (stale after the engine merge); now the harness's current counts, guarded by tests_app/test_docs_numbers.py. See overnight/integration/CHANGES.md -->
-- "Correctness: we test COAL against PAL2NAL version 14's own output: 165 checks on 38 hand-made inputs and
-  every FASTA option. 147 compare the output byte for byte, and 141 of those also compare the warnings.
-  12 check that COAL rejects the inputs PAL2NAL fails on. 6 are documented, deliberate differences where
-  we think PAL2NAL is wrong, such as that dropped codon; for those we check COAL's own behaviour."
+- "Correctness: we test COAL against PAL2NAL version 14's own output: 279 checks on 38 hand-made inputs, in
+  all four output formats. 246 compare the output byte for byte, and 240 of those also compare the warnings.
+  24 check that COAL rejects the inputs PAL2NAL fails on. 9 are documented, deliberate differences where
+  we think PAL2NAL is wrong, such as that dropped codon; for those we check COAL's own behaviour. And on every
+  change, CI runs both tools on 3,000 random inputs in every format: byte-identical apart from those
+  documented differences." <!-- CHANGED(DEC-4): was 165 / 147 / 141 / 12 / 6, FASTA only; fuzz sentence new -->
 - "Speed, measured on one Windows laptop, end to end: 100 genes of 10,000 codons, PAL2NAL 24.5 seconds,
   COAL 0.2 seconds, 119 times faster. Ten thousand genes: 25 seconds down to under one second.
   Half a million genes, nearly a gigabyte: 10 seconds with 4 processes, 25 on one. For tiny inputs both take about 0.05 seconds; we

@@ -69,6 +69,38 @@ jobs:
           COAL_REQUIRE_EXTRAS: gui
         run: python .github/ci_unittest.py discover -s tests_app  # CHANGED(FINAL-3)
 
+  pal2nal-fuzz:
+    # CHANGED(DEC-4): new. Differential fuzz against the real PAL2NAL v14 on every push: fetched by
+    # scripts/fetch_pal2nal.py (official site, else the orthologr copy on GitHub; sha256-checked; PAL2NAL/ is
+    # git-ignored and never committed), then tests/fuzz_vs_pal2nal.py (FUZZ_N random cases x 4 output formats,
+    # fixed seed). Fails if the fuzz is skipped. See overnight/integration/CHANGES.md
+    name: "Differential fuzz vs the real PAL2NAL v14"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install COAL
+        run: python -m pip install -e .
+      - name: Fetch PAL2NAL v14 (checksum-verified, not committed)
+        run: python scripts/fetch_pal2nal.py
+      - name: Fuzz COAL against PAL2NAL (must not skip)
+        env:
+          PAL2NAL: PAL2NAL/pal2nal.v14/pal2nal.pl
+          FUZZ_N: "3000"
+        shell: bash
+        run: |
+          perl -e 'print "perl $^V\n"'
+          python tests/fuzz_vs_pal2nal.py -v 2>&1 | tee fuzz.txt
+          status=${PIPESTATUS[0]}
+          grep -E "^(fuzz vs PAL2NAL|deliberate differences|cases exercising)" fuzz.txt >> "$GITHUB_STEP_SUMMARY" || true
+          test "$status" -eq 0
+          if grep -qiE "skipped" fuzz.txt; then
+            echo "::error::the PAL2NAL fuzz was skipped (PAL2NAL not found)"; exit 1
+          fi
+
   explainer:
     # CHANGED(R2-D11): new; tests_app/test_explainer.py (pitch/explainer.html in Chromium) always skipped in CI.
     # CHANGED(R3-D2): was continue-on-error: true (first run); green in run 39001781214, so now required.

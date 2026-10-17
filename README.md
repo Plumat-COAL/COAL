@@ -21,7 +21,11 @@ pip install -e .[fast]                              # optional numpy speed-up fo
 
 - **Input:** a protein alignment (FASTA or CLUSTAL) and the unaligned coding DNA (FASTA, one or more files).
   Non-letters in the DNA (gaps, digits, spaces) are ignored, as in PAL2NAL.
-- **Output:** a codon alignment in FASTA format (60 columns per line), using the protein-alignment IDs.
+- **Output:** a codon alignment, using the protein-alignment IDs, in any of PAL2NAL v14's formats, byte for byte as
+  PAL2NAL writes them: `-output fasta` (COAL's default; 60 columns per line), `clustal` (PAL2NAL's default), `paml`
+  (codeml's input) or `codon` (amino acids above their codons; not combinable with `-nogap`/`-nomismatch`/`-blockonly`,
+  as in PAL2NAL). The drop-in `pal2nal` command defaults to clustal, like PAL2NAL.
+  <!-- CHANGED(DEC-4): was "a codon alignment in FASTA format". See overnight/integration/CHANGES.md -->
 - **Pairing:** sequences are matched by ID if every protein ID is in the DNA file(s), otherwise by order.
 - **Extra sequence around the gene** (UTRs, stop codon, poly-A) is skipped: COAL finds the leftmost place in the
   DNA, in any reading frame, where the whole protein fits.
@@ -42,6 +46,9 @@ pip install -e .[fast]                              # optional numpy speed-up fo
   <!-- CHANGED(DEC-1): was "It is also an error if more than half ... / ... is an error when its DNA is longer" (ENG-c,
   R2-E3, R3-E1); now PAL2NAL's output by default plus a notice, errors only with --strict. See overnight/integration/CHANGES.md -->
 - **`-nogap`** removes codon columns that contain a gap or a stop codon.
+- **`-blockonly`** keeps only the columns marked `#` under the blocks of a CLUSTAL protein alignment (PAL2NAL's
+  convention, e.g. Gblocks-selected positions); without `-blockonly` those marks are shown under each block of
+  clustal and codon output, as PAL2NAL does. No effect if the input has no `#` marks. <!-- CHANGED(DEC-4): new -->
 - **Exit code** is non-zero on any error (PAL2NAL always exits 0). Warnings and notices go to stderr; `-q` (like
   PAL2NAL's `-nostderr`) silences all of them, including the notices about probably-wrong data, so check the exit
   code or use `--strict` when running quietly. Errors are always printed. stdout is the same with or without `-q`.
@@ -60,13 +67,17 @@ for small ones (each extra process needs about 4 million nucleotides of DNA to p
 caps the number of processes and `-j 1` forces a single process. Output is always in the input order. Output is written to a temporary file and only moved into place
 if the whole run succeeds, so an error never leaves a partial file. Notes:
 
-- `-nogap`/`-nomismatch` need every row before deciding which columns to remove, so the rows are first written to
-  a temporary file (disk space about the size of the output).
+- `-nogap`/`-nomismatch`/`-blockonly` need every row before deciding which columns to remove, so the rows are first
+  written to a temporary file (disk space about the size of the output). The clustal and codon formats interleave
+  all sequences block by block, so they use temporary files the same way (about twice the output size on disk) and
+  hold at most 16 MB of rows in memory at a time. `-j` gives the same output in every format.
+  <!-- CHANGED(DEC-4): clustal/codon sentence new -->
 - CLUSTAL input is read into memory (FASTA input is streamed).
 - Memory still holds the sequence IDs and their file positions, about 300 bytes per sequence (≈150 MB per
   500,000 sequences).
 
-**Not yet supported:** output formats other than FASTA (`clustal`, `paml`, `codon`), and `-blockonly`/Gblocks input.
+**Not supported:** PAL2NAL's `-html` web-server mode (a clear error) and Gblocks-format protein input.
+<!-- CHANGED(DEC-4): was "output formats other than FASTA (clustal, paml, codon), and -blockonly/Gblocks input" -->
 
 **Deliberate differences from PAL2NAL** (details in `tests/README.md`):
 
@@ -80,18 +91,26 @@ if the whole run succeeds, so an error never leaves a partial file. Notes:
   per-codon warnings, or nothing for a partial ID match). When no ID matches COAL stays silent, like PAL2NAL.
   With `--strict` (COAL's own option) these cases are errors.
   <!-- CHANGED(DEC-1): was "More than half ... is an error" (a stdout difference); now stderr only. See overnight/integration/CHANGES.md -->
-- Genetic code 3 (yeast mitochondrial) also accepts GTG as a start codon (current NCBI table; whether PAL2NAL v14
-  does is unverified, so this is a possible difference).
+- Genetic code 3 (yeast mitochondrial) also accepts GTG as a start codon (current NCBI table; PAL2NAL v14's table 3
+  accepts only ATA/ATG, measured). <!-- CHANGED(DEC-4): was "unverified" -->
 - With `-nomismatch`, `unknown AA type. Taken as 'X'` warnings (for B/Z/J/O/U) are still printed; PAL2NAL prints
-  nothing there. Mismatch warnings are not printed, as in PAL2NAL.
+  nothing there. Mismatch warnings are not printed, as in PAL2NAL. The output is the same: both remove those columns.
+  <!-- CHANGED(DEC-4): COAL kept B/Z/J/O/U columns with -nomismatch; now removes them like PAL2NAL -->
+- `U` (selenocysteine) in the protein is read as any codon, like B/Z/J/O, with a warning. PAL2NAL's search pattern
+  gives `U` no codon at all, so its row is misaligned or the gene fails. <!-- CHANGED(DEC-4): found by the fuzz -->
+- RNA input (U instead of T): COAL reads U as T everywhere. PAL2NAL does too, except in its fallback (used when the
+  protein doesn't fit exactly), where a first Met on AUG/CUG/GUG is not accepted: PAL2NAL then flags that codon
+  (and `-nomismatch` removes the column) or places the gene elsewhere in the DNA. <!-- CHANGED(DEC-4): found by the fuzz -->
+- `coal`'s own default output format is FASTA (PAL2NAL's is clustal); the drop-in `pal2nal` command uses clustal.
 <!-- CHANGED(R2-D6): ENG-c, ENG-d, ENG-g, ENG-i2 added. See overnight/integration/CHANGES.md -->
 
 ## Ways to use COAL
 
 <!-- CHANGED(R2-D6): new section. See overnight/integration/CHANGES.md -->
 - **Command line:** `coal` / `python -m coal` (above).
-- **Drop-in for PAL2NAL pipelines:** `pal2nal pep.aln nuc.fasta -output fasta ...` (or `python -m coal_compat`)
-  accepts PAL2NAL's command line and runs COAL (see `src/coal_compat/cli.py` for what is supported).
+- **Drop-in for PAL2NAL pipelines:** `pal2nal pep.aln nuc.fasta [PAL2NAL options]` (or `python -m coal_compat`)
+  accepts an unchanged PAL2NAL v14 command line, with PAL2NAL's default clustal output, all four formats,
+  `-blockonly` and `-nostderr` (= `-q`); `-html` is a clear error. <!-- CHANGED(DEC-4): was "-output fasta ..." -->
 - **Web GUI for bench scientists:** `pip install -e .[gui]`, then `python -m coal_app` (or `coal-gui`): runs on
   this computer at http://127.0.0.1:7860, with a per-gene health check, an alignment view that marks where a
   gene breaks, genetic-code suggestions and a ready-to-paste methods sentence.
@@ -109,13 +128,30 @@ python -m unittest discover -s tests -v
 ```
 
 <!-- CHANGED(ENG-i4): was "165 checks. COAL's output must be byte-identical, and its mismatch warnings must equal PAL2NAL's" (rc files were not read, warnings not compared with -nomismatch, 4 checks compared only the exit code). See overnight/engine-fixes/CHANGES.md -->
-Compares COAL with stored PAL2NAL v14 outputs (`tests/golden/`): 38 input cases × all FASTA option
-combinations = 165 checks (the test prints these counts). In the 3 `invalid_chars` checks COAL deliberately fails
-(see below). Exit status in the other 162: PAL2NAL always exits 0, so COAL must exit 0 exactly when PAL2NAL produced
-output.<!-- CHANGED(R3-D5): was "in all 165" checks; the harness checks exit status in 162. See overnight/integration/CHANGES.md --> stdout is byte-identical in 147 checks, and the per-codon warnings
-are identical in 141 of them (47 with `-nomismatch`); in 12 both tools fail. 12 checks are deliberate differences:
-the other 6 of the 147 (same output, different warnings), 3 with different output and 3 where COAL deliberately
+<!-- CHANGED(DEC-4): was "all FASTA option combinations = 165 checks ... 3 invalid_chars ... other 162 ... 147 ... 141 ... 12 ... 12 checks
+... 3 where COAL deliberately fails"; now every stored golden in all four formats. See overnight/integration/CHANGES.md -->
+Compares COAL with stored PAL2NAL v14 outputs (`tests/golden/`): 38 input cases × all option combinations in all
+four output formats = 279 checks (the test prints these counts). In the 6 `invalid_chars` checks COAL deliberately
+fails (see below). Exit status in the other 273: PAL2NAL always exits 0, so COAL must exit 0 exactly when PAL2NAL
+produced output.<!-- CHANGED(R3-D5): was "in all 165" checks; the harness checks exit status in 162. See overnight/integration/CHANGES.md --> stdout is byte-identical in 246 checks, and the per-codon warnings
+are identical in 240 of them (47 with `-nomismatch`); in 24 both tools fail. 15 checks are deliberate differences:
+the other 6 of the 246 (same output, different warnings), 3 with different output and 6 where COAL deliberately
 fails. See `tests/README.md` for exactly what is compared and for the list of deliberate differences.
+
+**Random differential test against the real PAL2NAL** (needs Perl; PAL2NAL is fetched, never committed):
+
+```
+python scripts/fetch_pal2nal.py
+PAL2NAL=PAL2NAL/pal2nal.v14/pal2nal.pl python tests/fuzz_vs_pal2nal.py      # FUZZ_N=3000 cases by default
+```
+
+Each random case (FASTA or CLUSTAL input, sometimes with `#` marks; clean, mismatching, unrelated, masked or
+wrong-code DNA; UTRs, stops, frameshift digits, RNA, lower case; same, shuffled, different or partly matching IDs;
+random `-codontable`, `-nogap`, `-nomismatch`, `-blockonly`) runs through PAL2NAL and the drop-in `pal2nal` with the
+same command line in all four formats, and stdout must be byte-identical, or both must fail, except for the
+deliberate differences listed in the script (each is in the list above). CI runs it on every push (job
+`pal2nal-fuzz`). Result here, seed 20261017, 3,000 cases: no unexplained difference in any format (see
+`tests/README.md` for the counts). <!-- CHANGED(DEC-4): new -->
 
 ## Benchmark results
 
@@ -201,7 +237,9 @@ To fetch it locally (into `PAL2NAL/`, which is git-ignored):
 python scripts/fetch_pal2nal.py
 ```
 
-If the download is blocked, put `pal2nal.v14.tar.gz` (downloaded from the
+If the official site can't be reached, the script falls back to the copy of `pal2nal.pl` in the public orthologr
+R package on GitHub, accepted only if its SHA-256 equals that of the official script. <!-- CHANGED(DEC-4) -->
+If both downloads are blocked, put `pal2nal.v14.tar.gz` (downloaded from the
 official site in a browser) in the repo root and run:
 
 ```

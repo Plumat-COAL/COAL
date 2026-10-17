@@ -609,25 +609,25 @@ class TestFinding16AndC4C5Ci(unittest.TestCase):
 
 
 class TestC2CompatClaims(unittest.TestCase):
-    def test_docstring_and_html_error_dont_promise_clustal(self):
+    def test_docstring_and_html_error_match_what_works(self):  # DEC-4: clustal is supported now
         from coal_compat import cli
         doc = " ".join(cli.__doc__.split())
-        self.assertNotIn("unchanged:", doc)
-        self.assertIn("-output fasta", doc)
+        self.assertIn("An unchanged PAL2NAL command line works", doc)
+        self.assertIn("default output format is clustal", doc)
         with self.assertRaises(cli.UsageError) as cm:
-            cli.translate(["p", "n", "-html"], ("fasta",))
-        self.assertNotIn("clustal", str(cm.exception))
-        self.assertIn("-output fasta", str(cm.exception))
+            cli.translate(["p", "n", "-html"])
+        self.assertIn("not supported", str(cm.exception))
 
     def test_nostderr_is_accepted_as_quiet(self):
         from coal_compat import cli
-        self.assertEqual(cli.translate(["p", "n", "-output", "fasta", "-nostderr"], ("fasta",)), ["p", "n", "-q"])
+        self.assertEqual(cli.translate(["p", "n", "-output", "fasta", "-nostderr"]),
+                         ["-output", "fasta", "-q", "--", "p", "n"])  # DEC-4
 
     def test_qa_says_which_pipelines_can_switch(self):
         with open(os.path.join(ROOT, "pitch", "QA.md"), encoding="utf-8") as fh:
             qa = " ".join(fh.read().split())
         self.assertNotIn("a pipeline can switch without being rewritten", qa)
-        self.assertIn("-output fasta", qa)
+        self.assertIn("an unchanged PAL2NAL command line works", qa)  # DEC-4: was "-output fasta"
 
 
 class TestC10C11Skill(unittest.TestCase):
@@ -648,7 +648,7 @@ class TestC10C11Skill(unittest.TestCase):
         self.assertTrue(flags)
         for fl in flags:
             self.assertIn(fl, h, f"{fl} is in SKILL.md's current commands but not in `coal --help`")
-        for later in ("--keep-going", "--report", "-output paml", "normalised"):
+        for later in ("--keep-going", "--report", "normalised"):  # DEC-4: -output paml is current now
             self.assertNotIn(later, current, later)
         self.assertIn("usage error", current)
         self.assertIn("coal --help", current)

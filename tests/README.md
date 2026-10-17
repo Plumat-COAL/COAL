@@ -41,20 +41,25 @@ When `-nomismatch` (or `-nogap`) removes every column, PAL2NAL prints an empty l
 | invalid_chars | Drops a codon silently | Error, exit 1 |
 | table10 (`-codontable 10`) | TGA treated as stop → mismatch warnings; `-nomismatch` drops those columns | TGA = Cys (NCBI). Same output, no warnings |
 | table11, table13 | ATA (an NCBI start codon) not accepted as the first Met → warning; `-nomismatch` drops that column | Accepted, no warning. Same output except with `-nomismatch` |
-| table3, GTG as first Met (no golden case: the table3 fixture starts with ATA/ATG) | Unverified; if its table 3 lacks GTG, a GTG start is accepted only through the fallback (needs ≥ 20 residues) | GTG is a table-3 start codon (current NCBI: ATA, ATG, GTG) (ENG-g) |
 | `.` in protein alignment | Row gets shorter (misaligned output) | Treated as a gap |
 | Ambiguous DNA bases | Fixed list of accepted combinations | Accepted if every possible codon gives the right amino acid |
 | Fallback where more than half the codons do not match (e.g. unrelated protein and DNA; no golden case) | Output + per-codon warnings, exit 0 (measured with the real PAL2NAL v14: unrelated sequences, 30–90 % mismatching genes) | Same output and warnings, plus a notice; an error (exit 1) only with `--strict` (DEC-1; was always an error, ENG-c) |
 | Gene with no matching 10-residue anchor, fewer than 10 checkable codons and DNA longer than the gene (e.g. 85 % NNN + 5' UTR; no golden case) | Output (codons taken from the start of the DNA, so shifted by the UTR) + per-codon warnings, exit 0 (measured) | Same output and warnings, plus a notice that the row may be shifted; an error only with `--strict` (DEC-1; was always an error, R3-E1) |
 | Fallback where no 10-residue anchor matches but at most half the codons differ (table3/5/9/13/14/21/22 with the default table) | Output + per-codon warnings | Same output and warnings, plus a summary notice (ENG-c; silenced by `-q` since DEC-2) |
-| B/Z/J/O/U in the protein with `-nomismatch` (no golden case) | Prints no warnings at all with `-nomismatch` (seen in every `fasta_nomismatch` golden) | Still prints the `unknown AA type. Taken as 'X'` warning; mismatch warnings are suppressed as in PAL2NAL (ENG-i2) |
+| B/Z/J/O/U in the protein with `-nomismatch` (no golden case) | Prints no warnings at all with `-nomismatch` (seen in every `fasta_nomismatch` golden); removes the column (measured) | Still prints the `unknown AA type. Taken as 'X'` warning; mismatch warnings are suppressed as in PAL2NAL (ENG-i2). Removes the column too (DEC-4f; was kept) |
+| `U` (selenocysteine) in the protein (no golden case) | Its search pattern gives `U` no codon, so the row is misaligned or the gene fails (measured by the fuzz) | `U` is read as any codon, like B/Z/J/O, with a warning (DEC-4) |
+| RNA (U) DNA, protein starting with M, fallback needed (no golden case) | The fallback's first-Met pattern is `[ACGR]TG`, so AUG/CUG/GUG is flagged as a mismatch (`-nomismatch` drops the column) or the gene is placed elsewhere (measured by the fuzz) | U read as T everywhere: AUG accepted (DEC-4) |
+| Table 3, GTG as first Met | Not a table-3 start (its table 3 starts are ATA/ATG; measured) | GTG is a start (NCBI) (ENG-g) |
+| Default output format of `coal` | clustal | fasta (the drop-in `pal2nal` command defaults to clustal, like PAL2NAL) (DEC-4) |
 | Some but not all protein IDs are DNA IDs (no golden case) | Pairs by order, silently (measured) | Pairs by order (same output) and prints a notice (ENG-d); an error only with `--strict` (DEC-1) |
 
 ## What `test_differential.py` compares
 
 <!-- CHANGED(ENG-i1, ENG-i5): this section is new; the "1,300 random inputs / 490 without differences" claim was removed. See overnight/engine-fixes/CHANGES.md -->
-Every case in `cases.json` × every FASTA variant (the `clustal`, `paml` and `codon` goldens are not compared:
-COAL has only FASTA output). Per check:
+<!-- CHANGED(DEC-4): was "every FASTA variant (the clustal, paml and codon goldens are not compared: COAL has only FASTA
+output)"; now all 279 stored goldens. See overnight/integration/CHANGES.md -->
+Every case in `cases.json` × every variant, in all four output formats (`fasta*`, `clustal`, `paml`, `codon`): all
+279 stored goldens. COAL runs with exactly PAL2NAL's options (`-output X` included). Per check:
 
 1. **Exit status.** PAL2NAL always exits 0, even on ERROR, so each golden `.rc` is asserted to be `0`, and PAL2NAL
    counts as successful when its stdout is non-empty. COAL must exit 0 exactly when PAL2NAL succeeded
@@ -70,26 +75,58 @@ COAL has only FASTA output). Per check:
 The test prints its counts. Current output:
 
 ```
-PAL2NAL comparison: 38 cases, 165 checks: golden rc = 0 165, COAL exit status 162, stdout byte-identical 147,
-warnings identical 141, with -nomismatch 47, both fail 12, deliberate error 3, deliberate same_output 6,
+PAL2NAL comparison: 38 cases, 279 checks: golden rc = 0 279, COAL exit status 273, stdout byte-identical 246,
+warnings identical 240, with -nomismatch 47, both fail 24, deliberate error 6, deliberate same_output 6,
 deliberate differs 3
 ```
 
-That is: 165 golden exit codes read (all 0); 162 exit-status comparisons (the 3 deliberate errors are checked as
-"COAL fails" instead); 147 byte-identical outputs, of which 141 also have identical warnings (47 of those with
-`-nomismatch`) and 6 are deliberate warning differences (table10/11/13 `fasta_ct*` and `fasta_nogap_ct*`); 12
-cases where both tools fail; 3 deliberate output differences (`fasta_nomismatch_ct10/11/13`), checked only for
-exit 0.
+That is: 279 golden exit codes read (all 0); 273 exit-status comparisons (the 6 deliberate errors, `invalid_chars`
+in the fasta, fasta_nogap, fasta_nomismatch, clustal, paml and codon variants, are checked as "COAL fails" instead);
+246 byte-identical outputs, of which 240 also have identical warnings (47 of those with `-nomismatch`) and 6 are
+deliberate warning differences (table10/11/13 `fasta_ct*` and `fasta_nogap_ct*`); 24 cases where both tools fail;
+3 deliberate output differences (`fasta_nomismatch_ct10/11/13`), checked only for exit 0.
+<!-- CHANGED(DEC-4): was 165 / 162 / 147 / 141 / 12 / 3 (FASTA variants only) -->
 
 `-nomismatch`: PAL2NAL prints no warnings at all with `-nomismatch` (17 goldens where it would otherwise warn);
 COAL now does the same for mismatch warnings (ENG-i2). COAL still prints `unknown AA type. Taken as 'X'` for
-B/Z/J/O/U with `-nomismatch`; no golden case covers that (see the deliberate differences above).
+B/Z/J/O/U with `-nomismatch`; no golden case covers that (see the deliberate differences above). Both remove those
+columns (DEC-4f).
 
-Other test files: `test_pipeline.py` (results independent of `-j` and batch size) and `test_review_fixes.py`
-(regression tests for the engine reviews, ENG-a … ENG-i, R2-D1/R2-E3 … R2-E10 and R3-E1 … R3-E3). The counts above are
+Other test files: `test_pipeline.py` (results independent of `-j` and batch size), `test_review_fixes.py`
+(regression tests for the engine reviews, ENG-a … ENG-i, R2-D1/R2-E3 … R2-E10 and R3-E1 … R3-E3) and
+`test_decisions.py` (DEC-1 … DEC-4: `--strict`, `-q`, closed pipe, output formats, `-blockonly`, `-j` in every format,
+the fetch script). The counts above are
 also checked against PITCH.md, QA.md, SKILL.md and README.md by `tests_app/test_docs_numbers.py` (R2-D2).
 
-## Random differential testing
+## Random differential testing against the real PAL2NAL
 
-Random inputs were also compared against PAL2NAL during development, but neither the generator nor the results are
-in this repository, so no numbers are claimed here.
+<!-- CHANGED(DEC-4): was "neither the generator nor the results are in this repository, so no numbers are claimed here" -->
+`fuzz_vs_pal2nal.py` (not collected by `unittest discover`, which looks for `test*.py`; skipped unless `PAL2NAL`
+points at `pal2nal.pl`):
+
+```
+python scripts/fetch_pal2nal.py      # official site, else the orthologr copy on GitHub; sha256-checked; git-ignored
+PAL2NAL=PAL2NAL/pal2nal.v14/pal2nal.pl FUZZ_N=3000 FUZZ_SEED=20261017 python tests/fuzz_vs_pal2nal.py
+```
+
+Every random case runs through PAL2NAL v14 and COAL's drop-in `pal2nal` (in-process) with the same command line,
+once per output format. PAL2NAL succeeded (non-empty stdout) → COAL must exit 0 with byte-identical stdout; PAL2NAL
+failed → COAL must exit non-zero with empty stdout. stderr is not compared. The only allowed differences are the
+script's `DELIBERATE` features (invalid protein characters; the NCBI-vs-PAL2NAL genetic-code differences, measured
+against the real PAL2NAL for every codon × residue and every first-Met codon: table 10 TGA, table 3 GTG, table 11
+ATT/ATC/ATA and table 13 ATA starts; IUPAC codes other than N; `U` residues; RNA first Met in the fallback), and a
+case may differ only if the generator gave it one of them. CI job `pal2nal-fuzz` runs it on every push.
+
+Result in this repository (seed 20261017, 3,000 cases, 12,000 comparisons; PAL2NAL v14 sha256 2b419417…):
+
+| `-output` | cases | identical | both fail | deliberate differences | unexplained |
+|---|---:|---:|---:|---:|---:|
+| clustal | 3,000 | 2,599 | 350 | 51 | 0 |
+| paml | 3,000 | 2,599 | 350 | 51 | 0 |
+| fasta | 3,000 | 2,599 | 350 | 51 | 0 |
+| codon | 3,000 | 1,242 | 1,739 | 19 | 0 |
+
+(codon: both fail whenever the case has `-nogap`, `-nomismatch` or `-blockonly`, which PAL2NAL refuses with codon
+output.) Before DEC-4 the same harness found, besides the missing formats and `-blockonly`, two engine differences,
+both fixed or documented: B/Z/J/O/U columns kept by `-nomismatch` (fixed, DEC-4f) and the `U`-residue / RNA-first-Met
+behaviour of PAL2NAL (documented above).
