@@ -297,5 +297,16 @@ class TestEngH_InputEncodings(TempDirCase):
         self.assertNotIn("Traceback", r.stderr)
 
 
+# ---------------------------------------------------------------- ENG-i2
+class TestEngI_NomismatchWarnings(TempDirCase):
+    def test_no_mismatch_warnings_with_nomismatch(self):
+        fx = ROOT / "tests" / "fixtures" / "long_mismatch"
+        args = [str(fx / "pep.fasta"), str(fx / "nuc.fasta")]
+        self.assertIn("does not correspond", coal(args, self.d).stderr)
+        r = coal(args + ["-nomismatch"], self.d)
+        gold = (ROOT / "tests" / "golden" / "long_mismatch" / "fasta_nomismatch.stdout").read_text()
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, gold, ""))
+
+
 if __name__ == "__main__":
     unittest.main()

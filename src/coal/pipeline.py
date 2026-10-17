@@ -25,7 +25,7 @@ import tempfile
 from collections import deque
 
 from .core import (
-    CoalError, apply_slices, column_widths, expand, keep_slices, nogap_bad_triplets,
+    MISMATCH_WARNING, CoalError, apply_slices, column_widths, expand, keep_slices, nogap_bad_triplets,
     pair_sequences, prepare_row, thread_one,
 )
 from .seqio import DnaIndex, is_clustal, iter_fasta, read_clustal
@@ -219,7 +219,10 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
             for text, warns, mcols, badt, notes in _results(_batches(rows(), dna, pairing), jobs, init):
                 if warn:
                     for w in warns:
-                        warn(w)
+                        # CHANGED(ENG-i2): was printed with -nomismatch too; now, as PAL2NAL, no
+                        # mismatch warnings with -nomismatch. See overnight/engine-fixes/CHANGES.md
+                        if not (nomismatch and MISMATCH_WARNING in w):
+                            warn(w)
                 if notice:  # CHANGED(ENG-c): new; see overnight/engine-fixes/CHANGES.md
                     for n in notes:
                         notice(n)

@@ -41,6 +41,9 @@ RUN_WINDOW, RUN_MIN, RUN_MAX = 24, 4, 8
 _NON_ACGT = re.compile("[^ACGT]")
 
 
+MISMATCH_WARNING = " does not correspond to "  # CHANGED(ENG-i2): new constant, used to filter
+
+
 class CoalError(Exception):
     pass
 
@@ -348,7 +351,7 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int) -> Threaded:
         codon = res.dna[pos:pos + 3]
         mode = ANCHOR_START if (first and aa == "M") else NORMAL
         if not codon_ok(table, codon.upper().replace("U", "T"), aa, mode):
-            res.warnings.append(f"pepAlnPos {c}: {row[c - 1]} does not correspond to {codon}")
+            res.warnings.append(f"pepAlnPos {c}: {row[c - 1]}{MISMATCH_WARNING}{codon}")
             res.mismatch_cols.add(c)
         first = False
         pos += 3
@@ -466,7 +469,8 @@ def codon_align(
     idx = pair_sequences([p[0] for p in proteins], [d[0] for d in dnas], warn=pair_warn.append)
     items = [thread_one(pid, row, dnas[j][1], table) for (pid, row), j in zip(proteins, idx)]
     rows = build_alignment(items, nogap=nogap, nomismatch=nomismatch)
-    warnings = [f"{it.seq_id} {w}" for it in items for w in it.warnings]
+    warnings = [f"{it.seq_id} {w}" for it in items for w in it.warnings
+                if not (nomismatch and MISMATCH_WARNING in w)]  # CHANGED(ENG-i2): as PAL2NAL
     warnings += [n for it in items for n in it.notices]  # CHANGED(ENG-c): notices included
     warnings = pair_warn + warnings
     return [(it.seq_id, r) for it, r in zip(items, rows)], warnings

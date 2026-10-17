@@ -65,9 +65,13 @@ if the whole run succeeds, so an error never leaves a partial file. Notes:
 python -m unittest discover -s tests -v
 ```
 
+<!-- CHANGED(ENG-i4): was "165 checks. COAL's output must be byte-identical, and its mismatch warnings must equal PAL2NAL's" (rc files were not read, warnings not compared with -nomismatch, 4 checks compared only the exit code). See overnight/engine-fixes/CHANGES.md -->
 Compares COAL with stored PAL2NAL v14 outputs (`tests/golden/`): 38 input cases × all FASTA option
-combinations (165 checks). COAL's output must be byte-identical, and its mismatch warnings must equal PAL2NAL's.
-See `tests/README.md`.
+combinations = 165 checks (the test prints these counts). Exit status in all 165: PAL2NAL always exits 0, so COAL
+must exit 0 exactly when PAL2NAL produced output. stdout is byte-identical in 147 checks, and the per-codon warnings
+are identical in 141 of them (47 with `-nomismatch`); in 12 both tools fail. 12 checks are deliberate differences:
+the other 6 of the 147 (same output, different warnings), 3 with different output and 3 where COAL deliberately
+fails. See `tests/README.md` for exactly what is compared and for the list of deliberate differences.
 
 ## Benchmark results
 
