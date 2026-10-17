@@ -3,9 +3,9 @@ name: coal
 description: Build codon alignments with COAL (a fast, MIT-licensed PAL2NAL replacement) from a protein multiple sequence alignment plus the unaligned coding DNA of the same genes. Use when someone needs a codon alignment, back-translated alignment, "pal2nal", input for dN/dS (PAML codeml, HyPhy), or asks why protein and DNA "don't match".
 ---
 
-<!-- CHANGED(APP-C10, APP-C11): was documenting -output paml/--keep-going/--report/normalised pairing as if
-present, exit 2 = partial success, and both extras in one environment; now current flags only, upcoming ones
-in their own section, exit 2 = usage error today, extras in separate environments. See overnight/app/CHANGES.md -->
+<!-- CHANGED(APP-C10, APP-C11): was documenting upcoming engine options as if present, "exit 2 = partial
+success" and both extras in one environment; now current options only, upcoming ones in their own section,
+exit 2 = usage error today, extras in separate environments. See overnight/app/CHANGES.md -->
 
 # COAL: codon alignment from a protein alignment + coding DNA
 
