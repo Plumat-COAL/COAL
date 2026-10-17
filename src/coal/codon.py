@@ -35,14 +35,39 @@ def _allowed(table: int, aa: str, mode: int) -> frozenset[str]:
     return code.codons.get(aa, frozenset())
 
 
+_BIT = {"A": 1, "C": 2, "G": 4, "T": 8}
+_MASK = {k: sum(_BIT[b] for b in v) for k, v in IUPAC.items()}  # IUPAC code -> bit set of its bases
+
+
 @lru_cache(maxsize=None)
 def accepted(table: int, aa: str, mode: int = NORMAL) -> frozenset[str]:
-    """All upper-case IUPAC triplets that encode `aa` (no 'X' handling here)."""
+    """All upper-case IUPAC triplets that encode `aa` (no 'X' handling here).
+    CHANGED(IMP-E-H): was a brute-force expansion of all 15^3 triplets into their concrete codons (3.2 ms per
+    residue/table/mode, ~1 s for the 17 codes the genetic-code hint tries); now from per-position base sets: for
+    each pair of first two IUPAC bases, the third bases every concrete prefix allows. Same sets.
+    See overnight/integration/CHANGES.md"""
     allowed = _allowed(table, aa, mode)
-    out = set()
-    for trip in product(IUPAC, repeat=3):
-        if all("".join(c) in allowed for c in product(*(IUPAC[b] for b in trip))):
-            out.add("".join(trip))
+    third: dict[str, int] = {}  # concrete two-base prefix -> bit set of third bases that complete it
+    for c in allowed:
+        if len(c) == 3 and c[2] in _BIT and c[0] in _BIT and c[1] in _BIT:
+            third[c[:2]] = third.get(c[:2], 0) | _BIT[c[2]]
+    out = []
+    for b1, s1 in IUPAC.items():
+        if not all(any(p[0] == x for p in third) for x in s1):
+            continue
+        for b2, s2 in IUPAC.items():
+            inter = 15
+            for x in s1:
+                for y in s2:
+                    inter &= third.get(x + y, 0)
+                    if not inter:
+                        break
+                if not inter:
+                    break
+            if inter:
+                for b3, m in _MASK.items():
+                    if not m & ~inter:
+                        out.append(b1 + b2 + b3)
     return frozenset(out)
 
 

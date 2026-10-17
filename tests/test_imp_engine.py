@@ -109,5 +109,30 @@ class TestTestHooksInert(unittest.TestCase):
         self._run([str(b)])
 
 
+class TestFastAcceptanceSets(unittest.TestCase):
+    """IMP-E-H: accepted() and _note_ambiguous's quick test give what the brute-force versions gave."""
+
+    def test_accepted_equals_brute_force(self):
+        from itertools import product
+        from coal import codon
+        from coal.tables import SUPPORTED
+        for table in SUPPORTED:
+            for aa in "ACDEFGHIKLMNPQRSTVWY*":
+                for mode in (codon.NORMAL, codon.START, codon.ANCHOR_START):
+                    allowed = codon._allowed(table, aa, mode)
+                    brute = {"".join(t) for t in product(codon.IUPAC, repeat=3)
+                             if all("".join(c) in allowed for c in product(*(codon.IUPAC[b] for b in t)))}
+                    self.assertEqual(codon.accepted(table, aa, mode), brute, (table, aa, mode))
+
+    def test_quick_residue_test_equals_counting(self):
+        from coal import core
+        self.assertEqual(core.AMBIGUOUS_MAX_RESIDUES, 3)  # the regex counts to 4
+        rng = random.Random(7)
+        for _ in range(20000):
+            row = "".join(rng.choice("--------0123456789ACMW*") for _ in range(rng.randint(0, 12)))
+            old = len(row) - row.count("-") - sum(row.count(d) for d in "0123456789") > 3
+            self.assertEqual(bool(core._MORE_THAN_3_RES.search(row)), old, row)
+
+
 if __name__ == "__main__":
     unittest.main()
