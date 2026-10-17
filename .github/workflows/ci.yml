@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  python:
+    name: Python ${{ matrix.python }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.10", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install COAL
+        run: python -m pip install -e .
+      - name: Engine tests
+        run: python -m unittest discover -s tests -v
+      - name: App tests
+        env:
+          GRADIO_ANALYTICS_ENABLED: "False"
+        run: python -m unittest discover -s tests_app -v
+
+  cpp:
+    name: C++ build (if present)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Check for cpp/CMakeLists.txt
+        id: detect
+        shell: bash
+        run: |
+          if [ -f cpp/CMakeLists.txt ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "cpp/CMakeLists.txt not found: skipping the C++ build."
+          fi
+      - name: Build
+        if: steps.detect.outputs.present == 'true'
+        run: |
+          cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build cpp/build --config Release -j 2
+      - name: Install COAL
+        if: steps.detect.outputs.present == 'true'
+        run: python -m pip install -e .
+      - name: Engine tests with the C++ implementation
+        if: steps.detect.outputs.present == 'true'
+        env:
+          COAL_IMPL: cpp
+        run: python -m unittest discover -s tests -v
