@@ -178,5 +178,56 @@ class TestR2A7UsageError(RunsDirCase):  # R2-A7
         self.assertEqual(r["summary"]["ok"], 8, r)
 
 
+class TestR2A8Prune(RunsDirCase):  # R2-A8
+    def old(self, path):
+        t = __import__("time").time() - 48 * 3600
+        os.utime(path, (t, t))
+
+    def test_only_coal_run_folders_are_pruned(self):
+        mine = core.new_run_dir()
+        user = os.path.join(core.RUNS_DIR, "thesis_data")
+        os.makedirs(user)
+        with open(os.path.join(user, "chapter1.fa"), "w", encoding="utf-8") as fh:
+            fh.write(">x\nA\n")
+        fake = os.path.join(core.RUNS_DIR, "run_not_ours")
+        os.makedirs(fake)
+        for p in (mine, user, fake):
+            self.old(p)
+        core.prune_runs()
+        self.assertFalse(os.path.exists(mine))
+        self.assertTrue(os.path.isfile(os.path.join(user, "chapter1.fa")))
+        self.assertTrue(os.path.isdir(fake))
+
+    def test_fresh_run_folder_kept(self):
+        mine = core.new_run_dir()
+        core.prune_runs()
+        self.assertTrue(os.path.isdir(mine))
+
+
+class TestR2A11PastedPaths(unittest.TestCase):  # R2-A11
+    def setUp(self):
+        d = tempfile.mkdtemp(prefix="coal test r2 ")
+        self.addCleanup(shutil.rmtree, d, True)
+        self.f = os.path.join(d, "my protein.fa")
+        with open(self.f, "w", encoding="utf-8") as fh:
+            fh.write(">a\nMK\n")
+
+    def test_file_url_with_percent_escapes(self):
+        from pathlib import Path
+        url = Path(self.f).as_uri()
+        self.assertIn("%20", url)
+        self.assertEqual(core.resolve_input(None, url)[0], os.path.abspath(self.f))
+        self.assertEqual(core.resolve_input(None, "  '" + url + "'  ")[0], os.path.abspath(self.f))
+
+    def test_invisible_marks_and_quotes(self):
+        for junk in ("\u202a", "\u200e", "\u200f", "\ufeff", " \u202a"):
+            got = core.resolve_input(None, junk + '"' + self.f + '"' + junk + " \n")[0]
+            self.assertEqual(got, os.path.abspath(self.f), repr(junk))
+
+    def test_bad_path_still_rejected(self):
+        with self.assertRaises(ValueError):
+            core.resolve_input(None, "file:///no/such%20file.fa")
+
+
 if __name__ == "__main__":
     unittest.main()

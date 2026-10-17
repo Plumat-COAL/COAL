@@ -423,6 +423,7 @@ class TestFinding12TempDirs(_RunsDir):
         for x in (old, new):
             os.makedirs(x)
             _write(os.path.join(x, "f.txt"), "x")
+            _write(os.path.join(x, core.RUN_MARKER), "")  # R2-A8
         past = time.time() - 25 * 3600
         os.utime(old, (past, past))
         os.utime(os.path.join(old, "f.txt"), (past, past))

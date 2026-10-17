@@ -97,8 +97,13 @@ RUNS_DIR = os.environ.get("COAL_RUNS_DIR") or os.path.join(tempfile.gettempdir()
 RUNS_MAX_AGE_HOURS = 24
 
 
+RUN_MARKER = ".coal_run"  # CHANGED(R2-A8): every folder new_run_dir() makes holds this file
+
+
 def prune_runs(max_age_hours: float = RUNS_MAX_AGE_HOURS) -> int:
-    """Delete run folders in RUNS_DIR not modified for max_age_hours. Returns how many were removed."""
+    """Delete run folders in RUNS_DIR not modified for max_age_hours. Returns how many were removed.
+    CHANGED(R2-A8): was any subfolder (COAL_RUNS_DIR=~/data would delete a user's thesis_data/); now only
+    folders named run_* that hold COAL's marker file. See overnight/integration/CHANGES.md"""
     import shutil
     try:
         names = os.listdir(RUNS_DIR)
@@ -109,7 +114,8 @@ def prune_runs(max_age_hours: float = RUNS_MAX_AGE_HOURS) -> int:
     for n in names:
         p = os.path.join(RUNS_DIR, n)
         try:
-            if os.path.isdir(p) and not os.path.islink(p) and os.path.getmtime(p) < cutoff:
+            if (n.startswith("run_") and os.path.isdir(p) and not os.path.islink(p)
+                    and os.path.isfile(os.path.join(p, RUN_MARKER)) and os.path.getmtime(p) < cutoff):
                 shutil.rmtree(p, ignore_errors=True)
                 removed += not os.path.exists(p)
         except OSError:
@@ -121,7 +127,11 @@ def new_run_dir() -> str:
     """A fresh folder for one run's outputs inside RUNS_DIR (old runs are pruned first)."""
     os.makedirs(RUNS_DIR, exist_ok=True)
     prune_runs()
-    return tempfile.mkdtemp(prefix="run_", dir=RUNS_DIR)
+    d = tempfile.mkdtemp(prefix="run_", dir=RUNS_DIR)
+    with open(os.path.join(d, RUN_MARKER), "w", encoding="utf-8") as fh:  # CHANGED(R2-A8)
+        fh.write("Made by COAL; this folder is deleted automatically after "
+                 f"{RUNS_MAX_AGE_HOURS} hours.\n")
+    return d
 
 
 # ---------------------------------------------------------------- local vs hosted
@@ -165,10 +175,33 @@ def human_size(n: int) -> str:
     return f"{n:.1f} GB"
 
 
+_INVISIBLE = "\u202a\u202b\u202c\u202d\u202e\u200e\u200f\u200b\ufeff\u2066\u2067\u2068\u2069"
+
+
+def clean_pasted_path(text: str | None) -> str:
+    """CHANGED(R2-A11): new. A pasted path as the user meant it: surrounding whitespace, quotes and invisible
+    direction marks removed (Windows "Properties > Security" copies a leading U+202A), and file:// URLs
+    (as browsers and file managers copy them, with %20 etc.) turned into a path."""
+    t = (text or "")
+    prev = None
+    while t != prev:
+        prev = t
+        t = t.strip().strip(_INVISIBLE).strip().strip('"').strip("'")
+    if t.lower().startswith("file:"):
+        from urllib.parse import urlparse
+        from urllib.request import url2pathname
+        u = urlparse(t)
+        path = url2pathname(u.path)
+        if u.netloc and u.netloc.lower() != "localhost":
+            path = "\\\\" + u.netloc + url2pathname(u.path) if os.name == "nt" else "//" + u.netloc + path
+        t = path
+    return t
+
+
 def resolve_input(upload: str | None, path_text: str | None) -> tuple[str | None, str]:
     """(path to use, short description) for one GUI input. A typed/pasted path wins over an upload and is
     read in place (never copied). Raises ValueError with a plain message if the path is unusable."""
-    text = (path_text or "").strip().strip('"').strip("'").strip()
+    text = clean_pasted_path(path_text)  # CHANGED(R2-A11): was strip() + quotes only
     if text:
         if not path_inputs_enabled():
             raise ValueError("this shared server cannot read paths; please upload the file instead")
