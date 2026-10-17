@@ -270,6 +270,10 @@ class TestGui10Preview(unittest.TestCase):
         self.assertEqual((info2["first"], info2["last"]), (1000, 1399))
         self.assertIn("columns 1,000–1,399 of 1,500", frag2)
         self.assertNotEqual((c0, c1), (info2["first"], info2["last"]))
+        # centred: the sequences with a problem in those columns are drawn first
+        first_row = re.search(r'<tr id="coalv-([^"]+)"', frag2).group(1)
+        col = next(m["column"] for sq in rep["sequences"] if sq["id"] == first_row for m in sq["messages"])
+        self.assertTrue(1000 <= col <= 1399, (first_row, col))
 
     def test_rendering_is_fast_and_small_at_100000(self):
         tmp = tempfile.mkdtemp(prefix="coal_test_big_")

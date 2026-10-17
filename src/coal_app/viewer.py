@@ -70,10 +70,11 @@ def row_id(seq_id: str) -> str:
 
 # ---------------------------------------------------------------- preview: which rows and columns are drawn
 
-def select_rows(ids: list[str], report: dict | None, max_seqs: int) -> tuple[list[str], dict]:
+def select_rows(ids: list[str], report: dict | None, max_seqs: int, prefer: set | None = None) -> tuple[list[str], dict]:
     """CHANGED(GUI-10): new; was always the first max_seqs sequences. Which sequences the preview draws, in the
     order drawn: all of them in file order when they fit; otherwise every failed and then every warning sequence
     (file order, up to the cap, keeping some room) and then OK ones spread evenly through the file for context.
+    prefer: problem sequences to put first of all (those with a problem in the columns the preview is centred on).
     Returns (ids, {"problems": n with problems, "problems_shown": k, "context": m, "problems_first": bool})."""
     if len(ids) <= max_seqs:
         return list(ids), {"problems": None, "problems_shown": None, "context": 0, "problems_first": False}
@@ -81,6 +82,8 @@ def select_rows(ids: list[str], report: dict | None, max_seqs: int) -> tuple[lis
     failed = [i for i in ids if st.get(i) == "failed"]
     warning = [i for i in ids if st.get(i) == "warning"]
     problems = failed + warning
+    if prefer:
+        problems = [i for i in problems if i in prefer] + [i for i in problems if i not in prefer]
     if not problems:
         others = list(ids)
         picked = [others[k] for k in _even_idx(len(others), max_seqs)] if st else others[:max_seqs]
@@ -722,7 +725,14 @@ def view(protein_path: str, codon_path: str | None = None, report: dict | str | 
     ncols_all = max((len(r) for _, r in protein), default=0)
     # CHANGED(R2-A3): was rows built for every sequence (22,000 x 600 codons: 29 s, GBs) though only max_seqs
     # are drawn; now only the drawn sequences are built (problems of the others come from the report).
-    chosen, selection = select_rows(ids, report, max_seqs)
+    prefer = None
+    if centre is not None and report:
+        # centred on a column: sequences with a problem in that window are drawn first
+        cw0, cw1 = column_window(ncols_all, preview_columns(min(max_seqs, total), ncols_all, max_cols, max_cells),
+                                 centre)
+        prefer = {s.get("id") for s in report.get("sequences") or [] if any(
+            isinstance(m.get("column"), int) and cw0 <= m["column"] <= cw1 for m in s.get("messages") or [])}
+    chosen, selection = select_rows(ids, report, max_seqs, prefer)
     want = set(chosen)
     prot = dict(protein)
     protein_sel = [(p, prot[p]) for p in chosen]
