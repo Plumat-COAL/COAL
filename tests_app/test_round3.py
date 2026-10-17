@@ -322,7 +322,7 @@ class TestR3A4DemoTimeoutsStopWorkers(unittest.TestCase):  # R3-A4
         self.assertEqual([n for n in os.listdir(out) if n.startswith(".coal_")], [])
 
 
-_EVENTS = {"click", "change", "upload", "load", "then", "submit"}
+_EVENTS = {"click", "change", "upload", "load", "then", "submit", "input"}  # CHANGED(GUI-9): + input (settings)
 
 
 class _Comp:

@@ -1316,7 +1316,9 @@ def health_rows(report: dict) -> list[list[str]]:
     return rows
 
 
-def _jump_links(seq: dict, limit: int = 12) -> str:
+def _jump_links(seq: dict, limit: int = 12, preview: dict | None = None) -> str:
+    """CHANGED(GUI-10): preview (viewer.view's info: ids, first, last): a column outside the drawn part is named
+    without a link ("not in the preview"), so no link leads nowhere."""
     from .viewer import cell_id
     # CHANGED(APP-3/APP-1): was every message column linked; now only cells the viewer anchors. See overnight/app/CHANGES.md
     # only codes the viewer gives an anchor to (it outlines mismatched and frameshift cells)
@@ -1324,19 +1326,35 @@ def _jump_links(seq: dict, limit: int = 12) -> str:
                    if isinstance(m.get("column"), int) and m.get("code") in ("mismatch", "frameshift")})
     if not cols:
         return ""
-    links = ", ".join(f'<a href="#{cell_id(str(seq.get("id", "")), c)}">column {c}</a>' for c in cols[:limit])
+    sid = str(seq.get("id", ""))
+    drawn = preview is None or not preview.get("preview") or sid in (preview.get("ids") or ())
+    lo, hi = (preview or {}).get("first", 1), (preview or {}).get("last", 10 ** 9)
+
+    def one(c):
+        if drawn and lo <= c <= hi:
+            return f'<a href="#{cell_id(sid, c)}">column {c:,}</a>'
+        return f"column {c:,}"
+    links = ", ".join(one(c) for c in cols[:limit])
     more = f" and {len(cols) - limit} more" if len(cols) > limit else ""
-    return f'<br><span class="coal-small">Show in alignment: {links}{more}</span>'
+    if not drawn:
+        return f'<br><span class="coal-small">At {links}{more} (this gene is not in the alignment preview)</span>'
+    inside = [c for c in cols[:limit] if lo <= c <= hi]
+    lead = "Show in alignment:" if inside else "At"
+    if len(inside) < len(cols[:limit]):
+        more += (f" ({'some are ' if inside else ''}outside the preview, which draws columns {lo:,}–{hi:,}; type a "
+                 f"column in \u201cCentre the preview on column\u201d under the alignment to see it)")
+    return f'<br><span class="coal-small">{lead} {links}{more}</span>'
 
 
 HEALTH_MAX_ROWS = 200
 HEALTH_OK_NAMES = 2000  # CHANGED(GUI-4): OK genes are named in one collapsed row, at most this many
 
 
-def health_table_html(report: dict, links: bool = False) -> str:
+def health_table_html(report: dict, links: bool = False, preview: dict | None = None) -> str:
     """Accessible HTML table (icon + word + sentence, never colour alone).
     With links=True, problem columns link to the alignment viewer's cells (same page). No links when
-    -nogap/-nomismatch removed columns: report columns then don't exist in the output."""
+    -nogap/-nomismatch removed columns: report columns then don't exist in the output.
+    CHANGED(GUI-10): preview: what the alignment preview drew (viewer.view's info); only cells in it are linked."""
     opts = report.get("options") if isinstance(report.get("options"), dict) else {}
     if opts.get("nogap") or opts.get("nomismatch"):  # CHANGED(APP-1): no jump links in codon-only mode
         links = False
@@ -1363,7 +1381,8 @@ def health_table_html(report: dict, links: bool = False) -> str:
     # error in X" rows after a fatal error). See overnight/integration/CHANGES.md
     groups: dict = {}
     for s in seqs:
-        if not (s.get("dna_id") and s.get("dna_id") != s.get("id")) and not (links and _jump_links(s)):
+        paired = s.get("dna_id") and s.get("dna_id") != s.get("id")
+        if not paired and not (links and _jump_links(s, preview=preview)):
             groups.setdefault((s.get("status"), sequence_sentence(s)), []).append(s)
     grouped = {id(x) for g in groups.values() if len(g) >= 3 for x in g}
     done = set()
@@ -1387,7 +1406,7 @@ def health_table_html(report: dict, links: bool = False) -> str:
         out.append(
             f'<tr class="coal-{cls}"><td><span class="coal-badge coal-{cls}" aria-hidden="true">{icon}</span> '
             f'<strong>{word}</strong></td><td><code>{html.escape(str(s.get("id", "")))}</code>{pair}</td>'
-            f'<td>{html.escape(sequence_sentence(s))}{_jump_links(s) if links else ""}</td></tr>')
+            f'<td>{html.escape(sequence_sentence(s))}{_jump_links(s, preview=preview) if links else ""}</td></tr>')
     if rest:
         kinds = {}
         for s in rest:

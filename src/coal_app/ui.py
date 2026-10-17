@@ -12,7 +12,7 @@ os.environ.setdefault("GRADIO_ANALYTICS_ENABLED", "False")
 
 import gradio as gr  # noqa: E402
 
-from . import core, gui_html, tools, viewer  # noqa: E402
+from . import core, gui_html, settings, tools, viewer  # noqa: E402
 
 
 # CHANGED(GUI-3): was Gradio's default theme plus a few table rules; now a COAL theme (colours of the COAL logo and
@@ -103,6 +103,20 @@ abbr[title] { text-decoration:underline dotted; cursor:help; }
 button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible,
 summary:focus-visible, [tabindex]:focus-visible {
   outline:3px solid var(--coal-focus) !important; outline-offset:2px; }
+/* CHANGED(GUI-8): the drop zones. Gradio's upload text has min-height 15rem; with height=150 it overflowed the
+   zone and its icon covered the label. No fixed height now (the zone is as tall as its content, never clipped)
+   and, where Gradio's markup is as in 5.49 (button[aria-dropeffect] > div.wrap), a compact text block. */
+#coal-protein button[aria-dropeffect], #coal-dna button[aria-dropeffect] { min-height:150px; }
+#coal-protein button[aria-dropeffect] > div, #coal-dna button[aria-dropeffect] > div {
+  min-height:0 !important; padding:10px 0 !important; }
+/* CHANGED(GUI-9): Settings tab */
+#coal-settings-tab-button { margin-left:auto; }
+#coal-settings .coal-set-head { margin:0.9em 0 0.2em; font-size:1.05rem; font-weight:700; color:var(--coal-ink); }
+#coal-settings .coal-set-head:first-child { margin-top:0.2em; }
+#coal-settings-status p { margin:0; color:var(--coal-muted); }
+#coal-centre { align-items:flex-end !important; gap:8px !important; flex-wrap:wrap !important; }
+#coal-centre > * { flex:0 1 auto !important; min-width:0 !important; }
+#coal-view-dl-note p { margin:0; }
 @media (max-width: 640px) {
   .coal-head { gap:12px; } .coal-head .coal-mark { width:32px; height:25px; }
   .coal-head h1 { font-size:1.4rem; } .coal-headline { font-size:1.2rem; }
@@ -176,12 +190,45 @@ STRICT_INFO = ("Genes whose DNA is probably not theirs (unrelated, or where the 
                "DNA names match, the run stops instead. (--strict)")
 
 
+# CHANGED(GUI-8): the dropdowns showed "1: Standard (nuclear genes of most organisms)" and "FASTA (one sequence per
+# record; works everywhere)", cut off at about 40 characters in an 800 px window. Now short names (at most 38
+# characters; the genetic-code box is the wider of the two) and the explanation in the help line under each box.
+# core.GENETIC_CODES (full names, used in tips and the methods text) is unchanged.
+CODE_SHORT: dict[int, str] = {
+    1: "Standard (nuclear genes)",
+    2: "Vertebrate mitochondrial",
+    3: "Yeast mitochondrial",
+    4: "Protozoan mitochondrial, Mycoplasma",
+    5: "Invertebrate mitochondrial",
+    6: "Ciliate and Hexamita nuclear",
+    9: "Echinoderm, flatworm mitochondrial",
+    10: "Euplotid nuclear",
+    11: "Bacteria, archaea and plastids",
+    12: "Alternative yeast nuclear",
+    13: "Ascidian mitochondrial",
+    14: "Alternative flatworm mitochondrial",
+    15: "Blepharisma nuclear",
+    16: "Chlorophycean mitochondrial",
+    21: "Trematode mitochondrial",
+    22: "Scenedesmus mitochondrial",
+    23: "Thraustochytrium mitochondrial",
+}
+FORMAT_SHORT = {"fasta": "FASTA", "clustal": "CLUSTAL", "paml": "PAML (for codeml)", "codon": "Codon (spaced)"}
+CODE_INFO = "1 for nuclear genes, 2 for vertebrate mitochondria, 11 for bacteria and plastids."
+
+
 def _code_choices():
-    return [(f"{n}: {name}", n) for n, name in core.GENETIC_CODES.items()]
+    return [(f"{n}: {CODE_SHORT.get(n, name)}", n) for n, name in core.GENETIC_CODES.items()]
 
 
 def _format_choices(features):
-    return [(core.OUTPUT_FORMATS.get(f, f), f) for f in features.output_formats]
+    return [(FORMAT_SHORT.get(f, core.OUTPUT_FORMATS.get(f, f)), f) for f in features.output_formats]
+
+
+def _format_info(features):
+    if len(features.output_formats) <= 1:
+        return "This COAL version writes FASTA only; more formats come with the next engine."
+    return "FASTA works with almost every tool; PAML is for codeml (dN/dS); CLUSTAL is easy to read."
 
 
 def _hint_parts(report):
@@ -195,8 +242,10 @@ def _hint_parts(report):
 
 
 def _results(report, output_path, report_path, coal_cmd, pal2nal_cmd, stderr, banner,
-             view_html="", view_path=None, view_ok=False):
-    """banner: HTML from gui_html (CHANGED(GUI-1): was markdown)."""
+             view_html="", view_path=None, view_ok=False, preview=None, ctx=None):
+    """banner: HTML from gui_html (CHANGED(GUI-1): was markdown).
+    CHANGED(GUI-10): preview (what the alignment preview drew, viewer.view's info) and ctx (what is needed to
+    draw it again centred elsewhere); two more outputs: the run context and the "Centre on column" row."""
     hint_md, hint_btn, code = _hint_parts(report)
     # CHANGED(FIN-A5/FIN-C8): was "# Same run with PAL2NAL" (not the same run with -nogap and another code); now
     # "Closest PAL2NAL v14 command" with the caveats. See overnight/integration/CHANGES.md
@@ -208,20 +257,35 @@ def _results(report, output_path, report_path, coal_cmd, pal2nal_cmd, stderr, ba
         code,
         gr.update(value=output_path, visible=bool(output_path)),
         gr.update(value=report_path, visible=bool(report_path)),
-        gr.update(value=core.health_table_html(report, links=view_ok)),  # CHANGED(FIN-A4): only if the view rendered
+        # CHANGED(FIN-A4): links only if the view rendered; CHANGED(GUI-10): and only to cells in the preview
+        gr.update(value=core.health_table_html(report, links=view_ok, preview=preview)),
         gr.update(value=cmds),
         gr.update(value=stderr or "(no messages)"),
         gr.update(value=view_html or VIEW_EMPTY),
         gr.update(value=view_path, visible=bool(view_path)),
         gr.update(value=core.methods_text(report) if report else "",
                   visible=bool(report and core.methods_text(report))),
+        ctx,
+        gr.update(visible=bool(preview and preview.get("preview") and preview.get("last", 0) - preview.get("first", 1)
+                               + 1 < preview.get("ncols", 0))),
     )
+
+
+def _view_tail(preview) -> str:
+    """CHANGED(GUI-10): a line under a preview, above its download button."""
+    if not (preview and preview.get("preview")):
+        return ""
+    return ('<p class="coal-small" id="coal-view-dl-note">The downloadable alignment view is the same preview, '
+            'not the whole alignment. For every sequence, download the codon alignment and open it in Jalview or '
+            'AliView.</p>')
 
 
 VIEW_EMPTY = '<p class="coal-small">The alignment is drawn here after a run.</p>'  # CHANGED(GUI-6)
 
 
-def run_ui(protein, dna, fmt, code, nogap, nomismatch, protein_path="", dna_path="", strict=False, blockonly=False):
+def run_ui(protein, dna, fmt, code, nogap, nomismatch, protein_path="", dna_path="", strict=False, blockonly=False,
+           preview_size="standard"):
+    # CHANGED(GUI-10): preview_size (the Settings tab's "Alignment preview": settings.PREVIEW_SIZES)
     # CHANGED(APP-L1): was uploads only; now a typed/pasted path (local only) wins over an upload and is read
     # in place, never copied. See overnight/app/CHANGES.md
     try:
@@ -249,9 +313,14 @@ def run_ui(protein, dna, fmt, code, nogap, nomismatch, protein_path="", dna_path
     banner = gui_html.run_banner(head, r.report, core.summary_sentence(r.report),
                                  f"Files used: protein {p_desc}; DNA {d_desc}.")
     view_html, view_path, view_ok = "", None, False
+    info: dict = {}
+    ctx = {"protein": protein, "output": r.output_path, "report": r.report_path, "dna": dna, "code": int(code),
+           "out_dir": out_dir, "preview": preview_size}
     try:
         # CHANGED(R2-A3): was viewer.view twice (fragment + page); now rendered once
-        view_html, view_path = viewer.render_run(protein, r.output_path, r.report, dna, int(code), out_dir)
+        view_html, view_path = viewer.render_run(protein, r.output_path, r.report, dna, int(code), out_dir,
+                                                 limits=settings.preview_limits(preview_size), info=info)
+        view_html += _view_tail(info)
         view_ok = True
     except (OSError, ValueError) as e:
         # CHANGED(FIN-A4): was the full server path in the message; now file names only
@@ -259,7 +328,34 @@ def run_ui(protein, dna, fmt, code, nogap, nomismatch, protein_path="", dna_path
         view_html = ("<p>Could not draw the alignment: "
                      f"{_html.escape(core.public_error(e, [protein, dna, r.output_path, out_dir]))}</p>")
     return _results(r.report, r.output_path, r.report_path, r.coal_cmd, r.pal2nal_cmd, r.stderr, banner,
-                    view_html, view_path, view_ok)
+                    view_html, view_path, view_ok, preview=info if view_ok else None, ctx=ctx if view_ok else None)
+
+
+def centre_ui(ctx, column):
+    """CHANGED(GUI-10): draw the preview again, centred on `column` (the "Centre the preview on column" box).
+    Outputs: alignment view, its download button, health table."""
+    import html as _html
+    if not ctx:
+        return gr.update(), gr.update(), gr.update()
+    try:
+        col = int(column)
+    except (TypeError, ValueError):
+        return (gr.update(value=f'<p class="coal-small">Type a column number first.</p>{VIEW_EMPTY}'), gr.update(),
+                gr.update())
+    try:
+        import json
+        with open(ctx["report"], encoding="utf-8") as fh:
+            report = json.load(fh)
+        info: dict = {}
+        frag, path = viewer.render_run(ctx["protein"], ctx["output"], report, ctx["dna"], ctx["code"],
+                                       ctx["out_dir"], limits=settings.preview_limits(ctx.get("preview")),
+                                       centre=max(1, col), info=info)
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        msg = core.public_error(e, [ctx.get("protein"), ctx.get("dna"), ctx.get("out_dir")])
+        return (gr.update(value=f"<p>Could not draw the alignment: {_html.escape(msg)}</p>"), gr.update(),
+                gr.update())
+    return (gr.update(value=frag + _view_tail(info)), gr.update(value=path, visible=True),
+            gr.update(value=core.health_table_html(report, links=True, preview=info)))
 
 
 def _clear_path(_upload):
@@ -273,90 +369,209 @@ def show_sample():
                     "", banner)
 
 
+# ---------------------------------------------------------------- settings (CHANGED(GUI-9))
+
+SETTING_ORDER = ["codontable", "output_format", "nogap", "nomismatch", "strict", "preview"]
+
+
+def _settings_where() -> str:
+    if settings.stored_in_browser():
+        return ("Saved in this web browser only (this copy of COAL runs on a shared server, so nothing is kept "
+                "there). Another browser or a private window starts from the defaults.")
+    return f"Saved on this computer in `{settings.settings_path()}`."
+
+
+def _apply(data: dict, status: str):
+    """Outputs for the settings controls, the main form, the status line and the browser store."""
+    vals = [data[k] for k in SETTING_ORDER]
+    form = [data["codontable"], data["output_format"], data["nogap"], data["nomismatch"], data["strict"]]
+    return (*vals, *form, status, data)
+
+
+def _now() -> str:
+    import time
+    return time.strftime("%H:%M")
+
+
+def load_settings_ui(stored=None, formats=None):
+    """demo.load: the saved settings (a file locally, the browser's store on the hosted Space) into the
+    Settings tab and the main form."""
+    if settings.stored_in_browser():
+        data, note = settings.clean(stored, formats), ""
+    else:
+        data, note = settings.load(formats)
+    return _apply(data, note)
+
+
+def save_settings_ui(code, fmt, nogap, nomismatch, strict, preview, formats=None):
+    """A settings control changed: save at once (no Save button) and apply to the main form."""
+    data, err = settings.save({"codontable": code, "output_format": fmt, "nogap": nogap, "nomismatch": nomismatch,
+                               "strict": strict, "preview": preview}, formats)
+    return _apply(data, err or f"✔ Saved at {_now()}. New runs start with these choices.")
+
+
+def reset_settings_ui(formats=None):
+    data, err = settings.reset(formats)
+    return _apply(data, err or f"✔ Back to the defaults ({_now()}).")
+
+
 def build(demo_mode: bool = False) -> gr.Blocks:
     """CHANGED(GUI-1): layout, top to bottom: short header; the two files side by side (path boxes under a
     "Use a file path instead" disclosure; examples as one line under them); genetic code and output format, the
     four flags under "More options"; one primary button; results: summary banner (with the genetic-code tip and
     its re-run button), downloads, health table (OK genes in one collapsed row), alignment view, and one
     "Details" area for the methods paragraph, commands, raw messages and the glossary. Every component, event
-    and output of the previous layout is kept. See overnight/integration/CHANGES.md"""
+    and output of the previous layout is kept. See overnight/integration/CHANGES.md
+    CHANGED(GUI-9): all of that is the first of two tabs; the second, "Settings", holds the defaults a user sets
+    once (saved at once, applied to the form). CHANGED(GUI-10): "Centre the preview on column" under the view."""
     features = core.detect_features()
+    formats = list(features.output_formats)
+    saved, _note = settings.load(formats)  # CHANGED(GUI-9): the form starts with the saved defaults (locally)
+    fmt0 = saved["output_format"] if saved["output_format"] in formats else formats[0]
     with gr.Blocks(title="COAL codon alignment", theme=_theme(), css=CSS, analytics_enabled=False) as demo:
         gr.HTML(gui_html.header_html(core.intro_text()), elem_id="coal-header")
         local = core.path_inputs_enabled()  # CHANGED(APP-L1): path boxes only when running locally
-        with gr.Row(equal_height=True):
-            protein = gr.File(label="1. Protein alignment (FASTA or CLUSTAL)", type="filepath", height=150,
-                              file_types=[".fasta", ".fa", ".faa", ".aln", ".fas", ".clustal", ".txt"],
-                              elem_id="coal-protein")
-            dna = gr.File(label="2. Coding DNA (FASTA, not aligned)", type="filepath", height=150,
-                          file_types=[".fasta", ".fa", ".fna", ".ffn", ".fas", ".txt"], elem_id="coal-dna")
-        # CHANGED(GUI-1): the path boxes were always shown under the drop zones; now under a closed disclosure
-        # (opened by the desktop wrapper's ?protein=&dna= link). Labels CHANGED(GUI-1): were "or type/paste a path
-        # on this computer (big files: read in place, not copied)" on both.
-        with gr.Accordion("Use a file path instead (large files)", open=False, visible=local,
-                          elem_id="coal-paths") as paths_box:
-            gr.Markdown("Type or paste a path on this computer. The file is read in place, not copied, so this is "
-                        "the way for big files. A path wins over an uploaded file.", elem_classes=["coal-small"])
-            with gr.Row():
-                with gr.Column():
-                    protein_path = gr.Textbox(label="Protein alignment path", placeholder="/path/to/protein.aln.fasta",
-                                              visible=local, max_lines=1, elem_id="coal-protein-path")
-                    protein_info = gr.Markdown(visible=local)
-                with gr.Column():
-                    dna_path = gr.Textbox(label="Coding DNA path", placeholder="/path/to/dna.fasta",
-                                          visible=local, max_lines=1, elem_id="coal-dna-path")
-                    dna_info = gr.Markdown(visible=local)
-        with gr.Row(elem_id="coal-examples"):
-            gr.Markdown("No files to hand? Try an example:", elem_classes=["coal-ex-label"])
-            ex_buttons = {n: gr.Button(core.EXAMPLES[n][0], size="sm", variant="secondary")
-                          for n in core.available_examples()}
-            sample_btn = gr.Button("Demo sample report", size="sm", variant="secondary")
+        # CHANGED(GUI-9): two tabs: the work, then its Settings (last and on the right, as Windows apps do)
+        with gr.Tabs(elem_id="coal-tabs"):
+            with gr.Tab("Codon alignment", id="align", elem_id="coal-align-tab"):
+                with gr.Row(equal_height=True):
+                    # CHANGED(GUI-8): was height=150, which clipped the drop zone (its icon covered the label)
+                    protein = gr.File(label="1. Protein alignment (FASTA or CLUSTAL)", type="filepath",
+                                      file_types=[".fasta", ".fa", ".faa", ".aln", ".fas", ".clustal", ".txt"],
+                                      elem_id="coal-protein")
+                    dna = gr.File(label="2. Coding DNA (FASTA, not aligned)", type="filepath",
+                                  file_types=[".fasta", ".fa", ".fna", ".ffn", ".fas", ".txt"], elem_id="coal-dna")
+                # CHANGED(GUI-1): the path boxes were always shown under the drop zones; now under a closed
+                # disclosure (opened by the desktop wrapper's ?protein=&dna= link). Labels CHANGED(GUI-1): were "or
+                # type/paste a path on this computer (big files: read in place, not copied)" on both.
+                with gr.Accordion("Use a file path instead (large files)", open=False, visible=local,
+                                  elem_id="coal-paths") as paths_box:
+                    gr.Markdown("Type or paste a path on this computer. The file is read in place, not copied, so "
+                                "this is the way for big files. A path wins over an uploaded file.",
+                                elem_classes=["coal-small"])
+                    with gr.Row():
+                        with gr.Column():
+                            protein_path = gr.Textbox(label="Protein alignment path",
+                                                      placeholder="/path/to/protein.aln.fasta", visible=local,
+                                                      max_lines=1, elem_id="coal-protein-path")
+                            protein_info = gr.Markdown(visible=local)
+                        with gr.Column():
+                            dna_path = gr.Textbox(label="Coding DNA path", placeholder="/path/to/dna.fasta",
+                                                  visible=local, max_lines=1, elem_id="coal-dna-path")
+                            dna_info = gr.Markdown(visible=local)
+                with gr.Row(elem_id="coal-examples"):
+                    gr.Markdown("No files to hand? Try an example:", elem_classes=["coal-ex-label"])
+                    ex_buttons = {n: gr.Button(core.EXAMPLES[n][0], size="sm", variant="secondary")
+                                  for n in core.available_examples()}
+                    sample_btn = gr.Button("Demo sample report", size="sm", variant="secondary")
 
-        with gr.Row():
-            code = gr.Dropdown(_code_choices(), value=1, label="Genetic code",
-                               info="Code 1 for nuclear genes. Mitochondrial genes need their own code (2 for vertebrates).")
-            fmt = gr.Dropdown(_format_choices(features), value="fasta", label="Output format",
-                              info=("Which file format you want back." if len(features.output_formats) > 1 else
-                                    "This COAL version writes FASTA only; more formats come with the next engine."))
-        # CHANGED(GUI-5): the four flags were always shown, labelled with the flag; now under "More options",
-        # plain label first, the flag at the end of the help text
-        with gr.Accordion("More options", open=False, elem_id="coal-more"):
-            with gr.Row():
-                nogap = gr.Checkbox(label="Remove gap columns",
-                                    info="Drop columns with a gap or stop codon in any sequence. (-nogap)")
-                nomismatch = gr.Checkbox(label="Remove mismatched columns",
-                                         info="Drop columns where a codon doesn't match its amino acid. (-nomismatch)")
-            with gr.Row():  # CHANGED(FIN-A6): new options
-                strict = gr.Checkbox(label="Refuse probably-wrong genes", info=STRICT_INFO)
-                blockonly = gr.Checkbox(label="Keep only '#'-marked columns",
-                                        info="CLUSTAL input with '#' marks under the blocks, e.g. Gblocks positions. "
-                                             "(-blockonly)")
-        run_btn = gr.Button("Make codon alignment", variant="primary", size="lg", elem_id="coal-run")
+                with gr.Row():
+                    # CHANGED(GUI-8): short option names (they were cut off), the wider box for the genetic code
+                    code = gr.Dropdown(_code_choices(), value=saved["codontable"], label="Genetic code",
+                                       info=CODE_INFO, scale=3, min_width=260, elem_id="coal-code")
+                    fmt = gr.Dropdown(_format_choices(features), value=fmt0,
+                                      label="Output format", info=_format_info(features), scale=2, min_width=220,
+                                      elem_id="coal-format")
+                # CHANGED(GUI-5): the four flags were always shown, labelled with the flag; now under "More
+                # options", plain label first, the flag at the end of the help text
+                with gr.Accordion("More options", open=False, elem_id="coal-more"):
+                    with gr.Row():
+                        nogap = gr.Checkbox(value=saved["nogap"], label="Remove gap columns",
+                                            info="Drop columns with a gap or stop codon in any sequence. (-nogap)")
+                        nomismatch = gr.Checkbox(value=saved["nomismatch"], label="Remove mismatched columns",
+                                                 info="Drop columns where a codon doesn't match its amino acid. "
+                                                      "(-nomismatch)")
+                    with gr.Row():  # CHANGED(FIN-A6): new options
+                        strict = gr.Checkbox(value=saved["strict"], label="Refuse probably-wrong genes",
+                                             info=STRICT_INFO)
+                        blockonly = gr.Checkbox(label="Keep only '#'-marked columns",
+                                                info="CLUSTAL input with '#' marks under the blocks, e.g. Gblocks "
+                                                     "positions. (-blockonly)")
+                run_btn = gr.Button("Make codon alignment", variant="primary", size="lg", elem_id="coal-run")
 
-        with gr.Column(elem_id="coal-results"):
-            banner = gr.HTML(gui_html.empty_banner(), elem_id="coal-banner")
-            hint_md = gr.Markdown(visible=False, elem_id="coal-hint")
-            hint_btn = gr.Button("Re-run", visible=False, variant="secondary", elem_id="coal-hint-rerun")
-            hint_code = gr.State(None)
-            with gr.Row(elem_id="coal-downloads"):
-                dl_out = gr.DownloadButton("Download codon alignment", visible=False, variant="secondary")
-                dl_rep = gr.DownloadButton("Download report (JSON)", visible=False, variant="secondary")
-            table = gr.HTML(elem_id="coal-health-box")
-            with gr.Accordion("View alignment (see exactly where a gene breaks)", open=True, elem_id="coal-view"):
-                view = gr.HTML(VIEW_EMPTY)
-                dl_view = gr.DownloadButton("Download alignment view (HTML)", visible=False, variant="secondary")
-            # CHANGED(GUI-1): methods, commands, raw messages and the glossary were four separate areas; now one
-            with gr.Accordion("Details: methods text, commands, raw messages, glossary", open=False,
-                              elem_id="coal-details"):
-                methods = gr.Textbox(label="Methods paragraph (ready to paste into a paper)", lines=4, max_lines=8,
-                                     interactive=False, show_copy_button=True, visible=False)
-                cmds = gr.Code(label="Equivalent commands (copy into a terminal or pipeline)", language="shell",
-                               interactive=False)
-                raw = gr.Textbox(label="Raw COAL messages", lines=6, max_lines=20, interactive=False)
-                gr.Markdown("**What do these words mean?**\n" + GLOSSARY)
+                with gr.Column(elem_id="coal-results"):
+                    banner = gr.HTML(gui_html.empty_banner(), elem_id="coal-banner")
+                    hint_md = gr.Markdown(visible=False, elem_id="coal-hint")
+                    hint_btn = gr.Button("Re-run", visible=False, variant="secondary", elem_id="coal-hint-rerun")
+                    hint_code = gr.State(None)
+                    with gr.Row(elem_id="coal-downloads"):
+                        dl_out = gr.DownloadButton("Download codon alignment", visible=False, variant="secondary")
+                        dl_rep = gr.DownloadButton("Download report (JSON)", visible=False, variant="secondary")
+                    table = gr.HTML(elem_id="coal-health-box")
+                    with gr.Accordion("View alignment (see exactly where a gene breaks)", open=True,
+                                      elem_id="coal-view"):
+                        view = gr.HTML(VIEW_EMPTY)
+                        # CHANGED(GUI-10): shown when the preview leaves columns out
+                        with gr.Row(visible=False, elem_id="coal-centre") as centre_row:
+                            centre_col = gr.Number(label="Centre the preview on column", precision=0, minimum=1,
+                                                   elem_id="coal-centre-col")
+                            centre_btn = gr.Button("Show these columns", variant="secondary",
+                                                   elem_id="coal-centre-go")
+                        dl_view = gr.DownloadButton("Download alignment view (HTML)", visible=False,
+                                                    variant="secondary")
+                    # CHANGED(GUI-1): methods, commands, raw messages and the glossary were four separate areas
+                    with gr.Accordion("Details: methods text, commands, raw messages, glossary", open=False,
+                                      elem_id="coal-details"):
+                        methods = gr.Textbox(label="Methods paragraph (ready to paste into a paper)", lines=4,
+                                             max_lines=8, interactive=False, show_copy_button=True, visible=False)
+                        cmds = gr.Code(label="Equivalent commands (copy into a terminal or pipeline)",
+                                       language="shell", interactive=False)
+                        raw = gr.Textbox(label="Raw COAL messages", lines=6, max_lines=20, interactive=False)
+                        gr.Markdown("**What do these words mean?**\n" + GLOSSARY)
+
+            # CHANGED(GUI-9): Settings. Few settings (only what people set once), plain words, saved as soon as
+            # they change (no Save button), "Reset to defaults", and where they are kept. See docs/ui-principles.md
+            with gr.Tab("Settings", id="settings", elem_id="coal-settings-tab"):
+                with gr.Column(elem_id="coal-settings"):
+                    gr.Markdown("Choices you make here are saved straight away and used every time COAL starts. "
+                                "You can still change any of them for a single run on the first tab.",
+                                elem_classes=["coal-small"])
+                    gr.HTML('<p class="coal-set-head">New runs start with</p>')
+                    with gr.Row():
+                        s_code = gr.Dropdown(_code_choices(), value=saved["codontable"], label="Genetic code",
+                                             info=CODE_INFO, scale=3, min_width=260, elem_id="coal-set-code")
+                        s_fmt = gr.Dropdown(_format_choices(features), value=fmt0, label="Output format",
+                                            info=_format_info(features), scale=2, min_width=220,
+                                            elem_id="coal-set-format")
+                    with gr.Row():
+                        s_nogap = gr.Checkbox(value=saved["nogap"], label="Remove gap columns",
+                                              info="(-nogap)")
+                        s_nomismatch = gr.Checkbox(value=saved["nomismatch"], label="Remove mismatched columns",
+                                                   info="(-nomismatch)")
+                        s_strict = gr.Checkbox(value=saved["strict"], label="Refuse probably-wrong genes",
+                                               info="(--strict)")
+                    gr.Markdown("When a gene cannot be aligned, COAL leaves it out, says why, and still aligns the "
+                                "others; that is always on.", elem_classes=["coal-small"])
+                    gr.HTML('<p class="coal-set-head">Alignment preview</p>')
+                    s_preview = gr.Radio([(settings.PREVIEW_LABELS[k], k) for k in settings.PREVIEW_SIZES],
+                                         value=saved["preview"], label="How much of a large alignment to draw",
+                                         info="Problem sequences are drawn first. Bigger previews take longer to "
+                                              "appear; the files you download are always complete.",
+                                         elem_id="coal-set-preview")
+                    gr.HTML('<p class="coal-set-head">Files and appearance</p>')
+                    gr.Markdown(
+                        "- " + _settings_where() + "\n"
+                        "- Downloaded files go where your browser saves downloads, usually the Downloads folder.\n"
+                        f"- Result files are kept for {core.RUNS_MAX_AGE_HOURS} hours, then deleted"
+                        + (f" (in `{core.RUNS_DIR}`)." if local else ".") + "\n"
+                        "- COAL follows your computer's light or dark mode.", elem_classes=["coal-small"])
+                    s_status = gr.Markdown(_note, elem_id="coal-settings-status")
+                    s_reset = gr.Button("Reset to defaults", variant="secondary", size="sm", elem_id="coal-set-reset")
+        # per-browser store: used on the hosted Space only (locally the settings file is the store, because the
+        # desktop app's web view keeps no browser storage between starts). The storage key and the "secret" are
+        # fixed so the value survives a restart of the Space (Gradio's guide: a random secret is made per launch
+        # otherwise); the data is not sensitive, the secret only obfuscates it.
+        if hasattr(gr, "BrowserState"):
+            s_store = gr.BrowserState(dict(settings.DEFAULTS), storage_key="coal-settings-v1",
+                                      secret="coal-settings-v1-not-a-secret")
+        else:
+            s_store = gr.State(dict(settings.DEFAULTS))
 
         outputs = [banner, hint_md, hint_btn, hint_code, dl_out, dl_rep, table, cmds, raw, view, dl_view, methods]
-        inputs = [protein, dna, fmt, code, nogap, nomismatch, protein_path, dna_path, strict, blockonly]
+        # CHANGED(GUI-10): the run context (for "Centre the preview on column") and that control's row
+        run_ctx = gr.State(None)
+        outputs += [run_ctx, centre_row]
+        inputs = [protein, dna, fmt, code, nogap, nomismatch, protein_path, dna_path, strict, blockonly, s_preview]
         run_btn.click(run_ui, inputs, outputs, show_api=False)
         protein_path.change(core.path_status, protein_path, protein_info, show_api=False)
         dna_path.change(core.path_status, dna_path, dna_info, show_api=False)
@@ -364,6 +579,21 @@ def build(demo_mode: bool = False) -> gr.Blocks:
         # boxes and a path wins); now uploading a file clears that box. See overnight/integration/CHANGES.md
         protein.upload(_clear_path, protein, protein_path, show_api=False)
         dna.upload(_clear_path, dna, dna_path, show_api=False)
+        centre_btn.click(centre_ui, [run_ctx, centre_col], [view, dl_view, table], show_api=False)
+        centre_col.submit(centre_ui, [run_ctx, centre_col], [view, dl_view, table], show_api=False)
+
+        # CHANGED(GUI-9): settings. "input" events only (the user's own changes), so loading or resetting them
+        # does not save again. Each change is saved and applied to the main form at once.
+        s_controls = [s_code, s_fmt, s_nogap, s_nomismatch, s_strict, s_preview]
+        s_outputs = s_controls + [code, fmt, nogap, nomismatch, strict, s_status, s_store]
+
+        def _save(c, f, g, m, st, pv):
+            return save_settings_ui(c, f, g, m, st, pv, formats)
+
+        for comp in s_controls:
+            comp.input(_save, s_controls, s_outputs, show_api=False)
+        s_reset.click(lambda: reset_settings_ui(formats), None, s_outputs, show_api=False)
+        demo.load(lambda stored: load_settings_ui(stored, formats), s_store, s_outputs, show_api=False)
 
         if local:
             # Desktop wrappers: open http://127.0.0.1:7860/?protein=<path>&dna=<path> (URL-encoded) to fill the
