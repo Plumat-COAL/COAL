@@ -2,6 +2,7 @@
 MRG-8 in overnight/integration/CHANGES.md). Inputs are built in temp dirs; every subprocess has a timeout."""
 from __future__ import annotations
 
+import re
 import io
 import json
 import os
@@ -321,13 +322,18 @@ class TestMrg4ResumeComposes(_Tmp):
 
 # ------------------------------------------------------------------ MRG-8 version
 class TestMrg8Version(unittest.TestCase):
-    def test_version_is_0_4_0_everywhere(self):
-        self.assertEqual(__version__, "0.4.0")
-        self.assertIn('version = "0.4.0"', (ROOT / "pyproject.toml").read_text())
-        self.assertRegex((ROOT / "CMakeLists.txt").read_text(), r"VERSION 0\.4\.0")
+    # CHANGED(REL-1): was 0.4.0 everywhere; the version is read from src/coal and checked in every other place
+    def test_version_is_the_same_everywhere(self):
+        v = __version__
+        self.assertIn(f'version = "{v}"', (ROOT / "pyproject.toml").read_text())
+        self.assertIn(f"VERSION {v} ", (ROOT / "CMakeLists.txt").read_text())
+        for f in ("main.cpp", "report.cpp"):
+            self.assertIn(f'VERSION = "{v}"', (ROOT / "cpp" / "src" / f).read_text())
+        self.assertIn(f"version: {v}", (ROOT / "CITATION.cff").read_text())
         site = (ROOT / "site" / "index.html").read_text(encoding="utf-8")
-        self.assertRegex(site, r'id="version"[^>]*>0\.4\.0<')
-        self.assertIn("## 0.4.0", (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"))
+        self.assertRegex(site, r'id="version"[^>]*>' + re.escape(v) + "<")
+        self.assertIn(f"<span data-version-ref>{v}</span>", (ROOT / "site" / "cite.html").read_text(encoding="utf-8"))
+        self.assertIn(f"## {v}", (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
