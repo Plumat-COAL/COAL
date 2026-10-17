@@ -214,6 +214,29 @@ class RunResult:
 
 
 _WARN = re.compile(r"^coal: warning: (\S+) pepAlnPos (\d+): (\S+) does not correspond to (\S+)")
+_WARN_X = re.compile(r"^coal: warning: (\S+) pepAlnPos (\d+): (\S+) unknown AA type")
+_WARN_ANY = re.compile(r"^coal: warning: (\S+) (.+)$")  # any other per-sequence warning
+
+
+def _parse_warning(line: str) -> tuple[str, dict] | None:
+    """(sequence id, message) for any 'coal: warning: <id> ...' line, else None."""
+    m = _WARN.match(line)
+    if m:
+        sid, col, aa, codon = m.groups()
+        return sid, {"code": "mismatch", "column": int(col),
+                     "text": f"Column {col}: amino acid {aa} does not match codon {codon}.",
+                     "residue": aa, "codon": codon}
+    m = _WARN_X.match(line)
+    if m:
+        sid, col, aa = m.groups()
+        return sid, {"code": "unknown_aa", "column": int(col), "residue": aa,
+                     "text": (f"Column {col}: '{aa}' is not one of the 20 standard amino acids; COAL treated it "
+                              f"as X (any codon accepted).")}
+    m = _WARN_ANY.match(line)
+    if m:
+        sid, rest = m.groups()
+        return sid, {"code": "warning", "text": f"COAL warning: {rest.strip()}"}
+    return None
 _ERR = re.compile(r"^coal: error: (.*)$")
 
 _EXT = {"fasta": "fasta", "clustal": "aln", "paml": "paml", "codon": "codon.txt"}
@@ -276,13 +299,9 @@ def build_fallback_report(protein, dna, out, fmt, table, nogap, nomismatch, keep
     failed: dict[str, list[dict]] = {}
     general: list[dict] = []
     for line in stderr.splitlines():
-        m = _WARN.match(line)
-        if m:
-            sid, col, aa, codon = m.groups()
-            per.setdefault(sid, []).append({
-                "code": "mismatch", "column": int(col),
-                "text": f"Column {col}: amino acid {aa} does not match codon {codon}.",
-                "residue": aa, "codon": codon})
+        w = _parse_warning(line)
+        if w:
+            per.setdefault(w[0], []).append(w[1])
             continue
         m = _ERR.match(line)
         if m:
@@ -394,7 +413,7 @@ def genetic_code_hint(protein, dna, table, report, work_dir) -> dict | None:
         code, err, _ = _run_engine(protein, dna, out, "fasta", c, False, False, True, None)
         if code not in (0, 2):
             continue
-        warned = {m.group(1) for m in map(_WARN.match, err.splitlines()) if m}
+        warned = {w[0] for w in map(_parse_warning, err.splitlines()) if w}
         n_ok = sum(1 for s in seqs if s["id"] not in warned)
         if best is None or n_ok > best[1]:
             best = (c, n_ok)
@@ -479,8 +498,13 @@ def load_sample_report() -> dict:
 
 def _mismatch_sentence(msgs: list[dict]) -> str:
     mm = [m for m in msgs if m.get("code") == "mismatch"]
+    others = " ".join(m.get("text", "") for m in msgs if m.get("code") != "mismatch")
     if not mm:
-        return " ".join(m.get("text", "") for m in msgs)
+        return others or "COAL printed a warning for this sequence."
+    return _mm_sentence(mm) + (" " + others if others else "")
+
+
+def _mm_sentence(mm: list[dict]) -> str:
     first = mm[0]
     n = len(mm)
     where = f" (first at column {first['column']})" if first.get("column") else ""
@@ -537,7 +561,9 @@ def health_rows(report: dict) -> list[list[str]]:
 
 def _jump_links(seq: dict, limit: int = 12) -> str:
     from .viewer import cell_id
-    cols = sorted({m["column"] for m in seq.get("messages") or [] if isinstance(m.get("column"), int)})
+    # only codes the viewer gives an anchor to (it outlines mismatched and frameshift cells)
+    cols = sorted({m["column"] for m in seq.get("messages") or []
+                   if isinstance(m.get("column"), int) and m.get("code") in ("mismatch", "frameshift")})
     if not cols:
         return ""
     links = ", ".join(f'<a href="#{cell_id(str(seq.get("id", "")), c)}">column {c}</a>' for c in cols[:limit])
@@ -547,7 +573,11 @@ def _jump_links(seq: dict, limit: int = 12) -> str:
 
 def health_table_html(report: dict, links: bool = False) -> str:
     """Accessible HTML table (icon + word + sentence, never colour alone).
-    With links=True, problem columns link to the alignment viewer's cells (same page)."""
+    With links=True, problem columns link to the alignment viewer's cells (same page). No links when
+    -nogap/-nomismatch removed columns: report columns then don't exist in the output."""
+    opts = report.get("options") if isinstance(report.get("options"), dict) else {}
+    if opts.get("nogap") or opts.get("nomismatch"):
+        links = False
     order = {"failed": 0, "warning": 1, "not_checked": 2, "ok": 3}
     seqs = sorted(report.get("sequences", []), key=lambda s: order.get(s.get("status"), 4))
     out = ['<table class="coal-health"><caption>Sequence health, problems first</caption>',

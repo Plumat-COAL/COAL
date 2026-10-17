@@ -94,7 +94,7 @@ def row_id(seq_id: str) -> str:
 def _ok(aa: str, codon: str, code: dict, starts: frozenset, first: bool) -> bool:
     if len(codon) < 3:
         return False
-    if aa in "Xx":
+    if aa in "XBZJOU":  # the engine treats B Z J O U as X: any codon is accepted
         return True
     t = code.get(codon, "X")
     return t == aa or (first and aa == "M" and codon in starts)
@@ -113,20 +113,23 @@ def diagnose(protein_row: str, dna: str, codontable: int = 1) -> dict:
     out: dict = {"cells": {}, "events": [], "matched": 0}
     if not res or len(dna) < 3:
         return out
-    # where does the gene start? the leftmost offset with the longest matching run (first 12 residues)
+    # where does the gene start? the leftmost offset where most of the first 12 residues match
+    # (mismatches allowed: an alternative start codon or one odd early codon must not hide the gene)
     want = min(len(res), 12)
-    best = (0, 0)
+    allowed = max(0, want // 4)  # up to 3 of 12 may mismatch
+    best = (0, -1)
     for off in range(0, len(dna) - 2):
-        run = 0
+        score = 0
         for k in range(want):
-            if not _ok(res[k][1], dna[off + 3 * k: off + 3 * k + 3], code, starts, k == 0):
+            if _ok(res[k][1], dna[off + 3 * k: off + 3 * k + 3], code, starts, k == 0):
+                score += 1
+            elif k + 1 - score > allowed:
                 break
-            run += 1
-        if run > best[1]:
-            best = (off, run)
-            if run == want:
+        if score > best[1]:
+            best = (off, score)
+            if score == want:
                 break
-    if best[1] < min(3, len(res)):
+    if best[1] < max(min(3, len(res)), want - allowed):
         out["events"].append({"code": "inconsistent", "column": res[0][0],
                               "text": "The DNA does not spell the start of this protein in any reading frame."})
         return out
@@ -222,12 +225,14 @@ def build_rows(protein: list[tuple[str, str]], codon: list[tuple[str, str]] | No
         pid in cod and len(cod[pid]) != 3 * len(row) for pid, row in protein)
     if codon_only:
         notes.append("Columns were removed from the codon alignment (-nogap or -nomismatch), so columns are "
-                     "numbered as in the output and amino acids are translated from the codons.")
+                     "numbered as in the output and amino acids are translated from the codons. Problems are "
+                     "reported in protein-alignment columns, which no longer line up with this view, so no "
+                     "codons are marked here. Run again without -nogap / -nomismatch to see where they are.")
         ncols = max((len(cod[p]) // 3 for p, _ in protein if p in cod), default=0)
     rows = []
     for pid, prow in protein:
         m = marks.get(pid, {"status": None, "mismatch": set(), "frameshift": set()})
-        r = {"id": pid, "status": m["status"], "cells": [], "note": "", "events": []}
+        r = {"id": pid, "status": m["status"], "cells": [], "note": "", "events": [], "checked": not codon_only}
         if pid in cod:
             crow = cod[pid].upper()
             n = len(crow) // 3 if codon_only else len(prow)
@@ -242,7 +247,11 @@ def build_rows(protein: list[tuple[str, str]], codon: list[tuple[str, str]] | No
                     r["cells"].append(("-", c or "---", "gap"))
                     continue
                 flag = ""
-                if col in m["frameshift"]:
+                if codon_only:
+                    # report columns are protein-alignment columns and aa comes from this very codon:
+                    # nothing here can be checked honestly, so nothing is marked
+                    pass
+                elif col in m["frameshift"]:
                     flag = "frameshift"
                 elif col in m["mismatch"] or ("-" not in c and not _ok(aa, c, code, starts, first_res)):
                     flag = "mismatch"
@@ -381,6 +390,9 @@ def _issues(rows: list[dict], report: dict | None, shown_cols: int) -> str:
                      f"{'s' if unchecked != 1 else ''} (COAL stopped at an earlier error). In the view below their "
                      f"codons match their amino acids.</li>")
     if not items:
+        if any(not r.get("checked", True) for r in rows):
+            return ('<p class="note">Codons could not be checked against the protein in this view (columns were '
+                    'removed).</p>')
         return '<p class="note">✔ Every codon matches its amino acid.</p>'
     return '<ul class="issues">' + "".join(items) + "</ul>"
 
