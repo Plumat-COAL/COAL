@@ -280,6 +280,38 @@ class TestCppThreads(unittest.TestCase):
                     self.assertEqual(run_python(d, [*opts, "-j", "1"]), ref)
 
 
+@unittest.skipUnless(sys.platform.startswith("linux"), "peak memory read with getrusage (Linux: KB)")
+class TestCppMemory(unittest.TestCase):
+    """CPP-32 (reference FIN-E2 rule): memory must not grow with the number of sequences beyond the IDs. The run
+    report's end-of-run step once kept a view of every entry (~1.1 KB per sequence)."""
+
+    PEAK = ("import resource, subprocess, sys; subprocess.run(sys.argv[1:], stdout=subprocess.DEVNULL, check=True, "
+            "timeout=120); print(resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss)")
+
+    def peak_kb(self, binary, d):
+        r = subprocess.run([sys.executable, "-c", self.PEAK, str(binary), "pep.fasta", "nuc.fasta", "-j", "1"],
+                           cwd=d, capture_output=True, text=True, timeout=150)
+        self.assertEqual(r.returncode, 0, r.stderr[-300:])
+        return int(r.stdout.strip())
+
+    def test_growth_per_sequence_is_the_ids_only(self):
+        binary = cpp_binary()
+        if binary is None:
+            self.skipTest("coal-cpp not built")
+        sys.path.insert(0, str(ROOT / "benchmarks"))
+        from gen_data import generate
+        with tempfile.TemporaryDirectory() as t:
+            peaks = []
+            for n in (20000, 80000):
+                d = Path(t) / str(n)
+                d.mkdir()
+                generate(n, 40, d, seed=4)
+                peaks.append(self.peak_kb(binary, d))
+            per_seq = (peaks[1] - peaks[0]) * 1024 / 60000
+            print(f"\npeak {peaks} KB: {per_seq:.0f} bytes per extra sequence", file=sys.stderr)
+            self.assertLess(per_seq, 600, f"peak {peaks} KB: {per_seq:.0f} bytes per extra sequence")
+
+
 class TestCppResumeAndProgress(unittest.TestCase):
     """--resume and --progress in coal-cpp: interrupted + resumed C++ runs must give
     exactly what an uninterrupted Python run gives."""

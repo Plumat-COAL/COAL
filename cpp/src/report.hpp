@@ -6,6 +6,7 @@
 #include <chrono>
 #include <functional>
 #include <map>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -29,12 +30,14 @@ public:
               bool keep_going, bool keep_entries, bool strict, bool blockonly);
 
     void set_hash_paths(std::vector<std::string> p) { hash_paths_ = std::move(p); }  // CPP-17
-    void set_inputs(const std::vector<std::string>& ids);
-    void set_inputs(const std::vector<std::string>& ids, const std::vector<long long>& dna_counts,
-                    const std::vector<std::string>& dna_file_ids);
-    // mode id / order / normalised; per_seq: per-protein "id"/"normalised" (empty unless normalised)
+    // CPP-33: the report owns the protein IDs (the pipeline reads them through ids()), one copy per run
+    void set_inputs(std::vector<std::string>&& ids);
+    const std::vector<std::string>& ids() const { return ids_; }
+    void set_dna_inputs(const std::vector<long long>& dna_counts, const std::vector<std::string>& dna_file_ids);
+    // mode id / order / normalised; per_seq: per-protein "id"/"normalised" (empty unless normalised);
+    // pairing[k] = the DNA record (index into dna_file_ids) of protein k
     void set_pairing(const std::string& mode, const std::vector<std::string>& per_seq,
-                     const std::vector<std::string>& dna_ids, const std::vector<std::string>& notes);
+                     const std::vector<size_t>& pairing, const std::vector<std::string>& notes);
     // warnings: thread_one's ("pepAlnPos ..."); notices: with the ID; failure: code + message (code empty = none).
     // Returns the entry (nullptr for an ok sequence).
     const Json* add_sequence(long long k, const std::string& pid, const std::vector<std::string>& warnings,
@@ -83,7 +86,10 @@ private:
     std::string pairing_;  // empty = not paired
     std::vector<std::string> seq_pairing_;
     bool has_dna_ids_ = false;
-    std::vector<std::string> dna_ids_;
+    std::vector<size_t> pair_idx_;  // CPP-33: protein k's DNA ID is dna_file_ids_[pair_idx_[k]]
+    const std::string& dna_id(size_t k) const { return dna_file_ids_[pair_idx_[k]]; }
+    mutable std::set<std::string> paired_set_;  // built on first use (suspect_pairing text)
+    mutable bool paired_set_built_ = false;
     std::vector<Json> pair_hints_;
     bool partial_ = false;
     std::string kinds_;

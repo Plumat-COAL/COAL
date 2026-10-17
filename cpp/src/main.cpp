@@ -788,7 +788,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
     const bool staged = two_pass || block || (o.keep_going && o.fmt == "paml");
 
     // pass 1: protein IDs, row length, frameshift column widths
-    std::vector<std::string> ids;
+    std::vector<std::string> ids_read;
     long long ncol = -1;
     std::vector<int> widths;
     {
@@ -805,12 +805,13 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                                 "row_lengths");
             }
             update_column_widths(widths, row);
-            ids.push_back(id);
+            ids_read.push_back(id);
         }
     }
-    rec.set_inputs(ids);
+    rec.set_inputs(std::move(ids_read));
+    const std::vector<std::string>& ids = rec.ids();  // CPP-33: one copy, owned by the report
     DnaIndex dna(o.nucs);
-    rec.set_inputs(ids, dna.counts_per_file(), dna.ids());
+    rec.set_dna_inputs(dna.counts_per_file(), dna.ids());
     // CPP-25 (reference MRG-1): exact IDs; else (--strict: a partial exact match is an error) normalised IDs only
     // where file order would give a protein another gene's DNA, with a notice; else file order (ENG-d notice when
     // some IDs match, silent when none do)
@@ -818,12 +819,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
     std::string mode = pair_ids(ids, dna.ids(), dna.pos(), rs.pairing, per_seq, pair_notes, o.strict);
     const std::vector<size_t>& pairing = rs.pairing;
     for (auto& n : pair_notes) warn(n);
-    {
-        std::vector<std::string> paired;
-        paired.reserve(ids.size());
-        for (size_t k = 0; k < ids.size(); ++k) paired.push_back(dna.ids()[pairing[k]]);
-        rec.set_pairing(mode, per_seq, paired, pair_notes);
-    }
+    rec.set_pairing(mode, per_seq, pairing, pair_notes);
     dna.forget_ids();
     const long long nseq = (long long)ids.size();
     long long wtotal = 0;
@@ -936,7 +932,6 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         if (!prot_path.empty()) prot.open(prot_path, resuming ? get("prot_bytes") : -1);
         std::vector<char> drop((o.nomismatch || block_cols) ? (size_t)ncol : 0, 0), bad;
         long long skipped = 0;
-        std::vector<std::string> out_ids;  // staged formats: IDs of the written sequences, in order
         std::set<long long> skip_idx;       // sequences skipped by --keep-going (resume)
         if (resuming) {
             skipped = get("skipped");
@@ -962,9 +957,6 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
             rec.restore(rst ? *rst : Json::object(), nonok, start);
             if (const Json* v = state.get("skip_idx"))
                 for (auto& x : v->a) skip_idx.insert(x.as_int());
-            if (staged)
-                for (long long k = 0; k < start; ++k)
-                    if (!skip_idx.count(k)) out_ids.push_back(ids[(size_t)k]);
         } else if (o.fmt == "paml" && !staged) {
             sink.f << paml_header(nseq, wtotal);
         }
@@ -1044,7 +1036,6 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                     if (o.nogap) mark_nogap_triplets(it.out, bad, *code);
                     if (o.nomismatch)
                         for (int c : it.mcols) drop[(size_t)(c - 1)] = 1;
-                    out_ids.push_back(it.id);
                 } else {
                     sink.f.write(it.out.data(), (std::streamsize)it.out.size());
                 }
@@ -1087,12 +1078,20 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
             }
         };
         run_ordered<Item>(read_batch, [&](Item& it) { work(it, ctx); }, emit, o.jobs);
-        if (staged) std::vector<std::string>().swap(ids);  // CPP-24: out_ids has what the final pass needs
         if (prog && prog->printed) prog->update(done, true);
         if (o.keep_going && skipped == nseq)
             throw CoalError("none of the " + std::to_string(nseq) + " sequences could be converted", "all_failed");
         rec.finish(rows_fn, dna_fn);  // CPP-27: break locations, mismatch patterns, genetic-code hint
         const long long nout = nseq - skipped;
+        // CPP-33: the final pass names the written sequences: the report's IDs, or (--keep-going skipped some)
+        // a list without the skipped ones
+        std::vector<std::string> kept_ids;
+        if (staged && !skip_idx.empty()) {
+            kept_ids.reserve((size_t)nout);
+            for (long long q = 0; q < nseq; ++q)
+                if (!skip_idx.count(q)) kept_ids.push_back(ids[(size_t)q]);
+        }
+        const std::vector<std::string>& out_ids = skip_idx.empty() ? ids : kept_ids;
 
         OutFile out;
         if (staged) {

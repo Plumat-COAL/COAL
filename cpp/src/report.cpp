@@ -588,14 +588,12 @@ RunReport::RunReport(const std::vector<std::string>& argv, const std::string& pe
       nucs_(nucs), table_(table), nogap_(nogap), nomismatch_(nomismatch), keep_going_(keep_going), strict_(strict),
       blockonly_(blockonly) {}
 
-void RunReport::set_inputs(const std::vector<std::string>& ids) {
-    ids_ = ids;
+void RunReport::set_inputs(std::vector<std::string>&& ids) {
+    ids_ = std::move(ids);
     has_ids_ = true;
 }
 
-void RunReport::set_inputs(const std::vector<std::string>& ids, const std::vector<long long>& dna_counts,
-                           const std::vector<std::string>& dna_file_ids) {
-    set_inputs(ids);
+void RunReport::set_dna_inputs(const std::vector<long long>& dna_counts, const std::vector<std::string>& dna_file_ids) {
     dna_counts_ = dna_counts;
     has_dna_counts_ = true;
     dna_file_ids_ = dna_file_ids;
@@ -603,11 +601,11 @@ void RunReport::set_inputs(const std::vector<std::string>& ids, const std::vecto
 }
 
 void RunReport::set_pairing(const std::string& mode, const std::vector<std::string>& per_seq,
-                            const std::vector<std::string>& dna_ids, const std::vector<std::string>& notes) {
+                            const std::vector<size_t>& pairing, const std::vector<std::string>& notes) {
     pairing_ = mode;
     seq_pairing_ = per_seq;
-    dna_ids_ = dna_ids;
-    has_dna_ids_ = true;
+    pair_idx_ = pairing;
+    has_dna_ids_ = has_dna_file_ids_;
     for (const std::string& n : notes) {
         size_t i = 0;
         long long k = 0, tot = 0;
@@ -684,11 +682,15 @@ const Json* RunReport::add_sequence(long long k, const std::string& pid, const s
             for (auto& w : warnings) msgs.push_back(warning_message(w));
         }
         for (auto& n : notices) msgs.push_back(notice_message(pid, n));
-        bool has_d = has_dna_ids_ && k < (long long)dna_ids_.size();
-        std::string d = has_d ? dna_ids_[(size_t)k] : "";
+        bool has_d = has_dna_ids_ && k < (long long)pair_idx_.size();
+        std::string d = has_d ? dna_id((size_t)k) : "";
         bool mispaired = pairing_ == "order" && partial_ && has_d && d != pid;
         if (mispaired) {
-            bool in_dna = std::find(dna_ids_.begin(), dna_ids_.end(), pid) != dna_ids_.end();
+            if (!paired_set_built_) {  // CPP-33: was a linear search per sequence (quadratic)
+                for (size_t i = 0; i < pair_idx_.size(); ++i) paired_set_.insert(dna_id(i));
+                paired_set_built_ = true;
+            }
+            bool in_dna = paired_set_.count(pid) != 0;
             Json m = Json::object();
             m.set("code", "suspect_pairing");
             m.set("dna_id", d);
@@ -722,7 +724,7 @@ const Json* RunReport::add_sequence(long long k, const std::string& pid, const s
     Json e = Json::object();
     e.set("id", pid);
     e.set("index", k);
-    e.set("dna_id", has_dna_ids_ && k < (long long)dna_ids_.size() ? Json(dna_ids_[(size_t)k]) : Json());
+    e.set("dna_id", has_dna_ids_ && k < (long long)pair_idx_.size() ? Json(dna_id((size_t)k)) : Json());
     e.set("pairing", !seq_pairing_.empty() ? Json(seq_pairing_[(size_t)k]) : str_or_null(pairing_, !pairing_.empty()));
     e.set("status", status);
     Json arr = Json::array();
@@ -804,7 +806,7 @@ Json RunReport::entry_view(long long k, int aborted) const {
         e.set("id", has_ids_ && k < (long long)ids_.size() ? Json(ids_[(size_t)k]) : Json());
         e.set("index", k);
         bool paired = !pairing_.empty();
-        e.set("dna_id", paired && has_dna_ids_ && k < (long long)dna_ids_.size() ? Json(dna_ids_[(size_t)k]) : Json());
+        e.set("dna_id", paired && has_dna_ids_ && k < (long long)pair_idx_.size() ? Json(dna_id((size_t)k)) : Json());
         e.set("pairing", paired ? (!seq_pairing_.empty() ? Json(seq_pairing_[(size_t)k]) : Json(pairing_)) : Json());
         e.set("status", st);
         e.set("messages", Json::array());
@@ -892,12 +894,18 @@ void RunReport::finish_impl(const RowsFn& rows, const DnaFn& dna, bool aborted) 
             return k + 1 < n;
         });
     }
-    std::vector<Json> view;
-    view.reserve((size_t)n);
-    for (long long k = 0; k < n; ++k) view.push_back(entry_view(k, aborted ? 1 : 0));
+    // CPP-32: one entry view at a time (keeping all n of them took ~1.1 KB per sequence: 114 MB at 100,000);
+    // a clean sequence of a run that was not aborted is never fixable, so its view is not even built
+    std::map<long long, Json> pview;  // the problem entries' views (for the start-codon text below)
     std::vector<long long> problems;
-    for (long long k = 0; k < n; ++k)
-        if (fixable(view[(size_t)k])) problems.push_back(k);
+    for (long long k = 0; k < n; ++k) {
+        if (!aborted && k < (long long)kinds_.size() && kinds_[(size_t)k] == 'o' && !entries_.count(k)) continue;
+        Json v = entry_view(k, aborted ? 1 : 0);
+        if (fixable(v)) {
+            problems.push_back(k);
+            pview.emplace(k, std::move(v));
+        }
+    }
     if (problems.empty()) return;
     std::set<long long> pset(problems.begin(), problems.end());
     std::vector<long long> tested = problems;
@@ -980,7 +988,7 @@ void RunReport::finish_impl(const RowsFn& rows, const DnaFn& dna, bool aborted) 
     }
     std::vector<const Json*> starts;
     for (long long k : problems)
-        for (auto* m : real_mismatches(view[(size_t)k])) starts.push_back(m);
+        for (auto* m : real_mismatches(pview.at(k))) starts.push_back(m);
     bool all_start = !starts.empty();
     for (auto* m : starts) {
         const Json* sc = m->get("start_codon");
@@ -1156,7 +1164,7 @@ std::vector<std::string> RunReport::summary_lines() const {
                 ++kk;
                 if (j < 0) j = (long long)i;
             }
-        std::string eg = j >= 0 && has_ids_ ? ", e.g. protein " + ids_[(size_t)j] + " = DNA " + dna_ids_[(size_t)j] : "";
+        std::string eg = j >= 0 && has_ids_ ? ", e.g. protein " + ids_[(size_t)j] + " = DNA " + dna_id((size_t)j) : "";
         lines.push_back(fmt_n(kk) + " of " + fmt_n(n) + " IDs matched only after normalising (version suffix, case or "
                         "database fields)" + eg + "; COAL paired by those IDs where PAL2NAL's file order would mispair them.");
     }
