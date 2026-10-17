@@ -43,6 +43,8 @@ When `-nomismatch` (or `-nogap`) removes every column, PAL2NAL prints an empty l
 | table11, table13 | ATA (an NCBI start codon) not accepted as the first Met → warning | Accepted, no warning |
 | `.` in protein alignment | Row gets shorter (misaligned output) | Treated as a gap |
 | Ambiguous DNA bases | Fixed list of accepted combinations | Accepted if every possible codon gives the right amino acid |
+| Fallback where more than half the codons do not match (e.g. unrelated protein and DNA; no golden case) | Not observed; the fallback pattern fits at offset 0, so presumably output + per-codon warnings | Error, exit 1 (ENG-c) |
+| Fallback where no 10-residue anchor matches but at most half the codons differ (table3/5/9/13/14/21/22 with the default table) | Output + per-codon warnings | Same output and warnings, plus a summary warning that `-q` does not suppress (ENG-c) |
 
 ## Random differential testing
 

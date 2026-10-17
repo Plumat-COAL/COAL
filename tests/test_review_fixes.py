@@ -112,5 +112,36 @@ class TestEngB_StreamInputs(TempDirCase):
         self.assertEqual((r.returncode, r.stdout), (0, EXPECTED), r.stderr)
 
 
+# ---------------------------------------------------------------- ENG-c
+def _random_pair(seed=3, n=60):
+    rng = random.Random(seed)
+    prot = "M" + "".join(rng.choice("ACDEFGHIKLMNPQRSTVWY") for _ in range(n - 1))
+    dna = "".join(rng.choice("ACGT") for _ in range(3 * n))
+    return f">g1\n{prot}\n>g2\n{prot}\n", f">g1\n{dna}\n>g2\n{dna}\n"
+
+
+class TestEngC_Unrelated(TempDirCase):
+    def test_unrelated_protein_and_dna_is_an_error(self):
+        pep, nuc = _random_pair()
+        (self.d / "rp.fa").write_text(pep)
+        (self.d / "rn.fa").write_text(nuc)
+        for extra in ([], ["-q"]):
+            r = coal(["rp.fa", "rn.fa", *extra], self.d)
+            self.assertNotEqual(r.returncode, 0, r.stdout)
+            self.assertEqual(r.stdout, "")
+            self.assertIn("g1: protein and DNA are inconsistent", r.stderr)
+
+    def test_no_anchor_matched_warns_even_with_q(self):
+        # Golden table3/fasta: PAL2NAL succeeds although no 10-residue anchor matches
+        # (7 of 25 codons differ under table 1), so this stays a success, with a notice.
+        fx = ROOT / "tests" / "fixtures" / "table3"
+        gold = (ROOT / "tests" / "golden" / "table3" / "fasta.stdout").read_text()
+        r = coal([str(fx / "pep.fasta"), str(fx / "nuc.fasta"), "-q"], self.d)
+        self.assertEqual((r.returncode, r.stdout), (0, gold), r.stderr)
+        self.assertIn("s0: no 10-residue segment", r.stderr)
+        self.assertIn("7 of 25", r.stderr)
+        self.assertNotIn("pepAlnPos", r.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

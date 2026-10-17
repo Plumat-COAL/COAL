@@ -53,6 +53,8 @@ class Threaded:
     dna: str                 # matched DNA, original case
     warnings: list[str] = field(default_factory=list)
     mismatch_cols: set[int] = field(default_factory=set)   # 1-based alignment columns
+    # CHANGED(ENG-c): new field; notices that -q does not suppress. See overnight/engine-fixes/CHANGES.md
+    notices: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------- pairing
@@ -302,10 +304,13 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int) -> Threaded:
     if not anchors:
         raise CoalError(f"{seq_id}: protein and DNA are inconsistent (no match found)")
     pattern, col = [], 1
+    found_any = False
     for k, a in enumerate(anchors):
         at = _tokens(a, ANCHOR_START if k == 0 else NORMAL, col)
         if _find(target, at) < 0:
             at = [("w", 3 if t[0] == "r" else t[1], t[2]) for t in at]
+        else:
+            found_any = True
         pattern += at
         col += len(a)
     s = _find(target, [("n", t[1], t[2]) if t[0] == "w" else t for t in pattern])
@@ -327,6 +332,17 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int) -> Threaded:
             res.mismatch_cols.add(c)
         first = False
         pos += 3
+    # CHANGED(ENG-c): was success whenever the wildcard pattern fit (unrelated protein and DNA
+    # gave exit 0); now > half the codons mismatching is an error, and no anchor matching
+    # gives a notice. See overnight/engine-fixes/CHANGES.md
+    nres = sum(1 for t in toks if t[0] == "r")
+    nbad = len(res.mismatch_cols)
+    if 2 * nbad > nres:
+        raise CoalError(f"{seq_id}: protein and DNA are inconsistent "
+                        f"({nbad} of {nres} codons do not match the protein)")
+    if not found_any:
+        res.notices.append(f"{seq_id}: no 10-residue segment of the protein was found in the DNA; "
+                           f"codons were assigned by position ({nbad} of {nres} do not match)")
     return res
 
 
@@ -430,4 +446,5 @@ def codon_align(
     items = [thread_one(pid, row, dnas[j][1], table) for (pid, row), j in zip(proteins, idx)]
     rows = build_alignment(items, nogap=nogap, nomismatch=nomismatch)
     warnings = [f"{it.seq_id} {w}" for it in items for w in it.warnings]
+    warnings += [n for it in items for n in it.notices]  # CHANGED(ENG-c): notices included
     return [(it.seq_id, r) for it, r in zip(items, rows)], warnings

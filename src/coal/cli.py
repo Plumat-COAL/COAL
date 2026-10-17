@@ -41,9 +41,11 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
 
     warn = None if args.quiet else (lambda w: print(f"coal: warning: {w}", file=sys.stderr))
+    # CHANGED(ENG-c): new; notices are printed even with -q. See overnight/engine-fixes/CHANGES.md
+    notice = lambda w: print(f"coal: warning: {w}", file=sys.stderr)  # noqa: E731
     try:
         run(args.pep_aln, args.nuc_fasta, out_path=args.out, table=args.codontable,
-            nogap=args.nogap, nomismatch=args.nomismatch, jobs=args.jobs, warn=warn)
+            nogap=args.nogap, nomismatch=args.nomismatch, jobs=args.jobs, warn=warn, notice=notice)
     except (CoalError, InputFormatError, UnicodeDecodeError, OSError) as e:
         print(f"coal: error: {e}", file=sys.stderr)
         return 1

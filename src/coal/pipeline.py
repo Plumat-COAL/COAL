@@ -66,14 +66,16 @@ def _init_worker(table, widths, two_pass, nogap):
 
 
 def _work(batch):
-    """Thread one batch. Returns (text, warnings, mismatch columns, nogap triplets):
+    """Thread one batch. Returns (text, warnings, mismatch columns, nogap triplets, notices):
     text is finished FASTA, or 'id<TAB>row' lines for the column-removal pass."""
-    parts, warns, mcols, bad = [], [], set(), set()
+    # CHANGED(ENG-c): was a 4-tuple; now also returns notices. See overnight/engine-fixes/CHANGES.md
+    parts, warns, mcols, bad, notes = [], [], set(), set(), []
     two_pass = _W["two_pass"]
     for pid, row, dna in batch:
         it = thread_one(pid, row, dna, _W["table"])
         exp = expand(it, _W["widths"], _W["wide"])
         warns += [f"{pid} {w}" for w in it.warnings]
+        notes += it.notices
         if two_pass:
             parts.append(f"{pid}\t{exp}\n")
             mcols |= it.mismatch_cols
@@ -81,7 +83,7 @@ def _work(batch):
                 bad |= nogap_bad_triplets(exp)
         else:
             parts.append(fasta_record(pid, exp))
-    return "".join(parts), warns, mcols, bad
+    return "".join(parts), warns, mcols, bad, notes
 
 
 # ------------------------------------------------------------------ main side
@@ -157,11 +159,14 @@ def run(pep_path, nuc_paths, *args, **kw) -> int:
 
 
 def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
-         nomismatch: bool = False, jobs: int = 0, warn=None, min_nt_per_job: int | None = None) -> int:
+         nomismatch: bool = False, jobs: int = 0, warn=None, min_nt_per_job: int | None = None,
+         notice=None) -> int:
     """Convert; write FASTA to out_path (or stdout).
 
     jobs: 0 = automatic (up to all cores), N = at most N processes. Small inputs
-    always run in one process (see MIN_NT_PER_JOB)."""
+    always run in one process (see MIN_NT_PER_JOB).
+    warn / notice: callables for per-codon warnings / important notices (the CLI
+    passes notice even with -q)."""
     get_code(table)
     rows = _protein_rows(pep_path)
 
@@ -200,10 +205,13 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
             drop, bad = set(), set()
             init = (table, widths, two_pass, nogap)
             sink = stage.file if two_pass else tmp.file   # skip tempfile's per-call wrapper
-            for text, warns, mcols, badt in _results(_batches(rows(), dna, pairing), jobs, init):
+            for text, warns, mcols, badt, notes in _results(_batches(rows(), dna, pairing), jobs, init):
                 if warn:
                     for w in warns:
                         warn(w)
+                if notice:  # CHANGED(ENG-c): new; see overnight/engine-fixes/CHANGES.md
+                    for n in notes:
+                        notice(n)
                 sink.write(text)
                 if nomismatch:
                     drop.update(c - 1 for c in mcols)
