@@ -249,6 +249,18 @@ class TestMessages(unittest.TestCase):
 class TestCppSaysTheSame(unittest.TestCase):
     """coal-cpp: the same stderr (byte for byte) and exit code on every case above and the examples."""
 
+    def test_codon_output_when_the_last_sequence_is_skipped(self):  # ENG-UX-20 (TestCppMatchesPython seed 31337)
+        pep = '>seq0\nmsr-vet-yhsrneldpyykkalmafwkqyvm-gpwlklhccv\n>seq1\nMSRSVECDY-SRNELD-YYKKD-2GR-KQ-VMPGPTLKWHCCV\n>seq2\nMS-SVETD-HNRNELDPY4PKALTM!WKWYVMPFPTFKLRCCD\n'
+        nuc = '>seq0 desc\nATGTCACGCGTTGAGACATACCACTCACGTAATGAGCTCGACCCTTATTATAAGAAGGCCCTGATGGCCTTCTGGAAATAATACGTTATGGGGCCGTGGCTGAAACTGCACTGCTGTGWGTGAA\n>seq1 desc\nCGATACGATGTCGAGATCGGTCGAGTGCGATTACTCTCGAAACGAGTTGGACTACTATAAGAAGGACACGGACGTAAACAAGTAATGCCCGGRCCGACTCTCAAATGGCATTGCTGTGTG\n>seq2 desc\nATGTCTTCGGTTGAGACGGACCATAATCGGAACGAGCTAGATCCTTATTATACCGAAAGCGCTTACGATGACCTGGAAGTGGTATGTTATGCCTTTCCCAACGTTTAAGCTAAGATGCTGTGAC\n'
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            make(d, {"pep.fasta": pep, "nuc.fasta": nuc})
+            args = ["pep.fasta", "nuc.fasta", "-output", "codon", "-codontable", "6", "--keep-going"]
+            rc, out, err = run_py(d, args)
+            r = subprocess.run([str(cpp_binary()), *args], cwd=d, capture_output=True, timeout=60)
+            self.assertEqual(rc, 2)
+            self.assertEqual((r.returncode, r.stdout.decode()), (rc, out))
+
     def test_same_messages(self):
         binary = str(cpp_binary())
         with tempfile.TemporaryDirectory() as tmp:

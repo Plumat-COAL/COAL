@@ -123,11 +123,11 @@ For a plain-English summary call the MCP tool `explain_report(report_path)`.
 | `protein alignment rows have different lengths ...: is X an aligned protein file` | The protein file is not aligned | Align it first (MAFFT, MUSCLE, ...) |
 | `cannot open 'x.fa': no such file` | Wrong path | Check the file name and folder |
 | `protein and DNA are inconsistent` for the **first** gene, or for many genes | IDs don't match (e.g. `AT1G01010.1` vs `AT1G01010`), so COAL paired by order | Make IDs identical (strip `.1` version suffixes) |
-| `protein and DNA are inconsistent` for **one** gene | Frameshift (missing/extra base), wrong transcript, or truncated DNA | Check that gene's DNA; the run stops at the first failing gene (the summary says where it breaks); `--keep-going` writes the others and leaves it out |
+| `protein and DNA are inconsistent` for **one** gene | Frameshift (missing/extra base), wrong transcript, or truncated DNA | Check that gene's DNA (the summary line says where it breaks); drop it and re-run (the current engine stops at the first failing gene) |
 | `invalid protein alignment characters` | Non-amino-acid symbols in the alignment | Remove them; `.` and `-` are both gaps |
 | Stop codons in output columns | Internal stops or terminal stop kept | `-nogap` removes stop columns |
 
-<!-- CHANGED(ENG-UX-2/3/4/6): rows for the new engine messages; the one-gene fix names --keep-going. See overnight/integration/CHANGES.md -->
+<!-- CHANGED(ENG-UX-2/3/4/6): rows for the new engine messages. See overnight/integration/CHANGES.md -->
 
 Never "fix" a mismatch by editing sequences silently: report which genes failed and why.
 

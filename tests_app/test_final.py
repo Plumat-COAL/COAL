@@ -317,7 +317,11 @@ class TestFinC12C13MessyIds(Case):  # FIN-C12 / FIN-C13
         g = next(x for x in r.report["sequences"] if x["status"] == "failed")
         text = core.sequence_sentence(g)
         self.assertNotIn("truncated", text)
-        self.assertIn("by their order", text)
+        # CHANGED(ENG-UX-18/ENG-UX-19): the sentence said "by their order" only through the engine's break location,
+        # which here was false ("The DNA ends before the protein does (at column 120)" for another gene's DNA) and is
+        # no longer claimed; the engine's own failure message now names the order pairing instead.
+        # See overnight/integration/CHANGES.md
+        self.assertIn("paired by file order with DNA 'x", " ".join(m.get("text", "") for m in g["messages"]))
         hint = next(h for h in r.hints if h["code"] == "id_mismatch")["text"]
         self.assertNotIn("use a COAL version", hint)
         self.assertIn("AT1G79010", hint)

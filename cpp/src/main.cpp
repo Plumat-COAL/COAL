@@ -361,6 +361,11 @@ static void read_rows(std::istream& in, long long offset, long long count, std::
     in.read(&dst[0], (std::streamsize)count);
 }
 
+// CHANGED(ENG-UX-20): the residue-line widths of -output codon come from the last protein row of the input, also
+// when --keep-going left that sequence out (as pipeline.py codon_aa_widths(last_row)); was the last row written, so
+// the C++ and Python outputs differed (found by TestCppMatchesPython, seed 31337).
+static std::string g_last_row;
+
 // CPP-24 (reference FIN-E2: bounded memory): clustal / codon output for many sequences. Every line of a block has a
 // fixed length, so each line's place in the output is known in advance: the rows are read a chunk of consecutive
 // sequences at a time (sequential reads) and each block's lines for that chunk are written at their offset. Memory
@@ -379,8 +384,7 @@ static void write_blocks_chunked(std::ostream& out, const std::string& fmt, std:
     // residue-line tokens (codon): as in write_blocks
     std::vector<long long> toks;
     if (codon && n > 0) {
-        std::string last;
-        read_rows(*prot, (n - 1) * ncol, ncol, last);
+        const std::string& last = g_last_row;  // ENG-UX-20: the last input row (pipeline.py last_row)
         for (long long i = 0; i < (long long)last.size(); ++i) {
             toks.push_back(i);
             char ch = last[(size_t)i];
@@ -525,8 +529,7 @@ static void write_blocks(std::ostream& out, const std::string& fmt, std::fstream
     // Residue-line tokens: one per column, plus extra '-' tokens after a column where the
     // LAST sequence has a frameshift digit (see residue_line_blocks in pipeline.py).
     long long ntrip = length / 3;
-    std::string last;
-    if (n > 0) read_rows(*prot, (n - 1) * ncol, ncol, last);
+    const std::string& last = g_last_row;  // ENG-UX-20
     std::vector<long long> toks;  // column index, or -1 for an extra '-'
     for (long long i = 0; i < (long long)last.size(); ++i) {
         toks.push_back(i);
@@ -1100,6 +1103,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                         throw CoalError(cur[i].error, cur[i].error_code, cur[i].id);
                     }
             for (Item& it : cur) {
+                g_last_row = it.row;  // ENG-UX-20
                 // CPP-26 (reference MRG-3): per sequence its warnings, its notices, then "skipped ..." (--keep-going)
                 for (auto& w : it.warnings)  // CPP-11 (ENG-i2): no mismatch warnings with -nomismatch, as PAL2NAL
                     if (!(o.nomismatch && w.find(MISMATCH_WARNING) != std::string::npos) && kept_col(w))
