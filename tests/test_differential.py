@@ -190,6 +190,9 @@ class TestCoalOwnBehaviour(unittest.TestCase):
 
 if __name__ == "__main__":
     if sys.argv[1:] == ["--count"]:   # print "passing/total" golden checks for COAL_IMPL
+        if IMPL == "cpp" and cpp_binary() is None:  # CPP-6: skip cleanly, as the unittest run does
+            print("cpp: skipped (coal-cpp not built; set COAL_CPP_BIN or build into ./build)")
+            sys.exit(0)
         ok, total, fails = count_passing()
         print("\n".join(fails))
         print(f"{IMPL}: {ok}/{total} golden checks")
