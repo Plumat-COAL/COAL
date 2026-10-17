@@ -39,7 +39,9 @@
 <section class="hero" id="download" aria-labelledby="hero-title">
   <h1 id="hero-title">Codon alignments from a protein alignment and its coding DNA</h1>
   <p class="lead">COAL is a drop-in replacement for PAL2NAL v14. It accepts the same input files and options, with
-    <a href="guide.html#limits">a few exceptions</a>, and its warnings and errors name the gene concerned.</p>
+    <a href="guide.html#limits">a few exceptions</a>. When a gene does not match its protein, COAL says which gene and
+    why, and on long genes it was up to <span data-check="118.6×">118.6×</span> faster than PAL2NAL v14 in
+    <a href="differences.html#speed">our measurements</a>.</p>
   <ul class="meta">
     <li>Version <span id="version" data-version="0.4.0">0.4.0</span></li>
     <li>MIT licence</li>
@@ -59,11 +61,13 @@
       <p class="suggest" hidden>For this computer</p>
       <h3 id="pip-title">macOS and Linux</h3>
       <p class="req">Python 3.10 or newer, with pip</p>
-      <p class="act"><button type="button" class="btn" data-copy="pip-cmd" aria-describedby="pip-title">Copy install command</button></p>
-      <div class="cmd"><code id="pip-cmd">python3 -m pip install "coal[gui] @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz"</code></div>
-      <p class="fine">Install into a virtual environment (steps for <a href="install.html#macos">macOS</a> and
-        <a href="install.html#linux">Linux</a>). COAL is not on PyPI, so a plain <code>pip install coal</code> gets
-        you a different package.</p>
+      <p class="act"><button type="button" class="btn" data-copy="pip-cmd" aria-describedby="pip-title">Copy install commands</button></p>
+      <div class="cmd"><code id="pip-cmd">python3 -m venv ~/coal-env
+~/coal-env/bin/python -m pip install "coal[gui] @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz"
+~/coal-env/bin/coal-gui</code></div>
+      <p class="fine">Makes a virtual environment in <code>~/coal-env</code>, installs COAL into it and starts the app
+        (details for <a href="install.html#macos">macOS</a> and <a href="install.html#linux">Linux</a>). COAL is not on
+        PyPI, so a plain <code>pip install coal</code> gets you a different package.</p>
     </div>
     <div class="card" id="card-source">
       <h3>Source code</h3>

@@ -106,7 +106,7 @@ main { width: calc(100% - 2 * var(--gutter)); max-width: var(--wide); margin: 0 
 .hero { padding: 2.75rem 0 2.25rem; }
 @media (min-width: 40rem) { .hero { padding: 4rem 0 3rem; } }
 .hero h1 { font-size: var(--fs-h1); line-height: 1.08; max-width: 19em; margin-bottom: 1rem; text-wrap: balance; }
-.hero .lead { max-width: 36rem; margin-bottom: 0.9rem; }
+.hero .lead { max-width: 44rem; margin-bottom: 0.9rem; }
 .meta { display: flex; flex-wrap: wrap; gap: 0.2rem 1.25rem; list-style: none; padding: 0; margin: 0 0 2rem;
   font-size: var(--fs-sm); color: var(--muted); }
 .meta a { color: var(--muted); }
