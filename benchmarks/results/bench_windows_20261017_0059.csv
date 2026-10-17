@@ -1,0 +1,2 @@
+n_seqs,n_codons,total_codons,nuc_MB,coal_status,coal_median_s,coal_min_s,coal_peak_MB,coal_Mcodons_per_s,coal_j4_status,coal_j4_median_s,coal_j4_min_s,coal_j4_peak_MB,coal_j4_Mcodons_per_s,coal_j0_status,coal_j0_median_s,coal_j0_min_s,coal_j0_peak_MB,coal_j0_Mcodons_per_s,speedup_coal,speedup_coal_j4,speedup_coal_j0,outputs_identical
+500000,500,250000000,685.1,ok,25.2102,25.2102,130.8,9.917,ok,9.7827,9.7827,131.8,25.555,ok,9.9985,9.9985,181.6,25.004,,,,True
