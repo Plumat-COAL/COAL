@@ -27,6 +27,14 @@ class TestGui(unittest.TestCase):
         out = ui.run_ui(p, d, "fasta", 1, False, False)
         self.assertEqual(out[3], 2)  # suggested genetic code from the hint
 
+    def test_path_box_wins_and_is_not_copied(self):  # APP-L1
+        from coal_app import core, ui
+        p, d = core.example_paths("mito")
+        out = ui.run_ui(None, None, "fasta", 1, False, False, p, d)
+        self.assertEqual(out[3], 2)
+        out = ui.run_ui(None, None, "fasta", 1, False, False, "/no/such/file.fasta", d)
+        self.assertIn("does not exist", str(out[0]))
+
     def test_build_and_serve_briefly(self):
         from coal_app import ui
         timer = None

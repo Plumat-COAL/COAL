@@ -93,11 +93,19 @@ def _results(report, output_path, report_path, coal_cmd, pal2nal_cmd, stderr, ba
     )
 
 
-def run_ui(protein, dna, fmt, code, nogap, nomismatch):
+def run_ui(protein, dna, fmt, code, nogap, nomismatch, protein_path="", dna_path=""):
+    # CHANGED(APP-L1): was uploads only; now a typed/pasted path (local only) wins over an upload and is read
+    # in place, never copied. See overnight/app/CHANGES.md
+    try:
+        protein, _ = core.resolve_input(protein, protein_path)
+        dna, _ = core.resolve_input(dna, dna_path)
+    except ValueError as e:
+        return _results({}, None, None, "", "", str(e), f"### ✖ Could not use that file\n{e}")
     if not protein or not dna:
+        how = ("Upload a protein alignment and a DNA FASTA file" +
+               (" (or type their paths on this computer)" if core.path_inputs_enabled() else ""))
         return _results({}, None, None, "", "", "",
-                        "### ⚠ Please add both files\nUpload a protein alignment and a DNA FASTA file, "
-                        "or press one of the **Try an example** buttons.")
+                        f"### ⚠ Please add both files\n{how}, or press one of the **Try an example** buttons.")
     out_dir = core.new_run_dir()  # CHANGED(APP-12): runs older than 24 h are pruned
     try:
         r = core.run_coal(protein, dna, fmt, int(code), bool(nogap), bool(nomismatch), out_dir=out_dir)
@@ -139,11 +147,22 @@ def build(demo_mode: bool = False) -> gr.Blocks:
     )
     with gr.Blocks(title="COAL codon alignment", theme=theme, css=CSS, analytics_enabled=False) as demo:
         gr.Markdown(INTRO + core.intro_text())
+        local = core.path_inputs_enabled()  # CHANGED(APP-L1): path boxes only when running locally
         with gr.Row():
-            protein = gr.File(label="1. Protein alignment (FASTA or CLUSTAL)", type="filepath",
-                              file_types=[".fasta", ".fa", ".faa", ".aln", ".fas", ".clustal", ".txt"])
-            dna = gr.File(label="2. Coding DNA (FASTA, not aligned)", type="filepath",
-                          file_types=[".fasta", ".fa", ".fna", ".ffn", ".fas", ".txt"])
+            with gr.Column():
+                protein = gr.File(label="1. Protein alignment (FASTA or CLUSTAL)", type="filepath",
+                                  file_types=[".fasta", ".fa", ".faa", ".aln", ".fas", ".clustal", ".txt"])
+                protein_path = gr.Textbox(label="or type/paste a path on this computer (big files: read in "
+                                                "place, not copied)", placeholder="/path/to/protein.aln.fasta",
+                                          visible=local, max_lines=1)
+                protein_info = gr.Markdown(visible=local)
+            with gr.Column():
+                dna = gr.File(label="2. Coding DNA (FASTA, not aligned)", type="filepath",
+                              file_types=[".fasta", ".fa", ".fna", ".ffn", ".fas", ".txt"])
+                dna_path = gr.Textbox(label="or type/paste a path on this computer (big files: read in place, "
+                                            "not copied)", placeholder="/path/to/dna.fasta", visible=local,
+                                      max_lines=1)
+                dna_info = gr.Markdown(visible=local)
         with gr.Row():
             fmt = gr.Dropdown(_format_choices(features), value="fasta", label="Output format",
                               info=("Which file format you want back." if len(features.output_formats) > 1 else
@@ -183,16 +202,27 @@ def build(demo_mode: bool = False) -> gr.Blocks:
             gr.Markdown(GLOSSARY)
 
         outputs = [banner, hint_md, hint_btn, hint_code, dl_out, dl_rep, table, cmds, raw, view, dl_view, methods]
-        inputs = [protein, dna, fmt, code, nogap, nomismatch]
+        inputs = [protein, dna, fmt, code, nogap, nomismatch, protein_path, dna_path]
         run_btn.click(run_ui, inputs, outputs, show_api=False)
+        protein_path.change(core.path_status, protein_path, protein_info, show_api=False)
+        dna_path.change(core.path_status, dna_path, dna_info, show_api=False)
+
+        if local:
+            # Desktop wrappers: open http://127.0.0.1:7860/?protein=<path>&dna=<path> (URL-encoded) to fill the
+            # path boxes. See overnight/app/CHANGES.md (APP-L2).
+            def fill_from_url(request: gr.Request):
+                params = dict(request.query_params) if request is not None else {}
+                return core.paths_from_query(params)
+
+            demo.load(fill_from_url, None, [protein_path, dna_path], show_api=False)
 
         for name, btn in ex_buttons.items():
             p, d = core.example_paths(name)
 
             def load_example(p=p, d=d):
-                return p, d
+                return p, d, "", ""
 
-            btn.click(load_example, None, [protein, dna], show_api=False).then(
+            btn.click(load_example, None, [protein, dna, protein_path, dna_path], show_api=False).then(
                 run_ui, inputs, outputs, show_api=False)
 
         sample_btn.click(show_sample, None, outputs, show_api=False)

@@ -150,6 +150,68 @@ def check_path_allowed(path: str) -> str | None:
             f"examples and this server's own results can be used. Install COAL locally to use your own paths.")
 
 
+# ---------------------------------------------------------------- inputs given as paths (APP-L)
+
+def path_inputs_enabled() -> bool:
+    """Path boxes are offered only when running locally (never on the hosted Space)."""
+    return not hosted()
+
+
+def human_size(n: int) -> str:
+    for unit in ("bytes", "KB", "MB", "GB"):
+        if n < 1000 or unit == "GB":
+            return f"{n:,} {unit}" if unit == "bytes" else f"{n:.1f} {unit}"
+        n /= 1000
+    return f"{n:.1f} GB"
+
+
+def resolve_input(upload: str | None, path_text: str | None) -> tuple[str | None, str]:
+    """(path to use, short description) for one GUI input. A typed/pasted path wins over an upload and is
+    read in place (never copied). Raises ValueError with a plain message if the path is unusable."""
+    text = (path_text or "").strip().strip('"').strip("'").strip()
+    if text:
+        if not path_inputs_enabled():
+            raise ValueError("this shared server cannot read paths; please upload the file instead")
+        p = os.path.abspath(os.path.expanduser(text))
+        if not os.path.exists(p):
+            raise ValueError(f"'{text}' does not exist on this computer")
+        if os.path.isdir(p):
+            raise ValueError(f"'{text}' is a folder; give the file inside it")
+        if not os.path.isfile(p):
+            raise ValueError(f"'{text}' is not a regular file")
+        try:
+            with open(p, "rb") as fh:
+                fh.read(1)
+        except OSError as e:
+            raise ValueError(f"'{text}' cannot be read ({e.strerror or e})") from None
+        return p, f"{os.path.basename(p)}, {human_size(os.path.getsize(p))} (read in place)"
+    if upload:
+        try:
+            return upload, f"{os.path.basename(upload)}, {human_size(os.path.getsize(upload))} (uploaded)"
+        except OSError:
+            return upload, os.path.basename(upload)
+    return None, ""
+
+
+def path_status(path_text: str | None) -> str:
+    """One line for the GUI under a path box: the file size, or what is wrong."""
+    if not (path_text or "").strip():
+        return ""
+    try:
+        return "✔ " + resolve_input(None, path_text)[1]
+    except ValueError as e:
+        return f"✖ {e}"
+
+
+def paths_from_query(params) -> tuple[str, str]:
+    """Pre-fill the path boxes from the page URL: http://127.0.0.1:7860/?protein=PATH&dna=PATH (URL-encoded).
+    This is the hook for desktop wrappers. Ignored on the hosted Space."""
+    if not path_inputs_enabled() or not params:
+        return "", ""
+    get = params.get
+    return str(get("protein") or ""), str(get("dna") or "")
+
+
 INTRO_LOCAL = "Nothing leaves your computer: COAL runs here, on this machine."
 INTRO_HOSTED = ("This copy runs on a shared Hugging Face server: files you upload are processed there and "
                 f"deleted within {RUNS_MAX_AGE_HOURS} hours (or when the Space restarts). For unpublished or "
