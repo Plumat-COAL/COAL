@@ -1,24 +1,78 @@
+// CPP-27: mirrors src/coal/report.py of the merged engine (MRG-2, MRG-2b). See report.hpp.
 #include "report.hpp"
 
 #include <algorithm>
 #include <cctype>
-#include <cstdio>
+#include <set>
+
+#include "core.hpp"
+#include "tables.hpp"
 
 namespace coal {
 
-const char* const TABLE_NAMES[24] = {
-    nullptr, "standard", "vertebrate mitochondrial", "yeast mitochondrial",
-    "mold, protozoan and coelenterate mitochondrial", "invertebrate mitochondrial",
-    "ciliate, dasycladacean and Hexamita nuclear", nullptr, nullptr, "echinoderm and flatworm mitochondrial",
-    "euplotid nuclear", "bacterial, archaeal and plant plastid", "alternative yeast nuclear",
-    "ascidian mitochondrial", "alternative flatworm mitochondrial", "Blepharisma nuclear",
-    "chlorophycean mitochondrial", nullptr, nullptr, nullptr, nullptr, "trematode mitochondrial",
-    "Scenedesmus obliquus mitochondrial", "Thraustochytrium mitochondrial"};
-
 static const char* VERSION = "0.4.0";
-static const char* REPO_URL = "https://github.com/chloe-newt/COAL";
+static const char* SCHEMA = "coal.report/1";
+static const char* REPO_URL = "https://github.com/plumat-coal/COAL";
 static const int HINT_SAMPLE = 200;
-static const double HINT_THRESHOLD = 0.20;
+
+static std::string code_name(int t) {  // CODE_NAMES (names inside a sentence, FIN-C11)
+    switch (t) {
+        case 1: return "standard";
+        case 2: return "vertebrate mitochondrial";
+        case 3: return "yeast mitochondrial";
+        case 4: return "mold, protozoan and coelenterate mitochondrial and Mycoplasma/Spiroplasma";
+        case 5: return "invertebrate mitochondrial";
+        case 6: return "ciliate, dasycladacean and Hexamita nuclear";
+        case 9: return "echinoderm and flatworm mitochondrial";
+        case 10: return "euplotid nuclear";
+        case 11: return "bacterial, archaeal and plant plastid";
+        case 12: return "alternative yeast nuclear";
+        case 13: return "ascidian mitochondrial";
+        case 14: return "alternative flatworm mitochondrial";
+        case 15: return "Blepharisma nuclear";
+        case 16: return "chlorophycean mitochondrial";
+        case 21: return "trematode mitochondrial";
+        case 22: return "Scenedesmus obliquus mitochondrial";
+        case 23: return "Thraustochytrium mitochondrial";
+    }
+    return "";
+}
+
+static std::string app_code_name(int t) {  // APP_CODE_NAMES
+    switch (t) {
+        case 1: return "Standard (nuclear genes of most organisms)";
+        case 2: return "Vertebrate mitochondrial";
+        case 3: return "Yeast mitochondrial";
+        case 4: return "Mold, protozoan and coelenterate mitochondrial; Mycoplasma";
+        case 5: return "Invertebrate mitochondrial";
+        case 6: return "Ciliate, dasycladacean and Hexamita nuclear";
+        case 9: return "Echinoderm and flatworm mitochondrial";
+        case 10: return "Euplotid nuclear";
+        case 11: return "Bacterial, archaeal and plant plastid";
+        case 12: return "Alternative yeast nuclear";
+        case 13: return "Ascidian mitochondrial";
+        case 14: return "Alternative flatworm mitochondrial";
+        case 15: return "Blepharisma nuclear";
+        case 16: return "Chlorophycean mitochondrial";
+        case 21: return "Trematode mitochondrial";
+        case 22: return "Scenedesmus obliquus mitochondrial";
+        case 23: return "Thraustochytrium mitochondrial";
+    }
+    return "";
+}
+
+static const char* as_x_name(char c) {
+    switch (c) {
+        case 'U': return "selenocysteine";
+        case 'O': return "pyrrolysine";
+        case 'B': return "D or N";
+        case 'Z': return "E or Q";
+        case 'J': return "I or L";
+    }
+    return nullptr;
+}
+
+// ------------------------------------------------------------------ small helpers
 
 std::string fmt_n(long long x) {
     std::string s = std::to_string(x < 0 ? -x : x), out;
@@ -38,8 +92,8 @@ static std::string shlex_quote(const std::string& s) {
     if (s.empty()) return "''";
     bool safe = true;
     for (unsigned char c : s)
-        if (!(isalnum(c) || c == '_' || c == '@' || c == '%' || c == '+' || c == '=' || c == ':' || c == ',' ||
-              c == '.' || c == '/' || c == '-') || c > 127) {
+        if (c > 127 || !(isalnum(c) || c == '_' || c == '@' || c == '%' || c == '+' || c == '=' || c == ':' ||
+                         c == ',' || c == '.' || c == '/' || c == '-')) {
             safe = false;
             break;
         }
@@ -62,6 +116,7 @@ std::string shlex_join(const std::vector<std::string>& args) {
 }
 
 static std::string replace_all(std::string s, const std::string& a, const std::string& b) {
+    if (a.empty()) return s;
     size_t p = 0;
     while ((p = s.find(a, p)) != std::string::npos) {
         s.replace(p, a.size(), b);
@@ -70,461 +125,1215 @@ static std::string replace_all(std::string s, const std::string& a, const std::s
     return s;
 }
 
-std::string plain_reason(const std::string& code, const std::string& message) {
-    std::string detail = message;
-    if ((code == "invalid_chars" || code == "no_match")) {
-        size_t p = message.find(": ");
-        if (p != std::string::npos) detail = message.substr(p + 2);
+static std::string basename_of(const std::string& p) {  // os.path.basename
+    size_t i = p.find_last_of("/\\");
+    return i == std::string::npos ? p : p.substr(i + 1);
+}
+
+static std::string strip(const std::string& s) {
+    size_t a = 0, b = s.size();
+    while (a < b && isspace((unsigned char)s[a])) ++a;
+    while (b > a && isspace((unsigned char)s[b - 1])) --b;
+    return s.substr(a, b - a);
+}
+
+static std::string strip_version(const std::string& x) {  // re.sub(r"\.\d+$", "", x)
+    size_t dot = x.rfind('.');
+    if (dot == std::string::npos || dot + 1 >= x.size()) return x;
+    for (size_t i = dot + 1; i < x.size(); ++i)
+        if (!isdigit((unsigned char)x[i])) return x;
+    return x.substr(0, dot);
+}
+
+static bool is_ambiguous_codon(const std::string& codon) {
+    for (char ch : codon) {
+        char c = (char)toupper((unsigned char)ch);
+        if (c == 'U') c = 'T';
+        if (c != 'A' && c != 'C' && c != 'G' && c != 'T') return true;
     }
-    if (code == "count_mismatch" || code == "row_lengths") {
-        // last "(...)" group at the end of the message
-        size_t end = message.find_last_not_of(" \t\n\r");
-        if (end != std::string::npos && message[end] == ')') {
-            size_t open = message.rfind('(', end);
-            if (open != std::string::npos) {
-                std::string inner = message.substr(open + 1, end - open - 1);
-                if (inner.find('(') == std::string::npos && inner.find(')') == std::string::npos) detail = inner;
+    return false;
+}
+
+static Json* field(Json& j, const std::string& k) {
+    for (auto& p : j.o)
+        if (p.first == k) return &p.second;
+    return nullptr;
+}
+
+static std::string sget(const Json& j, const char* k) {
+    const Json* v = j.get(k);
+    return v && v->type == Json::String ? v->s : std::string();
+}
+
+static const std::vector<Json>& msgs_of(const Json& e) {
+    static const std::vector<Json> none;
+    const Json* m = e.get("messages");
+    return m && m->type == Json::Array ? m->a : none;
+}
+
+static Json str_or_null(const std::string& s, bool present) { return present ? Json(s) : Json(); }
+
+// digits at s[i..]: value, advance i; false if none
+static bool read_num(const std::string& s, size_t& i, long long& v) {
+    size_t j = i;
+    v = 0;
+    while (j < s.size() && isdigit((unsigned char)s[j])) v = v * 10 + (s[j++] - '0');
+    if (j == i) return false;
+    i = j;
+    return true;
+}
+
+static bool lit(const std::string& s, size_t& i, const std::string& t) {
+    if (s.compare(i, t.size(), t) != 0) return false;
+    i += t.size();
+    return true;
+}
+
+static std::string token(const std::string& s, size_t& i) {  // \S+
+    size_t j = i;
+    while (j < s.size() && !isspace((unsigned char)s[j])) ++j;
+    std::string t = s.substr(i, j - i);
+    i = j;
+    return t;
+}
+
+// ^pepAlnPos (\d+): (\S+) does not correspond to (\S+)
+static bool parse_mismatch(const std::string& w, long long& col, std::string& aa, std::string& codon) {
+    size_t i = 0;
+    if (!lit(w, i, "pepAlnPos ") || !read_num(w, i, col) || !lit(w, i, ": ")) return false;
+    aa = token(w, i);
+    if (aa.empty() || !lit(w, i, " does not correspond to ")) return false;
+    codon = token(w, i);
+    return !codon.empty();
+}
+
+// ^pepAlnPos (\d+): (\S+) (?:unknown AA type|\([^)]*\) is not checked)
+static bool parse_unknown(const std::string& w, long long& col, std::string& aa) {
+    size_t i = 0;
+    if (!lit(w, i, "pepAlnPos ") || !read_num(w, i, col) || !lit(w, i, ": ")) return false;
+    aa = token(w, i);
+    if (aa.empty() || !lit(w, i, " ")) return false;
+    if (w.compare(i, 15, "unknown AA type") == 0) return true;
+    if (i < w.size() && w[i] == '(') {
+        size_t j = w.find(')', i);
+        return j != std::string::npos && w.compare(j, 16, ") is not checked") == 0;
+    }
+    return false;
+}
+
+static Json warning_message(const std::string& w, bool removed = false) {
+    long long col;
+    std::string aa, codon;
+    Json m = Json::object();
+    if (parse_mismatch(w, col, aa, codon)) {
+        m.set("code", "mismatch");
+        m.set("column", col);
+        m.set("text", "Column " + std::to_string(col) + ": amino acid " + aa + " does not match codon " + codon + ".");
+        m.set("residue", aa);
+        m.set("codon", codon);
+        if (removed) m.set("removed", true);
+        return m;
+    }
+    if (parse_unknown(w, col, aa)) {
+        const char* what = aa.size() == 1 ? as_x_name(aa[0]) : nullptr;
+        m.set("code", "unknown_aa");
+        m.set("column", col);
+        m.set("residue", aa);
+        m.set("text", "Column " + std::to_string(col) + ": '" + aa + "'" + (what ? std::string(" (") + what + ")" : "") +
+                          " is not one of the 20 standard amino acids, so COAL did not check its codon (any codon "
+                          "accepted).");
+        return m;
+    }
+    m.set("code", "warning");
+    m.set("text", "COAL warning: " + strip(w));
+    return m;
+}
+
+static Json notice_message(const std::string& pid, const std::string& n) {
+    std::string rest = n.compare(0, pid.size() + 2, pid + ": ") == 0 ? n.substr(pid.size() + 2) : n;
+    Json m = Json::object();
+    size_t i = 0;
+    long long a = 0, b = 0;
+    // ^protein and DNA are probably unrelated: (\d+) of (\d+) checkable codons do not match
+    if (lit(rest, i, "protein and DNA are probably unrelated: ") && read_num(rest, i, a) && lit(rest, i, " of ") &&
+        read_num(rest, i, b) && lit(rest, i, " checkable codons do not match")) {
+        m.set("code", "suspect_unrelated");
+        m.set("text", std::to_string(a) + " of the " + std::to_string(b) +
+                          " codons COAL could check do not match this protein, so this is almost certainly the "
+                          "wrong DNA for it (or the wrong genetic code). COAL still wrote its row, codon by "
+                          "position, as PAL2NAL does: do not trust it. Run COAL with --strict (in the app: 'Refuse "
+                          "probably-wrong genes') to refuse such genes.");
+        return m;
+    }
+    i = 0;
+    const std::string guess = "position of the gene in the DNA is a guess: ";
+    if (lit(rest, i, guess)) {
+        for (size_t p = i; p <= rest.size(); ++p) {  // lazy .*? then the first alternative that matches
+            size_t q = p;
+            long long nchk = 0, nres = 0, shrt = 0;
+            if (lit(rest, q, "only ") && read_num(rest, q, nchk) && lit(rest, q, " of ") && read_num(rest, q, nres) &&
+                lit(rest, q, " codons have no ambiguous bases")) {
+                m.set("code", "suspect_position");
+                m.set("text", "Only " + std::to_string(nchk) + " of this gene's " + std::to_string(nres) +
+                                  " codons have no unknown bases (N), and no 10-residue stretch of the protein was "
+                                  "found in the DNA, so COAL cannot tell where the gene starts in the longer DNA. "
+                                  "Its row was taken from the start of the DNA (as PAL2NAL does) and may be "
+                                  "shifted: do not trust it. Run COAL with --strict (in the app: 'Refuse "
+                                  "probably-wrong genes') to refuse such genes.");
+                return m;
+            }
+            q = p;
+            if (lit(rest, q, "the gene has only ") && read_num(rest, q, shrt) && lit(rest, q, " codons")) {
+                m.set("code", "suspect_position");
+                m.set("text", "The gene has only " + std::to_string(shrt) +
+                                  " codons, and no 10-residue stretch of the protein was found in the DNA, so COAL "
+                                  "cannot tell where the gene starts in the longer DNA. Its row was taken from the "
+                                  "start of the DNA (as PAL2NAL does) and may be shifted: do not trust it. Run COAL "
+                                  "with --strict (in the app: 'Refuse probably-wrong genes') to refuse such genes.");
+                return m;
             }
         }
     }
-    if (code == "invalid_chars") {
-        size_t p = message.rfind("characters ");
-        detail = p == std::string::npos ? message : message.substr(p + 11);
-    }
-    std::string tpl = "{detail}";
-    if (code == "no_match")
-        tpl = "The protein could not be found in its DNA sequence in any reading frame, even allowing for a few "
-              "wrong codons. Check that this is the right DNA for this protein and the genetic code (-codontable).";
-    else if (code == "invalid_chars")
-        tpl = "The protein alignment contains characters that are not amino acids ({detail}).";
-    else if (code == "empty_protein")
-        tpl = "This protein row contains only gaps.";
-    else if (code == "count_mismatch")
-        tpl = "The protein alignment and the DNA file(s) contain different numbers of sequences ({detail}); every "
-              "protein needs exactly one DNA sequence.";
-    else if (code == "no_sequences")
-        tpl = "No sequences were found in the input files.";
-    else if (code == "row_lengths")
-        tpl = "The protein alignment rows have different lengths ({detail}), so it is not an alignment.";
-    else if (code == "input_format")
-        tpl = "An input file could not be read: {detail}.";
-    else if (code == "file_error")
-        tpl = "A file could not be opened or written: {detail}.";
-    else if (code == "all_failed")
-        tpl = "None of the sequences could be converted, so no output was written.";
-    return replace_all(tpl, "{detail}", detail);
-}
-
-// ---------------------------------------------------------------- Entry
-
-Json Entry::to_json() const {
-    Json j = Json::object();
-    j.set("id", id);
-    j.set("index", index);
-    j.set("dna_id", has_dna_id ? Json(dna_id) : Json());
-    j.set("pairing", pairing.empty() ? Json() : Json(pairing));
-    j.set("status", status);
-    Json ms = Json::array();
-    for (auto& m : messages) {
-        Json x = Json::object();
-        x.set("code", m.code);
-        if (m.column) x.set("column", m.column);
-        x.set("text", m.text);
-        ms.push(x);
-    }
-    j.set("messages", ms);
-    return j;
-}
-
-Entry Entry::from_json(const Json& j) {
-    Entry e;
-    if (auto v = j.get("id")) e.id = v->as_str();
-    if (auto v = j.get("index")) e.index = v->as_int();
-    if (auto v = j.get("dna_id"); v && v->type == Json::String) {
-        e.dna_id = v->s;
-        e.has_dna_id = true;
-    }
-    if (auto v = j.get("pairing")) e.pairing = v->as_str();
-    if (auto v = j.get("status")) e.status = v->as_str();
-    if (auto v = j.get("messages"))
-        for (auto& m : v->a) {
-            Message x;
-            if (auto c = m.get("code")) x.code = c->as_str();
-            if (auto c = m.get("column")) x.column = (int)c->as_int();
-            if (auto c = m.get("text")) x.text = c->as_str();
-            e.messages.push_back(x);
+    i = 0;
+    long long nbad = 0, nres2 = 0, namb = -1;
+    if (lit(rest, i, "no 10-residue segment of the protein was found in the DNA; codons were assigned by position (") &&
+        read_num(rest, i, nbad) && lit(rest, i, " of ") && read_num(rest, i, nres2) && lit(rest, i, " ")) {
+        lit(rest, i, "checkable codons ");
+        bool ok = lit(rest, i, "do not match");
+        size_t save = i;
+        if (ok && !(lit(rest, i, "; ") && read_num(rest, i, namb) && lit(rest, i, " contain N or other ambiguous bases"))) {
+            i = save;
+            namb = -1;
         }
-    return e;
-}
-
-// ---------------------------------------------------------------- RunReport
-
-RunReport::RunReport(const std::vector<std::string>& argv, const std::string& pep,
-                     const std::vector<std::string>& nucs, const std::string& out, const std::string& fmt, int table,
-                     bool nogap, bool nomismatch, bool keep_going, bool keep_entries_)
-    : keep_entries(keep_entries_), t0_(std::chrono::steady_clock::now()), pep_(pep), out_(out), fmt_(fmt),
-      nucs_(nucs), table_(table), nogap_(nogap), nomismatch_(nomismatch), keep_going_(keep_going) {
-    std::vector<std::string> c{"coal"};
-    c.insert(c.end(), argv.begin(), argv.end());
-    command_ = shlex_join(c);
-    std::vector<std::string> p{"pal2nal.pl", pep};
-    p.insert(p.end(), nucs.begin(), nucs.end());
-    p.push_back("-output");
-    p.push_back(fmt);
-    if (table != 1) {
-        p.push_back("-codontable");
-        p.push_back(std::to_string(table));
+        if (ok && lit(rest, i, ")")) {
+            std::string amb = namb >= 0 ? "; " + std::to_string(namb) + " contain N or other ambiguous bases" : "";
+            std::string ask = namb >= 0 && nbad == 0  // Python: `namb and int(nbad) == 0` (namb = the group's text)
+                                  ? "Every codon COAL could check matches, so the placement looks right."
+                                  : "Is this the right DNA for this protein, and the right genetic code?";
+            m.set("code", "no_anchor");
+            m.set("text", "No 10-residue stretch of the protein was found in the DNA, so codons were assigned by "
+                          "position (" + std::to_string(nbad) + " of " + std::to_string(nres2) +
+                              " checkable codons do not match" + amb + "). " + ask);
+            return m;
+        }
     }
-    if (nogap) p.push_back("-nogap");
-    if (nomismatch) p.push_back("-nomismatch");
-    pal2nal_ = shlex_join(p);
+    m.set("code", "warning");
+    m.set("text", "COAL warning: " + strip(rest));
+    return m;
 }
 
-void RunReport::set_inputs(long long n_protein_, const std::vector<long long>& dna_counts) {
-    n_protein = n_protein_;
+static Json failure_message(const std::string& pid, const std::string& code, const std::string& message) {
+    std::string rest = message.compare(0, pid.size() + 2, pid + ": ") == 0 ? message.substr(pid.size() + 2) : message;
+    Json m = Json::object();
+    m.set("code", code);
+    m.set("text", rest);
+    return m;
+}
+
+static bool is_suspect(const std::string& c) { return c == "suspect_unrelated" || c == "suspect_position"; }
+
+static std::string gene_kind(const Json& e) {
+    std::string st = sget(e, "status");
+    const auto& msgs = msgs_of(e);
+    if (st == "failed") {
+        for (auto& m : msgs) {
+            std::string c = sget(m, "code");
+            if (is_suspect(c) || c == "suspect_pairing") return "flagged";
+        }
+        return "excluded";
+    }
+    if (st == "warning") {
+        bool any = false;
+        for (auto& m : msgs)
+            if (sget(m, "code") == "mismatch") {
+                any = true;
+                if (!is_ambiguous_codon(sget(m, "codon"))) return "mismatch";
+            }
+        return any ? "unchecked" : "other";
+    }
+    return st;
+}
+
+static char kind_char(const std::string& k) {
+    if (k == "ok") return 'o';
+    if (k == "mismatch") return 'm';
+    if (k == "unchecked") return 'u';
+    if (k == "other") return 'x';
+    if (k == "flagged") return 'f';
+    if (k == "excluded") return 'e';
+    return 'n';
+}
+
+static std::vector<const Json*> real_mismatches(const Json& e) {
+    std::vector<const Json*> out;
+    for (auto& m : msgs_of(e))
+        if (sget(m, "code") == "mismatch" && !is_ambiguous_codon(sget(m, "codon"))) out.push_back(&m);
+    return out;
+}
+
+static bool has_code(const Json& e, const char* code) {
+    for (auto& m : msgs_of(e))
+        if (sget(m, "code") == code) return true;
+    return false;
+}
+
+static bool fixable(const Json& e) {
+    std::string k = gene_kind(e);
+    if (k == "mismatch") return !has_code(e, "possible_frameshift");
+    if (k == "flagged") return has_code(e, "suspect_unrelated") || !real_mismatches(e).empty();
+    if (k == "not_checked") return has_code(e, "not_written") ? !real_mismatches(e).empty() : true;
+    return k == "excluded";
+}
+
+static long long code_distance(int a, int b) {  // the first part of the app's _code_distance (codons that differ)
+    const GeneticCode* ca = get_code(a);
+    const GeneticCode* cb = get_code(b);
+    long long d = 0;
+    for (int c = 0; c < 64; ++c) d += ca->aa[c] != cb->aa[c];
+    return d;
+}
+
+static void annotate_mismatch_pattern(const std::string& row, Json& e) {
+    std::map<long long, long long> index;
+    long long k = 0;
+    for (size_t c = 0; c < row.size(); ++c)
+        if (row[c] != '-' && row[c] != '.') index[(long long)c + 1] = k++;
+    std::set<long long> idxs;
+    bool all_m = true;
+    Json* msgs = field(e, "messages");
+    if (!msgs) return;
+    std::vector<size_t> mm;
+    for (size_t i = 0; i < msgs->a.size(); ++i) {
+        const Json& m = msgs->a[i];
+        if (sget(m, "code") != "mismatch" || is_ambiguous_codon(sget(m, "codon"))) continue;
+        mm.push_back(i);
+        const Json* col = m.get("column");
+        if (col && col->type == Json::Int && index.count(col->i)) idxs.insert(index[col->i]);
+        std::string r = sget(m, "residue");
+        if (!(r.size() == 1 && toupper((unsigned char)r[0]) == 'M')) all_m = false;
+    }
+    std::vector<long long> idx(idxs.begin(), idxs.end());
+    if (idx.empty()) return;
+    if (idx.size() == 1 && idx[0] == 0 && all_m) {
+        for (size_t i : mm) msgs->a[i].set("start_codon", true);
+        return;
+    }
+    std::vector<std::vector<long long>> runs;
+    std::vector<long long> cur{idx[0]};
+    for (size_t i = 1; i < idx.size(); ++i) {
+        if (idx[i] - cur.back() <= 2) cur.push_back(idx[i]);
+        else {
+            runs.push_back(cur);
+            cur = {idx[i]};
+        }
+    }
+    runs.push_back(cur);
+    size_t bi = 0;
+    for (size_t i = 1; i < runs.size(); ++i)
+        if (runs[i].size() > runs[bi].size()) bi = i;
+    const auto& best = runs[bi];
+    long long span = best.back() - best.front() + 1;
+    bool to_end = best.back() >= k - 2;
+    long long nb = (long long)best.size();
+    if (nb >= 3 && (double)nb / (double)span >= 0.6 && 2 * nb >= (long long)idx.size() && (to_end || nb >= 4)) {
+        long long c0 = 0, c1 = 0;
+        for (auto& [c, v] : index) {
+            if (v == best.front()) c0 = c;
+            if (v == best.back()) c1 = c;
+        }
+        std::string where = to_end ? "to the end of the gene" : "up to column " + std::to_string(c1);
+        Json m = Json::object();
+        m.set("code", "possible_frameshift");
+        m.set("column", c0);
+        m.set("end_column", c1);
+        m.set("text", "The mismatches form one run, from column " + std::to_string(c0) + " " + where +
+                          ": this looks like a missing or extra base (a frameshift) or a small insertion/deletion "
+                          "in the DNA near column " + std::to_string(c0) +
+                          ", not a genetic-code problem. Check the DNA there (a sequencing or assembly error?).");
+        msgs->a.push_back(m);
+    }
+}
+
+// ------------------------------------------------------------------ where a failed gene breaks (app viewer rule)
+
+static bool aa_ok(char aa, const std::string& dna, long long pos, const GeneticCode& code, bool first) {
+    if (pos < 0 || pos + 3 > (long long)dna.size()) return false;
+    if (aa == 'X' || aa == 'B' || aa == 'Z' || aa == 'J' || aa == 'O' || aa == 'U') return true;
+    const uint8_t* iu = iupac_table();
+    uint8_t a = iu[(unsigned char)dna[(size_t)pos]], b = iu[(unsigned char)dna[(size_t)pos + 1]],
+            c = iu[(unsigned char)dna[(size_t)pos + 2]];
+    if ((a | b | c) & 0xF0) return false;
+    uint64_t mask = iupac_triplet_table()[a * 225 + b * 15 + c];
+    if (!mask) return false;
+    uint64_t ok = code.codons[(unsigned char)aa];
+    if (first && aa == 'M') ok |= code.starts;
+    return (mask & ~ok) == 0;
+}
+
+static bool break_event(const std::string& row, const std::string& raw_dna, int table, Json& ev) {
+    const GeneticCode& code = *get_code(table);
+    std::string dna;
+    for (char ch : raw_dna) {
+        if (!isalpha((unsigned char)ch)) continue;
+        char c = (char)toupper((unsigned char)ch);
+        dna += c == 'U' ? 'T' : c;
+    }
+    std::vector<std::pair<long long, char>> res;
+    for (size_t i = 0; i < row.size(); ++i)
+        if (isalpha((unsigned char)row[i])) res.push_back({(long long)i + 1, (char)toupper((unsigned char)row[i])});
+    if (res.empty() || dna.size() < 3) return false;
+    const long long nres = (long long)res.size(), nd = (long long)dna.size();
+    long long want = std::min<long long>(nres, 12), allowed = std::max<long long>(0, want / 4);
+    long long best_off = 0, best_score = -1;
+    for (long long off = 0; off < nd - 2; ++off) {
+        long long score = 0;
+        for (long long k = 0; k < want; ++k) {
+            if (aa_ok(res[(size_t)k].second, dna, off + 3 * k, code, k == 0)) ++score;
+            else if (k + 1 - score > allowed) break;
+        }
+        if (score > best_score) {
+            best_off = off;
+            best_score = score;
+            if (score == want) break;
+        }
+    }
+    auto event = [&](const char* c, long long col, const std::string& text) {
+        ev = Json::object();
+        ev.set("code", c);
+        ev.set("column", col);
+        ev.set("text", text);
+    };
+    if (best_score < std::max(std::min<long long>(3, nres), want - allowed)) {
+        event("inconsistent", res[0].first, "The DNA does not spell the start of this protein in any reading frame.");
+        return true;
+    }
+    long long pos = best_off, k = 0;
+    std::map<long long, std::string> flags;
+    while (k < nres) {
+        long long col = res[(size_t)k].first;
+        char aa = res[(size_t)k].second;
+        if (pos + 3 > nd) {
+            event("missing_dna", col, "The DNA ends before the protein does (at column " + std::to_string(col) + ").");
+            return true;
+        }
+        if (aa_ok(aa, dna, pos, code, k == 0)) {
+            flags[col] = "";
+            pos += 3;
+            ++k;
+            continue;
+        }
+        long long ahead = 0;
+        for (long long j = 1; j <= 5 && k + j < nres; ++j)
+            ahead += aa_ok(res[(size_t)(k + j)].second, dna, pos + 3 * j, code, false);
+        long long window = std::min<long long>(5, nres - k - 1);
+        if (window && ahead >= window - 1) {
+            flags[col] = "mismatch";
+            pos += 3;
+            ++k;
+            continue;
+        }
+        int shifted = 0;
+        bool have = false;
+        for (int s : {-1, 1, -2, 2}) {
+            long long n = std::min<long long>(10, nres - k - 1);
+            if (n <= 0) break;
+            long long hits = 0;
+            for (long long j = 0; j < n; ++j)
+                hits += aa_ok(res[(size_t)(k + 1 + j)].second, dna, pos + 3 + s + 3 * j, code, false);
+            if (hits >= std::max<long long>(1, (long long)(0.8 * (double)n))) {
+                shifted = s;
+                have = true;
+                break;
+            }
+        }
+        if (have) {
+            const char* what = shifted == -1   ? "one base is missing"
+                               : shifted == -2 ? "two bases are missing"
+                               : shifted == 1  ? "there is one extra base"
+                                               : "there are two extra bases";
+            ev = Json::object();
+            ev.set("code", "frameshift");
+            ev.set("column", col);
+            ev.set("shift", (long long)shifted);
+            ev.set("text", "Frameshift at column " + std::to_string(col) + ": " + what +
+                               " in the DNA, so from here on the codons are read out of step.");
+            return true;
+        }
+        flags[col] = "mismatch";
+        pos += 3;
+        ++k;
+    }
+    long long bad_after = 0, first = -1;
+    for (long long i = nres - 1; i >= 0; --i) {
+        auto it = flags.find(res[(size_t)i].first);
+        std::string f = it == flags.end() ? "missing" : it->second;
+        bad_after += (f == "mismatch" || f == "missing");
+        long long n = nres - i;
+        if (f == "mismatch" && n >= 10 && 2 * bad_after > n) first = i;
+    }
+    if (first >= 0) {
+        long long col = res[(size_t)first].first;
+        event("inconsistent", col, "From column " + std::to_string(col) + " on, the DNA no longer spells this protein.");
+        return true;
+    }
+    return false;
+}
+
+// ------------------------------------------------------------------ RunReport
+
+RunReport::RunReport(const std::vector<std::string>& argv, const std::string& pep, const std::vector<std::string>& nucs,
+                     const std::string& out, const std::string& fmt, int table, bool nogap, bool nomismatch,
+                     bool keep_going, bool keep_entries_, bool strict, bool blockonly)
+    : keep_entries(keep_entries_), t0_(std::chrono::steady_clock::now()), argv_(argv), pep_(pep), out_(out), fmt_(fmt),
+      nucs_(nucs), table_(table), nogap_(nogap), nomismatch_(nomismatch), keep_going_(keep_going), strict_(strict),
+      blockonly_(blockonly) {}
+
+void RunReport::set_inputs(const std::vector<std::string>& ids) {
+    ids_ = ids;
+    has_ids_ = true;
+}
+
+void RunReport::set_inputs(const std::vector<std::string>& ids, const std::vector<long long>& dna_counts,
+                           const std::vector<std::string>& dna_file_ids) {
+    set_inputs(ids);
     dna_counts_ = dna_counts;
     has_dna_counts_ = true;
+    dna_file_ids_ = dna_file_ids;
+    has_dna_file_ids_ = true;
 }
 
-void RunReport::set_pairing(const std::string& mode, const std::vector<std::string>* dna_ids,
-                            const std::vector<size_t>*, const std::vector<std::string>& per_seq,
-                            const std::string& ex_prot, const std::string& ex_dna) {
+void RunReport::set_pairing(const std::string& mode, const std::vector<std::string>& per_seq,
+                            const std::vector<std::string>& dna_ids, const std::vector<std::string>& notes) {
     pairing_ = mode;
-    pairing_set = true;
-    dna_ids_ = dna_ids;
     seq_pairing_ = per_seq;
-    ex_prot_ = ex_prot;
-    ex_dna_ = ex_dna;
+    dna_ids_ = dna_ids;
+    has_dna_ids_ = true;
+    for (const std::string& n : notes) {
+        size_t i = 0;
+        long long k = 0, tot = 0;
+        if (lit(n, i, "only ") && read_num(n, i, k) && lit(n, i, " of ") && read_num(n, i, tot) &&
+            lit(n, i, " protein IDs are DNA IDs; ")) {
+            std::string rest = n.substr(i);
+            partial_ = true;
+            std::string eg;
+            size_t p = rest.find("protein '");
+            while (p != std::string::npos) {  // re.search(r"protein '([^']*)' gets DNA '([^']*)'")
+                size_t a = p + 9, b = rest.find('\'', a);
+                if (b != std::string::npos && rest.compare(b, 12, "' gets DNA '") == 0) {
+                    size_t c = b + 12, d = rest.find('\'', c);
+                    if (d != std::string::npos) {
+                        eg = " (for example protein '" + rest.substr(a, b - a) + "' got DNA '" + rest.substr(c, d - c) + "')";
+                        break;
+                    }
+                }
+                p = rest.find("protein '", p + 1);
+            }
+            Json h = Json::object();
+            h.set("code", "partial_id_match");
+            h.set("text", "Only " + std::to_string(k) + " of " + std::to_string(tot) +
+                              " protein IDs were found in the DNA file, so COAL paired the sequences by their order "
+                              "in the files instead" + eg + ". Some proteins are probably paired with the wrong DNA: "
+                              "make the names match (or put both files in the same order) and run again.");
+            pair_hints_.push_back(h);
+        } else if (mode == "normalised" && !n.empty()) {
+            std::string cap = n;
+            cap[0] = (char)toupper((unsigned char)cap[0]);
+            Json h = Json::object();
+            h.set("code", "normalised_ids");
+            h.set("text", "Some protein IDs match their DNA only after tidying them (a '.1'-style version suffix, "
+                          "upper/lower case or database fields such as 'sp|'), so COAL paired those sequences by "
+                          "their tidied IDs. PAL2NAL pairs by file order here, which would have given some proteins "
+                          "the DNA of another gene. " + cap + ".");
+            pair_hints_.push_back(h);
+        }
+    }
 }
 
-static bool parse_warning(const std::string& w, const char* tail, int& col, char& aa, std::string& rest) {
-    // "pepAlnPos <col>: <aa><tail><rest>"
-    const std::string head = "pepAlnPos ";
-    if (w.compare(0, head.size(), head) != 0) return false;
-    size_t p = head.size(), q = p;
-    while (q < w.size() && isdigit((unsigned char)w[q])) ++q;
-    if (q == p || w.compare(q, 2, ": ") != 0 || q + 3 > w.size()) return false;
-    std::string t = tail;
-    if (w.compare(q + 3, t.size(), t) != 0) return false;
-    col = std::stoi(w.substr(p, q - p));
-    aa = w[q + 2];
-    rest = w.substr(q + 3 + t.size());
-    return true;
+void RunReport::set_kind(long long k, char ch) {
+    if (k < (long long)kinds_.size()) kinds_[(size_t)k] = ch;
+    else kinds_ += ch;
 }
 
-const Entry* RunReport::add_sequence(const std::string& pid, const std::vector<std::string>& warnings,
-                                     const std::string& fail_code, const std::string& fail_msg, long long k) {
-    bool failure = !fail_code.empty();
-    if (warnings.empty() && !failure && !keep_entries) {
-        ++n_ok;
+static void add_sorted(std::vector<long long>& v, long long x) {
+    auto it = std::lower_bound(v.begin(), v.end(), x);
+    if (it == v.end() || *it != x) v.insert(it, x);
+}
+
+const Json* RunReport::add_sequence(long long k, const std::string& pid, const std::vector<std::string>& warnings,
+                                    const std::vector<std::string>& notices, const std::string& fail_code,
+                                    const std::string& fail_msg) {
+    while ((long long)kinds_.size() < k) kinds_ += 'n';
+    std::vector<Json> msgs;
+    std::string status;
+    if (!fail_code.empty()) {
+        status = "failed";
+        msgs.push_back(failure_message(pid, fail_code, fail_msg));
+    } else {
+        long long col;
+        std::string aa, codon;
+        if (nomismatch_) {
+            for (auto& w : warnings)
+                if (parse_mismatch(w, col, aa, codon)) {
+                    msgs.push_back(warning_message(w, true));
+                    add_sorted(cols_, col);
+                    if (!is_ambiguous_codon(codon)) add_sorted(real_cols_, col);
+                }
+            for (auto& w : warnings)
+                if (!parse_mismatch(w, col, aa, codon)) msgs.push_back(warning_message(w));
+        } else {
+            for (auto& w : warnings) msgs.push_back(warning_message(w));
+        }
+        for (auto& n : notices) msgs.push_back(notice_message(pid, n));
+        bool has_d = has_dna_ids_ && k < (long long)dna_ids_.size();
+        std::string d = has_d ? dna_ids_[(size_t)k] : "";
+        bool mispaired = pairing_ == "order" && partial_ && has_d && d != pid;
+        if (mispaired) {
+            bool in_dna = std::find(dna_ids_.begin(), dna_ids_.end(), pid) != dna_ids_.end();
+            Json m = Json::object();
+            m.set("code", "suspect_pairing");
+            m.set("dna_id", d);
+            m.set("text", "Paired with DNA '" + d + "' only by its position in the files" +
+                              (in_dna ? " (this protein's own name is also in the DNA file)" : "") +
+                              ": check that this is the right DNA.");
+            msgs.push_back(m);
+        }
+        bool sus = false, mm = false;
+        for (auto& m : msgs) {
+            sus = sus || is_suspect(sget(m, "code"));
+            mm = mm || sget(m, "code") == "mismatch";
+        }
+        if (sus || (mispaired && mm)) {
+            status = "failed";
+            std::stable_sort(msgs.begin(), msgs.end(), [](const Json& a, const Json& b) {
+                auto key = [](const Json& m) {
+                    std::string c = sget(m, "code");
+                    return std::make_pair(!is_suspect(c), c != "suspect_pairing");
+                };
+                return key(a) < key(b);
+            });
+        } else {
+            status = msgs.empty() ? "ok" : "warning";
+        }
+    }
+    if (status == "ok") {
+        set_kind(k, 'o');
         return nullptr;
     }
-    static Entry scratch;
-    Entry e;
-    e.id = pid;
-    e.index = k;
-    bool mismatch = false, unknown = false;
-    for (auto& w : warnings) {
-        int col;
-        char aa;
-        std::string rest;
-        if (parse_warning(w, " does not correspond to ", col, aa, rest) && !rest.empty() &&
-            rest.find(' ') == std::string::npos) {
-            mismatch = true;
-            e.messages.push_back({"mismatch", "Column " + std::to_string(col) + ": " + aa + " does not match codon " +
-                                                  rest, col});
-            continue;
-        }
-        static const std::string not_checked = ") is not checked; any codon is accepted";  // CPP-23 wording
-        if (parse_warning(w, " (", col, aa, rest) && rest.size() >= not_checked.size() &&
-            rest.compare(rest.size() - not_checked.size(), not_checked.size(), not_checked) == 0) {
-            unknown = true;
-            e.messages.push_back({"unknown_aa", "Column " + std::to_string(col) + ": " + aa +
-                                                    " is not a standard amino acid; treated as X (any codon)", col});
-            continue;
-        }
-        e.messages.push_back({"warning", w, 0});
-    }
-    if (failure) {
-        e.messages.push_back({fail_code, plain_reason(fail_code, fail_msg), 0});
-        e.status = "failed";
-    } else {
-        e.status = e.messages.empty() ? "ok" : "warning";
-    }
-    if ((failure || mismatch) && problems.size() < (size_t)HINT_SAMPLE) problems.push_back(k);
-    if (e.status == "ok") ++n_ok;
-    else if (e.status == "warning") ++n_warning;
-    else ++n_failed;
-    n_mismatch += mismatch;
-    n_unknown += unknown;
-    if (dna_ids_ && k >= 0 && (size_t)k < dna_ids_->size()) {
-        e.dna_id = (*dna_ids_)[(size_t)k];
-        e.has_dna_id = true;
-    }
-    e.pairing = !seq_pairing_.empty() && (size_t)k < seq_pairing_.size() ? seq_pairing_[(size_t)k] : pairing_;
-    if (failure) failed_entries_.push_back(e);
-    if (keep_entries) {
-        entries_.push_back(std::move(e));
-        return &entries_.back();
-    }
-    scratch = std::move(e);
-    return &scratch;
+    Json e = Json::object();
+    e.set("id", pid);
+    e.set("index", k);
+    e.set("dna_id", has_dna_ids_ && k < (long long)dna_ids_.size() ? Json(dna_ids_[(size_t)k]) : Json());
+    e.set("pairing", !seq_pairing_.empty() ? Json(seq_pairing_[(size_t)k]) : str_or_null(pairing_, !pairing_.empty()));
+    e.set("status", status);
+    Json arr = Json::array();
+    for (auto& m : msgs) arr.push(m);
+    e.set("messages", arr);
+    entries_[k] = e;
+    set_kind(k, kind_char(gene_kind(e)));
+    return &entries_[k];
 }
 
-void RunReport::fail(const std::string& code, const std::string& message) {
-    has_error = true;
-    error_code = code;
-    error_text = plain_reason(code, message);
-    error_detail = message;
+void RunReport::fail(const std::string& code, const std::string& message, bool has_seq_id) {
+    error_ = Json::object();
+    error_.set("code", code);
+    error_.set("text", message);
+    error_.set("detail", message);
+    has_error_ = true;
+    if (!has_seq_id) {
+        Json e = Json::object();
+        e.set("code", code);
+        e.set("text", message);
+        errors_.push_back(e);
+    }
 }
 
 void RunReport::set_output(const std::string& path, const std::string& sha, long long n) {
+    output_ = Json::object();
+    output_.set("path", str_or_null(path, !path.empty()));
+    output_.set("format", fmt_);
+    output_.set("sha256", str_or_null(sha, !sha.empty()));
+    output_.set("sequences", n);
     has_output_ = true;
-    out_path_ = path;
-    out_sha_ = sha;
-    out_n_ = n;
 }
 
-bool RunReport::needs_hint() const {
-    long long done = n_ok + n_warning + n_failed;
-    long long mism = n_mismatch + n_failed;
-    if (!done || (double)mism / (double)done <= HINT_THRESHOLD || problems.empty() || !pairing_set) return false;
-    return true;
+Json RunReport::checkpoint_state() const {
+    Json s = Json::object();
+    s.set("kinds", kinds_);
+    Json c = Json::array(), r = Json::array();
+    for (long long x : cols_) c.push(x);
+    for (long long x : real_cols_) r.push(x);
+    s.set("cols", c);
+    s.set("real_cols", r);
+    return s;
 }
 
-void RunReport::apply_fits(const std::vector<std::pair<int, int>>& fits) {
-    if (fits.empty()) return;
-    int n = (int)problems.size();
-    int cur = 0;
-    for (auto& f : fits)
-        if (f.first == table_) cur = f.second;
-    // best: most fits, then lowest table number
-    std::pair<int, int> best = fits[0];
-    for (auto& f : fits)
-        if (f.second > best.second || (f.second == best.second && f.first < best.first)) best = f;
-    int t = best.first, k = best.second;
-    if (t == table_ || (double)k < 0.8 * n || (double)(k - cur) < 0.2 * n) return;
-    std::string name = TABLE_NAMES[t];
-    std::string quant = k == n ? "They all fit" : fmt_n(k) + " of the " + fmt_n(n) + " checked fit";
-    Hint h;
-    h.table = t;
-    h.checked = n;
-    h.fit = k;
-    h.fit_current = cur;
-    h.text = "Most sequences fit genetic code " + std::to_string(t) + " (" + name + "). Try -codontable " +
-             std::to_string(t) + ".";
-    h.summary = quant + " genetic code " + std::to_string(t) + " (" + name + "): try -codontable " +
-                std::to_string(t) + ".";
-    hints.push_back(h);
+void RunReport::restore(const Json& state, const std::vector<Json>& nonok, long long completed) {
+    const Json* k = state.get("kinds");
+    kinds_ = k && k->type == Json::String ? k->s : std::string((size_t)completed, 'o');
+    if ((long long)kinds_.size() > completed) kinds_.resize((size_t)completed);
+    cols_.clear();
+    real_cols_.clear();
+    if (const Json* c = state.get("cols"))
+        for (auto& x : c->a) add_sorted(cols_, x.as_int());
+    if (const Json* c = state.get("real_cols"))
+        for (auto& x : c->a) add_sorted(real_cols_, x.as_int());
+    entries_.clear();
+    for (auto& e : nonok) {
+        long long idx = e.get("index") ? e.get("index")->as_int() : -1;
+        if (idx >= 0 && idx < completed) entries_[idx] = e;
+    }
+    resumed_from_ = completed;
+}
+
+long long RunReport::total() const { return has_ids_ ? (long long)ids_.size() : (long long)kinds_.size(); }
+
+long long RunReport::first_fail() const {
+    size_t p = kinds_.find('e');
+    return p == std::string::npos ? -1 : (long long)p;
+}
+
+Json RunReport::entry_view(long long k, int aborted) const {
+    bool ab = aborted < 0 ? !has_output_ : aborted != 0;
+    Json e;
+    auto it = entries_.find(k);
+    if (it != entries_.end()) {
+        e = it->second;
+    } else {
+        std::string st = k < (long long)kinds_.size() && kinds_[(size_t)k] == 'o' ? "ok" : "not_checked";
+        e = Json::object();
+        e.set("id", has_ids_ && k < (long long)ids_.size() ? Json(ids_[(size_t)k]) : Json());
+        e.set("index", k);
+        bool paired = !pairing_.empty();
+        e.set("dna_id", paired && has_dna_ids_ && k < (long long)dna_ids_.size() ? Json(dna_ids_[(size_t)k]) : Json());
+        e.set("pairing", paired ? (!seq_pairing_.empty() ? Json(seq_pairing_[(size_t)k]) : Json(pairing_)) : Json());
+        e.set("status", st);
+        e.set("messages", Json::array());
+    }
+    if (!ab || (k < (long long)kinds_.size() && kinds_[(size_t)k] == 'e')) return e;
+    long long ff = first_fail();
+    Json msgs = Json::array();
+    if (ff >= 0) {
+        std::string fid = sget(entries_.at(ff), "id");
+        Json m = Json::object();
+        m.set("code", k < ff ? "not_written" : "not_reached");
+        m.set("failed_id", fid);
+        msgs.push(m);
+        if (k < ff)
+            for (auto& x : msgs_of(e))
+                if (sget(x, "code") != "suspect_pairing") msgs.push(x);
+    }
+    e.set("status", "not_checked");
+    e.set("messages", msgs);
+    return e;
+}
+
+std::vector<Json> RunReport::all_entries() const {
+    std::vector<Json> v;
+    long long n = total();
+    v.reserve((size_t)n);
+    for (long long k = 0; k < n; ++k) v.push_back(entry_view(k));
+    return v;
+}
+
+std::map<std::string, long long> RunReport::counts(const std::vector<Json>* entries) const {
+    std::map<std::string, long long> c{{"ok", 0}, {"warning", 0}, {"failed", 0}, {"not_checked", 0}};
+    if (entries) {
+        for (auto& e : *entries) c[sget(e, "status")] += 1;
+        return c;
+    }
+    for (char ch : kinds_) {
+        switch (ch) {
+            case 'o': c["ok"]++; break;
+            case 'm': case 'u': case 'x': c["warning"]++; break;
+            case 'f': case 'e': c["failed"]++; break;
+            default: c["not_checked"]++;
+        }
+    }
+    c["not_checked"] += std::max<long long>(0, total() - (long long)kinds_.size());
+    return c;
+}
+
+void RunReport::finish(const RowsFn& rows, const DnaFn& dna, bool aborted) {
+    finished = true;
+    try {
+        finish_impl(rows, dna, aborted);
+    } catch (...) {
+        // extras must never hide the real result
+    }
+}
+
+void RunReport::finish_impl(const RowsFn& rows, const DnaFn& dna, bool aborted) {
+    const long long n = total();
+    std::vector<long long> failed, marks;
+    for (auto& [k, e] : entries_) {
+        if (sget(e, "status") == "failed") {
+            bool col = false;
+            for (auto& m : msgs_of(e)) col = col || (m.get("column") && m.get("column")->type == Json::Int);
+            if (!col) failed.push_back(k);
+        }
+        if (!real_mismatches(e).empty()) marks.push_back(k);
+    }
+    std::set<long long> fset(failed.begin(), failed.begin() + (long long)std::min<size_t>(failed.size(), HINT_SAMPLE));
+    std::set<long long> mset(marks.begin(), marks.end());
+    std::set<long long> need = fset;
+    need.insert(mset.begin(), mset.end());
+    if (!need.empty()) {
+        rows([&](long long k, const std::string&, const std::string& row) {
+            if (need.count(k)) {
+                if (std::find(failed.begin(), failed.end(), k) != failed.end()) {  // (all failed, as Python)
+                    Json ev;
+                    if (break_event(row, dna(k), table_, ev)) {
+                        Json* ms = field(entries_[k], "messages");
+                        ms->a.insert(ms->a.begin(), ev);
+                    }
+                }
+                if (mset.count(k)) annotate_mismatch_pattern(row, entries_[k]);
+            }
+            return k + 1 < n;
+        });
+    }
+    std::vector<Json> view;
+    view.reserve((size_t)n);
+    for (long long k = 0; k < n; ++k) view.push_back(entry_view(k, aborted ? 1 : 0));
+    std::vector<long long> problems;
+    for (long long k = 0; k < n; ++k)
+        if (fixable(view[(size_t)k])) problems.push_back(k);
+    if (problems.empty()) return;
+    std::set<long long> pset(problems.begin(), problems.end());
+    std::vector<long long> tested = problems;
+    for (long long k = 0; k < n && (long long)tested.size() < HINT_SAMPLE; ++k)
+        if (!pset.count(k)) tested.push_back(k);
+    if ((long long)tested.size() > HINT_SAMPLE) tested.resize(HINT_SAMPLE);
+    if (tested.empty()) return;
+    std::set<long long> want(tested.begin(), tested.end());
+    std::map<long long, std::pair<std::string, std::string>> data;  // k -> (id, row)
+    std::map<long long, std::string> dnas;
+    rows([&](long long k, const std::string& pid, const std::string& row) {
+        if (want.count(k)) {
+            data[k] = {pid, row};
+            dnas[k] = dna(k);
+        }
+        return data.size() < want.size();
+    });
+    auto bad_under = [&](int c) {
+        std::set<long long> bad;
+        const GeneticCode* gc = get_code(c);
+        for (long long k : tested) {
+            auto& d = data[k];
+            Threaded it;
+            try {
+                it = thread_one(d.first, d.second, dnas[k], *gc);
+            } catch (const CoalError&) {
+                bad.insert(k);
+                continue;
+            }
+            bool b = false;
+            long long col;
+            std::string aa, codon;
+            for (auto& w : it.warnings)
+                if (parse_mismatch(w, col, aa, codon) && !is_ambiguous_codon(w.substr(w.rfind(' ') + 1))) b = true;
+            for (auto& x : it.notices)
+                if (is_suspect(sget(notice_message(d.first, x), "code"))) b = true;
+            if (b) bad.insert(k);
+        }
+        return bad;
+    };
+    std::set<long long> bad_now = bad_under(table_);
+    long long fits_now = 0;
+    for (long long k : tested) fits_now += !bad_now.count(k);
+    std::vector<std::pair<long long, int>> results;
+    for (int c : supported_tables()) {
+        if (c == table_) continue;
+        std::set<long long> bad = bad_under(c);
+        long long fit = 0, fixed = 0;
+        for (long long k : tested) fit += !bad.count(k);
+        for (long long k : problems) fixed += bad_now.count(k) && !bad.count(k);
+        if (fixed && fit > fits_now) results.push_back({fit, c});
+    }
+    if (results.empty()) return;
+    long long top = 0;
+    for (auto& r : results) top = std::max(top, r.first);
+    std::vector<int> tied;
+    for (auto& r : results)
+        if (r.first == top) tied.push_back(r.second);
+    std::stable_sort(tied.begin(), tied.end(), [&](int a, int b) {
+        return std::make_pair(code_distance(table_, a), a) < std::make_pair(code_distance(table_, b), b);
+    });
+    int c = tied[0];
+    long long nt = (long long)tested.size();
+    std::string name = app_code_name(c);
+    auto do_ = [](long long k) { return k == 0 ? std::string("none do") : k == 1 ? std::string("only 1 does") : std::to_string(k) + " do"; };
+    std::string text;
+    std::string T = std::to_string(table_), C = std::to_string(c);
+    if (nt == n) {
+        std::string who = top == n ? "all " + std::to_string(n) + " sequences match"
+                                   : std::to_string(top) + " of " + std::to_string(n) + " sequences match";
+        text = "Under genetic code " + C + " (" + name + "), " + who + " their protein; under code " + T + ", " +
+               do_(fits_now) + ".";
+    } else {
+        std::string which = (long long)problems.size() >= nt
+                                ? "a sample of the " + std::to_string(problems.size()) + " with problems"
+                                : "all " + std::to_string(problems.size()) + " with problems, then others";
+        text = "COAL tested " + std::to_string(nt) + " of the " + std::to_string(n) + " sequences (" + which +
+               "): under genetic code " + C + " (" + name + "), " + std::to_string(top) +
+               " of them match their protein; under code " + T + ", " + do_(fits_now) + ".";
+    }
+    std::vector<const Json*> starts;
+    for (long long k : problems)
+        for (auto* m : real_mismatches(view[(size_t)k])) starts.push_back(m);
+    bool all_start = !starts.empty();
+    for (auto* m : starts) {
+        const Json* sc = m->get("start_codon");
+        all_start = all_start && sc && sc->type == Json::Bool && sc->b;
+    }
+    if (all_start) {
+        size_t np = pset.size();
+        text = "The only mismatches are at the first codon of " + std::to_string(np) + " sequence" + (np != 1 ? "s" : "") +
+               " (for example " + sget(*starts[0], "codon") +
+               " where the protein starts with M): an alternative start codon, which code " + C + " accepts. " + text;
+    }
+    if (tied.size() > 1) {
+        std::string others;
+        if (tied.size() > 2) {
+            std::string mid;
+            for (size_t i = 1; i + 1 < tied.size(); ++i) mid += (i > 1 ? ", " : "") + std::to_string(tied[i]);
+            others = mid + " and " + std::to_string(tied.back());
+        } else {
+            others = std::to_string(tied[1]);
+        }
+        bool closer = code_distance(table_, c) < code_distance(table_, tied[1]);
+        text += std::string(" Code") + (tied.size() > 2 ? "s" : "") + " " + others + " fit" + (tied.size() > 2 ? "" : "s") + " " +
+                (closer ? "as well, but code " + C + " differs least from code " + T + "."
+                        : std::string("these sequences too: choose the code of the organism and organelle the genes come from."));
+    }
+    text += " Re-run with code " + C + "?";
+    gc_hint_ = Json::object();
+    gc_hint_.set("code", "genetic_code");
+    gc_hint_.set("text", text);
+    gc_hint_.set("suggested_codontable", c);
+    gc_hint_.set("checked", nt);
+    gc_hint_.set("fit", top);
+    gc_hint_.set("fit_current", fits_now);
+    has_gc_hint_ = true;
+}
+
+std::vector<Json> RunReport::id_hints() const {
+    if (partial_ || !(pairing_ == "order" || pairing_.empty()) || !has_ids_ || !has_dna_file_ids_) return {};
+    std::set<std::string> dset(dna_file_ids_.begin(), dna_file_ids_.end());
+    std::vector<std::string> missing;
+    for (auto& p : ids_)
+        if (!dset.count(p)) missing.push_back(p);
+    if (missing.empty()) return {};
+    auto c = counts();
+    long long tot = (long long)ids_.size();
+    bool clean = exit_code == 0 && tot && c["ok"] == tot;
+    std::string verdict = pairing_.empty() ? "COAL stopped before pairing them."
+                          : clean ? "Sequences were paired by their order in the files instead, and every pair "
+                                    "matched codon for codon, so the pairing looks right; renaming makes it safe."
+                                  : "Sequences were therefore paired by their order in the files, which is probably "
+                                    "wrong for the sequences that failed or have warnings.";
+    std::map<std::string, std::string> dnorm;
+    for (auto& d : dna_file_ids_) dnorm.emplace(strip_version(d), d);
+    std::vector<std::string> fix;
+    for (auto& p : missing)
+        if (dnorm.count(strip_version(p))) fix.push_back(p);
+    Json h = Json::object();
+    h.set("code", "id_mismatch");
+    if (!fix.empty() && fix.size() == missing.size()) {
+        const std::string& ex = fix[0];
+        h.set("text", "The protein IDs don't exactly match the DNA IDs: they differ only by a version suffix (for "
+                      "example protein '" + ex + "' vs DNA '" + dnorm[strip_version(ex)] + "'). " + verdict +
+                          " Rename the sequences so the IDs match exactly, for example by removing the '.1'-style "
+                          "version suffixes from the protein alignment ('" + ex + "' -> '" + strip_version(ex) +
+                          "'), then run again.");
+    } else {
+        h.set("text", std::to_string(missing.size()) + " protein ID(s) were not found in the DNA file (for example '" +
+                          missing[0] + "'). " + verdict +
+                          " Check that both files describe the same genes, in the same order.");
+    }
+    return {h};
+}
+
+std::vector<Json> RunReport::hints() const {
+    std::vector<Json> h = pair_hints_;
+    for (auto& x : id_hints()) h.push_back(x);
+    if (has_gc_hint_) h.push_back(gc_hint_);
+    return h;
+}
+
+bool RunReport::completed() const {
+    return (exit_code == 0 || (exit_code == 2 && keep_going_)) && errors_.empty() && has_output_;
+}
+
+std::string RunReport::command() const {
+    std::vector<std::string> parts{"coal", pep_};
+    parts.insert(parts.end(), nucs_.begin(), nucs_.end());
+    if (fmt_ != "fasta") {
+        parts.push_back("-output");
+        parts.push_back(fmt_);
+    }
+    if (table_ != 1) {
+        parts.push_back("-codontable");
+        parts.push_back(std::to_string(table_));
+    }
+    if (nogap_) parts.push_back("-nogap");
+    if (nomismatch_) parts.push_back("-nomismatch");
+    if (blockonly_) parts.push_back("-blockonly");
+    if (strict_) parts.push_back("--strict");
+    if (keep_going_) parts.push_back("--keep-going");
+    if (!out_.empty()) {
+        parts.push_back("-o");
+        parts.push_back(out_);
+    }
+    return shlex_join(parts);
 }
 
 std::vector<std::string> RunReport::summary_lines() const {
-    long long done = n_ok + n_warning + n_failed;
-    long long total = n_protein >= 0 ? n_protein : done;
+    std::map<char, long long> kc;
+    for (char ch : kinds_) kc[ch]++;
+    const long long n = total();
     std::vector<std::string> lines;
-    const Hint* hint = hints.empty() ? nullptr : &hints[0];
-    if (n_mismatch) {
-        std::string s = fmt_n(n_mismatch) + " of " + fmt_n(total) + " sequences " + (n_mismatch == 1 ? "has" : "have") +
-                        " codon mismatches.";
-        if (hint) s += " " + hint->summary;
+    long long k = nomismatch_ ? 0 : kc['m'];
+    if (k) {
+        std::string fate = nomismatch_ ? "removed by -nomismatch" : "kept in the alignment";
+        std::string s = fmt_n(k) + " of " + fmt_n(n) + " sequences " + (k == 1 ? "has" : "have") +
+                        " codons that do not match their amino acid (" + fate + ").";
+        if (has_gc_hint_) s += " " + sget(gc_hint_, "text");
         lines.push_back(s);
     }
-    const auto& failed = failed_entries_;
-    if (!failed.empty()) {
-        const Entry& first = failed[0];
-        std::string left_out;
-        if (keep_going_ && !has_error) left_out = std::string(" and ") + (failed.size() == 1 ? "was" : "were") + " left out";
-        std::string s = seqs((long long)failed.size()) + " of " + fmt_n(total) + " could not be converted" + left_out +
-                        " (first: " + first.id + ": " + first.messages.back().text + ")";
-        if (hint && !n_mismatch) s += " " + hint->summary;
+    k = nomismatch_ ? 0 : kc['u'];
+    if (k)
+        lines.push_back(fmt_n(k) + " of " + fmt_n(n) + " sequences " + (k == 1 ? "has" : "have") +
+                        " codons with unknown or ambiguous bases (e.g. N) that could not be checked: missing "
+                        "sequence data, not a genetic-code problem.");
+    std::vector<long long> fl, ex;
+    for (auto& [i, e] : entries_) {
+        std::string g = gene_kind(e);
+        if (g == "flagged") fl.push_back(i);
+        if (g == "excluded") ex.push_back(i);
+    }
+    if (!fl.empty()) {
+        const Json& first = entries_.at(fl[0]);
+        bool one = fl.size() == 1;
+        lines.push_back(seqs((long long)fl.size()) + " of " + fmt_n(n) + " " + (one ? "was" : "were") +
+                        " written to the output but " + (one ? "is" : "are") + " probably wrong (first: " +
+                        sget(first, "id") + ": " + sget(msgs_of(first)[0], "text") + ") Remove " + (one ? "it" : "them") +
+                        " before analysis, or use --strict to refuse such genes.");
+    }
+    if (!ex.empty()) {
+        const Json& first = entries_.at(ex[0]);
+        const auto& ms = msgs_of(first);
+        std::string left = keep_going_ && errors_.empty() ? std::string(" and ") + (ex.size() == 1 ? "was" : "were") + " left out" : "";
+        std::string why = ms.empty() ? "" : sget(ms.back(), "text"), where;
+        for (auto& m : ms) {
+            std::string c = sget(m, "code");
+            if (c != "frameshift" && c != "missing_dna" && !(c == "inconsistent" && m.get("column"))) {
+                why = sget(m, "text");
+                break;
+            }
+        }
+        for (auto& m : ms)
+            if (m.get("column")) {
+                where = " " + sget(m, "text");
+                break;
+            }
+        std::string s = seqs((long long)ex.size()) + " of " + fmt_n(n) + " could not be converted" + left + " (first: " +
+                        sget(first, "id") + ": " + why + "." + where + ")";
+        if (has_gc_hint_ && (nomismatch_ || !kc['m'])) s += " " + sget(gc_hint_, "text");
         lines.push_back(s);
     }
-    if (has_error && failed.empty()) lines.push_back("The run failed: " + error_text);
-    if (pairing_ == "order" && done) {
-        lines.push_back("Protein and DNA IDs don't match, so sequences were paired by file order. "
-                        "Check that the files list the same genes in the same order.");
-    } else if (pairing_ == "normalised" && done) {
-        long long k = std::count(seq_pairing_.begin(), seq_pairing_.end(), std::string("normalised"));
-        std::string ex = ex_prot_.empty() ? "" : ", e.g. protein " + ex_prot_ + " = DNA " + ex_dna_;
-        lines.push_back(fmt_n(k) + " of " + fmt_n(total) +
-                        " IDs matched only after normalising (version suffix, case or pipe fields)" + ex + ".");
-    }
-    if (n_unknown)
-        lines.push_back(fmt_n(n_unknown) + " of " + fmt_n(total) +
-                        " sequences contain non-standard amino acids (treated as X).");
-    if (has_error && n_protein > 0 && done < n_protein && !failed.empty()) {
-        long long left = n_protein - done;
+    if (!errors_.empty() && ex.empty()) lines.push_back("The run failed: " + sget(errors_[0], "text"));
+    auto c = counts();
+    if ((!errors_.empty() || !ex.empty()) && exit_code != 0 && exit_code != 2 && c["not_checked"]) {
+        long long left = c["not_checked"];
         lines.push_back("The run stopped there: " + seqs(left) + " " + (left == 1 ? "was" : "were") +
-                        " not processed and no output was written.");
+                        " not checked and no output was written.");
     }
+    if (pairing_ == "normalised") {
+        long long kk = 0, j = -1;
+        for (size_t i = 0; i < seq_pairing_.size(); ++i)
+            if (seq_pairing_[i] == "normalised") {
+                ++kk;
+                if (j < 0) j = (long long)i;
+            }
+        std::string eg = j >= 0 && has_ids_ ? ", e.g. protein " + ids_[(size_t)j] + " = DNA " + dna_ids_[(size_t)j] : "";
+        lines.push_back(fmt_n(kk) + " of " + fmt_n(n) + " IDs matched only after normalising (version suffix, case or "
+                        "database fields)" + eg + "; COAL paired by those IDs where PAL2NAL's file order would mispair them.");
+    }
+    long long unk = 0;
+    for (auto& [i, e] : entries_) unk += has_code(e, "unknown_aa");
+    if (unk)
+        lines.push_back(fmt_n(unk) + " of " + fmt_n(n) + " sequences contain non-standard amino acids (U, O, B, Z or J) "
+                        "whose codons were not checked.");
     return lines;
 }
 
-std::string RunReport::methods_text() const {
-    long long n = has_output_ ? out_n_ : n_ok + n_warning + n_failed;
-    int t = table_;
-    std::string code = t == 1 ? "standard genetic code" : std::string(TABLE_NAMES[t]) + " genetic code";
-    std::vector<std::string> opts;
-    if (nogap_) opts.push_back("removing codon columns containing gaps or stop codons (-nogap)");
-    if (nomismatch_) opts.push_back("removing columns with codons that do not match their amino acid (-nomismatch)");
-    std::string opt_txt;
-    if (!opts.empty()) opt_txt = ", " + (opts.size() == 2 ? opts[0] + " and " + opts[1] : opts[0]);
-    std::string skipped;
-    if (n_failed && keep_going_ && !has_error)
-        skipped = " (" + seqs(n_failed) + " that could not be matched to " + (n_failed == 1 ? "its" : "their") +
-                  " DNA " + (n_failed == 1 ? "was" : "were") + " excluded)";
-    std::string verified = "outputs are verified byte-identical to PAL2NAL v14 on the COAL test suite";
-    if (t == 10 || t == 11 || t == 13)
-        verified += " (COAL follows the current NCBI definition of table " + std::to_string(t) +
-                    ", a documented difference)";
-    std::string fname = fmt_ == "fasta" ? "FASTA" : fmt_ == "clustal" ? "CLUSTAL" : fmt_ == "paml" ? "PAML"
-                                                                                   : "codon-table (PAL2NAL '-output codon')";
-    return std::string("Codon alignments were generated with COAL v") + VERSION + " (" + REPO_URL + ") from " +
-           fmt_n(n) + " aligned protein sequence" + (n == 1 ? "" : "s") + " and their coding sequences" + skipped +
-           ", using the " + code + " (NCBI table " + std::to_string(t) + ") and " + fname + " output" + opt_txt +
-           "; " + verified + ".";
+std::string RunReport::methods_text(const Json& rep) const {
+    if (!completed()) return "";
+    const Json* s = rep.get("summary");
+    long long tot = s && s->get("total") ? s->get("total")->as_int() : 0;
+    long long ok = s && s->get("ok") ? s->get("ok")->as_int() : 0;
+    std::string T = std::to_string(table_);
+    std::vector<std::string> parts{
+        "Codon alignments were built with COAL v" + std::string(VERSION) + " (" + REPO_URL +
+        "), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the "
+        "method of PAL2NAL; Suyama et al. 2006), using the " + code_name(table_) + " genetic code (NCBI translation "
+        "table " + T + ")."};
+    std::map<std::string, std::vector<const Json*>> kinds;
+    if (const Json* sq = rep.get("sequences"))
+        for (auto& e : sq->a) kinds[gene_kind(e)].push_back(&e);
+    auto were = [](size_t k) { return std::string(k == 1 ? "was" : "were"); };
+    std::vector<std::string> clauses;
+    if (!kinds["mismatch"].empty())
+        clauses.push_back(std::to_string(kinds["mismatch"].size()) + " contained codons that did not match the aligned "
+                          "amino acid" + (nomismatch_ ? "" : " (kept in the alignment)"));
+    if (!kinds["unchecked"].empty())
+        clauses.push_back(std::to_string(kinds["unchecked"].size()) + " contained codons with unknown or ambiguous bases "
+                          "(e.g. N) that could not be checked" + (nomismatch_ ? "" : " (kept in the alignment)"));
+    if (!kinds["other"].empty()) {
+        std::set<std::string> codes;
+        for (auto* e : kinds["other"])
+            for (auto& m : msgs_of(*e)) codes.insert(sget(m, "code"));
+        std::vector<std::string> why;
+        if (codes.count("unknown_aa"))
+            why.push_back("contained non-standard amino acids (such as U, B or Z) whose codons were not checked");
+        if (codes.count("suspect_pairing")) why.push_back("were paired with their DNA only by their order in the files");
+        bool other = false;
+        for (auto& x : codes) other = other || (x != "unknown_aa" && x != "suspect_pairing");
+        if (other) why.push_back("had other warnings (see the report)");
+        std::string w;
+        if (why.size() == 1) w = why[0];
+        else {
+            w = "had warnings: they ";
+            for (size_t i = 0; i < why.size(); ++i) w += (i ? " or " : "") + why[i];
+        }
+        clauses.push_back(std::to_string(kinds["other"].size()) + " " + w);
+    }
+    if (!kinds["flagged"].empty()) {
+        size_t k = kinds["flagged"].size();
+        clauses.push_back(std::to_string(k) + " " + were(k) + " written to the output but flagged as probably wrong "
+                          "(most likely the wrong DNA, a shifted position or the wrong genetic code); remove " +
+                          (k == 1 ? "it" : "them") + " before analysis");
+    }
+    if (!kinds["excluded"].empty()) {
+        size_t k = kinds["excluded"].size();
+        clauses.push_back(std::to_string(k) + " could not be aligned and " + were(k) + " excluded");
+    }
+    std::string cnt = "Of " + std::to_string(tot) + " sequences, " + std::to_string(ok) + " matched their protein exactly";
+    if (clauses.size() > 1) {
+        cnt += "; ";
+        for (size_t i = 0; i + 1 < clauses.size(); ++i) cnt += (i ? "; " : "") + clauses[i];
+        cnt += "; and " + clauses.back();
+    } else if (clauses.size() == 1) {
+        cnt += (!kinds["flagged"].empty() ? "; " : ", and ") + clauses[0];
+    }
+    parts.push_back(cnt + ".");
+    long long removed = s && s->get("columns_removed") ? s->get("columns_removed")->as_int() : 0;
+    if (nomismatch_ && (!kinds["mismatch"].empty() || !kinds["unchecked"].empty()))
+        parts.push_back(removed ? "The " + std::to_string(removed) + " codon columns holding such codons were removed (-nomismatch)."
+                                : std::string("The alignment columns holding such codons were removed (-nomismatch)."));
+    if (nogap_) parts.push_back("Codon columns containing gaps or stop codons were removed.");
+    std::string cmd = sget(rep, "command");
+    std::vector<std::string> paths;
+    if (const Json* in = rep.get("inputs"))
+        for (auto& x : in->a) paths.push_back(sget(x, "path"));
+    if (const Json* o = rep.get("output"))
+        if (o->type == Json::Object) paths.push_back(sget(*o, "path"));
+    for (auto& p : paths)
+        if (!p.empty()) cmd = replace_all(cmd, p, basename_of(p));
+    if (!cmd.empty()) parts.push_back("Command: " + cmd);
+    std::string out;
+    for (size_t i = 0; i < parts.size(); ++i) out += (i ? " " : "") + parts[i];
+    return out;
 }
 
-Json RunReport::to_json() const {
-    long long done = n_ok + n_warning + n_failed;
-    long long total = n_protein >= 0 ? n_protein : done;
+Json RunReport::to_dict() const {
+    std::vector<Json> entries = all_entries();
+    auto c = counts(&entries);
+    long long n = total();
+    Json inputs = Json::array();
+    auto hash = [&](size_t i, const std::string& p) {
+        std::string h = sha256_file(hash_paths_.size() == nucs_.size() + 1 ? hash_paths_[i] : p);
+        return h.empty() ? Json() : Json(h);
+    };
+    Json pin = Json::object();
+    pin.set("role", "protein");
+    pin.set("path", pep_);
+    pin.set("sha256", hash(0, pep_));
+    pin.set("sequences", has_ids_ ? Json((long long)ids_.size()) : Json());
+    inputs.push(pin);
+    for (size_t i = 0; i < nucs_.size(); ++i) {
+        Json x = Json::object();
+        x.set("role", "dna");
+        x.set("path", nucs_[i]);
+        x.set("sha256", hash(i + 1, nucs_[i]));
+        x.set("sequences", has_dna_counts_ && i < dna_counts_.size() ? Json(dna_counts_[i]) : Json());
+        inputs.push(x);
+    }
+    std::vector<std::string> p2n{"pal2nal.pl", pep_};
+    p2n.insert(p2n.end(), nucs_.begin(), nucs_.end());
+    p2n.push_back("-output");
+    p2n.push_back(fmt_);
+    if (table_ != 1) {
+        p2n.push_back("-codontable");
+        p2n.push_back(std::to_string(table_));
+    }
+    if (nogap_) p2n.push_back("-nogap");
+    if (nomismatch_) p2n.push_back("-nomismatch");
+    if (blockonly_) p2n.push_back("-blockonly");
+    Json summary = Json::object();
+    summary.set("total", n);
+    summary.set("ok", c["ok"]);
+    summary.set("warning", c["warning"]);
+    summary.set("failed", c["failed"]);
+    summary.set("pairing", str_or_null(pairing_, !pairing_.empty()));
+    if (c["not_checked"]) summary.set("not_checked", c["not_checked"]);
+    if (nomismatch_ && has_output_) {
+        summary.set("columns_removed", (long long)cols_.size());
+        long long amb = 0;
+        for (long long x : cols_) amb += !std::binary_search(real_cols_.begin(), real_cols_.end(), x);
+        summary.set("columns_removed_ambiguous", amb);
+    }
     Json d = Json::object();
-    d.set("schema", "coal.report/1");
+    d.set("schema", SCHEMA);
     d.set("coal_version", VERSION);
-    d.set("command", command_);
-    d.set("pal2nal_equivalent", pal2nal_);
+    d.set("source", "coal");
+    d.set("command", command());
+    std::vector<std::string> cl{"coal"};
+    cl.insert(cl.end(), argv_.begin(), argv_.end());
+    d.set("command_line", shlex_join(cl));
+    d.set("pal2nal_equivalent", shlex_join(p2n));
     Json opts = Json::object();
     opts.set("output_format", fmt_);
     opts.set("codontable", table_);
     opts.set("nogap", nogap_);
     opts.set("nomismatch", nomismatch_);
     opts.set("keep_going", keep_going_);
+    opts.set("strict", strict_);
+    opts.set("blockonly", blockonly_);
     d.set("options", opts);
-    Json inputs = Json::array();
-    auto sha_or_null = [](const std::string& p) {
-        std::string h = sha256_file(p);
-        return h.empty() ? Json() : Json(h);
-    };
-    Json pin = Json::object();
-    pin.set("role", "protein");
-    pin.set("path", pep_);
-    pin.set("sha256", sha_or_null(hash_paths_.size() == nucs_.size() + 1 ? hash_paths_[0] : pep_));
-    pin.set("sequences", n_protein >= 0 ? Json(n_protein) : Json());
-    inputs.push(pin);
-    for (size_t i = 0; i < nucs_.size(); ++i) {
-        Json x = Json::object();
-        x.set("role", "dna");
-        x.set("path", nucs_[i]);
-        x.set("sha256", sha_or_null(hash_paths_.size() == nucs_.size() + 1 ? hash_paths_[i + 1] : nucs_[i]));
-        x.set("sequences", has_dna_counts_ ? Json(dna_counts_[i]) : Json());
-        inputs.push(x);
-    }
     d.set("inputs", inputs);
-    Json out = Json::object();
-    if (has_output_) {
-        out.set("path", out_path_.empty() ? Json() : Json(out_path_));
-        out.set("format", fmt_);
-        out.set("sha256", out_sha_.empty() ? Json() : Json(out_sha_));
-        out.set("sequences", out_n_);
-    } else {
-        out.set("path", out_.empty() ? Json() : Json(out_));
-        out.set("format", fmt_);
-        out.set("sha256", Json());
-        out.set("sequences", 0);
-    }
-    d.set("output", out);
-    Json sum = Json::object();
-    sum.set("total", total);
-    sum.set("ok", n_ok);
-    sum.set("warning", n_warning);
-    sum.set("failed", n_failed);
-    sum.set("pairing", pairing_.empty() ? Json() : Json(pairing_));
-    sum.set("not_processed", total ? std::max(0LL, total - done) : 0LL);
-    d.set("summary", sum);
-    Json hs = Json::array();
-    for (auto& h : hints) {
-        Json x = Json::object();
-        x.set("code", "genetic_code");
-        x.set("text", h.text);
-        x.set("suggested_codontable", h.table);
-        x.set("checked", h.checked);
-        x.set("fit", h.fit);
-        x.set("fit_current", h.fit_current);
-        hs.push(x);
-    }
-    d.set("hints", hs);
+    d.set("output", has_output_ ? output_ : Json());
+    d.set("summary", summary);
+    Json h = Json::array();
+    for (auto& x : hints()) h.push(x);
+    d.set("hints", h);
+    Json errs = Json::array();
+    for (auto& x : errors_) errs.push(x);
+    d.set("errors", errs);
     Json sq = Json::array();
-    for (auto& e : entries_) sq.push(e.to_json());
+    for (auto& e : entries) sq.push(e);
     d.set("sequences", sq);
-    double rt = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0_).count();
-    d.set("runtime_seconds", (double)((long long)(rt * 1000 + 0.5)) / 1000.0);
+    double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0_).count();
+    d.set("runtime_seconds", (double)(long long)(secs * 1000.0 + 0.5) / 1000.0);
     d.set("exit_code", exit_code);
     Json st = Json::array();
     for (auto& l : summary_lines()) st.push(l);
     d.set("summary_text", st);
-    d.set("methods_text", methods_text());
-    if (has_error) {
-        Json e = Json::object();
-        e.set("code", error_code);
-        e.set("text", error_text);
-        e.set("detail", error_detail);
-        d.set("error", e);
-    }
-    if (resumed_from >= 0) d.set("resumed_from", resumed_from);
+    d.set("methods_text", methods_text(d));
+    if (has_error_) d.set("error", error_);
+    if (resumed_from_ >= 0) d.set("resumed_from", resumed_from_);
     return d;
-}
-
-Json RunReport::checkpoint_state() const {
-    Json n = Json::object();
-    n.set("ok", n_ok);
-    n.set("warning", n_warning);
-    n.set("failed", n_failed);
-    n.set("mismatch", n_mismatch);
-    n.set("unknown_aa", n_unknown);
-    Json p = Json::array();
-    for (long long k : problems) p.push(k);
-    Json s = Json::object();
-    s.set("n", n);
-    s.set("problems", p);
-    return s;
-}
-
-void RunReport::restore(const Json& state, const std::vector<Entry>& nonok, long long completed,
-                        const std::vector<std::string>& prot_ids) {
-    if (const Json* n = state.get("n")) {
-        n_ok = n->get("ok") ? n->get("ok")->as_int() : 0;
-        n_warning = n->get("warning") ? n->get("warning")->as_int() : 0;
-        n_failed = n->get("failed") ? n->get("failed")->as_int() : 0;
-        n_mismatch = n->get("mismatch") ? n->get("mismatch")->as_int() : 0;
-        n_unknown = n->get("unknown_aa") ? n->get("unknown_aa")->as_int() : 0;
-    }
-    problems.clear();
-    if (const Json* p = state.get("problems"))
-        for (auto& v : p->a) problems.push_back(v.as_int());
-    failed_entries_.clear();
-    for (auto& e : nonok)
-        if (e.status == "failed") failed_entries_.push_back(e);
-    resumed_from = completed;
-    if (keep_entries) {
-        entries_.clear();
-        size_t j = 0;
-        for (long long k = 0; k < completed; ++k) {
-            if (j < nonok.size() && nonok[j].index == k) {
-                entries_.push_back(nonok[j++]);
-                continue;
-            }
-            Entry e;
-            e.id = (size_t)k < prot_ids.size() ? prot_ids[(size_t)k] : "";
-            e.index = k;
-            if (dna_ids_ && (size_t)k < dna_ids_->size()) {
-                e.dna_id = (*dna_ids_)[(size_t)k];
-                e.has_dna_id = true;
-            }
-            e.pairing = !seq_pairing_.empty() ? seq_pairing_[(size_t)k] : pairing_;
-            e.status = "ok";
-            entries_.push_back(e);
-        }
-    }
 }
 
 }  // namespace coal
