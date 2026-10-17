@@ -66,9 +66,33 @@ class Threaded:
 
 # ---------------------------------------------------------------- pairing
 
-def pair_sequences(prot_ids: list[str], dna_ids: list[str], dna_pos: dict | None = None) -> list[int]:
-    """Counts must match; match by ID if every protein ID is a DNA ID, else by order.
-    `dna_pos` (ID -> index) may be passed in to avoid building it again."""
+DB_TAGS = frozenset({"sp", "tr", "gi", "ref", "gb", "emb", "dbj", "pdb", "lcl", "gnl", "pir", "prf",
+                     "tpg", "tpe", "tpd", "bbs", "bbm", "pat"})
+
+
+def _strip_version(x: str) -> str:
+    """AT1G01010.1 -> AT1G01010 (a trailing '.<digits>')."""
+    head, dot, tail = x.rpartition(".")
+    return head if dot and head and tail.isdigit() else x
+
+
+def id_keys(rid: str) -> set[str]:
+    """Normalised forms of an ID used for safe pairing: version suffix removed,
+    lower case; for pipe headers (sp|P12345|NAME_HUMAN) every field except
+    database tags is tried as well."""
+    keys = {_strip_version(rid).lower()}
+    fields = [f for f in rid.split("|") if f]
+    if len(fields) > 1:
+        keys.update(_strip_version(f).lower() for f in fields if f.lower() not in DB_TAGS)
+    return keys
+
+
+def pair_ids(prot_ids: list[str], dna_ids: list[str], dna_pos: dict | None = None):
+    """Pair proteins with DNA records. Returns (dna index per protein, mode, per-sequence modes).
+
+    mode "id": every protein ID is a DNA ID. "normalised": after id_keys()
+    normalisation every protein has exactly one candidate and the pairing is
+    one-to-one (exact matches are preferred). "order": file order (PAL2NAL's rule)."""
     if len(prot_ids) != len(dna_ids):
         raise CoalError(
             f"number of sequences differs (protein: {len(prot_ids)}, DNA: {len(dna_ids)})",
@@ -78,8 +102,41 @@ def pair_sequences(prot_ids: list[str], dna_ids: list[str], dna_pos: dict | None
         raise CoalError("no sequences in input", code="no_sequences")
     pos = dna_pos if dna_pos is not None else {d: i for i, d in enumerate(dna_ids)}
     if all(p in pos for p in prot_ids):
-        return [pos[p] for p in prot_ids]
-    return list(range(len(prot_ids)))
+        return [pos[p] for p in prot_ids], "id", None
+    by_key: dict[str, set[int]] = {}
+    for i, d in enumerate(dna_ids):
+        for k in id_keys(d):
+            by_key.setdefault(k, set()).add(i)
+    idx, modes, used = [], [], set()
+    for p in prot_ids:
+        if p in pos:
+            j, m = pos[p], "id"
+        else:
+            cands = set().union(*(by_key.get(k, ()) for k in id_keys(p)))
+            if len(cands) != 1:
+                break
+            j, m = next(iter(cands)), "normalised"
+        if j in used:
+            break
+        used.add(j)
+        idx.append(j)
+        modes.append(m)
+    else:
+        return idx, "normalised", modes
+    return list(range(len(prot_ids))), "order", None
+
+
+def order_pairing_warning(prot_ids: list[str], dna_ids: list[str]) -> str:
+    pairs = ", ".join(f"{p} <-> DNA {d}" if i == 0 else f"{p} <-> {d}"
+                      for i, (p, d) in enumerate(zip(prot_ids[:2], dna_ids[:2])))
+    more = ", ..." if len(prot_ids) > 2 else ""
+    return (f"IDs don't match, so sequences were paired by file order (protein {pairs}{more}). "
+            f"Check this is what you want.")
+
+
+def pair_sequences(prot_ids: list[str], dna_ids: list[str], dna_pos: dict | None = None) -> list[int]:
+    """Counts must match; DNA record number for each protein (see pair_ids)."""
+    return pair_ids(prot_ids, dna_ids, dna_pos)[0]
 
 
 # ---------------------------------------------------------------- tokens

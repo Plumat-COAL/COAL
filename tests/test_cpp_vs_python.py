@@ -4,6 +4,7 @@ the Python engine on 1,000 random inputs.
 Each input: 1-4 sequences, 5-120 codons, gaps, wrong codons, frameshift digits
 (1/2/4/5), extra DNA before/after the gene, mixed case, ambiguous bases, B/Z/'.'/
 '*' in the protein, the occasional invalid character, shuffled or renamed IDs,
+IDs that only match after normalising (version suffix, pipe header, case),
 any supported genetic code (with the matching or the default -codontable),
 any output format, -nogap / -nomismatch.  Compared: stdout, full stderr (warnings
 and error messages) and exit code.
@@ -105,6 +106,15 @@ def make_case(rng: random.Random):
         rng.shuffle(order)
     elif r < 0.2:
         dna_ids = [f"d{i}" for i in range(nseq)]
+    elif r < 0.25:                                  # version suffixes, shuffled
+        dna_ids = [f"{x}.{rng.randint(1, 3)}" for x in ids]
+        rng.shuffle(order)
+    elif r < 0.3:                                   # pipe headers
+        dna_ids = [f"sp|{x}|{x.upper()}_HUMAN" for x in ids]
+    elif r < 0.33:                                  # case, one ambiguous pair sometimes
+        dna_ids = [x.upper() for x in ids]
+        if nseq > 1 and rng.random() < 0.3:
+            dna_ids[1] = dna_ids[0].lower() + ".2"
     pep = "".join(f">{ids[i]}\n{rows[i]}\n" for i in range(nseq))
     nuc = "".join(f">{dna_ids[i]} desc\n{dnas[i]}\n" for i in order)
     if rng.random() < 0.01:

@@ -62,6 +62,7 @@ Push when happy: `git push -u origin overnight/core`
 
 - run 2 task 1 (summary + genetic-code hints): already done in run 1 (f1373a2); skipped.
 - 2026-10-17 01:43 UTC | run2 task 2 --keep-going | Python 279/279, all suites OK | failing sequences are skipped ('coal: warning: skipped <msg>' in input order), others written in order, exit 2, report/summary list them; works with -j>1 and all formats (paml stages rows so the header count is right); -nogap/-nomismatch columns come from the sequences that succeeded. Decisions: if every sequence fails -> error, exit 1, no output; frameshift column widths still come from the whole protein alignment (a failed row's digit can widen a column for the others).
+- 2026-10-17 01:46 UTC | run2 task 3 safe ID pairing | Python 279/279, C++ 279/279, random 1000/1000 (now incl. version/pipe/case IDs), all suites OK | pair_ids(): exact IDs -> 'id'; else normalised keys (trailing .N removed, lower case, pipe fields minus db tags such as sp/tr/gi) accepted only if every protein has exactly one candidate and the pairing is one-to-one (exact matches preferred) -> 'normalised'; else file order + one warning naming the first two pairs. Per-sequence pairing in the report, summary.pairing overall, summary line. Ported to C++ at the same time so the strict C++/Python stderr comparison stays on. Fixture outputs unchanged (279/279). Decision: the warning uses ASCII '<->' instead of the Unicode arrow, because a Windows console (cp1252) cannot print it.
 
 ## Decisions
 

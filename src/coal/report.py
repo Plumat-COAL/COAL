@@ -102,6 +102,7 @@ class RunReport:
         self.n_protein: int | None = None
         self.dna_counts: list[int] | None = None
         self.pairing = None
+        self.pair_example = None
         self.dna_ids: list[str] | None = None     # DNA ID paired with each protein, input order
         self.dna_index: list[int] | None = None   # DNA record number paired with each protein
         self.seq_pairing: list[str] | None = None  # per-sequence pairing mode (when it varies)
@@ -117,9 +118,11 @@ class RunReport:
     def set_inputs(self, n_protein: int, dna_counts: list[int]):
         self.n_protein, self.dna_counts = n_protein, dna_counts
 
-    def set_pairing(self, mode: str, dna_ids, dna_index, per_seq: list[str] | None = None):
-        """dna_ids: callable k -> DNA ID or a list; dna_index: DNA record number per protein."""
+    def set_pairing(self, mode: str, dna_ids, dna_index, per_seq: list[str] | None = None, example=None):
+        """dna_ids: callable k -> DNA ID or a list; dna_index: DNA record number per protein;
+        example: (protein ID, DNA ID) of one normalised match."""
         self.pairing, self.dna_ids, self.dna_index, self.seq_pairing = mode, dna_ids, dna_index, per_seq
+        self.pair_example = example
 
     def add_sequence(self, pid: str, warnings: list[str], failure: tuple[str, str] | None = None,
                      k: int | None = None):
@@ -226,6 +229,14 @@ class RunReport:
             lines.append(s)
         if self.error and not failed:
             lines.append(f"The run failed: {self.error['text']}")
+        if self.pairing == "order" and done:
+            lines.append("Protein and DNA IDs don't match, so sequences were paired by file order. "
+                         "Check that the files list the same genes in the same order.")
+        elif self.pairing == "normalised" and done:
+            k = sum(1 for m in (self.seq_pairing or []) if m == "normalised")
+            ex = f", e.g. protein {self.pair_example[0]} = DNA {self.pair_example[1]}" if self.pair_example else ""
+            lines.append(f"{_n(k)} of {_n(total)} IDs matched only after normalising (version suffix, "
+                         f"case or pipe fields){ex}.")
         unk = self.n["unknown_aa"]
         if unk:
             lines.append(f"{_n(unk)} of {_n(total)} sequences contain non-standard amino acids (treated as X).")

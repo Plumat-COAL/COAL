@@ -26,7 +26,7 @@ from collections import deque
 
 from .core import (
     CoalError, apply_slices, column_widths, expand, keep_slices, nogap_bad_triplets,
-    pair_sequences, prepare_row, thread_one,
+    order_pairing_warning, pair_ids, prepare_row, thread_one,
 )
 from .seqio import DnaIndex, is_clustal, iter_fasta, read_clustal
 from .tables import get_code
@@ -261,11 +261,19 @@ def run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
                 per_file[f] += 1
             rec.set_inputs(len(ids), per_file)
         # DNA record number for each protein, as a compact array; then free the ID tables
-        pairing = array("q", pair_sequences(ids, dna.ids, dna.pos))
+        idx, mode, per_seq = pair_ids(ids, dna.ids, dna.pos)
+        pairing = array("q", idx)
+        del idx
         nseq = len(pairing)
+        if mode == "order" and warn:
+            warn(order_pairing_warning(ids, dna.ids))
         if rec is not None:
-            mode = "id" if all(p in dna.pos for p in ids) else "order"
-            rec.set_pairing(mode, [dna.ids[j] for j in pairing] if rec.keep_entries else None, pairing)
+            example = None
+            if per_seq:
+                k = per_seq.index("normalised")
+                example = (ids[k], dna.ids[pairing[k]])
+            rec.set_pairing(mode, [dna.ids[j] for j in pairing] if rec.keep_entries else None, pairing, per_seq,
+                            example)
         del ids
         dna.forget_ids()
         jobs = effective_jobs(jobs, dna.total_bytes(), min_nt_per_job)

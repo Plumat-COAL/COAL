@@ -16,6 +16,8 @@
 #include <fstream>
 #include <iostream>
 #include <random>
+#include <set>
+#include <unordered_map>
 #include <string>
 #include <thread>
 #include <vector>
@@ -107,6 +109,109 @@ static std::string apply_slices(const std::string& s, const std::vector<std::pai
     std::string out;
     for (auto& [a, b] : sl) out.append(s, (size_t)a, (size_t)(b - a));
     return out;
+}
+
+// ------------------------------------------------------------------ ID pairing
+// Same rules as pair_ids() in src/coal/core.py.
+
+static std::string strip_version(const std::string& x) {
+    size_t dot = x.rfind('.');
+    if (dot == std::string::npos || dot == 0 || dot + 1 >= x.size()) return x;
+    for (size_t i = dot + 1; i < x.size(); ++i)
+        if (x[i] < '0' || x[i] > '9') return x;
+    return x.substr(0, dot);
+}
+
+static std::string lower(std::string s) {
+    for (char& c : s)
+        if (c >= 'A' && c <= 'Z') c = char(c + 32);
+    return s;
+}
+
+static std::vector<std::string> id_keys(const std::string& rid) {
+    static const std::set<std::string> DB = {"sp", "tr", "gi", "ref", "gb", "emb", "dbj", "pdb", "lcl", "gnl",
+                                             "pir", "prf", "tpg", "tpe", "tpd", "bbs", "bbm", "pat"};
+    std::vector<std::string> keys{lower(strip_version(rid))};
+    std::vector<std::string> fields;
+    size_t a = 0;
+    while (a <= rid.size()) {
+        size_t b = rid.find('|', a);
+        if (b == std::string::npos) b = rid.size();
+        if (b > a) fields.push_back(rid.substr(a, b - a));
+        a = b + 1;
+    }
+    if (fields.size() > 1)
+        for (auto& f : fields)
+            if (!DB.count(lower(f))) keys.push_back(lower(strip_version(f)));
+    return keys;
+}
+
+// Returns mode "id", "normalised" or "order"; fills idx (and per_seq for "normalised").
+static std::string pair_ids(const std::vector<std::string>& prot, const std::vector<std::string>& dna_ids,
+                            const std::unordered_map<std::string, size_t>& pos, std::vector<size_t>& idx,
+                            std::vector<std::string>& per_seq) {
+    idx.assign(prot.size(), 0);
+    per_seq.clear();
+    bool all = true;
+    for (auto& p : prot)
+        if (!pos.count(p)) {
+            all = false;
+            break;
+        }
+    if (all) {
+        for (size_t k = 0; k < prot.size(); ++k) idx[k] = pos.at(prot[k]);
+        return "id";
+    }
+    std::unordered_map<std::string, std::vector<size_t>> by_key;
+    for (size_t i = 0; i < dna_ids.size(); ++i)
+        for (auto& key : id_keys(dna_ids[i])) {
+            auto& v = by_key[key];
+            if (v.empty() || v.back() != i) v.push_back(i);
+        }
+    std::vector<char> used(dna_ids.size(), 0);
+    bool ok = true;
+    for (size_t k = 0; k < prot.size() && ok; ++k) {
+        size_t j;
+        std::string m;
+        auto it = pos.find(prot[k]);
+        if (it != pos.end()) {
+            j = it->second;
+            m = "id";
+        } else {
+            std::set<size_t> cands;
+            for (auto& key : id_keys(prot[k])) {
+                auto f = by_key.find(key);
+                if (f != by_key.end()) cands.insert(f->second.begin(), f->second.end());
+            }
+            if (cands.size() != 1) {
+                ok = false;
+                break;
+            }
+            j = *cands.begin();
+            m = "normalised";
+        }
+        if (used[j]) {
+            ok = false;
+            break;
+        }
+        used[j] = 1;
+        idx[k] = j;
+        per_seq.push_back(m);
+    }
+    if (ok) return "normalised";
+    for (size_t k = 0; k < prot.size(); ++k) idx[k] = k;
+    per_seq.clear();
+    return "order";
+}
+
+static std::string order_pairing_warning(const std::vector<std::string>& prot, const std::vector<std::string>& dna) {
+    std::string pairs;
+    for (size_t i = 0; i < std::min<size_t>(2, prot.size()); ++i) {
+        if (i) pairs += ", ";
+        pairs += prot[i] + (i == 0 ? " <-> DNA " : " <-> ") + dna[i];
+    }
+    return "IDs don't match, so sequences were paired by file order (protein " + pairs +
+           (prot.size() > 2 ? ", ..." : "") + "). Check this is what you want.";
 }
 
 // ------------------------------------------------------------------ pipeline
@@ -295,16 +400,10 @@ static int run(const Options& o) {
         throw CoalError("number of sequences differs (protein: " + std::to_string(ids.size()) +
                         ", DNA: " + std::to_string(dna.size()) + ")");
     if (ids.empty()) throw CoalError("no sequences in input");
-    std::vector<size_t> pairing(ids.size());
-    {
-        bool by_id = true;
-        for (auto& p : ids)
-            if (!dna.pos().count(p)) {
-                by_id = false;
-                break;
-            }
-        for (size_t k = 0; k < ids.size(); ++k) pairing[k] = by_id ? dna.pos().at(ids[k]) : k;
-    }
+    std::vector<size_t> pairing;
+    std::vector<std::string> per_seq;
+    std::string mode = pair_ids(ids, dna.ids(), dna.pos(), pairing, per_seq);
+    if (mode == "order" && !o.quiet) std::cerr << "coal: warning: " << order_pairing_warning(ids, dna.ids()) << '\n';
     dna.forget_ids();
     const long long nseq = (long long)ids.size();
     if (!block) std::vector<std::string>().swap(ids);  // IDs come from pass 2 again

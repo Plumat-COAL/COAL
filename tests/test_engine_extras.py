@@ -115,5 +115,71 @@ class TestKeepGoing(unittest.TestCase):
         self.assertIn("none of the 3 sequences could be converted", err)
 
 
+
+class TestIdPairing(unittest.TestCase):
+    """Protein IDs g0..g4; DNA headers renamed / reordered."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.d = Path(self._tmp.name)
+        write_genes(self.d, 5, seed=6)
+        rc, self.ref, _ = run(self.d, ["pep.fasta", "nuc.fasta"])
+        self.assertEqual(rc, 0)
+        self.recs = (self.d / "nuc.fasta").read_text().split(">")[1:]
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def write_dna(self, names, order=(0, 1, 2, 3, 4)):
+        recs = [names[i] + "\n" + self.recs[i].split("\n", 1)[1] for i in range(5)]
+        (self.d / "nuc.fasta").write_text("".join(">" + recs[i] for i in order), newline="\n")
+
+    def pairing(self):
+        r = json.loads((self.d / "r.json").read_text())
+        return r["summary"]["pairing"], [s["pairing"] for s in r["sequences"]], [s["dna_id"] for s in r["sequences"]]
+
+    def check_normalised(self, names, order):
+        self.write_dna(names, order)
+        rc, out, err = run(self.d, ["pep.fasta", "nuc.fasta", "-o", "o.fa", "--report", "r.json"])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual((self.d / "o.fa").read_text(), self.ref)
+        self.assertNotIn("paired by file order", err)
+        mode, per, dna_ids = self.pairing()
+        self.assertEqual(mode, "normalised")
+        self.assertEqual(dna_ids, [names[i] for i in range(5)])
+        self.assertIn("IDs matched only after normalising", err)
+        return per
+
+    def test_version_suffixes_shuffled(self):
+        per = self.check_normalised([f"g{i}.{i + 1}" for i in range(5)], (4, 2, 0, 1, 3))
+        self.assertEqual(per, ["normalised"] * 5)
+
+    def test_pipe_headers(self):
+        self.check_normalised([f"sp|g{i}|G{i}_HUMAN" for i in range(5)], (1, 0, 2, 3, 4))
+        self.check_normalised([f"tr|P0000{i}|g{i}" for i in range(5)], (3, 1, 2, 0, 4))
+
+    def test_case_insensitive_and_mixed_exact(self):
+        per = self.check_normalised(["g0", "G1", "g2", "G3.1", "g4"], (2, 3, 4, 0, 1))
+        self.assertEqual(per, ["id", "normalised", "id", "normalised", "id"])
+
+    def test_ambiguous_falls_back_to_order_with_warning(self):
+        # g1.1 and g1.2 both normalise to g1: not one-to-one -> file order, with a clear warning
+        self.write_dna(["g0", "g1.1", "g1.2", "g3", "g4"])
+        rc, out, err = run(self.d, ["pep.fasta", "nuc.fasta", "-o", "o.fa", "--report", "r.json"])
+        self.assertIn("coal: warning: IDs don't match, so sequences were paired by file order "
+                      "(protein g0 <-> DNA g0, g1 <-> g1.1, ...). Check this is what you want.", err)
+        self.assertEqual(self.pairing()[0], "order")
+        self.assertEqual((self.d / "o.fa").read_text(), self.ref)   # same order, so same result
+
+    def test_unrelated_ids_use_order(self):
+        self.write_dna([f"n{i}" for i in range(5)])
+        rc, out, err = run(self.d, ["pep.fasta", "nuc.fasta", "--report", "r.json"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(out, self.ref)
+        self.assertIn("paired by file order (protein g0 <-> DNA n0, g1 <-> n1, ...)", err)
+        mode, per, dna_ids = self.pairing()
+        self.assertEqual((mode, per[0], dna_ids[0]), ("order", "order", "n0"))
+
+
 if __name__ == "__main__":
     unittest.main()
