@@ -158,6 +158,7 @@ Push when happy: `git push -u origin overnight/core`
 
 - Reconciled with the brief: overnight/core already had the CMake build, the ordered streaming thread pipeline, the COAL_IMPL=cpp hookup and verified output writers (285 golden checks) from runs 1-2; those are kept, not redone. The local branch overnight/merged (merge with Keanu's integration, not pushed) is left untouched, as the brief says not to merge yet.
 - 2026-10-17 10:40 UTC | CPP-1 build setup | CMake options COAL_WARNINGS_AS_ERRORS / COAL_BUILD_TOOLS; stricter flags. GCC 11 -Werror -Wpedantic -Wshadow clean; clang 19 -Werror clean for Windows (MinGW), macOS (arm64) and Linux targets. MSVC not available on this machine: flags set (/W4 /WX /permissive- /utf-8, _CRT_SECURE_NO_WARNINGS); a clang -Wconversion pass (approximating MSVC C4244/C4267 loss-of-data warnings, with 32-bit long as on Windows) found none.
+- 2026-10-17 10:44 UTC | CPP-2 readers | C++ readers follow the reviewed Python reader (BOM, \n/\r\n/lone \r, '#' before first DNA header, non-letters removed, duplicate/empty IDs, non-ASCII, file:line). New coal-cpp-dump helper + tests/test_cpp_readers.py: 43 edge cases equal to the reference reader; the test fails when the BOM skip / '#' rule are broken (checked, then restored). Golden 285/285 for C++; Python suite unchanged.
 
 ## Decisions
 

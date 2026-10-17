@@ -33,21 +33,20 @@ static std::string no_such_file(const std::string& path) {
     return "[Errno 2] No such file or directory: " + py_repr(path);
 }
 
-static void check_ascii(const std::string& s, long long offset) {
-    for (size_t i = 0; i < s.size(); ++i)
-        if ((unsigned char)s[i] > 127) {
-            static const char* hex = "0123456789abcdef";
-            unsigned char c = (unsigned char)s[i];
-            throw InputError(std::string("'ascii' codec can't decode byte 0x") + hex[c >> 4] + hex[c & 15] +
-                             " in position " + std::to_string(offset + (long long)i) +
-                             ": ordinal not in range(128)");
-        }
+// Text inputs must be ASCII (a UTF-8 BOM is skipped): "<file>:<line>: non-ASCII character",
+// as the Python engine (ENG-h / R2-E6).
+static void check_ascii(const std::string& s, const std::string& path, long long lineno) {
+    for (unsigned char c : s)
+        if (c > 127) throw InputError(path + ":" + std::to_string(lineno) + ": non-ASCII character");
 }
 
 // ------------------------------------------------------------------ LineReader
 
 LineReader::LineReader(const std::string& path) : path_(path), in_(path, std::ios::binary), buf_(1 << 16) {
     if (!in_) throw InputError(no_such_file(path), "file_error");
+    if (fill() && len_ >= 3 && (unsigned char)buf_[0] == 0xEF && (unsigned char)buf_[1] == 0xBB &&
+        (unsigned char)buf_[2] == 0xBF)
+        pos_ = 3;  // UTF-8 byte-order mark
 }
 
 bool LineReader::fill() {
@@ -65,8 +64,8 @@ bool LineReader::next(std::string& line) {
     for (;;) {
         if (pos_ >= len_ && !fill()) {
             if (got) {
-                check_ascii(line, offset_);
                 ++lineno_;
+                check_ascii(line, path_, lineno_);
             }
             return got;
         }
@@ -84,8 +83,8 @@ bool LineReader::next(std::string& line) {
                 if (pos_ >= len_) fill();
                 if (pos_ < len_ && buf_[pos_] == '\n') ++pos_;
             }
-            check_ascii(line, offset_);
             ++lineno_;
+            check_ascii(line, path_, lineno_);
             return true;
         }
     }
@@ -94,11 +93,10 @@ bool LineReader::next(std::string& line) {
 // ------------------------------------------------------------------ protein
 
 bool is_clustal(const std::string& path) {
-    std::ifstream in(path, std::ios::binary);
-    if (!in) throw InputError(no_such_file(path), "file_error");
-    char head[7] = {};
-    in.read(head, 7);
-    return in.gcount() == 7 && std::memcmp(head, "CLUSTAL", 7) == 0;
+    LineReader lr(path);
+    std::string first;
+    lr.next(first);
+    return first.compare(0, 7, "CLUSTAL") == 0;
 }
 
 static std::vector<std::string> split_ws(const std::string& s, size_t from = 0) {
@@ -204,70 +202,112 @@ DnaIndex::DnaIndex(const std::vector<std::string>& paths) : paths_(paths) {
 void DnaIndex::scan(int fno, const std::string& path) {
     std::ifstream in(path, std::ios::binary);
     if (!in) throw InputError(no_such_file(path), "file_error");
+    long long offset = 0;
+    {  // UTF-8 byte-order mark
+        char bom[3] = {};
+        in.read(bom, 3);
+        if (in.gcount() == 3 && (unsigned char)bom[0] == 0xEF && (unsigned char)bom[1] == 0xBB &&
+            (unsigned char)bom[2] == 0xBF)
+            offset = 3;
+        in.clear();
+        in.seekg(offset);
+    }
+    // Classic Mac files: a lone \r also ends a line (decided from the first 64 kB, as the Python engine)
+    bool cr_mode = false;
+    {
+        std::string c(1 << 16, '\0');
+        in.read(&c[0], (std::streamsize)c.size());
+        c.resize((size_t)in.gcount());
+        if (!c.empty() && c.back() == '\r') {
+            char x;
+            if (in.get(x)) c.push_back(x);
+        }
+        size_t r = 0, rn = 0;
+        for (size_t i = 0; i < c.size(); ++i)
+            if (c[i] == '\r') {
+                ++r;
+                if (i + 1 < c.size() && c[i + 1] == '\n') ++rn;
+            }
+        cr_mode = r != rn + (!c.empty() && c.back() == '\r' ? 1 : 0);
+        in.clear();
+        in.seekg(offset);
+    }
+    std::string joined;
+    for (size_t k = 0; k < paths_.size(); ++k) joined += (k ? ", " : "") + paths_[k];
     std::vector<char> buf(1 << 20);
-    long long offset = 0, start = -1;
-    std::string line;  // current line (only the first bytes are kept for long lines)
-    bool line_start = true, header = false, data_seen = false;
-    long long line_off = 0;
+    long long start = -1, lineno = 0, line_off = offset;
+    std::string line;  // header lines only
+    bool line_start = true, header = false, hash = false, data_seen = false, pending_cr = false;
     auto finish_line = [&]() {
+        ++lineno;
         if (header) {
-            // parse the ID from the header line
             size_t i = 1;
             while (i < line.size() && bytes_space((unsigned char)line[i])) ++i;
             size_t j = i;
             while (j < line.size() && !bytes_space((unsigned char)line[j])) ++j;
-            if (j == i) throw InputError(path + ": empty FASTA header");
-            std::string rid = line.substr(i, j - i);
-            check_ascii(rid, line_off + (long long)i);
             if (start >= 0) {
                 fno_.push_back((uint16_t)fno);
                 start_.push_back(start);
                 end_.push_back(line_off);
             }
-            std::string joined;
-            for (size_t k = 0; k < paths_.size(); ++k) joined += (k ? ", " : "") + paths_[k];
+            if (j == i) throw InputError(path + ":" + std::to_string(lineno) + ": empty FASTA header");
+            std::string rid = line.substr(i, j - i);
+            for (unsigned char ch : rid)
+                if (ch > 127) throw InputError(path + ":" + std::to_string(lineno) + ": non-ASCII sequence ID");
             if (pos_.count(rid)) throw InputError(joined + ": duplicate sequence ID " + py_repr(rid));
             pos_[rid] = ids_.size();
             ids_.push_back(rid);
             start = offset;  // byte after the header line
-        } else if (start < 0 && data_seen) {
-            throw InputError(path + ": sequence data before first '>' header");
+        } else if (start < 0 && data_seen && !hash) {
+            throw InputError(path + ":" + std::to_string(lineno) + ": sequence data before first '>' header");
         }
+        line_start = true;
     };
     for (;;) {
         in.read(buf.data(), (std::streamsize)buf.size());
         size_t n = (size_t)in.gcount();
         if (n == 0) break;
         for (size_t k = 0; k < n; ++k) {
+            char c = buf[k];
+            if (pending_cr) {
+                pending_cr = false;
+                if (c == '\n') {  // \r\n: one terminator
+                    ++offset;
+                    finish_line();
+                    continue;
+                }
+                finish_line();
+            }
             if (!line_start && !header && start >= 0) {
                 // inside sequence data: only the end of the line matters
-                const char* nl = (const char*)std::memchr(buf.data() + k, '\n', n - k);
-                if (!nl) {
-                    offset += (long long)(n - k);
-                    break;
+                size_t q = k;
+                if (cr_mode) {
+                    while (q < n && buf[q] != '\n' && buf[q] != '\r') ++q;
+                } else {
+                    const char* nl = (const char*)std::memchr(buf.data() + k, '\n', n - k);
+                    q = nl ? (size_t)(nl - buf.data()) : n;
                 }
-                size_t skip = (size_t)(nl - (buf.data() + k));
-                offset += (long long)skip;
-                k += skip;
+                offset += (long long)(q - k);
+                k = q;
+                if (k >= n) break;
+                c = buf[k];
             }
-            char c = buf[k];
             if (line_start) {
                 line_start = false;
                 line.clear();
                 header = c == '>';
+                hash = c == '#';
                 data_seen = false;
                 line_off = offset;
             }
             ++offset;
             if (header) line.push_back(c);
             else if (!bytes_space((unsigned char)c)) data_seen = true;
-            if (c == '\n') {
-                finish_line();
-                line_start = true;
-            }
+            if (c == '\n') finish_line();
+            else if (cr_mode && c == '\r') pending_cr = true;
         }
     }
-    if (!line_start) finish_line();
+    if (pending_cr || !line_start) finish_line();
     if (start >= 0) {
         fno_.push_back((uint16_t)fno);
         start_.push_back(start);

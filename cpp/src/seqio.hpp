@@ -37,7 +37,7 @@ private:
     std::ifstream in_;
     std::vector<char> buf_;
     size_t pos_ = 0, len_ = 0;
-    long long offset_ = 0, lineno_ = 0;
+    long long lineno_ = 0;
     bool eof_ = false;
 };
 
