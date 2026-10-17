@@ -128,7 +128,14 @@ class TestDiamondPipeline(unittest.TestCase):
             self.assertEqual(len(pairs), 4, pairs)
             self.assertFalse(any("Mm2-PA" in f for f in pairs))
             with open(os.path.join(out, "dropped_pairs.tsv"), encoding="utf-8") as fh:
-                self.assertIn("Mm2-PA", fh.read())
+                tsv = fh.read()
+            self.assertIn("Mm2-PA", tsv)
+            rows = tsv.split("\n")  # R3-A3: one header + one row per dropped pair, each with 3 fields
+            self.assertEqual(rows[-1], "", tsv)
+            self.assertEqual(len(rows), 3, tsv)
+            fields = rows[1].split("\t")
+            self.assertEqual(len(fields), 3, tsv)
+            self.assertTrue(fields[2].startswith("coal: error:"), tsv)
 
 
 if __name__ == "__main__":

@@ -168,10 +168,14 @@ def run_pal2nal_per_family(r, perl, pal2nal, fams, workdir, deadline):
 def run_batched(r, cmd, out_path, deadline):
     r.t0 = time.perf_counter()
     try:
-        res = subprocess.run(cmd + ["-o", out_path], capture_output=True, text=True, encoding="utf-8",
-                             errors="replace", timeout=max(1.0, deadline - time.perf_counter()))
-        if res.returncode not in (0, 2):
-            raise RuntimeError(res.stderr.strip()[:300])
+        # CHANGED(R3-A4): was subprocess.run(timeout=) (SIGKILL of the engine only: orphaned workers, .coal_*.tmp
+        # left); now the app's run_engine_command (SIGTERM, grace, kill; temp files removed).
+        # See overnight/integration/CHANGES.md
+        from coal_app.core import run_engine_command
+        rc, _, err = run_engine_command(cmd + ["-o", out_path], max(1.0, deadline - time.perf_counter()),
+                                        os.path.dirname(os.path.abspath(out_path)))
+        if rc not in (0, 2):
+            raise RuntimeError(err.strip()[:300])
         r.records = read_fasta(out_path)
         r.done = r.total
     except Exception as e:

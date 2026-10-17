@@ -229,6 +229,94 @@ class TestR3A2AmbiguousCodons(RunsDirCase):  # R3-A2
         self.assertTrue(all("genetic code" in x["explanation"] for x in r["problems"]))
 
 
+def _procs_mentioning(text):
+    """PIDs of live, non-zombie processes whose command line contains `text` (Linux /proc)."""
+    found = []
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit() or int(pid) == os.getpid():
+            continue
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as fh:
+                cmd = fh.read().decode("utf-8", "replace")
+            with open(f"/proc/{pid}/stat", "rb") as fh:
+                state = fh.read().decode().rsplit(")", 1)[1].split()[0]
+        except OSError:
+            continue
+        if text in cmd and state != "Z":
+            found.append(int(pid))
+    return found
+
+
+def _wait_gone(text, limit=10.0):
+    import time
+    end = time.monotonic() + limit
+    left = _procs_mentioning(text)
+    while left and time.monotonic() < end:
+        time.sleep(0.2)
+        left = _procs_mentioning(text)
+    return left
+
+
+def _load_demo(name):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(f"r3_{name}", os.path.join(ROOT, "demo", f"{name}.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+@unittest.skipUnless(os.path.isdir("/proc/self") and os.name != "nt", "R3-A4: needs Linux /proc and POSIX signals")
+class TestR3A4DemoTimeoutsStopWorkers(unittest.TestCase):  # R3-A4
+    @classmethod
+    def setUpClass(cls):
+        cls.data = tempfile.mkdtemp(prefix="coal_test_r3a4_")
+        r = subprocess.run([sys.executable, os.path.join(ROOT, "benchmarks", "gen_data.py"), "40000", "600",
+                            cls.data], capture_output=True, text=True, timeout=300)
+        assert r.returncode == 0, r.stderr
+        cls.pep, cls.nuc = os.path.join(cls.data, "pep.fasta"), os.path.join(cls.data, "nuc.fasta")
+
+    @classmethod
+    def tearDownClass(cls):
+        for pid in _procs_mentioning(cls.data):
+            try:
+                os.kill(pid, 9)
+            except OSError:
+                pass
+        shutil.rmtree(cls.data, True)
+
+    def out_dir(self):
+        d = tempfile.mkdtemp(prefix="coal_test_r3a4_out_", dir=self.data)
+        return d
+
+    def test_race_batched_timeout(self):
+        import time
+        race = _load_demo("race")
+        r = race.Racer("COAL", 1)
+        out = self.out_dir()
+        race.run_batched(r, [sys.executable, "-m", "coal", self.pep, self.nuc], os.path.join(out, "o.fasta"),
+                         time.perf_counter() + 0.8)
+        self.assertIsNotNone(r.error)
+        self.assertEqual(_wait_gone(self.data), [])
+        self.assertEqual([n for n in os.listdir(out) if n.startswith(".coal_")], [])
+
+    def test_diamond_run_batch_timeout(self):
+        import argparse
+        dp = _load_demo("diamond_pipeline")
+        recs = dp.read_fasta(self.pep)
+        dna = {rid: seq for rid, _, seq in dp.read_fasta(self.nuc)}
+        items, cds = [], {"a": {}, "b": {}}
+        for (x, _, rx), (y, _, ry) in zip(recs[0::2], recs[1::2]):
+            items.append((x, y, rx, ry))
+            cds["a"][x], cds["b"][y] = dna[x], dna[y]
+        out = self.out_dir()
+        a = argparse.Namespace(a_name="a", b_name="b", out=out, codontable=1, timeout=0.8)
+        res = dp.run_batch(items, a, "", "batch", [], cds)
+        self.assertIsInstance(res, tuple)
+        self.assertIn("did not finish", res[1])
+        self.assertEqual(_wait_gone(self.data), [])
+        self.assertEqual([n for n in os.listdir(out) if n.startswith(".coal_")], [])
+
+
 class TestR3E1AppParsesNewNotice(unittest.TestCase):  # R3-E1
     def test_new_notice_with_ambiguous_count(self):
         line = ("coal: warning: g: no 10-residue segment of the protein was found in the DNA; codons were assigned "

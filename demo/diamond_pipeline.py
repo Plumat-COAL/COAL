@@ -335,7 +335,7 @@ def main(argv=None) -> int:
                 if isinstance(res, dict):
                     codon.update(res)
                 else:
-                    dropped.append((item[0], item[1], res[1]))
+                    dropped.append((item[0], item[1], drop_reason(res[1])))  # CHANGED(R3-A3): was all of stderr
             todo = []
             break
         res = run_batch(todo, a, h, "batch", stderr_log, cds)
@@ -354,7 +354,7 @@ def main(argv=None) -> int:
             with open(os.path.join(a.out, "coal.stderr.txt"), "w", encoding="utf-8") as fh:
                 fh.write("".join(stderr_log))
             return 1
-        dropped.append((hit[0], hit[1], why.strip().splitlines()[-1] if why.strip() else "COAL error"))
+        dropped.append((hit[0], hit[1], drop_reason(why)))
         todo.remove(hit)
         drops += 1
     with open(os.path.join(a.out, "coal.stderr.txt"), "w", encoding="utf-8") as fh:  # CHANGED(APP-18): utf-8
@@ -389,6 +389,17 @@ def main(argv=None) -> int:
 MAX_DROPS = 20
 
 
+def drop_reason(stderr: str) -> str:
+    """One line for dropped_pairs.tsv: COAL's 'coal: error:' line, else its last non-empty line.
+    CHANGED(R3-A3): new; the one-pair-at-a-time branch stored COAL's whole stderr (newlines and warnings made
+    blank / multi-line TSV rows). See overnight/integration/CHANGES.md"""
+    lines = [ln.strip() for ln in stderr.splitlines() if ln.strip()]
+    for ln in lines:
+        if ln.startswith("coal: error:"):
+            return ln.replace("\t", " ")
+    return lines[-1].replace("\t", " ") if lines else "COAL error"
+
+
 def run_batch(items, a, h, tag, stderr_log, cds):
     """One COAL run on `items` (pairs). Returns {id: codon row} on success, else (sequence id COAL named or "",
     its stderr)."""
@@ -413,16 +424,19 @@ def run_batch(items, a, h, tag, stderr_log, cds):
     cmd += ["--", batch_pep, batch_cds]
     if tag == "batch":
         print(f"running COAL on {len(pep)} sequences ({len(items)} pairs)")
+    # CHANGED(R3-A4): was subprocess.run(timeout=) (SIGKILL of the engine only: its workers kept running and its
+    # .coal_*.tmp stayed); now the app's run_engine_command (SIGTERM, grace, kill; temp files removed).
+    # See overnight/integration/CHANGES.md
+    from coal_app.core import run_engine_command
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
-                           timeout=a.timeout)
+        rc, _, err = run_engine_command(cmd, a.timeout, a.out)
     except subprocess.TimeoutExpired:
         return "", "coal: error: COAL did not finish in time\n"
-    stderr_log.append(r.stderr)
-    ok = r.returncode == 0 or (r.returncode == 2 and "--keep-going" in h and "usage:" not in r.stderr)
+    stderr_log.append(err)
+    ok = rc == 0 or (rc == 2 and "--keep-going" in h and "usage:" not in err)
     if not ok or not os.path.exists(batch_out):
-        m = re.search(r"^coal: error: (\S+?): ", r.stderr, re.M)
-        return (m.group(1) if m else ""), r.stderr
+        m = re.search(r"^coal: error: (\S+?): ", err, re.M)
+        return (m.group(1) if m else ""), err
     return {i: seq for i, _, seq in read_fasta(batch_out)}
 
 if __name__ == "__main__":

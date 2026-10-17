@@ -528,6 +528,23 @@ def _remove_engine_temp(folder: str) -> None:
                 pass
 
 
+def run_engine_command(cmd: list, timeout: float, temp_dir: str | None = None) -> tuple[int, str, str]:
+    """CHANGED(R3-A4): new, for the demo scripts (they used subprocess.run(timeout=), which SIGKILLs only the
+    engine: workers orphaned, .coal_*.tmp left). Runs `cmd`, returns (returncode, stdout, stderr); on timeout or
+    interrupt stops the engine as stop_engine does, removes its .coal_*.tmp files in `temp_dir` and re-raises
+    (subprocess.TimeoutExpired on timeout). See overnight/integration/CHANGES.md"""
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8",
+                         errors="replace")
+    try:
+        out, err = p.communicate(timeout=timeout)
+    except BaseException:
+        stop_engine(p)
+        if temp_dir:
+            _remove_engine_temp(temp_dir)
+        raise
+    return p.returncode, out, err
+
+
 def _classify_error(text: str) -> str:
     t = text.lower()
     if "inconsistent" in t or "no match" in t:
