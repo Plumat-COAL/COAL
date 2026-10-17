@@ -129,5 +129,54 @@ class TestR2A2Notices(RunsDirCase):  # R2-A2 / R2-E2
         self.assertNotIn("Nothing went wrong", core.explain(rep))
 
 
+class TestR2A6Stopped(RunsDirCase):  # R2-A6
+    def report(self, code, stderr):
+        p, d = core.example_paths("clean")
+        return core.build_fallback_report(p, d, os.path.join(self.tmp(), "out.fa"), "fasta", 1, False, False, False,
+                                          code, stderr, 0.1)
+
+    def test_killed_or_interrupted_is_not_nothing_went_wrong(self):
+        for code, err in ((143, ""), (-9, ""), (130, "coal: interrupted\n"), (1, "coal: interrupted\n"),
+                          (137, "")):
+            rep = self.report(code, err)
+            text = core.explain(rep)
+            self.assertNotIn("Nothing went wrong", text, code)
+            self.assertIn("stopped before it finished", text, code)
+            self.assertEqual(rep["summary"]["ok"], 0, code)
+            self.assertIsNone(rep["output"])
+
+    def test_timeout_is_not_nothing_went_wrong(self):
+        rep = self.report(1, "coal: error: COAL did not finish within 5 seconds\n")
+        self.assertNotIn("Nothing went wrong", core.explain(rep))
+
+    def test_success_still_says_nothing_went_wrong(self):
+        self.assertIn("Nothing went wrong", core.explain(self.report(0, "")))
+
+
+class TestR2A7UsageError(RunsDirCase):  # R2-A7
+    def test_exit_2_usage_is_not_success(self):
+        p, d = core.example_paths("clean")
+        rep = core.build_fallback_report(p, d, os.path.join(self.tmp(), "o.fa"), "fasta", 1, False, False, False,
+                                         2, "usage: coal [-h] ...\ncoal: error: the following arguments are "
+                                            "required: nuc_fasta\n", 0.1)
+        self.assertEqual(rep["summary"]["ok"], 0)
+        self.assertNotIn("Nothing went wrong", core.explain(rep))
+        self.assertEqual(core.methods_text(rep), "")
+        rr = core.RunResult(2, p, "", rep, "usage: coal", "", "")
+        self.assertFalse(rr.ok)
+
+    def test_file_names_starting_with_dash(self):
+        d = self.tmp()
+        p0, d0 = core.example_paths("clean")
+        shutil.copy(p0, os.path.join(d, "-p.fa"))
+        shutil.copy(d0, os.path.join(d, "-d.fa"))
+        old = os.getcwd()
+        os.chdir(d)
+        self.addCleanup(os.chdir, old)
+        r = tools.codon_align("-p.fa", "-d.fa")
+        self.assertTrue(r["ok"], r)
+        self.assertEqual(r["summary"]["ok"], 8, r)
+
+
 if __name__ == "__main__":
     unittest.main()

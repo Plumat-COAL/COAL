@@ -356,7 +356,27 @@ class RunResult:
 
     @property
     def ok(self) -> bool:
-        return self.exit_code in (0, 2) and self.output_path is not None
+        # CHANGED(R2-A7): was exit 0 or 2 (2 is also argparse's usage error); now see run_completed()
+        return run_completed(self.exit_code, self.stderr, (self.report.get("options") or {}).get("keep_going"))\
+            and self.output_path is not None
+
+
+def run_completed(code, stderr: str = "", keep_going=False) -> bool:
+    """CHANGED(R2-A7): new. True if COAL finished: exit 0, or exit 2 only from a real --keep-going run (never
+    argparse's usage error, which also exits 2). See overnight/integration/CHANGES.md"""
+    if code == 0:
+        return True
+    return (code == 2 and bool(keep_going) and detect_features().keep_going
+            and "usage:" not in (stderr or ""))
+
+
+def was_stopped(code, stderr: str = "") -> bool:
+    """CHANGED(R2-A6): new. Killed by a signal / Ctrl-C (exit < 0 or >= 128, or 'coal: interrupted')."""
+    return code is not None and (code < 0 or code >= 128 or "coal: interrupted" in (stderr or ""))
+
+
+STOPPED_TEXT = ("The run was stopped before it finished (COAL was interrupted, killed or ran out of time), "
+                "so the sequences were not all checked and no alignment was written.")
 
 
 _WARN = re.compile(r"^coal: warning: (\S+) pepAlnPos (\d+): (\S+) does not correspond to (\S+)")
@@ -422,7 +442,7 @@ _EXT = {"fasta": "fasta", "clustal": "aln", "paml": "paml", "codon": "codon.txt"
 def _run_engine(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, report_path, timeout=None):
     f = detect_features()
     timeout = timeout or ENGINE_TIMEOUT
-    cmd = _coal_cmd() + [protein, dna, "-o", out, "-codontable", str(int(table))]
+    cmd = _coal_cmd() + ["-o", out, "-codontable", str(int(table))]
     if fmt != "fasta":
         cmd += ["-output", fmt]
     if nogap:
@@ -433,6 +453,7 @@ def _run_engine(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, re
         cmd.append("--keep-going")
     if report_path and f.report:
         cmd += ["--report", report_path]
+    cmd += ["--", protein, dna]  # CHANGED(R2-A7): was positional first, so a file named '-p.fa' was an option
     t0 = time.perf_counter()
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
@@ -498,7 +519,12 @@ def build_fallback_report(protein, dna, out, fmt, table, nogap, nomismatch, keep
                 failed[sid] = [{"code": _classify_error(rest), "text": rest}]
             else:
                 general.append({"code": _classify_error(msg), "text": msg})
-    aborted = code not in (0, 2)
+    aborted = not run_completed(code, stderr, keep_going)  # CHANGED(R2-A7): was code not in (0, 2)
+    if was_stopped(code, stderr) and not any(g.get("code") == "stopped" for g in general):
+        general.insert(0, {"code": "stopped", "text": STOPPED_TEXT})  # CHANGED(R2-A6)
+    elif aborted and not general and not failed:
+        general.append({"code": "error", "text": "COAL stopped without saying why (exit code "
+                                                 f"{code}); no alignment was written."})
     # CHANGED(APP-6): was "order"/"id" even when COAL stopped before pairing; now None (no pairing sentence). See overnight/app/CHANGES.md
     if aborted and general and not failed:
         pairing = None  # COAL stopped before pairing anything (e.g. counts differ, unreadable input)
@@ -663,7 +689,7 @@ def genetic_code_hint(protein, dna, table, report, work_dir) -> dict | None:
                                        timeout=min(PROBE_TIMEOUT, left))
             if os.path.exists(out):
                 os.remove(out)
-            if code not in (0, 2):
+            if code != 0:  # CHANGED(R2-A7): was (0, 2)
                 continue
             warned = {w[0] for w in map(_parse_warning, err.splitlines()) if w}
             fixed = sum(1 for i in sample if i not in warned)
@@ -782,7 +808,7 @@ def run_coal(protein_path: str, dna_path: str, output_format: str = "fasta", cod
         report["hints"] = hints
         with open(report_path, "w", encoding="utf-8") as fh:
             json.dump(report, fh, indent=2)
-    produced = code in (0, 2) and os.path.exists(out)
+    produced = run_completed(code, err, keep_going) and os.path.exists(out)  # CHANGED(R2-A7)
     return RunResult(
         exit_code=code,
         output_path=out if produced else None,
@@ -971,11 +997,17 @@ def summary_sentence(report: dict) -> str:
     return text
 
 
+def _report_completed(report: dict) -> bool:
+    return run_completed(report.get("exit_code"), "",
+                         (report.get("options") or {}).get("keep_going")) and not any(
+        (e or {}).get("code") == "stopped" for e in report.get("errors") or [])
+
+
 def methods_text(report: dict) -> str:
     """A ready-to-paste methods sentence for a run (report["methods_text"] if the engine wrote one)."""
     if report.get("methods_text"):
         return str(report["methods_text"])
-    if report.get("exit_code") not in (0, 2) or not report.get("output"):
+    if not _report_completed(report) or not report.get("output"):  # CHANGED(R2-A7)
         return ""
     opts = report.get("options") or {}
     s = report.get("summary") or {}
@@ -1028,7 +1060,7 @@ def explain(report: dict) -> str:
     out = report.get("output")
     if out:
         lines.append(f"The codon alignment was written to {out.get('path')} ({out.get('format')} format).")
-    elif code not in (0, 2):
+    elif not _report_completed(report):  # CHANGED(R2-A7): was code not in (0, 2)
         lines.append("No alignment was written, because COAL stopped at an error.")
     for e in report.get("errors") or []:
         lines.append(f"Error: {e.get('text')}")
@@ -1051,7 +1083,7 @@ def explain(report: dict) -> str:
         for h in hints:
             lines.append(f"- {h.get('text')}")
     if (not failed and not warned and not report.get("errors") and not s.get("columns_removed")
-            and not has_problem_hint(hints)):
+            and not has_problem_hint(hints) and _report_completed(report)):  # CHANGED(R2-A6): never when aborted
         lines.append("Nothing went wrong: every protein matched its DNA.")
     elif failed and not any(h.get("code") == "genetic_code" for h in hints):
         lines.append("")
