@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import io
 import os
+import re
 import random
 import shutil
 import subprocess
@@ -279,7 +280,11 @@ class TestHelpGroups(unittest.TestCase):
         for g in ("Core:", "PAL2NAL options:", "Large runs:", "Reporting:"):
             self.assertIn("\n" + g + "\n", h)
         self.assertLess(len(h.splitlines()), 60)
-        self.assertIn("-output, --output-format {fasta,clustal,paml,codon}", h)  # the app reads the formats here
+        # the app reads the formats here (coal_app.core.detect_features). CHANGED(SHIP-17): was an exact 3.13 line;
+        # Python <= 3.12 prints "-output {...}, --output-format {...}", so the check now uses the app's own pattern.
+        m = re.search(r"-output(?:,\s*--[\w-]+)?\s+\{([\w,]+)\}", h)
+        self.assertIsNotNone(m, h)
+        self.assertEqual(m.group(1), "fasta,clustal,paml,codon")
 
     @unittest.skipIf(cpp_binary() is None, "coal-cpp not built")
     def test_cpp_help_and_spellings(self):
