@@ -41,6 +41,9 @@ RUN_WINDOW, RUN_MIN, RUN_MAX = 24, 4, 8
 _NON_ACGT = re.compile("[^ACGT]")
 
 
+MISMATCH_WARNING = " does not correspond to "  # CHANGED(ENG-i2): new constant, used to filter
+
+
 class CoalError(Exception):
     pass
 
@@ -53,13 +56,17 @@ class Threaded:
     dna: str                 # matched DNA, original case
     warnings: list[str] = field(default_factory=list)
     mismatch_cols: set[int] = field(default_factory=set)   # 1-based alignment columns
+    # CHANGED(ENG-c): new field; notices that -q does not suppress. See overnight/engine-fixes/CHANGES.md
+    notices: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------- pairing
 
-def pair_sequences(prot_ids: list[str], dna_ids: list[str], dna_pos: dict | None = None) -> list[int]:
+def pair_sequences(prot_ids: list[str], dna_ids: list[str], dna_pos: dict | None = None,
+                   warn=None) -> list[int]:
     """Counts must match; match by ID if every protein ID is a DNA ID, else by order.
-    `dna_pos` (ID -> index) may be passed in to avoid building it again."""
+    `dna_pos` (ID -> index) may be passed in to avoid building it again.
+    `warn` is called when some (but not all) protein IDs are DNA IDs."""
     if len(prot_ids) != len(dna_ids):
         raise CoalError(
             f"number of sequences differs (protein: {len(prot_ids)}, DNA: {len(dna_ids)})"
@@ -69,6 +76,13 @@ def pair_sequences(prot_ids: list[str], dna_ids: list[str], dna_pos: dict | None
     pos = dna_pos if dna_pos is not None else {d: i for i, d in enumerate(dna_ids)}
     if all(p in pos for p in prot_ids):
         return [pos[p] for p in prot_ids]
+    # CHANGED(ENG-d): was silent order pairing; now warns when some but not all IDs match.
+    # See overnight/engine-fixes/CHANGES.md
+    hits = sum(p in pos for p in prot_ids)
+    if warn and hits:
+        p, d = next((p, d) for p, d in zip(prot_ids, dna_ids) if p != d)
+        warn(f"only {hits} of {len(prot_ids)} protein IDs are DNA IDs; pairing sequences by order "
+             f"instead (e.g. protein '{p}' gets DNA '{d}')")
     return list(range(len(prot_ids)))
 
 
@@ -302,10 +316,24 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int) -> Threaded:
     if not anchors:
         raise CoalError(f"{seq_id}: protein and DNA are inconsistent (no match found)")
     pattern, col = [], 1
+    found_any = False
+    expect = -1  # where this anchor starts if the previous anchors' matches are the real ones
     for k, a in enumerate(anchors):
         at = _tokens(a, ANCHOR_START if k == 0 else NORMAL, col)
-        if _find(target, at) < 0:
+        # CHANGED(ENG-e): was a full _find (regex compile + scan from the DNA start) for every
+        # anchor (quadratic); now tries the expected position first, which proves the anchor
+        # occurs, and only searches the whole DNA if it is not there. Same result.
+        # See overnight/engine-fixes/CHANGES.md
+        if expect >= 0 and _matches_at(table, dna, expect, at):
+            hit = expect
+        else:
+            hit = _find(target, at)
+        if hit < 0:
             at = [("w", 3 if t[0] == "r" else t[1], t[2]) for t in at]
+            expect = expect + _length(at) if expect >= 0 else -1
+        else:
+            found_any = True
+            expect = hit + _length(at)
         pattern += at
         col += len(a)
     s = _find(target, [("n", t[1], t[2]) if t[0] == "w" else t for t in pattern])
@@ -323,10 +351,21 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int) -> Threaded:
         codon = res.dna[pos:pos + 3]
         mode = ANCHOR_START if (first and aa == "M") else NORMAL
         if not codon_ok(table, codon.upper().replace("U", "T"), aa, mode):
-            res.warnings.append(f"pepAlnPos {c}: {row[c - 1]} does not correspond to {codon}")
+            res.warnings.append(f"pepAlnPos {c}: {row[c - 1]}{MISMATCH_WARNING}{codon}")
             res.mismatch_cols.add(c)
         first = False
         pos += 3
+    # CHANGED(ENG-c): was success whenever the wildcard pattern fit (unrelated protein and DNA
+    # gave exit 0); now > half the codons mismatching is an error, and no anchor matching
+    # gives a notice. See overnight/engine-fixes/CHANGES.md
+    nres = sum(1 for t in toks if t[0] == "r")
+    nbad = len(res.mismatch_cols)
+    if 2 * nbad > nres:
+        raise CoalError(f"{seq_id}: protein and DNA are inconsistent "
+                        f"({nbad} of {nres} codons do not match the protein)")
+    if not found_any:
+        res.notices.append(f"{seq_id}: no 10-residue segment of the protein was found in the DNA; "
+                           f"codons were assigned by position ({nbad} of {nres} do not match)")
     return res
 
 
@@ -426,8 +465,12 @@ def codon_align(
     lengths = {len(s) for _, s in proteins}
     if len(lengths) > 1:
         raise CoalError(f"protein alignment rows have different lengths: {sorted(lengths)}")
-    idx = pair_sequences([p[0] for p in proteins], [d[0] for d in dnas])
+    pair_warn: list[str] = []  # CHANGED(ENG-d): partial-ID-match warning added to warnings
+    idx = pair_sequences([p[0] for p in proteins], [d[0] for d in dnas], warn=pair_warn.append)
     items = [thread_one(pid, row, dnas[j][1], table) for (pid, row), j in zip(proteins, idx)]
     rows = build_alignment(items, nogap=nogap, nomismatch=nomismatch)
-    warnings = [f"{it.seq_id} {w}" for it in items for w in it.warnings]
+    warnings = [f"{it.seq_id} {w}" for it in items for w in it.warnings
+                if not (nomismatch and MISMATCH_WARNING in w)]  # CHANGED(ENG-i2): as PAL2NAL
+    warnings += [n for it in items for n in it.notices]  # CHANGED(ENG-c): notices included
+    warnings = pair_warn + warnings
     return [(it.seq_id, r) for it, r in zip(items, rows)], warnings

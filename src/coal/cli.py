@@ -8,6 +8,8 @@ existing pipelines (only '-output fasta' is implemented so far).
 from __future__ import annotations
 
 import argparse
+import os
+import signal
 import sys
 
 from . import __version__
@@ -15,6 +17,10 @@ from .core import CoalError
 from .pipeline import run
 from .seqio import InputFormatError
 from .tables import SUPPORTED
+
+
+def _on_sigterm(signum, frame):
+    raise SystemExit(128 + signum)
 
 
 def main(argv=None) -> int:
@@ -41,9 +47,25 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
 
     warn = None if args.quiet else (lambda w: print(f"coal: warning: {w}", file=sys.stderr))
+    # CHANGED(ENG-c): new; notices are printed even with -q. See overnight/engine-fixes/CHANGES.md
+    notice = lambda w: print(f"coal: warning: {w}", file=sys.stderr)  # noqa: E731
+    # CHANGED(ENG-f): was default signal handling (SIGTERM left .coal_*.tmp files; Ctrl-C printed a
+    # traceback; a closed stdout pipe gave "[Errno 32] Broken pipe", exit 1); now SIGTERM -> SystemExit
+    # (cleanup runs, exit 143), Ctrl-C -> "coal: interrupted", exit 130, broken pipe -> silent exit 141.
+    # See overnight/engine-fixes/CHANGES.md
+    signal.signal(signal.SIGTERM, _on_sigterm)
     try:
         run(args.pep_aln, args.nuc_fasta, out_path=args.out, table=args.codontable,
-            nogap=args.nogap, nomismatch=args.nomismatch, jobs=args.jobs, warn=warn)
+            nogap=args.nogap, nomismatch=args.nomismatch, jobs=args.jobs, warn=warn, notice=notice)
+    except KeyboardInterrupt:
+        print("coal: interrupted", file=sys.stderr)
+        return 130
+    except BrokenPipeError:
+        try:  # stop Python from reporting the pipe again when it flushes stdout at exit
+            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        except (OSError, ValueError):
+            pass
+        return 141
     except (CoalError, InputFormatError, UnicodeDecodeError, OSError) as e:
         print(f"coal: error: {e}", file=sys.stderr)
         return 1
