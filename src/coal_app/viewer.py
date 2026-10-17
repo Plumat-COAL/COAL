@@ -187,15 +187,35 @@ def diagnose(protein_row: str, dna: str, codontable: int = 1) -> dict:
             pos += 3 + shifted
             k += 1
             continue
-        # neither: the DNA stops matching for good
+        # CHANGED(R2-A12): was "the DNA stops matching for good" here (a cluster of TGA/ATA mismatches under the
+        # wrong code made engine-aligned genes "Failed"); now no shift signature = an in-frame mismatch, and a
+        # break is only called below when most of the rest of the gene mismatches. See overnight/integration/CHANGES.md
+        out["cells"][col] = (codon, "mismatch")
+        pos += 3
+        k += 1
+    if not out["events"]:
+        _call_break(res, out)
+    return out
+
+
+BREAK_MIN_CODONS = 10  # a break needs at least this many codons after it, more than half of them mismatching
+
+
+def _call_break(res, out) -> None:
+    """Add an 'inconsistent' event at the first column from which more than half of the remaining (at least
+    BREAK_MIN_CODONS) codons do not match, if there is one."""
+    flags = [out["cells"].get(col, ("", "missing"))[1] for col, _ in res]
+    bad_after = 0
+    first = None
+    for i in range(len(flags) - 1, -1, -1):
+        bad_after += flags[i] in ("mismatch", "missing")
+        n = len(flags) - i
+        if flags[i] == "mismatch" and n >= BREAK_MIN_CODONS and 2 * bad_after > n:
+            first = i
+    if first is not None:
+        col = res[first][0]
         out["events"].append({"code": "inconsistent", "column": col,
                               "text": f"From column {col} on, the DNA no longer spells this protein."})
-        for col2, a2 in res[k:]:
-            c2 = dna[pos:pos + 3]
-            out["cells"][col2] = (c2.ljust(3, " "), "mismatch" if not _ok(a2, c2, code, starts, False) else "")
-            pos += 3
-        break
-    return out
 
 
 # ---------------------------------------------------------------- model
@@ -508,8 +528,20 @@ def main(argv=None) -> int:
     ap.add_argument("--max-cols", type=int, default=MAX_COLS)
     ap.add_argument("-o", "--out", required=True, help="output HTML file")
     a = ap.parse_args(argv)
+    report = a.report
+    codon = a.codon
+    if codon is None and report is None and a.dna:
+        # CHANGED(R2-A12): was every gene diagnosed by the viewer alone (it called engine-aligned genes "Failed");
+        # now COAL itself is run on the inputs, and the viewer only diagnoses genes COAL rejected.
+        from . import core
+        try:
+            r = core.run_coal(a.protein, a.dna, codontable=a.codontable or 1, probe_codes=False)
+            codon, report = r.output_path, r.report
+        except (OSError, ValueError) as e:
+            print(f"coal viewer: note: could not run COAL ({e}); showing the viewer's own placement",
+                  file=sys.stderr)
     try:
-        page = view(a.protein, a.codon, a.report, a.dna, a.codontable, True, a.max_seqs, a.max_cols)
+        page = view(a.protein, codon, report, a.dna, a.codontable, True, a.max_seqs, a.max_cols)
     except (OSError, ValueError) as e:
         print(f"coal viewer: error: {e}", file=sys.stderr)
         return 1

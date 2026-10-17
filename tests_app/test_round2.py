@@ -317,5 +317,50 @@ class TestR2A4NoOrphans(unittest.TestCase):  # R2-A4
         self.assertEqual(_wait_gone(self.data), [])
 
 
+class TestR2A12ViewerNoFalseFailures(RunsDirCase):  # R2-A12
+    def test_mito_code1_diagnose_calls_no_break(self):
+        from coal_app import viewer
+        p, d = core.example_paths("mito")
+        dna = dict(viewer.read_alignment(d))
+        for pid, row in viewer.read_alignment(p):
+            ev = viewer.diagnose(row, dna[pid], 1)["events"]
+            self.assertEqual(ev, [], pid)
+
+    def test_standalone_viewer_runs_the_engine(self):
+        import subprocess, sys
+        p, d = core.example_paths("mito")
+        out = os.path.join(self.tmp(), "v.html")
+        r = subprocess.run([sys.executable, "-m", "coal_app.viewer", p, "--dna", d, "--codontable", "1", "-o", out],
+                           capture_output=True, text=True, timeout=120,
+                           env=dict(os.environ, COAL_RUNS_DIR=core.RUNS_DIR))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        with open(out, encoding="utf-8") as fh:
+            page = fh.read()
+        self.assertNotIn("Failed", page)
+        self.assertNotIn("no longer spells", page)
+        self.assertNotIn("COAL wrote no codon alignment", page)
+
+    def test_engine_aligned_gene_is_never_failed(self):
+        from coal_app import viewer
+        p, d = core.example_paths("mito")
+        rep = {"sequences": [{"id": pid, "status": "warning", "messages": []}
+                             for pid, _ in viewer.read_alignment(p)]}
+        rows, _, _ = viewer.build_rows(viewer.read_alignment(p), None, rep, viewer.read_alignment(d), 1)
+        self.assertNotIn("failed", {r["status"] for r in rows})
+
+    def test_real_frameshift_and_wrong_dna_still_found(self):
+        from coal_app import viewer
+        p, d = core.example_paths("one_broken_gene")
+        prot, dna = dict(viewer.read_alignment(p)), dict(viewer.read_alignment(d))
+        ev = viewer.diagnose(prot["OG0001_sp14"], dna["OG0001_sp14"])["events"]
+        self.assertEqual(ev[0]["code"], "frameshift")
+        import random
+        rng = random.Random(1)
+        row = prot["OG0001_sp01"]
+        junk = dna["OG0001_sp01"][:60] + "".join(rng.choice("ACGT") for _ in range(len(dna["OG0001_sp01"]) - 60))
+        ev = viewer.diagnose(row, junk)["events"]
+        self.assertTrue(ev and ev[0]["code"] == "inconsistent", ev)
+
+
 if __name__ == "__main__":
     unittest.main()
