@@ -1,3 +1,54 @@
+# Review fixes (2026-10-17, after the independent review)
+
+All on `keanu_overnight/windows-app`, local commits only, **not pushed**. Machine: Linux, no
+PyPI, so pywebview, Gradio, PyInstaller, Inno Setup and PowerShell are still not installed.
+Every change is listed with before/after in `overnight/windows-app/CHANGES.md` (IDs WIN-*),
+and the code carries `CHANGED(<ID>)` comments. `run_window` is now tested here against a **fake
+pywebview** (test_wrapper.py) modelled on the documented 6.x API: that checks our logic, not
+pywebview's real behaviour.
+
+| Item | Status | Commit |
+|---|---|---|
+| W1 drop guard lost at load_url | fixed (registered on each `loaded` of the app page); real pywebview: needs Windows to verify | 5d3610e |
+| W2 false "could not start" after closing during start | fixed; plus a stop/Popen race found by the new test (WIN-W2b) | 5d3610e, 66d0a24 |
+| W3 second launch rotates the running log; local_app.log grows forever | fixed | 66d0a24 |
+| W4 "Open with" only logged | fixed: visible message naming the file and the box; --browser mode reopens the page; README/installer/DESIGN text honest. Not wired to the app's path inputs (user decision 4: after merge). Message box itself: needs Windows | 5d3610e, c283500 |
+| W5 tests that couldn't fail | fixed (port-freed and loopback checks with self-tests that fail on the bad case; pywebview signatures; launch_gradio with a stand-in ui; SMOKE_TEST claim conditional) | c31faac |
+| W6 docs vs code | fixed (MCP, AppMutex, WebView2 profile stated as unverified, logs, temp folders, BOM messages, security line); uninstaller removes %TEMP%\coal_app_runs (never compiled) | b801e5b, c283500 |
+| W7 build.ps1 tree kill, invisible --version output, Group Policy note | fixed in code/docs; never parsed: needs Windows | b801e5b |
+| W8 installer stale `_internal`, ChangesAssociations | fixed in script; never compiled: needs Windows (if ISCC rejects the boolean expression, revert to `yes`) | b801e5b |
+| W9 pip hint, mutex restype, silent argparse errors | fixed (dialog path tested with a patched `_windowed`; ctypes part needs Windows) | 72249c7 |
+| WIN-M MCP on by default (`--no-mcp`) | done (user decision 2); spec collects `mcp`; endpoint never served here (no Gradio) | 72249c7, b801e5b, c283500 |
+| R1 traceback boxes | mitigated: serve/engine/window roles catch and report; `disable_windowed_traceback=True` | 72249c7 |
+| R2 pins | mitigated: hooks-contrib pinned 2026.5 (seen in a PyPI mirror listing, not installed); BUILD.md says verify all three | b801e5b |
+| R3 frozen-mode checks | mitigated: freeze_support first under `__main__`; checklist in BUILD.md and SMOKE_TEST.md; needs Windows | 72249c7, c283500 |
+| R4 coal_app as .py, mcp collected | mitigated (spec dry-run with a fake PyInstaller) | b801e5b |
+| R5 async lock release | mitigated: claim retries 3 s; crash test tolerant; tested here (POSIX locks) | 66d0a24 |
+| R6 foreground lock | mitigated: AllowSetForegroundWindow before notifying; needs Windows | 72249c7 |
+| R7 WebView2 missing | mitigated: create_window inside the broad fallback (tested with fake); real exception: needs Windows | 5d3610e |
+| R8 slow first launch | mitigated: 180 s, splash hint after 10 s | 72249c7 |
+| R9 slow close | mitigated: stop in a background thread (tested with fake) | 5d3610e |
+| R10 Job Object failure | mitigated: taskkill /T /F fallback; needs Windows | 72249c7 |
+| Security note | documented in README (no token, per user decision 3) | c283500 |
+
+Parked: nothing.
+
+Tests (Linux, Python 3.13, PYTHONPATH=src:desktop, all with timeouts): desktop
+test_wrapper.py + test_smoke.py **57 tests: OK, 4 skipped (Gradio x3, pywebview x1), 1 expected
+failure (UTF-8 BOM, engine)**; `unittest discover -s tests` 11 OK; `-s tests_app` 52 OK
+(2 skipped, Gradio).
+
+Still needs a Windows machine: everything real in `run_window` (pywebview events, drop guard
+on the real page, close timing, bring-to-front with AllowSetForegroundWindow, message boxes),
+WebView2-missing exception, WebView2 profile location, Job Object / taskkill fallback, named
+mutex + AppMutex, `build.ps1` (never parsed), `installer.iss` (never compiled; boolean
+ChangesAssociations, [InstallDelete], {%TEMP} uninstall line), the three version pins, the
+frozen-mode checks (BUILD.md), the MCP endpoint under Gradio, and SMOKE_TEST.md by a person.
+
+Superseded below: "Needs a human decision" 5 (token: not now) and 6 (MCP: on by default).
+
+---
+
 # Overnight C (Windows desktop app): morning summary
 
 All 5 tasks done on branch `keanu_overnight/windows-app`, **local commits only, not pushed**
