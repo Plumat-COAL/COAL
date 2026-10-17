@@ -60,6 +60,20 @@ class TestDocsNumbers(unittest.TestCase):
                     f"identical in {c['warnings identical']} of them ({c['with -nomismatch']} with `-nomismatch`)",
                     f"in {c['both fail']} both tools fail")
 
+    def test_readme_exit_status_count(self):  # R3-D5
+        n_exit = self.c["COAL exit status"]
+        self.expect("README.md", f"Exit status in the other {n_exit}")
+        self.assertNotIn(f"Exit status in all {self.n}", _read("README.md"))
+
+    def test_readme_scaling_extrapolation(self):  # R3-D4
+        import csv
+        with open(os.path.join(ROOT, "benchmarks", "results", "bench_windows_20261016_2356.csv"),
+                  encoding="utf-8") as fh:
+            row = next(r for r in csv.DictReader(fh) if (r["n_seqs"], r["n_codons"]) == ("10000", "500"))
+        t = float(row["pal2nal_median_s"])
+        m100k, m500k = round(t * 10 / 60), round(t * 50 / 60)
+        self.expect("README.md", f"10,000-sequence time ({t:.1f} s)", f"roughly {m100k} and {m500k} minutes")
+
     def test_tests_readme_quotes_the_printed_line(self):
         self.expect("tests/README.md", self.line)
 

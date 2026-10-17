@@ -416,5 +416,15 @@ class TestR3E1AppParsesNewNotice(unittest.TestCase):  # R3-E1
         self.assertIn("1 of 12 checkable codons do not match; 30 contain N", msg["text"])
 
 
+class TestR3D3SmokeTestMatchesWrapper(unittest.TestCase):  # R3-D3
+    def test_open_with_and_outside_drop_load_by_path(self):
+        with open(os.path.join(ROOT, "desktop", "SMOKE_TEST.md"), encoding="utf-8") as fh:
+            row = next(ln for ln in fh if ln.startswith("| 6 |"))
+        self.assertNotIn("doesn't load the file yet", row)
+        self.assertNotIn("box to drag it onto", row)
+        self.assertIn("puts the file into the right box", row)
+        self.assertIn("Only one DNA file can be loaded at a time".lower(), row.lower())
+
+
 if __name__ == "__main__":
     unittest.main()

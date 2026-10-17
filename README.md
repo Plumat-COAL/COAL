@@ -101,8 +101,9 @@ python -m unittest discover -s tests -v
 
 <!-- CHANGED(ENG-i4): was "165 checks. COAL's output must be byte-identical, and its mismatch warnings must equal PAL2NAL's" (rc files were not read, warnings not compared with -nomismatch, 4 checks compared only the exit code). See overnight/engine-fixes/CHANGES.md -->
 Compares COAL with stored PAL2NAL v14 outputs (`tests/golden/`): 38 input cases × all FASTA option
-combinations = 165 checks (the test prints these counts). Exit status in all 165: PAL2NAL always exits 0, so COAL
-must exit 0 exactly when PAL2NAL produced output. stdout is byte-identical in 147 checks, and the per-codon warnings
+combinations = 165 checks (the test prints these counts). In the 3 `invalid_chars` checks COAL deliberately fails
+(see below). Exit status in the other 162: PAL2NAL always exits 0, so COAL must exit 0 exactly when PAL2NAL produced
+output.<!-- CHANGED(R3-D5): was "in all 165" checks; the harness checks exit status in 162. See overnight/integration/CHANGES.md --> stdout is byte-identical in 147 checks, and the per-codon warnings
 are identical in 141 of them (47 with `-nomismatch`); in 12 both tools fail. 12 checks are deliberate differences:
 the other 6 of the 147 (same output, different warnings), 3 with different output and 3 where COAL deliberately
 fails. See `tests/README.md` for exactly what is compared and for the list of deliberate differences.
@@ -150,7 +151,9 @@ configuration. All outputs were byte-identical.
 
 - **Memory** stays small: v0.2 needed about 2.5 GB for the 500,000-sequence input (measured on Linux).
 - **Throughput** is about 100 MB of input per second with 4 processes. PAL2NAL was not run at these sizes; from its
-  10,000-sequence time (27 s), and assuming it grows in proportion, it would need roughly 4.5 and 22 minutes.
+  10,000-sequence time (24.7 s), and assuming it grows in proportion, it would need roughly 4 and 21 minutes.
+  <!-- CHANGED(R3-D4): was 27 s, 4.5 and 22 minutes; the table and bench_windows_20261016_2356.csv say 24.7 s.
+  See overnight/integration/CHANGES.md -->
 - **More than 4 processes don't help yet.** The main process reads all the DNA, passes it to the workers and writes
   all the output, and that is now the bottleneck.
 
