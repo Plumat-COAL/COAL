@@ -42,8 +42,9 @@ def cpp_binary() -> Path | None:
     return None
 
 
-def run_cpp(args, cwd):
-    r = subprocess.run([str(cpp_binary()), *args], cwd=cwd, capture_output=True, timeout=TIMEOUT)
+def run_cpp(args, cwd, env=None):
+    r = subprocess.run([str(cpp_binary()), *args], cwd=cwd, capture_output=True, timeout=TIMEOUT,
+                       env=None if env is None else dict(os.environ, **env))
     err = r.stderr.decode("utf-8", "replace").replace("\r\n", "\n")
     err = "".join(ln for ln in err.splitlines(True) if not ln.startswith("coal: summary:"))  # coal-cpp's own lines
     return r.returncode, r.stdout.decode("latin-1"), err
@@ -144,7 +145,7 @@ __path__.append({ref!r})  # every module but cli / __main__ comes from the refer
 with open(_os.path.join({ref!r}, "__init__.py")) as _f:
     exec(compile(_f.read(), "coal/__init__.py", "exec"))
 """
-REF_TEST_MODULES = ("test_decisions", "test_review_fixes", "test_fuzz_findings")
+REF_TEST_MODULES = ("test_decisions", "test_review_fixes", "test_fuzz_findings", "test_final_fixes")
 
 
 def build_shim(tmp: Path) -> Path:
@@ -218,7 +219,8 @@ class TestReferenceTestsWithCpp(unittest.TestCase):
 
 @unittest.skipIf(_skip_reason(), _skip_reason() or "")
 class TestCppVsReferenceLarge(unittest.TestCase):
-    """CPP-20: 1,200 sequences (PAML header widths), every format, coal-cpp vs the reference Python engine."""
+    """CPP-20 / CPP-24: 1,200 sequences (PAML header widths; FASTA and marked CLUSTAL input), every format
+    and every clustal/codon writer path, coal-cpp vs the reference Python engine."""
 
     def test_many_sequences_every_format(self):
         import random
@@ -236,13 +238,28 @@ class TestCppVsReferenceLarge(unittest.TestCase):
                 nuc.append(f">s{k}\n{''.join(code[a] for a in prot)}\n")
             (d / "p.fa").write_text("".join(pep))
             (d / "n.fa").write_text("".join(nuc))
+            # CPP-24: the same rows as a CLUSTAL file with '#' block marks (mark lines under clustal / codon blocks)
+            rows = [(f"s{k}", p.split("\n")[1]) for k, p in enumerate(pep)]
+            aln = ["CLUSTAL W\n\n"]
+            for b in range(0, 30, 12):
+                aln += [f"{i:<10}{r[b:b + 12]}\n" for i, r in rows]
+                aln.append(" " * 10 + "".join(rng.choice(" #") for _ in range(min(12, 30 - b))) + "\n\n")
+            (d / "p.aln").write_text("".join(aln))
             env = dict(os.environ, PYTHONPATH=str(REF_SRC))
-            for fmt in ("paml", "fasta", "clustal", "codon"):
-                with self.subTest(fmt=fmt):
-                    ref = subprocess.run([sys.executable, "-m", "coal", "p.fa", "n.fa", "-output", fmt], cwd=d,
+            # writer variants: default (chunked, one chunk), many chunks, the few-blocks-of-every-row writer
+            variants = {"default": {}, "chunks": {"COAL_BLOCK_CHUNK": "40000"}, "rows": {"COAL_BLOCK_CHUNK": "1"}}
+            for pep_file in ("p.fa", "p.aln"):
+                for fmt in ("paml", "fasta", "clustal", "codon"):
+                    ref = subprocess.run([sys.executable, "-m", "coal", pep_file, "n.fa", "-output", fmt], cwd=d,
                                          env=env, capture_output=True, timeout=TIMEOUT)
-                    rc, out, _ = run_cpp(["p.fa", "n.fa", "-output", fmt], d)
-                    self.assertEqual((rc, out), (ref.returncode, ref.stdout.decode("latin-1")))
+                    self.assertEqual(ref.returncode, 0, ref.stderr[-500:])
+                    self.assertGreater(len(ref.stdout), 100000)
+                    if pep_file == "p.aln" and fmt in ("clustal", "codon"):
+                        self.assertIn(b"#", ref.stdout)  # the mark lines are there
+                    for name, venv in variants.items():
+                        with self.subTest(pep=pep_file, fmt=fmt, writer=name):
+                            rc, out, _ = run_cpp([pep_file, "n.fa", "-output", fmt], d, venv)
+                            self.assertEqual((rc, out), (ref.returncode, ref.stdout.decode("latin-1")))
 
 
 @unittest.skipIf(_skip_reason() or not os.environ.get("PAL2NAL"),
