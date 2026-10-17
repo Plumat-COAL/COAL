@@ -6,7 +6,9 @@ to produce a codon alignment.
 
 Built at the Reinvent the Wheel AI × Science Tool-building Hackathon, London, October 2026.
 
-> **Status:** v0.4 (pure Python, no required dependencies; numpy optional). Up to **~119× faster** than PAL2NAL
+> **Status:** v0.4: a pure-Python engine (no required dependencies; numpy optional) and an optional C++ engine,
+> `coal-cpp`, with the same options and byte-identical output (see [C++ engine](#c-engine-coal-cpp)). <!-- CHANGED(SHIP-4): was "v0.4 (pure Python, no required dependencies; numpy optional)." -->
+> Up to **~119× faster** than PAL2NAL
 > with byte-identical output on the benchmarked datasets — see [Benchmark results](#benchmark-results).
 >
 > **Compatibility:** COAL's output is identical to PAL2NAL v14's except for a short list of documented, deliberate differences (newer NCBI genetic-code tables for codes 3, 10, 11 and 13; `-nogap` removing the selected code's stop codons; the selected code's start codons for the first Met; pairing by IDs that match only after normalising where PAL2NAL v14's file order would give a protein another gene's DNA; and inputs where PAL2NAL v14 writes malformed output or fails). Tested: all 285 stored reference checks pass (238 byte-identical, 4 of them with deliberately different warnings; 24 where both tools fail; 23 deliberate output or exit-status differences: 6 deliberate errors, 3 different outputs, 14 `-nogap` checks with a non-standard code), and in 20,000 random comparisons with the real PAL2NAL v14 (5,000 cases x 4 output formats) 13,826 were byte-identical, 4,681 both failed and 1,493 were deliberate differences, each checked to be exactly the documented change; 0 unexplained differences. <!-- CHANGED(FIN-C2/FIN-C3/FIN-C10/FIN-C20): was the "byte-identical ... (well-formed input)" claim, "every difference is one where PAL2NAL silently produces wrong output" and a 6,000-case run not reproducible from the repo; now the documented exceptions and the FIN-C10 fuzz numbers --> See
@@ -205,6 +207,38 @@ Details and evidence in `tests/README.md`:
   `desktop/BUILD.md` (building it).
 - **Hosted demo:** a Hugging Face Space is prepared but not deployed: `space/README.md`, `space/DEPLOY.md`.
 - **Two-species preset:** `demo/diamond_pipeline.py` (DIAMOND reciprocal best hits, then COAL on every pair).
+- **C++ engine for the largest jobs:** `coal-cpp`, built with CMake, same options and output (below). <!-- CHANGED(SHIP-4): new -->
+
+## C++ engine (coal-cpp)
+
+<!-- CHANGED(SHIP-4): new section; the C++ engine was not mentioned in the README. -->
+`coal-cpp` is a C++17 implementation of the same engine (standard library only, MIT). It takes the same options as
+`coal` and writes the same output, warnings, report and exit codes, so it can replace `coal` in any command line.
+It is a separate executable, built from source; the Python package and the Windows app use the Python engine.
+
+```
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
+build/coal-cpp pep.aln nuc.fasta -o codon_aln.fasta       # Windows (Visual Studio): build\Release\coal-cpp.exe
+```
+
+- **Same behaviour as the Python engine:** all 285 stored PAL2NAL v14 reference checks pass with `COAL_IMPL=cpp`;
+  3,000 random inputs (all formats and options, report JSON included) give identical results in both engines for
+  two seeds; and the random comparison with the real PAL2NAL v14 (`tests/fuzz_vs_pal2nal.py`, 1,500 cases per seed,
+  seeds 20261017, 777 and 4242) finds 0 unexplained differences. CI builds it with warnings as errors on Linux,
+  Windows and macOS and runs these tests.
+- **Speed:** 4-6x faster than the Python engine, with about a third of its peak memory (measured on a 2-core Linux
+  VM, commit `4084d1f`; `benchmarks/results/cpp_vs_python_linux_4084d1f.md`):
+
+| Sequences × codons | Python | C++ | C++ speed-up | Peak memory Python / C++ |
+|---|---:|---:|---:|---:|
+| 10,000 × 500 | 0.651 s | 0.109 s | 6.0× | 57 / 20 MB |
+| 100 × 10,000 | 0.175 s | 0.028 s | 6.3× | 27 / 14 MB |
+| 100,000 × 500 | 2.945 s | 0.964 s | 3.1× | 125 / 37 MB |
+
+  (Default `-j` for both engines; outputs byte-identical. `--impl both` in `benchmarks/run_bench.py` reproduces it.)
+- **Tests:** `COAL_IMPL=cpp COAL_CPP_BIN=build/coal-cpp python -m unittest tests.test_differential
+  tests.test_cpp_vs_python tests.test_cpp_cli` (the C++ tests skip when the binary isn't built).
 
 ## Tests
 

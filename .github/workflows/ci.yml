@@ -173,53 +173,51 @@ jobs:
           fi
 
   cpp:
-    # CHANGED(APP-C4): was a green "C++ build (if present)" with every step skipped, and once cpp/ existed it
-    # would have tested the Python engine (COAL_IMPL is read by nothing); now: a clear "not applicable" notice
-    # while cpp/ is absent, and once it exists the binary and tests/test_cpp_vs_python.py are required and the
-    # job fails if those tests are skipped.
-    name: C++ engine (not applicable until cpp/CMakeLists.txt exists)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # CHANGED(SHIP-3): was a job that waited for a cpp/CMakeLists.txt: the C++ engine's CMakeLists.txt is at the
+    # repository root, so this job never built or tested coal-cpp. Now it builds it on all three systems with
+    # warnings as errors and runs every C++ test (goldens with COAL_IMPL=cpp, C++ vs Python, CLI, readers, tables,
+    # thread pool); a skipped test fails the job, except tests.test_cpp_cli's live comparison with the Python CLI, which
+    # depends on argparse's exact messages and runs only on older 3.10/3.11 builds (it is run by hand there).
+    name: C++ engine on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1 (CHANGED(FIN-A10): was @v4)
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0 (CHANGED(FIN-A10): was @v5)
         with:
           python-version: "3.13"
-      - name: Check for cpp/CMakeLists.txt
-        id: detect
-        shell: bash
-        run: |
-          if [ -f cpp/CMakeLists.txt ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=C++ engine::NOT APPLICABLE: cpp/CMakeLists.txt does not exist on this branch, so nothing was built or tested."
-            echo "C++ engine: **not applicable** (no cpp/CMakeLists.txt on this branch). Nothing was built or tested." >> "$GITHUB_STEP_SUMMARY"
-          fi
       - name: Build
-        if: steps.detect.outputs.present == 'true'
         run: |
-          cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Release
-          cmake --build cpp/build --config Release -j 2
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCOAL_WARNINGS_AS_ERRORS=ON
+          cmake --build build --config Release -j 2
       - name: Require the binary and its comparison tests
-        if: steps.detect.outputs.present == 'true'
         shell: bash
         run: |
           # CHANGED(R2-D4): was `ls a b | head | grep -q .`, which always failed under bash -eo pipefail (ls exits 2
           # when one of the two paths is missing); tests_app/test_ci_steps.py runs this script.
-          [ -x cpp/build/coal ] || [ -f cpp/build/Release/coal.exe ] \
-            || { echo "::error::cpp/CMakeLists.txt exists but no cpp/build/coal binary was built"; exit 1; }
+          [ -x build/coal-cpp ] || [ -f build/Release/coal-cpp.exe ] \
+            || { echo "::error::no build/coal-cpp binary was built"; exit 1; }
           test -f tests/test_cpp_vs_python.py \
-            || { echo "::error::cpp/ exists but tests/test_cpp_vs_python.py (C++ vs Python comparison) is missing"; exit 1; }
-      - name: Install COAL
-        if: steps.detect.outputs.present == 'true'
-        run: python -m pip install -e .
-      - name: C++ vs Python tests (must not skip)
-        if: steps.detect.outputs.present == 'true'
+            || { echo "::error::tests/test_cpp_vs_python.py (C++ vs Python comparison) is missing"; exit 1; }
+      - name: Point the tests at the binary
         shell: bash
         run: |
-          python -m unittest tests.test_cpp_vs_python -v 2>&1 | tee cpp_tests.txt
+          if [ -f build/Release/coal-cpp.exe ]; then b="$PWD/build/Release/coal-cpp.exe"; else b="$PWD/build/coal-cpp"; fi
+          echo "COAL_CPP_BIN=$b" >> "$GITHUB_ENV"
+      - name: Install COAL
+        run: python -m pip install -e .
+      - name: C++ tests (must not skip)
+        shell: bash
+        env:
+          COAL_IMPL: cpp
+        run: |
+          python -m unittest -v tests.test_differential tests.test_cpp_vs_python tests.test_cpp_cli \
+            tests.test_cpp_readers tests.test_cpp_tables tests.test_cpp_pool 2>&1 | tee cpp_tests.txt
           test "${PIPESTATUS[0]}" -eq 0
-          if grep -qiE "skipped|OK \(skipped" cpp_tests.txt; then
-            echo "::error::C++ comparison tests were skipped, so the C++ engine was not exercised"; exit 1
+          if grep -iE "\.\.\. skipped" cpp_tests.txt | grep -viq "live comparison needs Python"; then
+            echo "::error::C++ tests were skipped, so the C++ engine was not fully exercised"; exit 1
           fi

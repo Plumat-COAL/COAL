@@ -39,8 +39,7 @@ def build() -> dict:
     for k in ("command", "pal2nal_equivalent", "command_line"):
         if k not in rep:
             continue
-        for full, base in names.items():
-            rep[k] = rep[k].replace(core._q(full), base).replace(full, base)
+        rep[k] = core.strip_folders(rep[k], names)  # CHANGED(SHIP-2): was replace(_q(full)), missing shlex quoting
         if k == "command_line":
             rep[k] = rep[k].replace(core._q(os.path.join(t, "")), "").replace(os.path.join(t, ""), "")
     rep["coal_version"] = "demo"
