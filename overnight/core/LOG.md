@@ -201,6 +201,25 @@ Push when happy: `git push -u origin overnight/core`
 - 2026-10-17 02:26 UTC | review pass 4 | CLEAN | ASan/UBSan (golden, random, resume, progress) and TSan (3 threads: plain, codon+keep-going, -nomismatch+report) on the final code; 3,000 new random cases (seeds 1-3) identical between engines; pyflakes clean; no TODO/debug leftovers; -X dev with ResourceWarnings: none; full suite 52 tests OK; golden 279/279 both engines; no leaked temp files; benchmarks re-checked (unchanged). Review stops here (clean pass).
 - 2026-10-17 09:40 UTC | morning | codon residue-line quirk FIXED | black-box probing of PAL2NAL (110 + 8 layouts, output only) showed the rule: after a column where the LAST sequence has digit N, each residue line gets 3*ceil(N/3)/3-1 extra '-' tokens (gap/residue there: none). Implemented in both engines (residue_line_blocks / write_blocks), 98/98 probe layouts identical to PAL2NAL for each engine; new fixture tests/fixtures/frameshift_codon_line + PAL2NAL goldens via scripts/make_golden.py (case added to cases.json) -> 285/285 golden checks on both engines; the previous build fails the new codon golden, so the test covers the fix.
 
+## Run 4: mirror the reviewed reference engine (started 2026-10-17 12:22 UTC)
+
+Reference: origin/keanu_overnight/integration at bb80bde, checked out read-only with
+`git worktree add --detach ~/coal-ref origin/keanu_overnight/integration` (outside the shared folder, so Windows
+does not see it). Real PAL2NAL v14 fetched with the reference's scripts/fetch_pal2nal.py (official site refused by
+the proxy; orthologr GitHub copy, sha256-verified) into ~/coal-ref/PAL2NAL (never in this repo).
+Harness (CPP-9): COAL_REF_SRC=~/coal-ref/src for tests/test_cpp_vs_python.py (reference mode) and the new
+tests/test_cpp_vs_reference.py (reference goldens + reference fuzz vs PAL2NAL, coal-cpp swapped in).
+
+### Initial work queue (C++ at 48eb082 vs the reference)
+- Reference goldens: 248/279. Failing: 15 x `fasta_nogap_ct<N>` (FZ-5: -nogap must use the selected code's
+  stops), 16 x `fasta_nomismatch*` (ENG-i2: no per-codon mismatch warnings with -nomismatch).
+- Random C++ vs reference Python (1000 cases): 739/1000 identical. Seen: DEC-1/ENG-c/R3-E1 notices missing,
+  ENG-i2 warnings, FZ-5 -nogap, DEC-4f -nomismatch on B/Z/J/O/U columns, C++-only "paired by file order" warning
+  (safe ID pairing; see "Needs reconciling"), partial-ID notice (ENG-d).
+- Fuzz vs real PAL2NAL (FUZZ_N=1000, seed 20261017, 4 formats): 440 unexplained differences (clustal 168,
+  paml 109, fasta 109, codon 54). Includes every `-blockonly` case (option missing in C++: DEC-4), CLUSTAL inputs
+  with '#' mark lines (FZ-1), tfastx notation (FZ-3), -nogap/-nomismatch rules.
+
 ## Run 3 progress (C++ foundations brief: build, readers, tables, CLI, pool, test hookup)
 
 - Reconciled with the brief: overnight/core already had the CMake build, the ordered streaming thread pipeline, the COAL_IMPL=cpp hookup and verified output writers (285 golden checks) from runs 1-2; those are kept, not redone. The local branch overnight/merged (merge with Keanu's integration, not pushed) is left untouched, as the brief says not to merge yet.
