@@ -1,0 +1,9 @@
+case,tier,scenario,n_seqs,aln_cols,cds_nt,rc,seconds,peak_mb,pass,rows_total,rows_refree_ok,rows_truth_exact,col_agreement,warnings_expected,warnings_found,identical_to_ref,problems,example
+sim/speed/n1000_L400,speed,n1000_L400,1000,493,1198626,0,0.1908,20.5,True,1000,1000,1000,1.0,0,0,,,
+sim/speed/n10000_L400,speed,n10000_L400,10000,446,12021747,0,1.7504,127.1,True,10000,10000,10000,1.0,0,0,,,
+sim/speed/n100000_L400,speed,n100000_L400,100000,441,118242735,0,8.3354,155.1,True,100000,100000,100000,1.0,0,0,,,
+sim/speed/n1000_L100,speed,n1000_L100,1000,133,303330,0,0.1355,17.8,True,1000,1000,1000,1.0,0,0,,,
+sim/speed/n1000_L1000,speed,n1000_L1000,1000,1164,2987634,0,0.4342,24.4,True,1000,1000,1000,1.0,0,0,,,
+sim/speed/n1000_L10000,speed,n1000_L10000,1000,10951,29932959,0,2.2275,128.7,True,1000,1000,1000,1.0,0,0,,,
+sim/speed/n100_L35000,speed,n100_L35000,100,39125,10490604,0,1.3566,119.2,True,100,100,100,1.0,0,0,,,
+sim/speed/n10_L35000,speed,n10_L35000,10,37285,1050492,0,0.1997,23.0,True,10,10,10,1.0,0,0,,,

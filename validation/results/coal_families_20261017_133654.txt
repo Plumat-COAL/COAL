@@ -1,0 +1,5 @@
+command: /usr/bin/python3 -m coal {pep} {nuc} {opts} -o {out}
+platform: Linux-6.18.44-fc-v139-x86_64-with-glibc2.39
+python: 3.13.16
+cpus: 2
+repeats: 1
