@@ -33,6 +33,7 @@
 #include "args.hpp"
 #include "core.hpp"
 #include "help_text.hpp"
+#include "pool.hpp"
 #include "json.hpp"
 #include "report.hpp"
 #include "seqio.hpp"
@@ -268,23 +269,6 @@ static void work(Item& it, const Ctx& c) {
         it.error_code = e.code;
     }
     std::string().swap(it.dna);
-}
-
-static void process(std::vector<Item>& batch, const Ctx& c, int nthreads) {
-    size_t n = batch.size();
-    int k = (int)std::min<size_t>((size_t)std::max(1, nthreads), n);
-    if (k <= 1) {
-        for (Item& it : batch) work(it, c);
-        return;
-    }
-    std::atomic<size_t> next{0};
-    std::vector<std::thread> pool;
-    for (int t = 0; t < k; ++t)
-        pool.emplace_back([&]() {
-            size_t i;
-            while ((i = next++) < n) work(batch[i], c);
-        });
-    for (auto& th : pool) th.join();
 }
 
 static void read_next(std::istream& in, long long count, std::string& dst) {
@@ -674,7 +658,6 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
     for (int w : widths) wtotal += w;
 
     Ctx ctx{code, widths, staged, o.fmt};
-    int nthreads = o.jobs > 0 ? o.jobs : (int)std::max(1u, std::thread::hardware_concurrency());
 
     // ---- files: deterministic names next to -o (resumable), temp files for stdout
     std::unique_ptr<Checkpoint> ck;
@@ -798,17 +781,8 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         if (o.progress && nseq > PROGRESS_MIN_SEQS) prog = std::make_unique<Progress>(nseq);
         auto last_ck = std::chrono::steady_clock::now();
         long long done = start;
-        std::vector<Item> cur, nxt;
-        read_batch(cur);
-        while (!cur.empty()) {
-            std::thread worker([&]() { process(cur, ctx, nthreads); });
-            try {
-                read_batch(nxt);
-            } catch (...) {
-                worker.join();
-                throw;
-            }
-            worker.join();
+        // thread each batch while the next one is read; results written in input order (pool.hpp)
+        auto emit = [&](std::vector<Item>& cur) {
             if (!o.keep_going)
                 for (size_t i = 0; i < cur.size(); ++i)
                     if (cur[i].failed) {
@@ -860,8 +834,8 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                 last_ck = std::chrono::steady_clock::now();
                 test_pause(ck->count);
             }
-            std::swap(cur, nxt);
-        }
+        };
+        run_ordered<Item>(read_batch, [&](Item& it) { work(it, ctx); }, emit, o.jobs);
         if (prog && prog->printed) prog->update(done, true);
         if (o.keep_going && skipped == nseq)
             throw CoalError("none of the " + std::to_string(nseq) + " sequences could be converted", "all_failed");
