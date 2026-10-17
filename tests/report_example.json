@@ -1,6 +1,6 @@
 {
  "schema": "coal.report/1",
- "coal_version": "0.3.0",
+ "coal_version": "0.4.0",
  "command": "coal pep.fasta nuc.fasta -output paml -o out.paml --report report.json",
  "pal2nal_equivalent": "pal2nal.pl pep.fasta nuc.fasta -output paml",
  "options": {
@@ -244,9 +244,10 @@
    ]
   }
  ],
- "runtime_seconds": 0.628,
+ "runtime_seconds": 0.638,
  "exit_code": 0,
  "summary_text": [
   "6 of 6 sequences have codon mismatches. They all fit genetic code 2 (vertebrate mitochondrial): try -codontable 2."
- ]
+ ],
+ "methods_text": "Codon alignments were generated with COAL v0.4.0 (https://github.com/chloe-newt/COAL) from 6 aligned protein sequences and their coding sequences, using the standard genetic code (NCBI table 1) and PAML output; outputs are verified byte-identical to PAL2NAL v14 on the COAL test suite."
 }

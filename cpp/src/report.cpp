@@ -15,7 +15,7 @@ const char* const TABLE_NAMES[24] = {
     "chlorophycean mitochondrial", nullptr, nullptr, nullptr, nullptr, "trematode mitochondrial",
     "Scenedesmus obliquus mitochondrial", "Thraustochytrium mitochondrial"};
 
-static const char* VERSION = "0.3.0";
+static const char* VERSION = "0.4.0";
 static const char* REPO_URL = "https://github.com/chloe-newt/COAL";
 static const int HINT_SAMPLE = 200;
 static const double HINT_THRESHOLD = 0.20;

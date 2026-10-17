@@ -42,7 +42,7 @@ C++ peak memory < 30 MB on a 137 MB input. Re-checked after all the changes: sti
 ### Needs a human decision
 - ~~Add `build/` to .gitignore.~~ Done (Chloe asked, next morning).
 - An untracked `Claude outputs/` folder sits in the repo root. It isn't mine, so I left it alone.
-- Bump the version to 0.4.0: `pyproject.toml` (off limits for me) and `src/coal/__init__.py`. `methods_text` currently says v0.3.0.
+- ~~Bump the version to 0.4.0~~ Done (pyproject.toml, src/coal/__init__.py, CMakeLists.txt and the C++ VERSION constants; tests/report_example.json regenerated).
 - coal-cpp has not been compiled with MSVC on Windows (no compiler here). It is written to standard C++17, but try the Windows build below.
 - README (off limits) doesn't mention the new flags yet.
 
