@@ -25,6 +25,9 @@ words when a gene doesn't fit.
 4. Choose whether you want a desktop shortcut and an "Open with" entry for .fasta and .aln
    files (both optional; COAL never becomes your default program for those files). Click
    **Install**.
+   <!-- CHANGED(WIN-W4): "Open with" caveat added. See overnight/windows-app/CHANGES.md -->
+   *About "Open with":* in this version it opens COAL (or brings it to the front) and tells you
+   which box to drag the file onto. It can't load the file into the box by itself yet.
 
 COAL now appears in your Start menu.
 
@@ -71,13 +74,20 @@ Not sure what your files should look like? Click one of the **Try an example** b
 | many codons "don't match", tip suggests another genetic code | the genes use a different genetic code (common for mitochondrial genes) | click the re-run button in the tip |
 | protein and DNA IDs don't match | e.g. proteins called `AT1G01010.1`, DNA called `AT1G01010` | rename so the IDs match (the tip says how they differ) |
 | a gene failed with a "frameshift" | a DNA letter is missing or extra in that gene (often a sequencing or assembly error) | fix or remove that gene; the others are fine |
-| "ascii codec can't decode byte 0xef" | the file was saved with a hidden "byte order mark" (old Notepad does this) | open it in Notepad, File > Save as, Encoding: **UTF-8** (not "UTF-8 with BOM"), save, try again |
+| "'ascii' codec can't decode byte 0xef in position 0" (protein file) or "sequence data before first '>' header" (DNA file) | the file was saved with a hidden "byte order mark" (old Notepad does this) | open it in Notepad, File > Save as, Encoding: **UTF-8** (not "UTF-8 with BOM"), save, try again |
 
 ## Uninstall
 
 Settings > Apps > Installed apps > **COAL** > **Uninstall**. This removes COAL, its shortcuts,
-its "Open with" entries and its own settings and logs. Your sequence files and anything you
-downloaded from COAL are not touched.
+its "Open with" entries, its own settings and logs (`%LOCALAPPDATA%\COAL`) and its run folders
+(`%TEMP%\coal_app_runs`). Your sequence files and anything you downloaded from COAL are not
+touched.
+
+Two kinds of temporary files are left for Windows' own cleanup (Settings > System > Storage >
+Temporary files), or you can delete them yourself: `%TEMP%\gradio` (uploaded copies of files you
+dropped in; shared with any other Gradio-based program, so the uninstaller leaves it) and
+`%TEMP%\coal_*` folders (runs started by AI tools over MCP).
+<!-- CHANGED(WIN-W6): temp folders listed. See overnight/windows-app/CHANGES.md -->
 
 ## Updates
 
@@ -89,8 +99,19 @@ COAL never checks for updates by itself. New versions are published at
 - COAL runs a small web page **on your own computer only** (address 127.0.0.1, a different
   random port each time) and shows it in a window, using the Microsoft Edge WebView2 component
   that comes with Windows. Other computers can't reach it, and nothing is sent to the internet.
-- Logs (start-up messages only, never your sequences) are in `%LOCALAPPDATA%\COAL\logs`. If
+- **But any program, and any user logged in to this same computer, can use it while COAL is
+  open**: the page has no password, and it can read any file your account can read if given its
+  path. On a shared lab PC, close COAL when you're done.
+  <!-- CHANGED(WIN-W6, decision 3): security line made plain. See overnight/windows-app/CHANGES.md -->
+- **AI tools on this computer** (MCP clients) can use COAL's tools while it is open, at
+  `http://127.0.0.1:<port>/gradio_api/mcp/sse`; the port changes every launch and is written in
+  `%LOCALAPPDATA%\COAL\logs\local_app.log`. To turn this off, start COAL with `COAL.exe --no-mcp`.
+  <!-- CHANGED(WIN-M): MCP on by default. See overnight/windows-app/CHANGES.md -->
+- Logs are in `%LOCALAPPDATA%\COAL\logs`. They never contain your sequences, but they do contain
+  file names, and `local_app.log` holds everything COAL's local app prints, which can include
+  full file paths (for example in error messages). Look through them before sending; if
   something goes wrong, sending that folder to the COAL team helps.
+  <!-- CHANGED(WIN-W6): was "start-up messages only". See overnight/windows-app/CHANGES.md -->
 - COAL includes Python, Gradio (the page), pywebview (the window) and their dependencies; their
   licences are in the install folder.
 

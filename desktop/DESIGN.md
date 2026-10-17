@@ -329,8 +329,8 @@ Small, because every setting is a support question. Stored in
 | Default genetic code   [ 1: Standard v ]                                 |
 | Text size          follows Windows (Settings > Accessibility > Text size)|
 | Appearance         follows Windows light / dark / contrast themes        |
-| For AI agents      [ ] Let AI tools on this computer use COAL (MCP)      |
-|                        Off by default. Only programs on this computer.   |
+| For AI agents      [x] Let AI tools on this computer use COAL (MCP)      |
+|                        On by default. Only programs on this computer.    |
 | Logs               [ Open log folder ]  (for bug reports; no sequences)  |
 |                                                       [ Close ]          |
 +--------------------------------------------------------------------------+
@@ -411,13 +411,17 @@ COAL.exe (wrapper: window + single-instance lock)        main thread: pywebview 
   freeze the window, and shutting it down is certain (terminate, then kill).
 - **Lifeline:** the child watches its stdin; when the wrapper exits for any reason, including
   a crash or Task Manager "End task", the pipe closes and the child exits by itself.
-- On close: the window's `closed` event stops the child (close stdin, wait up to 5 s,
-  terminate, wait 3 s, kill). On Windows the child is also put in a Job Object with
-  "kill on job close", so engine runs (grandchildren) die with it.
+- On close: the window's `closed` event stops the child in a background thread (close stdin,
+  wait up to 5 s, terminate, wait 3 s, kill), so the window never waits for it. Closing during
+  "Starting COAL…" is not an error. On Windows the child is also put in a Job Object with
+  "kill on job close", so engine runs (grandchildren) die with it; if that fails, stopping
+  uses `taskkill /T /F` on the child's process tree instead.
+  <!-- CHANGED(WIN-W2, WIN-R9, WIN-R10). See overnight/windows-app/CHANGES.md -->
 - **Readiness without guessing:** the child prints one line `COAL-READY http://127.0.0.1:N/`
-  after the server is listening; the wrapper waits for that line with a timeout (60 s; first
-  launch after install can be slow while Defender scans the new files) and shows a clear
-  error with the log path if it doesn't come.
+  after the server is listening; the wrapper waits for that line with a timeout (180 s; first
+  launch after install can be slow while Defender scans the new files, and after 10 s the
+  splash says so) and shows a clear error with the log path if it doesn't come.
+  <!-- CHANGED(WIN-R8): was 60 s. See overnight/windows-app/CHANGES.md -->
 - **Port:** the wrapper asks Windows for a free port on 127.0.0.1 (bind to port 0), then
   starts the child on it; if the child fails to bind (another program took it in the gap),
   the wrapper tries a new port, up to 3 times.
@@ -426,7 +430,9 @@ COAL.exe (wrapper: window + single-instance lock)        main thread: pywebview 
   port (127.0.0.1, random, protected by a random token stored next to the lock) and asks it
   to come to the front (and, later, to open the files it was given by a file association).
   Then the second launch exits. Locks are released by Windows when a process dies, so a crash
-  never leaves COAL "already running" forever.
+  never leaves COAL "already running" forever (the release can lag, so a launch retries for
+  3 s before saying COAL is running but not responding). Only the instance holding the lock
+  writes or rotates logs. <!-- CHANGED(WIN-R5, WIN-W3). See overnight/windows-app/CHANGES.md -->
 
 ### 5.3 Security of the local server
 
@@ -434,7 +440,11 @@ COAL.exe (wrapper: window + single-instance lock)        main thread: pywebview 
   and Windows Defender Firewall does not show its "allow access" prompt (that prompt appears
   only for programs listening on network interfaces), so no admin-looking dialog.
 - Random port each launch, so nothing else on the machine can rely on finding it.
-- MCP (AI-agent tools) off in the desktop app by default (`--no-mcp`); a Setting later.
+- MCP (AI-agent tools) **on** in the desktop app by default, at
+  `http://127.0.0.1:<port>/gradio_api/mcp/sse` (the URL is in `local_app.log`); start with
+  `COAL.exe --no-mcp` to turn it off; a Setting later.
+  <!-- CHANGED(WIN-M): was off by default with opt-in --mcp (this line said --no-mcp, the code
+  had --mcp). User decision. See overnight/windows-app/CHANGES.md -->
 - Known gap: any program running as any user on the same machine can talk to 127.0.0.1 ports;
   Gradio has no per-launch secret. On a shared lab PC another logged-in user could in
   principle call the app while it is open. Proposed fix (section 8): a per-launch token the
@@ -467,13 +477,17 @@ COAL.exe (wrapper: window + single-instance lock)        main thread: pywebview 
   `.fasta`, `.fa`, `.fas`, `.faa`, `.fna`. We never take over the default program for
   `.fasta` (people open those in Notepad++, Jalview, MEGA, and would be rightly annoyed).
   Opening a file with COAL passes its path to COAL; if COAL is open, the running window
-  receives it via the single-instance channel. Hackathon: the path reaches the wrapper and is
-  logged and focused; putting it into the drop zone needs a GUI hook (section 8).
+  receives it via the single-instance channel. Hackathon: COAL comes to the front and shows a
+  message naming the file and the box to drag it onto (it can't fill the box yet); putting it
+  into the drop zone needs the app's path inputs (section 8), to be wired after the branches
+  merge. <!-- CHANGED(WIN-W4). See overnight/windows-app/CHANGES.md -->
 - **Uninstall:** Settings > Apps > COAL > Uninstall. Removes the install folder, the shortcut(s),
   the per-user registry keys, and COAL's own app data (`%LOCALAPPDATA%\COAL`: logs, lock,
-  WebView2 cache). Never touches results, which live next to the person's data. Uninstall
-  first closes a running COAL (Inno Setup's "close applications" support plus a check of the
-  lock).
+  WebView2 cache) and `%TEMP%\coal_app_runs` (the GUI's run folders). Never touches results
+  the person saved. Setup and uninstall ask to close a running COAL using Inno Setup's
+  `AppMutex` (the wrapper holds a named mutex `COAL-desktop-running`); they don't check the
+  lock file. Upgrades delete the old `_internal` folder first.
+  <!-- CHANGED(WIN-W6, WIN-W8): was "plus a check of the lock". See overnight/windows-app/CHANGES.md -->
 - **Updates:** manual. No update check, no auto-updater, nothing phoning home. About shows the
   version and the releases address as copyable text. Installing a new version over an old one
   works (same AppId) and keeps settings.
@@ -612,10 +626,19 @@ PyInstaller. Mitigations, in order of effect:
 
 ### 5.15 Temporary files and logs
 
-- Gradio's own temp files and the GUI's run folders go to `%TEMP%`. The wrapper's logs
-  (server output, never sequence data) go to `%LOCALAPPDATA%\COAL\logs\`, newest 5 kept.
-  The WebView2 profile goes to `%LOCALAPPDATA%\COAL\webview\` (pywebview's private mode, so
-  nothing persists between launches anyway).
+- Gradio's own temp files (`%TEMP%\gradio`, shared with other Gradio apps) and the GUI's run
+  folders (`%TEMP%\coal_app_runs`; runs by AI agents over MCP: `%TEMP%\coal_*`) go to `%TEMP%`.
+- The wrapper's logs go to `%LOCALAPPDATA%\COAL\logs\`: `coal_desktop.log` (newest 5 kept)
+  and `local_app.log` (newest 3), rotated only by the instance holding the lock. They never
+  contain sequence data, but `local_app.log` holds everything the local app prints (including
+  file paths in error messages); the wrapper itself logs dropped/opened files by name only.
+- WebView2 profile: the wrapper calls `webview.start(private_mode=True,
+  storage_path=%LOCALAPPDATA%\COAL\webview)`. Private mode means no cookies or local storage
+  persist between launches (COAL needs none). Where pywebview then puts WebView2's data folder
+  (that `storage_path`, or a temporary folder) is **not verified**: check on Windows. Either
+  way, uninstall removes `%LOCALAPPDATA%\COAL`.
+  <!-- CHANGED(WIN-W6): was "the profile goes to %LOCALAPPDATA%\COAL\webview" as a fact.
+  See overnight/windows-app/CHANGES.md -->
 
 ---
 
@@ -672,9 +695,10 @@ PyInstaller. Mitigations, in order of effect:
 - `desktop/coal_desktop.py`: native window around the existing GUI; random port on 127.0.0.1;
   local app in a child process with lifeline and clean shutdown; single instance with
   bring-to-front; engine dispatch for frozen builds; offline; drag-and-drop paths captured
-  where pywebview supports it (window-wide drop prevents the window from navigating away to a
-  dropped file, and the dropped paths are logged); the Gradio drop zones accept drops as they
-  do in a browser.
+  where pywebview supports it (a window-wide drop guard, registered each time the app's page
+  loads, prevents the window from navigating away to a dropped file; dropped file names are
+  logged); the Gradio drop zones accept drops as they do in a browser.
+  <!-- CHANGED(WIN-W1): the guard used to sit on the splash page only. See overnight/windows-app/CHANGES.md -->
 - `desktop/build.ps1` + `coal_desktop.spec`: PyInstaller one-folder build bundling Python,
   COAL engine, GUI, examples, and `coal-cpp.exe` if it exists.
 - `desktop/installer.iss`: per-user Inno Setup installer, Start menu shortcut, optional
