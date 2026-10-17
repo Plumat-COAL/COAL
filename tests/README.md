@@ -38,7 +38,7 @@ When `-nomismatch` (or `-nogap`) removes every column, PAL2NAL prints an empty l
 
 | Case | PAL2NAL v14 | COAL |
 |---|---|---|
-| invalid_chars | Drops a codon silently | Error, exit 1 |
+| invalid_chars (`@`) | Drops a codon silently | Error, exit 1. (tfastx `\\` and `/` are not invalid: read as PAL2NAL does, FZ-3) |
 | table10 (`-codontable 10`) | TGA treated as stop → mismatch warnings; `-nomismatch` drops those columns | TGA = Cys (NCBI). Same output, no warnings |
 | table11, table13 | ATA (an NCBI start codon) not accepted as the first Met → warning; `-nomismatch` drops that column | Accepted, no warning. Same output except with `-nomismatch` |
 | `.` in protein alignment | Row gets shorter (misaligned output) | Treated as a gap |

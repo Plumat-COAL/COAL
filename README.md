@@ -32,7 +32,8 @@ pip install -e .[fast]                              # optional numpy speed-up fo
 - **Genetic codes:** `-codontable N` for the 17 NCBI codes PAL2NAL supports
   (1–6, 9–16, 21–23). The first Met may use any start codon of that code.
 - **Frameshifts:** a digit N in the protein alignment means N bases (PAL2NAL convention). That column is widened
-  to the next multiple of 3 for every sequence.
+  to the next multiple of 3 for every sequence. tfastx/tfasty notation is read as PAL2NAL reads it: `\` = 1 base,
+  `/` followed by (gaps and) a residue = a gap, then 2 bases. <!-- CHANGED(FZ-3): tfastx sentence new -->
 - **Mismatches:** if the protein doesn't fit exactly, COAL uses PAL2NAL's fallback: it lines up 10-residue
   chunks and prints a warning for each codon that doesn't match its residue. `-nomismatch` removes those
   columns (and, as in PAL2NAL, then prints no mismatch warnings). If even that fails, it's an error.
@@ -82,7 +83,10 @@ if the whole run succeeds, so an error never leaves a partial file. Notes:
 
 **Deliberate differences from PAL2NAL** (details in `tests/README.md`):
 
-- An invalid character in the protein alignment is an error. PAL2NAL silently drops a codon.
+- An invalid character in the protein alignment (e.g. `@`) is an error. PAL2NAL treats it as X but its output can
+  lose a codon silently (fixture `invalid_chars`: `ATGAAAGTTZZZ`, the final CTG lost). PAL2NAL's tfastx/tfasty
+  frameshift marks `\` (1 base) and `/` (before a residue: 2 bases) are not invalid: COAL reads them exactly as
+  PAL2NAL does (e.g. `MK\VL` → `ATGAAAG--GTTCTG`). <!-- CHANGED(FZ-3): was "PAL2NAL silently drops a codon" for every invalid character -->
 - Genetic codes follow the current NCBI tables. In code 10, TGA = Cys (PAL2NAL treats it as a stop). In codes 11
   and 13, COAL also accepts NCBI's alternative start codons (ATT/ATC/ATA, and ATA, respectively).
 - `.` is treated as a gap. In PAL2NAL it misaligns the output row.

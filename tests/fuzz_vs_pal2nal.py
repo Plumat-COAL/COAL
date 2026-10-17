@@ -131,6 +131,14 @@ def make_case(rng: random.Random) -> Case:
         k, i = rng.randrange(nseq), rng.randrange(len(rows[0]))
         if rows[k][i] != "-" and i > 0:
             rows[k][i] = str(rng.choice((1, 2, 4, 5)))
+    if rng.random() < 0.04:  # tfastx/tfasty frameshift notation: '\\' = 1 base, '/' + residue = gap + 2 bases
+        k, i = rng.randrange(nseq), rng.randrange(1, len(rows[0]))
+        j = next((j for j in range(i + 1, len(rows[0])) if rows[k][j] != "-"), None)
+        if rows[k][i].isalpha():
+            if rng.random() < 0.5:
+                rows[k][i] = "\\"
+            elif j is not None and rows[k][j].isalpha():
+                rows[k][i] = "/"
     if rng.random() < 0.01:
         k, i = rng.randrange(nseq), rng.randrange(len(rows[0]))
         rows[k][i] = rng.choice("@#")
@@ -160,11 +168,17 @@ def make_case(rng: random.Random) -> Case:
         out = []
         first = True
         start_idx = None  # index in `out` of the codon of the first Met (an M before any non-X residue)
+        slash = False
         for ch in row:
             if ch == "-":
                 continue
-            if ch.isdigit():
-                out.append("".join(rng.choice("ACGT") for _ in range(int(ch))))
+            if ch == "/":
+                slash = True
+                continue
+            if ch.isdigit() or ch == "\\" or slash:
+                n = int(ch) if ch.isdigit() else 1 if ch == "\\" else 2
+                slash = False
+                out.append("".join(rng.choice("ACGT") for _ in range(n)))
                 continue
             if ch == "M" and first and rng.random() < 0.3 and code.starts:
                 cod = rng.choice(sorted(code.starts))
@@ -284,6 +298,8 @@ def make_case(rng: random.Random) -> Case:
     c.info.add(f"ids {did_mode}")
     if run_table != 1:
         c.info.add("codontable != 1")
+    if any(ch in "\\/" for r in rows for ch in r):
+        c.info.add("tfastx notation")
     if any(ch.isdigit() for r in rows for ch in r):
         c.info.add("frameshift digit")
     if any(ch.isdigit() and int(ch) >= 4 for r in rows for ch in r):

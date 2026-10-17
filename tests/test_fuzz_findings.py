@@ -120,5 +120,32 @@ class TestFZ5NogapUsesTheSelectedCode(Tmp):  # FZ-5
         self.assertEqual(self.coal("p.fa", "n.fa", "-nogap")[:2], (0, ">s\naugaaa\n"))
 
 
+class TestFZ3TfastxNotation(Tmp):  # FZ-3; expected outputs: PAL2NAL v14
+    CASES = {
+        ("MK\\VL", "ATGAAAGGTTCTG"): (">a\nATGAAAG--GTTCTG\n>b\nATGAAAGCTGTTCTG\n",
+                                      "              M   K   1   V   L\na             ATG AAA G-- GTT CTG\n"
+                                      "              M   K   A   V   L\nb             ATG AAA GCT GTT CTG\n\n"),
+        ("MK/VL", "ATGAAAGGCTG"): (">a\nATGAAA---GG-CTG\n>b\nATGAAAGCTGTTCTG\n",
+                                   "              M   K   -   2   L\na             ATG AAA --- GG- CTG\n"
+                                   "              M   K   A   V   L\nb             ATG AAA GCT GTT CTG\n\n"),
+    }
+
+    def test_backslash_and_slash(self):
+        for (prot, dna), (fasta, codon) in self.CASES.items():
+            self.write("p.fa", f">a\n{prot}\n>b\nMKAVL\n")
+            self.write("n.fa", f">a\n{dna}\n>b\nATGAAAGCTGTTCTG\n")
+            for fmt, want in (("fasta", fasta), ("codon", codon)):
+                with self.subTest(prot=prot, fmt=fmt):
+                    rc, out, err = self.coal("p.fa", "n.fa", "-output", fmt)
+                    self.assertEqual((rc, out), (0, want), err)
+
+    def test_slash_without_a_following_residue_is_still_an_error(self):
+        self.write("p.fa", ">a\nMKVL/\n>b\nMKVLA\n")
+        self.write("n.fa", ">a\nATGAAAGTTCTG\n>b\nATGAAAGTTCTGGCT\n")
+        rc, out, err = self.coal("p.fa", "n.fa")
+        self.assertEqual((rc, out), (1, ""))
+        self.assertIn("invalid protein alignment characters ['/']", err)
+
+
 if __name__ == "__main__":
     unittest.main()

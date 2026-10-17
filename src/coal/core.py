@@ -525,8 +525,17 @@ def build_alignment(items: list[Threaded], nogap: bool = False, nomismatch: bool
     return [apply_slices(r, sl) for r in rows]
 
 
+_TFASTX_FWD = re.compile(r"/(-*)[A-Z*]")
+
+
 def prepare_row(pid: str, aln: str) -> str:
-    return aln.upper().replace(".", GAP)
+    # CHANGED(FZ-3): new: tfastx/tfasty frameshift notation, as PAL2NAL v14 reads it: '\' = 1 base (digit 1), and
+    # '/' + gaps + residue = a gap, the gaps, then 2 bases (digit 2). Was rejected as invalid characters.
+    # See overnight/integration/CHANGES.md
+    row = aln.upper()
+    if "\\" in row or "/" in row:
+        row = _TFASTX_FWD.sub(r"-\g<1>2", row.replace("\\", "1"))
+    return row.replace(".", GAP)
 
 
 def codon_align(
