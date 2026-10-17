@@ -405,6 +405,13 @@ _WARN_NOANCHOR = re.compile(r"^coal: warning: (\S+?): no 10-residue segment of t
                             r"codons were assigned by position \((\d+) of (\d+) (?:checkable codons )?do not match"
                             r"(?:; (\d+) contain N or other ambiguous bases)?\)")
 _WARN_PAIRING = re.compile(r"^coal: warning: only (\d+) of (\d+) protein IDs are DNA IDs; (.*)$")
+# CHANGED(DEC-1): new. Without --strict the engine writes these genes (as PAL2NAL does) and prints these notices; the
+# report marks such genes "failed" (probably wrong data). See overnight/integration/CHANGES.md
+_WARN_UNRELATED = re.compile(r"^coal: warning: (\S+?): protein and DNA are probably unrelated: (\d+) of (\d+) "
+                             r"checkable codons do not match")
+_WARN_GUESS = re.compile(r"^coal: warning: (\S+?): position of the gene in the DNA is a guess: .*?only (\d+) of "
+                         r"(\d+) codons have no ambiguous bases")
+SUSPECT_CODES = ("suspect_unrelated", "suspect_position")  # a gene with one of these is reported as "failed"
 PROBLEM_HINTS = ("partial_id_match", "engine_warning", "nomismatch_unknown")  # hints that mean "something is off"
 
 
@@ -423,6 +430,23 @@ def _parse_warning(line: str) -> tuple[str, dict] | None:
         return sid, {"code": "unknown_aa", "column": int(col), "residue": aa,
                      "text": (f"Column {col}: '{aa}' is not one of the 20 standard amino acids; COAL treated it "
                               f"as X (any codon accepted).")}
+    m = _WARN_UNRELATED.match(line)
+    if m:  # CHANGED(DEC-1): new
+        sid, nbad, nchk = m.groups()
+        return sid, {"code": "suspect_unrelated",
+                     "text": (f"{nbad} of the {nchk} codons COAL could check do not match this protein, so this is "
+                              f"almost certainly the wrong DNA for it (or the wrong genetic code). COAL still wrote "
+                              f"its row, codon by position, as PAL2NAL does: do not trust it. Run COAL with --strict "
+                              f"to refuse such genes.")}
+    m = _WARN_GUESS.match(line)
+    if m:  # CHANGED(DEC-1): new
+        sid, nchk, nres = m.groups()
+        return sid, {"code": "suspect_position",
+                     "text": (f"Only {nchk} of this gene's {nres} codons have no unknown bases (N), and no "
+                              f"10-residue stretch of the protein was found in the DNA, so COAL cannot tell where "
+                              f"the gene starts in the longer DNA. Its row was taken from the start of the DNA (as "
+                              f"PAL2NAL does) and may be shifted: do not trust it. Run COAL with --strict to refuse "
+                              f"such genes.")}
     m = _WARN_NOANCHOR.match(line)
     if m:
         sid, nbad, nres, namb = m.groups()
@@ -626,12 +650,27 @@ def build_fallback_report(protein, dna, out, fmt, table, nogap, nomismatch, keep
             d = p
         else:
             d = dids[i] if i < len(dids) else None
+        # CHANGED(DEC-1): new. In a run where only some protein IDs are DNA IDs, a gene paired by order with a DNA of
+        # another name says so; it is "failed" if it also has mismatches. See overnight/integration/CHANGES.md
+        msgs_p = list(per.get(p) or [])
+        mispaired = (pairing == "order" and d is not None and d != p
+                     and any(h.get("code") == "partial_id_match" for h in run_hints))
+        if mispaired and not aborted and p not in failed:
+            msgs_p.append({"code": "suspect_pairing", "dna_id": d,
+                           "text": (f"Paired with DNA '{d}' only by its position in the files"
+                                    + (" (this protein's own name is also in the DNA file)" if p in dset else "")
+                                    + ": check that this is the right DNA.")})
         if p in failed:
             status, msgs = "failed", failed[p]
         elif aborted:
             status, msgs = "not_checked", []
-        elif per.get(p):
-            status, msgs = "warning", per[p]
+        elif any(m.get("code") in SUSPECT_CODES for m in msgs_p) or (  # CHANGED(DEC-1): probably wrong data
+                mispaired and any(m.get("code") == "mismatch" for m in msgs_p)):
+            status = "failed"
+            msgs = sorted(msgs_p, key=lambda m: (m.get("code") not in SUSPECT_CODES,
+                                                 m.get("code") != "suspect_pairing"))
+        elif msgs_p:
+            status, msgs = "warning", msgs_p
         else:
             status, msgs = "ok", []
         seqs.append({"id": p, "dna_id": d, "pairing": pairing, "status": status, "messages": msgs})
@@ -1042,6 +1081,9 @@ def sequence_sentence(seq: dict) -> str:
     if st == "warning":
         return _mismatch_sentence(msgs)
     if st == "failed":
+        lead = [m for m in msgs if m.get("code") in SUSPECT_CODES + ("suspect_pairing",)]
+        if lead:  # CHANGED(DEC-1): written but probably wrong; say why first
+            return " ".join(m.get("text", "") for m in lead)
         for m in msgs:
             if isinstance(m.get("column"), int) and m.get("code") in ("frameshift", "inconsistent", "missing_dna"):
                 tail = {"frameshift": " Check the DNA near there (a sequencing or assembly error?).",

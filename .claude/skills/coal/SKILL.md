@@ -53,12 +53,15 @@ go to stderr; `-q` silences those, but **notices about probably-wrong data are a
 `<id>: no 10-residue segment of the protein was found in the DNA; codons were assigned by position (K of N
 checkable codons do not match; A contain N or other ambiguous bases)` (the last part only when A > 0) and `only K of N protein IDs are DNA IDs; pairing sequences by order instead (e.g. protein 'A'
 gets DNA 'B')` (some proteins are then almost certainly paired with the wrong DNA: fix the IDs).
-If more than half of a gene's checkable codons (codons made only of A/C/G/T) don't match, that is an error:
-`<id>: protein and DNA are inconsistent (K of N checkable codons do not match the protein)`.
-<!-- CHANGED(R3-E1): notice wording and the "too few" error below. See overnight/integration/CHANGES.md -->
-A gene where no 10-residue segment matched, fewer than 10 codons are checkable and the DNA is longer than the gene
-is also an error (`... only K of N codons have no ambiguous bases: too few to tell where the gene starts ...`):
-trim the UTR or use less heavily masked DNA.
+<!-- CHANGED(DEC-1): was "that is an error" for the next two cases; now PAL2NAL's output plus a notice, an error only
+with --strict. See overnight/integration/CHANGES.md -->
+Like PAL2NAL, the engine writes an alignment row even for probably-wrong data, and then prints a notice:
+`<id>: protein and DNA are probably unrelated: K of N checkable codons do not match the protein. ...` (more than
+half of the codons made only of A/C/G/T don't match: wrong DNA or wrong genetic code) and `<id>: position of the
+gene in the DNA is a guess: ... only K of N codons have no ambiguous bases, too few to tell where the gene starts
+in the longer DNA. ...` (heavily masked gene plus extra DNA: the row may be shifted; trim the UTR). **Treat such a
+gene's row as wrong** (the report marks it `failed`). Add **`--strict`** to make these cases, and a partial ID
+match, errors instead (exit 1, nothing written); check `python -m coal --help` for it first.
 
 With `-nomismatch` the engine, like PAL2NAL, prints **no** mismatch warnings, so stderr cannot tell you
 which genes didn't fit. Run once without `-nomismatch` to see them, or use `codon_align`: it re-checks
@@ -87,7 +90,10 @@ COAL's messages).
 - `sequences[]`: one entry per sequence with `status` `ok` / `warning` / `failed` and `messages[]`
   (`code`, `text`, `column` = protein-alignment column, 1-based).
   - `warning` + `mismatch`: a codon doesn't code for its amino acid; the row is still in the output.
-  - `failed`: COAL could not fit the protein onto the DNA at all; that row is not in the output.
+  - `failed`: COAL could not fit the protein onto the DNA at all (that row is not in the output), or the row was
+    written as PAL2NAL writes it but the data is probably wrong: first message `suspect_unrelated` (most codons
+    don't match), `suspect_position` (start of the gene can't be told), or `suspect_pairing` with mismatches
+    (paired with another gene's DNA by order). Don't use such a row. <!-- CHANGED(DEC-1) -->
 - `summary.columns_removed` (only with `-nomismatch`): how many codon columns were removed because a codon
   didn't match; the genes with such codons are `warning`, not `ok`.
 - `hints[]`: suggestions. `genetic_code` comes with `suggested_codontable`; re-run with it.

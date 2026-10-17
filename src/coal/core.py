@@ -63,10 +63,10 @@ class Threaded:
 # ---------------------------------------------------------------- pairing
 
 def pair_sequences(prot_ids: list[str], dna_ids: list[str], dna_pos: dict | None = None,
-                   warn=None) -> list[int]:
+                   warn=None, strict: bool = False) -> list[int]:
     """Counts must match; match by ID if every protein ID is a DNA ID, else by order.
     `dna_pos` (ID -> index) may be passed in to avoid building it again.
-    `warn` is called when some (but not all) protein IDs are DNA IDs."""
+    `warn` is called when some (but not all) protein IDs are DNA IDs; with `strict` that is an error."""
     if len(prot_ids) != len(dna_ids):
         raise CoalError(
             f"number of sequences differs (protein: {len(prot_ids)}, DNA: {len(dna_ids)})"
@@ -79,10 +79,17 @@ def pair_sequences(prot_ids: list[str], dna_ids: list[str], dna_pos: dict | None
     # CHANGED(ENG-d): was silent order pairing; now warns when some but not all IDs match.
     # See overnight/engine-fixes/CHANGES.md
     hits = sum(p in pos for p in prot_ids)
-    if warn and hits:
+    if hits and (warn or strict):
         p, d = next((p, d) for p, d in zip(prot_ids, dna_ids) if p != d)
-        warn(f"only {hits} of {len(prot_ids)} protein IDs are DNA IDs; pairing sequences by order "
-             f"instead (e.g. protein '{p}' gets DNA '{d}')")
+        text = (f"only {hits} of {len(prot_ids)} protein IDs are DNA IDs; pairing sequences by order "
+                f"instead (e.g. protein '{p}' gets DNA '{d}')")
+        # CHANGED(DEC-1): was always a warning (ENG-d); now an error with --strict, and the warning says so.
+        # See overnight/integration/CHANGES.md
+        if strict:
+            raise CoalError(f"only {hits} of {len(prot_ids)} protein IDs are DNA IDs, so sequences would be paired "
+                            f"by order (e.g. protein '{p}' with DNA '{d}'); make the IDs match, or run without "
+                            f"--strict to pair by order as PAL2NAL does")
+        warn(text + " (--strict makes this an error)")
     return list(range(len(prot_ids)))
 
 
@@ -308,7 +315,7 @@ def _np_quick(np, table: int, dna: str, residues: str) -> bool:
 MIN_CHECKABLE = 10
 
 
-def thread_one(seq_id: str, row: str, raw_dna: str, table: int) -> Threaded:
+def thread_one(seq_id: str, row: str, raw_dna: str, table: int, strict: bool = False) -> Threaded:
     bad = _VALID.search(row)
     if bad:
         chars = sorted(set(_VALID.findall(row)))
@@ -392,17 +399,31 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int) -> Threaded:
     # See overnight/integration/CHANGES.md
     nres = sum(1 for t in toks if t[0] == "r")
     namb = nres - nchk
+    # CHANGED(DEC-1): was always an error (ENG-c, R2-E3, R3-E1); now only with --strict (strict=True). By default
+    # COAL writes the same row as PAL2NAL (which never refuses on mismatches) and adds a notice saying the data is
+    # probably wrong. See overnight/integration/CHANGES.md
     if nchk and 2 * nbad_chk > nchk:
-        raise CoalError(f"{seq_id}: protein and DNA are inconsistent "
-                        f"({nbad_chk} of {nchk} checkable codons do not match the protein)")
+        if strict:
+            raise CoalError(f"{seq_id}: protein and DNA are inconsistent "
+                            f"({nbad_chk} of {nchk} checkable codons do not match the protein)")
+        res.notices.append(f"{seq_id}: protein and DNA are probably unrelated: {nbad_chk} of {nchk} checkable codons "
+                           f"do not match the protein. The row was written as PAL2NAL writes it, but it is "
+                           f"probably the wrong DNA or the wrong genetic code (--strict makes this an error)")
+        return res
     # CHANGED(R3-E1): was accepted (exit 0, notice only) when no anchor matched and almost every codon was
     # ambiguous: the all-wildcard pattern then sits at offset 0, so a 5' UTR ended up inside the codons (output
     # shifted). Now, when no anchor matched, the DNA is longer than the gene (so the offset is not forced) and
     # fewer than MIN_CHECKABLE codons can be checked, it is an error. See overnight/integration/CHANGES.md
     if not found_any and len(dna) > _length(toks) and nchk < MIN_CHECKABLE:
-        raise CoalError(f"{seq_id}: protein and DNA are inconsistent (no 10-residue segment of the protein was "
-                        f"found in the DNA and only {nchk} of {nres} codons have no ambiguous bases: too few to "
-                        f"tell where the gene starts in the longer DNA)")
+        if strict:  # CHANGED(DEC-1): was always an error; see above
+            raise CoalError(f"{seq_id}: protein and DNA are inconsistent (no 10-residue segment of the protein was "
+                            f"found in the DNA and only {nchk} of {nres} codons have no ambiguous bases: too few to "
+                            f"tell where the gene starts in the longer DNA)")
+        res.notices.append(f"{seq_id}: position of the gene in the DNA is a guess: no 10-residue segment of the "
+                           f"protein was found in the DNA and only {nchk} of {nres} codons have no ambiguous bases, "
+                           f"too few to tell where the gene starts in the longer DNA. The codons were taken from the "
+                           f"start of the DNA as PAL2NAL does, so the row may be shifted (--strict makes this an error)")
+        return res
     if not found_any:
         # CHANGED(R3-E1): was "(K of N do not match)" counting ambiguous codons as mismatches; now the same
         # checkable-codon counts as the error rule, plus the number of ambiguous codons. See overnight/integration/CHANGES.md
@@ -502,16 +523,17 @@ def codon_align(
     table: int = 1,
     nogap: bool = False,
     nomismatch: bool = False,
+    strict: bool = False,
 ) -> tuple[list[tuple[str, str]], list[str]]:
-    """Return ([(protein_id, codon_aligned_dna)], warnings)."""
+    """Return ([(protein_id, codon_aligned_dna)], warnings). `strict`: see thread_one / pair_sequences."""
     get_code(table)  # validates the table number
     proteins = [(pid, prepare_row(pid, aln)) for pid, aln in proteins]
     lengths = {len(s) for _, s in proteins}
     if len(lengths) > 1:
         raise CoalError(f"protein alignment rows have different lengths: {sorted(lengths)}")
     pair_warn: list[str] = []  # CHANGED(ENG-d): partial-ID-match warning added to warnings
-    idx = pair_sequences([p[0] for p in proteins], [d[0] for d in dnas], warn=pair_warn.append)
-    items = [thread_one(pid, row, dnas[j][1], table) for (pid, row), j in zip(proteins, idx)]
+    idx = pair_sequences([p[0] for p in proteins], [d[0] for d in dnas], warn=pair_warn.append, strict=strict)
+    items = [thread_one(pid, row, dnas[j][1], table, strict) for (pid, row), j in zip(proteins, idx)]
     rows = build_alignment(items, nogap=nogap, nomismatch=nomismatch)
     warnings = [f"{it.seq_id} {w}" for it in items for w in it.warnings
                 if not (nomismatch and MISMATCH_WARNING in w)]  # CHANGED(ENG-i2): as PAL2NAL

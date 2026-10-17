@@ -44,10 +44,11 @@ When `-nomismatch` (or `-nogap`) removes every column, PAL2NAL prints an empty l
 | table3, GTG as first Met (no golden case: the table3 fixture starts with ATA/ATG) | Unverified; if its table 3 lacks GTG, a GTG start is accepted only through the fallback (needs ≥ 20 residues) | GTG is a table-3 start codon (current NCBI: ATA, ATG, GTG) (ENG-g) |
 | `.` in protein alignment | Row gets shorter (misaligned output) | Treated as a gap |
 | Ambiguous DNA bases | Fixed list of accepted combinations | Accepted if every possible codon gives the right amino acid |
-| Fallback where more than half the codons do not match (e.g. unrelated protein and DNA; no golden case) | Not observed; the fallback pattern fits at offset 0, so presumably output + per-codon warnings | Error, exit 1 (ENG-c) |
+| Fallback where more than half the codons do not match (e.g. unrelated protein and DNA; no golden case) | Output + per-codon warnings, exit 0 (measured with the real PAL2NAL v14: unrelated sequences, 30–90 % mismatching genes) | Same output and warnings, plus a notice; an error (exit 1) only with `--strict` (DEC-1; was always an error, ENG-c) |
+| Gene with no matching 10-residue anchor, fewer than 10 checkable codons and DNA longer than the gene (e.g. 85 % NNN + 5' UTR; no golden case) | Output (codons taken from the start of the DNA, so shifted by the UTR) + per-codon warnings, exit 0 (measured) | Same output and warnings, plus a notice that the row may be shifted; an error only with `--strict` (DEC-1; was always an error, R3-E1) |
 | Fallback where no 10-residue anchor matches but at most half the codons differ (table3/5/9/13/14/21/22 with the default table) | Output + per-codon warnings | Same output and warnings, plus a summary warning that `-q` does not suppress (ENG-c) |
 | B/Z/J/O/U in the protein with `-nomismatch` (no golden case) | Prints no warnings at all with `-nomismatch` (seen in every `fasta_nomismatch` golden) | Still prints the `unknown AA type. Taken as 'X'` warning; mismatch warnings are suppressed as in PAL2NAL (ENG-i2) |
-| Some but not all protein IDs are DNA IDs (no golden case) | Presumably pairs by order, silently | Pairs by order (same output) and prints a warning that `-q` does not suppress (ENG-d) |
+| Some but not all protein IDs are DNA IDs (no golden case) | Pairs by order, silently (measured) | Pairs by order (same output) and prints a notice (ENG-d); an error only with `--strict` (DEC-1) |
 
 ## What `test_differential.py` compares
 

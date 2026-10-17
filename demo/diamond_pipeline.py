@@ -419,6 +419,10 @@ def run_batch(items, a, h, tag, stderr_log, cds):
     cmd = [sys.executable, "-m", "coal", "-codontable", str(a.codontable), "-o", batch_out]
     if "--keep-going" in h:
         cmd.append("--keep-going")
+    # CHANGED(DEC-1): new. Was: the engine itself refused pairs with > half the codons mismatching; that is now opt-in
+    # (--strict), and this pipeline drops such pairs, so it asks for it. See overnight/integration/CHANGES.md
+    if "--strict" in h:
+        cmd.append("--strict")
     if "--report" in h:
         cmd += ["--report", os.path.join(a.out, f"{tag}.report.json")]
     cmd += ["--", batch_pep, batch_cds]

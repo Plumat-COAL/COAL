@@ -31,12 +31,16 @@ pip install -e .[fast]                              # optional numpy speed-up fo
   to the next multiple of 3 for every sequence.
 - **Mismatches:** if the protein doesn't fit exactly, COAL uses PAL2NAL's fallback: it lines up 10-residue
   chunks and prints a warning for each codon that doesn't match its residue. `-nomismatch` removes those
-  columns (and, as in PAL2NAL, then prints no mismatch warnings). If even that fails, it's an error. It is also
-  an error if more than half of a gene's checkable codons (made only of A/C/G/T) don't match: that is not the
-  right DNA for the protein. Codons with N or other ambiguity codes don't count, so masked genes still align,
-  except that a gene with no matching 10-residue chunk and fewer than 10 checkable codons is an error when its DNA
-  is longer than the gene (the start can't be told, e.g. with a 5' UTR).
-  <!-- CHANGED(R3-E1): new exception. See overnight/integration/CHANGES.md -->
+  columns (and, as in PAL2NAL, then prints no mismatch warnings). If even that fails, it's an error.
+- **Probably-wrong data:** like PAL2NAL, COAL does not refuse a gene for having many mismatches, so its output is
+  the same as PAL2NAL's. It adds a notice on stderr naming the gene when (1) more than half of a gene's checkable
+  codons (made only of A/C/G/T; codons with N or other ambiguity codes don't count) don't match: probably the wrong
+  DNA or the wrong genetic code; (2) no 10-residue chunk matched, fewer than 10 codons are checkable and the DNA is
+  longer than the gene: the start can't be told (e.g. a masked gene with a 5' UTR), so the row may be shifted; or
+  (3) only some protein IDs are DNA IDs, so sequences are paired by order. **`--strict`** (or `-strict`) turns these
+  three cases into errors (exit 1, nothing written), for pipelines that would rather stop than continue.
+  <!-- CHANGED(DEC-1): was "It is also an error if more than half ... / ... is an error when its DNA is longer" (ENG-c,
+  R2-E3, R3-E1); now PAL2NAL's output by default plus a notice, errors only with --strict. See overnight/integration/CHANGES.md -->
 - **`-nogap`** removes codon columns that contain a gap or a stop codon.
 - **Exit code** is non-zero on any error (PAL2NAL always exits 0). Warnings go to stderr; `-q` silences the
   per-codon warnings, but notices about probably-wrong data (no 10-residue segment found, only some IDs
@@ -66,11 +70,10 @@ if the whole run succeeds, so an error never leaves a partial file. Notes:
 - `.` is treated as a gap. In PAL2NAL it misaligns the output row.
 - Ambiguous DNA bases (IUPAC codes) are accepted when every base they could stand for gives the right amino acid.
   PAL2NAL accepts only some fixed combinations.
-- More than half of a gene's checkable codons not matching is an error (`protein and DNA are inconsistent`).
-  PAL2NAL's fallback method (which COAL otherwise follows) accepts such input and writes unrelated DNA under
-  the protein. Codons containing N/IUPAC codes are not counted.
-- When some but not all protein IDs are DNA IDs, COAL pairs by order like PAL2NAL but prints a notice naming an
-  example pair (PAL2NAL is silent); when no ID matches it stays silent, like PAL2NAL.
+- Probably-wrong data (see above) gives the same output as PAL2NAL plus a notice on stderr (PAL2NAL prints only its
+  per-codon warnings, or nothing for a partial ID match). When no ID matches COAL stays silent, like PAL2NAL.
+  With `--strict` (COAL's own option) these cases are errors.
+  <!-- CHANGED(DEC-1): was "More than half ... is an error" (a stdout difference); now stderr only. See overnight/integration/CHANGES.md -->
 - Genetic code 3 (yeast mitochondrial) also accepts GTG as a start codon (current NCBI table; whether PAL2NAL v14
   does is unverified, so this is a possible difference).
 - With `-nomismatch`, `unknown AA type. Taken as 'X'` warnings (for B/Z/J/O/U) are still printed; PAL2NAL prints

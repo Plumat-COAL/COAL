@@ -68,13 +68,13 @@ def mp_child() -> bool:
     return multiprocessing.parent_process() is not None
 
 
-def _init_worker(table, widths, two_pass, nogap):
+def _init_worker(table, widths, two_pass, nogap, strict=False):
     # CHANGED(ENG-f): workers ignore Ctrl-C (the main process reports it once, no worker
     # tracebacks). See overnight/engine-fixes/CHANGES.md
     if mp_child():
         signal.signal(signal.SIGINT, signal.SIG_IGN)
     _W.update(table=table, widths=widths, wide=any(w != 3 for w in widths),
-              two_pass=two_pass, nogap=nogap)
+              two_pass=two_pass, nogap=nogap, strict=strict)  # CHANGED(DEC-1): strict is new
 
 
 def _work(batch):
@@ -84,7 +84,7 @@ def _work(batch):
     parts, warns, mcols, bad, notes = [], [], set(), set(), []
     two_pass = _W["two_pass"]
     for pid, row, dna in batch:
-        it = thread_one(pid, row, dna, _W["table"])
+        it = thread_one(pid, row, dna, _W["table"], _W["strict"])
         exp = expand(it, _W["widths"], _W["wide"])
         warns += [f"{pid} {w}" for w in it.warnings]
         notes += it.notices
@@ -185,7 +185,7 @@ def run(pep_path, nuc_paths, *args, **kw) -> int:
 
 def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
          nomismatch: bool = False, jobs: int = 0, warn=None, min_nt_per_job: int | None = None,
-         notice=None) -> int:
+         notice=None, strict: bool = False) -> int:
     """Convert; write FASTA to out_path (or stdout).
 
     jobs: 0 = automatic (up to all cores), N = at most N processes. Small inputs
@@ -210,7 +210,7 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
     try:
         # DNA record number for each protein, as a compact array; then free the ID tables
         # CHANGED(ENG-d): passes notice, so a partial ID match is reported. See overnight/engine-fixes/CHANGES.md
-        pairing = array("q", pair_sequences(ids, dna.ids, dna.pos, warn=notice))
+        pairing = array("q", pair_sequences(ids, dna.ids, dna.pos, warn=notice, strict=strict))  # CHANGED(DEC-1)
         del ids
         dna.forget_ids()
         jobs = effective_jobs(jobs, dna.total_bytes(), min_nt_per_job)
@@ -255,7 +255,7 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                                             encoding="ascii") if two_pass else None
         try:
             drop, bad = set(), set()
-            init = (table, widths, two_pass, nogap)
+            init = (table, widths, two_pass, nogap, strict)
             sink = stage.file if two_pass else tmp.file   # skip tempfile's per-call wrapper
             for text, warns, mcols, badt, notes in _results(_batches(rows(), dna, pairing), jobs, init):
                 if warn:

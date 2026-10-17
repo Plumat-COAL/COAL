@@ -231,7 +231,7 @@ class TestEngC_Unrelated(TempDirCase):
         (self.d / "rp.fa").write_text(pep)
         (self.d / "rn.fa").write_text(nuc)
         for extra in ([], ["-q"]):
-            r = coal(["rp.fa", "rn.fa", *extra], self.d)
+            r = coal(["rp.fa", "rn.fa", "--strict", *extra], self.d)  # DEC-1
             self.assertNotEqual(r.returncode, 0, r.stdout)
             self.assertEqual(r.stdout, "")
             self.assertIn("g1: protein and DNA are inconsistent", r.stderr)
@@ -284,7 +284,7 @@ class TestR2E3_AmbiguousCodons(TempDirCase):  # R2-E3
         pep, nuc = _random_pair()
         (self.d / "rp.fa").write_text(pep)
         (self.d / "rn.fa").write_text(nuc)
-        r = coal(["rp.fa", "rn.fa"], self.d)
+        r = coal(["rp.fa", "rn.fa", "--strict"], self.d)  # DEC-1
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("checkable codons do not match", r.stderr)
 
@@ -297,7 +297,7 @@ class TestR3E1_MaskedGeneWithUTR(TempDirCase):  # R3-E1
     def test_reviewer_repro_is_not_placed_shifted(self):
         (self.d / "ep.fa").write_text(f">g\n{self.PROT}\n")
         (self.d / "en.fa").write_text(f">g\n{self.DNA}\n")
-        r = coal(["ep.fa", "en.fa"], self.d)
+        r = coal(["ep.fa", "en.fa", "--strict"], self.d)  # DEC-1
         self.assertNotEqual(r.returncode, 0, r.stdout)
         self.assertEqual(r.stdout, "")
         self.assertIn("g: protein and DNA are inconsistent", r.stderr)
@@ -319,7 +319,7 @@ class TestR3E1_MaskedGeneWithUTR(TempDirCase):  # R3-E1
             utr = "".join(rng.choice("ACGT") for _ in range(rng.randint(1, 30)))
             cds = "".join(cod)
             try:
-                got = thread_one("g", prot, utr + cds, 1).dna
+                got = thread_one("g", prot, utr + cds, 1, strict=True).dna  # DEC-1
             except CoalError:
                 continue
             self.assertEqual(got, cds, (prot, utr, cds))

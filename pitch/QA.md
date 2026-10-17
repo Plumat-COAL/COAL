@@ -27,7 +27,9 @@ instead of silent.
 **3. What happens with messy input?**
 Built today: wrong genetic code -> COAL tests other codes and suggests the one that fits (one-click re-run
 in the GUI). A frameshift -> the gene and column are named and shown in the alignment view. Invalid
-characters -> a clear error (PAL2NAL silently drops a codon). Protein IDs like AT1G01010.1 vs DNA IDs
+characters -> a clear error (PAL2NAL silently drops a codon). DNA that doesn't belong to the protein -> the same
+output as PAL2NAL (it never refuses), plus a plain warning naming the gene, and the GUI marks it failed;
+`--strict` makes it an error instead. <!-- CHANGED(DEC-1): new sentence --> Protein IDs like AT1G01010.1 vs DNA IDs
 AT1G01010 -> COAL explains the mismatch. Errors give a non-zero exit code. **[after the C++/formats branch is merged]** IDs matched
 after removing version suffixes, and `--keep-going` so one bad gene doesn't stop the rest.
 

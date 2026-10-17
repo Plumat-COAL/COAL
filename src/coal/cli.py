@@ -45,6 +45,15 @@ def main(argv=None) -> int:
     # CHANGED(R2-E4): help was "do not print warnings" (notices are printed anyway)
     ap.add_argument("-q", "--quiet", action="store_true",
                     help="do not print per-codon warnings (notices about probably-wrong data are still printed)")
+    # CHANGED(DEC-1): new. Was: these three rules were always errors (ENG-c, R3-E1) or a warning (ENG-d). Now
+    # PAL2NAL's behaviour by default (output + notice) and errors only with --strict. See overnight/integration/CHANGES.md
+    ap.add_argument("-strict", "--strict", action="store_true",
+                    help="refuse probably-wrong data instead of writing it as PAL2NAL does (PAL2NAL never refuses): "
+                         "exit 1 with no output if (1) more than half of a sequence's checkable codons (A/C/G/T "
+                         "only) do not match its protein; (2) no 10-residue segment of a protein is found in its "
+                         "DNA, the DNA is longer than the gene and fewer than 10 codons are checkable (where the gene "
+                         "starts can't be told); (3) only some protein IDs are DNA IDs (pairing by order would "
+                         "follow). Without --strict these are notices on stderr")
     ap.add_argument("--version", action="version", version=f"coal {__version__}")
     args = ap.parse_args(argv)
 
@@ -60,7 +69,8 @@ def main(argv=None) -> int:
         signal.signal(signal.SIGHUP, _on_sigterm)
     try:
         run(args.pep_aln, args.nuc_fasta, out_path=args.out, table=args.codontable,
-            nogap=args.nogap, nomismatch=args.nomismatch, jobs=args.jobs, warn=warn, notice=notice)
+            nogap=args.nogap, nomismatch=args.nomismatch, jobs=args.jobs, warn=warn, notice=notice,
+            strict=args.strict)
     except KeyboardInterrupt:
         print("coal: interrupted", file=sys.stderr)
         return 130
