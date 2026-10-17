@@ -9,8 +9,12 @@ You need: `COAL-Setup-<version>.exe` (from `desktop\build.ps1`, see `BUILD.md`),
 Edge), not copied from a USB stick: the browser download is what triggers SmartScreen, which is
 part of what we're testing. No admin account needed; please test as a normal user.
 
-The automated part (`desktop\test_smoke.py`) has already checked that every example gives
-the right result through the local app. This checklist is for what only a person can see.
+<!-- CHANGED(WIN-W5): was: claimed test_smoke.py "has already checked" the real local app; now conditional. See overnight/windows-app/CHANGES.md -->
+The automated part (`desktop\test_smoke.py`) checks that every example gives the right result
+through the local app **only if it ran with Gradio installed** (`build.ps1` does this, and runs it
+again against `COAL.exe`): look for `RealLocalApp ... ok` in the build output, not `skipped`.
+Without Gradio it checks the same route with a stand-in for Gradio's HTTP layer. Either way, this
+checklist is for what only a person can see.
 
 | # | Step | Expected | ✓ | Notes |
 |---|---|---|---|---|

@@ -36,6 +36,7 @@ REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
 import coal_desktop as cd  # noqa: E402
+from test_wrapper import assert_loopback_only, assert_port_free  # noqa: E402
 
 cd.setup_source_paths()  # this repo's src/ first, for us and for child processes
 
@@ -284,6 +285,7 @@ class LocalAppTests(Checks):
 
     def test_1_listens_only_on_loopback(self):
         self.assertTrue(self.url.startswith("http://127.0.0.1:"), self.url)
+        assert_loopback_only(self, self.server.port)  # WIN-W5: the socket itself, not the URL
         status, page = http("GET", self.url, timeout=30)
         self.assertEqual(status, 200)
         self.assertIn("COAL", page)
@@ -299,9 +301,7 @@ class LocalAppTests(Checks):
         port = self.server.port
         self.assertEqual(self.server.stop(), 0)
         self.assertFalse(self.server.running())
-        with socket.socket() as s:
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            s.bind(("127.0.0.1", port))
+        assert_port_free(self, port)  # WIN-W5
 
 
 @unittest.skipUnless(HAS_GRADIO or SMOKE_EXE, "Gradio not installed (pip install -e .[gui])")
@@ -324,17 +324,34 @@ class StandInLocalApp(LocalAppTests, unittest.TestCase):
 
 @unittest.skipUnless(HAS_WEBVIEW, "pywebview not installed")
 class WindowApi(unittest.TestCase):
-    """The pywebview names run_window relies on (documented API, pywebview 6.x)."""
+    """WIN-W5: the pywebview names AND parameters run_window relies on (pywebview 6.x docs).
+    This checks signatures only; whether the window behaves is checked by hand (SMOKE_TEST.md)."""
 
-    def test_documented_names_exist(self):
+    @staticmethod
+    def params(f):
+        import inspect
+        return list(inspect.signature(f).parameters)
+
+    def test_documented_signatures(self):
+        import inspect
         import webview
-        from webview.dom import DOMEventHandler  # noqa: F401
-        for name in ("create_window", "start", "settings"):
-            self.assertTrue(hasattr(webview, name), name)
-        self.assertIn("ALLOW_DOWNLOADS", webview.settings)
+        from webview.dom import DOMEventHandler
         from webview.window import Window
-        for name in ("load_url", "restore", "show", "destroy", "on_top"):
-            self.assertTrue(hasattr(Window, name), name)
+        cw = self.params(webview.create_window)
+        for n in ("title", "html", "width", "height", "min_size", "text_select", "zoomable", "background_color"):
+            self.assertIn(n, cw, f"create_window({n}=)")
+        st = self.params(webview.start)
+        self.assertEqual(st[:2], ["func", "args"])
+        for n in ("gui", "private_mode", "storage_path", "debug"):
+            self.assertIn(n, st, f"start({n}=)")
+        self.assertIn("ALLOW_DOWNLOADS", webview.settings)
+        dh = [p for p in self.params(DOMEventHandler.__init__) if p != "self"]
+        self.assertEqual(dh[:3], ["callback", "prevent_default", "stop_propagation"])  # passed positionally
+        self.assertIn("debounce", dh)
+        for name in ("load_url", "get_current_url", "restore", "show", "destroy"):
+            self.assertTrue(callable(getattr(Window, name, None)), name)
+        self.assertIn("url", self.params(Window.load_url))
+        self.assertIsInstance(inspect.getattr_static(Window, "on_top"), property)
 
 
 if __name__ == "__main__":

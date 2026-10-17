@@ -83,6 +83,90 @@ def http_get(url: str, timeout: float = 10) -> tuple[int, bytes]:
         return r.status, r.read()
 
 
+def assert_port_free(tc, port: int) -> None:
+    """WIN-W5: nothing listens on 127.0.0.1:port any more, and the port can be bound.
+    POSIX: SO_REUSEADDR only skips TIME_WAIT (still fails on a listener). Windows: SO_REUSEADDR
+    would succeed even over a listener, so use SO_EXCLUSIVEADDRUSE, which fails on any binding."""
+    with socket.socket() as c:
+        c.settimeout(5)
+        tc.assertNotEqual(c.connect_ex(("127.0.0.1", port)), 0, f"something still listens on port {port}")
+    with socket.socket() as b:
+        if os.name == "nt":
+            b.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        else:
+            b.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            b.bind(("127.0.0.1", port))
+        except OSError as e:
+            tc.fail(f"port {port} is still in use: {e}")
+
+
+def non_loopback_ipv4() -> list[str]:
+    ips = set()
+    try:
+        ips.update(i[4][0] for i in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET))
+    except OSError:
+        pass
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as u:
+            u.connect(("192.0.2.1", 9))  # UDP connect sends nothing; it picks the outgoing address
+            ips.add(u.getsockname()[0])
+    except OSError:
+        pass
+    return sorted(ip for ip in ips if not ip.startswith("127.") and ip != "0.0.0.0")
+
+
+def assert_loopback_only(tc, port: int) -> None:
+    """WIN-W5: the listening socket on `port` is bound to loopback only: via psutil when it can
+    see the socket, and by connecting to every non-loopback address of this machine."""
+    checked = []
+    try:
+        import psutil
+        listen = [c for c in psutil.net_connections("inet")
+                  if c.status == psutil.CONN_LISTEN and c.laddr and c.laddr.port == port]
+        for c in listen:
+            tc.assertIn(c.laddr.ip, ("127.0.0.1", "::1"), f"port {port} listens on {c.laddr.ip}")
+        if listen:
+            checked.append("psutil")
+    except ImportError:
+        pass
+    except Exception:  # noqa: BLE001 - e.g. psutil.AccessDenied on macOS
+        pass
+    for ip in non_loopback_ipv4():
+        with socket.socket() as c:
+            c.settimeout(3)
+            tc.assertNotEqual(c.connect_ex((ip, port)), 0, f"port {port} is reachable on {ip}")
+        checked.append(ip)
+    if not checked:
+        tc.skipTest("no way to inspect the socket here (no psutil, no non-loopback address)")
+
+
+class TestHelpersCanFail(unittest.TestCase):
+    """The checks above must fail on the bad case (WIN-W5)."""
+
+    def test_port_free_fails_on_a_listener(self):
+        with socket.socket() as a:
+            a.bind(("127.0.0.1", 0))
+            a.listen(1)
+            with self.assertRaises(AssertionError):
+                assert_port_free(self, a.getsockname()[1])
+            port = a.getsockname()[1]
+        assert_port_free(self, port)
+
+    def test_loopback_only_fails_on_all_interfaces(self):
+        if not non_loopback_ipv4():
+            self.skipTest("no non-loopback address on this machine")
+        with socket.socket() as a:
+            a.bind(("0.0.0.0", 0))
+            a.listen(1)
+            with self.assertRaises(AssertionError):
+                assert_loopback_only(self, a.getsockname()[1])
+        with socket.socket() as a:
+            a.bind(("127.0.0.1", 0))
+            a.listen(1)
+            assert_loopback_only(self, a.getsockname()[1])
+
+
 class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="coal_desktop_test_")
@@ -148,9 +232,7 @@ class TestLocalServer(Base):
         self.assertLess(time.monotonic() - t0, cd.SERVER_STOP_TIMEOUT)
         self.assertTrue(os.path.exists(closed), "close() of the app was not called")
         self.assertFalse(s.running())
-        with socket.socket() as sock:  # listener gone (REUSEADDR: ignore TIME_WAIT, not LISTEN)
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            sock.bind(("127.0.0.1", s.port))
+        assert_port_free(self, s.port)  # WIN-W5
         self.assertEqual(s.stop(), 0)  # second stop is harmless
         with open(os.path.join(self.tmp, "local_app.log"), encoding="utf-8") as f:
             self.assertIn(cd.READY_PREFIX, f.read())
@@ -840,6 +922,46 @@ class TestFirstLaunchPatience(unittest.TestCase):
         self.assertGreaterEqual(cd.SERVER_START_TIMEOUT, 180)
         self.assertIn("First launch can take a minute", cd.SPLASH)
         self.assertIn("setTimeout", cd.SPLASH)
+
+
+class TestLaunchGradio(unittest.TestCase):
+    """WIN-W5: launch_gradio and bundled_examples_dir, with a stand-in coal_app.ui."""
+
+    def test_launch_gradio_calls_ui_launch_like_the_real_signature(self):
+        import ast
+        with open(os.path.join(REPO, "src", "coal_app", "ui.py"), encoding="utf-8") as f:
+            tree = ast.parse(f.read())
+        real = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "launch")
+        real_params = {a.arg for a in real.args.args + real.args.kwonlyargs}
+        calls, closed = [], []
+        fake_ui = types.ModuleType("coal_app.ui")
+        fake_ui.launch = lambda **kw: (calls.append(kw), types.SimpleNamespace(close=lambda: closed.append(1)))[1]
+        import coal_app
+        from coal_app import core
+        bundle = tempfile.mkdtemp()
+        os.makedirs(os.path.join(bundle, "examples", "clean"))
+        old_examples = core.EXAMPLES_DIR
+        try:
+            with mock.patch.dict(sys.modules, {"coal_app.ui": fake_ui}), \
+                    mock.patch.object(coal_app, "ui", fake_ui, create=True), \
+                    mock.patch.object(sys, "_MEIPASS", bundle, create=True):
+                self.assertEqual(cd.bundled_examples_dir(), os.path.join(bundle, "examples"))
+                url, close = cd.launch_gradio(4321, mcp=True)
+                self.assertEqual(core.EXAMPLES_DIR, os.path.join(bundle, "examples"))
+        finally:
+            core.EXAMPLES_DIR = old_examples
+            shutil.rmtree(bundle, ignore_errors=True)
+        self.assertEqual(url, "http://127.0.0.1:4321/")
+        self.assertEqual(len(calls), 1)
+        self.assertLessEqual(set(calls[0]), real_params, "launch_gradio passes an argument ui.launch lacks")
+        self.assertEqual((calls[0]["host"], calls[0]["port"], calls[0]["mcp"], calls[0]["prevent_thread_lock"]),
+                         ("127.0.0.1", 4321, True, True))
+        close()
+        self.assertEqual(closed, [1])
+
+    def test_bundled_examples_dir_outside_a_bundle(self):
+        with mock.patch.object(sys, "_MEIPASS", tempfile.gettempdir() + "/no-such-bundle", create=True):
+            self.assertIsNone(cd.bundled_examples_dir())
 
 
 if __name__ == "__main__":
