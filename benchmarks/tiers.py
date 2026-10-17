@@ -25,7 +25,11 @@ ROOT = Path(__file__).resolve().parent.parent
 BENCH = Path(os.environ.get("COALBENCH", r"C:\coalbench"))
 DATA = BENCH / "data"
 WORK = BENCH / "tmp"
-COMMIT = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+# the frozen COAL commit under test (not HEAD: the benchmark branch adds harness/results commits on top);
+# the tool sources must be unchanged from it
+COMMIT = os.environ.get("COAL_FROZEN_COMMIT", "47f57f176e78d8d66eed0edc98c2b17bc3cbe6a2")
+assert subprocess.run(["git", "-C", str(ROOT), "diff", "--quiet", COMMIT, "--", "src", "cpp", "CMakeLists.txt",
+                       "pyproject.toml"]).returncode == 0, f"COAL tool sources differ from frozen commit {COMMIT}"
 OUTDIR = ROOT / "benchmarks" / "results" / f"windows_{COMMIT[:7]}"
 
 PERL = r"C:\Strawberry\perl\bin\perl.exe"
@@ -33,6 +37,9 @@ P2N14 = ROOT / "PAL2NAL" / "pal2nal.v14" / "pal2nal.pl"
 P2N16 = BENCH / "venv-p2n16" / "Scripts" / "pal2nal.exe"
 COAL_PY = BENCH / "venv-coal" / "Scripts" / "python.exe"
 COAL_CPP = ROOT / "build" / "coal-cpp.exe"
+HARNESS_COMMIT = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--short=12", "HEAD"], capture_output=True,
+                                text=True).stdout.strip() + ("" if subprocess.run(["git", "-C", str(ROOT), "diff", "--quiet", "HEAD", "--",
+                                                                                  "benchmarks"]).returncode == 0 else "-dirty")
 TOOL_COMMIT = {"p2n14": "v14 sha256:2b419417e304", "p2n16": "da572f796bb5",
                "coal-py": COMMIT[:12], "coal-cpp": COMMIT[:12]}
 
@@ -127,6 +134,7 @@ def correctness_pass(tier: str, rows: list[dict], configs: list[tuple], workers:
             dpath = OUTDIR / "diffs" / tier / cname / (m["dir"].replace("/", "__") + ".diff")
             cls, reason, diff = grade.classify(tool, m, case_dir, r, o, ref_recs, dpath)
             w = grade.warnings_from_stderr(e)
+            recs = grade.read_fasta(o) if r.status == "OK" else None
             out_rows.append({
                 "tool": tool, "tool_commit": TOOL_COMMIT[tool], "jobs": "" if jobs is None else jobs,
                 "tier": tier, "case": m["dir"], "scenario": m.get("scenario", ""), "class": cls,
@@ -136,6 +144,7 @@ def correctness_pass(tier: str, rows: list[dict], configs: list[tuple], workers:
                 "exit_code": r.exit_code, "wall_s": round(r.wall_s, 4), "peak_mem_mb": round(r.peak_mem_mb or 0, 1),
                 "warn_emitted": len(w), "warn_expected": m.get("expected_warnings", ""),
                 "warn_set_match": "" if exp is None else (set(w) == exp),
+                "_hash": grade.records_hash(recs) if recs else "",
             })
             if cls == "MISMATCH":  # keep stderr next to the diff for triage
                 shutil.copy(e, dpath.with_suffix(".stderr"))
@@ -178,7 +187,344 @@ def tier_a(args):
     print(table)
 
 
-TIERS = {"A": tier_a}
+# ------------------------------------------------------------------ timed runs
+RAMMAP = Path(os.environ.get("RAMMAP", r"C:\Users\chloe\AppData\Local\Microsoft\WinGet\Packages"
+                             r"\Microsoft.Sysinternals.RAMMap_Microsoft.Winget.Source_8wekyb3d8bbwe\RAMMap64.exe"))
+TIMEOUT = 7200
+RUN_FIELDS = ["tool", "tool_commit", "harness_commit", "started_at", "tier", "case", "n_seqs", "aln_cols", "cds_nt", "batch_size", "mode", "jobs",
+              "jobs_effective", "run_idx", "cold", "cold_method", "wall_s", "user_s", "kernel_s", "peak_mem_mb",
+              "mem_source", "cpu_temp_c", "cpu_perf_pct", "exit_code", "status", "reason", "grade", "seed"]
+HEADLINE = [("p2n14", None), ("p2n16", None), ("coal-py", 1), ("coal-py", None), ("coal-cpp", 1), ("coal-cpp", None)]
+EXTRA_J12 = [("coal-py", 12), ("coal-cpp", 12)]
+NCPU = os.cpu_count() or 1
+
+
+def jobs_effective(tool, jobs, cds_nt):
+    if tool.startswith("p2n"):
+        return 1
+    if tool == "coal-cpp":
+        return jobs or NCPU  # coal-cpp: default = hardware_concurrency, independent of input size
+    return max(1, min(jobs or NCPU, cds_nt // 4_000_000))  # src/coal/pipeline.py effective_jobs
+
+
+class Clock:
+    """% Processor Performance (actual/nominal frequency x100), averaged over the interval since last sample.
+    Package temperature is not logged (user decision: no LibreHardwareMonitor driver on this desktop)."""
+    def __init__(self):
+        import win32pdh
+        self.pdh = win32pdh
+        self.q = win32pdh.OpenQuery()
+        self.c = win32pdh.AddEnglishCounter(self.q, r"\Processor Information(_Total)\% Processor Performance")
+        win32pdh.CollectQueryData(self.q)
+        self.ref = None
+        self.last_check = 0.0
+
+    def sample(self) -> float:
+        self.pdh.CollectQueryData(self.q)
+        return round(self.pdh.GetFormattedCounterValue(self.c, self.pdh.PDH_FMT_DOUBLE)[1], 1)
+
+    def probe(self) -> float:
+        """Single-thread 2 s busy loop; the clock it ran at."""
+        self.sample()
+        t = time.perf_counter()
+        while time.perf_counter() - t < 2:
+            pass
+        return self.sample()
+
+    def check(self, force=False):
+        """At tier start (force) and every ~30 min: log the probe clock; pause while >10% below the start value."""
+        if not force and time.time() - self.last_check < 1800:
+            return
+        self.last_check = time.time()
+        v = self.probe()
+        if self.ref is None:
+            self.ref = v
+            log(f"clock reference: {v}% of nominal (single-thread probe)")
+            return
+        waited = 0
+        while v < 0.9 * self.ref and waited < 900:
+            log(f"clock {v}% < 90% of start {self.ref}%: pausing 60 s")
+            time.sleep(60)
+            waited += 60
+            v = self.probe()
+        log(f"clock check: {v}% (start {self.ref}%)" + (f", paused {waited}s" if waited else ""))
+
+
+def standby_mb() -> float:
+    import win32pdh
+    q = win32pdh.OpenQuery()
+    cs = [win32pdh.AddEnglishCounter(q, rf"\Memory\Standby Cache {n} Bytes") for n in ("Core", "Normal Priority", "Reserve")]
+    win32pdh.CollectQueryData(q)
+    v = sum(win32pdh.GetFormattedCounterValue(c, win32pdh.PDH_FMT_LARGE)[1] for c in cs) / 2**20
+    win32pdh.CloseQuery(q)
+    return v
+
+
+def empty_standby() -> str:
+    """Empty the standby list with RAMMap and verify it emptied (RAMMap exits 0 even when it cannot)."""
+    before = standby_mb()
+    r = subprocess.run([str(RAMMAP), "-accepteula", "-Et"], capture_output=True)
+    time.sleep(2)
+    after = standby_mb()
+    if r.returncode != 0 or after > 256:
+        raise RuntimeError(f"RAMMap -Et did not empty the standby list (exit {r.returncode}, "
+                           f"{before:.0f} -> {after:.0f} MB); needs an elevated process")
+    return f"RAMMap64 -Et (standby {before:.0f}->{after:.0f} MB)"
+
+
+def _sha(path):
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for b in iter(lambda: fh.read(1 << 22), b""):
+            h.update(b)
+    return h.hexdigest()
+
+
+def timed_case(tier, cfg, m, runs, clock, seed, warmup=True, cold=False, extra=None) -> list[dict]:
+    """1 warm-up (graded; gates the rest) + `runs` timed runs, strictly sequential. cold=True: one cold run only.
+    Every run's output is checked: byte-identical to the graded run, else re-graded."""
+    tool, jobs = cfg
+    case_dir = DATA / m["dir"]
+    work = WORK / tier
+    work.mkdir(parents=True, exist_ok=True)
+    o, e = work / "out.fa", work / "err.txt"
+    base = {"tool": tool, "tool_commit": TOOL_COMMIT[tool], "tier": tier, "case": m["dir"], "n_seqs": m["n_seqs"],
+            "aln_cols": m["aln_cols"], "cds_nt": m["cds_nt"], "batch_size": 1, "mode": "single",
+            "jobs": "default" if jobs is None else jobs, "jobs_effective": jobs_effective(tool, jobs, m["cds_nt"]),
+            "cpu_temp_c": "", "seed": seed, "harness_commit": HARNESS_COMMIT, **(extra or {})}
+    rows, good_hash = [], None
+    plan = ([("cold", 0)] if cold else ([("warmup", 0)] if warmup else []) + [("timed", i) for i in range(1, runs + 1)])
+    for k, (kind, idx) in enumerate(plan):
+        clock.check()
+        method = empty_standby() if kind == "cold" else ""
+        started = datetime.now().isoformat(timespec="milliseconds")
+        clock.sample()
+        r = jobrun.run(tool_cmd(tool, jobs, m, case_dir), o, e, TIMEOUT)
+        perf = clock.sample()
+        g = ""
+        if r.status == "OK":
+            h = _sha(o)
+            if h == good_hash:
+                g = "same_as_graded"
+            else:
+                g, why, _ = grade.classify(tool, m, case_dir, r, o, None,
+                                           OUTDIR / "diffs" / tier / config_name(tool, jobs) / (m["dir"].replace("/", "__") + ".diff"))
+                if g in ("TRUTH", "REF", "KNOWN_DIV"):
+                    good_hash = h
+                else:
+                    r.reason = why
+        rows.append({**base, "run_idx": idx, "started_at": started, "cold": int(kind == "cold"), "cold_method": method,
+                     "wall_s": round(r.wall_s, 4), "user_s": round(r.user_s or 0, 4), "kernel_s": round(r.kernel_s or 0, 4),
+                     "peak_mem_mb": round(r.peak_mem_mb or 0, 1), "mem_source": r.mem_source, "cpu_perf_pct": perf,
+                     "exit_code": r.exit_code, "status": r.status if r.status != "OK" or g in ("TRUTH", "REF", "KNOWN_DIV", "same_as_graded") else "INVALID",
+                     "reason": r.reason, "grade": g})
+        if rows[-1]["status"] != "OK":
+            # correctness gates timing; TIMEOUT/OOM early stop: remaining runs recorded as skipped
+            why = f"after {rows[-1]['status']} at run {idx}"
+            for kind2, idx2 in plan[k + 1:]:
+                rows.append({**base, "run_idx": idx2, "cold": int(kind2 == "cold"), "cold_method": "",
+                             "status": "SKIPPED", "reason": why})
+            break
+    shutil.rmtree(work, ignore_errors=True)
+    return rows
+
+
+def drift_check(tier, clock, when, seed):
+    m = next(r for r in load_manifest("sim/speed") if r["scenario"] == "n10000_L400")
+    rows = timed_case(tier, ("coal-cpp", 1), m, 5, clock, seed, extra={"mode": f"drift_{when}"})
+    append_csv(OUTDIR / "runs.csv", rows, RUN_FIELDS)
+    w = sorted(r["wall_s"] for r in rows if r["run_idx"] and r["status"] == "OK")
+    log(f"drift check {tier}/{when}: coal-cpp -j1 n10000_L400 median {w[len(w) // 2]:.4f}s")
+
+
+def baseline(args):
+    """Fixed start-up cost of each tool on a trivial 2-sequence input (sim/accuracy/pairs/fam001)."""
+    clock = Clock()
+    clock.check(force=True)
+    m = next(r for r in load_manifest("sim/accuracy") if r["dir"] == "sim/accuracy/pairs/fam001")
+    seed = args.seed
+    cfgs = HEADLINE[:]
+    random.Random(seed).shuffle(cfgs)
+    for cfg in cfgs:
+        rows = timed_case("baseline", cfg, m, 10, clock, seed, extra={"mode": "startup"})
+        append_csv(OUTDIR / "runs.csv", rows, RUN_FIELDS)
+        w = sorted(r["wall_s"] for r in rows if r["run_idx"] and r["status"] == "OK")
+        mm = max(r["peak_mem_mb"] for r in rows if r["status"] == "OK")
+        log(f"baseline {config_name(*cfg)}: median {w[len(w) // 2]:.4f}s peak {mm} MB")
+
+
+def tier_b(args):
+    clock = Clock()
+    clock.check(force=True)
+    rows = [r for r in load_manifest("sim/speed") if args.include_1m or r["scenario"] != "n1000000_L400"]
+    seed = args.seed
+    rng = random.Random(seed)
+    rng.shuffle(rows)
+    if args.cold_only:
+        log(f"Tier B cold block start (seed {seed}): {len(rows)} cases x {len(HEADLINE)} configs")
+        for m in rows:
+            cfgs = HEADLINE[:]
+            rng.shuffle(cfgs)
+            for cfg in cfgs:
+                out = timed_case("B", cfg, m, 0, clock, seed, cold=True)
+                append_csv(OUTDIR / "runs.csv", out, RUN_FIELDS)
+                log(f"cold {m['scenario']} {config_name(*cfg)}: {out[0]['status']} {out[0]['wall_s']}s {out[0].get('reason', '')}")
+        log("Tier B cold block done")
+        return
+    log(f"Tier B start (seed {seed}): {len(rows)} cases")
+    drift_check("B", clock, "start", seed)
+    for m in rows:
+        cfgs = HEADLINE + EXTRA_J12
+        rng.shuffle(cfgs)
+        for cfg in cfgs:
+            n = 3 if m["cds_nt"] >= 1e9 else 5
+            out = timed_case("B", cfg, m, n, clock, seed)
+            append_csv(OUTDIR / "runs.csv", out, RUN_FIELDS)
+            ok = sorted(r["wall_s"] for r in out if r["run_idx"] and r["status"] == "OK")
+            log(f"B {m['scenario']} {config_name(*cfg)}: " + (f"median {ok[len(ok) // 2]:.3f}s" if ok else
+                f"{out[0]['status']} {out[0].get('reason', '')}"))
+    drift_check("B", clock, "end", seed)
+    log("Tier B done")
+
+
+# ------------------------------------------------------------------ Tier C: batch size
+C_SETS = {"families": "sim/families", "ncbi": "real/ncbi"}
+C_SIZES = [1, 10, 100, 1000, "all"]
+STATE = WORK.parent / "state"   # grading hashes (outside the repo)
+# coal-py: every Tier C file is < 8 Mnt, so its automatic -j resolves to 1 and "-j1" and "default" are the same
+# code path; it is timed once (jobs=default, jobs_effective=1) and that row serves both headline columns.
+C_CONFIGS = [("p2n14", None), ("p2n16", None), ("coal-py", None), ("coal-cpp", 1), ("coal-cpp", None)]
+C_GRADE_CONFIGS = HEADLINE
+
+
+def tier_c_grade(args):
+    STATE.mkdir(parents=True, exist_ok=True)
+    path = OUTDIR / "correctness_C.csv"
+    if path.exists():
+        path.unlink()
+    for name, rel in C_SETS.items():
+        rows = load_manifest(rel)
+        log(f"Tier C grading {name}: {len(rows)} cases x {len(C_GRADE_CONFIGS)} configs, workers={args.workers}")
+        res = correctness_pass("C", rows, C_GRADE_CONFIGS, workers=args.workers)
+        append_csv(path, res, CORR_FIELDS)
+        state = {}
+        for r in res:
+            state.setdefault(config_name(r["tool"], None if r["jobs"] == "" else r["jobs"]), {})[r["case"]] = \
+                {"class": r["class"], "hash": r["_hash"]}
+        json.dump(state, open(STATE / f"C_{name}.json", "w"))
+        (OUTDIR / f"tierC_{name}_table.md").write_text(class_table(res, key="scenario"))
+        log(f"Tier C grading {name} done")
+        print(class_table(res, key="scenario"))
+
+
+def c_samples(rows, valid: set, seed: int) -> dict:
+    """Nested fixed-seed samples drawn from the cases every timed config passed (like-for-like file sets)."""
+    pool = sorted(r["dir"] for r in rows if r["dir"] in valid)
+    random.Random(seed).shuffle(pool)
+    return {k: pool[: (len(pool) if k == "all" else k)] for k in C_SIZES}
+
+
+def c_loop_run(tier, cfg, metas, hashes, clock):
+    """One timed per-file loop: one process per alignment, sequential. Returns aggregate row fields."""
+    tool, jobs = cfg
+    work = WORK / tier
+    work.mkdir(parents=True, exist_ok=True)
+    o, e = work / "out.fa", work / "err.txt"
+    clock.sample()
+    t0 = time.perf_counter()
+    user = kern = peak = 0.0
+    bad = []
+    for m in metas:
+        r = jobrun.run(tool_cmd(tool, jobs, m, DATA / m["dir"]), o, e, TIMEOUT)
+        user += r.user_s or 0
+        kern += r.kernel_s or 0
+        peak = max(peak, r.peak_mem_mb or 0)
+        recs = grade.read_fasta(o) if r.status == "OK" else None
+        if r.status != "OK" or not recs or grade.records_hash(recs) != hashes[m["dir"]]:
+            bad.append(f"{m['dir']}:{r.status}")
+    wall = time.perf_counter() - t0
+    return {"wall_s": round(wall, 4), "user_s": round(user, 4), "kernel_s": round(kern, 4), "peak_mem_mb": round(peak, 1),
+            "mem_source": "job_peak_committed (max over files)", "cpu_perf_pct": clock.sample(),
+            "exit_code": 0 if not bad else 1, "status": "OK" if not bad else "INVALID",
+            "reason": "" if not bad else f"{len(bad)} files differ from graded output: {';'.join(bad[:5])}"}
+
+
+def c_inproc_run(tier, tool, metas, hashes, clock):
+    work = WORK / tier
+    work.mkdir(parents=True, exist_ok=True)
+    jobs_file, hash_out = work / "inproc_jobs.json", work / "inproc_hashes.json"
+    calls = [[m["dir"], tool_cmd(tool, None, m, DATA / m["dir"])[3 if tool == "coal-py" else 1:]] for m in metas]
+    json.dump(calls, open(jobs_file, "w"))
+    py = COAL_PY if tool == "coal-py" else P2N16.parent / "python.exe"
+    cmd = [str(py), str(Path(__file__).with_name("inproc_loop.py")), "coal" if tool == "coal-py" else "p2n16",
+           str(jobs_file), str(hash_out)]
+    clock.sample()
+    r = jobrun.run(cmd, work / "out.txt", work / "err.txt", TIMEOUT)
+    got = json.load(open(hash_out)) if r.status == "OK" and hash_out.exists() else {}
+    bad = [m["dir"] for m in metas if got.get(m["dir"]) != hashes[m["dir"]]]
+    return {"wall_s": round(r.wall_s, 4), "user_s": round(r.user_s or 0, 4), "kernel_s": round(r.kernel_s or 0, 4),
+            "peak_mem_mb": round(r.peak_mem_mb or 0, 1), "mem_source": r.mem_source, "cpu_perf_pct": clock.sample(),
+            "exit_code": r.exit_code, "status": r.status if r.status != "OK" else ("OK" if not bad else "INVALID"),
+            "reason": r.reason or (f"{len(bad)} outputs differ: {bad[:5]}" if bad else "")}
+
+
+def tier_c(args):
+    if args.grade_only:
+        return tier_c_grade(args)
+    clock = Clock()
+    clock.check(force=True)
+    seed = args.seed
+    rng = random.Random(seed)
+    log(f"Tier C timing start (seed {seed}); runs: 1 warm-up + 5 for batch 1/10/100, 1 warm-up + 3 for 1000/all")
+    drift_check("C", clock, "start", seed)
+    for name, rel in C_SETS.items():
+        rows = load_manifest(rel)
+        by_dir = {r["dir"]: r for r in rows}
+        state = json.load(open(STATE / f"C_{name}.json"))
+        ok = ("TRUTH", "REF", "KNOWN_DIV")
+        valid = {d for d in by_dir if all(state[config_name(*c)][d]["class"] in ok for c in C_CONFIGS)}
+        log(f"Tier C {name}: {len(valid)}/{len(rows)} cases passed grading for every timed config "
+            f"(excluded {len(rows) - len(valid)}, not timed for any tool)")
+        samples = c_samples(rows, valid, seed)
+        json.dump(samples, open(OUTDIR / f"tierC_{name}_samples.json", "w"))
+        sizes = C_SIZES[:]
+        rng.shuffle(sizes)
+        for k in sizes:
+            metas = [by_dir[d] for d in samples[k]]
+            nt = sum(m["cds_nt"] for m in metas)
+            n_timed = 5 if k in (1, 10, 100) else 3
+            modes = [("per_file_loop", c) for c in C_CONFIGS] + ([("inproc_api_loop", ("coal-py", None)),
+                                                                   ("inproc_api_loop", ("p2n16", None))] if args.inproc else [])
+            rng.shuffle(modes)
+            for mode, cfg in modes:
+                tool, jobs = cfg
+                hashes = {d: state[config_name(*cfg)][d]["hash"] for d in samples[k]}
+                base = {"tool": tool, "tool_commit": TOOL_COMMIT[tool], "tier": "C", "case": f"{name}:sample{k}",
+                        "n_seqs": sum(m["n_seqs"] for m in metas), "aln_cols": "", "cds_nt": nt, "batch_size": len(metas),
+                        "mode": mode, "jobs": "default" if jobs is None else jobs,
+                        "jobs_effective": 1 if tool != "coal-cpp" else (jobs or NCPU), "cold": 0, "cold_method": "",
+                        "cpu_temp_c": "", "seed": seed, "harness_commit": HARNESS_COMMIT}
+                out = []
+                for idx in range(0, n_timed + 1):
+                    clock.check()
+                    started = datetime.now().isoformat(timespec="milliseconds")
+                    res = (c_loop_run("C", cfg, metas, hashes, clock) if mode == "per_file_loop"
+                           else c_inproc_run("C", tool, metas, hashes, clock))
+                    out.append({**base, "run_idx": idx, "started_at": started, **res, "grade": "hash_checked"})
+                    if res["status"] != "OK":
+                        for j in range(idx + 1, n_timed + 1):
+                            out.append({**base, "run_idx": j, "status": "SKIPPED", "reason": f"after {res['status']} at run {idx}"})
+                        break
+                append_csv(OUTDIR / "runs.csv", out, RUN_FIELDS)
+                w = sorted(r["wall_s"] for r in out if r["run_idx"] and r["status"] == "OK")
+                log(f"C {name} batch={len(metas)} {mode} {config_name(*cfg)}: " +
+                    (f"median {w[len(w) // 2]:.2f}s" if w else f"{out[0]['status']} {out[0]['reason']}"))
+    drift_check("C", clock, "end", seed)
+    log("Tier C timing done")
+
+
+TIERS = {"A": tier_a, "B": tier_b, "C": tier_c, "baseline": baseline}
 
 
 def main(args):

@@ -101,6 +101,12 @@ def main() -> int:
                     help="run a manifest-driven tier of the Windows release benchmark (see tiers.py); "
                          "other options are ignored")
     ap.add_argument("--workers", type=int, default=10, help="--tier: concurrent cases in correctness passes")
+    ap.add_argument("--seed", type=int, default=20261017, help="--tier: seed for case/tool order and sampling")
+    ap.add_argument("--cold-only", action="store_true", help="--tier B: one cold-cache run per case/tool (needs admin)")
+    ap.add_argument("--include-1m", action="store_true", help="--tier B: include the n1000000_L400 case")
+    ap.add_argument("--grade-only", action="store_true", help="--tier C: correctness pass only (run before timing)")
+    ap.add_argument("--inproc", action="store_true",
+                    help="--tier C: also time the supplementary in-process API loop (coal-py, p2n16)")
     a = ap.parse_args()
     if a.tier:
         import tiers

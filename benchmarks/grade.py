@@ -39,6 +39,15 @@ def read_fasta(path) -> list[tuple[str, str]] | None:
     return recs
 
 
+def records_hash(recs) -> str:
+    """Hash of the normalised records (what grading compares), to re-check later runs cheaply."""
+    import hashlib
+    h = hashlib.sha256()
+    for head, seq in recs:
+        h.update(head.encode("latin-1") + b"\n" + seq.encode("latin-1") + b"\n")
+    return h.hexdigest()
+
+
 def warnings_from_stderr(path) -> list[tuple]:
     p = Path(path)
     if not p.exists():
