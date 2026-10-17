@@ -200,5 +200,48 @@ class TestSuggestionFirst(unittest.TestCase):
             self.assertNotIn("wrong genetic code?", err, extra)
 
 
+@unittest.skipIf(cpp_binary() is None, "coal-cpp not built (set COAL_CPP_BIN)")
+class TestStderrSameBothEngines(unittest.TestCase):
+    """IMP-E-E: on wrong-code runs both engines print the same stderr byte for byte (notice, warnings, summary)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = Path(tempfile.mkdtemp(prefix="coal_e_"))
+        sys.path.insert(0, str(ROOT / "tests" / "realdata"))
+        import realdata_lib as L
+        rows = L.clean_rows(L.load(ROOT / "tests" / "realdata" / "coxI_mammals" / "COXI.nex.gz", "nexus"))
+        pep, nuc, _ = L.derive(rows, 2)
+        (cls.tmp / "cox").mkdir()
+        (cls.tmp / "cox" / "pep.fasta").write_text(pep)
+        (cls.tmp / "cox" / "nuc.fasta").write_text(nuc)
+        cls.syn = make_synthetic(cls.tmp / "syn", 300, 120)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def _both(self, args, cwd):
+        env = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "COAL_ENGINE": "python"}
+        py = subprocess.run([sys.executable, "-m", "coal", *args], cwd=cwd, env=env, capture_output=True, timeout=120)
+        cp = subprocess.run([str(cpp_binary()), *args], cwd=cwd, env=env, capture_output=True, timeout=120)
+        return py, cp
+
+    def test_wrong_code_runs(self):
+        cox = self.tmp / "cox"
+        runs = [(["pep.fasta", "nuc.fasta"], cox), (["pep.fasta", "nuc.fasta", "-codontable", "11"], cox),
+                (["protein.aln.fasta", "dna.fasta"], ROOT / "examples" / "mito"),
+                (["protein.aln.fasta", "dna.fasta", "-codontable", "2"], ROOT / "examples" / "one_broken_gene"),
+                ([*self.syn, "-codontable", "2"], self.tmp)]
+        for args, cwd in runs:
+            for extra in ([], ["--max-warnings", "0"], ["--max-warnings", "3"], ["-q"], ["--keep-going"]):
+                with self.subTest(args=args, extra=extra):
+                    py, cp = self._both(args + extra, cwd)
+                    self.assertEqual(py.returncode, cp.returncode)
+                    self.assertEqual(py.stdout, cp.stdout)
+                    self.assertEqual(py.stderr.decode().replace("\r\n", "\n"), cp.stderr.decode().replace("\r\n", "\n"))
+                    if not extra or extra == ["--keep-going"]:
+                        self.assertIn(b"Re-run with -codontable", py.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
