@@ -540,12 +540,7 @@ class TestFinding15SampleReport(unittest.TestCase):
     def test_sample_matches_a_fresh_run(self):
         mk = _load("make_sample_report_r", os.path.join(ROOT, "demo", "make_sample_report.py"))
         fresh, stored = mk.build(), core.load_sample_report()
-        # CHANGED(ENG-UX-7): summary_text holds the engine's command-line summary lines, which now say "Re-run with
-        # -codontable 2." (was "Re-run with code 2?"); the app never shows them. The stored sample lives in
-        # src/coal_app (redesigned on another branch): regenerate it there with python demo/make_sample_report.py,
-        # then this exclusion can go. See overnight/integration/CHANGES.md
-        fresh.pop("summary_text", None)
-        stored.pop("summary_text", None)
+        # CHANGED(ENG-UX-7, INT-4): summary_text was skipped while the sample report predated ENG-UX; regenerated, so compared again
         self.assertEqual(fresh, stored)
 
 

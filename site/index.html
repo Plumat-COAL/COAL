@@ -92,8 +92,8 @@
   <div class="look">
 <pre class="term" tabindex="0" aria-label="Terminal: the one_broken_gene example stops with an error"><code><span class="ps">$</span> coal examples/one_broken_gene/protein.aln.fasta examples/one_broken_gene/dna.fasta -o codon.aln.fasta
 coal: error: OG0001_sp14: protein and DNA are inconsistent (no match found)
-coal: summary: 1 sequence of 20 could not be converted (first: OG0001_sp14: protein and DNA are inconsistent (no match found). Frameshift at column 102: one base is missing in the DNA, so from here on the codons are read out of step.)
-coal: summary: The run stopped there: 6 sequences were not checked and no output was written.
+coal: summary: OG0001_sp14: Frameshift at column 102: one base is missing in the DNA, so from here on the codons are read out of step.
+coal: summary: The run stopped at OG0001_sp14: 6 sequences were not checked and no output was written. Add --keep-going to write the other sequences and leave this one out.
 <span class="ps">$</span> echo $?
 1</code></pre>
     <figure>
