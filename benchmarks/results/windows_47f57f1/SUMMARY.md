@@ -25,7 +25,8 @@ Speed-ups against p2n14, from warm medians:
 
 - **Correctness:** every COAL config matched truth or the reference on every case run: Tier A 412/412, Tier C
   2000/2000 simulated plus 3273/3273 NCBI cases matching p2n14 (excluding invalid inputs), and **Tier D 2595/2595
-  real Compara trees matching truth**. On those trees p2n14 failed 22 and p2n16 failed 2. COAL's only output
+  real Compara trees matching truth**. On those trees p2n14 failed 22 (19 selenocysteine, 2 open, 1 regex
+  capture-group limit) and p2n16 failed 2 (the same 2 open trees, not investigated). COAL's only output
   difference from v14 is the documented selenocysteine fix.
 - **coal-cpp is the fast path everywhere.** coal-py is fast on large inputs, but **slower than p2n14 on small
   files** (Python start-up and imports: 92 ms baseline against 24 ms for p2n14).
@@ -131,16 +132,19 @@ including 1 of the 10 largest.
 
 **COAL matches truth on every graded tree** (0 failures in 10,380 COAL runs).
 
-By feature flag (failures / trees with that flag; a tree can have several flags):
-- **p2n14:**
-  - selenocysteine 19/38: the documented v14 defect, exit 0 with no output.
-  - x_residue 19/1747 and ambiguous_bases 14/1314: mostly the same trees.
-  - stop_in_protein 11/275.
-  - other_chars 2/269.
-  - Of p2n14's 22 errors, 21 are exit 0 with empty output and 1 is the capture-group limit on a long real protein
-    (the same v14 limit as Tier B L35000).
-- **p2n16:** 2 errors (t006204, t000088; both ambiguous_bases + x_residue; "inconsistency"). The cause was not
-  investigated (time).
+**Why PAL2NAL failed** (p2n14 rerun directly to capture stderr):
+- **p2n14, 22 failures: 19 selenocysteine + 2 open + 1 capture-group limit.**
+  - **19 trees, selenocysteine.** Every one has `U` in its proteins (2–225 per tree; 19 of the 38 selenocysteine
+    trees graded). This is the documented v14 defect (`fix_selenocysteine`): "inconsistency", **exit 0**, no output.
+    The stop_in_protein / x_residue / ambiguous_bases flags on these trees are incidental; the per-flag counts in
+    `correctness_D.csv` overlap.
+  - **2 trees, t006204 and t000088: open, not investigated.** "inconsistency", exit 0. No `U` and no internal stop;
+    flags ambiguous_bases + x_residue.
+  - **1 tree, t054129: Perl's 65,535 capture-group limit** (exit 255), the same v14 limit as Tier B L35000, here
+    on a real long protein.
+- **p2n16, 2 failures: open, not investigated.** The same two trees, t006204 and t000088 ("inconsistency", exit 1).
+  Both PAL2NAL versions fail them and COAL matches truth on both, so the cause is probably shared PAL2NAL logic.
+  Not confirmed.
 
 **Timing** (`tierD_timing.md`): 20 fixed-seed trees per bin plus the 10 largest, all 6 configs, 1 warm-up + 3. It ran
 21:02–21:30. The table gives the total of per-tree medians, with throughput in Mnt/s of CDS:
