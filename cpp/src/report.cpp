@@ -2,6 +2,9 @@
 #include "report.hpp"
 
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+#include <exception>
 #include <cctype>
 #include <set>
 
@@ -881,8 +884,13 @@ void RunReport::finish(const RowsFn& rows, const DnaFn& dna, bool aborted) {
     finished = true;
     try {
         finish_impl(rows, dna, aborted);
+    } catch (const std::exception& e) {
+        // extras must never hide the real result. CHANGED(IMP-E-G): COAL_DEBUG=1 says what failed (report.py)
+        if (std::getenv("COAL_DEBUG"))
+            std::fprintf(stderr, "coal: debug: the report's finish step failed (the run goes on): %s\n", e.what());
     } catch (...) {
-        // extras must never hide the real result
+        if (std::getenv("COAL_DEBUG"))
+            std::fprintf(stderr, "coal: debug: the report's finish step failed (the run goes on)\n");
     }
 }
 

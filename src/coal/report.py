@@ -20,6 +20,7 @@ import json
 import os
 import re
 import shlex
+import sys
 import time
 from itertools import product
 
@@ -87,7 +88,7 @@ def warning_message(w: str, removed: bool = False) -> dict:
         what = AS_X_NAMES.get(aa)
         return {"code": "unknown_aa", "column": int(col), "residue": aa,
                 "text": (f"Column {col}: '{aa}'" + (f" ({what})" if what else "") + " is not one of the 20 standard "
-                         f"amino acids, so COAL did not check its codon (any codon accepted).")}
+                         "amino acids, so COAL did not check its codon (any codon accepted).")}  # CHANGED(IMP-E-J)
     return {"code": "warning", "text": f"COAL warning: {w.strip()}"}
 
 
@@ -522,7 +523,12 @@ class RunReport:
         try:
             self._finish(rows, dna, pairing, aborted)
         except Exception:  # noqa: BLE001 - extras must never hide the real result
-            pass
+            # CHANGED(IMP-E-G): was a silent `pass`, which hid bugs in the hint or the report; the run still goes on,
+            # and COAL_DEBUG=1 prints the traceback. See overnight/integration/CHANGES.md
+            if os.environ.get("COAL_DEBUG"):
+                import traceback
+                print("coal: debug: the report's finish step failed (the run goes on):", file=sys.stderr)
+                traceback.print_exc()
 
     def _finish(self, rows, dna, pairing, aborted):
         from .core import CoalError, thread_one
