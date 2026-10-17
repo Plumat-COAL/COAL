@@ -336,23 +336,57 @@ def _load_script(name):
 
 class TestFinA9NoReleaseYet(unittest.TestCase):  # FIN-A9
     def test_downloads_replaced_when_no_release(self):
+        # CHANGED(WEB-13): every page with release links (index.html and install.html), was index.html only
         m = _load_script("site_without_release")
+        with_links = []
+        for name in sorted(os.listdir(os.path.join(ROOT, "site"))):
+            if not name.endswith(".html"):
+                continue
+            with open(os.path.join(ROOT, "site", name), encoding="utf-8") as fh:
+                page = fh.read()
+            if not m.needs_rewrite(page):
+                continue
+            with_links.append(name)
+            out = m.rewrite(page)
+            self.assertNotIn("releases/latest/download/", out, name)
+            self.assertNotIn("releases/download/", out, name)
+            self.assertIn("First release coming soon", out, name)
+            self.assertIn('id="no-release"', out, name)  # the target of every replaced link
+            self.assertEqual(out.count("<main"), 1, name)
+            self.assertFalse(m.needs_rewrite(out), name)
+            self.assertEqual(m.rewrite(out), out)  # idempotent
+        self.assertIn("index.html", with_links)
+        self.assertIn("install.html", with_links)
         with open(os.path.join(ROOT, "site", "index.html"), encoding="utf-8") as fh:
-            page = fh.read()
-        self.assertIn("releases/latest/download/", page)
-        out = m.rewrite(page)
-        self.assertNotIn("releases/latest/download/", out)
-        self.assertNotIn("releases/download/", out)
-        self.assertIn("First release coming soon", out)
-        self.assertIn('pip install "coal[gui] @ git+https://github.com/plumat-coal/COAL"', out)
-        self.assertEqual(out.count("<main"), 1)
-        self.assertEqual(m.rewrite(out), out)  # idempotent
+            self.assertIn('pip install "coal[gui] @ git+https://github.com/plumat-coal/COAL"', m.rewrite(fh.read()))
+
+    def test_script_rewrites_every_page_given(self):  # WEB-13
+        import shutil
+        import tempfile
+        m = _load_script("site_without_release")
+        with tempfile.TemporaryDirectory() as t:
+            for name in ("index.html", "install.html", "cite.html"):
+                shutil.copy(os.path.join(ROOT, "site", name), t)
+            with open(os.path.join(t, "cite.html"), encoding="utf-8") as fh:
+                cite = fh.read()
+            paths = [os.path.join(t, n) for n in ("index.html", "install.html", "cite.html")]
+            self.assertEqual(m.main(paths), 0)
+            first = []
+            for p in paths:
+                with open(p, encoding="utf-8") as fh:
+                    first.append(fh.read())
+            self.assertNotIn("releases/latest/download/", first[0] + first[1])
+            self.assertEqual(first[2], cite)  # no download links: left exactly as it was
+            self.assertEqual(m.main(paths), 0)
+            for p, before in zip(paths, first):
+                with open(p, encoding="utf-8") as fh:
+                    self.assertEqual(fh.read(), before)  # second run changes nothing
 
     def test_pages_workflow_checks_for_a_release(self):
         with open(os.path.join(ROOT, ".github", "workflows", "pages.yml"), encoding="utf-8") as fh:
             wf = fh.read()
         self.assertIn("gh release view", wf)
-        self.assertIn("scripts/site_without_release.py _site/index.html", wf)
+        self.assertIn("scripts/site_without_release.py _site/*.html", wf)  # CHANGED(WEB-13): was _site/index.html
         self.assertIn("GH_TOKEN: ${{ github.token }}", wf)
         with open(os.path.join(ROOT, "site", "README.md"), encoding="utf-8") as fh:
             self.assertIn("before merging to `main`", fh.read())

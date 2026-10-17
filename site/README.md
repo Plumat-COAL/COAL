@@ -2,15 +2,20 @@
 
 <!-- WEB-5: new file. See overnight/integration/CHANGES.md -->
 
-`site/` is the download page at **https://plumat-coal.github.io/COAL/**: plain HTML, CSS and JavaScript, no build
-step, nothing loaded from other sites (no CDNs, fonts, trackers or analytics). About 170 KB in all, 67 KB without
-images. <!-- CHANGED(WEB-8): was "About 50 KB without the screenshot". See overnight/integration/CHANGES.md -->
+`site/` is the website at **https://plumat-coal.github.io/COAL/**: plain HTML, CSS and JavaScript, no build
+step, nothing loaded from other sites (no CDNs, font services, trackers or analytics). About 225 KB in all.
+<!-- CHANGED(WEB-13): was one page, "About 170 KB in all, 67 KB without images" --> <!-- CHANGED(WEB-8): was "About 50 KB without the screenshot". See overnight/integration/CHANGES.md -->
 
 | File | What it is |
 |---|---|
-| `index.html` | the page |
-| `style.css` | styles, light and dark (follows the system setting) |
-| `main.js` | copy buttons, registers `sw.js` (CHANGED(WEB-11): no longer detects the visitor's system; all three downloads are always shown) |
+| `index.html` | home: what COAL is, the three downloads, a short example, three reasons, a cite pointer |
+| `install.html` | install steps for Windows (SmartScreen, Smart App Control), macOS, Linux, command line only; files and checksums |
+| `guide.html` | example run, warnings and errors, limitations, links to the README and help |
+| `differences.html` | differences from PAL2NAL v14 (the test counts) and the speed table |
+| `cite.html` | how to cite COAL and PAL2NAL (the version is in a `data-version-ref` span) |
+| `style.css` | styles for every page; dark only, light when printed |
+| `assets/fonts/` | Atkinson Hyperlegible Next, variable weight 400 to 800, Latin subset as WOFF2 (25 KB), with its licence `OFL.txt` (SIL Open Font License 1.1) |
+| `main.js` | copy buttons, registers `sw.js`; all three downloads are always shown (WEB-11), and CHANGED(WEB-13): the card for the visitor's system gets a "For this computer" mark, and old one-page links (`#windows`, `#speed`, ...) are sent to the page that now holds that section |
 | `sw.js` | keeps a copy of the site's own files so it opens offline after one visit (never touches downloads) |
 | `explainer.html` | a copy of `pitch/explainer.html` (the test fails if they differ: copy it again after editing the original) |
 | `img/broken-gene.webp` | screenshot of the alignment view (`pitch/backup/1_broken_gene_frameshift.png`, lossless WebP) |
@@ -21,6 +26,10 @@ images. <!-- CHANGED(WEB-8): was "About 50 KB without the screenshot". See overn
 | `assets/favicon-32.png`, `apple-touch-icon.png`, `icon-512.png` | PNG icons (written by `desktop/make_icon.py --site site`) |
 
 <!-- CHANGED(WEB-8): logo, mark, train and icon files added; screenshot now WebP. See overnight/integration/CHANGES.md -->
+<!-- CHANGED(WEB-13): several pages with one shared header and footer (a test checks they are identical; when you
+     change the header or footer, change it in every page). The font was made from google/fonts
+     ofl/atkinsonhyperlegiblenext with fontTools: `fontTools.varLib.instancer ... wght=400:800`, then `pyftsubset`
+     to Basic Latin, Latin-1 and common punctuation, `--flavor=woff2`. -->
 
 All internal links are relative, so the same files work at `/COAL/` and later at a custom domain.
 
@@ -60,8 +69,8 @@ page (`data-check`) is quoted from `README.md`.
 
 <!-- CHANGED(FIN-A9): order changed: tag and let the Release run publish BEFORE merging to main (merging deploys the
 site at once). See overnight/integration/CHANGES.md -->
-1. Bump the version in `src/coal/__init__.py`, `pyproject.toml` and `index.html` (they must agree; in `index.html`
-   also the citation's `data-version-ref` span, and `version:` in `CITATION.cff`), optionally add a
+1. Bump the version in `src/coal/__init__.py`, `pyproject.toml` and `index.html` (they must agree; also the
+   citation's `data-version-ref` span in `cite.html`, and `version:` in `CITATION.cff`), optionally add a
    `## <version>` section to `CHANGELOG.md`, and commit.
 2. Tag that commit and push the tag: `git tag v0.4.0 && git push origin v0.4.0`.
 3. The Release workflow builds and checks the wheel, sdist, Windows installer and portable zip, writes
@@ -84,8 +93,8 @@ which `releases/latest` (and so the website) ignores. To rebuild without publish
 
     python -m http.server -d site 8000      # then open http://127.0.0.1:8000/
 
-To see the page as deployed before the first release: copy `site/` somewhere, run
-`python scripts/site_without_release.py <copy>/index.html` and serve the copy.
+To see the site as deployed before the first release: copy `site/` somewhere, run
+`python scripts/site_without_release.py <copy>/*.html` and serve the copy. <!-- CHANGED(WEB-13): was <copy>/index.html -->
 
 ## One-time setup (repository admin)
 

@@ -1,7 +1,7 @@
 <!doctype html>
-<!-- WEB-3: new file. CHANGED(WEB-8): copy and design rewritten around the COAL logo. CHANGED(WEB-11): rewritten again:
-     no sidebar logo or section markers, H1 "COAL", three download cards, named authors, citation by version and repository.
-     See overnight/integration/CHANGES.md -->
+<!-- WEB-3: new file. CHANGED(WEB-8), CHANGED(WEB-11), CHANGED(WEB-12): see overnight/integration/CHANGES.md.
+     CHANGED(WEB-13): the site is split into short pages (index, install, guide, differences, cite) that share this
+     header and footer; tests_app/test_site.py checks they stay the same on every page. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -10,11 +10,12 @@
 <meta name="referrer" content="no-referrer">
 <title>COAL: codon alignments from protein alignments</title>
 <meta name="description" content="COAL makes a codon alignment from a protein multiple sequence alignment and the matching coding DNA. A drop-in replacement for PAL2NAL v14. MIT licence. Windows, macOS and Linux.">
-<meta name="color-scheme" content="light dark">
+<meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#121110">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="preload" href="assets/fonts/AtkinsonHyperlegibleNext-wght.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="style.css">
 <script src="main.js" defer></script>
 </head>
@@ -25,364 +26,114 @@
   <a class="home" href="./"><img src="assets/coal-mark-dark.svg" width="38" height="30" alt=""><span>COAL</span></a>
   <nav aria-label="Main">
     <ul>
-      <li><a href="#download">Download</a></li>
-      <li><a href="#docs">Docs</a></li>
-      <li><a href="#cite">Cite</a></li>
+      <li><a href="install.html">Install</a></li>
+      <li><a href="guide.html">Guide</a></li>
+      <li><a href="differences.html">Differences</a></li>
+      <li><a href="cite.html">Cite</a></li>
       <li><a href="https://github.com/plumat-coal/COAL">GitHub</a></li>
     </ul>
   </nav>
 </header>
 
 <main id="main">
-
-<div class="lede">
-  <h1>COAL</h1>
-  <p>COAL makes a codon alignment from a protein multiple sequence alignment and the matching coding DNA.</p>
-  <p>It is a drop-in replacement for <a href="#pal2nal">PAL2NAL v14</a>: it accepts the same input files and
-    options, with the exceptions listed under <a href="#limits">Limitations</a>. Its warnings and errors name the
-    gene concerned.</p>
-  <p class="meta">Version <span id="version" data-version="0.4.0">0.4.0</span> <span aria-hidden="true">·</span>
-    MIT licence <span aria-hidden="true">·</span>
-    <a href="https://github.com/plumat-coal/COAL/releases">Release notes</a></p>
-</div>
-
-<section class="download" id="download" aria-labelledby="download-title">
-  <h2 id="download-title" class="visually-hidden">Download</h2>
+<section class="hero" id="download" aria-labelledby="hero-title">
+  <h1 id="hero-title">Codon alignments from a protein alignment and its coding DNA</h1>
+  <p class="lead">COAL is a drop-in replacement for PAL2NAL v14. It accepts the same input files and options, with
+    <a href="guide.html#limits">a few exceptions</a>, and its warnings and errors name the gene concerned.</p>
+  <ul class="meta">
+    <li>Version <span id="version" data-version="0.4.0">0.4.0</span></li>
+    <li>MIT licence</li>
+    <li><a href="https://github.com/plumat-coal/COAL/releases">Release notes</a></li>
+  </ul>
+  <h2 class="visually-hidden">Download</h2>
   <div class="cards" id="get">
-    <div class="card">
+    <div class="card" id="card-windows">
+      <p class="suggest" hidden>For this computer</p>
       <h3>Windows</h3>
-      <p><a class="btn" id="win-download" href="https://github.com/plumat-coal/COAL/releases/latest/download/COAL-Setup-windows-x64.exe">Download Windows installer</a></p>
-      <p class="fine">64-bit Windows 10 and 11. Installs for your user account, without administrator rights. It is
-        not code-signed yet, so Windows asks you to confirm before it runs (<a href="#windows">what to expect</a>).</p>
+      <p class="req">64-bit Windows 10 and 11</p>
+      <p class="act"><a class="btn" id="win-download" href="https://github.com/plumat-coal/COAL/releases/latest/download/COAL-Setup-windows-x64.exe">Download Windows installer</a></p>
+      <p class="fine">Installs for your user account, without administrator rights. It is not code-signed yet, so
+        Windows asks you to confirm before it runs (<a href="install.html#windows">what to expect</a>).</p>
     </div>
-    <div class="card">
+    <div class="card" id="card-pip">
+      <p class="suggest" hidden>For this computer</p>
       <h3 id="pip-title">macOS and Linux</h3>
-      <p class="card-sub">Install with pip:</p>
-      <div class="cmd" data-copy-group>
-        <code id="pip-cmd">python3 -m pip install "coal[gui] @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz"</code>
-        <button type="button" class="copy" data-copy="pip-cmd" aria-describedby="pip-title">Copy</button>
-      </div>
-      <p class="fine">Needs Python 3.10 or newer. Install into a virtual environment (steps for
-        <a href="#macos">macOS</a> and <a href="#linux">Linux</a>). COAL is not on PyPI, so a plain
-        <code>pip install coal</code> gets you a different package.</p>
+      <p class="req">Python 3.10 or newer, with pip</p>
+      <p class="act"><button type="button" class="btn" data-copy="pip-cmd" aria-describedby="pip-title">Copy install command</button></p>
+      <div class="cmd"><code id="pip-cmd">python3 -m pip install "coal[gui] @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz"</code></div>
+      <p class="fine">Install into a virtual environment (steps for <a href="install.html#macos">macOS</a> and
+        <a href="install.html#linux">Linux</a>). COAL is not on PyPI, so a plain <code>pip install coal</code> gets
+        you a different package.</p>
     </div>
-    <div class="card">
+    <div class="card" id="card-source">
       <h3>Source code</h3>
-      <p><a class="btn" href="https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz">Download source code</a></p>
-      <p class="fine"><code>coal_src.tar.gz</code>, the Python source package of the newest release. The repository
-        is <a href="https://github.com/plumat-coal/COAL">on GitHub</a>.</p>
+      <p class="req">Python source package, <code>coal_src.tar.gz</code></p>
+      <p class="act"><a class="btn secondary" href="https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz">Download source code</a></p>
+      <p class="fine">The source of the newest release. The repository is <a href="https://github.com/plumat-coal/COAL">on GitHub</a>.</p>
     </div>
   </div>
-  <p class="also">Also: <a href="https://github.com/plumat-coal/COAL/releases/latest/download/COAL-windows-x64.zip">portable Windows zip</a>
-    <span aria-hidden="true">·</span> <a href="https://github.com/plumat-coal/COAL/releases/latest/download/SHA256SUMS.txt">SHA256SUMS.txt</a>
-    <span aria-hidden="true">·</span> <a href="https://github.com/plumat-coal/COAL/releases">older versions</a></p>
+  <ul class="also" aria-label="Other downloads">
+    <li><a href="https://github.com/plumat-coal/COAL/releases/latest/download/COAL-windows-x64.zip">Portable Windows zip</a></li>
+    <li><a href="https://github.com/plumat-coal/COAL/releases/latest/download/SHA256SUMS.txt">SHA256SUMS.txt</a></li>
+    <li><a href="https://github.com/plumat-coal/COAL/releases">Older versions</a></li>
+    <li><a href="install.html#files">All files and how to check them</a></li>
+  </ul>
   <p class="status" id="copy-status" role="status" aria-live="polite"></p>
 </section>
 
-<section class="sec" id="example" aria-labelledby="example-title">
-  <h2 id="example-title">Example</h2>
-  <p>The repository's <code>clean</code> example has 8 genes of 140 to 144 codons (plus a stop codon), aligned in
-    150 columns, with gaps in the protein alignment only.</p>
-<pre class="term" tabindex="0" aria-label="Terminal: running COAL on the clean example"><code><span class="ps">$</span> coal examples/clean/protein.aln.fasta examples/clean/dna.fasta -o codon.aln.fasta
-<span class="ps">$</span> echo $?
-0
-<span class="ps">$</span> head -3 codon.aln.fasta
-&gt;gene01
-ATG---GCGAGG---CCTTCCACTACTACCGTGAATATGTGGGGCTCGACACCAGTTTGG
-AATGGAGGG---AAAATG---TGGTTTGCTATGGGCGCCGTTGATAATATGCCTACCATG</code></pre>
-  <figure class="aln">
-    <div class="aln-scroll" tabindex="0" role="group" aria-labelledby="aln-cap">
-      <table class="triplets">
-        <caption class="visually-hidden">Protein alignment columns 1 to 14 with the codon COAL placed under each residue, for four genes</caption>
-        <tbody>
-          <tr><th scope="row">gene01</th><td>M<br><span>ATG</span></td><td class="gap">-<br><span>---</span></td><td>A<br><span>GCG</span></td><td>R<br><span>AGG</span></td><td class="gap">-<br><span>---</span></td><td>P<br><span>CCT</span></td><td>S<br><span>TCC</span></td><td>T<br><span>ACT</span></td><td>T<br><span>ACT</span></td><td>T<br><span>ACC</span></td><td>V<br><span>GTG</span></td><td>N<br><span>AAT</span></td><td>M<br><span>ATG</span></td><td>W<br><span>TGG</span></td></tr>
-          <tr><th scope="row">gene02</th><td>M<br><span>ATG</span></td><td>K<br><span>AAA</span></td><td>A<br><span>GCG</span></td><td>R<br><span>AGG</span></td><td>G<br><span>GGG</span></td><td>E<br><span>GAA</span></td><td>N<br><span>AAT</span></td><td>T<br><span>ACT</span></td><td>T<br><span>ACT</span></td><td>T<br><span>ACT</span></td><td>V<br><span>GTT</span></td><td>S<br><span>TCA</span></td><td>Q<br><span>CAA</span></td><td>W<br><span>TGG</span></td></tr>
-          <tr><th scope="row">gene04</th><td>M<br><span>ATG</span></td><td class="gap">-<br><span>---</span></td><td>A<br><span>GCC</span></td><td>R<br><span>CGA</span></td><td>G<br><span>GGA</span></td><td>E<br><span>GAG</span></td><td>S<br><span>TCG</span></td><td>K<br><span>AAA</span></td><td>T<br><span>ACA</span></td><td>T<br><span>ACA</span></td><td>V<br><span>GTG</span></td><td>V<br><span>GTG</span></td><td>R<br><span>AGA</span></td><td>W<br><span>TGG</span></td></tr>
-          <tr><th scope="row">gene08</th><td>M<br><span>ATG</span></td><td>K<br><span>AAA</span></td><td>A<br><span>GCA</span></td><td>R<br><span>CGC</span></td><td>K<br><span>AAG</span></td><td>E<br><span>GAG</span></td><td>S<br><span>TCG</span></td><td>T<br><span>ACT</span></td><td>T<br><span>ACC</span></td><td>T<br><span>ACA</span></td><td>V<br><span>GTC</span></td><td>V<br><span>GTT</span></td><td class="gap">-<br><span>---</span></td><td>K<br><span>AAA</span></td></tr>
-        </tbody>
-      </table>
-    </div>
-    <figcaption id="aln-cap">Columns 1 to 14 of the output for 4 of the 8 genes, each codon under its residue.</figcaption>
-  </figure>
-  <p>PAL2NAL-style options work as they are, for example
-    <code>coal pep.aln nuc.fasta -codontable 2 -o out.fasta</code>. The package also installs a <code>pal2nal</code>
-    command that takes a PAL2NAL command line unchanged. With <code>-nogap</code>, COAL removes the stop codons of
-    the genetic code you chose; PAL2NAL v14 always removes the standard code's.</p>
-  <p>Large inputs are split across processes automatically. <code>-j</code> sets the maximum.</p>
-</section>
-
-<section class="sec" id="misfit" aria-labelledby="misfit-title">
-  <h2 id="misfit-title">Warnings and errors</h2>
-  <p>The <code>mito</code> example has 24 vertebrate mitochondrial genes. With the standard genetic code (the
-    default), COAL writes the alignment but warns about every codon that does not match its residue, then
-    suggests a code:</p>
-<pre class="term" tabindex="0" aria-label="Terminal: the mito example with the standard and then the mitochondrial genetic code"><code><span class="ps">$</span> coal examples/mito/protein.aln.fasta examples/mito/dna.fasta -o codon.aln.fasta
-coal: warning: Homo_COX1 pepAlnPos 1: M does not correspond to ATA
-coal: warning: Homo_COX1 pepAlnPos 7: M does not correspond to ATA
-coal: warning: Homo_COX1 pepAlnPos 36: W does not correspond to TGA
-<span class="cmt">(176 more warnings, 179 in all)</span>
-coal: summary: 24 of 24 sequences have codons that do not match their amino acid (kept in the alignment). Under genetic code 2 (Vertebrate mitochondrial), all 24 sequences match their protein; under code 1, none do. Codes 5 and 13 fit these sequences too: choose the code of the organism and organelle the genes come from. Re-run with code 2?
-<span class="ps">$</span> coal examples/mito/protein.aln.fasta examples/mito/dna.fasta -codontable 2 -o codon.aln.fasta
-<span class="ps">$</span></code></pre>
-  <p>The desktop app runs the same engine and gives one line per gene instead of one per codon:</p>
-  <div class="said" role="group" aria-label="What the COAL app shows for the mito example">
-    <p><samp>Homo_COX1: 7 codons do not match their amino acid (first at column 1): the protein says M but the DNA
-      has ATA. Kept in the alignment; check the genetic code.</samp></p>
-  </div>
-  <p>In the <code>one_broken_gene</code> example, 1 of 20 genes is missing a base. The run stops and nothing is
-    written:</p>
+<section class="sec" id="look" aria-labelledby="look-title">
+  <h2 id="look-title">What it looks like</h2>
+  <p>In the repository's <code>one_broken_gene</code> example, 1 of 20 genes is missing a base. COAL stops, names the
+    gene and the column, and writes nothing:</p>
+  <div class="look">
 <pre class="term" tabindex="0" aria-label="Terminal: the one_broken_gene example stops with an error"><code><span class="ps">$</span> coal examples/one_broken_gene/protein.aln.fasta examples/one_broken_gene/dna.fasta -o codon.aln.fasta
 coal: error: OG0001_sp14: protein and DNA are inconsistent (no match found)
 coal: summary: 1 sequence of 20 could not be converted (first: OG0001_sp14: protein and DNA are inconsistent (no match found). Frameshift at column 102: one base is missing in the DNA, so from here on the codons are read out of step.)
 coal: summary: The run stopped there: 6 sequences were not checked and no output was written.
 <span class="ps">$</span> echo $?
 1</code></pre>
-  <p>PAL2NAL v14 reports an inconsistency here too, but exits with status 0, so a pipeline would carry on.</p>
-  <p>Not every frameshift stops the run. A base missing near the end of a gene can still let the gene fit, with a few
-    mismatch warnings; the app then says the run of mismatches looks like a frameshift.</p>
-  <figure class="shot">
-    <img src="img/broken-gene.webp" width="1280" height="720" loading="lazy"
-      alt="COAL's alignment view of the one_broken_gene example: genes OG0001_sp06 to sp20 in rows of codons under their amino acids. OG0001_sp14 is marked failed, and column 102 is outlined where its codons go out of step.">
-    <figcaption>The app's alignment view of the same example. The app also writes a methods paragraph and a JSON
-      report with checksums of the inputs. <a href="explainer.html">A short animation</a> shows how a codon
-      alignment is built.</figcaption>
-  </figure>
-</section>
-
-<section class="sec" id="pal2nal" aria-labelledby="pal2nal-title">
-  <h2 id="pal2nal-title">Differences from PAL2NAL</h2>
-  <p>PAL2NAL is by Suyama, Torrents and Bork (2006). We wrote COAL independently, in Python, and it
-    contains none of PAL2NAL's code: we ran PAL2NAL version 14 as a separate program, only to compare outputs. PAL2NAL is GPL-2.0;
-    COAL is MIT.</p>
-  <p>COAL's output is identical to PAL2NAL v14's except for a short list of documented, deliberate differences.
-    These are newer NCBI genetic-code tables (codes 3, 10, 11 and 13), <code>-nogap</code> removing the chosen
-    code's stop codons, the chosen code's start codons for the first Met, pairing by IDs that match only after
-    normalising, and inputs where PAL2NAL v14 writes malformed output or fails.</p>
-  <p>Our test suite compares COAL with stored PAL2NAL v14 output on <span data-check="39 input cases">39 input cases</span>,
-    with every option combination in all 4 output formats: <span data-check="285 checks">285 checks</span>.</p>
-  <ul>
-    <li>Standard output is <span data-check="byte-identical in 238 checks">byte-identical in 238 checks</span>. In 4
-      of these the warnings differ on purpose (NCBI tables 10, 11 and 13).</li>
-    <li>Of the rest, <span data-check="in 24 both tools fail">in 24 both tools fail</span>.</li>
-    <li><span data-check="23 checks are deliberate output or exit-status differences">23 checks are deliberate output or exit-status differences</span>:
-      6 deliberate errors, 3 with different output and 14 <code>-nogap</code> checks with a non-standard genetic
-      code.</li>
-  </ul>
-  <p>Some of the differences, as measured against PAL2NAL v14:</p>
-  <ul class="diffs">
-    <li>An invalid character in the protein alignment is an error. PAL2NAL treats it as X, and its output can lose
-      a codon without saying so.</li>
-    <li><code>.</code> is read as a gap. In PAL2NAL it misaligns the output row.</li>
-    <li>In code 10, TGA is cysteine, as in the current NCBI table. PAL2NAL treats it as a stop.</li>
-    <li>In mitochondrial data, PAL2NAL's <code>-nogap</code> deletes real tryptophan (TGA) columns, because it
-      always uses the standard code's stops.</li>
-    <li>Probably-wrong data, such as unrelated DNA or a gene where most codons do not match, gets a notice on
-      stderr. With <code>--strict</code> it is an error.</li>
-    <li>Any error gives a non-zero exit status. PAL2NAL always exits with 0.</li>
-  </ul>
-  <p>The full list is in the
-    <a href="https://github.com/plumat-coal/COAL#deliberate-differences-from-pal2nal">README</a> and
-    <a href="https://github.com/plumat-coal/COAL/blob/main/tests/README.md">tests/README.md</a>.</p>
-</section>
-
-<section class="sec" id="speed" aria-labelledby="speed-title">
-  <h2 id="speed-title">Speed</h2>
-  <div class="table-scroll" tabindex="0" role="group" aria-labelledby="speed-cap">
-    <table class="nums">
-      <caption id="speed-cap">Wall-clock time of the whole command, start-up included; median of 3 runs on synthetic data</caption>
-      <thead><tr><th scope="col">Genes × codons</th><th scope="col">PAL2NAL v14</th><th scope="col">COAL</th><th scope="col">PAL2NAL ÷ COAL</th></tr></thead>
-      <tbody>
-        <tr><th scope="row">10 × 500</th><td><span data-check="0.051 s">0.051 s</span></td><td><span data-check="0.061 s">0.061 s</span></td><td><span data-check="0.8×">0.8×</span></td></tr>
-        <tr><th scope="row">1,000 × 500</th><td><span data-check="2.39 s">2.39 s</span></td><td><span data-check="0.139 s">0.139 s</span></td><td><span data-check="17.3×">17.3×</span></td></tr>
-        <tr><th scope="row">10,000 × 500</th><td><span data-check="24.7 s">24.7 s</span></td><td><span data-check="0.864 s">0.864 s</span></td><td><span data-check="28.6×">28.6×</span></td></tr>
-        <tr><th scope="row">100 × 10,000</th><td><span data-check="24.5 s">24.5 s</span></td><td><span data-check="0.207 s">0.207 s</span></td><td><span data-check="118.6×">118.6×</span></td></tr>
-      </tbody>
-    </table>
+    <figure>
+      <img src="img/broken-gene.webp" width="1280" height="720"
+        alt="COAL's alignment view of the one_broken_gene example: genes OG0001_sp06 to sp20 in rows of codons under their amino acids. OG0001_sp14 is marked failed, and column 102 is outlined where its codons go out of step.">
+      <figcaption>The desktop app shows the same run as an alignment, with the column where the reading frame
+        shifts.</figcaption>
+    </figure>
   </div>
-  <p>On tiny inputs both tools take <span data-check="about 0.05 s">about 0.05 s</span>, nearly all of it start-up,
-    and COAL is slightly slower. As genes get longer, PAL2NAL's time grows much faster than their length. COAL's
-    grows in proportion to the input.</p>
-  <p>Half a million genes of 500 codons (<span data-check="974 MB">974 MB</span> of input) took
-    <span data-check="9.8 s">9.8 s</span> with 4 processes and <span data-check="25.2 s">25.2 s</span> with 1. The
-    1-process run used at most <span data-check="131 MB">131 MB</span> of memory. We did not run PAL2NAL at that
-    size.</p>
-  <p class="fine">Measured on one Windows 11 machine: Intel 64-bit CPU (Family 6 Model 183), Python 3.13.9,
-    Strawberry Perl 5.42.3. Raw data and the command to reproduce them are in the
-    <a href="https://github.com/plumat-coal/COAL#benchmark-results">README</a>.</p>
+  <p class="more"><a href="guide.html">More examples, warnings and options in the guide</a></p>
 </section>
 
-<section class="sec" id="limits" aria-labelledby="limits-title">
-  <h2 id="limits-title">Limitations</h2>
-  <ul>
-    <li>COAL does not read Gblocks-format input or write PAL2NAL's <code>-html</code> web-server output.</li>
-    <li><code>coal</code> writes FASTA unless you ask for another format. The <code>pal2nal</code> command defaults
-      to CLUSTAL, as PAL2NAL does.</li>
-    <li>The Windows installer is not code-signed. SmartScreen asks you to confirm, and Smart App Control blocks it
-      outright.</li>
-    <li>COAL is not on PyPI. Install it from the release with the commands on this page.</li>
-    <li>More than 4 processes do not help yet, because one main process reads and writes everything.</li>
+<section class="sec" id="why" aria-labelledby="why-title">
+  <h2 id="why-title">Why use it</h2>
+  <ul class="why">
+    <li>
+      <h3>PAL2NAL command lines work</h3>
+      <p>The <code>pal2nal</code> command accepts a PAL2NAL v14 command line unchanged. Our test suite compares
+        COAL with stored PAL2NAL v14 output in <span data-check="285 checks">285 checks</span>; every difference is
+        deliberate and documented.</p>
+      <p><a href="differences.html">Differences from PAL2NAL</a></p>
+    </li>
+    <li>
+      <h3>A broken gene stops the run</h3>
+      <p>A frameshift is an error with exit status 1. PAL2NAL v14 reports an inconsistency but exits with status 0,
+        so a pipeline would carry on.</p>
+      <p><a href="guide.html#misfit">Warnings and errors</a></p>
+    </li>
+    <li>
+      <h3>Large inputs are quick</h3>
+      <p>10,000 genes of 500 codons took <span data-check="24.7 s">24.7 s</span> with PAL2NAL v14 and
+        <span data-check="0.864 s">0.864 s</span> with COAL, start-up included. On tiny inputs COAL is slightly
+        slower.</p>
+      <p><a href="differences.html#speed">Speed measurements</a></p>
+    </li>
   </ul>
 </section>
 
-<section class="sec" id="install" aria-labelledby="install-title">
-  <h2 id="install-title">Install</h2>
-  <p>Steps for <a href="#windows">Windows</a>, <a href="#macos">macOS</a>, <a href="#linux">Linux</a> and the
-    <a href="#cli">command line only</a>. To update, run the same install again. It fetches the newest release.</p>
-
-  <section class="os" id="windows" aria-labelledby="windows-title">
-    <h3 id="windows-title">Windows</h3>
-    <ol class="steps">
-      <li>Download <a href="https://github.com/plumat-coal/COAL/releases/latest/download/COAL-Setup-windows-x64.exe">COAL-Setup-windows-x64.exe</a>.</li>
-      <li>Edge may say the file <q>isn't commonly downloaded</q>. Select <kbd>…</kbd> next to the message, then
-        <strong>Keep</strong>, <strong>Show more</strong> and <strong>Keep anyway</strong>.</li>
-      <li>Open the file. Windows shows <q>Windows protected your PC</q>. Select <strong>More info</strong>, check
-        that the app is <code>COAL-Setup-windows-x64.exe</code> and the publisher is <q>Unknown publisher</q>,
-        then select <strong>Run anyway</strong>. You can <a href="#verify">check the file's checksum</a> first.
-        <details class="ss">
-          <summary>What these 2 screens look like</summary>
-          <div class="ss-pair">
-            <div class="ss-box" role="img" aria-label="First screen: Windows protected your PC. Microsoft Defender SmartScreen prevented an unrecognized app from starting. Running this app might put your PC at risk. A More info link and a Don't run button.">
-              <p class="ss-title">Windows protected your PC</p>
-              <p>Microsoft Defender SmartScreen prevented an unrecognized app from starting. Running this app might put your PC at risk.</p>
-              <p class="ss-link">More info</p>
-              <p class="ss-buttons"><span class="ss-btn">Don't run</span></p>
-            </div>
-            <div class="ss-box" role="img" aria-label="After More info: App: COAL-Setup-windows-x64.exe. Publisher: Unknown publisher. Buttons Run anyway and Don't run.">
-              <p class="ss-title">Windows protected your PC</p>
-              <p>Microsoft Defender SmartScreen prevented an unrecognized app from starting. Running this app might put your PC at risk.</p>
-              <p class="ss-meta">App: <span>COAL-Setup-windows-x64.exe</span><br>Publisher: <span>Unknown publisher</span></p>
-              <p class="ss-buttons"><span class="ss-btn ss-go">Run anyway</span><span class="ss-btn">Don't run</span></p>
-            </div>
-          </div>
-          <p class="fine">Redrawn from the 2 SmartScreen screens. The wording varies a little between Windows
-            versions. Left: the first screen. Right: after <strong>More info</strong>.</p>
-        </details>
-      </li>
-      <li>Choose whether you want a desktop shortcut and an <q>Open with</q> entry for .fasta and .aln files. Both
-        are optional. Select <strong>Install</strong>. COAL goes into <code>%LOCALAPPDATA%\Programs\COAL</code>.</li>
-      <li>Start <strong>COAL</strong> from the Start menu. The first start can take about 10 seconds. Drop your
-        protein alignment and DNA onto the window, or select <strong>Try an example</strong>.</li>
-    </ol>
-
-    <div class="note" id="smart-app-control">
-      <h4>If Smart App Control blocks COAL</h4>
-      <p>Smart App Control on Windows 11 blocks unsigned apps. It has no <q>Run anyway</q> button and no way to
-        allow a single app. You can switch it off, but on some Windows versions it can then only be switched back
-        on by resetting or reinstalling Windows. We suggest leaving it on and installing with pip instead. In
-        PowerShell, with Python 3.10 or newer from python.org:</p>
-      <div class="cmd block" data-copy-group>
-        <code id="win-pip">py -m venv $HOME\coal-env
-&amp; $HOME\coal-env\Scripts\python -m pip install "coal[gui] @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz"
-&amp; $HOME\coal-env\Scripts\python -m coal_app</code>
-        <button type="button" class="copy" data-copy="win-pip" aria-label="Copy the Windows pip commands">Copy</button>
-      </div>
-      <p>The last line starts the app. Open <code>http://127.0.0.1:7860</code> in your browser. The app listens on
-        this computer only.</p>
-    </div>
-    <p class="fine">To run COAL without installing it, unzip
-      <a href="https://github.com/plumat-coal/COAL/releases/latest/download/COAL-windows-x64.zip">COAL-windows-x64.zip</a>
-      and run <code>COAL\COAL.exe</code>. Windows asks for the same confirmation. On a managed university or company
-      computer, IT policy may block both.</p>
-  </section>
-
-  <section class="os" id="macos" aria-labelledby="macos-title">
-    <h3 id="macos-title">macOS</h3>
-    <ol class="steps">
-      <li>In Terminal, run <code>python3 --version</code>. You need 3.10 or newer. If yours is older, install the
-        current Python from python.org.</li>
-      <li>Make a virtual environment for COAL:
-        <div class="cmd" data-copy-group><code id="mac-1">python3 -m venv ~/coal-env</code><button type="button" class="copy" data-copy="mac-1" aria-label="Copy: make the environment">Copy</button></div></li>
-      <li>Install COAL and its app into it:
-        <div class="cmd" data-copy-group><code id="mac-2">~/coal-env/bin/python -m pip install "coal[gui] @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz"</code><button type="button" class="copy" data-copy="mac-2" aria-label="Copy: install COAL">Copy</button></div></li>
-      <li>Start the app and open <code>http://127.0.0.1:7860</code> in your browser. <kbd>Ctrl</kbd>+<kbd>C</kbd>
-        in Terminal stops it.
-        <div class="cmd" data-copy-group><code id="mac-3">~/coal-env/bin/coal-gui</code><button type="button" class="copy" data-copy="mac-3" aria-label="Copy: start the app">Copy</button></div></li>
-    </ol>
-  </section>
-
-  <section class="os" id="linux" aria-labelledby="linux-title">
-    <h3 id="linux-title">Linux</h3>
-    <ol class="steps">
-      <li>Run <code>python3 --version</code> (3.10 or newer). On Debian and Ubuntu you may also need
-        <code>sudo apt install python3-venv</code>.</li>
-      <li>Recent Debian, Ubuntu and Fedora refuse <code>pip install</code> outside a virtual environment, so make
-        one and install COAL into it:
-        <div class="cmd block" data-copy-group><code id="lin-1">python3 -m venv ~/coal-env
-~/coal-env/bin/python -m pip install "coal[gui] @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz"</code><button type="button" class="copy" data-copy="lin-1" aria-label="Copy: make the environment and install COAL">Copy</button></div></li>
-      <li>Start the app with <code>~/coal-env/bin/coal-gui</code> and open <code>http://127.0.0.1:7860</code>.
-        On a server, use the command line.</li>
-    </ol>
-  </section>
-
-  <section class="os" id="cli" aria-labelledby="cli-title">
-    <h3 id="cli-title">Command line only</h3>
-    <p>The pip install also puts <code>coal</code> and <code>pal2nal</code> in <code>~/coal-env/bin</code>
-      (<code>$HOME\coal-env\Scripts</code> on Windows). For the command line alone, write <code>coal</code> instead
-      of <code>coal[gui]</code> in the install command. The engine has no required dependencies.</p>
-<pre class="code"><code>coal protein.aln.fasta dna.fasta -o codon.aln.fasta
-coal protein.aln.fasta dna.fasta -codontable 2 -nogap -o codon.aln.fasta
-coal --help</code></pre>
-  </section>
-</section>
-
-<section class="sec" id="downloads" aria-labelledby="downloads-title">
-  <h2 id="downloads-title">Files and checksums</h2>
-  <p>These links always point to the newest release. Older versions and release notes are on the
-    <a href="https://github.com/plumat-coal/COAL/releases">releases page</a>.</p>
-  <div class="table-scroll" tabindex="0" role="group" aria-labelledby="files-cap">
-    <table class="files">
-      <caption id="files-cap" class="visually-hidden">Files in the newest COAL release</caption>
-      <thead><tr><th scope="col">File</th><th scope="col">Contents</th></tr></thead>
-      <tbody>
-        <tr><td><a href="https://github.com/plumat-coal/COAL/releases/latest/download/COAL-Setup-windows-x64.exe">COAL-Setup-windows-x64.exe</a></td><td>Windows installer, 64-bit Windows 10 and 11</td></tr>
-        <tr><td><a href="https://github.com/plumat-coal/COAL/releases/latest/download/COAL-windows-x64.zip">COAL-windows-x64.zip</a></td><td>The same app without an installer. Unzip and run <code>COAL\COAL.exe</code>.</td></tr>
-        <tr><td><a href="https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz">coal_src.tar.gz</a></td><td>Python source package, used by the pip commands on this page</td></tr>
-        <tr><td><a href="https://github.com/plumat-coal/COAL/releases/latest/download/SHA256SUMS.txt">SHA256SUMS.txt</a></td><td>SHA-256 of every file in the release</td></tr>
-        <tr><td><a href="https://github.com/plumat-coal/COAL/releases/latest">Python wheel</a></td><td>On the release page. Its name contains the version, so it has no fixed link.</td></tr>
-      </tbody>
-    </table>
-  </div>
-  <h3 id="verify">Check a file</h3>
-  <p>Download SHA256SUMS.txt into the same folder as the file, then run the command for your system.</p>
-  <dl class="verify">
-    <dt>Windows (PowerShell)</dt>
-    <dd><pre class="code"><code>Get-FileHash .\COAL-Setup-windows-x64.exe -Algorithm SHA256</code></pre>
-      The hash must equal the one on that file's line of SHA256SUMS.txt. Case does not matter.</dd>
-    <dt>Linux</dt>
-    <dd><pre class="code"><code>sha256sum -c --ignore-missing SHA256SUMS.txt</code></pre>
-      Every file you downloaded should print <samp>OK</samp>.</dd>
-    <dt>macOS</dt>
-    <dd><pre class="code"><code>shasum -a 256 coal_src.tar.gz</code></pre>
-      Compare the result with that file's line of SHA256SUMS.txt.</dd>
-  </dl>
-</section>
-
-<section class="sec" id="cite" aria-labelledby="cite-title">
+<section class="sec" id="cite-short" aria-labelledby="cite-title">
   <h2 id="cite-title">Cite</h2>
-  <p>If you use COAL in published work, please cite the version you used. <code>coal --version</code> prints
-    it.</p>
-  <blockquote class="cite"><p>Newton C, Murati K (2026). COAL: codon alignments from protein alignments, version
-    <span data-version-ref>0.4.0</span>. https://github.com/plumat-coal/COAL</p></blockquote>
-  <p>COAL follows PAL2NAL's method, so please cite PAL2NAL too:</p>
-  <blockquote class="cite"><p>Suyama M, Torrents D, Bork P (2006). PAL2NAL: robust conversion of protein sequence
-    alignments into the corresponding codon alignments. <i>Nucleic Acids Research</i> 34:W609–W612.</p></blockquote>
-  <p class="fine">The repository's <a href="https://github.com/plumat-coal/COAL/blob/main/CITATION.cff">CITATION.cff</a>
-    holds the COAL reference in a form that reference managers can read.</p>
-</section>
-
-<section class="sec" id="docs" aria-labelledby="docs-title">
-  <h2 id="docs-title">Docs and help</h2>
-  <ul class="links">
-    <li><a href="https://github.com/plumat-coal/COAL#readme">README</a>: options, input formats, every difference
-      from PAL2NAL v14, benchmarks.</li>
-    <li><a href="https://github.com/plumat-coal/COAL/issues">Issues</a>: bugs and questions. Please include the
-      output of <code>coal --version</code>, your operating system and, if you can, a small file that shows the
-      problem.</li>
-    <li><a href="https://github.com/plumat-coal/COAL/blob/main/.claude/skills/coal/SKILL.md">SKILL.md</a>: how an
-      AI agent should call COAL. The app also works as an MCP server.</li>
-    <li><a href="https://github.com/plumat-coal/COAL">Source code</a> and
-      <a href="https://github.com/plumat-coal/COAL/blob/main/LICENSE">MIT licence</a>.</li>
-  </ul>
+  <div class="cite-box">
+    <p>If you use COAL in published work, please cite the version you used, and PAL2NAL too.</p>
+    <p><a href="cite.html">References to copy</a></p>
+  </div>
 </section>
 </main>
 
@@ -390,7 +141,8 @@ coal --help</code></pre>
   <div class="foot-text">
     <p>Made by Chloe Newton and Keanu Murati at Reinvent the Wheel, an AI × Science tool-building hackathon in
       London, October 2026.</p>
-    <p>No cookies, trackers or external scripts.</p>
+    <p>No cookies, trackers or external scripts. Set in Atkinson Hyperlegible Next
+      (<a href="assets/fonts/OFL.txt">SIL Open Font License</a>).</p>
   </div>
   <div class="rail"><svg class="train" viewBox="140 204 1120 582" aria-hidden="true" focusable="false"><g class="ts" fill="#CFC8BE"><circle cx="304" cy="328" r="32"/><circle cx="368" cy="272" r="44"/><circle cx="456" cy="236" r="28"/></g><g class="tb" fill="#1E1E1E"><rect x="264" y="368" width="72" height="124" rx="12.4"/></g><g class="tbo" fill="#2A2A2A"><rect x="216" y="480" width="376" height="216" rx="40"/></g><g class="tb" fill="#1E1E1E"><path d="M216 600V696H144Z"/><rect x="568" y="316" width="200" height="380" rx="20"/><rect x="552" y="296" width="232" height="36" rx="12.4"/><rect x="792" y="496" width="464" height="200" rx="21"/><rect x="760" y="622" width="40" height="20" rx="0"/><circle cx="320" cy="720" r="52"/><circle cx="480" cy="720" r="52"/><circle cx="672" cy="712" r="64"/><circle cx="880" cy="732" r="40"/><circle cx="1024" cy="732" r="40"/><circle cx="1168" cy="732" r="40"/></g><g class="ta" fill="#FFC24B"><rect x="616" y="368" width="104" height="88" rx="12"/></g><g class="th" fill="#4A4744"><circle cx="320" cy="719.5" r="15.5"/><circle cx="480" cy="719.5" r="15.5"/><circle cx="672" cy="711.5" r="19.5"/><circle cx="880" cy="732" r="11"/><circle cx="1024" cy="732" r="11"/><circle cx="1168" cy="732" r="11"/></g><g class="tc" fill="#2A2A2A"><rect x="848" y="448" width="40" height="40" rx="8"/><rect x="878" y="400" width="40" height="40" rx="8"/><rect x="974" y="400" width="40" height="40" rx="8"/><rect x="1004" y="352" width="40" height="40" rx="8"/><rect x="1052" y="352" width="40" height="40" rx="8"/><rect x="1052" y="448" width="40" height="40" rx="8"/><rect x="1082" y="400" width="40" height="40" rx="8"/></g><g class="tsl" fill="#4A4744"><rect x="926" y="400" width="40" height="40" rx="8"/><rect x="956" y="352" width="40" height="40" rx="8"/></g><g class="te" fill="#FF6A13"><rect x="800" y="448" width="40" height="40" rx="8"/><rect x="896" y="448" width="40" height="40" rx="8"/><rect x="1004" y="448" width="40" height="40" rx="8"/><rect x="1034" y="400" width="40" height="40" rx="8"/><rect x="1112" y="448" width="40" height="40" rx="8"/><rect x="1208" y="448" width="40" height="40" rx="8"/></g><g class="ta" fill="#FFC24B"><rect x="956" y="448" width="40" height="40" rx="8"/><rect x="1130" y="400" width="40" height="40" rx="8"/><rect x="1160" y="448" width="40" height="40" rx="8"/></g></svg></div>
 </footer>
