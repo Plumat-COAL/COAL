@@ -28,10 +28,15 @@ except ImportError:  # pragma: no cover
 try:  # mcp >= 2 (the `mcp` extra): a ToolError is an anticipated failure, its message reaches the model
     from mcp.server.mcpserver.exceptions import ToolError as _ToolErrorBase
 except ImportError:  # Gradio's MCP server (mcp 1.x) or no MCP at all: any exception becomes isError
-    _ToolErrorBase = Exception
+    _ToolErrorBase = None
+
+# CHANGED(SHIP-13): was `class CoalToolError(_ToolErrorBase, ValueError)` with _ToolErrorBase = Exception when mcp 2 is
+# absent, which is an invalid MRO (Exception before its subclass ValueError): importing coal_app.tools failed in every
+# environment without mcp 2 (plain install, Gradio's mcp 1.x, the Windows build), so CI run #67 went red.
+_TOOL_ERROR_BASES = (_ToolErrorBase, ValueError) if _ToolErrorBase is not None else (ValueError,)
 
 
-class CoalToolError(_ToolErrorBase, ValueError):
+class CoalToolError(*_TOOL_ERROR_BASES):
     """A failure the caller can fix (missing file, unknown genetic code, unsupported format, path not allowed).
     Raised instead of returning {"ok": false}, so MCP clients get a real tool error (isError: true)."""
 

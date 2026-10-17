@@ -105,7 +105,9 @@ def _test_pause(count: int) -> None:
 
 def effective_jobs(requested: int, total_nt: int, min_nt_per_job: int | None = None) -> int:
     """Number of processes to actually use. requested: 0 = all cores, N = at most N."""
-    cores = os.cpu_count() or 1
+    # process_cpu_count (Python 3.13+) respects CPU affinity (taskset, Slurm, containers); cpu_count counts every
+    # core of the machine, which over-subscribes a job limited to a few cores of a large node.
+    cores = getattr(os, "process_cpu_count", os.cpu_count)() or 1
     cap = cores if requested <= 0 else requested
     per = MIN_NT_PER_JOB if min_nt_per_job is None else min_nt_per_job
     by_size = total_nt // per if per > 0 else cap

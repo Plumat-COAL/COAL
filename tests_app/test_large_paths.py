@@ -196,6 +196,18 @@ class TestMcpDefaults(unittest.TestCase):
         self.assertIs(self._launch_kwargs(["--no-mcp"])["mcp"], False)
         self.assertEqual(self._launch_kwargs([])["host"], "127.0.0.1")
 
+    def test_remote_host_needs_allow_remote(self):
+        import contextlib
+        import io
+        from coal_app import __main__ as entry
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(entry.main(["--host", "0.0.0.0"]), 2)   # refused before Gradio is imported
+        self.assertIn("--allow-remote", err.getvalue())
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(self._launch_kwargs(["--host", "0.0.0.0", "--allow-remote"])["host"], "0.0.0.0")
+        self.assertEqual(self._launch_kwargs(["--host", "localhost"])["host"], "localhost")
+
     def test_space_does_not(self):
         import types
         from coal_app import space_app

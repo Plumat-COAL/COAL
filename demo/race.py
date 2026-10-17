@@ -12,7 +12,7 @@ family by family against PAL2NAL's (COAL's padding columns removed).
 PAL2NAL is NOT included (GPL-2.0). This script runs *your* local copy, by default
 PAL2NAL/pal2nal.v14/pal2nal.pl as fetched by `python scripts/fetch_pal2nal.py`.
 It never imports or ships PAL2NAL. The C++ COAL binary is raced too if it is built
-(cpp/build/...) or given with --cpp.
+(build/coal-cpp, as the README builds it) or given with --cpp.
 """
 from __future__ import annotations
 
@@ -193,7 +193,8 @@ def bar(r, width=28):
 
 
 def find_cpp():
-    pats = ["cpp/build/coal", "cpp/build/coal.exe", "cpp/build/Release/coal.exe", "cpp/build/*/coal*"]
+    pats = ["build/coal-cpp", "build/coal-cpp.exe", "build/Release/coal-cpp.exe",   # README's CMake commands
+            "cpp/build/coal", "cpp/build/coal.exe", "cpp/build/Release/coal.exe", "cpp/build/*/coal*"]
     for pat in pats:
         for p in glob.glob(os.path.join(ROOT, pat)):
             if os.path.isfile(p) and os.access(p, os.X_OK):
@@ -205,7 +206,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--pal2nal", default=DEFAULT_PAL2NAL, help="path to your local pal2nal.pl")
     ap.add_argument("--perl", default=shutil.which("perl") or "perl", help="Perl interpreter")
-    ap.add_argument("--cpp", help="path to the C++ COAL binary (default: look in cpp/build/)")
+    ap.add_argument("--cpp", help="path to the C++ COAL binary (default: look in build/)")
     ap.add_argument("--family", nargs=2, action="append", metavar=("PEP_ALN", "NUC_FASTA"),
                     help="one of your gene families (protein alignment FASTA + its DNA); repeat it. "
                          "Default: synthetic families")

@@ -491,6 +491,7 @@ class RunReport:
         self.pair_note: str | None = None
         self.partial = False
         self.kinds = bytearray()                   # gene_kind initial per processed sequence
+        self._ff_cache: tuple | None = None        # (key, first failed index): _first_fail is called per entry
         self.entries: dict[int, dict] = {}         # non-ok entries (all entries are rebuilt from these)
         self.cols: set[int] = set()                # -nomismatch: columns with a mismatch warning
         self.real_cols: set[int] = set()           # ... of which with a definite (A/C/G/T) mismatch
@@ -586,6 +587,7 @@ class RunReport:
         return entry
 
     def _set_kind(self, k, ch):
+        self._ff_cache = None
         if k < len(self.kinds):
             self.kinds[k] = ord(ch)
         else:
@@ -615,6 +617,7 @@ class RunReport:
         self._dict = None
         state = state or {}
         self.kinds = bytearray(state.get("kinds", "o" * completed).encode("ascii"))[:completed]
+        self._ff_cache = None
         self.cols, self.real_cols = set(state.get("cols", ())), set(state.get("real_cols", ()))
         self.entries = {e["index"]: e for e in nonok if e["index"] < completed}
         self.resumed_from = completed
@@ -736,7 +739,14 @@ class RunReport:
         return dict(e, status="not_checked", messages=msgs)
 
     def _first_fail(self):
-        return next((k for k, ch in enumerate(self.kinds) if chr(ch) == "e"), None)
+        # Cached: entry_view calls this for every sequence, and a full scan each time made a run that stopped on a
+        # late gene error quadratic in the number of sequences. kinds only changes through add_sequence/_set_kind
+        # (append or overwrite) and restore (new object), which the key covers together with _set_kind's reset.
+        key = (id(self.kinds), len(self.kinds))
+        if self._ff_cache is None or self._ff_cache[0] != key:
+            i = self.kinds.find(b"e")
+            self._ff_cache = (key, None if i < 0 else i)
+        return self._ff_cache[1]
 
     # -------------------------------------------------- views
     def _all_entries(self) -> list[dict]:
