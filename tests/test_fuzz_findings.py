@@ -147,5 +147,50 @@ class TestFZ3TfastxNotation(Tmp):  # FZ-3; expected outputs: PAL2NAL v14
         self.assertIn("invalid protein alignment characters ['/']", err)
 
 
+class TestFZ6AmbiguousShortPlacement(Tmp):  # FZ-6
+    def test_notice_when_a_short_protein_fits_in_several_places(self):
+        self.write("p.fa", ">s\nMK\n")
+        self.write("n.fa", ">s\nATGAAACCATGAAA\n")  # MK fits at 0 and at 8
+        rc, out, err = self.coal("p.fa", "n.fa")
+        self.assertEqual((rc, out), (0, ">s\nATGAAA\n"), err)  # PAL2NAL v14: the leftmost, ATGAAA
+        self.assertIn("s: placement is ambiguous: 2 possible positions in the DNA for this 2-residue protein; "
+                      "used the leftmost", err)
+        self.assertEqual(self.coal("p.fa", "n.fa", "-q")[1:], (">s\nATGAAA\n", ""))
+
+    def test_no_notice_when_unique_or_longer(self):
+        self.write("p.fa", ">s\nMK\n")
+        self.write("n.fa", ">s\nCCATGAAACC\n")
+        self.assertEqual(self.coal("p.fa", "n.fa")[2], "")
+        self.write("p.fa", ">s\nMKVA\n")
+        self.write("n.fa", ">s\nATGAAAGTTGCTATGAAAGTTGCT\n")
+        self.assertEqual(self.coal("p.fa", "n.fa")[2], "")
+
+    def test_app_counts_it_as_a_warning(self):
+        sys.path.insert(0, str(SRC))
+        from coal_app.core import _parse_warning
+        sid, msg = _parse_warning("coal: warning: s: placement is ambiguous: 2 possible positions in the DNA for "
+                                  "this 2-residue protein; used the leftmost (as PAL2NAL)")
+        self.assertEqual((sid, msg["code"]), ("s", "warning"))
+
+
+class TestFZ4ShortGeneWording(Tmp):  # FZ-4
+    def setUp(self):
+        super().setUp()
+        self.write("p.fa", ">s\nMKV---LAWE\n")  # 7 residues, 10 columns: one anchor, which fails (1 mismatch)
+        self.write("n.fa", ">s\nATGAAACCCCTGGCTTGGGAATAAGG\n")
+
+    def test_strict_error_does_not_say_7_of_7(self):
+        rc, out, err = self.coal("p.fa", "n.fa", "--strict")
+        self.assertEqual(rc, 1)
+        self.assertNotIn("7 of 7", err)
+        self.assertIn("the gene has only 7 codons: too few to tell where it starts in the longer DNA", err)
+
+    def test_notice_wording(self):
+        rc, out, err = self.coal("p.fa", "n.fa")
+        self.assertEqual(rc, 0, err)
+        self.assertNotIn("7 of 7", err)
+        self.assertIn("the gene has only 7 codons", err)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -409,8 +409,8 @@ _WARN_PAIRING = re.compile(r"^coal: warning: only (\d+) of (\d+) protein IDs are
 # report marks such genes "failed" (probably wrong data). See overnight/integration/CHANGES.md
 _WARN_UNRELATED = re.compile(r"^coal: warning: (\S+?): protein and DNA are probably unrelated: (\d+) of (\d+) "
                              r"checkable codons do not match")
-_WARN_GUESS = re.compile(r"^coal: warning: (\S+?): position of the gene in the DNA is a guess: .*?only (\d+) of "
-                         r"(\d+) codons have no ambiguous bases")
+_WARN_GUESS = re.compile(r"^coal: warning: (\S+?): position of the gene in the DNA is a guess: .*?(?:only (\d+) of "
+                         r"(\d+) codons have no ambiguous bases|the gene has only (\d+) codons)")  # CHANGED(FZ-4)
 SUSPECT_CODES = ("suspect_unrelated", "suspect_position")  # a gene with one of these is reported as "failed"
 PROBLEM_HINTS = ("partial_id_match", "engine_warning", "nomismatch_unknown")  # hints that mean "something is off"
 
@@ -440,9 +440,11 @@ def _parse_warning(line: str) -> tuple[str, dict] | None:
                               f"to refuse such genes.")}
     m = _WARN_GUESS.match(line)
     if m:  # CHANGED(DEC-1): new
-        sid, nchk, nres = m.groups()
+        sid, nchk, nres, short = m.groups()
+        why = (f"Only {nchk} of this gene's {nres} codons have no unknown bases (N), and no "
+               if short is None else f"The gene has only {short} codons, and no ")  # CHANGED(FZ-4)
         return sid, {"code": "suspect_position",
-                     "text": (f"Only {nchk} of this gene's {nres} codons have no unknown bases (N), and no "
+                     "text": (f"{why}"
                               f"10-residue stretch of the protein was found in the DNA, so COAL cannot tell where "
                               f"the gene starts in the longer DNA. Its row was taken from the start of the DNA (as "
                               f"PAL2NAL does) and may be shifted: do not trust it. Run COAL with --strict to refuse "

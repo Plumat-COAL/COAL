@@ -54,6 +54,11 @@ class TestDec1AppMarksSuspectGenes(unittest.TestCase):  # DEC-1
             "starts in the longer DNA. The codons were taken from the start of the DNA as PAL2NAL does, so the row "
             "may be shifted (--strict makes this an error)")
         self.assertEqual((sid, msg["code"]), ("g", "suspect_position"))
+        sid, msg = core._parse_warning(  # FZ-4 wording
+            "coal: warning: s: position of the gene in the DNA is a guess: no 10-residue segment of the protein was "
+            "found in the DNA and the gene has only 7 codons, too few to tell where it starts in the longer DNA. ...")
+        self.assertEqual((sid, msg["code"]), ("s", "suspect_position"))
+        self.assertIn("only 7 codons", msg["text"])
 
     def test_unrelated_gene_is_failed_but_alignment_written(self):
         n = len(UNREL_PROT)

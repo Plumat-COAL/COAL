@@ -314,6 +314,25 @@ def _np_quick(np, table: int, dna: str, residues: str) -> bool:
 MIN_CHECKABLE = 10
 
 
+AMBIGUOUS_MAX_RESIDUES = 3  # CHANGED(FZ-6): proteins this short get a notice when they fit in several places
+
+
+def _note_ambiguous(res: Threaded, table: int, dna: str, row: str, toks=None) -> None:
+    """CHANGED(FZ-6): new. A protein of at most 3 residues often fits in several places of a longer DNA (e.g. inside
+    a 5' UTR); like PAL2NAL, COAL takes the leftmost, and now says so. stdout is unchanged.
+    See overnight/integration/CHANGES.md"""
+    if len(row) - row.count(GAP) - sum(row.count(d) for d in "0123456789") > AMBIGUOUS_MAX_RESIDUES:
+        return  # the common case, decided without building tokens
+    toks = toks if toks is not None else _tokens(row, START)
+    nres = sum(1 for t in toks if t[0] == "r")
+    if nres > AMBIGUOUS_MAX_RESIDUES:
+        return
+    n = sum(1 for st in range(len(dna) - _length(toks) + 1) if _matches_at(table, dna, st, toks))
+    if n > 1:
+        res.notices.append(f"{res.seq_id}: placement is ambiguous: {n} possible positions in the DNA for this "
+                           f"{nres}-residue protein; used the leftmost (as PAL2NAL)")
+
+
 def thread_one(seq_id: str, row: str, raw_dna: str, table: int, strict: bool = False) -> Threaded:
     bad = _VALID.search(row)
     if bad:
@@ -335,12 +354,14 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int, strict: bool = F
     # 1. exact fit (quick check at offset 0 first: the common, clean case)
     if not _DIGIT.search(residues) and _quick_offset0(table, dna, residues):
         res.dna = raw_dna[:3 * len(residues)]
+        _note_ambiguous(res, table, dna, row)
         return res
     target = _Target(table, dna)
     toks = _tokens(row, START)
     s = _find(target, toks)
     if s >= 0:
         res.dna = raw_dna[s:s + _length(toks)]
+        _note_ambiguous(res, table, dna, row, toks)
         return res
 
     # 2. anchor fallback
@@ -417,13 +438,16 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int, strict: bool = F
     # shifted). Now, when no anchor matched, the DNA is longer than the gene (so the offset is not forced) and
     # fewer than MIN_CHECKABLE codons can be checked, it is an error. See overnight/integration/CHANGES.md
     if not found_any and len(dna) > _length(toks) and nchk < MIN_CHECKABLE:
+        # CHANGED(FZ-4): was always "only K of N codons have no ambiguous bases" (also "7 of 7" for a short gene
+        # without any ambiguous base); now "the gene has only N codons" when none is ambiguous
+        few = (f"only {nchk} of {nres} codons have no ambiguous bases" if namb else f"the gene has only {nres} codons")
         if strict:  # CHANGED(DEC-1): was always an error; see above
             raise CoalError(f"{seq_id}: protein and DNA are inconsistent (no 10-residue segment of the protein was "
-                            f"found in the DNA and only {nchk} of {nres} codons have no ambiguous bases: too few to "
-                            f"tell where the gene starts in the longer DNA)")
+                            f"found in the DNA and {few}: too few to tell where {'the gene' if namb else 'it'} "
+                            f"starts in the longer DNA)")
         res.notices.append(f"{seq_id}: position of the gene in the DNA is a guess: no 10-residue segment of the "
-                           f"protein was found in the DNA and only {nchk} of {nres} codons have no ambiguous bases, "
-                           f"too few to tell where the gene starts in the longer DNA. The codons were taken from the "
+                           f"protein was found in the DNA and {few}, too few to tell where "
+                           f"{'the gene' if namb else 'it'} starts in the longer DNA. The codons were taken from the "
                            f"start of the DNA as PAL2NAL does, so the row may be shifted (--strict makes this an error)")
         return res
     if not found_any:
