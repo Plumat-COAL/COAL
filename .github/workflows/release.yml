@@ -107,9 +107,11 @@ jobs:
           if (-not (Test-Path $iscc)) { throw "Inno Setup installed, but $iscc is missing" }
       - name: Build the C++ engine (bundled into the app; SHIP-19)
         run: |
-          cmake -S . -B build -A x64 -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
-          cmake --build build --config Release -j 2
-          if (-not (Test-Path build\Release\coal-cpp.exe)) { throw "no build\Release\coal-cpp.exe" }
+          # cpp/build, not build/: the engine tests in build.ps1 (Python 3.12) would pick up build/ and run the C++
+          # comparisons, which the cpp job already runs on Python 3.13 (CI #80-#83 failed there)
+          cmake -S . -B cpp/build -A x64 -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+          cmake --build cpp/build --config Release -j 2
+          if (-not (Test-Path cpp\build\Release\coal-cpp.exe)) { throw "no cpp\build\Release\coal-cpp.exe" }
       - name: Create the build venv with this Python (build.ps1 reuses it)
         run: python -m venv desktop\.venv
       - name: Build (desktop\build.ps1 - tests, PyInstaller, frozen --version and smoke test, installer)
