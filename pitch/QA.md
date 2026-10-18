@@ -81,13 +81,16 @@ opt-in. Honest limit: we haven't audited Gradio's own network behaviour beyond t
 Through MCP: `codon_align` returns the output file, counts, hints and per-gene explanations as structured
 data, and `explain_report` turns the JSON report into plain English. The agent reports what COAL found,
 with the same columns and gene names a human sees, instead of guessing from raw error text. It can't
-"fix" a sequence; it can only re-run with options COAL suggests, such as another genetic code.
+"fix" a sequence; it can only re-run with options COAL suggests, such as another genetic code. Setting it up: the
+Windows installer's last page has "Connect COAL to Claude Desktop" (ticked by default); MCP is an open standard, so any
+MCP-capable assistant can start the same server (`COAL.exe -m coal_app --mcp`). <!-- CHANGED(SHIP-18): new sentence -->
 
 **10. What doesn't it do yet?**
 PAL2NAL's `-html` web-server mode (a clear error) and Gblocks-format input. <!-- CHANGED(DEC-4): was "CLUSTAL/PAML/codon
 output formats and -blockonly" --> The desktop app has been run on Windows 11 (the command line byte-identical to Linux) and in CI on Linux; the Space is not deployed. The DIAMOND
-preset has only been tested with a stand-in, not real genomes. The C++ core is merged and matches the Python engine (285/285 stored checks, thousands of random inputs); it is
-built from source with CMake, not yet shipped in the installer.
+preset has only been tested with a stand-in, not real genomes. The C++ core is merged and matches the Python engine (285/285 stored checks, thousands of random inputs); since
+0.4.2 the Windows installer ships it and COAL uses it automatically for inputs of 1 MB or more (pip users build it with
+CMake). <!-- CHANGED(SHIP-19): was "built from source with CMake, not yet shipped in the installer" -->
 
 **11. Why not just fix PAL2NAL?** <!-- REV-3: new -->
 It's GPL Perl, and we wanted an MIT engine anyone can embed, plus a C++ core. We kept PAL2NAL as the reference
