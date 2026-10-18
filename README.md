@@ -4,32 +4,27 @@
 [PAL2NAL](https://www.bork.embl.de/pal2nal/): it maps unaligned coding DNA onto an existing protein multiple sequence
 alignment to produce a codon alignment, ready for dN/dS (PAML codeml, HyPhy) or DNA phylogenies.
 
-**Website and downloads: https://plumat-coal.github.io/COAL/**
-
 Built by Chloe Newton and Keanu Murati at the Reinvent the Wheel AI × Science Tool-building Hackathon, London,
 October 2026.
 
-- **Fast:** up to **~119× faster** than PAL2NAL on the benchmarked datasets (see [Benchmark results](#benchmark-results)),
-  with a Python engine and an optional C++ engine, `coal-cpp`, that gives byte-identical output.
-- **Checked against PAL2NAL itself:** COAL's output is identical to PAL2NAL v14's except for a short list of documented, deliberate differences (newer NCBI genetic-code tables for codes 3, 10, 11 and 13; `-nogap` removing the selected code's stop codons; the selected code's start codons for the first Met; pairing by IDs that match only after normalising where PAL2NAL v14's file order would give a protein another gene's DNA; and inputs where PAL2NAL v14 writes malformed output or fails). Tested: all 285 stored reference checks pass (238 byte-identical, 4 of them with deliberately different warnings; 24 where both tools fail; 23 deliberate output or exit-status differences: 6 deliberate errors, 3 different outputs, 14 `-nogap` checks with a non-standard code), and in 20,000 random comparisons with the real PAL2NAL v14 (5,000 cases x 4 output formats) 13,826 were byte-identical, 4,681 both failed and 1,493 were deliberate differences, each checked to be exactly the documented change; 0 unexplained differences.
-- **Tells you what went wrong:** a per-gene health check, warnings that name the gene and position, genetic-code
-  suggestions and a ready-to-paste methods sentence.
-- **Drop-in:** the `pal2nal` command accepts an unchanged PAL2NAL v14 command line.
-
 ## Download and install
 
-### Windows app (no terminal needed)
+### Option 1: download the app from the website (recommended)
 
-Download the installer from the website: **https://plumat-coal.github.io/COAL/**
-([direct link to the latest installer](https://github.com/plumat-coal/COAL/releases/latest/download/COAL-Setup-windows-x64.exe);
-all files, including a portable zip and `SHA256SUMS.txt`, are on the
-[Releases page](https://github.com/plumat-coal/COAL/releases/latest)).
+**https://plumat-coal.github.io/COAL/** has the Windows installer and step-by-step install instructions for
+Windows, macOS and Linux. No terminal is needed on Windows.
 
-The app is not code-signed yet, so Windows shows **"Windows protected your PC"**: click **More info**, then
-**Run anyway**. The [install page](https://plumat-coal.github.io/COAL/install.html) walks through every screen,
-including what to do if Smart App Control blocks it. User guide: `desktop/README.md`.
+- **Windows:** click **Download Windows installer** on the website
+  ([direct link to the latest installer](https://github.com/plumat-coal/COAL/releases/latest/download/COAL-Setup-windows-x64.exe);
+  all files, including a portable zip and `SHA256SUMS.txt`, are on the
+  [Releases page](https://github.com/plumat-coal/COAL/releases/latest)). The app is not code-signed yet, so Windows
+  shows **"Windows protected your PC"**: click **More info**, then **Run anyway**. The
+  [install page](https://plumat-coal.github.io/COAL/install.html) walks through every screen, including what to do
+  if Smart App Control blocks it. User guide: `desktop/README.md`.
+- **macOS and Linux:** follow the [install page](https://plumat-coal.github.io/COAL/install.html#macos) (three
+  commands, also below).
 
-### macOS and Linux (or Windows with Python)
+### Option 2: macOS and Linux (or Windows with Python)
 
 Needs Python 3.10+:
 
@@ -42,12 +37,21 @@ python3 -m venv ~/coal-env
 
 (Install from the release link above, not `pip install coal`: that name on PyPI belongs to another project.)
 
-### From source
+### Option 3: from source
 
 ```
 git clone https://github.com/plumat-coal/COAL && cd COAL
 pip install -e .            # command line;  .[gui] for the app, .[mcp] for AI agents, .[fast] for numpy
 ```
+
+## Why COAL
+
+- **Fast:** up to **~119× faster** than PAL2NAL on the benchmarked datasets (see [Benchmark results](#benchmark-results)),
+  with a Python engine and an optional C++ engine, `coal-cpp`, that gives byte-identical output.
+- **Checked against PAL2NAL itself:** COAL's output is identical to PAL2NAL v14's except for a short list of documented, deliberate differences (newer NCBI genetic-code tables for codes 3, 10, 11 and 13; `-nogap` removing the selected code's stop codons; the selected code's start codons for the first Met; pairing by IDs that match only after normalising where PAL2NAL v14's file order would give a protein another gene's DNA; and inputs where PAL2NAL v14 writes malformed output or fails). Tested: all 285 stored reference checks pass (238 byte-identical, 4 of them with deliberately different warnings; 24 where both tools fail; 23 deliberate output or exit-status differences: 6 deliberate errors, 3 different outputs, 14 `-nogap` checks with a non-standard code), and in 20,000 random comparisons with the real PAL2NAL v14 (5,000 cases x 4 output formats) 13,826 were byte-identical, 4,681 both failed and 1,493 were deliberate differences, each checked to be exactly the documented change; 0 unexplained differences.
+- **Tells you what went wrong:** a per-gene health check, warnings that name the gene and position, genetic-code
+  suggestions and a ready-to-paste methods sentence.
+- **Drop-in:** the `pal2nal` command accepts an unchanged PAL2NAL v14 command line.
 
 ## Quick start
 
