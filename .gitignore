@@ -46,3 +46,4 @@ build/
 /*_check*.py
 /coal_test_log.txt
 /*.bat
+build-app/

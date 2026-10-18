@@ -197,7 +197,11 @@ def find_cpp():
             "cpp/build/coal", "cpp/build/coal.exe", "cpp/build/Release/coal.exe", "cpp/build/*/coal*"]
     for pat in pats:
         for p in glob.glob(os.path.join(ROOT, pat)):
-            if os.path.isfile(p) and os.access(p, os.X_OK):
+            # CHANGED(SHIP-19): on Windows os.access(X_OK) is true for any file, so "cpp/build/*/coal*" picked
+            # coal_core.lib (CI #84); now only programs (.exe on Windows), never libraries or CMake files
+            if os.name == "nt" and not p.lower().endswith(".exe"):
+                continue
+            if os.path.isfile(p) and os.access(p, os.X_OK) and "coal_core" not in os.path.basename(p):
                 return p
     return None
 

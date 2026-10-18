@@ -58,7 +58,8 @@ for f in glob.glob(os.path.join(REPO, "examples", "*", "*")):
 # CHANGED(SHIP-19): was cpp/build/** only (the CMakeLists.txt is at the repo root, so builds land in build/) and put
 # into _internal/bin, where coal.dispatch.find_cpp does not look; now build/** too, into _internal itself (next to
 # python3*.dll and vcruntime), so `coal` hands large inputs to it.
-cpp = sorted(glob.glob(os.path.join(REPO, "build", "**", "coal-cpp.exe"), recursive=True)
+cpp = sorted(glob.glob(os.path.join(REPO, "build-app", "**", "coal-cpp.exe"), recursive=True)  # CI / release.yml
+             + glob.glob(os.path.join(REPO, "build", "**", "coal-cpp.exe"), recursive=True)
              + glob.glob(os.path.join(REPO, "cpp", "build", "**", "coal-cpp.exe"), recursive=True))
 if cpp:
     binaries.append((cpp[0], "."))
