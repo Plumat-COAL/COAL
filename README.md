@@ -14,13 +14,15 @@ October 2026.
 **https://plumat-coal.github.io/COAL/** has the Windows installer and step-by-step install instructions for
 Windows, macOS and Linux. No terminal is needed on Windows.
 
-- **Windows:** click **Download Windows installer** on the website
+- **Windows 10/11:** click **Download Windows installer** on the website (it installs for your user account; no
+  administrator rights needed)
   ([direct link to the latest installer](https://github.com/plumat-coal/COAL/releases/latest/download/COAL-Setup-windows-x64.exe);
   all files, including a portable zip and `SHA256SUMS.txt`, are on the
   [Releases page](https://github.com/plumat-coal/COAL/releases/latest)). The app is not code-signed yet, so Windows
   shows **"Windows protected your PC"**: click **More info**, then **Run anyway**. The
   [install page](https://plumat-coal.github.io/COAL/install.html) walks through every screen, including what to do
-  if Smart App Control blocks it. User guide: `desktop/README.md`.
+  if Smart App Control blocks it. On the installer's last page, **Connect COAL to Claude Desktop** lets Claude run
+  COAL for you ([AI agents](#ai-agents-mcp)). User guide: `desktop/README.md`.
 - **macOS and Linux:** follow the [install page](https://plumat-coal.github.io/COAL/install.html#macos) (three
   commands, also below).
 
@@ -35,7 +37,9 @@ python3 -m venv ~/coal-env
 ~/coal-env/bin/coal --help       # the command line
 ```
 
-(Install from the release link above, not `pip install coal`: that name on PyPI belongs to another project.)
+For the command line alone, write `coal` instead of `coal[gui]`. Install from the release link above, not
+`pip install coal`: COAL is not on PyPI, and that name belongs to another project. Check downloads against
+[SHA256SUMS.txt](https://github.com/plumat-coal/COAL/releases/latest/download/SHA256SUMS.txt).
 
 ### Option 3: from source
 
@@ -53,7 +57,7 @@ Windows launchers (`desktop\run_from_source.bat`, `desktop\setup_mcp.bat`) do th
 
 ## Why COAL
 
-- **Fast:** up to **~119× faster** than PAL2NAL on the benchmarked datasets (see [Benchmark results](#benchmark-results)),
+- **Fast:** up to **118.6× faster** than PAL2NAL v14 on long genes (see [Benchmark results](#benchmark-results)),
   with a Python engine and a C++ engine, `coal-cpp`, that gives byte-identical output.
 - **Checked against PAL2NAL itself:** COAL's output is identical to PAL2NAL v14's except for a short list of
   documented, deliberate differences (see [Deliberate differences](#deliberate-differences-from-pal2nal)). All
