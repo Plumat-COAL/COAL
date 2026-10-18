@@ -66,6 +66,18 @@ jobs:
             # CHANGED(WEB-13): every page (was _site/index.html only); pages without download links are left as they are
             python scripts/site_without_release.py _site/*.html
           fi
+      # CHANGED(WEB-18): new. The site is built from main, but its buttons give the latest release: show that release's
+      # version and drop text about features it does not have yet (data-since). Rollback: delete this step.
+      - name: Match the site to the latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh release view --repo "${{ github.repository }}" --json tagName --jq .tagName 2>/dev/null || true)
+          if [ -n "$tag" ]; then
+            python scripts/site_for_release.py "${tag#v}" _site/*.html
+          else
+            echo "No published release: site left at main's version."
+          fi
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9  # v5.0.0
         with:
           path: _site
