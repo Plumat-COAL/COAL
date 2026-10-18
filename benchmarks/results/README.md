@@ -1,0 +1,13 @@
+# Benchmark results
+
+<!-- CHANGED(IMP-M-4): new summary; superseded runs removed (bench_windows_20261017_0049, the first
+cpp_vs_python_linux run; both are in the git history). Every file left here is cited by README.md or pitch/PITCH.md. -->
+Each run is a `.csv` (one row per dataset) and a `.txt` (machine, versions). Only compare numbers from the same machine.
+
+| Files | What | Cited in |
+|---|---|---|
+| `bench_windows_20261016_2356.*` | COAL vs PAL2NAL v14, Windows 11, 20 logical CPUs, COAL `58a1219`: up to 119x faster, outputs identical | README "Benchmark results", PITCH.md |
+| `bench_windows_20261017_0055.*`, `bench_windows_20261017_0059.*` | COAL scaling to 100,000 and 500,000 sequences, 1 / 4 / 20 processes (same machine) | README "Scaling (v0.3)" |
+| `cpp_vs_python_linux_4084d1f.md` + `cpp_vs_python_linux_4084d1f_*` | Python vs C++ engine, 2-core Linux VM, commit `4084d1f`: C++ 3-6x faster, a third of the memory | README "C++ engine", PITCH.md |
+
+Reproduce with `benchmarks/run_bench.py` (see `benchmarks/README.md`).

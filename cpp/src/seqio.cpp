@@ -443,11 +443,19 @@ std::string DnaIndex::get(size_t i) {
     int f = fno_[i];
     if (!fh_[f]) fh_[f] = std::make_unique<std::ifstream>(paths_[f], std::ios::binary);
     std::ifstream& in = *fh_[f];
+    // Never fall back to the previous record's bytes: a file that cannot be (re)opened, or that
+    // shrank or changed after it was indexed, is an error, not another gene's DNA.
+    if (!in.is_open()) throw InputError(open_error(paths_[f]), "file_error");
     long long n = end_[i] - start_[i];
     raw_.resize((size_t)n);
     in.clear();
     in.seekg(start_[i]);
-    in.read(&raw_[0], (std::streamsize)n);
+    if (n > 0) in.read(&raw_[0], (std::streamsize)n);  // (gcount() is only meaningful after a read)
+    if (!in || (n > 0 && (long long)in.gcount() != n)) {
+        throw InputError(paths_[f] + ": could not read the DNA of record " + std::to_string(i + 1) +
+                             " (the file changed after it was read, or cannot be read)",
+                         "file_error");
+    }
     std::string out;
     out.reserve((size_t)n);
     bool at_line_start = true, skip = false;

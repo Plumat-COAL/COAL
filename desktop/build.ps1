@@ -144,6 +144,30 @@ try {
         $env:COAL_SMOKE_EXE = $Exe
         try {
             Invoke-Step "Smoke test (frozen COAL.exe)" $Py @("-m", "unittest", "desktop\test_smoke.py", "-v") 900
+            # CHANGED(SHIP-19): new. The bundled C++ engine (when built) must be found by the frozen app and give
+            # the Python engine's bytes.
+            $cppExe = Join-Path $Dist "COAL\_internal\coal-cpp.exe"
+            if (Test-Path $cppExe) {
+                $a = Join-Path $env:TEMP "coal_build_cpp.fasta"
+                $b = Join-Path $env:TEMP "coal_build_py.fasta"
+                $env:COAL_ENGINE = "cpp"
+                try {
+                    $null = Invoke-Capture "Frozen engine, C++ (COAL_ENGINE=cpp)" $Exe `
+                        @("-m", "coal", "examples\clean\protein.aln.fasta", "examples\clean\dna.fasta", "-o", $a) 120
+                } finally {
+                    Remove-Item Env:\COAL_ENGINE -ErrorAction SilentlyContinue
+                }
+                Invoke-Step "Python engine (reference)" $Py `
+                    @("-m", "coal", "examples\clean\protein.aln.fasta", "examples\clean\dna.fasta", "-o", $b) 120
+                if ((Get-FileHash $a).Hash -ne (Get-FileHash $b).Hash) { throw "bundled coal-cpp output differs from Python" }
+                Write-Host "    bundled coal-cpp: found by the app, output byte-identical to Python"
+            } else {
+                Write-Host "No coal-cpp.exe in the bundle (build it first: cmake -S . -B build; cmake --build build --config Release)." -ForegroundColor Yellow
+            }
+            # CHANGED(SHIP-18): new. What Claude Desktop starts after "Connect COAL to Claude Desktop": the frozen
+            # app's stdio MCP server must answer and run a real alignment.
+            Invoke-Step "MCP for Claude Desktop (frozen COAL.exe -m coal_app --mcp)" $Py `
+                @("-m", "unittest", "-v", "tests_app.test_tools.TestFrozenAppMcp") 600
         } finally {
             Remove-Item Env:\COAL_SMOKE_EXE -ErrorAction SilentlyContinue
         }

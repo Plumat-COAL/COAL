@@ -27,7 +27,7 @@ class TestR2A1Nomismatch(RunsDirCase):  # R2-A1 / R2-D5 / R2-E1
     def test_mito_code1_nomismatch_is_not_all_ok(self):
         p, d = core.example_paths("mito")
         r = tools.codon_align(p, d, codontable=1, nomismatch=True)
-        self.assertTrue(r["ok"])
+        self.assertTrue(r["completed"])
         s = r["summary"]
         self.assertEqual(s["ok"], 0, s)
         self.assertEqual(s["warning"], 24, s)
@@ -40,7 +40,7 @@ class TestR2A1Nomismatch(RunsDirCase):  # R2-A1 / R2-D5 / R2-E1
             self.assertIn("removed", prob["explanation"])
         text = tools.explain_report(r["report_path"])
         self.assertNotIn("Nothing went wrong", text)
-        self.assertNotEqual(core.banner_head(r["ok"], s), core.banner_head(True, {"ok": 24, "total": 24}))
+        self.assertNotEqual(core.banner_head(r["completed"], s), core.banner_head(True, {"ok": 24, "total": 24}))
 
     def test_probe_leaves_no_files(self):
         p, d = core.example_paths("mito")
@@ -174,7 +174,7 @@ class TestR2A7UsageError(RunsDirCase):  # R2-A7
         os.chdir(d)
         self.addCleanup(os.chdir, old)
         r = tools.codon_align("-p.fa", "-d.fa")
-        self.assertTrue(r["ok"], r)
+        self.assertTrue(r["completed"], r)
         self.assertEqual(r["summary"]["ok"], 8, r)
 
 

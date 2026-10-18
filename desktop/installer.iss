@@ -99,7 +99,15 @@ Root: HKA; Subkey: "Software\Classes\.faa\OpenWithProgids"; ValueType: string; V
 Root: HKA; Subkey: "Software\Classes\.fna\OpenWithProgids"; ValueType: string; ValueName: "{#ProgId}"; ValueData: ""; Flags: uninsdeletevalue; Tasks: openwith
 
 [Run]
+; CHANGED(SHIP-18): new, ticked by default. Adds "coal" to Claude Desktop's mcpServers (COAL.exe -m coal_app --mcp),
+; keeping the rest of claude_desktop_config.json (old copy: claude_desktop_config.json.bak-coal), then says to restart
+; Claude Desktop. Was: no way for Claude Desktop to start the installed app.
+Filename: "{app}\{#AppExe}"; Parameters: "--connect-claude"; Description: "Connect COAL to Claude Desktop (Claude can then run COAL for you)"; Flags: postinstall skipifsilent
 Filename: "{app}\{#AppExe}"; Description: "Open COAL now"; Flags: nowait postinstall skipifsilent
+
+[UninstallRun]
+; CHANGED(SHIP-18): new. Removes the "coal" entry the installer added (only one that starts COAL.exe), quietly.
+Filename: "{app}\{#AppExe}"; Parameters: "--disconnect-claude --quiet"; Flags: runhidden waituntilterminated; RunOnceId: "DisconnectClaude"
 
 [UninstallDelete]
 ; COAL's own app data: logs, single-instance lock, WebView2 profile. Never the user's results

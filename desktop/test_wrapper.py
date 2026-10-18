@@ -12,6 +12,7 @@ retry, lifeline and shutdown code is exercised.
 from __future__ import annotations
 
 import io
+from pathlib import Path
 import json
 import os
 import shutil
@@ -451,9 +452,10 @@ class TestServeProtocol(unittest.TestCase):
         self.assertTrue(cmd[1].endswith("coal_desktop.py"))
         self.assertEqual(cmd[2:5], ["--serve", "--port", "1234"])
         self.assertIn("--parent-pid", cmd)
-        self.assertNotIn("--mcp", cmd)  # WIN-M: MCP on by default, opt out with --no-mcp
-        self.assertNotIn("--no-mcp", cmd)
-        self.assertIn("--no-mcp", cd.default_server_command(1234, mcp=False))
+        self.assertNotIn("--mcp", cmd)
+        # CHANGED(IMP-M-3): was MCP on by default (WIN-M); now off unless the window was started with --mcp
+        self.assertIn("--no-mcp", cmd)
+        self.assertNotIn("--no-mcp", cd.default_server_command(1234, mcp=True))
 
     def test_child_env_offline_and_no_proxy(self):
         old = dict(os.environ)
@@ -982,6 +984,14 @@ class TestLaunchLogging(LogEnv):
             self.assertEqual(f.read(), "OLD RUN\n")
         self.assertFalse(os.path.exists(os.path.join(self.logs, "local_app.log")))
 
+    def test_window_child_serves_mcp_only_with_the_mcp_flag(self):  # IMP-M-3
+        for argv, want_no_mcp in ((["--browser"], True), (["--browser", "--mcp"], False),
+                                  (["--browser", "--mcp", "--no-mcp"], True)):
+            with mock.patch.object(cd, "_run_in_browser", return_value=0) as rb:
+                self.assertEqual(cd.main_window(cd.parse_args(argv)), 0)
+            server = rb.call_args.args[0]
+            self.assertEqual("--no-mcp" in server.command(1234), want_no_mcp, argv)
+
 
 class TestClaimInstance(unittest.TestCase):
     """WIN-R5: a lock that is still being released, or a primary still writing instance.json,
@@ -1026,10 +1036,12 @@ class TestClaimInstance(unittest.TestCase):
 
 
 class TestMcpDefault(unittest.TestCase):
-    """WIN-M: the desktop app serves MCP unless started with --no-mcp."""
+    """IMP-M-3 (was WIN-M): the window serves MCP only with --mcp; the --serve child does what it is told."""
 
     def test_flags(self):
         self.assertFalse(cd.parse_args([]).no_mcp)
+        self.assertFalse(cd.parse_args([]).mcp)
+        self.assertTrue(cd.parse_args(["--mcp"]).mcp)
         self.assertTrue(cd.parse_args(["--no-mcp"]).no_mcp)
         for argv, want in ((["--serve", "--port", "5"], True), (["--serve", "--port", "5", "--no-mcp"], False)):
             with mock.patch.object(cd, "serve", return_value=0) as sv:
@@ -1165,6 +1177,94 @@ class TestUtf8Streams(unittest.TestCase):
     def test_no_streams_is_fine(self):
         with mock.patch.object(sys, "stdout", None), mock.patch.object(sys, "stderr", None):
             cd._utf8_streams()
+
+
+class TestClaudeDesktop(unittest.TestCase):
+    """SHIP-18: the installer's "Connect COAL to Claude Desktop" (COAL.exe --connect-claude) and uninstall's
+    --disconnect-claude edit claude_desktop_config.json without losing anything else in it."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.appdata = os.path.join(self.tmp, "Roaming")
+        self.env = {"APPDATA": self.appdata, "LOCALAPPDATA": os.path.join(self.tmp, "Local"),
+                    "HOME": os.path.join(self.tmp, "home"), "USERPROFILE": os.path.join(self.tmp, "home")}
+        self.exe = r"C:\Users\x\AppData\Local\Programs\COAL\COAL.exe"
+        self.cfg = os.path.join(self.appdata, "Claude", "claude_desktop_config.json")
+
+    def run_cmd(self, connect):
+        with mock.patch.object(cd, "_info_box"), mock.patch.object(cd, "_error_dialog") as err:
+            code = cd.claude_desktop_command(connect=connect, env=self.env, exe=self.exe)
+        return code, err
+
+    def read(self, path=None):
+        with open(path or self.cfg, encoding="utf-8") as fh:
+            return json.load(fh)
+
+    def test_connect_creates_the_file_when_claude_has_none(self):
+        code, _ = self.run_cmd(True)
+        self.assertEqual(code, 0)
+        self.assertEqual(self.read(), {"mcpServers": {"coal": {"command": self.exe,
+                                                               "args": ["-m", "coal_app", "--mcp"]}}})
+
+    def test_connect_keeps_other_servers_and_settings_and_backs_up(self):
+        os.makedirs(os.path.dirname(self.cfg))
+        old = '\ufeff{"mcpServers": {"other": {"command": "x"}, "coal": {"command": "old python"}}, "theme": "dark"}'
+        with open(self.cfg, "w", encoding="utf-8") as fh:
+            fh.write(old)
+        self.assertEqual(self.run_cmd(True)[0], 0)
+        data = self.read()
+        self.assertEqual(data["theme"], "dark")
+        self.assertEqual(data["mcpServers"]["other"], {"command": "x"})
+        self.assertEqual(data["mcpServers"]["coal"]["command"], self.exe)
+        with open(self.cfg + ".bak-coal", encoding="utf-8") as fh:
+            self.assertEqual(fh.read(), old)
+        self.assertEqual(cd.update_claude_config(Path(self.cfg), cd.coal_server_entry(self.exe)), "unchanged")
+
+    def test_invalid_json_is_left_alone(self):
+        os.makedirs(os.path.dirname(self.cfg))
+        with open(self.cfg, "w", encoding="utf-8") as fh:
+            fh.write("{not json")
+        code, err = self.run_cmd(True)
+        self.assertEqual(code, 1)
+        err.assert_called_once()
+        with open(self.cfg, encoding="utf-8") as fh:
+            self.assertEqual(fh.read(), "{not json")
+
+    def test_store_version_of_claude_is_found_too(self):
+        store = os.path.join(self.tmp, "Local", "Packages", "Claude_pzs8sxrjxfjjc", "LocalCache", "Roaming", "Claude")
+        os.makedirs(store)
+        os.makedirs(os.path.dirname(self.cfg))
+        self.assertEqual(self.run_cmd(True)[0], 0)
+        for p in (self.cfg, os.path.join(store, "claude_desktop_config.json")):
+            self.assertEqual(self.read(p)["mcpServers"]["coal"]["command"], self.exe)
+
+    def test_disconnect_removes_only_coal(self):
+        os.makedirs(os.path.dirname(self.cfg))
+        with open(self.cfg, "w", encoding="utf-8") as fh:
+            json.dump({"mcpServers": {"other": {"command": "x"},
+                                      "coal": cd.coal_server_entry(self.exe)}}, fh)
+        self.assertEqual(self.run_cmd(False)[0], 0)
+        self.assertEqual(self.read(), {"mcpServers": {"other": {"command": "x"}}})
+
+    def test_disconnect_leaves_a_hand_made_coal_entry(self):
+        os.makedirs(os.path.dirname(self.cfg))
+        mine = {"command": r"C:\venv\Scripts\python.exe", "args": ["-m", "coal_app", "--mcp"]}
+        with open(self.cfg, "w", encoding="utf-8") as fh:
+            json.dump({"mcpServers": {"coal": mine}}, fh)
+        self.assertEqual(self.run_cmd(False)[0], 0)
+        self.assertEqual(self.read()["mcpServers"]["coal"], mine)
+
+    def test_dispatch_routes(self):
+        with mock.patch.object(cd, "run_mcp_stdio", return_value=0) as m:
+            self.assertEqual(cd.dispatch(["-m", "coal_app", "--mcp"]), 0)
+            m.assert_called_once()
+        with mock.patch.object(cd, "claude_desktop_command", return_value=0) as m:
+            cd.dispatch(["--connect-claude"])
+            m.assert_called_once_with(connect=True, quiet=False)
+            m.reset_mock()
+            cd.dispatch(["--disconnect-claude", "--quiet"])
+            m.assert_called_once_with(connect=False, quiet=True)
 
 
 if __name__ == "__main__":

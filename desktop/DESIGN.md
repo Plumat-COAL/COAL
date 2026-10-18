@@ -440,9 +440,9 @@ COAL.exe (wrapper: window + single-instance lock)        main thread: pywebview 
   and Windows Defender Firewall does not show its "allow access" prompt (that prompt appears
   only for programs listening on network interfaces), so no admin-looking dialog.
 - Random port each launch, so nothing else on the machine can rely on finding it.
-- MCP (AI-agent tools) **on** in the desktop app by default, at
-  `http://127.0.0.1:<port>/gradio_api/mcp/sse` (the URL is in `local_app.log`); start with
-  `COAL.exe --no-mcp` to turn it off; a Setting later.
+- MCP (AI-agent tools) **off** in the desktop window by default (IMP-M-3: on a random port nothing can register
+  it); `COAL.exe --mcp` turns it on at `http://127.0.0.1:<port>/gradio_api/mcp/sse` (the URL is in
+  `local_app.log`). For Claude, use the stdio server (`desktop\setup_mcp.bat`).
   <!-- CHANGED(WIN-M): was off by default with opt-in --mcp (this line said --no-mcp, the code
   had --mcp). User decision. See overnight/windows-app/CHANGES.md -->
 - Known gap: any program running as any user on the same machine can talk to 127.0.0.1 ports;
