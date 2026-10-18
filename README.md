@@ -1,6 +1,6 @@
 # COAL
 
-A fast, python & c++ alternative to [PAL2NAL](https://www.bork.embl.de/pal2nal/):
+A fast Python and C++ alternative to [PAL2NAL](https://www.bork.embl.de/pal2nal/):
 it maps unaligned coding DNA onto an existing protein multiple sequence alignment
 to produce a codon alignment.
 
@@ -8,7 +8,7 @@ Built at the Reinvent the Wheel AI × Science Tool-building Hackathon, London, O
 
 > **Status:** v0.4: a pure-Python engine (no required dependencies; numpy optional) and an optional C++ engine,
 > `coal-cpp`, with the same options and byte-identical output (see [C++ engine](#c-engine-coal-cpp)). <!-- CHANGED(SHIP-4): was "v0.4 (pure Python, no required dependencies; numpy optional)." -->
-> Up to **~119× faster** than PAL2NAL
+> Up to **118.6× faster** than PAL2NAL v14 on long genes
 > with byte-identical output on the benchmarked datasets — see [Benchmark results](#benchmark-results).
 >
 > **Compatibility:** COAL's output is identical to PAL2NAL v14's except for a short list of documented, deliberate differences
@@ -17,7 +17,31 @@ Built at the Reinvent the Wheel AI × Science Tool-building Hackathon, London, O
 > [tests/README.md](tests/README.md#test-numbers).
 > <!-- CHANGED(IMP-M-4): the dense block of test counts moved to tests/README.md ("Test numbers"), word for word -->
 
-## Quick start
+## Download
+
+Website: **[plumat-coal.github.io/COAL](https://plumat-coal.github.io/COAL/)** (install steps, guide, differences,
+citation). Every release has the same files ([releases](https://github.com/plumat-coal/COAL/releases)):
+
+- **Windows 10/11:** [COAL-Setup-windows-x64.exe](https://github.com/plumat-coal/COAL/releases/latest/download/COAL-Setup-windows-x64.exe)
+  installs the app for your user account (no administrator rights). It is not code-signed yet, so Windows asks you
+  to confirm (**More info**, then **Run anyway**). On its last page, **Connect COAL to Claude Desktop** lets Claude
+  run COAL for you ([AI agents](#ai-agents-mcp)). A portable
+  [COAL-windows-x64.zip](https://github.com/plumat-coal/COAL/releases/latest/download/COAL-windows-x64.zip) needs no
+  installer.
+- **macOS, Linux (and Windows with Python):** COAL is not on PyPI (`pip install coal` gets a different package);
+  install the release into a virtual environment:
+
+```
+python3 -m venv ~/coal-env
+~/coal-env/bin/python -m pip install "coal[gui] @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz"
+~/coal-env/bin/coal-gui          # the app, at http://127.0.0.1:7860; or the command line: ~/coal-env/bin/coal --help
+```
+
+  For the command line alone, write `coal` instead of `coal[gui]`. Check downloads against
+  [SHA256SUMS.txt](https://github.com/plumat-coal/COAL/releases/latest/download/SHA256SUMS.txt).
+<!-- CHANGED(WEB-17): new section, the same downloads and commands as the website's front and Install pages -->
+
+## Quick start from source
 
 ```
 git clone https://github.com/plumat-coal/COAL && cd COAL
@@ -29,6 +53,7 @@ coal examples/clean/protein.aln.fasta examples/clean/dna.fasta > codon_aln.fasta
 
 | I want to... | Go to |
 |---|---|
+| install the app (Windows) or COAL from a release | [Download](#download) |
 | use the command line, PAL2NAL options, big inputs | [Install and use](#install-and-use) |
 | click instead of type (web GUI or Windows app) | [Ways to use COAL](#ways-to-use-coal), [desktop/README.md](desktop/README.md) |
 | let Claude or another AI agent run COAL (MCP) | [AI agents (MCP)](#ai-agents-mcp) |
@@ -214,7 +239,11 @@ Details and evidence in `tests/README.md`:
 - `--keep-going` skips sequences that cannot be converted (or, with `--strict`, are refused) instead of stopping:
   the others are written in order, each skipped one is named on stderr, exit status 2. A frameshift digit of a
   skipped row still widens its column for the others.
-- `--max-warnings N` prints at most N per-codon warnings, then a count (notices and errors are never capped).
+- `--max-warnings N` prints at most N per-codon warnings, then a count ("... and 159 more warnings (see the report)");
+  the default is **20**, `0` prints them all. Notices and errors are never capped, the report always lists every
+  warning, and the `pal2nal` drop-in prints them all, as PAL2NAL does. When the genes fit another genetic code, COAL
+  says so once, in a notice before the warnings (it re-tests up to 50 sequences, problem genes first).
+  <!-- CHANGED(WEB-17): default 20 (IMP-E-C) and the early genetic-code notice (IMP-E-B, IMP-E-D) -->
 - `--progress` shows percent done and time left on stderr for inputs over 10,000 sequences.
 - `--resume` continues an interrupted `-o` run from `<out>.coal-checkpoint.json` (written at most every 2 s next to
   the real output file); the output is byte-identical to an uninterrupted run. If no checkpoint was written yet, an
@@ -233,13 +262,14 @@ Details and evidence in `tests/README.md`:
   gene breaks, genetic-code suggestions and a ready-to-paste methods sentence.
 - **AI agents (MCP):** `pip install -e ".[mcp]"`, then `python -m coal_app --mcp` (two tools: `codon_align`,
   `explain_report`); see [AI agents (MCP)](#ai-agents-mcp) below.
-- **Windows app:** a desktop wrapper with an installer, no terminal needed: `desktop/README.md` (users) and
-  `desktop/BUILD.md` (building it). From a source checkout, double-click `desktop\run_from_source.bat` (it creates
+- **Windows app:** a desktop wrapper with an installer, no terminal needed: [Download](#download),
+  `desktop/README.md` (users) and `desktop/BUILD.md` (building it). From a source checkout, double-click `desktop\run_from_source.bat` (it creates
   `.venv-gui` on first start, repairs it if an install was interrupted, then opens the window).
   <!-- CHANGED(IMP-M-2): Windows launchers from source -->
 - **Hosted demo:** a Hugging Face Space is prepared but not deployed: `space/README.md`, `space/DEPLOY.md`.
 - **Two-species preset:** `demo/diamond_pipeline.py` (DIAMOND reciprocal best hits, then COAL on every pair).
-- **C++ engine for the largest jobs:** `coal-cpp`, built with CMake, same options and output (below). <!-- CHANGED(SHIP-4): new -->
+- **C++ engine for the largest jobs:** `coal-cpp`, same options and output; bundled with the Windows app and used
+  automatically for large inputs (below). <!-- CHANGED(SHIP-4): new --> <!-- CHANGED(WEB-17): bundled, automatic -->
 
 ## AI agents (MCP)
 
@@ -279,7 +309,13 @@ not by default (`COAL.exe --mcp`). Agent instructions: `.claude/skills/coal/SKIL
 <!-- CHANGED(SHIP-4): new section; the C++ engine was not mentioned in the README. -->
 `coal-cpp` is a C++17 implementation of the same engine (standard library only, MIT). It takes the same options as
 `coal` and writes the same output, warnings, report and exit codes, so it can replace `coal` in any command line.
-It is a separate executable, built from source; the Python package and the Windows app use the Python engine.
+<!-- CHANGED(WEB-17): was "built from source; the Python package and the Windows app use the Python engine" -->
+**The Windows app includes it.** `coal` hands a run to `coal-cpp` when the input files total **1 MB or more**, every
+option is one `coal-cpp` has, and a `coal-cpp` of the same version is found: `COAL_CPP` (a path), else next to the
+Python running COAL (the app's own folder, a virtual environment's `bin`/`Scripts`), else on `PATH`. Smaller inputs
+stay in Python, where starting a second program would cost more than it saves; if `coal-cpp` cannot run, COAL says
+so and uses Python. Output is byte-identical either way. `COAL_ENGINE=python` or `COAL_ENGINE=cpp` forces one engine
+(`cpp` is an error if it cannot be used). The `pal2nal` drop-in always uses Python. With pip, build it yourself:
 
 ```
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
