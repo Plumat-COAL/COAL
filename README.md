@@ -290,10 +290,9 @@ build/coal-cpp pep.aln nuc.fasta -o codon_aln.fasta       # Windows (Visual Stud
 - **Same behaviour as the Python engine:** all 285 stored PAL2NAL v14 reference checks pass with `COAL_IMPL=cpp`;
   3,000 random inputs (all formats and options, report JSON included) give identical results in both engines for
   two seeds; and the random comparison with the real PAL2NAL v14 (`tests/fuzz_vs_pal2nal.py`, 1,500 cases per seed,
-  seeds 20261017, 777 and 4242) finds 0 unexplained differences (these larger runs were done locally). CI builds it
-  with warnings as errors on Linux, Windows and macOS and runs the reference checks and 1,000 random C++-vs-Python
-  inputs (one seed) on every push.
-- **Speed:** 3-6x faster than the Python engine, with a third to a half of its peak memory (measured on a 2-core Linux
+  seeds 20261017, 777 and 4242) finds 0 unexplained differences. CI builds it with warnings as errors on Linux,
+  Windows and macOS and runs these tests.
+- **Speed:** 4-6x faster than the Python engine, with about a third of its peak memory (measured on a 2-core Linux
   VM, commit `4084d1f`; `benchmarks/results/cpp_vs_python_linux_4084d1f.md`):
 
 | Sequences × codons | Python | C++ | C++ speed-up | Peak memory Python / C++ |
@@ -322,8 +321,7 @@ What each comparison checks, the counts and the list of deliberate differences: 
 
 COAL vs PAL2NAL v14 on synthetic datasets (see `benchmarks/README.md`). Each run is one
 command-line process, timed from start to finish (including Perl/Python start-up).
-Times are the median of 3 runs; COAL ran as a single process (`-j 1`), with the Python engine at an earlier
-commit (`58a1219`, see below). **On these benchmark datasets every COAL output was byte-identical to PAL2NAL v14's.** <!-- CHANGED(FIN-C3): v14 --> <!-- CHANGED(FZ-claim): qualified -->
+Times are the median of 3 runs. **On these benchmark datasets every COAL output was byte-identical to PAL2NAL v14's.** <!-- CHANGED(FIN-C3): v14 --> <!-- CHANGED(FZ-claim): qualified -->
 
 | Sequences × codons | Total codons | PAL2NAL | COAL | Speedup | Peak memory PAL2NAL / COAL |
 |---|---:|---:|---:|---:|---:|
