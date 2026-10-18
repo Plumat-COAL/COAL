@@ -168,9 +168,11 @@ main { width: calc(100% - 2 * var(--gutter)); max-width: var(--wide); margin: 0 
 
 /* Home: what it looks like (transcript beside the screenshot on wide screens). */
 .look { display: grid; gap: 1.25rem; grid-template-columns: minmax(0, 1fr); align-items: start; margin-bottom: 1rem; }
-@media (min-width: 60rem) { .look { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); } }
+/* CHANGED(WEB-16): was the terminal and the screenshot side by side, and the image had no height:auto, so it was
+   squeezed to the column's width at its full height (blurry, distorted); now stacked, the image at full width */
 .look pre { margin: 0; }
 .look figure { margin: 0; }
+.look img { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 6px; }
 
 /* Home: three reasons, each with the page that backs it. */
 .sec .why { padding: 0; }

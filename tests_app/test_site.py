@@ -305,10 +305,12 @@ class TestSiteFiles(unittest.TestCase):
             self.assertIn(must, self.all)  # CHANGED(WEB-13): was index.html; now differences.html and cite.html
 
     def test_size_budget_with_images(self):
-        """WEB-8: the whole site, images included, stays under 250 KB (README.md excluded: not deployed)."""
+        """WEB-8: the whole site, images included, stays under 400 KB (README.md excluded: not deployed)."""
         total = sum(os.path.getsize(os.path.join(d, f)) for d, _, files in os.walk(SITE) for f in files
                     if f != "README.md")
-        self.assertLess(total, 250 * 1024, f"site is {total} bytes (budget 250 KB)")
+        # CHANGED(WEB-16): budget was 250 KB; the results screenshot is now sharp on high-resolution screens
+        # (1600 px wide, ~175 KB), so 400 KB
+        self.assertLess(total, 400 * 1024, f"site is {total} bytes (budget 400 KB)")
 
     def test_unsigned_and_smart_app_control_explained(self):
         for must in ("Windows protected your PC", "More info", "Run anyway", "Unknown publisher", "Smart App Control",
