@@ -23,6 +23,19 @@ std::string shlex_join(const std::vector<std::string>& args);
 using RowsFn = std::function<void(const std::function<bool(long long, const std::string&, const std::string&)>&)>;
 using DnaFn = std::function<std::string(long long)>;  // DNA paired with sequence k
 
+// CHANGED(IMP-E-B, IMP-E-D): the genetic-code search shared by the end-of-run hint and the early notice
+struct HintGene {
+    std::string id, row, dna;
+};
+struct CodeSearch {
+    std::vector<int> tied;  // best first (empty: no code does better)
+    bool standard = false;  // code 1 is among the tied codes (and first)
+    long long top = 0, fits_now = 0;
+};
+using FitMemo = std::map<std::pair<long long, int>, bool>;  // (sequence, code) -> fits
+// The suggestion said before the per-codon warnings ("" = none): the first genes tested as the end-of-run hint
+std::string early_code_notice(const RowsFn& rows, const DnaFn& dna, int table, long long total, FitMemo& memo);
+
 class RunReport {
 public:
     RunReport(const std::vector<std::string>& argv, const std::string& pep, const std::vector<std::string>& nucs,
@@ -54,6 +67,8 @@ public:
     void restore(const Json& state, const std::vector<Json>& nonok, long long completed);
 
     bool keep_entries;
+    bool want_hint = true;
+    FitMemo fit_memo;  // CHANGED(IMP-E-B): shared with early_code_notice  // CHANGED(IMP-E-D): false under -q without --report/--json (report.py want_hint)
     bool finished = false;
     int exit_code = 0;
 

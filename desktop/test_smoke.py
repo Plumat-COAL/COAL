@@ -92,7 +92,7 @@ class Checks:
         hints = r.get("hints") or []
         problems = {p["id"]: p["status"] for p in r.get("problems", [])}
         if name == "clean":
-            self.assertTrue(r["ok"], r.get("stderr"))
+            self.assertTrue(r["completed"], r.get("engine_messages"))
             self.assertEqual((s.get("ok"), s.get("warning"), s.get("failed")), (8, 0, 0))
             self.check_codon_alignment(r["output_path"], 8)
             self.assertIn("COAL", r["methods_text"])
@@ -101,19 +101,19 @@ class Checks:
             self.assertGreater(s.get("warning", 0), 0)
             self.assertIn(2, [h.get("suggested_codontable") for h in hints], hints)
         elif name == "mito" and code == 2:
-            self.assertTrue(r["ok"], r.get("stderr"))
+            self.assertTrue(r["completed"], r.get("engine_messages"))
             self.assertEqual((s.get("ok"), s.get("warning"), s.get("failed")), (24, 0, 0))
             self.check_codon_alignment(r["output_path"], 24)
             self.assertIn("-codontable 2", r["coal_command"])
         elif name == "messy_ids":
-            if r["ok"]:  # engine with ID normalisation
+            if r["completed"]:  # engine with ID normalisation
                 self.assertEqual(s.get("ok"), 10)
             else:        # today: stops, but explains the ID mismatch
                 self.assertIn("id_mismatch", [h.get("code") for h in hints], hints)
         elif name == "one_broken_gene":
             self.assertEqual(problems.get("OG0001_sp14"), "failed", problems)
             self.assertEqual(len([p for p in problems.values() if p == "failed"]), 1)
-            if r["ok"]:  # engine with --keep-going: the other 19 are written
+            if r["completed"]:  # engine with --keep-going: the other 19 are written
                 self.assertEqual(s.get("ok"), 19)
                 self.check_codon_alignment(r["output_path"], 19)
         self.assertTrue(os.path.isfile(r["report_path"]))
@@ -309,7 +309,7 @@ class LocalAppTests(Checks):
                 p, d = core.example_paths(name)
                 # CHANGED(SHIP-10): was 6 values; codon_align has 8 parameters since FIN-A6 added strict and blockonly, and
                 # the real Gradio API rejects a short positional list (the first CI build of the installer failed here)
-                r = gradio_call(self.url, "codon_align", [p, d, "fasta", code, False, False, False, False])
+                r = gradio_call(self.url, "codon_align", [p, d, "fasta", code, False, False, False, False, ""])
                 self.check_result(name, code, r)
 
     def test_3_shutdown_frees_the_port(self):

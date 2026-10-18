@@ -151,14 +151,14 @@ class TestR3A1ReadersMirrorEngine(RunsDirCase):  # R3-A1
     def test_bom_dna_with_mito_protein_runs(self):
         pt, dt = self.example("mito")
         r = self.run_pair(pt, BOM + dt, codontable=1)
-        self.assertTrue(r["ok"], r.get("error"))
+        self.assertTrue(r["completed"], r.get("next_step"))
         self.assertTrue(any(h.get("suggested_codontable") == 2 for h in r["hints"]), r["hints"])
         self.assertEqual(r["summary"]["total"], 24, r["summary"])
 
     def test_hash_preamble_dna_with_mito_protein_runs(self):
         pt, dt = self.example("mito")
         r = self.run_pair(pt, "# exported by tool\n" + dt, codontable=1)
-        self.assertTrue(r["ok"], r.get("error"))
+        self.assertTrue(r["completed"], r.get("next_step"))
         self.assertTrue(any(h.get("suggested_codontable") == 2 for h in r["hints"]), r["hints"])
         self.assertTrue(r["problems"])  # per-gene warnings, not only run-level tips
 
@@ -170,7 +170,7 @@ class TestR3A1ReadersMirrorEngine(RunsDirCase):  # R3-A1
                                                     BOM + ("# x\n" + dt).replace("\n", "\r\n"))}.items():
             with self.subTest(k):
                 r = self.run_pair(ptext, dtext)
-                self.assertTrue(r["ok"], r.get("error"))
+                self.assertTrue(r["completed"], r.get("next_step"))
                 s = r["summary"]
                 self.assertEqual((s["total"], s["ok"], s["pairing"]), (8, 8, "id"), s)
                 self.assertFalse([h for h in r["hints"] if h.get("code") == "id_mismatch"], r["hints"])
@@ -200,7 +200,7 @@ class TestR3A2AmbiguousCodons(RunsDirCase):  # R3-A2
     def test_nnn_codons_are_not_called_a_genetic_code_problem(self):
         p, q, k = _masked_files(self.tmp())
         r = tools.codon_align(p, q)
-        self.assertTrue(r["ok"], r.get("error"))
+        self.assertTrue(r["completed"], r.get("next_step"))
         prob = next(x for x in r["problems"] if x["id"] == "masked")
         self.assertIn("unknown or ambiguous bases", prob["explanation"])
         self.assertIn(f"{k} codons", prob["explanation"])
@@ -211,7 +211,7 @@ class TestR3A2AmbiguousCodons(RunsDirCase):  # R3-A2
     def test_nomismatch_says_why_columns_were_removed(self):
         p, q, k = _masked_files(self.tmp())
         r = tools.codon_align(p, q, nomismatch=True)
-        self.assertTrue(r["ok"], r.get("error"))
+        self.assertTrue(r["completed"], r.get("next_step"))
         self.assertIn(f"{k} codon columns were removed", r["summary_text"])
         self.assertIn("unknown or ambiguous bases", r["summary_text"])
         self.assertNotIn("because they didn't match", r["summary_text"])

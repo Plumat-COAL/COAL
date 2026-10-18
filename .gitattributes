@@ -9,3 +9,5 @@ tests/cases.json text eol=lf
 # src/coal_app/sample_report.json and the bundled examples were not byte-stable; now LF everywhere.
 # See overnight/integration/CHANGES.md
 examples/** text eol=lf
+# CHANGED(IMP-M-2): Windows batch files need CRLF (cmd mis-reads labels in LF-only files)
+*.bat text eol=crlf

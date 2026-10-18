@@ -280,11 +280,11 @@ class TestFinA6StrictAndBlockonly(Case):  # FIN-A6
         p, d = self.variant(dna=_randomise(2))
         r = tools.codon_align(p, d, strict=True)
         # CHANGED(MRG-3): the tool keeps going (the app's default): the refused gene is left out and reported
-        self.assertTrue(r["ok"])
+        self.assertTrue(r["completed"])
         self.assertTrue(any(pr.get("id") == "gene03" for pr in r["problems"]), r["problems"])
         self.assertEqual(r["summary"]["failed"], 1)
         r = tools.codon_align(p, d)
-        self.assertTrue(r["ok"])
+        self.assertTrue(r["completed"])
         self.assertTrue(any("strict" in pr["explanation"] for pr in r["problems"]))
 
 

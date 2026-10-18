@@ -113,8 +113,21 @@ class TestReleaseWorkflow(unittest.TestCase):
             else:
                 self.assertNotIn("permissions", job, name)
 
+    def test_ci_caches_pip_and_browsers(self):  # IMP-M-5
+        wf = _workflow("ci.yml")
+        for name, job in wf["jobs"].items():
+            for st in job["steps"]:
+                if st.get("uses", "").startswith("actions/setup-python@"):
+                    self.assertEqual(st["with"].get("cache"), "pip", name)
+                    self.assertIn("pyproject.toml", st["with"].get("cache-dependency-path", ""), name)
+        cache = [st for st in wf["jobs"]["explainer"]["steps"] if st.get("uses", "").startswith("actions/cache@")]
+        self.assertEqual(len(cache), 1)
+        self.assertEqual(cache[0]["with"]["path"], wf["jobs"]["explainer"]["env"]["PLAYWRIGHT_BROWSERS_PATH"])
+        self.assertIn("playwright-1.48.0", cache[0]["with"]["key"])  # same pin as the install step
+
     def test_actions_pinned_to_commits(self):
-        for fname in ("release.yml",) + (("pages.yml",) if os.path.exists(os.path.join(WORKFLOWS, "pages.yml"))
+        # CHANGED(IMP-M-5): ci.yml checked too (it gained actions/cache)
+        for fname in ("release.yml", "ci.yml") + (("pages.yml",) if os.path.exists(os.path.join(WORKFLOWS, "pages.yml"))
                                           else ()):
             text = _read(".github", "workflows", fname)
             uses = re.findall(r"uses:\s*(\S+)", text)
@@ -210,11 +223,11 @@ class TestSiteFiles(unittest.TestCase):
         for f in SITE_FILES + ("README.md",):
             self.assertTrue(os.path.isfile(os.path.join(SITE, f)), f"site/{f} is missing")
 
-    def test_explainer_copy_is_current(self):
-        # The site serves a copy (Pages deploys site/ only); it must not drift from the tested original.
-        with open(os.path.join(ROOT, "pitch", "explainer.html"), "rb") as a, \
-                open(os.path.join(SITE, "explainer.html"), "rb") as b:
-            self.assertEqual(a.read(), b.read(), "site/explainer.html differs from pitch/explainer.html: copy it again")
+    def test_explainer_has_one_copy(self):
+        # CHANGED(IMP-M-4): was a check that pitch/explainer.html and its site/ copy were identical; now there is one
+        # file, site/explainer.html (what Pages deploys and tests_app/test_explainer.py tests)
+        self.assertFalse(os.path.exists(os.path.join(ROOT, "pitch", "explainer.html")),
+                         "pitch/explainer.html is back: keep the one copy in site/")
 
     def test_no_external_urls(self):
         """Only links to github.com/plumat-coal/COAL; nothing else may be referenced (no CDNs, fonts, trackers)."""
@@ -275,8 +288,9 @@ class TestSiteFiles(unittest.TestCase):
         self.assertNotIn("-", "coal_src")
 
     def test_claims_are_in_the_readme(self):
-        """Every measured number on the page (data-check) is quoted from README.md, which test_docs_numbers guards."""
-        readme = re.sub(r"\s+", " ", _read("README.md")).replace("**", "")
+        """Every measured number on the page (data-check) is quoted from README.md or tests/README.md, which
+        test_docs_numbers guards. CHANGED(IMP-M-4): tests/README.md added (the README's test counts moved there)."""
+        readme = re.sub(r"\s+", " ", _read("README.md") + " " + _read("tests", "README.md")).replace("**", "")
         claims = re.findall(r'data-check="([^"]+)">([^<]*)<', self.all)  # CHANGED(WEB-13): all pages
         self.assertGreaterEqual(len(claims), 10)
         for value, shown in claims:

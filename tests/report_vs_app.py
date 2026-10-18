@@ -55,7 +55,10 @@ def run_both(app, protein, dna, opts, work):
         feats = app.Features(report=has_report, **base)
         d = os.path.join(work, kind)
         os.makedirs(d, exist_ok=True)
-        with mock.patch.object(app, "detect_features", lambda: feats):
+        # CHANGED(IMP-E-C): `coal` now prints at most 20 per-codon warnings by default; the fallback (no --report)
+        # reads them all from stderr, as it did when there was no cap
+        cmd = app._coal_cmd() + (["--max-warnings", "0"] if not has_report else [])
+        with mock.patch.object(app, "detect_features", lambda: feats), mock.patch.object(app, "_coal_cmd", lambda: cmd):
             r = app.run_coal(str(protein), str(dna), codontable=opts.get("codontable", 1),
                              nogap=opts.get("nogap", False), nomismatch=opts.get("nomismatch", False),
                              keep_going=False, out_dir=d, probe_codes=True)
@@ -73,7 +76,8 @@ def _fits(protein, dna, table, nogap=False) -> int:
     """Genes that COAL aligns with no definite mismatch under `table` (an independent check of a hint)."""
     import subprocess
     from coal.report import is_ambiguous_codon
-    r = subprocess.run([sys.executable, "-m", "coal", "--keep-going", "-codontable", str(table), "--", str(protein),
+    r = subprocess.run([sys.executable, "-m", "coal", "--keep-going", "--max-warnings", "0",  # CHANGED(IMP-E-C)
+                        "-codontable", str(table), "--", str(protein),
                         str(dna)], capture_output=True, text=True, timeout=120)
     from coal_app.core import read_ids
     bad = set()

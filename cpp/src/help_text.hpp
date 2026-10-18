@@ -3,72 +3,57 @@
 #pragma once
 
 static const char* const COAL_HELP = R"COALHELP(usage: coal [-h] [-codontable N] [-nogap] [-nomismatch]
-            [-output {fasta,clustal,paml,codon}] [-blockonly] [-o OUT] [-j N]
+            [-output {fasta,clustal,paml,codon}] [-blockonly] [-o FILE] [-j N]
             [-q] [-strict] [--keep-going] [--max-warnings N] [--progress]
             [--resume] [--report FILE.json] [--json] [--version]
             pep_aln nuc_fasta [nuc_fasta ...]
 
 Convert a protein alignment + unaligned coding DNA into a codon alignment.
 
-positional arguments:
-  pep_aln               protein alignment (FASTA or CLUSTAL)
-  nuc_fasta             coding DNA sequences (FASTA; one or more files)
-
 options:
   -h, --help            show this help message and exit
-  -codontable N, --codontable N
-                        NCBI genetic code (default 1); one of 1, 2, 3, 4, 5,
-                        6, 9, 10, 11, 12, 13, 14, 15, 16, 21, 22, 23
-  -nogap, --nogap       remove codon columns containing gaps or stop codons
-                        (stop codons of the -codontable code, any case;
-                        PAL2NAL uses the standard code's TAA/TAG/TGA, upper
-                        case only)
-  -nomismatch, --nomismatch
-                        remove alignment columns where a codon does not match
-                        its residue
-  -output {fasta,clustal,paml,codon}, --output-format {fasta,clustal,paml,codon}
-                        output format, as PAL2NAL v14 writes it (default
-                        fasta; PAL2NAL's default is clustal)
-  -blockonly, --blockonly
-                        keep only the columns marked '#' in the CLUSTAL
-                        input's conservation lines (PAL2NAL's -blockonly; no
-                        effect if the input has no '#' marks)
-  -o OUT, --out OUT     output file (default: stdout)
-  -j N, --jobs N        worker threads (default 0 = all hardware threads)
+  --version             show program's version number and exit
+
+Core:
+  pep_aln               protein alignment (FASTA or CLUSTAL)
+  nuc_fasta             coding DNA (FASTA; one or more files)
+  -codontable, --codontable N
+                        NCBI genetic code (default 1): 1-6, 9-16, 21-23
+  -o, --out FILE        output file (default: standard output)
   -q, --quiet           do not print warnings or notices (errors are always
                         printed)
-  -strict, --strict     refuse probably-wrong data instead of writing it as
-                        PAL2NAL does (PAL2NAL writes these): exit 1 with no
-                        output if (1) more than half of a sequence's checkable
-                        codons (A/C/G/T only) do not match its protein; (2) no
-                        10-residue segment of a protein is found in its DNA,
-                        the DNA is longer than the gene and fewer than 10
-                        codons are checkable (where the gene starts can't be
-                        told); (3) only some protein IDs are DNA IDs (pairing
-                        by order would follow). Without --strict these are
-                        notices on stderr
+  -strict, --strict     refuse probably-wrong genes (exit 1) instead of
+                        writing them as PAL2NAL does: more than half of the
+                        checkable codons do not match, no 10-residue segment
+                        places the gene, or only some protein IDs are DNA IDs
+
+PAL2NAL options:
+  -nogap, --nogap       remove codon columns with a gap or a stop codon (of
+                        the -codontable code)
+  -nomismatch, --nomismatch
+                        remove columns where a codon does not match its amino
+                        acid
+  -output, --output-format {fasta,clustal,paml,codon}
+                        output format (default fasta; PAL2NAL's default is
+                        clustal)
+  -blockonly, --blockonly
+                        keep only the columns marked '#' in a CLUSTAL input
+
+Large runs:
+  -j, --jobs N          worker threads (default 0 = all hardware threads)
   --keep-going, -keep-going
-                        skip sequences that cannot be converted (or, with
-                        --strict, are refused) instead of stopping; the others
-                        are written in input order, skipped ones are named on
-                        stderr and in the report; exit code 2 if any was
-                        skipped
-  --max-warnings N      print at most N per-codon warning lines, then a count
-                        of the rest (default 0 = no limit, as PAL2NAL);
-                        notices and errors are always printed
-  --progress            show percent done and time left on stderr (inputs over
+                        leave out sequences that cannot be converted, write
+                        the rest; exit 2 if any was left out
+  --progress            percent done and time left on stderr (inputs over
                         10,000 sequences)
-  --resume              continue an interrupted run (needs -o, same inputs and
-                        options) from its checkpoint <out>.coal-
-                        checkpoint.json; without a checkpoint it runs
-                        normally. Output is identical to an uninterrupted run.
-                        With -nogap, -nomismatch, -blockonly, clustal or codon
-                        output only the first pass resumes; the final pass is
-                        redone. Not for piped inputs or an output that is not
-                        a regular file
-  --report FILE.json    write a JSON run report (schema coal.report/1), also
-                        when the run fails
-  --json                print the run report to stdout (requires -o, so stdout
-                        is free)
-  --version             show program's version number and exit
+  --resume              continue an interrupted run from its checkpoint (needs
+                        -o and the same inputs and options)
+
+Reporting:
+  --max-warnings N      print at most N per-codon warnings (default 20; 0 =
+                        all)
+  --report FILE.json    write a JSON run report, also when the run fails
+  --json                print the run report to stdout (needs -o)
+
+Every option in detail: README.md (https://github.com/plumat-coal/COAL).
 )COALHELP";

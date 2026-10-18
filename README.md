@@ -41,17 +41,36 @@ python3 -m venv ~/coal-env
 
 ```
 git clone https://github.com/plumat-coal/COAL && cd COAL
-pip install -e .            # command line;  .[gui] for the app, .[mcp] for AI agents, .[fast] for numpy
+python -m pip install -e .
+coal examples/clean/protein.aln.fasta examples/clean/dna.fasta > codon_aln.fasta
 ```
+
+Optional extras: `".[fast]"` (numpy speed-up for large inputs), `".[gui]"` (web GUI and Windows app, Gradio) and
+`".[mcp]"` (stand-alone MCP server for AI agents). **Install `gui` and `mcp` in separate virtual environments**: they
+pin conflicting versions of the `mcp` package, so installing one into the other's environment can break it. The
+Windows launchers (`desktop\run_from_source.bat`, `desktop\setup_mcp.bat`) do this for you. Quote the extras
+(`".[gui]"`): some shells (zsh, PowerShell) treat bare brackets specially.
 
 ## Why COAL
 
 - **Fast:** up to **~119× faster** than PAL2NAL on the benchmarked datasets (see [Benchmark results](#benchmark-results)),
-  with a Python engine and an optional C++ engine, `coal-cpp`, that gives byte-identical output.
-- **Checked against PAL2NAL itself:** COAL's output is identical to PAL2NAL v14's except for a short list of documented, deliberate differences (newer NCBI genetic-code tables for codes 3, 10, 11 and 13; `-nogap` removing the selected code's stop codons; the selected code's start codons for the first Met; pairing by IDs that match only after normalising where PAL2NAL v14's file order would give a protein another gene's DNA; and inputs where PAL2NAL v14 writes malformed output or fails). Tested: all 285 stored reference checks pass (238 byte-identical, 4 of them with deliberately different warnings; 24 where both tools fail; 23 deliberate output or exit-status differences: 6 deliberate errors, 3 different outputs, 14 `-nogap` checks with a non-standard code), and in 20,000 random comparisons with the real PAL2NAL v14 (5,000 cases x 4 output formats) 13,826 were byte-identical, 4,681 both failed and 1,493 were deliberate differences, each checked to be exactly the documented change; 0 unexplained differences.
+  with a Python engine and a C++ engine, `coal-cpp`, that gives byte-identical output.
+- **Checked against PAL2NAL itself:** COAL's output is identical to PAL2NAL v14's except for a short list of
+  documented, deliberate differences (see [Deliberate differences](#deliberate-differences-from-pal2nal)). All
+  stored PAL2NAL v14 reference checks pass, and random comparisons with the real PAL2NAL v14 find 0 unexplained
+  differences: the numbers are in [tests/README.md](tests/README.md#test-numbers).
 - **Tells you what went wrong:** a per-gene health check, warnings that name the gene and position, genetic-code
   suggestions and a ready-to-paste methods sentence.
 - **Drop-in:** the `pal2nal` command accepts an unchanged PAL2NAL v14 command line.
+- **Works with AI agents:** an MCP server lets Claude (or another agent) run COAL on your files.
+
+| I want to... | Go to |
+|---|---|
+| use the command line, PAL2NAL options, big inputs | [Quick start](#quick-start), [How COAL works](#how-coal-works) |
+| click instead of type (web GUI or Windows app) | [Download and install](#download-and-install), [desktop/README.md](desktop/README.md) |
+| let Claude or another AI agent run COAL (MCP) | [AI agents (MCP)](#ai-agents-mcp) |
+| the fastest engine (C++) | [C++ engine](#c-engine-coal-cpp) |
+| know how COAL differs from PAL2NAL and how that is tested | [Deliberate differences](#deliberate-differences-from-pal2nal), [tests/README.md](tests/README.md) |
 
 ## Quick start
 
@@ -67,7 +86,9 @@ Example inputs to try are in `examples/` (`clean`, `mito`, `messy_ids`, `one_bro
 
 ## Ways to use COAL
 
-- **Windows app:** installer from the [website](https://plumat-coal.github.io/COAL/); a local GUI, nothing is uploaded.
+- **Windows app:** installer from the [website](https://plumat-coal.github.io/COAL/); a local GUI, nothing is
+  uploaded. From a source checkout, double-click `desktop\run_from_source.bat` (it creates `.venv-gui` on first
+  start, repairs it if an install was interrupted, then opens the window). Building it: `desktop/BUILD.md`.
 - **Web GUI on any OS:** `coal-gui` (or `python -m coal_app`) runs on this computer at http://127.0.0.1:7860, with a
   per-gene health check, an alignment view that marks where a gene breaks, genetic-code suggestions and a
   ready-to-paste methods sentence.
@@ -75,12 +96,10 @@ Example inputs to try are in `examples/` (`clean`, `mito`, `messy_ids`, `one_bro
 - **Drop-in for PAL2NAL pipelines:** `pal2nal pep.aln nuc.fasta [PAL2NAL options]` (or `python -m coal_compat`)
   accepts an unchanged PAL2NAL v14 command line, with PAL2NAL's default clustal output, all four formats,
   `-blockonly` and `-nostderr` (= `-q`); `-html` is a clear error.
-- **AI agents (MCP):** `pip install -e .[mcp]`, then `python -m coal_app --mcp` (two tools: `codon_align`,
-  `explain_report`); the GUI also serves MCP. Agent instructions: `.claude/skills/coal/SKILL.md`.
-- **C++ engine for the largest jobs:** `coal-cpp`, built with CMake, same options and output
-  ([below](#c-engine-coal-cpp)).
+- **AI agents (MCP):** two tools, `codon_align` and `explain_report`; see [below](#ai-agents-mcp).
+- **C++ engine for the largest jobs:** `coal-cpp`, same options and output ([below](#c-engine-coal-cpp)).
 - **Two-species preset:** `demo/diamond_pipeline.py` (DIAMOND reciprocal best hits, then COAL on every pair).
-- **Hosted demo:** a Hugging Face Space is prepared but not deployed yet: `space/README.md`.
+- **Hosted demo:** a Hugging Face Space is prepared but not deployed yet: `space/README.md`, `space/DEPLOY.md`.
 
 ## How COAL works
 
@@ -99,12 +118,13 @@ Example inputs to try are in `examples/` (`clean`, `mito`, `messy_ids`, `one_bro
   DNA, in any reading frame, where the whole protein fits.
 - **Genetic codes:** `-codontable N` for the 17 NCBI codes PAL2NAL supports (1–6, 9–16, 21–23). The first Met may use
   any start codon of that code (also when the gene doesn't fit exactly and COAL needs its fallback placement, unlike
-  PAL2NAL v14).
+  PAL2NAL v14). When the genes fit another code better, COAL says so once, before the per-codon warnings.
 - **Frameshifts:** a digit N in the protein alignment means N bases (PAL2NAL convention). That column is widened
   to the next multiple of 3 for every sequence. tfastx/tfasty notation is read as PAL2NAL reads it: `\` = 1 base,
   `/` followed by (gaps and) a residue = a gap, then 2 bases.
 - **Mismatches:** if the protein doesn't fit exactly, COAL uses PAL2NAL's fallback: it lines up 10-residue
-  chunks and prints a warning for each codon that doesn't match its residue. `-nomismatch` removes those
+  chunks and prints a warning for each codon that doesn't match its residue (at most 20 by default,
+  `--max-warnings N`, 0 = all; the `pal2nal` drop-in prints them all, like PAL2NAL). `-nomismatch` removes those
   columns (and, as in PAL2NAL, then prints no mismatch warnings). If even that fails, it's an error.
 - **Probably-wrong data:** like PAL2NAL, COAL does not refuse a gene for having many mismatches, so its output is
   the same as PAL2NAL's. It adds a notice on stderr naming the gene when (1) more than half of a gene's checkable
@@ -161,7 +181,8 @@ file.
 - `--keep-going` skips sequences that cannot be converted (or, with `--strict`, are refused) instead of stopping:
   the others are written in order, each skipped one is named on stderr, exit status 2. A frameshift digit of a
   skipped row still widens its column for the others.
-- `--max-warnings N` prints at most N per-codon warnings, then a count (notices and errors are never capped).
+- `--max-warnings N` prints at most N per-codon warnings (default 20, 0 = all), then a count (notices and errors are
+  never capped).
 - `--progress` shows percent done and time left on stderr for inputs over 10,000 sequences.
 - `--resume` continues an interrupted `-o` run from `<out>.coal-checkpoint.json` (written at most every 2 s next to
   the real output file); the output is byte-identical to an uninterrupted run. If no checkpoint was written yet, an
@@ -231,11 +252,44 @@ not every difference is a silent one. Details and evidence in `tests/README.md`.
   mitochondria) it deletes TGA columns, which code for Trp there, and keeps AGA/AGG stops; lower-case `taa` is never
   removed. Repro: protein `MW*`, DNA `ATGTGAAGA`, `-codontable 2 -nogap`: PAL2NAL `ATGAGA`, COAL `ATGTGA`.
 
+## AI agents (MCP)
+
+COAL's stdio MCP server gives an agent two tools: `codon_align` (protein alignment + coding DNA -> codon alignment,
+with a report; `save_as` puts the alignment where you want it) and `explain_report` (that report in plain English).
+
+**Windows app:** keep **Connect COAL to Claude Desktop** ticked on the installer's last page (or run
+`COAL.exe --connect-claude` later), then quit and reopen Claude Desktop. This adds a `coal` entry that starts
+`COAL.exe -m coal_app --mcp` to `claude_desktop_config.json`, keeping everything else in it (the old file is kept as
+`claude_desktop_config.json.bak-coal`); uninstalling COAL removes the entry again.
+
+**From source:** install it in its **own** virtual environment (not the one with `".[gui]"`):
+
+```
+python -m venv .venv-mcp
+.venv-mcp/bin/python -m pip install -e ".[mcp]"        # Windows: desktop\setup_mcp.bat does all of this
+claude mcp add coal -- "$PWD/.venv-mcp/bin/python" -m coal_app --mcp
+```
+
+For Claude Desktop, add this to `claude_desktop_config.json` (Settings > Developer > Edit Config), with the full path
+of that environment's Python (on Windows, `desktop\setup_mcp.bat` prints it ready to paste, backslashes escaped):
+
+```json
+{"mcpServers": {"coal": {"command": "/full/path/to/COAL/.venv-mcp/bin/python", "args": ["-m", "coal_app", "--mcp"]}}}
+```
+
+Give the tools **absolute paths**. `codon_align` returns `completed` (COAL finished), `all_ok` / `needs_attention`
+(whether every sequence matched its protein), `counts`, `suggested_codontable`, `next_step`, `output_path` and
+`report_path`; a missing file, an unknown genetic code or an unsupported format is a tool error. The web GUI
+(`python -m coal_app`) also serves the tools at `http://127.0.0.1:7860/gradio_api/mcp/sse`; the Windows app does
+not by default (`COAL.exe --mcp`). Agent instructions: `.claude/skills/coal/SKILL.md`; a stage demo:
+`demo/mcp_demo.md`.
+
 ## C++ engine (coal-cpp)
 
 `coal-cpp` is a C++17 implementation of the same engine (standard library only, MIT). It takes the same options as
 `coal` and writes the same output, warnings, report and exit codes, so it can replace `coal` in any command line.
-It is a separate executable, built from source; the Python package and the Windows app use the Python engine.
+`coal` itself hands inputs of 1 MB or more to `coal-cpp` when it finds the same version (set `COAL_CPP` to its path,
+or put it next to Python or on `PATH`; `COAL_ENGINE=python|cpp` chooses), and the Windows app ships it. To build it:
 
 ```
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -264,39 +318,14 @@ build/coal-cpp pep.aln nuc.fasta -o codon_aln.fasta       # Windows (Visual Stud
 
 ## Tests
 
-```
-python -m unittest discover -s tests -v
-```
+| Where | What | Run |
+|---|---|---|
+| `tests/` | the engine (`coal`, `pal2nal`, `coal-cpp`): every stored PAL2NAL v14 reference output, options, large runs, real data | `python -m unittest discover -s tests` |
+| `tests_app/` | the app: GUI logic, MCP tools, reports, docs, website, packaging (Gradio / mcp tests skip without the extra) | `python -m unittest discover -s tests_app` |
+| `desktop/` | the Windows wrapper (`test_wrapper.py`) and an end-to-end smoke test of the local app (`test_smoke.py`) | `cd desktop && python -m unittest test_wrapper test_smoke` |
+| `tests/fuzz_vs_pal2nal.py` | random comparison with the real PAL2NAL v14 (needs Perl; `python scripts/fetch_pal2nal.py`) | `PAL2NAL=PAL2NAL/pal2nal.v14/pal2nal.pl python tests/fuzz_vs_pal2nal.py` |
 
-Compares COAL with stored PAL2NAL v14 outputs (`tests/golden/`): 39 input cases × all option combinations in all
-four output formats = 285 checks (the test prints these counts). In the 6 `invalid_chars` checks COAL deliberately
-fails (see above). Exit status in the other 279: PAL2NAL always exits 0, so COAL must exit 0 exactly when PAL2NAL
-produced output. stdout is byte-identical in 238 checks, and the per-codon warnings are identical in 234 of them
-(48 with `-nomismatch`); in the other 4 the warnings differ deliberately (NCBI tables 10, 11 and 13); in 24 both
-tools fail. 23 checks are deliberate output or exit-status differences: 6 deliberate errors (`invalid_chars`, where
-COAL refuses), 3 with different output and 14 `-nogap` checks with a non-standard genetic code (COAL's output must
-equal PAL2NAL's output without `-nogap` with that code's stop columns removed). 238 + 24 + 23 = 285. See
-`tests/README.md` for exactly what is compared and for the list of deliberate differences.
-
-**Random differential test against the real PAL2NAL** (needs Perl; PAL2NAL is fetched, never committed):
-
-```
-python scripts/fetch_pal2nal.py
-PAL2NAL=PAL2NAL/pal2nal.v14/pal2nal.pl python tests/fuzz_vs_pal2nal.py      # FUZZ_N=3000 cases by default
-```
-
-Each random case (FASTA or CLUSTAL input, sometimes with `#` marks; clean, mismatching, unrelated, masked or
-wrong-code DNA; UTRs, stops, frameshift digits, RNA, lower case; same, shuffled, different or partly matching IDs;
-random `-codontable`, `-nogap`, `-nomismatch`, `-blockonly`) runs through PAL2NAL and the drop-in `pal2nal` with the
-same command line in all four formats, and stdout must be byte-identical, or both must fail, except for the
-deliberate differences listed in the script (each is in the list above). A difference counts as deliberate only if
-it is exactly the documented one: the script also runs PAL2NAL on a copy of the case with that feature neutralised
-(e.g. `U` → `B`, RNA → DNA, an alternative start codon → ATG) and COAL's output must equal that, apart from the
-documented change. CI runs it (3,000 cases) on every push (job `pal2nal-fuzz`). Result here, seed 20261017, 5,000
-cases: 20,000 comparisons, 13,826 byte-identical, 4,681 where both fail, 1,493 deliberate differences (each
-checked), 0 unexplained (per-format counts in `tests/README.md`; seeds 4242 and 777 also give 0 unexplained).
-
-App, website and docs tests: `python -m unittest discover -s tests_app` (some need the `gui` extra).
+What each comparison checks, the counts and the list of deliberate differences: [tests/README.md](tests/README.md).
 
 ## Benchmark results
 
@@ -405,12 +434,12 @@ corresponding codon alignments. *Nucleic Acids Res.* 34:W609–W612.
    `releases/latest/download/<version-free name>`, so it offers the new release at once.
 
 The Windows app is not code-signed yet (the release notes say so, with the SmartScreen and Smart App Control steps).
-Details and the one-time setup checklist: `site/README.md`. Building the Windows app: `desktop/BUILD.md`.
+Details and the one-time setup checklist: `site/README.md`.
 
 ## Requirements
 
 - Python 3.10+ (the Windows app needs nothing else)
-- A C++17 compiler and CMake 3.16+, only for `coal-cpp`
+- A C++17 compiler and CMake 3.16+, only for building `coal-cpp`
 - Perl 5, only for running the PAL2NAL reference
 
 ## Citation and licence

@@ -87,7 +87,8 @@ def golden_failures():
 
     def run_coal(case, opts):
         spec = td.MANIFEST["cases"][case]
-        args = [spec["pep"], *spec.get("nuc", ["nuc.fasta"]), *opts]
+        # CHANGED(IMP-E-C): `coal` caps per-codon warnings at 20 by default; the goldens hold all of PAL2NAL's
+        args = [spec["pep"], *spec.get("nuc", ["nuc.fasta"]), "--max-warnings", "0", *opts]
         return run_cpp(args, td.FIX / case)
 
     td.run_coal = run_coal
@@ -106,7 +107,7 @@ def fuzz_run(pal2nal, n, seed, formats, report=print):
             cargs = translate(list(args), ENGINE_FORMATS)
         except UsageError as e:
             return 2, "", f"pal2nal: error: {e}\n"
-        return run_cpp(cargs, d)
+        return run_cpp(["--max-warnings", "0", *cargs], d)  # CHANGED(IMP-E-C): as the drop-in (coal_compat main)
 
     fz.run_coal = run_coal
     return fz.fuzz(pal2nal, n, seed, report=report, keep_dir=os.environ.get("FUZZ_KEEP"), formats=formats)

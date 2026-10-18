@@ -17,7 +17,7 @@ step, nothing loaded from other sites (no CDNs, font services, trackers or analy
 | `assets/fonts/` | Atkinson Hyperlegible Next, variable weight 400 to 800, Latin subset as WOFF2 (25 KB), with its licence `OFL.txt` (SIL Open Font License 1.1) |
 | `main.js` | copy buttons, registers `sw.js`; all three downloads are always shown (WEB-11), and CHANGED(WEB-13): the card for the visitor's system gets a "For this computer" mark, and old one-page links (`#windows`, `#speed`, ...) are sent to the page that now holds that section |
 | `sw.js` | keeps a copy of the site's own files so it opens offline after one visit (never touches downloads) |
-| `explainer.html` | a copy of `pitch/explainer.html` (the test fails if they differ: copy it again after editing the original) |
+| `explainer.html` | the 20-second explainer animation (the only copy; the pitch uses it too; `tests_app/test_explainer.py` plays it in Chromium) |
 | `img/broken-gene.webp` | screenshot of the alignment view (`pitch/backup/1_broken_gene_frameshift.png`, lossless WebP) |
 | `favicon.svg` | tab icon: one 3 x 3 codon block from the logo (lighter charcoal in a dark browser theme) |
 | `assets/coal-logo*.png` | the owner's logo, 176 px wide at 1x and 2x; `-dark` has the wordmark recoloured to #ECE8E3. Not shown on the page since WEB-11 (kept for previews and other uses) |

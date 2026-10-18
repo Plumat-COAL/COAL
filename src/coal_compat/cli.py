@@ -136,4 +136,5 @@ def main(argv=None) -> int:
     # files were orphaned. Now the engine runs in this process, so its own signal handling applies
     # (Ctrl-C -> "coal: interrupted", 130; SIGTERM -> cleanup, 143). See overnight/integration/CHANGES.md
     from coal.cli import main as coal_main
-    return coal_main(coal_args)
+    # CHANGED(IMP-E-C): `coal` now prints at most 20 per-codon warnings by default; PAL2NAL prints them all
+    return coal_main(["--max-warnings", "0", *coal_args])

@@ -1,11 +1,11 @@
-"""pitch/explainer.html in a real browser (APP-C6, APP-C7, APP-C8). Needs Playwright + Chromium; skipped otherwise."""
+"""site/explainer.html (was pitch/explainer.html, IMP-M-4) in a real browser (APP-C6, APP-C7, APP-C8). Needs Playwright + Chromium; skipped otherwise."""
 import glob
 import importlib.util
 import os
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PAGE = "file://" + os.path.join(ROOT, "pitch", "explainer.html")
+PAGE = "file://" + os.path.join(ROOT, "site", "explainer.html")  # CHANGED(IMP-M-4): the one copy
 
 
 def _chromium():
