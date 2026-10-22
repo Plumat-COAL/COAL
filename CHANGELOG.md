@@ -8,6 +8,11 @@
   it `standard input`; a second `-` is a usage error. The run report records `"path": "-"` with the sha256 of the data
   read (the report of a run reading `/dev/stdin` or another pipe now hashes the data too, in both engines, instead of
   the Python engine's hash of an empty re-read).
+- **C++ library for embedding** (e.g. in DIAMOND): `cmake --install` puts `coal-cpp`, `libcoal_core.a`, the headers
+  (`<coal/core.hpp>`, `<coal/tables.hpp>`, `<coal/seqio.hpp>`, `<coal/version.hpp>`) and a CMake package in place;
+  `find_package(coal CONFIG)` or `add_subdirectory` / FetchContent give `coal::core`. As a subproject only the library
+  is built (`COAL_BUILD_CLI`, `COAL_BUILD_TOOLS`, `COAL_INSTALL` to add more). Example: `examples/cpp-embed/`; docs:
+  docs/cpp-engine.md "Embedding the library".
 - **Repository tidied for outside users:** a short README with a section on using COAL in pipelines; the detailed
   documentation is in `docs/`. Hackathon logs and pitch material are removed (kept on the `hackathon-archive` tag),
   review-round markers are gone from comments, and engine test modules are named after what they test. No change to
