@@ -20,7 +20,11 @@ not every difference is a silent one. Details and evidence in `tests/README.md`.
 - `.` is treated as a gap. In PAL2NAL it misaligns the output row.
 - Ambiguous DNA bases (IUPAC codes, including plain N) are accepted when every base they could stand for gives the
   right amino acid, e.g. `NTG` as the first Met in table 4 (all of ATG/CTG/GTG/TTG are table-4 starts). PAL2NAL
-  accepts only some fixed combinations, and otherwise falls back to another, frame-shifted placement.
+  accepts only some fixed combinations, and otherwise falls back to another, frame-shifted placement, or fails.
+  Measured with PAL2NAL v14 on a 40-residue gene with one such codon: `CTN`, `CGN`, `AGY`, `TCN`, `GTN`, `GTK`,
+  `ATY`, `AAR`, `GAY`, `CCN` are accepted by both tools; `YTA` and `YTG` (both readings Leu), `MGA` and `MGG` (both
+  Arg) and `ATH` (all three Ile) are accepted by COAL but make PAL2NAL v14 fail the gene ("inconsistency", exit 0,
+  no output). Real coding sequences with IUPAC codes (e.g. from Ensembl) can hit this.
 - Probably-wrong data (see [Using COAL](usage.md)) gives the same output as PAL2NAL plus a notice on stderr (PAL2NAL prints only its
   per-codon warnings, or nothing for a partial ID match). When no ID matches COAL stays silent, like PAL2NAL.
   With `--strict` (COAL's own option) these cases are errors.
@@ -44,6 +48,9 @@ not every difference is a silent one. Details and evidence in `tests/README.md`.
   (and `-nomismatch` removes the column) or places the gene elsewhere in the DNA, even in another reading frame.
 - Protein rows of different lengths are an error (`protein alignment rows have different lengths`); PAL2NAL silently
   pads or truncates.
+- A protein file whose first line is neither `>` nor `CLUSTAL` (a CLUSTAL alignment without its header line, or
+  with the header indented) is an error (`sequence data before the first '>' header ... a CLUSTAL file must start
+  with 'CLUSTAL'`); PAL2NAL treats any such file as CLUSTAL and proceeds. Gblocks-format input is not supported.
 - Input that PAL2NAL misreads is read correctly: a protein FASTA starting with a blank line (PAL2NAL takes it for
   CLUSTAL and fails), a UTF-8 BOM (PAL2NAL fails), `> id` with a space after `>` (PAL2NAL finds no protein
   sequences: "number of input seqs differ (aa: 0 ...)", no output).
