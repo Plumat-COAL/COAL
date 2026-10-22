@@ -20,7 +20,11 @@ not every difference is a silent one. Details and evidence in `tests/README.md`.
 - `.` is treated as a gap. In PAL2NAL it misaligns the output row.
 - Ambiguous DNA bases (IUPAC codes, including plain N) are accepted when every base they could stand for gives the
   right amino acid, e.g. `NTG` as the first Met in table 4 (all of ATG/CTG/GTG/TTG are table-4 starts). PAL2NAL
-  accepts only some fixed combinations, and otherwise falls back to another, frame-shifted placement.
+  accepts only some fixed combinations, and otherwise falls back to another, frame-shifted placement, or fails.
+  Measured with PAL2NAL v14 on a 40-residue gene with one such codon: `CTN`, `CGN`, `AGY`, `TCN`, `GTN`, `GTK`,
+  `ATY`, `AAR`, `GAY`, `CCN` are accepted by both tools; `YTA` and `YTG` (both readings Leu), `MGA` and `MGG` (both
+  Arg) and `ATH` (all three Ile) are accepted by COAL but make PAL2NAL v14 fail the gene ("inconsistency", exit 0,
+  no output). Real coding sequences with IUPAC codes (e.g. from Ensembl) can hit this.
 - Probably-wrong data (see [Using COAL](usage.md)) gives the same output as PAL2NAL plus a notice on stderr (PAL2NAL prints only its
   per-codon warnings, or nothing for a partial ID match). When no ID matches COAL stays silent, like PAL2NAL.
   With `--strict` (COAL's own option) these cases are errors.
