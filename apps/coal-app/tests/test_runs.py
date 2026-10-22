@@ -166,6 +166,9 @@ class TestStopEngineNeverHangs(unittest.TestCase):
         with open(pidfile, encoding="utf-8") as fh:
             worker = int(fh.read())
         self.addCleanup(lambda: os.kill(worker, 9) if _alive(worker) else None)
+        deadline = time.monotonic() + 3  # SIGKILL of the group is delivered asynchronously
+        while _alive(worker) and time.monotonic() < deadline:
+            time.sleep(0.05)
         self.assertFalse(_alive(worker), f"the engine's worker {worker} survived stop_engine")
 
 
