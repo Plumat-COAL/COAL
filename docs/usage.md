@@ -83,7 +83,10 @@ file.
 - `--report FILE.json` writes a run report (schema `coal.report/1`, the one the GUI reads), also when the run fails:
   every sequence's status (`ok`, `warning`, `failed` = written but probably wrong, or left out; `not_checked`), its
   messages, the pairing, a genetic-code suggestion and a ready-to-paste methods sentence. `--json` prints it to
-  stdout (needs `-o`). Every field: [report-schema.md](report-schema.md) (JSON Schema: `docs/report.schema.json`). At the end of a run with problems, `coal: summary:` lines on stderr sum them up (nothing about
+  stdout (needs `-o`). The report path follows the rules of `-o`: naming an input file or the output file is a usage
+  error before anything runs (`coal: error: the report path r.json is an input file` / `is the output file`, exit
+  2; also for a job line's `--report` in a batch), a symbolic link is written through, and a FIFO or device
+  (`/dev/stdout`) is written to, not replaced by a regular file. Every field: [report-schema.md](report-schema.md) (JSON Schema: `docs/report.schema.json`). At the end of a run with problems, `coal: summary:` lines on stderr sum them up (nothing about
   mismatches with `-nomismatch`, which like PAL2NAL prints none; `-q` silences them).
 - `--keep-going` skips sequences that cannot be converted (or, with `--strict`, are refused) instead of stopping:
   the others are written in order, each skipped one is named on stderr, exit status 2. A frameshift digit of a

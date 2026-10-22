@@ -217,7 +217,7 @@ void remove_spooled(const std::vector<std::pair<std::string, std::string>>& spoo
 }
 
 // Python's os.path.realpath (non-strict): follow the final component's symlinks, resolve the folder.
-static std::string real_path(const std::string& p) {
+std::string real_path(const std::string& p) {
     fs::path cur = fs::absolute(fs::path(p));
     for (int i = 0; i < 40; ++i) {
         std::error_code ec;
@@ -285,6 +285,58 @@ std::string output_error(const std::string& out, int err) {
     else if (err == EACCES || err == EPERM) why = "permission denied (choose a folder you can write to)";
     else why = std::strerror(err);
     return "cannot write " + (out.empty() ? "a temporary file in " + folder : out) + ": " + why;
+}
+
+bool same_file(const std::string& a, const std::string& b) {
+    std::error_code ec;
+    bool eq = fs::equivalent(a, b, ec);
+    if (!ec) return eq;
+    return real_path(a) == real_path(b);
+}
+
+std::string report_path_conflict(const std::string& report, const std::vector<std::string>& inputs,
+                                 const std::string& out) {
+    if (report.empty()) return std::string();
+    for (const std::string& p : inputs)
+        if (p != STDIN_ARG && same_file(report, p)) return "the report path " + report + " is an input file";
+    if (!out.empty() && same_file(report, out)) return "the report path " + report + " is the output file";
+    return std::string();
+}
+
+int write_json_file(const std::string& path, const std::string& text) {
+    std::string real = real_path(path);
+    std::error_code ec;
+    bool exists = fs::exists(real, ec);
+    bool regular = exists && fs::is_regular_file(real, ec);
+    if (exists && (!regular || fs::hard_link_count(real, ec) > 1)) {
+        // a FIFO, device or hard-linked file: written in place, not replaced by a regular file
+        errno = 0;
+        std::ofstream f(path, std::ios::binary | std::ios::trunc);
+        if (!f) return errno ? errno : EIO;
+        f << text;
+        f.flush();
+        return f ? 0 : (errno ? errno : EIO);
+    }
+    std::string tmp = real + ".tmp" + unique_name();
+    int err = 0;
+    {
+        errno = 0;
+        std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
+        if (!f) return errno ? errno : EIO;
+        f << text;
+        f.flush();
+        if (!f) err = errno ? errno : EIO;
+    }
+    if (!err) {
+        if (regular) copy_mode(real, tmp);  // keep the existing file's mode
+        fs::rename(tmp, real, ec);
+        if (ec) err = ec.value();
+    }
+    if (err) {
+        std::error_code rm;
+        fs::remove(tmp, rm);
+    }
+    return err;
 }
 
 void copy_mode(const std::string& real, const std::string& tmp) {

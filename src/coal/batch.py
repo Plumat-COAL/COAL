@@ -20,6 +20,7 @@ import shlex
 import sys
 
 from . import __version__
+from .report import report_path_conflict, write_json
 
 SCHEMA = "coal.batch/1"
 # --batch-out-dir: the output file's extension per -output format
@@ -143,6 +144,10 @@ def plan(ap: argparse.ArgumentParser, args: argparse.Namespace, argv: list[str],
         else:
             job.argv = [*defaults, *job.tokens]
         job.args, job.output = ns, ns.out
+        # a job's --report may not name one of its inputs or its output (as for a single run)
+        why = report_path_conflict(ns.report, [ns.pep_aln, *ns.nuc_fasta], ns.out)
+        if why:
+            raise JobsError(n, why)
         jobs.append(job)
     seen: dict[str, Job] = {}
     for job in jobs:
@@ -151,23 +156,12 @@ def plan(ap: argparse.ArgumentParser, args: argparse.Namespace, argv: list[str],
             raise JobsError(job.line_no, f"writes {job.output}, the output of the job on line "
                                          f"{seen[key].line_no} (give each job its own -o)")
         seen[key] = job
+    if args.report:  # the batch report may not name any job's input or output either
+        for job in jobs:
+            why = report_path_conflict(args.report, [job.args.pep_aln, *job.args.nuc_fasta], job.output)
+            if why:
+                raise JobsError(0, why)
     return jobs
-
-
-def write_json(path: str, data: dict) -> None:
-    """Write atomically (temp file + rename); never leaves the temp file behind."""
-    tmp = f"{path}.tmp{os.getpid()}"
-    try:
-        with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
-            json.dump(data, fh, indent=1)
-            fh.write("\n")
-        os.replace(tmp, path)
-    except OSError:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
 
 
 def main(ap: argparse.ArgumentParser, args: argparse.Namespace, argv: list[str]) -> int:

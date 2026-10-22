@@ -6,6 +6,12 @@
   copy the device to a temporary file without end, filling the disk silently. Both engines now stop before reading
   with `coal: error: cannot read /dev/zero: it is a device, not a file` (exit 1; `standard input` for `-`). A
   terminal on standard input and `/dev/null` behave as before; pipes, FIFOs and `<(...)` are unchanged.
+- **`--report PATH` no longer replaces what is at PATH** (robustness review): it used to rename a temp file over
+  anything there, so `--report nuc.fa` destroyed an input, `--report out.fa` the output, and a symlink, FIFO or
+  device node (`/dev/null` became a regular file!) was replaced. Both engines now give the report path the rules of
+  `-o`: an input or the output file is a usage error before anything runs (`coal: error: the report path r.json is
+  an input file` / `is the output file`, exit 2; also for a job line's `--report` and the batch report), symlinks
+  are written through, and FIFOs, devices and hard-linked files are written in place.
 - **Less memory with many workers:** COAL's own processes now limit numpy's BLAS thread pool to one thread
   (`OPENBLAS_NUM_THREADS`, `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, unless already set). COAL uses no BLAS, but every
   worker that imported numpy started a pool sized to the machine. On a 20-thread Windows machine each process that

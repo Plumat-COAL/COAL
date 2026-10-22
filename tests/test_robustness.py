@@ -117,5 +117,76 @@ class TestDeviceInputs(EngineCase):
         self.assertEqual((rc, out, err), (0, EXPECTED.encode(), b""))
 
 
+# ---------------------------------------------------------------- 2. the report path
+class TestReportPath(EngineCase):
+    def test_report_naming_an_input_is_a_usage_error(self):
+        for args, what in ((["p.fa", "n.fa", "--report", "n.fa"], "n.fa is an input file"),
+                           (["p.fa", "n.fa", "--report", "./p.fa"], "./p.fa is an input file"),
+                           (["p.fa", "n.fa", "-o", "o.fa", "--report", "o.fa"], "o.fa is the output file"),
+                           (["p.fa", "n.fa", "-o", "o.fa", "--report", "./o.fa"], "./o.fa is the output file")):
+            with self.subTest(args=args):
+                rc, out, err = self.both(args)
+                self.assertEqual((rc, out), (2, b""))
+                self.assertTrue(err.startswith(b"usage: coal "), err)
+                self.assertEqual(err.splitlines()[-1], f"coal: error: the report path {what}".encode())
+        self.assertEqual((self.d / "n.fa").read_text(), NUC)
+        self.assertEqual((self.d / "p.fa").read_text(), PEP)
+        self.assertFalse((self.d / "o.fa").exists())
+
+    def test_batch_job_report_naming_its_output_is_refused(self):
+        (self.d / "jobs.txt").write_text("p.fa n.fa -o o.fa\np.fa n.fa -o o2.fa --report o2.fa\n")
+        r = self.run_engine(PY_CMD, ["--batch", "jobs.txt"])
+        self.assertEqual(r.returncode, 2, r.stderr)
+        self.assertEqual(r.stderr.splitlines()[-1],
+                         b"coal: error: jobs.txt line 2: the report path o2.fa is the output file")
+        self.assertFalse((self.d / "o.fa").exists())
+        (self.d / "jobs.txt").write_text("p.fa n.fa -o o.fa\n")
+        r = self.run_engine(PY_CMD, ["--batch", "jobs.txt", "--report", "n.fa"])
+        self.assertEqual(r.returncode, 2, r.stderr)
+        self.assertEqual(r.stderr.splitlines()[-1], b"coal: error: the report path n.fa is an input file")
+        self.assertEqual((self.d / "n.fa").read_text(), NUC)
+
+    def test_report_is_written_through_a_symlink(self):
+        target = self.d / "target.json"
+        target.write_text("old\n")
+        link = self.d / "link.json"
+        try:
+            link.symlink_to(target)
+        except (OSError, NotImplementedError):
+            self.skipTest("cannot create symlinks here")
+        for name, cmd in engines():
+            with self.subTest(engine=name):
+                target.write_text("old\n")
+                r = self.run_engine(cmd, ["p.fa", "n.fa", "-o", "o.fa", "--report", "link.json"])
+                self.assertEqual(r.returncode, 0, r.stderr)
+                self.assertTrue(link.is_symlink())
+                self.assertEqual(json.loads(target.read_text())["schema"], "coal.report/1")
+                self.assertEqual(self.leftovers(), [])
+
+    @unittest.skipUnless(POSIX and os.path.exists("/dev/null"), "needs /dev/null")
+    def test_report_to_a_device_does_not_replace_it(self):
+        for name, cmd in engines():
+            with self.subTest(engine=name):
+                r = self.run_engine(cmd, ["p.fa", "n.fa", "-o", "o.fa", "--report", "/dev/null"])
+                self.assertEqual(r.returncode, 0, r.stderr)
+                self.assertTrue(stat.S_ISCHR(os.stat("/dev/null").st_mode), "/dev/null was replaced by a file!")
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "needs FIFOs")
+    def test_report_to_a_fifo_is_written_not_replaced(self):
+        for name, cmd in engines():
+            with self.subTest(engine=name):
+                fifo = self.d / f"{name}.fifo"
+                os.mkfifo(fifo)
+                reader = subprocess.Popen(["cat", str(fifo)], stdout=subprocess.PIPE)
+                try:
+                    r = self.run_engine(cmd, ["p.fa", "n.fa", "-o", "o.fa", "--report", str(fifo)])
+                    data, _ = reader.communicate(timeout=TIMEOUT)
+                finally:
+                    reader.kill()
+                self.assertEqual(r.returncode, 0, r.stderr)
+                self.assertEqual(json.loads(data)["schema"], "coal.report/1")
+                self.assertTrue(stat.S_ISFIFO(fifo.stat().st_mode))
+
+
 if __name__ == "__main__":
     unittest.main()

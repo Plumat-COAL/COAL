@@ -47,6 +47,18 @@ OutTarget resolve_output(const std::string& out);
 // "cannot write <out>: <reason in plain words>" (pipeline.py _output_error); out "" = stdout's temp file.
 std::string output_error(const std::string& out, int err);
 
+// Python's os.path.realpath (non-strict): the final component's symlinks followed, the folder resolved.
+std::string real_path(const std::string& p);
+// Whether two paths name the same file (by identity when both exist, else by resolved path).
+bool same_file(const std::string& a, const std::string& b);
+// Why --report REPORT cannot be written (it names an input or the -o output; a usage error), or "" (report.py
+// report_path_conflict).
+std::string report_path_conflict(const std::string& report, const std::vector<std::string>& inputs,
+                                 const std::string& out);
+// Writes a JSON text as the alignment is written: temp file + rename through symlinks, in place for a FIFO, device
+// or hard-linked file (report.py write_json). Returns 0 or the errno.
+int write_json_file(const std::string& path, const std::string& text);
+
 // Gives `tmp` the permissions `real` has (existing file) before it replaces it.
 void copy_mode(const std::string& real, const std::string& tmp);
 

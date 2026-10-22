@@ -1403,6 +1403,9 @@ int main(int argc, char** argv) {
         std::vector<std::string> in{o.pep};
         in.insert(in.end(), o.nucs.begin(), o.nucs.end());
         if (stdin_count(in) > 1) return usage_error(STDIN_TWICE);
+        // --report naming an input or the output is refused before anything runs (cli.py)
+        std::string why = report_path_conflict(o.report, in, o.out);
+        if (!why.empty()) return usage_error(why);
     }
 
     RunReport rec(o.argv, o.pep, o.nucs, o.out, o.fmt, o.table, o.nogap, o.nomismatch, o.keep_going,
@@ -1475,23 +1478,9 @@ int main(int argc, char** argv) {
         for (auto& l : rec.summary_lines()) std::cerr << "coal: summary: " << l << '\n';
     std::cerr.flush();
     if (!o.report.empty()) {
-        std::string tmp = o.report + ".tmp" + unique_suffix();
-        bool ok;
-        int err = 0;
-        {
-            errno = 0;
-            std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
-            f << json_dump(rec.to_dict(), 1) << '\n';
-            f.flush();
-            ok = (bool)f;
-            if (!ok) err = errno ? errno : EIO;
-        }
-        std::error_code ec;
-        if (ok) fs::rename(tmp, o.report, ec);
-        if (!ok || ec) {
-            if (ec) err = ec.value();
+        int err = write_json_file(o.report, json_dump(rec.to_dict(), 1) + "\n");
+        if (err) {
             std::error_code rm;
-            fs::remove(tmp, rm);
             // As cli.py: the error gives the reason
             std::string why = fs::is_directory(o.report, rm) ? "it is a folder, not a file" : std::strerror(err);
             std::cerr << "coal: error: could not write the report " << o.report << ": " << why << '\n';

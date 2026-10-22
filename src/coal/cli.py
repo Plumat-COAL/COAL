@@ -19,7 +19,7 @@ import sys
 from . import __version__
 from .core import CoalError, limit_blas_threads
 from .pipeline import FORMATS, STDIN_TWICE, run, stdin_count
-from .report import RunReport
+from .report import RunReport, report_path_conflict
 from .tables import SUPPORTED
 
 
@@ -250,6 +250,9 @@ def main(argv=None) -> int:
         ap.error("--max-warnings must be 0 (no limit) or more")
     if stdin_count([args.pep_aln, *args.nuc_fasta]) > 1:
         ap.error(STDIN_TWICE)
+    why = report_path_conflict(args.report, [args.pep_aln, *args.nuc_fasta], args.out)
+    if why:
+        ap.error(why)
     if command_line:
         limit_blas_threads()  # this process and its workers are COAL's own
         rc = _maybe_cpp(ap, args, argv)
