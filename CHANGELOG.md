@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **orthologr:** `packaging/orthologr/pal2nal.pl` is a stand-in for the `pal2nal.pl` bundled in the orthologr R
+  package; copied over it, orthologr's `codon_aln()` / `dNdS()` run COAL (coal-cpp when installed) with their
+  unchanged command line and get the same output. Notes on what to expect and on a proper `tool = "coal"` option
+  for orthologr: `packaging/orthologr/README.md`.
 - **`-` reads standard input** (`zcat nuc.fa.gz | coal pep.aln -`), for the protein alignment or one DNA file, in
   `coal`, `coal-cpp` and the `pal2nal` drop-in, also on Windows (no `/dev/stdin` needed). The data is read as bytes
   into a temporary file, as for other pipes, so the output is byte-identical to giving the file's path; messages name
