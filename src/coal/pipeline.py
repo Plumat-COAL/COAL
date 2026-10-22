@@ -844,7 +844,7 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                             [pep_path, *nuc_paths])
             ck.name = out_path
             if resume:
-                state = ck.load_for_resume(ck.stage if two_pass else ck.partial, nseq)
+                state = ck.load_for_resume(ck.stage if two_pass else ck.partial, nseq, ncol, sum(widths) // 3)
                 if note:
                     if state:
                         note(f"resuming {out_path}: {state['completed']:,} of {nseq:,} sequences were already done"

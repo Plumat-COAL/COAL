@@ -364,6 +364,11 @@ CORRUPTIONS = {
     "rec_kinds_short": lambda st: st["rec"].update(kinds="o"),
     "nseq_wrong": lambda st: st.update(nseq=4),
     "drop_str": lambda st: st.update(drop=["x"]),
+    # beyond the protein columns / the output codon columns (coal-cpp used to resize a vector to it: bad_alloc)
+    "bad_huge": lambda st: st.update(bad=[4000000000000]),
+    "drop_huge": lambda st: st.update(drop=[4000000000000]),
+    "bad_past_columns": lambda st: st.update(bad=[15]),
+    "drop_past_columns": lambda st: st.update(drop=[15]),
 }
 
 

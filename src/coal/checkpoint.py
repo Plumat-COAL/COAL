@@ -73,12 +73,14 @@ class Checkpoint:
             sig.append({"path": os.path.abspath(p), "size": st.st_size, "mtime_ns": st.st_mtime_ns})
         return sig
 
-    def load_for_resume(self, sink_path: str, nseq: int | None = None) -> dict | None:
+    def load_for_resume(self, sink_path: str, nseq: int | None = None, ncol: int | None = None,
+                        ntriplets: int | None = None) -> dict | None:
         """The saved state if this run can resume, None if there is nothing to resume (self.why says why).
         Raises CoalError(code="resume_mismatch") if inputs or options changed.
-        Every field is checked (types, ranges against `nseq` and the partial files' sizes, the entries file's
-        lines) and any problem counts as an unreadable checkpoint, so an edited or corrupted checkpoint can never
-        make a resumed run write a truncated or wrong output; the checked entries are returned as state["_entries"].
+        Every field is checked (types, ranges against `nseq`, `ncol` (protein columns, bounding `drop`), `ntriplets`
+        (output codon columns, bounding `bad`) and the partial files' sizes, the entries file's lines) and any
+        problem counts as an unreadable checkpoint, so an edited or corrupted checkpoint can never make a resumed
+        run write a truncated or wrong output; the checked entries are returned as state["_entries"].
         The C++ engine applies the same rules (main.cpp Checkpoint::load_for_resume)."""
         import json
         if not os.path.exists(self.path):
@@ -100,7 +102,7 @@ class Checkpoint:
         if (st.get("engine") != ENGINE or st.get("coal_version") != __version__
                 or st.get("options_hash") != self.options_hash or st.get("inputs") != self._signature()):
             raise CoalError(CHANGED, code="resume_mismatch")
-        if not _well_formed(st, nseq):
+        if not _well_formed(st, nseq, ncol, ntriplets):
             return None
         self.why = "a checkpoint whose partial output is missing or incomplete"
         try:
@@ -162,9 +164,9 @@ def _int_list(x, below: int | None = None) -> bool:
     return isinstance(x, list) and all(_is_int(v) and v >= 0 and (below is None or v < below) for v in x)
 
 
-def _well_formed(st: dict, nseq: int | None) -> bool:
+def _well_formed(st: dict, nseq: int | None, ncol: int | None = None, ntriplets: int | None = None) -> bool:
     """Whether a checkpoint's fields have the types and ranges a run of this engine writes (nseq: the number of
-    sequences of this run; None skips that check)."""
+    sequences of this run, ncol: its protein columns, ntriplets: its output codon columns; None skips that check)."""
     for k in ("completed", "nseq", "sink_bytes", "entries_bytes", "skipped"):
         if not _is_int(st.get(k)) or st[k] < 0:
             return False
@@ -172,7 +174,8 @@ def _well_formed(st: dict, nseq: int | None) -> bool:
         return False
     if st["completed"] > st["nseq"] or st["skipped"] > st["completed"]:
         return False
-    if not (_int_list(st.get("skip_idx"), st["completed"]) and _int_list(st.get("drop")) and _int_list(st.get("bad"))):
+    if not (_int_list(st.get("skip_idx"), st["completed"]) and _int_list(st.get("drop"), ncol)
+            and _int_list(st.get("bad"), ntriplets)):
         return False
     if len(st["skip_idx"]) != st["skipped"]:
         return False

@@ -673,8 +673,10 @@ struct Checkpoint {
     // Every field is checked (types, ranges against nseq and the partial files' sizes, the entries file's lines)
     // and any problem counts as an unreadable checkpoint, so an edited or corrupted checkpoint can never make a
     // resumed run write a truncated or wrong output (checkpoint.py load_for_resume / _well_formed).
-    bool load_for_resume(Json& st, const std::vector<std::string>& needed, long long nseq,
-                         std::vector<Json>& lines_out) {
+    // ncol: protein columns (bounds `drop`); ntriplets: output codon columns (bounds `bad`): a crafted entry such
+    // as 4000000000000 is an unreadable checkpoint, not a std::bad_alloc from resizing a vector to it.
+    bool load_for_resume(Json& st, const std::vector<std::string>& needed, long long nseq, long long ncol,
+                         long long ntriplets, std::vector<Json>& lines_out) {
         std::error_code ec;
         if (!fs::exists(path, ec)) {
             why = "no checkpoint";
@@ -721,7 +723,8 @@ struct Checkpoint {
             if (!is_int(st.get(k))) return false;
         const long long completed = st.get("completed")->i, skipped = st.get("skipped")->i;
         if (st.get("nseq")->i != nseq || completed > nseq || skipped > completed) return false;
-        if (!int_list(st.get("skip_idx"), completed) || !int_list(st.get("drop"), -1) || !int_list(st.get("bad"), -1))
+        if (!int_list(st.get("skip_idx"), completed) || !int_list(st.get("drop"), ncol) ||
+            !int_list(st.get("bad"), ntriplets))
             return false;
         if ((long long)st.get("skip_idx")->a.size() != skipped) return false;
         if (const Json* rec = st.get("rec"); rec && rec->type != Json::Null) {
@@ -1040,7 +1043,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         if (o.fmt == "codon") prot_path = ck->prot;
         if (o.resume) {
             resuming = ck->load_for_resume(state, {staged ? stage_path : out_tmp, ck->entries, prot_path}, nseq,
-                                           resume_entries);
+                                           ncol, wtotal / 3, resume_entries);
             if (resuming)
                 note("resuming " + o.out + ": " + fmt_n(state.get("completed")->as_int()) + " of " + fmt_n(nseq) +
                      " sequences were already done" +
