@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **MCP server on mcp 1.x (the Windows app's) is quiet and names its version:** `python -m coal_app --mcp` /
+  `COAL.exe -m coal_app --mcp` with the `mcp` 1.x that Gradio's extra installs reported the mcp library's version
+  ("1.10.1") as `serverInfo.version` and logged about 37 KB of INFO lines to standard error per session (into
+  Claude Desktop's MCP log). It now reports COAL's version, as on mcp 2.x, and logs warnings and errors only. The
+  message for a missing `mcp` package no longer claims that version 2 is required (1.x works too).
+- **Packaging:** the source distributions of `coal-align` and `coal-align-app` no longer ship `tests/` (the tests
+  need the repository: helpers, fixtures, examples, coal-cpp), and the `coal-align-app` wheel and sdist now carry
+  the MIT `LICENSE` (the app had none).
 - **App: a settings file that is not text no longer stops COAL from starting.** `settings.json` in another encoding
   (or binary garbage) gave a traceback at start-up; it now counts as a damaged file: the defaults are used and the
   Settings tab says so, as for a half-written file.
