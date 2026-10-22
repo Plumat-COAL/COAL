@@ -14,7 +14,7 @@ import signal
 import sys
 
 from . import __version__
-from .core import CoalError
+from .core import CoalError, limit_blas_threads
 from .pipeline import FORMATS, run
 from .report import RunReport
 from .seqio import InputFormatError
@@ -128,6 +128,7 @@ def main(argv=None) -> int:
     if args.max_warnings < 0:
         ap.error("--max-warnings must be 0 (no limit) or more")
     if command_line:
+        limit_blas_threads()  # this process and its workers are COAL's own
         rc = _maybe_cpp(ap, args, argv)
         if rc is not None:
             return rc
