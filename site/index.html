@@ -39,8 +39,9 @@
   <h1 id="hero-title">Codon alignments from a protein alignment and its coding DNA</h1>
   <p class="lead">COAL is a drop-in replacement for PAL2NAL v14. It accepts the same input files and options, with
     <a href="guide.html#limits">a few exceptions</a>. When a gene does not match its protein, COAL says which gene and
-    why, and on long genes it was up to <span data-check="118.6×">118.6×</span> faster than PAL2NAL v14 in
-    <a href="differences.html#speed">our measurements</a>.</p>
+    why. Its C++ engine was <span data-check="297×">297×</span> faster than PAL2NAL v14 on a million genes and
+    <span data-check="1,115×">1,115×</span> faster on long genes in <a href="differences.html#speed">our measurements</a>,
+    with the same output.</p>
   <ul class="meta">
     <li>Version <span id="version" data-version="0.4.2">0.4.2</span></li>
     <li>MIT licence</li>
@@ -123,9 +124,10 @@ coal: summary: The run stopped at OG0001_sp14: 6 sequences were not checked and 
     </li>
     <li>
       <h3>Large inputs are quick</h3>
-      <p>10,000 genes of 500 codons took <span data-check="24.7 s">24.7 s</span> with PAL2NAL v14 and
-        <span data-check="0.864 s">0.864 s</span> with COAL, start-up included. On tiny inputs COAL is slightly
-        slower.</p>
+      <p>A million genes of 400 codons took <span data-check="62 min">62 min</span> and
+        <span data-check="18.6 GB">18.6 GB</span> of memory with PAL2NAL v14, and <span data-check="12.5 s">12.5 s</span>
+        and <span data-check="172 MB">172 MB</span> with COAL's C++ engine on one thread. On tiny inputs both take
+        a few hundredths of a second.</p>
       <p><a href="differences.html#speed">Speed measurements</a></p>
     </li>
   </ul>
