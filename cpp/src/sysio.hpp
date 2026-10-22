@@ -1,7 +1,7 @@
 // Operating-system side of coal-cpp, as the reference engine:
 //   * temp files are registered so a signal handler can remove them: SIGTERM -> exit 143,
 //     SIGHUP -> 129, Ctrl-C -> "coal: interrupted", 130; a closed stdout pipe -> exit 141, silent;
-//   * non-regular inputs (pipes, /dev/stdin, FIFOs) are copied to temp files first;
+//   * non-regular inputs (`-` = standard input, pipes, /dev/stdin, FIFOs) are copied to temp files first;
 //   * -o: symlinks written through, FIFOs / devices / hard-linked files written in place, an existing file keeps
 //     its permissions, clear errors for symlink loops and missing folders.
 #pragma once
@@ -23,8 +23,16 @@ void unregister_temp(const std::string& path);
 // "[Errno N] <text>: '<path>'" (Python's OSError message) for the current errno.
 std::string os_error(int err, const std::string& path);
 
-// Inputs that are not regular files are copied to temp files. Returns the paths to read and fills
-// `spooled` with (temp path, original argument) pairs (removed by remove_spooled).
+// `-` as an input path means standard input (pipeline.py STDIN); messages name it STDIN_NAME. At most one `-` per
+// command line (STDIN_TWICE, a usage error, as cli.py).
+constexpr const char* STDIN_ARG = "-";
+constexpr const char* STDIN_NAME = "standard input";
+constexpr const char* STDIN_TWICE =
+    "'-' (standard input) can be given only once: as the protein alignment or as one DNA file";
+int stdin_count(const std::vector<std::string>& args);
+
+// Inputs that are not regular files (and `-`, standard input) are copied to temp files. Returns the paths to read
+// and fills `spooled` with (temp path, name for messages) pairs (removed by remove_spooled).
 std::vector<std::string> spool_inputs(const std::vector<std::string>& args,
                                       std::vector<std::pair<std::string, std::string>>& spooled);
 void remove_spooled(const std::vector<std::pair<std::string, std::string>>& spooled);

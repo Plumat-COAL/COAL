@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- **`-` reads standard input** (`zcat nuc.fa.gz | coal pep.aln -`), for the protein alignment or one DNA file, in
+  `coal`, `coal-cpp` and the `pal2nal` drop-in, also on Windows (no `/dev/stdin` needed). The data is read as bytes
+  into a temporary file, as for other pipes, so the output is byte-identical to giving the file's path; messages name
+  it `standard input`; a second `-` is a usage error. The run report records `"path": "-"` with the sha256 of the data
+  read (the report of a run reading `/dev/stdin` or another pipe now hashes the data too, in both engines, instead of
+  the Python engine's hash of an empty re-read).
+- **C++ library for embedding** (e.g. in DIAMOND): `cmake --install` puts `coal-cpp`, `libcoal_core.a`, the headers
+  (`<coal/core.hpp>`, `<coal/tables.hpp>`, `<coal/seqio.hpp>`, `<coal/version.hpp>`) and a CMake package in place;
+  `find_package(coal CONFIG)` or `add_subdirectory` / FetchContent give `coal::core`. As a subproject only the library
+  is built (`COAL_BUILD_CLI`, `COAL_BUILD_TOOLS`, `COAL_INSTALL` to add more). Example: `examples/cpp-embed/`; docs:
+  docs/cpp-engine.md "Embedding the library".
+- **Less memory with many workers:** COAL's own processes now limit numpy's BLAS thread pool to one thread
+  (`OPENBLAS_NUM_THREADS`, `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, unless already set). COAL uses no BLAS, but every
+  worker that imported numpy started a pool sized to the machine. On a 20-thread Windows machine each process that
+  imported numpy committed about 630 MB (9-11 GB at the default `-j`); the BLAS pool is the likely cause, to be
+  confirmed by re-measuring. Programs that use COAL as a library are not affected.
+- **Faster start-up** for runs on small files (one COAL call per gene family in a pipeline): about 40 ms less per call
+  (104 -> 64 ms on Linux), by not importing `dataclasses`, `subprocess`, `hashlib`, `json` and `shlex` unless needed.
+
 - **Repository tidied for outside users:** a short README with a section on using COAL in pipelines; the detailed
   documentation is in `docs/`. Hackathon logs and pitch material are removed (kept on the `hackathon-archive` tag),
   review-round markers are gone from comments, and engine test modules are named after what they test. No change to
