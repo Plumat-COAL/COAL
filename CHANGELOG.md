@@ -10,6 +10,26 @@
   anything runs). Every output is byte-identical to the single run; about 40× less wall time on tiny jobs. Python
   only: `coal-cpp --batch` is a clear error and batches are never dispatched to it. `--resume` and cross-job
   parallelism are not supported in a batch yet.
+- **The app no longer waits forever for a stopped engine:** when an engine run hits the app's time limit (or the
+  demo pipeline's), it is sent SIGTERM and, after the grace period, SIGKILL; the kill now takes the engine's whole
+  process group, so its worker processes die with it. Before, a run that outlived the grace period on a slow machine
+  was killed alone, its orphaned workers kept its output pipes open and the app waited for them indefinitely (the
+  CI app suite hung until the job timeout). Windows already killed the tree. Test commands that start the engine
+  now give it no stdin and always carry a timeout.
+- **`coal-cpp` mirrors Python 3.13's argparse** (it mirrored 3.10's): `-qx` is "unrecognized arguments: -x" rather
+  than an ignored explicit argument, `-hx` prints help, `-cod=2` is accepted, invalid choices are quoted
+  (`invalid choice: '7' (choose from '1', '2', ...)`), and only the `--` marker is dropped from the positionals (a
+  second `--` is a file name). `tests/test_cpp_cli.py` compares the two command lines live on an interpreter
+  whose argparse behaves that way (probed, not keyed on the version) and skips elsewhere with the differences named.
+- **Documented for 1.0:** `docs/python-api.md` (the public Python API: `coal.codon_align`, the new re-export
+  `coal.align_files` = the `coal` command as a function, `coal.CoalError` with its `code`/`seq_id`/`index`, and the
+  semantic-versioning promise for command-line flags, output bytes, exit codes, the report schema and these
+  functions), `docs/report-schema.md` with a JSON Schema (`docs/report.schema.json`, draft 2020-12) for the run report
+  `coal.report/1` (every field, status, pairing mode, message and hint code; additive changes only within `/1`),
+  `CONTRIBUTING.md`, GitHub issue forms and a pull-request template. New tests run the documented examples
+  (`tests/test_python_api.py`) and validate freshly generated reports from both engines against the schema
+  (`tests/test_report_schema.py`); `tests/report_example.json` is now a real `examples/one_broken_gene --keep-going`
+  report. No change to COAL's behaviour or output.
 - **orthologr:** `packaging/orthologr/pal2nal.pl` is a stand-in for the `pal2nal.pl` bundled in the orthologr R
   package; copied over it, orthologr's `codon_aln()` / `dNdS()` run COAL (coal-cpp when installed) with their
   unchanged command line and get the same output. Notes on what to expect and on a proper `tool = "coal"` option

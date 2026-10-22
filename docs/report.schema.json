@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://plumat-coal.github.io/COAL/report.schema.json",
+  "title": "COAL run report (coal.report/1)",
+  "description": "The JSON that `coal --report FILE.json` / `--json` and `coal-cpp` write. Field meanings: docs/report-schema.md. Readers must ignore fields they do not know: fields are added without a schema bump.",
+  "type": "object",
+  "required": ["schema", "coal_version", "source", "command", "command_line", "pal2nal_equivalent", "options", "inputs",
+               "output", "summary", "hints", "errors", "sequences", "runtime_seconds", "exit_code", "summary_text",
+               "methods_text"],
+  "properties": {
+    "schema": {"const": "coal.report/1"},
+    "coal_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+((a|b|rc)[0-9]+)?$"},
+    "source": {"const": "coal"},
+    "command": {"type": "string"},
+    "command_line": {"type": "string"},
+    "pal2nal_equivalent": {"type": "string"},
+    "options": {
+      "type": "object",
+      "required": ["output_format", "codontable", "nogap", "nomismatch", "keep_going", "strict", "blockonly"],
+      "properties": {
+        "output_format": {"enum": ["fasta", "clustal", "paml", "codon"]},
+        "codontable": {"enum": [1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 16, 21, 22, 23]},
+        "nogap": {"type": "boolean"},
+        "nomismatch": {"type": "boolean"},
+        "keep_going": {"type": "boolean"},
+        "strict": {"type": "boolean"},
+        "blockonly": {"type": "boolean"}
+      }
+    },
+    "inputs": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["role", "path", "sha256", "sequences"],
+        "properties": {
+          "role": {"enum": ["protein", "dna"]},
+          "path": {"type": "string"},
+          "sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+          "sequences": {"type": ["integer", "null"], "minimum": 0}
+        }
+      }
+    },
+    "output": {
+      "type": ["object", "null"],
+      "required": ["path", "format", "sha256", "sequences"],
+      "properties": {
+        "path": {"type": ["string", "null"]},
+        "format": {"enum": ["fasta", "clustal", "paml", "codon"]},
+        "sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "sequences": {"type": "integer", "minimum": 0}
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["total", "ok", "warning", "failed", "pairing"],
+      "properties": {
+        "total": {"type": "integer", "minimum": 0},
+        "ok": {"type": "integer", "minimum": 0},
+        "warning": {"type": "integer", "minimum": 0},
+        "failed": {"type": "integer", "minimum": 0},
+        "not_checked": {"type": "integer", "minimum": 1},
+        "pairing": {"enum": ["id", "normalised", "order", null]},
+        "columns_removed": {"type": "integer", "minimum": 0},
+        "columns_removed_ambiguous": {"type": "integer", "minimum": 0}
+      }
+    },
+    "hints": {"type": "array", "items": {"$ref": "#/$defs/hint"}},
+    "errors": {"type": "array", "items": {"$ref": "#/$defs/error"}},
+    "sequences": {"type": "array", "items": {"$ref": "#/$defs/sequence"}},
+    "runtime_seconds": {"type": "number", "minimum": 0},
+    "exit_code": {"enum": [0, 1, 2]},
+    "summary_text": {"type": "array", "items": {"type": "string"}},
+    "methods_text": {"type": "string"},
+    "error": {
+      "type": "object",
+      "required": ["code", "text", "detail"],
+      "properties": {
+        "code": {"type": "string"},
+        "text": {"type": "string"},
+        "detail": {"type": "string"}
+      }
+    },
+    "resumed_from": {"type": "integer", "minimum": 0}
+  },
+  "$defs": {
+    "hint": {
+      "type": "object",
+      "required": ["code", "text"],
+      "properties": {
+        "code": {"enum": ["partial_id_match", "normalised_ids", "id_mismatch", "genetic_code"]},
+        "text": {"type": "string"},
+        "suggested_codontable": {"type": "integer"},
+        "checked": {"type": "integer", "minimum": 0},
+        "fit": {"type": "integer", "minimum": 0},
+        "fit_current": {"type": "integer", "minimum": 0}
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": ["code", "text"],
+      "properties": {
+        "code": {"type": "string"},
+        "text": {"type": "string"}
+      }
+    },
+    "sequence": {
+      "type": "object",
+      "required": ["id", "index", "dna_id", "pairing", "status", "messages"],
+      "properties": {
+        "id": {"type": ["string", "null"]},
+        "index": {"type": "integer", "minimum": 0},
+        "dna_id": {"type": ["string", "null"]},
+        "pairing": {"enum": ["id", "normalised", "order", null]},
+        "status": {"enum": ["ok", "warning", "failed", "not_checked"]},
+        "messages": {"type": "array", "items": {"$ref": "#/$defs/message"}}
+      }
+    },
+    "message": {
+      "type": "object",
+      "required": ["code"],
+      "properties": {
+        "code": {"type": "string"},
+        "text": {"type": "string"},
+        "column": {"type": "integer", "minimum": 1},
+        "end_column": {"type": "integer", "minimum": 1},
+        "residue": {"type": "string"},
+        "codon": {"type": "string"},
+        "removed": {"const": true},
+        "start_codon": {"const": true},
+        "shift": {"enum": [-5, -4, -2, -1, 1, 2, 4, 5]},
+        "dna_id": {"type": "string"},
+        "failed_id": {"type": "string"}
+      },
+      "allOf": [
+        {"if": {"properties": {"code": {"enum": ["not_written", "not_reached"]}}},
+         "then": {"required": ["failed_id"]},
+         "else": {"required": ["text"]}},
+        {"if": {"properties": {"code": {"const": "mismatch"}}},
+         "then": {"required": ["column", "residue", "codon"]}},
+        {"if": {"properties": {"code": {"const": "unknown_aa"}}},
+         "then": {"required": ["column", "residue"]}},
+        {"if": {"properties": {"code": {"enum": ["frameshift"]}}},
+         "then": {"required": ["column", "shift"]}},
+        {"if": {"properties": {"code": {"enum": ["missing_dna", "possible_frameshift"]}}},
+         "then": {"required": ["column"]}},
+        {"if": {"properties": {"code": {"const": "possible_frameshift"}}},
+         "then": {"required": ["end_column"]}},
+        {"if": {"properties": {"code": {"const": "suspect_pairing"}}},
+         "then": {"required": ["dna_id"]}}
+      ]
+    }
+  }
+}

@@ -53,7 +53,7 @@ class TestNoOrphanProcesses(unittest.TestCase):
     def _compat(self, sig):
         import signal, subprocess, sys, time
         p = subprocess.Popen([sys.executable, "-m", "coal_compat", self.pep, self.nuc, "-output", "fasta",
-                              "-nomismatch"], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                              "-nomismatch"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         try:
             time.sleep(0.8)  # let the engine start its work (a full run takes ~2.5 s)
             p.send_signal(sig)
@@ -119,6 +119,54 @@ class TestDemoTimeoutsStopWorkers(unittest.TestCase):
         self.assertIn("did not finish", res[1])
         self.assertEqual(_wait_gone(self.data), [])
         self.assertEqual([n for n in os.listdir(out) if n.startswith(".coal_")], [])
+
+
+# A stand-in engine that behaves like a stuck one: it ignores SIGTERM and has a worker (a forked child, holding
+# the same stdout/stderr pipes, as the engine's process-pool workers do) that outlives it. argv[1]: file for the
+# worker's pid.
+_STUCK_ENGINE = """
+import os, signal, sys, time
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+pid = os.fork()
+if pid == 0:
+    time.sleep(600)
+    os._exit(0)
+with open(sys.argv[1], "w") as fh:
+    fh.write(str(pid))
+time.sleep(600)
+"""
+
+
+def _alive(pid: int) -> bool:
+    try:
+        with open(f"/proc/{pid}/stat", "rb") as fh:
+            return fh.read().decode().rsplit(")", 1)[1].split()[0] != "Z"
+    except OSError:
+        return False
+
+
+@unittest.skipUnless(os.path.isdir("/proc/self") and os.name != "nt", "needs Linux /proc and POSIX signals")
+class TestStopEngineNeverHangs(unittest.TestCase):
+    """stop_engine after a timeout: SIGTERM, grace, then SIGKILL of the engine's whole process group. Before the
+    group kill, an engine that outlived the grace (a slow runner: SIGTERM waits for the in-flight batches) was
+    SIGKILLed alone, its orphaned workers kept its pipes open and the final communicate() waited for them forever
+    (the CI app suite hung until the job timeout)."""
+
+    def test_timed_out_engine_and_its_worker_are_gone_quickly(self):
+        import subprocess
+        import time
+        d = tempfile.mkdtemp(prefix="coal_test_stuck_")
+        self.addCleanup(shutil.rmtree, d, True)
+        pidfile = os.path.join(d, "worker.pid")
+        t0 = time.monotonic()
+        with self.assertRaises(subprocess.TimeoutExpired):
+            core.run_engine_command([sys.executable, "-c", _STUCK_ENGINE, pidfile], timeout=1.5, temp_dir=d)
+        elapsed = time.monotonic() - t0
+        self.assertLess(elapsed, 30, "stop_engine took too long (hung on the orphaned worker?)")
+        with open(pidfile, encoding="utf-8") as fh:
+            worker = int(fh.read())
+        self.addCleanup(lambda: os.kill(worker, 9) if _alive(worker) else None)
+        self.assertFalse(_alive(worker), f"the engine's worker {worker} survived stop_engine")
 
 
 class TestPruneRunFolders(RunsDirCase):

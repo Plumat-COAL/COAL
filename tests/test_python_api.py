@@ -1,0 +1,163 @@
+"""The public Python API as docs/python-api.md documents it: every example on that page, run.
+
+`import coal` exports codon_align, align_files, CoalError and __version__; the examples' outputs are the documented
+ones. A change here is a change to the documented API: update docs/python-api.md with it."""
+from __future__ import annotations
+
+import os
+import shutil
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "src"))
+import coal  # noqa: E402
+from coal import CoalError, align_files, codon_align  # noqa: E402
+
+DOC = ROOT / "docs" / "python-api.md"
+EXAMPLE = ROOT / "examples" / "one_broken_gene"
+
+# The gene of the "one wrong codon" example: column 11 is H, its codon GAT (D)
+PROT = "MFWDKESRSPHESAPQYARKIWEMAAAVAP"
+DNA = "ATGTTCTGGGACAAAGAAAGCAGAAGCCCAGATGAAAGCGCACCACAATACGCAAGAAAAATATGGGAAATGGCAGCAGCAGTAGCACCA"
+
+
+class TestExports(unittest.TestCase):
+    def test_all(self):
+        self.assertEqual(coal.__all__, ["CoalError", "codon_align", "align_files", "__version__"])
+        for name in coal.__all__:
+            self.assertTrue(hasattr(coal, name), name)
+        from coal.pipeline import run
+        self.assertIs(align_files, run)
+        self.assertTrue(issubclass(CoalError, Exception))
+
+    def test_doc_names_every_export(self):
+        text = DOC.read_text(encoding="utf-8")
+        for name in coal.__all__:
+            self.assertIn(f"coal.{name}", text, f"docs/python-api.md does not document coal.{name}")
+        self.assertIn(f"COAL {coal.__version__}", text, "docs/python-api.md names another version than the package")
+
+
+class TestCodonAlignExamples(unittest.TestCase):
+    def test_pairing_by_id_any_order(self):
+        rows, warnings = codon_align([("g1", "MK-VL"), ("g2", "MKQVL")],
+                                     [("g2", "ATGAAACAGGTTCTG"), ("g1", "ATGAAAGTTCTGTAA")])
+        self.assertEqual(rows, [("g1", "ATGAAA---GTTCTG"), ("g2", "ATGAAACAGGTTCTG")])
+        self.assertEqual(warnings, [])
+
+    def test_one_wrong_codon(self):
+        rows, warnings = codon_align([("x", PROT)], [("x", DNA)])
+        self.assertEqual(rows, [("x", DNA)])
+        self.assertEqual(warnings, ["x pepAlnPos 11: H does not correspond to GAT"])
+        rows, warnings = codon_align([("x", PROT)], [("x", DNA)], nomismatch=True)
+        self.assertEqual((len(rows[0][1]), warnings), (87, []))
+        self.assertEqual(rows[0][1], DNA[:30] + DNA[33:])
+
+    def test_warning_formats(self):
+        # B/Z/J/O/U
+        rows, warnings = codon_align([("a", "MUK")], [("a", "ATGTGAAAA")])
+        self.assertEqual(rows, [("a", "ATGTGAAAA")])
+        self.assertEqual(warnings, ["a pepAlnPos 2: U (selenocysteine) is not checked; any codon is accepted"])
+        # pairing by order with a partial ID match: a pairing warning first
+        rows, warnings = codon_align([("a", "MK"), ("b", "MK")], [("a", "ATGAAA"), ("c", "ATGAAG")])
+        self.assertEqual(rows, [("a", "ATGAAA"), ("b", "ATGAAG")])
+        self.assertEqual(len(warnings), 1)
+        self.assertTrue(warnings[0].startswith("only 1 of 2 protein IDs are DNA IDs; pairing sequences by order instead"))
+        # no ID matches: silent, by order
+        self.assertEqual(codon_align([("a", "MK"), ("b", "MK")], [("x", "ATGAAA"), ("y", "ATGAAG")]),
+                         ([("a", "ATGAAA"), ("b", "ATGAAG")], []))
+        # normalised IDs where order would mispair
+        rows, warnings = codon_align([("AT1.1", "MK"), ("AT2.1", "MV")], [("AT2", "ATGGTT"), ("AT1", "ATGAAA")])
+        self.assertEqual(rows, [("AT1.1", "ATGAAA"), ("AT2.1", "ATGGTT")])
+        self.assertTrue(warnings[0].startswith("2 of 2 protein IDs match a DNA ID only after normalising"))
+
+    def test_options(self):
+        self.assertEqual(codon_align([("a", "mk")], [("a", "atgaaa")]), ([("a", "atgaaa")], []))  # case kept
+        self.assertEqual(codon_align([("a", "M2K")], [("a", "ATGCCAAA")]), ([("a", "ATGCC-AAA")], []))
+        self.assertEqual(codon_align([("a", "MK*"), ("b", "M-*")], [("a", "ATGAAATAA"), ("b", "ATGTAG")], nogap=True),
+                         ([("a", "ATG"), ("b", "ATG")], []))
+        self.assertEqual(codon_align([("a", "MK")], [("a", "ATGAAA")], table=11), ([("a", "ATGAAA")], []))
+
+    def test_errors(self):
+        cases = [
+            ("row_lengths", None, [("a", "MK"), ("b", "M")], [("a", "ATGAAA"), ("b", "ATG")], {}),
+            ("count_mismatch", None, [("a", "MK")], [("b", "ATGAAA"), ("c", "ATGAAA")], {}),
+            ("no_sequences", None, [], [], {}),
+            ("partial_id_match", None, [("a", "MK"), ("b", "MK")], [("a", "ATGAAA"), ("c", "ATGAAG")],
+             {"strict": True}),
+            ("invalid_protein", "a", [("a", "M@")], [("a", "ATGAAA")], {}),
+            ("empty", "a", [("a", "--")], [("a", "ATG")], {}),
+            ("inconsistent", "a", [("a", "MK")], [("a", "CCCCCC")], {}),
+        ]
+        for code, seq_id, p, d, kw in cases:
+            with self.assertRaises(CoalError) as cm:
+                codon_align(p, d, **kw)
+            e = cm.exception
+            self.assertEqual((e.code, e.seq_id, e.index), (code, seq_id, None), str(e))
+        with self.assertRaises(CoalError) as cm:
+            codon_align([("a", "MK")], [("a", "CCCCCC")])
+        self.assertEqual(str(cm.exception), "a: protein and DNA are inconsistent (no match found)")
+        with self.assertRaises(ValueError):
+            codon_align([("a", "MK")], [("a", "ATGAAA")], table=7)
+
+
+class TestAlignFilesExample(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        for f in ("protein.aln.fasta", "dna.fasta"):
+            shutil.copy(EXAMPLE / f, self.tmp)
+        self.cwd = os.getcwd()
+        os.chdir(self.tmp)
+
+    def tearDown(self):
+        os.chdir(self.cwd)
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_keep_going_with_report(self):
+        from coal.report import RunReport
+        pep, dna, out = "protein.aln.fasta", ["dna.fasta"], "codon.fasta"
+        messages = []
+        rec = RunReport([], pep, dna, out, "fasta", 1, False, False, keep_going=True)
+        skipped = align_files(pep, dna, out_path=out, keep_going=True, warn=messages.append,
+                              notice=messages.append, rec=rec, jobs=1)
+        rec.exit_code = 2 if skipped else 0
+        report = rec.to_dict()
+        self.assertEqual(skipped, 1)
+        self.assertEqual(messages, ["skipped OG0001_sp14: protein and DNA are inconsistent (no match found)"])
+        self.assertEqual(report["summary"], {"total": 20, "ok": 19, "warning": 0, "failed": 1, "pairing": "id"})
+        self.assertEqual(report["sequences"][13]["messages"][0]["code"], "frameshift")
+        self.assertEqual(report["schema"], "coal.report/1")
+        self.assertEqual(report["exit_code"], 2)
+        self.assertEqual(rec.summary_lines(), [
+            "1 sequence of 20 could not be converted and was left out (first: OG0001_sp14: protein and DNA are "
+            "inconsistent (no match found). Frameshift at column 102: one base is missing in the DNA, so from here on "
+            "the codons are read out of step.)"])
+        with open(out, encoding="ascii") as fh:
+            self.assertEqual(sum(line.startswith(">") for line in fh), 19)
+
+    def test_without_keep_going_raises_and_writes_nothing(self):
+        with self.assertRaises(CoalError) as cm:
+            align_files("protein.aln.fasta", ["dna.fasta"], out_path="codon.fasta", jobs=1)
+        e = cm.exception
+        self.assertEqual((e.code, e.seq_id, e.index), ("inconsistent", "OG0001_sp14", 13))
+        self.assertFalse(os.path.exists("codon.fasta"))
+        self.assertEqual([f for f in os.listdir(".") if f.startswith(".coal")], [])
+
+    def test_fail_records_the_error(self):
+        from coal.report import RunReport
+        rec = RunReport([], "protein.aln.fasta", ["dna.fasta"], "codon.fasta", "fasta", 1, False, False)
+        try:
+            align_files("protein.aln.fasta", ["dna.fasta"], out_path="codon.fasta", rec=rec, jobs=1)
+        except CoalError as e:
+            rec.fail(e.code, str(e), e.seq_id)
+            rec.exit_code = 1
+        report = rec.to_dict()
+        self.assertEqual(report["error"]["code"], "inconsistent")
+        self.assertIsNone(report["output"])
+        self.assertEqual(report["summary"]["not_checked"], 19)
+
+
+if __name__ == "__main__":
+    unittest.main()

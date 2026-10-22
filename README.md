@@ -81,8 +81,8 @@ Example inputs are in `examples/` (`clean`, `mito`, `messy_ids`, `one_broken_gen
   ([docs/usage.md](docs/usage.md#batch-mode)).
 - **Reading from a pipe:** pass `-` as the protein alignment or one DNA file (`zcat nuc.fa.gz | coal pep.aln -`);
   works the same on Windows, with `coal-cpp` and with the `pal2nal` drop-in. Only one `-` per command line.
-- **From Python** (the API is not yet frozen; it may change before 1.0):
-- **From Python** (the API is not yet frozen; it may change before 1.0):
+- **From Python** ([docs/python-api.md](docs/python-api.md): `codon_align`, `align_files`, `CoalError`, and what 1.0 will
+  keep stable):
 
   ```python
   import coal
@@ -98,12 +98,15 @@ Example inputs are in `examples/` (`clean`, `mito`, `messy_ids`, `one_broken_gen
 | Topic | Where |
 |---|---|
 | Every option, input and output rules, large inputs, run report | [docs/usage.md](docs/usage.md) |
+| Using COAL from Python (`codon_align`, `align_files`, `CoalError`) and the 1.0 versioning promise | [docs/python-api.md](docs/python-api.md) |
+| The run report's fields (`--report` / `--json`, schema `coal.report/1`) and its JSON Schema | [docs/report-schema.md](docs/report-schema.md), [docs/report.schema.json](docs/report.schema.json) |
 | How and why COAL's output differs from PAL2NAL v14 | [docs/differences.md](docs/differences.md) |
 | The C++ engine | [docs/cpp-engine.md](docs/cpp-engine.md) |
 | Speed and memory vs PAL2NAL | [docs/benchmarks.md](docs/benchmarks.md) |
 | Windows app, web GUI, other install options | [docs/install.md](docs/install.md), [apps/coal-app/desktop/README.md](apps/coal-app/desktop/README.md) |
 | Running COAL from an AI agent (MCP) | [docs/mcp.md](docs/mcp.md) |
 | Tests, the PAL2NAL reference, releasing | [docs/development.md](docs/development.md), [tests/README.md](tests/README.md) |
+| Contributing: setup, the two-engine rule, adding a deliberate difference | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | Changes between versions | [CHANGELOG.md](CHANGELOG.md) |
 
 ## Citation and licence

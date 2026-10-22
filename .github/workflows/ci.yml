@@ -226,8 +226,9 @@ jobs:
     # Builds the C++ engine (its CMakeLists.txt is at the repository root) on all three systems with
     # warnings as errors and runs every C++ test (goldens with COAL_IMPL=cpp, C++ vs Python, CLI, readers, tables,
     # thread pool); a skipped test fails the job, except tests.test_cpp_cli's live comparison with the Python CLI, which
-    # depends on argparse's exact messages and runs only on older 3.10/3.11 builds (it is run by hand there), and the
-    # platform skips (Linux-only peak-memory test, POSIX signals/pipes on Windows). "not built" skips still fail.
+    # depends on argparse's exact messages (Python 3.13's; it runs here on 3.13 and skips on interpreters whose
+    # argparse differs), and the platform skips (Linux-only peak-memory test, POSIX signals/pipes on Windows).
+    # "not built" skips still fail.
     name: C++ engine on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
