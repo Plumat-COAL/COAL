@@ -274,10 +274,6 @@ class TestProbeCost(RunsDirCase):
         self.assertEqual([f for f in os.listdir(t) if f.startswith("probe")], [])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestUnusableRunsDir(unittest.TestCase):
     """COAL_RUNS_DIR pointing somewhere no folder can be made: one plain sentence, never a traceback."""
 
@@ -310,3 +306,6 @@ class TestUnusableRunsDir(unittest.TestCase):
         with self.assertRaisesRegex(tools.CoalToolError, "Could not create the results folder"):
             tools.codon_align(p, d)
 
+
+if __name__ == "__main__":
+    unittest.main()
