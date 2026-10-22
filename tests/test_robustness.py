@@ -801,3 +801,49 @@ class TestEmptyDnaFileAmongSeveral(EngineCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipIf(WINDOWS, "POSIX signals")
+class TestResumeKeepGoingSkippedBeforeCheckpoint(unittest.TestCase):
+    """A --keep-going run whose skipped sequence lies before the checkpoint: the checkpoint must record it in
+    skip_idx in every output format (the Python engine used to for clustal / codon only, and then rejected its own
+    fasta / paml checkpoint as "unreadable"), and --resume must give the same bytes as an uninterrupted run."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._td = tempfile.TemporaryDirectory(prefix="coal_ckpt_kg_")
+        cls.d = Path(cls._td.name)
+        sys.path.insert(0, str(ROOT / "benchmarks"))
+        from gen_data import generate
+        generate(3000, 15, cls.d, seed=5)
+        lines = (cls.d / "nuc.fasta").read_text().split("\n")   # gene 100 loses one nucleotide: a frameshift
+        lines[2 * 100 + 1] = lines[2 * 100 + 1][:20] + lines[2 * 100 + 1][21:]
+        (cls.d / "nuc.fasta").write_text("\n".join(lines), newline="\n")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._td.cleanup()
+
+    def test_resume_after_a_skipped_sequence(self):
+        for name, cmd in engines():
+            for fmt in ("fasta", "paml", "clustal", "codon"):
+                with self.subTest(engine=name, fmt=fmt):
+                    for f in self.d.iterdir():
+                        if f.name.startswith(("out.fa", "ref.fa")):
+                            f.unlink()
+                    env = dict(os.environ, PYTHONPATH=str(SRC), COAL_ENGINE="python", COAL_BATCH_NT="20000")
+                    args = ["pep.fasta", "nuc.fasta", "--keep-going", "-output", fmt]
+                    ref = subprocess.run([*cmd, *args, "-o", "ref.fa"], cwd=self.d, env=env, capture_output=True,
+                                         timeout=TIMEOUT)
+                    self.assertEqual(ref.returncode, 2, ref.stderr)
+                    interrupt([*cmd, *args, "-o", "out.fa"], self.d, after=2)
+                    ck = self.d / "out.fa.coal-checkpoint.json"
+                    st = json.loads(ck.read_text())
+                    self.assertGreater(st["completed"], 100)   # the skipped sequence is before the checkpoint
+                    self.assertEqual((st["skipped"], st["skip_idx"]), (1, [100]))
+                    r = subprocess.run([*cmd, *args, "-o", "out.fa", "--resume"], cwd=self.d, env=env,
+                                       stdin=subprocess.DEVNULL, capture_output=True, timeout=120)
+                    self.assertEqual(r.returncode, 2, r.stderr)
+                    self.assertTrue(r.stderr.startswith(b"coal: notice: resuming out.fa: "), r.stderr[:200])
+                    self.assertEqual((self.d / "out.fa").read_bytes(), (self.d / "ref.fa").read_bytes())
+                    self.assertEqual([f.name for f in self.d.iterdir() if f.name.startswith("out.fa.")], [])

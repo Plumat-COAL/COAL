@@ -956,8 +956,7 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                             entries_fh.write(json.dumps(entry) + "\n")
                     if failure:
                         skipped += 1
-                        if block_ids is not None:
-                            skip_idx.add(done)
+                        skip_idx.add(done)  # every format: the checkpoint requires len(skip_idx) == skipped
                     done += 1
                 if prog:
                     prog.update(done)

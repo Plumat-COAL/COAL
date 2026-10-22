@@ -49,6 +49,10 @@
   files' sizes, treat any problem as the existing "unreadable checkpoint" notice and start a normal run; a
   checkpoint that cannot be written (`cannot write the checkpoint ...: is a directory`) is a notice and the run
   goes on without one; and `coal-cpp`'s JSON parser has a nesting limit (64) instead of overflowing the stack.
+- **`--resume` of a `--keep-going` run in fasta or paml format** (Python engine): a checkpoint written after a
+  skipped sequence was rejected as "unreadable" (the skipped sequence's index was recorded for clustal / codon
+  only, and the checkpoint check requires one index per skipped sequence), so the run started over. The index is
+  now recorded in every format, as `coal-cpp` does, and the resumed output is byte-identical to an uninterrupted run.
 - **A checkpoint written by the other engine** (robustness review): `coal --resume` now picks the engine that wrote
   the checkpoint (so a `coal-cpp` installed or removed between the run and the resume does not get in the way),
   and when an engine is asked to resume the other one's run it says so instead of blaming the inputs: `out.fa was
