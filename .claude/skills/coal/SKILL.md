@@ -18,10 +18,16 @@ description: Build codon alignments with COAL (a fast, MIT-licensed PAL2NAL repl
 ## Install
 
 ```
-pip install -e .            # from the COAL repo: pure Python 3.10+, no dependencies
-pip install -e .[gui]       # optional: web GUI, which also serves the MCP tools (Gradio)
-pip install -e .[mcp]       # optional: stand-alone stdio MCP server only
+pip install -e .                              # from the COAL repo: the engine, pure Python 3.10+, no dependencies
+pip install -e . -e "apps/coal-app[gui]"      # optional: web GUI, which also serves the MCP tools (Gradio)
+pip install -e . -e "apps/coal-app[mcp]"      # optional: stand-alone stdio MCP server only
 ```
+
+The engine (`coal-align`) is all a pipeline needs; the GUI and the MCP server are the second package,
+`coal-align-app` (`apps/coal-app`). Without a checkout:
+`pip install "coal-align @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz"`
+(add `"coal-align-app[mcp] @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_app_src.tar.gz"` for
+the MCP server).
 
 Install `gui` and `mcp` in **separate environments** (virtualenvs): Gradio's own MCP support may need an
 older `mcp` than the `mcp` extra pins. Check: `python -m coal --version`. Use `python -m coal` if the `coal`

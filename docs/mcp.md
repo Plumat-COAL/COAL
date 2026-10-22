@@ -8,16 +8,20 @@ with a report; `save_as` puts the alignment where you want it) and `explain_repo
 `COAL.exe -m coal_app --mcp` to `claude_desktop_config.json`, keeping everything else in it (the old file is kept as
 `claude_desktop_config.json.bak-coal`); uninstalling COAL removes the entry again.
 
-**From source:** install it in its **own** virtual environment (not the one with `".[gui]"`):
+**From source:** the MCP server is part of the app package (`apps/coal-app`, `coal-align-app`); install it with
+the engine in its **own** virtual environment (not the one with the `gui` extra), from the repository root:
 
 ```
 python -m venv .venv-mcp
-.venv-mcp/bin/python -m pip install -e ".[mcp]"        # Windows: desktop\setup_mcp.bat does all of this
+.venv-mcp/bin/python -m pip install -e . -e "apps/coal-app[mcp]"   # Windows: apps\coal-app\desktop\setup_mcp.bat
 claude mcp add coal -- "$PWD/.venv-mcp/bin/python" -m coal_app --mcp
 ```
 
+Without a checkout: `pip install "coal-align @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz" "coal-align-app[mcp] @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_app_src.tar.gz"`.
+
 For Claude Desktop, add this to `claude_desktop_config.json` (Settings > Developer > Edit Config), with the full path
-of that environment's Python (on Windows, `desktop\setup_mcp.bat` prints it ready to paste, backslashes escaped):
+of that environment's Python (on Windows, `apps\coal-app\desktop\setup_mcp.bat` prints it ready to paste,
+backslashes escaped):
 
 ```json
 {"mcpServers": {"coal": {"command": "/full/path/to/COAL/.venv-mcp/bin/python", "args": ["-m", "coal_app", "--mcp"]}}}

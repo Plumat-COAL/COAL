@@ -33,6 +33,7 @@ def changelog_section(version, path=os.path.join(ROOT, "CHANGELOG.md")):
 
 def fixed_part(version):
     wheel = f"coal_align-{version}-py3-none-any.whl"
+    app_wheel = f"coal_align_app-{version}-py3-none-any.whl"
     return f"""COAL {version}: turns a protein alignment plus the matching coding DNA into a codon alignment
 (for dN/dS and DNA phylogenies). A fast, MIT-licensed replacement for PAL2NAL.
 
@@ -44,8 +45,10 @@ Website and install steps: https://plumat-coal.github.io/COAL/
 |---|---|
 | `COAL-Setup-{version}.exe` (same file: `COAL-Setup-windows-x64.exe`) | Windows 10/11 installer, 64-bit, installs for you only (no administrator rights) |
 | `COAL-{version}-windows-x64.zip` (same file: `COAL-windows-x64.zip`) | Windows portable app: unzip anywhere, run `COAL\\COAL.exe` |
-| `{wheel}` | Python wheel (Windows, macOS, Linux; Python 3.10+) |
-| `coal_align-{version}.tar.gz` (same file: `coal_src.tar.gz`) | Python source distribution |
+| `{wheel}` | Python wheel of the engine, `coal-align` (Windows, macOS, Linux; Python 3.10+; no dependencies) |
+| `coal_align-{version}.tar.gz` (same file: `coal_src.tar.gz`) | Python source distribution of the engine |
+| `{app_wheel}` | Python wheel of the app, `coal-align-app` (web GUI and MCP server; needs the engine wheel) |
+| `coal_align_app-{version}.tar.gz` (same file: `coal_app_src.tar.gz`) | Python source distribution of the app |
 | `SHA256SUMS.txt` | SHA-256 checksums of every file above |
 
 The version-free names always point at the newest release through
@@ -63,15 +66,17 @@ COAL has no code-signing certificate yet, so Windows doesn't know the publisher:
 
 ## Install with pip instead (Windows, macOS, Linux)
 
-Needs Python 3.10 or newer. In a virtual environment:
+Needs Python 3.10 or newer. In a virtual environment, the engine and the app:
 
 ```
-python -m pip install "coal-align[gui] @ {REPO}/releases/download/v{version}/{wheel}"
+python -m pip install "coal-align @ {REPO}/releases/download/v{version}/{wheel}" \\
+    "coal-align-app[gui] @ {REPO}/releases/download/v{version}/{app_wheel}"
 coal-gui        # the app, at http://127.0.0.1:7860
 coal --help     # the command line
 ```
 
-COAL's package name is `coal-align`: a plain `pip install coal` installs a different project.
+For the command line alone (pipelines), install only the first package, `coal-align`: it has no dependencies.
+A plain `pip install coal` installs a different project.
 
 ## Check a download
 
