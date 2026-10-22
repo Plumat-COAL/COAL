@@ -99,8 +99,19 @@ class TestCodonAlignExamples(unittest.TestCase):
         with self.assertRaises(CoalError) as cm:
             codon_align([("a", "MK")], [("a", "CCCCCC")])
         self.assertEqual(str(cm.exception), "a: protein and DNA are inconsistent (no match found)")
-        with self.assertRaises(ValueError):
-            codon_align([("a", "MK")], [("a", "ATGAAA")], table=7)
+
+    def test_unknown_table_is_a_coal_error(self):  # issue #18: not tables.get_code's ValueError
+        from coal.tables import SUPPORTED
+        for bad in (7, 0, -1, 99, "1"):
+            with self.subTest(table=bad):
+                with self.assertRaises(CoalError) as cm:
+                    codon_align([("a", "MK")], [("a", "ATGAAA")], table=bad)
+                e = cm.exception
+                self.assertEqual((e.code, e.seq_id, e.index), ("unknown_table", None, None))
+                self.assertNotIsInstance(e, ValueError)
+                for n in SUPPORTED:  # the message lists the supported codes
+                    self.assertIn(str(n), str(e))
+        self.assertEqual(codon_align([("a", "MK")], [("a", "ATGAAA")], table=SUPPORTED[-1]), ([("a", "ATGAAA")], []))
 
 
 class TestAlignFilesExample(unittest.TestCase):
@@ -144,6 +155,28 @@ class TestAlignFilesExample(unittest.TestCase):
         self.assertEqual((e.code, e.seq_id, e.index), ("inconsistent", "OG0001_sp14", 13))
         self.assertFalse(os.path.exists("codon.fasta"))
         self.assertEqual([f for f in os.listdir(".") if f.startswith(".coal")], [])
+
+    def test_unknown_table_is_a_coal_error(self):  # issue #18
+        with self.assertRaises(CoalError) as cm:
+            align_files("protein.aln.fasta", ["dna.fasta"], out_path="codon.fasta", table=7, jobs=1)
+        self.assertEqual(cm.exception.code, "unknown_table")
+        self.assertFalse(os.path.exists("codon.fasta"))
+
+    def test_input_format_is_a_coal_error(self):  # issue #18: InputFormatError is a CoalError (and a ValueError)
+        from coal.seqio import InputFormatError
+        self.assertTrue(issubclass(InputFormatError, CoalError))
+        self.assertTrue(issubclass(InputFormatError, ValueError))
+        with open("notes.txt", "w", encoding="ascii") as fh:
+            fh.write("hello world\nthis is not FASTA\n")
+        for pep, nuc in (("notes.txt", ["dna.fasta"]), ("protein.aln.fasta", ["notes.txt"])):
+            with self.subTest(pep=pep, nuc=nuc):
+                with self.assertRaises(CoalError) as cm:
+                    align_files(pep, nuc, out_path="codon.fasta", jobs=1)
+                e = cm.exception
+                self.assertIsInstance(e, InputFormatError)
+                self.assertEqual((e.code, e.seq_id, e.index), ("input_format", None, None))
+                self.assertTrue(str(e).startswith("notes.txt:1: sequence data before the first '>' header"), str(e))
+        self.assertFalse(os.path.exists("codon.fasta"))
 
     def test_fail_records_the_error(self):
         from coal.report import RunReport

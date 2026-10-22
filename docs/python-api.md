@@ -109,14 +109,13 @@ command prints after `coal: error:`. Its attributes:
 | `invalid_protein` | set | a character that is not an amino acid, gap, `*` or frameshift digit (e.g. `@`) |
 | `empty` | set | a row that is all gaps |
 | `inconsistent` | set | the DNA does not spell the protein (no match found, even by 10-residue anchors); with `strict=True` also a gene whose checkable codons mostly mismatch or whose position in a longer DNA is a guess |
+| `unknown_table` | `None` | `table` is not a supported NCBI genetic-code number (the message lists them); the `coal` command rejects it earlier, as a usage error |
 
 `align_files` can also raise `file_error` (an input cannot be opened or the output cannot be written),
-`all_failed` (`keep_going=True` and every sequence failed), `resume_mismatch` (`resume=True` with changed inputs or
-options) and, with no `code` argument, `error` (an unknown `out_format`, or `-output codon` with
-`nogap`/`nomismatch`/`blockonly`). It raises `coal.seqio.InputFormatError` (a `ValueError`) for a file that is not
-FASTA or CLUSTAL; the command line reports that as `error.code` `input_format`.
-
-An unsupported `table` raises `ValueError`, not `CoalError`.
+`input_format` (a file that is not FASTA or CLUSTAL, or not ASCII text: the exception is `coal.seqio.InputFormatError`,
+a subclass of both `CoalError` and `ValueError`), `all_failed` (`keep_going=True` and every sequence failed),
+`resume_mismatch` (`resume=True` with changed inputs or options) and, with no `code` argument, `error` (an unknown
+`out_format`, or `-output codon` with `nogap`/`nomismatch`/`blockonly`).
 
 ```python
 >>> from coal import CoalError

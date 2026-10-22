@@ -26,6 +26,14 @@
   unchanged command line and get the same output. Notes on what to expect and on a proper `tool = "coal"` option
   for orthologr: `packaging/orthologr/README.md`.
 
+- **Python API: every error is a `CoalError`** (issue #18). `coal.codon_align` and `coal.align_files` with an
+  unsupported `table` now raise `CoalError` with `code="unknown_table"` (the message lists the supported NCBI codes)
+  instead of a bare `ValueError`.
+- **Python API: `coal.seqio.InputFormatError` is a `CoalError`** with `code="input_format"` (issue #18), so one
+  `except CoalError` catches a file that is not FASTA or CLUSTAL too; it stays a `ValueError` for code that catches
+  that. The `coal` command's messages, exit code and report are unchanged.
+- **`pal2nal | head` no longer prints a traceback** (issue #18): the drop-in's usage text into a closed pipe is a
+  silent exit 141, as for `coal` and for the alignment output.
 - **Documented for 1.0:** `docs/python-api.md` (the public Python API: `coal.codon_align`, the new re-export
   `coal.align_files` = the `coal` command as a function, `coal.CoalError` with its `code`/`seq_id`/`index`, and the
   semantic-versioning promise for command-line flags, output bytes, exit codes, the report schema and these

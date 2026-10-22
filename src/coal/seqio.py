@@ -9,11 +9,20 @@ from array import array
 from contextlib import contextmanager
 from pathlib import Path
 
+from .core import CoalError
+
 _NON_LETTER = re.compile(r"[^A-Za-z]")
 
 
-class InputFormatError(ValueError):
-    pass
+class InputFormatError(CoalError, ValueError):
+    """An input that is not FASTA or CLUSTAL (or not ASCII text): a CoalError with code `input_format`, as the
+    `coal` command reports it; still a ValueError for callers that catch that."""
+
+    def __init__(self, message: str):
+        CoalError.__init__(self, message, code="input_format")
+
+    def __reduce__(self):
+        return (InputFormatError, (str(self),), dict(self.__dict__))
 
 
 # The reader messages say what is wrong in plain words and what a valid file looks like. The C++ engine mirrors them

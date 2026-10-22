@@ -144,6 +144,14 @@ def _on_sigterm(signum, frame):
     raise SystemExit(128 + signum)
 
 
+def closed_stdout_exit():  # as coal.cli (the `pal2nal` drop-in's usage text into a closed pipe)
+    try:
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+    except (OSError, ValueError):
+        pass
+    return 141
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     sys.stdout.flush()
