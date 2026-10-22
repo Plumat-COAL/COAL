@@ -106,7 +106,7 @@ struct Target {
     void build_frames() {
         if (have_frames) return;
         for (int f = 0; f < 3; ++f) {
-            size_t n = code.size() >= (size_t)f + 3 ? (code.size() - f) / 3 : 0;
+            size_t n = code.size() >= (size_t)f + 3 ? (code.size() - (size_t)f) / 3 : 0;
             frames[f].resize(n);
             for (size_t k = 0; k < n; ++k) frames[f][k] = translate(f + 3 * (long long)k);
         }
@@ -484,7 +484,7 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
             ok = target.ok(s + pos, allowed_for(code, t.aa, mode));
         }
         if (!ok) {
-            res.warnings.push_back("pepAlnPos " + std::to_string(t.col) + ": " + row[t.col - 1] +
+            res.warnings.push_back("pepAlnPos " + std::to_string(t.col) + ": " + row[(size_t)t.col - 1] +
                                    " does not correspond to " + res.dna.substr((size_t)pos, 3));
             res.mismatch_cols.push_back(t.col);
             nbad_chk += checkable;
