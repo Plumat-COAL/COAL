@@ -23,13 +23,13 @@ Needs Python 3.10+:
 
 ```
 python3 -m venv ~/coal-env
-~/coal-env/bin/python -m pip install "coal[gui] @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz"
+~/coal-env/bin/python -m pip install "coal-align[gui] @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz"
 ~/coal-env/bin/coal-gui          # the app, in your browser at http://127.0.0.1:7860
 ~/coal-env/bin/coal --help       # the command line
 ```
 
-For the command line alone, write `coal` instead of `coal[gui]`. Install from the release link above, not
-`pip install coal`: COAL is not on PyPI, and that name belongs to another project. Check downloads against
+For the command line alone, write `coal-align` instead of `coal-align[gui]`. The package is `coal-align`: `pip install
+coal` installs a different project. Check downloads against
 [SHA256SUMS.txt](https://github.com/plumat-coal/COAL/releases/latest/download/SHA256SUMS.txt).
 
 ## Option 3: from source

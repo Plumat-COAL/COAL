@@ -15,7 +15,7 @@ import re
 import sys
 
 REPO = "https://github.com/plumat-coal/COAL"
-PIP = f'pip install "coal[gui] @ git+{REPO}"'
+PIP = f'pip install "coal-align[gui] @ git+{REPO}"'
 NOTE = "First release coming soon"
 BANNER = (f'<p class="note" role="status" id="no-release">{NOTE}: there is nothing to download yet. Install from '
           f'source instead (Python 3.10 or newer): <code>{PIP}</code></p>')

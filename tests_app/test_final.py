@@ -361,7 +361,7 @@ class TestFinA9NoReleaseYet(unittest.TestCase):
         self.assertIn("index.html", with_links)
         self.assertIn("install.html", with_links)
         with open(os.path.join(ROOT, "site", "index.html"), encoding="utf-8") as fh:
-            self.assertIn('pip install "coal[gui] @ git+https://github.com/plumat-coal/COAL"', m.rewrite(fh.read()))
+            self.assertIn('pip install "coal-align[gui] @ git+https://github.com/plumat-coal/COAL"', m.rewrite(fh.read()))
 
     def test_script_rewrites_every_page_given(self):
         import shutil

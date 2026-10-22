@@ -74,7 +74,7 @@ class TestReleaseScripts(unittest.TestCase):
         rn = _load("release_notes")
         notes = rn.fixed_part("1.2.3")
         for must in ("not code-signed", "Windows protected your PC", "Smart App Control", "Run anyway",
-                     "pip install", "coal-1.2.3-py3-none-any.whl", "releases/download/v1.2.3/", "SHA256SUMS.txt",
+                     "pip install", "coal_align-1.2.3-py3-none-any.whl", "releases/download/v1.2.3/", "SHA256SUMS.txt",
                      "Get-FileHash", "sha256sum"):
             self.assertIn(must, notes)
         # Every file the notes name exists in the release workflow's list.
@@ -155,7 +155,7 @@ class TestReleaseWorkflow(unittest.TestCase):
         for name in release_file_names("${V}"):
             if name == "SHA256SUMS.txt":
                 continue
-            self.assertTrue(name in made or name in ("coal-${V}-py3-none-any.whl", "coal-${V}.tar.gz")
+            self.assertTrue(name in made or name in ("coal_align-${V}-py3-none-any.whl", "coal_align-${V}.tar.gz")
                             and "python -m build" in made, f"no build step makes {name}")
         sums = _steps(wf, "release")["SHA-256 of every file"]["run"]
         self.assertIn("> SHA256SUMS.txt", sums)
@@ -273,7 +273,7 @@ class TestSiteFiles(unittest.TestCase):
                       'COAL-Setup-windows-x64.exe"', self.index)
 
     def test_pip_commands_use_the_cache_safe_sdist(self):
-        cmds = re.findall(r'"coal(?:\[gui\])? @ ([^"]+)"', self.all)  # all pages
+        cmds = re.findall(r'"coal-align(?:\[gui\])? @ ([^"]+)"', self.all)  # all pages
         self.assertGreaterEqual(len(cmds), 4)
         for url in cmds:
             self.assertTrue(url.endswith("/releases/latest/download/coal_src.tar.gz"), url)

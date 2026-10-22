@@ -17,11 +17,11 @@ alignment to produce a codon alignment, ready for dN/dS (PAML codeml, HyPhy) or 
 
 ## Install
 
-Needs Python 3.10+. COAL is not on PyPI yet (the name `coal` there belongs to another project), so install from a
-release or from source:
+Needs Python 3.10+. The package is called `coal-align` (the name `coal` on PyPI belongs to another project); the
+command and the Python module are both `coal`. Until it is on PyPI, install from a release or from source:
 
 ```
-python -m pip install "coal @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz"
+python -m pip install "coal-align @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz"
 ```
 
 From source, with the C++ engine (needs a C++17 compiler and CMake 3.16+; optional but recommended for large inputs
