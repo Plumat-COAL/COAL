@@ -43,6 +43,10 @@
   and `apps\coal-app\desktop\setup_mcp.bat`. The app's tests (`apps/coal-app/tests/`) are grouped by feature; the
   checks of the docs, the website and CI moved to `tests/` (`test_docs_*.py`, `test_repo_ci.py`).
 
+- **Bioconda recipe prepared** (`packaging/bioconda/`): `meta.yaml`, `build.sh` (coal-cpp via CMake into `bin/`, then the
+  Python package), a fixture pair and a test that `coal` finds the installed `coal-cpp` and hands a 1 MB input to it.
+  Not submitted yet; `packaging/bioconda/README.md` explains the sha256 step and the pull request to `bioconda-recipes`.
+
 ## 0.4.2
 
 - **COAL in Claude Desktop, from the installer:** the Windows installer's last page has **Connect COAL to Claude

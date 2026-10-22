@@ -35,6 +35,13 @@ For the command line alone (pipelines such as OrthologR or a DIAMOND workflow), 
 different project. Check downloads against
 [SHA256SUMS.txt](https://github.com/plumat-coal/COAL/releases/latest/download/SHA256SUMS.txt).
 
+## Conda (Bioconda): prepared, not yet published
+
+A Bioconda recipe is ready under `packaging/bioconda/` (with `packaging/bioconda/README.md` on testing and
+submitting it). Once it is merged into `bioconda-recipes`, `conda install -c conda-forge -c bioconda coal-align`
+will install the engine (`coal`, `pal2nal`) and the C++ engine `coal-cpp` together on Linux and macOS, and `coal`
+will find `coal-cpp` in the same environment with no settings. Until then, use the options above.
+
 ## Option 3: from source
 
 ```
