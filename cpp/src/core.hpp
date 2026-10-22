@@ -27,22 +27,22 @@ struct Threaded {
     std::string dna;                    // matched DNA, original case
     std::vector<std::string> warnings;  // without the leading sequence ID
     std::vector<int> mismatch_cols;     // 1-based alignment columns
-    std::vector<std::string> notices;   // CPP-15: probably-wrong data (with the sequence ID), as the reference
+    std::vector<std::string> notices;   // probably-wrong data (with the sequence ID), as the reference
 };
 
 // Upper-case the row and turn '.' into '-' (as prepare_row in core.py).
 std::string prepare_row(const std::string& aln);
 
-// ENG-UX-3 / ENG-UX-13 (as core.py): at least 20 letters and >= 90% of them A/C/G/T/U/N; at least 20 letters and
+// As core.py: at least 20 letters and >= 90% of them A/C/G/T/U/N; at least 20 letters and
 // >= 10% of them amino acids that are no nucleotide code (E F I J L O P Q Z).
 bool looks_like_dna(const std::string& text);
 bool looks_like_protein(const std::string& text);
-// ENG-UX-3: the error for protein rows of different lengths (core.py row_length_message).
+// The error for protein rows of different lengths (core.py row_length_message).
 std::string row_length_message(const std::string& label, long long ncol, long long n, const std::string& pid,
                                const std::string& rows);
 
-// Throws CoalError (message starts with seq_id) when the sequence cannot be threaded. strict (--strict, reference
-// DEC-1): probably-wrong data is an error instead of a notice.
+// Throws CoalError (message starts with seq_id) when the sequence cannot be threaded. strict (--strict):
+// probably-wrong data is an error instead of a notice.
 Threaded thread_one(const std::string& seq_id, const std::string& row, const std::string& raw_dna,
                     const GeneticCode& code, bool strict = false);
 
@@ -54,7 +54,7 @@ std::string expand(const std::string& row, const std::string& dna, const std::ve
 
 // Mark (bad[k] = 1) the 3-nt output units -nogap removes: a gap, or a stop codon of the selected
 // genetic code (any case, U read as T; an IUPAC triplet counts if every reading is a stop).
-// CPP-10 (reference FZ-5): was PAL2NAL's rule, the standard code's [TU]A[AGR] / [TU]GA, upper case only.
+// (PAL2NAL v14 removes only the standard code's TAA/TAG/TGA, upper case: a documented difference.)
 void mark_nogap_triplets(const std::string& expanded, std::vector<char>& bad, const GeneticCode& code);
 
 // Character ranges [a, b) of the expanded row that survive -nomismatch / -nogap.

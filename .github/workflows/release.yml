@@ -2,7 +2,6 @@
 # zip), check them, and publish a GitHub Release with every file, version-free copies and SHA256SUMS.txt.
 # The website (site/) links to https://github.com/plumat-coal/COAL/releases/latest/download/<version-free name>,
 # so a new release updates the download buttons without editing the site. See site/README.md.
-# WEB-1: new file. See overnight/integration/CHANGES.md
 name: Release
 
 on:
@@ -100,8 +99,7 @@ jobs:
         run: python scripts/release_version.py $env:TAG --github-output
       - name: Install Inno Setup (pinned)
         run: |
-          # CHANGED(SHIP-7): was --version=6.4.3, which Chocolatey never published (the v0.4.0 release build failed
-          # here); 6.7.1 is the newest approved InnoSetup package (6.3+ is required by desktop/installer.iss).
+          # 6.7.1 is the newest approved Chocolatey InnoSetup package (6.3+ is required by desktop/installer.iss).
           choco install innosetup --version=6.7.1 --allow-downgrade -y --no-progress
           $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { throw "Inno Setup installed, but $iscc is missing" }

@@ -1,5 +1,5 @@
-"""Merge of origin/overnight/core into the reviewed engine: one test class per reconciliation decision (MRG-1 ...
-MRG-8 in overnight/integration/CHANGES.md). Inputs are built in temp dirs; every subprocess has a timeout."""
+"""How the engine's features compose: safe ID pairing, the run report / summary / hints, --keep-going, --resume and
+--progress, and one version everywhere. Inputs are built in temp dirs; every subprocess has a timeout."""
 from __future__ import annotations
 
 import re
@@ -55,7 +55,7 @@ class _Tmp(unittest.TestCase):
         self._t.cleanup()
 
 
-# ------------------------------------------------------------------ MRG-1 safe ID pairing
+# ------------------------------------------------------------------ safe ID pairing
 class TestMrg1Pairing(_Tmp):
     """Proteins g0..g4; the DNA renamed and reordered."""
 
@@ -76,8 +76,8 @@ class TestMrg1Pairing(_Tmp):
         self.assertIn("coal: warning: 5 of 5 protein IDs match a DNA ID only after normalising (version suffix, "
                       "case or database fields), so sequences were paired by those IDs, not by file order as "
                       "PAL2NAL pairs them: by order, 5 of 5 proteins would get the DNA of another gene (e.g. by file "
-                      "order, protein 'g0' would get DNA 'G4.1'; COAL paired it with 'G0.1')", err)  # CHANGED(ENG-UX-1)
-        self.assertEqual(run(self.d, ["pep.fasta", "nuc.fasta", "-q"])[2], "")  # DEC-2
+                      "order, protein 'g0' would get DNA 'G4.1'; COAL paired it with 'G0.1')", err)
+        self.assertEqual(run(self.d, ["pep.fasta", "nuc.fasta", "-q"])[2], "")  # -q silences it
 
     def test_same_order_stays_pal2nal(self):
         # file order already gives every protein its own DNA: PAL2NAL's pairing, output and (silent) stderr
@@ -103,7 +103,7 @@ class TestMrg1Pairing(_Tmp):
         rc, out, _ = run(self.d, ["pep.fasta", "nuc.fasta"])  # without --strict: paired by normalised ID
         self.assertEqual((rc, out), (0, self.ref))
 
-    def test_no_id_matches_is_silent(self):  # MRG-1 decision 2 (ENG-d, test_no_ids_match_stays_silent)
+    def test_no_id_matches_is_silent(self):  # as PAL2NAL (see also test_no_ids_match_stays_silent)
         self.dna([f"x{i}" for i in range(5)], range(5))
         self.assertEqual(run(self.d, ["pep.fasta", "nuc.fasta"]), (0, self.ref, ""))
 
@@ -113,7 +113,7 @@ class TestMrg1Pairing(_Tmp):
         self.assertEqual(json.loads((self.d / "r.json").read_text())["summary"]["pairing"], "order")
 
 
-# ------------------------------------------------------------------ MRG-2 report / summary / hint
+# ------------------------------------------------------------------ report / summary / hint
 class TestMrg2Report(_Tmp):
     def test_notices_are_report_messages_and_options_complete(self):
         write_genes(self.d, 4, seed=8)
@@ -126,7 +126,7 @@ class TestMrg2Report(_Tmp):
         self.assertEqual(rc, 0)
         r = json.loads((self.d / "r.json").read_text())
         g1 = r["sequences"][1]
-        self.assertEqual(g1["status"], "failed")  # DEC-1-A: written but probably wrong
+        self.assertEqual(g1["status"], "failed")  # written but probably wrong
         self.assertEqual(g1["messages"][0]["code"], "suspect_unrelated")
         self.assertEqual(r["options"]["strict"], False)
         self.assertIn("blockonly", r["options"])
@@ -174,7 +174,7 @@ class TestMrg2Report(_Tmp):
         self.assertEqual(bad, {})
 
 
-# ------------------------------------------------------------------ MRG-3 --keep-going composes
+# ------------------------------------------------------------------ --keep-going composes
 class TestMrg3KeepGoing(_Tmp):
     def unrelated(self, n=6, k=2, seed=4):
         write_genes(self.d, n, seed=seed)
@@ -194,12 +194,12 @@ class TestMrg3KeepGoing(_Tmp):
         r = json.loads((self.d / "r.json").read_text())
         self.assertEqual(r["sequences"][2]["status"], "failed")
         rc, out, err = run(self.d, ["pep.fasta", "nuc.fasta", "--strict"])
-        self.assertEqual((rc, out), (1, ""))  # without --keep-going: DEC-1 error, as before
+        self.assertEqual((rc, out), (1, ""))  # without --keep-going: a --strict error
 
     def test_default_dec1_notice_still_writes_the_row(self):
         self.unrelated()
         rc, out, err = run(self.d, ["pep.fasta", "nuc.fasta", "--keep-going"])
-        self.assertEqual(rc, 0)  # nothing skipped: DEC-1 writes it as PAL2NAL does
+        self.assertEqual(rc, 0)  # nothing skipped: the default writes it as PAL2NAL does
         self.assertEqual(out.count(">"), 6)
         self.assertIn("g2: protein and DNA are probably unrelated", err)
 
@@ -240,10 +240,10 @@ class TestMrg3KeepGoing(_Tmp):
             pipeline.BATCH_NT, pipeline.BLOCK_MEMORY = old, oldm
 
 
-# ------------------------------------------------------------------ MRG-4 --resume / --progress compose
+# ------------------------------------------------------------------ --resume / --progress compose
 def interrupt(cmd, cwd, after=2, extra_env=None):
     env = {**ENV, "COAL_BATCH_NT": "20000", "COAL_CHECKPOINT_EVERY": "0",
-           "COAL_TEST_HOOKS": "1",  # CHANGED(IMP-E-I): the hooks need this too
+           "COAL_TEST_HOOKS": "1",  # the hooks need this too
            "COAL_TEST_PAUSE_AFTER_CHECKPOINT": str(after), **(extra_env or {})}
     p = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
     dog = threading.Timer(60, p.kill)
@@ -269,7 +269,7 @@ class TestMrg4ResumeComposes(_Tmp):
         generate(3000, 15, self.d, seed=5)
         self.ref = sub(["pep.fasta", "nuc.fasta"], self.d).stdout
 
-    def test_resume_through_a_symlink_keeps_link_and_mode(self):  # ENG-a, R2-E5
+    def test_resume_through_a_symlink_keeps_link_and_mode(self):
         target = self.d / "real.fa"
         target.write_text("old\n")
         os.chmod(target, 0o640)
@@ -321,12 +321,12 @@ class TestMrg4ResumeComposes(_Tmp):
         self.assertIn(b"coal: progress: 100% (3,000 of 3,000 sequences), done in", r.stderr)
 
 
-# ------------------------------------------------------------------ MRG-8 version
+# ------------------------------------------------------------------ version
 class TestMrg8Version(unittest.TestCase):
-    # CHANGED(REL-1): was 0.4.0 everywhere; the version is read from src/coal and checked in every other place
+    # the version is read from src/coal and checked in every other place
     def test_version_is_the_same_everywhere(self):
         v = __version__
-        # CHANGED(SHIP-16): files that are absent are skipped (tests/test_cpp_vs_reference.py runs this module in a
+        # files that are absent are skipped (tests/test_cpp_vs_reference.py runs this module in a
         # partial copy of the repository); in the repository itself pyproject.toml must be there, so at least that
         # check always runs.
         checks = [("pyproject.toml", f'version = "{v}"'), ("CMakeLists.txt", f"VERSION {v} "),

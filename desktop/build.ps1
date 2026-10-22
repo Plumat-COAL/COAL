@@ -66,8 +66,8 @@ function Invoke-Step {
         -NoNewWindow -PassThru
     $null = $p.Handle  # keep the handle so ExitCode is available after exit
     if (-not $p.WaitForExit($TimeoutSec * 1000)) {
-        # CHANGED(WIN-W7): was Stop-Process (top process only; pip/PyInstaller/test children kept
-        # running); now the whole tree. See overnight/windows-app/CHANGES.md
+        # The whole tree, not Stop-Process (top process only: pip/PyInstaller/test children would keep
+        # running).
         & taskkill.exe /T /F /PID $p.Id | Out-Null
         throw "$Title did not finish within $TimeoutSec seconds and was stopped."
     }
@@ -133,8 +133,7 @@ try {
     if (-not (Test-Path $Exe)) { throw "PyInstaller finished but $Exe is missing." }
 
     # 4. Check the frozen build: engine dispatch, then the smoke test against COAL.exe.
-    # CHANGED(WIN-W7): was: exit code only (a windowed exe's output is invisible); now the output
-    # is captured and must name the version. See overnight/windows-app/CHANGES.md
+    # A windowed exe's output is invisible, so it is captured and must name the version.
     $v = Invoke-Capture "Frozen engine: COAL.exe -m coal --version" $Exe @("-m", "coal", "--version") 120
     if ($v -notmatch [regex]::Escape($version)) {
         throw "COAL.exe -m coal --version printed '$($v.Trim())', expected version $version."
@@ -144,7 +143,7 @@ try {
         $env:COAL_SMOKE_EXE = $Exe
         try {
             Invoke-Step "Smoke test (frozen COAL.exe)" $Py @("-m", "unittest", "desktop\test_smoke.py", "-v") 900
-            # CHANGED(SHIP-19): new. The bundled C++ engine (when built) must be found by the frozen app and give
+            # The bundled C++ engine (when built) must be found by the frozen app and give
             # the Python engine's bytes.
             $cppExe = Join-Path $Dist "COAL\_internal\coal-cpp.exe"
             if (Test-Path $cppExe) {
@@ -164,7 +163,7 @@ try {
             } else {
                 Write-Host "No coal-cpp.exe in the bundle (build it first: cmake -S . -B build; cmake --build build --config Release)." -ForegroundColor Yellow
             }
-            # CHANGED(SHIP-18): new. What Claude Desktop starts after "Connect COAL to Claude Desktop": the frozen
+            # What Claude Desktop starts after "Connect COAL to Claude Desktop": the frozen
             # app's stdio MCP server must answer and run a real alignment.
             Invoke-Step "MCP for Claude Desktop (frozen COAL.exe -m coal_app --mcp)" $Py `
                 @("-m", "unittest", "-v", "tests_app.test_tools.TestFrozenAppMcp") 600

@@ -1,5 +1,5 @@
-"""GUI-1..GUI-6: the redesigned GUI (header, summary banner, health table grouping, viewer theming, layout).
-Runs without Gradio: the layout is checked against the stub from test_round3. See overnight/integration/CHANGES.md"""
+"""The GUI's header, summary banner, health table grouping, viewer theming and layout.
+Runs without Gradio: the layout is checked against the stub from test_round3."""
 import os
 import re
 import shutil
@@ -18,7 +18,7 @@ def _seq(i, status="ok", **kw):
     return {"id": f"g{i:02d}", "status": status, "messages": [], **kw}
 
 
-class TestGui1Banner(unittest.TestCase):  # GUI-1
+class TestGui1Banner(unittest.TestCase):
     def test_headline_counts_aligned_genes(self):
         rep = {"summary": {"total": 20, "ok": 19, "failed": 1}, "sequences": [_seq(i) for i in range(19)] +
                [_seq(19, "failed")]}
@@ -47,9 +47,8 @@ class TestGui1Banner(unittest.TestCase):  # GUI-1
         html = gui_html.header_html(core.intro_text())
         self.assertNotRegex(html, r"https?://(?!www\.w3\.org/2000/svg)")
         self.assertIn("<svg", html)
-        # CHANGED(GUI-13): was the intro text in the header; the header is the mark and "COAL" only (owner: "just
-        # COAL is fine") and the where-the-data-goes note is the page footer
-        # CHANGED(POL-1): checked with the hosted note (the local app has none now, and "" is in every string)
+        # the header is the mark and "COAL" only (owner: "just COAL is fine"); the where-the-data-goes note is the
+        # page footer. Checked with the hosted note (the local app has none, and "" is in every string)
         intro = core.INTRO_HOSTED
         self.assertNotIn(intro, gui_html.header_html(intro))
         self.assertNotIn("codon alignment", html)
@@ -57,7 +56,7 @@ class TestGui1Banner(unittest.TestCase):  # GUI-1
         self.assertEqual(gui_html.footer_html(""), "")
 
 
-class TestGui4HealthTable(unittest.TestCase):  # GUI-4
+class TestGui4HealthTable(unittest.TestCase):
     def test_ok_genes_are_one_collapsed_row(self):
         rep = {"sequences": [_seq(i) for i in range(19)] + [
             _seq(19, "failed", messages=[{"code": "frameshift", "column": 5, "text": "Frameshift at column 5."}])]}
@@ -81,7 +80,7 @@ class TestGui4HealthTable(unittest.TestCase):  # GUI-4
         self.assertEqual(core.health_table_html({}), "")
 
 
-class TestGui2ViewerTheme(unittest.TestCase):  # GUI-2
+class TestGui2ViewerTheme(unittest.TestCase):
     def test_dark_variables_for_gradio_and_for_the_page(self):
         self.assertIn(".dark div.coalv {", viewer.CSS)
         self.assertIn("@media (prefers-color-scheme: dark) { body.coalv-page div.coalv", viewer.CSS)
@@ -111,7 +110,7 @@ class TestGui2ViewerTheme(unittest.TestCase):  # GUI-2
                 self.assertGreaterEqual(ratio(pal[k], pal["bg"]), 4.5, k)
 
 
-class TestGui3Layout(unittest.TestCase):  # GUI-1, GUI-3, GUI-5
+class TestGui3Layout(unittest.TestCase):
     def setUp(self):
         saved = {k: sys.modules.get(k) for k in ("gradio", "coal_app.ui")}
 
@@ -169,7 +168,7 @@ class TestGui3Layout(unittest.TestCase):  # GUI-1, GUI-3, GUI-5
 
 
 
-class TestGui13LessText(unittest.TestCase):  # GUI-13, GUI-14
+class TestGui13LessText(unittest.TestCase):
     def setUp(self):
         saved = {k: sys.modules.get(k) for k in ("gradio", "coal_app.ui")}
 
@@ -219,8 +218,7 @@ class TestGui13LessText(unittest.TestCase):  # GUI-13, GUI-14
             src = fh.read()
         self.assertIn('gr.Tab("Align"', src)
         for c in comps:
-            # CHANGED(POL-3): was assertIsNone(info) for both genetic-code boxes; the main form's has one hint line
-            # (the Settings tab's still has none)
+            # the main form's genetic-code box has one hint line (the Settings tab's has none)
             if c._name == "Dropdown" and c._kw.get("label") == "Genetic code":
                 self.assertEqual(c._kw.get("info"), self.ui.CODE_HINT if c._kw.get("elem_id") == "coal-code"
                                  else None)

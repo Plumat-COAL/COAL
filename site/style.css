@@ -1,10 +1,9 @@
-/* COAL website. WEB-3: new file. CHANGED(WEB-8): palette and layout from the COAL logo (charcoal #2A2A2A,
-   slate #4A4744, ember #FF6A13, amber #FFC24B). CHANGED(WEB-11): one column, no sidebar logo, no section markers,
-   three download cards. CHANGED(WEB-12): dark only; print stays light (see @media print).
-   CHANGED(WEB-13): several pages (index, install, guide, differences, cite) share this file; a self-hosted font
+/* COAL website. Palette and layout from the COAL logo (charcoal #2A2A2A, slate #4A4744, ember #FF6A13,
+   amber #FFC24B). One column, three download cards. Dark only; print stays light (see @media print).
+   Several pages (index, install, guide, differences, cite) share this file; a self-hosted font
    (Atkinson Hyperlegible Next, OFL, assets/fonts/), a type scale, raised download cards with one primary action
-   each, and a current-page mark in the header. See overnight/integration/CHANGES.md
-   Contrast (WCAG 2.1, computed; figures in CHANGES.md WEB-13): every text/background pair below is at least 4.5:1. */
+   each, and a current-page mark in the header.
+   Contrast (WCAG 2.1, computed): every text/background pair below is at least 4.5:1. */
 
 @font-face {
   font-family: "Atkinson Hyperlegible Next";
@@ -26,8 +25,7 @@
   --card-line: #564D46;
   --card-hi: rgba(255, 236, 220, 0.09);   /* the card's inner top highlight */
   --card-code-bg: #171514;
-  /* CHANGED(AMB-2): the accent was ember #FF6A13 (hover #FF8A45); now the logo's amber. Ember stays in the logo
-     and the footer train only. */
+  /* The accent is the logo's amber. Ember stays in the logo and the footer train only. */
   --accent: #FFC24B;       /* 11.7:1 on the page, 9.5:1 on a card: links' hover line, current page, edges */
   --accent-hover: #FFD27A;
   --on-accent: #1E1E1E;    /* 10.4:1 on amber, 11.7:1 on the hover colour */
@@ -125,8 +123,8 @@ main { width: calc(100% - 2 * var(--gutter)); max-width: var(--wide); margin: 0 
 .card .act { margin: 0 0 0.9rem; }
 .card .fine { margin: 0; font-size: 0.875rem; }
 .card code { background: var(--card-code-bg); }
-/* CHANGED(AMB-2): was a filled amber pill (dark text), now that the buttons are amber an outlined one on the card
-   colour (amber text 9.5:1, its edge 9.5:1), so it does not read as a button */
+/* The buttons are amber, so this is an outlined pill on the card colour (amber text 9.5:1, its edge 9.5:1),
+   so it does not read as a button */
 .suggest { position: absolute; top: -0.7rem; right: 1rem; margin: 0; padding: 0 0.55rem; border-radius: 999px;
   background: var(--card-bg); color: var(--accent); border: 1.5px solid var(--accent); font-size: 0.8rem;
   font-weight: 700; }
@@ -168,8 +166,8 @@ main { width: calc(100% - 2 * var(--gutter)); max-width: var(--wide); margin: 0 
 
 /* Home: what it looks like (transcript beside the screenshot on wide screens). */
 .look { display: grid; gap: 1.25rem; grid-template-columns: minmax(0, 1fr); align-items: start; margin-bottom: 1rem; }
-/* CHANGED(WEB-16): was the terminal and the screenshot side by side, and the image had no height:auto, so it was
-   squeezed to the column's width at its full height (blurry, distorted); now stacked, the image at full width */
+/* Stacked, the image at full width with height:auto (without it the image is squeezed to the column's width at
+   its full height: blurry, distorted) */
 .look pre { margin: 0; }
 .look figure { margin: 0; }
 .look img { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 6px; }

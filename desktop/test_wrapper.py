@@ -453,7 +453,7 @@ class TestServeProtocol(unittest.TestCase):
         self.assertEqual(cmd[2:5], ["--serve", "--port", "1234"])
         self.assertIn("--parent-pid", cmd)
         self.assertNotIn("--mcp", cmd)
-        # CHANGED(IMP-M-3): was MCP on by default (WIN-M); now off unless the window was started with --mcp
+        # MCP is off unless the window was started with --mcp
         self.assertIn("--no-mcp", cmd)
         self.assertNotIn("--no-mcp", cd.default_server_command(1234, mcp=True))
 

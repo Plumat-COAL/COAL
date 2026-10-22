@@ -1,7 +1,6 @@
 # Benchmark results
 
-<!-- CHANGED(IMP-M-4): new summary; superseded runs removed (bench_windows_20261017_0049, the first
-cpp_vs_python_linux run; both are in the git history). Every file left here is cited by README.md or pitch/PITCH.md. -->
+<!-- Superseded runs are in the git history. Every file left here is cited by README.md or pitch/PITCH.md. -->
 Each run is a `.csv` (one row per dataset) and a `.txt` (machine, versions). Only compare numbers from the same machine.
 
 | Files | What | Cited in |

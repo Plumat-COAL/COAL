@@ -79,7 +79,7 @@ class TestViewer(unittest.TestCase):
         rows = [{"id": f"s{i}", "status": "ok", "note": "", "events": [],
                  "cells": [("A", "GCT", "")] * 2500} for i in range(300)]
         frag = viewer.render_fragment(rows, 2500)
-        # CHANGED(GUI-10): was "Large alignment: showing the first 200 of 300 sequences ..."; now the preview line
+        # the preview line
         self.assertIn("Preview: 200 of 300 sequences", frag)
         self.assertLessEqual(frag.count("<td"), viewer.MAX_CELLS)
         self.assertNotIn('id="coalv-s200"', frag)

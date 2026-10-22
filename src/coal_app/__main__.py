@@ -56,13 +56,13 @@ def main(argv=None) -> int:
             from . import mcp_stdio
             return mcp_stdio.main()
         except ImportError:
-            print("coal-gui: the MCP server needs the 'mcp' package (version 2): pip install -e \".[mcp]\"",  # CHANGED(IMP-M-4): quoted
+            print("coal-gui: the MCP server needs the 'mcp' package (version 2): pip install -e \".[mcp]\"",
                   file=sys.stderr)
             return 1
     try:
         from . import ui
     except ImportError as e:
-        print(f"coal-gui: the web GUI needs Gradio ({e}). Install it with:  pip install -e \".[gui]\"",  # CHANGED(IMP-M-4): quoted
+        print(f"coal-gui: the web GUI needs Gradio ({e}). Install it with:  pip install -e \".[gui]\"",
               file=sys.stderr)
         return 1
     ui.launch(host=args.host, port=args.port, mcp=not args.no_mcp, demo_mode=args.demo)

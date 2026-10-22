@@ -3,9 +3,6 @@
     python desktop/make_icon.py              # writes desktop/coal.ico
     python desktop/make_icon.py --site site  # also writes site/assets/coal-mark.svg, site/favicon.svg and PNGs
 
-CHANGED(WEB-8): was a blue tile with a 3x3 block grid (Okabe-Ito colours); now the COAL logo mark. See
-overnight/integration/CHANGES.md
-
 The mark: 51 rounded squares in groups of three (codons), cooling from charcoal at the top to ember at the bottom.
 Geometry and colours were measured on the owner's logo PNG (coal-mark-original.png, 1200 x 952): squares 88 px,
 corner radius 12.4 px, 104 px pitch inside a group of three and 128 px from one group to the next, rows on a
@@ -46,7 +43,7 @@ def squares():
             yield x, row * 112, k
 
 
-# CHANGED(WEB-12): new. On a dark background charcoal and slate squares are lightened (the favicon's dark colours),
+# On a dark background charcoal and slate squares are lightened (the favicon's dark colours),
 # 5.1:1 and 8.4:1 on the site's #121110 page; ember and amber are unchanged.
 DARK_COLOURS = dict(COLOURS, c="#8C8782", s="#B5AFA8")
 

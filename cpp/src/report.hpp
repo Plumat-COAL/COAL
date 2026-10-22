@@ -1,7 +1,7 @@
 // Run report (schema coal.report/1), the "coal: summary:" lines, the genetic-code hint and the methods text.
-// CPP-27: rewritten to mirror src/coal/report.py of the merged engine (MRG-2, MRG-2b): the app's message codes and
-// texts, statuses (ok / warning / failed / not_checked), where a failed gene breaks (the app viewer's rule),
-// start-codon and frameshift-like mismatch patterns, the hint rule and wording, the methods text.
+// Mirrors src/coal/report.py: the app's message codes and texts, statuses (ok / warning / failed / not_checked),
+// where a failed gene breaks (the app viewer's rule), start-codon and frameshift-like mismatch patterns, the hint
+// rule and wording, the methods text.
 #pragma once
 #include <chrono>
 #include <functional>
@@ -23,7 +23,7 @@ std::string shlex_join(const std::vector<std::string>& args);
 using RowsFn = std::function<void(const std::function<bool(long long, const std::string&, const std::string&)>&)>;
 using DnaFn = std::function<std::string(long long)>;  // DNA paired with sequence k
 
-// CHANGED(IMP-E-B, IMP-E-D): the genetic-code search shared by the end-of-run hint and the early notice
+// The genetic-code search shared by the end-of-run hint and the early notice
 struct HintGene {
     std::string id, row, dna;
 };
@@ -42,8 +42,8 @@ public:
               const std::string& out, const std::string& fmt, int table, bool nogap, bool nomismatch,
               bool keep_going, bool keep_entries, bool strict, bool blockonly);
 
-    void set_hash_paths(std::vector<std::string> p) { hash_paths_ = std::move(p); }  // CPP-17
-    // CPP-33: the report owns the protein IDs (the pipeline reads them through ids()), one copy per run
+    void set_hash_paths(std::vector<std::string> p) { hash_paths_ = std::move(p); }
+    // The report owns the protein IDs (the pipeline reads them through ids()), one copy per run
     void set_inputs(std::vector<std::string>&& ids);
     const std::vector<std::string>& ids() const { return ids_; }
     void set_dna_inputs(const std::vector<long long>& dna_counts, const std::vector<std::string>& dna_file_ids);
@@ -67,8 +67,8 @@ public:
     void restore(const Json& state, const std::vector<Json>& nonok, long long completed);
 
     bool keep_entries;
-    bool want_hint = true;
-    FitMemo fit_memo;  // CHANGED(IMP-E-B): shared with early_code_notice  // CHANGED(IMP-E-D): false under -q without --report/--json (report.py want_hint)
+    bool want_hint = true;  // false under -q without --report/--json (report.py want_hint)
+    FitMemo fit_memo;  // shared with early_code_notice
     bool finished = false;
     int exit_code = 0;
 
@@ -101,7 +101,7 @@ private:
     std::string pairing_;  // empty = not paired
     std::vector<std::string> seq_pairing_;
     bool has_dna_ids_ = false;
-    std::vector<size_t> pair_idx_;  // CPP-33: protein k's DNA ID is dna_file_ids_[pair_idx_[k]]
+    std::vector<size_t> pair_idx_;  // protein k's DNA ID is dna_file_ids_[pair_idx_[k]]
     const std::string& dna_id(size_t k) const { return dna_file_ids_[pair_idx_[k]]; }
     mutable std::set<std::string> paired_set_;  // built on first use (suspect_pairing text)
     mutable bool paired_set_built_ = false;
@@ -117,7 +117,7 @@ private:
     Json output_;
     bool has_gc_hint_ = false;
     Json gc_hint_;
-    std::string gc_hint_cli_;  // ENG-UX-7: the hint as the command line says it
+    std::string gc_hint_cli_;  // the hint as the command line says it
     long long resumed_from_ = -1;
 };
 

@@ -1,14 +1,11 @@
 // COAL website: copy buttons, the suggested download, old links, and the offline cache.
-// WEB-3: new file. See overnight/integration/CHANGES.md
-// CHANGED(WEB-11): the visitor's system is no longer detected; the page shows all three downloads at once.
-// CHANGED(WEB-13): all three downloads still show, in the same order; the card for the visitor's system only gets a
-// "For this computer" mark. Links to the old one-page site (index.html#windows and so on) go to the page that now
-// holds that section. The Copy button keeps its own label.
+// All three downloads show, in the same order; the card for the visitor's system only gets a "For this computer"
+// mark. Links to the old one-page site (index.html#windows and so on) go to the page that now holds that section. The Copy button keeps its own label.
 // No external requests. Without JavaScript everything still shows; only the Copy buttons do nothing.
 (function () {
   "use strict";
 
-  // Sections that moved off the home page in WEB-13, and where they are now.
+  // Sections that moved off the home page, and where they are now.
   var MOVED = {
     install: "install.html", windows: "install.html", "smart-app-control": "install.html", macos: "install.html",
     linux: "install.html", cli: "install.html", downloads: "install.html", files: "install.html",

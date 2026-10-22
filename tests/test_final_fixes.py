@@ -1,4 +1,5 @@
-"""FIN-*: last review round, engine side (overnight/integration/CHANGES.md)."""
+"""Engine edge cases: non-standard residue wording, the fallback's first-Met codon under the selected code,
+bounded-memory block writing, and the drop-in's PAL2NAL-style argument parsing."""
 from __future__ import annotations
 
 import os
@@ -30,7 +31,7 @@ class Tmp(unittest.TestCase):
         return r.returncode, r.stdout, r.stderr
 
 
-class TestFinC14NonStandardResidueWording(Tmp):  # FIN-C14
+class TestFinC14NonStandardResidueWording(Tmp):
     PEP = ">a\nMKUVBLZJO\n"
     NUC = ">a\nATGAAATGAGTTGATCTGGAAATTTAG\n"
 
@@ -43,7 +44,7 @@ class TestFinC14NonStandardResidueWording(Tmp):  # FIN-C14
                           (9, "O (pyrrolysine)")):
             self.assertIn(f"coal: warning: a pepAlnPos {pos}: {what} is not checked; any codon is accepted\n", err)
 
-    def test_nomismatch_still_removes_the_column(self):  # DEC-4f unchanged
+    def test_nomismatch_still_removes_the_column(self):
         code, out, err = self.coal(">a\nMKBVL\n", ">a\nATGAAAGATGTTCTG\n", "-output", "fasta", "-nomismatch")
         self.assertEqual(out, ">a\nATGAAAGTTCTG\n")
         self.assertIn("B (D or N) is not checked", err)
@@ -55,7 +56,7 @@ MITO_NUC = (">nd2\nATTAATCCTCTTGCTCAGCCGGTGATCTATTCTACGATTTTCGCGGGTACGCTTATTACTG
             "ATTACCGCGCTTTCGAGCCATTGGTTTTTCACGTGAGTCGGCTTAGAAATAAACATGCTAGCATTCATCCCTGTGCTGACCAAAAAG\n")
 
 
-class TestFinE1FallbackFirstMetUsesTheCode(Tmp):  # FIN-E1
+class TestFinE1FallbackFirstMetUsesTheCode(Tmp):
     """ATT is a start codon of code 2; nd2 has one N (column 31), so it needs the anchor fallback."""
 
     def test_start_codon_of_the_selected_code_is_accepted(self):
@@ -82,7 +83,7 @@ class TestFinE1FallbackFirstMetUsesTheCode(Tmp):  # FIN-E1
         self.assertIn("nd2 pepAlnPos 1: M does not correspond to ATT", err)
 
 
-class TestFinE2BlockWriterBoundedMemory(unittest.TestCase):  # FIN-E2
+class TestFinE2BlockWriterBoundedMemory(unittest.TestCase):
     def _write(self, fmt, memory):
         import io
         import random
@@ -113,7 +114,7 @@ class TestFinE2BlockWriterBoundedMemory(unittest.TestCase):  # FIN-E2
                     self.assertTrue(w.called)
 
 
-class TestFinE3DropInParsesLikePal2nal(unittest.TestCase):  # FIN-E3; expectations observed with the real PAL2NAL v14
+class TestFinE3DropInParsesLikePal2nal(unittest.TestCase):  # expectations observed with the real PAL2NAL v14
     def t(self, *argv):
         import sys
         sys.path.insert(0, str(SRC))

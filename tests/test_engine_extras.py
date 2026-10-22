@@ -39,8 +39,7 @@ class TestSummaryHint(unittest.TestCase):
             self.assertIn("coal: summary: 40 of 40 sequences have codons that do not match their amino acid (kept "
                           "in the alignment). Under genetic code 2 (Vertebrate mitochondrial), all 40 sequences match "
                           "their protein; under code 1, none do. Codes 5 and 13 fit these sequences too: choose the "
-                          "code of the organism and organelle the genes come from. Re-run with -codontable 2.", err)  # ENG-UX-7
-            # MRG-2/MRG-2b: the app's wording
+                          "code of the organism and organelle the genes come from. Re-run with -codontable 2.", err)  # the app's wording
             r = json.loads((d / "r.json").read_text())
             self.assertEqual(r["hints"][0]["suggested_codontable"], 2)
 
@@ -75,7 +74,7 @@ class TestKeepGoing(unittest.TestCase):
         self.assertTrue(r["options"]["keep_going"])
         self.assertEqual({k: r["summary"][k] for k in ("total", "ok", "failed")}, {"total": 20, "ok": 19, "failed": 1})
         bad = [s for s in r["sequences"] if s["status"] == "failed"]
-        # MRG-2: the app's codes; where the gene breaks comes first
+        # the app's codes; where the gene breaks comes first
         self.assertEqual([(s["id"], [m["code"] for m in s["messages"]]) for s in bad],
                          [("g7", ["frameshift", "inconsistent"])])
         self.assertEqual(r["output"]["sequences"], 19)
@@ -173,7 +172,7 @@ class TestIdPairing(unittest.TestCase):
         # g1.1 and g1.2 both normalise to g1: not one-to-one -> file order, with a clear warning
         self.write_dna(["g0", "g1.1", "g1.2", "g3", "g4"])
         rc, out, err = run(self.d, ["pep.fasta", "nuc.fasta", "-o", "o.fa", "--report", "r.json"])
-        # MRG-1: 3 of 5 IDs match exactly, so this branch's ENG-d notice (reviewed) is printed
+        # 3 of 5 IDs match exactly, so the partial-match notice is printed
         self.assertIn("coal: warning: only 3 of 5 protein IDs are DNA IDs; pairing sequences by order instead "
                       "(e.g. protein 'g1' gets DNA 'g1.1') (--strict makes this an error)", err)
         self.assertEqual(self.pairing()[0], "order")
@@ -184,7 +183,7 @@ class TestIdPairing(unittest.TestCase):
         rc, out, err = run(self.d, ["pep.fasta", "nuc.fasta", "--report", "r.json"])
         self.assertEqual(rc, 0)
         self.assertEqual(out, self.ref)
-        # MRG-1: no ID matches at all: silent, as PAL2NAL (ENG-d); the report's id_mismatch hint says it
+        # no ID matches at all: silent, as PAL2NAL; the report's id_mismatch hint says it
         self.assertEqual(err, "")
         self.assertEqual(json.loads((self.d / "r.json").read_text())["hints"][0]["code"], "id_mismatch")
         mode, per, dna_ids = self.pairing()
@@ -202,7 +201,7 @@ class TestMethodsAndMaxWarnings(unittest.TestCase):
             self.assertEqual(rc, 0, err)
             from coal import __version__
             m = json.loads((d / "r.json").read_text())["methods_text"]
-            # MRG-2: the app's methods text (FIN-C1/FIN-C11 rules; no unqualified "byte-identical" claim, FZ-claim)
+            # the app's methods text (no unqualified "byte-identical" claim)
             self.assertEqual(m, f"Codon alignments were built with COAL v{__version__} "
                                 "(https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto "
                                 "the protein multiple sequence alignment codon by codon (the method of PAL2NAL; "
@@ -217,7 +216,7 @@ class TestMethodsAndMaxWarnings(unittest.TestCase):
             run(d, ["pep.fasta", "nuc.fasta", "--keep-going", "-nogap", "-o", "o.fa", "--report", "r.json"])
             m = json.loads((d / "r.json").read_text())["methods_text"]
             self.assertIn("Of 5 sequences, 4 matched their protein exactly, and 1 could not be aligned and was "
-                          "excluded.", m)  # MRG-2: the app's wording
+                          "excluded.", m)  # the app's wording
             self.assertIn("Codon columns containing gaps or stop codons were removed.", m)
             self.assertIn("Command: coal pep.fasta nuc.fasta -nogap --keep-going -o o.fa", m)
 
@@ -225,11 +224,11 @@ class TestMethodsAndMaxWarnings(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)
             write_genes(d, 6, table=2, mito=True)
-            rc, _, full = run(d, ["pep.fasta", "nuc.fasta", "--max-warnings", "0"])  # CHANGED(IMP-E-C): default 20
+            rc, _, full = run(d, ["pep.fasta", "nuc.fasta", "--max-warnings", "0"])  # all (default 20)
             n = full.count("does not correspond")
             self.assertGreater(n, 5)
             rc, _, err = run(d, ["pep.fasta", "nuc.fasta", "--max-warnings", "5"])
-            # MRG-3: notices (here ENG-c's no-anchor notices) are never capped, so only the per-codon lines count
+            # notices (here the no-anchor notices) are never capped, so only the per-codon lines count
             lines = [l for l in err.splitlines() if l.startswith("coal: warning:") and "pepAlnPos" in l]
             self.assertEqual(lines, [l for l in full.splitlines() if "does not correspond" in l][:5])
             notices = [l for l in full.splitlines() if l.startswith("coal: warning:") and "pepAlnPos" not in l]
@@ -291,7 +290,7 @@ def interrupt(cmd, cwd, after_checkpoint=3, extra_env=None):
     cluster time limit). A watchdog kills it anyway after 60 s."""
     env = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "COAL_BATCH_NT": "20000",
            "COAL_CHECKPOINT_EVERY": "0", "COAL_TEST_PAUSE_AFTER_CHECKPOINT": str(after_checkpoint),
-           "COAL_TEST_HOOKS": "1",  # CHANGED(IMP-E-I): the hooks need this too
+           "COAL_TEST_HOOKS": "1",  # the hooks need this too
            **(extra_env or {})}
     p = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
     dog = threading.Timer(60, p.kill)

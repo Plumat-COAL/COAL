@@ -31,7 +31,7 @@ def tidy(obj):
 
 
 def call(fn, **kw):
-    # CHANGED(IMP-M-1): was: dropped the raw "stderr" field; the tool now returns a compact summary itself
+    # The tool returns a compact summary itself, so nothing is dropped here.
     return fn(**kw)
 
 
@@ -58,7 +58,6 @@ def _main():
 
 A stage script for showing COAL as a tool an AI assistant can use. Everything below the script is the
 real output of the tool functions, regenerated with `python demo/make_mcp_demo.py`.
-<!-- CHANGED(IMP-M-4): version-free (was "COAL engine 0.3.0"); setup points to desktop/setup_mcp.bat -->
 
 ## Setup (before going on stage)
 

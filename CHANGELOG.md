@@ -4,7 +4,6 @@
 
 ## 0.4.2
 
-<!-- CHANGED(IMP-M-4): Unreleased, 0.2.0 and 0.1.0 added from the git history -->
 - **COAL in Claude Desktop, from the installer:** the Windows installer's last page has **Connect COAL to Claude
   Desktop** (ticked). Claude Desktop then starts COAL itself (`COAL.exe -m coal_app --mcp`) and can run it on your
   files; uninstalling removes the entry. `codon_align` can save the alignment where you ask (`save_as`), e.g. next to

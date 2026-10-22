@@ -9,7 +9,7 @@ Usage:
     python scripts/fetch_pal2nal.py                 # official site; if that fails, the orthologr GitHub copy
     python scripts/fetch_pal2nal.py --archive FILE  # use an already-downloaded tarball
 
-Sources, in order (CHANGED(DEC-4): the GitHub fallback is new; see overnight/integration/CHANGES.md):
+Sources, in order:
   1. the official tarball (checked against ARCHIVE_SHA256, then pal2nal.pl against SCRIPT_SHA256);
   2. the copy of pal2nal.pl in the public orthologr R package on GitHub (checked against SCRIPT_SHA256, the
      checksum of the script in the official tarball, so it is byte for byte the official v14 script).

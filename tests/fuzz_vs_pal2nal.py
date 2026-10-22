@@ -15,15 +15,14 @@ Rule per comparison: PAL2NAL always exits 0; it succeeded if its stdout is non-e
 command, run in-process) must exit 0 with byte-identical stdout; if PAL2NAL failed, COAL must exit non-zero with
 empty stdout. stderr is not compared (COAL's messages are its own). The only exceptions are the deliberate
 differences in DELIBERATE below (each is in README.md's list).
-CHANGED(FIN-C10): was "a case that has one of those features may differ" (ANY difference was accepted when the case
-had ANY deliberate feature); now a difference is accepted only if it is exactly the documented one. The generator
+A difference is accepted only if it is exactly the documented one. The generator
 also writes a neutralised copy of each case (U residues -> B, RNA -> DNA, alternative start codons -> ATG, table-10
 TGA codons -> TGC, each IUPAC codon -> one of its readings chosen so that it matches the residue / is a stop exactly
 when COAL says so; substituted codons are written in the other letter case so they can be recognised), and the real
 PAL2NAL is run on that copy without -nogap. COAL's output must then equal that reference output, with -nogap applied
 by COAL's documented rule (gap or stop codon of the selected code, any case) and only the substituted codons allowed
 to differ (and only by the documented substitution); an invalid protein character must be a COAL error. Anything
-else is an unexplained difference. See overnight/integration/CHANGES.md
+else is an unexplained difference.
 """
 from __future__ import annotations
 
@@ -64,7 +63,6 @@ DELIBERATE = {
     "first_met_code": "the first Met of a gene that needs the fallback (one N, one mismatch, ...): COAL accepts the "
                       "selected code's start and Met codons (e.g. ATT and ATA in code 2, TTG in code 11), as in its "
                       "exact-fit path; PAL2NAL accepts only ATG/CTG/GTG there, whatever -codontable says (FIN-E1)",
-    # CHANGED(MRG-1): new
     "normalised_ids": "DNA IDs equal to the protein IDs only after normalising (version suffix, case, database "
                       "fields such as sp|...|) and in another order: PAL2NAL pairs by file order (each protein gets "
                       "another gene's DNA); COAL pairs by the normalised IDs. Exact check: COAL's output is "
@@ -93,9 +91,9 @@ def _codons(table):
 class Case:
     def __init__(self):
         self.files = {}      # name -> text
-        self.ref_files = {}  # CHANGED(FIN-C10): name -> neutralised text (see the module docstring)
+        self.ref_files = {}  # name -> neutralised text (see the module docstring)
         self.ref_files_b = {}  # the same without the first-Met substitution (for a gene placed off its own frame)
-        self.ref_files_p = {}  # CHANGED(MRG-1): the case itself with the DNA records in protein order (normalised_ids)
+        self.ref_files_p = {}  # the case itself with the DNA records in protein order (normalised_ids)
         self.pep = None
         self.nucs = []
         self.opts = []
@@ -108,7 +106,7 @@ def _readings(trip):
 
 
 def _reference_reading(table, aa, trip):
-    """CHANGED(FIN-C10): new. A concrete reading of an IUPAC codon that matches residue `aa` exactly when COAL accepts
+    """A concrete reading of an IUPAC codon that matches residue `aa` exactly when COAL accepts
     the codon (every reading matches) and is a stop exactly when COAL's -nogap removes it (every reading is a stop);
     None if no reading has both properties."""
     code = get_code(table).code
@@ -186,7 +184,7 @@ def make_case(rng: random.Random) -> Case:
         k, i = rng.randrange(nseq), rng.randrange(len(rows[0]))
         if rows[k][i] != "-" and i > 0:
             rows[k][i] = str(rng.choice((1, 2, 4, 5)))
-    if rng.random() < 0.04 and len(rows[0]) > 1:  # tfastx/tfasty frameshift notation (FIN-C10: 1-column guard): '\\' = 1 base, '/' + residue = gap + 2 bases
+    if rng.random() < 0.04 and len(rows[0]) > 1:  # tfastx/tfasty frameshift notation (needs 2+ columns): '\\' = 1 base, '/' + residue = gap + 2 bases
         k, i = rng.randrange(nseq), rng.randrange(1, len(rows[0]))
         j = next((j for j in range(i + 1, len(rows[0])) if rows[k][j] != "-"), None)
         if rows[k][i].isalpha():
@@ -219,7 +217,7 @@ def make_case(rng: random.Random) -> Case:
     dnas = []
     mode = rng.choices(("clean", "mismatch", "unrelated", "masked", "wrongtable"),
                        (0.55, 0.22, 0.06, 0.12, 0.05))[0]
-    ref_dnas = []  # CHANGED(FIN-C10): neutralised DNA (see the module docstring)
+    ref_dnas = []  # neutralised DNA (see the module docstring)
     for k, row in enumerate(rows):
         out = []
         out_res = []  # residue of each entry of `out` (None for frameshift bases)
@@ -263,7 +261,7 @@ def make_case(rng: random.Random) -> Case:
         cds = list(cds)
         ref = list(cds)
         marked = set()  # indices into cds/ref whose reference codon is a substitution
-        # CHANGED(FIN-C10): was IUPAC codes anywhere in the DNA (UTRs too); now in the gene's codons only, each with a
+        # IUPAC codes in the gene's codons only, each with a
         # concrete reading for the reference run (codons with no reading of the right kind are left unchanged)
         if rng.random() < 0.04:
             for i, (x, aa) in enumerate(zip(cds, out_res)):
@@ -291,7 +289,7 @@ def make_case(rng: random.Random) -> Case:
         if first_met in START_CODONS.get(run_table, ()):
             c.features.add("genetic_code")
         elif first_met in FIRST_MET(run_table) and first_met not in ANCHOR_STARTS:
-            c.features.add("first_met_code")  # FIN-E1: matters only when the gene needs the fallback
+            c.features.add("first_met_code")  # matters only when the gene needs the fallback
         start_marked = set()
         if first_met in START_CODONS.get(run_table, ()) or (
                 first_met in FIRST_MET(run_table) and first_met not in ANCHOR_STARTS):
@@ -316,7 +314,7 @@ def make_case(rng: random.Random) -> Case:
             tail = rng.choice(("TAA", "TAG", "TGA")) + "".join(rng.choice("ACGT") for _ in range(rng.randint(0, 20)))
             seq, rseq, rseq_b = seq + tail, rseq + tail, rseq_b + tail
         if run_table in TABLE_CODONS:
-            # FIN-C10: any other TGA (UTR, out of frame, a random codon) would change PAL2NAL's placement search in a
+            # any other TGA (UTR, out of frame, a random codon) would change PAL2NAL's placement search in a
             # way the reference cannot neutralise, so it becomes TGG in both copies
             sl, rl, rb = list(seq), list(rseq), list(rseq_b)
             while True:
@@ -342,7 +340,6 @@ def make_case(rng: random.Random) -> Case:
         c.features.add("genetic_code")
 
     # DNA IDs and order
-    # CHANGED(MRG-1): "normalised" is new (was "same" 0.65)
     did_mode = rng.choices(("same", "shuffled", "different", "partial", "count", "normalised"),
                            (0.57, 0.17, 0.1, 0.05, 0.03, 0.08))[0]
     order = list(range(nseq))
@@ -373,7 +370,7 @@ def make_case(rng: random.Random) -> Case:
     recs = [(dids[j], dnas[j], ref_dnas[j][0], ref_dnas[j][1]) for j in order]
     if did_mode == "count":
         recs = recs[:-1] if (len(recs) > 1 and rng.random() < 0.5) else recs + [("extra",) + ("ATGAAA",) * 3]
-    # CHANGED(MRG-1): with normalised IDs every reference has the DNA in protein order (what COAL pairs)
+    # with normalised IDs every reference has the DNA in protein order (what COAL pairs)
     ref_recs = [(dids[j], dnas[j], ref_dnas[j][0], ref_dnas[j][1]) for j in range(nseq)] \
         if "normalised_ids" in c.features else recs
     width = rng.choice((0, 60, 60, 70, 13))
@@ -393,7 +390,7 @@ def make_case(rng: random.Random) -> Case:
     srows = ["".join(r) for r in rows]
     if lower:
         srows = [s.lower() for s in srows]
-    # CHANGED(FIN-C10): the reference protein has B where the case has U (PAL2NAL treats B as COAL treats U)
+    # the reference protein has B where the case has U (PAL2NAL treats B as COAL treats U)
     rrows = [s.replace("U", "B").replace("u", "b") for s in srows]
     ncol = len(srows[0])
     mask = None
@@ -475,7 +472,7 @@ def make_case(rng: random.Random) -> Case:
 
 
 def parse_output(fmt, text):
-    """CHANGED(FIN-C10): new. [(id, aligned sequence)] from PAL2NAL/COAL output in any of the four formats
+    """[(id, aligned sequence)] from PAL2NAL/COAL output in any of the four formats
     (amino-acid, mark and header lines skipped)."""
     lines = text.split("\n")
     recs = []
@@ -511,7 +508,7 @@ def parse_output(fmt, text):
 
 
 def _allowed_codon(table, coal3, ref3):
-    """CHANGED(FIN-C10/FIN-E1): new. True if a substituted reference codon `ref3` is the documented neutralisation of
+    """True if a substituted reference codon `ref3` is the documented neutralisation of
     COAL's codon `coal3`: one of its IUPAC readings, TGC for table 10's TGA, or ATG for a first-Met codon that is a
     start or Met codon of the selected code."""
     c = coal3.upper().replace("U", "T")
@@ -538,7 +535,7 @@ def _nogap_rule(fmt, text, table):
 
 
 def check_deliberate(case, fmt, rc, out, ref_out, coal_without_nogap=None):
-    """CHANGED(FIN-C10): new. None if COAL's result is exactly the documented deliberate difference for this case,
+    """None if COAL's result is exactly the documented deliberate difference for this case,
     else the reason it is not. `ref_out`: PAL2NAL's stdout on the neutralised case (without -nogap).
     With -nogap, `coal_without_nogap()` gives COAL's (rc, stdout) for the same case without -nogap: that must match
     the reference, and COAL's -nogap output must be the documented -nogap rule applied to it (so an IUPAC codon's
@@ -596,7 +593,7 @@ def _fasta_records(text):
 
 
 def placed_first_met_files(case, coal_fasta):
-    """CHANGED(FIN-C10/FIN-E1): new. A third neutralised copy (from the copy without first-Met substitutions), built
+    """A third neutralised copy (from the copy without first-Met substitutions), built
     after the run: for every gene that starts with M,
     find where COAL placed it (its ungapped output row is a contiguous piece of its DNA) and, if that first codon is
     a start or Met codon of the selected code other than ATG, write a marked ATG there. Needed when a gene is placed
@@ -689,13 +686,13 @@ def fuzz(pal2nal, n, seed, report=print, keep_dir=None, formats=FORMATS):
             refs = {}
 
             def reference(fmt, variant, case=case, d=d, refs=refs):
-                """PAL2NAL's stdout on a neutralised copy of the case, without -nogap (FIN-C10); variant 3: the case
-                itself with only the DNA records reordered, with every option (MRG-1)."""
+                """PAL2NAL's stdout on a neutralised copy of the case, without -nogap; variant 3: the case
+                itself with only the DNA records reordered, with every option."""
                 if (fmt, variant) not in refs:
                     rd = os.path.join(d, f"ref{variant}")
                     os.makedirs(rd, exist_ok=True)
                     for name, text in (case.ref_files, case.ref_files_b, getattr(case, "ref_files_c", None),
-                                       case.ref_files_p)[variant].items():  # CHANGED(MRG-1): variant 3
+                                       case.ref_files_p)[variant].items():  # variant 3: ref_files_p
                         with open(os.path.join(rd, name), "w", newline="\n") as fh:
                             fh.write(text)
                     opts = [o for o in case.opts if o != "-nogap" or variant == 3]
@@ -704,7 +701,7 @@ def fuzz(pal2nal, n, seed, report=print, keep_dir=None, formats=FORMATS):
 
             def verified(fmt, rc, out, case=case, d=d):
                 """None if the difference is exactly a documented one (either reference), else why not."""
-                if "normalised_ids" in case.features:  # CHANGED(MRG-1): exact, byte for byte
+                if "normalised_ids" in case.features:  # exact, byte for byte
                     ref = reference(fmt, 3)
                     if (rc == 0 and out == ref != "") or (ref == "" and rc != 0 and out == ""):
                         return None
@@ -721,7 +718,7 @@ def fuzz(pal2nal, n, seed, report=print, keep_dir=None, formats=FORMATS):
                 if why is not None and case.features & set(DELIBERATE) and case.ref_files_b != case.ref_files:
                     if check_deliberate(case, fmt, rc, out, reference(fmt, 1), base) is None:
                         return None
-                if why is not None:  # the first Met where COAL placed the gene (FIN-E1)
+                if why is not None:  # the first Met where COAL placed the gene
                     if not hasattr(case, "ref_files_c"):
                         a = [case.pep, *case.nucs, "-output", "fasta", *[o for o in case.opts
                                                                         if o not in ("-nogap", "-nomismatch")]]
@@ -749,8 +746,7 @@ def fuzz(pal2nal, n, seed, report=print, keep_dir=None, formats=FORMATS):
                     cnt["identical"] += 1
                 elif not pal_ok and rc != 0 and out == "":
                     cnt["both_fail"] += 1
-                elif (why := verified(fmt, rc, out)) is None:  # FIN-C10/FIN-E1: every difference is checked
-                    # CHANGED(FIN-C10): was accepted unchecked
+                elif (why := verified(fmt, rc, out)) is None:  # every difference is checked
                     cnt["deliberate"] += 1
                     for f in case.features & set(DELIBERATE):
                         by_feature[f] = by_feature.get(f, 0) + 1

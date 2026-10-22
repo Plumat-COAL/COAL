@@ -23,6 +23,6 @@ AI agents: the MCP tools (`codon_align`, `explain_report`) work on files on the 
 so use them locally: COAL is not on PyPI (a package called "coal" there is something else), so install it
 from the repository (`git clone https://github.com/plumat-coal/COAL`, then `pip install -e "./COAL[mcp]"`),
 then run `python -m coal_app --mcp`, or `coal-gui`, which also serves MCP.
-<!-- CHANGED(R2-D9): was pip install "coal[mcp]" (not on PyPI). See overnight/integration/CHANGES.md --> This public Space does not serve MCP.
+This public Space does not serve MCP.
 
 Source: https://github.com/plumat-coal/COAL

@@ -3,10 +3,6 @@ name: coal
 description: Build codon alignments with COAL (a fast, MIT-licensed PAL2NAL replacement) from a protein multiple sequence alignment plus the unaligned coding DNA of the same genes. Use when someone needs a codon alignment, back-translated alignment, "pal2nal", input for dN/dS (PAML codeml, HyPhy), or asks why protein and DNA "don't match".
 ---
 
-<!-- CHANGED(APP-C10, APP-C11): was documenting upcoming engine options as if present, "exit 2 = partial
-success" and both extras in one environment; now current options only, upcoming ones in their own section,
-exit 2 = usage error today, extras in separate environments. See overnight/app/CHANGES.md -->
-
 # COAL: codon alignment from a protein alignment + coding DNA
 
 ## When to use it
@@ -17,7 +13,6 @@ exit 2 = usage error today, extras in separate environments. See overnight/app/C
   `-output clustal|paml|fasta|codon`) and gave the same output as PAL2NAL v14 in all 238 byte-for-byte comparisons
   of its test suite (all four formats), plus a random differential test against the real PAL2NAL; it is much faster
   on big inputs. The `pal2nal` command takes an unchanged PAL2NAL command line (default clustal, like PAL2NAL).
-  <!-- CHANGED(R2-D2): was 143 --> <!-- CHANGED(DEC-4): was "-output fasta ... same FASTA output ... 147" --> <!-- CHANGED(FZ-5): 246 -> 232 -->
 - Not for: aligning sequences from scratch (run an aligner on the proteins first), non-coding DNA, or RNA genes.
 
 ## Install
@@ -49,21 +44,15 @@ coal pep.aln nuc.fasta -output paml -o codon.paml        # 6. PAML/codeml input 
 coal pep.aln nuc.fasta --strict -o codon.fasta           # 7. pipelines: stop on probably-wrong data
 ```
 
-<!-- CHANGED(R2-A10, R2-D5, R2-D7, R2-E4): was "-q silences them", "unrelated sequences can still succeed",
-"always count the warnings per gene" (none are printed with -nomismatch) and exit codes 0/1/2 only.
-See overnight/integration/CHANGES.md -->
-<!-- CHANGED(DEC-4): was "Output is FASTA only" -->
 Output formats: `-output fasta` (the default of `coal`), `clustal`, `paml`, `codon`, as PAL2NAL v14 writes them.
-COAL's output is identical to PAL2NAL v14's except for a short list of documented, deliberate differences (newer NCBI genetic-code tables for codes 3, 10, 11 and 13; `-nogap` removing the selected code's stop codons; the selected code's start codons for the first Met; pairing by IDs that match only after normalising where PAL2NAL v14's file order would give a protein another gene's DNA; and inputs where PAL2NAL v14 writes malformed output or fails). Tested: all 285 stored reference checks pass (238 byte-identical, 4 of them with deliberately different warnings; 24 where both tools fail; 23 deliberate output or exit-status differences: 6 deliberate errors, 3 different outputs, 14 `-nogap` checks with a non-standard code), and in 20,000 random comparisons with the real PAL2NAL v14 (5,000 cases x 4 output formats) 13,826 were byte-identical, 4,681 both failed and 1,493 were deliberate differences, each checked to be exactly the documented change; 0 unexplained differences. (List in README.md.) <!-- CHANGED(FIN-C2/FIN-C3/FIN-C10/FIN-C20): was the "byte-identical ... (well-formed input)" claim, "every difference is one where PAL2NAL silently produces wrong output" and a 6,000-case run not reproducible from the repo; now the documented exceptions and the FIN-C10 fuzz numbers --> <!-- CHANGED(FZ-claim) --> (`codon` cannot be combined with `-nogap`/`-nomismatch`/`-blockonly`, as in PAL2NAL). `-blockonly` keeps
+COAL's output is identical to PAL2NAL v14's except for a short list of documented, deliberate differences (newer NCBI genetic-code tables for codes 3, 10, 11 and 13; `-nogap` removing the selected code's stop codons; the selected code's start codons for the first Met; pairing by IDs that match only after normalising where PAL2NAL v14's file order would give a protein another gene's DNA; and inputs where PAL2NAL v14 writes malformed output or fails). Tested: all 285 stored reference checks pass (238 byte-identical, 4 of them with deliberately different warnings; 24 where both tools fail; 23 deliberate output or exit-status differences: 6 deliberate errors, 3 different outputs, 14 `-nogap` checks with a non-standard code), and in 20,000 random comparisons with the real PAL2NAL v14 (5,000 cases x 4 output formats) 13,826 were byte-identical, 4,681 both failed and 1,493 were deliberate differences, each checked to be exactly the documented change; 0 unexplained differences. (List in README.md.) (`codon` cannot be combined with `-nogap`/`-nomismatch`/`-blockonly`, as in PAL2NAL). `-blockonly` keeps
 only the columns marked `#` under the blocks of a CLUSTAL input. Per-codon warnings (`coal: warning: <id> pepAlnPos N: ...`)
 go to stderr, and so do **notices about probably-wrong data** (below). `-q` silences warnings and notices alike
 (errors are always printed), so **don't use `-q` when you need to know about bad genes**; use `--strict` to stop on
-them instead. <!-- CHANGED(DEC-2): was "-q silences those, but notices ... are always printed" --> The notices:
+them instead. The notices:
 `<id>: no 10-residue segment of the protein was found in the DNA; codons were assigned by position (K of N
 checkable codons do not match; A contain N or other ambiguous bases)` (the last part only when A > 0) and `only K of N protein IDs are DNA IDs; pairing sequences by order instead (e.g. protein 'A'
 gets DNA 'B')` (some proteins are then almost certainly paired with the wrong DNA: fix the IDs).
-<!-- CHANGED(DEC-1): was "that is an error" for the next two cases; now PAL2NAL's output plus a notice, an error only
-with --strict. See overnight/integration/CHANGES.md -->
 Like PAL2NAL, the engine writes an alignment row even for probably-wrong data, and then prints a notice:
 `<id>: protein and DNA are probably unrelated: K of N checkable codons do not match the protein. ...` (more than
 half of the codons made only of A/C/G/T don't match: wrong DNA or wrong genetic code) and `<id>: position of the
@@ -94,8 +83,6 @@ use the alignment only when `all_ok` is true. If `needs_attention` is true, read
 (ok / warning / failed), `next_step` and `problems`, or call `explain_report(report_path)`; if
 `suggested_codontable` is set, re-run `codon_align` with it. A missing file, an unknown genetic code or an
 unsupported format is a tool error (isError), not a result.
-<!-- CHANGED(IMP-M-1): result fields documented (the old `ok` field, which meant "finished", is gone) -->
-
 
 ## How to read the report (`report_path` from `codon_align`, schema `coal.report/1`)
 
@@ -108,7 +95,7 @@ unsupported format is a tool error (isError), not a result.
   - `failed`: COAL could not fit the protein onto the DNA at all (that row is not in the output), or the row was
     written as PAL2NAL writes it but the data is probably wrong: first message `suspect_unrelated` (most codons
     don't match), `suspect_position` (start of the gene can't be told), or `suspect_pairing` with mismatches
-    (paired with another gene's DNA by order). Don't use such a row. <!-- CHANGED(DEC-1) -->
+    (paired with another gene's DNA by order). Don't use such a row.
 - `summary.columns_removed` (only with `-nomismatch`): how many codon columns were removed because a codon
   didn't match; the genes with such codons are `warning`, not `ok`.
 - `hints[]`: suggestions. `genetic_code` comes with `suggested_codontable`; re-run with it.
@@ -132,8 +119,6 @@ For a plain-English summary call the MCP tool `explain_report(report_path)`.
 | `protein and DNA are inconsistent` for **one** gene | Frameshift (missing/extra base), wrong transcript, or truncated DNA | Check that gene's DNA (the summary line says where it breaks); drop it and re-run (the current engine stops at the first failing gene) |
 | `invalid protein alignment characters` | Non-amino-acid symbols in the alignment | Remove them; `.` and `-` are both gaps |
 | Stop codons in output columns | Internal stops or terminal stop kept | `-nogap` removes stop columns |
-
-<!-- CHANGED(ENG-UX-2/3/4/6): rows for the new engine messages. See overnight/integration/CHANGES.md -->
 
 Never "fix" a mismatch by editing sequences silently: report which genes failed and why.
 

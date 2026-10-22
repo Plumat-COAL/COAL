@@ -11,7 +11,7 @@ from coal_app import core, tools
 
 
 def has_mcp():
-    """CHANGED(SHIP-18): new. Any mcp (1.x from Gradio's extra, as in the Windows app, or 2.x): the stdio server
+    """Any mcp (1.x from Gradio's extra, as in the Windows app, or 2.x): the stdio server
     runs on both."""
     return importlib.util.find_spec("mcp") is not None
 
@@ -20,7 +20,7 @@ def has_mcp2():
     return importlib.util.find_spec("mcp") is not None and importlib.util.find_spec("mcp.server.mcpserver") is not None
 
 
-# APP-16: in the CI job that installs .[mcp], COAL_REQUIRE_EXTRAS=mcp makes these tests run (and fail) instead
+# in the CI job that installs .[mcp], COAL_REQUIRE_EXTRAS=mcp makes these tests run (and fail) instead
 # of skipping when the package is missing.
 REQUIRE_MCP = "mcp" in os.environ.get("COAL_REQUIRE_EXTRAS", "").split(",")
 
@@ -40,7 +40,7 @@ class TestTools(_PrivateRuns):
         p, d = core.example_paths("clean")
         r = tools.codon_align(p, d)
         self.assertTrue(r["completed"])
-        self.assertTrue(r["all_ok"])  # IMP-M-1
+        self.assertTrue(r["all_ok"])
         self.assertFalse(r["needs_attention"])
         self.assertEqual(r["counts"], {"total": 8, "ok": 8, "warning": 0, "failed": 0, "not_checked": 0})
         self.assertIsNone(r["suggested_codontable"])
@@ -76,15 +76,15 @@ class TestTools(_PrivateRuns):
         self.assertEqual(r2["problems"], [])
 
     def test_codon_align_missing_file(self):
-        # CHANGED(IMP-M-1): was {"ok": false, "error": ...}; now a tool error, so MCP clients see isError
+        # a tool error, so MCP clients see isError
         with self.assertRaisesRegex(tools.CoalToolError, "not found.*absolute path"):
             tools.codon_align("/no/such/file.fa", "/no/such/dna.fa")
 
     def test_explain_report(self):
         text = tools.explain_report(core.SAMPLE_REPORT)
-        self.assertIn("Homo_COX1", text)  # APP-15
+        self.assertIn("Homo_COX1", text)
         self.assertIn("genetic code 2", text)
-        with self.assertRaisesRegex(tools.CoalToolError, "Could not read"):  # CHANGED(IMP-M-1): was returned
+        with self.assertRaisesRegex(tools.CoalToolError, "Could not read"):  # raised, not returned
             tools.explain_report("/no/such/report.json")
 
     def test_explain_after_failed_run(self):
@@ -99,7 +99,7 @@ class TestTools(_PrivateRuns):
 
 
 class TestTruthfulResult(_PrivateRuns):
-    """IMP-M-1: completed (COAL finished) is not the same as all_ok (every sequence matched)."""
+    """Completed (COAL finished) is not the same as all_ok (every sequence matched)."""
 
     def test_wrong_code_completes_but_needs_attention(self):
         p, d = core.example_paths("mito")
@@ -119,7 +119,7 @@ class TestTruthfulResult(_PrivateRuns):
         r = tools.codon_align(p, d, codontable=1)
         self.assertLessEqual(len(r["problems"]), tools.MAX_PROBLEMS)
         self.assertEqual(r["problems_total"], 24)
-        # CHANGED(IMP-E-C): was > 24 (every per-codon line); `coal` now prints 20 and "... and N more" by default
+        # `coal` prints 20 per-codon lines and "... and N more" by default
         self.assertIn(r["warning_lines"], (20, 21))
         self.assertFalse([ln for ln in r["engine_messages"] if ln.startswith("coal: warning:")])
         self.assertLess(len(json.dumps(r)), 12000)
@@ -155,7 +155,7 @@ class TestTruthfulResult(_PrivateRuns):
 
 
 class TestToolSchemas(unittest.TestCase):
-    """IMP-M-1: argument descriptions and enums (built from the type hints by mcp and by Gradio)."""
+    """Argument descriptions and enums (built from the type hints by mcp and by Gradio)."""
 
     def test_enums_match_what_coal_supports(self):
         import typing
@@ -191,8 +191,8 @@ class TestToolSchemas(unittest.TestCase):
     def test_gradio_api_keeps_the_positional_order(self):
         # The Gradio HTTP API (and desktop/test_smoke.py's 8-value call) is positional: the Annotated hints must not
         # change the parameter list. Public Blocks.get_api_info() only; the exact type schema is Gradio's business.
-        # CHANGED(SHIP-15): was built in this process, where other test modules replace `gradio` with a stub in
-        # sys.modules ("'_Comp' object is not subscriptable" in CI); now a fresh interpreter with the real Gradio.
+        # Built in a fresh interpreter with the real Gradio: other test modules replace `gradio` with a stub in
+        # sys.modules ("'_Comp' object is not subscriptable" in CI).
         import subprocess
         code = ("import json, coal_app.ui as ui; d = ui.build(); f = getattr(d, 'get_api_info', None); "
                 "print(json.dumps(None if f is None else "
@@ -215,9 +215,9 @@ class TestStdioMcpServer(_PrivateRuns):
         names = sorted(t.name for t in asyncio.run(s.list_tools()))
         self.assertEqual(names, ["codon_align", "explain_report"])
         res = asyncio.run(s.call_tool("explain_report", {"report_path": core.SAMPLE_REPORT}))
-        self.assertIn("Homo_COX1", res.content[0].text)  # APP-15
+        self.assertIn("Homo_COX1", res.content[0].text)
 
-    def test_schemas_errors_and_version(self):  # IMP-M-1
+    def test_schemas_errors_and_version(self):
         from coal import __version__
         from coal_app import mcp_stdio
         from mcp.server.mcpserver.exceptions import ToolError
@@ -244,7 +244,7 @@ class TestStdioMcpServer(_PrivateRuns):
 def stdio_handshake(cmd, extra_calls=()):
     """Talk to an MCP stdio server as Claude Code / Desktop do: initialize, list tools, call explain_report on the
     sample report and on a missing file, plus extra_calls ((id, name, arguments), ...). Returns {id: reply}.
-    CHANGED(SHIP-18): was inline in TestStdioMcpHandshake; now shared with the frozen COAL.exe check."""
+    Shared by TestStdioMcpHandshake and the frozen COAL.exe check."""
     import subprocess
     import threading
     msgs = [
@@ -255,7 +255,7 @@ def stdio_handshake(cmd, extra_calls=()):
         {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
         {"jsonrpc": "2.0", "id": 3, "method": "tools/call",
          "params": {"name": "explain_report", "arguments": {"report_path": core.SAMPLE_REPORT}}},
-        {"jsonrpc": "2.0", "id": 4, "method": "tools/call",  # IMP-M-1: a real failure is isError
+        {"jsonrpc": "2.0", "id": 4, "method": "tools/call",  # a real failure is isError
          "params": {"name": "explain_report", "arguments": {"report_path": "/no/such/report.json"}}},
     ] + [{"jsonrpc": "2.0", "id": i, "method": "tools/call", "params": {"name": n, "arguments": a}}
          for i, n, a in extra_calls]
@@ -311,15 +311,15 @@ FIX = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
 
 @unittest.skipUnless(has_mcp() or REQUIRE_MCP, "mcp not installed (pip install -e .[mcp] or .[gui])")
 class TestStdioMcpHandshake(_PrivateRuns, _HandshakeChecks):
-    """APP-16: talk to `python -m coal_app --mcp` over real stdio, as Claude Code / Desktop do.
-    CHANGED(SHIP-18): runs on mcp 1.x too (was mcp 2 only), so the gui job and the Windows build test it."""
+    """Talk to `python -m coal_app --mcp` over real stdio, as Claude Code / Desktop do. Runs on mcp 1.x and 2.x,
+    so the gui job and the Windows build test it."""
 
     def test_initialize_list_and_call_over_stdio(self):
         replies = stdio_handshake([sys.executable, "-m", "coal_app", "--mcp"])
         self.check_common(replies)
         if has_mcp2():
             from coal import __version__
-            self.assertEqual(replies[1]["result"]["serverInfo"]["version"], __version__)  # IMP-M-1: was empty
+            self.assertEqual(replies[1]["result"]["serverInfo"]["version"], __version__)  # not empty
 
 
 @unittest.skipUnless(os.environ.get("COAL_SMOKE_EXE"), "set COAL_SMOKE_EXE to the frozen COAL.exe (desktop\\build.ps1)")

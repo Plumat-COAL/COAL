@@ -1,4 +1,5 @@
-"""FIN-*: last review round (methods text, genetic-code hint, viewer, commands, MCP options)."""
+"""App: the methods text, the genetic-code hint, the viewer, the closest PAL2NAL command, MCP options, release links
+and CI hygiene."""
 import os
 import random
 import re
@@ -60,7 +61,7 @@ def _randomise(i):
     return f
 
 
-class TestFinC1MethodsText(Case):  # FIN-C1 / FIN-A2
+class TestFinC1MethodsText(Case):
     def test_suspect_gene_is_written_not_excluded(self):
         r = self.run_app(*self.variant(dna=_randomise(2)))
         self.assertEqual(r.report["summary"]["failed"], 1)
@@ -102,7 +103,7 @@ class TestFinC1MethodsText(Case):  # FIN-C1 / FIN-A2
         m = core.methods_text(r.report)
         self.assertIn("1 contained codons that did not match the aligned amino acid", m)
 
-    def test_proper_names_keep_their_capitals(self):  # FIN-C11
+    def test_proper_names_keep_their_capitals(self):
         rep = core.load_sample_report()
         for n, frag in ((22, "Scenedesmus obliquus mitochondrial genetic code"),
                         (23, "Thraustochytrium mitochondrial genetic code"),
@@ -129,15 +130,15 @@ def _hint(r):
     return next((h for h in r.hints if h.get("code") == "genetic_code"), None)
 
 
-class TestFinA1GeneticCodeHint(Case):  # FIN-A1 / FIN-C4 / FIN-C5 / FIN-C6 / FIN-C9
-    def test_pairing_only_warnings_get_no_code_hint(self):  # FIN-A1
+class TestFinA1GeneticCodeHint(Case):
+    def test_pairing_only_warnings_get_no_code_hint(self):
         def ren(recs):
             recs[2][0], recs[4][0] = "geneX3", "geneX5"
             return recs
         r = self.run_app(*self.variant(dna=ren), probe=True)
         self.assertIsNone(_hint(r), r.hints)
 
-    def test_hint_counts_what_was_tested(self):  # FIN-C4: gene08 uses AGA for Arg, a stop in code 2
+    def test_hint_counts_what_was_tested(self):  # gene08 uses AGA for Arg, a stop in code 2
         def mito(g, i, c):  # read as vertebrate mitochondrial (code 2) genes
             return {"TGG": "TGA", "AGA": "CGT", "AGG": "CGT", "ATA": "ATT"}.get(c, "ATA" if c == "ATG" and i else c)
         tga = _recode(mito, genes=range(7))
@@ -148,9 +149,9 @@ class TestFinA1GeneticCodeHint(Case):  # FIN-A1 / FIN-C4 / FIN-C5 / FIN-C6 / FIN
         self.assertEqual(h["suggested_codontable"], 2)
         self.assertNotIn("All", h["text"])
         self.assertIn("7 of 8 sequences match their protein", h["text"])
-        self.assertNotIn("compared with", h["text"])  # FIN-C5
+        self.assertNotIn("compared with", h["text"])
 
-    def test_mito_example_wording(self):  # FIN-C5
+    def test_mito_example_wording(self):
         p, d = core.example_paths("mito")
         r = self.run_app(p, d, probe=True)
         h = _hint(r)
@@ -158,7 +159,7 @@ class TestFinA1GeneticCodeHint(Case):  # FIN-A1 / FIN-C4 / FIN-C5 / FIN-C6 / FIN
         self.assertIn("Under genetic code 2 (Vertebrate mitochondrial), all 24 sequences match their protein; "
                       "under code 1, none do.", h["text"])
 
-    def test_alternative_start_codon_prefers_the_closest_code(self):  # FIN-C6
+    def test_alternative_start_codon_prefers_the_closest_code(self):
         ata = _recode(lambda g, i, c: "ATA" if i == 0 else c, genes={1, 4})
         r = self.run_app(*self.variant(dna=ata), probe=True)
         h = _hint(r)
@@ -167,7 +168,7 @@ class TestFinA1GeneticCodeHint(Case):  # FIN-A1 / FIN-C4 / FIN-C5 / FIN-C6 / FIN
         self.assertIn("start codon", h["text"])
         self.assertNotIn("Mycoplasma", h["text"].split(" Codes")[0].split(" Other")[0])
 
-    def test_frameshift_near_the_end_is_not_a_code_problem(self):  # FIN-C9
+    def test_frameshift_near_the_end_is_not_a_code_problem(self):
         def fs(recs):
             s = recs[2][1]
             k = len(s) - 3 * 6  # delete one base 5 codons before the stop
@@ -183,7 +184,7 @@ class TestFinA1GeneticCodeHint(Case):  # FIN-A1 / FIN-C4 / FIN-C5 / FIN-C6 / FIN
         self.assertIsNone(_hint(r), r.hints)
 
 
-class TestFinA4ViewerOtherFormats(Case):  # FIN-A4
+class TestFinA4ViewerOtherFormats(Case):
     def test_paml_and_codon_output_are_drawn(self):
         from coal_app import viewer
         for fmt in ("paml", "codon", "clustal"):
@@ -202,7 +203,7 @@ class TestFinA4ViewerOtherFormats(Case):  # FIN-A4
                          "a.paml: not FASTA")
 
 
-class TestFinA7ViewerNote(Case):  # FIN-A7
+class TestFinA7ViewerNote(Case):
     def test_wide_frameshift_column_is_not_called_nogap(self):
         from coal_app import viewer
 
@@ -221,7 +222,7 @@ class TestFinA7ViewerNote(Case):  # FIN-A7
         self.assertNotIn("-nogap or -nomismatch", frag)
 
 
-class TestFinA5ClosestPal2nalCommand(Case):  # FIN-A5 / FIN-C8
+class TestFinA5ClosestPal2nalCommand(Case):
     def test_label_and_caveats(self):
         text = core.commands_text("coal a b -o x", "pal2nal.pl a b -output fasta > x", {"codontable": 1})
         self.assertIn("# Closest PAL2NAL v14 command", text)
@@ -243,11 +244,11 @@ class TestFinA5ClosestPal2nalCommand(Case):  # FIN-A5 / FIN-C8
         self.assertNotIn("equivalent command lines", tools.codon_align.__doc__)
 
 
-class TestFinA6StrictAndBlockonly(Case):  # FIN-A6
+class TestFinA6StrictAndBlockonly(Case):
     def test_strict_refuses_a_probably_wrong_gene(self):
         p, d = self.variant(dna=_randomise(2))
-        # CHANGED(MRG-3): the engine has --keep-going since the merge, and the app passes it by default: --strict then
-        # leaves the refused gene out (exit 2) instead of stopping the run; keep_going=False stops it as before
+        # the app passes --keep-going by default: --strict then leaves the refused gene out (exit 2) instead of
+        # stopping the run; keep_going=False stops it
         r = core.run_coal(p, d, out_dir=os.path.join(self.d, "s0"), probe_codes=False, strict=True)
         with open(r.output_path) as fh:
             self.assertNotIn(">gene03", fh.read())
@@ -279,7 +280,7 @@ class TestFinA6StrictAndBlockonly(Case):  # FIN-A6
         self.assertIn("blockonly", sig.parameters)
         p, d = self.variant(dna=_randomise(2))
         r = tools.codon_align(p, d, strict=True)
-        # CHANGED(MRG-3): the tool keeps going (the app's default): the refused gene is left out and reported
+        # the tool keeps going (the app's default): the refused gene is left out and reported
         self.assertTrue(r["completed"])
         self.assertTrue(any(pr.get("id") == "gene03" for pr in r["problems"]), r["problems"])
         self.assertEqual(r["summary"]["failed"], 1)
@@ -288,10 +289,10 @@ class TestFinA6StrictAndBlockonly(Case):  # FIN-A6
         self.assertTrue(any("strict" in pr["explanation"] for pr in r["problems"]))
 
 
-class TestFinC7NotCheckedWording(Case):  # FIN-C7
+class TestFinC7NotCheckedWording(Case):
     def test_genes_before_and_after_the_error(self):
         p, d = core.example_paths("one_broken_gene")
-        r = self.run_app(p, d, keep_going=False)  # CHANGED(MRG-3): a stopped run (the app keeps going by default)
+        r = self.run_app(p, d, keep_going=False)  # a stopped run (the app keeps going by default)
         seqs = {x["id"]: x for x in r.report["sequences"]}
         before = core.sequence_sentence(seqs["OG0001_sp01"])
         after = core.sequence_sentence(seqs["OG0001_sp20"])
@@ -303,10 +304,10 @@ class TestFinC7NotCheckedWording(Case):  # FIN-C7
         self.assertEqual(r.report["summary"]["not_checked"], 19)
 
 
-class TestFinC12C13MessyIds(Case):  # FIN-C12 / FIN-C13
+class TestFinC12C13MessyIds(Case):
     def test_order_pairing_is_named_as_the_cause(self):
         p, d = core.example_paths("messy_ids")
-        # CHANGED(MRG-1): messy_ids now aligns (its IDs match after normalising, so COAL pairs by them); the same
+        # messy_ids aligns (its IDs match after normalising, so COAL pairs by them); the same
         # genes with DNA IDs that match nothing, in the same (shuffled) order, are paired by order and fail
         recs = _read_fasta(d)
         for k, rec in enumerate(recs):
@@ -317,10 +318,8 @@ class TestFinC12C13MessyIds(Case):  # FIN-C12 / FIN-C13
         g = next(x for x in r.report["sequences"] if x["status"] == "failed")
         text = core.sequence_sentence(g)
         self.assertNotIn("truncated", text)
-        # CHANGED(ENG-UX-18/ENG-UX-19): the sentence said "by their order" only through the engine's break location,
-        # which here was false ("The DNA ends before the protein does (at column 120)" for another gene's DNA) and is
-        # no longer claimed; the engine's own failure message now names the order pairing instead.
-        # See overnight/integration/CHANGES.md
+        # the engine's own failure message names the order pairing; no break location is claimed (one would be false
+        # here, e.g. "The DNA ends before the protein does (at column 120)" for another gene's DNA)
         self.assertIn("paired by file order with DNA 'x", " ".join(m.get("text", "") for m in g["messages"]))
         hint = next(h for h in r.hints if h["code"] == "id_mismatch")["text"]
         self.assertNotIn("use a COAL version", hint)
@@ -338,9 +337,9 @@ def _load_script(name):
     return m
 
 
-class TestFinA9NoReleaseYet(unittest.TestCase):  # FIN-A9
+class TestFinA9NoReleaseYet(unittest.TestCase):
     def test_downloads_replaced_when_no_release(self):
-        # CHANGED(WEB-13): every page with release links (index.html and install.html), was index.html only
+        # every page with release links (index.html and install.html)
         m = _load_script("site_without_release")
         with_links = []
         for name in sorted(os.listdir(os.path.join(ROOT, "site"))):
@@ -364,7 +363,7 @@ class TestFinA9NoReleaseYet(unittest.TestCase):  # FIN-A9
         with open(os.path.join(ROOT, "site", "index.html"), encoding="utf-8") as fh:
             self.assertIn('pip install "coal[gui] @ git+https://github.com/plumat-coal/COAL"', m.rewrite(fh.read()))
 
-    def test_script_rewrites_every_page_given(self):  # WEB-13
+    def test_script_rewrites_every_page_given(self):
         import shutil
         import tempfile
         m = _load_script("site_without_release")
@@ -390,13 +389,13 @@ class TestFinA9NoReleaseYet(unittest.TestCase):  # FIN-A9
         with open(os.path.join(ROOT, ".github", "workflows", "pages.yml"), encoding="utf-8") as fh:
             wf = fh.read()
         self.assertIn("gh release view", wf)
-        self.assertIn("scripts/site_without_release.py _site/*.html", wf)  # CHANGED(WEB-13): was _site/index.html
+        self.assertIn("scripts/site_without_release.py _site/*.html", wf)  # every page
         self.assertIn("GH_TOKEN: ${{ github.token }}", wf)
         with open(os.path.join(ROOT, "site", "README.md"), encoding="utf-8") as fh:
             self.assertIn("before merging to `main`", fh.read())
 
 
-class TestFinA10CiHygiene(unittest.TestCase):  # FIN-A10
+class TestFinA10CiHygiene(unittest.TestCase):
     def test_ci_permissions_and_pinned_actions(self):
         with open(os.path.join(ROOT, ".github", "workflows", "ci.yml"), encoding="utf-8") as fh:
             ci = fh.read()
@@ -411,7 +410,7 @@ class TestFinA10CiHygiene(unittest.TestCase):  # FIN-A10
             self.assertEqual(u, rel.get(u.split("@")[0], u), "not the SHA release.yml uses")
 
 
-class TestFinA8InstallerText(unittest.TestCase):  # FIN-A8
+class TestFinA8InstallerText(unittest.TestCase):
     def test_open_with_text_is_current(self):
         with open(os.path.join(ROOT, "desktop", "installer.iss"), encoding="utf-8") as fh:
             iss = fh.read()

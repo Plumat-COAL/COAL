@@ -68,7 +68,7 @@ void install_signal_handlers() {
     std::signal(SIGHUP, on_signal);
 #endif
 #ifdef SIGPIPE
-    std::signal(SIGPIPE, SIG_IGN);  // a closed stdout pipe makes writes fail with EPIPE: exit 141 (DEC-3)
+    std::signal(SIGPIPE, SIG_IGN);  // a closed stdout pipe makes writes fail with EPIPE: exit 141
 #endif
 }
 
@@ -100,7 +100,7 @@ std::vector<std::string> spool_inputs(const std::vector<std::string>& args,
             out.push_back(a);
             continue;
         }
-        // CHANGED(ENG-UX-4): was Python's "[Errno N] ...: '<path>'"; now "cannot open '<path>': <reason>"
+        // "cannot open '<path>': <reason>"
         if (fs::is_directory(a, ec)) throw InputError(open_error(a), "file_error");
         std::ifstream src(a, std::ios::binary);
         if (!src) throw InputError(open_error(a), "file_error");
@@ -161,7 +161,7 @@ OutTarget resolve_output(const std::string& out) {
     OutTarget t;
     t.real = real_path(out);
     std::error_code ec;
-    // CHANGED(ENG-UX-12): -o naming a folder failed only at the very end ("cannot write od: Is a directory")
+    // -o naming a folder is refused here, before any work
     if (fs::is_directory(t.real, ec))
         throw CoalError("cannot write " + out + ": it is a folder, not a file (give a file name with -o)", "file_error");
     t.existing = fs::is_regular_file(t.real, ec);
@@ -190,8 +190,8 @@ OutTarget resolve_output(const std::string& out) {
     return t;
 }
 
-// CHANGED(ENG-UX-12): as pipeline.py _output_error: ENOENT in a folder that exists is not "does not exist",
-// permission denied says what to do, no -o names the temp folder. See overnight/integration/CHANGES.md
+// As pipeline.py _output_error: ENOENT in a folder that exists is not "does not exist", permission denied says
+// what to do, no -o names the temp folder.
 std::string output_error(const std::string& out, int err) {
     std::error_code ec;
     std::string folder = out.empty() ? fs::temp_directory_path(ec).string()

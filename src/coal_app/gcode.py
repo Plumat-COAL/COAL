@@ -16,7 +16,7 @@ _RAW = {
          "---M------**--*----M---------------M----------------------------"),
     2:  ("FFLLSSSSYY**CCWWLLLLPPPPHHQQRRRRIIMMTTTTNNKKSS**VVVVAAAADDEEGGGG",
          "----------**--------------------MMMM----------**---M------------"),
-    # CHANGED(INT-1): was no GTG start in table 3; now ATA/ATG/GTG, matching the engine's ENG-g fix. See overnight/integration/CHANGES.md
+    # starts ATA/ATG/GTG, matching the engine
     3:  ("FFLLSSSSYY**CCWWTTTTPPPPHHQQRRRRIIMMTTTTNNKKSSRRVVVVAAAADDEEGGGG",
          "----------**----------------------MM---------------M------------"),
     4:  ("FFLLSSSSYY**CCWWLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG",
@@ -74,7 +74,6 @@ def expand(codon: str) -> tuple[str, ...]:
     return tuple("".join(x) for x in product(*(IUPAC[b] for b in c)))
 
 
-# CHANGED(APP-5): was 'X' for any ambiguous codon; now the residue when every IUPAC expansion agrees. See overnight/app/CHANGES.md
 def translate(codon: str, number: int = 1) -> str:
     """Amino acid for a codon. An ambiguous codon (IUPAC, e.g. GCN) gives its amino acid only if every
     codon it stands for gives the same one (the engine's rule), else 'X'. Non-IUPAC characters give 'X'."""

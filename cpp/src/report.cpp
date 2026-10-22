@@ -1,4 +1,4 @@
-// CPP-27: mirrors src/coal/report.py of the merged engine (MRG-2, MRG-2b). See report.hpp.
+// Mirrors src/coal/report.py. See report.hpp.
 #include "report.hpp"
 
 #include <algorithm>
@@ -16,12 +16,12 @@ namespace coal {
 static const char* VERSION = "0.4.2";
 static const char* SCHEMA = "coal.report/1";
 static const char* REPO_URL = "https://github.com/plumat-coal/COAL";
-// CHANGED(IMP-E-D): the hint re-tests at most 50 sequences (was 200) and drops a code as soon as it cannot fit as many
-// as the best so far; break locations still for up to 200 failed genes (report.py HINT_SAMPLE, BREAK_SAMPLE)
+// The hint re-tests at most 50 sequences and drops a code as soon as it cannot fit as many as the best so far;
+// break locations are found for up to 200 failed genes (report.py HINT_SAMPLE, BREAK_SAMPLE)
 static const int HINT_SAMPLE = 50;
 static const int BREAK_SAMPLE = 200;
 
-static std::string code_name(int t) {  // CODE_NAMES (names inside a sentence, FIN-C11)
+static std::string code_name(int t) {  // CODE_NAMES (names inside a sentence)
     switch (t) {
         case 1: return "standard";
         case 2: return "vertebrate mitochondrial";
@@ -476,9 +476,9 @@ static bool aa_ok(char aa, const std::string& dna, long long pos, const GeneticC
     return (mask & ~ok) == 0;
 }
 
-// CHANGED(ENG-UX-19): as report.py break_event: the earliest credible start, a shift must hold for the next 20
+// As report.py break_event: the earliest credible start, a shift must hold for the next 20
 // residues and may include a lost / extra codon (+-4, +-5), "at" vs "near" column, "the DNA ends" only after a
-// credible walk. See overnight/integration/CHANGES.md
+// credible walk.
 static bool break_event(const std::string& row, const std::string& raw_dna, int table, Json& ev) {
     const GeneticCode& code = *get_code(table);
     std::string dna;
@@ -609,7 +609,7 @@ static bool break_event(const std::string& row, const std::string& raw_dna, int 
 
 // ------------------------------------------------------------------ genetic-code search (report.py search_codes)
 
-// CHANGED(IMP-E-B): one gene fits a code: it threads, with no definite (A/C/G/T) mismatch and no suspect notice
+// One gene fits a code: it threads, with no definite (A/C/G/T) mismatch and no suspect notice
 static bool gene_fits(const HintGene& g, const GeneticCode& gc) {
     Threaded it;
     try {
@@ -626,7 +626,7 @@ static bool gene_fits(const HintGene& g, const GeneticCode& gc) {
     return true;
 }
 
-// CHANGED(IMP-E-D, IMP-E-B): the hint's search, shared by the end-of-run hint and the early notice; a code is dropped
+// The hint's search, shared by the end-of-run hint and the early notice; a code is dropped
 // as soon as it can no longer fit as many genes as the best so far (same result as testing all). tied empty = none.
 // memo: (sequence, code) -> fits, shared by the early notice and the end-of-run hint
 static CodeSearch search_codes(const std::vector<long long>& tested, const std::vector<long long>& problems,
@@ -675,7 +675,7 @@ static CodeSearch search_codes(const std::vector<long long>& tested, const std::
     std::stable_sort(out.tied.begin(), out.tied.end(), [&](int a, int b) {
         return std::make_pair(code_distance(table, a), a) < std::make_pair(code_distance(table, b), b);
     });
-    // CHANGED(PRE-4): the standard code 1 first when it is among the tied codes (as report.py)
+    // The standard code 1 first when it is among the tied codes (as report.py)
     out.standard = out.tied.size() > 1 && std::find(out.tied.begin(), out.tied.end(), 1) != out.tied.end();
     if (out.standard) {
         out.tied.erase(std::find(out.tied.begin(), out.tied.end(), 1));
@@ -688,7 +688,7 @@ static std::string do_(long long k) {
     return k == 0 ? std::string("none do") : k == 1 ? std::string("only 1 does") : std::to_string(k) + " do";
 }
 
-// CHANGED(IMP-E-B): new (report.py early_code_notice): the suggestion said before the per-codon warnings, from the
+// As report.py early_code_notice: the suggestion said before the per-codon warnings, from the
 // first HINT_SAMPLE genes. Empty: no code does better.
 std::string early_code_notice(const RowsFn& rows, const DnaFn& dna, int table, long long total, FitMemo& memo) {
     std::map<long long, HintGene> data;
@@ -823,7 +823,7 @@ const Json* RunReport::add_sequence(long long k, const std::string& pid, const s
         std::string d = has_d ? dna_id((size_t)k) : "";
         bool mispaired = pairing_ == "order" && partial_ && has_d && d != pid;
         if (mispaired) {
-            if (!paired_set_built_) {  // CPP-33: was a linear search per sequence (quadratic)
+            if (!paired_set_built_) {
                 for (size_t i = 0; i < pair_idx_.size(); ++i) paired_set_.insert(dna_id(i));
                 paired_set_built_ = true;
             }
@@ -997,7 +997,7 @@ void RunReport::finish(const RowsFn& rows, const DnaFn& dna, bool aborted) {
     try {
         finish_impl(rows, dna, aborted);
     } catch (const std::exception& e) {
-        // extras must never hide the real result. CHANGED(IMP-E-G): COAL_DEBUG=1 says what failed (report.py)
+        // extras must never hide the real result. COAL_DEBUG=1 says what failed (report.py)
         if (std::getenv("COAL_DEBUG"))
             std::fprintf(stderr, "coal: debug: the report's finish step failed (the run goes on): %s\n", e.what());
     } catch (...) {
@@ -1036,8 +1036,8 @@ void RunReport::finish_impl(const RowsFn& rows, const DnaFn& dna, bool aborted) 
             return k + 1 < n;
         });
     }
-    if (!want_hint) return;  // CHANGED(IMP-E-D): -q without --report/--json never shows it
-    // CPP-32: one entry view at a time (keeping all n of them took ~1.1 KB per sequence: 114 MB at 100,000);
+    if (!want_hint) return;  // -q without --report/--json never shows it
+    // One entry view at a time (keeping all n of them took ~1.1 KB per sequence: 114 MB at 100,000);
     // a clean sequence of a run that was not aborted is never fixable, so its view is not even built
     std::map<long long, Json> pview;  // the problem entries' views (for the start-codon text below)
     std::vector<long long> problems;
@@ -1114,7 +1114,7 @@ void RunReport::finish_impl(const RowsFn& rows, const DnaFn& dna, bool aborted) 
                  : closer ? "as well, but code " + C + " differs least from code " + T + "."
                           : std::string("these sequences too: choose the code of the organism and organelle the genes come from."));
     }
-    // CHANGED(ENG-UX-7): the summary line names the option; the report keeps the app's text (report.py)
+    // The summary line names the option; the report keeps the app's text (report.py)
     gc_hint_cli_ = text + " Re-run with -codontable " + C + ".";
     text += " Re-run with code " + C + "?";
     gc_hint_ = Json::object();
@@ -1208,7 +1208,7 @@ std::vector<std::string> RunReport::summary_lines() const {
         std::string fate = nomismatch_ ? "removed by -nomismatch" : "kept in the alignment";
         std::string s = fmt_n(k) + " of " + fmt_n(n) + " sequences " + (k == 1 ? "has" : "have") +
                         " codons that do not match their amino acid (" + fate + ").";
-        if (has_gc_hint_) s += " " + gc_hint_cli_;  // CHANGED(ENG-UX-7)
+        if (has_gc_hint_) s += " " + gc_hint_cli_;
         lines.push_back(s);
     }
     k = nomismatch_ ? 0 : kc['u'];
@@ -1254,7 +1254,7 @@ std::vector<std::string> RunReport::summary_lines() const {
             lines.push_back(seqs((long long)ex.size()) + " of " + fmt_n(n) + " could not be converted" + left + " (first: " +
                             fid + ": " + why + "." + (where.empty() ? "" : " " + where) + ")" + gc);
         } else {
-            // CHANGED(ENG-UX-2, ENG-UX-5): where the gene breaks without repeating the error, then what to do (report.py)
+            // Where the gene breaks without repeating the error, then what to do (report.py)
             if (!where.empty()) lines.push_back(fid + ": " + where + gc);
             else if (!gc.empty()) lines.push_back(gc.substr(1));
             long long left = c["not_checked"];
@@ -1265,7 +1265,7 @@ std::vector<std::string> RunReport::summary_lines() const {
             lines.push_back(s);
         }
     }
-    // CHANGED(ENG-UX-5): a run-level error is no longer repeated as "The run failed: ..." (report.py)
+    // A run-level error is not repeated as "The run failed: ..." (report.py)
     if (pairing_ == "normalised") {
         long long kk = 0, j = -1;
         for (size_t i = 0; i < seq_pairing_.size(); ++i)
@@ -1358,7 +1358,7 @@ std::string RunReport::methods_text(const Json& rep) const {
         if (o->type == Json::Object) paths.push_back(sget(*o, "path"));
     for (auto& p : paths) {
         if (p.empty()) continue;
-        // SHIP-2: mirror report.py; replace the quoted full path first (Windows paths are always quoted)
+        // As report.py: replace the quoted full path first (Windows paths are always quoted)
         std::string q = shlex_quote(p);
         if (q != p) cmd = replace_all(cmd, q, shlex_quote(basename_of(p)));
         cmd = replace_all(cmd, p, basename_of(p));
@@ -1366,7 +1366,7 @@ std::string RunReport::methods_text(const Json& rep) const {
     if (!cmd.empty()) parts.push_back("Command: " + cmd);
     std::string out;
     for (size_t i = 0; i < parts.size(); ++i) out += (i ? " " : "") + parts[i];
-    if (tot && 2 * ok < tot)  // CHANGED(ENG-UX-9): a note to fix the warnings first (report.py)
+    if (tot && 2 * ok < tot)  // a note to fix the warnings first (report.py)
         out = "Fix the warnings first: only " + std::to_string(ok) + " of " + std::to_string(tot) +
               " sequences matched their protein exactly, so this alignment is probably not ready to use (see the hints "
               "and the messages for each sequence). Methods text for this run as it stands: " + out;

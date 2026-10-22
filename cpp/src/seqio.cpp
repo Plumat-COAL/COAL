@@ -7,8 +7,7 @@
 
 namespace coal {
 
-// CHANGED(ENG-UX-11): plain-words reader messages, as src/coal/seqio.py (were e.g. "sequence data before first '>'
-// header", "non-ASCII character", "non-ASCII sequence ID"). See overnight/integration/CHANGES.md
+// Plain-words reader messages, as src/coal/seqio.py.
 const char* const NON_ASCII =
     "non-ASCII character: sequence files must be plain text (is this a binary or word-processor file?)";
 const char* const NON_ASCII_ID =
@@ -24,8 +23,6 @@ std::string duplicate_message(const std::string& where, const std::string& rid) 
     return where + ": duplicate sequence ID " + py_repr(rid) + ": every sequence needs its own ID";
 }
 
-// CHANGED(ENG-UX-4): was "[Errno 2] No such file or directory: '<path>'" for every input that could not be opened
-// (also for a folder or a file without read permission). See overnight/integration/CHANGES.md
 std::string open_error(const std::string& path) {
     std::error_code ec;
     std::string why;
@@ -84,8 +81,8 @@ static size_t uni_space(const std::string& s, size_t i) {
 }
 
 // Text inputs must be ASCII (a UTF-8 BOM is skipped): "<file>:<line>: non-ASCII character", as the reference
-// engine (ENG-h / R2-E6). CPP-12 (reference FZ-2): a header's description (after the ID) may hold any text: the
-// line becomes ">ID"; a non-ASCII ID is "<file>:<line>: non-ASCII character in the sequence ID".
+// engine. A header's description (after the ID) may hold any text: the line becomes ">ID"; a non-ASCII ID is
+// "<file>:<line>: non-ASCII character in the sequence ID".
 static void check_ascii(std::string& s, const std::string& path, long long lineno) {
     bool ascii = true;
     for (unsigned char c : s)
@@ -164,7 +161,7 @@ bool LineReader::next(std::string& line) {
 
 static bool blank(const std::string& s);
 
-// CPP-12 (reference FZ-1): the first non-blank line starts with CLUSTAL (was: the first line).
+// The first non-blank line starts with CLUSTAL.
 bool is_clustal(const std::string& path) {
     LineReader lr(path);
     std::string line;
@@ -202,11 +199,11 @@ ProteinReader::ProteinReader(const std::string& path) : path_(path) {
         std::vector<std::string> order;
         std::unordered_map<std::string, std::string> seqs;
         while (lr.next(line)) {
-            // CPP-12 (reference FZ-1): '#' mark lines and repeated CLUSTAL header lines are skipped too
+            // '#' mark lines and repeated CLUSTAL header lines are skipped too
             if (blank(line) || line[0] == ' ' || line[0] == '\t' || line[0] == '#' || line.compare(0, 7, "CLUSTAL") == 0)
                 continue;
             auto parts = split_ws(line);
-            if (parts.size() < 2)  // CHANGED(ENG-UX-11): + line number and what a block line holds
+            if (parts.size() < 2)
                 throw InputError(path + ":" + std::to_string(lr.lineno()) + ": malformed CLUSTAL line " + py_repr(line) +
                                  ": each line of a block must hold a sequence name, then (after spaces) its aligned "
                                  "sequence");
@@ -271,7 +268,7 @@ bool ProteinReader::next(std::string& id, std::string& row) {
     return in_rec;
 }
 
-// CPP-13 (reference DEC-4 clustal_mask): PAL2NAL's '#' mark line, one character per alignment column. After
+// As clustal_mask in the reference: PAL2NAL's '#' mark line, one character per alignment column. After
 // each sequence line, the next line that is not a sequence line is padded with spaces to that sequence line's
 // length and the part under its sequence is appended. A block whose last sequence line ends the file adds nothing.
 std::string clustal_mask(const std::string& path) {

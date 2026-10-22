@@ -5,9 +5,7 @@
 tests/fixtures/** text eol=lf
 tests/golden/** text eol=lf
 tests/cases.json text eol=lf
-# CHANGED(R3-D1): was examples/** checked out with CRLF on Windows (text=auto), so their sha256 differed from
-# src/coal_app/sample_report.json and the bundled examples were not byte-stable; now LF everywhere.
-# See overnight/integration/CHANGES.md
+# Examples are LF everywhere so their sha256 matches src/coal_app/sample_report.json on every OS.
 examples/** text eol=lf
-# CHANGED(IMP-M-2): Windows batch files need CRLF (cmd mis-reads labels in LF-only files)
+# Windows batch files need CRLF (cmd mis-reads labels in LF-only files)
 *.bat text eol=crlf

@@ -1,15 +1,14 @@
 """Automatic use of the C++ engine (coal-cpp) for large inputs.
 
-CHANGED(IMP-E-A): new. `coal` (the command, `python -m coal`, `COAL.exe -m coal`) hands a run to coal-cpp when
+`coal` (the command, `python -m coal`, `COAL.exe -m coal`) hands a run to coal-cpp when
   * COAL_ENGINE is unset or "auto", every option given is one coal-cpp has (all of them today), every input is a
-    regular file and the inputs hold at least CPP_MIN_BYTES bytes together (the crossover measured in
-    overnight/integration/CHANGES.md, IMP-E-A, with a margin for slower process start-up on Windows), and
+    regular file and the inputs hold at least CPP_MIN_BYTES bytes together (the measured crossover, with a margin
+    for slower process start-up on Windows), and
   * a coal-cpp is found (find_cpp) whose `--version` is this package's version.
 COAL_ENGINE=python never uses it; COAL_ENGINE=cpp always does (error if it is not found or does not run).
 Output, stderr, the run report and the exit code are the same either way (tests/test_imp_engine.py). If coal-cpp
 cannot be started, the run goes on in Python after one `coal: notice:` line. Only the command line dispatches:
 `coal.cli.main(argv)` called from Python (the `pal2nal` drop-in, tests) always runs the Python engine.
-See overnight/integration/CHANGES.md
 """
 from __future__ import annotations
 

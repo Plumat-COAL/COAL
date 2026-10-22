@@ -1,7 +1,7 @@
 """Compare the engine's run report (coal --report) with the app's fallback report (src/coal_app/core.py, built from
 the engine's stderr: build_fallback_report + mismatch_probe + locate_breaks + id_hints + genetic_code_hint).
 
-CHANGED(MRG-2): new (merge reconciliation item 2). Run:  python tests/report_vs_app.py   (prints every difference)
+Run:  python tests/report_vs_app.py   (prints every difference)
 Used by tests/test_merge.py. Needs src/coal_app (skips without it). Every engine call has a timeout (the app's).
 """
 from __future__ import annotations
@@ -25,7 +25,7 @@ OPTION_SETS = [
     {"codontable": 13},
     {"codontable": 2, "nomismatch": True},
 ]
-# What may legitimately differ, and why (each documented in overnight/integration/CHANGES.md, MRG-2):
+# What may legitimately differ, and why:
 #   hints "engine_warning"/"nomismatch_unknown": stderr-parsing artefacts of the fallback (the engine knows)
 #   genetic_code hint: the engine tests every gene and all 17 codes (the fallback: 9 codes on the problem genes)
 #   "not_checked": the fallback marks every gene of an aborted run "not checked"; the engine only those it never
@@ -55,7 +55,7 @@ def run_both(app, protein, dna, opts, work):
         feats = app.Features(report=has_report, **base)
         d = os.path.join(work, kind)
         os.makedirs(d, exist_ok=True)
-        # CHANGED(IMP-E-C): `coal` now prints at most 20 per-codon warnings by default; the fallback (no --report)
+        # `coal` prints at most 20 per-codon warnings by default; the fallback (no --report)
         # reads them all from stderr, as it did when there was no cap
         cmd = app._coal_cmd() + (["--max-warnings", "0"] if not has_report else [])
         with mock.patch.object(app, "detect_features", lambda: feats), mock.patch.object(app, "_coal_cmd", lambda: cmd):
@@ -76,7 +76,7 @@ def _fits(protein, dna, table, nogap=False) -> int:
     """Genes that COAL aligns with no definite mismatch under `table` (an independent check of a hint)."""
     import subprocess
     from coal.report import is_ambiguous_codon
-    r = subprocess.run([sys.executable, "-m", "coal", "--keep-going", "--max-warnings", "0",  # CHANGED(IMP-E-C)
+    r = subprocess.run([sys.executable, "-m", "coal", "--keep-going", "--max-warnings", "0",  # every warning (default cap: 20)
                         "-codontable", str(table), "--", str(protein),
                         str(dna)], capture_output=True, text=True, timeout=120)
     from coal_app.core import read_ids
@@ -93,7 +93,7 @@ def _fits(protein, dna, table, nogap=False) -> int:
 
 
 def differences(res, protein=None, dna=None, table=1) -> list[str]:
-    """Differences between the two reports, except the documented ones (MRG-2, MRG-1):
+    """Differences between the two reports, except the documented ones:
     pairing: the fallback assumes order pairing; the engine pairs by normalised IDs where order would mispair;
     genetic-code hint: accepted when the engine's suggestion really fits more genes than the code used (checked by
     running it) and the fallback's suggestion, if any, fits no more genes than the engine's."""
@@ -143,7 +143,7 @@ def differences(res, protein=None, dna=None, table=1) -> list[str]:
             diffs.append(f"genetic-code hint {ga} != {ge}")
     if bool(a.get("output")) != bool(e.get("output")):
         diffs.append(f"output {a.get('output')} != {e.get('output')}")
-    # CHANGED(ENG-UX-9): the engine puts a "fix the warnings first" note before the methods text when fewer than half
+    # the engine puts a "fix the warnings first" note before the methods text when fewer than half
     # the genes are OK; the app's fallback text (built from stderr) has no such note. Compare the text after it.
     from coal.report import AS_IT_STANDS, NOT_READY
     if me and me.startswith(NOT_READY) and not (ma or "").startswith(NOT_READY):

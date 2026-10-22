@@ -1,6 +1,6 @@
 """User settings of the COAL app: the defaults a user sets once (genetic code, output format, options, preview size).
 
-CHANGED(GUI-9): new file. See overnight/integration/CHANGES.md and docs/ui-principles.md.
+See docs/ui-principles.md.
 
 Where they live:
 - running locally (``python -m coal_app`` or the desktop app): one small JSON file in the user's config folder,
@@ -32,7 +32,7 @@ PREVIEW_SIZES: dict[str, tuple[int, int, int]] = {
     "standard": (100, 1000, 60_000),
     "large": (200, 2000, 200_000),
 }
-# CHANGED(GUI-13): shorter; the radio's label says what the numbers are ("sequences × columns")
+# short: the radio's label says what the numbers are ("sequences × columns")
 PREVIEW_LABELS = {
     "small": "Small: 40 × 400",
     "standard": "Standard: 100 × 1,000",

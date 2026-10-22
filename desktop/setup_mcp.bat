@@ -3,7 +3,6 @@ rem Set up COAL's MCP server for Claude (Claude Code or Claude Desktop), from a 
 rem Creates .venv-mcp in the repo folder (separate from the GUI's .venv-gui: the two extras conflict),
 rem installs COAL with the mcp extra, checks it imports, and prints what to register with Claude.
 rem Run it again any time: it repairs a half-finished install and prints the registration again.
-rem CHANGED(IMP-M-2): new. See overnight/integration/CHANGES.md
 setlocal EnableExtensions
 cd /d "%~dp0.." || goto :fail
 set "VENV=%CD%\.venv-mcp"

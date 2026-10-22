@@ -1,5 +1,5 @@
-"""Pre-release fixes found by running the app in real Gradio 5.49.1 (PRE-1..PRE-3).
-See overnight/integration/CHANGES.md. Runs without Gradio (the stub of test_round3): the click sequences are
+"""Issues found by running the app in real Gradio 5.49.1: examples set their own settings, the accordion icon, long
+warning groups and the genetic-code fix. Runs without Gradio (the stub of test_round3): the click sequences are
 replayed through the recorded event wiring, so what is tested is what the buttons are wired to do."""
 import os
 import re
@@ -99,7 +99,7 @@ class TestPre1ExamplesSetTheirSettings(UiCase):
         pg.fire(self.hint_btn)  # "Re-run with genetic code 2"
         self.assertEqual(pg.get(self.code), 2)
         self.assertIn("All 24 genes match codon for codon", pg.get(self.banner))
-        pg.fire(self.ex["one_broken_gene"])  # ran with code 2 before PRE-1 (19 warnings, tip for code 4)
+        pg.fire(self.ex["one_broken_gene"])  # must not keep code 2 from the previous run (19 warnings, tip for code 4)
         self.assertEqual(pg.get(self.code), 1)
         banner, table = pg.get(self.banner), pg.get(self.table)
         self.assertIn("19 of 20 genes aligned", banner)
@@ -167,8 +167,8 @@ class TestPre3LongGroups(unittest.TestCase):
         cls.tmp = tempfile.mkdtemp(prefix="coal_pre3_")
         p, d = core.example_paths("mito")
         cls.report = core.run_coal(p, d, "fasta", 1, False, False, out_dir=cls.tmp).report
-        # CHANGED(AMB-4): with its genetic-code hint this run's warnings are one closed row (TestAmb4CodeFix); the
-        # grouping of PRE-3 is for runs without such a hint, so the hint is left out here
+        # with its genetic-code hint this run's warnings are one closed row (TestAmb4CodeFix); the grouping tested
+        # here is for runs without such a hint, so the hint is left out
         cls.report = dict(cls.report, hints=[])
 
     @classmethod

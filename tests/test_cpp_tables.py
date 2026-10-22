@@ -1,7 +1,7 @@
-"""C++ genetic code tables == the reviewed Python tables (CPP-3).
+"""C++ genetic code tables == the reviewed Python tables.
 
-Reference: src/coal/tables.py on origin/keanu_overnight/integration (checked against NCBI: 64/64 codons
-and every start set; table 3 includes GTG), read with `git show` or from COAL_REF_TABLES. The C++
+Reference: src/coal/tables.py (checked against NCBI: 64/64 codons and every start set; table 3 includes GTG),
+from COAL_REF_TABLES, this repo's src/coal, or REF_BRANCH via `git show`. The C++
 tables come from `coal-cpp-dump tables`. Every supported code must have the same 64 amino acids (NCBI
 codon order TCAG) and exactly the same start codons, and the set of codes must be the same.
 """

@@ -17,12 +17,6 @@ COAL's own options (``--strict``, ``-j``, ``-o`` ...) are not accepted here; use
 Differences from PAL2NAL: the exit code is non-zero on errors (PAL2NAL always exits 0): 1 for a usage error or
 bad input (``coal`` itself uses 2 for a usage error), 130 / 141 / 143 as for ``coal``.
 """
-# CHANGED(REV-1): the help text above no longer carries change notes (users saw them in `pal2nal --help`); they are kept
-# here. CHANGED(FIN-C3): was "byte for byte" for all well-formed input. FIN-E3: PAL2NAL v14's argument parsing.
-# CHANGED(R2-A10): was "(COAL's -q)", which implied a silent stderr. CHANGED(DEC-2): was "COAL's notices about
-# probably-wrong data ... still go to standard error". CHANGED(FIN-E3): exit 1 for usage errors documented.
-# CHANGED(DEC-4): was "the default output format is PAL2NAL's (clustal), so when this COAL can only write FASTA you
-# must pass -output fasta". See overnight/integration/CHANGES.md
 from __future__ import annotations
 
 import re
@@ -30,14 +24,12 @@ import sys
 
 USAGE = __doc__
 
-FLAG_OPTS = {"-nogap", "-nomismatch", "-blockonly"}  # CHANGED(DEC-4): -blockonly was rejected as unsupported
+FLAG_OPTS = {"-nogap", "-nomismatch", "-blockonly"}
 UNSUPPORTED = {
-    # CHANGED(APP-C2): was "use -output fasta or clustal" (clustal is not supported yet); now only what works
-    # CHANGED(DEC-4): wording; all four formats are supported now
     "-html": ("-html (PAL2NAL's web-server mode: HTML with <pre> and coloured mismatches on standard output) is not "
               "supported by COAL; leave it out to get PAL2NAL's plain output."),
 }
-QUIET_OPTS = {"-nostderr"}  # CHANGED(APP-C2): was rejected as unknown; now mapped to coal -q
+QUIET_OPTS = {"-nostderr"}  # mapped to coal -q
 FORMATS = ("clustal", "paml", "fasta", "codon")
 
 
@@ -58,12 +50,12 @@ def _perl_number(v: str) -> float:
 def translate(argv: list[str], supported_formats=FORMATS) -> list[str]:
     """Turn PAL2NAL arguments into ``coal`` arguments (raises UsageError).
 
-    CHANGED(FIN-E3): was strict (a dangling -output / -codontable, "-codontable 1.0", "-codontable 2x" and
-    "-codontable -nogap" were errors, PAL2NAL v14 runs them). Now the command line is read as PAL2NAL v14 reads it
-    (observed by running it): -output takes the next argument whatever it is; after -codontable the flags -h,
-    -output, -nogap, -nomismatch, -blockonly and -codontable are still read as options and the next other argument
-    is the table, compared as a Perl number (leading numeric part: "1.0" = 1, "2x" = "+2" = "2e0" = 2; "2.5" and
-    "0x2" are invalid); a value never given leaves the default. See overnight/integration/CHANGES.md"""
+    The command line is read as PAL2NAL v14 reads it (observed by running it), not strictly: a dangling -output /
+    -codontable, "-codontable 1.0", "-codontable 2x" and "-codontable -nogap" all run in PAL2NAL v14. -output takes
+    the next argument whatever it is; after -codontable the flags -h, -output, -nogap, -nomismatch, -blockonly and
+    -codontable are still read as options and the next other argument is the table, compared as a Perl number
+    (leading numeric part: "1.0" = 1, "2x" = "+2" = "2e0" = 2; "2.5" and "0x2" are invalid); a value never given
+    leaves the default."""
     files: list[str] = []
     fmt = "clustal"  # PAL2NAL's default
     table = None
@@ -119,22 +111,20 @@ def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     import signal
     from coal.cli import _on_sigterm
-    signal.signal(signal.SIGTERM, _on_sigterm)  # CHANGED(R2-A4): SIGTERM before the engine starts -> exit 143 too
+    signal.signal(signal.SIGTERM, _on_sigterm)  # SIGTERM before the engine starts -> exit 143 too
     if not argv or argv[0] in ("-h", "-help", "--help"):
         print(USAGE)
         return 0
-    # CHANGED(DEC-4): was detect_features() (a `python -m coal --help` subprocess) to find the formats; the engine
-    # runs in this process (R2-A4), so its own list is used. See overnight/integration/CHANGES.md
+    # The engine runs in this process, so its own list of formats is used.
     from coal.pipeline import FORMATS as ENGINE_FORMATS
     try:
         coal_args = translate(argv, ENGINE_FORMATS)
     except UsageError as e:
         print(f"pal2nal (COAL): error: {e}", file=sys.stderr)
         return 1
-    # CHANGED(R2-A4): was subprocess.call(python -m coal ...): Ctrl-C gave a traceback and exit -2, SIGTERM
-    # stopped only this wrapper (the engine kept running and writing), and the engine's workers and temp
-    # files were orphaned. Now the engine runs in this process, so its own signal handling applies
-    # (Ctrl-C -> "coal: interrupted", 130; SIGTERM -> cleanup, 143). See overnight/integration/CHANGES.md
+    # The engine runs in this process (not as a subprocess, which a SIGTERM to this wrapper would orphan, with its
+    # workers and temp files), so its own signal handling applies (Ctrl-C -> "coal: interrupted", 130;
+    # SIGTERM -> cleanup, 143).
     from coal.cli import main as coal_main
-    # CHANGED(IMP-E-C): `coal` now prints at most 20 per-codon warnings by default; PAL2NAL prints them all
+    # `coal` prints at most 20 per-codon warnings by default; PAL2NAL prints them all
     return coal_main(["--max-warnings", "0", *coal_args])

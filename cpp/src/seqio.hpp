@@ -22,11 +22,11 @@ struct InputError : std::runtime_error {
 // Python's repr() of an ID string ('abc', or "it's").
 std::string py_repr(const std::string& s);
 
-// ENG-UX-4: "cannot open '<path>': no such file" (or: permission denied, it is a folder, or strerror), as
+// "cannot open '<path>': no such file" (or: permission denied, it is a folder, or strerror), as
 // open_error_message in src/coal/seqio.py, for an input that cannot be opened.
 std::string open_error(const std::string& path);
 
-// ENG-UX-11: the reader messages (src/coal/seqio.py NON_ASCII, NON_ASCII_ID, EMPTY_HEADER, BEFORE_HEADER_*).
+// The reader messages (src/coal/seqio.py NON_ASCII, NON_ASCII_ID, EMPTY_HEADER, BEFORE_HEADER_*).
 extern const char* const NON_ASCII;
 extern const char* const NON_ASCII_ID;
 extern const char* const EMPTY_HEADER;

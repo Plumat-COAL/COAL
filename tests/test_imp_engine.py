@@ -1,4 +1,5 @@
-"""Improvement list, engine and command line (IMP-E-*, overnight/integration/CHANGES.md).
+"""Engine and command line: logged finish errors, inert test hooks, acceptance sets, genetic-code hints, the same
+stderr from both engines, the warning cap, help groups and automatic coal-cpp dispatch.
 
 Run:  python -m unittest tests.test_imp_engine   (C++ checks need COAL_CPP_BIN or ./build/coal-cpp; else skipped)
 """
@@ -280,14 +281,14 @@ class TestHelpGroups(unittest.TestCase):
         for g in ("Core:", "PAL2NAL options:", "Large runs:", "Reporting:"):
             self.assertIn("\n" + g + "\n", h)
         self.assertLess(len(h.splitlines()), 60)
-        # the app reads the formats here (coal_app.core.detect_features). CHANGED(SHIP-17): was an exact 3.13 line;
-        # Python <= 3.12 prints "-output {...}, --output-format {...}", so the check now uses the app's own pattern.
+        # the app reads the formats here (coal_app.core.detect_features). Python <= 3.12 prints
+        # "-output {...}, --output-format {...}", so the check uses the app's own pattern.
         m = re.search(r"-output(?:,\s*--[\w-]+)?\s+\{([\w,]+)\}", h)
         self.assertIsNotNone(m, h)
         self.assertEqual(m.group(1), "fasta,clustal,paml,codon")
 
     @unittest.skipIf(cpp_binary() is None, "coal-cpp not built")
-    # CHANGED(SHIP-17): coal-cpp's help mirrors Python 3.13's argparse layout ("-j, --jobs N"); 3.12 and older print
+    # coal-cpp's help mirrors Python 3.13's argparse layout ("-j, --jobs N"); 3.12 and older print
     # "-j N, --jobs N", so the line-for-line comparison only holds on 3.13+ (CI's cpp job). Spellings are checked below.
     @unittest.skipIf(sys.version_info < (3, 13), "help layout differs before Python 3.13")
     def test_cpp_help_and_spellings(self):

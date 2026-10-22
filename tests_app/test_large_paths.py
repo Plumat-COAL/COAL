@@ -85,7 +85,7 @@ class TestLargeInputByPath(unittest.TestCase):
             self.assertEqual(out[sid], "".join(want), sid)
         self.assertEqual(len(out), 22000)
 
-    def test_gui_rendering_is_fast_and_small(self):  # R2-A3
+    def test_gui_rendering_is_fast_and_small(self):
         import tracemalloc
         out_dir = tempfile.mkdtemp(prefix="coal_test_render_")
         self.addCleanup(shutil.rmtree, out_dir, True)
@@ -102,12 +102,10 @@ class TestLargeInputByPath(unittest.TestCase):
         self.assertLess(elapsed, 20.0)  # ~5 s here under tracemalloc; was ~46 s without it
         self.assertLess(peak, 500_000_000)
         self.assertTrue(os.path.isfile(page_path))
-        # CHANGED(GUI-10): was "showing the first 200 of 22000 sequences"; now an explicit preview (default size
-        # 200 here: render_run without limits keeps the old caps)
+        # an explicit preview (default size 200 here: render_run without limits keeps the old caps)
         self.assertIn("Preview: 200 of 22,000 sequences", frag)
         self.assertLess(len(table), 300_000)
-        # CHANGED(GUI-4): was "21,800 more sequences" (200 OK rows + a summary row); OK genes are now one collapsed
-        # row naming the first core.HEALTH_OK_NAMES of them
+        # OK genes are one collapsed row naming the first core.HEALTH_OK_NAMES of them
         self.assertIn("All 22,000 genes match codon for codon", table)
         self.assertIn(f"and {22000 - core.HEALTH_OK_NAMES:,} more", table)
 

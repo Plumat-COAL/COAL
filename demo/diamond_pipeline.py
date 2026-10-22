@@ -156,8 +156,7 @@ def _score(a, b):
     return _B62[_IDX.get(a, 22)][_IDX.get(b, 22)]
 
 
-# CHANGED(APP-10): was 6 full n x m matrices of Python ints (3000 x 3000: 1.25 GB); now 2 score rows + byte
-# tracebacks, and --max-length default 5000 -> 2000. See overnight/app/CHANGES.md
+# Memory: 2 score rows + byte tracebacks, not full n x m matrices of Python ints (3000 x 3000 would be ~1.25 GB).
 def needleman_wunsch(s: str, t: str, gap_open: int = 11, gap_extend: int = 1) -> tuple[str, str]:
     """Global alignment, BLOSUM62, affine gaps (Gotoh: a gap of length k costs open + (k-1)*extend).
     Returns the two gapped rows.
@@ -310,7 +309,7 @@ def main(argv=None) -> int:
         aligned.append((x, y, ra, rb))
     if skipped:
         print(f"skipped {len(skipped)} pairs longer than --max-length {a.max_length}")
-    # CHANGED(APP-9): was a ValueError traceback when every pair was skipped; now a clear error, exit 1. See overnight/app/CHANGES.md
+    # Every pair skipped: a clear error, exit 1.
     if not aligned:
         print(f"error: all {len(pairs)} reciprocal-best-hit pairs have a protein longer than --max-length "
               f"{a.max_length}, so nothing was aligned. Raise --max-length (slower) and run again.",
@@ -320,10 +319,9 @@ def main(argv=None) -> int:
     # one batch: every pair padded with trailing gaps to the same length, unique IDs per row
     h = coal_help()
     stderr_log = []
-    # CHANGED(R2-A5): was one COAL run for all pairs; without --keep-going one bad CDS (or one pair with more
-    # than half the codons mismatching, ENG-c) gave exit 1 and 0 of N pairs written. Now the pair COAL names in
-    # its error is dropped (and reported) and the rest re-run; after MAX_DROPS drops the remaining pairs are run
-    # one at a time. See overnight/integration/CHANGES.md
+    # One bad CDS (or one pair with more than half the codons mismatching) must not lose every pair: the pair
+    # COAL names in its error is dropped (and reported) and the rest re-run; after MAX_DROPS drops the remaining
+    # pairs are run one at a time.
     todo = list(aligned)
     codon, dropped, rc_worst = {}, [], 0
     drops = 0
@@ -335,18 +333,17 @@ def main(argv=None) -> int:
                 ids = (f"{a.a_name}__{item[0]}", f"{a.b_name}__{item[1]}")
                 if isinstance(res, dict) and all(i in res for i in ids):
                     codon.update(res)
-                elif isinstance(res, dict):  # CHANGED(MRG-7): one side skipped by --keep-going
+                elif isinstance(res, dict):  # one side skipped by --keep-going
                     dropped.append((item[0], item[1], skip_reason(stderr_log[-1], ids)))
                 else:
-                    dropped.append((item[0], item[1], drop_reason(res[1])))  # CHANGED(R3-A3): was all of stderr
+                    dropped.append((item[0], item[1], drop_reason(res[1])))
             todo = []
             break
         res = run_batch(todo, a, h, "batch", stderr_log, cds)
         if isinstance(res, dict):
             codon.update(res)
-            # CHANGED(MRG-7): was only the A side checked (a B-side CDS skipped by the engine's --keep-going, new
-            # since the merge, silently lost its pair: exit 0, not in dropped_pairs.tsv); now a pair missing either
-            # side is dropped with COAL's error for that sequence. See overnight/integration/CHANGES.md
+            # A pair missing either side (skipped by the engine's --keep-going) is dropped with COAL's error for that
+            # sequence, so it is not silently lost.
             for it in todo:
                 ia, ib = f"{a.a_name}__{it[0]}", f"{a.b_name}__{it[1]}"
                 if ia not in res or ib not in res:
@@ -366,7 +363,7 @@ def main(argv=None) -> int:
         dropped.append((hit[0], hit[1], drop_reason(why)))
         todo.remove(hit)
         drops += 1
-    with open(os.path.join(a.out, "coal.stderr.txt"), "w", encoding="utf-8") as fh:  # CHANGED(APP-18): utf-8
+    with open(os.path.join(a.out, "coal.stderr.txt"), "w", encoding="utf-8") as fh:
         fh.write("".join(stderr_log))
     written = 0
     for x, y, ra, rb in aligned:
@@ -399,7 +396,7 @@ MAX_DROPS = 20
 
 
 def skip_reason(stderr: str, ids) -> str:
-    """CHANGED(MRG-7): new. The engine's --keep-going line for a skipped sequence ('coal: warning: skipped <msg>',
+    """The engine's --keep-going line for a skipped sequence ('coal: warning: skipped <msg>',
     msg = the error COAL prints without --keep-going) as the 'coal: error: <msg>' line drop_reason gives."""
     for ln in stderr.splitlines():
         if ln.startswith("coal: warning: skipped ") and any(ln[len("coal: warning: skipped "):].startswith(i + ":")
@@ -410,8 +407,7 @@ def skip_reason(stderr: str, ids) -> str:
 
 def drop_reason(stderr: str) -> str:
     """One line for dropped_pairs.tsv: COAL's 'coal: error:' line, else its last non-empty line.
-    CHANGED(R3-A3): new; the one-pair-at-a-time branch stored COAL's whole stderr (newlines and warnings made
-    blank / multi-line TSV rows). See overnight/integration/CHANGES.md"""
+    One line, so newlines and warnings in stderr never make blank or multi-line TSV rows."""
     lines = [ln.strip() for ln in stderr.splitlines() if ln.strip()]
     for ln in lines:
         if ln.startswith("coal: error:"):
@@ -438,8 +434,8 @@ def run_batch(items, a, h, tag, stderr_log, cds):
     cmd = [sys.executable, "-m", "coal", "-codontable", str(a.codontable), "-o", batch_out]
     if "--keep-going" in h:
         cmd.append("--keep-going")
-    # CHANGED(DEC-1): new. Was: the engine itself refused pairs with > half the codons mismatching; that is now opt-in
-    # (--strict), and this pipeline drops such pairs, so it asks for it. See overnight/integration/CHANGES.md
+    # The engine refuses pairs with > half the codons mismatching only with --strict; this pipeline drops such
+    # pairs, so it asks for it.
     if "--strict" in h:
         cmd.append("--strict")
     if "--report" in h:
@@ -447,9 +443,8 @@ def run_batch(items, a, h, tag, stderr_log, cds):
     cmd += ["--", batch_pep, batch_cds]
     if tag == "batch":
         print(f"running COAL on {len(pep)} sequences ({len(items)} pairs)")
-    # CHANGED(R3-A4): was subprocess.run(timeout=) (SIGKILL of the engine only: its workers kept running and its
-    # .coal_*.tmp stayed); now the app's run_engine_command (SIGTERM, grace, kill; temp files removed).
-    # See overnight/integration/CHANGES.md
+    # The app's run_engine_command (SIGTERM, grace, kill; temp files removed), not subprocess.run(timeout=), which
+    # kills only the engine: its workers keep running and its .coal_*.tmp files stay.
     from coal_app.core import run_engine_command
     try:
         rc, _, err = run_engine_command(cmd, a.timeout, a.out)

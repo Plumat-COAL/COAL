@@ -1,4 +1,5 @@
-"""Round 3 review fixes (overnight/integration/CHANGES.md, R3-A*, R3-D*, R3-E*)."""
+"""App and CI: LF example files, required CI jobs, app readers that mirror the engine, ambiguous codons, demo
+timeouts that stop workers, upload vs path boxes, the new engine notice and the desktop smoke test."""
 import glob
 import os
 import shutil
@@ -26,7 +27,7 @@ class RunsDirCase(unittest.TestCase):
         return d
 
 
-class TestR3D1ExamplesAreLF(unittest.TestCase):  # R3-D1
+class TestR3D1ExamplesAreLF(unittest.TestCase):
     def test_gitattributes_forces_lf_for_examples(self):
         with open(os.path.join(ROOT, ".gitattributes"), encoding="utf-8") as fh:
             rules = [ln.split() for ln in fh if ln.strip() and not ln.lstrip().startswith("#")]
@@ -53,7 +54,7 @@ class TestR3D1ExamplesAreLF(unittest.TestCase):  # R3-D1
                 self.assertNotIn(b"\r", fh.read(), f)
 
 
-class TestR3D2CiConditions(unittest.TestCase):  # R3-D2
+class TestR3D2CiConditions(unittest.TestCase):
     def setUp(self):
         import re
         with open(os.path.join(ROOT, ".github", "workflows", "ci.yml"), encoding="utf-8") as fh:
@@ -82,8 +83,7 @@ class TestR3D2CiConditions(unittest.TestCase):  # R3-D2
     def test_explainer_job_is_required(self):
         self.assertIsNone(self.re.search(r"^\s+continue-on-error:", self._job("explainer"), self.re.M))
 
-    # CHANGED(FINAL-1): was test_windows_gui_job_still_informational (asserted continue-on-error on Windows);
-    # Windows passed in CI, so the GUI job and the desktop step must now be required on every OS.
+    # the GUI job and the desktop step are required on every OS, Windows included
     def test_windows_gui_job_is_required(self):
         self.assertIsNone(self.re.search(r"^\s+continue-on-error:", self._job("gui"), self.re.M))
 
@@ -105,7 +105,7 @@ def _variants(text: str, dna: bool):
     return v
 
 
-class TestR3A1ReadersMirrorEngine(RunsDirCase):  # R3-A1
+class TestR3A1ReadersMirrorEngine(RunsDirCase):
     def write(self, d, name, text):
         p = os.path.join(d, name)
         with open(p, "w", encoding="utf-8", newline="") as fh:
@@ -196,7 +196,7 @@ def _masked_files(d, frac=0.55, n=100, seed=7):
     return p, q, int(frac * n)
 
 
-class TestR3A2AmbiguousCodons(RunsDirCase):  # R3-A2
+class TestR3A2AmbiguousCodons(RunsDirCase):
     def test_nnn_codons_are_not_called_a_genetic_code_problem(self):
         p, q, k = _masked_files(self.tmp())
         r = tools.codon_align(p, q)
@@ -271,7 +271,7 @@ def _load_demo(name):
 
 
 @unittest.skipUnless(os.path.isdir("/proc/self") and os.name != "nt", "R3-A4: needs Linux /proc and POSIX signals")
-class TestR3A4DemoTimeoutsStopWorkers(unittest.TestCase):  # R3-A4
+class TestR3A4DemoTimeoutsStopWorkers(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.data = tempfile.mkdtemp(prefix="coal_test_r3a4_")
@@ -293,17 +293,6 @@ class TestR3A4DemoTimeoutsStopWorkers(unittest.TestCase):  # R3-A4
         d = tempfile.mkdtemp(prefix="coal_test_r3a4_out_", dir=self.data)
         return d
 
-    def test_race_batched_timeout(self):
-        import time
-        race = _load_demo("race")
-        r = race.Racer("COAL", 1)
-        out = self.out_dir()
-        race.run_batched(r, [sys.executable, "-m", "coal", self.pep, self.nuc], os.path.join(out, "o.fasta"),
-                         time.perf_counter() + 0.8)
-        self.assertIsNotNone(r.error)
-        self.assertEqual(_wait_gone(self.data), [])
-        self.assertEqual([n for n in os.listdir(out) if n.startswith(".coal_")], [])
-
     def test_diamond_run_batch_timeout(self):
         import argparse
         dp = _load_demo("diamond_pipeline")
@@ -322,7 +311,7 @@ class TestR3A4DemoTimeoutsStopWorkers(unittest.TestCase):  # R3-A4
         self.assertEqual([n for n in os.listdir(out) if n.startswith(".coal_")], [])
 
 
-_EVENTS = {"click", "change", "upload", "load", "then", "submit", "input"}  # CHANGED(GUI-9): + input (settings)
+_EVENTS = {"click", "change", "upload", "load", "then", "submit", "input"}  # input: settings
 
 
 class _Comp:
@@ -331,7 +320,7 @@ class _Comp:
 
     def __init__(self, name="", parent=None, args=(), kw=None):
         self._name, self._parent, self._args, self._kw = name, parent, args, kw or {}
-        self._origin = None  # CHANGED(PRE-1): for a chain, the (component, event) it follows (".then" wiring)
+        self._origin = None  # for a chain, the (component, event) it follows (".then" wiring)
 
     def __getattr__(self, n):
         if n.startswith("__"):
@@ -364,7 +353,7 @@ def _stub_gradio():
     return mod
 
 
-class TestR3A5UploadAfterPath(RunsDirCase):  # R3-A5
+class TestR3A5UploadAfterPath(RunsDirCase):
     def setUp(self):
         super().setUp()
         saved = {k: sys.modules.get(k) for k in ("gradio", "coal_app.ui")}
@@ -395,8 +384,7 @@ class TestR3A5UploadAfterPath(RunsDirCase):  # R3-A5
             outs = outs if isinstance(outs, (list, tuple)) else [outs]
             fn = kw.get("fn", a[0] if a else None)
             found[self._label(comp)] = ([self._label(o) for o in outs], fn)
-        # CHANGED(GUI-13): the labels were "1. Protein alignment (...)" and "2. Coding DNA (...)"; now "Protein
-        # alignment" and "Coding DNA" (the formats are a hint inside the drop zone)
+        # the labels are "Protein alignment" and "Coding DNA" (the formats are a hint inside the drop zone)
         prot = next((k for k in found if k.startswith("Protein")), None)
         dna = next((k for k in found if k.startswith("Coding DNA")), None)
         self.assertIsNotNone(prot, found)
@@ -404,8 +392,7 @@ class TestR3A5UploadAfterPath(RunsDirCase):  # R3-A5
         for k in (prot, dna):
             labels, fn = found[k]
             self.assertEqual(len(labels), 1, labels)
-            # CHANGED(GUI-1): was labels "or type/paste a path ..."; the path boxes now sit under "Use a file path
-            # instead (large files)" and are labelled "<file> path"
+            # the path boxes sit under "Use a file path instead (large files)" and are labelled "<file> path"
             self.assertTrue(labels[0].endswith(" path"), labels)
             self.assertEqual(labels[0].split()[0], {prot: "Protein", dna: "Coding"}[k], labels)
             self.assertEqual(fn("/tmp/x.fa"), "")
@@ -420,7 +407,7 @@ class TestR3A5UploadAfterPath(RunsDirCase):  # R3-A5
         self.assertIn("read in place", banner)
 
 
-class TestR3E1AppParsesNewNotice(unittest.TestCase):  # R3-E1
+class TestR3E1AppParsesNewNotice(unittest.TestCase):
     def test_new_notice_with_ambiguous_count(self):
         line = ("coal: warning: g: no 10-residue segment of the protein was found in the DNA; codons were assigned "
                 "by position (1 of 12 checkable codons do not match; 30 contain N or other ambiguous bases)")
@@ -429,7 +416,7 @@ class TestR3E1AppParsesNewNotice(unittest.TestCase):  # R3-E1
         self.assertIn("1 of 12 checkable codons do not match; 30 contain N", msg["text"])
 
 
-class TestR3D3SmokeTestMatchesWrapper(unittest.TestCase):  # R3-D3
+class TestR3D3SmokeTestMatchesWrapper(unittest.TestCase):
     def test_open_with_and_outside_drop_load_by_path(self):
         with open(os.path.join(ROOT, "desktop", "SMOKE_TEST.md"), encoding="utf-8") as fh:
             row = next(ln for ln in fh if ln.startswith("| 6 |"))

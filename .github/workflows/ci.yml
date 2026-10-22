@@ -4,7 +4,6 @@ on:
   push:
   pull_request:
 
-# CHANGED(FIN-A10): new; was the default token permissions. See overnight/integration/CHANGES.md
 permissions:
   contents: read
 
@@ -20,54 +19,46 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python: ["3.10", "3.13"]
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1 (CHANGED(FIN-A10): was @v4)
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0 (CHANGED(FIN-A10): was @v5)
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: ${{ matrix.python }}
-          cache: pip  # CHANGED(IMP-M-5): pip cache, keyed on the files that pin dependencies
+          cache: pip  # keyed on the files that pin dependencies
           cache-dependency-path: |
             pyproject.toml
             desktop/requirements.txt
       - name: Install COAL
         run: python -m pip install -e .
       - name: Engine tests
-        run: python .github/ci_unittest.py discover -s tests  # CHANGED(FINAL-3)
+        run: python .github/ci_unittest.py discover -s tests
       - name: App tests
         env:
           GRADIO_ANALYTICS_ENABLED: "False"
-        run: python .github/ci_unittest.py discover -s tests_app  # CHANGED(FINAL-3)
-      # CHANGED(R2-D11): new; desktop/test_wrapper.py and test_smoke.py never ran in CI. Required on Linux; on
-      # Windows they run for the first time here, so they may not fail the build until a run is green there
-      # (then remove continue-on-error). See overnight/integration/CHANGES.md
-      # CHANGED(R3-D2): was `if: matrix.os != 'macos-latest'` (implicit success(), so skipped whenever App tests
-      # failed); now also runs after a failed earlier step. The job still fails if any test step failed.
-      # See overnight/integration/CHANGES.md
+        run: python .github/ci_unittest.py discover -s tests_app
+      # Runs even after a failed earlier step (the implicit success() would skip it whenever App tests fail).
+      # The job still fails if any test step failed.
       - name: Desktop wrapper tests
-        # CHANGED(FINAL-1): was continue-on-error on Windows (never run there); green on windows-latest in run 39006043852, so now required.
         if: ${{ !cancelled() && matrix.os != 'macos-latest' }}
         working-directory: desktop
         env:
           GRADIO_ANALYTICS_ENABLED: "False"
-        run: python ../.github/ci_unittest.py test_wrapper test_smoke  # CHANGED(FINAL-3): was python -m unittest; failures now also appear as readable annotations
+        run: python ../.github/ci_unittest.py test_wrapper test_smoke  # failures also appear as readable annotations
 
-  # CHANGED(APP-16/APP-C5): was no job installing the extras (GUI and MCP tests always skipped); now one job per
-  # extra, each in its own environment, with COAL_REQUIRE_EXTRAS making the tests fail instead of skip.
+  # One job per extra, each in its own environment, with COAL_REQUIRE_EXTRAS making the tests fail instead of skip.
   gui:
-    # CHANGED(R2-D11): was ubuntu only; now also windows-latest (first run there: allowed to fail until green).
     name: GUI extra (.[gui], real Gradio) on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
-    # CHANGED(FINAL-1): was continue-on-error on windows-latest (never run there); green in run 39006043852, so now required.
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1 (CHANGED(FIN-A10): was @v4)
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0 (CHANGED(FIN-A10): was @v5)
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.13"
-          cache: pip  # IMP-M-5
+          cache: pip
           cache-dependency-path: |
             pyproject.toml
             desktop/requirements.txt
@@ -79,22 +70,22 @@ jobs:
         env:
           GRADIO_ANALYTICS_ENABLED: "False"
           COAL_REQUIRE_EXTRAS: gui
-        run: python .github/ci_unittest.py discover -s tests_app  # CHANGED(FINAL-3)
+        run: python .github/ci_unittest.py discover -s tests_app
 
   pal2nal-fuzz:
-    # CHANGED(DEC-4): new. Differential fuzz against the real PAL2NAL v14 on every push: fetched by
+    # Differential fuzz against the real PAL2NAL v14 on every push: fetched by
     # scripts/fetch_pal2nal.py (official site, else the orthologr copy on GitHub; sha256-checked; PAL2NAL/ is
     # git-ignored and never committed), then tests/fuzz_vs_pal2nal.py (FUZZ_N random cases x 4 output formats,
-    # fixed seed). Fails if the fuzz is skipped. See overnight/integration/CHANGES.md
+    # fixed seed). Fails if the fuzz is skipped.
     name: "Differential fuzz vs the real PAL2NAL v14"
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1 (CHANGED(FIN-A10): was @v4)
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0 (CHANGED(FIN-A10): was @v5)
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.13"
-          cache: pip  # IMP-M-5
+          cache: pip
           cache-dependency-path: |
             pyproject.toml
             desktop/requirements.txt
@@ -118,24 +109,22 @@ jobs:
           fi
 
   explainer:
-    # CHANGED(R2-D11): new; tests_app/test_explainer.py (site/explainer.html in Chromium) always skipped in CI.
-    # CHANGED(R3-D2): was continue-on-error: true (first run); green in run 39001781214, so now required.
-    # See overnight/integration/CHANGES.md
+    # Runs tests_app/test_explainer.py (site/explainer.html in Chromium).
     name: "Explainer page in Chromium (Playwright)"
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw-browsers
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1 (CHANGED(FIN-A10): was @v4)
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0 (CHANGED(FIN-A10): was @v5)
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.13"
-          cache: pip  # IMP-M-5
+          cache: pip
           cache-dependency-path: |
             pyproject.toml
             desktop/requirements.txt
-      # CHANGED(IMP-M-5): the Chromium download is cached (key: the pinned Playwright version)
+      # The Chromium download is cached (key: the pinned Playwright version)
       - name: Cache Playwright browsers
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
@@ -159,11 +148,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1 (CHANGED(FIN-A10): was @v4)
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0 (CHANGED(FIN-A10): was @v5)
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.13"
-          cache: pip  # IMP-M-5
+          cache: pip
           cache-dependency-path: |
             pyproject.toml
             desktop/requirements.txt
@@ -174,7 +163,7 @@ jobs:
       - name: App tests (MCP tests required)
         env:
           COAL_REQUIRE_EXTRAS: mcp
-        run: python .github/ci_unittest.py discover -s tests_app  # CHANGED(FINAL-3)
+        run: python .github/ci_unittest.py discover -s tests_app
 
   extras-together:
     # Informational: can .[gui] and .[mcp] share one environment? (gradio[mcp] 5.x may need mcp 1.x while the
@@ -184,11 +173,11 @@ jobs:
     timeout-minutes: 10
     continue-on-error: true
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1 (CHANGED(FIN-A10): was @v4)
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0 (CHANGED(FIN-A10): was @v5)
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.13"
-          cache: pip  # IMP-M-5
+          cache: pip
           cache-dependency-path: |
             pyproject.toml
             desktop/requirements.txt
@@ -203,8 +192,7 @@ jobs:
           fi
 
   cpp:
-    # CHANGED(SHIP-3): was a job that waited for a cpp/CMakeLists.txt: the C++ engine's CMakeLists.txt is at the
-    # repository root, so this job never built or tested coal-cpp. Now it builds it on all three systems with
+    # Builds the C++ engine (its CMakeLists.txt is at the repository root) on all three systems with
     # warnings as errors and runs every C++ test (goldens with COAL_IMPL=cpp, C++ vs Python, CLI, readers, tables,
     # thread pool); a skipped test fails the job, except tests.test_cpp_cli's live comparison with the Python CLI, which
     # depends on argparse's exact messages and runs only on older 3.10/3.11 builds (it is run by hand there), and the
@@ -217,11 +205,11 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1 (CHANGED(FIN-A10): was @v4)
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0 (CHANGED(FIN-A10): was @v5)
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.13"
-          cache: pip  # IMP-M-5
+          cache: pip
           cache-dependency-path: |
             pyproject.toml
             desktop/requirements.txt
@@ -232,8 +220,8 @@ jobs:
       - name: Require the binary and its comparison tests
         shell: bash
         run: |
-          # CHANGED(R2-D4): was `ls a b | head | grep -q .`, which always failed under bash -eo pipefail (ls exits 2
-          # when one of the two paths is missing); tests_app/test_ci_steps.py runs this script.
+          # Not `ls a b | head | grep -q .`: that always fails under bash -eo pipefail (ls exits 2 when one of the
+          # two paths is missing). tests_app/test_ci_steps.py runs this script.
           [ -x build/coal-cpp ] || [ -f build/Release/coal-cpp.exe ] \
             || { echo "::error::no build/coal-cpp binary was built"; exit 1; }
           test -f tests/test_cpp_vs_python.py \
@@ -257,10 +245,9 @@ jobs:
             echo "::error::C++ tests were skipped, so the C++ engine was not fully exercised"; exit 1
           fi
 
-  # CHANGED(SHIP-9): new. The packaged Windows app (PyInstaller + Inno Setup, desktop\build.ps1) was only ever built
-  # by release.yml, i.e. after a tag; the first real build (v0.4.0) failed twice on unverified pins (SHIP-7, SHIP-8).
-  # Building it on every push to main / keanu_overnight/* catches that before a release, and the installer is kept
-  # as a workflow artifact for testing. See overnight/integration/CHANGES.md
+  # Builds the packaged Windows app (PyInstaller + Inno Setup, desktop\build.ps1) on every push to main or a
+  # keanu_overnight branch, so a broken pin is caught before a release (release.yml builds it only after a tag), and
+  # keeps the installer as a workflow artifact for testing.
   windows-app:
     name: Windows app build (installer + portable)
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/keanu_overnight/'))
@@ -276,7 +263,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.12"
-          cache: pip  # IMP-M-5
+          cache: pip
           cache-dependency-path: |
             pyproject.toml
             desktop/requirements.txt

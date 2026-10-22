@@ -6,7 +6,7 @@ Every `releases/latest/download/...` link would give a 404 until the first GitHu
 .github/workflows/pages.yml runs this on the copy it deploys (never on site/ itself) when `gh release view` finds no
 published release: download links become a "first release coming soon" note, the pip commands install from the
 repository instead, and a short notice goes at the top of the page. Running it twice changes nothing more.
-CHANGED(WEB-13): takes any number of pages (the site is several pages now); a page with no release download link
+Takes any number of pages; a page with no release download link
 (the guide, the cite page, the explainer) is left exactly as it is.
 """
 from __future__ import annotations
@@ -23,9 +23,8 @@ LINK = re.compile(r'<a\b[^>]*href="' + re.escape(REPO) + r'/releases/(?:latest/)
 
 
 def rewrite(html: str) -> str:
-    # CHANGED(WEB-11): links first, keeping their text ("Download source code: first release coming soon"); was the
-    # sdist URL first, which turned the source-code button into a broken href="git+https://..." link.
-    # See overnight/integration/CHANGES.md
+    # Links first, keeping their text ("Download source code: first release coming soon"); rewriting the sdist URL
+    # first would turn the source-code button into a broken href="git+https://..." link.
     html = LINK.sub(lambda m: f'<a class="pending" href="#no-release">{m.group(1)}: {NOTE.lower()}</a>', html)
     html = re.sub(re.escape(REPO) + r"/releases/(?:latest/)?download/coal_src\.tar\.gz", "git+" + REPO, html)
     if 'id="no-release"' not in html:

@@ -1,5 +1,5 @@
 """HTML pieces of the GUI (header, result banner), kept free of Gradio so they can be tested and rendered on
-their own. CHANGED(GUI-1): new file. See overnight/integration/CHANGES.md
+their own.
 
 Colours come from CSS custom properties defined in ui.CSS (light) and re-defined under Gradio's ``.dark`` body
 class (dark), so these fragments follow the app theme. Every status has an icon and a word, never colour alone.
@@ -32,17 +32,15 @@ def mark_svg(size: int = 40) -> str:
 
 
 def header_html(intro: str = "") -> str:
-    """Page header: the COAL mark and the name.
-    CHANGED(GUI-13): was the mark, "COAL codon alignment", a two-line description and the where-the-data-goes note
-    (core.intro_text()). The owner: "just COAL is fine"; the description is gone and the note is in footer_html.
+    """Page header: the COAL mark and the name. The where-the-data-goes note is in footer_html.
     `intro` is accepted and ignored so older callers keep working."""
     return f'<header class="coal-head">{mark_svg(32)}<h1>COAL</h1></header>'
 
 
 def footer_html(intro: str) -> str:
-    """CHANGED(GUI-13): new. The where-the-data-goes note (core.intro_text()), small, at the foot of the page (as
-    Squoosh puts "images never leave your device" below its drop zone, not in its header).
-    CHANGED(POL-1): "" when there is no note (the local app has none now; the hosted Space keeps its note)."""
+    """The where-the-data-goes note (core.intro_text()), small, at the foot of the page (as Squoosh puts
+    "images never leave your device" below its drop zone, not in its header).
+    "" when there is no note (the local app has none; the hosted Space has one)."""
     return f'<p class="coal-foot">{html.escape(intro)}</p>' if intro else ""
 
 
@@ -99,7 +97,7 @@ def _chips(summary: dict) -> str:
 
 def gene_strip(report: dict) -> str:
     """One small tile per gene, in file order (like the tiles of the COAL mark): quiet grey for OK, ember with '!'
-    for a warning, crimson with '✖' for a failure (CHANGED(AMB-1): were amber and ember), dashed for not checked.
+    for a warning, crimson with '✖' for a failure, dashed for not checked.
     Decorative for screen readers (the counts are in the text); each tile's tooltip names the gene."""
     seqs = report.get("sequences") or []
     if not seqs or len(seqs) > STRIP_MAX:
@@ -114,7 +112,7 @@ def gene_strip(report: dict) -> str:
 
 
 def extra_sentence(sentence: str) -> str:
-    """CHANGED(GUI-13): the part of core.summary_sentence that the headline and chips do not already say (the
+    """The part of core.summary_sentence that the headline and chips do not already say (the
     columns removed by -nomismatch); "" when it only repeats the counts ("20 sequences: 19 OK, ...")."""
     m = re.match(r"\d[\d,]* sequences?: [^.]*\.\s*", sentence or "")
     return (sentence or "")[m.end():].strip() if m else (sentence or "").strip()
@@ -123,9 +121,7 @@ def extra_sentence(sentence: str) -> str:
 def run_banner(head: str, report: dict, sentence: str, files: str = "") -> str:
     """Summary banner after a run. head: core.banner_head(...) (markdown '### ✔ Done ...'); sentence:
     core.summary_sentence(report); files: 'Files used: ...'.
-    CHANGED(GUI-13): was a status line ("⚠ Done, with some problems (see the table)") above the headline and the
-    summary sentence ("24 sequences: 0 OK, 24 with warnings, 0 failed.") under the tiles, both repeating the
-    headline and the chips. Now: icon + headline, chips, tiles, then only what is new (columns removed) and the
+    Shows icon + headline, chips, tiles, then only what they do not already say (columns removed) and the
     files line."""
     kind = _kind_of(head)
     icon, cls = _KIND[kind]
@@ -148,7 +144,7 @@ def _code_name(code, names: dict) -> str:
 
 
 def code_fix_banner(fix: dict, report: dict, names: dict | None = None, files: str = "") -> str:
-    """CHANGED(AMB-4): new. The banner when the genetic-code hint explains the run (core.code_fix): it reads as
+    """The banner when the genetic-code hint explains the run (core.code_fix): it reads as
     "the code chosen does not fit these genes; here is the fix", not as a page of warnings. Informational style
     (nothing is broken, the choice of code is), icon + words; no gene tiles, chips only for failed or unchecked
     genes (those are real problems). The re-run button (ui: #coal-hint-rerun, primary) sits under it in the
@@ -181,18 +177,15 @@ def message_banner(kind: str, title: str, text: str = "", text_html: str = "") -
 
 
 def empty_banner() -> str:
-    # CHANGED(GUI-13): was a dashed box "Results appear here: add the two files (or pick an example) and press
-    # Make codon alignment." directly under that button; then one quiet line "Results appear here."
-    # CHANGED(POL-4): nothing. The whole results area (heading, banner, view, methods) stays hidden until there is
+    # Nothing. The whole results area (heading, banner, view, methods) stays hidden until there is
     # something to show (ui.build: #coal-results visible=False, made visible by every result), as Squoosh shows no
     # result panel before an image is opened. The form above already names the next step (the button).
     return ""
 
 
 def sample_banner(report: dict, sentence: str) -> str:
-    """Banner of the demo sample report (core.sample_banner's text, as HTML).
-    CHANGED(GUI-13): was "Demo sample, not your data" + a two-sentence explanation + the counts sentence; now the
-    status line, the headline, chips, tiles and one short line (the tip under the banner says what to do)."""
+    """Banner of the demo sample report (core.sample_banner's text, as HTML): the status line, the headline,
+    chips, tiles and one short line (the tip under the banner says what to do)."""
     s = report.get("summary") or {}
     kind = "warning" if (s.get("failed") or s.get("warning")) else "ok"
     return (

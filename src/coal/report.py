@@ -4,14 +4,13 @@
 The report is built while the pipeline runs and written at the end, also when the run failed, so a person can
 see why.
 
-CHANGED(MRG-2): this module comes from the teammate's branch (--report/--json, summary lines, hints, methods
-text). Its per-sequence messages, statuses, hints and methods text now follow the rules of the reviewed app
-report (src/coal_app/core.py: build_fallback_report, mismatch_probe, id_hints, genetic_code_hint, methods_text,
+Per-sequence messages, statuses, hints and methods text follow the rules of the app report
+(src/coal_app/core.py: build_fallback_report, mismatch_probe, id_hints, genetic_code_hint, methods_text,
 viewer.locate_breaks), computed here from the engine's own results instead of parsed from stderr: the same
-message codes and texts, DEC-1 suspect genes "failed" but written, mismatches counted only for A/C/G/T codons,
+message codes and texts, suspect genes "failed" but written, mismatches counted only for A/C/G/T codons,
 methods text counted by message code, genetic-code hint from real mismatches only and tested on all genes
 (start-codon-only ties prefer code 11), sequences an aborted run never reached "not_checked" while the ones it
-did check keep their status. See overnight/integration/CHANGES.md. teammate's C++ must mirror.
+did check keep their status. The C++ engine mirrors this module (cpp/src/report.cpp).
 """
 from __future__ import annotations
 
@@ -29,15 +28,14 @@ from .codon import IUPAC
 from .tables import SUPPORTED, get_code
 
 SCHEMA = "coal.report/1"
-REPO_URL = "https://github.com/plumat-coal/COAL"  # CHANGED(MRG-2): was github.com/chloe-newt/COAL (WEB-7)
-# CHANGED(IMP-E-D): the genetic-code hint re-tests at most HINT_SAMPLE sequences, problem genes first (was 200, the
-# app's PROBE_SAMPLE; 50 keeps every bundled example whole, so the engine's report still equals the app's), and drops
-# a code as soon as it can no longer fit as many as the best code so far. Break locations are still found for up to
-# BREAK_SAMPLE failed genes. See overnight/integration/CHANGES.md
+REPO_URL = "https://github.com/plumat-coal/COAL"
+# The genetic-code hint re-tests at most HINT_SAMPLE sequences, problem genes first (50 keeps every bundled example
+# whole, so the engine's report equals the app's), and drops a code as soon as it can no longer fit as many as the
+# best code so far. Break locations are found for up to BREAK_SAMPLE failed genes.
 HINT_SAMPLE = 50
 BREAK_SAMPLE = 200
 
-# Names inside a sentence: common words lower case, genus names capitalised as NCBI writes them (FIN-C11)
+# Names inside a sentence: common words lower case, genus names capitalised as NCBI writes them
 CODE_NAMES = {
     1: "standard", 2: "vertebrate mitochondrial", 3: "yeast mitochondrial",
     4: "mold, protozoan and coelenterate mitochondrial and Mycoplasma/Spiroplasma", 5: "invertebrate mitochondrial",
@@ -47,10 +45,10 @@ CODE_NAMES = {
     16: "chlorophycean mitochondrial", 21: "trematode mitochondrial",
     22: "Scenedesmus obliquus mitochondrial", 23: "Thraustochytrium mitochondrial",
 }
-TABLE_NAMES = CODE_NAMES  # the teammate's name for it
+TABLE_NAMES = CODE_NAMES  # alias
 
 SUSPECT_CODES = ("suspect_unrelated", "suspect_position")
-# CHANGED(ENG-UX-9): the start and the end of the note before the methods text of a run with mostly problem genes
+# The start and the end of the note before the methods text of a run with mostly problem genes
 NOT_READY = "Fix the warnings first:"
 AS_IT_STANDS = "Methods text for this run as it stands:"
 # one character per sequence in RunReport.kinds
@@ -93,7 +91,7 @@ def warning_message(w: str, removed: bool = False) -> dict:
         what = AS_X_NAMES.get(aa)
         return {"code": "unknown_aa", "column": int(col), "residue": aa,
                 "text": (f"Column {col}: '{aa}'" + (f" ({what})" if what else "") + " is not one of the 20 standard "
-                         "amino acids, so COAL did not check its codon (any codon accepted).")}  # CHANGED(IMP-E-J)
+                         "amino acids, so COAL did not check its codon (any codon accepted).")}
     return {"code": "warning", "text": f"COAL warning: {w.strip()}"}
 
 
@@ -151,7 +149,7 @@ def gene_kind(entry: dict) -> str:
     return st
 
 
-# CHANGED(MRG-2b): the app's FIN-C4/C5/C6/C7/C9 rules (src/coal_app/core.py real_mismatches, _fixable, _fits_now,
+# The app's rules (src/coal_app/core.py real_mismatches, _fixable, _fits_now,
 # _code_distance, annotate_mismatch_patterns, GENETIC_CODES), so the engine's report says what the app's would.
 APP_CODE_NAMES = {
     1: "Standard (nuclear genes of most organisms)", 2: "Vertebrate mitochondrial", 3: "Yeast mitochondrial",
@@ -242,7 +240,7 @@ def _ok(aa, codon, code, starts, first) -> bool:
     return bool(exp) and all(code.get(c) == aa or (first and aa == "M" and c in starts) for c in exp)
 
 
-SHIFTS = (-1, 1, -2, 2, -4, 4, -5, 5)  # ENG-UX-19: +-4 / +-5 = a frameshift together with a lost or extra codon
+SHIFTS = (-1, 1, -2, 2, -4, 4, -5, 5)  # +-4 / +-5 = a frameshift together with a lost or extra codon
 SHIFT_WORDS = {-1: "one base is missing", -2: "two bases are missing", 1: "there is one extra base",
                2: "there are two extra bases", -4: "four bases are missing", -5: "five bases are missing",
                4: "there are four extra bases", 5: "there are five extra bases"}
@@ -251,13 +249,11 @@ SHIFT_WORDS = {-1: "one base is missing", -2: "two bases are missing", 1: "there
 def break_event(row: str, dna: str, table: int) -> dict | None:
     """The first event of the app viewer's diagnose(): where a failed gene stops matching (frameshift, missing
     DNA, or the column from which the DNA no longer spells the protein). Same algorithm, so the GUI says the same.
-    CHANGED(ENG-UX-19): on real data it named wrong columns (a camelid gene with partial codons at columns 21 and 24:
-    "Frameshift at column 94"; a gene missing its first 2 nt, with a duplicated stretch: "The DNA ends before the
-    protein does (at column 3344)"). Now: the earliest credible start (not the best-scoring one, which can be a
-    duplicated stretch further on); a shift must also hold for the next 20 residues and may include a whole lost or
-    extra codon (+-4, +-5); "at column N" only when the old frame holds up to N and the new one from the next
-    residue, else "near column N"; "the DNA ends" only after a walk where most codons matched (else no location).
-    teammate's C++ mirrors it (cpp/src/report.cpp). See overnight/integration/CHANGES.md"""
+    The earliest credible start (not the best-scoring one, which can be a duplicated stretch further on); a shift
+    must also hold for the next 20 residues and may include a whole lost or extra codon (+-4, +-5); "at column N"
+    only when the old frame holds up to N and the new one from the next residue, else "near column N"; "the DNA
+    ends" only after a walk where most codons matched (else no location).
+    The C++ engine mirrors it (cpp/src/report.cpp)."""
     gc = get_code(table)
     code, starts = gc.code, gc.starts
     dna = re.sub(r"[^A-Za-z]", "", dna).upper().replace("U", "T")
@@ -275,7 +271,7 @@ def break_event(row: str, dna: str, table: int) -> dict | None:
                 score += 1
             elif k + 1 - score > allowed:
                 break
-        if score >= need:  # ENG-UX-19: the earliest credible start
+        if score >= need:  # the earliest credible start
             best = (off, score)
             break
         if score > best[1]:
@@ -293,7 +289,7 @@ def break_event(row: str, dna: str, table: int) -> dict | None:
         col, aa = res[k]
         codon = dna[pos:pos + 3]
         if len(codon) < 3:
-            if k and 5 * matched >= 4 * k:  # ENG-UX-19: only after a credible walk
+            if k and 5 * matched >= 4 * k:  # only after a credible walk
                 return {"code": "missing_dna", "column": col, "text": f"The DNA ends before the protein does (at "
                                                                       f"column {col})."}
             return None
@@ -384,10 +380,10 @@ def search_codes(tested, problems, data, table, memo=None):
     """The genetic-code hint's search: the codes under which most of the `tested` genes fit (data[k] = (id, row,
     DNA)), if better than `table` and fixing at least one of `problems`. Returns (tied codes, best first; the
     standard code is among them and first; how many fit the best; how many fit `table`) or None.
-    CHANGED(IMP-E-D): a code is dropped as soon as it can no longer fit as many genes as the best so far (same result
-    as testing every gene under every code). CHANGED(IMP-E-B): shared by the end-of-run hint and the early notice;
-    memo[(k, code)] keeps each answer, so the end-of-run hint does not redo the early notice's work.
-    teammate's C++ mirrors it (cpp/src/report.cpp search_codes). See overnight/integration/CHANGES.md"""
+    A code is dropped as soon as it can no longer fit as many genes as the best so far (same result as testing every
+    gene under every code). Shared by the end-of-run hint and the early notice; memo[(k, code)] keeps each answer, so
+    the end-of-run hint does not redo the early notice's work. The C++ engine mirrors it (cpp/src/report.cpp
+    search_codes)."""
     nt = len(tested)
 
     def bad_under(c, at_least=0):
@@ -425,9 +421,8 @@ def search_codes(tested, problems, data, table, memo=None):
         return None
     top = max(f for f, _ in results)
     tied = sorted((c for f, c in results if f == top), key=lambda c: (code_distance(table, c)[0], c))
-    # CHANGED(PRE-4): was always the tied code that differs least from the one used (one_broken_gene run with
-    # code 2: "code 4 ... Codes 1, 10, 11, 15, 16 and 6 fit as well"); now the standard code 1 when it is among
-    # them (by far the most common right answer for nuclear genes). See overnight/integration/CHANGES.md
+    # The standard code 1 first when it is among the tied codes (by far the most common right answer for nuclear
+    # genes), else the tied code that differs least from the one used
     standard = 1 in tied and len(tied) > 1
     if standard:
         tied = [1] + [x for x in tied if x != 1]
@@ -439,10 +434,10 @@ def _do(k: int) -> str:
 
 
 def early_code_notice(rows, dna_of, table: int, total: int, memo=None) -> str | None:
-    """CHANGED(IMP-E-B): new. The genetic-code suggestion said before the per-codon warnings: the first HINT_SAMPLE
+    """The genetic-code suggestion said before the per-codon warnings: the first HINT_SAMPLE
     genes (rows: iterable of (id, row) in input order; dna_of(k): the DNA paired with gene k) are tested under
     `table`; if any does not fit, under every other code, as the end-of-run hint does. None if no code does better.
-    teammate's C++ mirrors it (cpp/src/report.cpp early_code_notice). See overnight/integration/CHANGES.md"""
+    The C++ engine mirrors it (cpp/src/report.cpp early_code_notice)."""
     data, problems = {}, []
     for k, (pid, row) in enumerate(rows):
         if k >= HINT_SAMPLE:
@@ -473,8 +468,8 @@ class RunReport:
                  keep_going: bool = False, keep_entries: bool = True, strict: bool = False, blockonly: bool = False,
                  hint: bool = True):
         self.t0 = time.perf_counter()
-        self.want_hint = hint  # CHANGED(IMP-E-D): False (-q without --report/--json): the hint is never shown
-        self.fit_memo: dict = {}  # CHANGED(IMP-E-B): (sequence, code) -> fits, shared with early_code_notice
+        self.want_hint = hint  # False (-q without --report/--json): the hint is never shown
+        self.fit_memo: dict = {}  # (sequence, code) -> fits, shared with early_code_notice
         self.keep_entries = keep_entries
         self.argv = list(argv)
         self.pep, self.nucs, self.out, self.fmt, self.table = pep, list(nucs), out, fmt, table
@@ -499,7 +494,7 @@ class RunReport:
         self.errors: list[dict] = []
         self.output: dict | None = None
         self.gc_hint: dict | None = None
-        self.gc_hint_cli: str | None = None        # the hint as the command line says it (ENG-UX-7)
+        self.gc_hint_cli: str | None = None        # the hint as the command line says it
         self.exit_code = 0
         self.resumed_from: int | None = None
         self._dict = None
@@ -631,8 +626,8 @@ class RunReport:
         try:
             self._finish(rows, dna, pairing, aborted)
         except Exception:  # noqa: BLE001 - extras must never hide the real result
-            # CHANGED(IMP-E-G): was a silent `pass`, which hid bugs in the hint or the report; the run still goes on,
-            # and COAL_DEBUG=1 prints the traceback. See overnight/integration/CHANGES.md
+            # Not a silent `pass`, which would hide bugs in the hint or the report: the run goes on, and COAL_DEBUG=1
+            # prints the traceback.
             if os.environ.get("COAL_DEBUG"):
                 import traceback
                 print("coal: debug: the report's finish step failed (the run goes on):", file=sys.stderr)
@@ -655,7 +650,7 @@ class RunReport:
                             self.entries[k]["messages"].insert(0, ev)
                     if k in marks:
                         annotate_mismatch_pattern(row, self.entries[k])
-        # CHANGED(MRG-2b): the app's FIN-A1/FIN-C4/FIN-C5 hint (src/coal_app/core.py genetic_code_hint), computed here
+        # The app's hint (src/coal_app/core.py genetic_code_hint), computed here
         if not self.want_hint:
             return
         view = [self.entry_view(k, aborted) for k in range(n)]
@@ -706,16 +701,15 @@ class RunReport:
                      + ("as well, but code 1 is the standard code, used by most nuclear genes." if standard else
                         f"as well, but code {c} differs least from code {table}." if closer else
                         "these sequences too: choose the code of the organism and organelle the genes come from."))
-        # CHANGED(ENG-UX-7): the summary line said "Re-run with code 2?" (the app's button wording); on the command line
-        # it now names the option. The report keeps the app's text (the app shows its own button; contract
-        # unchanged). See overnight/integration/CHANGES.md
+        # On the command line the summary line names the option; the report keeps the app's text ("Re-run with code
+        # 2?", the app's button wording).
         self.gc_hint_cli = text + f" Re-run with -codontable {c}."
         text += f" Re-run with code {c}?"
         self.gc_hint = {"code": "genetic_code", "text": text, "suggested_codontable": c,
                         "checked": nt, "fit": top, "fit_current": fits_now}
 
     def entry_view(self, k: int, aborted: bool | None = None) -> dict:
-        """Sequence k as the report shows it. In a run that stopped at an error (no output), as the app's FIN-C7:
+        """Sequence k as the report shows it. In a run that stopped at an error (no output), as the app's:
         genes before the first failed gene are 'not_checked' with a 'not_written' message (and their own messages),
         genes after it 'not_checked' with 'not_reached'; failed genes stay failed."""
         if aborted is None:
@@ -834,14 +828,14 @@ class RunReport:
 
     def summary_lines(self) -> list[str]:
         """Plain-language lines for the end of a run with problems ([] if none).
-        CHANGED(MRG-2): they only sum up what stderr already reported: nothing about mismatches with -nomismatch
-        (ENG-i2: as PAL2NAL, -nomismatch prints no mismatch warnings) and nothing about pairing by order when no
-        ID matched (ENG-d: silent as PAL2NAL); the report holds both."""
+        They only sum up what stderr already reported: nothing about mismatches with -nomismatch (as PAL2NAL,
+        -nomismatch prints no mismatch warnings) and nothing about pairing by order when no ID matched (silent as
+        PAL2NAL); the report holds both."""
         kc = self.kind_counts()
         n = len(self.ids) if self.ids is not None else len(self.kinds)
         ent = self.entries
         lines = []
-        hint = self.gc_hint_cli if self.gc_hint else None  # CHANGED(ENG-UX-7): the command-line wording
+        hint = self.gc_hint_cli if self.gc_hint else None  # the command-line wording
         k = 0 if self.nomismatch else kc.get("m", 0)
         if k:
             fate = "removed by -nomismatch" if self.nomismatch else "kept in the alignment"
@@ -876,10 +870,7 @@ class RunReport:
                 lines.append(f"{_seqs(len(ex))} of {_n(n)} could not be converted{left} (first: {first['id']}: "
                              f"{why}.{where}){gc}")
             else:
-                # CHANGED(ENG-UX-2, ENG-UX-5): was "1 sequence of 20 could not be converted (first: <id>: <the error
-                # just printed>. <where>)" and "The run stopped there: ... no output was written." (no way out named);
-                # now where the gene breaks, without repeating the error, and what to do (--keep-going).
-                # See overnight/integration/CHANGES.md
+                # Where the gene breaks, without repeating the error just printed, and what to do (--keep-going).
                 if where:
                     lines.append(f"{first['id']}: {where}{gc}")
                 elif gc:
@@ -891,8 +882,7 @@ class RunReport:
                 if n > 1:
                     s += " Add --keep-going to write the other sequences and leave this one out."
                 lines.append(s)
-        # CHANGED(ENG-UX-5): a run-level error (e.g. the counts differ) was printed twice: "coal: error: X" and
-        # "coal: summary: The run failed: X" (+ "The run stopped there: ... not checked"); now once, as the error.
+        # A run-level error (e.g. the counts differ) is printed once, as the error, not repeated here.
         if self.pairing == "normalised":
             k = sum(1 for m in (self.seq_pairing or []) if m == "normalised")
             j = next((i for i, m in enumerate(self.seq_pairing or []) if m == "normalised"), None)
@@ -968,8 +958,8 @@ class RunReport:
         for item in list(rep.get("inputs") or []) + [rep.get("output") or {}]:
             pth = item.get("path") if isinstance(item, dict) else None
             if pth:
-                # CHANGED(SHIP-2): the quoted full path is replaced first; on Windows every full path is quoted
-                # (backslashes), and replacing only the folder left 'protein.aln.fasta' in quotes
+                # The quoted full path is replaced first: on Windows every full path is quoted (backslashes), and
+                # replacing only the folder would leave 'protein.aln.fasta' in quotes
                 if shlex.quote(pth) != pth:
                     cmd = cmd.replace(shlex.quote(pth), shlex.quote(os.path.basename(pth)))
                 cmd = cmd.replace(pth, os.path.basename(pth))
@@ -977,9 +967,9 @@ class RunReport:
             parts.append(f"Command: {cmd}")
         text = " ".join(parts)
         if total and 2 * ok < total:
-            # CHANGED(ENG-UX-9): new. A "ready-to-paste" methods text for a run where most genes have problems read as
-            # if the alignment were fine; it now starts with a note to fix the warnings first (the app shows the
-            # report's methods_text as it is). See overnight/integration/CHANGES.md
+            # A "ready-to-paste" methods text for a run where most genes have problems would read as if the
+            # alignment were fine, so it starts with a note to fix the warnings first (the app shows the report's
+            # methods_text as it is).
             text = (f"{NOT_READY} only {ok} of {total} sequences matched their protein exactly, so this alignment is "
                     f"probably not ready to use (see the hints and the messages for each sequence). {AS_IT_STANDS} "
                     + text)

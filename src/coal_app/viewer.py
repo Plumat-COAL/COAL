@@ -47,11 +47,8 @@ LEGEND = [("hy", "Hydrophobic (A V L I M)"), ("ar", "Aromatic (F W Y)"), ("po", 
 # ---------------------------------------------------------------- reading
 
 def read_alignment(path: str, dna: bool = False, want=None) -> list[tuple[str, str]]:
-    """(id, sequence) records from FASTA or CLUSTAL, in file order (dna=True: DNA FASTA rules).
-    CHANGED(R3-A1): was plain UTF-8, first line had to start with '>' or 'CLUSTAL' (a BOM or '#' preamble the
-    engine accepts was "not FASTA or CLUSTAL"); now the engine's rules, via seqformat.
-    See overnight/integration/CHANGES.md
-    CHANGED(GUI-10): want: only these IDs (a set), see seqformat.iter_records."""
+    """(id, sequence) records from FASTA or CLUSTAL, in file order (dna=True: DNA FASTA rules), read by the
+    engine's rules via seqformat. want: only these IDs (a set), see seqformat.iter_records."""
     from .seqformat import read_records
     return read_records(path, dna=dna, want=want)
 
@@ -71,7 +68,7 @@ def row_id(seq_id: str) -> str:
 # ---------------------------------------------------------------- preview: which rows and columns are drawn
 
 def select_rows(ids: list[str], report: dict | None, max_seqs: int, prefer: set | None = None) -> tuple[list[str], dict]:
-    """CHANGED(GUI-10): new; was always the first max_seqs sequences. Which sequences the preview draws, in the
+    """Which sequences the preview draws, in the
     order drawn: all of them in file order when they fit; otherwise every failed and then every warning sequence
     (file order, up to the cap, keeping some room) and then OK ones spread evenly through the file for context.
     prefer: problem sequences to put first of all (those with a problem in the columns the preview is centred on).
@@ -129,8 +126,7 @@ def _ok(aa: str, codon: str, code: dict, starts: frozenset, first: bool) -> bool
     """Does `codon` code for `aa`? IUPAC ambiguity codes count when every expansion does (the engine's rule)."""
     if len(codon) < 3:
         return False
-    # CHANGED(APP-5): was exact codons only and only X accepted; now IUPAC codes (all expansions must fit) and
-    # B Z J O U like X, as the engine does. See overnight/app/CHANGES.md
+    # as the engine does: IUPAC codes are accepted when all expansions fit, and B Z J O U like X
     if aa in "XBZJOU":  # the engine treats B Z J O U as X: any codon is accepted
         return True
     exp = gcode.expand(codon)
@@ -152,7 +148,6 @@ def diagnose(protein_row: str, dna: str, codontable: int = 1) -> dict:
     out: dict = {"cells": {}, "events": [], "matched": 0}
     if not res or len(dna) < 3:
         return out
-    # CHANGED(APP-2): was "first 3 residues must match exactly"; now up to 1 in 4 of the first 12 may mismatch. See overnight/app/CHANGES.md
     # where does the gene start? the leftmost offset where most of the first 12 residues match
     # (mismatches allowed: an alternative start codon or one odd early codon must not hide the gene)
     want = min(len(res), 12)
@@ -221,9 +216,8 @@ def diagnose(protein_row: str, dna: str, codontable: int = 1) -> dict:
             pos += 3 + shifted
             k += 1
             continue
-        # CHANGED(R2-A12): was "the DNA stops matching for good" here (a cluster of TGA/ATA mismatches under the
-        # wrong code made engine-aligned genes "Failed"); now no shift signature = an in-frame mismatch, and a
-        # break is only called below when most of the rest of the gene mismatches. See overnight/integration/CHANGES.md
+        # no shift signature: an in-frame mismatch, not a break (a cluster of TGA/ATA mismatches under the wrong
+        # code must not make the gene "Failed"); a break is only called below when most of the rest mismatches
         out["cells"][col] = (codon, "mismatch")
         pos += 3
         k += 1
@@ -257,7 +251,7 @@ def _call_break(res, out) -> None:
 def _report_marks(report: dict | None, only: set | None = None) -> dict[str, dict]:
     marks: dict[str, dict] = {}
     for s in (report or {}).get("sequences", []):
-        if only is not None and s.get("id") not in only:  # CHANGED(GUI-10): only the sequences drawn
+        if only is not None and s.get("id") not in only:  # only the sequences drawn
             continue
         m = {"status": s.get("status"), "mismatch": set(), "frameshift": set()}
         for msg in s.get("messages") or []:
@@ -288,7 +282,7 @@ def build_rows(protein: list[tuple[str, str]], codon: list[tuple[str, str]] | No
                report: dict | None = None, dna: list[tuple[str, str]] | None = None,
                codontable: int | None = None, widths: list[int] | None = None) -> tuple[list[dict], int, list[str]]:
     """Rows for rendering: [{"id", "status", "cells": [(aa, codon, flag)], "note", "events"}], ncols, notes.
-    CHANGED(GUI-10): widths: nt per column computed from every sequence (view() passes it when only some are
+    widths: nt per column computed from every sequence (view() passes it when only some are
     built); default: from the given rows."""
     if codontable is None:
         codontable = int(((report or {}).get("options") or {}).get("codontable") or 1)
@@ -298,10 +292,9 @@ def build_rows(protein: list[tuple[str, str]], codon: list[tuple[str, str]] | No
     dnad = dict(dna or [])
     notes: list[str] = []
     ncols = max((len(s) for _, s in protein), default=0)
-    # CHANGED(FIN-A7): was "any row length != 3 x columns", so a column widened by a frameshift digit >= 4 looked like
-    # removed columns ("-nogap or -nomismatch" note although neither was used); now the options actually used, or,
-    # without a report, the length expected from the column widths (frameshift digits included).
-    # See overnight/integration/CHANGES.md
+    # removed columns are told from the options actually used, or, without a report, from the length expected from
+    # the column widths (frameshift digits included): "row length != 3 x columns" would misread a column widened by
+    # a frameshift digit >= 4 as removed columns
     if widths is None or len(widths) < ncols:
         widths = _column_widths([row for _, row in protein], ncols)
     opts = (report or {}).get("options") if isinstance((report or {}).get("options"), dict) else None
@@ -325,7 +318,7 @@ def build_rows(protein: list[tuple[str, str]], codon: list[tuple[str, str]] | No
             n = len(crow) // 3 if codon_only else len(prow)
             first_res = True
             bounds = None if codon_only else [0]
-            if bounds is not None:  # FIN-A7: cell i holds widths[i] nt (wider for a frameshift digit >= 4)
+            if bounds is not None:  # cell i holds widths[i] nt (wider for a frameshift digit >= 4)
                 for w in widths[:n]:
                     bounds.append(bounds[-1] + w)
             for i in range(n):
@@ -339,8 +332,6 @@ def build_rows(protein: list[tuple[str, str]], codon: list[tuple[str, str]] | No
                     continue
                 flag = ""
                 if codon_only:
-                    # CHANGED(APP-1): was report columns applied to output columns and aa translated from the
-                    # same codon (self-comparison); now nothing is marked in this mode. See overnight/app/CHANGES.md
                     # report columns are protein-alignment columns and aa comes from this very codon:
                     # nothing here can be checked honestly, so nothing is marked
                     pass
@@ -371,7 +362,6 @@ def build_rows(protein: list[tuple[str, str]], codon: list[tuple[str, str]] | No
                 if d["events"]:
                     r["note"] = d["events"][0]["text"]
                 if r["status"] is None:
-                    # CHANGED(APP-4): was "failed" if events else "ok" (mismatches ignored); now "warning" too
                     flagged = any(f in ("mismatch", "frameshift") for _, _, f in r["cells"])
                     r["status"] = "failed" if d["events"] else ("warning" if flagged else "ok")
             else:
@@ -387,17 +377,13 @@ def build_rows(protein: list[tuple[str, str]], codon: list[tuple[str, str]] | No
 
 # ---------------------------------------------------------------- rendering
 
-# CHANGED(GUI-2): was one light palette with no text colour pinned on headings, cells and links, so in Gradio's dark
-# theme its light text leaked into the white panel (light grey on white, nearly invisible); now every colour is a
-# variable, set for light, for Gradio's dark theme (the ".dark" body class) and, in the downloaded page, for a dark
-# system theme; rules are "div.coalv ..." so they win over Gradio's ".prose ..." styles. Residue tints keep the
-# Okabe-Ito hues (dark versions: text 7.1-10.2:1); outlines, hatching and icon + word statuses unchanged. Text colours
-# are !important: Gradio's own rules for h2/th/td/a/code must not win in either theme.
-# See overnight/integration/CHANGES.md
-# CHANGED(GUI-10): ov* colours of the overview (graphics: problem marks >= 3:1 on the background, WCAG 1.4.11)
-# CHANGED(AMB-1): statuses follow the app (warning ember #D45400 / #FF6A13, was amber; failed crimson #E0284F, was
-# ember) so that none looks like the accent; the jump-target ring and preview edge are the accent (deep gold
-# #8A5A00 on light, amber on dark; light was #E69F00 / #B07A00). Marks keep their shapes (tall / short / hanging).
+# Every colour is a variable, set for light, for Gradio's dark theme (the ".dark" body class) and, in the downloaded
+# page, for a dark system theme; rules are "div.coalv ..." so they win over Gradio's ".prose ..." styles. Residue
+# tints use the Okabe-Ito hues (dark versions: text 7.1-10.2:1). Text colours are !important: Gradio's own rules for
+# h2/th/td/a/code must not win in either theme.
+# ov*: colours of the overview (graphics: problem marks >= 3:1 on the background, WCAG 1.4.11).
+# Statuses follow the app (warning ember #D45400 / #FF6A13, failed crimson #E0284F) so that none looks like the
+# accent; the jump-target ring and preview edge are the accent (deep gold #8A5A00 on light, amber on dark).
 _LIGHT = {"bg": "#ffffff", "fg": "#1a1a1a", "muted": "#5f6b75", "line": "#d5dbe0", "gap": "#6e7780",
           "ovok": "#b8b2ab", "ovwarn": "#D45400", "ovfail": "#E0284F", "ovgap": "#8a939b", "ovprob": "#A83E00",
           "ovbox": "#1a1a1a", "ovun": "#d5d0ca", "prevbg": "#fff6dc", "prevline": "#8A5A00",
@@ -525,14 +511,14 @@ _ICON = {"ok": ("✔", "OK"), "warning": ("⚠", "Warning"), "failed": ("✖", "
          "not_checked": ("–", "Not checked")}
 
 
-ISSUES_OPEN = 8  # CHANGED(GUI-10): problems listed open above the grid; more are under a disclosure
-HIDDEN_ISSUES_MAX = 200  # CHANGED(R2-A3): problems of sequences beyond the drawn rows, listed from the report
+ISSUES_OPEN = 8  # problems listed open above the grid; more are under a disclosure
+HIDDEN_ISSUES_MAX = 200  # problems of sequences beyond the drawn rows, listed from the report
 
 
 def _issues(rows: list[dict], report: dict | None, window: tuple[int, int], drawn: set | None = None,
             preview: bool = False) -> str:
-    """CHANGED(GUI-10): window (first, last) drawn columns, was the count from column 1; problems of sequences not
-    drawn are under a closed "not in the preview" disclosure when the view is a preview."""
+    """window: (first, last) drawn columns. Problems of sequences not drawn are under a closed "not in the
+    preview" disclosure when the view is a preview."""
     c0, c1 = window
     sentences = {}
     hidden = []
@@ -590,11 +576,11 @@ def _issues(rows: list[dict], report: dict | None, window: tuple[int, int], draw
                      f"{'s' if unchecked != 1 else ''} (COAL stopped at an earlier error). In the view below their "
                      f"codons match their amino acids.</li>")
     if not items and not hidden_html:
-        if any(not r.get("checked", True) for r in rows):  # CHANGED(APP-1): no "every codon matches" claim
+        if any(not r.get("checked", True) for r in rows):  # no "every codon matches" claim
             return ('<p class="note">Codons could not be checked against the protein in this view (columns were '
                     'removed).</p>')
         return '<p class="note">✔ Every codon matches its amino acid.</p>'
-    if len(items) > ISSUES_OPEN:  # CHANGED(GUI-10): a long list would push the grid off screen; the rest on demand
+    if len(items) > ISSUES_OPEN:  # a long list would push the grid off screen; the rest on demand
         rest = items[ISSUES_OPEN:]
         return ('<ul class="issues">' + "".join(items[:ISSUES_OPEN]) + "</ul>"
                 f'<details class="hidden-issues"><summary>{len(rest):,} more drawn sequence'
@@ -604,7 +590,7 @@ def _issues(rows: list[dict], report: dict | None, window: tuple[int, int], draw
 
 
 def preview_sentence(shown: int, total: int, window: tuple[int, int], ncols: int, selection: dict | None) -> str:
-    """CHANGED(GUI-10): 'Preview: 100 of 21,800 sequences, problems first, columns 1–1,000 of 12,000.'"""
+    """'Preview: 100 of 21,800 sequences, problems first, columns 1–1,000 of 12,000.'"""
     sel = selection or {}
     if shown >= total:
         rows = f"all {total:,} sequence{'s' if total != 1 else ''}"
@@ -635,8 +621,8 @@ def render_fragment(rows: list[dict], ncols: int, notes: list[str] | None = None
                     overview: str = "", selection: dict | None = None) -> str:
     """HTML fragment (a <style> plus a <div class="coalv">) for embedding in another page.
     total_rows: how many sequences the alignment has when `rows` holds only some (see view()).
-    CHANGED(GUI-10): col_start (first column drawn), max_cells, the overview block (overview.overview_html) and
-    the row selection (select_rows) for the "Preview: ..." line; was "Large alignment: showing the first ..."."""
+    col_start: first column drawn; overview: the overview block (overview.overview_html); selection: the row
+    selection (select_rows) for the "Preview: ..." line."""
     notes = list(notes or [])
     shown_rows = rows[:max_seqs]
     total = max(len(rows), total_rows or 0)
@@ -658,7 +644,7 @@ def render_fragment(rows: list[dict], ncols: int, notes: list[str] | None = None
         out.append(f'<span><span class="sw" style="background:var(--{cls})"></span>{label}</span>')
     out.append('<span><b>≠</b> codon does not match its amino acid (outlined)</span>'
                '<span><b>↯</b> frameshift (double outline, hatched)</span>'
-               '<span class="gapkey">--- gap</span></div>')  # CHANGED(GUI-2): was an inline colour
+               '<span class="gapkey">--- gap</span></div>')
     flagged_cols = {c0 + i for r in shown_rows for i, (_, _, f) in enumerate(r["cells"][c0 - 1:c1])
                     if f in ("mismatch", "frameshift")}
     out.append('<div class="scroll" tabindex="0" aria-label="Codon alignment, scrolls sideways">'
@@ -713,11 +699,11 @@ def view(protein_path: str, codon_path: str | None = None, report: dict | str | 
          max_seqs: int = MAX_SEQS, max_cols: int = MAX_COLS, max_cells: int = MAX_CELLS,
          centre: int | None = None, info: dict | None = None) -> str:
     """Render a COAL run as HTML. `report` may be a dict, a path to a coal.report/1 file, or None.
-    CHANGED(GUI-10): an honest preview at scale: rows chosen by select_rows (problems first, then OK ones from
+    An honest preview at scale: rows chosen by select_rows (problems first, then OK ones from
     across the file), a column window (centre: the column to centre it on; by default column 1, or the first
     problem of a drawn sequence when that is further right), an overview of the whole alignment above the grid
     (overview.py) and max_cells. info (a dict, optional) is filled with what was drawn: preview, ids, first,
-    last, ncols, total, shown. See overnight/integration/CHANGES.md"""
+    last, ncols, total, shown."""
     from . import overview as ov
     if isinstance(report, str):
         with open(report, encoding="utf-8") as fh:
@@ -726,8 +712,8 @@ def view(protein_path: str, codon_path: str | None = None, report: dict | str | 
     total = len(protein)
     ids = [p for p, _ in protein]
     ncols_all = max((len(r) for _, r in protein), default=0)
-    # CHANGED(R2-A3): was rows built for every sequence (22,000 x 600 codons: 29 s, GBs) though only max_seqs
-    # are drawn; now only the drawn sequences are built (problems of the others come from the report).
+    # only the drawn sequences are built (problems of the others come from the report): building every row
+    # (22,000 x 600 codons) takes 29 s and GBs
     prefer = None
     if centre is not None and report:
         # centred on a column: sequences with a problem in that window are drawn first
@@ -747,7 +733,7 @@ def view(protein_path: str, codon_path: str | None = None, report: dict | str | 
     need = [p for p in chosen if p not in have]  # drawn sequences COAL wrote no codons for
     dna = None
     if dna_path and os.path.isfile(dna_path) and (need or codon is None):
-        dna = read_alignment(dna_path, dna=True, want=set(need))  # CHANGED(R3-A1)
+        dna = read_alignment(dna_path, dna=True, want=set(need))
         if len(dna) < len(need):
             full = read_alignment(dna_path, dna=True)
             if len(full) == total and not all(p in {i for i, _ in full} for p in need):
@@ -786,13 +772,11 @@ def view(protein_path: str, codon_path: str | None = None, report: dict | str | 
 def render_run(protein_path: str, output_path: str | None, report: dict, dna_path: str | None, codontable: int,
                out_dir: str, limits: tuple[int, int, int] | None = None, centre: int | None = None,
                info: dict | None = None) -> tuple[str, str]:
-    """CHANGED(R2-A3): new; was two full view() calls in ui.run_ui. Renders once: (fragment for the GUI, path of
-    the downloadable page written into out_dir).
-    CHANGED(GUI-10): limits (sequences, columns, cells: the preview size from the settings), centre (a column to
+    """Renders once: (fragment for the GUI, path of the downloadable page written into out_dir).
+    limits (sequences, columns, cells: the preview size from the settings), centre (a column to
     centre the preview on) and info (filled by view()); the downloadable page is the same preview."""
-    # CHANGED(FIN-A4): was the output read as FASTA/CLUSTAL whatever its format, so PAML and codon output gave
-    # "<server path>: not FASTA or CLUSTAL"; now those are drawn from a FASTA copy of the same run (same options),
-    # written to a hidden temporary file in out_dir and deleted. See overnight/integration/CHANGES.md
+    # PAML and codon output cannot be read as FASTA/CLUSTAL: those are drawn from a FASTA copy of the same run
+    # (same options), written to a hidden temporary file in out_dir and deleted
     opts = (report or {}).get("options") or {}
     tmp = None
     if output_path and opts.get("output_format") in ("paml", "codon"):
@@ -830,8 +814,7 @@ def main(argv=None) -> int:
     report = a.report
     codon = a.codon
     if codon is None and report is None and a.dna:
-        # CHANGED(R2-A12): was every gene diagnosed by the viewer alone (it called engine-aligned genes "Failed");
-        # now COAL itself is run on the inputs, and the viewer only diagnoses genes COAL rejected.
+        # COAL itself is run on the inputs, and the viewer only diagnoses genes COAL rejected
         from . import core
         try:
             r = core.run_coal(a.protein, a.dna, codontable=a.codontable or 1, probe_codes=False)
@@ -854,7 +837,7 @@ def locate_breaks(protein_path: str, dna_path: str, report: dict) -> None:
     """Add the column where each failed gene breaks (frameshift or not) to a report, in place."""
     try:
         protein = read_alignment(protein_path)
-        dna = read_alignment(dna_path, dna=True)  # CHANGED(R3-A1)
+        dna = read_alignment(dna_path, dna=True)
     except (OSError, ValueError):
         return
     table = int((report.get("options") or {}).get("codontable") or 1)

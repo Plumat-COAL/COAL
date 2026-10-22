@@ -96,7 +96,7 @@ class TestReport(unittest.TestCase):
             self.assertIn(k, r)
         self.assertEqual(r["schema"], "coal.report/1")
         self.assertEqual(r["coal_version"], __version__)
-        # MRG-2: "command" reproduces the output (as the app writes it); the exact argv is "command_line"
+        # "command" reproduces the output (as the app writes it); the exact argv is "command_line"
         self.assertEqual(r["command"], "coal pep.fasta nuc.fasta -output paml -o out.paml")
         self.assertEqual(r["command_line"], "coal pep.fasta nuc.fasta -o out.paml -output paml --report r.json")
         self.assertEqual(r["pal2nal_equivalent"], "pal2nal.pl pep.fasta nuc.fasta -output paml")
@@ -156,19 +156,19 @@ class TestReport(unittest.TestCase):
         self.assertFalse((self.d / "o.fa").exists())
         r = self.report()
         self.assertEqual(r["exit_code"], 1)
-        self.assertEqual(r["error"]["code"], "inconsistent")  # MRG-2: the app's message codes
+        self.assertEqual(r["error"]["code"], "inconsistent")  # the app's message codes
         failed = [s for s in r["sequences"] if s["status"] == "failed"]
         self.assertEqual([s["id"] for s in failed], ["g2"])
-        # MRG-2: where the gene breaks comes first (as the app's locate_breaks), then the engine's reason
+        # where the gene breaks comes first (as the app's locate_breaks), then the engine's reason
         self.assertEqual([m["code"] for m in failed[0]["messages"]], ["frameshift", "inconsistent"])
         self.assertIn("Frameshift at column 14", failed[0]["messages"][0]["text"])
-        # as the app (FIN-C7): g0 and g1 were checked but not written, g3 was never reached
+        # as the app: g0 and g1 were checked but not written, g3 was never reached
         self.assertEqual([(s["status"], [m["code"] for m in s["messages"]]) for s in r["sequences"]],
                          [("not_checked", ["not_written"]), ("not_checked", ["not_written"]),
                           ("failed", ["frameshift", "inconsistent"]), ("not_checked", ["not_reached"])])
         self.assertIsNone(r["output"])
         self.assertEqual(r["summary"]["failed"], 1)
-        # CHANGED(ENG-UX-2/ENG-UX-5): was "1 sequence of 4 could not be converted (first: g2: <the error again>"
+        # the error is said once (not repeated in the summary)
         self.assertIn("coal: summary: g2: Frameshift at column", err)
         self.assertIn("coal: summary: The run stopped at g2: 1 sequence was not checked and no output was written. Add "
                       "--keep-going to write the other sequences and leave this one out.", err)
@@ -181,7 +181,7 @@ class TestReport(unittest.TestCase):
         r = self.report()
         self.assertEqual(r["error"]["code"], "count_mismatch")
         self.assertIn("number of sequences differs (protein: 3, DNA: 2)", r["error"]["text"])
-        # MRG-2: as the app's report: every protein listed, none checked, no pairing
+        # as the app's report: every protein listed, none checked, no pairing
         self.assertEqual([(s["id"], s["status"], s["dna_id"]) for s in r["sequences"]],
                          [(f"g{i}", "not_checked", None) for i in range(3)])
         self.assertIsNone(r["summary"]["pairing"])
@@ -209,13 +209,13 @@ class TestSummaryAndHints(unittest.TestCase):
             self.assertEqual(len(hints), 1, err)
             self.assertEqual(hints[0]["suggested_codontable"], 2)
             self.assertIn("Vertebrate mitochondrial", hints[0]["text"])
-            self.assertIn("Re-run with code 2?", hints[0]["text"])  # CHANGED(ENG-UX-7): the report keeps the app's text
+            self.assertIn("Re-run with code 2?", hints[0]["text"])  # the report keeps the app's text
             self.assertIn("Re-run with -codontable 2.", err)          # ... the command line names the option
-            # MRG-2b: the app's FIN-A1/FIN-C5 wording
+            # the app's wording
             self.assertIn("coal: summary: 30 of 30 sequences have codons that do not match their amino acid (kept "
                           "in the alignment). Under genetic code 2 (Vertebrate mitochondrial), all 30 sequences match "
                           "their protein; under code 1, none do. Codes 5 and 13 fit these sequences too: choose the "
-                          "code of the organism and organelle the genes come from. Re-run with -codontable 2.", err)  # ENG-UX-7
+                          "code of the organism and organelle the genes come from. Re-run with -codontable 2.", err)
             self.assertEqual((hints[0]["checked"], hints[0]["fit"], hints[0]["fit_current"]), (30, 30, 0))
             # with the right code: clean run, no summary, no hint
             rc, _, err = run(d, ["pep.fasta", "nuc.fasta", "-codontable", "2", "-o", "o.fa", "--report", "r.json"])
@@ -226,7 +226,7 @@ class TestSummaryAndHints(unittest.TestCase):
     def test_no_hint_below_threshold(self):
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)
-            write_genes(d, 10, wrong={4})          # MRG-2: no genetic code fixes this codon: no hint
+            write_genes(d, 10, wrong={4})          # no genetic code fixes this codon: no hint
             rc, _, err = run(d, ["pep.fasta", "nuc.fasta", "-o", "o.fa", "--report", "r.json"])
             self.assertEqual(json.loads((d / "r.json").read_text())["hints"], [])
             self.assertIn("coal: summary: 1 of 10 sequences has codons that do not match their amino acid (kept in "

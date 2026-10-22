@@ -7,14 +7,14 @@ from __future__ import annotations
 import os
 
 os.environ.setdefault("GRADIO_ANALYTICS_ENABLED", "False")
-# CHANGED(APP-11): was not marked; now COAL_HOSTED=1: hosted intro text, tools limited to a sandbox.
+# COAL_HOSTED=1: hosted intro text, tools limited to a sandbox.
 os.environ["COAL_HOSTED"] = "1"
 
 
 def main() -> None:
     from . import ui
     port = int(os.environ.get("PORT", os.environ.get("GRADIO_SERVER_PORT", "7860")))
-    # CHANGED(APP-11/APP-M): was mcp=True; now mcp=False on the public Space. A remote agent cannot hand the
+    # mcp=False on the public Space. A remote agent cannot hand the
     # Space its own files (the tools take server paths), so MCP there could only reach the examples; the
     # tools' path sandbox stays on regardless, because Gradio's HTTP API also exposes them.
     ui.launch(host="0.0.0.0", port=port, mcp=False, demo_mode=False)

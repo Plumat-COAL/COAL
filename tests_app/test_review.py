@@ -1,4 +1,4 @@
-"""Regression tests for the independent review findings (see overnight/app/LOG.md, "Review fixes")."""
+"""Regression tests for the app review findings."""
 import os
 import re
 import shutil
@@ -90,7 +90,7 @@ class TestFinding3AnyWarningCounts(unittest.TestCase):
         p = _write(os.path.join(t, "p.fasta"), ">s1\nMBKL\n>s2\nMAKL\n")
         d = _write(os.path.join(t, "d.fasta"), ">s1\nATGGATAAACTG\n>s2\nATGGCTAAACTG\n")
         r = core.run_coal(p, d, out_dir=t, probe_codes=False)
-        self.assertIn("B (D or N) is not checked", r.stderr)  # FIN-C14
+        self.assertIn("B (D or N) is not checked", r.stderr)
         self.assertEqual((r.report["summary"]["ok"], r.report["summary"]["warning"]), (1, 1))
         s1 = next(s for s in r.report["sequences"] if s["id"] == "s1")
         self.assertEqual(s1["status"], "warning")
@@ -190,9 +190,8 @@ class TestFinding7IdHint(unittest.TestCase):
         self.assertIn("every pair matched", texts[0])
 
     def test_failed_run_keeps_the_warning(self):
-        # CHANGED(MRG-1): was a failed run (the engine paired messy_ids by order, the wrong DNA) with an id_mismatch
-        # hint saying the pairing is probably wrong; the merged engine pairs these IDs by their normalised form
-        # (order would mispair), so every gene aligns and the report says how they were paired
+        # the engine pairs messy_ids by their normalised form (order would mispair), so every gene aligns and the
+        # report says how they were paired
         p, d = core.example_paths("messy_ids")
         r = core.run_coal(p, d, out_dir=_tmp(self), probe_codes=False)
         self.assertEqual(r.exit_code, 0)
@@ -355,7 +354,7 @@ class TestFinding11HostedSandbox(_RunsDir):
         t = _tmp(self)
         secret = _write(os.path.join(t, "secret.fasta"), ">s1\nMAKL\n")
         dna = _write(os.path.join(t, "dna.fasta"), ">s1\nATGGCTAAACTG\n")
-        # CHANGED(IMP-M-1): was a {"ok": false, "error": ...} result; now a tool error (isError over MCP)
+        # a tool error (isError over MCP)
         with self.assertRaisesRegex(tools.CoalToolError, "not allowed"):
             tools.codon_align(secret, dna)
         for bad in (secret, "/etc/passwd", os.path.join(core.EXAMPLES_DIR, "..", "pyproject.toml")):
@@ -388,7 +387,7 @@ class TestFinding11HostedSandbox(_RunsDir):
 
     def test_intro_depends_on_where_it_runs(self):
         self._hosted(False)
-        # CHANGED(POL-1): was assertIn("Nothing leaves your computer", ...); the local app shows no note now
+        # the local app shows no note
         self.assertEqual(core.intro_text(), "")
         self._hosted(True)
         text = core.intro_text()
@@ -428,7 +427,7 @@ class TestFinding12TempDirs(_RunsDir):
         for x in (old, new):
             os.makedirs(x)
             _write(os.path.join(x, "f.txt"), "x")
-            _write(os.path.join(x, core.RUN_MARKER), "")  # R2-A8
+            _write(os.path.join(x, core.RUN_MARKER), "")
         past = time.time() - 25 * 3600
         os.utime(old, (past, past))
         os.utime(os.path.join(old, "f.txt"), (past, past))
@@ -444,13 +443,13 @@ class TestFinding13ProbeCost(_RunsDir):
         real = core._run_engine
 
         def spy(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, report_path, timeout=None, **kw):
-            calls.append((protein, len(core.read_ids(protein)), timeout))  # FIN-A6: **kw (strict, blockonly)
+            calls.append((protein, len(core.read_ids(protein)), timeout))  # **kw: strict, blockonly
             return real(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, report_path, timeout=timeout,
                         **kw)
 
         core._run_engine = spy
         self.addCleanup(setattr, core, "_run_engine", real)
-        # CHANGED(MRG-2): the app probes only in its fallback path (an engine without --report); the merged engine
+        # the app probes only in its fallback path (an engine without --report); the engine
         # writes the report itself (and has --keep-going, whose "skipped" lines the fallback does not parse), so this
         # test of the fallback's probe cost pins that path
         import dataclasses
@@ -477,9 +476,9 @@ class TestFinding13ProbeCost(_RunsDir):
             self.assertLessEqual(timeout, core.PROBE_TIMEOUT)
         self.assertLessEqual(core.PROBE_TIMEOUT, 30)
         hint = [h for h in r.hints if h["code"] == "genetic_code"]
-        # FIN-A1/FIN-C6: only TGA = Trp is needed, so code 4 (which differs from code 1 only there) is the closest
+        # only TGA = Trp is needed, so code 4 (which differs from code 1 only there) is the closest
         self.assertEqual(hint[0]["suggested_codontable"], 4)
-        self.assertIn("COAL tested 200 of the 250 sequences", hint[0]["text"])  # FIN-C4/FIN-C5: what was tested
+        self.assertIn("COAL tested 200 of the 250 sequences", hint[0]["text"])  # what was tested
         self.assertIn("200 of them match their protein", hint[0]["text"])
         self.assertEqual([f for f in os.listdir(t) if f.startswith("probe")], [])
 
@@ -505,7 +504,7 @@ class TestFinding14MalformedReports(unittest.TestCase):
                     {"schema": "coal.report/1", "options": []},
                     {"schema": "coal.report/1", "inputs": {}},
                     [1, 2]):
-            with self.assertRaises(tools.CoalToolError) as cm:  # CHANGED(IMP-M-1): was a returned string
+            with self.assertRaises(tools.CoalToolError) as cm:  # raised, not returned
                 tools.explain_report(self._report(obj))
             text = str(cm.exception)
             self.assertTrue(text.startswith("Could not read the report:"), (obj, text))
@@ -545,7 +544,7 @@ class TestFinding15SampleReport(unittest.TestCase):
     def test_sample_matches_a_fresh_run(self):
         mk = _load("make_sample_report_r", os.path.join(ROOT, "demo", "make_sample_report.py"))
         fresh, stored = mk.build(), core.load_sample_report()
-        # CHANGED(ENG-UX-7, INT-4): summary_text was skipped while the sample report predated ENG-UX; regenerated, so compared again
+        # every field, summary_text included
         self.assertEqual(fresh, stored)
 
 
@@ -606,8 +605,7 @@ class TestFinding16AndC4C5Ci(unittest.TestCase):
 
     def test_cpp_job_cannot_go_green_without_exercising_cpp(self):
         cpp = self._job("cpp")
-        # CHANGED(SHIP-3): was "not applicable" while cpp/ was absent and "COAL_IMPL is read by nothing"; coal-cpp now
-        # builds from the root CMakeLists.txt and tests/test_differential.py reads COAL_IMPL
+        # coal-cpp builds from the root CMakeLists.txt and tests/test_differential.py reads COAL_IMPL
         self.assertIn("cmake -S . -B build", cpp)
         self.assertIn("COAL_IMPL: cpp", cpp)
         self.assertIn("tests.test_differential", cpp)
@@ -634,7 +632,7 @@ class TestFinding16AndC4C5Ci(unittest.TestCase):
 
 
 class TestC2CompatClaims(unittest.TestCase):
-    def test_docstring_and_html_error_match_what_works(self):  # DEC-4: clustal is supported now
+    def test_docstring_and_html_error_match_what_works(self):  # clustal is supported
         from coal_compat import cli
         doc = " ".join(cli.__doc__.split())
         self.assertIn("An unchanged PAL2NAL command line works", doc)
@@ -646,7 +644,7 @@ class TestC2CompatClaims(unittest.TestCase):
     def test_nostderr_is_accepted_as_quiet(self):
         from coal_compat import cli
         self.assertEqual(cli.translate(["p", "n", "-output", "fasta", "-nostderr"]),
-                         ["-output", "fasta", "-q", "--", "p", "n"])  # DEC-4
+                         ["-output", "fasta", "-q", "--", "p", "n"])
 
 
 class TestC10C11Skill(unittest.TestCase):
@@ -667,7 +665,7 @@ class TestC10C11Skill(unittest.TestCase):
         self.assertTrue(flags)
         for fl in flags:
             self.assertIn(fl, h, f"{fl} is in SKILL.md's current commands but not in `coal --help`")
-        for later in ("--keep-going", "--report", "normalised"):  # DEC-4: -output paml is current now
+        for later in ("--keep-going", "--report", "normalised"):  # -output paml is current
             self.assertNotIn(later, current, later)
         self.assertIn("usage error", current)
         self.assertIn("coal --help", current)
