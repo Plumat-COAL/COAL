@@ -1,4 +1,4 @@
-// argparse-compatible command-line parsing (CPP-4). The structure follows the documented behaviour of
+// argparse-compatible command-line parsing. The structure follows the documented behaviour of
 // Python 3.10's argparse (parse_known_args): first every argument is classified as an option ('O'),
 // a value ('A') or the '--' marker ('-'); then options and runs of positionals are consumed left to
 // right. Positional runs are matched greedily, like argparse's nargs patterns "-*A-*" (one value) and

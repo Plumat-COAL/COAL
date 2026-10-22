@@ -6,7 +6,7 @@
 ; Output: desktop\dist\COAL-Setup-<version>.exe
 ;
 ; Needs Inno Setup 6.3 or newer (x64compatible). NOT BUILT YET: written on a Linux machine
-; without Inno Setup (see overnight/windows-app/LOG.md).
+; without Inno Setup.
 ;
 ; Decisions (DESIGN.md 5.4, 5.5): installs to %LOCALAPPDATA%\Programs\COAL; one Start menu
 ; shortcut; desktop shortcut and "Open with" entries are optional and off by default; the
@@ -53,8 +53,7 @@ OutputBaseFilename=COAL-Setup-{#AppVersion}
 Compression=lzma2/max
 SolidCompression=yes
 ; Tell Explorer to refresh "Open with" menus, only when that task was chosen.
-; CHANGED(WIN-W8): was yes; now a boolean expression (Inno Setup 6 allows one here; not compiled
-; yet: if ISCC rejects it, go back to yes). See overnight/windows-app/CHANGES.md
+; (Inno Setup 6 allows a boolean expression here.)
 ChangesAssociations=WizardIsTaskSelected('openwith')
 SetupLogging=yes
 
@@ -66,14 +65,11 @@ SelectTasksLabel2=COAL installs for you only and needs no administrator rights. 
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
-; CHANGED(WIN-W4): was: offered "Open with" with no caveat; now says what it does today. See overnight/windows-app/CHANGES.md
-; CHANGED(FIN-A8): was "... tells you which box to drag the file onto; it can't load the file by itself yet" (stale since
-; R2-A9: COAL fills in the file's path itself). See overnight/integration/CHANGES.md
 Name: "openwith"; Description: "Add COAL to ""Open with"" for .aln and .fasta files (opens COAL with that file filled in, read in place; your default programs don't change)"; Flags: unchecked
 
 [InstallDelete]
-; CHANGED(WIN-W8): new. An upgrade first removes the old bundle, so files a newer build no longer
-; ships don't linger and get imported. See overnight/windows-app/CHANGES.md
+; An upgrade first removes the old bundle, so files a newer build no longer
+; ships don't linger and get imported.
 Type: filesandordirs; Name: "{app}\_internal"
 
 [Files]
@@ -99,14 +95,14 @@ Root: HKA; Subkey: "Software\Classes\.faa\OpenWithProgids"; ValueType: string; V
 Root: HKA; Subkey: "Software\Classes\.fna\OpenWithProgids"; ValueType: string; ValueName: "{#ProgId}"; ValueData: ""; Flags: uninsdeletevalue; Tasks: openwith
 
 [Run]
-; CHANGED(SHIP-18): new, ticked by default. Adds "coal" to Claude Desktop's mcpServers (COAL.exe -m coal_app --mcp),
+; Ticked by default. Adds "coal" to Claude Desktop's mcpServers (COAL.exe -m coal_app --mcp),
 ; keeping the rest of claude_desktop_config.json (old copy: claude_desktop_config.json.bak-coal), then says to restart
-; Claude Desktop. Was: no way for Claude Desktop to start the installed app.
+; Claude Desktop.
 Filename: "{app}\{#AppExe}"; Parameters: "--connect-claude"; Description: "Connect COAL to Claude Desktop (Claude can then run COAL for you)"; Flags: postinstall skipifsilent
 Filename: "{app}\{#AppExe}"; Description: "Open COAL now"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
-; CHANGED(SHIP-18): new. Removes the "coal" entry the installer added (only one that starts COAL.exe), quietly.
+; Removes the "coal" entry the installer added (only one that starts COAL.exe), quietly.
 Filename: "{app}\{#AppExe}"; Parameters: "--disconnect-claude --quiet"; Flags: runhidden waituntilterminated; RunOnceId: "DisconnectClaude"
 
 [UninstallDelete]
@@ -115,8 +111,8 @@ Filename: "{app}\{#AppExe}"; Parameters: "--disconnect-claude --quiet"; Flags: r
 Type: filesandordirs; Name: "{localappdata}\COAL"
 ; Anything the app left inside its own folder.
 Type: filesandordirs; Name: "{app}"
-; CHANGED(WIN-W6): new. The local app's run folders (results shown in the window; downloads you
-; saved elsewhere are untouched). See overnight/windows-app/CHANGES.md
+; The local app's run folders (results shown in the window; downloads you saved elsewhere are
+; untouched).
 Type: filesandordirs; Name: "{%TEMP}\coal_app_runs"
 
 [Code]

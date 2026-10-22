@@ -1,4 +1,4 @@
-"""R2-D2: numbers quoted in the docs must equal what the harness and the repo say now."""
+"""Numbers quoted in the docs must equal what the harness and the repo say now."""
 import glob
 import importlib.util
 import os
@@ -6,7 +6,7 @@ import re
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# CHANGED(WEB-13): new; the site is several pages, and the forbidden-wording rules apply to all of them
+# the site is several pages, and the forbidden-wording rules apply to all of them
 SITE_PAGES = tuple(sorted(os.path.relpath(p, ROOT).replace(os.sep, "/")
                           for p in glob.glob(os.path.join(ROOT, "site", "*.html"))))
 
@@ -24,14 +24,6 @@ def _read(rel):
         return re.sub(r"\s+", " ", fh.read())  # line breaks don't matter
 
 
-def _lines(pattern):
-    total = 0
-    for p in glob.glob(os.path.join(ROOT, pattern)):
-        with open(p, encoding="utf-8") as fh:
-            total += sum(1 for _ in fh)
-    return total
-
-
 class TestDocsNumbers(unittest.TestCase):
     longMessage = False  # the message says what is missing; do not dump whole documents
     @classmethod
@@ -45,47 +37,35 @@ class TestDocsNumbers(unittest.TestCase):
         for ph in phrases:
             self.assertIn(ph, text, f"{rel} should say: {ph!r} (harness: {self.line})")
 
-    def test_pitch_and_qa(self):
-        c, n = self.c, self.n
-        byte, warn, both = c["stdout byte-identical"], c["warnings identical"], c["both fail"]
-        other = c["deliberate error"] + c["deliberate differs"] + c.get("deliberate nogap_code", 0)  # FZ-5
-        for rel in ("pitch/PITCH.md", "pitch/QA.md"):
-            self.expect(rel, f"{n} checks on {self.ncases} hand-made inputs", f"{byte} compare",
-                        f"{warn} of those also compare the warnings", f"{both} check that COAL rejects",
-                        f"{other} are documented, deliberate differences")
-
     def test_skill(self):
         self.expect(".claude/skills/coal/SKILL.md", f"all {self.c['stdout byte-identical']} byte-for-byte comparisons")
 
-    # CHANGED(IMP-M-4): the README's test counts moved to tests/README.md ("Test numbers"), word for word; the checks
-    # below follow them (README.md keeps a short claim and a link, and is still checked for forbidden wording)
+    # the test counts are in tests/README.md ("Test numbers"); README.md keeps a short claim and a link, and is still
+    # checked for forbidden wording
     def test_readme(self):
         c = self.c
         self.expect("tests/README.md", f"= {self.n} checks", f"byte-identical in {c['stdout byte-identical']} checks",
                     f"identical in {c['warnings identical']} of them ({c['with -nomismatch']} with `-nomismatch`)",
                     f"in {c['both fail']} both tools fail")
 
-    def test_readme_exit_status_count(self):  # R3-D5
+    def test_readme_exit_status_count(self):
         n_exit = self.c["COAL exit status"]
         self.expect("tests/README.md", f"Exit status in the other {n_exit}")
         for rel in ("README.md", "tests/README.md"):
             self.assertNotIn(f"Exit status in all {self.n}", _read(rel))
 
-    def test_readme_scaling_extrapolation(self):  # R3-D4
+    def test_benchmarks_scaling_extrapolation(self):
         import csv
         with open(os.path.join(ROOT, "benchmarks", "results", "bench_windows_20261016_2356.csv"),
                   encoding="utf-8") as fh:
             row = next(r for r in csv.DictReader(fh) if (r["n_seqs"], r["n_codons"]) == ("10000", "500"))
         t = float(row["pal2nal_median_s"])
         m100k, m500k = round(t * 10 / 60), round(t * 50 / 60)
-        self.expect("README.md", f"10,000-sequence time ({t:.1f} s)", f"roughly {m100k} and {m500k} minutes")
+        self.expect("docs/benchmarks.md", f"10,000-sequence time ({t:.1f} s)", f"roughly {m100k} and {m500k} minutes")
 
-    # CHANGED(FIN-C2/FIN-C3/FIN-C10): was the "byte-identical to PAL2NAL v14 on well-formed input ... 23 documented
-    # deliberate differences ... every difference is one where PAL2NAL silently produces wrong output" claim (false:
-    # well-formed mito -codontable 2 -nogap differs) and the fuzz numbers of the run before FIN-C10. Now one claim built
-    # from the harness's counts and the FIN-C10 fuzz run, and every breakdown must add up to the total.
-    # CHANGED(MRG-9): re-measured after the merge (the generator gained the normalised-ID mode, MRG-1); was 14269 /
-    # 4692 / 1039, rows (4067, 600, 333) and (2068, 2892, 40)
+    # One compatibility claim, built from the harness's counts and the fuzz run below (with the normalised-ID mode);
+    # every breakdown must add up to the total. No "on well-formed input" claim: well-formed mito -codontable 2 -nogap
+    # differs.
     FUZZ = {"cases": 5000, "comparisons": 20000, "identical": 13826, "both": 4681, "deliberate": 1493,
             "rows": {"clustal": (3937, 604, 459), "paml": (3937, 604, 459), "fasta": (3937, 604, 459),
                      "codon": (2015, 2869, 116)}}
@@ -107,13 +87,13 @@ class TestDocsNumbers(unittest.TestCase):
                 f"were deliberate differences, each checked to be exactly the documented change; 0 unexplained "
                 f"differences.")
 
-    def test_compatibility_claim_everywhere(self):  # FZ-claim, FIN-C3
+    def test_compatibility_claim_everywhere(self):
         c, f = self.c, self.FUZZ
         self.assertEqual(c["stdout byte-identical"] + c["both fail"] + c["deliberate error"] + c["deliberate differs"]
                          + c["deliberate nogap_code"], self.n, "the harness's own breakdown must add up")
         self.assertEqual(f["identical"] + f["both"] + f["deliberate"], f["comparisons"])
         self.assertEqual(tuple(map(sum, zip(*f["rows"].values()))), (f["identical"], f["both"], f["deliberate"]))
-        for rel in ("tests/README.md", "pitch/PITCH.md", "pitch/QA.md", ".claude/skills/coal/SKILL.md"):
+        for rel in ("tests/README.md", ".claude/skills/coal/SKILL.md"):
             self.expect(rel, self.claim())
         self.expect("README.md", "COAL's output is identical to PAL2NAL v14's except for a short list of documented, "
                                  "deliberate differences", "tests/README.md#test-numbers")
@@ -122,8 +102,8 @@ class TestDocsNumbers(unittest.TestCase):
                                  f"{f['deliberate']:,} deliberate differences")
         for fmt, (i, b, d) in f["rows"].items():
             self.expect("tests/README.md", f"| {fmt} | {f['cases']:,} | {i:,} | {b:,} | {d:,} | 0 |")
-        # CHANGED(WEB-13): every page of the site (was site/index.html only)
-        for rel in ("README.md", "tests/README.md", "pitch/PITCH.md", "pitch/QA.md", ".claude/skills/coal/SKILL.md",
+        # every page of the site
+        for rel in ("README.md", "tests/README.md", ".claude/skills/coal/SKILL.md",
                     "src/coal_compat/cli.py") + SITE_PAGES:
             text = _read(rel)
             self.assertNotIn("on well-formed input", text, f"{rel}: the well-formed claim is false (FIN-C3)")
@@ -132,7 +112,7 @@ class TestDocsNumbers(unittest.TestCase):
                 self.assertRegex(m.group(0), r"PAL2NAL v14", f"{rel}: say PAL2NAL v14: {m.group(0)}")
                 self.assertTrue(any(q in m.group(0) for q in ("except", "benchmark")), f"{rel}: {m.group(0)}")
 
-    def test_breakdowns_add_up(self):  # FIN-C2 / FIN-A3
+    def test_breakdowns_add_up(self):
         c = self.c
         k = c["deliberate error"] + c["deliberate differs"] + c["deliberate nogap_code"]
         text = _read("tests/README.md")
@@ -146,7 +126,7 @@ class TestDocsNumbers(unittest.TestCase):
                                                      c["deliberate nogap_code"]))
         self.assertEqual(e + d + g, kk)
         self.assertEqual(byte + both + kk, self.n)
-        site = _read("site/differences.html")  # CHANGED(WEB-13): the breakdown moved from site/index.html
+        site = _read("site/differences.html")  # the breakdown is on the differences page
         spans = dict((v, v) for v in re.findall(r'data-check="([^"]+)"', site))
         nums = {}
         for key, pat in (("total", r"^(\d+) checks$"), ("byte", r"^byte-identical in (\d+) checks$"),
@@ -157,25 +137,12 @@ class TestDocsNumbers(unittest.TestCase):
             nums[key] = hits[0]
         self.assertEqual(nums["byte"] + nums["both"] + nums["delib"], nums["total"], f"site numbers: {nums}")
         self.assertEqual(nums["total"], self.n)
-        for rel in ("README.md", "pitch/PITCH.md", "pitch/QA.md", ".claude/skills/coal/SKILL.md") + SITE_PAGES:
+        for rel in ("README.md", ".claude/skills/coal/SKILL.md") + SITE_PAGES:
             self.assertNotIn("29 checks are deliberate", _read(rel))
 
     def test_tests_readme_quotes_the_printed_line(self):
         self.expect("tests/README.md", self.line)
 
-    def test_qa_line_and_test_counts(self):
-        text = _read("pitch/QA.md")
-        m = re.search(r"about ([\d,]+) lines of dependency-free Python in the engine and ([\d,]+) in the app", text)
-        self.assertIsNotNone(m, "QA.md should state the engine and app line counts")
-        for said, actual in ((m.group(1), _lines("src/coal/*.py")), (m.group(2), _lines("src/coal_app/*.py"))):
-            said = int(said.replace(",", ""))
-            self.assertLess(abs(said - actual), 0.1 * actual, f"QA.md says {said} lines, the code has {actual}")
-        m = re.search(r"more than ([\d,]+) app tests", text)
-        self.assertIsNotNone(m, "QA.md should say 'more than N app tests'")
-        here = os.path.join(ROOT, "tests_app")
-        actual = unittest.TestLoader().discover(here, top_level_dir=here).countTestCases()
-        said = int(m.group(1).replace(",", ""))
-        self.assertTrue(0.8 * actual <= said < actual, f"QA.md says more than {said} app tests; there are {actual}")
 
 
 if __name__ == "__main__":

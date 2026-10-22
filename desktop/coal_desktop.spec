@@ -7,7 +7,7 @@
 # Result: desktop\dist\COAL\COAL.exe plus its _internal\ folder.
 #
 # Written for PyInstaller 6.x. NOT BUILT YET: written on a Linux machine without PyPI access,
-# so the Gradio/pywebview collection below is untested (see overnight/windows-app/LOG.md).
+# so the Gradio/pywebview collection below is untested.
 #
 # What goes in:
 #   - Python + COAL engine (src/coal) + local app (src/coal_app) + the wrapper
@@ -32,8 +32,7 @@ datas, binaries, hiddenimports = [], [], []
 
 # Gradio and friends: data files (frontend build, templates), metadata (importlib.metadata
 # version lookups), and every submodule (uvicorn and fastapi import some by name).
-# CHANGED(WIN-M, WIN-R4): was: no "mcp"; now collected, because the desktop app serves MCP by
-# default (gradio[mcp] -> the mcp package). See overnight/windows-app/CHANGES.md
+# "mcp" is collected because the desktop app can serve MCP (gradio[mcp] -> the mcp package).
 for pkg in ("gradio", "gradio_client", "safehttpx", "groovy", "uvicorn", "fastapi", "starlette",
             "webview", "mcp"):
     try:
@@ -55,9 +54,9 @@ for f in glob.glob(os.path.join(REPO, "examples", "*", "*")):
         datas.append((f, os.path.join("examples", os.path.basename(os.path.dirname(f)))))
 
 # Optional C++ engine (CI and release.yml build it first: cmake -S . -B build).
-# CHANGED(SHIP-19): was cpp/build/** only (the CMakeLists.txt is at the repo root, so builds land in build/) and put
-# into _internal/bin, where coal.dispatch.find_cpp does not look; now build/** too, into _internal itself (next to
-# python3*.dll and vcruntime), so `coal` hands large inputs to it.
+# Looked for in build-app/, build/ (the CMakeLists.txt is at the repo root) and cpp/build/, and put into _internal
+# itself (next to python3*.dll and vcruntime; coal.dispatch.find_cpp does not look in _internal/bin), so `coal`
+# hands large inputs to it.
 cpp = sorted(glob.glob(os.path.join(REPO, "build-app", "**", "coal-cpp.exe"), recursive=True)  # CI / release.yml
              + glob.glob(os.path.join(REPO, "build", "**", "coal-cpp.exe"), recursive=True)
              + glob.glob(os.path.join(REPO, "cpp", "build", "**", "coal-cpp.exe"), recursive=True))
@@ -106,8 +105,7 @@ a = Analysis(  # noqa: F821
     excludes=["tkinter", "matplotlib", "IPython", "pytest"],
     # Gradio reads its own source files at run time (e.g. inspect, .pyi event stubs); keep it as
     # plain .py files on disk rather than only bytecode inside the archive.
-    # CHANGED(WIN-R4): was: coal_app as bytecode only; now .py too (gr.api / MCP read the tool
-    # functions' source/docstrings). See overnight/windows-app/CHANGES.md
+    # coal_app too: gr.api / MCP read the tool functions' source/docstrings.
     module_collection_mode={"gradio": "py", "gradio_client": "py", "coal_app": "py"},
     noarchive=False,
 )
@@ -122,8 +120,7 @@ exe = EXE(  # noqa: F821
     icon=os.path.join(SPECPATH, "coal.ico"),  # noqa: F821
     version=version_info,
     console=False,          # windowed: no console window
-    # CHANGED(WIN-R1): was False (modal traceback box in hidden processes); now errors go to the logs.
-    # See overnight/windows-app/CHANGES.md
+    # No modal traceback box in hidden processes; errors go to the logs.
     disable_windowed_traceback=True,
     upx=False,              # UPX is a common antivirus false-positive trigger
     debug=False,

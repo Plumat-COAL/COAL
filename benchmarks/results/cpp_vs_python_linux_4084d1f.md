@@ -1,6 +1,6 @@
 # COAL engines after the merge: Python vs C++ (measured, run 5 step 4)
 
-Commit **4084d1f** (`overnight/core`: Keanu's merge 0729829 + CPP-25..CPP-33). Produced with
+Commit **4084d1f** (the C++ engine after merging the Python engine fixes). Produced with
 `python benchmarks/run_bench.py --impl both --coal-jobs 0 --sizes <N>x<L> --repeats <R> --data-dir <local disk>`
 (one call per size; raw rows in `cpp_vs_python_linux_4084d1f_*.csv`, run notes in the matching `*.txt`).
 

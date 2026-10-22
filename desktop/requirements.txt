@@ -3,15 +3,12 @@
 #   desktop\.venv\Scripts\python -m pip install -e ".[gui]" -r desktop\requirements.txt
 #
 # Versions: latest releases on the projects' GitHub release pages on 2026-10-17. They could not
-# be checked against PyPI or installed on the machine that wrote this file (no PyPI access);
-# see overnight/windows-app/LOG.md.
+# be checked against PyPI or installed on the machine that wrote this file (no PyPI access).
 
 # Native window around the local app (Edge WebView2 backend on Windows; pulls in pythonnet there).
 pywebview==6.2.1
 
 # Build only: one-folder Windows build (desktop\build.ps1).
 pyinstaller==6.22.3
-# CHANGED(WIN-R2): was unpinned (PyInstaller pulls whatever is newest); now pinned. 2026.5 was seen
-# in a PyPI mirror listing (web search, 2026-10-17), not installed. See overnight/windows-app/CHANGES.md
-# CHANGED(SHIP-8): was 2026.5; the v0.4.0 release build showed pyinstaller 6.22.3 requires >=2026.7
+# Pinned, or PyInstaller pulls whatever is newest; pyinstaller 6.22.3 requires >=2026.7.
 pyinstaller-hooks-contrib==2026.8

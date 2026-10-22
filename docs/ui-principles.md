@@ -1,6 +1,6 @@
 # COAL app: usability principles and what they mean here
 
-Written for GUI round 2 (overnight/integration/CHANGES.md, rows GUI-8 to GUI-12). The owner's rule comes first: if
+Design principles for the web GUI and Windows app (`src/coal_app`). The owner's rule comes first: if
 the experience isn't clean, then for a user the tool does not work. The recommendations below come from published
 guidance and are listed in priority order. "Done" means it is in the app now.
 
@@ -41,7 +41,7 @@ guidance and are listed in priority order. "Done" means it is in the app now.
 
 ## Round 3 baseline
 
-Written for GUI round 3 (rows GUI-13 and GUI-14 in overnight/integration/CHANGES.md). The owner's feedback: "visual
+Added in the third GUI revision. The owner's feedback: "visual
 clutter … the descriptions are too long — shorten or get rid of them, use existing software to make the decisions."
 Six well-regarded tools are the baseline. For each: what COAL takes from it, and what to avoid.
 
@@ -67,7 +67,7 @@ line, not under a field.
 
 ## Round 4 polish
 
-Written for v0.4.1 (rows POL-1 to POL-6 in overnight/integration/CHANGES.md). The owner, after running the desktop
+Added for v0.4.1. The owner, after running the desktop
 app on Windows: cut the reassurance lines, give each section a clear hierarchy as on the website, emphasise the
 genetic code, and replace "Results appear here." Three reference points, and what was taken from each:
 

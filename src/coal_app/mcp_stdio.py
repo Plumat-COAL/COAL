@@ -21,7 +21,7 @@ INSTRUCTIONS = (
 
 
 def server_version() -> str:
-    """CHANGED(IMP-M-1): new. serverInfo.version (was empty): the version of the COAL engine actually imported
+    """serverInfo.version: the version of the COAL engine actually imported
     (not the installed distribution's metadata, which can be stale for an editable or PYTHONPATH checkout)."""
     try:
         from coal import __version__
@@ -32,7 +32,7 @@ def server_version() -> str:
 
 def _structured_codon_align():
     """codon_align with its result TypedDict as the return annotation, so mcp publishes an outputSchema.
-    CHANGED(IMP-M-1): new. tools.codon_align itself keeps `-> dict` for Gradio's gr.api."""
+    tools.codon_align itself keeps `-> dict` for Gradio's gr.api."""
     fn = tools.codon_align
 
     def codon_align(*args, **kwargs):
@@ -59,9 +59,9 @@ def build_server():
 
 
 def _build_fastmcp():
-    """CHANGED(SHIP-18): new. The same server on mcp 1.x (FastMCP). Gradio 5.49.1's `mcp` extra pins mcp==1.10.1, so
-    that is the mcp inside the Windows app, which now runs this server for Claude Desktop (`COAL.exe -m coal_app
-    --mcp`). Was: mcp 2 only (ImportError under 1.x). mcp 1.x has no server version field."""
+    """The same server on mcp 1.x (FastMCP). Gradio 5.49.1's `mcp` extra pins mcp==1.10.1, so that is the mcp
+    inside the Windows app, which runs this server for Claude Desktop (`COAL.exe -m coal_app --mcp`).
+    mcp 1.x has no server version field."""
     from mcp.server.fastmcp import FastMCP  # mcp 1.x
 
     server = FastMCP(name="coal", instructions=INSTRUCTIONS)
@@ -72,6 +72,6 @@ def _build_fastmcp():
 
 def main() -> int:
     from . import core
-    core.prune_runs()  # CHANGED(APP-12): old run folders are removed at startup
+    core.prune_runs()  # old run folders are removed at startup
     build_server().run("stdio")
     return 0

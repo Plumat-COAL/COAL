@@ -1,6 +1,5 @@
 <!doctype html>
-<!-- WEB-3: new file. CHANGED(WEB-8), CHANGED(WEB-11), CHANGED(WEB-12): see overnight/integration/CHANGES.md.
-     CHANGED(WEB-13): the site is split into short pages (index, install, guide, differences, cite) that share this
+<!-- The site is split into short pages (index, install, guide, differences, cite) that share this
      header and footer; tests_app/test_site.py checks they stay the same on every page. -->
 <html lang="en">
 <head>
@@ -98,7 +97,7 @@
         PowerShell, with Python 3.10 or newer from python.org:</p>
       <div class="cmd block" data-copy-group>
         <code id="win-pip">py -m venv $HOME\coal-env
-&amp; $HOME\coal-env\Scripts\python -m pip install "coal[gui] @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz"
+&amp; $HOME\coal-env\Scripts\python -m pip install "coal-align[gui] @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz"
 &amp; $HOME\coal-env\Scripts\python -m coal_app</code>
         <button type="button" class="copy" data-copy="win-pip" aria-label="Copy the Windows pip commands">Copy</button>
       </div>
@@ -119,7 +118,7 @@
       <li>Make a virtual environment for COAL:
         <div class="cmd" data-copy-group><code id="mac-1">python3 -m venv ~/coal-env</code><button type="button" class="copy" data-copy="mac-1" aria-label="Copy: make the environment">Copy</button></div></li>
       <li>Install COAL and its app into it:
-        <div class="cmd" data-copy-group><code id="mac-2">~/coal-env/bin/python -m pip install "coal[gui] @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz"</code><button type="button" class="copy" data-copy="mac-2" aria-label="Copy: install COAL">Copy</button></div></li>
+        <div class="cmd" data-copy-group><code id="mac-2">~/coal-env/bin/python -m pip install "coal-align[gui] @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz"</code><button type="button" class="copy" data-copy="mac-2" aria-label="Copy: install COAL">Copy</button></div></li>
       <li>Start the app and open <code>http://127.0.0.1:7860</code> in your browser. <kbd>Ctrl</kbd>+<kbd>C</kbd>
         in Terminal stops it.
         <div class="cmd" data-copy-group><code id="mac-3">~/coal-env/bin/coal-gui</code><button type="button" class="copy" data-copy="mac-3" aria-label="Copy: start the app">Copy</button></div></li>
@@ -134,7 +133,7 @@
       <li>Recent Debian, Ubuntu and Fedora refuse <code>pip install</code> outside a virtual environment, so make
         one and install COAL into it:
         <div class="cmd block" data-copy-group><code id="lin-1">python3 -m venv ~/coal-env
-~/coal-env/bin/python -m pip install "coal[gui] @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz"</code><button type="button" class="copy" data-copy="lin-1" aria-label="Copy: make the environment and install COAL">Copy</button></div></li>
+~/coal-env/bin/python -m pip install "coal-align[gui] @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz"</code><button type="button" class="copy" data-copy="lin-1" aria-label="Copy: make the environment and install COAL">Copy</button></div></li>
       <li>Start the app with <code>~/coal-env/bin/coal-gui</code> and open <code>http://127.0.0.1:7860</code>.
         On a server, use the command line.</li>
     </ol>
@@ -143,8 +142,8 @@
   <section class="sec" id="cli" aria-labelledby="cli-title">
     <h2 id="cli-title">Command line only</h2>
     <p>The pip install also puts <code>coal</code> and <code>pal2nal</code> in <code>~/coal-env/bin</code>
-      (<code>$HOME\coal-env\Scripts</code> on Windows). For the command line alone, write <code>coal</code> instead
-      of <code>coal[gui]</code> in the install command. The engine has no required dependencies.</p>
+      (<code>$HOME\coal-env\Scripts</code> on Windows). For the command line alone, write <code>coal-align</code> instead
+      of <code>coal-align[gui]</code> in the install command. The engine has no required dependencies.</p>
 <pre class="code"><code>coal protein.aln.fasta dna.fasta -o codon.aln.fasta
 coal protein.aln.fasta dna.fasta -codontable 2 -nogap -o codon.aln.fasta
 coal --help</code></pre>

@@ -1,4 +1,4 @@
-"""Round 4 polish (POL-1 .. POL-6, overnight/integration/CHANGES.md): reassurance lines gone, section headings,
+"""GUI polish: no reassurance lines, section headings,
 the genetic code first and emphasised, no empty results area, Gradio's own settings link hidden."""
 import gc
 import os
@@ -38,12 +38,12 @@ class _UiCase(unittest.TestCase):
                 and all(o._kw.get(k) == v for k, v in kw.items())]
 
 
-class TestPol1NoReassuranceLines(_UiCase):  # POL-1
+class TestPol1NoReassuranceLines(_UiCase):
     def test_splash_and_footer_lines_are_gone(self):
         with open(os.path.join(ROOT, "desktop", "coal_desktop.py"), encoding="utf-8") as fh:
             desk = fh.read()
         desk = desk[desk.index('SPLASH = """'):]
-        desk = desk[:desk.index('"""', 12) + 3]  # the splash page only (its CHANGED comment quotes the old line)
+        desk = desk[:desk.index('"""', 12) + 3]  # the splash page only (a comment around it may quote the old line)
         self.assertNotIn("No internet needed", desk)
         self.assertNotIn("This computer only", desk)
         self.assertIn("Starting COAL&hellip;", desk)
@@ -58,7 +58,7 @@ class TestPol1NoReassuranceLines(_UiCase):  # POL-1
         self.assertIn("if core.intro_text():\n            gr.HTML(gui_html.footer_html", self.src)
 
 
-class TestPol2Sections(_UiCase):  # POL-2
+class TestPol2Sections(_UiCase):
     def test_one_heading_per_group_in_order(self):
         heads = re.findall(r'gr\.HTML\(_sec\("(\w+)"', self.src)
         self.assertEqual(self.ui._sec("Files"), '<h2 class="coal-sec">Files</h2>')
@@ -72,7 +72,7 @@ class TestPol2Sections(_UiCase):  # POL-2
         self.assertIn('block_title_text_color="#4A4744"', self.src)  # labels lighter than headings
 
 
-class TestPol3GeneticCodeFirst(_UiCase):  # POL-3
+class TestPol3GeneticCodeFirst(_UiCase):
     def test_code_is_its_own_section_and_format_secondary(self):
         self.ui.build()
         code = self.comps("Dropdown", elem_id="coal-code")[0]
@@ -85,7 +85,7 @@ class TestPol3GeneticCodeFirst(_UiCase):  # POL-3
         self.assertIn('#coal-code span[data-testid="block-info"]', self.ui.CSS)
 
 
-class TestPol4NoEmptyResults(_UiCase):  # POL-4
+class TestPol4NoEmptyResults(_UiCase):
     def test_results_hidden_until_a_result(self):
         self.ui.build()
         box = self.comps("Column", elem_id="coal-results")
@@ -99,7 +99,7 @@ class TestPol4NoEmptyResults(_UiCase):  # POL-4
             self.assertIs(out[-1]._kw.get("visible"), True)
 
 
-class TestPol6OneSettingsPlace(_UiCase):  # POL-6
+class TestPol6OneSettingsPlace(_UiCase):
     def test_gradio_settings_link_hidden_api_link_kept(self):
         css = self.ui.CSS
         self.assertIn("footer > button.settings", css)

@@ -1,7 +1,7 @@
 """Overview of a whole alignment, for any size: two thin strips drawn as two small SVGs from aggregated numbers.
 
-CHANGED(GUI-10): new file. See overnight/integration/CHANGES.md and docs/ui-principles.md (Shneiderman's "overview
-first, zoom and filter, then details on demand"; Jalview's overview window with its box for the part on screen).
+See docs/ui-principles.md (Shneiderman's "overview first, zoom and filter, then details on demand"; Jalview's
+overview window with its box for the part on screen).
 
 - Sequences strip: the genes in file order, put into at most BINS bins; each bin shows the worst status in it
   (failed: full height, warning: three quarters, OK: a low grey bar), and ticks under it mark the bins that hold a

@@ -10,7 +10,7 @@ With -nogap / -nomismatch / -blockonly, which depend on every row, pass 2 writes
 temporary file and a final pass removes the flagged columns. The clustal and codon formats
 interleave all sequences block by block, so they also take that path: the final rows go to a
 fixed-width temporary file, which is then read back a group of blocks at a time, or, when one block of
-all sequences is larger than BLOCK_MEMORY, one block a chunk of sequences at a time (FIN-E2); the rows and
+all sequences is larger than BLOCK_MEMORY, one block a chunk of sequences at a time; the rows and
 blocks held in memory stay bounded by BLOCK_MEMORY, not by the number or length of the sequences (the IDs
 and padded names are kept, as in every format).
 
@@ -44,7 +44,7 @@ from .tables import get_code
 
 WRAP = 60
 _DIGIT = re.compile(r"[0-9]")
-# CHANGED(DEC-4): new. Was FASTA only; now PAL2NAL v14's four output formats. See overnight/integration/CHANGES.md
+# PAL2NAL v14's four output formats
 FORMATS = ("fasta", "clustal", "paml", "codon")
 BLOCK_FORMATS = ("clustal", "codon")  # interleaved blocks of 60 nt
 BLOCK_MEMORY = 16_000_000  # bytes of rows held at once while writing clustal / codon blocks
@@ -54,13 +54,13 @@ BATCH_NT = int(os.environ.get("COAL_BATCH_NT", 2_000_000))  # target DNA per wor
 # core needs for a few million nucleotides. So each extra worker must have at
 # least this much DNA to do, otherwise COAL runs in a single process.
 MIN_NT_PER_JOB = 4_000_000
-_WINDOWS = os.name == "nt"  # CHANGED(R2-D1): see the broken-pipe handling in _run
+_WINDOWS = os.name == "nt"  # see the broken-pipe handling in _run
 PROGRESS_MIN_SEQS = int(os.environ.get("COAL_PROGRESS_MIN_SEQS", 10_000))  # --progress: inputs larger than this
 PROGRESS_EVERY = float(os.environ.get("COAL_PROGRESS_EVERY", 2.0))        # seconds between progress reports
 
 
 class Progress:
-    """--progress (teammate's branch, MRG-4): percent done + estimated time left on stderr: one updating line on a
+    """--progress: percent done + estimated time left on stderr: one updating line on a
     terminal, plain lines otherwise. Never touches stdout."""
 
     def __init__(self, total: int, stream=None):
@@ -90,8 +90,8 @@ class Progress:
 
 
 def _test_hooks() -> bool:
-    """CHANGED(IMP-E-I): the test hooks below act only when COAL_TEST_HOOKS=1 is set as well, so a stray
-    COAL_TEST_PAUSE_* variable can never make a real run sleep. See overnight/integration/CHANGES.md"""
+    """The test hooks below act only when COAL_TEST_HOOKS=1 is set as well, so a stray COAL_TEST_PAUSE_* variable
+    can never make a real run sleep."""
     return os.environ.get("COAL_TEST_HOOKS") == "1"
 
 
@@ -132,14 +132,13 @@ def mp_child() -> bool:
 
 
 def _init_worker(table, widths, two_pass, nogap, strict=False, out_format="fasta", keep_going=False):
-    # CHANGED(ENG-f): workers ignore Ctrl-C (the main process reports it once, no worker
-    # tracebacks). See overnight/engine-fixes/CHANGES.md
+    # Workers ignore Ctrl-C (the main process reports it once, no worker tracebacks).
     if mp_child():
         signal.signal(signal.SIGINT, signal.SIG_IGN)
     _W.update(table=table, widths=widths, wide=any(w != 3 for w in widths),
-              two_pass=two_pass, nogap=nogap, strict=strict,  # CHANGED(DEC-1): strict is new
-              record=paml_record if out_format == "paml" else fasta_record,  # CHANGED(DEC-4)
-              keep_going=keep_going)  # CHANGED(MRG-3): --keep-going
+              two_pass=two_pass, nogap=nogap, strict=strict,
+              record=paml_record if out_format == "paml" else fasta_record,
+              keep_going=keep_going)
 
 
 def _work(batch):
@@ -147,9 +146,7 @@ def _work(batch):
     'id<TAB>row' lines for the staged pass; items = [(id, warnings, notices, failure)] for every sequence in input
     order (failure = (code, message) of a sequence skipped by --keep-going, else None).
     Without --keep-going a CoalError is raised, with .index = position in the batch."""
-    # CHANGED(ENG-c): was a 4-tuple; now also returns notices. See overnight/engine-fixes/CHANGES.md
-    # CHANGED(MRG-3): was (text, warnings, mcols, bad, notices) flat over the batch; now per-sequence items, so
-    # --keep-going can skip a sequence and the run report can keep each sequence's messages
+    # Per-sequence items, so --keep-going can skip a sequence and the run report can keep each sequence's messages
     parts, items, mcols, bad = [], [], set(), set()
     two_pass = _W["two_pass"]
     for i, (pid, row, dna) in enumerate(batch):
@@ -160,7 +157,7 @@ def _work(batch):
                 items.append((pid, [], [], (e.code, str(e))))
                 continue
             e.index = i
-            e.done_items = items  # CHANGED(MRG-2): the batch's sequences before it (for the run report only)
+            e.done_items = items  # the batch's sequences before it (for the run report only)
             raise
         exp = expand(it, _W["widths"], _W["wide"])
         items.append((pid, it.warnings, it.notices, None))
@@ -168,7 +165,7 @@ def _work(batch):
             parts.append(f"{pid}\t{exp}\n")
             mcols |= it.mismatch_cols
             if _W["nogap"]:
-                bad |= nogap_bad_triplets(exp, _W["table"])  # CHANGED(FZ-5): the selected code's stops
+                bad |= nogap_bad_triplets(exp, _W["table"])  # the selected code's stops
         else:
             parts.append(_W["record"](pid, exp))
     return "".join(parts), items, mcols, bad
@@ -231,11 +228,9 @@ def write_blocks(out, fmt: str, ids, rows_fh, alilen: int, aa_fh=None, aalen: in
     n = len(ids)
     per_seq = WRAP + (20 if aa_fh else 0)
     if n * per_seq > memory:
-        # CHANGED(FIN-E2): was always at least one whole block of every sequence in memory (segments, then the joined
-        # text: ~0.4 KB per sequence for clustal, ~0.8 KB for codon; 500,000 sequences: 320 / 533 MB peak vs 122 MB
-        # for fasta). Now, when one block of all sequences exceeds `memory`, each block is written a chunk of
-        # sequences at a time. Same bytes. teammate's engine/C++ must mirror (bounded memory).
-        # See overnight/integration/CHANGES.md
+        # One block of all sequences exceeds `memory` (~0.4 KB per sequence for clustal, ~0.8 KB for codon): each
+        # block is written a chunk of sequences at a time, so memory stays bounded. Same bytes. The C++ engine
+        # mirrors it.
         _write_blocks_chunked(out, fmt, names, pad, rows_fh, alilen, aa_fh, aalen, mask, nblk,
                               max(1, memory // (4 * per_seq)))
         return
@@ -278,7 +273,7 @@ def _block_mark(fmt, mask, b, pad):
 
 
 def _write_blocks_chunked(out, fmt, names, pad, rows_fh, alilen, aa_fh, aalen, mask, nblk, chunk) -> None:
-    """CHANGED(FIN-E2): new. write_blocks for many sequences: block by block, `chunk` sequences at a time."""
+    """write_blocks for many sequences: block by block, `chunk` sequences at a time."""
     n = len(names)
     for b in range(nblk):
         lo, hi = WRAP * b, min(WRAP * b + WRAP, alilen)
@@ -299,7 +294,7 @@ def _write_blocks_chunked(out, fmt, names, pad, rows_fh, alilen, aa_fh, aalen, m
 
 
 def _batches(rows, dna: DnaIndex, pairing, start: int = 0):
-    """Batches of (id, row, DNA) of about BATCH_NT nucleotides, from sequence `start` on (MRG-4: --resume)."""
+    """Batches of (id, row, DNA) of about BATCH_NT nucleotides, from sequence `start` on (--resume)."""
     batch, nt = [], 0
     for k, (pid, row) in enumerate(islice(rows, start, None), start):
         seq = dna.get(pairing[k])
@@ -351,7 +346,7 @@ def _write_block_output(out, fmt, ids, stage, slices, alilen, rows, aa_widths, m
     if fmt == "codon":
         aa_fh = temp()
         for k, (_pid, row) in enumerate(rows()):
-            if k in skip:  # CHANGED(MRG-3): sequences skipped by --keep-going have no row
+            if k in skip:  # sequences skipped by --keep-going have no row
                 continue
             line = codon_aa_line(row, aa_widths)
             aalen = len(line)
@@ -378,13 +373,12 @@ def _spool(path, spooled: list) -> str:
 def run(pep_path, nuc_paths, *args, **kw) -> int:
     """Convert; write the codon alignment to out_path (or stdout). Arguments as for _run. Returns the number of
     sequences skipped by keep_going (0 otherwise)."""
-    # CHANGED(ENG-b): was opening every input path several times (pipes/FIFOs gave
-    # "protein: 0" or "not seekable"); now non-regular inputs are copied to temp files
-    # first and removed afterwards. See overnight/engine-fixes/CHANGES.md
-    if "fmt" in kw:  # CHANGED(MRG-3): the teammate's name for out_format, kept as an alias
+    # Every input path is opened several times, so non-regular inputs (pipes, FIFOs) are copied to temp files first
+    # and removed afterwards.
+    if "fmt" in kw:  # fmt: accepted as an alias for out_format
         kw["out_format"] = kw.pop("fmt")
     spooled: list = []
-    names = {}  # CHANGED(R2-E7): temp copy -> the argument it came from, for error messages
+    names = {}  # temp copy -> the argument it came from, for error messages
     inputs = {str(pep_path), *map(str, nuc_paths)}
     try:
         try:
@@ -394,8 +388,7 @@ def run(pep_path, nuc_paths, *args, **kw) -> int:
             for p in nuc_paths:
                 nps.append(_spool(p, spooled))
                 names[nps[-1]] = str(p)
-            # CHANGED(MRG-4): a run whose input came through a pipe cannot be resumed (its data is gone), so it
-            # keeps no checkpoint. See overnight/integration/CHANGES.md
+            # A run whose input came through a pipe cannot be resumed (its data is gone), so it keeps no checkpoint.
             kw.setdefault("_resumable", not spooled)
             return _run(sp, nps, *args, **kw)
         except (CoalError, InputFormatError) as e:
@@ -408,9 +401,7 @@ def run(pep_path, nuc_paths, *args, **kw) -> int:
                 raise type(e)(msg) from None
             raise
         except OSError as e:
-            # CHANGED(ENG-UX-4): an input that cannot be opened was "[Errno 2] No such file or directory: 'x.fa'"
-            # (Python's wording); now "cannot open 'x.fa': no such file" (also: permission denied, it is a folder).
-            # See overnight/integration/CHANGES.md
+            # "cannot open 'x.fa': no such file" (also: permission denied, it is a folder), not Python's wording.
             fn = getattr(e, "filename", None)
             user = names.get(str(fn), str(fn)) if fn is not None else None
             if user in inputs:
@@ -425,10 +416,9 @@ def run(pep_path, nuc_paths, *args, **kw) -> int:
 
 
 def _output_error(out_path, e: OSError) -> CoalError:
-    """CHANGED(R3-E2): the error for an output (or its partial file) that cannot be created, naming the user's -o
-    path in plain words (was the raw OSError naming COAL's hidden temp file). See overnight/integration/CHANGES.md
-    CHANGED(ENG-UX-12): ENOENT in a folder that exists (e.g. /proc) said "folder ... does not exist"; permission
-    denied now says what to do; no -o (a temporary file for stdout) named "None"."""
+    """The error for an output (or its partial file) that cannot be created, naming the user's -o path (not COAL's
+    hidden temp file) in plain words. ENOENT in a folder that exists (e.g. /proc) is not "folder ... does not
+    exist"; permission denied says what to do; with no -o (a temporary file for stdout) the temp folder is named."""
     folder = os.path.dirname(os.path.abspath(out_path)) if out_path else tempfile.gettempdir()
     if e.errno == errno.ENOENT and not os.path.isdir(folder):
         why = f"folder {folder} does not exist"
@@ -460,10 +450,6 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
     progress: percent done on stderr for inputs over PROGRESS_MIN_SEQS sequences.
     resume: continue an interrupted run with the same out_path from its checkpoint (checkpoint.py); note(text)
     receives informational messages."""
-    # CHANGED(DEC-4): out_format and blockonly are new (was FASTA only, -blockonly rejected).
-    # See overnight/integration/CHANGES.md
-    # CHANGED(MRG-3, MRG-4): rec, keep_going, progress, resume, note are new (teammate's branch, made to compose
-    # with this engine). See overnight/integration/CHANGES.md
     if out_format not in FORMATS:
         raise CoalError(f"unknown output format '{out_format}' (one of {', '.join(FORMATS)})")
     if out_format == "codon" and (nogap or nomismatch or blockonly):
@@ -487,22 +473,19 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
             ncol = len(row)
             first_row = row
         elif len(row) != ncol:
-            # CHANGED(ENG-UX-3): was "protein alignment rows have different lengths (N and M, at id)" whatever the
-            # cause; now the files-swapped case (the first file is DNA) and the not-aligned case are told apart, with
-            # what to do. See overnight/integration/CHANGES.md
+            # The files-swapped case (the first file is DNA) and the not-aligned case are told apart, with what to do.
             raise CoalError(row_length_message(str(pep_path), ncol, len(row), pid, first_row + row),
                             code="row_lengths")
         if _DIGIT.search(row):
             digit_rows.append(row)
     if not ids:
-        # CHANGED(ENG-UX-6): was "number of sequences differs (protein: 0, DNA: N)"; now names the empty file
         raise CoalError(f"{pep_path}: no sequences found: the file is empty or has no '>' header lines (expected a "
                         f"protein alignment in FASTA or CLUSTAL format)", code="no_sequences")
     if rec is not None:
         rec.set_inputs(ids)
     dna = DnaIndex(nuc_paths)
     try:
-        if not len(dna):  # CHANGED(ENG-UX-6): was "number of sequences differs (protein: N, DNA: 0)"
+        if not len(dna):
             raise CoalError(f"{', '.join(map(str, nuc_paths))}: no sequences found: the file"
                             + ("s are" if len(nuc_paths) > 1 else " is")
                             + " empty or ha" + ("ve" if len(nuc_paths) > 1 else "s")
@@ -513,8 +496,7 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                 per_file[f] += 1
             rec.set_inputs(ids, per_file, dna.ids)
         # DNA record number for each protein, as a compact array; then free the ID tables
-        # CHANGED(ENG-d): passes notice, so a partial ID match is reported. See overnight/engine-fixes/CHANGES.md
-        # CHANGED(MRG-1): pair_ids (was pair_sequences): normalised IDs where file order would mispair
+        # pair_ids reports a partial ID match and uses normalised IDs where file order would mispair
         pair_notes: list = []
         idx, mode, per_seq = pair_ids(ids, dna.ids, dna.pos, warn=pair_notes.append, strict=strict)
         pairing = array("q", idx)
@@ -523,8 +505,8 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
             for n in pair_notes:
                 notice(n)
         nseq = len(ids)
-        # CHANGED(ENG-UX-18): sequences paired by file order whose IDs differ: a failure names the DNA record used
-        # (ENG-d: a run where every gene fits stays silent). See overnight/integration/CHANGES.md
+        # Sequences paired by file order whose IDs differ: a failure names the DNA record used (a run where every
+        # gene fits stays silent).
         order_why = None
         if mode == "order":
             hits = sum(1 for p in ids if p in dna.pos)
@@ -543,17 +525,14 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
         dna.forget_ids()
         jobs = effective_jobs(jobs, dna.total_bytes(), min_nt_per_job)
         widths = column_widths(digit_rows, ncol)
-        # CHANGED(MRG-3): --keep-going + paml stages the rows too (the header needs the final count)
+        # --keep-going + paml stages the rows too (the header needs the final count)
         two_pass = (nogap or nomismatch or block_cols or out_format in BLOCK_FORMATS
                     or (keep_going and out_format == "paml"))
         keep_col = (lambda c: mask[c - 1:c] == "#") if block_cols else None
 
-        # CHANGED(ENG-a): was always temp-file-then-rename next to out_path (replaced symlinks,
-        # FIFOs and devices; mode 0600); now renames only onto a regular/new file (symlinks
-        # resolved), writes other paths directly. See overnight/engine-fixes/CHANGES.md
-        # CHANGED(R2-E5): a symlink loop was silently replaced by a regular file; now a clear error. An existing
-        # file with other hard links is written in place (renaming broke the links), and an existing file keeps
-        # its permission bits (was widened to 0666 & ~umask). See overnight/integration/CHANGES.md
+        # Temp-file-then-rename only onto a regular/new file (symlinks resolved; a symlink loop is a clear error);
+        # FIFOs, devices and files with other hard links (renaming would break the links) are written directly.
+        # An existing file keeps its permission bits.
         if out_path and os.path.islink(out_path):
             try:
                 os.stat(out_path)
@@ -562,8 +541,7 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                     raise CoalError(f"{out_path}: symbolic link loop; cannot write the output there",
                                     code="file_error") from None
         real_out = os.path.realpath(out_path) if out_path else None
-        # CHANGED(ENG-UX-12): -o naming a folder failed only at the very end ("[Errno 21] Is a directory: 'od'"); -o
-        # naming an input file overwrote that input. Both are now refused before any work. See overnight/integration/CHANGES.md
+        # -o naming a folder or an input file is refused before any work.
         if real_out and os.path.isdir(real_out):
             raise CoalError(f"cannot write {out_path}: it is a folder, not a file (give a file name with -o)",
                             code="file_error")
@@ -580,11 +558,10 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
         direct = bool(real_out) and os.path.exists(real_out) and (
             not existing or os.stat(real_out).st_nlink > 1)
 
-        # CHANGED(MRG-4): checkpoints for --resume (teammate's checkpoint.py). Kept only for an output that is (or
-        # will be) a regular file and inputs that are regular files: the partial output <real out>.coal-partial
-        # (rows: .coal-stage) lives next to the real target, so symlinks, hard links and modes are handled as
-        # above; FIFOs/devices (e.g. /dev/null) and piped inputs keep the old hidden temp files and cannot be
-        # resumed. See overnight/integration/CHANGES.md
+        # Checkpoints for --resume (checkpoint.py). Kept only for an output that is (or will be) a regular file and
+        # inputs that are regular files: the partial output <real out>.coal-partial (rows: .coal-stage) lives next
+        # to the real target, so symlinks, hard links and modes are handled as above; FIFOs/devices (e.g.
+        # /dev/null) and piped inputs use hidden temp files and cannot be resumed.
         ck = state = None
         if out_path and _resumable and (not os.path.exists(real_out) or existing):
             ck = Checkpoint(real_out, {"fmt": out_format, "table": table, "nogap": nogap,
@@ -608,7 +585,7 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                  "the output is not a regular file") + "); starting a normal run")
 
         dest_dir = os.path.dirname(real_out) if out_path and not direct else None
-        scratch: list = []  # CHANGED(DEC-4): fixed-width temp files of the clustal / codon writer
+        scratch: list = []  # fixed-width temp files of the clustal / codon writer
         tmp = stage = None
         entries_fh = None
         finished = failed = False
@@ -634,7 +611,7 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                     try:
                         st = tempfile.NamedTemporaryFile("w+", delete=False, newline="\n", prefix=".coal_rows_",
                                                          encoding="ascii")
-                    except OSError as e:  # CHANGED(ENG-UX-12): was the raw OSError
+                    except OSError as e:
                         raise _output_error(None, e) from None
                     scratch.append(st)
                     stage = st.file
@@ -656,8 +633,8 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                 return [w for w in warns if not (keep_col and (m := _ALNPOS.search(" " + w))
                                                  and not keep_col(int(m.group(1))))]
             if note and warn and not nomismatch:
-                # CHANGED(IMP-E-B): the genetic-code suggestion comes first, before the per-codon warnings it explains
-                # (was only in the last summary line, after e.g. 834 warnings on coxI). See overnight/integration/CHANGES.md
+                # The genetic-code suggestion comes first, before the per-codon warnings it explains (not only in the
+                # last summary line, after e.g. 834 warnings on coxI).
                 from .report import early_code_notice
                 hint = early_code_notice(rows(), lambda k: dna.get(pairing[k]), table, nseq,
                                          rec.fit_memo if rec is not None else None)
@@ -692,18 +669,17 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                         failure = (failure[0], _paired(done, *failure))
                     for w in warns:
                         printed = not (nomismatch and MISMATCH_WARNING in w)
-                        if keep_col:  # CHANGED(DEC-4): -blockonly: as PAL2NAL, only warnings in kept columns
+                        if keep_col:  # -blockonly: as PAL2NAL, only warnings in kept columns
                             m = _ALNPOS.search(" " + w)
                             if m and not keep_col(int(m.group(1))):
                                 continue
-                        # CHANGED(ENG-i2): was printed with -nomismatch too; now, as PAL2NAL, no
-                        # mismatch warnings with -nomismatch. See overnight/engine-fixes/CHANGES.md
+                        # As PAL2NAL, no mismatch warnings with -nomismatch.
                         if warn and printed:
                             warn(f"{pid} {w}")
-                    if notice:  # CHANGED(ENG-c): new; see overnight/engine-fixes/CHANGES.md
+                    if notice:
                         for n in notes:
                             notice(n)
-                        if failure:  # CHANGED(MRG-3): --keep-going names each skipped sequence
+                        if failure:  # --keep-going names each skipped sequence
                             notice(f"skipped {failure[1]}")
                     if rec is not None:
                         entry = rec.add_sequence(done, pid, _shown(warns), notes, failure)
@@ -730,14 +706,13 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
             if prog and prog.printed:
                 prog.update(done, final=True)
             if keep_going and skipped == nseq:
-                # CHANGED(ENG-UX-17): + what to check
                 raise CoalError(f"none of the {nseq} sequences could be converted: check that the DNA file holds the "
                                 f"coding sequences of these proteins and that the genetic code (-codontable) is right",
                                 code="all_failed")
             if rec is not None:
                 rec.finish(rows, dna, pairing)
             if two_pass:
-                if block_cols:  # CHANGED(DEC-4): -blockonly drops the columns not marked '#'
+                if block_cols:  # -blockonly drops the columns not marked '#'
                     drop.update(i for i in range(ncol) if mask[i:i + 1] != "#")
                 sl = keep_slices(widths, drop, bad)
                 alilen = sum(b - a for a, b in sl)
@@ -763,20 +738,20 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                 rec.set_output(out_path, sha256_file(tmp_name) if rec.keep_entries else None, nseq - skipped)
             if out_path and not direct:
                 if existing:
-                    shutil.copymode(real_out, tmp_name)  # CHANGED(R2-E5): keep the existing file's mode
+                    shutil.copymode(real_out, tmp_name)  # keep the existing file's mode
                 else:
                     umask = os.umask(0)
                     os.umask(umask)
-                    os.chmod(tmp_name, 0o666 & ~umask)  # CHANGED(ENG-a): was 0600; see CHANGES.md
+                    os.chmod(tmp_name, 0o666 & ~umask)  # not mkstemp's 0600
                 try:
                     os.replace(tmp_name, real_out)
-                except OSError as e:  # CHANGED(ENG-UX-12): was the raw OSError
+                except OSError as e:
                     raise _output_error(out_path, e) from None
             elif out_path:
                 with open(tmp_name, "r", encoding="ascii", newline="\n") as fh:
                     try:
                         dst = open(out_path, "w", encoding="ascii", newline="\n")
-                    except OSError as e:  # CHANGED(ENG-UX-12): was the raw OSError
+                    except OSError as e:
                         raise _output_error(out_path, e) from None
                     with dst:
                         shutil.copyfileobj(fh, dst, 1 << 20)
@@ -789,9 +764,8 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                         shutil.copyfileobj(fh, out, 1 << 20)
                         out.flush()
                     except OSError as e:
-                        # CHANGED(R2-D1): was only BrokenPipeError quiet; now, on Windows, EINVAL from writing
-                        # to a closed stdout pipe (how Windows often reports it) is a quiet exit 141 too.
-                        # See overnight/integration/CHANGES.md
+                        # On Windows, EINVAL from writing to a closed stdout pipe (how Windows often reports it) is a
+                        # quiet exit 141 too, as BrokenPipeError.
                         if _WINDOWS and not isinstance(e, BrokenPipeError) and e.errno == errno.EINVAL:
                             raise BrokenPipeError(errno.EPIPE, "stdout closed") from None
                         raise
@@ -813,8 +787,8 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                 except OSError:
                     pass
             if ck is not None:
-                # CHANGED(MRG-4): after a crash, kill or signal (ENG-f / R2-E8 cleanup) the partial files are kept
-                # only when a checkpoint describes them, so --resume can continue; otherwise removed as before
+                # After a crash, kill or signal (cleanup) the partial files are kept only when a checkpoint describes
+                # them, so --resume can continue; otherwise they are removed
                 if finished or failed or not os.path.exists(ck.path):
                     ck.remove()
     finally:

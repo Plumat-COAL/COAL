@@ -3,15 +3,14 @@
 For teammates making the Windows app. (People who just want to use COAL: see `README.md`.)
 
 Status: these files were written on Linux without PyPI, PyInstaller or Inno Setup, so **the
-build has never been run**. Expect to fix small things on the first run; note them in
-`overnight/windows-app/LOG.md`.
+build has never been run**. Expect to fix small things on the first run.
 
 ## Once per machine
 
 1. Windows 10 or 11, 64-bit.
 2. Python 3.12 from python.org (tick "Add python.exe to PATH" is not needed; the `py` launcher
    is enough). Check: `py -3.12 --version`.
-3. Git, and this repo checked out on branch `keanu_overnight/windows-app`.
+3. Git, and this repo checked out on branch `main`.
 4. Optional, for the installer: Inno Setup 6.3 or newer from https://jrsoftware.org/isdl.php
    (choose "Install for me only" if you have no admin rights).
 
@@ -23,7 +22,6 @@ In PowerShell, from the repo root:
 powershell -ExecutionPolicy Bypass -File desktop\build.ps1
 ```
 
-<!-- CHANGED(WIN-W7): new note. See overnight/windows-app/CHANGES.md -->
 On a managed (university/company) PC, Group Policy can override `-ExecutionPolicy Bypass`; then
 the script won't run at all, and you need IT or a non-managed machine.
 
@@ -57,17 +55,14 @@ $env:COAL_SMOKE_EXE = "$PWD\desktop\dist\COAL\COAL.exe"; desktop\.venv\Scripts\p
 
 ## Pinned versions: verify on the first build
 
-<!-- CHANGED(WIN-R2): new section. See overnight/windows-app/CHANGES.md -->
 `desktop\requirements.txt` pins `pywebview==6.2.1`, `pyinstaller==6.22.3` and
 `pyinstaller-hooks-contrib==2026.8` (SHIP-8: was 2026.5, which conflicts with PyInstaller 6.22.3, found by the
 v0.4.0 release build; 2026.8 is the newest hooks release tag). On the first build, check that pip installs
 all three; if pip reports a conflict between PyInstaller and the hooks package, pin the
-hooks-contrib release from the same month as the PyInstaller release, and record it in
-`overnight/windows-app/LOG.md`.
+hooks-contrib release from the same month as the PyInstaller release.
 
 ## Frozen-mode checks (first build)
 
-<!-- CHANGED(WIN-R3): new section. See overnight/windows-app/CHANGES.md -->
 These only exist in the PyInstaller build and were never run:
 
 - `COAL.exe --serve` (the hidden child) gets valid stdout/stdin pipes even though the exe is

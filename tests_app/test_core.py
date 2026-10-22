@@ -27,10 +27,10 @@ class TestSampleReport(unittest.TestCase):
                   "summary", "hints", "sequences", "runtime_seconds", "exit_code"):
             self.assertIn(k, r)
         self.assertEqual(set(r["options"]), {"output_format", "codontable", "nogap", "nomismatch", "keep_going",
-                                             "strict", "blockonly"})  # FIN-A6: strict, blockonly
+                                             "strict", "blockonly"})
         self.assertEqual({i["role"] for i in r["inputs"]}, {"protein", "dna"})
 
-    def test_counts(self):  # APP-15: the sample is now a real run of examples/mito with code 1
+    def test_counts(self):  # the sample is a real run of examples/mito with code 1
         r = self.rep
         self.assertEqual(len(r["sequences"]), 24)
         st = [s["status"] for s in r["sequences"]]
@@ -137,11 +137,11 @@ class TestRunsOnExamples(unittest.TestCase):
 class TestMethodsText(unittest.TestCase):
     def test_from_sample_report(self):
         m = core.methods_text(core.load_sample_report())
-        self.assertIn("COAL (demo)", m)  # APP-15
+        self.assertIn("COAL (demo)", m)
         self.assertIn("standard genetic code (NCBI translation table 1)", m)
         self.assertIn("Of 24 sequences, 0 matched", m)
         self.assertIn("24 contained codons that did not match", m)
-        # CHANGED(MRG-10): was "... dna.fasta -o ..."; the app now passes --keep-going to the merged engine (MRG-6/2)
+        # the app passes --keep-going to the engine
         self.assertIn("Command: coal protein.aln.fasta dna.fasta --keep-going -o protein.codon.fasta", m)
 
     def test_engine_text_wins(self):

@@ -16,7 +16,7 @@ IUPAC = {
     "R": "AG", "Y": "CT", "S": "CG", "W": "AT", "K": "GT", "M": "AC",
     "B": "CGT", "D": "AGT", "H": "ACT", "V": "ACG", "N": "ACGT",
 }
-ANCHOR_STARTS = frozenset({"ATG", "CTG", "GTG"})  # PAL2NAL's first-Met rule in fallback mode (FIN-E1: + the code's)
+ANCHOR_STARTS = frozenset({"ATG", "CTG", "GTG"})  # PAL2NAL's first-Met rule in fallback mode (COAL adds the code's)
 
 # Residue "modes": how the first Met of a sequence is treated.
 NORMAL, START, ANCHOR_START = 0, 1, 2
@@ -27,10 +27,10 @@ def _allowed(table: int, aa: str, mode: int) -> frozenset[str]:
     if aa == "M" and mode == START:
         return code.starts
     if aa == "M" and mode == ANCHOR_START:
-        # CHANGED(FIN-E1): was ATG/CTG/GTG only (PAL2NAL's fallback rule) whatever the table, so code 2's ATT/ATA start
-        # was a mismatch (and -nomismatch dropped column 1) whenever a gene needed the fallback; now also the selected
-        # code's start and Met codons, as in the exact-fit path. Deliberate difference from PAL2NAL v14.
-        # teammate's engine/C++ must mirror. See overnight/integration/CHANGES.md
+        # Besides ATG/CTG/GTG (PAL2NAL's fallback rule), also the selected code's start and Met codons, as in the
+        # exact-fit path; otherwise e.g. code 2's ATT/ATA start would be a mismatch (and -nomismatch would drop
+        # column 1) whenever a gene needs the fallback. Deliberate difference from PAL2NAL v14; the C++ engine
+        # mirrors it.
         return ANCHOR_STARTS | code.starts | code.codons.get("M", frozenset())
     return code.codons.get(aa, frozenset())
 
@@ -42,10 +42,8 @@ _MASK = {k: sum(_BIT[b] for b in v) for k, v in IUPAC.items()}  # IUPAC code -> 
 @lru_cache(maxsize=None)
 def accepted(table: int, aa: str, mode: int = NORMAL) -> frozenset[str]:
     """All upper-case IUPAC triplets that encode `aa` (no 'X' handling here).
-    CHANGED(IMP-E-H): was a brute-force expansion of all 15^3 triplets into their concrete codons (3.2 ms per
-    residue/table/mode, ~1 s for the 17 codes the genetic-code hint tries); now from per-position base sets: for
-    each pair of first two IUPAC bases, the third bases every concrete prefix allows. Same sets.
-    See overnight/integration/CHANGES.md"""
+    Built from per-position base sets: for each pair of first two IUPAC bases, the third bases every concrete prefix
+    allows (the same sets as expanding all 15^3 triplets, which is far too slow for the genetic-code hint)."""
     allowed = _allowed(table, aa, mode)
     third: dict[str, int] = {}  # concrete two-base prefix -> bit set of third bases that complete it
     for c in allowed:

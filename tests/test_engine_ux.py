@@ -1,7 +1,7 @@
-"""ENG-UX: every error path says what is wrong, which file / gene / position, and what to do; coal-cpp says it
+"""Engine messages: every error path says what is wrong, which file / gene / position, and what to do; coal-cpp says it
 byte for byte the same (stderr and exit code).
 
-CHANGED(ENG-UX-1..ENG-UX-17): new. See overnight/integration/CHANGES.md. Python runs in-process; the C++ half is
+Python runs in-process; the C++ half is
 skipped if coal-cpp is not built (COAL_CPP_BIN, default ./build/coal-cpp).
 """
 from __future__ import annotations
@@ -87,8 +87,8 @@ CASES = {
     "resume_notice": ({"p.fa": P, "d.fa": D}, ["p.fa", "d.fa", "-o", "o.fa", "--resume"],
                       ["coal: notice: no checkpoint to resume for o.fa; starting a normal run\n"]),
 }
-# ENG-UX-18 / ENG-UX-19: real-data findings (REAL-1 review). A camelid VH gene (HyPhy camelid set, LGL237335) whose
-# partial codons sit at alignment columns 21 and 24 was "Frameshift at column 94".
+# Real-data finding: a camelid VH gene (HyPhy camelid set, LGL237335) whose partial codons sit at alignment
+# columns 21 and 24 must not be reported as "Frameshift at column 94".
 FS_PEP = ">s\n---LQQSGGGLVQAGGSLRL-CV-SGIIASDSAMAWYRQAPGKGREYVA-HITAGGLSNYEDFVNGRFTISRDNARNTMYLQMNSLKPEDTAVYYC\n"
 FS_NUC = (">s\nCTGCAGCAGTCTGGGGGAGGCTTGGTGCAGGCTGGGGGGTCTCTGAGACTCTCTGTGTAGCTCTGGAATAATCGCCAGCGACAGTGCCATGGCCTGGTACCGC"
           "CAGGCTCCAGGGAAGGGGCGCGAGTATGTCGCACATATCACAGCTGGTGGTCTTTCAAATTATGAAGACTTCGTGAACGGCCGATTCACCATCTCCAGAGACAAC"
@@ -170,29 +170,29 @@ class TestMessages(unittest.TestCase):
                 self.assertNotEqual(rc, 0, err) if name != "resume_notice" else self.assertEqual(rc, 0, err)
                 for f in frags:
                     self.assertIn(f, err)
-                # ENG-UX-5: an error is said once (no "The run failed: ..." / "[Errno" repeats)
+                # an error is said once (no "The run failed: ..." / "[Errno" repeats)
                 self.assertNotIn("The run failed", err)
                 self.assertNotIn("[Errno", err)
 
-    def test_run_level_error_is_one_line(self):  # ENG-UX-5
+    def test_run_level_error_is_one_line(self):
         make(self.d, {"p.fa": P, "d.fa": D + ">c\nATG\n"})
         rc, out, err = run_py(self.d, ["p.fa", "d.fa"])
         self.assertEqual((rc, out, err.count("\n")), (1, "", 1), err)
 
-    def test_open_error_reasons(self):  # ENG-UX-4 (root can read anything, so the reasons are tested directly)
+    def test_open_error_reasons(self):  # (root can read anything, so the reasons are tested directly)
         self.assertEqual(open_error_message("x.fa", PermissionError(errno.EACCES, "Permission denied", "x.fa")),
                          "cannot open 'x.fa': permission denied")
         self.assertEqual(open_error_message("x.fa", OSError(errno.ENAMETOOLONG, "File name too long", "x.fa")),
                          "cannot open 'x.fa': File name too long")
 
-    def test_normalised_pairing_example_reads_the_right_way(self):  # ENG-UX-1
+    def test_normalised_pairing_example_reads_the_right_way(self):
         rc, _, err = run_py(ROOT, [str(EX / "messy_ids" / "protein.aln.fasta"), str(EX / "messy_ids" / "dna.fasta")])
         self.assertEqual(rc, 0)
         self.assertIn("(e.g. by file order, protein 'AT1G79010.1' would get DNA 'AT2G68010'; COAL paired it with "
                       "'AT1G79010')", err)
         self.assertNotIn("gets DNA", err)
 
-    def test_broken_gene_says_where_and_what_to_do(self):  # ENG-UX-2, ENG-UX-5
+    def test_broken_gene_says_where_and_what_to_do(self):
         rc, _, err = run_py(ROOT, [str(EX / "one_broken_gene" / "protein.aln.fasta"),
                                    str(EX / "one_broken_gene" / "dna.fasta")])
         self.assertEqual(rc, 1)
@@ -202,7 +202,7 @@ class TestMessages(unittest.TestCase):
                               "coal: summary: The run stopped at OG0001_sp14: 6 sequences were not checked and no output "
                               "was written. Add --keep-going to write the other sequences and leave this one out.\n")
 
-    def test_genetic_code_hint_names_the_option_report_keeps_app_text(self):  # ENG-UX-7, ENG-UX-9
+    def test_genetic_code_hint_names_the_option_report_keeps_app_text(self):
         out = self.d / "o.fa"
         rep = self.d / "r.json"
         rc, _, err = run_py(ROOT, [str(EX / "mito" / "protein.aln.fasta"), str(EX / "mito" / "dna.fasta"),
@@ -222,9 +222,9 @@ class TestMessages(unittest.TestCase):
                                  "-o", str(out), "--report", str(rep)])
         self.assertTrue(json.loads(rep.read_text())["methods_text"].startswith("Codon alignments were built"))
 
-    def test_standard_code_is_suggested_when_it_fits(self):  # PRE-4
+    def test_standard_code_is_suggested_when_it_fits(self):
         # one_broken_gene run with code 2: codes 1, 4, 6, 10, 11, 15 and 16 all fit the 19 healthy genes; the
-        # hint said "code 4 ... differs least from code 2"; now code 1, the standard code
+        # hint suggests code 1, the standard code (not code 4, the one that differs least from code 2)
         rep = self.d / "r.json"
         args = [str(EX / "one_broken_gene" / "protein.aln.fasta"), str(EX / "one_broken_gene" / "dna.fasta"),
                 "-codontable", "2", "--keep-going", "-o", str(self.d / "o.fa"), "--report", str(rep)]
@@ -245,14 +245,14 @@ class TestMessages(unittest.TestCase):
                       "code 1, none do. Codes 5 and 13 fit these sequences too: choose the code of the organism and "
                       "organelle the genes come from. Re-run with -codontable 2.\n", err)
 
-    def test_break_locations_are_not_wrong(self):  # ENG-UX-19
+    def test_break_locations_are_not_wrong(self):
         from coal.report import break_event
         self.assertIsNone(break_event(DUP_ROW, DUP_DNA, 1))  # no evidence for a column: no column
         ev = break_event(FS_PEP.split("\n")[1], FS_NUC.split("\n")[1], 1)
         self.assertEqual((ev["code"], ev["column"], ev["shift"]), ("frameshift", 22, 4))
         self.assertTrue(ev["text"].startswith("Frameshift near column 22"))
 
-    def test_order_pairing_named_only_on_failure(self):  # ENG-UX-18 (ENG-d: silent when every gene fits)
+    def test_order_pairing_named_only_on_failure(self):  # silent when every gene fits
         make(self.d, {"p.fa": ">x\nMKV-L\n>y\nMKVAL\n", "d.fa": D})
         rc, _, err = run_py(self.d, ["p.fa", "d.fa"])
         self.assertEqual((rc, err), (0, ""))
@@ -262,7 +262,7 @@ class TestMessages(unittest.TestCase):
                       "order with DNA 'b', because only 1 of 3 protein IDs are DNA IDs)", err)
         self.assertNotIn("skipped z: protein and DNA are inconsistent (no match found) (paired", err)  # same ID
 
-    def test_clean_example_readme_counts(self):  # ENG-UX-8
+    def test_clean_example_readme_counts(self):
         text = (EX / "clean" / "README.md").read_text()
         self.assertNotIn("150 codons", text)
         self.assertIn("140-144 codons each, aligned in 150 columns", text)
@@ -272,7 +272,7 @@ class TestMessages(unittest.TestCase):
 class TestCppSaysTheSame(unittest.TestCase):
     """coal-cpp: the same stderr (byte for byte) and exit code on every case above and the examples."""
 
-    def test_codon_output_when_the_last_sequence_is_skipped(self):  # ENG-UX-20 (TestCppMatchesPython seed 31337)
+    def test_codon_output_when_the_last_sequence_is_skipped(self):  # found by TestCppMatchesPython, seed 31337
         pep = '>seq0\nmsr-vet-yhsrneldpyykkalmafwkqyvm-gpwlklhccv\n>seq1\nMSRSVECDY-SRNELD-YYKKD-2GR-KQ-VMPGPTLKWHCCV\n>seq2\nMS-SVETD-HNRNELDPY4PKALTM!WKWYVMPFPTFKLRCCD\n'
         nuc = '>seq0 desc\nATGTCACGCGTTGAGACATACCACTCACGTAATGAGCTCGACCCTTATTATAAGAAGGCCCTGATGGCCTTCTGGAAATAATACGTTATGGGGCCGTGGCTGAAACTGCACTGCTGTGWGTGAA\n>seq1 desc\nCGATACGATGTCGAGATCGGTCGAGTGCGATTACTCTCGAAACGAGTTGGACTACTATAAGAAGGACACGGACGTAAACAAGTAATGCCCGGRCCGACTCTCAAATGGCATTGCTGTGTG\n>seq2 desc\nATGTCTTCGGTTGAGACGGACCATAATCGGAACGAGCTAGATCCTTATTATACCGAAAGCGCTTACGATGACCTGGAAGTGGTATGTTATGCCTTTCCCAACGTTTAAGCTAAGATGCTGTGAC\n'
         with tempfile.TemporaryDirectory() as tmp:
@@ -290,7 +290,7 @@ class TestCppSaysTheSame(unittest.TestCase):
             runs = [(n, f, a) for n, (f, a, _) in CASES.items()]
             for ex in ("messy_ids", "one_broken_gene", "mito"):
                 runs.append((ex, {}, [str(EX / ex / "protein.aln.fasta"), str(EX / ex / "dna.fasta"), "-o", "o.fa"]))
-            # PRE-4: the standard-code preference (one_broken_gene and clean run with code 2)
+            # the standard-code preference (one_broken_gene and clean run with code 2)
             for ex in ("one_broken_gene", "clean"):
                 runs.append((ex + "-code2", {}, [str(EX / ex / "protein.aln.fasta"), str(EX / ex / "dna.fasta"),
                                                  "-o", "o.fa", "-codontable", "2", "--keep-going"]))
@@ -308,7 +308,7 @@ class TestCppSaysTheSame(unittest.TestCase):
                     self.assertEqual((r.returncode, cerr), (rc, err))
 
 
-    def test_same_genetic_code_hint_in_the_report(self):  # PRE-4
+    def test_same_genetic_code_hint_in_the_report(self):
         binary = str(cpp_binary())
         with tempfile.TemporaryDirectory() as tmp:
             for ex, code in (("one_broken_gene", "2"), ("clean", "2"), ("mito", "1")):

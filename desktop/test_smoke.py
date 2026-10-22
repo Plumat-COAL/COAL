@@ -182,7 +182,7 @@ class WindowsFileQuirks(unittest.TestCase):
         with open(ref, "rb") as a, open(out, "rb") as b:
             self.assertEqual(a.read(), b.read())
 
-    # CHANGED(INT-2): was @unittest.expectedFailure; the engine now skips a UTF-8 BOM (ENG-h), so this must pass.
+    # The engine skips a UTF-8 BOM.
     def test_utf8_bom_is_accepted(self):
         p, d = core.example_paths("clean")
         r = self.run_engine(self.copy(p, "bom.aln.fasta", bom=True), d, os.path.join(self.dir, "o.fasta"))
@@ -307,8 +307,7 @@ class LocalAppTests(Checks):
         for name, code in self.RUNS:
             with self.subTest(example=name, genetic_code=code):
                 p, d = core.example_paths(name)
-                # CHANGED(SHIP-10): was 6 values; codon_align has 8 parameters since FIN-A6 added strict and blockonly, and
-                # the real Gradio API rejects a short positional list (the first CI build of the installer failed here)
+                # codon_align has 8 parameters, and the real Gradio API rejects a short positional list
                 r = gradio_call(self.url, "codon_align", [p, d, "fasta", code, False, False, False, False, ""])
                 self.check_result(name, code, r)
 

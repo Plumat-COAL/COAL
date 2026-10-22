@@ -32,7 +32,7 @@ def changelog_section(version, path=os.path.join(ROOT, "CHANGELOG.md")):
 
 
 def fixed_part(version):
-    wheel = f"coal-{version}-py3-none-any.whl"
+    wheel = f"coal_align-{version}-py3-none-any.whl"
     return f"""COAL {version}: turns a protein alignment plus the matching coding DNA into a codon alignment
 (for dN/dS and DNA phylogenies). A fast, MIT-licensed replacement for PAL2NAL.
 
@@ -45,7 +45,7 @@ Website and install steps: https://plumat-coal.github.io/COAL/
 | `COAL-Setup-{version}.exe` (same file: `COAL-Setup-windows-x64.exe`) | Windows 10/11 installer, 64-bit, installs for you only (no administrator rights) |
 | `COAL-{version}-windows-x64.zip` (same file: `COAL-windows-x64.zip`) | Windows portable app: unzip anywhere, run `COAL\\COAL.exe` |
 | `{wheel}` | Python wheel (Windows, macOS, Linux; Python 3.10+) |
-| `coal-{version}.tar.gz` (same file: `coal_src.tar.gz`) | Python source distribution |
+| `coal_align-{version}.tar.gz` (same file: `coal_src.tar.gz`) | Python source distribution |
 | `SHA256SUMS.txt` | SHA-256 checksums of every file above |
 
 The version-free names always point at the newest release through
@@ -66,12 +66,12 @@ COAL has no code-signing certificate yet, so Windows doesn't know the publisher:
 Needs Python 3.10 or newer. In a virtual environment:
 
 ```
-python -m pip install "coal[gui] @ {REPO}/releases/download/v{version}/{wheel}"
+python -m pip install "coal-align[gui] @ {REPO}/releases/download/v{version}/{wheel}"
 coal-gui        # the app, at http://127.0.0.1:7860
 coal --help     # the command line
 ```
 
-COAL is not on PyPI: a plain `pip install coal` does not install this project.
+COAL's package name is `coal-align`: a plain `pip install coal` installs a different project.
 
 ## Check a download
 

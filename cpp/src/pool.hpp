@@ -1,4 +1,4 @@
-// Parallel infrastructure (CPP-5): an ordered, streaming thread pool over sequences.
+// Parallel infrastructure: an ordered, streaming thread pool over sequences.
 //
 //   run_ordered<Item>(read_batch, work, emit, jobs)
 //     read_batch(std::vector<Item>&)  fills the next batch (left empty = end of input); calling thread

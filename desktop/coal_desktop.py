@@ -45,8 +45,7 @@ READY_PREFIX = "COAL-READY"
 EXIT_PORT_BUSY = 75          # serve(): the port was taken; the window process tries another one
 EXIT_NO_GUI = 3              # serve(): the local app (Gradio) could not be imported
 EXIT_CRASH = 1               # serve()/engine: unexpected error (traceback printed to the pipe)
-# CHANGED(WIN-R8): was 60 s; now 180 s (first start after install can be slow while Defender scans
-# the bundle). See overnight/windows-app/CHANGES.md
+# 180 s: the first start after install can be slow while Defender scans the bundle.
 SERVER_START_TIMEOUT = 180.0
 SERVER_STOP_TIMEOUT = 5.0
 PORT_ATTEMPTS = 3
@@ -108,8 +107,8 @@ def child_env() -> dict:
         if h not in no_proxy:
             no_proxy.append(h)
     env["NO_PROXY"] = ",".join(no_proxy)
-    # CHANGED(WINCI-5): was NO_PROXY and no_proxy on every OS; now no_proxy only off Windows (Windows variable names
-    # are case-insensitive: two spellings in one environment block are duplicates). See overnight/integration/CHANGES.md
+    # no_proxy only off Windows: Windows variable names are case-insensitive, so two spellings in one environment
+    # block are duplicates.
     if not IS_WINDOWS:
         env["no_proxy"] = env["NO_PROXY"]
     env["PYTHONUNBUFFERED"] = "1"
@@ -154,9 +153,8 @@ def find_free_port(host: str = "127.0.0.1") -> int:
         return s.getsockname()[1]
 
 
-# CHANGED(WINCI-1): was: only EADDRINUSE / WinError 10048 counted as "port busy"; now also WinError 10013
-# (WSAEACCES: Windows' answer for a port held with exclusive use or inside a reserved/excluded port range) and
-# EACCES raised by a bind. See overnight/integration/CHANGES.md
+# "Port busy": EADDRINUSE / WinError 10048, and also WinError 10013 (WSAEACCES: Windows' answer for a port held
+# with exclusive use or inside a reserved/excluded port range) and EACCES raised by a bind.
 _PORT_BUSY = re.compile(r"empty port|address already in use|only one usage of each socket address|"
                         r"errno 98|errno 48|winerror 10048|winerror 10013|"
                         r"access a socket in a way forbidden by its access permissions", re.I)
@@ -196,7 +194,7 @@ def launch_gradio(port: int, mcp: bool = False):
     ex = bundled_examples_dir()
     if ex:
         # core computes EXAMPLES_DIR as <coal_app>/../../examples, which doesn't exist in a bundle.
-        # CHANGED(R2-A9): comment was "proposed fix"; core now reads COAL_EXAMPLES_DIR (APP-C12), set here too.
+        # core reads COAL_EXAMPLES_DIR, so it is set here too.
         os.environ["COAL_EXAMPLES_DIR"] = ex
         core.EXAMPLES_DIR = ex
     demo = ui.launch(host="127.0.0.1", port=port, mcp=mcp, demo_mode=False, prevent_thread_lock=True)
@@ -233,9 +231,7 @@ def serve(port: int, mcp: bool = False, launcher=None, parent_pid: int | None = 
     try:
         url, close = launcher(port, mcp)
     except ImportError as e:
-        # CHANGED(WIN-W9): was: told everyone to pip install with single quotes (fails in cmd);
-        # now: installed app -> "reinstall", source checkout -> cmd-safe double quotes.
-        # See overnight/windows-app/CHANGES.md
+        # Installed app -> "reinstall"; source checkout -> pip with cmd-safe double quotes.
         if FROZEN:
             hint = "This installation of COAL is incomplete; please reinstall COAL."
         else:
@@ -250,9 +246,8 @@ def serve(port: int, mcp: bool = False, launcher=None, parent_pid: int | None = 
         traceback.print_exc(file=stdout)
         return EXIT_CRASH
     except Exception:  # noqa: BLE001
-        # CHANGED(WIN-R1): was: unexpected errors propagated (in the windowed build: a modal
-        # "Unhandled exception" box in a hidden process); now printed to the pipe (-> local_app.log),
-        # exit 1. See overnight/windows-app/CHANGES.md
+        # Printed to the pipe (-> local_app.log), exit 1, so the windowed build never shows a modal
+        # "Unhandled exception" box in a hidden process.
         traceback.print_exc(file=stdout)
         stdout.flush()
         return EXIT_CRASH
@@ -298,10 +293,7 @@ class ServerError(RuntimeError):
 def default_server_command(port: int, mcp: bool = False) -> list[str]:
     base = [sys.executable] if FROZEN else [sys.executable, os.path.abspath(__file__)]
     cmd = base + ["--serve", "--port", str(port), "--parent-pid", str(os.getpid())]
-    # CHANGED(WIN-M): was: MCP off unless --mcp; now on unless --no-mcp (user decision).
-    # See overnight/windows-app/CHANGES.md
-    # CHANGED(IMP-M-3): the window's default is MCP off again (mcp=False): the endpoint sits on a random port, so no
-    # MCP client could be registered with it. `COAL.exe --mcp` turns it on; the stdio server (desktop/setup_mcp.bat)
+    # The window's default is MCP off (mcp=False): the endpoint sits on a random port, so no MCP client could be registered with it. `COAL.exe --mcp` turns it on; the stdio server (desktop/setup_mcp.bat)
     # is the way to register COAL with Claude. The --serve child still serves MCP unless given --no-mcp.
     if not mcp:
         cmd.append("--no-mcp")
@@ -394,8 +386,8 @@ class LocalServer:
     def start(self) -> str:
         last = ""
         for attempt in range(1, self.attempts + 1):
-            # CHANGED(WIN-W2): was: stop() during start() looked like a crash (and could start a
-            # new attempt); now start() raises ServerError(cancelled=True). See overnight/windows-app/CHANGES.md
+            # stop() during start(): raise ServerError(cancelled=True), so it doesn't look like a crash or start a
+            # new attempt.
             if self._stopped:
                 raise ServerError("COAL was closed while it was starting.", cancelled=True)
             port = find_free_port()
@@ -437,8 +429,7 @@ class LocalServer:
                 self._job.add(self.proc)
                 self._job_failed = False
             except Exception as e:  # noqa: BLE001 - the stdin lifeline still works
-                # CHANGED(WIN-R10): was: only logged; now stop() also kills the process tree
-                # (taskkill /T /F) so engine runs don't outlive COAL. See overnight/windows-app/CHANGES.md
+                # stop() then kills the process tree (taskkill /T /F) so engine runs don't outlive COAL.
                 log.warning("could not attach the local app to a job object (%s); "
                             "will stop it with taskkill /T", e)
                 self._job_failed = True
@@ -588,8 +579,7 @@ class LocalServer:
 
 def lock_file(fh) -> None:
     """Non-blocking exclusive OS lock on an open file (byte 0 on Windows); OSError if another handle holds it.
-    CHANGED(WINCI-4): moved out of SingleInstance.acquire (same calls) so tests lock the same way on every OS.
-    See overnight/integration/CHANGES.md"""
+    Separate from SingleInstance.acquire so tests lock the same way on every OS."""
     if IS_WINDOWS:
         import msvcrt
         fh.seek(0)
@@ -713,9 +703,8 @@ class SingleInstance:
                 info = json.load(f)
             payload = dict(message, token=info["token"])
             if IS_WINDOWS:
-                # CHANGED(WIN-R6): was: relied on toggling on_top; now we also let the running COAL
-                # take the foreground (Windows' foreground lock). Untested here.
-                # See overnight/windows-app/CHANGES.md
+                # Besides toggling on_top, let the running COAL take the foreground (Windows' foreground
+                # lock). Untested here.
                 try:
                     import ctypes
                     ctypes.windll.user32.AllowSetForegroundWindow(int(info["pid"]))
@@ -772,8 +761,7 @@ def sniff_sequence_file(path: str, max_bytes: int = 256 * 1024) -> str:
 def classify_dropped_files(paths) -> dict:
     """Sort dropped paths into {'protein': path|None, 'dna': path|None, 'other': [paths], 'extra': [(kind, path)]}
     ('extra': a second protein or DNA file; only the first of each kind is used)."""
-    # CHANGED(R3-A6): was a second file of a kind put in 'other' ("COAL couldn't tell whether this is a protein
-    # alignment or DNA"); now in 'extra', so files_to_load can say only one is used. See overnight/integration/CHANGES.md
+    # A second file of a kind goes in 'extra', not 'other', so files_to_load can say only one is used.
     out = {"protein": None, "dna": None, "other": [], "extra": []}
     for p in paths:
         if not p or not os.path.isfile(p):
@@ -798,9 +786,8 @@ def run_engine(args: list[str], module: str = "coal") -> int:
     try:
         runpy.run_module(module, run_name="__main__", alter_sys=True)
     except Exception:  # noqa: BLE001
-        # CHANGED(WIN-R1): was: propagated (windowed build: modal traceback box blocking the run
-        # until its timeout); now traceback on stderr (the GUI shows it), exit 1, like python -m coal.
-        # See overnight/windows-app/CHANGES.md
+        # Traceback on stderr (the GUI shows it), exit 1, like python -m coal; in the windowed build a
+        # propagated error would be a modal traceback box blocking the run until its timeout.
         if sys.stderr is not None:
             traceback.print_exc(file=sys.stderr)
         return 1
@@ -817,8 +804,8 @@ def run_engine(args: list[str], module: str = "coal") -> int:
 
 # ============================================================== window (pywebview; untested here)
 
-# CHANGED(POL-1): the line "This computer only. No internet needed." under the title is gone (owner: cut the
-# reassurance texts; the privacy facts stay in desktop/README.md and on the site)
+# No reassurance line under the title ("This computer only. No internet needed."): the privacy facts are in
+# desktop/README.md and on the site.
 SPLASH = """<!doctype html><html><head><meta charset="utf-8"><title>COAL</title>
 <style>
 :root { color-scheme: light dark; }
@@ -877,7 +864,7 @@ def query_url(base: str, protein: str | None, dna: str | None) -> str:
 
 
 def files_to_load(paths, current: dict) -> tuple[dict, str]:
-    """CHANGED(WIN-W4b/R2-A9): new. Sort files from "Open with", a second launch or a drop into protein / DNA
+    """Sort files from "Open with", a second launch or a drop into protein / DNA
     (by sniffing their content), keep the other box's file from `current` if only one kind is given, and
     return ({"protein": path|None, "dna": path|None}, message for the person or "")."""
     c = classify_dropped_files(paths)
@@ -886,7 +873,7 @@ def files_to_load(paths, current: dict) -> tuple[dict, str]:
     for p in c["other"]:
         lines.append(f"{os.path.basename(p or '')}: COAL couldn't tell whether this is a protein alignment or "
                      "DNA. Type or paste its path into the box it belongs in.")
-    # CHANGED(R3-A6): new message for a second file of the same kind. See overnight/integration/CHANGES.md
+    # A second file of the same kind.
     for kind in ("protein", "dna"):
         if any(k == kind for k, _ in c["extra"]):
             what = "protein alignment" if kind == "protein" else "DNA file"
@@ -898,8 +885,7 @@ def files_to_load(paths, current: dict) -> tuple[dict, str]:
 
 
 def open_with_message(paths) -> str:
-    """CHANGED(WIN-W4b/R2-A9): was "COAL can't load files opened from Explorer yet ... drag them"; files are now
-    loaded by path, so this only explains what could not be loaded (kept for callers/tests)."""
+    """Files are loaded by path, so this only explains what could not be loaded (kept for callers/tests)."""
     return files_to_load(paths, {})[1]
 
 
@@ -919,8 +905,7 @@ def run_window(server: LocalServer, instance: SingleInstance, files: list[str]) 
     window = None
 
     def load_files(paths):
-        # CHANGED(WIN-W4b/R2-A9): was only a message ("drag them onto the boxes"); now the files are loaded by
-        # path (read in place, never copied) through the GUI's ?protein=&dna= hook. See overnight/integration/CHANGES.md
+        # The files are loaded by path (read in place, never copied) through the GUI's ?protein=&dna= hook.
         want, msg = files_to_load(paths, state["loaded"])
         log.info("loading files: %s", _names(classify_dropped_files([p for p in want.values() if p])))
         if (want["protein"] or want["dna"]) and server.url:
@@ -939,7 +924,6 @@ def run_window(server: LocalServer, instance: SingleInstance, files: list[str]) 
         except Exception as e:  # noqa: BLE001
             log.warning("could not bring the window to the front: %s", e)
         if msg.get("files"):
-            # CHANGED(WIN-W4b/R2-A9): was a message only; now loaded by path. See overnight/integration/CHANGES.md
             load_files(msg["files"])
 
     instance.on_message = bring_to_front
@@ -949,9 +933,8 @@ def run_window(server: LocalServer, instance: SingleInstance, files: list[str]) 
 
     def on_drop(e):
         # This document-level handler stops the window from navigating away to a dropped file.
-        # CHANGED(WIN-W4b/R2-A9): was: paths only logged; now dropped files with a full path are loaded by path
-        # (read in place). A drop on one of Gradio's own boxes also starts Gradio's upload, which the page
-        # reload replaces. See overnight/integration/CHANGES.md
+        # Dropped files with a full path are loaded by path (read in place). A drop on one of Gradio's own boxes
+        # also starts Gradio's upload, which the page reload replaces.
         try:
             paths = [f.get("pywebviewFullPath") for f in e.get("dataTransfer", {}).get("files", [])]
             paths = [p for p in paths if p]
@@ -962,8 +945,8 @@ def run_window(server: LocalServer, instance: SingleInstance, files: list[str]) 
             load_files(paths)
 
     def on_loaded():
-        # CHANGED(WIN-W1): was: drop guard registered on the splash page, lost at load_url(); now
-        # registered on every load of the local app's page. See overnight/windows-app/CHANGES.md
+        # The drop guard is registered on every load of the local app's page (one on the splash page would be
+        # lost at load_url()).
         try:
             current = window.get_current_url() or ""
             if not (server.url and current.startswith(server.url)):
@@ -975,9 +958,8 @@ def run_window(server: LocalServer, instance: SingleInstance, files: list[str]) 
             log.warning("drag and drop guard not available: %s", ex)
 
     def on_closed():
-        # CHANGED(WIN-W2, WIN-R9): was: server.stop() here (blocking, and a stop during start was
-        # reported as "could not start"); now: mark closing, stop in the background.
-        # See overnight/windows-app/CHANGES.md
+        # Mark closing and stop in the background (server.stop() here would block, and a stop during start
+        # would be reported as "could not start").
         if state["failure"] is None:
             state["closing"] = True
         t = threading.Thread(target=server.stop, daemon=True)
@@ -1000,7 +982,7 @@ def run_window(server: LocalServer, instance: SingleInstance, files: list[str]) 
             return
         if state["closing"]:
             return
-        if files:  # CHANGED(WIN-W4b/R2-A9): was a message only; now the files are loaded by path
+        if files:  # the files are loaded by path
             want, msg = files_to_load(files, {})
             log.info("opened with files: %s", _names(classify_dropped_files(files)))
             state["loaded"] = want
@@ -1012,8 +994,7 @@ def run_window(server: LocalServer, instance: SingleInstance, files: list[str]) 
 
     gui = "edgechromium" if IS_WINDOWS else None  # never fall back to the IE11 engine
     try:
-        # CHANGED(WIN-R7): was: create_window outside the try (a failure there skipped the browser
-        # fallback); now any exception opening the window offers it. See overnight/windows-app/CHANGES.md
+        # create_window is inside the try: any exception opening the window offers the browser fallback.
         window = webview.create_window(WINDOW_TITLE, html=SPLASH, width=1200, height=820,
                                        min_size=(900, 600), text_select=True, zoomable=True,
                                        background_color="#FFFFFF")
@@ -1051,12 +1032,11 @@ def _run_in_browser(server: LocalServer, instance: SingleInstance | None = None)
         return 1
     webbrowser.open(url)
     if instance is not None:
-        # CHANGED(WIN-W4): was: a second launch in --browser mode did nothing visible; now it
-        # reopens the page (and explains "Open with" files). See overnight/windows-app/CHANGES.md
+        # A second launch in --browser mode reopens the page (and explains "Open with" files).
         loaded = {}
 
         def on_message(msg):
-            if msg.get("files"):  # CHANGED(WIN-W4b/R2-A9): open the page with the files loaded by path
+            if msg.get("files"):  # open the page with the files loaded by path
                 want, text = files_to_load(msg["files"], loaded)
                 loaded.update(want)
                 webbrowser.open(query_url(url, want["protein"], want["dna"]))
@@ -1083,8 +1063,8 @@ def parse_args(argv):
 
     class Parser(argparse.ArgumentParser):
         def error(self, message):
-            # CHANGED(WIN-W9): was: windowed build exited 2 silently; now a message box (or the
-            # pipe, for the hidden --serve child). See overnight/windows-app/CHANGES.md
+            # The windowed build would exit 2 silently: show a message box (or write to the pipe, for the
+            # hidden --serve child).
             if _windowed() or sys.stderr is None:
                 text = f"COAL could not understand its command line: {message}"
                 if "--serve" in argv:
@@ -1100,13 +1080,13 @@ def parse_args(argv):
     ap.add_argument("--serve", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--port", type=int, default=0, help=argparse.SUPPRESS)
     ap.add_argument("--parent-pid", type=int, default=None, help=argparse.SUPPRESS)
-    # CHANGED(IMP-M-3): --mcp added (opt in; the URL is only in local_app.log, on a random port); --no-mcp kept
+    # --mcp is opt in (the URL is only in local_app.log, on a random port)
     ap.add_argument("--mcp", action="store_true",
                     help="also serve COAL's MCP tools to AI agents on this computer (random port, see local_app.log)")
     ap.add_argument("--no-mcp", action="store_true",
                     help="don't serve COAL's MCP tools (the default for the window)")
     ap.add_argument("--browser", action="store_true", help="open in the default browser instead of a window")
-    # CHANGED(SHIP-18): new. The installer's "Connect COAL to Claude Desktop" box runs --connect-claude; uninstall
+    # The installer's "Connect COAL to Claude Desktop" box runs --connect-claude; uninstall
     # runs --disconnect-claude --quiet.
     ap.add_argument("--connect-claude", action="store_true",
                     help="let Claude Desktop run COAL (adds COAL to Claude Desktop's settings)")
@@ -1118,8 +1098,8 @@ def parse_args(argv):
 
 def dispatch(argv: list[str]) -> int:
     if argv[:2] == ["-m", "coal"]:
-        # CHANGED(SHIP-12): the frozen engine also wrote its messages in cp1252 while the app reads them as UTF-8
-        # (coal_app.core): a file path outside cp1252 crashed the run, and one inside it (é) arrived garbled
+        # UTF-8, as the app reads them (coal_app.core): in cp1252 a file path outside cp1252 would crash the run,
+        # and one inside it (é) would arrive garbled
         _utf8_streams()
         return run_engine(argv[2:])
     if argv[:3] == ["-m", "coal_app", "--mcp"]:
@@ -1152,7 +1132,7 @@ CLAUDE_CONFIG = "claude_desktop_config.json"
 
 def run_mcp_stdio() -> int:
     """`COAL.exe -m coal_app --mcp`: COAL's MCP server over stdio, started by Claude Desktop (as `python -m coal_app
-    --mcp`). CHANGED(SHIP-18): new; was refused ("only '-m coal'"), so the installed app could not be used by Claude."""
+    --mcp`), so the installed app can be used by Claude."""
     if sys.stdin is None or sys.stdout is None:  # double-clicked or started without pipes (windowed build)
         _error_dialog("COAL", "This part of COAL is started by Claude Desktop, not by hand.\n\nTo connect COAL to "
                               "Claude Desktop, run the COAL installer again and keep \"Connect COAL to Claude "
@@ -1283,9 +1263,9 @@ def claude_desktop_command(connect: bool, quiet: bool = False, env=None, exe: st
 
 
 def _utf8_streams() -> None:
-    """CHANGED(SHIP-11): new. The --serve child writes to a pipe; in the frozen app (PyInstaller) that pipe used the
-    ANSI code page (cp1252) whatever PYTHONIOENCODING said, so Gradio's own start-up line with an emoji ('🔨
-    Launching MCP server') raised UnicodeEncodeError and the local app died (first CI build of the installer).
+    """The --serve child writes to a pipe; in the frozen app (PyInstaller) that pipe uses the ANSI code page
+    (cp1252) whatever PYTHONIOENCODING says, so Gradio's own start-up line with an emoji ('🔨 Launching MCP
+    server') would raise UnicodeEncodeError and kill the local app.
     The parent decodes the pipe as UTF-8 (LocalServer), so use UTF-8 here and never fail on a character."""
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
@@ -1306,8 +1286,7 @@ def _hold_app_mutex():
         import ctypes
         from ctypes import wintypes
         k32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        # CHANGED(WIN-W9): was: default int restype (a HANDLE truncated to 32 bits); now HANDLE.
-        # See overnight/windows-app/CHANGES.md
+        # HANDLE restype: the default int would truncate it to 32 bits.
         k32.CreateMutexW.restype = wintypes.HANDLE
         k32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
         return k32.CreateMutexW(None, False, APP_MUTEX)
@@ -1322,9 +1301,8 @@ INSTANCE_WAIT = 3.0  # seconds to wait for a lock still being released / a prima
 def claim_instance(instance: SingleInstance, message: dict, wait: float = INSTANCE_WAIT) -> str:
     """'primary' (we hold the lock), 'notified' (the running COAL got `message`) or 'unreachable'.
 
-    CHANGED(WIN-R5): was: one try, then "already running"; now retries for `wait` seconds (on
-    Windows a crashed holder's lock is released asynchronously, and a new primary takes the lock
-    before writing instance.json). See overnight/windows-app/CHANGES.md"""
+    Retries for `wait` seconds: on Windows a crashed holder's lock is released asynchronously, and
+    a new primary takes the lock before writing instance.json."""
     deadline = time.monotonic() + wait
     while True:
         if instance.acquire():
@@ -1339,9 +1317,8 @@ def claim_instance(instance: SingleInstance, message: dict, wait: float = INSTAN
 def main_window(args) -> int:
     instance = SingleInstance(data_dir())
     files = [os.path.abspath(f) for f in args.files]
-    # CHANGED(WIN-W3): was: logs rotated before the single-instance check (a second launch rotated
-    # the running COAL's log); now only the lock holder touches the logs; a second launch writes
-    # none. See overnight/windows-app/CHANGES.md
+    # Only the lock holder touches the logs (rotating before this check would rotate the running
+    # COAL's log); a second launch writes none.
     role = claim_instance(instance, {"action": "focus", "files": files})
     if role == "notified":
         return 0
@@ -1353,7 +1330,7 @@ def main_window(args) -> int:
     try:
         log_path = setup_logging()
         local_log = os.path.join(os.path.dirname(log_path), "local_app.log")
-        rotate_log(local_log, keep=3)  # CHANGED(WIN-W3): was: appended forever; now rotated per launch
+        rotate_log(local_log, keep=3)  # rotated per launch
         if IS_WINDOWS and not _hold_app_mutex():
             log.warning("app mutex not created: setup/uninstall won't see that COAL is open")
         log.info("COAL desktop starting (frozen=%s, python %s)", FROZEN, sys.version.split()[0])
@@ -1369,8 +1346,7 @@ def main_window(args) -> int:
             return 1
         return run_window(server, instance, files)
     except Exception:  # noqa: BLE001
-        # CHANGED(WIN-R1): was: propagated (windowed build: "Unhandled exception" box); now logged
-        # and explained. See overnight/windows-app/CHANGES.md
+        # Logged and explained (in the windowed build a propagated error is an "Unhandled exception" box).
         log.exception("unexpected error")
         _error_dialog("COAL", "COAL stopped because of an unexpected error. Details are in "
                       f"{os.path.join(data_dir(), 'logs')}.")
@@ -1388,7 +1364,6 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
-    # CHANGED(WIN-R3): was: only inside main(); now first thing in the frozen entry point, before
-    # anything else runs, as PyInstaller recommends. See overnight/windows-app/CHANGES.md
+    # First thing in the frozen entry point, before anything else runs, as PyInstaller recommends.
     multiprocessing.freeze_support()
     sys.exit(main())

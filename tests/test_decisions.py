@@ -1,4 +1,5 @@
-"""DEC-1 .. DEC-4: the four decisions of overnight/integration/CHANGES.md ("Decisions").
+"""Design decisions: PAL2NAL-compatible default vs --strict, --quiet, closed-pipe exit codes, and the output formats,
+drop-in, parallel/block writing and PAL2NAL fetching.
 
 Expected outputs marked "PAL2NAL v14:" were produced by running the real PAL2NAL v14 on the same input.
 """
@@ -26,7 +27,7 @@ def coal(args, cwd):
     return run("coal", args, cwd)
 
 
-# 40-residue protein; DNA = 2 nt of UTR + a ~90% NNN-masked copy (reviewer's R3-E1 input)
+# 40-residue protein; DNA = 2 nt of UTR + a ~90% NNN-masked copy (a reviewer's input)
 MASKED_PROT = "MTVDCLAHRFISDLVKSPSFGSVLACYVISPLDRNVCGQH"
 MASKED_DNA = ("GCATGNNNNNNNNNNNNTTGNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNATCAGTNNNNNNNNNNNN"
               "NNNNNNTGTNNNNNNNNN")
@@ -57,7 +58,7 @@ class Tmp(unittest.TestCase):
         self._td.cleanup()
 
 
-class TestDec1DefaultIsPal2nal(Tmp):  # DEC-1
+class TestDec1DefaultIsPal2nal(Tmp):
     def test_unrelated_pair_gives_pal2nal_output_with_a_notice(self):
         r = coal(["up.fa", "un.fa"], self.d)
         self.assertEqual((r.returncode, r.stdout), (0, f">u\n{UNREL_DNA[:60]}\n{UNREL_DNA[60:]}\n"), r.stderr)
@@ -85,7 +86,7 @@ class TestDec1DefaultIsPal2nal(Tmp):  # DEC-1
         self.assertTrue(any("probably unrelated" in w for w in warns))
 
 
-class TestDec1Strict(Tmp):  # DEC-1
+class TestDec1Strict(Tmp):
     def test_strict_spellings_turn_each_rule_into_an_error(self):
         for flag in ("--strict", "-strict"):
             for pep, nuc, text in (("up.fa", "un.fa", "u: protein and DNA are inconsistent (30 of 32 checkable"),
@@ -111,7 +112,7 @@ class TestDec1Strict(Tmp):  # DEC-1
             self.assertIn(phrase, h)
 
 
-class TestDec2Quiet(Tmp):  # DEC-2
+class TestDec2Quiet(Tmp):
     def test_quiet_silences_warnings_and_notices_but_not_stdout(self):
         for pep, nuc in (("up.fa", "un.fa"), ("mp.fa", "mn.fa"), ("ip.fa", "in.fa")):
             loud = coal([pep, nuc], self.d)
@@ -139,7 +140,7 @@ class TestDec2Quiet(Tmp):  # DEC-2
         self.assertTrue(r.stdout.startswith(">u\n"))
 
 
-class TestDec3ClosedPipe(Tmp):  # DEC-3
+class TestDec3ClosedPipe(Tmp):
     class _Closed(__import__("io").StringIO):
         def __init__(self, err):
             super().__init__()
@@ -214,7 +215,7 @@ MARKED_PAL2NAL = {
 }
 
 
-class TestDec4FormatsAndDropIn(Tmp):  # DEC-4
+class TestDec4FormatsAndDropIn(Tmp):
     def setUp(self):
         super().setUp()
         (self.d / "pep.aln").write_text(MARKED_ALN)
@@ -251,7 +252,7 @@ class TestDec4FormatsAndDropIn(Tmp):  # DEC-4
         r = run("coal_compat", ["pep.aln", "nuc.fa", "-nostderr"], self.d)
         self.assertEqual((r.returncode, r.stdout, r.stderr), (0, MARKED_PAL2NAL[("-output", "clustal")], ""))
 
-    def test_unknown_residue_column_removed_by_nomismatch(self):  # DEC-4f; PAL2NAL v14: ATGAAAGTTCTG
+    def test_unknown_residue_column_removed_by_nomismatch(self):  # PAL2NAL v14: ATGAAAGTTCTG
         (self.d / "b.fa").write_text(">a\nMKBVL\n>b\nMKAVL\n")
         (self.d / "bn.fa").write_text(">a\nATGAAAGATGTTCTG\n>b\nATGAAAGCTGTTCTG\n")
         r = coal(["b.fa", "bn.fa", "-nomismatch"], self.d)
@@ -263,7 +264,7 @@ class TestDec4FormatsAndDropIn(Tmp):  # DEC-4
         self.assertIn("-blockonly", h)
 
 
-class TestDec4ParallelAndBlocks(unittest.TestCase):  # DEC-4
+class TestDec4ParallelAndBlocks(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         import random
@@ -337,7 +338,7 @@ class TestDec4ParallelAndBlocks(unittest.TestCase):  # DEC-4
                 self.assertEqual(self._run(fmt, (), 1, memory=1), self._run(fmt, (), 1))
 
 
-class TestDec4FetchPal2nal(unittest.TestCase):  # DEC-4
+class TestDec4FetchPal2nal(unittest.TestCase):
     def setUp(self):
         import hashlib
         import importlib.util

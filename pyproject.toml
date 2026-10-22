@@ -1,9 +1,9 @@
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=69.3"]  # 69.3+: normalised sdist name (coal_align-<v>.tar.gz)
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "coal"
+name = "coal-align"
 version = "0.4.2"
 description = "Fast codon alignment from a protein alignment and coding DNA (PAL2NAL alternative)"
 readme = "README.md"
@@ -14,11 +14,11 @@ dependencies = []
 [project.optional-dependencies]
 fast = ["numpy"]   # optional: speeds up the codon check on large inputs (BSD licence)
 # Web GUI + MCP server for AI agents (python -m coal_app / coal-gui). Pinned exactly.
-# CHANGED(R2-D10): was "pin not verified against PyPI"; verified by CI on Linux: the gui job installed
-# gradio[mcp]==5.49.1 and passed pip check (and the mcp job installed mcp==2.2.0). Not yet checked on Windows/macOS.
+# Verified by CI on Linux: the gui job installs
+# gradio[mcp]==5.49.1 and passes pip check (and the mcp job installs mcp==2.2.0). Not yet checked on Windows/macOS.
 gui = ["gradio[mcp]==5.49.1"]
 # Stand-alone stdio MCP server (python -m coal_app --mcp), no Gradio needed.
-# CHANGED(APP-C11): was silent; now documented: install `gui` and `mcp` in SEPARATE environments. gradio[mcp] 5.x
+# Install `gui` and `mcp` in SEPARATE environments: gradio[mcp] 5.x
 # probably needs mcp 1.x while this pins 2.2.0 (read CI's info job for the answer). CI installs each extra in its own job
 # and the "Info: gui + mcp extras in one environment" job reports whether they resolve together.
 mcp = ["mcp==2.2.0"]
@@ -34,7 +34,7 @@ where = ["src"]
 [tool.setuptools.package-data]
 coal_app = ["*.json"]
 
-# CHANGED(APP-C12): was not shipped (an installed wheel found no examples); now installed under
+# Examples are installed under
 # <prefix>/share/coal/examples, where coal_app.core looks after COAL_EXAMPLES_DIR and a repo checkout.
 [tool.setuptools.data-files]
 "share/coal/examples/clean" = ["examples/clean/README.md", "examples/clean/dna.fasta", "examples/clean/protein.aln.fasta"]

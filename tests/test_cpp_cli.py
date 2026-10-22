@@ -1,14 +1,14 @@
-"""coal-cpp command line == `python -m coal` on the reviewed branch (CPP-4).
+"""coal-cpp command line == `python -m coal` (the reviewed Python CLI).
 
-The reference is the reviewed CLI on origin/keanu_overnight/integration (its src/coal package is
-extracted with `git ls-tree` / `git show` into a temp dir, not merged; or COAL_REF_SRC = a src dir).
+The reference is this repo's src/coal, or COAL_REF_SRC = a src dir; without either, the src/coal package of
+REF_BRANCH is extracted with `git ls-tree` / `git show` into a temp dir (not merged).
 
   * Live comparison (Python 3.10/3.11 only, whose argparse messages coal-cpp reproduces): every
     command line in CASES is run through both; same exit code, same last stderr line on errors, same
     stdout on successful runs. `--help` must equal the reference parser's help after the documented
-    C++ change (HELP_DRIVER: the -j help says threads; MRG-8 keeps "processes" for Python).
+    C++ change (HELP_DRIVER: the -j help says threads; Python's says "processes").
   * Pinned expectations (any Python): the error messages captured from the reference with Python 3.10.
-  * C++-only checks: -output clustal/paml/codon, -strict, the extras (CPP-29: ordinary, abbreviable options
+  * C++-only checks: -output clustal/paml/codon, -strict, the extras (ordinary, abbreviable options
     of the merged parser, so `--j` is ambiguous between --jobs and --json, as in Python).
 
 `python tests/test_cpp_cli.py --write-help` regenerates cpp/src/help_text.hpp from the reference.
@@ -25,7 +25,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-REF_BRANCH = "origin/keanu_overnight/integration"
+REF_BRANCH = "origin/main"
 TIMEOUT = 60
 LIVE_OK = sys.version_info[:2] in ((3, 10), (3, 11))
 P, N = "pep.fasta", "nuc.fasta"
@@ -36,7 +36,7 @@ def cpp_binary() -> Path | None:
     if not p.is_absolute():
         p = ROOT / p
     for cand in (p, p.with_suffix(".exe"), p.parent / "Release" / (p.name + ".exe")):
-        # on Windows only .exe files: a shared folder may also hold the Linux build (CPP-8)
+        # on Windows only .exe files: a shared folder may also hold the Linux build
         if cand.is_file() and (os.name != "nt" or cand.suffix.lower() == ".exe"):
             return cand
     return None
@@ -47,8 +47,7 @@ def reference_src(tmp: Path) -> Path | None:
     env = os.environ.get("COAL_REF_SRC")
     if env:
         return Path(env)
-    # CHANGED(MRG-6): was the integration branch read with git show (before the merge); now this branch's own
-    # engine, which is the merged, reviewed reference. See overnight/integration/CHANGES.md
+    # this branch's own engine is the reviewed reference
     if (ROOT / "src" / "coal" / "cli.py").is_file():
         return ROOT / "src"
     try:
@@ -126,7 +125,7 @@ ACCEPTED = [
     [P, N, "-o", "x.fa", "-o", "y.fa"], [P, N, "-output", "fasta"], [P, N, "--output-format=fasta"],
     [P, N, "--output-f", "fasta"], [P, "--", N, "--"], [P, N, "-blockonly"], [P, N, "--block"], [P, N, "-b"],
     [P, N, "-output", "clustal"], [P, N, "-output", "paml", "-nogap"], [P, N, "-strict"],
-    # CPP-29 (reference MRG-3/MRG-4): the extras, abbreviated as any option
+    # the extras, abbreviated as any option
     [P, N, "--keep"], [P, N, "-keep"], [P, N, "-keep-going"], [P, N, "--max", "3"], [P, N, "--max-warnings=0"], [P, N, "--prog"],
     [P, N, "-o", "x.fa", "--res"], [P, N, "-o", "x.fa", "--rep", "r.json"],
 ]
@@ -146,14 +145,14 @@ ERRORS = [
     [P, N, "-j", "x", "--help"], [P, N, "-n", "--help"], ["--foo", "-n"],
     [P, N, "-output", "xml"], [P, N, "-output"], [P, N, "--output-format=XML"], [P, N, "-outp", "fasta"],
     [P, N, "-blockonly=1"], [P, N, "--blockonly=yes"],
-    # CPP-29 (reference MRG-3/MRG-4)
+    # the extras
     [P, N, "--j", "1"], [P, N, "--re"], [P, N, "--max-warnings", "-1"], [P, N, "--max-warnings", "x"],
     [P, N, "--keep-going=1"], [P, N, "--json"], [P, N, "--resume"], [P, N, "--report"],
 ]
 # The C++ engine accepts four formats, so its -output choices list differs (documented).
 CHOICES_DIFF = "argument -output/--output-format: invalid choice:"
 
-# Pinned: last stderr line of the reference (Python 3.10; bb80bde, CPP-29 rows 0729829) for each ERRORS
+# Pinned: last stderr line of the reference (Python 3.10; bb80bde, the extras' rows 0729829) for each ERRORS
 # command line; exit code 2.
 PINNED = {
     '': 'coal: error: the following arguments are required: pep_aln, nuc_fasta',
@@ -208,7 +207,7 @@ PINNED = {
     "'pep.fasta' 'nuc.fasta' '-outp' 'fasta'": 'coal: error: ambiguous option: -outp could match -output, -o',
     "'pep.fasta' 'nuc.fasta' '-blockonly=1'": "coal: error: argument -blockonly/--blockonly: ignored explicit argument '1'",
     "'pep.fasta' 'nuc.fasta' '--blockonly=yes'": "coal: error: argument -blockonly/--blockonly: ignored explicit argument 'yes'",
-    # CPP-29: captured from the merged reference (0729829), Python 3.10
+    # the extras: captured from the merged reference (0729829), Python 3.10
     "'pep.fasta' 'nuc.fasta' '--j' '1'": 'coal: error: ambiguous option: --j could match --jobs, --json',
     "'pep.fasta' 'nuc.fasta' '--re'": 'coal: error: ambiguous option: --re could match --resume, --report',
     "'pep.fasta' 'nuc.fasta' '--max-warnings' '-1'": 'coal: error: --max-warnings must be 0 (no limit) or more',
@@ -337,14 +336,14 @@ class CppOnly(_Base):
         self.assertEqual(last_line(c.stderr), "coal: error: argument -output/--output-format: invalid choice: "
                                               "'xml' (choose from 'fasta', 'clustal', 'paml', 'codon')")
 
-    def test_strict_accepted(self):  # CPP-15/CPP-19: implemented (reference DEC-1)
+    def test_strict_accepted(self):  # implemented, as in the reference
         plain = self.cpp([P, N])
         for flag in ("-strict", "--strict", "--str"):
             with self.subTest(flag=flag):
                 c = self.cpp([P, N, flag])
                 self.assertEqual((c.returncode, c.stdout), (0, plain.stdout), c.stderr)
 
-    def test_extras_are_ordinary_options(self):  # CPP-29 (reference MRG-3/MRG-4 cli.py)
+    def test_extras_are_ordinary_options(self):  # as in the reference's cli.py
         c = self.cpp([P, N, "--j", "1"])
         self.assertEqual(last_line(c.stderr), "coal: error: ambiguous option: --j could match --jobs, --json")
         self.assertEqual(self.cpp([P, N, "--keep", "--max=3"]).returncode, 0)
@@ -371,8 +370,8 @@ def _main():
                 text = expected_help(src)
                 hdr = ROOT / "cpp" / "src" / "help_text.hpp"
                 hdr.write_text(
-                    "// Generated by `python tests/test_cpp_cli.py --write-help` from the reviewed Python CLI\n"
-                    f"// ({REF_BRANCH}) plus the documented C++ changes. Do not edit by hand.\n"
+                    "// Generated by `python tests/test_cpp_cli.py --write-help` from the Python CLI (src/coal)\n"
+                    "// plus the documented C++ changes. Do not edit by hand.\n"
                     "#pragma once\n\n"
                     f'static const char* const COAL_HELP = R"COALHELP({text})COALHELP";\n',
                     encoding="utf-8", newline="\n")

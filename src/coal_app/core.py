@@ -26,8 +26,8 @@ SAMPLE_REPORT = os.path.join(HERE, "sample_report.json")
 
 
 def _find_examples() -> str:
-    """CHANGED(APP-C12): was only <repo>/examples; now COAL_EXAMPLES_DIR, then a repo checkout, then the copy a
-    wheel installs under <prefix>/share/coal/examples. See overnight/app/CHANGES.md"""
+    """The examples folder: COAL_EXAMPLES_DIR, then a repo checkout, then the copy a wheel installs under
+    <prefix>/share/coal/examples."""
     import sysconfig
     env = os.environ.get("COAL_EXAMPLES_DIR")
     if env:
@@ -46,18 +46,16 @@ def _find_examples() -> str:
 EXAMPLES_DIR = _find_examples()
 EXAMPLES = {
     "clean": ("Clean nuclear genes", "Eight genes that fit the standard code. Everything should be OK."),
-    # CHANGED(AMB-3): the button was "Mitochondrial genes"; it runs them with code 1 on purpose (the demo of the tip)
+    # runs them with code 1 on purpose (the demo of the genetic-code tip)
     "mito": ("Mitochondrial (wrong code)", "Vertebrate mitochondrial genes, run with the standard code 1 on purpose."),
     "messy_ids": ("Messy IDs", "Protein IDs like AT1G01010.1, DNA IDs like AT1G01010."),
     "one_broken_gene": ("One broken gene", "19 good genes and one with a frameshift."),
 }
 
-# CHANGED(PRE-1): new. The settings each example runs with; an example button puts them into the form (so the
-# dropdown and checkboxes show what ran) before it runs. Before, an example ran with whatever the form held, so
-# after "Re-run with genetic code 2" on the Mitochondrial genes, "One broken gene" ran with code 2 (19 healthy
-# genes as warnings). Every example uses the standard code 1: the Mitochondrial genes deliberately so (the demo
-# shows the genetic-code tip; pitch/PITCH.md). The output format stays the user's choice (it does not change
-# what is found). See overnight/integration/CHANGES.md
+# The settings each example runs with; an example button puts them into the form (so the dropdown and checkboxes
+# show what ran) before it runs, so an example never inherits a code left in the form by an earlier run. Every
+# example uses the standard code 1: the Mitochondrial genes deliberately so (the demo shows the genetic-code tip).
+# The output format stays the user's choice (it does not change what is found).
 EXAMPLE_SETTINGS: dict[str, dict] = {
     name: {"codontable": 1, "nogap": False, "nomismatch": False, "strict": False, "blockonly": False}
     for name in EXAMPLES
@@ -109,13 +107,13 @@ RUNS_DIR = os.environ.get("COAL_RUNS_DIR") or os.path.join(tempfile.gettempdir()
 RUNS_MAX_AGE_HOURS = 24
 
 
-RUN_MARKER = ".coal_run"  # CHANGED(R2-A8): every folder new_run_dir() makes holds this file
+RUN_MARKER = ".coal_run"  # every folder new_run_dir() makes holds this file
 
 
 def prune_runs(max_age_hours: float = RUNS_MAX_AGE_HOURS) -> int:
     """Delete run folders in RUNS_DIR not modified for max_age_hours. Returns how many were removed.
-    CHANGED(R2-A8): was any subfolder (COAL_RUNS_DIR=~/data would delete a user's thesis_data/); now only
-    folders named run_* that hold COAL's marker file. See overnight/integration/CHANGES.md"""
+    Only folders named run_* that hold COAL's marker file are touched, so COAL_RUNS_DIR pointing at a folder of
+    the user's own deletes nothing of theirs."""
     import shutil
     try:
         names = os.listdir(RUNS_DIR)
@@ -140,7 +138,7 @@ def new_run_dir() -> str:
     os.makedirs(RUNS_DIR, exist_ok=True)
     prune_runs()
     d = tempfile.mkdtemp(prefix="run_", dir=RUNS_DIR)
-    with open(os.path.join(d, RUN_MARKER), "w", encoding="utf-8") as fh:  # CHANGED(R2-A8)
+    with open(os.path.join(d, RUN_MARKER), "w", encoding="utf-8") as fh:
         fh.write("Made by COAL; this folder is deleted automatically after "
                  f"{RUNS_MAX_AGE_HOURS} hours.\n")
     return d
@@ -191,7 +189,7 @@ _INVISIBLE = "\u202a\u202b\u202c\u202d\u202e\u200e\u200f\u200b\ufeff\u2066\u2067
 
 
 def clean_pasted_path(text: str | None) -> str:
-    """CHANGED(R2-A11): new. A pasted path as the user meant it: surrounding whitespace, quotes and invisible
+    """A pasted path as the user meant it: surrounding whitespace, quotes and invisible
     direction marks removed (Windows "Properties > Security" copies a leading U+202A), and file:// URLs
     (as browsers and file managers copy them, with %20 etc.) turned into a path."""
     t = (text or "")
@@ -213,7 +211,7 @@ def clean_pasted_path(text: str | None) -> str:
 def resolve_input(upload: str | None, path_text: str | None) -> tuple[str | None, str]:
     """(path to use, short description) for one GUI input. A typed/pasted path wins over an upload and is
     read in place (never copied). Raises ValueError with a plain message if the path is unusable."""
-    text = clean_pasted_path(path_text)  # CHANGED(R2-A11): was strip() + quotes only
+    text = clean_pasted_path(path_text)
     if text:
         if not path_inputs_enabled():
             raise ValueError("this shared server cannot read paths; please upload the file instead")
@@ -257,9 +255,8 @@ def paths_from_query(params) -> tuple[str, str]:
     return str(get("protein") or ""), str(get("dna") or "")
 
 
-# CHANGED(POL-1): was "Nothing leaves your computer: COAL runs here, on this machine.", shown as the app's footer.
-# The owner asked to cut it (a reassurance, not something to act on); the fact stays in README.md, desktop/README.md
-# and the site. The hosted note stays: there, files do go to a shared server, and people need to know.
+# No note when running locally (that nothing leaves the computer is said in docs/install.md, desktop/README.md and the
+# site). The hosted note matters: there, files do go to a shared server, and people need to know.
 INTRO_LOCAL = ""
 INTRO_HOSTED = ("This copy runs on a shared Hugging Face server: files you upload are processed there and "
                 f"deleted within {RUNS_MAX_AGE_HOURS} hours (or when the Space restarts). For unpublished or "
@@ -289,7 +286,7 @@ def _coal_cmd() -> list[str]:
 def detect_features() -> Features:
     """Read ``python -m coal --help`` to find which options this engine has."""
     try:
-        # CHANGED(WINCI-2): was stdin inherited; now stdin=DEVNULL (see _run_engine). See overnight/integration/CHANGES.md
+        # stdin=DEVNULL: see _run_engine
         h = subprocess.run(_coal_cmd() + ["--help"], capture_output=True, text=True, encoding="utf-8",
                            errors="replace", timeout=60, stdin=subprocess.DEVNULL).stdout
         v = subprocess.run(_coal_cmd() + ["--version"], capture_output=True, text=True, encoding="utf-8",
@@ -322,8 +319,7 @@ def sha256_file(path: str) -> str:
 
 def read_ids(path: str) -> list[str]:
     """Sequence IDs from a FASTA or CLUSTAL file (first word of each name), in file order.
-    CHANGED(R3-A1): was plain UTF-8 and a first line starting with '>' or 'CLUSTAL' only (a BOM or '#' preamble gave
-    no IDs); now the engine's rules, via seqformat. See overnight/integration/CHANGES.md"""
+    Read by the engine's rules, via seqformat."""
     from .seqformat import read_ids as _read_ids
     return _read_ids(path)
 
@@ -340,10 +336,10 @@ def _q(p: str) -> str:
 
 
 def strip_folders(text: str, paths) -> str:
-    """CHANGED(SHIP-2): new. Show each path in a command by its file name only, however it was quoted.
-    The engine quotes with shlex.quote on every OS, so on Windows a full path (backslashes, drive colon) arrived as
-    'C:\\...\\protein.aln.fasta' and removing only the folder left the quotes: 'protein.aln.fasta'. Each quoted form
-    of the full path is now replaced by the file name quoted the app's way. See overnight/integration/CHANGES.md"""
+    """Show each path in a command by its file name only, however it was quoted.
+    The engine quotes with shlex.quote on every OS, so on Windows a full path (backslashes, drive colon) arrives as
+    'C:\\...\\protein.aln.fasta' and removing only the folder would leave the quotes: 'protein.aln.fasta'. Each
+    quoted form of the full path is replaced by the file name quoted the app's way."""
     for p in sorted({p for p in paths if p}, key=len, reverse=True):
         base = os.path.basename(p)
         for form in (shlex.quote(p), _q(p)):
@@ -355,7 +351,7 @@ def strip_folders(text: str, paths) -> str:
 
 def coal_command(protein: str, dna: str, output_format="fasta", codontable=1, nogap=False,
                  nomismatch=False, out="codon_aln.fasta", keep_going=False, report: str | None = None,
-                 strict=False, blockonly=False) -> str:  # CHANGED(FIN-A6): strict, blockonly
+                 strict=False, blockonly=False) -> str:
     parts = ["coal", _q(protein), _q(dna)]
     if output_format != "fasta":
         parts += ["-output", output_format]
@@ -387,14 +383,13 @@ def pal2nal_command(protein: str, dna: str, output_format="fasta", codontable=1,
         parts.append("-nogap")
     if nomismatch:
         parts.append("-nomismatch")
-    if blockonly:  # CHANGED(FIN-A6)
+    if blockonly:
         parts.append("-blockonly")
     return " ".join(parts) + f" > {_q(out)}"
 
 
 def pal2nal_caveats(opts: dict) -> list[str]:
-    """CHANGED(FIN-A5/FIN-C8): new. When the closest PAL2NAL v14 command does not do the same as this COAL run.
-    See overnight/integration/CHANGES.md"""
+    """When the closest PAL2NAL v14 command does not do the same as this COAL run."""
     n = int(opts.get("codontable") or 1)
     out = []
     old = {3: "accepts only ATA/ATG as start codons (current NCBI table 3 also GTG)",
@@ -413,8 +408,7 @@ def pal2nal_caveats(opts: dict) -> list[str]:
 
 
 def commands_text(coal_cmd: str, pal2nal_cmd: str, opts: dict) -> str:
-    """CHANGED(FIN-A5/FIN-C8): new; was "# Same run with PAL2NAL" in ui.py, which was not the same run with -nogap
-    and another code. The command box of the GUI."""
+    """The command box of the GUI."""
     cav = pal2nal_caveats(opts or {})
     notes = "".join(f"# Note: {c}\n" for c in cav)
     return (f"# COAL\n{coal_cmd}\n\n# Closest PAL2NAL v14 command (COAL's documented deliberate differences from "
@@ -436,14 +430,14 @@ class RunResult:
 
     @property
     def ok(self) -> bool:
-        # CHANGED(R2-A7): was exit 0 or 2 (2 is also argparse's usage error); now see run_completed()
+        # exit 2 is also argparse's usage error: see run_completed()
         return run_completed(self.exit_code, self.stderr, (self.report.get("options") or {}).get("keep_going"))\
             and self.output_path is not None
 
 
 def run_completed(code, stderr: str = "", keep_going=False) -> bool:
-    """CHANGED(R2-A7): new. True if COAL finished: exit 0, or exit 2 only from a real --keep-going run (never
-    argparse's usage error, which also exits 2). See overnight/integration/CHANGES.md"""
+    """True if COAL finished: exit 0, or exit 2 only from a real --keep-going run (never argparse's usage error,
+    which also exits 2)."""
     if code == 0:
         return True
     return (code == 2 and bool(keep_going) and detect_features().keep_going
@@ -451,7 +445,7 @@ def run_completed(code, stderr: str = "", keep_going=False) -> bool:
 
 
 def was_stopped(code, stderr: str = "") -> bool:
-    """CHANGED(R2-A6): new. Killed by a signal / Ctrl-C (exit < 0 or >= 128, or 'coal: interrupted')."""
+    """Killed by a signal / Ctrl-C (exit < 0 or >= 128, or 'coal: interrupted')."""
     return code is not None and (code < 0 or code >= 128 or "coal: interrupted" in (stderr or ""))
 
 
@@ -460,30 +454,25 @@ STOPPED_TEXT = ("The run was stopped before it finished (COAL was interrupted, k
 
 
 _WARN = re.compile(r"^coal: warning: (\S+) pepAlnPos (\d+): (\S+) does not correspond to (\S+)")
-# CHANGED(FIN-C14): was only PAL2NAL's "X unknown AA type" wording; now also the engine's "U (selenocysteine) is not
-# checked; any codon is accepted". See overnight/integration/CHANGES.md
+# PAL2NAL's "X unknown AA type" wording and the engine's "U (selenocysteine) is not checked; any codon is accepted"
 _WARN_X = re.compile(r"^coal: warning: (\S+) pepAlnPos (\d+): (\S+) (?:unknown AA type|\([^)]*\) is not checked)")
-# CHANGED(R2-A2/R2-E2): was (\S+) so "s0:" kept its colon (and the notice was dropped); now the colon is stripped,
-# the engine's ENG-c / ENG-d notices are recognised, and a line naming no known sequence becomes a run-level hint.
-# See overnight/integration/CHANGES.md
+# The colon after the ID is stripped ("s0:" -> "s0"); a line naming no known sequence becomes a run-level hint.
 _WARN_ANY = re.compile(r"^coal: warning: (\S+?):? (.+)$")  # any other per-sequence warning
-# CHANGED(R3-E1): was only "(K of N do not match)"; now also the engine's new "(K of N checkable codons do not match;
-# A contain N or other ambiguous bases)". See overnight/integration/CHANGES.md
+# both "(K of N do not match)" and "(K of N checkable codons do not match; A contain N or other ambiguous bases)"
 _WARN_NOANCHOR = re.compile(r"^coal: warning: (\S+?): no 10-residue segment of the protein was found in the DNA; "
                             r"codons were assigned by position \((\d+) of (\d+) (?:checkable codons )?do not match"
                             r"(?:; (\d+) contain N or other ambiguous bases)?\)")
 _WARN_PAIRING = re.compile(r"^coal: warning: only (\d+) of (\d+) protein IDs are DNA IDs; (.*)$")
-# CHANGED(DEC-1): new. Without --strict the engine writes these genes (as PAL2NAL does) and prints these notices; the
-# report marks such genes "failed" (probably wrong data). See overnight/integration/CHANGES.md
+# Without --strict the engine writes these genes (as PAL2NAL does) and prints these notices; the report marks such
+# genes "failed" (probably wrong data).
 _WARN_UNRELATED = re.compile(r"^coal: warning: (\S+?): protein and DNA are probably unrelated: (\d+) of (\d+) "
                              r"checkable codons do not match")
 _WARN_GUESS = re.compile(r"^coal: warning: (\S+?): position of the gene in the DNA is a guess: .*?(?:only (\d+) of "
-                         r"(\d+) codons have no ambiguous bases|the gene has only (\d+) codons)")  # CHANGED(FZ-4)
+                         r"(\d+) codons have no ambiguous bases|the gene has only (\d+) codons)")
 SUSPECT_CODES = ("suspect_unrelated", "suspect_position")  # a gene with one of these is reported as "failed"
 PROBLEM_HINTS = ("partial_id_match", "engine_warning", "nomismatch_unknown")  # hints that mean "something is off"
 
 
-# CHANGED(APP-3): was only "does not correspond to" lines; now every "coal: warning: <id> ..." line. See overnight/app/CHANGES.md
 def _parse_warning(line: str) -> tuple[str, dict] | None:
     """(sequence id, message) for any 'coal: warning: <id> ...' line, else None."""
     m = _WARN.match(line)
@@ -495,14 +484,13 @@ def _parse_warning(line: str) -> tuple[str, dict] | None:
     m = _WARN_X.match(line)
     if m:
         sid, col, aa = m.groups()
-        # CHANGED(FIN-C14): was "'U' is not one of the 20 standard amino acids; COAL treated it as X"; now names it
         what = {"U": "selenocysteine", "O": "pyrrolysine", "B": "D or N", "Z": "E or Q", "J": "I or L"}.get(aa)
         return sid, {"code": "unknown_aa", "column": int(col), "residue": aa,
                      "text": (f"Column {col}: '{aa}'" + (f" ({what})" if what else "") + " is not one of the 20 "
                               f"standard amino acids, so COAL did not check its codon (any codon accepted).")}
     m = _WARN_UNRELATED.match(line)
-    # CHANGED(FIN-A6): the --strict advice now also names the app's option (the GUI and the MCP tool have it now)
-    if m:  # CHANGED(DEC-1): new
+    # the --strict advice also names the app's option (the GUI and the MCP tool have it)
+    if m:
         sid, nbad, nchk = m.groups()
         return sid, {"code": "suspect_unrelated",
                      "text": (f"{nbad} of the {nchk} codons COAL could check do not match this protein, so this is "
@@ -510,10 +498,10 @@ def _parse_warning(line: str) -> tuple[str, dict] | None:
                               f"its row, codon by position, as PAL2NAL does: do not trust it. Run COAL with --strict "
                               f"(in the app: 'Refuse probably-wrong genes') to refuse such genes.")}
     m = _WARN_GUESS.match(line)
-    if m:  # CHANGED(DEC-1): new
+    if m:
         sid, nchk, nres, short = m.groups()
         why = (f"Only {nchk} of this gene's {nres} codons have no unknown bases (N), and no "
-               if short is None else f"The gene has only {short} codons, and no ")  # CHANGED(FZ-4)
+               if short is None else f"The gene has only {short} codons, and no ")
         return sid, {"code": "suspect_position",
                      "text": (f"{why}"
                               f"10-residue stretch of the protein was found in the DNA, so COAL cannot tell where "
@@ -524,8 +512,8 @@ def _parse_warning(line: str) -> tuple[str, dict] | None:
     if m:
         sid, nbad, nres, namb = m.groups()
         amb = f"; {namb} contain N or other ambiguous bases" if namb else ""
-        # CHANGED(R3-A2): was always "... and the right genetic code?"; when every checkable codon matches and the
-        # rest are ambiguous, the placement is fine and the code is not the problem. See overnight/integration/CHANGES.md
+        # when every checkable codon matches and the rest are ambiguous, the placement is fine and the code is not
+        # the problem
         if namb and int(nbad) == 0:
             ask = "Every codon COAL could check matches, so the placement looks right."
         else:
@@ -544,7 +532,7 @@ _ERR = re.compile(r"^coal: error: (.*)$")
 
 
 def pairing_warning(line: str) -> dict | None:
-    """CHANGED(R2-A2): new. The engine's ENG-d line 'only K of N protein IDs are DNA IDs; ...' as a hint."""
+    """The engine's line 'only K of N protein IDs are DNA IDs; ...' as a hint."""
     m = _WARN_PAIRING.match(line)
     if not m:
         return None
@@ -560,7 +548,7 @@ _EXT = {"fasta": "fasta", "clustal": "aln", "paml": "paml", "codon": "codon.txt"
 
 
 def _run_engine(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, report_path, timeout=None,
-                strict=False, blockonly=False):  # CHANGED(FIN-A6): strict, blockonly
+                strict=False, blockonly=False):
     f = detect_features()
     timeout = timeout or ENGINE_TIMEOUT
     cmd = _coal_cmd() + ["-o", out, "-codontable", str(int(table))]
@@ -578,12 +566,11 @@ def _run_engine(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, re
         cmd.append("--keep-going")
     if report_path and f.report:
         cmd += ["--report", report_path]
-    cmd += ["--", protein, dna]  # CHANGED(R2-A7): was positional first, so a file named '-p.fa' was an option
+    cmd += ["--", protein, dna]  # after "--", so a file named '-p.fa' is not read as an option
     t0 = time.perf_counter()
-    # CHANGED(WINCI-2): was stdin inherited from the app; now stdin=DEVNULL. In the desktop app the app's stdin is
-    # the wrapper's lifeline pipe, which serve() keeps a blocking read on; on Windows a child given that same
-    # (synchronous) pipe blocks at startup behind the pending read, so every engine run hung. The engine never
-    # reads stdin. See overnight/integration/CHANGES.md
+    # stdin=DEVNULL: in the desktop app the app's stdin is the wrapper's lifeline pipe, which serve() keeps a
+    # blocking read on; on Windows a child given that same (synchronous) pipe blocks at startup behind the pending
+    # read, so every engine run would hang. The engine never reads stdin.
     p = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                          encoding="utf-8", errors="replace")
     try:
@@ -600,16 +587,15 @@ def _run_engine(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, re
 
 
 def stop_engine(p: subprocess.Popen, grace: float = 5.0) -> None:
-    """CHANGED(R2-A4): was subprocess.run(timeout=) = SIGKILL of the engine only (its worker processes were
-    orphaned, its .coal_*.tmp left behind). Now: POSIX SIGTERM (the engine cleans up, stops its workers, exits
-    143), wait `grace` seconds, then SIGKILL; Windows: taskkill /T /F (the whole process tree), then kill().
-    See overnight/integration/CHANGES.md"""
+    """Stop the engine and its workers: POSIX SIGTERM (the engine cleans up, stops its workers, exits 143), wait
+    `grace` seconds, then SIGKILL; Windows: taskkill /T /F (the whole process tree), then kill(). A plain SIGKILL
+    of the engine alone would orphan its worker processes and leave its .coal_*.tmp files behind."""
     if p.poll() is not None:
         p.communicate()
         return
     if os.name == "nt":
         try:
-            # CHANGED(WINCI-2): was stdin inherited; now DEVNULL (see _run_engine). See overnight/integration/CHANGES.md
+            # stdin=DEVNULL: see _run_engine
             subprocess.run(["taskkill", "/T", "/F", "/PID", str(p.pid)], capture_output=True, timeout=30,
                            stdin=subprocess.DEVNULL)
         except (OSError, subprocess.SubprocessError):
@@ -638,11 +624,10 @@ def _remove_engine_temp(folder: str) -> None:
 
 
 def run_engine_command(cmd: list, timeout: float, temp_dir: str | None = None) -> tuple[int, str, str]:
-    """CHANGED(R3-A4): new, for the demo scripts (they used subprocess.run(timeout=), which SIGKILLs only the
-    engine: workers orphaned, .coal_*.tmp left). Runs `cmd`, returns (returncode, stdout, stderr); on timeout or
-    interrupt stops the engine as stop_engine does, removes its .coal_*.tmp files in `temp_dir` and re-raises
-    (subprocess.TimeoutExpired on timeout). See overnight/integration/CHANGES.md"""
-    # CHANGED(WINCI-2): was stdin inherited; now DEVNULL (see _run_engine). See overnight/integration/CHANGES.md
+    """For the demo scripts (subprocess.run(timeout=) would SIGKILL only the engine: workers orphaned, .coal_*.tmp
+    left). Runs `cmd`, returns (returncode, stdout, stderr); on timeout or interrupt stops the engine as stop_engine
+    does, removes its .coal_*.tmp files in `temp_dir` and re-raises (subprocess.TimeoutExpired on timeout)."""
+    # stdin=DEVNULL: see _run_engine
     p = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                          encoding="utf-8", errors="replace")
     try:
@@ -656,8 +641,8 @@ def run_engine_command(cmd: list, timeout: float, temp_dir: str | None = None) -
 
 
 def public_error(e, paths=()) -> str:
-    """CHANGED(FIN-A4): new. An error message for the user with every given path shown as its file name only (no
-    server folders, e.g. on the hosted Space). See overnight/integration/CHANGES.md"""
+    """An error message for the user with every given path shown as its file name only (no server folders, e.g.
+    on the hosted Space)."""
     text = str(e)
     for p in sorted((p for p in paths if p), key=len, reverse=True):
         text = text.replace(p, os.path.basename(p))
@@ -708,7 +693,7 @@ def build_fallback_report(protein, dna, out, fmt, table, nogap, nomismatch, keep
         if w and w[0] in per:
             per[w[0]].append(w[1])
             continue
-        if w or line.startswith("coal: warning:"):  # CHANGED(R2-A2): was kept under an unknown id and lost
+        if w or line.startswith("coal: warning:"):
             run_hints.append({"code": "engine_warning", "text": "COAL warning: " + line[len("coal: warning:"):].strip()})
             continue
         m = _ERR.match(line)
@@ -719,21 +704,18 @@ def build_fallback_report(protein, dna, out, fmt, table, nogap, nomismatch, keep
                 failed[sid] = [{"code": _classify_error(rest), "text": rest}]
             else:
                 general.append({"code": _classify_error(msg), "text": msg})
-    aborted = not run_completed(code, stderr, keep_going)  # CHANGED(R2-A7): was code not in (0, 2)
+    aborted = not run_completed(code, stderr, keep_going)
     if was_stopped(code, stderr) and not any(g.get("code") == "stopped" for g in general):
-        general.insert(0, {"code": "stopped", "text": STOPPED_TEXT})  # CHANGED(R2-A6)
+        general.insert(0, {"code": "stopped", "text": STOPPED_TEXT})
     elif aborted and not general and not failed:
         general.append({"code": "error", "text": "COAL stopped without saying why (exit code "
                                                  f"{code}); no alignment was written."})
-    # CHANGED(APP-6): was "order"/"id" even when COAL stopped before pairing; now None (no pairing sentence). See overnight/app/CHANGES.md
     if aborted and general and not failed:
         pairing = None  # COAL stopped before pairing anything (e.g. counts differ, unreadable input)
     keep_going = bool(keep_going and detect_features().keep_going)  # only what was really passed
     seqs = []
-    # CHANGED(FIN-C7): was "Not checked: COAL stopped at an earlier error" for every gene of a stopped run, also for
-    # the genes before the failing one (they were processed fine; their warnings were dropped). Now genes before it
-    # say "Not written ..." (with their own warnings) and genes after it name the failing gene.
-    # See overnight/integration/CHANGES.md
+    # In a stopped run, genes before the failing one were processed: they say "Not written ..." (with their own
+    # warnings); genes after it name the failing gene.
     first_fail = next((i for i, p in enumerate(pids) if p in failed), None) if aborted else None
     for i, p in enumerate(pids):
         if pairing is None:
@@ -742,8 +724,8 @@ def build_fallback_report(protein, dna, out, fmt, table, nogap, nomismatch, keep
             d = p
         else:
             d = dids[i] if i < len(dids) else None
-        # CHANGED(DEC-1): new. In a run where only some protein IDs are DNA IDs, a gene paired by order with a DNA of
-        # another name says so; it is "failed" if it also has mismatches. See overnight/integration/CHANGES.md
+        # In a run where only some protein IDs are DNA IDs, a gene paired by order with a DNA of another name says
+        # so; it is "failed" if it also has mismatches.
         msgs_p = list(per.get(p) or [])
         mispaired = (pairing == "order" and d is not None and d != p
                      and any(h.get("code") == "partial_id_match" for h in run_hints))
@@ -762,7 +744,7 @@ def build_fallback_report(protein, dna, out, fmt, table, nogap, nomismatch, keep
                     msgs = [{"code": "not_written", "failed_id": fid}] + list(per.get(p) or [])
                 else:
                     msgs = [{"code": "not_reached", "failed_id": fid}]
-        elif any(m.get("code") in SUSPECT_CODES for m in msgs_p) or (  # CHANGED(DEC-1): probably wrong data
+        elif any(m.get("code") in SUSPECT_CODES for m in msgs_p) or (  # probably wrong data
                 mispaired and any(m.get("code") == "mismatch" for m in msgs_p)):
             status = "failed"
             msgs = sorted(msgs_p, key=lambda m: (m.get("code") not in SUSPECT_CODES,
@@ -781,7 +763,6 @@ def build_fallback_report(protein, dna, out, fmt, table, nogap, nomismatch, keep
         "command": coal_command(protein, dna, fmt, table, nogap, nomismatch, out, keep_going,
                                 strict=strict, blockonly=blockonly),
         "pal2nal_equivalent": pal2nal_command(protein, dna, fmt, table, nogap, nomismatch, out, blockonly),
-        # CHANGED(FIN-A6): strict and blockonly are new option fields
         "options": {"output_format": fmt, "codontable": int(table), "nogap": bool(nogap),
                     "nomismatch": bool(nomismatch), "keep_going": bool(keep_going), "strict": bool(strict),
                     "blockonly": bool(blockonly)},
@@ -811,8 +792,6 @@ def _safe_sha(p):
         return None
 
 
-# CHANGED(APP-7): was the stripped protein ID shown as "DNA" and "probably wrong" even on clean runs; now the
-# real DNA ID, and the verdict depends on the run's outcome. See overnight/app/CHANGES.md
 def id_hints(protein: str, dna: str, report: dict | None = None) -> list[dict]:
     """Spot IDs that only differ by a version suffix (AT1G01010.1 vs AT1G01010).
 
@@ -827,7 +806,7 @@ def id_hints(protein: str, dna: str, report: dict | None = None) -> list[dict]:
     if not missing:
         return []
     if any(h.get("code") == "partial_id_match" for h in (report or {}).get("hints") or []):
-        return []  # CHANGED(R2-A2): the engine's own partial-match warning already says it (and that it's wrong)
+        return []  # the engine's own partial-match warning already says it (and that it's wrong)
     summ = (report or {}).get("summary") or {}
     if report is not None and summ.get("pairing") not in ("order", None):
         return []  # the engine paired them some other way (e.g. normalised IDs)
@@ -851,8 +830,6 @@ def id_hints(protein: str, dna: str, report: dict | None = None) -> list[dict]:
         return [{"code": "id_mismatch",
                  "text": (f"The protein IDs don't exactly match the DNA IDs: they differ only by a version "
                           f"suffix (for example protein '{ex}' vs DNA '{dnorm[strip_version(ex)]}'). {verdict} "
-                          # CHANGED(FIN-C13): was "... or use a COAL version that matches IDs after normalising
-                          # them" (no such version exists); now concrete advice
                           f"Rename the sequences so the IDs match exactly, for example by removing the '.1'-style "
                           f"version suffixes from the protein alignment ('{ex}' -> '{strip_version(ex)}'), then "
                           f"run again.")}]
@@ -869,7 +846,7 @@ def _write_sample(protein, dna, ids, report, work_dir):
     from .viewer import read_alignment
     want = set(ids)
     prot = [(i, r) for i, r in read_alignment(protein) if i in want]
-    dna_recs = read_alignment(dna, dna=True)  # CHANGED(R3-A1): DNA rules ('#' lines, letters only)
+    dna_recs = read_alignment(dna, dna=True)  # DNA rules ('#' lines, letters only)
     pairs = {s["id"]: s.get("dna_id") for s in report.get("sequences", [])}
     dmap = dict(dna_recs)
     nuc = [(i, dmap.get(pairs.get(i) or i, "")) for i, _ in prot]
@@ -884,10 +861,10 @@ def _write_sample(protein, dna, ids, report, work_dir):
 
 
 def annotate_mismatch_patterns(protein: str, report: dict) -> None:
-    """CHANGED(FIN-C6/FIN-C9): new. Marks, in place, the mismatch patterns that are not a genetic-code question:
+    """Marks, in place, the mismatch patterns that are not a genetic-code question:
     a gene whose only definite mismatch is its first Met gets m["start_codon"] = True; a gene whose definite mismatches
     form a dense run (to the end of the gene, or a block of 4 or more) gets a "possible_frameshift" message (a missing
-    or extra base, or an indel, then in-frame again or the gene ends). See overnight/integration/CHANGES.md"""
+    or extra base, or an indel, then in-frame again or the gene ends)."""
     want = {sq["id"]: sq for sq in report.get("sequences") or [] if real_mismatches(sq)}
     if not want:
         return
@@ -943,7 +920,7 @@ def _code_distance(a: int, b: int) -> tuple[int, int]:
 
 
 def _fits_now(sq: dict) -> bool:
-    if sq.get("status") == "not_checked":  # FIN-C7: processed before the error, without a definite mismatch
+    if sq.get("status") == "not_checked":  # processed before the error, without a definite mismatch
         return any(m.get("code") == "not_written" for m in sq.get("messages") or []) and not real_mismatches(sq)
     return gene_kind(sq) in ("ok", "unchecked", "other")
 
@@ -957,7 +934,7 @@ def _fixable(sq: dict) -> bool:
     if k == "flagged":
         return any(m.get("code") == "suspect_unrelated" for m in sq.get("messages") or []) or bool(
             real_mismatches(sq))
-    if k == "not_checked":  # CHANGED(FIN-C7): a gene processed before the error is fixable only if it mismatched
+    if k == "not_checked":  # a gene processed before the error is fixable only if it mismatched
         written = any(m.get("code") == "not_written" for m in sq.get("messages") or [])
         return bool(real_mismatches(sq)) if written else True
     return k == "excluded"
@@ -965,15 +942,12 @@ def _fixable(sq: dict) -> bool:
 
 def genetic_code_hint(protein, dna, table, report, work_dir) -> dict | None:
     """If sequences have mismatches, see whether another genetic code fits more of them.
-    CHANGED(APP-13): was 9 full-input engine runs (600 s limit each, probe files left behind); now as below.
-    CHANGED(FIN-A1/FIN-C4/FIN-C5/FIN-C6/FIN-C9): was every "warning" gene a problem gene (pairing-only, U/B/Z-only
-    and ambiguous-placement genes were "fixed" by any code: "All sequences fit code 4"), and the count assumed genes
-    fine under the current code stay fine ("All ..." although one gene broke). Now only genes with definite
-    mismatches (not a frameshift-like run), probably-unrelated, excluded or unchecked genes ask for a hint; every gene
-    (up to PROBE_SAMPLE, problem genes first) is re-run under each candidate code; a gene fits when it has no definite
-    mismatch and no probably-unrelated notice; the text says what was tested; ties go to the code closest to the
-    current one (CHANGED(PRE-4): to code 1 when it is tied), and other codes that fit as well are named; a start-codon-only problem says so.
-    See overnight/integration/CHANGES.md
+    Only genes with definite mismatches (not a frameshift-like run), probably-unrelated, excluded or unchecked genes
+    ask for a hint (pairing-only, U/B/Z-only and ambiguous-placement genes would be "fixed" by any code). Every gene
+    (up to PROBE_SAMPLE, problem genes first) is re-run under each candidate code, so a gene that fits the current
+    code but not the candidate is counted too; a gene fits when it has no definite mismatch and no
+    probably-unrelated notice; the text says what was tested; ties go to code 1 when it is tied, otherwise to the
+    code closest to the current one, and other codes that fit as well are named; a start-codon-only problem says so.
 
     Each probe has a short time limit and all probes run within PROBE_BUDGET seconds; every probe file is deleted."""
     import shutil
@@ -1008,7 +982,7 @@ def genetic_code_hint(protein, dna, table, report, work_dir) -> dict | None:
                                        timeout=min(PROBE_TIMEOUT, left))
             if os.path.exists(out):
                 os.remove(out)
-            if code != 0:  # CHANGED(R2-A7): was (0, 2)
+            if code != 0:
                 continue
             bad = set()
             for w in map(_parse_warning, err.splitlines()):
@@ -1026,7 +1000,7 @@ def genetic_code_hint(protein, dna, table, report, work_dir) -> dict | None:
     top = max(f for f, _ in results)
     tied = sorted((c for f, c in results if f == top),
                   key=lambda c: (_code_distance(table, c)[0], CANDIDATE_CODES.index(c)))
-    # CHANGED(PRE-4): the standard code 1 first when it is among the tied codes (as the engine, coal/report.py)
+    # the standard code 1 first when it is among the tied codes (as the engine, coal/report.py)
     standard = 1 in tied and len(tied) > 1
     if standard:
         tied = [1] + [x for x in tied if x != 1]
@@ -1059,17 +1033,16 @@ def genetic_code_hint(protein, dna, table, report, work_dir) -> dict | None:
                     f"as well, but code {c} differs least from code {table}." if closer else
                     "these sequences too: choose the code of the organism and organelle the genes come from."))
     text += f" Re-run with code {c}?"
-    # CHANGED(AMB-4): also the counts, under the names the engine's hint uses (coal/report.py), for code_fix
+    # also the counts, under the names the engine's hint uses (coal/report.py), for code_fix
     return {"code": "genetic_code", "text": text, "suggested_codontable": c, "checked": n, "fit": top,
             "fit_current": fits_now}
 
 
 def mismatch_probe(protein, dna, table, keep_going, report, work_dir, blockonly=False) -> dict:
-    """CHANGED(R2-A1/R2-D5/R2-E1): new. With -nomismatch the engine (like PAL2NAL) prints no mismatch
-    warnings, so the report said every gene matched. This re-runs the same inputs without -nomismatch (output
+    """With -nomismatch the engine (like PAL2NAL) prints no mismatch warnings, so the report would say every gene
+    matched. This re-runs the same inputs without -nomismatch (output
     to a temporary file, deleted) to find which genes had mismatching codons, marks them "warning" (columns
-    removed) and stores the number of removed codon columns in summary["columns_removed"].
-    See overnight/integration/CHANGES.md"""
+    removed) and stores the number of removed codon columns in summary["columns_removed"]."""
     import shutil
     probe_dir = tempfile.mkdtemp(prefix="probe_nomismatch_", dir=work_dir)
     try:
@@ -1085,7 +1058,7 @@ def mismatch_probe(protein, dna, table, keep_going, report, work_dir, blockonly=
         return report
     per: dict[str, list[dict]] = {}
     cols: set[int] = set()
-    real_cols: set[int] = set()  # CHANGED(R3-A2): columns with at least one definite (A/C/G/T) mismatch
+    real_cols: set[int] = set()  # columns with at least one definite (A/C/G/T) mismatch
     for line in err.splitlines():
         w = _parse_warning(line)
         if w and w[1].get("code") == "mismatch":
@@ -1103,7 +1076,7 @@ def mismatch_probe(protein, dna, table, keep_going, report, work_dir, blockonly=
     for k in ("ok", "warning"):
         summ[k] = sum(1 for x in report.get("sequences", []) if x["status"] == k)
     summ["columns_removed"] = len(cols)
-    summ["columns_removed_ambiguous"] = len(cols - real_cols)  # CHANGED(R3-A2)
+    summ["columns_removed_ambiguous"] = len(cols - real_cols)
     return report
 
 
@@ -1112,8 +1085,8 @@ def has_problem_hint(hints) -> bool:
 
 
 def banner_head(ok: bool, summary: dict, hints=()) -> str:
-    """CHANGED(R2-A1/R2-A2): was inline in ui.run_ui; "every sequence matched" now also needs no removed columns
-    and no run-level problem (e.g. a partial ID match)."""
+    """"Every sequence matched" also needs no removed columns and no run-level problem (e.g. a partial ID
+    match)."""
     if (ok and not summary.get("failed") and not summary.get("warning") and not summary.get("columns_removed")
             and not has_problem_hint(hints)):
         return "### ✔ Done: every sequence matched"
@@ -1127,14 +1100,14 @@ def run_coal(protein_path: str, dna_path: str, output_format: str = "fasta", cod
              out_dir: str | None = None, probe_codes: bool = True, strict: bool = False,
              blockonly: bool = False) -> RunResult:
     """Run COAL once and return the output, a coal.report/1 report and hints.
-    CHANGED(FIN-A6): strict (COAL's --strict: refuse probably-wrong genes) and blockonly (-blockonly) are new."""
+    strict: COAL's --strict (refuse probably-wrong genes); blockonly: -blockonly."""
     f = detect_features()
     if output_format not in f.output_formats:
         raise ValueError(f"output format '{output_format}' is not supported by this COAL "
                          f"(supported: {', '.join(f.output_formats)})")
     if int(codontable) not in GENETIC_CODES:
         raise ValueError(f"unknown genetic code {codontable}")
-    out_dir = out_dir or new_run_dir()  # CHANGED(APP-12): was mkdtemp("coal_") in /tmp, never removed. See overnight/app/CHANGES.md
+    out_dir = out_dir or new_run_dir()  # pruned by prune_runs()
     os.makedirs(out_dir, exist_ok=True)
     stem = os.path.splitext(os.path.basename(protein_path))[0].replace(".aln", "")
     out = os.path.join(out_dir, f"{stem}.codon.{_EXT.get(output_format, 'txt')}")
@@ -1157,7 +1130,7 @@ def run_coal(protein_path: str, dna_path: str, output_format: str = "fasta", cod
             mismatch_probe(protein_path, dna_path, codontable, keep_going, report, out_dir, blockonly=blockonly)
         from .viewer import locate_breaks
         locate_breaks(protein_path, dna_path, report)
-        annotate_mismatch_patterns(protein_path, report)  # CHANGED(FIN-C6/FIN-C9)
+        annotate_mismatch_patterns(protein_path, report)
         hints = list(report.get("hints") or []) + id_hints(protein_path, dna_path, report)
         if probe_codes:
             h = genetic_code_hint(protein_path, dna_path, codontable, report, out_dir)
@@ -1166,7 +1139,7 @@ def run_coal(protein_path: str, dna_path: str, output_format: str = "fasta", cod
         report["hints"] = hints
         with open(report_path, "w", encoding="utf-8") as fh:
             json.dump(report, fh, indent=2)
-    produced = run_completed(code, err, keep_going) and os.path.exists(out)  # CHANGED(R2-A7)
+    produced = run_completed(code, err, keep_going) and os.path.exists(out)
     return RunResult(
         exit_code=code,
         output_path=out if produced else None,
@@ -1211,8 +1184,7 @@ def _validate_report(rep) -> None:
 
 
 def load_report(path: str) -> dict:
-    # CHANGED(APP-14): was plain utf-8 and no type checks (AttributeError on {"summary": []}); now utf-8-sig
-    # (a BOM is fine) and every field explain() uses is type-checked. See overnight/app/CHANGES.md
+    # utf-8-sig (a BOM is fine); every field explain() uses is type-checked (e.g. {"summary": []})
     with open(path, encoding="utf-8-sig") as fh:
         try:
             rep = json.load(fh)
@@ -1230,8 +1202,8 @@ def load_sample_report() -> dict:
 
 
 def sample_banner(rep: dict) -> str:
-    """GUI banner for the sample report. CHANGED(APP-15): was "what a run looks like with a newer COAL";
-    now a clearly labelled demo sample (a real run of examples/mito with the wrong genetic code)."""
+    """GUI banner for the sample report: a clearly labelled demo sample (a real run of examples/mito with the wrong
+    genetic code)."""
     return ("### Demo sample (not your data)\nThe 24 mitochondrial genes of the *Mitochondrial (wrong code)* example, run "
             "with genetic code 1, the wrong code for them: see the tip to re-run with code 2. "
             + summary_sentence(rep))
@@ -1242,7 +1214,7 @@ def _mismatch_sentence(msgs: list[dict]) -> str:
     others = " ".join(m.get("text", "") for m in msgs if m.get("code") != "mismatch")
     if not mm:
         return others or "COAL printed a warning for this sequence."
-    # CHANGED(FIN-C9): a frameshift-like run of mismatches gets no genetic-code advice
+    # a frameshift-like run of mismatches gets no genetic-code advice
     fs = any(m.get("code") == "possible_frameshift" for m in msgs)
     return _mm_sentence(mm, code_advice=not fs) + (" " + others if others else "")
 
@@ -1253,9 +1225,7 @@ def is_ambiguous_codon(codon) -> bool:
 
 
 def _mm_sentence(mm: list[dict], code_advice: bool = True) -> str:
-    # CHANGED(R3-A2): was every mismatch explained as a genetic-code problem ("55 codons do not match ... the DNA
-    # has NNN ... check the genetic code"); now codons with unknown/ambiguous bases get their own sentence and
-    # no genetic-code advice. See overnight/integration/CHANGES.md
+    # codons with unknown/ambiguous bases get their own sentence and no genetic-code advice
     amb = [m for m in mm if is_ambiguous_codon(m.get("codon"))]
     real = [m for m in mm if not is_ambiguous_codon(m.get("codon"))]
     removed = any(m.get("removed") for m in mm)
@@ -1266,10 +1236,10 @@ def _mm_sentence(mm: list[dict], code_advice: bool = True) -> str:
         detail = ""
         if first.get("residue") and first.get("codon"):
             detail = f": the protein says {first['residue']} but the DNA has {first['codon']}"
-        # CHANGED(R2-A1): mismatches found by the -nomismatch probe say their columns were removed
+        # mismatches found by the -nomismatch probe say their columns were removed
         fate = ("Those columns were removed from the alignment (-nomismatch)" if first.get("removed")
                 else "Kept in the alignment")
-        if n == 1 and first.get("start_codon"):  # CHANGED(FIN-C6)
+        if n == 1 and first.get("start_codon"):
             out.append(f"The first codon, {first.get('codon')}, is not a start codon of this genetic code, although "
                        f"the protein starts with M: probably an alternative start codon (some codes accept it). "
                        f"{fate}.")
@@ -1307,7 +1277,7 @@ def sequence_sentence(seq: dict) -> str:
     if st == "ok":
         return "Protein and DNA match codon for codon."
     if st == "not_checked":
-        # CHANGED(FIN-C7): genes before / after the gene that stopped the run
+        # genes before / after the gene that stopped the run
         mark = next((m for m in msgs if m.get("code") in ("not_written", "not_reached")), None)
         if mark is None:
             return "Not checked: COAL stopped at an earlier error."
@@ -1324,7 +1294,7 @@ def sequence_sentence(seq: dict) -> str:
         return _mismatch_sentence(msgs)
     if st == "failed":
         lead = [m for m in msgs if m.get("code") in SUSPECT_CODES + ("suspect_pairing",)]
-        if lead:  # CHANGED(DEC-1): written but probably wrong; say why first
+        if lead:  # written but probably wrong; say why first
             return " ".join(m.get("text", "") for m in lead)
         for m in msgs:
             if isinstance(m.get("column"), int) and m.get("code") in ("frameshift", "inconsistent", "missing_dna"):
@@ -1332,7 +1302,7 @@ def sequence_sentence(seq: dict) -> str:
                         "inconsistent": " Is this the right DNA for this protein, and the right genetic code?",
                         "missing_dna": " The DNA looks truncated."}[m["code"]]
                 if seq.get("pairing") == "order" and seq.get("dna_id") and seq.get("dna_id") != seq.get("id"):
-                    # CHANGED(FIN-C12): was "The DNA looks truncated" also when the cause is pairing by order
+                    # paired by order: the wrong DNA is more likely than a truncated one
                     tail = (f" It was paired with DNA '{seq['dna_id']}' only by their order in the files (the IDs "
                             f"don't match), so this is most likely the wrong DNA for it: make the IDs match.")
                 return m.get("text", "") + tail
@@ -1353,10 +1323,9 @@ def health_rows(report: dict) -> list[list[str]]:
 
 
 def _jump_links(seq: dict, limit: int = 12, preview: dict | None = None) -> str:
-    """CHANGED(GUI-10): preview (viewer.view's info: ids, first, last): a column outside the drawn part is named
+    """preview (viewer.view's info: ids, first, last): a column outside the drawn part is named
     without a link ("not in the preview"), so no link leads nowhere."""
     from .viewer import cell_id
-    # CHANGED(APP-3/APP-1): was every message column linked; now only cells the viewer anchors. See overnight/app/CHANGES.md
     # only codes the viewer gives an anchor to (it outlines mismatched and frameshift cells)
     cols = sorted({m["column"] for m in seq.get("messages") or []
                    if isinstance(m.get("column"), int) and m.get("code") in ("mismatch", "frameshift")})
@@ -1366,8 +1335,7 @@ def _jump_links(seq: dict, limit: int = 12, preview: dict | None = None) -> str:
     drawn = preview is None or not preview.get("preview") or sid in (preview.get("ids") or ())
     lo, hi = (preview or {}).get("first", 1), (preview or {}).get("last", 10 ** 9)
 
-    # CHANGED(GUI-14): was "Show in alignment: column 1, column 7, column 36, ..."; now "Columns 1, 7, 36"
-    # (the number is the link, as in a page index)
+    # "Columns 1, 7, 36" (the number is the link, as in a page index)
     def one(c):
         if drawn and lo <= c <= hi:
             return f'<a href="#{cell_id(sid, c)}" aria-label="column {c:,}">{c:,}</a>'
@@ -1385,17 +1353,17 @@ def _jump_links(seq: dict, limit: int = 12, preview: dict | None = None) -> str:
 
 
 def _closing_sentence(text: str) -> str:
-    """CHANGED(GUI-14): the last sentence of a row's text when there is more than one ("" otherwise)."""
+    """The last sentence of a row's text when there is more than one ("" otherwise)."""
     text = (text or "").rstrip()
     i = text.rfind(". ", 0, len(text) - 1)
     return text[i + 2:] if i > 0 else ""
 
 
-CODE_FIX_SHARE = 0.9  # CHANGED(AMB-4): share of the checked genes that must fit the suggested code
+CODE_FIX_SHARE = 0.9  # share of the checked genes that must fit the suggested code
 
 
 def code_fix(report: dict) -> dict | None:
-    """CHANGED(AMB-4): new. When the genetic-code hint explains the run (all, or at least CODE_FIX_SHARE, of the
+    """When the genetic-code hint explains the run (all, or at least CODE_FIX_SHARE, of the
     checked sequences fit the suggested code, and more of them than fit the code used), what the result page
     says first: the code used, the code to use, the counts, and the other codes that fit too (the hint's own
     sentence). None otherwise. Reads the report's hints only; the report and the engine are unchanged."""
@@ -1421,60 +1389,58 @@ def _plural_genes(n: int) -> str:
 
 
 def _code_fix_genes(seqs: list[dict]) -> list[dict]:
-    """CHANGED(AMB-4): the warnings a wrong genetic code explains (a warning with a mismatched codon)."""
+    """The warnings a wrong genetic code explains (a warning with a mismatched codon)."""
     return [s for s in seqs if s.get("status") == "warning"
             and any(m.get("code") == "mismatch" for m in (s.get("messages") or []))]
 
 
 HEALTH_MAX_ROWS = 200
-HEALTH_GROUP_SHOWN = 3  # CHANGED(PRE-3): rows shown of a group that shares its closing sentence; the rest on demand
-HEALTH_OK_NAMES = 2000  # CHANGED(GUI-4): OK genes are named in one collapsed row, at most this many
+HEALTH_GROUP_SHOWN = 3  # rows shown of a group that shares its closing sentence; the rest on demand
+HEALTH_OK_NAMES = 2000  # OK genes are named in one collapsed row, at most this many
 
 
 def health_table_html(report: dict, links: bool = False, preview: dict | None = None) -> str:
     """Accessible HTML table (icon + word + sentence, never colour alone).
     With links=True, problem columns link to the alignment viewer's cells (same page). No links when
     -nogap/-nomismatch removed columns: report columns then don't exist in the output.
-    CHANGED(GUI-10): preview: what the alignment preview drew (viewer.view's info); only cells in it are linked."""
+    preview: what the alignment preview drew (viewer.view's info); only cells in it are linked."""
     opts = report.get("options") if isinstance(report.get("options"), dict) else {}
-    if opts.get("nogap") or opts.get("nomismatch"):  # CHANGED(APP-1): no jump links in codon-only mode
+    if opts.get("nogap") or opts.get("nomismatch"):  # no jump links in codon-only mode
         links = False
     order = {"failed": 0, "warning": 1, "not_checked": 2, "ok": 3}
     allseqs = sorted(report.get("sequences", []), key=lambda s: order.get(s.get("status"), 4))
-    if not allseqs:  # CHANGED(GUI-4): was an empty table with only its caption (no report yet, or an input error)
+    if not allseqs:  # no report yet, or an input error: no empty table
         return ""
-    # CHANGED(GUI-4): was one row per OK gene too ("OK · Protein and DNA match codon for codon." x 19 under one
-    # failed gene); now OK genes without a note are one collapsed row listing their names. See
-    # overnight/integration/CHANGES.md
+    # OK genes without a note are one collapsed row listing their names, not one row each
     oks = [s for s in allseqs if s.get("status") == "ok" and not (s.get("dna_id") and s.get("dna_id") != s.get("id"))]
     ok_ids = {id(s) for s in oks}
     allseqs = [s for s in allseqs if id(s) not in ok_ids]
-    # CHANGED(AMB-4): when the genetic-code hint explains the run (code_fix), the warnings it explains are one
+    # When the genetic-code hint explains the run (code_fix), the warnings it explains are one
     # closed row after the other problems ("24 genes with mismatched codons under code 1: expected with the wrong
-    # code"), not 24 rows; runs without such a hint are as before
+    # code"), not 24 rows
     fix = code_fix(report)
     fixed = _code_fix_genes(allseqs) if fix else []
     if fixed:
         fixed_ids = {id(s) for s in fixed}
         allseqs = [s for s in allseqs if id(s) not in fixed_ids]
-    # CHANGED(R2-A3): was one row per sequence (22,000 rows = 4.2 MB of HTML); now at most HEALTH_MAX_ROWS rows,
-    # problems first, then one summary row for the rest. See overnight/integration/CHANGES.md
+    # at most HEALTH_MAX_ROWS rows (one row per sequence: 22,000 rows = 4.2 MB of HTML), problems first, then one
+    # summary row for the rest
     seqs = allseqs[:HEALTH_MAX_ROWS]
     rest = allseqs[HEALTH_MAX_ROWS:]
-    caption = "Sequences"  # CHANGED(GUI-14): was "Sequence health, problems first" / "Sequence health"
+    caption = "Sequences"
     out = [f'<table class="coal-health"><caption>{caption}</caption>',
            '<thead><tr><th scope="col">Status</th><th scope="col">Sequence</th>'
            '<th scope="col">What this means</th></tr></thead><tbody>']
-    # CHANGED(GUI-4): three or more problem genes with the same status and the same sentence, and nothing of their
+    # Three or more problem genes with the same status and the same sentence, and nothing of their
     # own (no jump link, no pairing note), are one row naming them (e.g. the 19 "Not checked: COAL stopped at an
-    # error in X" rows after a fatal error). See overnight/integration/CHANGES.md
+    # error in X" rows after a fatal error).
     groups: dict = {}
     for s in seqs:
         paired = s.get("dna_id") and s.get("dna_id") != s.get("id")
         if not paired and not (links and _jump_links(s, preview=preview)):
             groups.setdefault((s.get("status"), sequence_sentence(s)), []).append(s)
     grouped = {id(x) for g in groups.values() if len(g) >= 3 for x in g}
-    # CHANGED(GUI-14): a closing sentence that three or more rows of the same status share (e.g. "Kept in the
+    # A closing sentence that three or more rows of the same status share (e.g. "Kept in the
     # alignment; check the genetic code." under 24 warnings) is said once, in a row above the first of them
     tails: dict = {}
     for s in seqs:
@@ -1483,8 +1449,7 @@ def health_table_html(report: dict, links: bool = False, preview: dict | None = 
             if t:
                 tails.setdefault((s.get("status"), t), []).append(s)
     shared = {id(x): k[1] for k, g in tails.items() if len(g) >= 3 for x in g}
-    # CHANGED(PRE-3): such a group listed every row (24 under "⚠ 24 genes: Kept in the alignment; check the genetic
-    # code."); now its first HEALTH_GROUP_SHOWN rows, then the others under one "Show N more" disclosure (a
+    # Such a group shows its first HEALTH_GROUP_SHOWN rows, then the others under one "Show N more" disclosure (a
     # native <details>, as gr.HTML runs no scripts) right after them, each with its own jump links
     later = {}
     for g in tails.values():
@@ -1530,14 +1495,14 @@ def health_table_html(report: dict, links: bool = False, preview: dict | None = 
                 out.append(f'<tr class="coal-{cls} coal-shared"><td colspan="3"><span class="coal-badge coal-{cls}" '
                            f'aria-hidden="true">{icon}</span> <strong>{n:,} genes:</strong> {html.escape(tail)}</td></tr>')
         out.append(row(s, short(s)))
-        if id(s) in later:  # CHANGED(PRE-3): the rest of its group, on demand
+        if id(s) in later:  # the rest of its group, on demand
             more = later[id(s)]
             out.append(f'<tr class="coal-morerows"><td colspan="3"><details><summary>Show {len(more):,} '
                        f'more</summary><table class="coal-health coal-nested"><thead class="coal-sr"><tr>'
                        f'<th scope="col">Status</th><th scope="col">Sequence</th><th scope="col">What this means</th>'
                        f'</tr></thead><tbody>{"".join(row(x, short(x)) for x in more)}</tbody></table></details>'
                        f'</td></tr>')
-    if fixed:  # CHANGED(AMB-4)
+    if fixed:
         icon, word, cls = STATUS["warning"]
         shown = fixed[:HEALTH_MAX_ROWS]
         more = (f'<p class="coal-small">… and {len(fixed) - len(shown):,} more; the report JSON lists every '
@@ -1557,7 +1522,7 @@ def health_table_html(report: dict, links: bool = False, preview: dict | None = 
         what = ", ".join(f"{n:,} {STATUS.get(k, ('', str(k), ''))[1]}" for k, n in kinds.items())
         out.append(f'<tr><td colspan="3">… and {len(rest):,} more sequences ({what}); the report JSON lists '
                    f'every sequence.</td></tr>')
-    if oks:  # CHANGED(GUI-4): one row for every OK gene, names listed on demand
+    if oks:  # one row for every OK gene, names listed on demand
         icon, word, cls = STATUS["ok"]
         names = " ".join(f"<code>{html.escape(str(s.get('id', '')))}</code>" for s in oks[:HEALTH_OK_NAMES])
         more = (f" … and {len(oks) - HEALTH_OK_NAMES:,} more (the report JSON lists every sequence)"
@@ -1582,10 +1547,9 @@ def summary_sentence(report: dict) -> str:
     if s.get("not_checked"):
         parts.append(f"{s['not_checked']} not checked")
     text = f"{total} sequence{'s' if total != 1 else ''}: " + ", ".join(parts) + "."
-    if s.get("columns_removed"):  # CHANGED(R2-A1): say how much -nomismatch removed
+    if s.get("columns_removed"):  # say how much -nomismatch removed
         n = s["columns_removed"]
-        # CHANGED(R3-A2): was always "because they didn't match"; columns removed only for codons with unknown or
-        # ambiguous bases are now named as such. See overnight/integration/CHANGES.md
+        # columns removed only for codons with unknown or ambiguous bases are named as such
         a = int(s.get("columns_removed_ambiguous") or 0)
         if a >= n:
             why = (f"{'they' if n != 1 else 'it'} had codons with unknown or ambiguous bases (e.g. N) that COAL "
@@ -1605,7 +1569,7 @@ def _report_completed(report: dict) -> bool:
         (e or {}).get("code") == "stopped" for e in report.get("errors") or [])
 
 
-# CHANGED(FIN-C11): new. The code names as they read inside a sentence: common words lower case, genus names
+# The code names as they read inside a sentence: common words lower case, genus names
 # capitalised (NCBI: "The Scenedesmus obliquus Mitochondrial Code", "... and the Mycoplasma/Spiroplasma Code").
 METHODS_CODE_NAMES: dict[int, str] = {
     1: "standard genetic code",
@@ -1629,15 +1593,15 @@ METHODS_CODE_NAMES: dict[int, str] = {
 
 
 def real_mismatches(seq: dict) -> list[dict]:
-    """CHANGED(FIN-A1/FIN-C1): new. The gene's mismatch messages with a definite (A/C/G/T) codon."""
+    """The gene's mismatch messages with a definite (A/C/G/T) codon."""
     return [m for m in seq.get("messages") or []
             if m.get("code") == "mismatch" and not is_ambiguous_codon(m.get("codon"))]
 
 
 def gene_kind(seq: dict) -> str:
-    """CHANGED(FIN-C1/FIN-A2): new. What happened to one gene, by its messages: 'ok', 'mismatch' (definite
+    """What happened to one gene, by its messages: 'ok', 'mismatch' (definite
     mismatching codons), 'unchecked' (only codons with unknown/ambiguous bases), 'other' (other warnings: non-standard
-    residues, pairing by order, ambiguous placement), 'flagged' (written but probably wrong, DEC-1), 'excluded'
+    residues, pairing by order, ambiguous placement), 'flagged' (written but probably wrong), 'excluded'
     (failed, no row in the output) or 'not_checked'."""
     st = seq.get("status")
     msgs = seq.get("messages") or []
@@ -1656,24 +1620,22 @@ def methods_text(report: dict) -> str:
     """A ready-to-paste methods sentence for a run (report["methods_text"] if the engine wrote one)."""
     if report.get("methods_text"):
         return str(report["methods_text"])
-    if not _report_completed(report) or not report.get("output"):  # CHANGED(R2-A7)
+    if not _report_completed(report) or not report.get("output"):
         return ""
     opts = report.get("options") or {}
     s = report.get("summary") or {}
     n = int(opts.get("codontable") or 1)
     ver = report.get("coal_version") or "unknown"
     total, ok = s.get("total", 0), s.get("ok", 0)
-    # CHANGED(FIN-C11): was the plain name lower-cased ("scenedesmus obliquus", "hexamita"); now METHODS_CODE_NAMES,
-    # with genus names capitalised as NCBI writes them. See overnight/integration/CHANGES.md
+    # genus names capitalised as NCBI writes them (METHODS_CODE_NAMES)
     phrase = METHODS_CODE_NAMES.get(n, f"NCBI genetic code {n}")
-    # CHANGED(APP-15): was always "COAL v<version>"; a non-numeric version (the demo sample) is shown in brackets
+    # a non-numeric version (the demo sample) is shown in brackets
     shown = f"COAL v{ver}" if ver[:1].isdigit() else f"COAL ({ver})"
     parts = [f"Codon alignments were built with {shown} (https://github.com/plumat-coal/COAL), which places "
              f"each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method "
              f"of PAL2NAL; Suyama et al. 2006), using the {phrase} (NCBI translation table {n})."]
-    # CHANGED(FIN-C1/FIN-A2): was every "warning" gene "contained codons that did not match" and every "failed" gene
-    # "could not be aligned and was excluded" (false for U/B/Z-only and pairing-only genes, and for DEC-1 suspect
-    # genes, which ARE written); now counted by message code. See overnight/integration/CHANGES.md
+    # counted by message code, not by status: a "warning" gene need not have mismatched codons (U/B/Z-only,
+    # pairing-only) and a "failed" gene may still be written (probably wrong data)
     kinds = {}
     for sq in report.get("sequences") or []:
         k = gene_kind(sq)
@@ -1723,7 +1685,7 @@ def methods_text(report: dict) -> str:
                      else "The alignment columns holding such codons were removed (-nomismatch).")
     if opts.get("nogap"):
         parts.append("Codon columns containing gaps or stop codons were removed.")
-    cmd = strip_folders(report.get("command") or "",  # CHANGED(SHIP-2): was replace(pth, basename) per path
+    cmd = strip_folders(report.get("command") or "",
                         [item.get("path") for item in list(report.get("inputs") or []) + [report.get("output") or {}]
                          if isinstance(item, dict)])
     if cmd:
@@ -1748,7 +1710,7 @@ def explain(report: dict) -> str:
     out = report.get("output")
     if out:
         lines.append(f"The codon alignment was written to {out.get('path')} ({out.get('format')} format).")
-    elif not _report_completed(report):  # CHANGED(R2-A7): was code not in (0, 2)
+    elif not _report_completed(report):
         lines.append("No alignment was written, because COAL stopped at an error.")
     for e in report.get("errors") or []:
         lines.append(f"Error: {e.get('text')}")
@@ -1771,7 +1733,7 @@ def explain(report: dict) -> str:
         for h in hints:
             lines.append(f"- {h.get('text')}")
     if (not failed and not warned and not report.get("errors") and not s.get("columns_removed")
-            and not has_problem_hint(hints) and _report_completed(report)):  # CHANGED(R2-A6): never when aborted
+            and not has_problem_hint(hints) and _report_completed(report)):  # never when aborted
         lines.append("Nothing went wrong: every protein matched its DNA.")
     elif failed and not any(h.get("code") == "genetic_code" for h in hints):
         lines.append("")

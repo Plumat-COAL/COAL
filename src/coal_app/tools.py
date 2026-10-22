@@ -1,10 +1,9 @@
 """The two MCP tools AI agents use. Plain functions: served by Gradio's MCP server
 (``python -m coal_app``) or by the stand-alone stdio server (``python -m coal_app --mcp``).
 
-CHANGED(IMP-M-1): the result says what happened truthfully (``completed`` = COAL finished; ``all_ok`` /
+The result says what happened truthfully (``completed`` = COAL finished; ``all_ok`` /
 ``needs_attention`` = whether every sequence matched), errors raise :class:`CoalToolError` (MCP clients see
 ``isError: true``), the arguments carry descriptions and enums, and stderr is summarised instead of copied.
-See overnight/integration/CHANGES.md
 """
 from __future__ import annotations
 
@@ -28,14 +27,13 @@ except ImportError:  # pragma: no cover
 try:  # mcp >= 2 (the `mcp` extra): a ToolError is an anticipated failure, its message reaches the model
     from mcp.server.mcpserver.exceptions import ToolError as _ToolErrorBase
 except ImportError:
-    try:  # CHANGED(SHIP-18): mcp 1.x (Gradio's, and the Windows app's stdio server) has ToolError under fastmcp
+    try:  # mcp 1.x (Gradio's, and the Windows app's stdio server) has ToolError under fastmcp
         from mcp.server.fastmcp.exceptions import ToolError as _ToolErrorBase
     except ImportError:  # no MCP at all: any exception becomes isError
         _ToolErrorBase = None
 
-# CHANGED(SHIP-13): was `class CoalToolError(_ToolErrorBase, ValueError)` with _ToolErrorBase = Exception when mcp 2 is
-# absent, which is an invalid MRO (Exception before its subclass ValueError): importing coal_app.tools failed in every
-# environment without mcp 2 (plain install, Gradio's mcp 1.x, the Windows build), so CI run #67 went red.
+# Without an MCP ToolError base, the bases are just (ValueError,): (Exception, ValueError) would be an invalid MRO
+# (Exception before its subclass ValueError) and importing this module would fail.
 _TOOL_ERROR_BASES = (_ToolErrorBase, ValueError) if _ToolErrorBase is not None else (ValueError,)
 
 
@@ -153,12 +151,12 @@ def summarise(r: core.RunResult) -> CodonAlignResult:
         methods_text=core.methods_text(r.report),
         coal_command=r.coal_cmd,
         pal2nal_command=r.pal2nal_cmd,
-        pal2nal_caveats=core.pal2nal_caveats(r.report.get("options") or {}),  # CHANGED(FIN-A5/FIN-C8)
+        pal2nal_caveats=core.pal2nal_caveats(r.report.get("options") or {}),
     )
 
 
 def _check_input(path: str) -> None:
-    # CHANGED(APP-11): was any server path accepted; now only sandbox paths when hosted. See overnight/app/CHANGES.md
+    # only sandbox paths are allowed when hosted
     why = core.check_path_allowed(path)
     if why:
         raise CoalToolError(why)
@@ -167,8 +165,8 @@ def _check_input(path: str) -> None:
                             f"the server's working directory {os.getcwd()})")
 
 
-# CHANGED(GUI-5): docstring only (strict): was "the run stops with an error and no alignment is written", but this tool
-# runs COAL with --keep-going (core.run_coal default, MRG-3), so refused genes are left out and the run goes on.
+# This tool runs COAL with --keep-going (core.run_coal default), so with strict refused genes are left out and the
+# run goes on.
 def codon_align(
     protein_alignment_path: Annotated[str, Field(
         description="Absolute path to the protein multiple sequence alignment (FASTA or CLUSTAL).")],
@@ -234,7 +232,7 @@ def codon_align(
         _check_input(p)
     save_as = (save_as or "").strip()
     if save_as:
-        # CHANGED(SHIP-20): new. Agents (Claude Desktop) could only point at a file in COAL's temporary run folder.
+        # lets agents (Claude Desktop) write the result where they choose, not only into COAL's temporary run folder
         if core.hosted():
             raise CoalToolError("save_as is not available on this shared server; use output_path")
         if not os.path.isabs(save_as):
@@ -243,8 +241,7 @@ def codon_align(
         raise CoalToolError(f"unknown genetic code {codontable} (supported: "
                             f"{', '.join(str(c) for c in core.GENETIC_CODES)})")
     try:
-        # CHANGED(APP-12): was a /tmp/coal_* folder never cleaned; now a pruned folder in core.RUNS_DIR
-        # CHANGED(FIN-A6): strict and blockonly passed on (were not available to agents)
+        # a run folder in core.RUNS_DIR, pruned over time
         r = core.run_coal(protein_alignment_path, dna_fasta_path, output_format, int(codontable),
                           bool(nogap), bool(nomismatch), out_dir=core.new_run_dir(), strict=bool(strict),
                           blockonly=bool(blockonly))
@@ -287,7 +284,7 @@ def explain_report(
         mismatched IDs, frameshift), suggested fixes, and a ready-to-paste methods sentence.
         A report that cannot be read is a tool error.
     """
-    why = core.check_path_allowed(report_path)  # CHANGED(APP-11): sandboxed when hosted
+    why = core.check_path_allowed(report_path)  # sandboxed when hosted
     if why:
         raise CoalToolError(f"Could not read the report: {why}")
     try:

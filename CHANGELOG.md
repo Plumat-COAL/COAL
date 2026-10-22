@@ -2,9 +2,16 @@
 
 ## Unreleased
 
+- **Repository tidied for outside users:** a short README with a section on using COAL in pipelines; the detailed
+  documentation is in `docs/`. Hackathon logs and pitch material are removed (kept on the `hackathon-archive` tag),
+  review-round markers are gone from comments, and engine test modules are named after what they test. No change to
+  COAL's behaviour or output.
+- **Package renamed to `coal-align`** (`coal` on PyPI is another project). The `coal` command, the `coal` Python
+  module and `pal2nal` are unchanged; release files are now `coal_align-<version>-py3-none-any.whl` and
+  `coal_align-<version>.tar.gz` (`coal_src.tar.gz` stays).
+
 ## 0.4.2
 
-<!-- CHANGED(IMP-M-4): Unreleased, 0.2.0 and 0.1.0 added from the git history -->
 - **COAL in Claude Desktop, from the installer:** the Windows installer's last page has **Connect COAL to Claude
   Desktop** (ticked). Claude Desktop then starts COAL itself (`COAL.exe -m coal_app --mcp`) and can run it on your
   files; uninstalling removes the entry. `codon_align` can save the alignment where you ask (`save_as`), e.g. next to

@@ -1,12 +1,8 @@
-// Offline copy of this site's own files. WEB-3: new file. See overnight/integration/CHANGES.md
+// Offline copy of this site's own files.
 // Network first (so a new version shows at once), the cached copy when offline. Same-origin GET only: downloads
 // from github.com are never touched.
 "use strict";
-// CHANGED(WEB-8): was coal-site-v1 with img/broken-gene.png; now v2 with the logo assets and the WebP screenshot.
-// CHANGED(WEB-11): v3; the page no longer shows the large logo PNGs, so they are not cached.
-// CHANGED(WEB-12): v4; dark-only page with the dark header mark.
-// CHANGED(WEB-13): v5; the site is several pages, set in a self-hosted font.
-// CHANGED(WEB-16): v6, the new results screenshot (img/broken-gene.webp)
+// Bump the cache name whenever FILES or their content changes.
 var CACHE = "coal-site-v6";
 var FILES = ["./", "index.html", "install.html", "guide.html", "differences.html", "cite.html", "style.css", "main.js",
   "favicon.svg", "explainer.html", "img/broken-gene.webp", "assets/fonts/AtkinsonHyperlegibleNext-wght.woff2",

@@ -1,5 +1,5 @@
 // Command-line parsing that behaves like Python's argparse (3.10/3.11), so coal-cpp accepts the same
-// command lines as `python -m coal` and prints the same error messages (CPP-4). Covers what COAL's
+// command lines as `python -m coal` and prints the same error messages. Covers what COAL's
 // parser uses: flags, one-value options (string or int, optional choices), one positional with one
 // value and one with one-or-more; long-option abbreviations, single-dash options with attached values,
 // `=` values, chained short flags (-qq), negative numbers as values, `--`.

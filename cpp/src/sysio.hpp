@@ -1,9 +1,9 @@
-// Operating-system side of coal-cpp, as the reference engine (overnight/integration, engine-fixes):
-//   * temp files are registered so a signal handler can remove them (ENG-f, R2-E8): SIGTERM -> exit 143,
-//     SIGHUP -> 129, Ctrl-C -> "coal: interrupted", 130; a closed stdout pipe -> exit 141, silent (DEC-3, R2-D1b);
-//   * non-regular inputs (pipes, /dev/stdin, FIFOs) are copied to temp files first (ENG-b, R2-E7);
+// Operating-system side of coal-cpp, as the reference engine:
+//   * temp files are registered so a signal handler can remove them: SIGTERM -> exit 143,
+//     SIGHUP -> 129, Ctrl-C -> "coal: interrupted", 130; a closed stdout pipe -> exit 141, silent;
+//   * non-regular inputs (pipes, /dev/stdin, FIFOs) are copied to temp files first;
 //   * -o: symlinks written through, FIFOs / devices / hard-linked files written in place, an existing file keeps
-//     its permissions, clear errors for symlink loops and missing folders (ENG-a, R2-E5, R3-E2).
+//     its permissions, clear errors for symlink loops and missing folders.
 #pragma once
 #include <string>
 #include <utility>
@@ -36,7 +36,7 @@ struct OutTarget {
 };
 // Checks -o PATH before any work: throws CoalError for a symlink loop or an unusable folder.
 OutTarget resolve_output(const std::string& out);
-// ENG-UX-12: "cannot write <out>: <reason in plain words>" (pipeline.py _output_error); out "" = stdout's temp file.
+// "cannot write <out>: <reason in plain words>" (pipeline.py _output_error); out "" = stdout's temp file.
 std::string output_error(const std::string& out, int err);
 
 // Gives `tmp` the permissions `real` has (existing file) before it replaces it.

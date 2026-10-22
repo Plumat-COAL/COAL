@@ -1,6 +1,5 @@
 # Website: deploy site/ to GitHub Pages (https://plumat-coal.github.io/COAL/) on every push to main that touches it.
 # Needs Settings > Pages > Source: "GitHub Actions" (once). See site/README.md.
-# WEB-4: new file. See overnight/integration/CHANGES.md
 name: Pages
 
 on:
@@ -12,8 +11,8 @@ on:
       - ".github/workflows/pages.yml"
       - ".github/workflows/release.yml"
       - "tests_app/test_site.py"
-  # CHANGED(SHIP-1): new. The site's download buttons depend on a published release (FIN-A9), but the site was only
-  # rebuilt on a push to main, so a release published after that push left "first release coming soon" in place.
+  # The site's download buttons depend on a published release, so the site is also rebuilt when one is published
+  # (otherwise a release published after the last push to main would leave "first release coming soon" in place).
   release:
     types: [published]
   workflow_dispatch:
@@ -49,24 +48,23 @@ jobs:
           cp -R site/. _site/
           rm -f _site/README.md
           ls -lR _site
-      # CHANGED(FIN-A9): new. Before the first release every releases/latest/download/... button gave a 404; now, when no
-      # published release exists, the deployed copy says "First release coming soon" and installs from source.
-      # See overnight/integration/CHANGES.md
+      # Without a release every releases/latest/download/... button would give a 404, so when no published release
+      # exists the deployed copy says "First release coming soon" and installs from source.
       - name: Download buttons only when a release exists
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # CHANGED(SHIP-14): was "a published release exists"; v0.4.0 was published with no files (its build failed),
-          # so the buttons were kept and every download gave a 404. Now the latest release must hold the installer.
+          # The latest release must hold the installer, not merely exist: a release published with no files (failed
+          # build) would keep the buttons and every download would give a 404.
           if gh release view --repo "${{ github.repository }}" --json assets --jq '.assets[].name' 2>/dev/null \
               | grep -qx "COAL-Setup-windows-x64.exe"; then
             echo "The latest release has its files: download buttons kept."
           else
             echo "::warning::No release with files yet: download buttons replaced by the install-from-source notice."
-            # CHANGED(WEB-13): every page (was _site/index.html only); pages without download links are left as they are
+            # Every page; pages without download links are left as they are
             python scripts/site_without_release.py _site/*.html
           fi
-      # CHANGED(WEB-18): new. The site is built from main, but its buttons give the latest release: show that release's
+      # The site is built from main, but its buttons give the latest release: show that release's
       # version and drop text about features it does not have yet (data-since). Rollback: delete this step.
       - name: Match the site to the latest release
         env:

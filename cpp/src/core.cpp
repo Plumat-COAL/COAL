@@ -9,8 +9,8 @@ namespace {
 
 enum Mode { NORMAL = 0, START = 1, ANCHOR_START = 2 };
 constexpr int ANCHOR = 10;
-constexpr int MIN_CHECKABLE = 10;            // reference R3-E1
-constexpr int AMBIGUOUS_MAX_RESIDUES = 3;    // reference FZ-6
+constexpr int MIN_CHECKABLE = 10;
+constexpr int AMBIGUOUS_MAX_RESIDUES = 3;
 
 inline bool is_digit(char c) { return c >= '0' && c <= '9'; }
 inline bool as_x(char c) { return c == 'B' || c == 'Z' || c == 'J' || c == 'O' || c == 'U'; }
@@ -34,8 +34,8 @@ struct Token {
 
 uint64_t allowed_for(const GeneticCode& code, char aa, int mode) {
     if (aa == 'M' && mode == START) return code.starts;
-    // CPP-22 (reference FIN-E1): the fallback's first Met also accepts the selected code's start and Met codons
-    // (was ATG/CTG/GTG only, PAL2NAL's rule; deliberate difference from PAL2NAL v14)
+    // The fallback's first Met also accepts the selected code's start and Met codons (deliberate difference from
+    // PAL2NAL v14, which accepts ATG/CTG/GTG only)
     if (aa == 'M' && mode == ANCHOR_START) return anchor_start_mask() | code.starts | code.codons[(unsigned char)'M'];
     return code.codons[(unsigned char)aa];
 }
@@ -75,7 +75,7 @@ struct Target {
 
     // Does the triplet at pos encode a residue with these allowed codons?
     inline bool ok(long long pos, uint64_t allowed) const {
-        const size_t i = (size_t)pos;  // CPP-7: explicit (size_t is 32-bit on 32-bit Windows: MSVC C4244)
+        const size_t i = (size_t)pos;  // explicit (size_t is 32-bit on 32-bit Windows: MSVC C4244)
         uint8_t a = code[i], b = code[i + 1], c = code[i + 2];
         if ((a | b | c) & 0xF0) return false;  // 255 = not IUPAC (valid codes are 0..14)
         return (triplet[a * 225 + b * 15 + c] & ~allowed) == 0;
@@ -154,8 +154,7 @@ std::string py_repr_char(unsigned char c) {
     return std::string("'") + char(c) + "'";
 }
 
-// CHANGED(ENG-UX-13): the per-sequence inconsistency error, plus a hint when the inputs look swapped (core.py
-// inconsistent_message). See overnight/integration/CHANGES.md
+// The per-sequence inconsistency error, plus a hint when the inputs look swapped (core.py inconsistent_message).
 std::string inconsistent_message(const std::string& seq_id, const std::string& detail, const std::string& row,
                                  const std::string& dna) {
     std::string msg = seq_id + ": protein and DNA are inconsistent (" + detail + ")";
@@ -211,7 +210,7 @@ std::string prepare_row(const std::string& aln) {
         else if (c == '\\' || c == '/') tfastx = true;
     }
     if (tfastx) {
-        // CPP-14 (reference FZ-3): tfastx/tfasty frameshift notation, read as PAL2NAL v14 reads it: '\\' = 1 base
+        // tfastx/tfasty frameshift notation, read as PAL2NAL v14 reads it: '\\' = 1 base
         // (digit 1); '/' + gaps + residue = a gap, the gaps, then 2 bases (digit 2). Any other '/' stays (invalid).
         std::string t;
         t.reserve(r.size());
@@ -244,7 +243,7 @@ std::string prepare_row(const std::string& aln) {
     return r;
 }
 
-// CPP-15 (reference FZ-6): a protein of at most 3 residues that fits in several places of the DNA gets a notice;
+// A protein of at most 3 residues that fits in several places of the DNA gets a notice;
 // the leftmost is used, as PAL2NAL. stdout is unchanged.
 static void note_ambiguous(Threaded& res, const std::string& seq_id, const Target& target,
                            const std::vector<Token>& toks) {
@@ -276,7 +275,6 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
             list += py_repr_char(c);
             firstc = false;
         }
-        // CHANGED(ENG-UX-15): + where the first one is and what is allowed (core.py)
         throw CoalError(seq_id + ": invalid protein alignment characters " + list + "] (first at column " +
                             std::to_string(first_bad + 1) + "): a protein alignment may hold only amino-acid letters, "
                             "'-' or '.' gaps, '*' stops and frameshift digits",
@@ -286,12 +284,12 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
     Threaded res;
     for (size_t i = 0; i < row.size(); ++i)
         if (as_x(row[i])) {
-            // CPP-23 (reference FIN-C14): was "U unknown AA type. Taken as 'X'" (PAL2NAL's wording)
+            // PAL2NAL's wording: "U unknown AA type. Taken as 'X'"
             const char* name = row[i] == 'U' ? "selenocysteine" : row[i] == 'O' ? "pyrrolysine"
                                : row[i] == 'B' ? "D or N" : row[i] == 'Z' ? "E or Q" : "I or L";
             res.warnings.push_back("pepAlnPos " + std::to_string(i + 1) + ": " + row[i] + " (" + name +
                                    ") is not checked; any codon is accepted");
-            res.mismatch_cols.push_back(int(i + 1));  // CPP-11 (DEC-4f): -nomismatch removes it, as PAL2NAL
+            res.mismatch_cols.push_back(int(i + 1));  // -nomismatch removes it, as PAL2NAL
         }
 
     bool any_residue = false;
@@ -300,7 +298,7 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
             any_residue = true;
             break;
         }
-    if (!any_residue)  // CHANGED(ENG-UX-16): + why and what to do (core.py)
+    if (!any_residue)
         throw CoalError(seq_id + ": protein sequence is empty (its alignment row has only gaps): remove it from both files",
                         "empty", seq_id);
 
@@ -355,7 +353,7 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
     res.dna = raw_dna.substr((size_t)s, (size_t)len);
 
     // mismatch report: first residue Met -> ATG/CTG/GTG, others -> genetic code
-    long long pos = 0, nres = 0, nchk = 0, nbad_chk = 0;  // CPP-15: checkable = A/C/G/T(U) bases only
+    long long pos = 0, nres = 0, nchk = 0, nbad_chk = 0;  // checkable = A/C/G/T(U) bases only
     bool first = true;
     for (const Token& t : toks) {
         if (!t.residue) {
@@ -386,8 +384,8 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
         first = false;
         pos += 3;
     }
-    // CPP-15 (reference DEC-1 with ENG-c, R2-E3, R3-E1, FZ-4): probably-wrong data. By default the row is written as
-    // PAL2NAL writes it, with a notice; --strict makes the first two rules errors.
+    // Probably-wrong data. By default the row is written as PAL2NAL writes it, with a notice; --strict makes the
+    // first two rules errors.
     const long long namb = nres - nchk;
     const std::string N = std::to_string(nres), K = std::to_string(nchk), B = std::to_string(nbad_chk);
     if (nchk && 2 * nbad_chk > nchk) {

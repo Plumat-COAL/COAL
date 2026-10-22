@@ -1,4 +1,4 @@
-"""WEB-1..WEB-6: the download website (site/) and the release/pages workflows behind it."""
+"""The download website (site/) and the release/pages workflows behind it."""
 import importlib.util
 import os
 import re
@@ -74,7 +74,7 @@ class TestReleaseScripts(unittest.TestCase):
         rn = _load("release_notes")
         notes = rn.fixed_part("1.2.3")
         for must in ("not code-signed", "Windows protected your PC", "Smart App Control", "Run anyway",
-                     "pip install", "coal-1.2.3-py3-none-any.whl", "releases/download/v1.2.3/", "SHA256SUMS.txt",
+                     "pip install", "coal_align-1.2.3-py3-none-any.whl", "releases/download/v1.2.3/", "SHA256SUMS.txt",
                      "Get-FileHash", "sha256sum"):
             self.assertIn(must, notes)
         # Every file the notes name exists in the release workflow's list.
@@ -113,7 +113,7 @@ class TestReleaseWorkflow(unittest.TestCase):
             else:
                 self.assertNotIn("permissions", job, name)
 
-    def test_ci_caches_pip_and_browsers(self):  # IMP-M-5
+    def test_ci_caches_pip_and_browsers(self):
         wf = _workflow("ci.yml")
         for name, job in wf["jobs"].items():
             for st in job["steps"]:
@@ -126,7 +126,7 @@ class TestReleaseWorkflow(unittest.TestCase):
         self.assertIn("playwright-1.48.0", cache[0]["with"]["key"])  # same pin as the install step
 
     def test_actions_pinned_to_commits(self):
-        # CHANGED(IMP-M-5): ci.yml checked too (it gained actions/cache)
+        # ci.yml too (it uses actions/cache)
         for fname in ("release.yml", "ci.yml") + (("pages.yml",) if os.path.exists(os.path.join(WORKFLOWS, "pages.yml"))
                                           else ()):
             text = _read(".github", "workflows", fname)
@@ -155,7 +155,7 @@ class TestReleaseWorkflow(unittest.TestCase):
         for name in release_file_names("${V}"):
             if name == "SHA256SUMS.txt":
                 continue
-            self.assertTrue(name in made or name in ("coal-${V}-py3-none-any.whl", "coal-${V}.tar.gz")
+            self.assertTrue(name in made or name in ("coal_align-${V}-py3-none-any.whl", "coal_align-${V}.tar.gz")
                             and "python -m build" in made, f"no build step makes {name}")
         sums = _steps(wf, "release")["SHA-256 of every file"]["run"]
         self.assertIn("> SHA256SUMS.txt", sums)
@@ -180,8 +180,7 @@ class TestPagesWorkflow(unittest.TestCase):
         self.assertIn("test_site.py", build)
 
 
-# WEB-8: screenshot now WebP (lossless, 51 KB instead of 234 KB); logo, mark and icons added.
-# CHANGED(WEB-13): the site is several pages, with a self-hosted font and its licence
+# Several pages, a self-hosted font and its licence, a WebP screenshot, logo, mark and icons.
 PAGES = ("index.html", "install.html", "guide.html", "differences.html", "cite.html")
 SITE_FILES = PAGES + ("assets/fonts/AtkinsonHyperlegibleNext-wght.woff2", "assets/fonts/OFL.txt") + ("index.html", "style.css", "main.js", "sw.js", "favicon.svg", "explainer.html", "img/broken-gene.webp",
               "assets/coal-mark.svg", "assets/coal-mark-dark.svg", "assets/coal-logo.png", "assets/coal-logo@2x.png", "assets/coal-logo-dark.png",
@@ -192,7 +191,7 @@ TEXT_EXT = (".html", ".css", ".js", ".svg", ".txt", ".json", ".webmanifest")
 ALLOWED_NON_REPO_URLS = ("http://www.w3.org/2000/svg", "http://127.0.0.1:7860")
 
 
-# CHANGED(WEB-13): new. The font's licence names its project and licence sites; no page loads or links them.
+# The font's licence names its project and licence sites; no page loads or links them.
 NOT_LOADED = (os.path.join("assets", "fonts", "OFL.txt"),)
 
 
@@ -212,7 +211,7 @@ def site_links(html):
 
 
 class TestSiteFiles(unittest.TestCase):
-    # CHANGED(WEB-13): content moved from index.html to install, guide, differences and cite pages. Checks that need
+    # content is spread over index, install, guide, differences and cite pages. Checks that need
     # a string somewhere on the site look at all pages (self.all); per-page checks loop over self.pages.
     def setUp(self):
         self.index = _read("site", "index.html")
@@ -222,12 +221,6 @@ class TestSiteFiles(unittest.TestCase):
     def test_files_exist(self):
         for f in SITE_FILES + ("README.md",):
             self.assertTrue(os.path.isfile(os.path.join(SITE, f)), f"site/{f} is missing")
-
-    def test_explainer_has_one_copy(self):
-        # CHANGED(IMP-M-4): was a check that pitch/explainer.html and its site/ copy were identical; now there is one
-        # file, site/explainer.html (what Pages deploys and tests_app/test_explainer.py tests)
-        self.assertFalse(os.path.exists(os.path.join(ROOT, "pitch", "explainer.html")),
-                         "pitch/explainer.html is back: keep the one copy in site/")
 
     def test_no_external_urls(self):
         """Only links to github.com/plumat-coal/COAL; nothing else may be referenced (no CDNs, fonts, trackers)."""
@@ -248,7 +241,7 @@ class TestSiteFiles(unittest.TestCase):
                     self.assertFalse(link.startswith("/"), f"{rel}: {link} must be relative (site may move to a custom domain)")
 
     def test_internal_links_resolve(self):
-        # CHANGED(WEB-13): every page, and page#anchor links must find the anchor on that page
+        # every page, and page#anchor links must find the anchor on that page
         ids = {p: set(re.findall(r'\sid="([^"]+)"', h)) for p, h in self.pages.items()}
         for page, html in self.pages.items():
             for link in site_links(html):
@@ -269,7 +262,7 @@ class TestSiteFiles(unittest.TestCase):
 
     def test_download_links_match_release_files(self):
         names = set(release_file_names())
-        # CHANGED(WEB-13): all pages (was index.html only)
+        # all pages
         latest = re.findall(r"https://github\.com/plumat-coal/COAL/releases/latest/download/([^\"'\s<]+)", self.all)
         self.assertGreaterEqual(len(set(latest)), 4, "expected installer, zip, sdist and checksum links")
         for f in latest:
@@ -280,18 +273,20 @@ class TestSiteFiles(unittest.TestCase):
                       'COAL-Setup-windows-x64.exe"', self.index)
 
     def test_pip_commands_use_the_cache_safe_sdist(self):
-        cmds = re.findall(r'"coal(?:\[gui\])? @ ([^"]+)"', self.all)  # CHANGED(WEB-13): all pages
+        cmds = re.findall(r'"coal-align(?:\[gui\])? @ ([^"]+)"', self.all)  # all pages
         self.assertGreaterEqual(len(cmds), 4)
         for url in cmds:
             self.assertTrue(url.endswith("/releases/latest/download/coal_src.tar.gz"), url)
-        # pip caches wheels built from URLs whose file name looks like name-version (WEB-1); the alias must not.
+        # pip caches wheels built from URLs whose file name looks like name-version; the alias must not.
         self.assertNotIn("-", "coal_src")
 
     def test_claims_are_in_the_readme(self):
-        """Every measured number on the page (data-check) is quoted from README.md or tests/README.md, which
-        test_docs_numbers guards. CHANGED(IMP-M-4): tests/README.md added (the README's test counts moved there)."""
-        readme = re.sub(r"\s+", " ", _read("README.md") + " " + _read("tests", "README.md")).replace("**", "")
-        claims = re.findall(r'data-check="([^"]+)">([^<]*)<', self.all)  # CHANGED(WEB-13): all pages
+        """Every measured number on the page (data-check) is quoted from README.md, docs/ or tests/README.md, which
+        test_docs_numbers guards (the test counts are in tests/README.md)."""
+        docs = [os.path.join("docs", f) for f in sorted(os.listdir(os.path.join(ROOT, "docs"))) if f.endswith(".md")]
+        readme = re.sub(r"\s+", " ", " ".join(_read(*p.split(os.sep)) for p in ["README.md", *docs, "tests/README.md"]))
+        readme = readme.replace("**", "")
+        claims = re.findall(r'data-check="([^"]+)">([^<]*)<', self.all)  # all pages
         self.assertGreaterEqual(len(claims), 10)
         for value, shown in claims:
             self.assertEqual(value, shown, "data-check value and the text shown differ")
@@ -299,66 +294,64 @@ class TestSiteFiles(unittest.TestCase):
         self.assertIn("Measured on", self.pages["differences.html"])
 
     def test_version_is_current(self):
-        """WEB-8: the page names the current version; it must match the package."""
+        """The page names the current version; it must match the package."""
         init = re.search(r'__version__ = "([^"]+)"', _read("src", "coal", "__init__.py")).group(1)
         shown = re.search(r'<span id="version" data-version="([^"]+)">([^<]+)</span>', self.index)
         self.assertIsNotNone(shown, "version span missing")
         self.assertEqual(shown.group(1), shown.group(2))
         self.assertEqual(shown.group(1), init, "site/index.html names another version than src/coal/__init__.py")
-        # CHANGED(WEB-13): new; the citation (now on cite.html) names the version too
+        # the citation (on cite.html) names the version too
         ref = re.findall(r"<span data-version-ref>([^<]+)</span>", self.all)
         self.assertEqual(ref, [init], "site/cite.html: the citation's data-version-ref span names another version")
 
     def test_pal2nal_relationship_and_citation(self):
-        """WEB-8: the qualified PAL2NAL wording, the licences and the reference."""
-        # FIN-C3: was "On well-formed input COAL's output is identical to PAL2NAL's" / "COAL deliberately differs and
-        # documents why" (false claim); now the documented-exceptions wording
+        """The qualified PAL2NAL wording, the licences and the reference."""
+        # the documented-exceptions wording (an "on well-formed input" claim would be false)
         for must in ("COAL's output is identical to PAL2NAL v14's except for a short list of documented, deliberate "
                      "differences", "GPL-2.0", "contains none of PAL2NAL's code",
                      "Suyama M, Torrents D, Bork P (2006)", "34:W609"):
-            self.assertIn(must, self.all)  # CHANGED(WEB-13): was index.html; now differences.html and cite.html
+            self.assertIn(must, self.all)  # differences.html and cite.html
 
     def test_size_budget_with_images(self):
-        """WEB-8: the whole site, images included, stays under 400 KB (README.md excluded: not deployed)."""
+        """The whole site, images included, stays under 400 KB (README.md excluded: not deployed)."""
         total = sum(os.path.getsize(os.path.join(d, f)) for d, _, files in os.walk(SITE) for f in files
                     if f != "README.md")
-        # CHANGED(WEB-16): budget was 250 KB; the results screenshot is now sharp on high-resolution screens
-        # (1600 px wide, ~175 KB), so 400 KB
+        # the results screenshot is sharp on high-resolution screens (1600 px wide, ~175 KB), so 400 KB
         self.assertLess(total, 400 * 1024, f"site is {total} bytes (budget 400 KB)")
 
     def test_unsigned_and_smart_app_control_explained(self):
         for must in ("Windows protected your PC", "More info", "Run anyway", "Unknown publisher", "Smart App Control",
                      "Get-FileHash", "sha256sum", "coal-gui", "SKILL.md", "/issues", "MIT",
-                     # CHANGED(WEB-11): was "Zenodo", "placeholder" (the DOI placeholder); the owner asked for no DOI
-                     # and named authors, so the page cites Newton and Murati and points to CITATION.cff
+                     # the owner asked for no DOI and named authors, so the page cites Newton and Murati and points
+                     # to CITATION.cff
                      "Newton C, Murati K (2026)", "CITATION.cff"):
-            self.assertIn(must, self.all)  # CHANGED(WEB-13): was index.html; now install, guide and cite pages
-        # CHANGED(WEB-11): new; the owner asked for no DOI or Zenodo mention and for the large sidebar logo to go
+            self.assertIn(must, self.all)  # install, guide and cite pages
+        # the owner asked for no DOI or Zenodo mention and for the large sidebar logo to go
         for gone in ("Zenodo", "placeholder", "DOI", 'class="logo"', "coal-logo.png"):
             for page, html in self.pages.items():
                 self.assertNotIn(gone, html, page)
 
     def test_accessibility_basics(self):
-        for page, html in self.pages.items():  # CHANGED(WEB-13): every page (was index.html only)
+        for page, html in self.pages.items():  # every page
             self.assertRegex(html, r'<html lang="en">', page)
             self.assertEqual(len(re.findall(r"<h1[\s>]", html)), 1, page)
             self.assertIn('<main id="main">', html, page)
             self.assertIn('href="#main"', html, page)
             for img in re.findall(r"<img\b[^>]*>", html):
-                if 'src="assets/coal-mark-dark.svg"' in img:  # CHANGED(WEB-12): was coal-mark.svg. WEB-8: decorative, next to the text "COAL" in the same link
+                if 'src="assets/coal-mark-dark.svg"' in img:  # decorative, next to the text "COAL" in the same link
                     self.assertIn('alt=""', img)
                     continue
                 self.assertRegex(img, r'\salt="[^"]{10,}"', img)
             self.assertRegex(html, r'<a class="home" href="\./"><img src="assets/coal-mark-dark\.svg"[^>]*><span>COAL</span></a>', page)
         css = _read("site", "style.css")
         self.assertIn("prefers-reduced-motion", css)
-        # CHANGED(WEB-12): was "prefers-color-scheme: dark" (light page with a dark variant); the page is dark only
+        # the page is dark only (no light variant)
         self.assertIn("color-scheme: dark;", css)
         self.assertNotIn("prefers-color-scheme", re.sub(r"/\*.*?\*/", "", css, flags=re.S))
         self.assertIn(":focus-visible", css)
 
     def test_same_header_and_footer_on_every_page(self):
-        """WEB-13: one header and footer for the whole site; only the current page's nav link is marked."""
+        """One header and footer for the whole site; only the current page's nav link is marked."""
         def chrome(html):
             head = re.search(r'<header class="top">.*?</header>', html, re.S).group(0)
             foot = re.search(r'<footer class="foot".*?</footer>', html, re.S).group(0)
@@ -372,7 +365,7 @@ class TestSiteFiles(unittest.TestCase):
                 self.assertIn(f'href="{page}"', first[0], f"{page} is not in the header")
 
     def test_font_is_self_hosted_with_its_licence(self):
-        """WEB-13: the only font file is ours, small, and the OFL travels with it."""
+        """The only font file is ours, small, and the OFL travels with it."""
         css = _read("site", "style.css")
         self.assertEqual(re.findall(r'url\("([^"]+)"\)', css), ["assets/fonts/AtkinsonHyperlegibleNext-wght.woff2"])
         size = os.path.getsize(os.path.join(SITE, "assets", "fonts", "AtkinsonHyperlegibleNext-wght.woff2"))

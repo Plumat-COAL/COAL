@@ -19,7 +19,7 @@
     display: flex; flex-direction: column; gap: 4vh; align-items: center; }
   .row { display: flex; align-items: flex-end; gap: 0.25em;
     font-family: ui-monospace, "Cascadia Mono", Consolas, Menlo, monospace; font-size: clamp(13px, 3.9vw, 66px); }
-  /* CHANGED(APP-C8): was clamp(22px, ...), which overflowed a 390 px phone screen */
+  /* a larger minimum (e.g. 22px) overflows a 390 px phone screen */
   .name { font-family: system-ui, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 0.5em; color: var(--muted);
     width: 4.2em; text-align: right; padding-right: 0.5em; align-self: center; }
   .cell { position: relative; width: 1.25em; height: 1.9em; transition: width 0.6s ease;
@@ -31,7 +31,7 @@
   .gap .aa { color: var(--gap); }
   .gap .nt { color: var(--gap); }
   /* step 1+: letters expand into codons; the amino acid moves up as a small label */
-  /* CHANGED(APP-C6): was .s1 .cell:not(.gap) (gap cells stayed narrow at step 1, so the rows slipped apart) */
+  /* gap cells too, or the rows slip apart at step 1 */
   .s1 .cell, .s2 .cell, .s3 .cell, .s4 .cell { width: 2.4em; }
   .s1 .cell:not(.gap) .aa, .s2 .aa, .s3 .aa, .s4 .aa { bottom: 2.5em; font-size: 0.5em; }
   .s1 .cell:not(.gap) .nt, .s2 .nt, .s3 .nt, .s4 .nt { opacity: 1; }
@@ -45,7 +45,7 @@
   .s3 .bad::after, .s4 .bad::after { content: "TGA = STOP"; position: absolute; top: 100%; left: 50%;
     transform: translateX(-50%); margin-top: 0.15em; font-family: system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
     font-size: 0.32em; font-weight: 700; color: var(--bad); white-space: nowrap; }
-  /* CHANGED(APP-C7): was "TGA = STOP" on the last step too, contradicting its caption (mito: TGA = W) */
+  /* matches the last step's caption (mito: TGA = W) */
   .s4 .bad::after { content: "TGA = W (mito)"; color: var(--ok); }
   .caption { min-height: 3.2em; font-size: clamp(18px, 2.4vw, 38px); line-height: 1.3; text-align: center;
     max-width: 30em; margin-top: 2vh; }

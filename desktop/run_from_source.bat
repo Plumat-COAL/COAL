@@ -5,7 +5,6 @@ rem Later starts: checks the environment by importing COAL, Gradio and pywebview
 rem then opens the window. Arguments are passed on (e.g. --browser, --mcp).
 rem The GUI and the MCP server need separate environments (gradio[mcp] and the mcp extra conflict):
 rem for Claude, use setup_mcp.bat, which uses .venv-mcp.
-rem CHANGED(IMP-M-2): new. See overnight/integration/CHANGES.md
 setlocal EnableExtensions
 cd /d "%~dp0.." || goto :fail
 set "VENV=%CD%\.venv-gui"

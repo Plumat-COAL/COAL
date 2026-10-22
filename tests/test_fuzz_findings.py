@@ -1,5 +1,6 @@
-"""FZ-1 .. FZ-6: findings of the independent differential fuzz against the real PAL2NAL v14
-(overnight/integration/CHANGES.md). Expected outputs marked "PAL2NAL v14:" were produced by running the real PAL2NAL.
+"""Regression tests for findings of the differential fuzz against the real PAL2NAL v14: CLUSTAL '#' and blank
+lines, non-ASCII header text, -nogap with the selected code, tfastx notation, ambiguous short placements and the
+short-gene wording. Expected outputs marked "PAL2NAL v14:" were produced by running the real PAL2NAL.
 """
 from __future__ import annotations
 
@@ -41,7 +42,7 @@ NUC = ">a\nATGAAAGTT\n>b\nATGCGT\n"
 OUT = ">a\nATGAAAGTT\n>b\nATGCGT---\n"  # PAL2NAL v14 for every input below
 
 
-class TestFZ1ClustalHashAndBlankLines(Tmp):  # FZ-1
+class TestFZ1ClustalHashAndBlankLines(Tmp):
     def test_hash_line_after_block_is_a_mark_line_not_a_sequence(self):
         self.write("p.aln", "CLUSTAL W\n\na    MKV\nb    MR-\n#    ###\n")
         self.write("n.fa", NUC)
@@ -70,7 +71,7 @@ class TestFZ1ClustalHashAndBlankLines(Tmp):  # FZ-1
         self.assertEqual(read_ids(str(self.d / "p.aln")), ["a", "b"])
 
 
-class TestFZ2NonAsciiHeaderText(Tmp):  # FZ-2
+class TestFZ2NonAsciiHeaderText(Tmp):
     def test_non_ascii_description_in_protein_header(self):
         self.write("p.fa", b">a Kr\xc3\xbcppel-like factor 4\nMKV\n>b\nMR-\n")
         self.write("n.fa", NUC)
@@ -92,7 +93,7 @@ class TestFZ2NonAsciiHeaderText(Tmp):  # FZ-2
         self.assertIn("p.fa:2: non-ASCII character", err)
 
 
-class TestFZ5NogapUsesTheSelectedCode(Tmp):  # FZ-5
+class TestFZ5NogapUsesTheSelectedCode(Tmp):
     def test_every_table_upper_and_lower_case(self):
         sys.path.insert(0, str(SRC))
         from coal.tables import CODONS, SUPPORTED, get_code
@@ -120,7 +121,7 @@ class TestFZ5NogapUsesTheSelectedCode(Tmp):  # FZ-5
         self.assertEqual(self.coal("p.fa", "n.fa", "-nogap")[:2], (0, ">s\naugaaa\n"))
 
 
-class TestFZ3TfastxNotation(Tmp):  # FZ-3; expected outputs: PAL2NAL v14
+class TestFZ3TfastxNotation(Tmp):  # expected outputs: PAL2NAL v14
     CASES = {
         ("MK\\VL", "ATGAAAGGTTCTG"): (">a\nATGAAAG--GTTCTG\n>b\nATGAAAGCTGTTCTG\n",
                                       "              M   K   1   V   L\na             ATG AAA G-- GTT CTG\n"
@@ -147,7 +148,7 @@ class TestFZ3TfastxNotation(Tmp):  # FZ-3; expected outputs: PAL2NAL v14
         self.assertIn("invalid protein alignment characters ['/']", err)
 
 
-class TestFZ6AmbiguousShortPlacement(Tmp):  # FZ-6
+class TestFZ6AmbiguousShortPlacement(Tmp):
     def test_notice_when_a_short_protein_fits_in_several_places(self):
         self.write("p.fa", ">s\nMK\n")
         self.write("n.fa", ">s\nATGAAACCATGAAA\n")  # MK fits at 0 and at 8
@@ -173,7 +174,7 @@ class TestFZ6AmbiguousShortPlacement(Tmp):  # FZ-6
         self.assertEqual((sid, msg["code"]), ("s", "warning"))
 
 
-class TestFZ4ShortGeneWording(Tmp):  # FZ-4
+class TestFZ4ShortGeneWording(Tmp):
     def setUp(self):
         super().setUp()
         self.write("p.fa", ">s\nMKV---LAWE\n")  # 7 residues, 10 columns: one anchor, which fails (1 mismatch)

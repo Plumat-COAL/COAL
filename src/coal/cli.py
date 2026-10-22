@@ -21,7 +21,7 @@ from .seqio import InputFormatError
 from .tables import SUPPORTED
 
 
-MAX_WARNINGS = 20  # CHANGED(IMP-E-C): default --max-warnings
+MAX_WARNINGS = 20  # default --max-warnings
 
 
 def _on_sigterm(signum, frame):
@@ -43,12 +43,8 @@ def _ranges(nums) -> str:
 
 def build_parser() -> argparse.ArgumentParser:
     """The `coal` command line.
-    CHANGED(IMP-E-F): was one flat list of 18 options with paragraph-long help (71 lines; -strict alone 9, --resume 7);
-    now four groups (Core / PAL2NAL options / Large runs / Reporting) with one-line help; the details are in the
-    README. The options, their spellings, defaults and the order of the usage line are unchanged (coal-cpp's
-    cpp/src/help_text.hpp is generated from this parser: tests/test_cpp_cli.py --write-help). Earlier history of the
-    help texts: CHANGED(FZ-5) -nogap, DEC-4 -output, R2-E4/DEC-2 -q, DEC-1/REV-1 -strict, MRG-3/MRG-4 the extras.
-    See overnight/integration/CHANGES.md"""
+    Four groups (Core / PAL2NAL options / Large runs / Reporting) with one-line help; the details are in the README.
+    coal-cpp's cpp/src/help_text.hpp is generated from this parser (tests/test_cpp_cli.py --write-help)."""
     ap = argparse.ArgumentParser(
         prog="coal",
         description="Convert a protein alignment + unaligned coding DNA into a codon alignment.",
@@ -83,8 +79,8 @@ def build_parser() -> argparse.ArgumentParser:
                            "only some protein IDs are DNA IDs")
     large.add_argument("--keep-going", "-keep-going", action="store_true",
                        help="leave out sequences that cannot be converted, write the rest; exit 2 if any was left out")
-    # CHANGED(IMP-E-C): default was 0 (no limit): a wrong genetic code printed hundreds of lines (834 on coxI). Now 20;
-    # the `pal2nal` drop-in passes 0 (PAL2NAL prints them all). See overnight/integration/CHANGES.md
+    # Capped by default: a wrong genetic code would print hundreds of lines (834 on coxI). The `pal2nal` drop-in
+    # passes 0 (PAL2NAL prints them all).
     rep.add_argument("--max-warnings", type=int, default=MAX_WARNINGS, metavar="N",
                      help=f"print at most N per-codon warnings (default {MAX_WARNINGS}; 0 = all)")
     large.add_argument("--progress", action="store_true",
@@ -99,8 +95,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _maybe_cpp(ap, args, argv) -> int | None:
-    """CHANGED(IMP-E-A): run a large input with coal-cpp (coal/dispatch.py); its exit code, or None to go on in
-    Python. See overnight/integration/CHANGES.md"""
+    """Run a large input with coal-cpp (coal/dispatch.py); its exit code, or None to go on in Python."""
     from . import dispatch
     note = None if args.quiet else (lambda t: print(f"coal: notice: {t}", file=sys.stderr))
     try:
@@ -123,7 +118,7 @@ def _maybe_cpp(ap, args, argv) -> int | None:
 
 def main(argv=None) -> int:
     ap = build_parser()
-    command_line = argv is None  # CHANGED(IMP-E-A): only the command line may hand the run to coal-cpp
+    command_line = argv is None  # only the command line may hand the run to coal-cpp
     argv = sys.argv[1:] if argv is None else list(argv)
     args = ap.parse_args(argv)
     if args.json and not args.out:
@@ -137,17 +132,17 @@ def main(argv=None) -> int:
         if rc is not None:
             return rc
 
-    # CHANGED(MRG-2): always collected (it also drives the end-of-run "coal: summary:" lines); per-sequence entries
+    # Always collected (it also drives the end-of-run "coal: summary:" lines); per-sequence entries
     # of ok sequences only when a report is asked for
     rec = RunReport(argv, args.pep_aln, args.nuc_fasta, args.out, args.output_format, args.codontable,
                     args.nogap, args.nomismatch, keep_going=args.keep_going,
                     keep_entries=bool(args.report or args.json), strict=args.strict, blockonly=args.blockonly,
-                    hint=not args.quiet or bool(args.report or args.json))  # CHANGED(IMP-E-D): -q never shows it
+                    hint=not args.quiet or bool(args.report or args.json))  # -q never shows it
     hidden = [0]
     shown = [0]
 
     def _warn(w: str):
-        # CHANGED(MRG-3): --max-warnings caps the per-codon lines only (teammate's option)
+        # --max-warnings caps the per-codon lines only
         if args.max_warnings and "pepAlnPos" in w:
             if shown[0] >= args.max_warnings:
                 hidden[0] += 1
@@ -155,18 +150,14 @@ def main(argv=None) -> int:
             shown[0] += 1
         print(f"coal: warning: {w}", file=sys.stderr)
     warn = None if args.quiet else _warn
-    # CHANGED(ENG-c): new; notices are printed even with -q. See overnight/engine-fixes/CHANGES.md
-    # CHANGED(DEC-2): was printed even with -q; now -q silences notices too (GNU / clig.dev "quiet", and PAL2NAL's
-    # -nostderr). Errors are still printed. See overnight/integration/CHANGES.md
+    # -q silences notices too (GNU / clig.dev "quiet", and PAL2NAL's -nostderr). Errors are still printed.
     notice = None if args.quiet else (lambda w: print(f"coal: warning: {w}", file=sys.stderr))
-    # CHANGED(ENG-UX-10): was "coal: note:"; now "coal: notice:" (the three prefixes: error, warning, notice)
+    # the three prefixes: error, warning, notice
     note = None if args.quiet else (lambda t: print(f"coal: notice: {t}", file=sys.stderr))
-    # CHANGED(ENG-f): was default signal handling (SIGTERM left .coal_*.tmp files; Ctrl-C printed a
-    # traceback; a closed stdout pipe gave "[Errno 32] Broken pipe", exit 1); now SIGTERM -> SystemExit
-    # (cleanup runs, exit 143), Ctrl-C -> "coal: interrupted", exit 130, broken pipe -> silent exit 141.
-    # See overnight/engine-fixes/CHANGES.md
+    # SIGTERM -> SystemExit (cleanup runs, so no .coal_*.tmp files are left; exit 143), Ctrl-C -> "coal: interrupted",
+    # exit 130, broken pipe -> silent exit 141.
     signal.signal(signal.SIGTERM, _on_sigterm)
-    if hasattr(signal, "SIGHUP"):  # CHANGED(R2-E8): terminal closed -> same cleanup, exit 129
+    if hasattr(signal, "SIGHUP"):  # terminal closed -> same cleanup, exit 129
         signal.signal(signal.SIGHUP, _on_sigterm)
     rc = 0
     try:
@@ -175,7 +166,7 @@ def main(argv=None) -> int:
                       strict=args.strict, out_format=args.output_format, blockonly=args.blockonly,
                       rec=rec, keep_going=args.keep_going, progress=args.progress, resume=args.resume, note=note)
         if skipped:
-            rc = 2  # CHANGED(MRG-3): --keep-going skipped some sequences (partial success)
+            rc = 2  # --keep-going skipped some sequences (partial success)
     except KeyboardInterrupt:
         print("coal: interrupted", file=sys.stderr)
         return 130
@@ -192,7 +183,6 @@ def main(argv=None) -> int:
                 "input_format" if isinstance(e, (InputFormatError, UnicodeDecodeError)) else "file_error")
         rec.fail(code, str(e), getattr(e, "seq_id", None))
     if hidden[0]:
-        # CHANGED(IMP-E-C): + "--max-warnings 0" (the cap is now on by default)
         where = "see the report" if (args.report or args.json) else \
             "see them all with --max-warnings 0 or --report FILE.json"
         print(f"coal: warning: ... and {hidden[0]:,} more warnings ({where})", file=sys.stderr)
@@ -204,7 +194,6 @@ def main(argv=None) -> int:
         try:
             rec.write(args.report)
         except OSError as e:
-            # CHANGED(ENG-UX-12): a folder gave "Is a directory"; now said in plain words (C++ said only the path)
             why = "it is a folder, not a file" if os.path.isdir(args.report) else (e.strerror or e)
             print(f"coal: error: could not write the report {args.report}: {why}", file=sys.stderr)
             rc = rc or 1

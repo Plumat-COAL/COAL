@@ -1,16 +1,15 @@
-"""coal-cpp against the REVIEWED reference (CPP-9): the reference's PAL2NAL golden checks and its fuzz against the
+"""coal-cpp against the REVIEWED reference: the reference's PAL2NAL golden checks and its fuzz against the
 real PAL2NAL v14, with coal-cpp in place of the Python engine.
 
-The reference is the reviewed Python engine (origin/keanu_overnight/integration) checked out as a separate folder,
-e.g. `git worktree add ../coal-ref origin/keanu_overnight/integration`; COAL_REF_SRC points at its src/ (its tests/
-are next to it). Its harness code is loaded as is; only the "run COAL" function is swapped for one that runs
+The reference is the reviewed Python engine: this repo's src/ (and tests/) by default, or another checkout of it
+(e.g. a `git worktree`) with COAL_REF_SRC pointing at its src/ (its tests/ are next to it). Its harness code is loaded as is; only the "run COAL" function is swapped for one that runs
 coal-cpp (COAL_CPP_BIN, default build/coal-cpp):
   * golden: the reference's tests/test_differential.py compare_all (every stored PAL2NAL golden, its DELIBERATE
     rules, warnings compared as there);
   * fuzz: the reference's tests/fuzz_vs_pal2nal.py (needs PAL2NAL=/path/to/pal2nal.pl and perl; FUZZ_N, FUZZ_SEED,
     FUZZ_FORMATS as there). The PAL2NAL-style command line is turned into coal-cpp's by the reference's own
     `pal2nal` drop-in translation (coal_compat.cli.translate).
-Skipped when COAL_REF_SRC or the binary is missing.
+Skipped when the reference or the binary is missing.
 
   python tests/test_cpp_vs_reference.py golden      # list every failing golden check
   python tests/test_cpp_vs_reference.py fuzz        # fuzz summary + the first differences
@@ -27,7 +26,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
-# CHANGED(MRG-6): was None (skipped) without COAL_REF_SRC; after the merge this branch's own engine is the reference
+# without COAL_REF_SRC this branch's own engine is the reference
 REF_SRC = Path(os.environ["COAL_REF_SRC"]).resolve() if os.environ.get("COAL_REF_SRC") else ROOT / "src"
 TIMEOUT = 60
 
@@ -87,7 +86,7 @@ def golden_failures():
 
     def run_coal(case, opts):
         spec = td.MANIFEST["cases"][case]
-        # CHANGED(IMP-E-C): `coal` caps per-codon warnings at 20 by default; the goldens hold all of PAL2NAL's
+        # `coal` caps per-codon warnings at 20 by default; the goldens hold all of PAL2NAL's
         args = [spec["pep"], *spec.get("nuc", ["nuc.fasta"]), "--max-warnings", "0", *opts]
         return run_cpp(args, td.FIX / case)
 
@@ -107,7 +106,7 @@ def fuzz_run(pal2nal, n, seed, formats, report=print):
             cargs = translate(list(args), ENGINE_FORMATS)
         except UsageError as e:
             return 2, "", f"pal2nal: error: {e}\n"
-        return run_cpp(["--max-warnings", "0", *cargs], d)  # CHANGED(IMP-E-C): as the drop-in (coal_compat main)
+        return run_cpp(["--max-warnings", "0", *cargs], d)  # as the drop-in (coal_compat main)
 
     fz.run_coal = run_coal
     return fz.fuzz(pal2nal, n, seed, report=report, keep_dir=os.environ.get("FUZZ_KEEP"), formats=formats)
@@ -174,8 +173,8 @@ __path__.append({ref!r})  # every module but cli / __main__ comes from the refer
 with open(_os.path.join({ref!r}, "__init__.py")) as _f:
     exec(compile(_f.read(), "coal/__init__.py", "exec"))
 """
-REF_TEST_MODULES = ("test_decisions", "test_review_fixes", "test_fuzz_findings", "test_final_fixes",
-                    "test_merge", "test_report", "test_engine_extras")
+REF_TEST_MODULES = ("test_decisions", "test_io_robustness", "test_fuzz_findings", "test_edge_cases",
+                    "test_feature_combinations", "test_report", "test_engine_extras")
 
 
 def build_shim(tmp: Path) -> Path:
@@ -252,7 +251,7 @@ class TestReferenceTestsWithCpp(unittest.TestCase):
 
 @unittest.skipIf(_skip_reason(), _skip_reason() or "")
 class TestCppVsReferenceLarge(unittest.TestCase):
-    """CPP-20 / CPP-24: 1,200 sequences (PAML header widths; FASTA and marked CLUSTAL input), every format
+    """1,200 sequences (PAML header widths; FASTA and marked CLUSTAL input), every format
     and every clustal/codon writer path, coal-cpp vs the reference Python engine."""
 
     def test_many_sequences_every_format(self):
@@ -271,7 +270,7 @@ class TestCppVsReferenceLarge(unittest.TestCase):
                 nuc.append(f">s{k}\n{''.join(code[a] for a in prot)}\n")
             (d / "p.fa").write_text("".join(pep))
             (d / "n.fa").write_text("".join(nuc))
-            # CPP-24: the same rows as a CLUSTAL file with '#' block marks (mark lines under clustal / codon blocks)
+            # the same rows as a CLUSTAL file with '#' block marks (mark lines under clustal / codon blocks)
             rows = [(f"s{k}", p.split("\n")[1]) for k, p in enumerate(pep)]
             aln = ["CLUSTAL W\n\n"]
             for b in range(0, 30, 12):

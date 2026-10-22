@@ -2,7 +2,6 @@
 # zip), check them, and publish a GitHub Release with every file, version-free copies and SHA256SUMS.txt.
 # The website (site/) links to https://github.com/plumat-coal/COAL/releases/latest/download/<version-free name>,
 # so a new release updates the download buttons without editing the site. See site/README.md.
-# WEB-1: new file. See overnight/integration/CHANGES.md
 name: Release
 
 on:
@@ -59,19 +58,19 @@ jobs:
           V: ${{ steps.v.outputs.version }}
         run: |
           mkdir -p release
-          cp "dist/coal-${V}-py3-none-any.whl" "dist/coal-${V}.tar.gz" release/
-          # Version-free sdist copy for `pip install "coal[gui] @ .../releases/latest/download/coal_src.tar.gz"`.
+          cp "dist/coal_align-${V}-py3-none-any.whl" "dist/coal_align-${V}.tar.gz" release/
+          # Version-free sdist copy for `pip install "coal-align[gui] @ .../releases/latest/download/coal_src.tar.gz"`.
           # No hyphen in the name on purpose: pip caches wheels built from "name-version"-looking archive URLs, so
-          # "coal-latest.tar.gz" would keep installing the old build after a new release (tested with pip 24.0).
-          cp "dist/coal-${V}.tar.gz" release/coal_src.tar.gz
+          # "coal_align-latest.tar.gz" would keep installing the old build after a new release (tested with pip 24.0).
+          cp "dist/coal_align-${V}.tar.gz" release/coal_src.tar.gz
           python -m venv "$RUNNER_TEMP/whl"
-          "$RUNNER_TEMP/whl/bin/python" -m pip install "release/coal-${V}-py3-none-any.whl"
+          "$RUNNER_TEMP/whl/bin/python" -m pip install "release/coal_align-${V}-py3-none-any.whl"
           test "$("$RUNNER_TEMP/whl/bin/coal" --version)" = "coal ${V}"
           "$RUNNER_TEMP/whl/bin/coal" examples/clean/protein.aln.fasta examples/clean/dna.fasta -o "$RUNNER_TEMP/whl.fa"
           PYTHONPATH=src python -m coal examples/clean/protein.aln.fasta examples/clean/dna.fasta -o "$RUNNER_TEMP/ref.fa"
           cmp "$RUNNER_TEMP/whl.fa" "$RUNNER_TEMP/ref.fa"
           python -m venv "$RUNNER_TEMP/src"
-          "$RUNNER_TEMP/src/bin/python" -m pip install "coal @ file://$PWD/release/coal_src.tar.gz"
+          "$RUNNER_TEMP/src/bin/python" -m pip install "coal-align @ file://$PWD/release/coal_src.tar.gz"
           test "$("$RUNNER_TEMP/src/bin/coal" --version)" = "coal ${V}"
           ls -l release
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
@@ -100,8 +99,7 @@ jobs:
         run: python scripts/release_version.py $env:TAG --github-output
       - name: Install Inno Setup (pinned)
         run: |
-          # CHANGED(SHIP-7): was --version=6.4.3, which Chocolatey never published (the v0.4.0 release build failed
-          # here); 6.7.1 is the newest approved InnoSetup package (6.3+ is required by desktop/installer.iss).
+          # 6.7.1 is the newest approved Chocolatey InnoSetup package (6.3+ is required by desktop/installer.iss).
           choco install innosetup --version=6.7.1 --allow-downgrade -y --no-progress
           $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { throw "Inno Setup installed, but $iscc is missing" }
@@ -205,8 +203,8 @@ jobs:
             "COAL-Setup-windows-x64.exe"
             "COAL-${V}-windows-x64.zip"
             "COAL-windows-x64.zip"
-            "coal-${V}-py3-none-any.whl"
-            "coal-${V}.tar.gz"
+            "coal_align-${V}-py3-none-any.whl"
+            "coal_align-${V}.tar.gz"
             "coal_src.tar.gz"
             "SHA256SUMS.txt"
           )

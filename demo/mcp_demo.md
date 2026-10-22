@@ -2,7 +2,6 @@
 
 A stage script for showing COAL as a tool an AI assistant can use. Everything below the script is the
 real output of the tool functions, regenerated with `python demo/make_mcp_demo.py`.
-<!-- CHANGED(IMP-M-4): version-free (was "COAL engine 0.3.0"); setup points to desktop/setup_mcp.bat -->
 
 ## Setup (before going on stage)
 

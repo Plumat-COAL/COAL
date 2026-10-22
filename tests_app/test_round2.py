@@ -1,4 +1,5 @@
-"""Round 2 review fixes (overnight/integration/CHANGES.md, R2-A*, R2-D*, R2-E*)."""
+"""App: -nomismatch results, engine notices, stopped runs and usage errors, run-folder pruning, pasted paths, no
+orphan processes, and no false failures in the viewer."""
 import os
 import shutil
 import tempfile
@@ -23,7 +24,7 @@ class RunsDirCase(unittest.TestCase):
         return d
 
 
-class TestR2A1Nomismatch(RunsDirCase):  # R2-A1 / R2-D5 / R2-E1
+class TestR2A1Nomismatch(RunsDirCase):
     def test_mito_code1_nomismatch_is_not_all_ok(self):
         p, d = core.example_paths("mito")
         r = tools.codon_align(p, d, codontable=1, nomismatch=True)
@@ -64,7 +65,7 @@ class TestR2A1Nomismatch(RunsDirCase):  # R2-A1 / R2-D5 / R2-E1
         self.assertNotIn("Nothing went wrong", core.explain(r.report))
         self.assertGreater(r.report["summary"]["columns_removed"], 0)
 
-    def test_long_mismatch_one_warning(self):  # R2-E1 repro
+    def test_long_mismatch_one_warning(self):
         p, d = os.path.join(FX, "long_mismatch", "pep.fasta"), os.path.join(FX, "long_mismatch", "nuc.fasta")
         r = core.run_coal(p, d, nomismatch=True, out_dir=self.tmp(), probe_codes=False)
         s = r.report["summary"]
@@ -81,7 +82,7 @@ class TestR2A1Nomismatch(RunsDirCase):  # R2-A1 / R2-D5 / R2-E1
         self.assertIn("Nothing went wrong", core.explain(r.report))
 
 
-class TestR2A2Notices(RunsDirCase):  # R2-A2 / R2-E2
+class TestR2A2Notices(RunsDirCase):
     def write(self, pep, nuc):
         d = self.tmp()
         p, n = os.path.join(d, "p.fa"), os.path.join(d, "n.fa")
@@ -129,7 +130,7 @@ class TestR2A2Notices(RunsDirCase):  # R2-A2 / R2-E2
         self.assertNotIn("Nothing went wrong", core.explain(rep))
 
 
-class TestR2A6Stopped(RunsDirCase):  # R2-A6
+class TestR2A6Stopped(RunsDirCase):
     def report(self, code, stderr):
         p, d = core.example_paths("clean")
         return core.build_fallback_report(p, d, os.path.join(self.tmp(), "out.fa"), "fasta", 1, False, False, False,
@@ -153,7 +154,7 @@ class TestR2A6Stopped(RunsDirCase):  # R2-A6
         self.assertIn("Nothing went wrong", core.explain(self.report(0, "")))
 
 
-class TestR2A7UsageError(RunsDirCase):  # R2-A7
+class TestR2A7UsageError(RunsDirCase):
     def test_exit_2_usage_is_not_success(self):
         p, d = core.example_paths("clean")
         rep = core.build_fallback_report(p, d, os.path.join(self.tmp(), "o.fa"), "fasta", 1, False, False, False,
@@ -178,7 +179,7 @@ class TestR2A7UsageError(RunsDirCase):  # R2-A7
         self.assertEqual(r["summary"]["ok"], 8, r)
 
 
-class TestR2A8Prune(RunsDirCase):  # R2-A8
+class TestR2A8Prune(RunsDirCase):
     def old(self, path):
         t = __import__("time").time() - 48 * 3600
         os.utime(path, (t, t))
@@ -204,7 +205,7 @@ class TestR2A8Prune(RunsDirCase):  # R2-A8
         self.assertTrue(os.path.isdir(mine))
 
 
-class TestR2A11PastedPaths(unittest.TestCase):  # R2-A11
+class TestR2A11PastedPaths(unittest.TestCase):
     def setUp(self):
         d = tempfile.mkdtemp(prefix="coal test r2 ")
         self.addCleanup(shutil.rmtree, d, True)
@@ -258,7 +259,7 @@ def _wait_gone(text, limit=10.0):
 
 
 @unittest.skipUnless(os.path.isdir("/proc/self") and os.name != "nt", "R2-A4: needs Linux /proc and POSIX signals")
-class TestR2A4NoOrphans(unittest.TestCase):  # R2-A4
+class TestR2A4NoOrphans(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         import subprocess, sys
@@ -317,7 +318,7 @@ class TestR2A4NoOrphans(unittest.TestCase):  # R2-A4
         self.assertEqual(_wait_gone(self.data), [])
 
 
-class TestR2A12ViewerNoFalseFailures(RunsDirCase):  # R2-A12
+class TestR2A12ViewerNoFalseFailures(RunsDirCase):
     def test_mito_code1_diagnose_calls_no_break(self):
         from coal_app import viewer
         p, d = core.example_paths("mito")

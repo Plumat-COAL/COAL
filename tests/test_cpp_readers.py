@@ -1,8 +1,8 @@
-"""C++ input readers == the reviewed Python readers (CPP-2).
+"""C++ input readers == the reviewed Python readers.
 
 Edge-case files are built in a temp dir and read by both:
-  * Python: src/coal/seqio.py from the reviewed engine on origin/keanu_overnight/integration (read with
-    `git show`, not merged), or the file named by COAL_REF_SEQIO;
+  * Python: the file named by COAL_REF_SEQIO, else this repo's src/coal/seqio.py, else src/coal/seqio.py of
+    REF_BRANCH (read with `git show`, not merged);
   * C++: build/coal-cpp-dump (COAL_CPP_DUMP), the same reader code coal-cpp uses.
 Both must give the same IDs, the same sequences/rows, or the same error message (with file:line).
 Protein files are read as the pipeline reads them (CLUSTAL if the first line starts with CLUSTAL,
@@ -21,19 +21,19 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-REF_BRANCH = "origin/keanu_overnight/integration"
+REF_BRANCH = "origin/main"
 TIMEOUT = 60
 
 
 def cpp_dump() -> Path | None:
     default = ROOT / "build" / "coal-cpp-dump"
-    if os.environ.get("COAL_CPP_BIN"):  # next to the coal-cpp under test (CPP-8)
+    if os.environ.get("COAL_CPP_BIN"):  # next to the coal-cpp under test
         default = Path(os.environ["COAL_CPP_BIN"]).with_name("coal-cpp-dump")
     p = Path(os.environ.get("COAL_CPP_DUMP", default))
     if not p.is_absolute():
         p = ROOT / p
     for cand in (p, p.with_suffix(".exe"), p.parent / "Release" / (p.name + ".exe")):
-        # on Windows only .exe files: a shared folder may also hold the Linux build (CPP-8)
+        # on Windows only .exe files: a shared folder may also hold the Linux build
         if cand.is_file() and (os.name != "nt" or cand.suffix.lower() == ".exe"):
             return cand
     return None
@@ -45,7 +45,7 @@ def load_reference(module: str, tmp: Path):
     if env:
         src = Path(env).read_text(encoding="utf-8")
     elif (ROOT / "src" / "coal" / f"{module}.py").is_file():
-        # CHANGED(MRG-6): was the integration branch via git show (before the merge); now this branch's merged engine
+        # this branch's merged engine
         src = (ROOT / "src" / "coal" / f"{module}.py").read_text(encoding="utf-8")
     else:
         try:
@@ -97,7 +97,7 @@ PROTEIN_CASES = {
     "clustal_malformed": b"CLUSTAL\n\ns1   MKVAL\nlonely\n",
     "clustal_tab_conservation": b"CLUSTAL\n\ns1 MKV\ns2 MKV\n\t***\n",
     "clustal_nonascii": "CLUSTAL\n\ns1 MKV\nsé2 MKV\n".encode("utf-8"),
-    # CPP-12 (reference FZ-1, FZ-2) and CPP-13 (mark lines)
+    # non-ASCII text and CLUSTAL mark lines
     "nonascii_description": ">s1 Krüppel-like factor 4\nMKVAL\n>s2 ok\nMKV\n".encode("utf-8"),
     "nonascii_desc_after_nbsp": ">s1\u00a0desc é\nMKVAL\n".encode("utf-8"),
     "nonascii_desc_after_tab_latin1": b">s1\tna\xefve\nMKVAL\n",
@@ -159,12 +159,12 @@ class ReaderCase(unittest.TestCase):
         try:
             recs = ref.read_clustal(path) if ref.is_clustal(path) else list(ref.iter_fasta(path))
             out = {"records": [list(r) for r in recs]}
-            if ref.is_clustal(path) and hasattr(ref, "clustal_mask"):  # CPP-13: PAL2NAL's '#' block marks
+            if ref.is_clustal(path) and hasattr(ref, "clustal_mask"):  # PAL2NAL's '#' block marks
                 out["mask"] = ref.clustal_mask(path)
             return out
         except ref.InputFormatError as e:
             return {"error": str(e)}
-        except OSError as e:  # CHANGED(ENG-UX-4): the pipeline's wording (the C++ readers say it themselves)
+        except OSError as e:  # the pipeline's wording (the C++ readers say it themselves)
             return {"error": ref.open_error_message(e.filename, e) if hasattr(ref, "open_error_message") else str(e)}
 
     def py_dna(self, paths: list[str]) -> dict:
@@ -177,7 +177,7 @@ class ReaderCase(unittest.TestCase):
                 idx.close()
         except ref.InputFormatError as e:
             return {"error": str(e)}
-        except OSError as e:  # CHANGED(ENG-UX-4): the pipeline's wording (the C++ readers say it themselves)
+        except OSError as e:  # the pipeline's wording (the C++ readers say it themselves)
             return {"error": ref.open_error_message(e.filename, e) if hasattr(ref, "open_error_message") else str(e)}
 
 

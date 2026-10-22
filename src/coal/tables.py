@@ -17,7 +17,7 @@ _RAW = {
          "---M------**--*----M---------------M----------------------------"),
     2:  ("FFLLSSSSYY**CCWWLLLLPPPPHHQQRRRRIIMMTTTTNNKKSS**VVVVAAAADDEEGGGG",
          "----------**--------------------MMMM----------**---M------------"),
-    # CHANGED(ENG-g): starts were ATA ATG; now ATA ATG GTG (current NCBI). See overnight/engine-fixes/CHANGES.md
+    # starts ATA ATG GTG (current NCBI)
     3:  ("FFLLSSSSYY**CCWWTTTTPPPPHHQQRRRRIIMMTTTTNNKKSSRRVVVVAAAADDEEGGGG",
          "----------**----------------------MM---------------M------------"),
     4:  ("FFLLSSSSYY**CCWWLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG",

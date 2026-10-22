@@ -1,4 +1,5 @@
-"""Regression tests for the independent engine review (overnight/engine-fixes/CHANGES.md, ENG-a .. ENG-i).
+"""Regression tests for the engine review findings: output paths, piped and FIFO inputs, unrelated or masked genes,
+partial ID matches, long fallbacks, interrupts, table 3 starts, input encodings and -nomismatch warnings.
 
 Every input is built inside a temporary directory created by the test; -o is only
 ever pointed at paths inside that directory.
@@ -17,7 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src"
 TIMEOUT = 60
-WINDOWS = os.name == "nt"  # R2-D1
+WINDOWS = os.name == "nt"
 
 PEP = ">s1\nMKV-AL\n>s2\nMKVSAL\n"
 NUC = ">s1\nATGAAAGTTGCTCTG\n>s2\nATGAAGGTCTCAGCACTA\n"
@@ -44,7 +45,7 @@ class TempDirCase(unittest.TestCase):
         return sorted(p.name for p in self.d.iterdir() if p.name.startswith(".coal_"))
 
 
-# ---------------------------------------------------------------- ENG-a
+# ---------------------------------------------------------------- output paths
 class TestEngA_OutputPath(TempDirCase):
     def test_symlink_is_written_through(self):
         target = self.d / "target.fa"
@@ -52,7 +53,7 @@ class TestEngA_OutputPath(TempDirCase):
         link = self.d / "link.fa"
         try:
             link.symlink_to(target)
-        except (OSError, NotImplementedError):  # R2-D1
+        except (OSError, NotImplementedError):
             self.skipTest("cannot create symlinks here")
         r = coal(["p.fa", "n.fa", "-o", "link.fa"], self.d)
         self.assertEqual(r.returncode, 0, r.stderr)
@@ -89,7 +90,7 @@ class TestEngA_OutputPath(TempDirCase):
 
 
 @unittest.skipIf(WINDOWS, "R2-E5: POSIX permissions / links")
-class TestR2E5_ExistingOutput(TempDirCase):  # R2-E5
+class TestR2E5_ExistingOutput(TempDirCase):
     def test_existing_file_keeps_its_permissions(self):
         out = self.d / "out.fa"
         out.write_text("old\n")
@@ -124,7 +125,7 @@ class TestR2E5_ExistingOutput(TempDirCase):  # R2-E5
         self.assertEqual(self.leftovers(), [])
 
 
-class TestR2E6_BadByteLine(TempDirCase):  # R2-E6
+class TestR2E6_BadByteLine(TempDirCase):
     def test_latin1_byte_reports_its_line(self):
         lines = [">s1"] + ["MKVAL"] * 399 + ["MK\xe9AL"]
         (self.d / "lat.fa").write_bytes(("\n".join(lines) + "\n").encode("latin-1"))
@@ -135,7 +136,7 @@ class TestR2E6_BadByteLine(TempDirCase):  # R2-E6
 
 
 @unittest.skipUnless(os.path.exists("/dev/stdin"), "R2-E7: no /dev/stdin (Windows)")
-class TestR2E7_PipeNames(TempDirCase):  # R2-E7
+class TestR2E7_PipeNames(TempDirCase):
     def test_error_in_piped_input_names_the_argument(self):
         r = coal(["/dev/stdin", "n.fa"], self.d, stdin=">s1\nMKV-AL\n>s1\nMKVSAL\n")
         self.assertEqual(r.returncode, 1)
@@ -143,7 +144,7 @@ class TestR2E7_PipeNames(TempDirCase):  # R2-E7
         self.assertNotIn(".coal_in_", r.stderr)
 
 
-class TestR3E2_OutputFolderErrors(TempDirCase):  # R3-E2
+class TestR3E2_OutputFolderErrors(TempDirCase):
     def test_missing_folder_names_the_output_path(self):
         r = coal(["p.fa", "n.fa", "-o", os.path.join("nodir", "out.fa")], self.d)
         self.assertEqual(r.returncode, 1, r.stderr)
@@ -166,12 +167,12 @@ class TestR3E2_OutputFolderErrors(TempDirCase):  # R3-E2
         self.assertEqual(self.leftovers(), [])
 
 
-class TestR3E3_DnaErrorLineNumbers(TempDirCase):  # R3-E3
+class TestR3E3_DnaErrorLineNumbers(TempDirCase):
     def test_data_before_header_has_line_number(self):
         (self.d / "bn.fa").write_text("# comment\n\nATGAAA\n>s1\nATGAAAGTTGCTCTG\n")
         r = coal(["p.fa", "bn.fa"], self.d)
         self.assertEqual(r.returncode, 1)
-        self.assertIn("bn.fa:3: sequence data before the first '>' header", r.stderr)  # CHANGED(ENG-UX-11)
+        self.assertIn("bn.fa:3: sequence data before the first '>' header", r.stderr)
 
     def test_non_ascii_id_has_line_number(self):
         (self.d / "un.fa").write_bytes(b">s1\nATGAAAGTTGCTCTG\n>s\xc3\xa92\nATG\n")
@@ -187,7 +188,7 @@ class TestR3E3_DnaErrorLineNumbers(TempDirCase):  # R3-E3
             self.assertIn(f"{name}:3: empty FASTA header", r.stderr)
 
 
-# ---------------------------------------------------------------- ENG-b
+# ---------------------------------------------------------------- piped / FIFO inputs
 @unittest.skipUnless(os.path.exists("/dev/stdin"), "R2-D1: no /dev/stdin (Windows)")
 class TestEngB_StreamInputs(TempDirCase):
     def test_protein_from_pipe(self):
@@ -217,7 +218,7 @@ class TestEngB_StreamInputs(TempDirCase):
         self.assertEqual((r.returncode, r.stdout), (0, EXPECTED), r.stderr)
 
 
-# ---------------------------------------------------------------- ENG-c
+# ---------------------------------------------------------------- unrelated / masked genes
 def _random_pair(seed=3, n=60):
     rng = random.Random(seed)
     prot = "M" + "".join(rng.choice("ACDEFGHIKLMNPQRSTVWY") for _ in range(n - 1))
@@ -231,12 +232,12 @@ class TestEngC_Unrelated(TempDirCase):
         (self.d / "rp.fa").write_text(pep)
         (self.d / "rn.fa").write_text(nuc)
         for extra in ([], ["-q"]):
-            r = coal(["rp.fa", "rn.fa", "--strict", *extra], self.d)  # DEC-1
+            r = coal(["rp.fa", "rn.fa", "--strict", *extra], self.d)
             self.assertNotEqual(r.returncode, 0, r.stdout)
             self.assertEqual(r.stdout, "")
             self.assertIn("g1: protein and DNA are inconsistent", r.stderr)
 
-    def test_no_anchor_matched_warns_and_q_silences_it(self):  # DEC-2
+    def test_no_anchor_matched_warns_and_q_silences_it(self):
         # Golden table3/fasta: PAL2NAL succeeds although no 10-residue anchor matches
         # (7 of 25 codons differ under table 1), so this stays a success, with a notice.
         fx = ROOT / "tests" / "fixtures" / "table3"
@@ -249,7 +250,7 @@ class TestEngC_Unrelated(TempDirCase):
         self.assertEqual((r.returncode, r.stdout, r.stderr), (0, gold, ""))
 
 
-class TestR2E3_AmbiguousCodons(TempDirCase):  # R2-E3
+class TestR2E3_AmbiguousCodons(TempDirCase):
     def masked_pair(self, frac=0.55, n=300, seed=7):
         sys.path.insert(0, str(SRC))
         from coal.tables import get_code
@@ -285,12 +286,12 @@ class TestR2E3_AmbiguousCodons(TempDirCase):  # R2-E3
         pep, nuc = _random_pair()
         (self.d / "rp.fa").write_text(pep)
         (self.d / "rn.fa").write_text(nuc)
-        r = coal(["rp.fa", "rn.fa", "--strict"], self.d)  # DEC-1
+        r = coal(["rp.fa", "rn.fa", "--strict"], self.d)
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("checkable codons do not match", r.stderr)
 
 
-class TestR3E1_MaskedGeneWithUTR(TempDirCase):  # R3-E1
+class TestR3E1_MaskedGeneWithUTR(TempDirCase):
     PROT = "MTVDCLAHRFISDLVKSPSFGSVLACYVISPLDRNVCGQH"
     DNA = ("GCATGNNNNNNNNNNNNTTGNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNATCAGTNNNNNNNNNNNN"
            "NNNNNNTGTNNNNNNNNN")
@@ -298,7 +299,7 @@ class TestR3E1_MaskedGeneWithUTR(TempDirCase):  # R3-E1
     def test_reviewer_repro_is_not_placed_shifted(self):
         (self.d / "ep.fa").write_text(f">g\n{self.PROT}\n")
         (self.d / "en.fa").write_text(f">g\n{self.DNA}\n")
-        r = coal(["ep.fa", "en.fa", "--strict"], self.d)  # DEC-1
+        r = coal(["ep.fa", "en.fa", "--strict"], self.d)
         self.assertNotEqual(r.returncode, 0, r.stdout)
         self.assertEqual(r.stdout, "")
         self.assertIn("g: protein and DNA are inconsistent", r.stderr)
@@ -320,7 +321,7 @@ class TestR3E1_MaskedGeneWithUTR(TempDirCase):  # R3-E1
             utr = "".join(rng.choice("ACGT") for _ in range(rng.randint(1, 30)))
             cds = "".join(cod)
             try:
-                got = thread_one("g", prot, utr + cds, 1, strict=True).dna  # DEC-1
+                got = thread_one("g", prot, utr + cds, 1, strict=True).dna
             except CoalError:
                 continue
             self.assertEqual(got, cds, (prot, utr, cds))
@@ -354,12 +355,12 @@ class TestR3E1_MaskedGeneWithUTR(TempDirCase):  # R3-E1
     def test_notice_counts_checkable_codons(self):
         # golden table3: no anchor, 7 of 25 checkable codons differ, none ambiguous
         fx = ROOT / "tests" / "fixtures" / "table3"
-        r = coal([str(fx / "pep.fasta"), str(fx / "nuc.fasta")], self.d)  # DEC-2: was with -q
+        r = coal([str(fx / "pep.fasta"), str(fx / "nuc.fasta")], self.d)  # without -q: the notice is printed
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("(7 of 25 checkable codons do not match)", r.stderr)
 
 
-# ---------------------------------------------------------------- ENG-d
+# ---------------------------------------------------------------- partial ID match
 class TestEngD_PartialIdMatch(TempDirCase):
     def test_some_ids_match_warns_and_pairs_by_order(self):
         (self.d / "ip.fa").write_text(">geneA\nMKVAL\n>geneB\nMKVAL\n")
@@ -369,7 +370,7 @@ class TestEngD_PartialIdMatch(TempDirCase):
         self.assertEqual(r.stdout, ">geneA\nATGAAAGTTGCTCTG\n>geneB\nATGAAGGTCGCACTA\n")
         self.assertIn("1 of 2 protein IDs", r.stderr)
         self.assertIn("'geneA' gets DNA 'geneB'", r.stderr)
-        r = coal(["ip.fa", "in.fa", "-q"], self.d)  # DEC-2
+        r = coal(["ip.fa", "in.fa", "-q"], self.d)  # -q silences the warning
         self.assertEqual((r.returncode, r.stdout, r.stderr), (0, ">geneA\nATGAAAGTTGCTCTG\n>geneB\nATGAAGGTCGCACTA\n", ""))
 
     def test_no_ids_match_stays_silent(self):  # golden id_mismatch_same_order: PAL2NAL pairs by order
@@ -379,7 +380,7 @@ class TestEngD_PartialIdMatch(TempDirCase):
         self.assertEqual((r.returncode, r.stderr), (0, ""))
 
 
-# ---------------------------------------------------------------- ENG-e
+# ---------------------------------------------------------------- long fallback
 class TestEngE_LongFallback(unittest.TestCase):
     def test_100k_codons_with_one_n_is_fast(self):
         sys.path.insert(0, str(SRC))
@@ -399,9 +400,9 @@ class TestEngE_LongFallback(unittest.TestCase):
         dt = time.perf_counter() - t
         self.assertEqual(r.dna, dna)
         self.assertEqual(r.mismatch_cols, {50_001})
-        self.assertLess(dt, 3.0)  # R2-E10: was 1.0 (flaky on slow CI); ~0.1 s here, quadratic was ~10 s
+        self.assertLess(dt, 3.0)  # generous for slow CI; ~0.1 s here, quadratic was ~10 s
 
-    def test_many_failed_anchors_with_n_are_fast(self):  # R2-E9
+    def test_many_failed_anchors_with_n_are_fast(self):
         sys.path.insert(0, str(SRC))
         import time
         from coal.core import thread_one
@@ -422,7 +423,7 @@ class TestEngE_LongFallback(unittest.TestCase):
         self.assertLess(dt, 2.5)  # ~0.5 s here; was ~5 s
 
 
-# ---------------------------------------------------------------- ENG-f
+# ---------------------------------------------------------------- interrupts
 class TestEngF_Interrupts(TempDirCase):
     """coal is stopped while it copies its finished temp file to a stdout pipe that the
     test does not drain (so it is blocked mid-copy, with the temp file present)."""
@@ -452,11 +453,11 @@ class TestEngF_Interrupts(TempDirCase):
             if p.poll() is None:
                 p.kill()
                 p.wait()
-            p.stderr.close()  # R2-E10
+            p.stderr.close()
         return p.returncode, err
 
     @unittest.skipUnless(hasattr(__import__("signal"), "SIGHUP"), "R2-E8: no SIGHUP here")
-    def test_sighup_cleans_up(self):  # R2-E8
+    def test_sighup_cleans_up(self):
         import signal
         p = self.start()
         rc, err = self.stop(p, signal.SIGHUP)
@@ -498,13 +499,13 @@ class TestEngF_Interrupts(TempDirCase):
             if p.poll() is None:
                 p.kill()
                 p.wait()
-            p.stderr.close()  # R2-E10
+            p.stderr.close()
         self.assertEqual(err, "")
         self.assertEqual(p.returncode, 141)
         self.assertEqual(list(self.tmpdir.iterdir()), [])
 
 
-class TestR2D1_WindowsClosedStdout(TempDirCase):  # R2-D1
+class TestR2D1_WindowsClosedStdout(TempDirCase):
     class _ClosedPipe:
         def __init__(self, err):
             self.err = err
@@ -534,7 +535,7 @@ class TestR2D1_WindowsClosedStdout(TempDirCase):  # R2-D1
         self.assertNotIsInstance(cm.exception, BrokenPipeError)
 
 
-# ---------------------------------------------------------------- ENG-g
+# ---------------------------------------------------------------- table 3 starts
 class TestEngG_Table3Starts(TempDirCase):
     def test_gtg_start_in_table3(self):
         (self.d / "gp.fa").write_text(">g\nMKVAS\n")
@@ -548,7 +549,7 @@ class TestEngG_Table3Starts(TempDirCase):
         self.assertEqual(set(get_code(3).starts), {"ATA", "ATG", "GTG"})
 
 
-# ---------------------------------------------------------------- ENG-h
+# ---------------------------------------------------------------- input encodings
 class TestEngH_InputEncodings(TempDirCase):
     def check(self, pep: bytes, nuc: bytes):
         (self.d / "hp.fa").write_bytes(pep)
@@ -577,7 +578,7 @@ class TestEngH_InputEncodings(TempDirCase):
         self.assertNotIn("Traceback", r.stderr)
 
 
-# ---------------------------------------------------------------- ENG-i2
+# ---------------------------------------------------------------- -nomismatch warnings
 class TestEngI_NomismatchWarnings(TempDirCase):
     def test_no_mismatch_warnings_with_nomismatch(self):
         fx = ROOT / "tests" / "fixtures" / "long_mismatch"

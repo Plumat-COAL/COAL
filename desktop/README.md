@@ -25,7 +25,6 @@ words when a gene doesn't fit.
 4. Choose whether you want a desktop shortcut and an "Open with" entry for .fasta and .aln
    files (both optional; COAL never becomes your default program for those files). Click
    **Install**.
-   <!-- CHANGED(WIN-W4b/R2-A9): was "it can't load the file into the box by itself yet"; it now does. See overnight/integration/CHANGES.md -->
    *About "Open with":* it opens COAL (or brings it to the front) and puts the file into the
    right box (COAL looks inside to tell a protein alignment from DNA). The file is read where it
    is, never copied. Open the other file the same way, or type its path.
@@ -38,8 +37,6 @@ allow a single app. You can turn Smart App Control off (Windows Security > App &
 but on some Windows versions it can then only be turned back on by resetting or reinstalling
 Windows, so we suggest leaving it on and installing COAL with pip instead (see "Install with pip"
 in the release notes or on the website).
-<!-- CHANGED(FIN-C18): was "it can't be turned back on without reinstalling Windows; wait for a signed version"
-(inconsistent with the site and the release notes, which recommend pip) -->
 
 **On a university or company laptop** the install may be blocked by IT policy. Send IT this
 page; COAL installs in your own user folder (`%LOCALAPPDATA%\Programs\COAL`) and only listens
@@ -53,10 +50,9 @@ on this computer (127.0.0.1).
    **coding DNA** of the same genes (FASTA, not aligned) anywhere on the window: COAL puts each
    one in the right box and reads it where it is (no copy, so big files are fine). You can also
    click a box to choose a file, or type or paste a file's path under the box.
-   <!-- CHANGED(R2-A9): drops anywhere are now loaded by path. See overnight/integration/CHANGES.md -->
 3. Check the **genetic code**: 1 for nuclear genes of most organisms, 2 for vertebrate
    mitochondria, 11 for bacteria and plastids.
-4. Click **Start alignment**.  <!-- CHANGED(IMP-M-4): button renamed in POL-7 -->
+4. Click **Start alignment**.
 
 Not sure what your files should look like? Click one of the **Try an example** buttons.
 
@@ -80,12 +76,10 @@ Not sure what your files should look like? Click one of the **Try an example** b
 |---|---|---|
 | many codons "don't match", tip suggests another genetic code | the genes use a different genetic code (common for mitochondrial genes) | click the re-run button in the tip |
 | protein and DNA IDs don't match | e.g. proteins called `AT1G01010.1`, DNA called `AT1G01010` | rename so the IDs match (the tip says how they differ) |
-| a gene failed with a "frameshift" | a DNA letter is missing or extra in that gene (often a sequencing or assembly error) | fix or remove that gene and run again: COAL stops at the first failed gene, so no alignment is written: the genes before it are shown as "Not written" (with their own problems, if any) and the genes after it as "Not checked", not as fine | <!-- CHANGED(FIN-C7) -->
-<!-- CHANGED(R2-D8): BOM row removed (the engine now skips a byte order mark, ENG-h); frameshift advice: later genes are "not checked". See overnight/integration/CHANGES.md -->
+| a gene failed with a "frameshift" | a DNA letter is missing or extra in that gene (often a sequencing or assembly error) | fix or remove that gene and run again: COAL stops at the first failed gene, so no alignment is written: the genes before it are shown as "Not written" (with their own problems, if any) and the genes after it as "Not checked", not as fine |
 
 ## Run from source (no installer)
 
-<!-- CHANGED(IMP-M-2): new; the launchers are in this folder -->
 With Python 3.10 or newer (3.12 recommended, from https://www.python.org/downloads/windows/) and a copy of the COAL
 repository (`git clone` or the source zip):
 
@@ -111,8 +105,7 @@ Two kinds of temporary files are left for Windows' own cleanup (Settings > Syste
 Temporary files), or you can delete them yourself: `%TEMP%\gradio` (uploaded copies of files you
 chose with a box's file picker; shared with any other Gradio-based program, so the uninstaller
 leaves it). Runs started by AI tools over MCP use the same `%TEMP%\coal_app_runs` folder as the
-window. <!-- CHANGED(R2-D8): was "%TEMP%\coal_* folders (MCP runs)"; MCP runs go to coal_app_runs (core.RUNS_DIR) -->
-<!-- CHANGED(WIN-W6): temp folders listed. See overnight/windows-app/CHANGES.md -->
+window.
 
 ## Updates
 
@@ -127,7 +120,6 @@ COAL never checks for updates by itself. New versions are published at
 - **But any program, and any user logged in to this same computer, can use it while COAL is
   open**: the page has no password, and it can read any file your account can read if given its
   path. On a shared lab PC, close COAL when you're done.
-  <!-- CHANGED(WIN-W6, decision 3): security line made plain. See overnight/windows-app/CHANGES.md -->
 - **AI tools (MCP)**: the installer's **Connect COAL to Claude Desktop** box (ticked by default; later:
   `COAL.exe --connect-claude`) lets Claude Desktop start COAL's MCP server itself (`COAL.exe -m coal_app --mcp`):
   quit and reopen Claude Desktop afterwards. Claude asks before each run; uninstalling removes the entry. The window
@@ -136,12 +128,10 @@ COAL never checks for updates by itself. New versions are published at
   (see "Run from source" above). `COAL.exe --mcp` still turns the endpoint on
   for a session, at `http://127.0.0.1:<port>/gradio_api/mcp/sse` (the port is written in
   `%LOCALAPPDATA%\COAL\logs\local_app.log`).
-  <!-- CHANGED(IMP-M-3): was on by default (WIN-M) on a random port. See overnight/integration/CHANGES.md -->
 - Logs are in `%LOCALAPPDATA%\COAL\logs`. They never contain your sequences, but they do contain
   file names, and `local_app.log` holds everything COAL's local app prints, which can include
   full file paths (for example in error messages). Look through them before sending; if
   something goes wrong, sending that folder to the COAL team helps.
-  <!-- CHANGED(WIN-W6): was "start-up messages only". See overnight/windows-app/CHANGES.md -->
 - COAL includes Python, Gradio (the page), pywebview (the window) and their dependencies; their
   licences are in the install folder.
 

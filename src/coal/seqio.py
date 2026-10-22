@@ -16,9 +16,8 @@ class InputFormatError(ValueError):
     pass
 
 
-# CHANGED(ENG-UX-11): the reader messages say what is wrong in plain words and what a valid file looks like (were
-# e.g. "p.fa:1: sequence data before first '>' header", "p.fa:1: non-ASCII character"). teammate's C++ mirrors them
-# (cpp/src/seqio.cpp). See overnight/integration/CHANGES.md
+# The reader messages say what is wrong in plain words and what a valid file looks like. The C++ engine mirrors them
+# (cpp/src/seqio.cpp).
 NON_ASCII = "non-ASCII character: sequence files must be plain text (is this a binary or word-processor file?)"
 NON_ASCII_ID = "non-ASCII character in the sequence ID: use only ASCII letters, digits and punctuation in IDs"
 EMPTY_HEADER = "empty FASTA header: a '>' line without a sequence ID (every record needs a name after '>')"
@@ -32,8 +31,8 @@ def duplicate_message(where, rid: str) -> str:
 
 
 def open_error_message(path: str, e: OSError) -> str:
-    """CHANGED(ENG-UX-4): new. "cannot open 'x.fa': no such file" (or: permission denied, it is a folder, or the
-    system's reason) for an input that cannot be opened (was "[Errno 2] No such file or directory: 'x.fa'")."""
+    """The error for an input that cannot be opened: "cannot open 'x.fa': no such file" (or: permission denied, it
+    is a folder, or the system's reason)."""
     if os.path.isdir(path):
         why = "it is a folder, not a file"
     elif e.errno == errno.ENOENT:
@@ -45,15 +44,12 @@ def open_error_message(path: str, e: OSError) -> str:
     return f"cannot open '{path}': {why}"
 
 
-# CHANGED(ENG-h): text inputs were opened as strict ASCII (a UTF-8 BOM failed with "'ascii' codec
-# can't decode byte 0xef", no file name); now a BOM is skipped and other non-ASCII input is an
-# InputFormatError naming the file. See overnight/engine-fixes/CHANGES.md
+# Text inputs: a UTF-8 BOM is skipped and other non-ASCII input is an InputFormatError naming the file.
 @contextmanager
 def _text(path):
     """Lines of a text input: BOM skipped; \\n, \\r\\n and \\r all end a line."""
-    # CHANGED(R2-E6): was errors="strict": a bad byte failed the decoder on its 8 kB chunk before the line was
-    # counted ("near line 1"); now bad bytes become surrogates and the line check names the right line.
-    # See overnight/integration/CHANGES.md
+    # Not errors="strict": that fails the decoder on its 8 kB chunk before the line is counted ("near line 1").
+    # Bad bytes become surrogates instead, so the line check names the right line.
     fh = open(path, encoding="utf-8-sig", errors="surrogateescape")
     try:
         yield _ascii_lines(fh, path)
@@ -67,9 +63,8 @@ def _ascii_lines(fh, path):
         for line in fh:
             lineno += 1
             if not line.isascii():
-                # CHANGED(FZ-2): was an error for any non-ASCII byte; now a header's description (after the ID) may
-                # hold any text, as in PAL2NAL (e.g. ">a Krüppel-like factor"). Non-ASCII IDs and sequence data stay
-                # errors. See overnight/integration/CHANGES.md
+                # A header's description (after the ID) may hold any text, as in PAL2NAL (e.g. ">a Krüppel-like
+                # factor"). Non-ASCII IDs and sequence data are errors.
                 if line.startswith(">"):
                     head = line[1:].split(None, 1)
                     if head and head[0].isascii():
@@ -88,7 +83,7 @@ def read_fasta(path: str | Path, letters_only: bool = False) -> list[tuple[str, 
     as PAL2NAL does), every non-letter is removed (gaps, digits, '*', ...) and
     lines starting with '#' are skipped."""
     records: list[tuple[str, list[str]]] = []
-    with _text(path) as fh:  # CHANGED(ENG-h)
+    with _text(path) as fh:
         for lineno, line in enumerate(fh, 1):
             line = line.rstrip("\r\n")
             if line.startswith(">"):
@@ -115,10 +110,10 @@ def read_clustal(path: str | Path) -> list[tuple[str, str]]:
     """Return [(id, aligned sequence)] from a CLUSTAL file (interleaved blocks)."""
     order: list[str] = []
     seqs: dict[str, list[str]] = {}
-    with _text(path) as fh:  # CHANGED(ENG-h)
+    with _text(path) as fh:
         first = next(fh, "")
         lineno = 1
-        while first and not first.strip():  # CHANGED(FZ-1): leading blank lines (PAL2NAL reads such files as CLUSTAL)
+        while first and not first.strip():  # leading blank lines (PAL2NAL reads such files as CLUSTAL)
             first = next(fh, "")
             lineno += 1
         if not first.startswith("CLUSTAL"):
@@ -126,13 +121,11 @@ def read_clustal(path: str | Path) -> list[tuple[str, str]]:
         for lineno, line in enumerate(fh, lineno + 1):
             line = line.rstrip("\r\n")
             # Skip blank lines and conservation lines (start with whitespace).
-            # CHANGED(FZ-1): also lines starting with '#' (PAL2NAL's block-mark lines; was read as a sequence named
-            # '#') and further CLUSTAL header lines, as PAL2NAL. See overnight/integration/CHANGES.md
+            # Also lines starting with '#' (PAL2NAL's block-mark lines) and further CLUSTAL header lines, as PAL2NAL.
             if not line.strip() or line[0] in " \t#" or line.startswith("CLUSTAL"):
                 continue
             parts = line.split()
             if len(parts) < 2:
-                # CHANGED(ENG-UX-11): was "<file>: malformed CLUSTAL line: '...'" (no line number, no explanation)
                 raise InputFormatError(f"{path}:{lineno}: malformed CLUSTAL line {line!r}: each line of a block must "
                                        f"hold a sequence name, then (after spaces) its aligned sequence")
             name, chunk = parts[0], parts[1]
@@ -143,8 +136,7 @@ def read_clustal(path: str | Path) -> list[tuple[str, str]]:
     return [(n, "".join(seqs[n])) for n in order]
 
 
-# CHANGED(DEC-4): new. PAL2NAL's '#' block marks (used by -blockonly and shown in clustal/codon output); was not read.
-# See overnight/integration/CHANGES.md
+# PAL2NAL's '#' block marks (used by -blockonly and shown in clustal/codon output).
 def clustal_mask(path: str | Path) -> str:
     """The mark line of a CLUSTAL alignment, one character per alignment column, read the way PAL2NAL v14 reads it:
     after each sequence line, the next line that is not a sequence line (the conservation line, or a blank line) is
@@ -177,7 +169,7 @@ def clustal_mask(path: str | Path) -> str:
 
 def read_alignment(path: str | Path) -> list[tuple[str, str]]:
     """Read a protein alignment, auto-detecting CLUSTAL vs FASTA."""
-    return read_clustal(path) if is_clustal(path) else read_fasta(path)  # CHANGED(FZ-1): same rule as is_clustal
+    return read_clustal(path) if is_clustal(path) else read_fasta(path)
 
 
 def _check_unique(ids: list[str], path) -> None:
@@ -203,7 +195,7 @@ def iter_fasta(path: str | Path):
     """Yield (id, sequence) one record at a time (whitespace removed)."""
     rid, chunks = None, []
     seen = set()
-    with _text(path) as fh:  # CHANGED(ENG-h)
+    with _text(path) as fh:
         for lineno, line in enumerate(fh, 1):
             if line.startswith(">"):
                 if rid is not None:
@@ -224,8 +216,8 @@ def iter_fasta(path: str | Path):
 
 
 def is_clustal(path: str | Path) -> bool:
-    """True if the first non-blank line starts with CLUSTAL (CHANGED(FZ-1): was the first line)."""
-    with _text(path) as fh:  # CHANGED(ENG-h)
+    """True if the first non-blank line starts with CLUSTAL."""
+    with _text(path) as fh:
         for line in fh:
             if line.strip():
                 return line.startswith("CLUSTAL")
@@ -233,7 +225,7 @@ def is_clustal(path: str | Path) -> bool:
 
 
 _LETTERS = bytes(range(65, 91)) + bytes(range(97, 123))
-# CHANGED(ENG-h): new helpers so a lone \r also ends a line in DNA files (classic Mac).
+# Helpers so a lone \r also ends a line in DNA files (classic Mac).
 _LINES = re.compile(rb"[^\r\n]*(?:\r\n|\r|\n)|[^\r\n]+")
 
 
@@ -276,18 +268,15 @@ class DnaIndex:
         self._fh: dict[int, object] = {}
 
     def _scan(self, fno: int, path: str) -> None:
-        # CHANGED(ENG-h): was \n-only lines, BOM not skipped, '#' before the first header an
-        # error; now a BOM is skipped, a lone \r also ends a line, and '#' lines before the
-        # first header are skipped (as read_fasta does). See overnight/engine-fixes/CHANGES.md
+        # A BOM is skipped, a lone \r also ends a line, and '#' lines before the first header are skipped (as
+        # read_fasta does).
         with open(path, "rb") as fh:
             offset, start = 0, None
             if fh.read(len(codecs.BOM_UTF8)) == codecs.BOM_UTF8:
                 offset = len(codecs.BOM_UTF8)
             else:
                 fh.seek(0)
-            # CHANGED(R3-E3): was "<file>: empty FASTA header" / "non-ASCII sequence ID" / "sequence data before
-            # first '>' header" with no line number; now "<file>:<line>: ..." as for protein files.
-            # See overnight/integration/CHANGES.md
+            # Errors are "<file>:<line>: ..." as for protein files.
             for lineno, line in enumerate(_cr_lines(fh) if _has_lone_cr(fh) else fh, 1):
                 if line.startswith(b">"):
                     if start is not None:
