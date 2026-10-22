@@ -182,7 +182,7 @@ def main(ap: argparse.ArgumentParser, args: argparse.Namespace, argv: list[str])
     try:
         jobs = plan(ap, args, argv, lines)
     except JobsError as e:
-        ap.error(f"{args.batch} line {e.line}: {e}" if e.line else str(e))
+        ap.error(f"{'standard input' if args.batch == '-' else args.batch} line {e.line}: {e}" if e.line else str(e))
     if args.batch_out_dir:
         try:
             os.makedirs(args.batch_out_dir, exist_ok=True)
