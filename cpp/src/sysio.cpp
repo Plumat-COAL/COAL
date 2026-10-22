@@ -163,6 +163,32 @@ static void refuse_device(int fd, const std::string& name) {
 #endif
 }
 
+#ifndef _WIN32
+// Reads a file descriptor with the small part of std::istream's surface the spool loop uses (read, gcount,
+// bool), and closes it at the end of its scope.
+class FdSource {
+public:
+    explicit FdSource(int fd) : fd_(fd) {}
+    ~FdSource() { ::close(fd_); }
+    FdSource(const FdSource&) = delete;
+    FdSource& operator=(const FdSource&) = delete;
+    void read(char* buf, std::streamsize n) {
+        ssize_t got = ::read(fd_, buf, (size_t)n);
+        if (got < 0) { err_ = errno; got = 0; eof_ = true; }
+        else if (got == 0) eof_ = true;
+        gcount_ = got;
+    }
+    std::streamsize gcount() const { return gcount_; }
+    explicit operator bool() const { return !eof_; }
+    int error() const { return err_; }
+private:
+    int fd_;
+    std::streamsize gcount_ = 0;
+    bool eof_ = false;
+    int err_ = 0;
+};
+#endif
+
 // `-`: standard input copied, as bytes, to a temp file (pipeline.py _spool_stdin). The same mechanism as a pipe or
 // /dev/stdin, so CRLF and BOM handling are those of file input; also on Windows (no /dev/stdin; binary mode).
 static std::string spool_stdin(std::vector<std::pair<std::string, std::string>>& spooled) {
@@ -225,22 +251,22 @@ std::vector<std::string> spool_inputs(const std::vector<std::string>& args,
         }
         // "cannot open '<path>': <reason>"
         if (fs::is_directory(a, ec)) throw InputError(open_error(a), "file_error");
+        // One open only: a FIFO's writer is consumed by the first reader (pipeline.py checks the open fd too), so
+        // the device check runs on the descriptor the copy will read from, never on a second open of the path.
 #ifndef _WIN32
-        {
-            int fd = ::open(a.c_str(), O_RDONLY | O_NOCTTY);
-            if (fd >= 0) {
-                try {
-                    refuse_device(fd, a);
-                } catch (...) {
-                    ::close(fd);
-                    throw;
-                }
-                ::close(fd);
-            }
+        int fd = ::open(a.c_str(), O_RDONLY | O_NOCTTY);
+        if (fd < 0) throw InputError(open_error(a), "file_error");
+        try {
+            refuse_device(fd, a);
+        } catch (...) {
+            ::close(fd);
+            throw;
         }
-#endif
+        FdSource src(fd);
+#else
         std::ifstream src(a, std::ios::binary);
         if (!src) throw InputError(open_error(a), "file_error");
+#endif
         std::string base = fs::path(a).filename().string();
         for (char& c : base)
             if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' ||
@@ -263,6 +289,9 @@ std::vector<std::string> spool_inputs(const std::vector<std::string>& args,
                 if (!dst) throw InputError(copy_error(a, errno ? errno : ENOSPC), "file_error");
             }
         }
+#ifndef _WIN32
+        if (src.error()) throw InputError("cannot read '" + a + "': " + lower_reason(src.error()), "file_error");
+#endif
         dst.flush();
         if (!dst) throw InputError(copy_error(a, errno ? errno : ENOSPC), "file_error");
         out.push_back(tmp);

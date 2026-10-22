@@ -116,6 +116,29 @@ class TestDeviceInputs(EngineCase):
         rc, out, err = self.both(["-", "n.fa"], stdin=PEP.encode())
         self.assertEqual((rc, out, err), (0, EXPECTED.encode(), b""))
 
+    def test_fifo_inputs_still_work(self):
+        """A FIFO (what <(cat p.fa) gives) has one writer: the device check must not open the path a second time,
+        or the copy blocks forever waiting for another writer (found in the first version of the check)."""
+        import threading
+
+        def feed(src, fifo):
+            with open(self.d / fifo, "w") as fh:
+                fh.write((self.d / src).read_text())
+
+        for name, cmd in engines():
+            with self.subTest(engine=name):
+                for f in ("pf", "nf"):
+                    if (self.d / f).exists():
+                        (self.d / f).unlink()
+                    os.mkfifo(self.d / f)
+                feeders = [threading.Thread(target=feed, args=a, daemon=True) for a in (("p.fa", "pf"), ("n.fa", "nf"))]
+                for t in feeders:
+                    t.start()
+                r = self.run_engine(cmd, ["pf", "nf"], timeout=20)
+                for t in feeders:
+                    t.join(timeout=5)
+                self.assertEqual((r.returncode, r.stdout, r.stderr), (0, EXPECTED.encode(), b""))
+
 
 # ---------------------------------------------------------------- 2. the report path
 class TestReportPath(EngineCase):

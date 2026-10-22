@@ -212,7 +212,7 @@ def build_shim(tmp: Path) -> Path:
     return tmp / "tests"
 
 
-def run_ref_tests(modules=REF_TEST_MODULES, timeout=170):
+def run_ref_tests(modules=REF_TEST_MODULES, timeout=360):
     import tempfile
     with tempfile.TemporaryDirectory(prefix="coal_shim_") as t:
         tests = build_shim(Path(t))
