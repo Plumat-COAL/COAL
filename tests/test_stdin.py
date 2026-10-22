@@ -256,7 +256,7 @@ class TestPal2nalDropInStdin(StdinCase):
     def drop_in(self, args, stdin):
         r = subprocess.run([sys.executable, "-m", "coal_compat", *args], cwd=self.d, env=self.env(),
                            input=stdin if stdin is not None else b"", capture_output=True, timeout=TIMEOUT)
-        return r.returncode, r.stdout, r.stderr.decode("utf-8", "replace")
+        return r.returncode, r.stdout, r.stderr.decode("utf-8", "replace").replace("\r\n", "\n")
 
     def test_dash_as_protein_or_dna(self):
         for args, k in ((["clean/pep.fasta", "clean/nuc.fasta"], 0),
