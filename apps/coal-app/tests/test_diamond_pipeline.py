@@ -67,7 +67,7 @@ class TestDiamondPipeline(unittest.TestCase):
             r = subprocess.run([sys.executable, SCRIPT, "--a-protein", p["ap"], "--a-cds", p["ac"],
                                 "--b-protein", p["bp"], "--b-cds", p["bc"], "--out", os.path.join(t, "o"),
                                 "--diamond", os.path.join(t, "no_such_diamond")],
-                               capture_output=True, text=True, timeout=60)
+                               capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
         self.assertEqual(r.returncode, 1)
         self.assertIn("DIAMOND was not found", r.stderr)
 
@@ -78,7 +78,7 @@ class TestDiamondPipeline(unittest.TestCase):
             r = subprocess.run([sys.executable, SCRIPT, "--a-protein", p["ap"], "--a-cds", p["ac"], "--a-name", "human",
                                 "--b-protein", p["bp"], "--b-cds", p["bc"], "--b-name", "mouse",
                                 "--out", out, "--diamond", STUB, "--threads", "1"],
-                               capture_output=True, text=True, timeout=300)
+                               capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL)
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
             self.assertIn("6 genes", r.stdout)            # 11 proteins -> 6 genes
             self.assertIn("reciprocal best hits: 5", r.stdout)
@@ -124,7 +124,8 @@ class TestDiamondPipeline(unittest.TestCase):
             if in_process:
                 self.assertEqual(dp.main(args), 2)
             else:
-                r = subprocess.run([sys.executable, SCRIPT, *args], capture_output=True, text=True, timeout=300)
+                r = subprocess.run([sys.executable, SCRIPT, *args], capture_output=True, text=True, timeout=300,
+                                   stdin=subprocess.DEVNULL)
                 self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
                 self.assertIn("dropped 1 pair", r.stdout)
                 self.assertIn("Mm2-PA", r.stdout)
@@ -194,7 +195,8 @@ class TestDiamondPipelineLimits(unittest.TestCase):
                             "--a-protein", p["ap"], "--a-cds", p["ac"], "--b-protein", p["bp"], "--b-cds", p["bc"],
                             "--out", os.path.join(t, "o"), "--diamond",
                             os.path.join(APP, "tests", "diamond_stub.py"), "--threads", "1",
-                            "--max-length", "10"], capture_output=True, text=True, timeout=300)
+                            "--max-length", "10"], capture_output=True, text=True, timeout=300,
+                           stdin=subprocess.DEVNULL)
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         self.assertNotIn("Traceback", r.stderr)
         self.assertIn("--max-length", r.stderr)
@@ -232,7 +234,7 @@ class TestDiamondPipelineLimits(unittest.TestCase):
         import subprocess
         import sys
         r = subprocess.run([sys.executable, os.path.join(ROOT, "demo", "diamond_pipeline.py"), "--help"],
-                           capture_output=True, text=True, timeout=60)
+                           capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
         self.assertIn("default 2000", " ".join(r.stdout.split()))
 
 
