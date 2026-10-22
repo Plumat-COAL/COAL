@@ -264,9 +264,21 @@ def stdio_handshake(cmd, extra_calls=()):
          for i, n, a in extra_calls]
     want = {1, 2, 3, 4} | {i for i, _, _ in extra_calls}
     env = dict(os.environ, COAL_RUNS_DIR=core.RUNS_DIR)
+    # Its own process group (POSIX), so the watchdog can also kill any engine the server started: a child holding
+    # the server's stdout would otherwise keep readline() below waiting after the server itself is dead.
     p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-                         encoding="utf-8", env=env)
-    watchdog = threading.Timer(120, p.kill)  # never hang the suite
+                         encoding="utf-8", env=env, start_new_session=os.name != "nt")
+
+    def _kill_all():
+        if os.name != "nt":
+            try:
+                os.killpg(p.pid, 9)
+                return
+            except OSError:
+                pass
+        p.kill()
+
+    watchdog = threading.Timer(120, _kill_all)  # never hang the suite
     watchdog.start()
     replies, err = {}, []
     drain = threading.Thread(target=lambda: err.append(p.stderr.read()), daemon=True)
@@ -288,7 +300,7 @@ def stdio_handshake(cmd, extra_calls=()):
         try:
             p.wait(timeout=20)
         except subprocess.TimeoutExpired:
-            p.kill()
+            _kill_all()
             p.wait(timeout=20)
         p.stdout.close()
         drain.join(5)

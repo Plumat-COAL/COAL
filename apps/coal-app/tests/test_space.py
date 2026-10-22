@@ -32,7 +32,7 @@ class TestSpace(unittest.TestCase):
             # the copied engine works on its own (as the Space's subprocess will run it)
             env = dict(os.environ, PYTHONPATH=os.path.join(t, "src"))
             r = subprocess.run([sys.executable, "-m", "coal", "--version"], capture_output=True, text=True,
-                               timeout=60, env=env, cwd=t)
+                               timeout=60, env=env, cwd=t, stdin=subprocess.DEVNULL)
             self.assertEqual(r.returncode, 0, r.stderr)
 
 

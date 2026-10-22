@@ -19,7 +19,8 @@ def _tmpdir(test):
 
 
 def coal(*args):
-    return subprocess.run([sys.executable, "-m", "coal", *args], capture_output=True, text=True, timeout=120)
+    return subprocess.run([sys.executable, "-m", "coal", *args], capture_output=True, text=True, timeout=120,
+                          stdin=subprocess.DEVNULL)
 
 
 class TestViewer(unittest.TestCase):
