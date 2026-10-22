@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Repository tidied for outside users:** a short README with a section on using COAL in pipelines; the detailed
+  documentation is in `docs/`. Hackathon logs and pitch material are removed (kept on the `hackathon-archive` tag),
+  review-round markers are gone from comments, and engine test modules are named after what they test. No change to
+  COAL's behaviour or output.
+
 ## 0.4.2
 
 - **COAL in Claude Desktop, from the installer:** the Windows installer's last page has **Connect COAL to Claude
