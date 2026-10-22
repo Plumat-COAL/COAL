@@ -48,6 +48,9 @@ not every difference is a silent one. Details and evidence in `tests/README.md`.
   (and `-nomismatch` removes the column) or places the gene elsewhere in the DNA, even in another reading frame.
 - Protein rows of different lengths are an error (`protein alignment rows have different lengths`); PAL2NAL silently
   pads or truncates.
+- A protein file whose first line is neither `>` nor `CLUSTAL` (a CLUSTAL alignment without its header line, or
+  with the header indented) is an error (`sequence data before the first '>' header ... a CLUSTAL file must start
+  with 'CLUSTAL'`); PAL2NAL treats any such file as CLUSTAL and proceeds. Gblocks-format input is not supported.
 - Input that PAL2NAL misreads is read correctly: a protein FASTA starting with a blank line (PAL2NAL takes it for
   CLUSTAL and fails), a UTF-8 BOM (PAL2NAL fails), `> id` with a space after `>` (PAL2NAL finds no protein
   sequences: "number of input seqs differ (aa: 0 ...)", no output).
