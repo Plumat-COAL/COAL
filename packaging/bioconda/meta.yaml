@@ -1,0 +1,86 @@
+{% set name = "coal-align" %}
+{% set version = "0.4.2" %}
+# sha256 of https://github.com/Plumat-COAL/COAL/archive/refs/tags/v0.4.2.tar.gz (computed 2026-10-22).
+# NOTE: the v0.4.2 tag still has the old repository layout (root package `coal`, app included, no CMake install
+# rules). This recipe is written for the first release AFTER 0.4.2 (root package `coal-align`, engine only, app in
+# apps/coal-app). Before submitting, bump `version` to that release and recompute the sha256 (packaging/bioconda/README.md).
+{% set sha256 = "cea4dea5455f0305a88447612eea414d18084965d00ec8b90d606504d7a62755" %}
+
+package:
+  name: {{ name }}
+  version: {{ version }}
+
+source:
+  # The repository tarball, not the PyPI sdist: the C++ engine (cpp/, CMakeLists.txt) is built in build.sh.
+  url: https://github.com/plumat-coal/COAL/archive/refs/tags/v{{ version }}.tar.gz
+  sha256: {{ sha256 }}
+
+build:
+  number: 0
+  # Not noarch: the package ships the compiled coal-cpp binary next to the pure-Python package.
+  # Linux and macOS only; Bioconda does not build Windows (the Windows app is distributed from GitHub Releases).
+  skip: True  # [win]
+  run_exports:
+    - {{ pin_subpackage(name, max_pin="x.x") }}
+
+requirements:
+  build:
+    - {{ compiler('cxx') }}
+    - cmake
+    - make
+  host:
+    - python >=3.10
+    - pip
+    - setuptools >=69.3
+  run:
+    - python >=3.10
+
+test:
+  files:
+    - test_protein.aln.fasta
+    - test_dna.fasta
+    - test_dispatch.sh
+  commands:
+    # coal hands large inputs to coal-cpp only when both are the same version
+    - coal --version | grep -qx "coal {{ version }}"
+    - coal-cpp --version | grep -qx "coal {{ version }} (C++)"
+    - coal --help
+    - pal2nal | grep -q "pal2nal pep.aln nuc.fasta"
+    - pal2nal -h | grep -q "PAL2NAL"
+    - python -c "import coal, coal_compat; print(coal.__version__)"
+    # The same alignment from both engines, byte for byte (COAL_ENGINE=cpp forces coal-cpp even for small inputs).
+    - COAL_ENGINE=python coal test_protein.aln.fasta test_dna.fasta > py.fasta
+    - COAL_ENGINE=cpp coal test_protein.aln.fasta test_dna.fasta > cpp.fasta
+    - cmp py.fasta cpp.fasta
+    - grep -c "^>" py.fasta | grep -qx 8
+    - coal-cpp test_protein.aln.fasta test_dna.fasta -output paml | head -1 | grep -q "8 *[0-9]"
+    - pal2nal test_protein.aln.fasta test_dna.fasta -output fasta | cmp - py.fasta
+    # Automatic dispatch: a >= 1 MB input must reach coal-cpp (found on PATH, no COAL_CPP needed).
+    # test_dispatch.sh builds such an input by repeating the fixture under new IDs.
+    - bash test_dispatch.sh
+
+about:
+  home: https://github.com/plumat-coal/COAL
+  license: MIT
+  license_family: MIT
+  license_file: LICENSE
+  summary: Fast codon alignment from a protein alignment and coding DNA (PAL2NAL alternative), with a C++ engine for large inputs
+  description: |
+    COAL builds a codon (nucleotide) alignment from a protein multiple sequence alignment and the unaligned coding
+    DNA of the same genes, for dN/dS analyses (PAML codeml, HyPhy) and ortholog pipelines (OrthologR, DIAMOND
+    workflows). It reproduces PAL2NAL v14's output byte for byte (documented differences aside) and is much faster.
+    This package installs the Python engine (`coal`, `import coal`), the PAL2NAL drop-in command `pal2nal`, and the
+    C++ engine `coal-cpp`; `coal` hands inputs of 1 MB or more to `coal-cpp` automatically.
+  dev_url: https://github.com/plumat-coal/COAL
+  doc_url: https://plumat-coal.github.io/COAL/
+
+extra:
+  identifiers:
+    - doi:TODO  # Zenodo / paper DOI once there is one (see CITATION.cff)
+  recipe-maintainers:
+    - TODO-github-handle  # the GitHub user(s) who will answer BiocondaBot and review bumps
+  notes: |
+    Both engines are installed. `coal` uses the Python engine for small inputs and `coal-cpp` (same output) for
+    inputs of 1 MB or more; `COAL_ENGINE=python|cpp` forces one. `pal2nal` here is COAL's drop-in replacement
+    for PAL2NAL's command line; the original Perl script is `pal2nal.pl` from the separate `pal2nal` package, so the
+    two packages can be installed side by side.
