@@ -32,6 +32,11 @@
   and when an engine is asked to resume the other one's run it says so instead of blaming the inputs: `out.fa was
   interrupted by the Python engine (coal-python), which must resume it: run again with COAL_ENGINE=python, or start
   a new run without --resume`.
+- **`-o /dev/fd/1` and `-o /dev/stdout` work when stdout is a pipe** (robustness review): both engines resolved
+  the path to `pipe:[N]` and failed with `cannot write /dev/fd/1: No such file or directory`. An existing target
+  that is not a regular file is now written through before any path resolution.
+- **`--json | head` is a silent exit 141** (robustness review) in both engines (the Python engine printed a
+  traceback and exited 1, `coal-cpp` exited 0), also for `--batch ... --json`.
 - **Less memory with many workers:** COAL's own processes now limit numpy's BLAS thread pool to one thread
   (`OPENBLAS_NUM_THREADS`, `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, unless already set). COAL uses no BLAS, but every
   worker that imported numpy started a pool sized to the machine. On a 20-thread Windows machine each process that

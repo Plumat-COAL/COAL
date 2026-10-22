@@ -1568,6 +1568,17 @@ int main(int argc, char** argv) {
             if (!rc) rc = 1;
         }
     }
-    if (o.json) std::cout << json_dump(rec.to_dict(), 1) << '\n' << std::flush;
+    if (o.json) {
+        std::string text = json_dump(rec.to_dict(), 1) + "\n";
+        try {
+            write_stdout(text.data(), text.size());
+            flush_stdout();
+        } catch (const BrokenPipe&) {  // `--json | head`: silent exit 141, as for the alignment
+            return 141;
+        } catch (const std::exception& e) {
+            std::cerr << "coal: error: cannot write the report to standard output: " << e.what() << '\n';
+            return rc ? rc : 1;
+        }
+    }
     return rc;
 }

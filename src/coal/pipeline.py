@@ -698,6 +698,15 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                     raise CoalError(f"{out_path}: symbolic link loop; cannot write the output there",
                                     code="file_error") from None
         real_out = os.path.realpath(out_path) if out_path else None
+        # An existing non-regular target (a FIFO, /dev/stdout, /dev/fd/1, a device) is written through as it is,
+        # before any path resolution: realpath of /dev/fd/1 on a pipe is "pipe:[N]", which no folder holds.
+        if out_path and not os.path.isdir(out_path):
+            try:
+                import stat as _stat
+                if not _stat.S_ISREG(os.stat(out_path).st_mode):
+                    real_out = out_path
+            except OSError:
+                pass
         # -o naming a folder or an input file is refused before any work.
         if real_out and os.path.isdir(real_out):
             raise CoalError(f"cannot write {out_path}: it is a folder, not a file (give a file name with -o)",

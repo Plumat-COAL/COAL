@@ -227,5 +227,9 @@ def main(ap: argparse.ArgumentParser, args: argparse.Namespace, argv: list[str])
                 print(f"coal: error: could not write the report {args.report}: {why}", file=sys.stderr)
                 rc = 1
         if args.json:
-            print(json.dumps(report, indent=1))
+            try:
+                print(json.dumps(report, indent=1), flush=True)
+            except BrokenPipeError:  # `--batch ... --json | head`: silent exit 141
+                from .cli import closed_stdout_exit
+                return closed_stdout_exit()
     return rc

@@ -472,5 +472,61 @@ class TestCheckpointCorruption(unittest.TestCase):
         self.assertIn(b"interrupted by the C++ engine (coal-cpp), which must resume it", r.stderr)
 
 
+# ---------------------------------------------------------------- 8. -o /dev/fd/1, 9. --json | head
+@unittest.skipUnless(POSIX and os.path.exists("/dev/fd/1"), "needs /dev/fd")
+class TestOutputToStdoutDevice(EngineCase):
+    def test_dev_fd_1_into_a_pipe(self):
+        for name, cmd in engines():
+            for path in ("/dev/fd/1", "/dev/stdout"):
+                with self.subTest(engine=name, path=path):
+                    # stdout is a pipe here (capture_output): its real path is "pipe:[N]", which no folder holds
+                    r = self.run_engine(cmd, ["p.fa", "n.fa", "-o", path])
+                    self.assertEqual((r.returncode, r.stderr), (0, b""), r.stderr)
+                    self.assertEqual(r.stdout, EXPECTED.encode())
+                    self.assertEqual(self.leftovers(), [])
+
+    def test_dev_stdout_resume_is_a_notice(self):
+        rc, out, err = self.both(["p.fa", "n.fa", "-o", "/dev/stdout", "--resume"])
+        self.assertEqual((rc, out), (0, EXPECTED.encode()))
+        self.assertEqual(err, b"coal: notice: /dev/stdout cannot be resumed (the output is not a regular file); "
+                              b"starting a normal run\n")
+
+
+@unittest.skipIf(WINDOWS, "POSIX pipes")
+class TestJsonIntoClosedPipe(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._td = tempfile.TemporaryDirectory(prefix="coal_jsonpipe_")
+        cls.d = Path(cls._td.name)
+        sys.path.insert(0, str(ROOT / "benchmarks"))
+        from gen_data import generate
+        generate(20000, 15, cls.d, seed=5)  # a report larger than a pipe buffer (20,000 IDs)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._td.cleanup()
+
+    def closed_pipe(self, cmd):
+        env = dict(os.environ, PYTHONPATH=str(SRC), COAL_ENGINE="python")
+        p = subprocess.Popen(cmd, cwd=self.d, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE)
+        p.stdout.read(1)
+        p.stdout.close()  # like `| head`
+        _, err = p.communicate(timeout=TIMEOUT)
+        return p.returncode, err
+
+    def test_json_report_into_head(self):
+        for name, cmd in engines():
+            with self.subTest(engine=name):
+                rc, err = self.closed_pipe([*cmd, "pep.fasta", "nuc.fasta", "-o", "o.fa", "--json"])
+                self.assertEqual((rc, err), (141, b""))
+                self.assertTrue((self.d / "o.fa").exists())
+
+    def test_batch_json_report_into_head(self):
+        (self.d / "jobs.txt").write_text("pep.fasta nuc.fasta -o o1.fa\npep.fasta nuc.fasta -o o2.fa\n")
+        rc, err = self.closed_pipe([*PY_CMD, "--batch", "jobs.txt", "--json", "-q"])
+        self.assertEqual((rc, err), (141, b""))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -239,8 +239,15 @@ OutTarget resolve_output(const std::string& out) {
         throw CoalError(out + ": symbolic link loop; cannot write the output there", "file_error");
 #endif
     OutTarget t;
-    t.real = real_path(out);
     std::error_code ec;
+    // An existing non-regular target (a FIFO, /dev/stdout, /dev/fd/1, a device) is written through as it is, before
+    // any path resolution: the real path of /dev/fd/1 on a pipe is "pipe:[N]", which no folder holds
+    if (fs::exists(out, ec) && !fs::is_directory(out, ec) && !fs::is_regular_file(out, ec)) {
+        t.real = out;
+        t.direct = true;
+        return t;
+    }
+    t.real = real_path(out);
     // -o naming a folder is refused here, before any work
     if (fs::is_directory(t.real, ec))
         throw CoalError("cannot write " + out + ": it is a folder, not a file (give a file name with -o)", "file_error");
