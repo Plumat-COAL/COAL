@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **`-` reads standard input** (`zcat nuc.fa.gz | coal pep.aln -`), for the protein alignment or one DNA file, in
+  `coal`, `coal-cpp` and the `pal2nal` drop-in, also on Windows (no `/dev/stdin` needed). The data is read as bytes
+  into a temporary file, as for other pipes, so the output is byte-identical to giving the file's path; messages name
+  it `standard input`; a second `-` is a usage error. The run report records `"path": "-"` with the sha256 of the data
+  read (the report of a run reading `/dev/stdin` or another pipe now hashes the data too, in both engines, instead of
+  the Python engine's hash of an empty re-read).
 - **Repository tidied for outside users:** a short README with a section on using COAL in pipelines; the detailed
   documentation is in `docs/`. Hackathon logs and pitch material are removed (kept on the `hackathon-archive` tag),
   review-round markers are gone from comments, and engine test modules are named after what they test. No change to
