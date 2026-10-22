@@ -223,12 +223,6 @@ class TestSiteFiles(unittest.TestCase):
         for f in SITE_FILES + ("README.md",):
             self.assertTrue(os.path.isfile(os.path.join(SITE, f)), f"site/{f} is missing")
 
-    def test_explainer_has_one_copy(self):
-        # CHANGED(IMP-M-4): was a check that pitch/explainer.html and its site/ copy were identical; now there is one
-        # file, site/explainer.html (what Pages deploys and tests_app/test_explainer.py tests)
-        self.assertFalse(os.path.exists(os.path.join(ROOT, "pitch", "explainer.html")),
-                         "pitch/explainer.html is back: keep the one copy in site/")
-
     def test_no_external_urls(self):
         """Only links to github.com/plumat-coal/COAL; nothing else may be referenced (no CDNs, fonts, trackers)."""
         for path in site_text_files():

@@ -24,14 +24,6 @@ def _read(rel):
         return re.sub(r"\s+", " ", fh.read())  # line breaks don't matter
 
 
-def _lines(pattern):
-    total = 0
-    for p in glob.glob(os.path.join(ROOT, pattern)):
-        with open(p, encoding="utf-8") as fh:
-            total += sum(1 for _ in fh)
-    return total
-
-
 class TestDocsNumbers(unittest.TestCase):
     longMessage = False  # the message says what is missing; do not dump whole documents
     @classmethod
@@ -44,15 +36,6 @@ class TestDocsNumbers(unittest.TestCase):
         text = _read(rel)
         for ph in phrases:
             self.assertIn(ph, text, f"{rel} should say: {ph!r} (harness: {self.line})")
-
-    def test_pitch_and_qa(self):
-        c, n = self.c, self.n
-        byte, warn, both = c["stdout byte-identical"], c["warnings identical"], c["both fail"]
-        other = c["deliberate error"] + c["deliberate differs"] + c.get("deliberate nogap_code", 0)  # FZ-5
-        for rel in ("pitch/PITCH.md", "pitch/QA.md"):
-            self.expect(rel, f"{n} checks on {self.ncases} hand-made inputs", f"{byte} compare",
-                        f"{warn} of those also compare the warnings", f"{both} check that COAL rejects",
-                        f"{other} are documented, deliberate differences")
 
     def test_skill(self):
         self.expect(".claude/skills/coal/SKILL.md", f"all {self.c['stdout byte-identical']} byte-for-byte comparisons")
@@ -113,7 +96,7 @@ class TestDocsNumbers(unittest.TestCase):
                          + c["deliberate nogap_code"], self.n, "the harness's own breakdown must add up")
         self.assertEqual(f["identical"] + f["both"] + f["deliberate"], f["comparisons"])
         self.assertEqual(tuple(map(sum, zip(*f["rows"].values()))), (f["identical"], f["both"], f["deliberate"]))
-        for rel in ("tests/README.md", "pitch/PITCH.md", "pitch/QA.md", ".claude/skills/coal/SKILL.md"):
+        for rel in ("tests/README.md", ".claude/skills/coal/SKILL.md"):
             self.expect(rel, self.claim())
         self.expect("README.md", "COAL's output is identical to PAL2NAL v14's except for a short list of documented, "
                                  "deliberate differences", "tests/README.md#test-numbers")
@@ -123,7 +106,7 @@ class TestDocsNumbers(unittest.TestCase):
         for fmt, (i, b, d) in f["rows"].items():
             self.expect("tests/README.md", f"| {fmt} | {f['cases']:,} | {i:,} | {b:,} | {d:,} | 0 |")
         # CHANGED(WEB-13): every page of the site (was site/index.html only)
-        for rel in ("README.md", "tests/README.md", "pitch/PITCH.md", "pitch/QA.md", ".claude/skills/coal/SKILL.md",
+        for rel in ("README.md", "tests/README.md", ".claude/skills/coal/SKILL.md",
                     "src/coal_compat/cli.py") + SITE_PAGES:
             text = _read(rel)
             self.assertNotIn("on well-formed input", text, f"{rel}: the well-formed claim is false (FIN-C3)")
@@ -157,25 +140,12 @@ class TestDocsNumbers(unittest.TestCase):
             nums[key] = hits[0]
         self.assertEqual(nums["byte"] + nums["both"] + nums["delib"], nums["total"], f"site numbers: {nums}")
         self.assertEqual(nums["total"], self.n)
-        for rel in ("README.md", "pitch/PITCH.md", "pitch/QA.md", ".claude/skills/coal/SKILL.md") + SITE_PAGES:
+        for rel in ("README.md", ".claude/skills/coal/SKILL.md") + SITE_PAGES:
             self.assertNotIn("29 checks are deliberate", _read(rel))
 
     def test_tests_readme_quotes_the_printed_line(self):
         self.expect("tests/README.md", self.line)
 
-    def test_qa_line_and_test_counts(self):
-        text = _read("pitch/QA.md")
-        m = re.search(r"about ([\d,]+) lines of dependency-free Python in the engine and ([\d,]+) in the app", text)
-        self.assertIsNotNone(m, "QA.md should state the engine and app line counts")
-        for said, actual in ((m.group(1), _lines("src/coal/*.py")), (m.group(2), _lines("src/coal_app/*.py"))):
-            said = int(said.replace(",", ""))
-            self.assertLess(abs(said - actual), 0.1 * actual, f"QA.md says {said} lines, the code has {actual}")
-        m = re.search(r"more than ([\d,]+) app tests", text)
-        self.assertIsNotNone(m, "QA.md should say 'more than N app tests'")
-        here = os.path.join(ROOT, "tests_app")
-        actual = unittest.TestLoader().discover(here, top_level_dir=here).countTestCases()
-        said = int(m.group(1).replace(",", ""))
-        self.assertTrue(0.8 * actual <= said < actual, f"QA.md says more than {said} app tests; there are {actual}")
 
 
 if __name__ == "__main__":

@@ -304,7 +304,7 @@ def _nw_best(dp, s, t, go=11, ge=1):
 
 
 class TestFinding18Encodings(unittest.TestCase):
-    FILES = ["demo/diamond_pipeline.py", "demo/race.py", "demo/make_mcp_demo.py", "tests_app/diamond_stub.py",
+    FILES = ["demo/diamond_pipeline.py", "demo/make_mcp_demo.py", "tests_app/diamond_stub.py",
              "src/coal_app/core.py", "src/coal_app/viewer.py", "src/coal_app/tools.py", "src/coal_app/ui.py",
              "src/coal_compat/cli.py", "space/build_space.py", "examples/make_examples.py"]
 
@@ -551,7 +551,7 @@ class TestFinding15SampleReport(unittest.TestCase):
 
 class TestFinding17DemoWording(unittest.TestCase):
     def test_location_is_attributed_to_the_app_estimate(self):
-        for rel in ("demo/mcp_demo.md", "demo/make_mcp_demo.py", "pitch/PITCH.md"):
+        for rel in ("demo/mcp_demo.md", "demo/make_mcp_demo.py"):
             with open(os.path.join(ROOT, rel), encoding="utf-8") as fh:
                 text = fh.read()
             self.assertNotIn("says *where*: a missing base", text, rel)
@@ -647,12 +647,6 @@ class TestC2CompatClaims(unittest.TestCase):
         from coal_compat import cli
         self.assertEqual(cli.translate(["p", "n", "-output", "fasta", "-nostderr"]),
                          ["-output", "fasta", "-q", "--", "p", "n"])  # DEC-4
-
-    def test_qa_says_which_pipelines_can_switch(self):
-        with open(os.path.join(ROOT, "pitch", "QA.md"), encoding="utf-8") as fh:
-            qa = " ".join(fh.read().split())
-        self.assertNotIn("a pipeline can switch without being rewritten", qa)
-        self.assertIn("an unchanged PAL2NAL command line works", qa)  # DEC-4: was "-output fasta"
 
 
 class TestC10C11Skill(unittest.TestCase):
