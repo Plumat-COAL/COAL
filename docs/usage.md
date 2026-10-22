@@ -8,7 +8,10 @@
   `<(...)` are, so line ends (CRLF, CR) and a UTF-8 BOM are handled exactly as in a file, and the output is
   byte-identical to giving the file's path. Messages name it `standard input` (e.g. `standard input:3: empty FASTA
   header ...`). Only one `-` per command line (two is a usage error, exit 2). The run report records `"path": "-"`
-  and the sha256 of the data that was read.
+  and the sha256 of the data that was read. A character or block device as an input (`/dev/zero`, a disk, or
+  standard input redirected from one) is refused before anything is read (`coal: error: cannot read /dev/zero: it
+  is a device, not a file`, exit 1): copying it to the temporary file would never end. A terminal on standard input
+  is read until EOF (Ctrl-D) as before, and `/dev/null` (`</dev/null`) is an empty input as before.
 - **Output:** a codon alignment, using the protein-alignment IDs, in any of PAL2NAL v14's formats, as PAL2NAL writes
   them (byte for byte, apart from the documented differences): `-output fasta` (COAL's default; 60 columns per line),
   `clustal` (PAL2NAL's default), `paml` (codeml's input) or `codon` (amino acids above their codons; not combinable

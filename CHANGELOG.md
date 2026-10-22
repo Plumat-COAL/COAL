@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Device inputs are refused** (robustness review): `coal /dev/zero nuc.fa` or `coal - nuc.fa </dev/zero` used to
+  copy the device to a temporary file without end, filling the disk silently. Both engines now stop before reading
+  with `coal: error: cannot read /dev/zero: it is a device, not a file` (exit 1; `standard input` for `-`). A
+  terminal on standard input and `/dev/null` behave as before; pipes, FIFOs and `<(...)` are unchanged.
 - **Less memory with many workers:** COAL's own processes now limit numpy's BLAS thread pool to one thread
   (`OPENBLAS_NUM_THREADS`, `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, unless already set). COAL uses no BLAS, but every
   worker that imported numpy started a pool sized to the machine. On a 20-thread Windows machine each process that

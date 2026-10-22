@@ -92,6 +92,24 @@ std::string os_error(int err, const std::string& path) {
     return "[Errno " + std::to_string(err) + "] " + std::strerror(err) + ": " + py_repr(path);
 }
 
+// A character or block device as an input (`coal /dev/zero n.fa`, `coal - n.fa </dev/urandom`) would be copied to a
+// temp file without end, filling the disk: refused before anything is read (pipeline.py _refuse_device). A terminal
+// on standard input is read until EOF as before, and the null device is still an empty input.
+static void refuse_device(int fd, const std::string& name) {
+#ifndef _WIN32
+    struct stat st;
+    if (fd < 0 || ::fstat(fd, &st) != 0) return;
+    if (!S_ISCHR(st.st_mode) && !S_ISBLK(st.st_mode)) return;
+    if (::isatty(fd)) return;
+    struct stat null_st;
+    if (S_ISCHR(st.st_mode) && ::stat("/dev/null", &null_st) == 0 && null_st.st_rdev == st.st_rdev) return;
+    throw InputError("cannot read " + name + ": it is a device, not a file", "file_error");
+#else
+    (void)fd;
+    (void)name;
+#endif
+}
+
 // `-`: standard input copied, as bytes, to a temp file (pipeline.py _spool_stdin). The same mechanism as a pipe or
 // /dev/stdin, so CRLF and BOM handling are those of file input; also on Windows (no /dev/stdin; binary mode).
 static std::string spool_stdin(std::vector<std::pair<std::string, std::string>>& spooled) {
@@ -101,6 +119,7 @@ static std::string spool_stdin(std::vector<std::pair<std::string, std::string>>&
     _setmode(_fileno(stdin), _O_BINARY);
 #else
     if (::fcntl(0, F_GETFD) == -1) throw InputError(closed, "file_error");
+    refuse_device(0, STDIN_NAME);
 #endif
     std::string tmp = (fs::temp_directory_path() / (".coal_in_" + unique_name() + "_stdin")).string();
     register_temp(tmp);
@@ -149,6 +168,20 @@ std::vector<std::string> spool_inputs(const std::vector<std::string>& args,
         }
         // "cannot open '<path>': <reason>"
         if (fs::is_directory(a, ec)) throw InputError(open_error(a), "file_error");
+#ifndef _WIN32
+        {
+            int fd = ::open(a.c_str(), O_RDONLY | O_NOCTTY);
+            if (fd >= 0) {
+                try {
+                    refuse_device(fd, a);
+                } catch (...) {
+                    ::close(fd);
+                    throw;
+                }
+                ::close(fd);
+            }
+        }
+#endif
         std::ifstream src(a, std::ios::binary);
         if (!src) throw InputError(open_error(a), "file_error");
         std::string base = fs::path(a).filename().string();

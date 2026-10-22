@@ -357,6 +357,26 @@ def _write_block_output(out, fmt, ids, stage, slices, alilen, rows, aa_widths, m
 
 STDIN = "-"                 # the input argument that means standard input
 STDIN_NAME = "standard input"  # how messages name it
+DEVICE_ERROR = "cannot read {}: it is a device, not a file"  # the same wording in coal-cpp (sysio.cpp)
+
+
+def _refuse_device(fd: int, name: str) -> None:
+    """A character or block device as an input (`coal /dev/zero n.fa`, `coal - n.fa </dev/urandom`) would be copied
+    to a temp file without end, filling the disk: refused before anything is read. A terminal on standard input is
+    read until EOF as before, and the null device (`</dev/null`, `/dev/null` as a path) is still an empty input."""
+    import stat
+    try:
+        st = os.fstat(fd)
+    except OSError:
+        return
+    if not (stat.S_ISCHR(st.st_mode) or stat.S_ISBLK(st.st_mode)):
+        return
+    try:
+        if os.isatty(fd) or (stat.S_ISCHR(st.st_mode) and st.st_rdev == os.stat(os.devnull).st_rdev):
+            return
+    except OSError:
+        pass
+    raise CoalError(DEVICE_ERROR.format(name), code="file_error")
 
 
 def _spool_stdin(spooled: list) -> str:
@@ -371,6 +391,12 @@ def _spool_stdin(spooled: list) -> str:
             msvcrt.setmode(src.fileno(), os.O_BINARY)
         except (OSError, ValueError, AttributeError, ImportError):
             pass
+    try:
+        fd = src.fileno()
+    except (OSError, ValueError, AttributeError):
+        fd = None
+    if fd is not None:
+        _refuse_device(fd, STDIN_NAME)
     with tempfile.NamedTemporaryFile("wb", delete=False, prefix=".coal_in_", suffix="_stdin") as dst:
         spooled.append(dst.name)
         while True:
@@ -393,10 +419,11 @@ def _spool(path, spooled: list) -> str:
     if os.path.isfile(path):
         return path
     base = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.basename(str(path)))[-40:]
-    with open(path, "rb") as src, tempfile.NamedTemporaryFile(
-            "wb", delete=False, prefix=".coal_in_", suffix="_" + base) as dst:
-        spooled.append(dst.name)
-        shutil.copyfileobj(src, dst, 1 << 20)
+    with open(path, "rb") as src:
+        _refuse_device(src.fileno(), str(path))
+        with tempfile.NamedTemporaryFile("wb", delete=False, prefix=".coal_in_", suffix="_" + base) as dst:
+            spooled.append(dst.name)
+            shutil.copyfileobj(src, dst, 1 << 20)
     return dst.name
 
 
