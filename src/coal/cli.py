@@ -16,7 +16,7 @@ import signal
 import sys
 
 from . import __version__
-from .core import CoalError
+from .core import CoalError, limit_blas_threads
 from .pipeline import FORMATS, STDIN_TWICE, run, stdin_count
 from .report import RunReport
 from .seqio import InputFormatError
@@ -133,6 +133,7 @@ def main(argv=None) -> int:
     if stdin_count([args.pep_aln, *args.nuc_fasta]) > 1:
         ap.error(STDIN_TWICE)
     if command_line:
+        limit_blas_threads()  # this process and its workers are COAL's own
         rc = _maybe_cpp(ap, args, argv)
         if rc is not None:
             return rc
