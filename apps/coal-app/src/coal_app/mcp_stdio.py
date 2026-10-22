@@ -61,10 +61,13 @@ def build_server():
 def _build_fastmcp():
     """The same server on mcp 1.x (FastMCP). Gradio 5.49.1's `mcp` extra pins mcp==1.10.1, so that is the mcp
     inside the Windows app, which runs this server for Claude Desktop (`COAL.exe -m coal_app --mcp`).
-    mcp 1.x has no server version field."""
+    FastMCP has no version parameter; it reports the mcp library's own version unless the low-level server's is
+    set, so that is set to COAL's. log_level: FastMCP's default INFO logs tens of kilobytes to stderr per session
+    (every request), which Claude Desktop keeps in its MCP log."""
     from mcp.server.fastmcp import FastMCP  # mcp 1.x
 
-    server = FastMCP(name="coal", instructions=INSTRUCTIONS)
+    server = FastMCP(name="coal", instructions=INSTRUCTIONS, log_level="WARNING")
+    server._mcp_server.version = server_version()  # serverInfo.version
     server.add_tool(_structured_codon_align(), name="codon_align")
     server.add_tool(tools.explain_report)
     return server
