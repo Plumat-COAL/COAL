@@ -566,6 +566,12 @@ def run(pep_path, nuc_paths, *args, **kw) -> int:
                 pass
 
 
+def _lower_reason(e: OSError) -> str:
+    """An OSError's reason in plain words, lower case as C's strerror has it ("no space left on device")."""
+    why = e.strerror or str(e)
+    return why[:1].lower() + why[1:]
+
+
 def _output_error(out_path, e: OSError) -> CoalError:
     """The error for an output (or its partial file) that cannot be created, naming the user's -o path (not COAL's
     hidden temp file) in plain words. ENOENT in a folder that exists (e.g. /proc) is not "folder ... does not
@@ -719,8 +725,9 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                                        "nomismatch": nomismatch, "blockonly": blockonly, "strict": strict,
                                        "keep_going": keep_going, "staged": two_pass},
                             [pep_path, *nuc_paths])
+            ck.name = out_path
             if resume:
-                state = ck.load_for_resume(ck.stage if two_pass else ck.partial)
+                state = ck.load_for_resume(ck.stage if two_pass else ck.partial, nseq)
                 if note:
                     if state:
                         note(f"resuming {out_path}: {state['completed']:,} of {nseq:,} sequences were already done"
@@ -772,8 +779,7 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                 drop, bad, skipped = set(state["drop"]), set(state["bad"]), state["skipped"]
                 skip_idx = set(state.get("skip_idx", ()))
                 if rec is not None:
-                    with open(ck.entries, encoding="utf-8") as fh:
-                        rec.restore(state["rec"], [json.loads(x) for x in fh], start)
+                    rec.restore(state["rec"], state["_entries"], start)
             else:
                 drop, bad, skipped, skip_idx = set(), set(), 0, set()
                 if not two_pass and out_format == "paml":
@@ -792,6 +798,7 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                 if hint:
                     note(hint)
             done = start
+            ck_saves = True
             prog = Progress(nseq) if progress and nseq > PROGRESS_MIN_SEQS else None
             last_ck = time.monotonic()
             results = _results(_batches(rows(), dna, pairing, start), jobs, init)
@@ -847,11 +854,19 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                 if nomismatch:
                     drop.update(c - 1 for c in mcols)
                 bad |= badt
-                if ck is not None and time.monotonic() - last_ck >= _ck.CHECKPOINT_EVERY and done < nseq:
-                    ck.save({"completed": done, "nseq": nseq, "sink_bytes": durable_size(sink),
-                             "entries_bytes": durable_size(entries_fh), "skipped": skipped,
-                             "skip_idx": sorted(skip_idx), "drop": sorted(drop), "bad": sorted(bad),
-                             "rec": rec.checkpoint_state() if rec is not None else None})
+                if ck is not None and ck_saves and time.monotonic() - last_ck >= _ck.CHECKPOINT_EVERY and done < nseq:
+                    try:
+                        ck.save({"completed": done, "nseq": nseq, "sink_bytes": durable_size(sink),
+                                 "entries_bytes": durable_size(entries_fh), "skipped": skipped,
+                                 "skip_idx": sorted(skip_idx), "drop": sorted(drop), "bad": sorted(bad),
+                                 "rec": rec.checkpoint_state() if rec is not None else None})
+                    except OSError as e:
+                        # A checkpoint that cannot be written (its path is a folder, disk full ...) does not end the
+                        # run: it only cannot be resumed. The same notice in coal-cpp.
+                        ck_saves = False
+                        if note:
+                            note(f"cannot write the checkpoint {ck.path}: {_lower_reason(e)}; the run cannot be "
+                                 f"resumed if it is interrupted")
                     last_ck = time.monotonic()
                     _test_pause(ck.count)
             if prog and prog.printed:

@@ -99,7 +99,15 @@ killed, so a pipeline reading COAL's output never waits on an orphaned worker.
 - `--resume` continues an interrupted `-o` run from `<out>.coal-checkpoint.json` (written at most every 2 s next to
   the real output file); the output is byte-identical to an uninterrupted run. If no checkpoint was written yet, an
   interrupted run leaves nothing behind. Not for piped inputs (`-`, `/dev/stdin`, FIFOs) or an output that is not a
-  regular file (COAL says so in a notice and runs normally).
+  regular file (COAL says so in a notice and runs normally). A checkpoint that cannot be read or is not consistent
+  (edited, truncated, a field out of range, its partial files missing or shorter than recorded) is never resumed
+  from: COAL says so in a notice (`found an unreadable checkpoint ...` / `... whose partial output is missing or
+  incomplete ...`) and starts a normal run; a checkpoint that cannot be written (its path is a folder, the disk is
+  full) is a notice too, and the run goes on without one. Each engine resumes only its own runs: `coal --resume`
+  picks the engine that wrote the checkpoint by itself (a notice says so when that is not the engine it would
+  otherwise use), and `coal-cpp` or `COAL_ENGINE=python` on the other engine's checkpoint is a clear error naming
+  the engine that must resume it (`out.fa was interrupted by the Python engine (coal-python), which must resume it:
+  run again with COAL_ENGINE=python, or start a new run without --resume`).
 
 ## Batch mode
 

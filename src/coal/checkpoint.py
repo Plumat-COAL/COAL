@@ -20,9 +20,34 @@ from . import __version__
 from .core import CoalError
 
 ENGINE = "coal-python"
+ENGINE_NAMES = ("coal-python", "coal-cpp")  # what the two engines write as "engine"
 CHECKPOINT_EVERY = float(os.environ.get("COAL_CHECKPOINT_EVERY", "2.0"))  # seconds (tests: 0)
 CHANGED = ("The input files or options changed since the interrupted run, so it can't be resumed safely. "
            "Start a new run without --resume.")
+ENGINE_WORDS = {"coal-python": ("Python", "python"), "coal-cpp": ("C++", "cpp")}
+
+
+def other_engine_message(out: str, engine: str) -> str:
+    """The error when a checkpoint was written by the other engine (the same text in coal-cpp)."""
+    word, env = ENGINE_WORDS[engine]
+    return (f"{out} was interrupted by the {word} engine ({engine}), which must resume it: run again with "
+            f"COAL_ENGINE={env}, or start a new run without --resume")
+
+
+def checkpoint_engine(out_path) -> str | None:
+    """Which engine wrote the checkpoint of an interrupted run to `out_path` ("coal-python" / "coal-cpp"), or None
+    (no checkpoint, or not one of ours). Read only, cheap: for the command line to pick that engine on --resume."""
+    import json
+    path = os.path.abspath(out_path) + ".coal-checkpoint.json"
+    try:
+        if os.path.getsize(path) > 50_000_000:
+            return None
+        with open(path, encoding="utf-8") as fh:
+            st = json.load(fh)
+    except Exception:  # noqa: BLE001 - unreadable, whatever the reason: the engine will say so
+        return None
+    eng = st.get("engine") if isinstance(st, dict) else None
+    return eng if eng in ENGINE_NAMES else None
 
 
 class Checkpoint:
@@ -38,6 +63,8 @@ class Checkpoint:
         self.inputs = inputs
         self.count = 0
         self.why = "no checkpoint"   # why load_for_resume() returned None
+        self.other_engine = None     # the engine named by a checkpoint this engine cannot resume (resume_mismatch)
+        self.name = out_path         # how messages name the output (the -o argument)
 
     def _signature(self):
         sig = []
@@ -46,30 +73,58 @@ class Checkpoint:
             sig.append({"path": os.path.abspath(p), "size": st.st_size, "mtime_ns": st.st_mtime_ns})
         return sig
 
-    def load_for_resume(self, sink_path: str) -> dict | None:
-        """The saved state if this run can resume, None if there is nothing to resume.
-        Raises CoalError(code="resume_mismatch") if inputs or options changed."""
+    def load_for_resume(self, sink_path: str, nseq: int | None = None) -> dict | None:
+        """The saved state if this run can resume, None if there is nothing to resume (self.why says why).
+        Raises CoalError(code="resume_mismatch") if inputs or options changed.
+        Every field is checked (types, ranges against `nseq` and the partial files' sizes, the entries file's
+        lines) and any problem counts as an unreadable checkpoint, so an edited or corrupted checkpoint can never
+        make a resumed run write a truncated or wrong output; the checked entries are returned as state["_entries"].
+        The C++ engine applies the same rules (main.cpp Checkpoint::load_for_resume)."""
         import json
         if not os.path.exists(self.path):
             self.why = "no checkpoint"
             return None
+        self.why = "an unreadable checkpoint"
         try:
             with open(self.path, encoding="utf-8") as fh:
                 st = json.load(fh)
-        except (OSError, ValueError):
-            self.why = "an unreadable checkpoint"
+        except Exception:  # noqa: BLE001 - OSError, ValueError, UnicodeDecodeError, RecursionError (deep nesting) ...
             return None
+        if not isinstance(st, dict):
+            return None
+        if st.get("engine") != ENGINE and st.get("engine") in ENGINE_NAMES:
+            # Each engine resumes only its own runs (their partial files differ): the error says which one must
+            # (the command line normally picks it by itself: dispatch.py checkpoint_engine)
+            self.other_engine = st["engine"]
+            raise CoalError(other_engine_message(self.name, st["engine"]), code="resume_mismatch")
         if (st.get("engine") != ENGINE or st.get("coal_version") != __version__
                 or st.get("options_hash") != self.options_hash or st.get("inputs") != self._signature()):
             raise CoalError(CHANGED, code="resume_mismatch")
+        if not _well_formed(st, nseq):
+            return None
         self.why = "a checkpoint whose partial output is missing or incomplete"
         try:
             if os.path.getsize(sink_path) < st["sink_bytes"]:
                 return None
-            if st.get("entries_bytes") and os.path.getsize(self.entries) < st["entries_bytes"]:
+            if os.path.getsize(self.entries) < st["entries_bytes"]:
                 return None
-        except (OSError, KeyError):
+            with open(self.entries, "rb") as fh:
+                lines = fh.read(st["entries_bytes"]).decode("utf-8").splitlines()
+        except (OSError, UnicodeDecodeError):
             return None
+        self.why = "an unreadable checkpoint"
+        entries = []
+        for line in lines:
+            if not line.strip():
+                continue
+            try:
+                e = json.loads(line)
+            except ValueError:
+                return None
+            if not isinstance(e, dict) or not _is_int(e.get("index")) or not 0 <= e["index"] < st["completed"]:
+                return None
+            entries.append(e)
+        st["_entries"] = entries
         return st
 
     def save(self, state: dict):
@@ -78,11 +133,18 @@ class Checkpoint:
         st = dict(state, engine=ENGINE, coal_version=__version__, options_hash=self.options_hash,
                   inputs=self._signature())
         tmp = self.path + ".tmp"
-        with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
-            json.dump(st, fh)
-            fh.flush()
-            os.fsync(fh.fileno())
-        os.replace(tmp, self.path)
+        try:
+            with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
+                json.dump(st, fh)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp, self.path)
+        except OSError:  # the caller reports it; no temp file is left behind
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
 
     def remove(self, *, keep_partial: bool = False):
         for p in (self.path, self.path + ".tmp", self.entries, self.stage) + (() if keep_partial else (self.partial,)):
@@ -90,6 +152,37 @@ class Checkpoint:
                 os.unlink(p)
             except OSError:
                 pass
+
+
+def _is_int(x) -> bool:
+    return isinstance(x, int) and not isinstance(x, bool)
+
+
+def _int_list(x, below: int | None = None) -> bool:
+    return isinstance(x, list) and all(_is_int(v) and v >= 0 and (below is None or v < below) for v in x)
+
+
+def _well_formed(st: dict, nseq: int | None) -> bool:
+    """Whether a checkpoint's fields have the types and ranges a run of this engine writes (nseq: the number of
+    sequences of this run; None skips that check)."""
+    for k in ("completed", "nseq", "sink_bytes", "entries_bytes", "skipped"):
+        if not _is_int(st.get(k)) or st[k] < 0:
+            return False
+    if nseq is not None and st["nseq"] != nseq:
+        return False
+    if st["completed"] > st["nseq"] or st["skipped"] > st["completed"]:
+        return False
+    if not (_int_list(st.get("skip_idx"), st["completed"]) and _int_list(st.get("drop")) and _int_list(st.get("bad"))):
+        return False
+    if len(st["skip_idx"]) != st["skipped"]:
+        return False
+    rec = st.get("rec")
+    if rec is not None:
+        if not isinstance(rec, dict) or not isinstance(rec.get("kinds"), str) or len(rec["kinds"]) != st["completed"]:
+            return False
+        if not (_int_list(rec.get("cols")) and _int_list(rec.get("real_cols"))):
+            return False
+    return True
 
 
 def open_append(path: str, resume_bytes: int | None):

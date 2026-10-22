@@ -19,6 +19,19 @@
   used to be swallowed inside the work) and **die with the main process** (`PR_SET_PDEATHSIG` on Linux, a parent
   watchdog everywhere), so a `kill -9` of `coal` no longer leaves workers holding its stdout open and a pipeline
   reading it waiting for EOF forever.
+- **Checkpoints are checked before `--resume` trusts them** (robustness review): an edited or corrupted
+  `<out>.coal-checkpoint.json` (`completed` beyond the input or negative, a string or float where an integer belongs,
+  a list at the top level, a missing key, a deleted entries file, a partial file shorter than recorded, a truncated
+  or deeply nested file, a folder at the checkpoint's path) made both engines write a truncated output with exit 0,
+  or crash with a traceback / raw C++ text. Both engines now check every field's type and range and the partial
+  files' sizes, treat any problem as the existing "unreadable checkpoint" notice and start a normal run; a
+  checkpoint that cannot be written (`cannot write the checkpoint ...: is a directory`) is a notice and the run
+  goes on without one; and `coal-cpp`'s JSON parser has a nesting limit (64) instead of overflowing the stack.
+- **A checkpoint written by the other engine** (robustness review): `coal --resume` now picks the engine that wrote
+  the checkpoint (so a `coal-cpp` installed or removed between the run and the resume does not get in the way),
+  and when an engine is asked to resume the other one's run it says so instead of blaming the inputs: `out.fa was
+  interrupted by the Python engine (coal-python), which must resume it: run again with COAL_ENGINE=python, or start
+  a new run without --resume`.
 - **Less memory with many workers:** COAL's own processes now limit numpy's BLAS thread pool to one thread
   (`OPENBLAS_NUM_THREADS`, `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, unless already set). COAL uses no BLAS, but every
   worker that imported numpy started a pool sized to the machine. On a 20-thread Windows machine each process that

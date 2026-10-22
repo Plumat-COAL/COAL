@@ -277,5 +277,200 @@ class TestWorkerProcesses(unittest.TestCase):
         p.stderr.close()
 
 
+# ---------------------------------------------------------------- 5 + 6 + 7. checkpoints
+def interrupt(cmd, cwd, after=2, extra_env=None):
+    """Run `cmd` with frequent checkpoints and stop it (SIGTERM) after the `after`-th one, leaving the checkpoint."""
+    import threading
+    env = {**os.environ, "PYTHONPATH": str(SRC), "COAL_ENGINE": "python", "COAL_BATCH_NT": "20000",
+           "COAL_CHECKPOINT_EVERY": "0", "COAL_TEST_HOOKS": "1", "COAL_TEST_PAUSE_AFTER_CHECKPOINT": str(after),
+           **(extra_env or {})}
+    p = subprocess.Popen(cmd, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.PIPE, text=True)
+    dog = threading.Timer(60, p.kill)
+    dog.start()
+    try:
+        for line in p.stderr:
+            if line.startswith("coal: test: paused"):
+                break
+        p.terminate()
+        p.wait(timeout=30)
+    finally:
+        dog.cancel()
+        p.stderr.close()
+
+
+UNREADABLE = b"coal: notice: found an unreadable checkpoint, so nothing can be resumed for out.fa; starting a normal run"
+INCOMPLETE = (b"coal: notice: found a checkpoint whose partial output is missing or incomplete, so nothing can be "
+              b"resumed for out.fa; starting a normal run")
+
+# edits of a valid checkpoint (a dict) that must make it "unreadable"
+CORRUPTIONS = {
+    "completed_huge": lambda st: st.update(completed=10 ** 9),
+    "completed_99999": lambda st: st.update(completed=99999),
+    "completed_negative": lambda st: st.update(completed=-5),
+    "completed_bool": lambda st: st.update(completed=True),
+    "completed_str": lambda st: st.update(completed="12"),
+    "top_level_list": lambda st: [st],
+    "sink_bytes_str": lambda st: st.update(sink_bytes="abc"),
+    "sink_bytes_float": lambda st: st.update(sink_bytes=1.5e300),
+    "sink_bytes_negative": lambda st: st.update(sink_bytes=-1),
+    "no_skip_idx": lambda st: st.pop("skip_idx"),
+    "skipped_wrong": lambda st: st.update(skipped=7),
+    "skip_idx_out_of_range": lambda st: st.update(skipped=1, skip_idx=[10 ** 6]),
+    "rec_int": lambda st: st.update(rec=5),
+    "rec_kinds_short": lambda st: st["rec"].update(kinds="o"),
+    "nseq_wrong": lambda st: st.update(nseq=4),
+    "drop_str": lambda st: st.update(drop=["x"]),
+}
+
+
+@unittest.skipIf(WINDOWS, "POSIX signals")
+class TestCheckpointCorruption(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._td = tempfile.TemporaryDirectory(prefix="coal_ckpt_")
+        cls.d = Path(cls._td.name)
+        sys.path.insert(0, str(ROOT / "benchmarks"))
+        from gen_data import generate
+        generate(3000, 15, cls.d, seed=5)
+        env = dict(os.environ, PYTHONPATH=str(SRC), COAL_ENGINE="python")
+        cls.ref = subprocess.run([*PY_CMD, "pep.fasta", "nuc.fasta"], cwd=cls.d, env=env, capture_output=True,
+                                 timeout=TIMEOUT).stdout
+        cls.snapshots = {}
+        for name, cmd in engines():
+            cls.clear()
+            interrupt([*cmd, "pep.fasta", "nuc.fasta", "-o", "out.fa"], cls.d)
+            cls.snapshots[name] = {f.name: f.read_bytes() for f in cls.d.iterdir() if f.name.startswith("out.fa")}
+            assert "out.fa.coal-checkpoint.json" in cls.snapshots[name], name
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._td.cleanup()
+
+    @classmethod
+    def clear(cls):
+        import shutil
+        for f in cls.d.iterdir():
+            if f.name.startswith("out.fa"):
+                shutil.rmtree(f) if f.is_dir() else f.unlink()
+
+    def restore(self, name):
+        self.clear()
+        for k, v in self.snapshots[name].items():
+            (self.d / k).write_bytes(v)
+        return self.d / "out.fa.coal-checkpoint.json"
+
+    def resume(self, cmd, env_extra=None):
+        env = {**os.environ, "PYTHONPATH": str(SRC), "COAL_ENGINE": "python", "COAL_BATCH_NT": "20000",
+               **(env_extra or {})}
+        return subprocess.run([*cmd, "pep.fasta", "nuc.fasta", "-o", "out.fa", "--resume"], cwd=self.d, env=env,
+                              stdin=subprocess.DEVNULL, capture_output=True, timeout=120)
+
+    def check_normal_run(self, r, notice):
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stderr.splitlines()[0], notice)
+        self.assertEqual((self.d / "out.fa").read_bytes(), self.ref)
+        self.assertEqual([f.name for f in self.d.iterdir() if f.name.startswith("out.fa.")], [])
+
+    def test_edited_checkpoints_start_a_normal_run(self):
+        for name, cmd in engines():
+            for case, edit in CORRUPTIONS.items():
+                with self.subTest(engine=name, case=case):
+                    ck = self.restore(name)
+                    st = json.loads(ck.read_text())
+                    new = edit(st)
+                    ck.write_text(json.dumps(st if new is None else new))
+                    self.check_normal_run(self.resume(cmd), UNREADABLE)
+
+    def test_deeply_nested_checkpoint(self):
+        for name, cmd in engines():
+            with self.subTest(engine=name):
+                ck = self.restore(name)
+                ck.write_text("[" * 100000 + "]" * 100000)
+                self.check_normal_run(self.resume(cmd), UNREADABLE)
+
+    def test_truncated_and_garbage_checkpoint(self):
+        for name, cmd in engines():
+            for case, data in (("truncated", None), ("garbage", b"\x00\xff{"), ("empty", b"")):
+                with self.subTest(engine=name, case=case):
+                    ck = self.restore(name)
+                    ck.write_bytes(ck.read_bytes()[:50] if data is None else data)
+                    self.check_normal_run(self.resume(cmd), UNREADABLE)
+
+    def test_missing_entries_file(self):
+        for name, cmd in engines():
+            with self.subTest(engine=name):
+                self.restore(name)
+                (self.d / "out.fa.coal-entries.jsonl").unlink()
+                self.check_normal_run(self.resume(cmd), INCOMPLETE)
+
+    def test_missing_partial_file(self):
+        for name, cmd in engines():
+            with self.subTest(engine=name):
+                self.restore(name)
+                (self.d / "out.fa.coal-partial").unlink()
+                self.check_normal_run(self.resume(cmd), INCOMPLETE)
+
+    def test_checkpoint_path_is_a_folder(self):
+        for name, cmd in engines():
+            with self.subTest(engine=name):
+                ck = self.restore(name)
+                ck.unlink()
+                ck.mkdir()
+                r = self.resume(cmd, {"COAL_CHECKPOINT_EVERY": "0"})
+                self.assertEqual(r.returncode, 0, r.stderr)
+                lines = r.stderr.splitlines()
+                self.assertEqual(lines[0], UNREADABLE)
+                self.assertEqual(lines[1], b"coal: notice: cannot write the checkpoint " + bytes(ck) +
+                                 b": is a directory; the run cannot be resumed if it is interrupted")
+                self.assertEqual(len(lines), 2, r.stderr)
+                self.assertEqual((self.d / "out.fa").read_bytes(), self.ref)
+                self.assertTrue(ck.is_dir())
+                self.assertEqual([f.name for f in self.d.iterdir() if f.name.startswith("out.fa.")],
+                                 ["out.fa.coal-checkpoint.json"])
+
+    def test_valid_checkpoint_still_resumes(self):
+        for name, cmd in engines():
+            with self.subTest(engine=name):
+                self.restore(name)
+                r = self.resume(cmd)
+                self.assertEqual(r.returncode, 0, r.stderr)
+                self.assertTrue(r.stderr.startswith(b"coal: notice: resuming out.fa: "), r.stderr)
+                self.assertEqual((self.d / "out.fa").read_bytes(), self.ref)
+
+    @unittest.skipIf(CPP is None, "coal-cpp not built (build/coal-cpp or COAL_CPP_BIN)")
+    def test_other_engines_checkpoint(self):
+        # the Python engine on a coal-cpp checkpoint, and coal-cpp on a Python one: a clear error, files kept
+        self.restore("cpp")
+        r = self.resume(PY_CMD)
+        self.assertEqual(r.returncode, 1)
+        self.assertEqual(r.stderr.splitlines()[0],
+                         b"coal: error: out.fa was interrupted by the C++ engine (coal-cpp), which must resume it: run "
+                         b"again with COAL_ENGINE=cpp, or start a new run without --resume")
+        self.assertTrue((self.d / "out.fa.coal-checkpoint.json").exists())
+        self.restore("python")
+        r = self.resume([str(CPP)])
+        self.assertEqual(r.returncode, 1)
+        self.assertEqual(r.stderr.splitlines()[0],
+                         b"coal: error: out.fa was interrupted by the Python engine (coal-python), which must resume "
+                         b"it: run again with COAL_ENGINE=python, or start a new run without --resume")
+        # the command line picks the engine that wrote the checkpoint (COAL_ENGINE unset = auto)
+        self.restore("cpp")
+        r = self.resume(PY_CMD, {"COAL_ENGINE": "", "COAL_CPP": str(CPP)})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stderr.splitlines()[0],
+                         b"coal: notice: out.fa was interrupted by the C++ engine (coal-cpp); resuming with it")
+        self.assertEqual((self.d / "out.fa").read_bytes(), self.ref)
+        self.restore("python")
+        r = self.resume(PY_CMD, {"COAL_ENGINE": "", "COAL_CPP": str(CPP)})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertTrue(r.stderr.startswith(b"coal: notice: resuming out.fa: "), r.stderr)
+        # a coal-cpp checkpoint but no coal-cpp any more: the Python engine says what to do
+        self.restore("cpp")
+        r = self.resume(PY_CMD, {"COAL_ENGINE": "", "COAL_CPP": str(self.d / "nonexistent")})
+        self.assertEqual(r.returncode, 1)
+        self.assertIn(b"interrupted by the C++ engine (coal-cpp), which must resume it", r.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

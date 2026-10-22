@@ -639,6 +639,8 @@ struct Checkpoint {
     std::vector<std::string> inputs;
     int count = 0;
     std::string why = "no checkpoint";  // why load_for_resume() returned false
+    std::string other_engine;           // the engine named by a checkpoint this engine cannot resume
+    std::string name;                   // how messages name the output (the -o argument)
 
     Checkpoint(const std::string& out, const std::string& canon, const std::vector<std::string>& in) : inputs(in) {
         std::string base = fs::absolute(fs::path(out)).string();
@@ -665,68 +667,138 @@ struct Checkpoint {
         return a;
     }
 
-    // true + state if this run can resume; false if there is nothing to resume.
+    // true + state if this run can resume; false if there is nothing to resume (`why` says why).
     // Throws CoalError(resume_mismatch) if inputs or options changed.
-    bool load_for_resume(Json& st, const std::vector<std::string>& needed) {
-        std::ifstream in(path, std::ios::binary);
-        if (!in) {
+    // Every field is checked (types, ranges against nseq and the partial files' sizes, the entries file's lines)
+    // and any problem counts as an unreadable checkpoint, so an edited or corrupted checkpoint can never make a
+    // resumed run write a truncated or wrong output (checkpoint.py load_for_resume / _well_formed).
+    bool load_for_resume(Json& st, const std::vector<std::string>& needed, long long nseq,
+                         std::vector<Json>& lines_out) {
+        std::error_code ec;
+        if (!fs::exists(path, ec)) {
             why = "no checkpoint";
             return false;
         }
-        std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        why = "an unreadable checkpoint";
+        std::string text;
         try {
+            std::ifstream in(path, std::ios::binary);
+            if (!in) return false;
+            text.assign((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            if (in.bad()) return false;  // e.g. the path is a folder (libstdc++ may throw instead)
             st = json_parse(text);
         } catch (...) {
-            why = "an unreadable checkpoint";
             return false;
         }
-        if (st.type != Json::Object) {
-            why = "an unreadable checkpoint";
-            return false;
-        }
+        if (st.type != Json::Object) return false;
         auto str = [&](const char* k) {
             const Json* v = st.get(k);
             return v ? v->as_str() : std::string();
         };
         const Json* ins = st.get("inputs");
         if (str("engine") != "coal-cpp" || str("coal_version") != VERSION || str("options_hash") != options_hash ||
-            !ins || json_dump(*ins) != json_dump(signature()))
+            !ins || json_dump(*ins) != json_dump(signature())) {
+            std::string e = str("engine");
+            if (e == "coal-python") {
+                // Each engine resumes only its own runs: the error says which one must (checkpoint.py
+                // other_engine_message; the Python command line picks that engine by itself)
+                other_engine = e;
+                throw CoalError(name + " was interrupted by the Python engine (coal-python), which must resume it: "
+                                "run again with COAL_ENGINE=python, or start a new run without --resume",
+                                "resume_mismatch");
+            }
             throw CoalError(CHANGED, "resume_mismatch");
+        }
+        auto is_int = [&](const Json* v) { return v && v->type == Json::Int && v->i >= 0; };
+        auto int_list = [&](const Json* v, long long below) {
+            if (!v || v->type != Json::Array) return false;
+            for (auto& x : v->a)
+                if (x.type != Json::Int || x.i < 0 || (below >= 0 && x.i >= below)) return false;
+            return true;
+        };
+        for (const char* k : {"completed", "nseq", "sink_bytes", "entries_bytes", "skipped"})
+            if (!is_int(st.get(k))) return false;
+        const long long completed = st.get("completed")->i, skipped = st.get("skipped")->i;
+        if (st.get("nseq")->i != nseq || completed > nseq || skipped > completed) return false;
+        if (!int_list(st.get("skip_idx"), completed) || !int_list(st.get("drop"), -1) || !int_list(st.get("bad"), -1))
+            return false;
+        if ((long long)st.get("skip_idx")->a.size() != skipped) return false;
+        if (const Json* rec = st.get("rec"); rec && rec->type != Json::Null) {
+            if (rec->type != Json::Object) return false;
+            const Json* kinds = rec->get("kinds");
+            if (!kinds || kinds->type != Json::String || (long long)kinds->s.size() != completed) return false;
+            if (!int_list(rec->get("cols"), -1) || !int_list(rec->get("real_cols"), -1)) return false;
+        }
         why = "a checkpoint whose partial output is missing or incomplete";
         static const char* keys[] = {"sink_bytes", "entries_bytes", "prot_bytes"};
         for (size_t i = 0; i < needed.size(); ++i) {
             if (needed[i].empty()) continue;
-            std::error_code ec;
             auto n = fs::file_size(needed[i], ec);
             const Json* v = st.get(keys[i]);
-            if (ec || !v || (long long)n < v->as_int()) return false;
+            if (ec || !is_int(v) || (long long)n < v->i) return false;
+        }
+        // the entries file: one JSON object per line with an "index" below `completed`
+        why = "an unreadable checkpoint";
+        std::ifstream ein(entries, std::ios::binary);
+        if (!ein) return false;
+        std::string etext((size_t)st.get("entries_bytes")->i, '\0');
+        ein.read(&etext[0], (std::streamsize)etext.size());
+        if ((long long)ein.gcount() != (long long)etext.size()) return false;
+        size_t a = 0;
+        while (a < etext.size()) {
+            size_t b = etext.find('\n', a);
+            if (b == std::string::npos) b = etext.size();
+            std::string line = etext.substr(a, b - a);
+            a = b + 1;
+            if (line.find_first_not_of(" \t\r") == std::string::npos) continue;
+            Json e;
+            try {
+                e = json_parse(line);
+            } catch (...) {
+                return false;
+            }
+            if (e.type != Json::Object || !is_int(e.get("index")) || e.get("index")->i >= completed) return false;
+            lines_out.push_back(std::move(e));
         }
         return true;
     }
 
-    void save(Json st) {
+    // Returns 0, or the errno when the checkpoint could not be written (no temp file is left behind).
+    int save(Json st) {
         ++count;
         st.set("engine", "coal-cpp");
         st.set("coal_version", VERSION);
         st.set("options_hash", options_hash);
         st.set("inputs", signature());
         std::string tmp = path + ".tmp";
+        int err = 0;
         {
+            errno = 0;
             std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
+            if (!f) return errno ? errno : EIO;
             f << json_dump(st);
             f.flush();
+            if (!f) err = errno ? errno : EIO;
         }
-        fsync_path(tmp);
         std::error_code ec;
-        fs::rename(tmp, path, ec);
+        if (!err) {
+            fsync_path(tmp);
+            fs::rename(tmp, path, ec);
+            if (ec) err = ec.value();
+        }
+        if (err) fs::remove(tmp, ec);
+        return err;
     }
 
     void remove(bool keep_partial = false) {
         std::error_code ec;
-        for (auto* p : {&path, &entries, &stage, &prot}) fs::remove(*p, ec);
-        fs::remove(stage + ".grid", ec);
-        fs::remove(path + ".tmp", ec);
-        if (!keep_partial) fs::remove(partial, ec);
+        auto rm = [&](const std::string& p) {  // files only: a folder in the way is left alone (os.unlink)
+            if (!fs::is_directory(p, ec)) fs::remove(p, ec);
+        };
+        for (auto* p : {&path, &entries, &stage, &prot}) rm(*p);
+        rm(stage + ".grid");
+        rm(path + ".tmp");
+        if (!keep_partial) rm(partial);
     }
 };
 
@@ -743,6 +815,12 @@ static void test_pause(int count) {
         std::cerr << "coal: test: paused after checkpoint " << count << std::endl;
         std::this_thread::sleep_for(std::chrono::seconds(3600));
     }
+}
+
+// "No space left on device" -> "no space left on device" (pipeline.py _lower_reason)
+static std::string lower_first(std::string s) {
+    if (!s.empty() && s[0] >= 'A' && s[0] <= 'Z') s[0] = char(s[0] + 32);
+    return s;
 }
 
 // The -o argument ("" = stdout), for output_error() when a file of the run cannot be created.
@@ -917,6 +995,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
     // ---- files: deterministic names next to -o (resumable), temp files for stdout
     std::unique_ptr<Checkpoint> ck;
     Json state;
+    std::vector<Json> resume_entries;  // the checked lines of the entries file (load_for_resume)
     bool resuming = false;
     std::string out_tmp, stage_path, prot_path;
     // -o PATH is checked before any work. Symlinks are written through;
@@ -949,11 +1028,13 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         std::vector<std::string> inputs{o.pep};
         inputs.insert(inputs.end(), o.nucs.begin(), o.nucs.end());
         ck = std::make_unique<Checkpoint>(target.real, canon, inputs);
+        ck->name = o.out;
         out_tmp = ck->partial;
         if (staged) stage_path = ck->stage;
         if (o.fmt == "codon") prot_path = ck->prot;
         if (o.resume) {
-            resuming = ck->load_for_resume(state, {staged ? stage_path : out_tmp, ck->entries, prot_path});
+            resuming = ck->load_for_resume(state, {staged ? stage_path : out_tmp, ck->entries, prot_path}, nseq,
+                                           resume_entries);
             if (resuming)
                 note("resuming " + o.out + ": " + fmt_n(state.get("completed")->as_int()) + " of " + fmt_n(nseq) +
                      " sequences were already done" +
@@ -1038,15 +1119,8 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                         bad[(size_t)t] = 1;
                     }
                 }
-            std::vector<Json> nonok;
-            {
-                std::ifstream in(ck->entries, std::ios::binary);
-                std::string line;
-                while (std::getline(in, line))
-                    if (!line.empty()) nonok.push_back(json_parse(line));
-            }
             const Json* rst = state.get("rec");
-            rec.restore(rst ? *rst : Json::object(), nonok, start);
+            rec.restore(rst ? *rst : Json::object(), resume_entries, start);
             if (const Json* v = state.get("skip_idx"))
                 for (auto& x : v->a) skip_idx.insert(x.as_int());
         } else if (o.fmt == "paml" && !staged) {
@@ -1084,6 +1158,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         if (o.progress && nseq > PROGRESS_MIN_SEQS) prog = std::make_unique<Progress>(nseq);
         auto last_ck = std::chrono::steady_clock::now();
         long long done = start;
+        bool ck_saves = true;
         // thread each batch while the next one is read; results written in input order (pool.hpp)
         // With -blockonly, as PAL2NAL, only warnings about kept ('#') columns are printed
         auto kept_col = [&](const std::string& w) {
@@ -1147,7 +1222,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                 std::cerr << "coal: test: paused before any checkpoint" << std::endl;
                 std::this_thread::sleep_for(std::chrono::seconds(3600));
             }
-            if (ck && done < nseq &&
+            if (ck && ck_saves && done < nseq &&
                 std::chrono::duration<double>(std::chrono::steady_clock::now() - last_ck).count() >= CHECKPOINT_EVERY) {
                 Json st = Json::object();
                 st.set("completed", done);
@@ -1167,7 +1242,13 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                 for (long long x : skip_idx) sk.push(x);
                 st.set("skip_idx", sk);
                 st.set("rec", rec.checkpoint_state());
-                ck->save(st);
+                if (int err = ck->save(st)) {
+                    // A checkpoint that cannot be written (its path is a folder, disk full ...) does not end the
+                    // run: it only cannot be resumed (pipeline.py)
+                    ck_saves = false;
+                    note("cannot write the checkpoint " + ck->path + ": " + lower_first(std::strerror(err)) +
+                         "; the run cannot be resumed if it is interrupted");
+                }
                 if (ck_registered) {  // a checkpoint describes them now: kept after a signal
                     for (auto* q : {&ck->partial, &ck->stage, &ck->prot, &ck->entries}) unregister_temp(*q);
                     unregister_temp(ck->stage + ".grid");
