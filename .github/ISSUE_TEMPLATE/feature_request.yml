@@ -1,0 +1,35 @@
+name: Feature request
+description: An option, format, message or integration COAL should have.
+title: "[feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The task and the pipeline or tool around it (PAML codeml, HyPhy, OrthologR, a Snakemake rule, the GUI, an agent over MCP ...), and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What should COAL do?
+      description: The option, output or behaviour you have in mind; an example command line and its expected output help.
+    validations:
+      required: true
+  - type: dropdown
+    id: pal2nal
+    attributes:
+      label: Relation to PAL2NAL v14
+      description: COAL's output is byte-identical to PAL2NAL's except for the documented deliberate differences (docs/differences.md). Would this change PAL2NAL-compatible output?
+      options:
+        - No, it is a new option or output, off by default
+        - It changes what an existing PAL2NAL option writes (please explain the reference, e.g. NCBI, a format's definition)
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Workaround today
+      description: How you do it now, if at all (a script around the run report, a second tool, by hand).
