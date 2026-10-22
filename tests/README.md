@@ -150,7 +150,7 @@ COAL does the same for mismatch warnings. COAL still prints its B/Z/J/O/U warnin
 B/Z/J/O/U with `-nomismatch`; no golden case covers that (see the deliberate differences above). Both remove those
 columns.
 
-Other test files: `test_pipeline.py` (results independent of `-j` and batch size), `test_review_fixes.py`
+Other test files: `test_pipeline.py` (results independent of `-j` and batch size), `test_io_robustness.py`
 (regression tests for the engine reviews) and
 `test_decisions.py` (`--strict`, `-q`, closed pipe, output formats, `-blockonly`, `-j` in every format,
 the fetch script). The counts above are

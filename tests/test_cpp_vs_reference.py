@@ -173,8 +173,8 @@ __path__.append({ref!r})  # every module but cli / __main__ comes from the refer
 with open(_os.path.join({ref!r}, "__init__.py")) as _f:
     exec(compile(_f.read(), "coal/__init__.py", "exec"))
 """
-REF_TEST_MODULES = ("test_decisions", "test_review_fixes", "test_fuzz_findings", "test_final_fixes",
-                    "test_merge", "test_report", "test_engine_extras")
+REF_TEST_MODULES = ("test_decisions", "test_io_robustness", "test_fuzz_findings", "test_edge_cases",
+                    "test_feature_combinations", "test_report", "test_engine_extras")
 
 
 def build_shim(tmp: Path) -> Path:

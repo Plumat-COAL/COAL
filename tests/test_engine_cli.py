@@ -1,7 +1,7 @@
 """Engine and command line: logged finish errors, inert test hooks, acceptance sets, genetic-code hints, the same
 stderr from both engines, the warning cap, help groups and automatic coal-cpp dispatch.
 
-Run:  python -m unittest tests.test_imp_engine   (C++ checks need COAL_CPP_BIN or ./build/coal-cpp; else skipped)
+Run:  python -m unittest tests.test_engine_cli   (C++ checks need COAL_CPP_BIN or ./build/coal-cpp; else skipped)
 """
 from __future__ import annotations
 

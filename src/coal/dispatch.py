@@ -6,7 +6,7 @@
     for slower process start-up on Windows), and
   * a coal-cpp is found (find_cpp) whose `--version` is this package's version.
 COAL_ENGINE=python never uses it; COAL_ENGINE=cpp always does (error if it is not found or does not run).
-Output, stderr, the run report and the exit code are the same either way (tests/test_imp_engine.py). If coal-cpp
+Output, stderr, the run report and the exit code are the same either way (tests/test_engine_cli.py). If coal-cpp
 cannot be started, the run goes on in Python after one `coal: notice:` line. Only the command line dispatches:
 `coal.cli.main(argv)` called from Python (the `pal2nal` drop-in, tests) always runs the Python engine.
 """
