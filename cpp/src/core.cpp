@@ -172,12 +172,15 @@ bool plain_anchor(const std::vector<Token>& toks) {
 inline bool residue_ok(const Target& t, long long pos, const Token& tok) { return t.ok(pos, tok.allowed); }
 
 bool matches_at(const Target& t, long long s, const std::vector<Token>& toks) {
+    // The whole anchor must lie inside the DNA before any triplet is read: thread_one() tries the expected
+    // position of an anchor, which can be past the end of a short gene (found by the nightly ASan run).
+    if (s < 0 || s + total_length(toks) > (long long)t.code.size()) return false;
     long long pos = s;
     for (const Token& tok : toks) {
         if (tok.residue && !tok.any && !residue_ok(t, pos, tok)) return false;
         pos += tok.n;
     }
-    return pos <= (long long)t.code.size();
+    return true;
 }
 
 // Leftmost start where every token matches consecutively, or -1.

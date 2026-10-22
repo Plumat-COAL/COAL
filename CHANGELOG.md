@@ -8,6 +8,9 @@
   on malformed inputs and every option; Linux and macOS) and the C++ tests plus the generator under
   AddressSanitizer and UndefinedBehaviorSanitizer (`COAL_SKIP_MEMORY_TESTS=1` skips the peak-memory test there).
   Differing cases are uploaded as artifacts; CONTRIBUTING.md "Nightly checks" says how to replay them.
+- **coal-cpp: no read past the end of a short gene's DNA** when the expected position of an anchor (after a
+  frameshift digit or a mismatch) lies beyond the sequence end; found by the first sanitizer run. Output and exit
+  codes are unchanged (the out-of-bounds read could never have produced a match).
 - **MCP server on mcp 1.x (the Windows app's) is quiet and names its version:** `python -m coal_app --mcp` /
   `COAL.exe -m coal_app --mcp` with the `mcp` 1.x that Gradio's extra installs reported the mcp library's version
   ("1.10.1") as `serverInfo.version` and logged about 37 KB of INFO lines to standard error per session (into
