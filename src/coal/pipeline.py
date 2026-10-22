@@ -437,18 +437,26 @@ def _abandon_pool(ex) -> None:
     call_queue = getattr(ex, "_call_queue", None)
     reader = getattr(call_queue, "_reader", None)
     feeder = getattr(call_queue, "_thread", None)
+    # Best effort on private attributes, and racing the pool's manager thread, which may be tearing the same
+    # queue down at the same moment (it noticed the dead workers too): on 3.10 / 3.11 it can `put` into the queue
+    # after this close() (ValueError / AssertionError in the feeder), on 3.12+ it closes the reader this loop
+    # polls (OSError / ValueError). Whatever either side meets, the workers are gone and nothing is left to send,
+    # so any exception here is ignored.
     try:
         call_queue.close()  # the feeder stops once its buffer is sent
-    except Exception:  # noqa: BLE001 - best effort on private attributes
+    except Exception:  # noqa: BLE001
         pass
-    deadline = time.monotonic() + 5.0
-    while feeder is not None and feeder.is_alive() and time.monotonic() < deadline:
-        try:
-            while reader is not None and reader.poll(0.02):
-                reader.recv_bytes()
-        except (OSError, EOFError, ValueError):
-            break
-        feeder.join(0.02)
+    try:
+        deadline = time.monotonic() + 5.0
+        while feeder is not None and feeder.is_alive() and time.monotonic() < deadline:
+            try:
+                while reader is not None and reader.poll(0.02):
+                    reader.recv_bytes()
+            except (OSError, EOFError, ValueError):
+                break
+            feeder.join(0.02)
+    except Exception:  # noqa: BLE001
+        pass
     # A worker killed in the middle of sending a result leaves the pool's management thread reading a message that
     # never completes, and the interpreter joins that thread at exit: closing this process's write end of the result
     # pipe gives it EOF (the workers' ends are gone with them) so it ends as for a broken pool.
@@ -855,6 +863,7 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
         scratch: list = []  # fixed-width temp files of the clustal / codon writer
         tmp = stage = None
         entries_fh = None
+        results = None
         finished = failed = False
         try:
             if ck is not None:
@@ -1061,11 +1070,17 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
             # A write that failed (disk full, quota, I/O error): "cannot write <out>: no space left on device",
             # naming the output, or the temp folder while the rows go to a temporary file there
             failed = True
-            err = _output_error(None if sink_is_temp and not final_pass else out_path, e)
             if rec is not None and not rec.finished:
                 rec.finish(rows, dna, pairing, aborted=True)
-            raise err from None
+            # Raised directly, not through a local: an exception held in a local of the frame it is raised from
+            # (its traceback references the frame) is a reference cycle, and the frame holds `results` (the pool)
+            raise _output_error(None if sink_is_temp and not final_pass else out_path, e) from None
         finally:
+            if results is not None:
+                # An error on this side (a failed write, a CoalError) leaves the pool's generator suspended at its
+                # yield: closing it runs its finally, which ends the workers now, not when the cyclic garbage
+                # collector gets to the frame
+                results.close()
             for f in (tmp, stage, entries_fh, *scratch):
                 if f is not None:
                     try:

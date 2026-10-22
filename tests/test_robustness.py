@@ -847,3 +847,50 @@ class TestResumeKeepGoingSkippedBeforeCheckpoint(unittest.TestCase):
                     self.assertTrue(r.stderr.startswith(b"coal: notice: resuming out.fa: "), r.stderr[:200])
                     self.assertEqual((self.d / "out.fa").read_bytes(), (self.d / "ref.fa").read_bytes())
                     self.assertEqual([f.name for f in self.d.iterdir() if f.name.startswith("out.fa.")], [])
+
+
+# The child program of TestPoolAbandonedAfterOutputError: a -j 2 run whose output file cannot grow past 200 KB
+# (RLIMIT_FSIZE: the write fails with EFBIG in the middle of the run, as a full disk or a small tmpfs would) ...
+_POOL_AFTER_ERROR = r"""
+import gc, os, resource, sys, threading, time
+gc.disable()                      # nothing may depend on the cyclic collector
+resource.setrlimit(resource.RLIMIT_FSIZE, (200_000, 200_000))
+from coal import pipeline
+from coal.core import CoalError
+pipeline.BATCH_NT = 20_000
+try:
+    pipeline.run("pep.fasta", ["nuc.fasta"], out_path="out.fa", jobs=2, min_nt_per_job=0)
+except CoalError as e:
+    print("error:", e)
+else:
+    print("error: none")
+# ... after which the pool must be gone at once: no worker process, no pool thread (the pool's threads end on their
+# own once told to; up to 5 s of grace, but never a gc.collect())
+from test_robustness import worker_processes   # (not the fork server / resource tracker, which live on by design)
+deadline = time.monotonic() + 5
+while time.monotonic() < deadline:
+    threads = [t.name for t in threading.enumerate() if t is not threading.main_thread()]
+    kids = [p.pid for p in worker_processes(os.getpid())]
+    if not threads and not kids:
+        break
+    time.sleep(0.05)
+print("threads:", threads)
+print("children:", kids)
+print("tmp files:", sorted(f for f in os.listdir(".") if f.startswith((".coal_", "out.fa"))))
+"""
+
+
+@unittest.skipUnless(POSIX and psutil is not None, "RLIMIT_FSIZE and psutil")
+class TestPoolAbandonedAfterOutputError(unittest.TestCase):
+    def test_no_workers_or_pool_threads_remain_without_gc(self):
+        with tempfile.TemporaryDirectory(prefix="coal_pool_err_") as td:
+            d = Path(td)
+            sys.path.insert(0, str(ROOT / "benchmarks"))
+            from gen_data import generate
+            generate(20000, 15, d, seed=5)   # ~1.3 MB of output: the limit is hit with batches still in flight
+            env = dict(os.environ, PYTHONPATH=os.pathsep.join([str(SRC), str(ROOT / "tests")]))
+            r = subprocess.run([sys.executable, "-c", _POOL_AFTER_ERROR], cwd=d, env=env, stdin=subprocess.DEVNULL,
+                               capture_output=True, text=True, timeout=TIMEOUT)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(r.stdout.splitlines(), ["error: cannot write out.fa: file too large", "threads: []",
+                                                     "children: []", "tmp files: []"], r.stdout + r.stderr)

@@ -41,6 +41,10 @@
   and, under the fork server, wait for EOF on a pipe only `coal` holds. `COAL_MIN_NT_PER_JOB` (default 4,000,000)
   can now be set in the environment, as `COAL_BATCH_NT`, so tests can force worker processes on a small input; CI
   runs the suite on 3.14 (Linux).
+- **Worker processes end as soon as the main process fails** (Python engine): after an error on the writing side
+  of a `-j` run (a full disk, a file-size limit) the pool was only ended when the cyclic garbage collector got to it
+  (the suspended result generator and an exception held in a local kept it alive), so terminated workers and pool
+  threads could outlive the error by seconds. The generator is now closed on the way out and the pool ended at once.
 - **Checkpoints are checked before `--resume` trusts them** (robustness review): an edited or corrupted
   `<out>.coal-checkpoint.json` (`completed` beyond the input or negative, a string or float where an integer belongs,
   a list at the top level, a missing key, a deleted entries file, a partial file shorter than recorded, a truncated
