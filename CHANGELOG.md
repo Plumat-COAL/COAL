@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **The app no longer waits forever for a stopped engine:** when an engine run hits the app's time limit (or the
+  demo pipeline's), it is sent SIGTERM and, after the grace period, SIGKILL; the kill now takes the engine's whole
+  process group, so its worker processes die with it. Before, a run that outlived the grace period on a slow machine
+  was killed alone, its orphaned workers kept its output pipes open and the app waited for them indefinitely (the
+  CI app suite hung until the job timeout). Windows already killed the tree. Test commands that start the engine
+  now give it no stdin and always carry a timeout.
+- **`coal-cpp` mirrors Python 3.13's argparse** (it mirrored 3.10's): `-qx` is "unrecognized arguments: -x" rather
+  than an ignored explicit argument, `-hx` prints help, `-cod=2` is accepted, invalid choices are quoted
+  (`invalid choice: '7' (choose from '1', '2', ...)`), and only the `--` marker is dropped from the positionals (a
+  second `--` is a file name). `tests/test_cpp_cli.py` compares the two command lines live on an interpreter
+  whose argparse behaves that way (probed, not keyed on the version) and skips elsewhere with the differences named.
 - **Repository tidied for outside users:** a short README with a section on using COAL in pipelines; the detailed
   documentation is in `docs/`. Hackathon logs and pitch material are removed (kept on the `hackathon-archive` tag),
   review-round markers are gone from comments, and engine test modules are named after what they test. No change to
