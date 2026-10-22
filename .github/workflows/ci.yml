@@ -127,7 +127,7 @@ jobs:
     # Runs tests/test_docs_explainer.py (site/explainer.html in Chromium).
     name: "Explainer page in Chromium (Playwright)"
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw-browsers
     steps:
@@ -149,7 +149,17 @@ jobs:
       - name: Install the engine and Playwright with Chromium
         run: |
           python -m pip install -e . playwright==1.48.0
-          python -m playwright install --with-deps chromium
+          python -m playwright install chromium        # skipped when the cache above restored it
+      # The system libraries come from apt, which is what stalled this job twice (15 min, no output); a bounded
+      # step with one retry turns a slow mirror into a visible failure instead of a cancelled job.
+      - name: Chromium's system libraries
+        timeout-minutes: 6
+        run: |
+          for attempt in 1 2; do
+            python -m playwright install-deps chromium && exit 0
+            echo "install-deps failed (attempt $attempt); retrying in 20 s"; sleep 20
+          done
+          exit 1
       - name: Explainer tests (must not skip)
         shell: bash
         run: |
