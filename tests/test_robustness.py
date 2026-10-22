@@ -444,8 +444,9 @@ class TestCheckpointCorruption(unittest.TestCase):
                 self.assertEqual(r.returncode, 0, r.stderr)
                 lines = r.stderr.splitlines()
                 self.assertEqual(lines[0], UNREADABLE)
-                self.assertEqual(lines[1], b"coal: notice: cannot write the checkpoint " + bytes(ck) +
-                                 b": is a directory; the run cannot be resumed if it is interrupted")
+                # the checkpoint path is built from the resolved output path (macOS: /var -> /private/var)
+                self.assertEqual(lines[1], b"coal: notice: cannot write the checkpoint " + os.fsencode(os.path.realpath(ck))
+                                 + b": is a directory; the run cannot be resumed if it is interrupted")
                 self.assertEqual(len(lines), 2, r.stderr)
                 self.assertEqual((self.d / "out.fa").read_bytes(), self.ref)
                 self.assertTrue(ck.is_dir())
