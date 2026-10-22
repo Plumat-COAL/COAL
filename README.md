@@ -64,6 +64,8 @@ Example inputs are in `examples/` (`clean`, `mito`, `messy_ids`, `one_broken_gen
 
 - **Replacing PAL2NAL:** `pal2nal pep.aln nuc.fasta [PAL2NAL options]` accepts an unchanged PAL2NAL v14 command line
   (clustal output by default, as PAL2NAL). To call COAL's own options, use `coal`, whose default output is FASTA.
+- **orthologr:** its `dNdS()` runs a bundled `pal2nal.pl`; `packaging/orthologr/` has a stand-in for that file and
+  notes on what COAL changes there.
 - **Exit codes:** 0 success; 1 bad input or a gene that cannot be converted; 2 usage error (`coal`), or some
   sequences left out with `--keep-going`; 141 closed output pipe; 130 / 143 / 129 interrupted. Messages go to stderr,
   each line starting `coal: error:`, `coal: warning:`, `coal: notice:` or `coal: summary:`.

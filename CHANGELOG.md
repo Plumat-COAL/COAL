@@ -11,6 +11,10 @@
   (`tests/test_python_api.py`) and validate freshly generated reports from both engines against the schema
   (`tests/test_report_schema.py`); `tests/report_example.json` is now a real `examples/one_broken_gene --keep-going`
   report. No change to COAL's behaviour or output.
+- **orthologr:** `packaging/orthologr/pal2nal.pl` is a stand-in for the `pal2nal.pl` bundled in the orthologr R
+  package; copied over it, orthologr's `codon_aln()` / `dNdS()` run COAL (coal-cpp when installed) with their
+  unchanged command line and get the same output. Notes on what to expect and on a proper `tool = "coal"` option
+  for orthologr: `packaging/orthologr/README.md`.
 - **`-` reads standard input** (`zcat nuc.fa.gz | coal pep.aln -`), for the protein alignment or one DNA file, in
   `coal`, `coal-cpp` and the `pal2nal` drop-in, also on Windows (no `/dev/stdin` needed). The data is read as bytes
   into a temporary file, as for other pipes, so the output is byte-identical to giving the file's path; messages name
@@ -51,6 +55,10 @@
   and the version-free `coal_app_src.tar.gz`. The Windows launchers are now `apps\coal-app\desktop\run_from_source.bat`
   and `apps\coal-app\desktop\setup_mcp.bat`. The app's tests (`apps/coal-app/tests/`) are grouped by feature; the
   checks of the docs, the website and CI moved to `tests/` (`test_docs_*.py`, `test_repo_ci.py`).
+
+- **Bioconda recipe prepared** (`packaging/bioconda/`): `meta.yaml`, `build.sh` (coal-cpp via CMake into `bin/`, then the
+  Python package), a fixture pair and a test that `coal` finds the installed `coal-cpp` and hands a 1 MB input to it.
+  Not submitted yet; `packaging/bioconda/README.md` explains the sha256 step and the pull request to `bioconda-recipes`.
 
 ## 0.4.2
 
