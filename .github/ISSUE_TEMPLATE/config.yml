@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: How to use COAL
+    url: https://github.com/Plumat-COAL/COAL/blob/main/docs/usage.md
+    about: Every option, input and output rules, the run report. For a question that the docs do not answer, open a bug report and say so.
