@@ -10,6 +10,25 @@
   that. The `coal` command's messages, exit code and report are unchanged.
 - **`pal2nal | head` no longer prints a traceback** (issue #18): the drop-in's usage text into a closed pipe is a
   silent exit 141, as for `coal` and for the alignment output.
+- **Batch mode (`coal --batch JOBS`, #15):** thousands of small conversions in one process, one `coal` command line
+  per line of JOBS (`-` = stdin), the command line's options as the defaults of every job, `--batch-out-dir DIR` for
+  jobs without `-o`, a `coal.batch/1` report with `--report`/`--json`, per-job stderr prefixes
+  (`coal: [k/n PEP] warning: ...`) and a `coal: batch:` summary line. A failing job does not stop the batch (exit 1
+  at the end; 2 if jobs only left sequences out; mistakes in JOBS are reported with their line number before
+  anything runs). Every output is byte-identical to the single run; about 40× less wall time on tiny jobs. Python
+  only: `coal-cpp --batch` is a clear error and batches are never dispatched to it. `--resume` and cross-job
+  parallelism are not supported in a batch yet.
+- **The app no longer waits forever for a stopped engine:** when an engine run hits the app's time limit (or the
+  demo pipeline's), it is sent SIGTERM and, after the grace period, SIGKILL; the kill now takes the engine's whole
+  process group, so its worker processes die with it. Before, a run that outlived the grace period on a slow machine
+  was killed alone, its orphaned workers kept its output pipes open and the app waited for them indefinitely (the
+  CI app suite hung until the job timeout). Windows already killed the tree. Test commands that start the engine
+  now give it no stdin and always carry a timeout.
+- **`coal-cpp` mirrors Python 3.13's argparse** (it mirrored 3.10's): `-qx` is "unrecognized arguments: -x" rather
+  than an ignored explicit argument, `-hx` prints help, `-cod=2` is accepted, invalid choices are quoted
+  (`invalid choice: '7' (choose from '1', '2', ...)`), and only the `--` marker is dropped from the positionals (a
+  second `--` is a file name). `tests/test_cpp_cli.py` compares the two command lines live on an interpreter
+  whose argparse behaves that way (probed, not keyed on the version) and skips elsewhere with the differences named.
 - **Documented for 1.0:** `docs/python-api.md` (the public Python API: `coal.codon_align`, the new re-export
   `coal.align_files` = the `coal` command as a function, `coal.CoalError` with its `code`/`seq_id`/`index`, and the
   semantic-versioning promise for command-line flags, output bytes, exit codes, the report schema and these
@@ -19,10 +38,37 @@
   (`tests/test_python_api.py`) and validate freshly generated reports from both engines against the schema
   (`tests/test_report_schema.py`); `tests/report_example.json` is now a real `examples/one_broken_gene --keep-going`
   report. No change to COAL's behaviour or output.
+- **orthologr:** `packaging/orthologr/pal2nal.pl` is a stand-in for the `pal2nal.pl` bundled in the orthologr R
+  package; copied over it, orthologr's `codon_aln()` / `dNdS()` run COAL (coal-cpp when installed) with their
+  unchanged command line and get the same output. Notes on what to expect and on a proper `tool = "coal"` option
+  for orthologr: `packaging/orthologr/README.md`.
+- **`-` reads standard input** (`zcat nuc.fa.gz | coal pep.aln -`), for the protein alignment or one DNA file, in
+  `coal`, `coal-cpp` and the `pal2nal` drop-in, also on Windows (no `/dev/stdin` needed). The data is read as bytes
+  into a temporary file, as for other pipes, so the output is byte-identical to giving the file's path; messages name
+  it `standard input`; a second `-` is a usage error. The run report records `"path": "-"` with the sha256 of the data
+  read (the report of a run reading `/dev/stdin` or another pipe now hashes the data too, in both engines, instead of
+  the Python engine's hash of an empty re-read).
+- **C++ library for embedding** (e.g. in DIAMOND): `cmake --install` puts `coal-cpp`, `libcoal_core.a`, the headers
+  (`<coal/core.hpp>`, `<coal/tables.hpp>`, `<coal/seqio.hpp>`, `<coal/version.hpp>`) and a CMake package in place;
+  `find_package(coal CONFIG)` or `add_subdirectory` / FetchContent give `coal::core`. As a subproject only the library
+  is built (`COAL_BUILD_CLI`, `COAL_BUILD_TOOLS`, `COAL_INSTALL` to add more). Example: `examples/cpp-embed/`; docs:
+  docs/cpp-engine.md "Embedding the library".
+- **Less memory with many workers:** COAL's own processes now limit numpy's BLAS thread pool to one thread
+  (`OPENBLAS_NUM_THREADS`, `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, unless already set). COAL uses no BLAS, but every
+  worker that imported numpy started a pool sized to the machine. On a 20-thread Windows machine each process that
+  imported numpy committed about 630 MB (9-11 GB at the default `-j`); the BLAS pool is the likely cause, to be
+  confirmed by re-measuring. Programs that use COAL as a library are not affected.
+- **Faster start-up** for runs on small files (one COAL call per gene family in a pipeline): about 40 ms less per call
+  (104 -> 64 ms on Linux), by not importing `dataclasses`, `subprocess`, `hashlib`, `json` and `shlex` unless needed.
+
 - **Repository tidied for outside users:** a short README with a section on using COAL in pipelines; the detailed
   documentation is in `docs/`. Hackathon logs and pitch material are removed (kept on the `hackathon-archive` tag),
   review-round markers are gone from comments, and engine test modules are named after what they test. No change to
   COAL's behaviour or output.
+- **`coal-cpp` reports the same error as `coal` when a protein file has two defects.** A FASTA record is now
+  handed back before the `>` line that ends it is checked, so a short row is reported before a later duplicate or
+  empty header; and a CLUSTAL file's rows are parsed before its `#` mark line is read, so a malformed CLUSTAL line is
+  reported before a later non-ASCII character. Found by differential fuzzing; `tests/test_cpp_error_precedence.py`.
 - **Package renamed to `coal-align`** (`coal` on PyPI is another project). The `coal` command, the `coal` Python
   module and `pal2nal` are unchanged; release files are now `coal_align-<version>-py3-none-any.whl` and
   `coal_align-<version>.tar.gz` (`coal_src.tar.gz` stays).
@@ -36,6 +82,10 @@
   and the version-free `coal_app_src.tar.gz`. The Windows launchers are now `apps\coal-app\desktop\run_from_source.bat`
   and `apps\coal-app\desktop\setup_mcp.bat`. The app's tests (`apps/coal-app/tests/`) are grouped by feature; the
   checks of the docs, the website and CI moved to `tests/` (`test_docs_*.py`, `test_repo_ci.py`).
+
+- **Bioconda recipe prepared** (`packaging/bioconda/`): `meta.yaml`, `build.sh` (coal-cpp via CMake into `bin/`, then the
+  Python package), a fixture pair and a test that `coal` finds the installed `coal-cpp` and hands a 1 MB input to it.
+  Not submitted yet; `packaging/bioconda/README.md` explains the sha256 step and the pull request to `bioconda-recipes`.
 
 ## 0.4.2
 

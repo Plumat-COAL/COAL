@@ -272,15 +272,17 @@ class TestWarningCap(unittest.TestCase):
 
 
 class TestHelpGroups(unittest.TestCase):
-    """IMP-E-F: --help in four groups with short help; coal-cpp prints the same help (one documented line, -j) and
-    accepts every option spelling the Python parser has."""
+    """IMP-E-F: --help in five groups with short help; coal-cpp prints the same help (one documented line, -j) and
+    accepts every option spelling the Python parser has (but the Batch group's, which it refuses: test_batch.py)."""
 
     def test_groups_and_length(self):
         from coal.cli import build_parser
         h = build_parser().format_help()
-        for g in ("Core:", "PAL2NAL options:", "Large runs:", "Reporting:"):
+        for g in ("Core:", "PAL2NAL options:", "Large runs:", "Reporting:", "Batch:"):
             self.assertIn("\n" + g + "\n", h)
-        self.assertLess(len(h.splitlines()), 60)
+        self.assertLess(len(h.splitlines()), 70)
+        self.assertTrue(h.rstrip().endswith("Every option in detail: README.md (https://github.com/plumat-coal/COAL)."))
+        self.assertLess(h.index("Reporting:"), h.index("Batch:"))  # the Batch group comes last
         # the app reads the formats here (coal_app.core.detect_features). Python <= 3.12 prints
         # "-output {...}, --output-format {...}", so the check uses the app's own pattern.
         m = re.search(r"-output(?:,\s*--[\w-]+)?\s+\{([\w,]+)\}", h)
@@ -292,7 +294,7 @@ class TestHelpGroups(unittest.TestCase):
     # "-j N, --jobs N", so the line-for-line comparison only holds on 3.13+ (CI's cpp job). Spellings are checked below.
     @unittest.skipIf(sys.version_info < (3, 13), "help layout differs before Python 3.13")
     def test_cpp_help_and_spellings(self):
-        from coal.cli import build_parser
+        from coal.cli import BATCH_DESTS, build_parser
         env = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "COLUMNS": "80", "COAL_ENGINE": "python"}
         py = subprocess.run([sys.executable, "-m", "coal", "--help"], env=env, capture_output=True, text=True,
                             timeout=60).stdout.splitlines()
@@ -309,7 +311,7 @@ class TestHelpGroups(unittest.TestCase):
         self.addCleanup(shutil.rmtree, tmp, True)
         for act in build_parser()._actions:
             for opt in act.option_strings:
-                if opt in ("-h", "--help", "--version"):
+                if opt in ("-h", "--help", "--version") or act.dest in BATCH_DESTS:  # batch: coal only
                     continue
                 args = [str(d / "pep.fasta"), str(d / "nuc.fasta"), opt] + ([values[opt]] if opt in values else [])
                 if opt in ("--json", "--resume"):
@@ -456,7 +458,7 @@ class TestAutomaticCppDispatch(unittest.TestCase):
             self.assertEqual(dispatch.find_cpp(), str(fake_py.parent / "coal-cpp"))  # next to Python first
             os.unlink(fake_py.parent / "coal-cpp")
             os.unlink(internal / "coal-cpp")
-            with mock.patch.object(dispatch.sysconfig, "get_path", lambda name: str(self.tmp / "none")), \
+            with mock.patch("sysconfig.get_path", lambda name: str(self.tmp / "none")), \
                     mock.patch.dict(os.environ, {"PATH": str(self.tmp)}):
                 self.assertEqual(dispatch.find_cpp(), str(self.tmp / "coal-cpp"))  # then PATH
 

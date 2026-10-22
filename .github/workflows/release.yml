@@ -253,3 +253,34 @@ jobs:
           else
             gh release create "$TAG" release/* --verify-tag --title "COAL $V" --notes-file notes.md "${extra[@]}"
           fi
+
+  # PyPI, by trusted publishing (no API token in the repository). Off until the repository variable PYPI_PUBLISH is
+  # "true": set it (Settings > Secrets and variables > Actions > Variables) after creating the two projects on PyPI
+  # with a trusted publisher for this repository, workflow release.yml, environment pypi (docs/development.md).
+  pypi:
+    name: Publish to PyPI (coal-align, coal-align-app)
+    needs: [python, release]
+    if: vars.PYPI_PUBLISH == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: pypi
+    permissions:
+      id-token: write   # trusted publishing
+      contents: read
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: dist-python
+          path: release/
+      - name: Only the versioned wheels and sdists (not the version-free copies or checksums)
+        env:
+          V: ${{ needs.python.outputs.version }}
+        run: |
+          mkdir -p dist
+          cp "release/coal_align-${V}-py3-none-any.whl" "release/coal_align-${V}.tar.gz" \
+             "release/coal_align_app-${V}-py3-none-any.whl" "release/coal_align_app-${V}.tar.gz" dist/
+          ls -l dist
+      - uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e  # v1.13.0
+        with:
+          packages-dir: dist/
+          print-hash: true

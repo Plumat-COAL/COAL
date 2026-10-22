@@ -14,6 +14,7 @@ import json
 import os
 import re
 import shlex
+import signal
 import subprocess
 import sys
 import tempfile
@@ -289,7 +290,7 @@ def _coal_cmd() -> list[str]:
 def detect_features() -> Features:
     """Read ``python -m coal --help`` to find which options this engine has."""
     try:
-        # stdin=DEVNULL: see _run_engine
+        # stdin=DEVNULL: see _start_engine
         h = subprocess.run(_coal_cmd() + ["--help"], capture_output=True, text=True, encoding="utf-8",
                            errors="replace", timeout=60, stdin=subprocess.DEVNULL).stdout
         v = subprocess.run(_coal_cmd() + ["--version"], capture_output=True, text=True, encoding="utf-8",
@@ -571,11 +572,7 @@ def _run_engine(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, re
         cmd += ["--report", report_path]
     cmd += ["--", protein, dna]  # after "--", so a file named '-p.fa' is not read as an option
     t0 = time.perf_counter()
-    # stdin=DEVNULL: in the desktop app the app's stdin is the wrapper's lifeline pipe, which serve() keeps a
-    # blocking read on; on Windows a child given that same (synchronous) pipe blocks at startup behind the pending
-    # read, so every engine run would hang. The engine never reads stdin.
-    p = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-                         encoding="utf-8", errors="replace")
+    p = _start_engine(cmd)
     try:
         _, err = p.communicate(timeout=timeout)
         code = p.returncode
@@ -589,16 +586,43 @@ def _run_engine(protein, dna, out, fmt, table, nogap, nomismatch, keep_going, re
     return code, err, time.perf_counter() - t0
 
 
+def _start_engine(cmd: list) -> subprocess.Popen:
+    """The engine as a child with piped output.
+    stdin=DEVNULL: in the desktop app the app's stdin is the wrapper's lifeline pipe, which serve() keeps a
+    blocking read on; on Windows a child given that same (synchronous) pipe blocks at startup behind the pending
+    read, so every engine run would hang. The engine never reads stdin.
+    POSIX start_new_session: the engine leads its own process group, so stop_engine's SIGKILL can take its worker
+    processes with it (see there). The app's Ctrl-C then no longer reaches the engine directly; _run_engine and
+    run_engine_command stop it themselves on KeyboardInterrupt."""
+    return subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                            encoding="utf-8", errors="replace", start_new_session=os.name != "nt")
+
+
+def _kill_engine_tree(p: subprocess.Popen) -> None:
+    """SIGKILL the engine and, when it leads its own process group (started by _start_engine), its workers too."""
+    if os.name != "nt":
+        try:
+            if os.getpgid(p.pid) == p.pid:
+                os.killpg(p.pid, signal.SIGKILL)
+                return
+        except OSError:  # already gone (or not ours to signal): fall through to the plain kill
+            pass
+    p.kill()
+
+
 def stop_engine(p: subprocess.Popen, grace: float = 5.0) -> None:
     """Stop the engine and its workers: POSIX SIGTERM (the engine cleans up, stops its workers, exits 143), wait
-    `grace` seconds, then SIGKILL; Windows: taskkill /T /F (the whole process tree), then kill(). A plain SIGKILL
-    of the engine alone would orphan its worker processes and leave its .coal_*.tmp files behind."""
+    `grace` seconds, then SIGKILL the engine's process group; Windows: taskkill /T /F (the whole process tree),
+    then kill(). A plain SIGKILL of the engine alone would orphan its worker processes (they wait forever for
+    work from a parent that is gone) and leave its .coal_*.tmp files behind. The engine's workers also hold its
+    stdout/stderr pipes, so after the kill the pipes are read for at most `grace` more seconds and then closed:
+    an orphan that survived the kill must never make the app wait forever."""
     if p.poll() is not None:
         p.communicate()
         return
     if os.name == "nt":
         try:
-            # stdin=DEVNULL: see _run_engine
+            # stdin=DEVNULL: see _start_engine
             subprocess.run(["taskkill", "/T", "/F", "/PID", str(p.pid)], capture_output=True, timeout=30,
                            stdin=subprocess.DEVNULL)
         except (OSError, subprocess.SubprocessError):
@@ -607,9 +631,17 @@ def stop_engine(p: subprocess.Popen, grace: float = 5.0) -> None:
         p.terminate()
     try:
         p.communicate(timeout=grace)
+        return
     except subprocess.TimeoutExpired:
-        p.kill()
-        p.communicate()
+        pass
+    _kill_engine_tree(p)
+    try:
+        p.communicate(timeout=grace)
+    except subprocess.TimeoutExpired:  # something still holds the pipes: stop reading them
+        for fh in (p.stdout, p.stderr):
+            if fh is not None:
+                fh.close()
+        p.wait()
 
 
 def _remove_engine_temp(folder: str) -> None:
@@ -630,9 +662,7 @@ def run_engine_command(cmd: list, timeout: float, temp_dir: str | None = None) -
     """For the demo scripts (subprocess.run(timeout=) would SIGKILL only the engine: workers orphaned, .coal_*.tmp
     left). Runs `cmd`, returns (returncode, stdout, stderr); on timeout or interrupt stops the engine as stop_engine
     does, removes its .coal_*.tmp files in `temp_dir` and re-raises (subprocess.TimeoutExpired on timeout)."""
-    # stdin=DEVNULL: see _run_engine
-    p = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-                         encoding="utf-8", errors="replace")
+    p = _start_engine(cmd)
     try:
         out, err = p.communicate(timeout=timeout)
     except BaseException:

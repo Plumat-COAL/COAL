@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import os
 import re
-from dataclasses import dataclass, field
 from functools import lru_cache
 from itertools import accumulate
 
@@ -66,16 +65,29 @@ def check_table(table) -> None:
                         f"{', '.join(map(str, SUPPORTED))}", code="unknown_table")
 
 
-@dataclass
 class Threaded:
-    """Per-sequence result: the matched DNA and the column layout."""
-    seq_id: str
-    row: str                 # aligned protein row (upper case, '.' -> '-')
-    dna: str                 # matched DNA, original case
-    warnings: list[str] = field(default_factory=list)
-    mismatch_cols: set[int] = field(default_factory=set)   # 1-based alignment columns
-    # notices about probably-wrong data (kept apart from the per-codon warnings)
-    notices: list[str] = field(default_factory=list)
+    """Per-sequence result: the matched DNA and the column layout. (A plain class, not a dataclass: importing
+    dataclasses costs ~20 ms of start-up, which shows on pipelines that run COAL once per small file.)"""
+    __slots__ = ("seq_id", "row", "dna", "warnings", "mismatch_cols", "notices")
+
+    def __init__(self, seq_id: str, row: str, dna: str, warnings: list[str] | None = None,
+                 mismatch_cols: set[int] | None = None, notices: list[str] | None = None):
+        self.seq_id = seq_id
+        self.row = row            # aligned protein row (upper case, '.' -> '-')
+        self.dna = dna            # matched DNA, original case
+        self.warnings = [] if warnings is None else warnings
+        self.mismatch_cols = set() if mismatch_cols is None else mismatch_cols  # 1-based alignment columns
+        self.notices = [] if notices is None else notices  # probably-wrong data, apart from per-codon warnings
+
+    def __repr__(self):
+        return f"Threaded({', '.join(f'{k}={getattr(self, k)!r}' for k in self.__slots__)})"
+
+    def __eq__(self, other):
+        if not isinstance(other, Threaded):
+            return NotImplemented
+        return all(getattr(self, k) == getattr(other, k) for k in self.__slots__)
+
+    __hash__ = None
 
 
 # ---------------------------------------------------------------- pairing
@@ -440,6 +452,15 @@ def _quick_offset0(table: int, dna: str, residues: str) -> bool:
 _NP_STATE: dict = {}
 NP_MIN_CODONS = 300        # per sequence
 NP_AFTER_CODONS = 2_000_000  # per process, cumulative
+
+
+def limit_blas_threads() -> None:
+    """COAL uses no BLAS. Importing numpy otherwise starts a BLAS thread pool sized to the machine, each thread with
+    its own buffers, in every worker process: memory that grows with workers x cores. Called only in processes COAL
+    owns (the command line and its workers), never on import, so a program using COAL as a library is unaffected.
+    A value the user set wins."""
+    for var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
+        os.environ.setdefault(var, "1")
 
 
 def _numpy():

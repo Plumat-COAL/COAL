@@ -64,6 +64,8 @@ Example inputs are in `examples/` (`clean`, `mito`, `messy_ids`, `one_broken_gen
 
 - **Replacing PAL2NAL:** `pal2nal pep.aln nuc.fasta [PAL2NAL options]` accepts an unchanged PAL2NAL v14 command line
   (clustal output by default, as PAL2NAL). To call COAL's own options, use `coal`, whose default output is FASTA.
+- **orthologr:** its `dNdS()` runs a bundled `pal2nal.pl`; `packaging/orthologr/` has a stand-in for that file and
+  notes on what COAL changes there.
 - **Exit codes:** 0 success; 1 bad input or a gene that cannot be converted; 2 usage error (`coal`), or some
   sequences left out with `--keep-going`; 141 closed output pipe; 130 / 143 / 129 interrupted. Messages go to stderr,
   each line starting `coal: error:`, `coal: warning:`, `coal: notice:` or `coal: summary:`.
@@ -73,7 +75,12 @@ Example inputs are in `examples/` (`clean`, `mito`, `messy_ids`, `one_broken_gen
   pairing and a genetic-code suggestion, also when the run fails ([docs/usage.md](docs/usage.md#run-report-and-long-runs)).
 - **Parallel jobs:** with many COAL processes running at once (one per gene family), pass `-j 1` so each uses one
   core. Without it, COAL uses all cores for large inputs.
-- **Reading from a pipe:** pass `/dev/stdin` as an input path.
+- **Thousands of small alignments:** `coal --batch jobs.txt` runs one job per line of `jobs.txt` (a `coal` command
+  line each, every one with `-o`) in a single process, so Python starts once instead of once per gene: about 40×
+  less wall time on tiny jobs, with byte-identical outputs
+  ([docs/usage.md](docs/usage.md#batch-mode)).
+- **Reading from a pipe:** pass `-` as the protein alignment or one DNA file (`zcat nuc.fa.gz | coal pep.aln -`);
+  works the same on Windows, with `coal-cpp` and with the `pal2nal` drop-in. Only one `-` per command line.
 - **From Python** ([docs/python-api.md](docs/python-api.md): `codon_align`, `align_files`, `CoalError`, and what 1.0 will
   keep stable):
 

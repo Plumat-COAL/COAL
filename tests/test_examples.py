@@ -13,7 +13,8 @@ NAMES = ["clean", "mito", "messy_ids", "one_broken_gene"]
 
 
 def coal(*args):
-    return subprocess.run([sys.executable, "-m", "coal", *args], capture_output=True, text=True, timeout=120)
+    return subprocess.run([sys.executable, "-m", "coal", *args], capture_output=True, text=True, timeout=120,
+                          stdin=subprocess.DEVNULL)
 
 
 class TestExamples(unittest.TestCase):

@@ -42,7 +42,7 @@ class TestNomismatchResults(RunsDirCase):
             got = fh.read()
         import subprocess, sys
         ref = subprocess.run([sys.executable, "-m", "coal", p, d, "-nomismatch"], capture_output=True,
-                             text=True, timeout=120).stdout
+                             text=True, timeout=120, stdin=subprocess.DEVNULL).stdout
         self.assertEqual(got, ref)
 
     def test_table3_nomismatch_not_nothing_went_wrong(self):

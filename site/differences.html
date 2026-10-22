@@ -84,25 +84,26 @@
   <h2 id="speed-title">Speed</h2>
   <div class="table-scroll" tabindex="0" role="group" aria-labelledby="speed-cap">
     <table class="nums">
-      <caption id="speed-cap">Wall-clock time of the whole command, start-up included; median of 3 runs on synthetic data</caption>
+      <caption id="speed-cap">Wall-clock time of the whole command, start-up included; warm medians on synthetic data. COAL: the C++ engine, one thread</caption>
       <thead><tr><th scope="col">Genes × codons</th><th scope="col">PAL2NAL v14</th><th scope="col">COAL</th><th scope="col">PAL2NAL ÷ COAL</th></tr></thead>
       <tbody>
-        <tr><th scope="row">10 × 500</th><td><span data-check="0.051 s">0.051 s</span></td><td><span data-check="0.061 s">0.061 s</span></td><td><span data-check="0.8×">0.8×</span></td></tr>
-        <tr><th scope="row">1,000 × 500</th><td><span data-check="2.39 s">2.39 s</span></td><td><span data-check="0.139 s">0.139 s</span></td><td><span data-check="17.3×">17.3×</span></td></tr>
-        <tr><th scope="row">10,000 × 500</th><td><span data-check="24.7 s">24.7 s</span></td><td><span data-check="0.864 s">0.864 s</span></td><td><span data-check="28.6×">28.6×</span></td></tr>
-        <tr><th scope="row">100 × 10,000</th><td><span data-check="24.5 s">24.5 s</span></td><td><span data-check="0.207 s">0.207 s</span></td><td><span data-check="118.6×">118.6×</span></td></tr>
+        <tr><th scope="row">1,000 × 400</th><td><span data-check="2.31 s">2.31 s</span></td><td><span data-check="0.031 s">0.031 s</span></td><td><span data-check="74×">74×</span></td></tr>
+        <tr><th scope="row">100,000 × 400</th><td><span data-check="239 s">239 s</span></td><td><span data-check="1.07 s">1.07 s</span></td><td><span data-check="223×">223×</span></td></tr>
+        <tr><th scope="row">1,000,000 × 400</th><td><span data-check="3,714 s">3,714 s</span></td><td><span data-check="12.5 s">12.5 s</span></td><td><span data-check="297×">297×</span></td></tr>
+        <tr><th scope="row">1,000 × 10,000</th><td><span data-check="280 s">280 s</span></td><td><span data-check="0.251 s">0.251 s</span></td><td><span data-check="1,115×">1,115×</span></td></tr>
       </tbody>
     </table>
   </div>
-  <p>On tiny inputs both tools take <span data-check="about 0.05 s">about 0.05 s</span>, nearly all of it start-up,
-    and COAL is slightly slower. As genes get longer, PAL2NAL's time grows much faster than their length. COAL's
-    grows in proportion to the input.</p>
-  <p>Half a million genes of 500 codons (<span data-check="974 MB">974 MB</span> of input) took
-    <span data-check="9.8 s">9.8 s</span> with 4 processes and <span data-check="25.2 s">25.2 s</span> with 1. The
-    1-process run used at most <span data-check="131 MB">131 MB</span> of memory. We did not run PAL2NAL at that
-    size.</p>
-  <p class="fine">Measured on one Windows 11 machine: Intel 64-bit CPU (Family 6 Model 183), Python 3.13.9,
-    Strawberry Perl 5.42.3. Raw data and the command to reproduce them are in the
+  <p>Every COAL output in these runs matched PAL2NAL v14's or the simulated truth. On tiny inputs both tools take
+    a few hundredths of a second, nearly all of it start-up. As genes get longer, PAL2NAL's time grows much faster
+    than their length; COAL's grows in proportion to the input. PAL2NAL v14 cannot process proteins longer than about
+    22,000 residues (Perl's limit on capture groups in one regex); COAL can.</p>
+  <p>At a million genes PAL2NAL v14 needed <span data-check="18.6 GB">18.6 GB</span> of memory and COAL
+    <span data-check="172 MB">172 MB</span>. COAL's Python engine gives the same output more slowly:
+    <span data-check="74×">74×</span> faster than PAL2NAL v14 at a million genes, and slower than it on many tiny
+    files run one process at a time.</p>
+  <p class="fine">Measured on one Windows 11 machine (Intel i5-13600KF, 32 GB), COAL commit 47f57f1; the million-gene
+    PAL2NAL run is a single run. Raw data and the method are in the
     <a href="https://github.com/plumat-coal/COAL/blob/main/docs/benchmarks.md">benchmark results</a>.</p>
 </section>
 </main>

@@ -1379,7 +1379,10 @@ Json RunReport::to_dict() const {
     long long n = total();
     Json inputs = Json::array();
     auto hash = [&](size_t i, const std::string& p) {
-        std::string h = sha256_file(hash_paths_.size() == nucs_.size() + 1 ? hash_paths_[i] : p);
+        // "path" is the argument as given (`-` for standard input); the hash is of the data read (the temp copy)
+        bool have = hash_paths_.size() == nucs_.size() + 1;
+        if (!have && p == "-") return Json();  // never a file named '-' in the current folder (report.py)
+        std::string h = sha256_file(have ? hash_paths_[i] : p);
         return h.empty() ? Json() : Json(h);
     };
     Json pin = Json::object();

@@ -36,8 +36,8 @@ from itertools import islice
 from . import checkpoint as _ck
 from .checkpoint import Checkpoint, durable_size, open_append
 from .core import (
-    MISMATCH_WARNING, CoalError, apply_slices, check_table, column_widths, expand, keep_slices, nogap_bad_triplets,
-    pair_ids, prepare_row, row_length_message, thread_one,
+    MISMATCH_WARNING, CoalError, apply_slices, check_table, column_widths, expand, keep_slices, limit_blas_threads,
+    nogap_bad_triplets, pair_ids, prepare_row, row_length_message, thread_one,
 )
 from .seqio import DnaIndex, InputFormatError, clustal_mask, is_clustal, iter_fasta, open_error_message, read_clustal
 
@@ -125,15 +125,14 @@ def _protein_rows(path):
 _W: dict = {}
 
 
-def mp_child() -> bool:
-    import multiprocessing
-    return multiprocessing.parent_process() is not None
+def _init_pool_worker(*init_args):
+    """Initializer of a worker process: ignore Ctrl-C (the main process reports it once, no worker tracebacks)."""
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    limit_blas_threads()
+    _init_worker(*init_args)
 
 
 def _init_worker(table, widths, two_pass, nogap, strict=False, out_format="fasta", keep_going=False):
-    # Workers ignore Ctrl-C (the main process reports it once, no worker tracebacks).
-    if mp_child():
-        signal.signal(signal.SIGINT, signal.SIG_IGN)
     _W.update(table=table, widths=widths, wide=any(w != 3 for w in widths),
               two_pass=two_pass, nogap=nogap, strict=strict,
               record=paml_record if out_format == "paml" else fasta_record,
@@ -315,7 +314,7 @@ def _results(batches, jobs: int, init_args):
         return
     from concurrent.futures import ProcessPoolExecutor  # imported only when needed
 
-    with ProcessPoolExecutor(max_workers=jobs, initializer=_init_worker, initargs=init_args) as ex:
+    with ProcessPoolExecutor(max_workers=jobs, initializer=_init_pool_worker, initargs=init_args) as ex:
         pending: deque = deque()
         for b in batches:
             pending.append(ex.submit(_work, b))
@@ -356,9 +355,41 @@ def _write_block_output(out, fmt, ids, stage, slices, alilen, rows, aa_widths, m
     write_blocks(out, fmt, ids, fixed, alilen, aa_fh, aalen, mask)
 
 
+STDIN = "-"                 # the input argument that means standard input
+STDIN_NAME = "standard input"  # how messages name it
+
+
+def _spool_stdin(spooled: list) -> str:
+    """Standard input (`-`) copied, as bytes, to a temp file: the same mechanism as a pipe or /dev/stdin, so CRLF and
+    BOM handling are those of file input (also on Windows, which has no /dev/stdin)."""
+    src = getattr(sys.stdin, "buffer", None) if sys.stdin is not None else None
+    if src is None:
+        raise CoalError(f"cannot read {STDIN_NAME}: it is closed", code="file_error")
+    if _WINDOWS:  # bytes as they are (Python already sets this; a host program may not have)
+        try:
+            import msvcrt
+            msvcrt.setmode(src.fileno(), os.O_BINARY)
+        except (OSError, ValueError, AttributeError, ImportError):
+            pass
+    with tempfile.NamedTemporaryFile("wb", delete=False, prefix=".coal_in_", suffix="_stdin") as dst:
+        spooled.append(dst.name)
+        while True:
+            try:
+                chunk = src.read(1 << 20)
+            except OSError as e:
+                why = "it is closed" if e.errno == errno.EBADF else (e.strerror or str(e))
+                raise CoalError(f"cannot read {STDIN_NAME}: {why}", code="file_error") from None
+            if not chunk:
+                break
+            dst.write(chunk)
+    return dst.name
+
+
 def _spool(path, spooled: list) -> str:
     """A path that can be opened several times and seeked: regular files as they are,
-    anything else (pipe, /dev/stdin, <(...)) copied to a temp file first."""
+    anything else (`-` = standard input, pipe, /dev/stdin, <(...)) copied to a temp file first."""
+    if str(path) == STDIN:
+        return _spool_stdin(spooled)
     if os.path.isfile(path):
         return path
     base = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.basename(str(path)))[-40:]
@@ -367,6 +398,15 @@ def _spool(path, spooled: list) -> str:
         spooled.append(dst.name)
         shutil.copyfileobj(src, dst, 1 << 20)
     return dst.name
+
+
+def stdin_count(paths) -> int:
+    """How many of the input arguments are `-` (at most one is allowed)."""
+    return sum(1 for p in paths if str(p) == STDIN)
+
+
+# The same wording in coal, coal-cpp and the pal2nal drop-in.
+STDIN_TWICE = "'-' (standard input) can be given only once: as the protein alignment or as one DNA file"
 
 
 def run(pep_path, nuc_paths, *args, **kw) -> int:
@@ -381,15 +421,21 @@ def run(pep_path, nuc_paths, *args, **kw) -> int:
     inputs = {str(pep_path), *map(str, nuc_paths)}
     try:
         try:
-            sp = _spool(pep_path, spooled)
-            names[sp] = str(pep_path)
-            nps = []
-            for p in nuc_paths:
-                nps.append(_spool(p, spooled))
-                names[nps[-1]] = str(p)
+            if stdin_count([pep_path, *nuc_paths]) > 1:
+                raise CoalError(STDIN_TWICE)
+            sps = []
+            for p in (pep_path, *nuc_paths):
+                sps.append(_spool(p, spooled))
+                names[sps[-1]] = STDIN_NAME if str(p) == STDIN else str(p)
+            rec = kw.get("rec")
+            if rec is not None and spooled and rec.keep_entries:
+                # The report hashes what was read: for `-` and piped inputs, the temp copy (removed before the report
+                # is written; re-reading a pipe would give nothing). Only when a report was asked for.
+                from .report import sha256_file
+                rec.set_input_hashes({k: sha256_file(t) for k, t in enumerate(sps) if t in spooled})
             # A run whose input came through a pipe cannot be resumed (its data is gone), so it keeps no checkpoint.
             kw.setdefault("_resumable", not spooled)
-            return _run(sp, nps, *args, **kw)
+            return _run(sps[0], sps[1:], *args, **kw)
         except CoalError as e:  # InputFormatError included
             msg = str(e)
             for tmp_name in spooled:

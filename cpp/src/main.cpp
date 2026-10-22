@@ -827,19 +827,18 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
     const bool block = o.fmt == "clustal" || o.fmt == "codon";
     // PAL2NAL's '#' block marks of a CLUSTAL input: -blockonly keeps only those
     // columns; clustal / codon output show the marks under each block when -blockonly is not given
-    const std::string mask = is_clustal(o.pep) ? clustal_mask(o.pep) : std::string();
-    const bool has_marks = mask.find('#') != std::string::npos;
-    const bool block_cols = o.blockonly && has_marks;
-    const bool two_pass = o.nogap || o.nomismatch || block_cols;
-    // keep_going + paml: the header needs the final count, so stage the rows
-    const bool staged = two_pass || block || (o.keep_going && o.fmt == "paml");
+    std::string mask;
 
     // pass 1: protein IDs, row length, frameshift column widths
     std::vector<std::string> ids_read;
     long long ncol = -1;
     std::vector<int> widths;
     {
+        // The reader first: a CLUSTAL file is parsed whole here, so its format errors come
+        // before anything the mask read would report (as _protein_rows precedes clustal_mask
+        // in the reference).
         ProteinReader pr(o.pep);
+        if (pr.is_clustal()) mask = clustal_mask(o.pep);
         std::string id, row, first_row;
         while (pr.next(id, row)) {
             row = prepare_row(row);
@@ -860,6 +859,11 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         throw CoalError(o.pep + ": no sequences found: the file is empty or has no '>' header lines (expected a "
                                 "protein alignment in FASTA or CLUSTAL format)",
                         "no_sequences");
+    const bool has_marks = mask.find('#') != std::string::npos;
+    const bool block_cols = o.blockonly && has_marks;
+    const bool two_pass = o.nogap || o.nomismatch || block_cols;
+    // keep_going + paml: the header needs the final count, so stage the rows
+    const bool staged = two_pass || block || (o.keep_going && o.fmt == "paml");
     rec.set_inputs(std::move(ids_read));
     const std::vector<std::string>& ids = rec.ids();  // one copy, owned by the report
     DnaIndex dna(o.nucs);
@@ -1311,6 +1315,9 @@ static std::string usage_text() {
     return h.substr(0, h.find("\n\n") + 1);
 }
 
+static const char* const BATCH_ERROR =
+    "--batch is only available in the Python command (coal); coal-cpp converts one alignment per run";
+
 static int usage_error(const std::string& msg) {
     std::cerr << usage_text() << "coal: error: " << msg << '\n';
     return 2;
@@ -1356,8 +1363,17 @@ int main(int argc, char** argv) {
     const int a_resume = ap.add({Kind::Flag, {"--resume"}, "", false, {}, true});
     const int a_report = ap.add({Kind::Value, {"--report"}, "", false, {}, true});
     const int a_json = ap.add({Kind::Flag, {"--json"}, "", false, {}, true});
+    // The Batch group exists in the Python command only (coal/batch.py). coal-cpp knows the two options so that
+    // abbreviations resolve as in Python and so the error is a clear one, not "unrecognized arguments".
+    const int a_batch = ap.add({Kind::Value, {"--batch"}, "", false, {}, true});
+    const int a_batch_dir = ap.add({Kind::Value, {"--batch-out-dir"}, "", false, {}, true});
     ap.add({Kind::Version, {"--version"}, "", false, {}, true});
 
+    // `coal-cpp --batch JOBS` has no positionals, so say why before the parser asks for them
+    for (const std::string& a : o.argv) {
+        if (a == "--") break;
+        if (a == "--batch" || a.compare(0, 8, "--batch=") == 0) return usage_error(BATCH_ERROR);
+    }
     coal::args::Result args = ap.parse(o.argv);
     if (args.exit) {
         std::cout << args.out << std::flush;
@@ -1381,18 +1397,24 @@ int main(int argc, char** argv) {
     if (args.given(a_report)) o.report = args.get(a_report);
     o.json = args.given(a_json);
     o.strict = args.given(a_strict);
+    if (args.given(a_batch) || args.given(a_batch_dir)) return usage_error(BATCH_ERROR);
     if (o.json && o.out.empty())
         return usage_error("--json requires -o (the alignment and the report cannot both go to stdout)");
     if (o.resume && o.out.empty())
         return usage_error("--resume requires -o (only runs that write to a file can be resumed)");
     if (o.max_warnings < 0) return usage_error("--max-warnings must be 0 (no limit) or more");
+    {
+        std::vector<std::string> in{o.pep};
+        in.insert(in.end(), o.nucs.begin(), o.nucs.end());
+        if (stdin_count(in) > 1) return usage_error(STDIN_TWICE);
+    }
 
     RunReport rec(o.argv, o.pep, o.nucs, o.out, o.fmt, o.table, o.nogap, o.nomismatch, o.keep_going,
                   !o.report.empty() || o.json, o.strict, o.blockonly);
     rec.want_hint = !o.quiet || !o.report.empty() || o.json;
     install_signal_handlers();
-    // Pipes, /dev/stdin and FIFOs are copied to temp files first; messages name
-    // the argument, not the temp copy
+    // `-` (standard input), pipes, /dev/stdin and FIFOs are copied to temp files first; messages name
+    // the argument ("standard input" for `-`), not the temp copy
     std::vector<std::pair<std::string, std::string>> spooled;
     struct SpoolCleanup {
         std::vector<std::pair<std::string, std::string>>& s;
