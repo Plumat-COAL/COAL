@@ -122,8 +122,11 @@ class TestBatchEqualsSingleRuns(_Tmp):
         self.assertEqual([j["report"]["options"]["output_format"] for j in rep["jobs"]],
                          ["clustal", "clustal", "fasta"])
         # the per-job command line = the defaults (without the batch-level options), then the job line
+        import shlex  # the report quotes as the single run's report does (shlex, on every platform)
         self.assertEqual(rep["jobs"][2]["report"]["command_line"],
-                         f"coal -codontable 2 -output clustal {TABLE2[0]} {TABLE2[1]} -o c.fa -output fasta")
+                         " ".join(shlex.quote(a) for a in ["coal", "-codontable", "2", "-output", "clustal",
+                                                           str(TABLE2[0]), str(TABLE2[1]), "-o", "c.fa",
+                                                           "-output", "fasta"]))
 
     def test_quiet_and_nomismatch_defaults_reach_the_jobs(self):
         lines = [f"{WARN[0]} {WARN[1]} -o a.fa"]
