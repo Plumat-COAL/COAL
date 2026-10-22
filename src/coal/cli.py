@@ -2,6 +2,8 @@
 
     coal PEP_ALN NUC_FASTA [NUC_FASTA ...] [-codontable N] [-nogap] [-nomismatch] [-o OUT]
 
+`-` as one input path (the protein alignment or one DNA file) reads standard input.
+
 PAL2NAL-style single-dash options are accepted, so COAL can be dropped into
 existing pipelines; -output clustal|paml|fasta|codon and -blockonly as in PAL2NAL v14.
 """
@@ -15,7 +17,7 @@ import sys
 
 from . import __version__
 from .core import CoalError, limit_blas_threads
-from .pipeline import FORMATS, run
+from .pipeline import FORMATS, STDIN_TWICE, run, stdin_count
 from .report import RunReport
 from .seqio import InputFormatError
 from .tables import SUPPORTED
@@ -55,8 +57,9 @@ def build_parser() -> argparse.ArgumentParser:
     large = ap.add_argument_group("Large runs")
     rep = ap.add_argument_group("Reporting")
     # registration order = the usage line's order (unchanged)
-    core.add_argument("pep_aln", help="protein alignment (FASTA or CLUSTAL)")
-    core.add_argument("nuc_fasta", nargs="+", help="coding DNA (FASTA; one or more files)")
+    core.add_argument("pep_aln", help="protein alignment (FASTA or CLUSTAL; - reads standard input)")
+    core.add_argument("nuc_fasta", nargs="+",
+                      help="coding DNA (FASTA; one or more files; - reads standard input)")
     core.add_argument("-codontable", "--codontable", type=int, default=1, choices=SUPPORTED, metavar="N",
                       help=f"NCBI genetic code (default 1): {_ranges(list(SUPPORTED))}")
     pal.add_argument("-nogap", "--nogap", action="store_true",
@@ -127,6 +130,8 @@ def main(argv=None) -> int:
         ap.error("--resume requires -o (only runs that write to a file can be resumed)")
     if args.max_warnings < 0:
         ap.error("--max-warnings must be 0 (no limit) or more")
+    if stdin_count([args.pep_aln, *args.nuc_fasta]) > 1:
+        ap.error(STDIN_TWICE)
     if command_line:
         limit_blas_threads()  # this process and its workers are COAL's own
         rc = _maybe_cpp(ap, args, argv)

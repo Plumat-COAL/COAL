@@ -51,8 +51,8 @@ const Raw RAW[] = {
 };
 constexpr int NRAW = sizeof(RAW) / sizeof(RAW[0]);
 
-const char* IUPAC_LETTERS = "ACGTRYSWKMBDHVN";
-const char* IUPAC_BASES[15] = {"A", "C", "G", "T", "AG", "CT", "CG", "AT", "GT", "AC",
+const char* const IUPAC_LETTERS = "ACGTRYSWKMBDHVN";
+const char* const IUPAC_BASES[15] = {"A", "C", "G", "T", "AG", "CT", "CG", "AT", "GT", "AC",
                                "CGT", "AGT", "ACT", "ACG", "ACGT"};
 
 struct Tables {
