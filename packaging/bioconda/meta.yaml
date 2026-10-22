@@ -45,8 +45,9 @@ test:
     - coal --version | grep -qx "coal {{ version }}"
     - coal-cpp --version | grep -qx "coal {{ version }} (C++)"
     - coal --help
-    - pal2nal | grep -q "pal2nal pep.aln nuc.fasta"
-    - pal2nal -h | grep -q "PAL2NAL"
+    # (to a file, not a pipe: `grep -q` closing the pipe early makes the usage print a BrokenPipeError traceback)
+    - pal2nal > usage.txt && grep -q "pal2nal pep.aln nuc.fasta" usage.txt
+    - pal2nal -h > help.txt && grep -q "PAL2NAL" help.txt
     - python -c "import coal, coal_compat; print(coal.__version__)"
     # The same alignment from both engines, byte for byte (COAL_ENGINE=cpp forces coal-cpp even for small inputs).
     - COAL_ENGINE=python coal test_protein.aln.fasta test_dna.fasta > py.fasta
@@ -55,7 +56,8 @@ test:
     - grep -c "^>" py.fasta | grep -qx 8
     - coal-cpp test_protein.aln.fasta test_dna.fasta -output paml | head -1 | grep -q "8 *[0-9]"
     - pal2nal test_protein.aln.fasta test_dna.fasta -output fasta | cmp - py.fasta
-    # Automatic dispatch: a >= 1 MB input must reach coal-cpp (found on PATH, no COAL_CPP needed).
+    # Automatic dispatch: a >= 1 MB input must reach coal-cpp (found next to the interpreter in $PREFIX/bin, or on
+    # PATH; no COAL_CPP needed).
     # test_dispatch.sh builds such an input by repeating the fixture under new IDs.
     - bash test_dispatch.sh
 

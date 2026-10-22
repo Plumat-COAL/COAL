@@ -61,6 +61,11 @@ bioconda-utils build recipes config.yml --packages coal-align
 # or in Bioconda's Docker image: bioconda-utils build --docker --mulled-test recipes config.yml --packages coal-align
 ```
 
+Status: on 2026-10-22 this recipe (with `source:` pointed at a tarball of the `packaging/bioconda` branch, i.e. the split
+layout) built and passed all of its tests with `conda build -c conda-forge` on linux-64 (python 3.15 variant); the
+package held `bin/coal`, `bin/coal-cpp`, `bin/pal2nal`, the `coal` and `coal_compat` modules and
+`share/coal/examples/`.
+
 To test a not-yet-tagged checkout, point `source:` at a local tarball:
 `git archive --format=tar.gz --prefix=COAL-<version>/ -o /tmp/coal.tar.gz HEAD`, then set
 `url: file:///tmp/coal.tar.gz` and its sha256 in a copy of `meta.yaml` (do not commit that copy).
