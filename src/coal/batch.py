@@ -134,6 +134,9 @@ def plan(ap: argparse.ArgumentParser, args: argparse.Namespace, argv: list[str],
         if "-" in (ns.pep_aln, *ns.nuc_fasta):
             raise JobsError(n, "'-' (standard input) cannot be a job's input: standard input can be read once, and "
                                "`--batch -` may be reading the job list from it; give a file path")
+        if ns.out == "-":
+            raise JobsError(n, "-o - (standard output) is not allowed on a job line: every job of a batch writes to "
+                               "a file")
         if not ns.out:
             if not args.batch_out_dir:
                 raise JobsError(n, "the job has no -o (every job of a batch writes to a file; or give "

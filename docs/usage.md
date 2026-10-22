@@ -1,7 +1,12 @@
 # Using COAL
 
-- **Input:** a protein alignment (FASTA or CLUSTAL) and the unaligned coding DNA (FASTA, one or more files).
-  Non-letters in the DNA (gaps, digits, spaces) are ignored, as in PAL2NAL.
+- **Input:** a protein alignment (FASTA or CLUSTAL) and the unaligned coding DNA (FASTA, one or more files; an
+  empty file among several is fine). Non-letters in the DNA (gaps, digits, spaces) are ignored, as in PAL2NAL.
+  Files must be plain ASCII text: a non-ASCII byte, or a control byte such as NUL (a binary file, UTF-16 text),
+  is an error naming the file and line (`nuc.fa:2: control character: sequence files must be plain text (is this a
+  binary or word-processor file?)`); tab, LF, VT, FF and CR are whitespace. IDs longer than 200 characters are
+  shortened in stderr messages to their first 100 and last 20 characters (`...` between); the output and the run
+  report keep them whole.
   `-` as an input path reads standard input, for the protein alignment or for one DNA file (`cat pep.aln | coal -
   nuc.fasta`, `zcat nuc.fa.gz | coal pep.aln -`); the same in `coal`, `coal-cpp` and the `pal2nal` drop-in, on every
   system (Windows too). Standard input is read as bytes into a temporary file first, as pipes, FIFOs and
@@ -12,7 +17,8 @@
   standard input redirected from one) is refused before anything is read (`coal: error: cannot read /dev/zero: it
   is a device, not a file`, exit 1): copying it to the temporary file would never end. A terminal on standard input
   is read until EOF (Ctrl-D) as before, and `/dev/null` (`</dev/null`) is an empty input as before.
-- **Output:** a codon alignment, using the protein-alignment IDs, in any of PAL2NAL v14's formats, as PAL2NAL writes
+- **Output:** `-o FILE`, or standard output by default (`-o -` also means standard output, so `--json -o -` and
+  `--resume -o -` are the usage errors they are without `-o`). A codon alignment, using the protein-alignment IDs, in any of PAL2NAL v14's formats, as PAL2NAL writes
   them (byte for byte, apart from the documented differences): `-output fasta` (COAL's default; 60 columns per line),
   `clustal` (PAL2NAL's default), `paml` (codeml's input) or `codon` (amino acids above their codons; not combinable
   with `-nogap`/`-nomismatch`/`-blockonly`, as in PAL2NAL). The drop-in `pal2nal` command defaults to clustal, like
@@ -70,7 +76,8 @@ COAL streams the data. It reads the protein alignment and indexes the DNA file(s
 then handles one sequence at a time, fetching its DNA from disk and writing its output row, so memory doesn't grow
 with the size of the sequences. By default the Python engine uses all CPU cores for large inputs and one process for
 small ones (each extra process needs about 4 million nucleotides of DNA to pay for its start-up); `coal-cpp` uses
-threads. `-j N` caps the number of workers and `-j 1` forces one. Output is always in the input order. Output is
+threads. `-j N` caps the number of workers and `-j 1` forces one (an `N` above the number of cores is used as given,
+in both engines). Output is always in the input order. Output is
 written to a temporary file and only moved into place if the whole run succeeds, so an error never leaves a partial
 file. If a worker process is killed (the out-of-memory killer, usually), the run stops with `coal: error: a worker
 process died (out of memory?)` (exit 1) instead of hanging, and the workers die with the main process when that is

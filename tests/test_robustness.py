@@ -623,5 +623,137 @@ class TestDiskFull(unittest.TestCase):
                               f"device\n".encode())
 
 
+# ---------------------------------------------------------------- 13. smaller items
+CONTROL = b"control character: sequence files must be plain text (is this a binary or word-processor file?)"
+
+
+class TestControlBytes(EngineCase):
+    def test_control_bytes_are_an_input_format_error(self):
+        cases = {
+            "nul_in_protein.fa": (b">s1\nMKV-AL\n>s2\nMKV\x00SAL\n", "n.fa", 4),
+            "nul_in_protein_id.fa": (b">s1\x00\nMKV-AL\n>s2\nMKVSAL\n", "n.fa", 1),
+            "ctrl_z_at_end.fa": (PEP.encode() + b"\x1a", "n.fa", 5),
+            "bell_in_clustal.aln": (b"CLUSTAL\n\ns1 MKV\x07-AL\ns2 MKVSAL\n", "n.fa", 3),
+            "utf16.fa": (("\ufeff" + PEP).encode("utf-16-le"), "n.fa", 1),
+        }
+        for name, (data, nuc, line) in cases.items():
+            with self.subTest(file=name):
+                (self.d / name).write_bytes(data)
+                rc, out, err = self.both([name, nuc])
+                self.assertEqual((rc, out), (1, b""))
+                self.assertEqual(err, b"coal: error: " + name.encode() + b":" + str(line).encode() + b": " + CONTROL
+                                 + b"\n")
+        dna = {
+            "nul_in_dna.fa": (b">s1\nATGAAAGTT\x00GCTCTG\n>s2\nATGAAGGTCTCAGCACTA\n", 2),
+            "nul_after_dna.fa": (NUC.encode() + b"\x00", 5),
+            "nul_in_dna_header.fa": (b">s1\x01\nATGAAAGTTGCTCTG\n>s2\nATGAAGGTCTCAGCACTA\n", 1),
+            "nul_in_dna_cr.fa": (b">s1\rATGAAAGTTGCTCTG\r>s2\rATGAAGGTC\x00TCAGCACTA\r", 4),
+        }
+        for name, (data, line) in dna.items():
+            with self.subTest(file=name):
+                (self.d / name).write_bytes(data)
+                rc, out, err = self.both(["p.fa", name])
+                self.assertEqual((rc, out), (1, b""))
+                self.assertEqual(err, b"coal: error: " + name.encode() + b":" + str(line).encode() + b": " + CONTROL
+                                 + b"\n")
+
+    def test_tab_ff_vt_are_still_whitespace(self):
+        (self.d / "ws.fa").write_bytes(b">s1\tdesc\x0b\nMKV-AL\x0c\n>s2\nMKVSAL\n")
+        rc, out, err = self.both(["ws.fa", "n.fa"])
+        self.assertEqual((rc, out, err), (0, EXPECTED.encode(), b""))
+
+
+class TestLongIds(EngineCase):
+    LONG = "L" * 300
+    SHORT = "L" * 100 + "..." + "L" * 20
+
+    def test_long_ids_are_shortened_on_stderr_not_in_the_report(self):
+        (self.d / "lp.fa").write_text(f">{self.LONG}\nMKV-AL\n>s2\nMKVSAL\n")
+        (self.d / "ln.fa").write_text(f">{self.LONG}\nCCCCCCCCC\n>s2\nATGAAGGTCTCAGCACTA\n")
+        for name, cmd in engines():  # (--json: the runtime differs between the engines, so one at a time)
+            r = self.run_engine(cmd, ["lp.fa", "ln.fa", "-o", "o.fa", "--json"])
+            rc, out, err = r.returncode, r.stdout, r.stderr
+            self.assertEqual(rc, 1, err)
+            self.assertNotIn(self.LONG.encode(), err)
+            self.assertEqual(err.splitlines()[0], f"coal: error: {self.SHORT}: protein and DNA are inconsistent (no "
+                                                  f"match found)".encode())
+            self.assertIn(self.SHORT.encode(), err.splitlines()[-1])  # the summary lines too
+            rep = json.loads(out)
+            self.assertEqual(rep["sequences"][0]["id"], self.LONG)  # the report keeps the whole ID
+            self.assertIn(self.LONG, json.dumps(rep["error"]))
+        rc, out, err = self.both(["lp.fa", "ln.fa"])
+        self.assertEqual(rc, 1)
+        self.assertNotIn(self.LONG.encode(), err)
+        self.assertEqual(err.splitlines()[0], f"coal: error: {self.SHORT}: protein and DNA are inconsistent (no match "
+                                              f"found)".encode())
+        self.assertIn(self.SHORT.encode(), err.splitlines()[-1])  # the summary lines too
+        # pairing notices (DNA IDs) and the duplicate-ID error (raised while reading the file)
+        rc, out, err = self.both(["lp.fa", "n.fa"])
+        self.assertEqual(rc, 0)
+        self.assertIn(f"protein '{self.SHORT}' gets DNA 's1'".encode(), err)
+        (self.d / "dup.fa").write_text(f">{self.LONG}\nATG\n>{self.LONG}\nATG\n")
+        rc, out, err = self.both(["p.fa", "dup.fa"])
+        self.assertEqual(err, f"coal: error: dup.fa: duplicate sequence ID '{self.SHORT}': every sequence needs its "
+                              f"own ID\n".encode())
+
+    def test_ids_of_200_are_whole(self):
+        rid = "I" * 200
+        (self.d / "p200.fa").write_text(f">{rid}\nMKV-AL\n>s2\nMKVSAL\n")
+        rc, out, err = self.both(["p200.fa", "n.fa"])
+        self.assertIn(f"protein '{rid}' gets DNA 's1'".encode(), err)
+
+
+class TestOutputDash(EngineCase):
+    def test_o_dash_is_standard_output(self):
+        rc, out, err = self.both(["p.fa", "n.fa", "-o", "-"])
+        self.assertEqual((rc, out, err), (0, EXPECTED.encode(), b""))
+        self.assertFalse((self.d / "-").exists())
+        for extra, msg in ((["--json"], b"--json requires -o (the alignment and the report cannot both go to stdout)"),
+                           (["--resume"], b"--resume requires -o (only runs that write to a file can be resumed)")):
+            rc, out, err = self.both(["p.fa", "n.fa", "-o", "-", *extra])
+            self.assertEqual((rc, out), (2, b""))
+            self.assertEqual(err.splitlines()[-1], b"coal: error: " + msg)
+
+    def test_o_dash_on_a_batch_job_line(self):
+        (self.d / "jobs.txt").write_text("p.fa n.fa -o -\n")
+        r = self.run_engine(PY_CMD, ["--batch", "jobs.txt"])
+        self.assertEqual(r.returncode, 2)
+        self.assertEqual(r.stderr.splitlines()[-1], b"coal: error: jobs.txt line 1: -o - (standard output) is not "
+                                                   b"allowed on a job line: every job of a batch writes to a file")
+
+
+class TestDnaFileChanged(unittest.TestCase):
+    def test_shrunk_dna_file_is_an_error_not_another_gene(self):
+        sys.path.insert(0, str(SRC))
+        from coal import CoalError
+        from coal.seqio import DnaIndex
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "n.fa")
+            with open(p, "w") as fh:
+                for k in range(200):
+                    fh.write(f">s{k}\n" + "ATGAAAGTTGCTCTG" * 10 + "\n")
+            ix = DnaIndex([p])
+            self.assertTrue(ix.get(0).startswith("ATGAAAGTT"))
+            with open(p, "w") as fh:  # the file shrinks after it was indexed
+                fh.write(">s1\nATG\n")
+            with self.assertRaises(CoalError) as cm:
+                ix.get(150)
+            self.assertEqual(cm.exception.code, "file_error")
+            self.assertEqual(str(cm.exception), f"{p}: could not read the DNA of record 151 (the file changed after "
+                                                f"it was read, or cannot be read)")
+            ix.close()
+
+
+class TestEmptyDnaFileAmongSeveral(EngineCase):
+    def test_empty_file_is_accepted(self):
+        (self.d / "empty.fa").write_bytes(b"")
+        for args in (["p.fa", "empty.fa", "n.fa"], ["p.fa", "n.fa", "empty.fa"]):
+            rc, out, err = self.both(args)
+            self.assertEqual((rc, out, err), (0, EXPECTED.encode(), b""))
+        rc, out, err = self.both(["p.fa", "empty.fa"])
+        self.assertEqual(rc, 1)
+        self.assertIn(b"empty.fa: no sequences found", err)
+
+
 if __name__ == "__main__":
     unittest.main()

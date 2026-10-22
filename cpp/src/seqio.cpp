@@ -1,5 +1,7 @@
 #include "seqio.hpp"
 
+#include <algorithm>
+
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
@@ -12,6 +14,11 @@ const char* const NON_ASCII =
     "non-ASCII character: sequence files must be plain text (is this a binary or word-processor file?)";
 const char* const NON_ASCII_ID =
     "non-ASCII character in the sequence ID: use only ASCII letters, digits and punctuation in IDs";
+const char* const CONTROL_CHAR =
+    "control character: sequence files must be plain text (is this a binary or word-processor file?)";
+
+// NUL and the other C0 control bytes, except tab, LF, VT, FF and CR (seqio.py _CONTROL)
+static inline bool control_byte(unsigned char c) { return c < 0x20 && !(c >= 0x09 && c <= 0x0d); }
 const char* const EMPTY_HEADER =
     "empty FASTA header: a '>' line without a sequence ID (every record needs a name after '>')";
 #define COAL_BEFORE "sequence data before the first '>' header: not a FASTA file? (each FASTA record starts with a '>name' line"
@@ -19,8 +26,13 @@ const char* const BEFORE_HEADER_PROTEIN = COAL_BEFORE "; a CLUSTAL file must sta
 const char* const BEFORE_HEADER_DNA = COAL_BEFORE ")";
 #undef COAL_BEFORE
 
+std::string short_id(const std::string& rid) {
+    return rid.size() <= 200 ? rid : rid.substr(0, 100) + "..." + rid.substr(rid.size() - 20);
+}
+
 std::string duplicate_message(const std::string& where, const std::string& rid) {
-    return where + ": duplicate sequence ID " + py_repr(rid) + ": every sequence needs its own ID";
+    // (raised before the IDs are known to the message layer: shortened here)
+    return where + ": duplicate sequence ID " + py_repr(short_id(rid)) + ": every sequence needs its own ID";
 }
 
 std::string open_error(const std::string& path) {
@@ -85,11 +97,10 @@ static size_t uni_space(const std::string& s, size_t i) {
 // "<file>:<line>: non-ASCII character in the sequence ID".
 static void check_ascii(std::string& s, const std::string& path, long long lineno) {
     bool ascii = true;
-    for (unsigned char c : s)
-        if (c > 127) {
-            ascii = false;
-            break;
-        }
+    for (unsigned char c : s) {
+        if (control_byte(c)) throw InputError(path + ":" + std::to_string(lineno) + ": " + CONTROL_CHAR);
+        if (c > 127) ascii = false;
+    }
     if (ascii) return;
     if (!s.empty() && s[0] == '>') {
         size_t i = 1, n = s.size(), w;
@@ -366,6 +377,8 @@ void DnaIndex::scan(int fno, const std::string& path) {
                 start_.push_back(start);
                 end_.push_back(line_off);
             }
+            for (unsigned char ch : line)  // (the sequence data are checked when they are read: get())
+                if (control_byte(ch)) throw InputError(path + ":" + std::to_string(lineno) + ": " + CONTROL_CHAR);
             if (j == i) throw InputError(path + ":" + std::to_string(lineno) + ": " + EMPTY_HEADER);
             std::string rid = line.substr(i, j - i);
             for (unsigned char ch : rid)
@@ -436,6 +449,24 @@ void DnaIndex::forget_ids() {
     std::unordered_map<std::string, size_t>().swap(pos_);
 }
 
+// The 1-based line number of a byte offset (for an error message only: reads the file up to there).
+long long DnaIndex::line_of(int f, long long offset) const {
+    std::ifstream in(paths_[f], std::ios::binary);
+    std::vector<char> buf(1 << 20);
+    long long nl = 0, cr = 0, left = offset;
+    while (left > 0 && in) {
+        in.read(buf.data(), (std::streamsize)std::min<long long>((long long)buf.size(), left));
+        std::streamsize got = in.gcount();
+        if (got <= 0) break;
+        for (std::streamsize k = 0; k < got; ++k) {
+            if (buf[(size_t)k] == '\n') ++nl;
+            else if (buf[(size_t)k] == '\r') ++cr;
+        }
+        left -= got;
+    }
+    return (nl ? nl : cr) + 1;  // old Mac line ends when there is no \n
+}
+
 std::string DnaIndex::get(size_t i) {
     int f = fno_[i];
     if (!fh_[f]) fh_[f] = std::make_unique<std::ifstream>(paths_[f], std::ios::binary);
@@ -453,6 +484,9 @@ std::string DnaIndex::get(size_t i) {
                              " (the file changed after it was read, or cannot be read)",
                          "file_error");
     }
+    for (long long k = 0; k < n; ++k)
+        if (control_byte((unsigned char)raw_[(size_t)k]))
+            throw InputError(paths_[f] + ":" + std::to_string(line_of(f, start_[i] + k)) + ": " + CONTROL_CHAR);
     std::string out;
     out.reserve((size_t)n);
     bool at_line_start = true, skip = false;

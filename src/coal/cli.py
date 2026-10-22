@@ -19,7 +19,7 @@ import sys
 from . import __version__
 from .core import CoalError, limit_blas_threads
 from .pipeline import FORMATS, STDIN_TWICE, run, stdin_count
-from .report import RunReport, report_path_conflict
+from .report import IdShortener, RunReport, report_path_conflict
 from .tables import SUPPORTED
 
 
@@ -167,9 +167,6 @@ def run_job(args, argv, prefix: str = "", want_report: bool = False) -> tuple[in
     Returns (exit code, the run report); 130 and 141 mean interrupted / closed pipe (the caller stops).
     Every stderr line is `coal: <prefix><kind>: ...` (prefix "" for a single run, "[k/n PEP] " in a batch).
     want_report: keep the per-sequence entries although args has no --report/--json (the batch report wants them)."""
-    def say(text: str):
-        print(f"coal: {prefix}{text}", file=sys.stderr)
-
     reporting = bool(args.report or args.json or want_report)
     # Always collected (it also drives the end-of-run "coal: summary:" lines); per-sequence entries
     # of ok sequences only when a report is asked for
@@ -177,6 +174,10 @@ def run_job(args, argv, prefix: str = "", want_report: bool = False) -> tuple[in
                     args.nogap, args.nomismatch, keep_going=args.keep_going, keep_entries=reporting,
                     strict=args.strict, blockonly=args.blockonly,
                     hint=not args.quiet or reporting)  # -q never shows it
+    shorten = IdShortener(rec)  # IDs over 200 characters are shortened on stderr (the report keeps them whole)
+
+    def say(text: str):
+        print(f"coal: {prefix}{shorten(text)}", file=sys.stderr)
     hidden = [0]
     shown = [0]
 
@@ -245,6 +246,8 @@ def main(argv=None) -> int:
         return batch_main(ap, args, argv)
     if args.batch_out_dir:
         ap.error("--batch-out-dir needs --batch")
+    if args.out == "-":
+        args.out = None  # `-o -` is standard output (the default), as for most Unix tools
     if args.json and not args.out:
         ap.error("--json requires -o (the alignment and the report cannot both go to stdout)")
     if args.resume and not args.out:

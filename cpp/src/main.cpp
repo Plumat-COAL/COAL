@@ -1479,6 +1479,7 @@ int main(int argc, char** argv) {
     o.blockonly = args.given(a_block);
     if (args.given(a_fmt)) o.fmt = args.get(a_fmt);
     if (args.given(a_out)) o.out = args.get(a_out);
+    if (o.out == "-") o.out.clear();  // `-o -` is standard output (the default), as cli.py
     if (args.given(a_jobs)) o.jobs = to_int(args.get(a_jobs));
     o.quiet = args.given(a_quiet);
     o.keep_going = args.given(a_keep);
@@ -1519,6 +1520,29 @@ int main(int argc, char** argv) {
             for (size_t at; (at = msg.find(sp.first)) != std::string::npos;) msg.replace(at, sp.first.size(), sp.second);
         return msg;
     };
+    // IDs over 200 characters are shortened on stderr (the report keeps them whole), as cli.py IdShortener
+    std::vector<std::string> long_ids;
+    size_t long_seen_p = 0, long_seen_d = 0;
+    auto shorten = [&](std::string text) {
+        if (rec.ids().size() != long_seen_p || rec.dna_file_ids().size() != long_seen_d) {
+            long_seen_p = rec.ids().size();
+            long_seen_d = rec.dna_file_ids().size();
+            std::set<std::string> found;
+            for (auto* lst : {&rec.ids(), &rec.dna_file_ids()})
+                for (auto& i : *lst)
+                    if (i.size() > 200) found.insert(i);
+            long_ids.assign(found.begin(), found.end());
+            std::sort(long_ids.begin(), long_ids.end(),
+                      [](const std::string& a, const std::string& b) { return a.size() > b.size(); });
+        }
+        for (auto& rid : long_ids)
+            for (size_t at = 0; (at = text.find(rid, at)) != std::string::npos;) {
+                std::string sh = short_id(rid);
+                text.replace(at, rid.size(), sh);
+                at += sh.size();
+            }
+        return text;
+    };
     long long shown = 0, hidden = 0;
     WarnFn warn = [&](const std::string& w) {
         if (o.quiet) return;
@@ -1529,11 +1553,11 @@ int main(int argc, char** argv) {
             }
             ++shown;
         }
-        std::cerr << "coal: warning: " << w << '\n';
+        std::cerr << "coal: warning: " << shorten(w) << '\n';
     };
     WarnFn note = [&](const std::string& t) {
         // -q: no notices (as the Python CLI)
-        if (!o.quiet) std::cerr << "coal: notice: " << t << std::endl;
+        if (!o.quiet) std::cerr << "coal: notice: " << shorten(t) << std::endl;
     };
     RunState rs;
     int rc = 0;
@@ -1551,15 +1575,15 @@ int main(int argc, char** argv) {
     } catch (const BrokenPipe&) {
         return 141;  // a closed stdout pipe ends the run silently; temp files are gone
     } catch (const CoalError& e) {
-        std::cerr << "coal: error: " << restore_names(e.what()) << '\n';
+        std::cerr << "coal: error: " << shorten(restore_names(e.what())) << '\n';
         rc = 1;
         rec.fail(e.code, restore_names(e.what()), !e.seq_id.empty());
     } catch (const InputError& e) {
-        std::cerr << "coal: error: " << restore_names(e.what()) << '\n';
+        std::cerr << "coal: error: " << shorten(restore_names(e.what())) << '\n';
         rc = 1;
         rec.fail(e.code, restore_names(e.what()), false);
     } catch (const std::exception& e) {
-        std::cerr << "coal: error: " << restore_names(e.what()) << '\n';
+        std::cerr << "coal: error: " << shorten(restore_names(e.what())) << '\n';
         rc = 1;
         rec.fail("file_error", restore_names(e.what()), false);
     }
@@ -1570,7 +1594,7 @@ int main(int argc, char** argv) {
     }
     rec.exit_code = rc;
     if (!o.quiet)
-        for (auto& l : rec.summary_lines()) std::cerr << "coal: summary: " << l << '\n';
+        for (auto& l : rec.summary_lines()) std::cerr << "coal: summary: " << shorten(l) << '\n';
     std::cerr.flush();
     if (!o.report.empty()) {
         int err = write_json_file(o.report, json_dump(rec.to_dict(), 1) + "\n");

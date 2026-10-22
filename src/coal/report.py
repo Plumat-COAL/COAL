@@ -351,6 +351,33 @@ def sha256_file(path) -> str | None:
         return None
 
 
+LONG_ID = 200  # IDs longer than this are shortened on stderr (short_id); the report keeps them whole
+
+
+def short_id(rid: str) -> str:
+    """A very long ID as stderr shows it: the first 100 and the last 20 characters (the same in coal-cpp)."""
+    return rid if len(rid) <= LONG_ID else rid[:100] + "..." + rid[-20:]
+
+
+class IdShortener:
+    """Replaces the IDs longer than LONG_ID in a message by short_id(): stderr lines stay readable when IDs are
+    whole header lines of thousands of characters. Nothing to do (and no cost) when no ID is that long."""
+
+    def __init__(self, rec):
+        self.rec, self._seen, self.long = rec, (None, None), []
+
+    def __call__(self, text: str) -> str:
+        key = (id(self.rec.ids), id(getattr(self.rec, "dna_file_ids", None)))
+        if key != self._seen:
+            self._seen = key
+            self.long = sorted({i for lst in (self.rec.ids, getattr(self.rec, "dna_file_ids", None)) if lst
+                                for i in lst if len(i) > LONG_ID}, key=len, reverse=True)
+        for rid in self.long:
+            if rid in text:
+                text = text.replace(rid, short_id(rid))
+        return text
+
+
 def _n(x: int) -> str:
     return f"{x:,}"
 

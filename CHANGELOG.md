@@ -51,6 +51,14 @@
   a dict, generator, bare string, `None`, a non-`str` ID or a pair of the wrong length, instead of a `KeyError` or
   `AttributeError` from inside the engine. `align_files(pep, "nuc.fa")` with one DNA path as a string or
   `os.PathLike` now means that one file (the string used to be iterated character by character).
+- **Smaller robustness fixes** (both engines, identical messages): a NUL or other control byte (except tab, LF,
+  VT, FF, CR) anywhere in a protein or DNA file is `<file>:<line>: control character: sequence files must be plain
+  text (is this a binary or word-processor file?)` (exit 1, code `input_format`) instead of a confusing row-length
+  error, a mangled ID or silently dropped bytes; IDs longer than 200 characters are shortened on stderr to their
+  first 100 and last 20 characters (the output and the report keep them whole); `-o -` means standard output; the
+  Python engine reports a DNA file that shrank between indexing and reading as `could not read the DNA of record N
+  (the file changed after it was read, or cannot be read)`, as `coal-cpp` does, instead of reading another
+  record's bytes; an empty DNA file among several is documented as accepted.
 - **Less memory with many workers:** COAL's own processes now limit numpy's BLAS thread pool to one thread
   (`OPENBLAS_NUM_THREADS`, `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, unless already set). COAL uses no BLAS, but every
   worker that imported numpy started a pool sized to the machine. On a 20-thread Windows machine each process that
