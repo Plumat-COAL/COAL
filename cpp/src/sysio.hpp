@@ -6,6 +6,7 @@
 //     its permissions, clear errors for symlink loops and missing folders.
 #pragma once
 #include <functional>
+#include <streambuf>
 #include <string>
 #include <utility>
 #include <vector>
@@ -77,5 +78,29 @@ void copy_mode(const std::string& real, const std::string& tmp);
 void write_stdout(const char* data, size_t n);
 // fflush(stdout) with the same error handling.
 void flush_stdout();
+
+// A std::streambuf onto standard output through write_stdout, so a report can be streamed to stdout one piece at
+// a time (`--json`) instead of being built whole in memory first. A stream error does not escape the streambuf
+// (the ostream would turn it into badbit): it is kept, the stream goes bad and stops producing output, and
+// finish() throws it (BrokenPipe for a closed pipe, std::runtime_error otherwise) after flushing.
+class StdoutBuf : public std::streambuf {
+public:
+    StdoutBuf();
+    ~StdoutBuf() override;
+    // Flushes; then rethrows the first error met while writing, if any (BrokenPipe / std::runtime_error).
+    void finish();
+
+protected:
+    int overflow(int ch) override;
+    std::streamsize xsputn(const char* s, std::streamsize n) override;
+    int sync() override;
+
+private:
+    bool send(const char* data, size_t n);  // false after an error (recorded once)
+    bool flush_buffer();
+    std::vector<char> buf_;
+    bool broken_ = false;
+    std::string error_;
+};
 
 }  // namespace coal

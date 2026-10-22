@@ -72,7 +72,9 @@
   reason (the report failed with `could not write the report /dev/fd/1: No such file or directory` after the
   whole run).
 - **`--json | head` is a silent exit 141** (robustness review) in both engines (the Python engine printed a
-  traceback and exited 1, `coal-cpp` exited 0), also for `--batch ... --json`.
+  traceback and exited 1, `coal-cpp` exited 0), also for `--batch ... --json`. `coal-cpp` now streams the `--json`
+  report to standard output one sequence at a time instead of building it whole in memory first (the bytes are
+  the same).
 - **`coal-cpp` falls back when `TMPDIR` is unusable** (robustness review): a `TMPDIR` naming a missing folder or a
   file made it fail with `filesystem error: temp_directory_path`; it now searches `TMPDIR`, `TEMP`, `TMP`, `/tmp`,
   `/var/tmp`, `/usr/tmp` and the current folder as Python's `tempfile` does, so both engines behave the same.

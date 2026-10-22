@@ -1616,12 +1616,13 @@ int main(int argc, char** argv) {
     }
     if (o.json) {
         try {
-            std::ostringstream text;  // streamed per sequence into a buffer, then one write (closed-pipe handling)
-            rec.write_json(text);
-            text << '\n';
-            const std::string t = text.str();
-            write_stdout(t.data(), t.size());
-            flush_stdout();
+            // Streamed straight to stdout (StdoutBuf), one sequence at a time: the report is never held whole in
+            // memory; a closed pipe / write error is thrown by finish()
+            StdoutBuf sb;
+            std::ostream out(&sb);
+            rec.write_json(out);
+            out << '\n';
+            sb.finish();
         } catch (const BrokenPipe&) {  // `--json | head`: silent exit 141, as for the alignment
             return 141;
         } catch (const std::exception& e) {

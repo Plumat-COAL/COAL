@@ -481,4 +481,66 @@ void flush_stdout() {
     throw std::runtime_error(std::string("[Errno ") + std::to_string(e) + "] " + std::strerror(e));
 }
 
+StdoutBuf::StdoutBuf() : buf_(1 << 16) { setp(buf_.data(), buf_.data() + buf_.size()); }
+
+StdoutBuf::~StdoutBuf() = default;
+
+bool StdoutBuf::send(const char* data, size_t n) {
+    if (broken_ || !error_.empty()) return false;
+    try {
+        write_stdout(data, n);
+        return true;
+    } catch (const BrokenPipe&) {
+        broken_ = true;
+    } catch (const std::exception& e) {
+        error_ = e.what();
+    }
+    return false;
+}
+
+bool StdoutBuf::flush_buffer() {
+    size_t n = (size_t)(pptr() - pbase());
+    setp(buf_.data(), buf_.data() + buf_.size());
+    return n == 0 || send(buf_.data(), n);
+}
+
+int StdoutBuf::overflow(int ch) {
+    if (!flush_buffer()) return traits_type::eof();
+    if (ch != traits_type::eof()) {
+        *pptr() = (char)ch;
+        pbump(1);
+    }
+    return traits_type::not_eof(ch);
+}
+
+std::streamsize StdoutBuf::xsputn(const char* s, std::streamsize n) {
+    if (n <= 0) return 0;
+    if ((size_t)n <= (size_t)(epptr() - pptr())) {
+        std::memcpy(pptr(), s, (size_t)n);
+        pbump((int)n);
+        return n;
+    }
+    if (!flush_buffer()) return 0;
+    if ((size_t)n >= buf_.size()) return send(s, (size_t)n) ? n : 0;  // large pieces go straight out
+    std::memcpy(pptr(), s, (size_t)n);
+    pbump((int)n);
+    return n;
+}
+
+int StdoutBuf::sync() { return flush_buffer() ? 0 : -1; }
+
+void StdoutBuf::finish() {
+    if (flush_buffer()) {
+        try {
+            flush_stdout();
+        } catch (const BrokenPipe&) {
+            broken_ = true;
+        } catch (const std::exception& e) {
+            error_ = e.what();
+        }
+    }
+    if (broken_) throw BrokenPipe();
+    if (!error_.empty()) throw std::runtime_error(error_);
+}
+
 }  // namespace coal
