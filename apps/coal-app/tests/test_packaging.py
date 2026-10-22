@@ -84,10 +84,11 @@ class TestInstalledWheel(unittest.TestCase):
 
 
 def _has_build():
+    """The 'build' package, not a build/ folder (CMake's) on sys.path, which imports as a namespace package."""
+    import importlib.util
     try:
-        import build  # noqa: F401
-        return True
-    except ImportError:
+        return importlib.util.find_spec("build.__main__") is not None
+    except (ImportError, ValueError):
         return False
 
 
