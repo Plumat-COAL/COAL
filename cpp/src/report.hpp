@@ -46,6 +46,7 @@ public:
     // The report owns the protein IDs (the pipeline reads them through ids()), one copy per run
     void set_inputs(std::vector<std::string>&& ids);
     const std::vector<std::string>& ids() const { return ids_; }
+    const std::vector<std::string>& dna_file_ids() const { return dna_file_ids_; }
     void set_dna_inputs(const std::vector<long long>& dna_counts, const std::vector<std::string>& dna_file_ids);
     // mode id / order / normalised; per_seq: per-protein "id"/"normalised" (empty unless normalised);
     // pairing[k] = the DNA record (index into dna_file_ids) of protein k

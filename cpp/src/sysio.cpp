@@ -4,6 +4,7 @@
 #include <cerrno>
 #include <csignal>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -88,8 +89,78 @@ void unregister_temp(const std::string& path) {
         if (g_used[i].load() && path == g_paths[i]) g_used[i].store(false);
 }
 
+// The folder for temporary files, found as Python's tempfile.gettempdir() finds it: the first of TMPDIR, TEMP,
+// TMP, then the system's usual folders, then the current folder, in which a file can be created. Cached. So an
+// unusable TMPDIR (a missing folder, a file) falls back as the Python engine does instead of failing the run.
+std::string temp_dir() {
+    static std::string cached;
+    if (!cached.empty()) return cached;
+    std::vector<std::string> cands;
+    for (const char* v : {"TMPDIR", "TEMP", "TMP"}) {
+        const char* e = std::getenv(v);
+        if (e && *e) cands.push_back(e);
+    }
+#ifdef _WIN32
+    for (const char* d : {"C:\\TEMP", "C:\\TMP", "\\TEMP", "\\TMP"}) cands.push_back(d);
+#else
+    for (const char* d : {"/tmp", "/var/tmp", "/usr/tmp"}) cands.push_back(d);
+#endif
+    std::error_code ec;
+    cands.push_back(fs::current_path(ec).string());
+    for (const std::string& c : cands) {
+        if (c.empty() || !fs::is_directory(c, ec)) continue;
+        std::string probe = (fs::path(c) / (".coal_probe_" + unique_name())).string();
+        bool ok;
+        {
+            std::ofstream f(probe, std::ios::binary | std::ios::trunc);
+            ok = (bool)f;
+            if (ok) {
+                f << "blat";  // a folder on a full disk is not usable either (Python writes a probe too)
+                f.flush();
+                ok = (bool)f;
+            }
+        }
+        fs::remove(probe, ec);
+        if (!ok) continue;
+        cached = fs::absolute(c, ec).string();
+        if (cached.size() > 1 && (cached.back() == '/' || cached.back() == '\\')) cached.pop_back();
+        return cached;
+    }
+    throw CoalError("no usable temporary folder: set TMPDIR to a folder you can write to", "file_error");
+}
+
+// "No space left on device" -> "no space left on device" (pipeline.py _lower_reason)
+std::string lower_reason(int err) {
+    std::string s = std::strerror(err);
+    if (!s.empty() && s[0] >= 'A' && s[0] <= 'Z') s[0] = char(s[0] + 32);
+    return s;
+}
+
+// The error for an input that cannot be copied to its temporary file (pipeline.py _copy_error)
+std::string copy_error(const std::string& name, int err) {
+    return "cannot copy " + name + " to a temporary file in " + temp_dir() + ": " + lower_reason(err);
+}
+
 std::string os_error(int err, const std::string& path) {
     return "[Errno " + std::to_string(err) + "] " + std::strerror(err) + ": " + py_repr(path);
+}
+
+// A character or block device as an input (`coal /dev/zero n.fa`, `coal - n.fa </dev/urandom`) would be copied to a
+// temp file without end, filling the disk: refused before anything is read (pipeline.py _refuse_device). A terminal
+// on standard input is read until EOF as before, and the null device is still an empty input.
+static void refuse_device(int fd, const std::string& name) {
+#ifndef _WIN32
+    struct stat st;
+    if (fd < 0 || ::fstat(fd, &st) != 0) return;
+    if (!S_ISCHR(st.st_mode) && !S_ISBLK(st.st_mode)) return;
+    if (::isatty(fd)) return;
+    struct stat null_st;
+    if (S_ISCHR(st.st_mode) && ::stat("/dev/null", &null_st) == 0 && null_st.st_rdev == st.st_rdev) return;
+    throw InputError("cannot read " + name + ": it is a device, not a file", "file_error");
+#else
+    (void)fd;
+    (void)name;
+#endif
 }
 
 // `-`: standard input copied, as bytes, to a temp file (pipeline.py _spool_stdin). The same mechanism as a pipe or
@@ -101,17 +172,23 @@ static std::string spool_stdin(std::vector<std::pair<std::string, std::string>>&
     _setmode(_fileno(stdin), _O_BINARY);
 #else
     if (::fcntl(0, F_GETFD) == -1) throw InputError(closed, "file_error");
+    refuse_device(0, STDIN_NAME);
 #endif
-    std::string tmp = (fs::temp_directory_path() / (".coal_in_" + unique_name() + "_stdin")).string();
+    std::string tmp = (fs::path(temp_dir()) / (".coal_in_" + unique_name() + "_stdin")).string();
     register_temp(tmp);
     spooled.push_back({tmp, STDIN_NAME});
+    errno = 0;
     std::ofstream dst(tmp, std::ios::binary | std::ios::trunc);
-    if (!dst) throw InputError(os_error(errno ? errno : EACCES, tmp), "file_error");
+    if (!dst) throw InputError(copy_error(STDIN_NAME, errno ? errno : EACCES), "file_error");
     std::vector<char> buf(1 << 20);
     for (;;) {
         errno = 0;
         size_t n = std::fread(buf.data(), 1, buf.size(), stdin);
-        if (n > 0) dst.write(buf.data(), (std::streamsize)n);
+        if (n > 0) {
+            errno = 0;
+            dst.write(buf.data(), (std::streamsize)n);
+            if (!dst) throw InputError(copy_error(STDIN_NAME, errno ? errno : ENOSPC), "file_error");
+        }
         if (n < buf.size()) {
             if (std::ferror(stdin)) {
                 int e = errno ? errno : EIO;
@@ -123,8 +200,7 @@ static std::string spool_stdin(std::vector<std::pair<std::string, std::string>>&
         }
     }
     dst.flush();
-    if (!dst) throw InputError(std::string("could not copy ") + STDIN_NAME + " to a temporary file (disk full?)",
-                               "file_error");
+    if (!dst) throw InputError(copy_error(STDIN_NAME, errno ? errno : ENOSPC), "file_error");
     return tmp;
 }
 
@@ -149,6 +225,20 @@ std::vector<std::string> spool_inputs(const std::vector<std::string>& args,
         }
         // "cannot open '<path>': <reason>"
         if (fs::is_directory(a, ec)) throw InputError(open_error(a), "file_error");
+#ifndef _WIN32
+        {
+            int fd = ::open(a.c_str(), O_RDONLY | O_NOCTTY);
+            if (fd >= 0) {
+                try {
+                    refuse_device(fd, a);
+                } catch (...) {
+                    ::close(fd);
+                    throw;
+                }
+                ::close(fd);
+            }
+        }
+#endif
         std::ifstream src(a, std::ios::binary);
         if (!src) throw InputError(open_error(a), "file_error");
         std::string base = fs::path(a).filename().string();
@@ -157,19 +247,24 @@ std::vector<std::string> spool_inputs(const std::vector<std::string>& args,
                   c == '_' || c == '-'))
                 c = '_';
         if (base.size() > 40) base = base.substr(base.size() - 40);
-        std::string tmp = (fs::temp_directory_path() / (".coal_in_" + unique_name() + "_" + base)).string();
+        std::string tmp = (fs::path(temp_dir()) / (".coal_in_" + unique_name() + "_" + base)).string();
         register_temp(tmp);
         spooled.push_back({tmp, a});
+        errno = 0;
         std::ofstream dst(tmp, std::ios::binary | std::ios::trunc);
-        if (!dst) throw InputError(os_error(errno ? errno : EACCES, tmp), "file_error");
+        if (!dst) throw InputError(copy_error(a, errno ? errno : EACCES), "file_error");
         std::vector<char> buf(1 << 20);
         while (src) {
             src.read(buf.data(), (std::streamsize)buf.size());
             std::streamsize n = src.gcount();
-            if (n > 0) dst.write(buf.data(), n);
+            if (n > 0) {
+                errno = 0;
+                dst.write(buf.data(), n);
+                if (!dst) throw InputError(copy_error(a, errno ? errno : ENOSPC), "file_error");
+            }
         }
         dst.flush();
-        if (!dst) throw InputError("could not copy " + a + " to a temporary file (disk full?)", "file_error");
+        if (!dst) throw InputError(copy_error(a, errno ? errno : ENOSPC), "file_error");
         out.push_back(tmp);
     }
     return out;
@@ -184,7 +279,7 @@ void remove_spooled(const std::vector<std::pair<std::string, std::string>>& spoo
 }
 
 // Python's os.path.realpath (non-strict): follow the final component's symlinks, resolve the folder.
-static std::string real_path(const std::string& p) {
+std::string real_path(const std::string& p) {
     fs::path cur = fs::absolute(fs::path(p));
     for (int i = 0; i < 40; ++i) {
         std::error_code ec;
@@ -206,8 +301,15 @@ OutTarget resolve_output(const std::string& out) {
         throw CoalError(out + ": symbolic link loop; cannot write the output there", "file_error");
 #endif
     OutTarget t;
-    t.real = real_path(out);
     std::error_code ec;
+    // An existing non-regular target (a FIFO, /dev/stdout, /dev/fd/1, a device) is written through as it is, before
+    // any path resolution: the real path of /dev/fd/1 on a pipe is "pipe:[N]", which no folder holds
+    if (fs::exists(out, ec) && !fs::is_directory(out, ec) && !fs::is_regular_file(out, ec)) {
+        t.real = out;
+        t.direct = true;
+        return t;
+    }
+    t.real = real_path(out);
     // -o naming a folder is refused here, before any work
     if (fs::is_directory(t.real, ec))
         throw CoalError("cannot write " + out + ": it is a folder, not a file (give a file name with -o)", "file_error");
@@ -241,7 +343,7 @@ OutTarget resolve_output(const std::string& out) {
 // what to do, no -o names the temp folder.
 std::string output_error(const std::string& out, int err) {
     std::error_code ec;
-    std::string folder = out.empty() ? fs::temp_directory_path(ec).string()
+    std::string folder = out.empty() ? temp_dir()
                                      : fs::absolute(fs::path(out)).lexically_normal().parent_path().string();
     std::string why;
     if (err == ENOENT && !fs::is_directory(folder, ec)) why = "folder " + folder + " does not exist";
@@ -250,8 +352,60 @@ std::string output_error(const std::string& out, int err) {
 #endif
     else if (err == ENOTDIR) why = folder + " is not a folder";
     else if (err == EACCES || err == EPERM) why = "permission denied (choose a folder you can write to)";
-    else why = std::strerror(err);
+    else why = lower_reason(err);
     return "cannot write " + (out.empty() ? "a temporary file in " + folder : out) + ": " + why;
+}
+
+bool same_file(const std::string& a, const std::string& b) {
+    std::error_code ec;
+    bool eq = fs::equivalent(a, b, ec);
+    if (!ec) return eq;
+    return real_path(a) == real_path(b);
+}
+
+std::string report_path_conflict(const std::string& report, const std::vector<std::string>& inputs,
+                                 const std::string& out) {
+    if (report.empty()) return std::string();
+    for (const std::string& p : inputs)
+        if (p != STDIN_ARG && same_file(report, p)) return "the report path " + report + " is an input file";
+    if (!out.empty() && same_file(report, out)) return "the report path " + report + " is the output file";
+    return std::string();
+}
+
+int write_json_file(const std::string& path, const std::string& text) {
+    std::string real = real_path(path);
+    std::error_code ec;
+    bool exists = fs::exists(real, ec);
+    bool regular = exists && fs::is_regular_file(real, ec);
+    if (exists && (!regular || fs::hard_link_count(real, ec) > 1)) {
+        // a FIFO, device or hard-linked file: written in place, not replaced by a regular file
+        errno = 0;
+        std::ofstream f(path, std::ios::binary | std::ios::trunc);
+        if (!f) return errno ? errno : EIO;
+        f << text;
+        f.flush();
+        return f ? 0 : (errno ? errno : EIO);
+    }
+    std::string tmp = real + ".tmp" + unique_name();
+    int err = 0;
+    {
+        errno = 0;
+        std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
+        if (!f) return errno ? errno : EIO;
+        f << text;
+        f.flush();
+        if (!f) err = errno ? errno : EIO;
+    }
+    if (!err) {
+        if (regular) copy_mode(real, tmp);  // keep the existing file's mode
+        fs::rename(tmp, real, ec);
+        if (ec) err = ec.value();
+    }
+    if (err) {
+        std::error_code rm;
+        fs::remove(tmp, rm);
+    }
+    return err;
 }
 
 void copy_mode(const std::string& real, const std::string& tmp) {

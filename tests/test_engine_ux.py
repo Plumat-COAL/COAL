@@ -122,7 +122,7 @@ CASES["no_false_location"] = ({"p.fa": f">g\n{DUP_ROW}\n", "d.fa": f">g\n{DUP_DN
                               ["coal: summary: The run stopped at g, so no output was written.\n"])
 if sys.platform.startswith("linux") and os.path.isdir("/proc"):
     CASES["out_proc"] = ({"p.fa": P, "d.fa": D}, ["p.fa", "d.fa", "-o", "/proc/coal-x.fa"],
-                         ["coal: error: cannot write /proc/coal-x.fa: No such file or directory\n"])  # folder exists
+                         ["coal: error: cannot write /proc/coal-x.fa: no such file or directory\n"])  # folder exists
 
 
 def make(d: Path, files: dict) -> None:

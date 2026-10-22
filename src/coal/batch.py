@@ -20,6 +20,7 @@ import shlex
 import sys
 
 from . import __version__
+from .report import report_path_conflict, write_json
 
 SCHEMA = "coal.batch/1"
 # --batch-out-dir: the output file's extension per -output format
@@ -133,6 +134,9 @@ def plan(ap: argparse.ArgumentParser, args: argparse.Namespace, argv: list[str],
         if "-" in (ns.pep_aln, *ns.nuc_fasta):
             raise JobsError(n, "'-' (standard input) cannot be a job's input: standard input can be read once, and "
                                "`--batch -` may be reading the job list from it; give a file path")
+        if ns.out == "-":
+            raise JobsError(n, "-o - (standard output) is not allowed on a job line: every job of a batch writes to "
+                               "a file")
         if not ns.out:
             if not args.batch_out_dir:
                 raise JobsError(n, "the job has no -o (every job of a batch writes to a file; or give "
@@ -143,6 +147,10 @@ def plan(ap: argparse.ArgumentParser, args: argparse.Namespace, argv: list[str],
         else:
             job.argv = [*defaults, *job.tokens]
         job.args, job.output = ns, ns.out
+        # a job's --report may not name one of its inputs or its output (as for a single run)
+        why = report_path_conflict(ns.report, [ns.pep_aln, *ns.nuc_fasta], ns.out)
+        if why:
+            raise JobsError(n, why)
         jobs.append(job)
     seen: dict[str, Job] = {}
     for job in jobs:
@@ -151,23 +159,12 @@ def plan(ap: argparse.ArgumentParser, args: argparse.Namespace, argv: list[str],
             raise JobsError(job.line_no, f"writes {job.output}, the output of the job on line "
                                          f"{seen[key].line_no} (give each job its own -o)")
         seen[key] = job
+    if args.report:  # the batch report may not name any job's input or output either
+        for job in jobs:
+            why = report_path_conflict(args.report, [job.args.pep_aln, *job.args.nuc_fasta], job.output)
+            if why:
+                raise JobsError(0, why)
     return jobs
-
-
-def write_json(path: str, data: dict) -> None:
-    """Write atomically (temp file + rename); never leaves the temp file behind."""
-    tmp = f"{path}.tmp{os.getpid()}"
-    try:
-        with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
-            json.dump(data, fh, indent=1)
-            fh.write("\n")
-        os.replace(tmp, path)
-    except OSError:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
 
 
 def main(ap: argparse.ArgumentParser, args: argparse.Namespace, argv: list[str]) -> int:
@@ -233,5 +230,9 @@ def main(ap: argparse.ArgumentParser, args: argparse.Namespace, argv: list[str])
                 print(f"coal: error: could not write the report {args.report}: {why}", file=sys.stderr)
                 rc = 1
         if args.json:
-            print(json.dumps(report, indent=1))
+            try:
+                print(json.dumps(report, indent=1), flush=True)
+            except BrokenPipeError:  # `--batch ... --json | head`: silent exit 141
+                from .cli import closed_stdout_exit
+                return closed_stdout_exit()
     return rc

@@ -18,6 +18,63 @@
   create the results folder <folder>: <reason>" in the banner, the MCP tool `codon_align` raises a tool error with
   that sentence, and `coal-gui` / `python -m coal_app` print it and exit 1 instead of failing in `os.makedirs`.
 
+- **Device inputs are refused** (robustness review): `coal /dev/zero nuc.fa` or `coal - nuc.fa </dev/zero` used to
+  copy the device to a temporary file without end, filling the disk silently. Both engines now stop before reading
+  with `coal: error: cannot read /dev/zero: it is a device, not a file` (exit 1; `standard input` for `-`). A
+  terminal on standard input and `/dev/null` behave as before; pipes, FIFOs and `<(...)` are unchanged.
+- **`--report PATH` no longer replaces what is at PATH** (robustness review): it used to rename a temp file over
+  anything there, so `--report nuc.fa` destroyed an input, `--report out.fa` the output, and a symlink, FIFO or
+  device node (`/dev/null` became a regular file!) was replaced. Both engines now give the report path the rules of
+  `-o`: an input or the output file is a usage error before anything runs (`coal: error: the report path r.json is
+  an input file` / `is the output file`, exit 2; also for a job line's `--report` and the batch report), symlinks
+  are written through, and FIFOs, devices and hard-linked files are written in place.
+- **A killed worker no longer hangs the Python engine** (robustness review): when the out-of-memory killer (or
+  `kill -9`) took one worker of a `-j` run, the main process could block forever in the pool's shutdown. It now
+  ends the pool without waiting and stops with `coal: error: a worker process died (out of memory?)` (exit 1, report
+  code `worker_died`, no partial output, no temp files). Workers also let SIGTERM end them (the inherited handler
+  used to be swallowed inside the work) and **die with the main process** (`PR_SET_PDEATHSIG` on Linux, a parent
+  watchdog everywhere), so a `kill -9` of `coal` no longer leaves workers holding its stdout open and a pipeline
+  reading it waiting for EOF forever.
+- **Checkpoints are checked before `--resume` trusts them** (robustness review): an edited or corrupted
+  `<out>.coal-checkpoint.json` (`completed` beyond the input or negative, a string or float where an integer belongs,
+  a list at the top level, a missing key, a deleted entries file, a partial file shorter than recorded, a truncated
+  or deeply nested file, a folder at the checkpoint's path) made both engines write a truncated output with exit 0,
+  or crash with a traceback / raw C++ text. Both engines now check every field's type and range and the partial
+  files' sizes, treat any problem as the existing "unreadable checkpoint" notice and start a normal run; a
+  checkpoint that cannot be written (`cannot write the checkpoint ...: is a directory`) is a notice and the run
+  goes on without one; and `coal-cpp`'s JSON parser has a nesting limit (64) instead of overflowing the stack.
+- **A checkpoint written by the other engine** (robustness review): `coal --resume` now picks the engine that wrote
+  the checkpoint (so a `coal-cpp` installed or removed between the run and the resume does not get in the way),
+  and when an engine is asked to resume the other one's run it says so instead of blaming the inputs: `out.fa was
+  interrupted by the Python engine (coal-python), which must resume it: run again with COAL_ENGINE=python, or start
+  a new run without --resume`.
+- **`-o /dev/fd/1` and `-o /dev/stdout` work when stdout is a pipe** (robustness review): both engines resolved
+  the path to `pipe:[N]` and failed with `cannot write /dev/fd/1: No such file or directory`. An existing target
+  that is not a regular file is now written through before any path resolution.
+- **`--json | head` is a silent exit 141** (robustness review) in both engines (the Python engine printed a
+  traceback and exited 1, `coal-cpp` exited 0), also for `--batch ... --json`.
+- **`coal-cpp` falls back when `TMPDIR` is unusable** (robustness review): a `TMPDIR` naming a missing folder or a
+  file made it fail with `filesystem error: temp_directory_path`; it now searches `TMPDIR`, `TEMP`, `TMP`, `/tmp`,
+  `/var/tmp`, `/usr/tmp` and the current folder as Python's `tempfile` does, so both engines behave the same.
+- **Disk-full errors name the file** (robustness review): the Python engine printed `[Errno 28] No space left on
+  device` (and could hang at exit after terminating its workers), `coal-cpp` `could not write the output (disk
+  full?)` (and, with the rows going through a full temp folder, exit 0 with an empty output). Both now say
+  `cannot write out.fa: no space left on device`, `cannot write a temporary file in /tmp: ...` or `cannot copy
+  standard input to a temporary file in /tmp: ...`, exit 1, and leave no temp file behind.
+- **Python API checks its arguments** (robustness review): `coal.codon_align` raises `CoalError` with
+  `code="duplicate_id"` for a repeated protein or DNA ID (it used to pair them silently; the command line refuses
+  the file), and both `codon_align` and `coal.align_files` raise `TypeError` with a message naming the argument for
+  a dict, generator, bare string, `None`, a non-`str` ID or a pair of the wrong length, instead of a `KeyError` or
+  `AttributeError` from inside the engine. `align_files(pep, "nuc.fa")` with one DNA path as a string or
+  `os.PathLike` now means that one file (the string used to be iterated character by character).
+- **Smaller robustness fixes** (both engines, identical messages): a NUL or other control byte (except tab, LF,
+  VT, FF, CR) anywhere in a protein or DNA file is `<file>:<line>: control character: sequence files must be plain
+  text (is this a binary or word-processor file?)` (exit 1, code `input_format`) instead of a confusing row-length
+  error, a mangled ID or silently dropped bytes; IDs longer than 200 characters are shortened on stderr to their
+  first 100 and last 20 characters (the output and the report keep them whole); `-o -` means standard output; the
+  Python engine reports a DNA file that shrank between indexing and reading as `could not read the DNA of record N
+  (the file changed after it was read, or cannot be read)`, as `coal-cpp` does, instead of reading another
+  record's bytes; an empty DNA file among several is documented as accepted.
 - **Less memory with many workers:** COAL's own processes now limit numpy's BLAS thread pool to one thread
   (`OPENBLAS_NUM_THREADS`, `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, unless already set). COAL uses no BLAS, but every
   worker that imported numpy started a pool sized to the machine. On a 20-thread Windows machine each process that

@@ -351,6 +351,33 @@ def sha256_file(path) -> str | None:
         return None
 
 
+LONG_ID = 200  # IDs longer than this are shortened on stderr (short_id); the report keeps them whole
+
+
+def short_id(rid: str) -> str:
+    """A very long ID as stderr shows it: the first 100 and the last 20 characters (the same in coal-cpp)."""
+    return rid if len(rid) <= LONG_ID else rid[:100] + "..." + rid[-20:]
+
+
+class IdShortener:
+    """Replaces the IDs longer than LONG_ID in a message by short_id(): stderr lines stay readable when IDs are
+    whole header lines of thousands of characters. Nothing to do (and no cost) when no ID is that long."""
+
+    def __init__(self, rec):
+        self.rec, self._seen, self.long = rec, (None, None), []
+
+    def __call__(self, text: str) -> str:
+        key = (id(self.rec.ids), id(getattr(self.rec, "dna_file_ids", None)))
+        if key != self._seen:
+            self._seen = key
+            self.long = sorted({i for lst in (self.rec.ids, getattr(self.rec, "dna_file_ids", None)) if lst
+                                for i in lst if len(i) > LONG_ID}, key=len, reverse=True)
+        for rid in self.long:
+            if rid in text:
+                text = text.replace(rid, short_id(rid))
+        return text
+
+
 def _n(x: int) -> str:
     return f"{x:,}"
 
@@ -1038,17 +1065,63 @@ class RunReport:
         return d
 
     def write(self, path: str):
-        """Write atomically (temp file + rename); never leaves the temp file behind."""
-        import json
-        tmp = f"{path}.tmp{os.getpid()}"
+        """Write the report to `path` (write_json)."""
+        write_json(path, self.to_dict())
+
+
+def _same_file(a, b) -> bool:
+    """Whether two paths name the same file: by identity when both exist, else by resolved path."""
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        pass
+    try:
+        return os.path.normcase(os.path.realpath(a)) == os.path.normcase(os.path.realpath(b))
+    except OSError:
+        return False
+
+
+def report_path_conflict(report, inputs, out) -> str | None:
+    """Why `--report REPORT` cannot be written: it names an input file or the -o output (the report replaces what is
+    at its path, which would destroy them). A usage error (exit 2), checked before anything runs; also for the
+    reports of a batch's job lines. None when the path is fine. The C++ engine mirrors this (main.cpp)."""
+    if not report:
+        return None
+    for p in inputs:
+        if str(p) != "-" and _same_file(report, p):
+            return f"the report path {report} is an input file"
+    if out and _same_file(report, out):
+        return f"the report path {report} is the output file"
+    return None
+
+
+def write_json(path: str, data: dict) -> None:
+    """Write a JSON file as the alignment is written (pipeline._run): a temp file renamed onto the real target,
+    through a symlink, so a failure never leaves a half-written file; a path that exists and is not a regular file
+    (a FIFO, /dev/stdout, /dev/null) or a file with other hard links is written in place instead of being replaced
+    by a regular file. Never leaves the temp file behind."""
+    import json
+    text = json.dumps(data, indent=1) + "\n"
+    real = os.path.realpath(path)
+    try:
+        st = os.stat(real)
+    except OSError:
+        st = None
+    if st is not None and (not os.path.isfile(real) or st.st_nlink > 1):
+        with open(path, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(text)
+        return
+    tmp = f"{real}.tmp{os.getpid()}"
+    try:
+        with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(text)
+        if st is not None:
+            import shutil
+            shutil.copymode(real, tmp)  # keep the existing file's mode
+        os.replace(tmp, real)
+    except OSError:
         try:
-            with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
-                json.dump(self.to_dict(), fh, indent=1)
-                fh.write("\n")
-            os.replace(tmp, path)
+            os.unlink(tmp)
         except OSError:
-            try:
-                os.unlink(tmp)
-            except OSError:
-                pass
-            raise
+            pass
+        raise
