@@ -1124,9 +1124,9 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                         warn(it.id + " " + w);
                 for (auto& n : it.notices) warn(n);
                 if (it.failed) warn("skipped " + it.error);
-                const Json* e = it.failed ? rec.add_sequence(done, it.id, {}, {}, it.error_code, it.error)
-                                          : rec.add_sequence(done, it.id, shown(it.warnings), it.notices);
-                if (ck && e) entries.f << json_dump(*e) << '\n';
+                const std::string* e = it.failed ? rec.add_sequence(done, it.id, {}, {}, it.error_code, it.error)
+                                                 : rec.add_sequence(done, it.id, shown(it.warnings), it.notices);
+                if (ck && e) entries.f << *e << '\n';
                 if (it.failed) {
                     ++skipped;
                     skip_idx.insert(done);
@@ -1485,7 +1485,8 @@ int main(int argc, char** argv) {
         {
             errno = 0;
             std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
-            f << json_dump(rec.to_dict(), 1) << '\n';
+            rec.write_json(f);
+            f << '\n';
             f.flush();
             ok = (bool)f;
             if (!ok) err = errno ? errno : EIO;
@@ -1502,6 +1503,9 @@ int main(int argc, char** argv) {
             if (!rc) rc = 1;
         }
     }
-    if (o.json) std::cout << json_dump(rec.to_dict(), 1) << '\n' << std::flush;
+    if (o.json) {
+        rec.write_json(std::cout);
+        std::cout << '\n' << std::flush;
+    }
     return rc;
 }

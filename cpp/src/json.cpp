@@ -201,6 +201,8 @@ std::string json_dump(const Json& j, int indent) {
     return out;
 }
 
+void json_dump_to(std::string& out, const Json& j, int indent, int depth) { dump(out, j, indent, depth); }
+
 namespace {
 struct Parser {
     const std::string& t;

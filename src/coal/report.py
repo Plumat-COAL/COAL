@@ -657,8 +657,23 @@ class RunReport:
         # The app's hint (apps/coal-app/src/coal_app/core.py genetic_code_hint), computed here
         if not self.want_hint:
             return
-        view = [self.entry_view(k, aborted) for k in range(n)]
-        problems = [k for k, e in enumerate(view) if fixable(e)]
+        # One entry view at a time (a list of all n took ~400 B per sequence); a clean sequence of a run that was not
+        # aborted is never fixable, so its view is not even built. Of the problems' views only the start-codon summary
+        # is kept: whether every definite mismatch is a first-Met one, and the first such codon (the text below).
+        problems = []
+        any_start, all_start, first_codon = False, True, None
+        ent, kinds = self.entries, self.kinds
+        for k in range(n):
+            if not aborted and k < len(kinds) and kinds[k] == 111 and k not in ent:  # ord("o")
+                continue
+            e = self.entry_view(k, aborted)
+            if fixable(e):
+                problems.append(k)
+                for m in real_mismatches(e):
+                    if not any_start:
+                        first_codon = m.get("codon")
+                    any_start = True
+                    all_start = all_start and bool(m.get("start_codon"))
         if not problems:
             return
         pset = set(problems)
@@ -691,11 +706,9 @@ class RunReport:
             text = (f"COAL tested {nt} of the {total} sequences ({which}): under "
                     f"genetic code {c} ({name}), {top} of them match their protein; under code {table}, "
                     f"{do(fits_now)}.")
-        starts = [m for k in problems for m in real_mismatches(view[k])]
-        if starts and all(m.get("start_codon") for m in starts):
-            ex = starts[0]
+        if any_start and all_start:
             text = (f"The only mismatches are at the first codon of {len(pset)} sequence{'s' if len(pset) != 1 else ''}"
-                    f" (for example {ex.get('codon')} where the protein starts with M): an alternative start codon, "
+                    f" (for example {first_codon} where the protein starts with M): an alternative start codon, "
                     f"which code {c} accepts. " + text)
         if len(tied) > 1:
             others = " and ".join([", ".join(str(x) for x in tied[1:-1]), str(tied[-1])] if len(tied) > 2
@@ -913,25 +926,29 @@ class RunReport:
         parts = [f"Codon alignments were built with COAL v{__version__} ({REPO_URL}), which places each coding DNA "
                  f"sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; "
                  f"Suyama et al. 2006), using the {phrase} (NCBI translation table {n})."]
-        kinds: dict[str, list] = {}
+        # Counted in one pass over the entries ("sequences" may be a one-shot iterator: _write_json streams them)
+        kinds: dict[str, int] = {}
+        codes: set = set()  # the message codes of the "other" entries
         for sq in rep["sequences"]:
-            kinds.setdefault(gene_kind(sq), []).append(sq)
+            g = gene_kind(sq)
+            kinds[g] = kinds.get(g, 0) + 1
+            if g == "other":
+                codes.update(m.get("code") for m in sq.get("messages") or [])
         nomm = self.nomismatch
         clauses = []
 
         def were(k):
             return "was" if k == 1 else "were"
         if kinds.get("mismatch"):
-            k = len(kinds["mismatch"])
+            k = kinds["mismatch"]
             clauses.append(f"{k} contained codons that did not match the aligned amino acid"
                            + ("" if nomm else " (kept in the alignment)"))
         if kinds.get("unchecked"):
-            k = len(kinds["unchecked"])
+            k = kinds["unchecked"]
             clauses.append(f"{k} contained codons with unknown or ambiguous bases (e.g. N) that could not be checked"
                            + ("" if nomm else " (kept in the alignment)"))
-        other = kinds.get("other") or []
+        other = kinds.get("other", 0)
         if other:
-            codes = {m.get("code") for sq in other for m in sq.get("messages") or []}
             why = []
             if "unknown_aa" in codes:
                 why.append("contained non-standard amino acids (such as U, B or Z) whose codons were not checked")
@@ -939,15 +956,15 @@ class RunReport:
                 why.append("were paired with their DNA only by their order in the files")
             if codes - {"unknown_aa", "suspect_pairing"}:
                 why.append("had other warnings (see the report)")
-            k = len(other)
+            k = other
             clauses.append(f"{k} " + (why[0] if len(why) == 1 else "had warnings: they " + " or ".join(why)))
         if kinds.get("flagged"):
-            k = len(kinds["flagged"])
+            k = kinds["flagged"]
             clauses.append(f"{k} {were(k)} written to the output but flagged as probably wrong (most likely the wrong "
                            f"DNA, a shifted position or the wrong genetic code); remove "
                            f"{'it' if k == 1 else 'them'} before analysis")
         if kinds.get("excluded"):
-            k = len(kinds["excluded"])
+            k = kinds["excluded"]
             clauses.append(f"{k} could not be aligned and {were(k)} excluded")
         counts = f"Of {total} sequences, {ok} matched their protein exactly"
         if clauses:
@@ -982,9 +999,13 @@ class RunReport:
         return text
 
     def to_dict(self, methods: bool = True) -> dict:
+        return self._dict_with(self._all_entries(), methods)
+
+    def _dict_with(self, entries, methods: bool = True) -> dict:
+        """to_dict with the given entry views (a list, or in _write_json a callable giving a fresh iterator)."""
         import shlex
-        entries = self._all_entries()
-        c = self.counts(entries)
+        views = entries if callable(entries) else (lambda: entries)
+        c = self.counts(views())
         n = len(self.ids) if self.ids is not None else len(self.kinds)
         # "path" is the argument as given (`-` for standard input); "sha256" is of the data read
         def _hash(k, p):
@@ -1024,7 +1045,7 @@ class RunReport:
             "summary": summary,
             "hints": self.hints(),
             "errors": list(self.errors),
-            "sequences": entries,
+            "sequences": views(),
             "runtime_seconds": round(time.perf_counter() - self.t0, 3),
             "exit_code": self.exit_code,
         }
@@ -1037,13 +1058,35 @@ class RunReport:
             d["resumed_from"] = self.resumed_from
         return d
 
+    def write_json(self, fh) -> None:
+        """Write the report (json.dump(self.to_dict(), fh, indent=1), byte for byte) one sequence entry at a time, so a
+        run of a million sequences never holds a million entry dicts at once."""
+        import json
+        n = len(self.ids) if self.ids is not None else len(self.kinds)
+        d = self._dict_with(lambda: (self.entry_view(k) for k in range(n)))
+        head = {k: v for k, v in d.items() if k != "sequences"}
+        keys = list(d)
+        at = keys.index("sequences")
+        # json.dumps(indent=1) of the keys before "sequences", without its closing "\n}"; then the array, each entry
+        # as json.dumps writes it two levels deep; then the keys after it, without their opening "{"
+        fh.write(json.dumps({k: head[k] for k in keys[:at]}, indent=1)[:-2])
+        fh.write(',\n "sequences": ')
+        if n == 0:
+            fh.write("[]")
+        else:
+            fh.write("[")
+            for k in range(n):
+                fh.write(",\n  " if k else "\n  ")
+                fh.write(json.dumps(self.entry_view(k), indent=1).replace("\n", "\n  "))
+            fh.write("\n ]")
+        fh.write("," + json.dumps({k: head[k] for k in keys[at + 1:]}, indent=1)[1:])
+
     def write(self, path: str):
         """Write atomically (temp file + rename); never leaves the temp file behind."""
-        import json
         tmp = f"{path}.tmp{os.getpid()}"
         try:
             with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
-                json.dump(self.to_dict(), fh, indent=1)
+                self.write_json(fh)
                 fh.write("\n")
             os.replace(tmp, path)
         except OSError:

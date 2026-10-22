@@ -227,7 +227,8 @@ def run_job(args, argv, prefix: str = "", want_report: bool = False) -> tuple[in
             say(f"error: could not write the report {args.report}: {why}")
             rc = rc or 1
     if args.json:
-        print(json.dumps(rec.to_dict(), indent=1))
+        rec.write_json(sys.stdout)
+        print()
     return rc, rec
 
 
