@@ -8,6 +8,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <random>
 #include <stdexcept>
 
@@ -402,6 +403,10 @@ std::string report_path_conflict(const std::string& report, const std::vector<st
 }
 
 int write_json_file(const std::string& path, const std::string& text) {
+    return write_json_file(path, [&](std::ostream& f) { f << text; });
+}
+
+int write_json_file(const std::string& path, const std::function<void(std::ostream&)>& writer) {
     std::string real = real_path(path);
     std::error_code ec;
     bool exists = fs::exists(real, ec);
@@ -411,7 +416,7 @@ int write_json_file(const std::string& path, const std::string& text) {
         errno = 0;
         std::ofstream f(path, std::ios::binary | std::ios::trunc);
         if (!f) return errno ? errno : EIO;
-        f << text;
+        writer(f);
         f.flush();
         return f ? 0 : (errno ? errno : EIO);
     }
@@ -421,7 +426,7 @@ int write_json_file(const std::string& path, const std::string& text) {
         errno = 0;
         std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
         if (!f) return errno ? errno : EIO;
-        f << text;
+        writer(f);
         f.flush();
         if (!f) err = errno ? errno : EIO;
     }

@@ -11,7 +11,6 @@ existing pipelines; -output clustal|paml|fasta|codon and -blockonly as in PAL2NA
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import signal
 import sys
@@ -229,7 +228,8 @@ def run_job(args, argv, prefix: str = "", want_report: bool = False) -> tuple[in
             rc = rc or 1
     if args.json:
         try:
-            print(json.dumps(rec.to_dict(), indent=1), flush=True)
+            rec.write_json(sys.stdout)
+            print(flush=True)
         except BrokenPipeError:  # `--json | head`: silent exit 141, as for the alignment
             return closed_stdout_exit(), rec
     return rc, rec

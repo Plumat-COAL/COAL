@@ -5,6 +5,7 @@
 //   * -o: symlinks written through, FIFOs / devices / hard-linked files written in place, an existing file keeps
 //     its permissions, clear errors for symlink loops and missing folders.
 #pragma once
+#include <functional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -66,6 +67,8 @@ std::string report_path_conflict(const std::string& report, const std::vector<st
 // Writes a JSON text as the alignment is written: temp file + rename through symlinks, in place for a FIFO, device
 // or hard-linked file (report.py write_json). Returns 0 or the errno.
 int write_json_file(const std::string& path, const std::string& text);
+// The same, with the text produced by `writer` (the run report is streamed one sequence at a time).
+int write_json_file(const std::string& path, const std::function<void(std::ostream&)>& writer);
 
 // Gives `tmp` the permissions `real` has (existing file) before it replaces it.
 void copy_mode(const std::string& real, const std::string& tmp);

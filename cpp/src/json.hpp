@@ -68,6 +68,8 @@ struct Json {
 
 // indent < 0: compact one line ("a": 1, separators like Python's json.dumps)
 std::string json_dump(const Json& j, int indent = -1);
+// Appends j as json_dump would write it nested `depth` levels deep in an indented document (streaming writers).
+void json_dump_to(std::string& out, const Json& j, int indent, int depth);
 // Throws std::runtime_error on malformed input.
 Json json_parse(const std::string& text);
 

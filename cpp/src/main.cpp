@@ -22,6 +22,7 @@
 #include <random>
 #include <set>
 #include <unordered_map>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -1200,9 +1201,9 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                         warn(it.id + " " + w);
                 for (auto& n : it.notices) warn(n);
                 if (it.failed) warn("skipped " + it.error);
-                const Json* e = it.failed ? rec.add_sequence(done, it.id, {}, {}, it.error_code, it.error)
-                                          : rec.add_sequence(done, it.id, shown(it.warnings), it.notices);
-                if (ck && e) entries.f << json_dump(*e) << '\n';
+                const std::string* e = it.failed ? rec.add_sequence(done, it.id, {}, {}, it.error_code, it.error)
+                                                 : rec.add_sequence(done, it.id, shown(it.warnings), it.notices);
+                if (ck && e) entries.f << *e << '\n';
                 if (it.failed) {
                     ++skipped;
                     skip_idx.insert(done);
@@ -1601,7 +1602,7 @@ int main(int argc, char** argv) {
         for (auto& l : rec.summary_lines()) std::cerr << "coal: summary: " << shorten(l) << '\n';
     std::cerr.flush();
     if (!o.report.empty()) {
-        int err = write_json_file(o.report, json_dump(rec.to_dict(), 1) + "\n");
+        int err = write_json_file(o.report, [&](std::ostream& f) { rec.write_json(f); f << '\n'; });
         if (err) {
             std::error_code rm;
             // As cli.py: the error gives the reason
@@ -1611,9 +1612,12 @@ int main(int argc, char** argv) {
         }
     }
     if (o.json) {
-        std::string text = json_dump(rec.to_dict(), 1) + "\n";
         try {
-            write_stdout(text.data(), text.size());
+            std::ostringstream text;  // streamed per sequence into a buffer, then one write (closed-pipe handling)
+            rec.write_json(text);
+            text << '\n';
+            const std::string t = text.str();
+            write_stdout(t.data(), t.size());
             flush_stdout();
         } catch (const BrokenPipe&) {  // `--json | head`: silent exit 141, as for the alignment
             return 141;

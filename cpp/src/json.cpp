@@ -201,6 +201,8 @@ std::string json_dump(const Json& j, int indent) {
     return out;
 }
 
+void json_dump_to(std::string& out, const Json& j, int indent, int depth) { dump(out, j, indent, depth); }
+
 namespace {
 // Nesting deeper than this is malformed input (a checkpoint or report never nests more than a few levels):
 // the parser recurses once per level, so without a limit a file of 100,000 '[' overflows the stack.

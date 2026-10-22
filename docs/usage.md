@@ -85,15 +85,26 @@ killed, so a pipeline reading COAL's output never waits on an orphaned worker.
 
 - `-nogap`/`-nomismatch`/`-blockonly` need every row before deciding which columns to remove, so the rows are first
   written to a temporary file (disk space about the size of the output). The clustal and codon formats interleave
-  all sequences block by block, so they use temporary files the same way (about twice the output size on disk) and
-  hold at most 16 MB of rows in memory at a time (measured with 500,000 sequences of 150 codons, `-j 1`: peak memory
-  122 MB for fasta, 139 MB for clustal, 145 MB for codon). `-j` gives the same output in every format.
+  all sequences block by block, so they use temporary files the same way and hold at most 16 MB of rows in memory at
+  a time. Temporary disk space for clustal/codon output: about 2.5× the output size with the Python engine (a stage
+  file and the partial output next to the output file, plus a fixed-width copy of the rows in the temp folder,
+  `TMPDIR`) and about 1.8× with `coal-cpp` (all next to the output file with `-o`; in the temp folder without `-o`).
+  `-j` gives the same output in every format.
 - CLUSTAL input is read into memory (FASTA input is streamed).
 - Temporary files go to `TMPDIR` (then `TEMP`, `TMP`, `/tmp`, `/var/tmp`, the current folder: the first that is a
   writable folder, as Python's `tempfile` chooses it), in both engines; an unusable `TMPDIR` is skipped, not an
   error.
-- Memory still holds the sequence IDs and their file positions, about 300 bytes per sequence (≈150 MB per
-  500,000 sequences).
+- Memory still holds the sequence IDs and their file positions: about 350 bytes per sequence with the Python
+  engine (one process: 86 MB at 100,000 sequences, 140 MB at 300,000, 367 MB at 1,000,000, all of 400
+  codons; 500,000 sequences of 150 codons: 203 / 203 / 209 MB for fasta / clustal / codon output) and about
+  190 bytes with `coal-cpp` (36 / 73 / 204 MB; 112 / 136 / 148 MB). Each extra Python
+  worker process adds its own footprint (about 150 MB). Sequences with warnings keep their report entry in
+  memory (about 0.6 KB each with `coal-cpp`, 1.4 KB with the Python engine); `--report`/`--json` is written one
+  sequence at a time, so it adds little.
+- `-q --progress` still prints the progress lines (`-q` silences warnings, notices and the summary, not progress).
+- The `--resume` checkpoint is written about every 2 seconds of processing; under heavy I/O contention it can be
+  later, since each checkpoint flushes the partial output to disk first (best effort, never less than the data the
+  checkpoint describes).
 
 ## Run report and long runs
 

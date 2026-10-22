@@ -9,6 +9,7 @@ namespace {
 
 enum Mode { NORMAL = 0, START = 1, ANCHOR_START = 2 };
 constexpr int ANCHOR = 10;
+constexpr int INDEX_AFTER = 8;  // anchors searched for (not at their expected position) before the window index is built
 constexpr int MIN_CHECKABLE = 10;
 constexpr int AMBIGUOUS_MAX_RESIDUES = 3;
 
@@ -68,10 +69,16 @@ long long total_length(const std::vector<Token>& toks) {
     return n;
 }
 
-// DNA upper-cased with U->T, as IUPAC codes (255 = not an IUPAC letter).
+// DNA upper-cased with U->T, as IUPAC codes (255 = not an IUPAC letter), plus lazily built 3-frame translations
+// and an index of their ANCHOR-residue windows (the anchor fallback; see thread_one).
 struct Target {
     std::vector<uint8_t> code;
     const uint64_t* triplet = iupac_triplet_table();
+    const GeneticCode* gc = nullptr;
+    std::string frames[3];  // translation of frame f: residue letter, or '?' for a triplet no residue accepts
+    bool have_frames = false;
+    std::vector<std::pair<uint64_t, long long>> windows;  // (packed window, DNA position), sorted
+    bool have_windows = false;
 
     // Does the triplet at pos encode a residue with these allowed codons?
     inline bool ok(long long pos, uint64_t allowed) const {
@@ -80,7 +87,87 @@ struct Target {
         if ((a | b | c) & 0xF0) return false;  // 255 = not IUPAC (valid codes are 0..14)
         return (triplet[a * 225 + b * 15 + c] & ~allowed) == 0;
     }
+
+    // The one residue (NORMAL mode) whose codons include every codon the triplet at pos can stand for, else '?'.
+    // A triplet matches an ordinary residue token exactly when it translates to it: a concrete codon encodes one
+    // residue, so the residues' accepted sets are disjoint.
+    inline char translate(long long pos) const {
+        const size_t i = (size_t)pos;
+        uint8_t a = code[i], b = code[i + 1], c = code[i + 2];
+        if ((a | b | c) & 0xF0) return '?';
+        uint64_t m = triplet[a * 225 + b * 15 + c];
+        if (!m) return '?';
+        int first = 0;
+        while (!((m >> first) & 1)) ++first;
+        char aa = gc->aa[first];
+        return (m & ~gc->codons[(unsigned char)aa]) == 0 ? aa : '?';
+    }
+
+    void build_frames() {
+        if (have_frames) return;
+        for (int f = 0; f < 3; ++f) {
+            size_t n = code.size() >= (size_t)f + 3 ? (code.size() - f) / 3 : 0;
+            frames[f].resize(n);
+            for (size_t k = 0; k < n; ++k) frames[f][k] = translate(f + 3 * (long long)k);
+        }
+        have_frames = true;
+    }
+
+    // 5 bits per residue letter ('*' included; '?' gets a code no token letter has)
+    static inline uint64_t letter_code(char c) { return c == '?' ? 31 : c == '*' ? 27 : uint64_t(c - 'A' + 1); }
+
+    // Every ANCHOR-residue window of the three translations with its DNA position, sorted by (window, position):
+    // built once per sequence in O(len(dna) log len(dna)), so each anchor is then looked up in O(log len(dna))
+    // instead of scanning the DNA (quadratic in the gene length over all anchors).
+    void build_windows() {
+        if (have_windows) return;
+        build_frames();
+        const uint64_t mask = (uint64_t(1) << (5 * ANCHOR)) - 1;
+        size_t total = 0;
+        for (int f = 0; f < 3; ++f) total += frames[f].size() >= (size_t)ANCHOR ? frames[f].size() - ANCHOR + 1 : 0;
+        windows.reserve(total);
+        for (int f = 0; f < 3; ++f) {
+            const std::string& tr = frames[f];
+            if (tr.size() < (size_t)ANCHOR) continue;
+            uint64_t key = 0;
+            for (size_t k = 0; k < tr.size(); ++k) {
+                key = ((key << 5) | letter_code(tr[k])) & mask;
+                if (k + 1 >= (size_t)ANCHOR) windows.push_back({key, f + 3 * (long long)(k + 1 - ANCHOR)});
+            }
+        }
+        std::sort(windows.begin(), windows.end());
+        have_windows = true;
+    }
+
+    // Leftmost DNA position (any frame) whose next ANCHOR codons translate to the tokens' residues, or -1. Same
+    // answer as find() for ANCHOR tokens that are all ordinary residues (no X, digit or first-Met mode).
+    long long find_plain(const std::vector<Token>& toks) {
+        build_windows();
+        uint64_t key = 0;
+        for (const Token& t : toks) key = (key << 5) | letter_code(t.aa);
+        auto it = std::lower_bound(windows.begin(), windows.end(), std::make_pair(key, (long long)-1));
+        return it != windows.end() && it->first == key ? it->second : -1;
+    }
+
+    // Do the ANCHOR codons at pos translate to the tokens' residues? (matches_at for ordinary residues)
+    bool plain_at(long long pos, const std::vector<Token>& toks) {
+        build_frames();
+        const std::string& tr = frames[pos % 3];
+        size_t k = (size_t)(pos / 3);
+        if (k + toks.size() > tr.size()) return false;
+        for (size_t i = 0; i < toks.size(); ++i)
+            if (tr[k + i] != toks[i].aa) return false;
+        return true;
+    }
 };
+
+// An anchor the window index answers: exactly ANCHOR tokens, all ordinary residues.
+bool plain_anchor(const std::vector<Token>& toks) {
+    if (toks.size() != (size_t)ANCHOR) return false;
+    for (const Token& t : toks)
+        if (!t.residue || t.any || t.mode != NORMAL) return false;
+    return true;
+}
 
 inline bool residue_ok(const Target& t, long long pos, const Token& tok) { return t.ok(pos, tok.allowed); }
 
@@ -303,6 +390,7 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
                         "empty", seq_id);
 
     Target target;
+    target.gc = &code;
     target.code.resize(raw_dna.size());
     {
         // upper-case, U -> T, then IUPAC code: one table lookup per base
@@ -334,11 +422,31 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
     std::vector<Token> pattern;
     int col = 1;
     bool found_any = false;
+    long long expect = -1;  // where this anchor starts if the previous anchors' matches are the real ones
+    int searched = 0;       // anchors that were not at their expected position
     for (size_t k = 0; k < ranges.size(); ++k) {
         auto [a, b] = ranges[k];
         std::vector<Token> at = tokens(row, a, b, k == 0 ? ANCHOR_START : NORMAL, col, code);
-        bool found = find(target, at) >= 0;
+        // Each anchor only needs to occur somewhere in the DNA. A chunk of ANCHOR ordinary residues (the usual one)
+        // is checked against the translated frames: at the expected position first, else searched for (find(), a
+        // scan of the DNA) for the first INDEX_AFTER such chunks of this sequence (a gene with one wrong codon needs
+        // one search, cheaper than an index), then looked up in the window index (O(log L) after a one-off
+        // O(L log L) build: scanning the DNA for every chunk would be quadratic in the gene length). Any other chunk
+        // (with a frameshift digit, an X, the first Met, or the longer merged last chunk) is checked at the expected
+        // position and otherwise searched for. The result (found or not) is the same either way.
+        long long hit;
+        if (plain_anchor(at)) {
+            if (expect >= 0 && target.plain_at(expect, at)) hit = expect;
+            else hit = ++searched > INDEX_AFTER ? target.find_plain(at) : find(target, at);
+        } else if (expect >= 0 && matches_at(target, expect, at)) {
+            hit = expect;
+        } else {
+            hit = find(target, at);
+        }
+        const long long n = total_length(at);
+        const bool found = hit >= 0;
         found_any = found_any || found;
+        expect = found ? hit + n : (expect >= 0 ? expect + n : -1);
         for (Token& t : at) {
             if (!found) {  // wildcard of the same length
                 t.residue = false;

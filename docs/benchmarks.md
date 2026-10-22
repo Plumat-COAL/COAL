@@ -18,6 +18,11 @@ Speed-up of COAL over PAL2NAL v14, from warm medians (5 timed runs after a warm-
   is 347× faster there; extra threads help it little (about 1.2× from 2 threads on).
 - On many small files, one process per file, the Python engine was slower than PAL2NAL v14 (184 against 125 ms per
   file, Python start-up); coal-cpp took 18 ms per file.
+- The 100 × 35,000 figure is for genes that fit their DNA exactly. A long gene that does not (one wrong codon, or an
+  ambiguous base the protein's residue does not accept) takes PAL2NAL's anchor fallback instead: since the index of
+  translated 10-residue windows (see the changelog) that costs about 0.3 s per 35,000-codon gene with coal-cpp and 1.5 s with the
+  Python engine, most of it the genetic-code hint re-testing the gene under the 17 other codes (on a 2-core Linux box:
+  10 such genes, 3.0 s and 15.6 s; before the index 104 s and 27 s, as every chunk scanned the DNA from its start).
 - ¹ PAL2NAL v14 builds one regex per sequence and Perl allows at most 65,535 capture groups in one, so it fails on
   proteins longer than about 22,000–24,000 residues (reproduced on three Perl builds).
 

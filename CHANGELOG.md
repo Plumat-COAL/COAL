@@ -75,6 +75,27 @@
   Python engine reports a DNA file that shrank between indexing and reading as `could not read the DNA of record N
   (the file changed after it was read, or cannot be read)`, as `coal-cpp` does, instead of reading another
   record's bytes; an empty DNA file among several is documented as accepted.
+- **Mismatching long genes no longer take quadratic time.** When a protein does not fit its DNA exactly, both engines
+  locate PAL2NAL's 10-residue chunks in the DNA; every chunk was a scan from the start of the DNA (coal-cpp; the
+  Python engine scanned for every chunk that was not where the previous ones put it), so a 35,000-codon gene with one
+  wrong codon cost about 10 s per gene with coal-cpp (and the genetic-code hint repeated that under 17 other codes).
+  The DNA is now translated once per frame and its 10-residue windows indexed, so a chunk of ordinary residues is a
+  lookup; chunks with a frameshift digit, an X or the first Met keep the old scan. Same chunks found, same output and
+  messages: 10 genes × 35,000 codons with one wrong codon each, 104 s → 3.0 s (coal-cpp), 27 s → 16 s (Python);
+  exactly fitting genes are unchanged. The Python engine's fallback is also about 1.5× faster per short gene.
+- **coal-cpp uses far less memory on runs with many warnings or with `--report`.** It kept a JSON tree for every
+  sequence with a warning (about 4 KB each: 1 GB at 300,000 mismatching sequences) and, for `--report`/`--json`, built
+  every sequence's entry before writing (3 KB each: 3.2 GB at 1,000,000 sequences). It now keeps each non-ok entry as
+  its compact JSON line (about 0.6 KB; the Python engine's dict entries take 1.4 KB) and streams the report one
+  sequence at a time:
+  300,000 mismatching sequences 994 → 266 MB; 1,000,000 clean sequences with `--report` 3.2 GB → 204 MB. The
+  Python engine streams its report the same way and no longer builds a view of every sequence for the genetic-code
+  hint (1,000,000 sequences with `--report`, one process: 635 → 367 MB). The report JSON is unchanged.
+- **Docs:** `docs/usage.md` gives the measured memory per sequence of both engines (about 350 bytes with the Python
+  engine after the change above, 190 with coal-cpp; the old figures, 300 bytes and 122/139/145 MB, matched coal-cpp
+  only), where each engine puts its temporary files and how much disk the clustal/codon formats need, that
+  `-q --progress` still prints progress, and that the checkpoint cadence is best-effort under I/O contention.
+
 - **Less memory with many workers:** COAL's own processes now limit numpy's BLAS thread pool to one thread
   (`OPENBLAS_NUM_THREADS`, `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, unless already set). COAL uses no BLAS, but every
   worker that imported numpy started a pool sized to the machine. On a 20-thread Windows machine each process that
