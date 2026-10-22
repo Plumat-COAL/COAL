@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **orthologr:** `packaging/orthologr/pal2nal.pl` is a stand-in for the `pal2nal.pl` bundled in the orthologr R
+  package; copied over it, orthologr's `codon_aln()` / `dNdS()` run COAL (coal-cpp when installed) with their
+  unchanged command line and get the same output. Notes on what to expect and on a proper `tool = "coal"` option
+  for orthologr: `packaging/orthologr/README.md`.
+
 - **Repository tidied for outside users:** a short README with a section on using COAL in pipelines; the detailed
   documentation is in `docs/`. Hackathon logs and pitch material are removed (kept on the `hackathon-archive` tag),
   review-round markers are gone from comments, and engine test modules are named after what they test. No change to
