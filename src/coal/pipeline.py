@@ -99,7 +99,11 @@ def _test_pause(count: int) -> None:
     test can kill the run at a known point)."""
     if _test_hooks() and os.environ.get("COAL_TEST_PAUSE_AFTER_CHECKPOINT") == str(count):
         print(f"coal: test: paused after checkpoint {count}", file=sys.stderr, flush=True)
-        time.sleep(3600)
+        # Short sleeps rather than one long one: on CPython 3.14 a signal that arrives as time.sleep() starts can
+        # be lost, and a single hour-long sleep would then outlive the test that sent it.
+        deadline = time.monotonic() + 3600
+        while time.monotonic() < deadline:
+            time.sleep(0.05)
 
 
 def effective_jobs(requested: int, total_nt: int, min_nt_per_job: int | None = None) -> int:
