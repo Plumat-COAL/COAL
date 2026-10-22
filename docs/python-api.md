@@ -110,6 +110,12 @@ command prints after `coal: error:`. Its attributes:
 | `empty` | set | a row that is all gaps |
 | `inconsistent` | set | the DNA does not spell the protein (no match found, even by 10-residue anchors); with `strict=True` also a gene whose checkable codons mostly mismatch or whose position in a longer DNA is a guess |
 | `unknown_table` | `None` | `table` is not a supported NCBI genetic-code number (the message lists them); the `coal` command rejects it earlier, as a usage error |
+| `duplicate_id` | `None` | two proteins (or two DNA records) have the same ID (`the protein alignment: duplicate sequence ID 'a': every sequence needs its own ID`); the `coal` command refuses the file with the same wording (as `input_format`) |
+
+Arguments of the wrong type raise `TypeError` with a message naming the argument (`proteins must be a list of
+(id, sequence) pairs, not dict`, `proteins[0]: the ID must be a str, not int`, `dnas[1] ('g2'): the sequence must be
+a str, not bytes`): `proteins` and `dnas` must be lists or tuples of 2-item `(str, str)` tuples or lists (a dict, a
+generator or a bare string is refused, not iterated), never a `KeyError` or `AttributeError` from inside the engine.
 
 `align_files` can also raise `file_error` (an input cannot be opened or the output cannot be written),
 `input_format` (a file that is not FASTA or CLUSTAL, or not ASCII text: the exception is `coal.seqio.InputFormatError`,
@@ -147,7 +153,7 @@ with `multiprocessing`. Output bytes, warnings and errors are identical to the c
 | Argument | Type | Meaning |
 |---|---|---|
 | `pep_path` | path | the protein alignment (FASTA or CLUSTAL); a pipe or `/dev/stdin` is copied to a temp file first |
-| `nuc_paths` | `list` of paths | the coding DNA (FASTA), one or more files |
+| `nuc_paths` | a path, or a `list` of paths | the coding DNA (FASTA), one or more files; a single `str` or `os.PathLike` is one file (not iterated as characters). Anything else, or a non-path element, is a `TypeError` naming the argument (`nuc_paths[1] must be a path (str or os.PathLike), not int`) before any file is opened |
 | `out_path` | path or `None` | the output file; `None` writes to `sys.stdout` |
 | `table`, `nogap`, `nomismatch`, `strict` | as for `codon_align` | |
 | `out_format` | `str` | `"fasta"` (default), `"clustal"`, `"paml"` or `"codon"` (PAL2NAL's four formats, same bytes) |

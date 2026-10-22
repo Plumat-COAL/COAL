@@ -113,6 +113,71 @@ class TestCodonAlignExamples(unittest.TestCase):
                     self.assertIn(str(n), str(e))
         self.assertEqual(codon_align([("a", "MK")], [("a", "ATGAAA")], table=SUPPORTED[-1]), ([("a", "ATGAAA")], []))
 
+    def test_duplicate_ids_are_refused(self):  # as the command line does
+        with self.assertRaises(CoalError) as cm:
+            codon_align([("a", "MK"), ("a", "MK")], [("a", "ATGAAA"), ("b", "ATGAAA")])
+        self.assertEqual((cm.exception.code, str(cm.exception)),
+                         ("duplicate_id", "the protein alignment: duplicate sequence ID 'a': every sequence needs its own ID"))
+        with self.assertRaises(CoalError) as cm:
+            codon_align([("a", "MK")], [("a", "ATGAAA"), ("a", "ATGAAA")])
+        self.assertEqual((cm.exception.code, str(cm.exception)),
+                         ("duplicate_id", "the DNA: duplicate sequence ID 'a': every sequence needs its own ID"))
+
+    def test_wrong_types_are_type_errors(self):  # a clear TypeError, not a KeyError / AttributeError from inside
+        ok_p, ok_d = [("a", "MK")], [("a", "ATGAAA")]
+        cases = [
+            ({"a": "MK"}, ok_d, "proteins must be a list of (id, sequence) pairs, not dict"),
+            ((x for x in ok_p), ok_d, "proteins must be a list of (id, sequence) pairs, not generator"),
+            ("MK", ok_d, "proteins must be a list of (id, sequence) pairs, not str"),
+            (ok_p, None, "dnas must be a list of (id, sequence) pairs, not NoneType"),
+            ([(1, "MK")], ok_d, "proteins[0]: the ID must be a str, not int"),
+            ([("a", None)], ok_d, "proteins[0] ('a'): the sequence must be a str, not NoneType"),
+            ([("a", "MK", "x")], ok_d, "proteins[0] must be an (id, sequence) pair, not a tuple of 3"),
+            (["MK"], ok_d, "proteins[0] must be an (id, sequence) pair, not str"),
+            (ok_p, [("a", b"ATG")], "dnas[0] ('a'): the sequence must be a str, not bytes"),
+        ]
+        for p, d, msg in cases:
+            with self.subTest(msg=msg):
+                with self.assertRaises(TypeError) as cm:
+                    codon_align(p, d)
+                self.assertEqual(str(cm.exception), msg)
+        self.assertEqual(codon_align(tuple(ok_p), [["a", "ATGAAA"]]), ([("a", "ATGAAA")], []))  # tuples / lists
+
+
+class TestAlignFilesArguments(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        (self.tmp / "p.fa").write_text(">s1\nMKV-AL\n>s2\nMKVSAL\n")
+        (self.tmp / "n.fa").write_text(">s1\nATGAAAGTTGCTCTG\n>s2\nATGAAGGTCTCAGCACTA\n")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_one_dna_path_as_a_string_or_pathlike(self):
+        out = self.tmp / "o.fa"
+        for nuc in (str(self.tmp / "n.fa"), self.tmp / "n.fa", [self.tmp / "n.fa"], (str(self.tmp / "n.fa"),)):
+            with self.subTest(nuc=type(nuc).__name__):
+                out.unlink(missing_ok=True)
+                self.assertEqual(align_files(self.tmp / "p.fa", nuc, out_path=str(out)), 0)
+                self.assertEqual(out.read_text(), ">s1\nATGAAAGTT---GCTCTG\n>s2\nATGAAGGTCTCAGCACTA\n")
+
+    def test_wrong_types_are_type_errors(self):
+        p, n = str(self.tmp / "p.fa"), str(self.tmp / "n.fa")
+        cases = [
+            ((p, 5), "nuc_paths must be a path or a list of paths, not int"),
+            ((p, {n: 1}), "nuc_paths must be a path or a list of paths, not dict"),
+            ((p, (x for x in [n])), "nuc_paths must be a path or a list of paths, not generator"),
+            ((None, n), "pep_path must be a path (str or os.PathLike), not NoneType"),
+            ((p, [n, 3]), "nuc_paths[1] must be a path (str or os.PathLike), not int"),
+            ((p, []), "nuc_paths must name at least one DNA file"),
+        ]
+        for args, msg in cases:
+            with self.subTest(msg=msg):
+                with self.assertRaises(TypeError) as cm:
+                    align_files(*args, out_path=str(self.tmp / "o.fa"))
+                self.assertEqual(str(cm.exception), msg)
+        self.assertFalse((self.tmp / "o.fa").exists())
+
 
 class TestAlignFilesExample(unittest.TestCase):
     def setUp(self):

@@ -750,6 +750,31 @@ def prepare_row(pid: str, aln: str) -> str:
     return row.replace(".", GAP)
 
 
+def _check_pairs(name: str, seqs, where: str) -> list[tuple[str, str]]:
+    """`seqs` as a list of (id, sequence) pairs of str, or TypeError saying what is wrong with it; a duplicate ID is
+    CoalError `duplicate_id` with the command line's wording (where: "the protein alignment" / "the DNA")."""
+    if isinstance(seqs, (str, bytes, bytearray, dict)) or not isinstance(seqs, (list, tuple)):
+        raise TypeError(f"{name} must be a list of (id, sequence) pairs, not {type(seqs).__name__}")
+    out: list[tuple[str, str]] = []
+    seen: set = set()
+    for k, item in enumerate(seqs):
+        if not isinstance(item, (tuple, list)) or len(item) != 2:
+            raise TypeError(f"{name}[{k}] must be an (id, sequence) pair, not "
+                            + (f"a {type(item).__name__} of {len(item)}" if isinstance(item, (tuple, list)) else
+                               type(item).__name__))
+        pid, seq = item
+        if not isinstance(pid, str):
+            raise TypeError(f"{name}[{k}]: the ID must be a str, not {type(pid).__name__}")
+        if not isinstance(seq, str):
+            raise TypeError(f"{name}[{k}] ({pid!r}): the sequence must be a str, not {type(seq).__name__}")
+        if pid in seen:
+            from .seqio import duplicate_message
+            raise CoalError(duplicate_message(where, pid), code="duplicate_id")
+        seen.add(pid)
+        out.append((pid, seq))
+    return out
+
+
 def codon_align(
     proteins: list[tuple[str, str]],
     dnas: list[tuple[str, str]],
@@ -758,8 +783,12 @@ def codon_align(
     nomismatch: bool = False,
     strict: bool = False,
 ) -> tuple[list[tuple[str, str]], list[str]]:
-    """Return ([(protein_id, codon_aligned_dna)], warnings). `strict`: see thread_one / pair_sequences."""
+    """Return ([(protein_id, codon_aligned_dna)], warnings). `strict`: see thread_one / pair_sequences.
+    Wrong argument types raise TypeError (a clear message, not an error from deep inside); duplicate IDs raise
+    CoalError `duplicate_id`, as the command line refuses them."""
     check_table(table)  # CoalError `unknown_table`, not tables.get_code's ValueError
+    proteins = _check_pairs("proteins", proteins, "the protein alignment")
+    dnas = _check_pairs("dnas", dnas, "the DNA")
     proteins = [(pid, prepare_row(pid, aln)) for pid, aln in proteins]
     lengths = {len(s) for _, s in proteins}
     if len(lengths) > 1:

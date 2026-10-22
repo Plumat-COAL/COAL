@@ -45,6 +45,12 @@
   full?)` (and, with the rows going through a full temp folder, exit 0 with an empty output). Both now say
   `cannot write out.fa: no space left on device`, `cannot write a temporary file in /tmp: ...` or `cannot copy
   standard input to a temporary file in /tmp: ...`, exit 1, and leave no temp file behind.
+- **Python API checks its arguments** (robustness review): `coal.codon_align` raises `CoalError` with
+  `code="duplicate_id"` for a repeated protein or DNA ID (it used to pair them silently; the command line refuses
+  the file), and both `codon_align` and `coal.align_files` raise `TypeError` with a message naming the argument for
+  a dict, generator, bare string, `None`, a non-`str` ID or a pair of the wrong length, instead of a `KeyError` or
+  `AttributeError` from inside the engine. `align_files(pep, "nuc.fa")` with one DNA path as a string or
+  `os.PathLike` now means that one file (the string used to be iterated character by character).
 - **Less memory with many workers:** COAL's own processes now limit numpy's BLAS thread pool to one thread
   (`OPENBLAS_NUM_THREADS`, `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, unless already set). COAL uses no BLAS, but every
   worker that imported numpy started a pool sized to the machine. On a 20-thread Windows machine each process that

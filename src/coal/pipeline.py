@@ -549,6 +549,21 @@ def run(pep_path, nuc_paths, *args, **kw) -> int:
     # and removed afterwards.
     if "fmt" in kw:  # fmt: accepted as an alias for out_format
         kw["out_format"] = kw.pop("fmt")
+    # The Python API: one DNA path may be given as it is (not iterated as a string); other wrong types are a clear
+    # TypeError, not an error from deep inside
+    if isinstance(nuc_paths, (str, bytes, os.PathLike)):
+        nuc_paths = [nuc_paths]
+    if isinstance(nuc_paths, dict) or not isinstance(nuc_paths, (list, tuple)):
+        raise TypeError(f"nuc_paths must be a path or a list of paths, not {type(nuc_paths).__name__}")
+    for what, p in (("pep_path", pep_path), *((f"nuc_paths[{k}]", p) for k, p in enumerate(nuc_paths))):
+        if not isinstance(p, (str, bytes, os.PathLike)):
+            raise TypeError(f"{what} must be a path (str or os.PathLike), not {type(p).__name__}")
+    if not nuc_paths:
+        raise TypeError("nuc_paths must name at least one DNA file")
+    pep_path, nuc_paths = os.fspath(pep_path), [os.fspath(p) for p in nuc_paths]
+    if isinstance(pep_path, bytes) or any(isinstance(p, bytes) for p in nuc_paths):
+        pep_path = os.fsdecode(pep_path)
+        nuc_paths = [os.fsdecode(p) for p in nuc_paths]
     spooled: list = []
     names = {}  # temp copy -> the argument it came from, for error messages
     inputs = {str(pep_path), *map(str, nuc_paths)}
