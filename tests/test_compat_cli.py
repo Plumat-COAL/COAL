@@ -41,12 +41,13 @@ class TestCommand(unittest.TestCase):
     def test_runs_coal_to_stdout(self):
         r = subprocess.run([sys.executable, "-m", "coal_compat", os.path.join(EX, "protein.aln.fasta"),
                             os.path.join(EX, "dna.fasta"), "-output", "fasta"],
-                           capture_output=True, text=True, timeout=120)
+                           capture_output=True, text=True, timeout=120, stdin=subprocess.DEVNULL)
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertTrue(r.stdout.startswith(">gene01"))
 
     def test_help(self):
-        r = subprocess.run([sys.executable, "-m", "coal_compat", "-h"], capture_output=True, text=True, timeout=60)
+        r = subprocess.run([sys.executable, "-m", "coal_compat", "-h"], capture_output=True, text=True, timeout=60,
+                           stdin=subprocess.DEVNULL)
         self.assertEqual(r.returncode, 0)
         self.assertIn("-codontable", r.stdout)
 

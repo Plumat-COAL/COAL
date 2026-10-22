@@ -1,5 +1,6 @@
 // argparse-compatible command-line parsing. The structure follows the documented behaviour of
-// Python 3.10's argparse (parse_known_args): first every argument is classified as an option ('O'),
+// Python 3.13's argparse (parse_known_args; tests/test_cpp_cli.py compares the two live on that version): first
+// every argument is classified as an option ('O'),
 // a value ('A') or the '--' marker ('-'); then options and runs of positionals are consumed left to
 // right. Positional runs are matched greedily, like argparse's nargs patterns "-*A-*" (one value) and
 // "-*A[A-]*" (one or more). Written from the behaviour, not copied.
@@ -41,7 +42,8 @@ bool negative_number(std::string a) {
 struct Opt {
     int spec = -1;  // -1: looks like an option but is unknown
     std::string opt;
-    bool has_exp = false;
+    bool has_exp = false;  // argparse's explicit_arg is not None
+    bool eq = false;       // argparse's sep == "=": the value came after '=' (not attached as in -j4 / -qq)
     std::string exp;
 };
 
@@ -174,25 +176,26 @@ struct ParseRun {
 
     std::vector<Opt> tuples(const std::string& a) const {
         std::vector<Opt> t;
+        // both forms split at the first '=': the part before it is the (abbreviated) option
+        std::string prefix = a, exp;
+        bool has = false;
+        size_t eq = a.find('=');
+        if (eq != std::string::npos) {
+            prefix = a.substr(0, eq);
+            exp = a.substr(eq + 1);
+            has = true;
+        }
         if (a[1] == '-') {  // --long: unique prefixes, optional =value
-            std::string prefix = a, exp;
-            bool has = false;
-            size_t eq = a.find('=');
-            if (eq != std::string::npos) {
-                prefix = a.substr(0, eq);
-                exp = a.substr(eq + 1);
-                has = true;
-            }
             for (auto& o : order)
-                if (spec(o.second).abbrev && starts_with(o.first, prefix)) t.push_back({o.second, o.first, has, exp});
-        } else {  // -x: a two-character option with the rest attached, or a prefix of a single-dash option
+                if (spec(o.second).abbrev && starts_with(o.first, prefix)) t.push_back({o.second, o.first, has, has, exp});
+        } else {  // -x: a two-character option with the rest attached, or a prefix of a single-dash option (-cod=2)
             std::string sp = a.substr(0, 2), sexp = a.substr(2);
             for (auto& o : order) {
                 if (!spec(o.second).abbrev) continue;
                 if (o.first == sp)
-                    t.push_back({o.second, o.first, true, sexp});
-                else if (starts_with(o.first, a))
-                    t.push_back({o.second, o.first, false, ""});
+                    t.push_back({o.second, o.first, true, false, sexp});
+                else if (starts_with(o.first, prefix))
+                    t.push_back({o.second, o.first, has, has, exp});
             }
         }
         return t;
@@ -202,7 +205,7 @@ struct ParseRun {
         if (a.empty() || a[0] != '-') return false;
         int i = exact(a);
         if (i >= 0) {
-            o = {i, a, false, ""};
+            o = {i, a, false, false, ""};
             return true;
         }
         if (a.size() == 1) return false;
@@ -211,7 +214,7 @@ struct ParseRun {
             std::string n = a.substr(0, eq);
             int j = exact(n);
             if (j >= 0) {
-                o = {j, n, true, a.substr(eq + 1)};
+                o = {j, n, true, true, a.substr(eq + 1)};
                 return true;
             }
         }
@@ -227,7 +230,7 @@ struct ParseRun {
         }
         if (negative_number(a)) return false;  // no option of ours looks like a negative number
         if (a.find(' ') != std::string::npos) return false;
-        o = {-1, a, false, ""};
+        o = {-1, a, false, false, ""};
         return true;
     }
 
@@ -238,16 +241,16 @@ struct ParseRun {
         if (!s.choices.empty()) {
             bool ok = false;
             for (auto& c : s.choices) ok = ok || c == out;
-            if (!ok) {
+            if (!ok) {  // repr(str(value)) and repr(str(choice)): quoted also for integers
                 std::string list;
-                for (auto& c : s.choices) list += (list.empty() ? "" : ", ") + (s.is_int ? c : py_repr(c));
-                fail(i, "invalid choice: " + (s.is_int ? out : py_repr(out)) + " (choose from " + list + ")");
+                for (auto& c : s.choices) list += (list.empty() ? "" : ", ") + py_repr(c);
+                fail(i, "invalid choice: " + py_repr(out) + " (choose from " + list + ")");
             }
         }
         return out;
     }
 
-    void take(int i, std::vector<std::string> vals) {
+    void take(int i, std::vector<std::string> vals, bool strip_dd = false) {
         seen[(size_t)i] = true;
         const Spec& s = spec(i);
         switch (s.kind) {
@@ -263,8 +266,10 @@ struct ParseRun {
                 break;
             case Kind::Positional:
             case Kind::PositionalPlus:
-                for (size_t k = 0; k < vals.size(); ++k)
-                    if (vals[k] == "--") {  // argparse drops one '--' from a positional's values
+                // argparse drops the '--' marker (the first '--'; a later '--' is an ordinary value) from the values
+                // of the positional whose run contains it
+                for (size_t k = 0; strip_dd && k < vals.size(); ++k)
+                    if (vals[k] == "--") {
                         vals.erase(vals.begin() + (long)k);
                         break;
                     }
@@ -300,8 +305,9 @@ struct ParseRun {
         std::vector<size_t> counts = match_partial(pat.substr(start));
         for (size_t k = 0; k < counts.size(); ++k) {
             std::vector<std::string> vals(argv.begin() + (long)start, argv.begin() + (long)(start + counts[k]));
+            bool has_marker = pat.find('-', start) < start + counts[k];
             start += counts[k];
-            take(pos_left[k], vals);
+            take(pos_left[k], vals, has_marker);
         }
         pos_left.erase(pos_left.begin(), pos_left.begin() + (long)counts.size());
         return start;
@@ -318,14 +324,24 @@ struct ParseRun {
             }
             int nargs = spec(o.spec).kind == Kind::Value ? 1 : 0;
             if (o.has_exp) {
-                if (nargs == 0 && o.opt[1] != '-') {  // -qq: chained single-character flags
+                if (nargs == 0 && o.opt[1] != '-' && !o.exp.empty()) {  // -qq: chained single-character flags
+                    // -q=1 (or -q-x): the value cannot be more flags
+                    if (o.eq || o.exp[0] == '-') fail(o.spec, "ignored explicit argument " + py_repr(o.exp));
                     acts.push_back({o.spec, {}});
-                    if (o.exp.empty()) fail(o.spec, "ignored explicit argument " + py_repr(o.exp));
                     std::string next = std::string("-") + o.exp[0];
                     int j = exact(next);
-                    if (j < 0) fail(o.spec, "ignored explicit argument " + py_repr(o.exp));
+                    if (j < 0) {  // -qx with no -x: the tail is an unknown option (-x), reported with the extras
+                        extras.push_back(std::string("-") + o.exp);
+                        stop = start + 1;
+                        break;
+                    }
                     std::string rest = o.exp.substr(1);
-                    o = {j, next, !rest.empty(), rest};
+                    if (rest.empty())
+                        o = {j, next, false, false, ""};
+                    else if (rest[0] == '=')
+                        o = {j, next, true, true, rest.substr(1)};
+                    else
+                        o = {j, next, true, false, rest};
                 } else if (nargs == 1) {
                     stop = start + 1;
                     acts.push_back({o.spec, {o.exp}});

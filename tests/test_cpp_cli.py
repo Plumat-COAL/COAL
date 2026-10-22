@@ -3,11 +3,13 @@
 The reference is this repo's src/coal, or COAL_REF_SRC = a src dir; without either, the src/coal package of
 REF_BRANCH is extracted with `git ls-tree` / `git show` into a temp dir (not merged).
 
-  * Live comparison (Python 3.10/3.11 only, whose argparse messages coal-cpp reproduces): every
-    command line in CASES is run through both; same exit code, same last stderr line on errors, same
-    stdout on successful runs. `--help` must equal the reference parser's help after the documented
-    C++ change (HELP_DRIVER: the -j help says threads; Python's says "processes").
-  * Pinned expectations (any Python): the error messages captured from the reference with Python 3.10.
+  * Live comparison (only where the interpreter's argparse is the dialect coal-cpp reproduces, Python
+    3.13's: argparse_dialect() probes for it, so other versions skip with the reason): every command line
+    in CASES is run through both; same exit code, same last stderr line on errors, same stdout on
+    successful runs. `--help` must equal the reference parser's help after the documented C++ change
+    (HELP_DRIVER: the -j help says threads; Python's says "processes").
+  * Pinned expectations (any Python): the error messages captured from the reference with Python 3.13
+    (`python tests/test_cpp_cli.py --print-pinned` on 3.13 prints the table).
   * C++-only checks: -output clustal/paml/codon, -strict, the extras (ordinary, abbreviable options
     of the merged parser, so `--j` is ambiguous between --jobs and --json, as in Python).
 
@@ -27,8 +29,44 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 REF_BRANCH = "origin/main"
 TIMEOUT = 60
-LIVE_OK = sys.version_info[:2] in ((3, 10), (3, 11))
 P, N = "pep.fasta", "nuc.fasta"
+
+
+def argparse_dialect() -> str | None:
+    """None if this interpreter's argparse behaves as the one coal-cpp mirrors (Python 3.13's), else what differs.
+    Probed, not keyed on the version: the messages changed in patch releases (3.11.9 / 3.12.3 stopped reporting
+    `-qx` as an ignored explicit argument; 3.13 quotes invalid choices, prints a metavar once per help line and
+    accepts `-cod=2`), so a version test would go stale again."""
+    import argparse
+    import contextlib
+    import io
+
+    def with_parser():
+        ap = argparse.ArgumentParser(prog="p", add_help=False, allow_abbrev=True)
+        ap.add_argument("-q", "--quiet", action="store_true")
+        ap.add_argument("-codontable", "--codontable", type=int, choices=[1, 2], metavar="N")
+        return ap
+
+    def err_line(argv) -> str:
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf), contextlib.suppress(SystemExit):
+            with_parser().parse_args(argv)
+        return (buf.getvalue().strip().splitlines() or [""])[-1]
+
+    diffs = []
+    if err_line(["-qx"]) != "p: error: unrecognized arguments: -x":
+        diffs.append("-qx is not an unrecognized -x")
+    if err_line(["-codontable", "3"]) != "p: error: argument -codontable/--codontable: invalid choice: '3' " \
+                                         "(choose from '1', '2')":
+        diffs.append("invalid choices are not quoted")
+    if err_line(["-cod=2"]):
+        diffs.append("-cod=2 is not accepted")
+    if "-codontable, --codontable N" not in with_parser().format_help():
+        diffs.append("help repeats the metavar per option string")
+    return "; ".join(diffs) or None
+
+
+ARGPARSE_DIFFERS = argparse_dialect()
 
 
 def cpp_binary() -> Path | None:
@@ -119,17 +157,18 @@ ACCEPTED = [
     [P, N], [P, N, "-codontable", "2"], [P, N, "--cod", "2"], [P, N, "-cod", "2"], [P, N, "-codontable=2"],
     [P, N, "--codontable=11"], [P, N, "-codontable", " 1_1 "], [P, N, "-codontable", "+011"],
     [P, N, "-nog"], [P, N, "--nogap"], [P, N, "-nom"], [P, N, "--nomismatch", "-nogap"],
-    [P, N, "-j4"], [P, N, "--jobs=2"], [P, N, "-j=3"], [P, N, "--jobs", "1_0"],
+    [P, N, "-j4"], [P, N, "--jobs=2"], [P, N, "-j=3"], [P, N, "--jobs", "1_0"], [P, N, "-cod=2"], [P, N, "-qj=2"],
     [P, N, "-q"], [P, N, "-qq"], [P, N, "-qj2"], [P, N, "--qu"],
     ["--", P, N], [P, "--", N], ["-q", "--", P, N], [P, "-o", "x.fa", N], ["-o", "out.fa", P, N],
     [P, N, "-o", "x.fa", "-o", "y.fa"], [P, N, "-output", "fasta"], [P, N, "--output-format=fasta"],
-    [P, N, "--output-f", "fasta"], [P, "--", N, "--"], [P, N, "-blockonly"], [P, N, "--block"], [P, N, "-b"],
+    [P, N, "--output-f", "fasta"], [P, N, "-blockonly"], [P, N, "--block"], [P, N, "-b"],
     [P, N, "-output", "clustal"], [P, N, "-output", "paml", "-nogap"], [P, N, "-strict"],
     # the extras, abbreviated as any option
     [P, N, "--keep"], [P, N, "-keep"], [P, N, "-keep-going"], [P, N, "--max", "3"], [P, N, "--max-warnings=0"], [P, N, "--prog"],
     [P, N, "-o", "x.fa", "--res"], [P, N, "-o", "x.fa", "--rep", "r.json"],
 ]
-HELP_CASES = [["-h"], ["--help"], ["--h"], [P, "--he"], ["-qh"], ["--help", "-j", "x"], ["-h", "--foo"]]
+HELP_CASES = [["-h"], ["--help"], ["--h"], [P, "--he"], ["-qh"], ["--help", "-j", "x"], ["-h", "--foo"],
+              [P, N, "-hx"]]  # -hx: help is acted on before the unknown -x is reported
 VERSION_CASES = [["--version"], ["--v"], ["--vers", P]]
 ERRORS = [
     [], [P], ["--foo"], ["-q"], [P, "-o", "x.fa"],
@@ -139,9 +178,9 @@ ERRORS = [
     [P, N, "-j", "x"], [P, N, "-jx"], [P, N, "-j"], [P, N, "-j", "1__0"], [P, N, "-j", "it's"],
     [P, N, "-j", "a\\b"], [P, N, "-j", 'say "hi"'], [P, N, "-o"], [P, N, "-o", "-q"], [P, N, "--out", "--"],
     [P, N, "-qx"], [P, N, "-qqx"], [P, N, "-q=1"], [P, N, "--quiet=1"], [P, N, "--nogap=1"],
-    [P, N, "-nogap=12"], [P, N, "-strict=1"], [P, N, "--strict=yes"], [P, N, "-hx"],
+    [P, N, "-nogap=12"], [P, N, "-strict=1"], [P, N, "--strict=yes"],
     [P, N, "-out", "x"], [P, N, "-n"], [P, N, "--no"], [P, N, "--o", "x"], [P, N, "-no"],
-    [P, N, "--foo"], [P, N, "-x"], [P, N, "-cod=2"], [P, N, "-o", "x.fa", N], [P, N, "-q", N, "-q", N],
+    [P, N, "--foo"], [P, N, "-x"], [P, N, "-o", "x.fa", N], [P, N, "-q", N, "-q", N],
     [P, N, "-j", "x", "--help"], [P, N, "-n", "--help"], ["--foo", "-n"],
     [P, N, "-output", "xml"], [P, N, "-output"], [P, N, "--output-format=XML"], [P, N, "-outp", "fasta"],
     [P, N, "-blockonly=1"], [P, N, "--blockonly=yes"],
@@ -152,23 +191,23 @@ ERRORS = [
 # The C++ engine accepts four formats, so its -output choices list differs (documented).
 CHOICES_DIFF = "argument -output/--output-format: invalid choice:"
 
-# Pinned: last stderr line of the reference (Python 3.10; bb80bde, the extras' rows 0729829) for each ERRORS
-# command line; exit code 2.
+# Pinned: last stderr line of the reference (Python 3.13.16, `--print-pinned`) for each ERRORS command line;
+# exit code 2.
 PINNED = {
     '': 'coal: error: the following arguments are required: pep_aln, nuc_fasta',
     "'pep.fasta'": 'coal: error: the following arguments are required: nuc_fasta',
     "'--foo'": 'coal: error: the following arguments are required: pep_aln, nuc_fasta',
     "'-q'": 'coal: error: the following arguments are required: pep_aln, nuc_fasta',
     "'pep.fasta' '-o' 'x.fa'": 'coal: error: the following arguments are required: nuc_fasta',
-    "'pep.fasta' 'nuc.fasta' '-codontable' '7'": 'coal: error: argument -codontable/--codontable: invalid choice: 7 (choose from 1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 16, 21, 22, 23)',
+    "'pep.fasta' 'nuc.fasta' '-codontable' '7'": "coal: error: argument -codontable/--codontable: invalid choice: '7' (choose from '1', '2', '3', '4', '5', '6', '9', '10', '11', '12', '13', '14', '15', '16', '21', '22', '23')",
     "'-codontable' 'x' 'pep.fasta' 'nuc.fasta'": "coal: error: argument -codontable/--codontable: invalid int value: 'x'",
     "'pep.fasta' 'nuc.fasta' '-codontable' '2.0'": "coal: error: argument -codontable/--codontable: invalid int value: '2.0'",
     "'pep.fasta' 'nuc.fasta' '-codontable'": 'coal: error: argument -codontable/--codontable: expected one argument',
     "'pep.fasta' 'nuc.fasta' '-codontable' '--foo'": 'coal: error: argument -codontable/--codontable: expected one argument',
-    "'pep.fasta' 'nuc.fasta' '--codontable=99999999999999999999'": 'coal: error: argument -codontable/--codontable: invalid choice: 99999999999999999999 (choose from 1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 16, 21, 22, 23)',
+    "'pep.fasta' 'nuc.fasta' '--codontable=99999999999999999999'": "coal: error: argument -codontable/--codontable: invalid choice: '99999999999999999999' (choose from '1', '2', '3', '4', '5', '6', '9', '10', '11', '12', '13', '14', '15', '16', '21', '22', '23')",
     "'pep.fasta' 'nuc.fasta' '-codontable='": "coal: error: argument -codontable/--codontable: invalid int value: ''",
     "'pep.fasta' 'nuc.fasta' '-codontable' '0x2'": "coal: error: argument -codontable/--codontable: invalid int value: '0x2'",
-    "'pep.fasta' 'nuc.fasta' '-codontable' '-1'": 'coal: error: argument -codontable/--codontable: invalid choice: -1 (choose from 1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 16, 21, 22, 23)',
+    "'pep.fasta' 'nuc.fasta' '-codontable' '-1'": "coal: error: argument -codontable/--codontable: invalid choice: '-1' (choose from '1', '2', '3', '4', '5', '6', '9', '10', '11', '12', '13', '14', '15', '16', '21', '22', '23')",
     "'pep.fasta' 'nuc.fasta' '-j' 'x'": "coal: error: argument -j/--jobs: invalid int value: 'x'",
     "'pep.fasta' 'nuc.fasta' '-jx'": "coal: error: argument -j/--jobs: invalid int value: 'x'",
     "'pep.fasta' 'nuc.fasta' '-j'": 'coal: error: argument -j/--jobs: expected one argument',
@@ -179,15 +218,14 @@ PINNED = {
     "'pep.fasta' 'nuc.fasta' '-o'": 'coal: error: argument -o/--out: expected one argument',
     "'pep.fasta' 'nuc.fasta' '-o' '-q'": 'coal: error: argument -o/--out: expected one argument',
     "'pep.fasta' 'nuc.fasta' '--out' '--'": 'coal: error: argument -o/--out: expected one argument',
-    "'pep.fasta' 'nuc.fasta' '-qx'": "coal: error: argument -q/--quiet: ignored explicit argument 'x'",
-    "'pep.fasta' 'nuc.fasta' '-qqx'": "coal: error: argument -q/--quiet: ignored explicit argument 'x'",
+    "'pep.fasta' 'nuc.fasta' '-qx'": 'coal: error: unrecognized arguments: -x',
+    "'pep.fasta' 'nuc.fasta' '-qqx'": 'coal: error: unrecognized arguments: -x',
     "'pep.fasta' 'nuc.fasta' '-q=1'": "coal: error: argument -q/--quiet: ignored explicit argument '1'",
     "'pep.fasta' 'nuc.fasta' '--quiet=1'": "coal: error: argument -q/--quiet: ignored explicit argument '1'",
     "'pep.fasta' 'nuc.fasta' '--nogap=1'": "coal: error: argument -nogap/--nogap: ignored explicit argument '1'",
     "'pep.fasta' 'nuc.fasta' '-nogap=12'": "coal: error: argument -nogap/--nogap: ignored explicit argument '12'",
     "'pep.fasta' 'nuc.fasta' '-strict=1'": "coal: error: argument -strict/--strict: ignored explicit argument '1'",
     "'pep.fasta' 'nuc.fasta' '--strict=yes'": "coal: error: argument -strict/--strict: ignored explicit argument 'yes'",
-    "'pep.fasta' 'nuc.fasta' '-hx'": "coal: error: argument -h/--help: ignored explicit argument 'x'",
     "'pep.fasta' 'nuc.fasta' '-out' 'x'": 'coal: error: ambiguous option: -out could match -output, -o',
     "'pep.fasta' 'nuc.fasta' '-n'": 'coal: error: ambiguous option: -n could match -nogap, -nomismatch',
     "'pep.fasta' 'nuc.fasta' '--no'": 'coal: error: ambiguous option: --no could match --nogap, --nomismatch',
@@ -195,7 +233,6 @@ PINNED = {
     "'pep.fasta' 'nuc.fasta' '-no'": 'coal: error: ambiguous option: -no could match -nogap, -nomismatch',
     "'pep.fasta' 'nuc.fasta' '--foo'": 'coal: error: unrecognized arguments: --foo',
     "'pep.fasta' 'nuc.fasta' '-x'": 'coal: error: unrecognized arguments: -x',
-    "'pep.fasta' 'nuc.fasta' '-cod=2'": 'coal: error: unrecognized arguments: -cod=2',
     "'pep.fasta' 'nuc.fasta' '-o' 'x.fa' 'nuc.fasta'": 'coal: error: unrecognized arguments: nuc.fasta',
     "'pep.fasta' 'nuc.fasta' '-q' 'nuc.fasta' '-q' 'nuc.fasta'": 'coal: error: unrecognized arguments: nuc.fasta nuc.fasta',
     "'pep.fasta' 'nuc.fasta' '-j' 'x' '--help'": "coal: error: argument -j/--jobs: invalid int value: 'x'",
@@ -207,7 +244,6 @@ PINNED = {
     "'pep.fasta' 'nuc.fasta' '-outp' 'fasta'": 'coal: error: ambiguous option: -outp could match -output, -o',
     "'pep.fasta' 'nuc.fasta' '-blockonly=1'": "coal: error: argument -blockonly/--blockonly: ignored explicit argument '1'",
     "'pep.fasta' 'nuc.fasta' '--blockonly=yes'": "coal: error: argument -blockonly/--blockonly: ignored explicit argument 'yes'",
-    # the extras: captured from the merged reference (0729829), Python 3.10
     "'pep.fasta' 'nuc.fasta' '--j' '1'": 'coal: error: ambiguous option: --j could match --jobs, --json',
     "'pep.fasta' 'nuc.fasta' '--re'": 'coal: error: ambiguous option: --re could match --resume, --report',
     "'pep.fasta' 'nuc.fasta' '--max-warnings' '-1'": 'coal: error: --max-warnings must be 0 (no limit) or more',
@@ -247,8 +283,9 @@ class _Base(unittest.TestCase):
 class LiveComparison(_Base):
     @classmethod
     def setUpClass(cls):
-        if not LIVE_OK:
-            raise unittest.SkipTest("live comparison needs Python 3.10/3.11 (argparse messages differ later)")
+        if ARGPARSE_DIFFERS:
+            raise unittest.SkipTest(f"live comparison needs Python 3.13's argparse; this is "
+                                    f"{sys.version.split()[0]}, whose {ARGPARSE_DIFFERS}")
         super().setUpClass()
         cls.src = reference_src(cls.tmp)
         if cls.src is None or not (cls.src / "coal" / "cli.py").is_file():
@@ -353,6 +390,12 @@ class CppOnly(_Base):
         c = self.cpp([P, N, "--max-warnings", "-1"])
         self.assertEqual((c.returncode, last_line(c.stderr)), (2, "coal: error: --max-warnings must be 0 (no limit) "
                                                                   "or more"))
+
+    def test_second_double_dash_is_a_file_name(self):
+        # Python 3.13's argparse drops only the '--' marker; a later '--' is a value (3.10-3.12 dropped one '--'
+        # from every positional, so this ran).
+        c = self.cpp([P, "--", N, "--"])
+        self.assertEqual((c.returncode, last_line(c.stderr)), (1, "coal: error: cannot open '--': no such file"))
 
     def test_version(self):
         c = self.cpp(["--version"])
