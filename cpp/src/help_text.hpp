@@ -5,7 +5,8 @@
 static const char* const COAL_HELP = R"COALHELP(usage: coal [-h] [-codontable N] [-nogap] [-nomismatch]
             [-output {fasta,clustal,paml,codon}] [-blockonly] [-o FILE] [-j N]
             [-q] [-strict] [--keep-going] [--max-warnings N] [--progress]
-            [--resume] [--report FILE.json] [--json] [--version]
+            [--resume] [--report FILE.json] [--json] [--batch JOBS]
+            [--batch-out-dir DIR] [--version]
             pep_aln nuc_fasta [nuc_fasta ...]
 
 Convert a protein alignment + unaligned coding DNA into a codon alignment.
@@ -56,6 +57,14 @@ Reporting:
                         all)
   --report FILE.json    write a JSON run report, also when the run fails
   --json                print the run report to stdout (needs -o)
+
+Batch:
+  --batch JOBS          run many small conversions in one process: one coal
+                        command line per line of JOBS (- = stdin), each with
+                        -o; the options given here are the defaults of every
+                        job (not in coal-cpp)
+  --batch-out-dir DIR   with --batch: a job without -o writes DIR/<its protein
+                        file's name>.<fasta|aln|paml|codon>
 
 Every option in detail: README.md (https://github.com/plumat-coal/COAL).
 )COALHELP";
