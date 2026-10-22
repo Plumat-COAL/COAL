@@ -7,6 +7,7 @@ Offline: no CDN fonts (system fonts only) and analytics disabled.
 from __future__ import annotations
 
 import os
+import sys
 
 os.environ.setdefault("GRADIO_ANALYTICS_ENABLED", "False")
 
@@ -415,8 +416,8 @@ def run_ui(protein, dna, fmt, code, nogap, nomismatch, protein_path="", dna_path
         missing = " and ".join(n for n, v in (("a protein alignment", protein), ("a coding DNA file", dna)) if not v)
         return _results({}, None, None, "", "", "", gui_html.message_banner(
             "warning", "Please add both files", text=f"Add {missing}, or try an example."))
-    out_dir = core.new_run_dir()  # runs older than 24 h are pruned
     try:
+        out_dir = core.new_run_dir()  # runs older than 24 h are pruned
         r = core.run_coal(protein, dna, fmt, int(code), bool(nogap), bool(nomismatch), out_dir=out_dir,
                           strict=bool(strict), blockonly=bool(blockonly))
     except ValueError as e:
@@ -757,7 +758,11 @@ def build(demo_mode: bool = False) -> gr.Blocks:
 
 
 def launch(host="127.0.0.1", port=7860, mcp=True, demo_mode=False, prevent_thread_lock=False):
-    os.makedirs(core.RUNS_DIR, exist_ok=True)
+    try:
+        core.ensure_runs_dir()
+    except ValueError as e:
+        print(f"coal-app: {e}", file=sys.stderr, flush=True)
+        sys.exit(1)
     core.prune_runs()  # runs older than 24 h are removed at startup
     demo = build(demo_mode)
     demo.launch(server_name=host, server_port=port, mcp_server=mcp, inbrowser=False,

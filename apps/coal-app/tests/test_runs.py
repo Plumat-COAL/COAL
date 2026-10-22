@@ -276,3 +276,37 @@ class TestProbeCost(RunsDirCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestUnusableRunsDir(unittest.TestCase):
+    """COAL_RUNS_DIR pointing somewhere no folder can be made: one plain sentence, never a traceback."""
+
+    def _with_runs_dir(self, path):
+        old = core.RUNS_DIR
+        core.RUNS_DIR = path
+        self.addCleanup(setattr, core, "RUNS_DIR", old)
+
+    def test_new_run_dir_under_an_impossible_path(self):
+        self._with_runs_dir("/proc/nonexistent/runs" if os.name != "nt" else "?:\\nonexistent\\runs")
+        with self.assertRaisesRegex(ValueError, r"Could not create the results folder .*nonexistent.*runs: .+") as cm:
+            core.new_run_dir()
+        self.assertNotIn("Traceback", str(cm.exception))
+        self.assertIsInstance(cm.exception.__cause__, OSError)
+
+    def test_new_run_dir_when_a_file_is_in_the_way(self):
+        d = _tmp(self)
+        f = os.path.join(d, "runs")
+        _write(f, "not a folder\n")
+        self._with_runs_dir(f)
+        with self.assertRaisesRegex(ValueError, "Could not create the results folder"):
+            core.new_run_dir()
+        with self.assertRaisesRegex(ValueError, "Could not create the results folder"):
+            core.ensure_runs_dir()
+
+    def test_mcp_tool_reports_a_tool_error(self):
+        from coal_app import tools
+        self._with_runs_dir("/proc/nonexistent/runs" if os.name != "nt" else "?:\\nonexistent\\runs")
+        p, d = core.example_paths("clean")
+        with self.assertRaisesRegex(tools.CoalToolError, "Could not create the results folder"):
+            tools.codon_align(p, d)
+

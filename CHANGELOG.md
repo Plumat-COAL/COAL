@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **App: a settings file that is not text no longer stops COAL from starting.** `settings.json` in another encoding
+  (or binary garbage) gave a traceback at start-up; it now counts as a damaged file: the defaults are used and the
+  Settings tab says so, as for a half-written file.
+- **App: an unusable results folder is one plain sentence, not a traceback.** With `COAL_RUNS_DIR` pointing where no
+  folder can be made (a path under a missing directory, an existing file, no permission), the GUI shows "Could not
+  create the results folder <folder>: <reason>" in the banner, the MCP tool `codon_align` raises a tool error with
+  that sentence, and `coal-gui` / `python -m coal_app` print it and exit 1 instead of failing in `os.makedirs`.
+
 - **Less memory with many workers:** COAL's own processes now limit numpy's BLAS thread pool to one thread
   (`OPENBLAS_NUM_THREADS`, `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, unless already set). COAL uses no BLAS, but every
   worker that imported numpy started a pool sized to the machine. On a 20-thread Windows machine each process that
