@@ -150,6 +150,25 @@ class TestUploadClearsPathBox(RunsDirCase):
             self.assertEqual(fn("/tmp/x.fa"), "")
             self.assertEqual(fn(None), "")
 
+    def test_unusable_runs_dir_is_a_banner_not_an_error(self):
+        core.RUNS_DIR = "/proc/nonexistent/runs" if os.name != "nt" else "?:\\nonexistent\\runs"
+        p, d = core.example_paths("clean")
+        out = self.ui.run_ui(None, None, "fasta", 1, False, False, p, d)
+        banner = out[0]._kw["value"]
+        self.assertIn("Could not create the results folder", banner)
+        self.assertIn("nonexistent", banner)
+
+    def test_launch_with_an_unusable_runs_dir_exits_with_a_message(self):
+        import io
+        from contextlib import redirect_stderr
+        core.RUNS_DIR = "/proc/nonexistent/runs" if os.name != "nt" else "?:\\nonexistent\\runs"
+        err = io.StringIO()
+        with redirect_stderr(err), self.assertRaises(SystemExit) as cm:
+            self.ui.launch()
+        self.assertEqual(cm.exception.code, 1)
+        self.assertIn("Could not create the results folder", err.getvalue())
+        self.assertNotIn("Traceback", err.getvalue())
+
     def test_banner_names_the_files_used(self):
         p, d = core.example_paths("clean")
         out = self.ui.run_ui(None, None, "fasta", 1, False, False, p, d)

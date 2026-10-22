@@ -101,17 +101,20 @@ def load(formats=None) -> tuple[dict, str]:
     if stored_in_browser():
         return clean(None, formats), ""
     path = settings_path()
+    damaged = "Your saved settings file was damaged, so the defaults are used until you change one."
     try:
         with open(path, encoding="utf-8") as fh:
             text = fh.read()
     except FileNotFoundError:
         return clean(None, formats), ""
+    except UnicodeDecodeError:        # not text at all (a binary file, another encoding): damaged, not unreadable
+        return clean(None, formats), damaged
     except OSError as e:
         return clean(None, formats), f"Could not read your saved settings ({e.strerror or e}); using the defaults."
     try:
         data = json.loads(text) if text.strip() else {}
-    except ValueError:
-        return clean(None, formats), "Your saved settings file was damaged, so the defaults are used until you change one."
+    except (ValueError, RecursionError):
+        return clean(None, formats), damaged
     return clean(data, formats), ""
 
 

@@ -118,10 +118,28 @@ def choose(args, argv, defaults, note=None) -> str | None:
         return None
     if mode == "auto":
         size = _input_bytes(args)
-        if size is None or size < CPP_MIN_BYTES:
-            return None
+        by_size = size is not None and size >= CPP_MIN_BYTES
         if os.name == "nt" and not all(a.isascii() for a in argv):
-            return None  # coal-cpp reads its arguments in the ANSI code page on Windows
+            by_size = False  # coal-cpp reads its arguments in the ANSI code page on Windows
+        # --resume: the engine that wrote the checkpoint resumes the run (each engine resumes only its own), so a
+        # coal-cpp installed or removed between the run and the resume does not get in the way
+        engine = None
+        if getattr(args, "resume", False) and getattr(args, "out", None):
+            from .checkpoint import checkpoint_engine
+            engine = checkpoint_engine(args.out)
+        if engine == "coal-python":
+            if by_size and note:
+                note(f"{args.out} was interrupted by the Python engine; resuming with it")
+            return None
+        if engine == "coal-cpp":
+            path = find_cpp()
+            if path is not None and _version_ok(path)[0]:
+                if not by_size and note:
+                    note(f"{args.out} was interrupted by the C++ engine (coal-cpp); resuming with it")
+                return path
+            return None  # the Python engine explains that coal-cpp must resume this run
+        if not by_size:
+            return None
     path = find_cpp()
     if path is None:
         if mode == "cpp":

@@ -13,9 +13,11 @@ Two ways in:
 
 ## 1. Replace orthologr's bundled script with the stand-in (works today)
 
-`pal2nal.pl` in this folder is a 20-line Perl script that hands the unchanged PAL2NAL command line to COAL:
+`pal2nal.pl` in this folder is a small Perl script that hands the unchanged PAL2NAL command line to COAL:
 to `coal-cpp` when it is installed (it starts in a few milliseconds, which is what matters when a program runs
-once per gene pair), otherwise to COAL's `pal2nal` command (Python); `COAL_PAL2NAL=<path>` forces one. Output is
+once per gene pair), otherwise to COAL's `pal2nal` command (Python); `COAL_PAL2NAL=<path>` forces one. A command
+line with a PAL2NAL option that `coal-cpp` does not take (`-nostderr`, `-h`) always goes to `pal2nal`, which
+accepts all of PAL2NAL's. Output is
 PAL2NAL v14's, byte for byte, apart from the [documented differences](../../docs/differences.md).
 
 In R, with COAL installed (`pip install coal-align`, or `conda install -c bioconda coal-align` once the recipe is

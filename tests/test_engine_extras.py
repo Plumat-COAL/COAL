@@ -302,7 +302,12 @@ def interrupt(cmd, cwd, after_checkpoint=3, extra_env=None):
                 paused = True
                 break
         p.terminate()
-        p.wait(timeout=30)
+        try:
+            p.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            p.kill()                          # never leave an hour-long orphan behind a failed test
+            p.wait(timeout=30)
+            raise
     finally:
         dog.cancel()
         p.stderr.close()

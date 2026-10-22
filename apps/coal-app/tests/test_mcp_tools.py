@@ -211,40 +211,74 @@ class TestToolSchemas(unittest.TestCase):
                                  "nogap", "nomismatch", "strict", "blockonly", "save_as"])  # SHIP-20: + save_as
 
 
-@unittest.skipUnless(has_mcp2() or REQUIRE_MCP, "mcp>=2 not installed (pip install -e 'apps/coal-app[mcp]')")
+def _mcp1_or_2(server):
+    """Small adapter over the two SDKs the stdio server runs on: mcp 2.x (MCPServer) and 1.x (FastMCP, what Gradio's
+    extra and so the Windows app ship). Returns (version, {name: (input_schema, output_schema)}, call, ToolError);
+    call(name, args) -> (text of the first content block, structured result)."""
+    if has_mcp2():
+        from mcp.server.mcpserver.exceptions import ToolError
+        tools_ = {t.name: (t.input_schema, t.output_schema) for t in asyncio.run(server.list_tools())}
+
+        def call(name, args):
+            res = asyncio.run(server.call_tool(name, args))
+            return res.content[0].text, res.structured_content
+        return server.version, tools_, call, ToolError
+    from mcp.server.fastmcp.exceptions import ToolError
+    tools_ = {t.name: (t.inputSchema, t.outputSchema) for t in asyncio.run(server.list_tools())}
+
+    def call(name, args):
+        res = asyncio.run(server.call_tool(name, args))
+        content, structured = res if isinstance(res, tuple) else (res, None)
+        return content[0].text, structured
+    return server._mcp_server.version, tools_, call, ToolError
+
+
+@unittest.skipUnless(has_mcp() or REQUIRE_MCP, "mcp not installed (pip install -e 'apps/coal-app[mcp]' or '[gui]')")
 class TestStdioMcpServer(_PrivateRuns):
+    """The server object itself, on mcp 2.x and on 1.x (the Windows app's)."""
+
     def test_lists_and_calls_tools(self):
         from coal_app import mcp_stdio
-        s = mcp_stdio.build_server()
-        names = sorted(t.name for t in asyncio.run(s.list_tools()))
-        self.assertEqual(names, ["codon_align", "explain_report"])
-        res = asyncio.run(s.call_tool("explain_report", {"report_path": core.SAMPLE_REPORT}))
-        self.assertIn("Homo_COX1", res.content[0].text)
+        _, tools_, call, _ = _mcp1_or_2(mcp_stdio.build_server())
+        self.assertEqual(sorted(tools_), ["codon_align", "explain_report"])
+        text, _ = call("explain_report", {"report_path": core.SAMPLE_REPORT})
+        self.assertIn("Homo_COX1", text)
 
     def test_schemas_errors_and_version(self):
         from coal import __version__
         from coal_app import mcp_stdio
-        from mcp.server.mcpserver.exceptions import ToolError
-        s = mcp_stdio.build_server()
-        self.assertEqual(s.version, __version__)
-        t = {t.name: t for t in asyncio.run(s.list_tools())}["codon_align"]
-        props = t.input_schema["properties"]
+        version, tools_, call, ToolError = _mcp1_or_2(mcp_stdio.build_server())
+        self.assertEqual(version, __version__)  # COAL's, not the mcp library's (mcp 1.x reported its own)
+        input_schema, output_schema = tools_["codon_align"]
+        props = input_schema["properties"]
         self.assertEqual(props["codontable"]["enum"], list(core.GENETIC_CODES))
         self.assertEqual(props["output_format"]["enum"], ["fasta", "clustal", "paml", "codon"])
         self.assertIn("Absolute path", props["dna_fasta_path"]["description"])
-        self.assertIn("all_ok", t.output_schema["properties"])
+        self.assertIn("all_ok", output_schema["properties"])
         p, d = core.example_paths("mito")
         for bad in ({"protein_alignment_path": "/no/such.fa", "dna_fasta_path": d},
                     {"protein_alignment_path": p, "dna_fasta_path": d, "codontable": 99},
                     {"protein_alignment_path": p, "dna_fasta_path": d, "output_format": "xml"}):
             with self.assertRaises(ToolError):
-                asyncio.run(s.call_tool("codon_align", bad))
-        res = asyncio.run(s.call_tool("codon_align", {"protein_alignment_path": p, "dna_fasta_path": d}))
-        self.assertEqual(res.structured_content["suggested_codontable"], 2)
-        self.assertFalse(res.structured_content["all_ok"])
+                call("codon_align", bad)
+        _, structured = call("codon_align", {"protein_alignment_path": p, "dna_fasta_path": d})
+        self.assertEqual(structured["suggested_codontable"], 2)
+        self.assertFalse(structured["all_ok"])
+
+    def test_stdio_session_is_quiet_and_reports_coal_version(self):
+        # mcp 1.x's FastMCP logs every request at INFO (tens of KB per session into Claude Desktop's MCP log) and
+        # reports the mcp library's version as serverInfo.version unless told otherwise
+        from coal import __version__
+        p, d = core.example_paths("mito")
+        replies, err = _handshake_with_stderr([sys.executable, "-m", "coal_app", "--mcp"],
+                                              extra_calls=((5, "codon_align", {"protein_alignment_path": p,
+                                                                               "dna_fasta_path": d}),))
+        self.assertEqual(replies[1]["result"]["serverInfo"]["version"], __version__)
+        self.assertNotIn("INFO", err)
+        self.assertLess(len(err), 2000, err[-2000:])
 
 
-def stdio_handshake(cmd, extra_calls=()):
+def _handshake_with_stderr(cmd, extra_calls=()):
     """Talk to an MCP stdio server as Claude Code / Desktop do: initialize, list tools, call explain_report on the
     sample report and on a missing file, plus extra_calls ((id, name, arguments), ...). Returns {id: reply}.
     Shared by TestStdioMcpHandshake and the frozen COAL.exe check."""
@@ -307,7 +341,12 @@ def stdio_handshake(cmd, extra_calls=()):
         p.stderr.close()
     if not want <= set(replies):
         raise AssertionError(f"no reply to {sorted(want - set(replies))}; server stderr:\n{''.join(err)[-3000:]}")
-    return replies
+    return replies, "".join(err)
+
+
+def stdio_handshake(cmd, extra_calls=()):
+    """_handshake_with_stderr without the server's stderr."""
+    return _handshake_with_stderr(cmd, extra_calls)[0]
 
 
 class _HandshakeChecks:

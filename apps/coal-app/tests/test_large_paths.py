@@ -85,22 +85,44 @@ class TestLargeInputByPath(unittest.TestCase):
             self.assertEqual(out[sid], "".join(want), sid)
         self.assertEqual(len(out), 22000)
 
+    @staticmethod
+    def _calibrate():
+        """Seconds for a fixed pure-Python workload (integer loop + many small strings), measured under the same
+        tracemalloc as the rendering, so the time bound follows the machine and its load rather than a fixed clock."""
+        best = None
+        for _ in range(3):
+            t = time.perf_counter()
+            acc = 0
+            for i in range(1_000_000):
+                acc += i % 7
+            "".join(str(i) for i in range(100_000))
+            best = min(best or 1e9, time.perf_counter() - t)
+        return best
+
     def test_gui_rendering_is_fast_and_small(self):
         import tracemalloc
         out_dir = tempfile.mkdtemp(prefix="coal_test_render_")
         self.addCleanup(shutil.rmtree, out_dir, True)
         r = core.run_coal(self.pep, self.nuc, out_dir=out_dir, probe_codes=False)
         tracemalloc.start()
-        t = time.perf_counter()
         try:
+            unit = self._calibrate()
+            t = time.perf_counter()
             frag, page_path = viewer.render_run(self.pep, r.output_path, r.report, self.nuc, 1, out_dir)
             table = core.health_table_html(r.report, links=True)
             elapsed = time.perf_counter() - t
             peak = tracemalloc.get_traced_memory()[1]
         finally:
             tracemalloc.stop()
-        self.assertLess(elapsed, 20.0)  # ~5 s here under tracemalloc; was ~46 s without it
-        self.assertLess(peak, 500_000_000)
+        # Rendering takes about 7-8 calibration units under tracemalloc (~5 s on an idle machine; it was ~46 s
+        # before the viewer was optimised). 3x that, with the old 20 s as a floor, is the guard; the bound scales
+        # with the machine and its load (a loaded 2-core box measured 21-22 s against the fixed 20 s).
+        # COAL_TEST_SLOW_FACTOR multiplies it further for very slow or heavily shared machines.
+        slow = float(os.environ.get("COAL_TEST_SLOW_FACTOR") or 1)
+        bound = max(20.0, 3 * 8 * unit) * slow
+        self.assertLess(elapsed, bound, f"rendering took {elapsed:.1f} s (bound {bound:.1f} s from a calibration "
+                                        f"unit of {unit:.2f} s)")
+        self.assertLess(peak, 500_000_000)  # memory stays a fixed bound
         self.assertTrue(os.path.isfile(page_path))
         # an explicit preview (default size 200 here: render_run without limits keeps the old caps)
         self.assertIn("Preview: 200 of 22,000 sequences", frag)

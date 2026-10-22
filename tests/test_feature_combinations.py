@@ -253,7 +253,12 @@ def interrupt(cmd, cwd, after=2, extra_env=None):
             if line.startswith("coal: test: paused"):
                 break
         p.terminate()
-        p.wait(timeout=30)
+        try:
+            p.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            p.kill()                          # never leave an hour-long orphan behind a failed test
+            p.wait(timeout=30)
+            raise
     finally:
         dog.cancel()
         p.stderr.close()

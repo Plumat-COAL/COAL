@@ -56,8 +56,8 @@ def main(argv=None) -> int:
             from . import mcp_stdio
             return mcp_stdio.main()
         except ImportError:
-            print("coal-gui: the MCP server needs the 'mcp' package (version 2): pip install \"coal-align-app[mcp]\" "
-                  "(from a COAL checkout: pip install -e . -e \"apps/coal-app[mcp]\")",
+            print("coal-gui: the MCP server needs the 'mcp' package (1.x or 2.x): pip install \"coal-align-app[mcp]\" "
+                  "(from a COAL checkout: pip install -e . -e \"apps/coal-app[mcp]\"; the gui extra brings it too)",
                   file=sys.stderr)
             return 1
     try:

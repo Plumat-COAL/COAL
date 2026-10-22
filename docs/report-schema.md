@@ -134,7 +134,9 @@ for the run `count_mismatch`, `row_lengths`, `no_sequences`, `partial_id_match` 
 options) and `error` (an invalid option combination). The code `stopped` is reserved for the COAL app, which adds it
 to `errors` when it finds a run was interrupted; the engine never writes it (an interrupted run writes no report).
 `unknown_table` (Python API only: an unsupported `table`) never reaches a report written by the command line, which
-rejects the number as a usage error before the run starts.
+rejects the number as a usage error before the run starts. `worker_died` is written by the Python engine only (a
+worker process of a `-j` run was killed, most likely by the out-of-memory killer; `coal-cpp` uses threads, so it has
+no such error).
 
 ## Validating and regenerating
 

@@ -29,6 +29,11 @@ class InputFormatError(CoalError, ValueError):
 # (cpp/src/seqio.cpp).
 NON_ASCII = "non-ASCII character: sequence files must be plain text (is this a binary or word-processor file?)"
 NON_ASCII_ID = "non-ASCII character in the sequence ID: use only ASCII letters, digits and punctuation in IDs"
+# NUL and the other C0 control bytes (except tab, LF, VT, FF, CR) never occur in a sequence file: a binary file, or
+# UTF-16 text
+CONTROL_CHAR = "control character: sequence files must be plain text (is this a binary or word-processor file?)"
+_CONTROL = re.compile(r"[\x00-\x08\x0e-\x1f]")
+_CONTROL_BYTES = re.compile(rb"[\x00-\x08\x0e-\x1f]")
 EMPTY_HEADER = "empty FASTA header: a '>' line without a sequence ID (every record needs a name after '>')"
 _BEFORE = "sequence data before the first '>' header: not a FASTA file? (each FASTA record starts with a '>name' line"
 BEFORE_HEADER_PROTEIN = _BEFORE + "; a CLUSTAL file must start with 'CLUSTAL')"
@@ -36,6 +41,8 @@ BEFORE_HEADER_DNA = _BEFORE + ")"
 
 
 def duplicate_message(where, rid: str) -> str:
+    if len(rid) > 200:  # (raised before the IDs are known to the message layer: shortened here)
+        rid = rid[:100] + "..." + rid[-20:]
     return f"{where}: duplicate sequence ID {rid!r}: every sequence needs its own ID"
 
 
@@ -71,6 +78,8 @@ def _ascii_lines(fh, path):
     try:
         for line in fh:
             lineno += 1
+            if _CONTROL.search(line):
+                raise InputFormatError(f"{path}:{lineno}: {CONTROL_CHAR}")
             if not line.isascii():
                 # A header's description (after the ID) may hold any text, as in PAL2NAL (e.g. ">a Krüppel-like
                 # factor"). Non-ASCII IDs and sequence data are errors.
@@ -290,6 +299,8 @@ class DnaIndex:
                 if line.startswith(b">"):
                     if start is not None:
                         self._add(fno, start, offset)
+                    if _CONTROL_BYTES.search(line):  # (the sequence data are checked when they are read: get())
+                        raise InputFormatError(f"{path}:{lineno}: {CONTROL_CHAR}")
                     parts = line[1:].split()
                     if not parts:
                         raise InputFormatError(f"{path}:{lineno}: {EMPTY_HEADER}")
@@ -332,9 +343,26 @@ class DnaIndex:
             fh = self._fh[fno] = open(self.paths[fno], "rb")
         fh.seek(a)
         raw = fh.read(b - a)
+        if len(raw) != b - a:
+            # Never another record's bytes: a file that shrank or changed after it was indexed is an error (the
+            # same words as coal-cpp)
+            raise CoalError(f"{self.paths[fno]}: could not read the DNA of record {i + 1} (the file changed after "
+                            f"it was read, or cannot be read)", code="file_error")
+        m = _CONTROL_BYTES.search(raw)
+        if m:
+            raise InputFormatError(f"{self.paths[fno]}:{self._line_of(fno, a + m.start())}: {CONTROL_CHAR}")
         if b"#" in raw:
             raw = b"".join(l for l in raw.splitlines(True) if not l.startswith(b"#"))
         return raw.translate(None, _NON_LETTER_BYTES).decode("ascii")
+
+    def _line_of(self, fno: int, offset: int) -> int:
+        """The 1-based line number of a byte offset (for an error message only: reads the file up to there)."""
+        with open(self.paths[fno], "rb") as fh:
+            head = fh.read(offset)
+        n = head.count(b"\n")
+        if n == 0:
+            n = head.count(b"\r")  # old Mac line ends
+        return n + 1
 
     def close(self) -> None:
         for fh in self._fh.values():
