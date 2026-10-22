@@ -66,6 +66,10 @@
   documentation is in `docs/`. Hackathon logs and pitch material are removed (kept on the `hackathon-archive` tag),
   review-round markers are gone from comments, and engine test modules are named after what they test. No change to
   COAL's behaviour or output.
+- **`coal-cpp` reports the same error as `coal` when a protein file has two defects.** A FASTA record is now
+  handed back before the `>` line that ends it is checked, so a short row is reported before a later duplicate or
+  empty header; and a CLUSTAL file's rows are parsed before its `#` mark line is read, so a malformed CLUSTAL line is
+  reported before a later non-ASCII character. Found by differential fuzzing; `tests/test_cpp_error_precedence.py`.
 - **Package renamed to `coal-align`** (`coal` on PyPI is another project). The `coal` command, the `coal` Python
   module and `pal2nal` are unchanged; release files are now `coal_align-<version>-py3-none-any.whl` and
   `coal_align-<version>.tar.gz` (`coal_src.tar.gz` stays).

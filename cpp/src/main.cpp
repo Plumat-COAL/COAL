@@ -827,19 +827,18 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
     const bool block = o.fmt == "clustal" || o.fmt == "codon";
     // PAL2NAL's '#' block marks of a CLUSTAL input: -blockonly keeps only those
     // columns; clustal / codon output show the marks under each block when -blockonly is not given
-    const std::string mask = is_clustal(o.pep) ? clustal_mask(o.pep) : std::string();
-    const bool has_marks = mask.find('#') != std::string::npos;
-    const bool block_cols = o.blockonly && has_marks;
-    const bool two_pass = o.nogap || o.nomismatch || block_cols;
-    // keep_going + paml: the header needs the final count, so stage the rows
-    const bool staged = two_pass || block || (o.keep_going && o.fmt == "paml");
+    std::string mask;
 
     // pass 1: protein IDs, row length, frameshift column widths
     std::vector<std::string> ids_read;
     long long ncol = -1;
     std::vector<int> widths;
     {
+        // The reader first: a CLUSTAL file is parsed whole here, so its format errors come
+        // before anything the mask read would report (as _protein_rows precedes clustal_mask
+        // in the reference).
         ProteinReader pr(o.pep);
+        if (pr.is_clustal()) mask = clustal_mask(o.pep);
         std::string id, row, first_row;
         while (pr.next(id, row)) {
             row = prepare_row(row);
@@ -860,6 +859,11 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         throw CoalError(o.pep + ": no sequences found: the file is empty or has no '>' header lines (expected a "
                                 "protein alignment in FASTA or CLUSTAL format)",
                         "no_sequences");
+    const bool has_marks = mask.find('#') != std::string::npos;
+    const bool block_cols = o.blockonly && has_marks;
+    const bool two_pass = o.nogap || o.nomismatch || block_cols;
+    // keep_going + paml: the header needs the final count, so stage the rows
+    const bool staged = two_pass || block || (o.keep_going && o.fmt == "paml");
     rec.set_inputs(std::move(ids_read));
     const std::vector<std::string>& ids = rec.ids();  // one copy, owned by the report
     DnaIndex dna(o.nucs);
