@@ -12,6 +12,13 @@
   `-o`: an input or the output file is a usage error before anything runs (`coal: error: the report path r.json is
   an input file` / `is the output file`, exit 2; also for a job line's `--report` and the batch report), symlinks
   are written through, and FIFOs, devices and hard-linked files are written in place.
+- **A killed worker no longer hangs the Python engine** (robustness review): when the out-of-memory killer (or
+  `kill -9`) took one worker of a `-j` run, the main process could block forever in the pool's shutdown. It now
+  ends the pool without waiting and stops with `coal: error: a worker process died (out of memory?)` (exit 1, report
+  code `worker_died`, no partial output, no temp files). Workers also let SIGTERM end them (the inherited handler
+  used to be swallowed inside the work) and **die with the main process** (`PR_SET_PDEATHSIG` on Linux, a parent
+  watchdog everywhere), so a `kill -9` of `coal` no longer leaves workers holding its stdout open and a pipeline
+  reading it waiting for EOF forever.
 - **Less memory with many workers:** COAL's own processes now limit numpy's BLAS thread pool to one thread
   (`OPENBLAS_NUM_THREADS`, `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, unless already set). COAL uses no BLAS, but every
   worker that imported numpy started a pool sized to the machine. On a 20-thread Windows machine each process that

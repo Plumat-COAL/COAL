@@ -114,7 +114,8 @@ command prints after `coal: error:`. Its attributes:
 `align_files` can also raise `file_error` (an input cannot be opened or the output cannot be written),
 `input_format` (a file that is not FASTA or CLUSTAL, or not ASCII text: the exception is `coal.seqio.InputFormatError`,
 a subclass of both `CoalError` and `ValueError`), `all_failed` (`keep_going=True` and every sequence failed),
-`resume_mismatch` (`resume=True` with changed inputs or options) and, with no `code` argument, `error` (an unknown
+`resume_mismatch` (`resume=True` with changed inputs or options), `worker_died` (a worker process of a `jobs > 1`
+run was killed, most likely by the out-of-memory killer) and, with no `code` argument, `error` (an unknown
 `out_format`, or `-output codon` with `nogap`/`nomismatch`/`blockonly`).
 
 ```python

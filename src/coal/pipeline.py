@@ -125,11 +125,47 @@ def _protein_rows(path):
 _W: dict = {}
 
 
-def _init_pool_worker(*init_args):
-    """Initializer of a worker process: ignore Ctrl-C (the main process reports it once, no worker tracebacks)."""
+def _init_pool_worker(parent_pid, *init_args):
+    """Initializer of a worker process: ignore Ctrl-C (the main process reports it once, no worker tracebacks); let
+    SIGTERM / SIGHUP end the worker (the main process's handlers, inherited with the fork start method, would raise
+    SystemExit inside the work and the pool would send it back as a result instead of exiting); and die with the
+    main process (_watch_parent), so a `kill -9` of coal never leaves workers holding its stdout and stderr open."""
     signal.signal(signal.SIGINT, signal.SIG_IGN)
+    for name in ("SIGTERM", "SIGHUP"):
+        if hasattr(signal, name):
+            try:
+                signal.signal(getattr(signal, name), signal.SIG_DFL)
+            except (OSError, ValueError):
+                pass
+    _watch_parent(parent_pid)
     limit_blas_threads()
     _init_worker(*init_args)
+
+
+def _watch_parent(parent_pid: int) -> None:
+    """Make this worker exit when its parent dies: on Linux the kernel sends SIGKILL (PR_SET_PDEATHSIG); everywhere a
+    small thread checks the parent every 0.5 s (also covers the spawn start method, macOS and Windows, and a
+    parent that died before prctl ran). Started in the worker itself, never inherited."""
+    import threading
+    if sys.platform.startswith("linux"):
+        try:
+            import ctypes
+            libc = ctypes.CDLL(None, use_errno=True)
+            libc.prctl(1, 9, 0, 0, 0)  # PR_SET_PDEATHSIG, SIGKILL
+        except (OSError, AttributeError, ValueError):
+            pass
+
+    def watch():
+        while True:
+            time.sleep(0.5)
+            try:
+                alive = os.getppid() == parent_pid
+            except OSError:
+                alive = False
+            if not alive:
+                os._exit(1)
+
+    threading.Thread(target=watch, name="coal-parent-watch", daemon=True).start()
 
 
 def _init_worker(table, widths, two_pass, nogap, strict=False, out_format="fasta", keep_going=False):
@@ -313,8 +349,11 @@ def _results(batches, jobs: int, init_args):
             yield _work(b)
         return
     from concurrent.futures import ProcessPoolExecutor  # imported only when needed
+    from concurrent.futures.process import BrokenProcessPool
 
-    with ProcessPoolExecutor(max_workers=jobs, initializer=_init_pool_worker, initargs=init_args) as ex:
+    ex = ProcessPoolExecutor(max_workers=jobs, initializer=_init_pool_worker, initargs=(os.getpid(), *init_args))
+    ok = False
+    try:
         pending: deque = deque()
         for b in batches:
             pending.append(ex.submit(_work, b))
@@ -322,6 +361,46 @@ def _results(batches, jobs: int, init_args):
                 yield pending.popleft().result()
         while pending:
             yield pending.popleft().result()
+        ok = True
+    except BrokenProcessPool:
+        # A worker was killed (the OOM killer, most likely): the run cannot finish, and waiting for the pool
+        # would hang, so the workers are killed and the run ends with a clear error (exit 1, no partial output)
+        raise CoalError(WORKER_DIED, code="worker_died") from None
+    finally:
+        if ok:
+            ex.shutdown(wait=True)
+        else:
+            _abandon_pool(ex)
+
+
+WORKER_DIED = "a worker process died (out of memory?)"
+
+
+def _abandon_pool(ex) -> None:
+    """End a process pool whose work is no longer wanted (a worker died, or an error ended the run) without waiting
+    for it: pending work is cancelled and the workers are terminated (killed after a short grace period), so a
+    pool stuck on a broken pipe or a worker in the middle of a long batch never keeps the main process from exiting."""
+    # The workers first: shutdown() takes the pool's lock, which its management thread holds while it joins the
+    # call queue's feeder thread, and that thread is stuck writing to the pipe until no worker holds it open.
+    procs = list((getattr(ex, "_processes", None) or {}).values())
+    for p in procs:
+        try:
+            p.terminate()
+        except (OSError, ValueError, AttributeError):
+            pass
+    deadline = time.monotonic() + 1.0
+    for p in procs:
+        try:
+            p.join(max(0.0, deadline - time.monotonic()))
+            if p.is_alive():
+                p.kill()
+                p.join(1.0)
+        except (OSError, ValueError, AttributeError, AssertionError):
+            pass
+    try:
+        ex.shutdown(wait=False, cancel_futures=True)
+    except Exception:  # the pool is already broken: nothing to wait for
+        pass
 
 
 def _expand_mask(mask: str, widths, slices) -> str:

@@ -188,5 +188,94 @@ class TestReportPath(EngineCase):
                 self.assertTrue(stat.S_ISFIFO(fifo.stat().st_mode))
 
 
+# ---------------------------------------------------------------- 3 + 4. worker processes
+try:
+    import psutil
+except ImportError:  # pragma: no cover
+    psutil = None
+
+
+def _big_input(where: Path, n_seqs: int = 100_000):
+    """A protein alignment + DNA large enough for a -j 2 run to use two worker processes for a few seconds."""
+    sys.path.insert(0, str(ROOT / "benchmarks"))
+    from gen_data import generate
+    generate(n_seqs, 150, where)
+    return where / "pep.fasta", where / "nuc.fasta"
+
+
+def _children(pid: int):
+    try:
+        return psutil.Process(pid).children()
+    except psutil.Error:
+        return []
+
+
+def _running(proc) -> bool:
+    try:
+        return proc.is_running() and proc.status() != psutil.STATUS_ZOMBIE
+    except psutil.Error:
+        return False
+
+
+@unittest.skipUnless(POSIX and psutil is not None, "POSIX signals and psutil")
+class TestWorkerProcesses(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._td = tempfile.TemporaryDirectory(prefix="coal_workers_")
+        cls.d = Path(cls._td.name)
+        cls.pep, cls.nuc = _big_input(cls.d)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._td.cleanup()
+
+    def start(self, args):
+        env = dict(os.environ, PYTHONPATH=str(SRC), COAL_ENGINE="python")
+        p = subprocess.Popen([*PY_CMD, str(self.pep), str(self.nuc), "-j", "2", *args], cwd=self.d, env=env,
+                             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        t0 = time.monotonic()
+        kids = []
+        while time.monotonic() - t0 < 30 and len(kids) < 2:
+            kids = _children(p.pid)
+            time.sleep(0.05)
+        self.assertEqual(len(kids), 2, "the run did not start two workers")
+        time.sleep(0.3)
+        return p, kids
+
+    def test_a_killed_worker_ends_the_run_with_an_error(self):
+        out = self.d / "out.fa"
+        p, kids = self.start(["-o", str(out)])
+        kids[0].kill()
+        try:
+            _, err = p.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            p.kill()
+            for k in kids:
+                try:
+                    k.kill()
+                except psutil.Error:
+                    pass
+            self.fail("coal hung after a worker was killed")
+        self.assertEqual(p.returncode, 1, err)
+        self.assertEqual(err.decode().splitlines()[0], "coal: error: a worker process died (out of memory?)")
+        self.assertFalse(out.exists())
+        self.assertEqual([x.name for x in self.d.iterdir() if x.name.startswith(("out.fa", ".coal_"))], [])
+        time.sleep(0.5)
+        self.assertEqual([k.pid for k in kids if _running(k)], [])
+
+    def test_workers_die_with_the_main_process(self):
+        p, kids = self.start([])
+        os.kill(p.pid, 9)
+        p.wait()
+        t0 = time.monotonic()
+        p.stdout.read()  # EOF only once every process holding the pipe is gone
+        self.assertLess(time.monotonic() - t0, 3.0, "a worker kept coal's stdout open")
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline and any(_running(k) for k in kids):
+            time.sleep(0.1)
+        self.assertEqual([k.pid for k in kids if _running(k)], [], "workers survived the main process")
+        p.stderr.close()
+
+
 if __name__ == "__main__":
     unittest.main()

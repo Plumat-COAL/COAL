@@ -67,7 +67,9 @@ with the size of the sequences. By default the Python engine uses all CPU cores 
 small ones (each extra process needs about 4 million nucleotides of DNA to pay for its start-up); `coal-cpp` uses
 threads. `-j N` caps the number of workers and `-j 1` forces one. Output is always in the input order. Output is
 written to a temporary file and only moved into place if the whole run succeeds, so an error never leaves a partial
-file.
+file. If a worker process is killed (the out-of-memory killer, usually), the run stops with `coal: error: a worker
+process died (out of memory?)` (exit 1) instead of hanging, and the workers die with the main process when that is
+killed, so a pipeline reading COAL's output never waits on an orphaned worker.
 
 - `-nogap`/`-nomismatch`/`-blockonly` need every row before deciding which columns to remove, so the rows are first
   written to a temporary file (disk space about the size of the output). The clustal and codon formats interleave
