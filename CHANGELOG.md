@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Batch mode (`coal --batch JOBS`, #15):** thousands of small conversions in one process, one `coal` command line
+  per line of JOBS (`-` = stdin), the command line's options as the defaults of every job, `--batch-out-dir DIR` for
+  jobs without `-o`, a `coal.batch/1` report with `--report`/`--json`, per-job stderr prefixes
+  (`coal: [k/n PEP] warning: ...`) and a `coal: batch:` summary line. A failing job does not stop the batch (exit 1
+  at the end; 2 if jobs only left sequences out; mistakes in JOBS are reported with their line number before
+  anything runs). Every output is byte-identical to the single run; about 40× less wall time on tiny jobs. Python
+  only: `coal-cpp --batch` is a clear error and batches are never dispatched to it. `--resume` and cross-job
+  parallelism are not supported in a batch yet.
 - **The app no longer waits forever for a stopped engine:** when an engine run hits the app's time limit (or the
   demo pipeline's), it is sent SIGTERM and, after the grace period, SIGKILL; the kill now takes the engine's whole
   process group, so its worker processes die with it. Before, a run that outlived the grace period on a slow machine

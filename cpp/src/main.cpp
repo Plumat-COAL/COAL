@@ -1315,6 +1315,9 @@ static std::string usage_text() {
     return h.substr(0, h.find("\n\n") + 1);
 }
 
+static const char* const BATCH_ERROR =
+    "--batch is only available in the Python command (coal); coal-cpp converts one alignment per run";
+
 static int usage_error(const std::string& msg) {
     std::cerr << usage_text() << "coal: error: " << msg << '\n';
     return 2;
@@ -1360,8 +1363,17 @@ int main(int argc, char** argv) {
     const int a_resume = ap.add({Kind::Flag, {"--resume"}, "", false, {}, true});
     const int a_report = ap.add({Kind::Value, {"--report"}, "", false, {}, true});
     const int a_json = ap.add({Kind::Flag, {"--json"}, "", false, {}, true});
+    // The Batch group exists in the Python command only (coal/batch.py). coal-cpp knows the two options so that
+    // abbreviations resolve as in Python and so the error is a clear one, not "unrecognized arguments".
+    const int a_batch = ap.add({Kind::Value, {"--batch"}, "", false, {}, true});
+    const int a_batch_dir = ap.add({Kind::Value, {"--batch-out-dir"}, "", false, {}, true});
     ap.add({Kind::Version, {"--version"}, "", false, {}, true});
 
+    // `coal-cpp --batch JOBS` has no positionals, so say why before the parser asks for them
+    for (const std::string& a : o.argv) {
+        if (a == "--") break;
+        if (a == "--batch" || a.compare(0, 8, "--batch=") == 0) return usage_error(BATCH_ERROR);
+    }
     coal::args::Result args = ap.parse(o.argv);
     if (args.exit) {
         std::cout << args.out << std::flush;
@@ -1385,6 +1397,7 @@ int main(int argc, char** argv) {
     if (args.given(a_report)) o.report = args.get(a_report);
     o.json = args.given(a_json);
     o.strict = args.given(a_strict);
+    if (args.given(a_batch) || args.given(a_batch_dir)) return usage_error(BATCH_ERROR);
     if (o.json && o.out.empty())
         return usage_error("--json requires -o (the alignment and the report cannot both go to stdout)");
     if (o.resume && o.out.empty())
