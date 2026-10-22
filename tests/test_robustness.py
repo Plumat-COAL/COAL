@@ -159,6 +159,66 @@ class TestReportPath(EngineCase):
         self.assertEqual((self.d / "p.fa").read_text(), PEP)
         self.assertFalse((self.d / "o.fa").exists())
 
+    def test_report_into_a_missing_folder_is_a_usage_error(self):
+        # Checked before the run (as the input / output conflicts), so a full run never ends by losing its report
+        nodir = os.path.join(os.path.realpath(self.d), "nodir")
+        for args, what in ((["p.fa", "n.fa", "-o", "o.fa", "--report", "nodir/r.json"],
+                            f"nodir/r.json: folder {nodir} does not exist"),
+                           (["p.fa", "n.fa", "-o", "o.fa", "--report", "nodir/deeper/r.json"],
+                            f"nodir/deeper/r.json: folder {os.path.join(nodir, 'deeper')} does not exist"),
+                           (["p.fa", "n.fa", "-o", "o.fa", "--report", "p.fa/r.json"],
+                            f"p.fa/r.json: {os.path.join(os.path.realpath(self.d), 'p.fa')} is not a folder")):
+            with self.subTest(args=args):
+                rc, out, err = self.both(args)
+                self.assertEqual((rc, out), (2, b""), err)
+                self.assertTrue(err.startswith(b"usage: coal "), err)
+                self.assertEqual(err.splitlines()[-1], f"coal: error: the report path {what}".encode())
+        self.assertFalse((self.d / "o.fa").exists())
+        # the report of a --batch job line too, after --batch-out-dir is made (a job's report may point into it)
+        (self.d / "jobs.txt").write_text("p.fa n.fa -o out/o.fa --report out/r.json\np.fa n.fa -o o2.fa --report nodir/r.json\n")
+        r = self.run_engine(PY_CMD, ["--batch", "jobs.txt", "--batch-out-dir", "out"])
+        self.assertEqual(r.returncode, 2, r.stderr)
+        self.assertEqual(r.stderr.splitlines()[-1],
+                         f"coal: error: jobs.txt line 2: the report path nodir/r.json: folder {nodir} does not exist".encode())
+        self.assertTrue((self.d / "out").is_dir())
+        self.assertFalse((self.d / "out" / "o.fa").exists())
+        r = self.run_engine(PY_CMD, ["--batch", "jobs.txt", "--batch-out-dir", "out", "--report", "nodir/b.json"])
+        self.assertEqual(r.returncode, 2, r.stderr)
+        self.assertEqual(r.stderr.splitlines()[-1],
+                         f"coal: error: the report path nodir/b.json: folder {nodir} does not exist".encode())
+
+    @unittest.skipIf(WINDOWS, "POSIX signals")
+    def test_sigterm_while_the_report_is_written_leaves_no_temp_file(self):
+        import threading
+        for name, cmd in engines():
+            with self.subTest(engine=name):
+                for f in self.d.iterdir():
+                    if f.name.startswith(("o.fa", "r.json")):
+                        f.unlink()
+                env = self.env(COAL_TEST_HOOKS="1", COAL_TEST_PAUSE_IN_REPORT="1")
+                p = subprocess.Popen([*cmd, "p.fa", "n.fa", "-o", "o.fa", "--report", "r.json"], cwd=self.d, env=env,
+                                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                                     text=True)
+                dog = threading.Timer(TIMEOUT, p.kill)
+                dog.start()
+                try:
+                    paused = False
+                    for line in p.stderr:
+                        if line.startswith("coal: test: paused in report"):
+                            paused = True
+                            break
+                    self.assertTrue(paused, "the run did not pause while writing its report")
+                    self.assertTrue([f.name for f in self.d.iterdir() if f.name.startswith("r.json.tmp")],
+                                    "no report temp file while paused")
+                    p.terminate()
+                    p.wait(timeout=TIMEOUT)
+                finally:
+                    dog.cancel()
+                    p.stderr.close()
+                self.assertEqual(p.returncode, 143)
+                self.assertEqual((self.d / "o.fa").read_text(), EXPECTED)  # the alignment was done before the report
+                self.assertEqual([f.name for f in self.d.iterdir() if f.name.startswith("r.json")], [])
+
     def test_batch_job_report_naming_its_output_is_refused(self):
         (self.d / "jobs.txt").write_text("p.fa n.fa -o o.fa\np.fa n.fa -o o2.fa --report o2.fa\n")
         r = self.run_engine(PY_CMD, ["--batch", "jobs.txt"])

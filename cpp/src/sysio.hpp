@@ -65,6 +65,9 @@ bool same_file(const std::string& a, const std::string& b);
 // report_path_conflict).
 std::string report_path_conflict(const std::string& report, const std::vector<std::string>& inputs,
                                  const std::string& out);
+// Why --report REPORT could not be written at the end: its folder does not exist / is not a folder (a usage error
+// before anything runs), or "" (report.py report_folder_missing).
+std::string report_folder_missing(const std::string& report);
 // Writes a JSON text as the alignment is written: temp file + rename through symlinks, in place for a FIFO, device
 // or hard-linked file (report.py write_json). Returns 0 or the errno.
 int write_json_file(const std::string& path, const std::string& text);

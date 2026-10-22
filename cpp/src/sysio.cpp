@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <cerrno>
+#include <chrono>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
@@ -9,8 +10,10 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <iostream>
 #include <random>
 #include <stdexcept>
+#include <thread>
 
 #include "core.hpp"
 #include "seqio.hpp"
@@ -399,6 +402,25 @@ std::string report_path_conflict(const std::string& report, const std::vector<st
     return std::string();
 }
 
+std::string report_folder_missing(const std::string& report) {
+    std::error_code ec;
+    if (report.empty() || fs::exists(report, ec)) return std::string();
+    std::string folder = fs::absolute(fs::path(report)).lexically_normal().parent_path().string();
+    if (fs::is_directory(folder, ec)) return std::string();
+    if (fs::exists(folder, ec)) return "the report path " + report + ": " + folder + " is not a folder";
+    return "the report path " + report + ": folder " + folder + " does not exist";
+}
+
+// Test hook: COAL_TEST_HOOKS=1 and COAL_TEST_PAUSE_IN_REPORT=1 stop here while the report's temp file exists (so a
+// test can send SIGTERM at that point), as report.py _test_pause_in_report
+static void test_pause_in_report() {
+    const char* h = std::getenv("COAL_TEST_HOOKS");
+    const char* v = std::getenv("COAL_TEST_PAUSE_IN_REPORT");
+    if (!h || std::string(h) != "1" || !v || std::string(v) != "1") return;
+    std::cerr << "coal: test: paused in report" << std::endl;
+    std::this_thread::sleep_for(std::chrono::seconds(3600));
+}
+
 int write_json_file(const std::string& path, const std::string& text) {
     return write_json_file(path, [&](std::ostream& f) { f << text; });
 }
@@ -428,14 +450,19 @@ int write_json_file(const std::string& path, const std::function<void(std::ostre
         return f ? 0 : (errno ? errno : EIO);
     }
     std::string tmp = real + ".tmp" + unique_name();
+    register_temp(tmp);  // SIGTERM while the report is written leaves nothing behind
     int err = 0;
     {
         errno = 0;
         std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
-        if (!f) return errno ? errno : EIO;
+        if (!f) {
+            unregister_temp(tmp);
+            return errno ? errno : EIO;
+        }
         writer(f);
         f.flush();
         if (!f) err = errno ? errno : EIO;
+        test_pause_in_report();
     }
     if (!err) {
         if (regular) copy_mode(real, tmp);  // keep the existing file's mode
@@ -446,6 +473,7 @@ int write_json_file(const std::string& path, const std::function<void(std::ostre
         std::error_code rm;
         fs::remove(tmp, rm);
     }
+    unregister_temp(tmp);
     return err;
 }
 

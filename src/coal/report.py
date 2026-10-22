@@ -1143,6 +1143,30 @@ def report_path_conflict(report, inputs, out) -> str | None:
     return None
 
 
+def report_folder_missing(report) -> str | None:
+    """Why `--report REPORT` could not be written at the end: its folder does not exist (or is not a folder). Checked
+    before anything runs (a usage error, exit 2), so a full run never ends by losing its report. None when the path
+    is fine, or already exists (a FIFO, a device, an existing file). The C++ engine mirrors this (sysio.cpp)."""
+    if not report or os.path.exists(report):
+        return None
+    folder = os.path.dirname(os.path.abspath(report))
+    if os.path.isdir(folder):
+        return None
+    if os.path.exists(folder):
+        return f"the report path {report}: {folder} is not a folder"
+    return f"the report path {report}: folder {folder} does not exist"
+
+
+def _test_pause_in_report() -> None:
+    """Test hook: COAL_TEST_HOOKS=1 and COAL_TEST_PAUSE_IN_REPORT=1 stop here while the report's temp file exists (so
+    a test can send SIGTERM at that point). Short sleeps, as pipeline._test_pause."""
+    if os.environ.get("COAL_TEST_HOOKS") == "1" and os.environ.get("COAL_TEST_PAUSE_IN_REPORT") == "1":
+        print("coal: test: paused in report", file=sys.stderr, flush=True)
+        deadline = time.monotonic() + 3600
+        while time.monotonic() < deadline:
+            time.sleep(0.05)
+
+
 def write_json(path: str, data: dict) -> None:
     """Write `data` as JSON to `path` (write_json_with)."""
     import json
@@ -1177,11 +1201,12 @@ def write_json_with(path: str, writer) -> None:
     try:
         with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
             writer(fh)
+            _test_pause_in_report()
         if st is not None:
             import shutil
             shutil.copymode(real, tmp)  # keep the existing file's mode
         os.replace(tmp, real)
-    except OSError:
+    except BaseException:  # an OSError, and SIGTERM / SIGHUP (SystemExit from cli._on_sigterm) or Ctrl-C too
         try:
             os.unlink(tmp)
         except OSError:

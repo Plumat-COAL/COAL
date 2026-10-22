@@ -27,7 +27,10 @@
   device node (`/dev/null` became a regular file!) was replaced. Both engines now give the report path the rules of
   `-o`: an input or the output file is a usage error before anything runs (`coal: error: the report path r.json is
   an input file` / `is the output file`, exit 2; also for a job line's `--report` and the batch report), symlinks
-  are written through, and FIFOs, devices and hard-linked files are written in place.
+  are written through, and FIFOs, devices and hard-linked files are written in place. A report into a folder that
+  does not exist is a usage error too (`the report path results/r.json: folder /data/results does not exist`, exit
+  2) instead of a full run that ends by losing its report, and the report's temp file is removed on SIGTERM /
+  SIGHUP / Ctrl-C while it is written, in both engines.
 - **A killed worker no longer hangs the Python engine** (robustness review): when the out-of-memory killer (or
   `kill -9`) took one worker of a `-j` run, the main process could block forever in the pool's shutdown. It now
   ends the pool without waiting and stops with `coal: error: a worker process died (out of memory?)` (exit 1, report

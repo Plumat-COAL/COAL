@@ -18,7 +18,7 @@ import sys
 from . import __version__
 from .core import CoalError, limit_blas_threads
 from .pipeline import FORMATS, STDIN_TWICE, run, stdin_count
-from .report import IdShortener, RunReport, report_path_conflict
+from .report import IdShortener, RunReport, report_folder_missing, report_path_conflict
 from .tables import SUPPORTED
 
 
@@ -256,7 +256,7 @@ def main(argv=None) -> int:
         ap.error("--max-warnings must be 0 (no limit) or more")
     if stdin_count([args.pep_aln, *args.nuc_fasta]) > 1:
         ap.error(STDIN_TWICE)
-    why = report_path_conflict(args.report, [args.pep_aln, *args.nuc_fasta], args.out)
+    why = report_path_conflict(args.report, [args.pep_aln, *args.nuc_fasta], args.out) or report_folder_missing(args.report)
     if why:
         ap.error(why)
     if command_line:

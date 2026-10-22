@@ -1509,6 +1509,7 @@ int main(int argc, char** argv) {
         if (stdin_count(in) > 1) return usage_error(STDIN_TWICE);
         // --report naming an input or the output is refused before anything runs (cli.py)
         std::string why = report_path_conflict(o.report, in, o.out);
+        if (why.empty()) why = report_folder_missing(o.report);  // and a folder that does not exist (cli.py)
         if (!why.empty()) return usage_error(why);
     }
 

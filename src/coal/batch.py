@@ -20,7 +20,7 @@ import shlex
 import sys
 
 from . import __version__
-from .report import report_path_conflict, write_json
+from .report import report_folder_missing, report_path_conflict, write_json
 
 SCHEMA = "coal.batch/1"
 # --batch-out-dir: the output file's extension per -output format
@@ -200,6 +200,15 @@ def main(ap: argparse.ArgumentParser, args: argparse.Namespace, argv: list[str])
             os.makedirs(args.batch_out_dir, exist_ok=True)
         except OSError as e:
             ap.error(f"cannot create --batch-out-dir {args.batch_out_dir}: {e.strerror or e}")
+    # A report into a folder that does not exist is refused before any job runs (after --batch-out-dir is made,
+    # which a job's --report may point into): the batch report, then each job's
+    why = report_folder_missing(args.report)
+    if why:
+        ap.error(why)
+    for job in jobs:
+        why = report_folder_missing(job.args.report)
+        if why:
+            ap.error(f"{'standard input' if args.batch == '-' else args.batch} line {job.line_no}: {why}")
     reporting = bool(args.report or args.json)
     limit_blas_threads()  # this process and its workers are COAL's own
     install_signal_handlers()
