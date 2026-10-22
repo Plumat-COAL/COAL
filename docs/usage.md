@@ -149,8 +149,9 @@ coal --batch jobs.txt -codontable 11 --strict -q --report batch.json
 ```
 
 `jobs.txt` has one job per line: a `coal` command line without the program name (blank lines and lines starting
-with `#` are skipped; `-` reads the jobs from stdin). Words are split with POSIX shell rules (`shlex`: quotes and
-backslashes as in `sh`, also on Windows). Each job names its own input files, and every job must write to a file:
+with `#` are skipped; `-` reads the jobs from stdin). Words are split on spaces; a path with spaces goes in single or
+double quotes. A backslash is an ordinary character, never an escape (Windows paths need no doubling), on every
+platform. Each job names its own input files, and every job must write to a file:
 
 ```
 # family   protein alignment   coding DNA           output          options of this job

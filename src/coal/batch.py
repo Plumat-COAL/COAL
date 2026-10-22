@@ -46,6 +46,17 @@ class Job:
         self.output = ""
 
 
+def split_job_line(line: str) -> list[str]:
+    """Words of a job line: split on whitespace, with single or double quotes grouping words that hold spaces (and
+    the other kind of quote). A backslash is an ordinary character, never an escape, so Windows paths
+    (`D:\\data\\fam1\\pep.aln`) need no doubling; the same rule on every platform."""
+    lex = shlex.shlex(line, posix=True)
+    lex.whitespace_split = True
+    lex.escape = ""
+    lex.commenters = ""
+    return list(lex)
+
+
 def read_jobs(path: str) -> list[tuple[int, str]]:
     """(line number, line) for every non-empty, non-comment line of JOBS ('-' = stdin)."""
     if path == "-":
@@ -117,9 +128,9 @@ def plan(ap: argparse.ArgumentParser, args: argparse.Namespace, argv: list[str],
     for k, (n, line) in enumerate(lines, 1):
         job = Job(k, n, line, [])
         try:
-            job.tokens = shlex.split(line, posix=True)
+            job.tokens = split_job_line(line)
         except ValueError as e:
-            raise JobsError(n, f"{e} (quotes and backslashes follow POSIX shell rules)") from None
+            raise JobsError(n, f"{e} (quote a path that has spaces; backslashes are ordinary characters)") from None
         # the job's namespace starts as the defaults of the main command line; the job line's options come last
         ns = argparse.Namespace(**vars(args))
         for dest in ("pep_aln", "nuc_fasta", *NOT_IN_A_JOB, "report"):

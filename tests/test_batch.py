@@ -231,7 +231,7 @@ class TestJobsValidation(_Tmp):
         self.check([good, f"{CLEAN[0]} {CLEAN[1]} -o x.fa -codontable 7"],
                    contains="jobs.txt line 2: argument -codontable/--codontable: invalid choice: ")
         self.check([good, f'{CLEAN[0]} {CLEAN[1]} -o "x.fa'],
-                   contains="jobs.txt line 2: No closing quotation (quotes and backslashes follow POSIX shell rules)")
+                   contains="jobs.txt line 2: No closing quotation (quote a path that has spaces; backslashes are ordinary characters)")
         for bad in ("--resume", "--json", "--batch other.txt", "--batch-out-dir d"):
             self.check([good, f"{CLEAN[0]} {CLEAN[1]} -o x.fa {bad}"],
                        contains=f"jobs.txt line 2: {bad.split()[0]}")
@@ -258,9 +258,27 @@ class TestJobsValidation(_Tmp):
         d.mkdir()
         shutil.copy(CLEAN[0], d / "p.fa")
         shutil.copy(CLEAN[1], d / "n.fa")
-        rc, _, err = run_py(["--batch", self.jobs(["'a dir/p.fa' \"a dir/n.fa\" -o a\\ dir/out.fa"])], self.tmp)
+        rc, _, err = run_py(["--batch", self.jobs(["'a dir/p.fa' \"a dir/n.fa\" -o \"a dir/out.fa\""])], self.tmp)
         self.assertEqual(rc, 0, err)
         self.assertTrue((d / "out.fa").is_file())
+
+    def test_backslashes_are_ordinary_characters(self):
+        """Windows paths (D:\\a\\pep.fasta) must survive the split on every platform: no POSIX escapes."""
+        from coal.batch import split_job_line
+        self.assertEqual(split_job_line(r"D:\a\COAL\pep.fasta D:\a\nuc.fasta -o D:\out\x.fa"),
+                         [r"D:\a\COAL\pep.fasta", r"D:\a\nuc.fasta", "-o", r"D:\out\x.fa"])
+        self.assertEqual(split_job_line("\"C:\\my data\\p.aln\" 'n.fa' -codontable 2"),
+                         [r"C:\my data\p.aln", "n.fa", "-codontable", "2"])
+        d = self.tmp / "bs"
+        d.mkdir()
+        shutil.copy(CLEAN[0], d / "p.fa")
+        shutil.copy(CLEAN[1], d / "n.fa")
+        # a literal backslash in a (POSIX) file name is kept as given
+        if os.name != "nt":
+            shutil.copy(CLEAN[1], d / "n\\1.fa")
+            rc, _, err = run_py(["--batch", self.jobs([f"{d}/p.fa {d}/n\\1.fa -o {d}/o.fa"])], self.tmp)
+            self.assertEqual(rc, 0, err)
+            self.assertTrue((d / "o.fa").is_file())
 
 
 class TestReportAndStdin(_Tmp):
