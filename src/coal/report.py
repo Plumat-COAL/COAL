@@ -14,11 +14,8 @@ did check keep their status. The C++ engine mirrors this module (cpp/src/report.
 """
 from __future__ import annotations
 
-import hashlib
-import json
 import os
 import re
-import shlex
 import sys
 import time
 from itertools import product
@@ -343,6 +340,7 @@ def break_event(row: str, dna: str, table: int) -> dict | None:
 # ------------------------------------------------------------------ helpers
 
 def sha256_file(path) -> str | None:
+    import hashlib
     try:
         h = hashlib.sha256()
         with open(path, "rb") as fh:
@@ -499,8 +497,14 @@ class RunReport:
         self.resumed_from: int | None = None
         self._dict = None
         self.finished = False
+        self.input_hashes: dict[int, str | None] = {}  # input number (0 = protein) -> sha256 of what was read
 
     # -------------------------------------------------- filled in by the pipeline
+    def set_input_hashes(self, hashes: dict):
+        """sha256 of inputs read through a temp copy (`-` = standard input, pipes), by input number (0 = protein):
+        the argument itself cannot be read again when the report is written."""
+        self.input_hashes = dict(hashes)
+
     def set_inputs(self, ids, dna_counts=None, dna_ids=None):
         """Protein IDs (input order); DNA records per file and DNA IDs in file order, once the DNA is read."""
         self.ids = list(ids)
@@ -813,6 +817,7 @@ class RunReport:
 
     def command(self) -> str:
         """The command that reproduces the output (options that change it, then -o), as the app writes it."""
+        import shlex
         parts = ["coal", self.pep, *self.nucs]
         if self.fmt != "fasta":
             parts += ["-output", self.fmt]
@@ -897,6 +902,7 @@ class RunReport:
 
     def methods_text(self, rep: dict | None = None) -> str:
         """A ready-to-paste methods sentence: the app's rules (coal_app.core.methods_text) on this report."""
+        import shlex
         rep = rep or self.to_dict(methods=False)
         if not self.completed():
             return ""
@@ -976,13 +982,19 @@ class RunReport:
         return text
 
     def to_dict(self, methods: bool = True) -> dict:
+        import shlex
         entries = self._all_entries()
         c = self.counts(entries)
         n = len(self.ids) if self.ids is not None else len(self.kinds)
-        inputs = [{"role": "protein", "path": self.pep, "sha256": sha256_file(self.pep),
+        # "path" is the argument as given (`-` for standard input); "sha256" is of the data read
+        def _hash(k, p):
+            if k in self.input_hashes:
+                return self.input_hashes[k]
+            return None if p == "-" else sha256_file(p)  # `-` never names a file in the current folder
+        inputs = [{"role": "protein", "path": self.pep, "sha256": _hash(0, self.pep),
                    "sequences": len(self.ids) if self.ids is not None else None}]
         for i, p in enumerate(self.nucs):
-            inputs.append({"role": "dna", "path": p, "sha256": sha256_file(p),
+            inputs.append({"role": "dna", "path": p, "sha256": _hash(i + 1, p),
                            "sequences": self.dna_counts[i] if self.dna_counts else None})
         p2n = ["pal2nal.pl", self.pep, *self.nucs, "-output", self.fmt]
         if self.table != 1:
@@ -1027,6 +1039,7 @@ class RunReport:
 
     def write(self, path: str):
         """Write atomically (temp file + rename); never leaves the temp file behind."""
+        import json
         tmp = f"{path}.tmp{os.getpid()}"
         try:
             with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
