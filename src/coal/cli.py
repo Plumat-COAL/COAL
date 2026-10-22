@@ -17,7 +17,6 @@ from . import __version__
 from .core import CoalError
 from .pipeline import FORMATS, run
 from .report import RunReport
-from .seqio import InputFormatError
 from .tables import SUPPORTED
 
 
@@ -26,6 +25,17 @@ MAX_WARNINGS = 20  # default --max-warnings
 
 def _on_sigterm(signum, frame):
     raise SystemExit(128 + signum)
+
+
+def closed_stdout_exit() -> int:
+    """After a BrokenPipeError on stdout (`coal ... | head`): the exit status 141 (128 + SIGPIPE, docs/usage.md
+    "Closed output pipe"), with stdout pointed at the null device first so Python does not report the pipe again when
+    it flushes stdout at exit. Also used by the `pal2nal` drop-in."""
+    try:
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+    except (OSError, ValueError):
+        pass
+    return 141
 
 
 def _ranges(nums) -> str:
@@ -171,16 +181,12 @@ def main(argv=None) -> int:
         print("coal: interrupted", file=sys.stderr)
         return 130
     except BrokenPipeError:
-        try:  # stop Python from reporting the pipe again when it flushes stdout at exit
-            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
-        except (OSError, ValueError):
-            pass
-        return 141
-    except (CoalError, InputFormatError, UnicodeDecodeError, OSError) as e:
+        return closed_stdout_exit()
+    except (CoalError, UnicodeDecodeError, OSError) as e:  # InputFormatError is a CoalError (code input_format)
         print(f"coal: error: {e}", file=sys.stderr)
         rc = 1
         code = (e.code if isinstance(e, CoalError) else
-                "input_format" if isinstance(e, (InputFormatError, UnicodeDecodeError)) else "file_error")
+                "input_format" if isinstance(e, UnicodeDecodeError) else "file_error")
         rec.fail(code, str(e), getattr(e, "seq_id", None))
     if hidden[0]:
         where = "see the report" if (args.report or args.json) else \

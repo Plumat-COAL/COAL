@@ -50,6 +50,22 @@ class TestCommand(unittest.TestCase):
         self.assertEqual(r.returncode, 0)
         self.assertIn("-codontable", r.stdout)
 
+    @unittest.skipIf(os.name == "nt", "a closed pipe is EPIPE on POSIX only (Windows reports EINVAL)")
+    def test_usage_into_a_closed_pipe_is_141_and_silent(self):  # pal2nal | head
+        # stdout is a pipe whose read end is already closed, so the first write fails with EPIPE (Python ignores
+        # SIGPIPE, so it is a BrokenPipeError): no traceback, exit 141 as for `coal` (docs/usage.md).
+        for argv in ([], ["-h"]):
+            with self.subTest(argv=argv):
+                rfd, wfd = os.pipe()
+                os.close(rfd)
+                try:
+                    r = subprocess.run([sys.executable, "-m", "coal_compat", *argv], stdout=wfd,
+                                       stderr=subprocess.PIPE, text=True, timeout=60)
+                finally:
+                    os.close(wfd)
+                self.assertEqual(r.returncode, 141, r.stderr)
+                self.assertEqual(r.stderr, "")
+
 
 class TestCompatClaims(unittest.TestCase):
     def test_docstring_and_html_error_match_what_works(self):  # clustal is supported

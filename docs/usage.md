@@ -43,7 +43,7 @@
   end-of-run summary; it does not repeat the error).
 - **Closed output pipe** (e.g. `coal pep.aln nuc.fa | head`): COAL stops silently with exit status **141**
   (128 + SIGPIPE, the Unix convention), also on Windows, so a pipeline can tell "the reader stopped early" from a
-  real error (1). Other exit codes: 130 Ctrl-C, 143 SIGTERM, 129 SIGHUP; a usage error is 2 for `coal` and 1 for the
+  real error (1). The drop-in `pal2nal` does the same, also for its usage text (`pal2nal | head`). Other exit codes: 130 Ctrl-C, 143 SIGTERM, 129 SIGHUP; a usage error is 2 for `coal` and 1 for the
   drop-in `pal2nal`, which reads its command line as PAL2NAL v14 does (a dangling `-output` or `-codontable` is
   ignored, `-codontable 2x` means code 2).
 
