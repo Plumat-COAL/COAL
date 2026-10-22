@@ -153,7 +153,7 @@ with `multiprocessing`. Output bytes, warnings and errors are identical to the c
 | Argument | Type | Meaning |
 |---|---|---|
 | `pep_path` | path | the protein alignment (FASTA or CLUSTAL); a pipe or `/dev/stdin` is copied to a temp file first |
-| `nuc_paths` | a path, or a `list` of paths | the coding DNA (FASTA), one or more files; a single `str` or `os.PathLike` is one file (not iterated as characters). Anything else, or a non-path element, is a `TypeError` naming the argument (`nuc_paths[1] must be a path (str or os.PathLike), not int`) before any file is opened |
+| `nuc_paths` | a path, or a `list` / `tuple` of paths | the coding DNA (FASTA), one or more files; a single `str` or `os.PathLike` is one file (not iterated as characters). Anything else (a generator or other iterator, a set, a dict, `None`), or a non-path element, is a `TypeError` naming the argument (`nuc_paths must be a path or a list of paths, not generator`, `nuc_paths[1] must be a path (str or os.PathLike), not int`) before any file is opened; a generator used to be accepted and is not any more: pass `list(...)` |
 | `out_path` | path or `None` | the output file; `None` writes to `sys.stdout` |
 | `table`, `nogap`, `nomismatch`, `strict` | as for `codon_align` | |
 | `out_format` | `str` | `"fasta"` (default), `"clustal"`, `"paml"` or `"codon"` (PAL2NAL's four formats, same bytes) |

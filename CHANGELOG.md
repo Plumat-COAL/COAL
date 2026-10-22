@@ -88,7 +88,9 @@
   the file), and both `codon_align` and `coal.align_files` raise `TypeError` with a message naming the argument for
   a dict, generator, bare string, `None`, a non-`str` ID or a pair of the wrong length, instead of a `KeyError` or
   `AttributeError` from inside the engine. `align_files(pep, "nuc.fa")` with one DNA path as a string or
-  `os.PathLike` now means that one file (the string used to be iterated character by character).
+  `os.PathLike` now means that one file (the string used to be iterated character by character). `nuc_paths` is
+  one path or a `list` / `tuple` of paths: a generator (or any other iterator) of paths, which used to work, is a
+  `TypeError` now; pass `list(...)`.
 - **Smaller robustness fixes** (both engines, identical messages): a NUL or other control byte (except tab, LF,
   VT, FF, CR) anywhere in a protein or DNA file is `<file>:<line>: control character: sequence files must be plain
   text (is this a binary or word-processor file?)` (exit 1, code `input_format`) instead of a confusing row-length
