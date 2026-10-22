@@ -12,6 +12,7 @@
 | `apps/coal-app/tests/` | the app (`coal_app`, package `coal-align-app`): GUI form and layout, viewer, reports, MCP tools and server, settings, hosted Space, packaging, launchers; Gradio and mcp tests skip without that extra; shared helpers (the Gradio stand-in) in `helpers.py` | `python -m unittest discover -s apps/coal-app/tests` |
 | `apps/coal-app/desktop/` | the Windows wrapper (`test_wrapper.py`) and the local-app smoke test (`test_smoke.py`; the real-Gradio part runs in the Windows build) | in `apps/coal-app/desktop/`: `python -m unittest test_wrapper test_smoke` |
 | `tests/fuzz_vs_pal2nal.py` | random comparison with the real PAL2NAL v14 (not collected by `discover`) | see below |
+| `tests/tools/engine_fuzz.py` | random `coal-cpp` vs Python engine comparison (wide input space; not collected by `discover`; `test_engine_fuzz.py` runs 20 cases); nightly with a fresh seed, with the PAL2NAL fuzz for both engines and a sanitizer build: `.github/workflows/nightly.yml` | `COAL_CPP_BIN=build/coal-cpp python tests/tools/engine_fuzz.py --n 500 --seed 1` |
 
 ## Test numbers
 

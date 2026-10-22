@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Nightly fuzz workflow** (`.github/workflows/nightly.yml`, 03:17 UTC, or by hand with a seed): the fuzz against
+  the real PAL2NAL v14 with a fresh seed each night, once per engine (`COAL_FUZZ_ENGINE=cpp` in
+  `tests/fuzz_vs_pal2nal.py` runs `coal-cpp`), the new `tests/tools/engine_fuzz.py` (coal-cpp vs the Python engine
+  on malformed inputs and every option; Linux and macOS) and the C++ tests plus the generator under
+  AddressSanitizer and UndefinedBehaviorSanitizer (`COAL_SKIP_MEMORY_TESTS=1` skips the peak-memory test there).
+  Differing cases are uploaded as artifacts; CONTRIBUTING.md "Nightly checks" says how to replay them.
 - **MCP server on mcp 1.x (the Windows app's) is quiet and names its version:** `python -m coal_app --mcp` /
   `COAL.exe -m coal_app --mcp` with the `mcp` 1.x that Gradio's extra installs reported the mcp library's version
   ("1.10.1") as `serverInfo.version` and logged about 37 KB of INFO lines to standard error per session (into

@@ -281,6 +281,8 @@ class TestCppThreads(unittest.TestCase):
 
 
 @unittest.skipUnless(sys.platform.startswith("linux"), "peak memory read with getrusage (Linux: KB)")
+@unittest.skipIf(os.environ.get("COAL_SKIP_MEMORY_TESTS"),
+                 "COAL_SKIP_MEMORY_TESTS set: peak memory read with getrusage is meaningless under a sanitizer")
 class TestCppMemory(unittest.TestCase):
     """CPP-32 (reference FIN-E2 rule): memory must not grow with the number of sequences beyond the IDs. The run
     report's end-of-run step once kept a view of every entry (~1.1 KB per sequence)."""

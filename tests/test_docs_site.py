@@ -131,26 +131,45 @@ class TestReleaseWorkflow(unittest.TestCase):
                 self.assertNotIn("permissions", job, name)
 
     def test_ci_caches_pip_and_browsers(self):
+        for fname in ("ci.yml", "nightly.yml"):
+            for name, job in _workflow(fname)["jobs"].items():
+                for st in job["steps"]:
+                    if st.get("uses", "").startswith("actions/setup-python@"):
+                        self.assertEqual(st["with"].get("cache"), "pip", f"{fname}: {name}")
+                        self.assertIn("pyproject.toml", st["with"].get("cache-dependency-path", ""), f"{fname}: {name}")
         wf = _workflow("ci.yml")
-        for name, job in wf["jobs"].items():
-            for st in job["steps"]:
-                if st.get("uses", "").startswith("actions/setup-python@"):
-                    self.assertEqual(st["with"].get("cache"), "pip", name)
-                    self.assertIn("pyproject.toml", st["with"].get("cache-dependency-path", ""), name)
         cache = [st for st in wf["jobs"]["explainer"]["steps"] if st.get("uses", "").startswith("actions/cache@")]
         self.assertEqual(len(cache), 1)
         self.assertEqual(cache[0]["with"]["path"], wf["jobs"]["explainer"]["env"]["PLAYWRIGHT_BROWSERS_PATH"])
         self.assertIn("playwright-1.48.0", cache[0]["with"]["key"])  # same pin as the install step
 
     def test_actions_pinned_to_commits(self):
-        # ci.yml too (it uses actions/cache)
-        for fname in ("release.yml", "ci.yml") + (("pages.yml",) if os.path.exists(os.path.join(WORKFLOWS, "pages.yml"))
+        # ci.yml too (it uses actions/cache), and the nightly fuzz workflow
+        for fname in ("release.yml", "ci.yml", "nightly.yml") + (("pages.yml",) if os.path.exists(os.path.join(WORKFLOWS, "pages.yml"))
                                           else ()):
             text = _read(".github", "workflows", fname)
             uses = re.findall(r"uses:\s*(\S+)", text)
             self.assertTrue(uses, fname)
             for u in uses:
                 self.assertRegex(u, r"^[\w.-]+/[\w./-]+@[0-9a-f]{40}$", f"{fname}: {u} is not pinned to a commit")
+
+    def test_nightly_workflow_is_scheduled_read_only_and_bounded(self):
+        wf = _workflow("nightly.yml")
+        on = wf.get("on", wf.get(True))  # PyYAML reads the bare key `on` as True
+        self.assertEqual(on["schedule"], [{"cron": "17 3 * * *"}])
+        self.assertIn("seed", on["workflow_dispatch"]["inputs"])
+        self.assertFalse(on["workflow_dispatch"]["inputs"]["seed"]["required"])
+        self.assertEqual(wf["permissions"], {"contents": "read"})
+        self.assertIn("group", wf["concurrency"])
+        self.assertEqual(wf["env"]["FUZZ_SEED"], "${{ inputs.seed || github.run_number }}")
+        self.assertEqual(set(wf["jobs"]), {"pal2nal-fuzz", "engine-fuzz", "sanitizers"})
+        for name, job in wf["jobs"].items():
+            self.assertIsInstance(job.get("timeout-minutes"), int, name)
+            self.assertNotIn("permissions", job, name)
+            uploads = [st for st in job["steps"] if st.get("uses", "").startswith("actions/upload-artifact@")]
+            self.assertEqual(len(uploads), 1, name)
+            self.assertEqual(uploads[0]["if"], "failure()", name)  # the kept cases, only when something differed
+            self.assertIn("retention-days", uploads[0]["with"], name)
 
     def test_windows_job_builds_and_checks(self):
         wf = _workflow("release.yml")

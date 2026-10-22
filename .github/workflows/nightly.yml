@@ -1,0 +1,235 @@
+name: Nightly
+
+# The test campaign that finds the bugs the per-push CI does not: a fresh random seed every night (the run number,
+# or the `seed` input of a manual run), so the random comparisons keep covering new inputs. Three independent jobs:
+#   pal2nal-fuzz   COAL vs the real PAL2NAL v14 (3,000 random cases x 4 formats), the Python engine and coal-cpp
+#   engine-fuzz    coal-cpp vs the Python engine on tests/tools/engine_fuzz.py's wider input space (1,500 cases)
+#   sanitizers     coal-cpp built with ASan + UBSan: the C++ test set and 300 generator cases
+# A failing fuzz job uploads the differing cases as an artifact (each case folder holds its inputs and args.txt).
+# How to read one and how to run each job locally: CONTRIBUTING.md, "Nightly checks".
+
+on:
+  schedule:
+    - cron: '17 3 * * *'  # 03:17 UTC daily
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: "Random seed for every fuzz (empty: this run's number)"
+        required: false
+        default: ""
+
+# The seed is in the run's title, so the failing night's seed is one glance away.
+run-name: "Nightly fuzz (seed ${{ inputs.seed || github.run_number }})"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FUZZ_SEED: ${{ inputs.seed || github.run_number }}
+
+jobs:
+  pal2nal-fuzz:
+    # As ci.yml's pal2nal-fuzz job (PAL2NAL fetched by scripts/fetch_pal2nal.py, sha256-checked, never committed),
+    # with tonight's seed, once with the Python engine and once with coal-cpp (COAL_FUZZ_ENGINE=cpp). Both halves
+    # run even if the first fails; the kept cases of either are uploaded.
+    name: "Fuzz vs PAL2NAL v14 (Python engine and coal-cpp)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            apps/coal-app/pyproject.toml
+            apps/coal-app/desktop/requirements.txt
+      - name: Install COAL
+        run: python -m pip install -e .
+      - name: Fetch PAL2NAL v14 (checksum-verified, not committed)
+        run: python scripts/fetch_pal2nal.py
+      - name: Build coal-cpp
+        shell: bash
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCOAL_WARNINGS_AS_ERRORS=ON
+          cmake --build build --config Release -j 2
+          test -x build/coal-cpp
+      - name: Fuzz the Python engine against PAL2NAL (must not skip)
+        env:
+          PAL2NAL: PAL2NAL/pal2nal.v14/pal2nal.pl
+          FUZZ_N: "3000"
+          FUZZ_KEEP: fuzz-keep/python
+        shell: bash
+        run: |
+          perl -e 'print "perl $^V\n"'
+          echo "seed $FUZZ_SEED, python engine"
+          python tests/fuzz_vs_pal2nal.py -v 2>&1 | tee fuzz-python.txt
+          status=${PIPESTATUS[0]}
+          echo "### Python engine vs PAL2NAL, seed $FUZZ_SEED" >> "$GITHUB_STEP_SUMMARY"
+          grep -E "^(fuzz vs PAL2NAL|deliberate differences|cases exercising)" fuzz-python.txt >> "$GITHUB_STEP_SUMMARY" || true
+          test "$status" -eq 0
+          if grep -qiE "skipped" fuzz-python.txt; then
+            echo "::error::the PAL2NAL fuzz was skipped (PAL2NAL not found)"; exit 1
+          fi
+      - name: Fuzz coal-cpp against PAL2NAL (must not skip)
+        if: ${{ !cancelled() }}
+        env:
+          PAL2NAL: PAL2NAL/pal2nal.v14/pal2nal.pl
+          FUZZ_N: "3000"
+          FUZZ_KEEP: fuzz-keep/cpp
+          COAL_FUZZ_ENGINE: cpp
+          COAL_CPP_BIN: build/coal-cpp
+        shell: bash
+        run: |
+          echo "seed $FUZZ_SEED, coal-cpp"
+          python tests/fuzz_vs_pal2nal.py -v 2>&1 | tee fuzz-cpp.txt
+          status=${PIPESTATUS[0]}
+          echo "### coal-cpp vs PAL2NAL, seed $FUZZ_SEED" >> "$GITHUB_STEP_SUMMARY"
+          grep -E "^(fuzz vs PAL2NAL|deliberate differences|cases exercising)" fuzz-cpp.txt >> "$GITHUB_STEP_SUMMARY" || true
+          test "$status" -eq 0
+          if grep -qiE "skipped" fuzz-cpp.txt; then
+            echo "::error::the PAL2NAL fuzz was skipped (PAL2NAL not found)"; exit 1
+          fi
+          grep -q "^fuzz engine cpp" fuzz-cpp.txt || { echo "::error::the fuzz did not run coal-cpp"; exit 1; }
+      - name: Upload the differing cases
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: pal2nal-fuzz-seed-${{ env.FUZZ_SEED }}
+          path: |
+            fuzz-keep/
+            fuzz-python.txt
+            fuzz-cpp.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+  engine-fuzz:
+    # tests/tools/engine_fuzz.py: coal-cpp and the Python engine on the same random inputs, bytes compared.
+    # Linux and macOS; the generator is not verified on Windows (its CRLF / Unicode-ID cases depend on the console
+    # encoding there), so Windows is left to ci.yml's C++ job.
+    name: "coal-cpp vs Python engine generator on ${{ matrix.os }}"
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            apps/coal-app/pyproject.toml
+            apps/coal-app/desktop/requirements.txt
+      - name: Install COAL
+        run: python -m pip install -e .
+      - name: Build coal-cpp
+        shell: bash
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCOAL_WARNINGS_AS_ERRORS=ON
+          cmake --build build --config Release -j 2
+          test -x build/coal-cpp
+      - name: Engine generator (1,500 cases)
+        shell: bash
+        env:
+          COAL_CPP_BIN: build/coal-cpp
+          MATRIX_OS: ${{ matrix.os }}
+        run: |
+          python tests/tools/engine_fuzz.py --n 1500 --seed "$FUZZ_SEED" --keep engine-fuzz-keep 2>&1 | tee engine-fuzz.txt
+          status=${PIPESTATUS[0]}
+          echo "### Engine generator on $MATRIX_OS, seed $FUZZ_SEED" >> "$GITHUB_STEP_SUMMARY"
+          grep -E "^engine fuzz" engine-fuzz.txt >> "$GITHUB_STEP_SUMMARY" || true
+          test "$status" -eq 0
+      - name: Upload the differing cases
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: engine-fuzz-${{ matrix.os }}-seed-${{ env.FUZZ_SEED }}
+          path: |
+            engine-fuzz-keep/
+            engine-fuzz.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+  sanitizers:
+    # coal-cpp under AddressSanitizer (leaks included) and UndefinedBehaviorSanitizer: ci.yml's C++ test set plus
+    # the stdin, robustness, error-precedence and batch tests, then 300 generator cases. Any sanitizer report in
+    # the captured stderr fails the job, whatever the tests said. Peak-memory tests are skipped
+    # (COAL_SKIP_MEMORY_TESTS: ASan's shadow memory makes them meaningless); "not built" skips still fail.
+    name: "coal-cpp under ASan + UBSan"
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ASAN_OPTIONS: detect_leaks=1
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+      COAL_SKIP_MEMORY_TESTS: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            apps/coal-app/pyproject.toml
+            apps/coal-app/desktop/requirements.txt
+      - name: Install COAL
+        run: python -m pip install -e .
+      - name: Build coal-cpp with sanitizers
+        shell: bash
+        run: |
+          # Debug adds only -g, so the -O1 here is the optimisation level that applies (Release's -O3 would win).
+          cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug -DCOAL_WARNINGS_AS_ERRORS=ON \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -O1 -g" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+          cmake --build build-asan -j 2
+          test -x build-asan/coal-cpp
+          echo "COAL_CPP_BIN=$PWD/build-asan/coal-cpp" >> "$GITHUB_ENV"
+      - name: C++ tests under the sanitizers
+        shell: bash
+        env:
+          COAL_IMPL: cpp
+        run: |
+          python -m unittest -v tests.test_differential tests.test_cpp_vs_python tests.test_cpp_cli \
+            tests.test_cpp_readers tests.test_cpp_tables tests.test_cpp_pool \
+            tests.test_stdin tests.test_robustness tests.test_cpp_error_precedence tests.test_batch \
+            2>&1 | tee san-tests.txt
+          status=${PIPESTATUS[0]}
+          if grep -qE "AddressSanitizer|LeakSanitizer|runtime error" san-tests.txt; then
+            echo "::error::a sanitizer reported during the C++ tests (see san-tests.txt)"; exit 1
+          fi
+          test "$status" -eq 0
+          if grep -iE "\.\.\. skipped" san-tests.txt | grep -qi "not built"; then
+            echo "::error::C++ tests were skipped as 'not built', so the sanitizer build was not exercised"; exit 1
+          fi
+      - name: Engine generator under the sanitizers (300 cases)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          python tests/tools/engine_fuzz.py --n 300 --seed "$FUZZ_SEED" --sanitizer --keep san-keep 2>&1 | tee san-fuzz.txt
+          status=${PIPESTATUS[0]}
+          echo "### Sanitizer generator run, seed $FUZZ_SEED" >> "$GITHUB_STEP_SUMMARY"
+          grep -E "^engine fuzz" san-fuzz.txt >> "$GITHUB_STEP_SUMMARY" || true
+          if grep -qE "AddressSanitizer|LeakSanitizer|runtime error" san-fuzz.txt; then
+            echo "::error::a sanitizer reported during the generator run (see san-fuzz.txt)"; exit 1
+          fi
+          test "$status" -eq 0
+      - name: Upload the sanitizer reports
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: sanitizers-seed-${{ env.FUZZ_SEED }}
+          path: |
+            san-keep/
+            san-tests.txt
+            san-fuzz.txt
+          if-no-files-found: warn
+          retention-days: 30
