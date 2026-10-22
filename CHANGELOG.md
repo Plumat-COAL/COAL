@@ -29,6 +29,11 @@
   `find_package(coal CONFIG)` or `add_subdirectory` / FetchContent give `coal::core`. As a subproject only the library
   is built (`COAL_BUILD_CLI`, `COAL_BUILD_TOOLS`, `COAL_INSTALL` to add more). Example: `examples/cpp-embed/`; docs:
   docs/cpp-engine.md "Embedding the library".
+- **orthologr stand-in takes every PAL2NAL option:** `packaging/orthologr/pal2nal.pl` sent every command line to
+  `coal-cpp` when installed, which rejects PAL2NAL-only options such as `-nostderr` and prints `coal`'s help for
+  `-h`. It now runs `coal-cpp` only for the options it understands (`-output`, `-codontable`, `-nogap`,
+  `-nomismatch`, `-blockonly` and the files) and COAL's `pal2nal` drop-in for anything else; `COAL_PAL2NAL` still
+  overrides.
 - **orthologr:** `packaging/orthologr/pal2nal.pl` is a stand-in for the `pal2nal.pl` bundled in the orthologr R
   package; copied over it, orthologr's `codon_aln()` / `dNdS()` run COAL (coal-cpp when installed) with their
   unchanged command line and get the same output. Notes on what to expect and on a proper `tool = "coal"` option

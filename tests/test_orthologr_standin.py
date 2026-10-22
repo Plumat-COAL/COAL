@@ -1,6 +1,7 @@
 """packaging/orthologr/pal2nal.pl: the Perl stand-in for orthologr's bundled pal2nal.pl runs COAL with the
-unchanged PAL2NAL command line (`<aln> <nuc> -output fasta`), prefers coal-cpp, and gives the same bytes as
-calling COAL directly. Needs perl; skipped otherwise."""
+unchanged PAL2NAL command line (`<aln> <nuc> -output fasta`), prefers coal-cpp for the options it understands,
+hands PAL2NAL-only options (-nostderr, -h) to the `pal2nal` drop-in, and gives the same bytes as calling COAL
+directly. Needs perl; skipped otherwise."""
 import os
 import shutil
 import subprocess
@@ -51,6 +52,52 @@ class TestStandIn(unittest.TestCase):
         direct = subprocess.run([cpp, "protein.aln.fasta", "dna.fasta", "-output", "fasta"], capture_output=True,
                                 cwd=EX, timeout=120, stdin=subprocess.DEVNULL)
         self.assertEqual((aln.returncode, aln.stdout), (0, direct.stdout))
+
+    def _cpp_env(self):
+        cpp = os.environ.get("COAL_CPP_BIN") or shutil.which("coal-cpp")
+        if not cpp or not Path(cpp).exists():
+            self.skipTest("coal-cpp not built (set COAL_CPP_BIN)")
+        pal2nal = Path(_bin_dir()) / ("pal2nal.exe" if os.name == "nt" else "pal2nal")
+        if not pal2nal.exists():
+            self.skipTest("the pal2nal console script is not installed next to this Python")
+        return cpp, {"PATH": str(Path(cpp).parent) + os.pathsep + _bin_dir() + os.pathsep
+                     + os.environ.get("PATH", "")}
+
+    def test_pal2nal_only_options_go_to_the_drop_in(self):
+        # coal-cpp rejects -nostderr and prints coal's help for -h; with coal-cpp first on PATH these must still
+        # behave as PAL2NAL's (the drop-in accepts them)
+        cpp, env = self._cpp_env()
+        want = subprocess.run([sys.executable, "-m", "coal_compat", "protein.aln.fasta", "dna.fasta", "-output",
+                               "fasta", "-nostderr"], capture_output=True, cwd=EX, timeout=120,
+                              stdin=subprocess.DEVNULL)
+        self.assertEqual(want.returncode, 0, want.stderr)
+        got = self.run_standin(["protein.aln.fasta", "dna.fasta", "-output", "fasta", "-nostderr"], env)
+        self.assertEqual(got.returncode, 0, got.stderr)
+        self.assertEqual(got.stdout, want.stdout)
+        self.assertNotIn(b"unrecognized arguments", got.stderr)
+        for args in (["-h"], ["-help"], []):
+            with self.subTest(args=args):
+                got = self.run_standin(args, env)
+                direct = subprocess.run([sys.executable, "-m", "coal_compat", *args], capture_output=True, cwd=EX,
+                                        timeout=120, stdin=subprocess.DEVNULL)
+                self.assertEqual(got.returncode, direct.returncode, got.stderr)
+                self.assertEqual(got.stdout + got.stderr, direct.stdout + direct.stderr)  # PAL2NAL-style help
+                self.assertNotIn(b"usage: coal [-h]", got.stdout + got.stderr)
+
+    def test_coal_cpp_still_takes_the_orthologr_command_lines(self):
+        cpp, env = self._cpp_env()
+        for args in (["protein.aln.fasta", "dna.fasta", "-output", "fasta", "-codontable", "1", "-nogap",
+                      "-nomismatch", "-blockonly"],
+                     ["protein.aln.fasta", "dna.fasta", "-output", "paml"]):
+            with self.subTest(args=args):
+                got = self.run_standin(args, env)
+                direct = subprocess.run([cpp, *args], capture_output=True, cwd=EX, timeout=120,
+                                        stdin=subprocess.DEVNULL)
+                self.assertEqual((got.returncode, got.stdout), (direct.returncode, direct.stdout), got.stderr)
+        # COAL_PAL2NAL stays the override, also for a PAL2NAL-only option the chosen program may not take
+        got = self.run_standin(["-h"], {**env, "COAL_PAL2NAL": cpp})
+        self.assertEqual(got.returncode, 0, got.stderr)
+        self.assertIn(b"usage: coal [-h]", got.stdout)  # coal-cpp's help, as asked
 
     def test_missing_coal_is_a_clear_error(self):
         got = self.run_standin(["a", "b", "-output", "fasta"], {"COAL_PAL2NAL": str(EX / "no-such-program")})
