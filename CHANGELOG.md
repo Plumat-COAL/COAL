@@ -35,6 +35,12 @@
   used to be swallowed inside the work) and **die with the main process** (`PR_SET_PDEATHSIG` on Linux, a parent
   watchdog everywhere), so a `kill -9` of `coal` no longer leaves workers holding its stdout open and a pipeline
   reading it waiting for EOF forever.
+- **Python 3.14 on Linux: every multi-worker run failed** with `a worker process died (out of memory?)` after
+  half a second. 3.14 made `forkserver` the default start method there, so the workers' parent is the fork server,
+  not `coal`, and the watchdog above took that for a dead parent. The workers now watch the parent they really have
+  and, under the fork server, wait for EOF on a pipe only `coal` holds. `COAL_MIN_NT_PER_JOB` (default 4,000,000)
+  can now be set in the environment, as `COAL_BATCH_NT`, so tests can force worker processes on a small input; CI
+  runs the suite on 3.14 (Linux).
 - **Checkpoints are checked before `--resume` trusts them** (robustness review): an edited or corrupted
   `<out>.coal-checkpoint.json` (`completed` beyond the input or negative, a string or float where an integer belongs,
   a list at the top level, a missing key, a deleted entries file, a partial file shorter than recorded, a truncated

@@ -229,11 +229,28 @@ def _big_input(where: Path, n_seqs: int = 100_000):
     return where / "pep.fasta", where / "nuc.fasta"
 
 
-def _children(pid: int):
+def worker_processes(pid: int):
+    """COAL's worker processes under the coal process `pid`, whatever the multiprocessing start method: with fork and
+    spawn they are coal's own children; with forkserver (the default on Linux from Python 3.14) they are children of
+    the fork server, which is itself a child of coal and shares its command line with the workers it forks, so it is
+    told apart by its position, not its name. The resource tracker is never a worker."""
     try:
-        return psutil.Process(pid).children()
+        kids = psutil.Process(pid).children(recursive=True)
     except psutil.Error:
         return []
+    out = []
+    for k in kids:
+        try:
+            cmd = " ".join(k.cmdline())
+            direct = k.ppid() == pid
+        except psutil.Error:
+            continue
+        if "python" not in cmd.lower() or "multiprocessing.resource_tracker" in cmd:
+            continue
+        if direct and "multiprocessing.forkserver" in cmd:
+            continue  # the fork server: its children are the workers
+        out.append(k)
+    return out
 
 
 def _running(proc) -> bool:
@@ -262,7 +279,7 @@ class TestWorkerProcesses(unittest.TestCase):
         t0 = time.monotonic()
         kids = []
         while time.monotonic() - t0 < 30 and len(kids) < 2:
-            kids = _children(p.pid)
+            kids = worker_processes(p.pid)
             time.sleep(0.05)
         self.assertEqual(len(kids), 2, "the run did not start two workers")
         time.sleep(0.3)

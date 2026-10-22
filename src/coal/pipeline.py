@@ -52,7 +52,8 @@ BATCH_NT = int(os.environ.get("COAL_BATCH_NT", 2_000_000))  # target DNA per wor
 # Starting worker processes costs ~0.1-0.2 s (more on Windows), about the time one
 # core needs for a few million nucleotides. So each extra worker must have at
 # least this much DNA to do, otherwise COAL runs in a single process.
-MIN_NT_PER_JOB = 4_000_000
+# COAL_MIN_NT_PER_JOB overrides it (tests: 0 makes `-j 2` start two workers on a small input).
+MIN_NT_PER_JOB = int(os.environ.get("COAL_MIN_NT_PER_JOB", 4_000_000))
 _WINDOWS = os.name == "nt"  # see the broken-pipe handling in _run
 PROGRESS_MIN_SEQS = int(os.environ.get("COAL_PROGRESS_MIN_SEQS", 10_000))  # --progress: inputs larger than this
 PROGRESS_EVERY = float(os.environ.get("COAL_PROGRESS_EVERY", 2.0))        # seconds between progress reports
@@ -129,7 +130,7 @@ def _protein_rows(path):
 _W: dict = {}
 
 
-def _init_pool_worker(parent_pid, *init_args):
+def _init_pool_worker(coal_pid, alive, *init_args):
     """Initializer of a worker process: ignore Ctrl-C (the main process reports it once, no worker tracebacks); let
     SIGTERM / SIGHUP end the worker (the main process's handlers, inherited with the fork start method, would raise
     SystemExit inside the work and the pool would send it back as a result instead of exiting); and die with the
@@ -141,15 +142,25 @@ def _init_pool_worker(parent_pid, *init_args):
                 signal.signal(getattr(signal, name), signal.SIG_DFL)
             except (OSError, ValueError):
                 pass
-    _watch_parent(parent_pid)
+    _watch_parent(coal_pid, alive)
     limit_blas_threads()
     _init_worker(*init_args)
 
 
-def _watch_parent(parent_pid: int) -> None:
-    """Make this worker exit when its parent dies: on Linux the kernel sends SIGKILL (PR_SET_PDEATHSIG); everywhere a
-    small thread checks the parent every 0.5 s (also covers the spawn start method, macOS and Windows, and a
-    parent that died before prctl ran). Started in the worker itself, never inherited."""
+def _watch_parent(coal_pid: int, alive=None) -> None:
+    """Make this worker exit when coal (the main process, `coal_pid`) dies. Started in the worker itself, never
+    inherited.
+
+    - On Linux the kernel sends SIGKILL (PR_SET_PDEATHSIG). That signal is tied to the *thread that forked this
+      process*: the pool's thread in coal with the fork start method, but the fork server's with forkserver (the
+      default on Linux from Python 3.14), which outlives coal as long as a worker lives, so it cannot be relied on.
+    - Everywhere a small thread checks every 0.5 s. With fork and spawn the worker's parent is coal, and a parent
+      that changed (to init / a subreaper) means coal is gone; this also covers macOS, Windows and a parent that
+      died before prctl ran. With forkserver the parent is the fork server, which stays alive while its children
+      do, so the thread waits instead for EOF on `alive`: the read end of a pipe whose only write end coal holds
+      (multiprocessing passes the descriptor to the worker; nothing is ever written to it). Comparing getppid()
+      with coal_pid there would make every worker exit at once: that was the "a worker process died" of every
+      multi-worker run on Python 3.14."""
     import threading
     if sys.platform.startswith("linux"):
         try:
@@ -158,15 +169,23 @@ def _watch_parent(parent_pid: int) -> None:
             libc.prctl(1, 9, 0, 0, 0)  # PR_SET_PDEATHSIG, SIGKILL
         except (OSError, AttributeError, ValueError):
             pass
+    try:
+        parent_pid = os.getppid()
+    except OSError:
+        parent_pid = coal_pid
+    pipe = alive if parent_pid != coal_pid else None  # forkserver: coal is not the parent (fork / spawn: it is)
 
     def watch():
         while True:
-            time.sleep(0.5)
             try:
-                alive = os.getppid() == parent_pid
-            except OSError:
-                alive = False
-            if not alive:
+                if pipe is not None:
+                    if pipe.poll(0.5):  # readable: only ever EOF, since coal never writes -> coal is gone
+                        os._exit(1)
+                else:
+                    time.sleep(0.5)
+                if os.getppid() != parent_pid:
+                    os._exit(1)
+            except (OSError, ValueError, EOFError):
                 os._exit(1)
 
     threading.Thread(target=watch, name="coal-parent-watch", daemon=True).start()
@@ -355,7 +374,11 @@ def _results(batches, jobs: int, init_args):
     from concurrent.futures import ProcessPoolExecutor  # imported only when needed
     from concurrent.futures.process import BrokenProcessPool
 
-    ex = ProcessPoolExecutor(max_workers=jobs, initializer=_init_pool_worker, initargs=(os.getpid(), *init_args))
+    import multiprocessing
+    # The read end goes to every worker (see _watch_parent); the write end stays here, so its EOF means coal is gone
+    alive_r, alive_w = multiprocessing.Pipe(duplex=False)
+    ex = ProcessPoolExecutor(max_workers=jobs, initializer=_init_pool_worker,
+                             initargs=(os.getpid(), alive_r, *init_args))
     ok = False
     try:
         pending: deque = deque()
@@ -375,6 +398,11 @@ def _results(batches, jobs: int, init_args):
             ex.shutdown(wait=True)
         else:
             _abandon_pool(ex)
+        for c in (alive_r, alive_w):
+            try:
+                c.close()
+            except OSError:
+                pass
 
 
 WORKER_DIED = "a worker process died (out of memory?)"
