@@ -404,8 +404,18 @@ int write_json_file(const std::string& path, const std::string& text) {
 }
 
 int write_json_file(const std::string& path, const std::function<void(std::ostream&)>& writer) {
-    std::string real = real_path(path);
     std::error_code ec;
+    // An existing non-regular target is written through as it is, before any path resolution (as -o does): the
+    // real path of /dev/fd/1 on a pipe is "pipe:[N]", which no folder holds
+    if (fs::exists(path, ec) && !fs::is_directory(path, ec) && !fs::is_regular_file(path, ec)) {
+        errno = 0;
+        std::ofstream f(path, std::ios::binary | std::ios::trunc);
+        if (!f) return errno ? errno : EIO;
+        writer(f);
+        f.flush();
+        return f ? 0 : (errno ? errno : EIO);
+    }
+    std::string real = real_path(path);
     bool exists = fs::exists(real, ec);
     bool regular = exists && fs::is_regular_file(real, ec);
     if (exists && (!regular || fs::hard_link_count(real, ec) > 1)) {

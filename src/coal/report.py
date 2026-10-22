@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 import re
+import stat
 import sys
 import time
 from itertools import product
@@ -1154,6 +1155,15 @@ def write_json_with(path: str, writer) -> None:
     through a symlink, so a failure never leaves a half-written file; a path that exists and is not a regular file
     (a FIFO, /dev/stdout, /dev/null) or a file with other hard links is written in place instead of being replaced
     by a regular file. Never leaves the temp file behind. `writer(fh)` writes the text."""
+    # An existing non-regular target is written through as it is, before any path resolution (as -o does): the real
+    # path of /dev/fd/1 on a pipe is "pipe:[N]", which no folder holds
+    try:
+        if not os.path.isdir(path) and not stat.S_ISREG(os.stat(path).st_mode):
+            with open(path, "w", encoding="utf-8", newline="\n") as fh:
+                writer(fh)
+            return
+    except OSError:
+        pass
     real = os.path.realpath(path)
     try:
         st = os.stat(real)

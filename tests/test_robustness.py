@@ -529,6 +529,18 @@ class TestOutputToStdoutDevice(EngineCase):
                     self.assertEqual(r.stdout, EXPECTED.encode())
                     self.assertEqual(self.leftovers(), [])
 
+    def test_report_to_dev_fd_1_into_a_pipe(self):
+        for name, cmd in engines():
+            for path in ("/dev/fd/1", "/dev/stdout"):
+                with self.subTest(engine=name, path=path):
+                    # `--report /dev/fd/1 | cat`: the report goes to stdout (the real path of /dev/fd/1 on a pipe
+                    # is "pipe:[N]": the report used to fail with "No such file or directory" after the whole run)
+                    r = self.run_engine(cmd, ["p.fa", "n.fa", "-o", "o.fa", "--report", path])
+                    self.assertEqual((r.returncode, r.stderr), (0, b""), r.stderr)
+                    self.assertEqual(json.loads(r.stdout)["schema"], "coal.report/1")
+                    self.assertEqual((self.d / "o.fa").read_text(), EXPECTED)
+                    self.assertEqual(self.leftovers(), [])
+
     def test_dev_stdout_resume_is_a_notice(self):
         rc, out, err = self.both(["p.fa", "n.fa", "-o", "/dev/stdout", "--resume"])
         self.assertEqual((rc, out), (0, EXPECTED.encode()))

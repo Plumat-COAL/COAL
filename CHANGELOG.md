@@ -65,6 +65,9 @@
 - **`-o /dev/fd/1` and `-o /dev/stdout` work when stdout is a pipe** (robustness review): both engines resolved
   the path to `pipe:[N]` and failed with `cannot write /dev/fd/1: No such file or directory`. An existing target
   that is not a regular file is now written through before any path resolution.
+- **`--report /dev/fd/1` and `--report /dev/stdout` work when stdout is a pipe**, in both engines, for the same
+  reason (the report failed with `could not write the report /dev/fd/1: No such file or directory` after the
+  whole run).
 - **`--json | head` is a silent exit 141** (robustness review) in both engines (the Python engine printed a
   traceback and exited 1, `coal-cpp` exited 0), also for `--batch ... --json`.
 - **`coal-cpp` falls back when `TMPDIR` is unusable** (robustness review): a `TMPDIR` naming a missing folder or a
