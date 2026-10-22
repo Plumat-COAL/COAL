@@ -1,253 +1,225 @@
 {
  "schema": "coal.report/1",
- "coal_version": "0.4.0",
- "command": "coal pep.fasta nuc.fasta -output paml -o out.paml --report report.json",
- "pal2nal_equivalent": "pal2nal.pl pep.fasta nuc.fasta -output paml",
+ "coal_version": "0.4.2",
+ "source": "coal",
+ "command": "coal protein.aln.fasta dna.fasta --keep-going -o codon.fasta",
+ "command_line": "coal protein.aln.fasta dna.fasta --keep-going -o codon.fasta --report report.json",
+ "pal2nal_equivalent": "pal2nal.pl protein.aln.fasta dna.fasta -output fasta",
  "options": {
-  "output_format": "paml",
+  "output_format": "fasta",
   "codontable": 1,
   "nogap": false,
   "nomismatch": false,
-  "keep_going": false
+  "keep_going": true,
+  "strict": false,
+  "blockonly": false
  },
  "inputs": [
   {
    "role": "protein",
-   "path": "pep.fasta",
-   "sha256": "748e72133e6287841f2dbf56104cee399cbd63e42a048bf5b538c18329d3f1dd",
-   "sequences": 6
+   "path": "protein.aln.fasta",
+   "sha256": "f3fd705c35aad60a8e761f622067f209f89d98c8e4a9c235a8d2ffb9de0aebfb",
+   "sequences": 20
   },
   {
    "role": "dna",
-   "path": "nuc.fasta",
-   "sha256": "b93210cfb81e6b3282faeaedc49205b3c89ced7cd183c1531204271fac24481e",
-   "sequences": 6
+   "path": "dna.fasta",
+   "sha256": "19bd9e5bd96d60e0fa3435984b46ed7b8c31c6d7a71fcc0065476ae6ac8032bc",
+   "sequences": 20
   }
  ],
  "output": {
-  "path": "out.paml",
-  "format": "paml",
-  "sha256": "f9b99621bdc14572d23aab68afdb58b70fbf48660c1144bce7d46d04b8eb7aa5",
-  "sequences": 6
+  "path": "codon.fasta",
+  "format": "fasta",
+  "sha256": "a0093d9c754e40e961eb39bcc00660fa1cbff3ee3b3bd62927256635fe59514c",
+  "sequences": 19
  },
  "summary": {
-  "total": 6,
-  "ok": 0,
-  "warning": 6,
-  "failed": 0,
-  "pairing": "id",
-  "not_processed": 0
+  "total": 20,
+  "ok": 19,
+  "warning": 0,
+  "failed": 1,
+  "pairing": "id"
  },
- "hints": [
-  {
-   "code": "genetic_code",
-   "text": "Most sequences fit genetic code 2 (vertebrate mitochondrial). Try -codontable 2.",
-   "suggested_codontable": 2,
-   "checked": 6,
-   "fit": 6,
-   "fit_current": 0
-  }
- ],
+ "hints": [],
+ "errors": [],
  "sequences": [
   {
-   "id": "g0",
+   "id": "OG0001_sp01",
    "index": 0,
-   "dna_id": "g0",
+   "dna_id": "OG0001_sp01",
    "pairing": "id",
-   "status": "warning",
-   "messages": [
-    {
-     "code": "mismatch",
-     "column": 18,
-     "text": "Column 18: W does not match codon TGA"
-    },
-    {
-     "code": "mismatch",
-     "column": 41,
-     "text": "Column 41: M does not match codon ATA"
-    },
-    {
-     "code": "mismatch",
-     "column": 56,
-     "text": "Column 56: M does not match codon ATA"
-    },
-    {
-     "code": "mismatch",
-     "column": 59,
-     "text": "Column 59: W does not match codon TGA"
-    }
-   ]
+   "status": "ok",
+   "messages": []
   },
   {
-   "id": "g1",
+   "id": "OG0001_sp02",
    "index": 1,
-   "dna_id": "g1",
+   "dna_id": "OG0001_sp02",
    "pairing": "id",
-   "status": "warning",
-   "messages": [
-    {
-     "code": "mismatch",
-     "column": 19,
-     "text": "Column 19: M does not match codon ATA"
-    },
-    {
-     "code": "mismatch",
-     "column": 22,
-     "text": "Column 22: W does not match codon TGA"
-    },
-    {
-     "code": "mismatch",
-     "column": 40,
-     "text": "Column 40: M does not match codon ATA"
-    },
-    {
-     "code": "mismatch",
-     "column": 52,
-     "text": "Column 52: M does not match codon ATA"
-    }
-   ]
+   "status": "ok",
+   "messages": []
   },
   {
-   "id": "g2",
+   "id": "OG0001_sp03",
    "index": 2,
-   "dna_id": "g2",
+   "dna_id": "OG0001_sp03",
    "pairing": "id",
-   "status": "warning",
-   "messages": [
-    {
-     "code": "mismatch",
-     "column": 5,
-     "text": "Column 5: M does not match codon ATA"
-    },
-    {
-     "code": "mismatch",
-     "column": 17,
-     "text": "Column 17: W does not match codon TGA"
-    },
-    {
-     "code": "mismatch",
-     "column": 37,
-     "text": "Column 37: M does not match codon ATA"
-    },
-    {
-     "code": "mismatch",
-     "column": 38,
-     "text": "Column 38: W does not match codon TGA"
-    },
-    {
-     "code": "mismatch",
-     "column": 44,
-     "text": "Column 44: W does not match codon TGA"
-    },
-    {
-     "code": "mismatch",
-     "column": 52,
-     "text": "Column 52: W does not match codon TGA"
-    }
-   ]
+   "status": "ok",
+   "messages": []
   },
   {
-   "id": "g3",
+   "id": "OG0001_sp04",
    "index": 3,
-   "dna_id": "g3",
+   "dna_id": "OG0001_sp04",
    "pairing": "id",
-   "status": "warning",
-   "messages": [
-    {
-     "code": "mismatch",
-     "column": 5,
-     "text": "Column 5: M does not match codon ATA"
-    },
-    {
-     "code": "mismatch",
-     "column": 13,
-     "text": "Column 13: W does not match codon TGA"
-    },
-    {
-     "code": "mismatch",
-     "column": 27,
-     "text": "Column 27: W does not match codon TGA"
-    },
-    {
-     "code": "mismatch",
-     "column": 39,
-     "text": "Column 39: W does not match codon TGA"
-    },
-    {
-     "code": "mismatch",
-     "column": 48,
-     "text": "Column 48: M does not match codon ATA"
-    },
-    {
-     "code": "mismatch",
-     "column": 52,
-     "text": "Column 52: W does not match codon TGA"
-    }
-   ]
+   "status": "ok",
+   "messages": []
   },
   {
-   "id": "g4",
+   "id": "OG0001_sp05",
    "index": 4,
-   "dna_id": "g4",
+   "dna_id": "OG0001_sp05",
    "pairing": "id",
-   "status": "warning",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "OG0001_sp06",
+   "index": 5,
+   "dna_id": "OG0001_sp06",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "OG0001_sp07",
+   "index": 6,
+   "dna_id": "OG0001_sp07",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "OG0001_sp08",
+   "index": 7,
+   "dna_id": "OG0001_sp08",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "OG0001_sp09",
+   "index": 8,
+   "dna_id": "OG0001_sp09",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "OG0001_sp10",
+   "index": 9,
+   "dna_id": "OG0001_sp10",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "OG0001_sp11",
+   "index": 10,
+   "dna_id": "OG0001_sp11",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "OG0001_sp12",
+   "index": 11,
+   "dna_id": "OG0001_sp12",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "OG0001_sp13",
+   "index": 12,
+   "dna_id": "OG0001_sp13",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "OG0001_sp14",
+   "index": 13,
+   "dna_id": "OG0001_sp14",
+   "pairing": "id",
+   "status": "failed",
    "messages": [
     {
-     "code": "mismatch",
-     "column": 9,
-     "text": "Column 9: M does not match codon ATA"
+     "code": "frameshift",
+     "column": 102,
+     "shift": -1,
+     "text": "Frameshift at column 102: one base is missing in the DNA, so from here on the codons are read out of step."
     },
     {
-     "code": "mismatch",
-     "column": 11,
-     "text": "Column 11: W does not match codon TGA"
-    },
-    {
-     "code": "mismatch",
-     "column": 22,
-     "text": "Column 22: M does not match codon ATA"
-    },
-    {
-     "code": "mismatch",
-     "column": 42,
-     "text": "Column 42: M does not match codon ATA"
-    },
-    {
-     "code": "mismatch",
-     "column": 54,
-     "text": "Column 54: W does not match codon TGA"
-    },
-    {
-     "code": "mismatch",
-     "column": 55,
-     "text": "Column 55: W does not match codon TGA"
+     "code": "inconsistent",
+     "text": "protein and DNA are inconsistent (no match found)"
     }
    ]
   },
   {
-   "id": "g5",
-   "index": 5,
-   "dna_id": "g5",
+   "id": "OG0001_sp15",
+   "index": 14,
+   "dna_id": "OG0001_sp15",
    "pairing": "id",
-   "status": "warning",
-   "messages": [
-    {
-     "code": "mismatch",
-     "column": 31,
-     "text": "Column 31: W does not match codon TGA"
-    },
-    {
-     "code": "mismatch",
-     "column": 60,
-     "text": "Column 60: M does not match codon ATA"
-    }
-   ]
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "OG0001_sp16",
+   "index": 15,
+   "dna_id": "OG0001_sp16",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "OG0001_sp17",
+   "index": 16,
+   "dna_id": "OG0001_sp17",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "OG0001_sp18",
+   "index": 17,
+   "dna_id": "OG0001_sp18",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "OG0001_sp19",
+   "index": 18,
+   "dna_id": "OG0001_sp19",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "OG0001_sp20",
+   "index": 19,
+   "dna_id": "OG0001_sp20",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
   }
  ],
- "runtime_seconds": 0.638,
- "exit_code": 0,
+ "runtime_seconds": 0.044,
+ "exit_code": 2,
  "summary_text": [
-  "6 of 6 sequences have codon mismatches. They all fit genetic code 2 (vertebrate mitochondrial): try -codontable 2."
+  "1 sequence of 20 could not be converted and was left out (first: OG0001_sp14: protein and DNA are inconsistent (no match found). Frameshift at column 102: one base is missing in the DNA, so from here on the codons are read out of step.)"
  ],
- "methods_text": "Codon alignments were generated with COAL v0.4.0 (https://github.com/plumat-coal/COAL) from 6 aligned protein sequences and their coding sequences, using the standard genetic code (NCBI table 1) and PAML output."
+ "methods_text": "Codon alignments were built with COAL v0.4.2 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 20 sequences, 19 matched their protein exactly, and 1 could not be aligned and was excluded. Command: coal protein.aln.fasta dna.fasta --keep-going -o codon.fasta"
 }

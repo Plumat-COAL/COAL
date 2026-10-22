@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Documented for 1.0:** `docs/python-api.md` (the public Python API: `coal.codon_align`, the new re-export
+  `coal.align_files` = the `coal` command as a function, `coal.CoalError` with its `code`/`seq_id`/`index`, and the
+  semantic-versioning promise for command-line flags, output bytes, exit codes, the report schema and these
+  functions), `docs/report-schema.md` with a JSON Schema (`docs/report.schema.json`, draft 2020-12) for the run report
+  `coal.report/1` (every field, status, pairing mode, message and hint code; additive changes only within `/1`),
+  `CONTRIBUTING.md`, GitHub issue forms and a pull-request template. New tests run the documented examples
+  (`tests/test_python_api.py`) and validate freshly generated reports from both engines against the schema
+  (`tests/test_report_schema.py`); `tests/report_example.json` is now a real `examples/one_broken_gene --keep-going`
+  report. No change to COAL's behaviour or output.
 - **orthologr:** `packaging/orthologr/pal2nal.pl` is a stand-in for the `pal2nal.pl` bundled in the orthologr R
   package; copied over it, orthologr's `codon_aln()` / `dNdS()` run COAL (coal-cpp when installed) with their
   unchanged command line and get the same output. Notes on what to expect and on a proper `tool = "coal"` option
