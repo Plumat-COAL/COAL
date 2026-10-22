@@ -32,6 +32,7 @@ _VALID = re.compile(r"[^-ACDEFGHIKLMNPQRSTVWY*XBZJOU0-9]")
 _DIGIT = re.compile(r"[0-9]")
 _MORE_THAN_3_RES = re.compile(r"[^-0-9](?:[-0-9]*[^-0-9]){3}")  # _note_ambiguous's quick test
 _AS_X = re.compile("[" + "".join(sorted(AS_X)) + "]")
+_AS_X_TABLE = str.maketrans({c: "X" for c in AS_X})
 _CODON = re.compile(r"...", re.S)
 _GAPCHAR = re.compile("-")
 _TIMES3 = (3).__mul__
@@ -275,6 +276,15 @@ def pair_sequences(prot_ids: list[str], dna_ids: list[str], dna_pos: dict | None
 # ("w", 3|N, col) wildcard of that many bases (fallback mode).
 
 def _tokens(row: str, start_mode: int, col0: int = 1):
+    if not (_DIGIT.search(row) or _AS_X.search(row)):
+        # Only ordinary residues: one comprehension, then the first Met's mode
+        toks = [("r", ch, col0 + i, NORMAL) for i, ch in enumerate(row) if ch != GAP]
+        for q, t in enumerate(toks):
+            if t[1] != "X":
+                if t[1] == "M" and start_mode != NORMAL:
+                    toks[q] = ("r", "M", t[2], start_mode)
+                break
+        return toks
     toks = []
     seen_specific = False   # PAL2NAL: "first Met" = an M before any non-X residue
     for i, ch in enumerate(row):
@@ -293,7 +303,11 @@ def _tokens(row: str, start_mode: int, col0: int = 1):
 
 
 def _length(toks) -> int:
-    return sum(3 if t[0] == "r" else t[1] for t in toks)
+    n = 3 * len(toks)
+    for t in toks:
+        if t[0] != "r":
+            n += t[1] - 3
+    return n
 
 
 def _token_regex(table: int, t) -> str:
@@ -315,13 +329,38 @@ def _matches_at(table: int, dna: str, s: int, toks) -> bool:
 
 
 class _Target:
-    """A normalised DNA sequence plus lazily built 3-frame translations."""
-    __slots__ = ("table", "dna", "plain", "_frames")
+    """A normalised DNA sequence plus lazily built 3-frame translations and an index of their 10-residue windows."""
+    __slots__ = ("table", "dna", "plain", "_frames", "_windows")
 
     def __init__(self, table: int, dna: str):
         self.table, self.dna = table, dna
         self.plain = _NON_ACGT.search(dna) is None
         self._frames = None
+        self._windows = None
+
+    def windows(self) -> list[dict[str, int]]:
+        """Per frame: every ANCHOR-residue window of the translation -> the DNA position of its leftmost occurrence
+        (built once per sequence, in O(len(dna))). The anchor fallback looks its chunks up here instead of scanning
+        the DNA for each of them (which is quadratic in the gene length)."""
+        if self._windows is None:
+            out = []
+            for f, tr in enumerate(self.frames()):
+                nw = len(tr) - ANCHOR + 1
+                # Windows in decreasing order of position, so the dict keeps the leftmost occurrence of each word
+                out.append({tr[k:k + ANCHOR]: f + 3 * k for k in range(nw - 1, -1, -1)})
+            self._windows = out
+        return self._windows
+
+    def find_plain(self, word: str) -> int:
+        """Leftmost DNA position (any frame) whose next len(word) codons translate to `word`, or -1; len(word) ==
+        ANCHOR. Same answer as _find for tokens that are all ordinary residues (no X, digit or first-Met mode): a
+        triplet matches such a residue exactly when it translates to it (frames())."""
+        best = -1
+        for d in self.windows():
+            s = d.get(word, -1)
+            if s >= 0 and (best < 0 or s < best):
+                best = s
+        return best
 
     def frames(self) -> list[str]:
         if self._frames is None:
@@ -345,6 +384,17 @@ def _iupac_code(table: int) -> dict[str, str]:
         for trip in accepted(table, aa, NORMAL):
             out[trip] = aa
     return out
+
+
+def _plain_word(toks) -> str | None:
+    """The residues of an anchor's tokens as a word for _Target.find_plain, or None when a token is not an ordinary
+    residue (a frameshift digit, X, or a first Met with its start-codon mode) or there are not exactly ANCHOR."""
+    if len(toks) != ANCHOR:
+        return None
+    for t in toks:
+        if t[0] != "r" or t[1] == "X" or t[3] != NORMAL:
+            return None
+    return "".join([t[1] for t in toks])
 
 
 def _plain_run(toks):
@@ -409,20 +459,36 @@ def _find(target: _Target, toks) -> int:
 
 # ---------------------------------------------------------------- locate
 
+_CHUNK = re.compile("(?:-*[^-]){%d}" % ANCHOR)  # a chunk: up to and including its 10th non-gap character
+
+
 def _anchors(row: str) -> list[str]:
-    """Split the aligned row into chunks of 10 non-gap characters (PAL2NAL rule);
-    a final chunk shorter than 10 *characters* is merged into the previous one."""
-    pre, cur, n = [], [], 0
-    for i, ch in enumerate(row):
-        cur.append(ch)
-        if ch != GAP:
-            n += 1
-        if n == ANCHOR or i == len(row) - 1:
-            pre.append("".join(cur))
-            cur, n = [], 0
+    """Split the aligned row into chunks of 10 non-gap characters (PAL2NAL rule); what is left at the end of the row
+    (fewer than 10 non-gap characters, possibly none) is a chunk too, and a final chunk shorter than 10 *characters*
+    is merged into the previous one."""
+    pre = _CHUNK.findall(row)
+    tail = row[sum(map(len, pre)):]
+    if tail:
+        pre.append(tail)
     if pre and len(pre[-1]) < ANCHOR:
         pre = pre[:-2] + ["".join(pre[-2:])] if len(pre) >= 2 else []
     return pre
+
+
+def _anchor_tokens(toks, anchors: list[str]):
+    """The tokens of each anchor (_tokens(anchor, ANCHOR_START if first else NORMAL, its first column)), taken from
+    the row's tokens: every non-gap character is one token, and the only mode that differs from the row's is the
+    first Met's (START in the row; ANCHOR_START in the first anchor, NORMAL in a later one)."""
+    out, i = [], 0
+    for k, a in enumerate(anchors):
+        j = i + len(a) - a.count(GAP)
+        at = toks[i:j]  # a new list
+        for q, t in enumerate(at):
+            if t[0] == "r" and t[3] != NORMAL:
+                at[q] = (t[0], t[1], t[2], ANCHOR_START if k == 0 else NORMAL)
+        out.append(at)
+        i = j
+    return out
 
 
 def _quick_offset0(table: int, dna: str, residues: str) -> bool:
@@ -561,55 +627,94 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int, strict: bool = F
     if not anchors:
         raise CoalError(inconsistent_message(seq_id, "no match found", row, raw_dna), code="inconsistent",
                         seq_id=seq_id)
-    pattern, col = [], 1
+    pattern = []
     found_any = False
     expect = -1  # where this anchor starts if the previous anchors' matches are the real ones
-    for k, a in enumerate(anchors):
-        at = _tokens(a, ANCHOR_START if k == 0 else NORMAL, col)
-        # Try the expected position first, which proves the anchor occurs, and only search the whole DNA if it is
-        # not there (a full _find for every anchor would be quadratic). Same result.
-        if expect >= 0 and _matches_at(table, dna, expect, at):
+    for at in _anchor_tokens(toks, anchors):
+        # Each anchor only needs to occur somewhere in the DNA. A chunk of ANCHOR ordinary residues (the usual one)
+        # is checked against the translated frames: at the expected position first, else looked up in the index of
+        # translated windows (O(1) after a one-off O(len(dna)) build). Any other chunk (with a frameshift digit, an
+        # X, the first Met, or the longer merged last chunk) is checked at the expected position and otherwise
+        # searched for by _find. Scanning the DNA for every chunk would be quadratic in the gene length; the result
+        # (found or not) is the same as _find's for each chunk.
+        word = _plain_word(at)
+        if word is not None:
+            if expect >= 0 and target.frames()[expect % 3].startswith(word, expect // 3):
+                hit = expect
+            else:
+                hit = target.find_plain(word)
+        elif expect >= 0 and _matches_at(table, dna, expect, at):
             hit = expect
         else:
             hit = _find(target, at)
+        n = _length(at)
         if hit < 0:
             at = [("w", 3 if t[0] == "r" else t[1], t[2]) for t in at]
-            expect = expect + _length(at) if expect >= 0 else -1
+            expect = expect + n if expect >= 0 else -1
         else:
             found_any = True
-            expect = hit + _length(at)
+            expect = hit + n
         pattern += at
-        col += len(a)
     s = _find(target, [("n", t[1], t[2]) if t[0] == "w" else t for t in pattern])
     if s < 0:
         raise CoalError(inconsistent_message(seq_id, "no match found", row, raw_dna), code="inconsistent",
                         seq_id=seq_id)
-    res.dna = raw_dna[s:s + _length(toks)]
+    total = _length(toks)
+    res.dna = raw_dna[s:s + total]
 
     # mismatch report: first residue Met -> ATG/CTG/GTG, others -> genetic code
-    pos, first = 0, True
     nchk = nbad_chk = 0  # codons with only A/C/G/T(U) bases, and those of them that mismatch
-    for t in toks:
-        if t[0] == "n":
-            pos += t[1]
-            continue
-        aa, c = t[1], t[2]
-        codon = res.dna[pos:pos + 3]
-        mode = ANCHOR_START if (first and aa == "M") else NORMAL
-        cu = codon.upper().replace("U", "T")
-        checkable = not cu.strip("ACGT")
-        nchk += checkable
-        if not codon_ok(table, cu, aa, mode):
-            res.warnings.append(f"pepAlnPos {c}: {row[c - 1]}{MISMATCH_WARNING}{codon}")
+    nres = 0
+    if not _DIGIT.search(residues):
+        # No frameshift digit (the usual case): codon i is dna[s+3i:s+3i+3]. A codon matches an ordinary residue
+        # exactly when it translates to it (see _Target.frames), so translate the matched DNA once and compare it
+        # with the residues (the first Met and X apart) instead of testing every codon one by one.
+        nres = len(toks)
+        nd = dna[s:s + total]
+        if target.plain or _NON_ACGT.search(nd) is None:
+            tr = "".join(map(fast_code(table).__getitem__, _CODON.findall(nd)))
+            amb = frozenset()
+        else:
+            get = _iupac_code(table).get
+            tr = "".join([get(c, "?") for c in _CODON.findall(nd)])
+            amb = frozenset(m.start() // 3 for m in _NON_ACGT.finditer(nd))  # codons with an ambiguous base
+        nchk = nres - len(amb)
+        aas = residues.translate(_AS_X_TABLE)
+        bad = [i for i, (x, y) in enumerate(zip(tr, aas)) if x != y and y != "X"]
+        if aas[0] == "M":  # the first Met: start codons too
+            ok0 = nd[:3] in accepted(table, "M", ANCHOR_START)
+            if ok0 and bad and bad[0] == 0:
+                del bad[0]
+            elif not ok0 and (not bad or bad[0] != 0):
+                bad.insert(0, 0)
+        for i in bad:
+            c = toks[i][2]
+            res.warnings.append(f"pepAlnPos {c}: {row[c - 1]}{MISMATCH_WARNING}{res.dna[3 * i:3 * i + 3]}")
             res.mismatch_cols.add(c)
-            nbad_chk += checkable
-        first = False
-        pos += 3
+            nbad_chk += i not in amb
+    else:
+        pos, first = 0, True
+        for t in toks:
+            if t[0] == "n":
+                pos += t[1]
+                continue
+            aa, c = t[1], t[2]
+            nres += 1
+            codon = res.dna[pos:pos + 3]
+            mode = ANCHOR_START if (first and aa == "M") else NORMAL
+            cu = codon.upper().replace("U", "T")
+            checkable = not cu.strip("ACGT")
+            nchk += checkable
+            if not codon_ok(table, cu, aa, mode):
+                res.warnings.append(f"pepAlnPos {c}: {row[c - 1]}{MISMATCH_WARNING}{codon}")
+                res.mismatch_cols.add(c)
+                nbad_chk += checkable
+            first = False
+            pos += 3
     # The wildcard pattern fitting does not prove the protein and DNA are related: > half the codons mismatching
     # is probably-wrong data, and no anchor matching gives a notice. Codons containing any base other than
     # A/C/G/T(U) count in neither the numerator nor the denominator (no rule if none is checkable), so a correctly
     # placed gene with many NNN (masked / low coverage) codons is not flagged.
-    nres = sum(1 for t in toks if t[0] == "r")
     namb = nres - nchk
     # An error only with --strict (strict=True). By default COAL writes the same row as PAL2NAL (which never refuses
     # on mismatches) and adds a notice saying the data is probably wrong.
