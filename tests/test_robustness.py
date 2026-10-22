@@ -528,5 +528,19 @@ class TestJsonIntoClosedPipe(unittest.TestCase):
         self.assertEqual((rc, err), (141, b""))
 
 
+# ---------------------------------------------------------------- 10. TMPDIR unusable
+class TestUnusableTmpdir(EngineCase):
+    def test_missing_or_file_tmpdir_falls_back(self):
+        for tmpdir in (str(self.d / "nonexistent"), str(self.d / "p.fa")):
+            for args, stdin in ((["p.fa", "n.fa"], subprocess.DEVNULL),            # no temp file needed
+                                (["-", "n.fa"], PEP.encode()),                      # stdin is spooled
+                                (["p.fa", "n.fa", "-output", "clustal"], subprocess.DEVNULL)):  # staged rows
+                with self.subTest(tmpdir=tmpdir, args=args):
+                    rc, out, err = self.both(args, stdin=stdin, env=self.env(TMPDIR=tmpdir, TEMP=tmpdir, TMP=tmpdir))
+                    self.assertEqual((rc, err), (0, b""), err)
+                    self.assertTrue(out.startswith(b">s1\n") or out.startswith(b"CLUSTAL"), out)
+        self.assertEqual(self.leftovers(), [])
+
+
 if __name__ == "__main__":
     unittest.main()

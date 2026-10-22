@@ -1057,7 +1057,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                  (o.resumable ? "the output is not a regular file" : "an input is not a regular file") +
                  "); starting a normal run");
         // the output's temp file goes next to the real target when it is renamed onto it (same file system)
-        fs::path d = (!o.out.empty() && !direct) ? fs::path(target.real).parent_path() : fs::temp_directory_path();
+        fs::path d = (!o.out.empty() && !direct) ? fs::path(target.real).parent_path() : fs::path(temp_dir());
         out_tmp = (d / (".coal_" + unique_suffix() + ".tmp")).string();
         if (staged) stage_path = (d / (".coal_rows_" + unique_suffix() + ".tmp")).string();
         if (o.fmt == "codon") prot_path = (d / (".coal_prot_" + unique_suffix() + ".tmp")).string();

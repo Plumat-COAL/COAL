@@ -4,6 +4,7 @@
 #include <cerrno>
 #include <csignal>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -88,6 +89,39 @@ void unregister_temp(const std::string& path) {
         if (g_used[i].load() && path == g_paths[i]) g_used[i].store(false);
 }
 
+// The folder for temporary files, found as Python's tempfile.gettempdir() finds it: the first of TMPDIR, TEMP,
+// TMP, then the system's usual folders, then the current folder, in which a file can be created. Cached. So an
+// unusable TMPDIR (a missing folder, a file) falls back as the Python engine does instead of failing the run.
+std::string temp_dir() {
+    static std::string cached;
+    if (!cached.empty()) return cached;
+    std::vector<std::string> cands;
+    for (const char* v : {"TMPDIR", "TEMP", "TMP"}) {
+        const char* e = std::getenv(v);
+        if (e && *e) cands.push_back(e);
+    }
+#ifdef _WIN32
+    for (const char* d : {"C:\\TEMP", "C:\\TMP", "\\TEMP", "\\TMP"}) cands.push_back(d);
+#else
+    for (const char* d : {"/tmp", "/var/tmp", "/usr/tmp"}) cands.push_back(d);
+#endif
+    std::error_code ec;
+    cands.push_back(fs::current_path(ec).string());
+    for (const std::string& c : cands) {
+        if (c.empty() || !fs::is_directory(c, ec)) continue;
+        std::string probe = (fs::path(c) / (".coal_probe_" + unique_name())).string();
+        {
+            std::ofstream f(probe, std::ios::binary | std::ios::trunc);
+            if (!f) continue;
+        }
+        fs::remove(probe, ec);
+        cached = fs::absolute(c, ec).string();
+        if (cached.size() > 1 && (cached.back() == '/' || cached.back() == '\\')) cached.pop_back();
+        return cached;
+    }
+    throw CoalError("no usable temporary folder: set TMPDIR to a folder you can write to", "file_error");
+}
+
 std::string os_error(int err, const std::string& path) {
     return "[Errno " + std::to_string(err) + "] " + std::strerror(err) + ": " + py_repr(path);
 }
@@ -121,7 +155,7 @@ static std::string spool_stdin(std::vector<std::pair<std::string, std::string>>&
     if (::fcntl(0, F_GETFD) == -1) throw InputError(closed, "file_error");
     refuse_device(0, STDIN_NAME);
 #endif
-    std::string tmp = (fs::temp_directory_path() / (".coal_in_" + unique_name() + "_stdin")).string();
+    std::string tmp = (fs::path(temp_dir()) / (".coal_in_" + unique_name() + "_stdin")).string();
     register_temp(tmp);
     spooled.push_back({tmp, STDIN_NAME});
     std::ofstream dst(tmp, std::ios::binary | std::ios::trunc);
@@ -190,7 +224,7 @@ std::vector<std::string> spool_inputs(const std::vector<std::string>& args,
                   c == '_' || c == '-'))
                 c = '_';
         if (base.size() > 40) base = base.substr(base.size() - 40);
-        std::string tmp = (fs::temp_directory_path() / (".coal_in_" + unique_name() + "_" + base)).string();
+        std::string tmp = (fs::path(temp_dir()) / (".coal_in_" + unique_name() + "_" + base)).string();
         register_temp(tmp);
         spooled.push_back({tmp, a});
         std::ofstream dst(tmp, std::ios::binary | std::ios::trunc);
@@ -281,7 +315,7 @@ OutTarget resolve_output(const std::string& out) {
 // what to do, no -o names the temp folder.
 std::string output_error(const std::string& out, int err) {
     std::error_code ec;
-    std::string folder = out.empty() ? fs::temp_directory_path(ec).string()
+    std::string folder = out.empty() ? temp_dir()
                                      : fs::absolute(fs::path(out)).lexically_normal().parent_path().string();
     std::string why;
     if (err == ENOENT && !fs::is_directory(folder, ec)) why = "folder " + folder + " does not exist";

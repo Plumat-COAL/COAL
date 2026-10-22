@@ -20,6 +20,9 @@ void install_signal_handlers();
 void register_temp(const std::string& path);
 void unregister_temp(const std::string& path);
 
+// The folder for temporary files, searched as Python's tempfile.gettempdir() (TMPDIR, TEMP, TMP, /tmp, ..., cwd).
+std::string temp_dir();
+
 // "[Errno N] <text>: '<path>'" (Python's OSError message) for the current errno.
 std::string os_error(int err, const std::string& path);
 

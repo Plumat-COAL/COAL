@@ -79,6 +79,9 @@ killed, so a pipeline reading COAL's output never waits on an orphaned worker.
   hold at most 16 MB of rows in memory at a time (measured with 500,000 sequences of 150 codons, `-j 1`: peak memory
   122 MB for fasta, 139 MB for clustal, 145 MB for codon). `-j` gives the same output in every format.
 - CLUSTAL input is read into memory (FASTA input is streamed).
+- Temporary files go to `TMPDIR` (then `TEMP`, `TMP`, `/tmp`, `/var/tmp`, the current folder: the first that is a
+  writable folder, as Python's `tempfile` chooses it), in both engines; an unusable `TMPDIR` is skipped, not an
+  error.
 - Memory still holds the sequence IDs and their file positions, about 300 bytes per sequence (≈150 MB per
   500,000 sequences).
 
