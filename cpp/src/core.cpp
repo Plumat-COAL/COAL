@@ -9,6 +9,7 @@ namespace {
 
 enum Mode { NORMAL = 0, START = 1, ANCHOR_START = 2 };
 constexpr int ANCHOR = 10;
+constexpr int INDEX_AFTER = 8;  // anchors searched for (not at their expected position) before the window index is built
 constexpr int MIN_CHECKABLE = 10;
 constexpr int AMBIGUOUS_MAX_RESIDUES = 3;
 
@@ -422,18 +423,21 @@ Threaded thread_one(const std::string& seq_id, const std::string& row, const std
     int col = 1;
     bool found_any = false;
     long long expect = -1;  // where this anchor starts if the previous anchors' matches are the real ones
+    int searched = 0;       // anchors that were not at their expected position
     for (size_t k = 0; k < ranges.size(); ++k) {
         auto [a, b] = ranges[k];
         std::vector<Token> at = tokens(row, a, b, k == 0 ? ANCHOR_START : NORMAL, col, code);
         // Each anchor only needs to occur somewhere in the DNA. A chunk of ANCHOR ordinary residues (the usual one)
-        // is checked against the translated frames: at the expected position first, else looked up in the window
-        // index. Any other chunk (with a frameshift digit, an X, the first Met, or the longer merged last chunk) is
-        // checked at the expected position and otherwise searched for by find(). Scanning the DNA for every chunk
-        // would be quadratic in the gene length; the result (found or not) is the same as find()'s for each chunk.
+        // is checked against the translated frames: at the expected position first, else searched for (find(), a
+        // scan of the DNA) for the first INDEX_AFTER such chunks of this sequence (a gene with one wrong codon needs
+        // one search, cheaper than an index), then looked up in the window index (O(log L) after a one-off
+        // O(L log L) build: scanning the DNA for every chunk would be quadratic in the gene length). Any other chunk
+        // (with a frameshift digit, an X, the first Met, or the longer merged last chunk) is checked at the expected
+        // position and otherwise searched for. The result (found or not) is the same either way.
         long long hit;
         if (plain_anchor(at)) {
             if (expect >= 0 && target.plain_at(expect, at)) hit = expect;
-            else hit = target.find_plain(at);
+            else hit = ++searched > INDEX_AFTER ? target.find_plain(at) : find(target, at);
         } else if (expect >= 0 && matches_at(target, expect, at)) {
             hit = expect;
         } else {

@@ -37,6 +37,7 @@ _CODON = re.compile(r"...", re.S)
 _GAPCHAR = re.compile("-")
 _TIMES3 = (3).__mul__
 ANCHOR = 10
+INDEX_AFTER = 8  # anchors searched for (not at their expected position) before the window index is built
 PREFIX_TOKENS = 8
 RUN_WINDOW, RUN_MIN, RUN_MAX = 24, 4, 8
 _NON_ACGT = re.compile("[^ACGT]")
@@ -365,6 +366,16 @@ class _Target:
     def frames(self) -> list[str]:
         if self._frames is None:
             if self.plain:
+                np = _NP_STATE.get("np")  # once numpy is in use (see _quick_offset0), ~5x faster
+                if np is not None:
+                    b = _NP_STATE["base"][np.frombuffer(self.dna.encode("ascii"), dtype=np.uint8)]
+                    tab, out = _np_table(self.table), []
+                    for f in range(3):
+                        n = (len(b) - f) // 3
+                        c = b[f:f + 3 * n].reshape(-1, 3).astype(np.intp)
+                        out.append(tab[c[:, 0] * 16 + c[:, 1] * 4 + c[:, 2]].tobytes().decode("ascii"))
+                    self._frames = out
+                    return out
                 get = fast_code(self.table).__getitem__
                 self._frames = ["".join(map(get, _CODON.findall(self.dna, f))) for f in range(3)]
             else:
@@ -408,13 +419,13 @@ def _plain_run(toks):
                 cur_off = off
             cur.append(t[1])
             if best is None or len(cur) > len(best[1]):
-                best = (cur_off, "".join(cur))
+                best = (cur_off, cur)
             if len(cur) >= RUN_MAX:
                 break
         else:
             cur = []
         off += 3 if t[0] == "r" else t[1]
-    return best if best and len(best[1]) >= RUN_MIN else None
+    return (best[0], "".join(best[1])) if best and len(best[1]) >= RUN_MIN else None
 
 
 @lru_cache(maxsize=4096)
@@ -422,8 +433,11 @@ def _prefix_regex(table: int, key: tuple):
     return re.compile("(?=" + "".join(_token_regex(table, t) for t in key) + ")")
 
 
-def _find(target: _Target, toks) -> int:
-    """Leftmost start where all tokens match consecutively, or -1."""
+def _find(target: _Target, toks, aas: str | None = None, verify=None) -> int:
+    """Leftmost start where all tokens match consecutively, or -1. `aas`: the tokens' residues when every token is a
+    residue and none is X (the first may have its first-Met mode): a candidate is then verified against the
+    translated frames in one string comparison instead of codon by codon (the same test, see _Target.frames).
+    `verify(start)`: a caller's equivalent of _matches_at for these tokens (the anchor fallback's pattern)."""
     dna, table = target.dna, target.table
     total = _length(toks)
     last = len(dna) - total
@@ -435,7 +449,8 @@ def _find(target: _Target, toks) -> int:
         # the start: find the run in the translated frames, then verify.
         off, word = run
         cands = []
-        for f, tr in enumerate(target.frames()):
+        frames = target.frames()
+        for f, tr in enumerate(frames):
             k = tr.find(word)
             while k >= 0:
                 st = f + 3 * k - off
@@ -443,7 +458,15 @@ def _find(target: _Target, toks) -> int:
                     cands.append(st)
                 k = tr.find(word, k + 1)
         for st in sorted(cands):
-            if _matches_at(table, dna, st, toks):
+            if verify is not None:
+                ok = verify(st)
+            elif aas is None:
+                ok = _matches_at(table, dna, st, toks)
+            elif toks[0][3] == NORMAL:
+                ok = frames[st % 3].startswith(aas, st // 3)
+            else:  # the first Met with its start-codon mode: codon by codon for it, the frames for the rest
+                ok = _matches_at(table, dna, st, toks[:1]) and frames[st % 3].startswith(aas[1:], st // 3 + 1)
+            if ok:
                 return st
         return -1
     key = tuple((t[0], t[1], t[3] if t[0] == "r" else None) for t in toks[:PREFIX_TOKENS])
@@ -452,7 +475,7 @@ def _find(target: _Target, toks) -> int:
         st = m.start()
         if st > last:
             break
-        if _matches_at(table, dna, st, toks):
+        if verify(st) if verify is not None else _matches_at(table, dna, st, toks):
             return st
     return -1
 
@@ -475,18 +498,26 @@ def _anchors(row: str) -> list[str]:
     return pre
 
 
-def _anchor_tokens(toks, anchors: list[str]):
+def _anchor_tokens(toks, anchors: list[str], aas: str | None):
     """The tokens of each anchor (_tokens(anchor, ANCHOR_START if first else NORMAL, its first column)), taken from
     the row's tokens: every non-gap character is one token, and the only mode that differs from the row's is the
-    first Met's (START in the row; ANCHOR_START in the first anchor, NORMAL in a later one)."""
+    first Met's (START in the row; ANCHOR_START in the first anchor, NORMAL in a later one). With each, its word for
+    _Target.find_plain (_plain_word), or None. `aas`: the residues when every token is an ordinary residue (no
+    frameshift digit, no X), so that the words are slices of it."""
     out, i = [], 0
     for k, a in enumerate(anchors):
         j = i + len(a) - a.count(GAP)
         at = toks[i:j]  # a new list
+        start = False
         for q, t in enumerate(at):
             if t[0] == "r" and t[3] != NORMAL:
                 at[q] = (t[0], t[1], t[2], ANCHOR_START if k == 0 else NORMAL)
-        out.append(at)
+                start = k == 0
+        if aas is not None:
+            word = aas[i:j] if j - i == ANCHOR and not start else None
+        else:
+            word = _plain_word(at)
+        out.append((at, word))
         i = j
     return out
 
@@ -616,7 +647,11 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int, strict: bool = F
         return res
     target = _Target(table, dna)
     toks = _tokens(row, START)
-    s = _find(target, toks)
+    # the residues as tokens see them, when every token is an ordinary residue (no frameshift digit, no X)
+    aas = residues.translate(_AS_X_TABLE) if not _DIGIT.search(residues) else None
+    if aas is not None and "X" in aas:
+        aas = None
+    s = _find(target, toks, aas)
     if s >= 0:
         res.dna = raw_dna[s:s + _length(toks)]
         _note_ambiguous(res, table, dna, row, toks)
@@ -630,32 +665,48 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int, strict: bool = F
     pattern = []
     found_any = False
     expect = -1  # where this anchor starts if the previous anchors' matches are the real ones
-    for at in _anchor_tokens(toks, anchors):
+    searched = 0  # anchors that were not at their expected position
+    pieces = []  # (nt offset, word or tokens) of the found anchors: the pattern's test (aas is not None)
+    off = 0
+    for at, word in _anchor_tokens(toks, anchors, aas):
         # Each anchor only needs to occur somewhere in the DNA. A chunk of ANCHOR ordinary residues (the usual one)
-        # is checked against the translated frames: at the expected position first, else looked up in the index of
-        # translated windows (O(1) after a one-off O(len(dna)) build). Any other chunk (with a frameshift digit, an
-        # X, the first Met, or the longer merged last chunk) is checked at the expected position and otherwise
-        # searched for by _find. Scanning the DNA for every chunk would be quadratic in the gene length; the result
-        # (found or not) is the same as _find's for each chunk.
-        word = _plain_word(at)
+        # is checked against the translated frames: at the expected position first, else searched for (_find, a
+        # scan of the DNA) for the first INDEX_AFTER such chunks of this sequence (a gene with one wrong codon needs
+        # one search, cheaper than an index), then looked up in the index of translated windows (O(1) after a
+        # one-off O(len(dna)) build: scanning the DNA for every chunk would be quadratic in the gene length).
+        # Any other chunk (with a frameshift digit, an X, the first Met, or the longer merged last chunk) is checked
+        # at the expected position and otherwise searched for. The result (found or not) is the same either way.
         if word is not None:
             if expect >= 0 and target.frames()[expect % 3].startswith(word, expect // 3):
                 hit = expect
             else:
-                hit = target.find_plain(word)
+                searched += 1
+                hit = target.find_plain(word) if searched > INDEX_AFTER else _find(target, at)
         elif expect >= 0 and _matches_at(table, dna, expect, at):
             hit = expect
         else:
             hit = _find(target, at)
-        n = _length(at)
+        n = 3 * len(at) if aas is not None else _length(at)
         if hit < 0:
             at = [("w", 3 if t[0] == "r" else t[1], t[2]) for t in at]
             expect = expect + n if expect >= 0 else -1
         else:
             found_any = True
             expect = hit + n
+            pieces.append((off, word if word is not None else at))
         pattern += at
-    s = _find(target, [("n", t[1], t[2]) if t[0] == "w" else t for t in pattern])
+        off += n
+    pattern = [("n", t[1], t[2]) if t[0] == "w" else t for t in pattern]
+    verify = None
+    if aas is not None:
+        # The pattern matches at st when each found anchor matches at its offset (the wildcards match anything):
+        # a word in one string comparison with the translated frame (_Target.frames), the others codon by codon
+        frames = target.frames()
+
+        def verify(st):
+            return all(frames[(st + o) % 3].startswith(w, (st + o) // 3) if isinstance(w, str)
+                       else _matches_at(table, dna, st + o, w) for o, w in pieces)
+    s = _find(target, pattern, verify=verify)
     if s < 0:
         raise CoalError(inconsistent_message(seq_id, "no match found", row, raw_dna), code="inconsistent",
                         seq_id=seq_id)
@@ -671,6 +722,8 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int, strict: bool = F
         # with the residues (the first Met and X apart) instead of testing every codon one by one.
         nres = len(toks)
         nd = dna[s:s + total]
+        if aas is None:
+            aas = residues.translate(_AS_X_TABLE)
         if target.plain or _NON_ACGT.search(nd) is None:
             tr = "".join(map(fast_code(table).__getitem__, _CODON.findall(nd)))
             amb = frozenset()
@@ -679,7 +732,6 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int, strict: bool = F
             tr = "".join([get(c, "?") for c in _CODON.findall(nd)])
             amb = frozenset(m.start() // 3 for m in _NON_ACGT.finditer(nd))  # codons with an ambiguous base
         nchk = nres - len(amb)
-        aas = residues.translate(_AS_X_TABLE)
         bad = [i for i, (x, y) in enumerate(zip(tr, aas)) if x != y and y != "X"]
         if aas[0] == "M":  # the first Met: start codons too
             ok0 = nd[:3] in accepted(table, "M", ANCHOR_START)
