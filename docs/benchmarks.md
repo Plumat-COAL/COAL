@@ -1,9 +1,31 @@
 # Benchmark results
 
-A larger benchmark (Windows, commit `47f57f1`, up to 1,000,000 sequences, real Ensembl Compara trees, all four
-tools: PAL2NAL v14, PAL2NAL v16, the COAL Python and C++ engines) is on the `bench/windows-47f57f1` branch and will
-replace the numbers below once merged. The numbers below are from earlier versions of the Python engine (the
-commit is named in each section).
+## COAL 47f57f1 vs PAL2NAL v14 (Windows, up to 1 million sequences)
+
+Speed-up of COAL over PAL2NAL v14, from warm medians (5 timed runs after a warm-up; 3 for the 1M case):
+
+| Workload | PAL2NAL v14 | coal-cpp, 1 thread | Speed-up | coal-py, 1 process | Speed-up |
+|---|---:|---:|---:|---:|---:|
+| 1,000,000 sequences × 400 codons | 3,714 s (62 min), 18.6 GB | 12.5 s, 172 MB | **297×** | 50.3 s, 1.2 GB | 74× |
+| 100,000 sequences × 400 codons | 239 s | 1.07 s | **223×** | 5.04 s | 47× |
+| 1,000 sequences × 10,000 codons | 280 s | 0.251 s | **1,115×** | 0.958 s | 292× |
+| 1,000 sequences × 400 codons | 2.31 s | 0.031 s | 74× | 0.185 s | 12.5× |
+| 100 sequences × 35,000 codons | fails¹ | 0.125 s | | 0.604 s | |
+
+- Every COAL output matched the simulated truth or PAL2NAL v14, here and on 2,595 real Ensembl Compara gene trees
+  (where PAL2NAL v14 failed on 22).
+- The PAL2NAL v14 run at 1M is a single run with no warm-up (62 minutes). With all threads (default `-j`), coal-cpp
+  is 347× faster there; extra threads help it little (about 1.2× from 2 threads on).
+- On many small files, one process per file, the Python engine was slower than PAL2NAL v14 (184 against 125 ms per
+  file, Python start-up); coal-cpp took 18 ms per file.
+- ¹ PAL2NAL v14 builds one regex per sequence and Perl allows at most 65,535 capture groups in one, so it fails on
+  proteins longer than about 22,000–24,000 residues (reproduced on three Perl builds).
+
+Machine: Intel i5-13600KF (14 cores / 20 threads), 32 GB, Windows 11. Memory is peak committed memory. Full results,
+including PAL2NAL v16 and the method: `benchmarks/results/windows_47f57f1/SUMMARY.md` on the `bench/windows-47f57f1`
+branch.
+
+The sections below are from earlier versions of the Python engine (the commit is named in each section).
 
 ## COAL vs PAL2NAL v14 (v0.3)
 
