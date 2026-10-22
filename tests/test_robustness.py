@@ -69,8 +69,11 @@ class EngineCase(unittest.TestCase):
         if isinstance(stdin, (bytes, str)):
             kw["input"] = stdin
             stdin = None
-        return subprocess.run([*cmd, *args], cwd=self.d, env=kw.pop("env", None) or self.env(), stdin=stdin,
-                              capture_output=True, timeout=timeout, **kw)
+        r = subprocess.run([*cmd, *args], cwd=self.d, env=kw.pop("env", None) or self.env(), stdin=stdin,
+                           capture_output=True, timeout=timeout, **kw)
+        if os.name == "nt" and isinstance(r.stderr, bytes):  # Python's text-mode stderr writes \r\n on Windows
+            r.stderr = r.stderr.replace(b"\r\n", b"\n")
+        return r
 
     def both(self, args, stdin=subprocess.DEVNULL, cpp=True, **kw):
         """Run both engines; assert they agree on (rc, stdout, stderr); return that triple (bytes)."""
