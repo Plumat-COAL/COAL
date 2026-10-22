@@ -8,9 +8,9 @@
 
 | Where | What | Run (from the repo root unless noted) |
 |---|---|---|
-| `tests/` | the engine (`coal`, the `pal2nal` drop-in, `coal-cpp` with `COAL_IMPL=cpp`): stored PAL2NAL v14 outputs, options, decisions, large runs, real data | `python -m unittest discover -s tests` |
-| `tests_app/` | the app (`coal_app`): GUI logic, MCP tools and server, reports, docs numbers, website, packaging, launchers; Gradio and mcp tests skip without that extra | `PYTHONPATH=src python -m unittest discover -s tests_app` |
-| `desktop/` | the Windows wrapper (`test_wrapper.py`) and the local-app smoke test (`test_smoke.py`; the real-Gradio part runs in the Windows build) | in `desktop/`: `python -m unittest test_wrapper test_smoke` |
+| `tests/` | the engine (`coal`, the `pal2nal` drop-in, `coal-cpp` with `COAL_IMPL=cpp`): stored PAL2NAL v14 outputs, options, decisions, large runs, real data; and the repository checks: `test_docs_*.py` (docs numbers, website and release workflows, skill, the explainer page in Chromium), `test_repo_ci.py` (CI workflow), `test_examples.py` | `python -m unittest discover -s tests` |
+| `apps/coal-app/tests/` | the app (`coal_app`, package `coal-align-app`): GUI form and layout, viewer, reports, MCP tools and server, settings, hosted Space, packaging, launchers; Gradio and mcp tests skip without that extra; shared helpers (the Gradio stand-in) in `helpers.py` | `python -m unittest discover -s apps/coal-app/tests` |
+| `apps/coal-app/desktop/` | the Windows wrapper (`test_wrapper.py`) and the local-app smoke test (`test_smoke.py`; the real-Gradio part runs in the Windows build) | in `apps/coal-app/desktop/`: `python -m unittest test_wrapper test_smoke` |
 | `tests/fuzz_vs_pal2nal.py` | random comparison with the real PAL2NAL v14 (not collected by `discover`) | see below |
 
 ## Test numbers
@@ -154,7 +154,7 @@ Other test files: `test_pipeline.py` (results independent of `-j` and batch size
 (regression tests for the engine reviews) and
 `test_decisions.py` (`--strict`, `-q`, closed pipe, output formats, `-blockonly`, `-j` in every format,
 the fetch script). The counts above are
-also checked against PITCH.md, QA.md, SKILL.md and README.md by `tests_app/test_docs_numbers.py`.
+also checked against PITCH.md, QA.md, SKILL.md and README.md by `tests/test_docs_numbers.py`.
 
 ## Random differential testing against the real PAL2NAL
 

@@ -13,29 +13,19 @@ dependencies = []
 
 [project.optional-dependencies]
 fast = ["numpy"]   # optional: speeds up the codon check on large inputs (BSD licence)
-# Web GUI + MCP server for AI agents (python -m coal_app / coal-gui). Pinned exactly.
-# Verified by CI on Linux: the gui job installs
-# gradio[mcp]==5.49.1 and passes pip check (and the mcp job installs mcp==2.2.0). Not yet checked on Windows/macOS.
-gui = ["gradio[mcp]==5.49.1"]
-# Stand-alone stdio MCP server (python -m coal_app --mcp), no Gradio needed.
-# Install `gui` and `mcp` in SEPARATE environments: gradio[mcp] 5.x
-# probably needs mcp 1.x while this pins 2.2.0 (read CI's info job for the answer). CI installs each extra in its own job
-# and the "Info: gui + mcp extras in one environment" job reports whether they resolve together.
-mcp = ["mcp==2.2.0"]
+# The web GUI, the MCP server and the Windows app are a separate distribution, coal-align-app (apps/coal-app/),
+# so pipelines that install coal-align get the engine only: no dependencies and no app code.
 
 [project.scripts]
 coal = "coal.cli:main"
-coal-gui = "coal_app.__main__:main"
 pal2nal = "coal_compat.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
-[tool.setuptools.package-data]
-coal_app = ["*.json"]
-
-# Examples are installed under
-# <prefix>/share/coal/examples, where coal_app.core looks after COAL_EXAMPLES_DIR and a repo checkout.
+# Example inputs (also used by the engine tests and shown in the docs as `coal examples/...`), installed under
+# <prefix>/share/coal/examples. The app (coal-align-app, which depends on this package) looks there after
+# COAL_EXAMPLES_DIR and a repo checkout.
 [tool.setuptools.data-files]
 "share/coal/examples/clean" = ["examples/clean/README.md", "examples/clean/dna.fasta", "examples/clean/protein.aln.fasta"]
 "share/coal/examples/mito" = ["examples/mito/README.md", "examples/mito/dna.fasta", "examples/mito/protein.aln.fasta"]

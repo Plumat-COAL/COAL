@@ -9,7 +9,8 @@ permissions:
 
 jobs:
   python:
-    # Core install only (no extras): the GUI and MCP tests skip here; the gui / mcp jobs below run them.
+    # The engine on its own first (no app, no extras: what pipelines install), then the app without extras on top: the
+    # GUI and MCP tests skip here; the gui / mcp jobs below run them.
     name: Python ${{ matrix.python }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
@@ -26,27 +27,32 @@ jobs:
           cache: pip  # keyed on the files that pin dependencies
           cache-dependency-path: |
             pyproject.toml
-            desktop/requirements.txt
-      - name: Install COAL
+            apps/coal-app/pyproject.toml
+            apps/coal-app/desktop/requirements.txt
+      - name: Install the engine (coal-align only)
         run: python -m pip install -e .
+      - name: The engine installs no app
+        run: python -c "import importlib.util, sys; sys.exit(importlib.util.find_spec('coal_app') is not None)"
       - name: Engine tests
         run: python .github/ci_unittest.py discover -s tests
+      - name: Install the app (coal-align-app, no extras)
+        run: python -m pip install -e apps/coal-app
       - name: App tests
         env:
           GRADIO_ANALYTICS_ENABLED: "False"
-        run: python .github/ci_unittest.py discover -s tests_app
+        run: python .github/ci_unittest.py discover -s apps/coal-app/tests
       # Runs even after a failed earlier step (the implicit success() would skip it whenever App tests fail).
       # The job still fails if any test step failed.
       - name: Desktop wrapper tests
         if: ${{ !cancelled() && matrix.os != 'macos-latest' }}
-        working-directory: desktop
+        working-directory: apps/coal-app/desktop
         env:
           GRADIO_ANALYTICS_ENABLED: "False"
-        run: python ../.github/ci_unittest.py test_wrapper test_smoke  # failures also appear as readable annotations
+        run: python ../../../.github/ci_unittest.py test_wrapper test_smoke  # failures also appear as readable annotations
 
   # One job per extra, each in its own environment, with COAL_REQUIRE_EXTRAS making the tests fail instead of skip.
   gui:
-    name: GUI extra (.[gui], real Gradio) on ${{ matrix.os }}
+    name: GUI extra (apps/coal-app[gui], real Gradio) on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     strategy:
@@ -61,16 +67,23 @@ jobs:
           cache: pip
           cache-dependency-path: |
             pyproject.toml
-            desktop/requirements.txt
-      - name: Install COAL with the gui extra
-        run: python -m pip install -e ".[gui]"
+            apps/coal-app/pyproject.toml
+            apps/coal-app/desktop/requirements.txt
+      - name: Install the engine and the app with the gui extra
+        run: python -m pip install -e . -e "apps/coal-app[gui]"
       - name: Dependency check
         run: python -m pip check
       - name: App tests (GUI tests required)
         env:
           GRADIO_ANALYTICS_ENABLED: "False"
           COAL_REQUIRE_EXTRAS: gui
-        run: python .github/ci_unittest.py discover -s tests_app
+        run: python .github/ci_unittest.py discover -s apps/coal-app/tests
+      # The repository checks in tests/ (website, release workflows) read the workflows with PyYAML, which comes with
+      # Gradio: here they must run, not skip.
+      - name: Docs and site tests (PyYAML required)
+        env:
+          COAL_REQUIRE_EXTRAS: gui
+        run: python .github/ci_unittest.py discover -s tests -p "test_docs_*.py"
 
   pal2nal-fuzz:
     # Differential fuzz against the real PAL2NAL v14 on every push: fetched by
@@ -88,7 +101,8 @@ jobs:
           cache: pip
           cache-dependency-path: |
             pyproject.toml
-            desktop/requirements.txt
+            apps/coal-app/pyproject.toml
+            apps/coal-app/desktop/requirements.txt
       - name: Install COAL
         run: python -m pip install -e .
       - name: Fetch PAL2NAL v14 (checksum-verified, not committed)
@@ -109,7 +123,7 @@ jobs:
           fi
 
   explainer:
-    # Runs tests_app/test_explainer.py (site/explainer.html in Chromium).
+    # Runs tests/test_docs_explainer.py (site/explainer.html in Chromium).
     name: "Explainer page in Chromium (Playwright)"
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -123,28 +137,29 @@ jobs:
           cache: pip
           cache-dependency-path: |
             pyproject.toml
-            desktop/requirements.txt
+            apps/coal-app/pyproject.toml
+            apps/coal-app/desktop/requirements.txt
       # The Chromium download is cached (key: the pinned Playwright version)
       - name: Cache Playwright browsers
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ${{ github.workspace }}/pw-browsers
           key: playwright-1.48.0-chromium-${{ runner.os }}
-      - name: Install COAL and Playwright with Chromium
+      - name: Install the engine and Playwright with Chromium
         run: |
           python -m pip install -e . playwright==1.48.0
           python -m playwright install --with-deps chromium
       - name: Explainer tests (must not skip)
         shell: bash
         run: |
-          python -m unittest discover -s tests_app -p "test_explainer.py" -v 2>&1 | tee explainer.txt
+          python -m unittest discover -s tests -p "test_docs_explainer.py" -v 2>&1 | tee explainer.txt
           test "${PIPESTATUS[0]}" -eq 0
           if grep -qiE "skipped" explainer.txt; then
             echo "::error::explainer tests were skipped (Chromium not found)"; exit 1
           fi
 
   mcp:
-    name: MCP extra (.[mcp], stdio server)
+    name: MCP extra (apps/coal-app[mcp], stdio server)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -155,18 +170,19 @@ jobs:
           cache: pip
           cache-dependency-path: |
             pyproject.toml
-            desktop/requirements.txt
-      - name: Install COAL with the mcp extra
-        run: python -m pip install -e ".[mcp]"
+            apps/coal-app/pyproject.toml
+            apps/coal-app/desktop/requirements.txt
+      - name: Install the engine and the app with the mcp extra
+        run: python -m pip install -e . -e "apps/coal-app[mcp]"
       - name: Dependency check
         run: python -m pip check
       - name: App tests (MCP tests required)
         env:
           COAL_REQUIRE_EXTRAS: mcp
-        run: python .github/ci_unittest.py discover -s tests_app
+        run: python .github/ci_unittest.py discover -s apps/coal-app/tests
 
   extras-together:
-    # Informational: can .[gui] and .[mcp] share one environment? (gradio[mcp] 5.x may need mcp 1.x while the
+    # Informational: can the app's [gui] and [mcp] extras share one environment? (gradio[mcp] 5.x may need mcp 1.x while the
     # mcp extra pins 2.2.0.) Never fails the build; read the job summary.
     name: "Info: gui + mcp extras in one environment"
     runs-on: ubuntu-latest
@@ -180,11 +196,12 @@ jobs:
           cache: pip
           cache-dependency-path: |
             pyproject.toml
-            desktop/requirements.txt
+            apps/coal-app/pyproject.toml
+            apps/coal-app/desktop/requirements.txt
       - name: Resolve both extras together
         shell: bash
         run: |
-          if python -m pip install --dry-run -e ".[gui,mcp]" > resolve.txt 2>&1; then
+          if python -m pip install --dry-run -e . -e "apps/coal-app[gui,mcp]" > resolve.txt 2>&1; then
             echo "gui + mcp extras resolve together." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "gui + mcp extras CONFLICT: install them in separate environments." >> "$GITHUB_STEP_SUMMARY"
@@ -212,7 +229,8 @@ jobs:
           cache: pip
           cache-dependency-path: |
             pyproject.toml
-            desktop/requirements.txt
+            apps/coal-app/pyproject.toml
+            apps/coal-app/desktop/requirements.txt
       - name: Build
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCOAL_WARNINGS_AS_ERRORS=ON
@@ -221,7 +239,7 @@ jobs:
         shell: bash
         run: |
           # Not `ls a b | head | grep -q .`: that always fails under bash -eo pipefail (ls exits 2 when one of the
-          # two paths is missing). tests_app/test_ci_steps.py runs this script.
+          # two paths is missing). tests/test_repo_ci.py runs this script.
           [ -x build/coal-cpp ] || [ -f build/Release/coal-cpp.exe ] \
             || { echo "::error::no build/coal-cpp binary was built"; exit 1; }
           test -f tests/test_cpp_vs_python.py \
@@ -231,7 +249,7 @@ jobs:
         run: |
           if [ -f build/Release/coal-cpp.exe ]; then b="$PWD/build/Release/coal-cpp.exe"; else b="$PWD/build/coal-cpp"; fi
           echo "COAL_CPP_BIN=$b" >> "$GITHUB_ENV"
-      - name: Install COAL
+      - name: Install the engine
         run: python -m pip install -e .
       - name: C++ tests (must not skip)
         shell: bash
@@ -245,7 +263,7 @@ jobs:
             echo "::error::C++ tests were skipped, so the C++ engine was not fully exercised"; exit 1
           fi
 
-  # Builds the packaged Windows app (PyInstaller + Inno Setup, desktop\build.ps1) on every push to main, so a broken pin is caught before a release (release.yml builds it only after a tag), and
+  # Builds the packaged Windows app (PyInstaller + Inno Setup, apps\coal-app\desktop\build.ps1) on every push to main, so a broken pin is caught before a release (release.yml builds it only after a tag), and
   # keeps the installer as a workflow artifact for testing.
   windows-app:
     name: Windows app build (installer + portable)
@@ -265,7 +283,8 @@ jobs:
           cache: pip
           cache-dependency-path: |
             pyproject.toml
-            desktop/requirements.txt
+            apps/coal-app/pyproject.toml
+            apps/coal-app/desktop/requirements.txt
       - name: Install Inno Setup (pinned, as release.yml)
         run: |
           choco install innosetup --version=6.7.1 --allow-downgrade -y --no-progress
@@ -278,21 +297,21 @@ jobs:
           cmake --build build-app --config Release -j 2
           if (-not (Test-Path build-app\Release\coal-cpp.exe)) { throw "no build-app\Release\coal-cpp.exe" }
       - name: Create the build venv
-        run: python -m venv desktop\.venv
-      - name: Build (desktop\build.ps1)
+        run: python -m venv apps\coal-app\desktop\.venv
+      - name: Build (apps\coal-app\desktop\build.ps1)
         timeout-minutes: 75
         env:
           GRADIO_ANALYTICS_ENABLED: "False"
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File desktop\build.ps1
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File apps\coal-app\desktop\build.ps1
       - name: Installer was made
         run: |
-          $s = Get-ChildItem desktop\dist\COAL-Setup-*.exe
-          if (-not $s) { throw "desktop\build.ps1 made no installer" }
-          if (-not (Test-Path desktop\dist\COAL\_internal\coal-cpp.exe)) { throw "the C++ engine is not in the app" }
+          $s = Get-ChildItem apps\coal-app\desktop\dist\COAL-Setup-*.exe
+          if (-not $s) { throw "apps\coal-app\desktop\build.ps1 made no installer" }
+          if (-not (Test-Path apps\coal-app\desktop\dist\COAL\_internal\coal-cpp.exe)) { throw "the C++ engine is not in the app" }
           $s | Format-Table Name, Length
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: coal-windows-ci
-          path: desktop/dist/COAL-Setup-*.exe
+          path: apps/coal-app/desktop/dist/COAL-Setup-*.exe
           if-no-files-found: error
           retention-days: 7

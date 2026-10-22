@@ -13,6 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src"
+APP_SRC = ROOT / "apps" / "coal-app" / "src"  # coal_app (the app), for the tests that compare with it
 TIMEOUT = 60
 
 
@@ -67,6 +68,7 @@ class TestFZ1ClustalHashAndBlankLines(Tmp):
     def test_app_reads_the_same_ids(self):
         self.write("p.aln", "\nCLUSTAL W\n\na    MKV\nb    MR-\n#    ###\n")
         sys.path.insert(0, str(SRC))
+        sys.path.insert(0, str(APP_SRC))
         from coal_app.seqformat import read_ids
         self.assertEqual(read_ids(str(self.d / "p.aln")), ["a", "b"])
 
@@ -168,6 +170,7 @@ class TestFZ6AmbiguousShortPlacement(Tmp):
 
     def test_app_counts_it_as_a_warning(self):
         sys.path.insert(0, str(SRC))
+        sys.path.insert(0, str(APP_SRC))
         from coal_app.core import _parse_warning
         sid, msg = _parse_warning("coal: warning: s: placement is ambiguous: 2 possible positions in the DNA for "
                                   "this 2-residue protein; used the leftmost (as PAL2NAL)")

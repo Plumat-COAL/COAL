@@ -1,0 +1,123 @@
+"""Settings: the JSON file (atomic, damaged files, hosted Space writes none) and the Settings tab."""
+import json
+import os
+import sys
+import unittest
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # helpers.py
+
+from coal_app import core, settings, viewer  # noqa: E402
+from helpers import SettingsDirCase, UiCase, _Comp  # noqa: E402
+
+
+class TestSettingsFile(SettingsDirCase):
+    def test_defaults_without_a_file(self):
+        data, note = settings.load()
+        self.assertEqual(data, settings.DEFAULTS)
+        self.assertEqual(note, "")
+
+    def test_save_is_atomic_and_round_trips(self):
+        data, err = settings.save({"codontable": 2, "output_format": "paml", "nogap": True, "preview": "small"})
+        self.assertEqual(err, "")
+        self.assertTrue(os.path.isfile(settings.settings_path()))
+        self.assertEqual(sorted(os.listdir(self.dir)), ["settings.json"])  # no temporary file left behind
+        back, note = settings.load()
+        self.assertEqual(back, data)
+        self.assertEqual((back["codontable"], back["output_format"], back["nogap"], back["preview"]),
+                         (2, "paml", True, "small"))
+
+    def test_damaged_or_odd_files_give_defaults(self):
+        with open(settings.settings_path(), "w", encoding="utf-8") as fh:
+            fh.write('{"codontable": 2, "nog')
+        data, note = settings.load()
+        self.assertEqual(data, settings.DEFAULTS)
+        self.assertIn("damaged", note)
+        with open(settings.settings_path(), "w", encoding="utf-8") as fh:
+            json.dump({"codontable": 7, "output_format": "exe", "nogap": "yes", "preview": "huge", "x": 1,
+                       "strict": True}, fh)
+        data, note = settings.load()
+        self.assertEqual(note, "")
+        self.assertEqual(data, dict(settings.DEFAULTS, strict=True))  # only the valid value kept
+        self.assertEqual(settings.clean([1, 2]), settings.DEFAULTS)
+
+    def test_format_the_engine_cannot_write_is_not_kept(self):
+        self.assertEqual(settings.clean({"output_format": "paml"}, formats=["fasta"])["output_format"], "fasta")
+
+    def test_hosted_space_writes_no_file(self):
+        os.environ["COAL_HOSTED"] = "1"
+        data, err = settings.save({"codontable": 2})
+        self.assertEqual((data["codontable"], err), (2, ""))
+        self.assertEqual(os.listdir(self.dir), [])
+        self.assertEqual(settings.load()[0], settings.DEFAULTS)
+
+    def test_reset(self):
+        settings.save({"codontable": 2})
+        data, _ = settings.reset()
+        self.assertEqual(data, settings.DEFAULTS)
+        self.assertEqual(settings.load()[0], settings.DEFAULTS)
+
+    def test_config_folder_per_platform(self):
+        os.environ.pop("COAL_SETTINGS_DIR")
+        d = settings.settings_dir()
+        if sys.platform == "win32":
+            self.assertTrue(d.endswith(os.path.join("", "COAL")))
+        elif sys.platform == "darwin":
+            self.assertIn("Application Support", d)
+        else:
+            self.assertTrue(d.endswith(os.path.join("", "coal")))
+
+    def test_preview_limits(self):
+        self.assertEqual(settings.preview_limits("large"), (viewer.MAX_SEQS, viewer.MAX_COLS, viewer.MAX_CELLS))
+        self.assertEqual(settings.preview_limits("nonsense"), settings.PREVIEW_SIZES["standard"])
+
+
+class TestSettingsTab(UiCase):
+    def test_settings_tab_wired(self):
+        self.ui.build()
+        events = [(c, ev, a, kw) for c, ev, a, kw in _Comp.REG]
+        inputs = [e for e in events if e[1] == "input"]
+        self.assertEqual(len(inputs), 6)  # genetic code, format, three options, preview size
+        outs = inputs[0][2][2]
+        self.assertEqual(len(outs), 6 + 5 + 2)  # settings, main form, status, browser store
+        loads = [e for e in events if e[1] == "load"]
+        self.assertTrue(any(len(a[2]) == 13 for _, _, a, _ in loads if len(a) > 2 and isinstance(a[2], list)))
+        clicks = [c._kw.get("value", c._args[0] if c._args else "") for c, ev, _, _ in events if ev == "click"]
+        self.assertIn("Reset to defaults", clicks)
+        self.assertIn("Show these columns", clicks)
+        self.assertEqual([ev for _, ev, _, _ in events].count("change"), 2)  # unchanged (path boxes)
+
+    def test_save_applies_to_the_form_and_persists(self):
+        out = self.ui.save_settings_ui(2, "fasta", True, False, False, "small")
+        self.assertEqual(list(out[:6]), [2, "fasta", True, False, False, "small"])
+        self.assertEqual(list(out[6:11]), [2, "fasta", True, False, False])
+        self.assertIn("Saved", out[11])
+        self.assertEqual(out[12]["codontable"], 2)
+        self.assertEqual(settings.load()[0]["preview"], "small")
+        again = self.ui.load_settings_ui(None)
+        self.assertEqual(again[0], 2)
+        reset = self.ui.reset_settings_ui()
+        self.assertEqual(reset[0], 1)
+        self.assertIn("defaults", reset[11])
+
+    def test_hosted_reads_the_browser_store(self):
+        os.environ["COAL_HOSTED"] = "1"
+        out = self.ui.load_settings_ui({"codontable": 11, "preview": "large"})
+        self.assertEqual((out[0], out[5], out[6]), (11, "large", 11))
+        self.assertIn("browser", self.ui._settings_where())
+        self.assertEqual(os.listdir(self.dir), [])
+
+    def test_run_uses_preview_size_and_offers_centring(self):
+        p, d = core.example_paths("one_broken_gene")
+        out = self.ui.run_ui(None, None, "fasta", 1, False, False, p, d, False, False, "small")
+        self.assertEqual(len(out), 15)  # including the results area (shown by every result)
+        ctx = out[12]
+        self.assertEqual(ctx["preview"], "small")
+        self.assertFalse(out[13]._kw.get("visible"))  # 20 genes, all columns drawn: no centring needed
+        view, dl, table = self.ui.centre_ui(ctx, 30)
+        self.assertIn("coalv", view._kw["value"])
+        self.assertIn("coalv-OG0001_sp14", table._kw["value"])
+        self.assertIn("Type a column number", self.ui.centre_ui(ctx, None)[0]._kw["value"])
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=69.3"]  # 69.3+: normalised sdist name (coal_align_app-<v>.tar.gz)
+build-backend = "setuptools.build_meta"
+
+# The COAL app: web GUI (Gradio), MCP server for AI agents and the alignment viewer. The engine is the separate
+# distribution coal-align (the repository root), which this one depends on at exactly the same version; the app runs
+# it as `python -m coal`. Built from this folder: python -m build apps/coal-app
+[project]
+name = "coal-align-app"
+version = "0.4.2"  # always the same as coal-align (scripts/release_version.py and tests/test_site.py check it)
+description = "COAL web GUI and MCP server (codon alignment, PAL2NAL alternative)"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+dependencies = ["coal-align==0.4.2"]
+
+[project.optional-dependencies]
+# Web GUI + MCP server for AI agents (python -m coal_app / coal-gui). Pinned exactly.
+# Verified by CI on Linux: the gui job installs
+# gradio[mcp]==5.49.1 and passes pip check (and the mcp job installs mcp==2.2.0). Not yet checked on Windows/macOS.
+gui = ["gradio[mcp]==5.49.1"]
+# Stand-alone stdio MCP server (python -m coal_app --mcp), no Gradio needed.
+# Install `gui` and `mcp` in SEPARATE environments: gradio[mcp] 5.x
+# probably needs mcp 1.x while this pins 2.2.0 (read CI's info job for the answer). CI installs each extra in its own job
+# and the "Info: gui + mcp extras in one environment" job reports whether they resolve together.
+mcp = ["mcp==2.2.0"]
+
+[project.scripts]
+coal-gui = "coal_app.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+coal_app = ["*.json"]

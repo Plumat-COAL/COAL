@@ -1,5 +1,6 @@
-# Release: on a pushed tag v* (or by hand), build the Python wheel + sdist and the Windows app (installer + portable
-# zip), check them, and publish a GitHub Release with every file, version-free copies and SHA256SUMS.txt.
+# Release: on a pushed tag v* (or by hand), build the Python wheels + sdists of both packages (the engine coal-align
+# from the repository root, the app coal-align-app from apps/coal-app) and the Windows app (installer + portable zip),
+# check them, and publish a GitHub Release with every file, version-free copies and SHA256SUMS.txt.
 # The website (site/) links to https://github.com/plumat-coal/COAL/releases/latest/download/<version-free name>,
 # so a new release updates the download buttons without editing the site. See site/README.md.
 name: Release
@@ -31,7 +32,7 @@ env:
 
 jobs:
   python:
-    name: Python wheel and sdist
+    name: Python wheels and sdists (engine and app)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
@@ -48,30 +49,49 @@ jobs:
       - name: Tag matches the version in the source
         id: v
         run: python scripts/release_version.py "$TAG" --github-output
-      - name: Build wheel and sdist
+      - name: Build wheels and sdists
         run: |
           python -m pip install build==1.2.2.post1
           python -m build --outdir dist .
+          python -m build --outdir dist apps/coal-app
           ls -l dist
-      - name: Check the wheel and the version-free sdist install and run
+      - name: Check the wheels and the version-free sdists install and run
         env:
           V: ${{ steps.v.outputs.version }}
         run: |
           mkdir -p release
           cp "dist/coal_align-${V}-py3-none-any.whl" "dist/coal_align-${V}.tar.gz" release/
-          # Version-free sdist copy for `pip install "coal-align[gui] @ .../releases/latest/download/coal_src.tar.gz"`.
-          # No hyphen in the name on purpose: pip caches wheels built from "name-version"-looking archive URLs, so
+          cp "dist/coal_align_app-${V}-py3-none-any.whl" "dist/coal_align_app-${V}.tar.gz" release/
+          # Version-free sdist copies, for
+          #   pip install "coal-align @ .../releases/latest/download/coal_src.tar.gz"                       (engine)
+          #   pip install "coal-align @ .../coal_src.tar.gz" "coal-align-app[gui] @ .../coal_app_src.tar.gz"  (app)
+          # No hyphen in the names on purpose: pip caches wheels built from "name-version"-looking archive URLs, so
           # "coal_align-latest.tar.gz" would keep installing the old build after a new release (tested with pip 24.0).
           cp "dist/coal_align-${V}.tar.gz" release/coal_src.tar.gz
+          cp "dist/coal_align_app-${V}.tar.gz" release/coal_app_src.tar.gz
+          # the engine wheel alone: `coal` works, and no app comes with it
           python -m venv "$RUNNER_TEMP/whl"
           "$RUNNER_TEMP/whl/bin/python" -m pip install "release/coal_align-${V}-py3-none-any.whl"
           test "$("$RUNNER_TEMP/whl/bin/coal" --version)" = "coal ${V}"
           "$RUNNER_TEMP/whl/bin/coal" examples/clean/protein.aln.fasta examples/clean/dna.fasta -o "$RUNNER_TEMP/whl.fa"
           PYTHONPATH=src python -m coal examples/clean/protein.aln.fasta examples/clean/dna.fasta -o "$RUNNER_TEMP/ref.fa"
           cmp "$RUNNER_TEMP/whl.fa" "$RUNNER_TEMP/ref.fa"
+          if "$RUNNER_TEMP/whl/bin/python" -c "import coal_app" 2> /dev/null; then
+            echo "::error::the coal-align wheel installs coal_app"; exit 1
+          fi
+          # then the app wheel on top (no extras): it finds the engine and the examples
+          "$RUNNER_TEMP/whl/bin/python" -m pip install "release/coal_align_app-${V}-py3-none-any.whl"
+          "$RUNNER_TEMP/whl/bin/coal-gui" --help > /dev/null
+          "$RUNNER_TEMP/whl/bin/python" -m coal_app --check | tee "$RUNNER_TEMP/check.txt"
+          grep -q "^coal ${V}:" "$RUNNER_TEMP/check.txt"
+          grep -q "examples: clean, mito, messy_ids, one_broken_gene" "$RUNNER_TEMP/check.txt"
+          # the version-free sdists, as the website's pip commands install them
           python -m venv "$RUNNER_TEMP/src"
           "$RUNNER_TEMP/src/bin/python" -m pip install "coal-align @ file://$PWD/release/coal_src.tar.gz"
           test "$("$RUNNER_TEMP/src/bin/coal" --version)" = "coal ${V}"
+          "$RUNNER_TEMP/src/bin/python" -m pip install "coal-align @ file://$PWD/release/coal_src.tar.gz" \
+            "coal-align-app @ file://$PWD/release/coal_app_src.tar.gz"
+          "$RUNNER_TEMP/src/bin/python" -m coal_app --check
           ls -l release
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
@@ -110,18 +130,18 @@ jobs:
           cmake --build build-app --config Release -j 2
           if (-not (Test-Path build-app\Release\coal-cpp.exe)) { throw "no build-app\Release\coal-cpp.exe" }
       - name: Create the build venv with this Python (build.ps1 reuses it)
-        run: python -m venv desktop\.venv
-      - name: Build (desktop\build.ps1 - tests, PyInstaller, frozen --version and smoke test, installer)
+        run: python -m venv apps\coal-app\desktop\.venv
+      - name: Build (apps\coal-app\desktop\build.ps1 - tests, PyInstaller, frozen --version and smoke test, installer)
         timeout-minutes: 75
         env:
           GRADIO_ANALYTICS_ENABLED: "False"
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File desktop\build.ps1
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File apps\coal-app\desktop\build.ps1
       - name: Smoke run - frozen engine output equals the Python engine's
         timeout-minutes: 10
         run: |
           $ErrorActionPreference = "Stop"
-          $exe = "desktop\dist\COAL\COAL.exe"
-          $py = "desktop\.venv\Scripts\python.exe"
+          $exe = "apps\coal-app\desktop\dist\COAL\COAL.exe"
+          $py = "apps\coal-app\desktop\.venv\Scripts\python.exe"
           $prot = "examples\clean\protein.aln.fasta"
           $dna = "examples\clean\dna.fasta"
           $frozen = Join-Path $env:RUNNER_TEMP "smoke_frozen.fasta"
@@ -155,12 +175,12 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $v = $env:VERSION
-          $setup = "desktop\dist\COAL-Setup-$v.exe"
+          $setup = "apps\coal-app\desktop\dist\COAL-Setup-$v.exe"
           if (-not (Test-Path $setup)) { throw "build.ps1 made no installer ($setup): was Inno Setup found?" }
           New-Item -ItemType Directory -Force release | Out-Null
           Copy-Item $setup "release\COAL-Setup-$v.exe"
           Copy-Item $setup "release\COAL-Setup-windows-x64.exe"
-          Compress-Archive -Path "desktop\dist\COAL" -DestinationPath "release\COAL-$v-windows-x64.zip"
+          Compress-Archive -Path "apps\coal-app\desktop\dist\COAL" -DestinationPath "release\COAL-$v-windows-x64.zip"
           Copy-Item "release\COAL-$v-windows-x64.zip" "release\COAL-windows-x64.zip"
           Get-ChildItem release | Format-Table Name, Length
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
@@ -194,7 +214,7 @@ jobs:
           cat SHA256SUMS.txt
           sha256sum -c SHA256SUMS.txt
       - name: Check the release files
-        # The website links to the version-free names below; tests_app/test_site.py checks it against this list.
+        # The website links to the version-free names below; tests/test_docs_site.py checks it against this list.
         env:
           V: ${{ needs.python.outputs.version }}
         run: |
@@ -206,6 +226,9 @@ jobs:
             "coal_align-${V}-py3-none-any.whl"
             "coal_align-${V}.tar.gz"
             "coal_src.tar.gz"
+            "coal_align_app-${V}-py3-none-any.whl"
+            "coal_align_app-${V}.tar.gz"
+            "coal_app_src.tar.gz"
             "SHA256SUMS.txt"
           )
           for f in "${expected[@]}"; do test -s "release/$f" || { echo "::error::missing release file $f"; exit 1; }; done
