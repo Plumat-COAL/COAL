@@ -817,10 +817,11 @@ static void test_pause(int count) {
     }
 }
 
-// "No space left on device" -> "no space left on device" (pipeline.py _lower_reason)
-static std::string lower_first(std::string s) {
-    if (!s.empty() && s[0] >= 'A' && s[0] <= 'Z') s[0] = char(s[0] + 32);
-    return s;
+// A write that failed (disk full, quota, I/O error): "cannot write <out>: no space left on device" (out "" =
+// a temporary file in the temp folder), as pipeline.py _output_error
+static CoalError write_failed(const std::string& out) {
+    int e = errno ? errno : ENOSPC;
+    return CoalError(output_error(out, e), "file_error");
 }
 
 // The -o argument ("" = stdout), for output_error() when a file of the run cannot be created.
@@ -1246,7 +1247,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                     // A checkpoint that cannot be written (its path is a folder, disk full ...) does not end the
                     // run: it only cannot be resumed (pipeline.py)
                     ck_saves = false;
-                    note("cannot write the checkpoint " + ck->path + ": " + lower_first(std::strerror(err)) +
+                    note("cannot write the checkpoint " + ck->path + ": " + lower_reason(err) +
                          "; the run cannot be resumed if it is interrupted");
                 }
                 if (ck_registered) {  // a checkpoint describes them now: kept after a signal
@@ -1259,6 +1260,18 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
             }
         };
         run_ordered<Item>(read_batch, [&](Item& it) { work(it, ctx); }, emit, o.jobs);
+        // the rows (and the entries, residue lines) were written as they came: a failed write (disk full ...) is
+        // an error naming the output, or the temp folder while the rows go to a temporary file there
+        sink.f.flush();
+        if (!sink.f) throw write_failed(staged && !ck ? std::string() : o.out);
+        if (!prot_path.empty()) {
+            prot.f.flush();
+            if (!prot.f) throw write_failed(ck ? o.out : std::string());
+        }
+        if (ck) {
+            entries.f.flush();
+            if (!entries.f) throw write_failed(o.out);
+        }
         if (prog && prog->printed) prog->update(done, true);
         if (o.keep_going && skipped == nseq)
             throw CoalError("none of the " + std::to_string(nseq) + " sequences could be converted: check that the DNA "
@@ -1314,6 +1327,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                         grid.f.write(s2.data(), (std::streamsize)s2.size());
                     }
                     grid.f.flush();
+                    if (!grid.f) throw write_failed(ck ? o.out : std::string());
                     g = &grid.f;
                 }
                 if (!prot_path.empty()) prot.f.flush();
@@ -1332,11 +1346,11 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                 }
             }
             out.f.flush();
-            if (!out.f) throw CoalError("could not write the output (disk full?)");
+            if (!out.f) throw write_failed(o.out);
             out.f.close();
         } else {
             sink.f.flush();
-            if (!sink.f) throw CoalError("could not write the output (disk full?)");
+            if (!sink.f) throw write_failed(o.out);
         }
         sink.f.close();
         entries.f.close();
@@ -1355,7 +1369,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
             if (!dst) throw CoalError(output_error(o.out, errno ? errno : EIO), "file_error");
             dst << in.rdbuf();
             dst.flush();
-            if (!dst) throw CoalError("could not write " + o.out + " (disk full?)", "file_error");
+            if (!dst) throw write_failed(o.out);
         } else {
 #ifdef _WIN32
             _setmode(_fileno(stdout), _O_BINARY);

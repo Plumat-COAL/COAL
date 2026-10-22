@@ -40,6 +40,11 @@
 - **`coal-cpp` falls back when `TMPDIR` is unusable** (robustness review): a `TMPDIR` naming a missing folder or a
   file made it fail with `filesystem error: temp_directory_path`; it now searches `TMPDIR`, `TEMP`, `TMP`, `/tmp`,
   `/var/tmp`, `/usr/tmp` and the current folder as Python's `tempfile` does, so both engines behave the same.
+- **Disk-full errors name the file** (robustness review): the Python engine printed `[Errno 28] No space left on
+  device` (and could hang at exit after terminating its workers), `coal-cpp` `could not write the output (disk
+  full?)` (and, with the rows going through a full temp folder, exit 0 with an empty output). Both now say
+  `cannot write out.fa: no space left on device`, `cannot write a temporary file in /tmp: ...` or `cannot copy
+  standard input to a temporary file in /tmp: ...`, exit 1, and leave no temp file behind.
 - **Less memory with many workers:** COAL's own processes now limit numpy's BLAS thread pool to one thread
   (`OPENBLAS_NUM_THREADS`, `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, unless already set). COAL uses no BLAS, but every
   worker that imported numpy started a pool sized to the machine. On a 20-thread Windows machine each process that

@@ -110,16 +110,35 @@ std::string temp_dir() {
     for (const std::string& c : cands) {
         if (c.empty() || !fs::is_directory(c, ec)) continue;
         std::string probe = (fs::path(c) / (".coal_probe_" + unique_name())).string();
+        bool ok;
         {
             std::ofstream f(probe, std::ios::binary | std::ios::trunc);
-            if (!f) continue;
+            ok = (bool)f;
+            if (ok) {
+                f << "blat";  // a folder on a full disk is not usable either (Python writes a probe too)
+                f.flush();
+                ok = (bool)f;
+            }
         }
         fs::remove(probe, ec);
+        if (!ok) continue;
         cached = fs::absolute(c, ec).string();
         if (cached.size() > 1 && (cached.back() == '/' || cached.back() == '\\')) cached.pop_back();
         return cached;
     }
     throw CoalError("no usable temporary folder: set TMPDIR to a folder you can write to", "file_error");
+}
+
+// "No space left on device" -> "no space left on device" (pipeline.py _lower_reason)
+std::string lower_reason(int err) {
+    std::string s = std::strerror(err);
+    if (!s.empty() && s[0] >= 'A' && s[0] <= 'Z') s[0] = char(s[0] + 32);
+    return s;
+}
+
+// The error for an input that cannot be copied to its temporary file (pipeline.py _copy_error)
+std::string copy_error(const std::string& name, int err) {
+    return "cannot copy " + name + " to a temporary file in " + temp_dir() + ": " + lower_reason(err);
 }
 
 std::string os_error(int err, const std::string& path) {
@@ -158,13 +177,18 @@ static std::string spool_stdin(std::vector<std::pair<std::string, std::string>>&
     std::string tmp = (fs::path(temp_dir()) / (".coal_in_" + unique_name() + "_stdin")).string();
     register_temp(tmp);
     spooled.push_back({tmp, STDIN_NAME});
+    errno = 0;
     std::ofstream dst(tmp, std::ios::binary | std::ios::trunc);
-    if (!dst) throw InputError(os_error(errno ? errno : EACCES, tmp), "file_error");
+    if (!dst) throw InputError(copy_error(STDIN_NAME, errno ? errno : EACCES), "file_error");
     std::vector<char> buf(1 << 20);
     for (;;) {
         errno = 0;
         size_t n = std::fread(buf.data(), 1, buf.size(), stdin);
-        if (n > 0) dst.write(buf.data(), (std::streamsize)n);
+        if (n > 0) {
+            errno = 0;
+            dst.write(buf.data(), (std::streamsize)n);
+            if (!dst) throw InputError(copy_error(STDIN_NAME, errno ? errno : ENOSPC), "file_error");
+        }
         if (n < buf.size()) {
             if (std::ferror(stdin)) {
                 int e = errno ? errno : EIO;
@@ -176,8 +200,7 @@ static std::string spool_stdin(std::vector<std::pair<std::string, std::string>>&
         }
     }
     dst.flush();
-    if (!dst) throw InputError(std::string("could not copy ") + STDIN_NAME + " to a temporary file (disk full?)",
-                               "file_error");
+    if (!dst) throw InputError(copy_error(STDIN_NAME, errno ? errno : ENOSPC), "file_error");
     return tmp;
 }
 
@@ -227,16 +250,21 @@ std::vector<std::string> spool_inputs(const std::vector<std::string>& args,
         std::string tmp = (fs::path(temp_dir()) / (".coal_in_" + unique_name() + "_" + base)).string();
         register_temp(tmp);
         spooled.push_back({tmp, a});
+        errno = 0;
         std::ofstream dst(tmp, std::ios::binary | std::ios::trunc);
-        if (!dst) throw InputError(os_error(errno ? errno : EACCES, tmp), "file_error");
+        if (!dst) throw InputError(copy_error(a, errno ? errno : EACCES), "file_error");
         std::vector<char> buf(1 << 20);
         while (src) {
             src.read(buf.data(), (std::streamsize)buf.size());
             std::streamsize n = src.gcount();
-            if (n > 0) dst.write(buf.data(), n);
+            if (n > 0) {
+                errno = 0;
+                dst.write(buf.data(), n);
+                if (!dst) throw InputError(copy_error(a, errno ? errno : ENOSPC), "file_error");
+            }
         }
         dst.flush();
-        if (!dst) throw InputError("could not copy " + a + " to a temporary file (disk full?)", "file_error");
+        if (!dst) throw InputError(copy_error(a, errno ? errno : ENOSPC), "file_error");
         out.push_back(tmp);
     }
     return out;
@@ -324,7 +352,7 @@ std::string output_error(const std::string& out, int err) {
 #endif
     else if (err == ENOTDIR) why = folder + " is not a folder";
     else if (err == EACCES || err == EPERM) why = "permission denied (choose a folder you can write to)";
-    else why = std::strerror(err);
+    else why = lower_reason(err);
     return "cannot write " + (out.empty() ? "a temporary file in " + folder : out) + ": " + why;
 }
 

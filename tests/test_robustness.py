@@ -542,5 +542,86 @@ class TestUnusableTmpdir(EngineCase):
         self.assertEqual(self.leftovers(), [])
 
 
+# ---------------------------------------------------------------- 11. disk full
+def _mount_tiny_tmpfs(where: Path) -> bool:
+    """A 1 MB tmpfs at `where` (needs root on Linux); False when that is not possible here."""
+    if not sys.platform.startswith("linux") or os.geteuid() != 0:
+        return False
+    try:
+        r = subprocess.run(["mount", "-t", "tmpfs", "-o", "size=1m", "tmpfs", str(where)], capture_output=True,
+                           timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return r.returncode == 0
+
+
+@unittest.skipIf(WINDOWS, "POSIX device nodes")
+class TestDiskFull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._td = tempfile.TemporaryDirectory(prefix="coal_full_")
+        cls.d = Path(cls._td.name)
+        sys.path.insert(0, str(ROOT / "benchmarks"))
+        from gen_data import generate
+        generate(40000, 15, cls.d, seed=5)  # DNA and output of 2-6 MB, more than the tiny file system holds
+        cls.full = cls.d / "full"
+        cls.full.mkdir()
+        cls.mounted = _mount_tiny_tmpfs(cls.full)
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls.mounted:
+            subprocess.run(["umount", str(cls.full)], capture_output=True, timeout=30)
+        cls._td.cleanup()
+
+    def run_both(self, args, stdin=subprocess.DEVNULL, **env_extra):
+        results = {}
+        for name, cmd in engines():
+            env = dict(os.environ, PYTHONPATH=str(SRC), COAL_ENGINE="python", **env_extra)
+            kw = {"input": stdin} if isinstance(stdin, bytes) else {"stdin": stdin}
+            r = subprocess.run([*cmd, *args], cwd=self.d, env=env, capture_output=True, timeout=120, **kw)
+            results[name] = (r.returncode, r.stdout, r.stderr)
+            for f in self.full.iterdir():  # no temp file left behind on the full file system
+                self.assertFalse(f.name.startswith(".coal"), f"{name} left {f.name}")
+        if len(results) == 2:
+            self.assertEqual(results["python"], results["cpp"], f"engines differ on {args}")
+        return results["python"]
+
+    @unittest.skipUnless(os.path.exists("/dev/full"), "needs /dev/full")
+    def test_output_to_dev_full(self):
+        for fmt in ("fasta", "clustal"):
+            with self.subTest(fmt=fmt):
+                rc, out, err = self.run_both(["pep.fasta", "nuc.fasta", "-o", "/dev/full", "-output", fmt])
+                self.assertEqual((rc, out), (1, b""))
+                self.assertEqual(err, b"coal: error: cannot write /dev/full: no space left on device\n")
+
+    def test_output_on_a_full_file_system(self):
+        if not self.mounted:
+            self.skipTest("cannot mount a tiny tmpfs here (needs root on Linux)")
+        out = self.full / "o.fa"
+        for fmt, jobs in (("fasta", "1"), ("clustal", "1"), ("fasta", "2")):
+            with self.subTest(fmt=fmt, jobs=jobs):
+                rc, _, err = self.run_both(["pep.fasta", "nuc.fasta", "-o", str(out), "-output", fmt, "-j", jobs])
+                self.assertEqual(rc, 1)
+                self.assertEqual(err, f"coal: error: cannot write {out}: no space left on device\n".encode())
+                self.assertEqual(sorted(f.name for f in self.full.iterdir()), [])
+
+    def test_full_temp_folder(self):
+        if not self.mounted:
+            self.skipTest("cannot mount a tiny tmpfs here (needs root on Linux)")
+        tmp = {"TMPDIR": str(self.full), "TEMP": str(self.full), "TMP": str(self.full)}
+        # standard input is copied to a temporary file first
+        rc, _, err = self.run_both(["pep.fasta", "-", "-o", "o.fa"], stdin=(self.d / "nuc.fasta").read_bytes(), **tmp)
+        self.assertEqual(rc, 1)
+        self.assertEqual(err, f"coal: error: cannot copy standard input to a temporary file in {self.full}: no space "
+                              f"left on device\n".encode())
+        self.assertFalse((self.d / "o.fa").exists())
+        # the alignment for stdout goes through a temporary file
+        rc, out, err = self.run_both(["pep.fasta", "nuc.fasta"], **tmp)
+        self.assertEqual((rc, out), (1, b""))
+        self.assertEqual(err, f"coal: error: cannot write a temporary file in {self.full}: no space left on "
+                              f"device\n".encode())
+
+
 if __name__ == "__main__":
     unittest.main()

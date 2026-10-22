@@ -23,6 +23,11 @@ void unregister_temp(const std::string& path);
 // The folder for temporary files, searched as Python's tempfile.gettempdir() (TMPDIR, TEMP, TMP, /tmp, ..., cwd).
 std::string temp_dir();
 
+// strerror with a lower-case first letter ("no space left on device"), as the Python engine words reasons.
+std::string lower_reason(int err);
+// "cannot copy <name> to a temporary file in <folder>: <reason>" (pipeline.py _copy_error).
+std::string copy_error(const std::string& name, int err);
+
 // "[Errno N] <text>: '<path>'" (Python's OSError message) for the current errno.
 std::string os_error(int err, const std::string& path);
 

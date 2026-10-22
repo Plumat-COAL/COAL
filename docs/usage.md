@@ -47,7 +47,10 @@
 - **Messages and exit codes:** the exit code is non-zero on any error (PAL2NAL always exits 0). Warnings and notices
   go to stderr; `-q` (like PAL2NAL's `-nostderr`) silences all of them, including the notices about probably-wrong
   data, so check the exit code or use `--strict` when running quietly. Errors are always printed. stdout is the same
-  with or without `-q`. Every stderr line starts with `coal: error:` (the run or a gene failed; the message says
+  with or without `-q`. A write that fails (disk full, quota) is `coal: error: cannot write out.fa: no space left
+  on device` (`cannot write a temporary file in /tmp: ...` while the rows go through the temp folder, `cannot copy
+  standard input to a temporary file in /tmp: ...` for `-`), the same in both engines, and nothing half-written is
+  left behind. Every stderr line starts with `coal: error:` (the run or a gene failed; the message says
   which file, gene or position and what to do), `coal: warning:` (data that may be wrong: mismatches,
   probably-wrong genes, pairing), `coal: notice:` (information, e.g. about `--resume`) or `coal: summary:` (the
   end-of-run summary; it does not repeat the error).

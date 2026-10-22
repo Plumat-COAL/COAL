@@ -383,6 +383,7 @@ def _abandon_pool(ex) -> None:
     # The workers first: shutdown() takes the pool's lock, which its management thread holds while it joins the
     # call queue's feeder thread, and that thread is stuck writing to the pipe until no worker holds it open.
     procs = list((getattr(ex, "_processes", None) or {}).values())
+    result_queue = getattr(ex, "_result_queue", None)
     for p in procs:
         try:
             p.terminate()
@@ -397,6 +398,13 @@ def _abandon_pool(ex) -> None:
                 p.join(1.0)
         except (OSError, ValueError, AttributeError, AssertionError):
             pass
+    # A worker killed in the middle of sending a result leaves the pool's management thread reading a message that
+    # never completes, and the interpreter joins that thread at exit: closing this process's write end of the result
+    # pipe gives it EOF (the workers' ends are gone with them) so it ends as for a broken pool.
+    try:
+        result_queue._writer.close()
+    except Exception:  # noqa: BLE001 - best effort on a private attribute
+        pass
     try:
         ex.shutdown(wait=False, cancel_futures=True)
     except Exception:  # the pool is already broken: nothing to wait for
@@ -416,21 +424,24 @@ def _write_block_output(out, fmt, ids, stage, slices, alilen, rows, aa_widths, m
         f = tempfile.NamedTemporaryFile("w+b", delete=False, prefix=".coal_rows_")
         scratch.append(f)
         return f
-    fixed = temp()
-    for line in stage:
-        fixed.write(apply_slices(line.rstrip("\n").split("\t", 1)[1], slices).encode("ascii"))
-    aa_fh, aalen = None, 0
-    if fmt == "codon":
-        aa_fh = temp()
-        for k, (_pid, row) in enumerate(rows()):
-            if k in skip:  # sequences skipped by --keep-going have no row
-                continue
-            line = codon_aa_line(row, aa_widths)
-            aalen = len(line)
-            aa_fh.write(line.encode("ascii", "replace"))
-    fixed.flush()
-    if aa_fh is not None:
-        aa_fh.flush()
+    try:  # these live in the temp folder: a failed write names it, not the output
+        fixed = temp()
+        for line in stage:
+            fixed.write(apply_slices(line.rstrip("\n").split("\t", 1)[1], slices).encode("ascii"))
+        aa_fh, aalen = None, 0
+        if fmt == "codon":
+            aa_fh = temp()
+            for k, (_pid, row) in enumerate(rows()):
+                if k in skip:  # sequences skipped by --keep-going have no row
+                    continue
+                line = codon_aa_line(row, aa_widths)
+                aalen = len(line)
+                aa_fh.write(line.encode("ascii", "replace"))
+        fixed.flush()
+        if aa_fh is not None:
+            aa_fh.flush()
+    except OSError as e:
+        raise _output_error(None, e) from None
     write_blocks(out, fmt, ids, fixed, alilen, aa_fh, aalen, mask)
 
 
@@ -476,7 +487,11 @@ def _spool_stdin(spooled: list) -> str:
         fd = None
     if fd is not None:
         _refuse_device(fd, STDIN_NAME)
-    with tempfile.NamedTemporaryFile("wb", delete=False, prefix=".coal_in_", suffix="_stdin") as dst:
+    try:
+        dst = tempfile.NamedTemporaryFile("wb", delete=False, prefix=".coal_in_", suffix="_stdin")
+    except OSError as e:
+        raise _copy_error(STDIN_NAME, e) from None
+    with dst:
         spooled.append(dst.name)
         while True:
             try:
@@ -486,7 +501,10 @@ def _spool_stdin(spooled: list) -> str:
                 raise CoalError(f"cannot read {STDIN_NAME}: {why}", code="file_error") from None
             if not chunk:
                 break
-            dst.write(chunk)
+            try:
+                dst.write(chunk)
+            except OSError as e:  # disk full
+                raise _copy_error(STDIN_NAME, e) from None
     return dst.name
 
 
@@ -500,9 +518,18 @@ def _spool(path, spooled: list) -> str:
     base = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.basename(str(path)))[-40:]
     with open(path, "rb") as src:
         _refuse_device(src.fileno(), str(path))
-        with tempfile.NamedTemporaryFile("wb", delete=False, prefix=".coal_in_", suffix="_" + base) as dst:
+        try:
+            dst = tempfile.NamedTemporaryFile("wb", delete=False, prefix=".coal_in_", suffix="_" + base)
+        except OSError as e:
+            raise _copy_error(str(path), e) from None
+        with dst:
             spooled.append(dst.name)
-            shutil.copyfileobj(src, dst, 1 << 20)
+            try:
+                shutil.copyfileobj(src, dst, 1 << 20)
+            except OSError as e:
+                if getattr(e, "filename", None) == path or e.errno not in (errno.ENOSPC, errno.EDQUOT, errno.EFBIG):
+                    raise
+                raise _copy_error(str(path), e) from None
     return dst.name
 
 
@@ -545,7 +572,8 @@ def run(pep_path, nuc_paths, *args, **kw) -> int:
         except CoalError as e:  # InputFormatError included
             msg = str(e)
             for tmp_name in spooled:
-                msg = msg.replace(tmp_name, names[tmp_name])
+                if tmp_name in names:  # (a copy that failed half-way has no name yet)
+                    msg = msg.replace(tmp_name, names[tmp_name])
             if msg != str(e):
                 if isinstance(e, InputFormatError):
                     raise InputFormatError(msg) from None
@@ -586,9 +614,15 @@ def _output_error(out_path, e: OSError) -> CoalError:
     elif e.errno in (errno.EACCES, errno.EPERM):
         why = "permission denied (choose a folder you can write to)"
     else:
-        why = e.strerror or str(e)
+        why = _lower_reason(e)
     what = out_path if out_path else f"a temporary file in {folder}"
     return CoalError(f"cannot write {what}: {why}", code="file_error")
+
+
+def _copy_error(name: str, e: OSError) -> CoalError:
+    """The error for an input that cannot be copied to its temporary file (`-`, a pipe), e.g. on a full disk."""
+    return CoalError(f"cannot copy {name} to a temporary file in {tempfile.gettempdir()}: {_lower_reason(e)}",
+                     code="file_error")
 
 
 def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False,
@@ -783,6 +817,8 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                     scratch.append(st)
                     stage = st.file
             sink = stage if two_pass else tmp
+            sink_is_temp = two_pass and ck is None  # the rows go to a temp file in the temp folder, not next to -o
+            final_pass = False
             start = state["completed"] if state else 0
             if state:
                 drop, bad, skipped = set(state["drop"]), set(state["bad"]), state["skipped"]
@@ -886,6 +922,7 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                                 code="all_failed")
             if rec is not None:
                 rec.finish(rows, dna, pairing)
+            final_pass = True
             if two_pass:
                 if block_cols:  # -blockonly drops the columns not marked '#'
                     drop.update(i for i in range(ncol) if mask[i:i + 1] != "#")
@@ -940,9 +977,10 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                         out.flush()
                     except OSError as e:
                         # On Windows, EINVAL from writing to a closed stdout pipe (how Windows often reports it) is a
-                        # quiet exit 141 too, as BrokenPipeError.
+                        # quiet exit 141 too, as BrokenPipeError. Other stdout errors are raised as they are.
                         if _WINDOWS and not isinstance(e, BrokenPipeError) and e.errno == errno.EINVAL:
                             raise BrokenPipeError(errno.EPIPE, "stdout closed") from None
+                        e.coal_stdout = True
                         raise
             finished = True
             return skipped
@@ -951,12 +989,25 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
             if rec is not None and not rec.finished:
                 rec.finish(rows, dna, pairing, aborted=True)
             raise
+        except OSError as e:
+            if (isinstance(e, BrokenPipeError) or getattr(e, "coal_stdout", False)
+                    or getattr(e, "filename", None) in (pep_path, *map(str, nuc_paths))):
+                raise  # a closed stdout pipe (exit 141) / an input that cannot be read: reported as before
+            # A write that failed (disk full, quota, I/O error): "cannot write <out>: no space left on device",
+            # naming the output, or the temp folder while the rows go to a temporary file there
+            failed = True
+            err = _output_error(None if sink_is_temp and not final_pass else out_path, e)
+            if rec is not None and not rec.finished:
+                rec.finish(rows, dna, pairing, aborted=True)
+            raise err from None
         finally:
-            for f in (tmp, stage, entries_fh):
+            for f in (tmp, stage, entries_fh, *scratch):
                 if f is not None:
-                    f.close()
+                    try:
+                        f.close()
+                    except OSError:  # a buffered write failing at close (disk full): the error is already raised
+                        pass
             for f in scratch:
-                f.close()
                 try:
                     os.unlink(f.name)
                 except OSError:
