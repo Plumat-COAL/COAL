@@ -32,6 +32,16 @@
 - **Package renamed to `coal-align`** (`coal` on PyPI is another project). The `coal` command, the `coal` Python
   module and `pal2nal` are unchanged; release files are now `coal_align-<version>-py3-none-any.whl` and
   `coal_align-<version>.tar.gz` (`coal_src.tar.gz` stays).
+- **The app is its own package, `coal-align-app`:** the web GUI, the MCP server, the viewer, the Windows app and the
+  Hugging Face Space moved to `apps/coal-app/` (package `coal_app` unchanged; `coal-gui` and `python -m coal_app` work
+  as before). `coal-align` is now the engine alone (`coal`, `pal2nal`, the examples) with no dependencies and no app
+  code, so pipelines (OrthologR, DIAMOND workflows) install only that. The `gui` and `mcp` extras are on the app:
+  `pip install "coal-align @ .../coal_src.tar.gz" "coal-align-app[gui] @ .../coal_app_src.tar.gz"`, or from a checkout
+  `pip install -e . -e "apps/coal-app[gui]"`. Both packages always have the same version, and the app depends on that
+  exact `coal-align`. Releases add `coal_align_app-<version>-py3-none-any.whl`, `coal_align_app-<version>.tar.gz`
+  and the version-free `coal_app_src.tar.gz`. The Windows launchers are now `apps\coal-app\desktop\run_from_source.bat`
+  and `apps\coal-app\desktop\setup_mcp.bat`. The app's tests (`apps/coal-app/tests/`) are grouped by feature; the
+  checks of the docs, the website and CI moved to `tests/` (`test_docs_*.py`, `test_repo_ci.py`).
 
 ## 0.4.2
 

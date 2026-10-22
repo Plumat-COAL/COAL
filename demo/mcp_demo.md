@@ -5,8 +5,9 @@ real output of the tool functions, regenerated with `python demo/make_mcp_demo.p
 
 ## Setup (before going on stage)
 
-1. `pip install -e ".[mcp]"` in the COAL repo, in its own virtual environment (not the one with `".[gui]"`).
-   On Windows, `desktop\setup_mcp.bat` does this and prints the two registrations below, filled in.
+1. `pip install -e . -e "apps/coal-app[mcp]"` in the COAL repo, in its own virtual environment (not the one with
+   the `gui` extra). On Windows, `apps\coal-app\desktop\setup_mcp.bat` does this and prints the two registrations
+   below, filled in.
 2. Add COAL to the assistant. Claude Code (use the full path of that environment's Python if it is not the
    `python` on your PATH):
 

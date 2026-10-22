@@ -160,7 +160,7 @@ class TestMrg2Report(_Tmp):
         rc, out, err = run(self.d, ["pep.fasta", "nuc.fasta", "-o", "o.fa", "--report", "r.json"])
         self.assertEqual(json.loads((self.d / "r.json").read_text())["hints"], [])
 
-    @unittest.skipUnless((ROOT / "src" / "coal_app").is_dir(), "needs src/coal_app")
+    @unittest.skipUnless((ROOT / "apps" / "coal-app" / "src" / "coal_app").is_dir(), "needs apps/coal-app/src/coal_app")
     def test_engine_report_equals_app_fallback_on_examples(self):
         import report_vs_app as rva
         saved = rva.OPTION_SETS

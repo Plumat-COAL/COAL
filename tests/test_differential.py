@@ -127,7 +127,7 @@ COUNT_KEYS = ("golden rc = 0", "COAL exit status", "stdout byte-identical", "war
 
 def compare_all(tc: unittest.TestCase):
     """Run every check (assertions on `tc`); return (number of cases, number of checks, counts).
-    Shared by test_all_cases and the docs-numbers guard (tests_app/test_docs_numbers.py)."""
+    Shared by test_all_cases and the docs-numbers guard (tests/test_docs_numbers.py)."""
     n = 0
     count = dict.fromkeys(COUNT_KEYS, 0)
     cases = set()

@@ -193,8 +193,10 @@ def build_shim(tmp: Path) -> Path:
     (tmp / "tests").mkdir()
     for name in ("fixtures", "golden", "cases.json", "report_example.json"):
         os.symlink(ref_root / "tests" / name, tmp / "tests" / name)
+    # apps/: the app (apps/coal-app/src/coal_app), which report_vs_app and test_fuzz_findings compare with; an older
+    # reference has src/coal_app instead (linked above)
     for name in ("scripts", "benchmarks", "examples", "README.md", "pyproject.toml", "CMakeLists.txt", "site",
-                 "CHANGELOG.md"):
+                 "CHANGELOG.md", "apps"):
         if (ref_root / name).exists():
             os.symlink(ref_root / name, tmp / name)
     for m in REF_TEST_MODULES + ("report_vs_app",):

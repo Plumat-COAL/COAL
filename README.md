@@ -37,6 +37,15 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --config R
 export COAL_CPP=$PWD/build/coal-cpp       # coal hands large inputs to coal-cpp when it finds it
 ```
 
+The engine (`coal-align`) has no dependencies and no app code: it is all a pipeline needs. The web GUI, the MCP
+server for AI agents and the Windows app are a second package in this repository, `coal-align-app`
+([apps/coal-app/](apps/coal-app/)), installed next to the engine:
+
+```
+python -m pip install "coal-align @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz" \
+    "coal-align-app[gui] @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_app_src.tar.gz"
+```
+
 The Windows app, the web GUI and the other install options: [docs/install.md](docs/install.md).
 
 ## Quick start
@@ -85,7 +94,7 @@ Example inputs are in `examples/` (`clean`, `mito`, `messy_ids`, `one_broken_gen
 | How and why COAL's output differs from PAL2NAL v14 | [docs/differences.md](docs/differences.md) |
 | The C++ engine | [docs/cpp-engine.md](docs/cpp-engine.md) |
 | Speed and memory vs PAL2NAL | [docs/benchmarks.md](docs/benchmarks.md) |
-| Windows app, web GUI, other install options | [docs/install.md](docs/install.md), [desktop/README.md](desktop/README.md) |
+| Windows app, web GUI, other install options | [docs/install.md](docs/install.md), [apps/coal-app/desktop/README.md](apps/coal-app/desktop/README.md) |
 | Running COAL from an AI agent (MCP) | [docs/mcp.md](docs/mcp.md) |
 | Tests, the PAL2NAL reference, releasing | [docs/development.md](docs/development.md), [tests/README.md](tests/README.md) |
 | Changes between versions | [CHANGELOG.md](CHANGELOG.md) |

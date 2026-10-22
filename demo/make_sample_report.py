@@ -1,4 +1,4 @@
-"""Regenerate src/coal_app/sample_report.json: the GUI's "Show a sample report" / --demo report.
+"""Regenerate apps/coal-app/src/coal_app/sample_report.json: the GUI's "Show a sample report" / --demo report.
 
     python demo/make_sample_report.py
 
@@ -17,6 +17,7 @@ import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "src"))
+sys.path.insert(1, os.path.join(ROOT, "apps", "coal-app", "src"))  # coal_app
 
 from coal_app import core  # noqa: E402
 

@@ -1,8 +1,8 @@
-"""Compare the engine's run report (coal --report) with the app's fallback report (src/coal_app/core.py, built from
+"""Compare the engine's run report (coal --report) with the app's fallback report (apps/coal-app/src/coal_app/core.py, built from
 the engine's stderr: build_fallback_report + mismatch_probe + locate_breaks + id_hints + genetic_code_hint).
 
 Run:  python tests/report_vs_app.py   (prints every difference)
-Used by tests/test_feature_combinations.py. Needs src/coal_app (skips without it). Every engine call has a timeout (the app's).
+Used by tests/test_feature_combinations.py. Needs apps/coal-app/src/coal_app (skips without it). Every engine call has a timeout (the app's).
 """
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(1, str(ROOT / "apps" / "coal-app" / "src"))  # coal_app
 
 OPTION_SETS = [
     {},

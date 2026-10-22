@@ -14,13 +14,13 @@ step, nothing loaded from other sites (no CDNs, font services, trackers or analy
 | `assets/fonts/` | Atkinson Hyperlegible Next, variable weight 400 to 800, Latin subset as WOFF2 (25 KB), with its licence `OFL.txt` (SIL Open Font License 1.1) |
 | `main.js` | copy buttons, registers `sw.js`; all three downloads are always shown, and the card for the visitor's system gets a "For this computer" mark, and old one-page links (`#windows`, `#speed`, ...) are sent to the page that now holds that section |
 | `sw.js` | keeps a copy of the site's own files so it opens offline after one visit (never touches downloads) |
-| `explainer.html` | the 20-second explainer animation (the only copy; the pitch uses it too; `tests_app/test_explainer.py` plays it in Chromium) |
+| `explainer.html` | the 20-second explainer animation (the only copy; the pitch uses it too; `tests/test_docs_explainer.py` plays it in Chromium) |
 | `img/broken-gene.webp` | screenshot of the alignment view (`pitch/backup/1_broken_gene_frameshift.png`, lossless WebP) |
 | `favicon.svg` | tab icon: one 3 x 3 codon block from the logo (lighter charcoal in a dark browser theme) |
 | `assets/coal-logo*.png` | the owner's logo, 176 px wide at 1x and 2x; `-dark` has the wordmark recoloured to #ECE8E3. Not shown on the page since WEB-11 (kept for previews and other uses) |
-| `assets/coal-mark.svg` | the logo's squares as SVG (written by `desktop/make_icon.py --site site`); the small mark in the page header |
+| `assets/coal-mark.svg` | the logo's squares as SVG (written by `apps/coal-app/desktop/make_icon.py --site site`); the small mark in the page header |
 | `assets/coal-train.svg` | the owner's train drawing as SVG; the page inlines a copy in the footer, beside the authors' names, so CSS can recolour it in dark mode |
-| `assets/favicon-32.png`, `apple-touch-icon.png`, `icon-512.png` | PNG icons (written by `desktop/make_icon.py --site site`) |
+| `assets/favicon-32.png`, `apple-touch-icon.png`, `icon-512.png` | PNG icons (written by `apps/coal-app/desktop/make_icon.py --site site`) |
 
 <!-- Several pages with one shared header and footer (a test checks they are identical; when you
      change the header or footer, change it in every page). The font was made from google/fonts
@@ -32,7 +32,7 @@ All internal links are relative, so the same files work at `/COAL/` and later at
 ## How downloads stay current
 
 The download links never name a version. The page shows the current version once (`<span id="version">`), and
-`tests_app/test_site.py` fails when it differs from `src/coal/__init__.py`, so bump it together with the package.
+`tests/test_docs_site.py` fails when it differs from `src/coal/__init__.py`, so bump it together with the packages.
 Every download link has the form
 
     https://github.com/plumat-coal/COAL/releases/latest/download/<file>
@@ -56,7 +56,7 @@ Two pip details behind those names (tested with pip 24.0 through a local stand-i
   like `name-version`, so `coal-latest.tar.gz` kept installing the old version after a new release;
   `coal_src.tar.gz` doesn't get cached, so re-running the command upgrades.
 
-`tests_app/test_site.py` checks that every `latest/download/` link on the page is in the release workflow's file
+`tests/test_docs_site.py` checks that every `latest/download/` link on the page is in the release workflow's file
 list, that the page has no other external URLs, that internal links resolve, and that every measured number on the
 page (`data-check`) is quoted from `README.md`.
 

@@ -422,6 +422,7 @@ class TestAutomaticCppDispatch(unittest.TestCase):
         self.assertFalse(r[5])
 
     def test_app_gets_dispatch_for_free(self):
+        sys.path.insert(1, str(ROOT / "apps" / "coal-app" / "src"))  # the app's source, as report_vs_app.py does
         try:
             from coal_app import core
         except ImportError as e:

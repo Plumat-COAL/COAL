@@ -15,7 +15,8 @@ import re
 import sys
 
 REPO = "https://github.com/plumat-coal/COAL"
-PIP = f'pip install "coal-align[gui] @ git+{REPO}"'
+PIP = (f'pip install "coal-align @ git+{REPO}" '
+       f'"coal-align-app[gui] @ git+{REPO}#subdirectory=apps/coal-app"')
 NOTE = "First release coming soon"
 BANNER = (f'<p class="note" role="status" id="no-release">{NOTE}: there is nothing to download yet. Install from '
           f'source instead (Python 3.10 or newer): <code>{PIP}</code></p>')
@@ -26,6 +27,8 @@ def rewrite(html: str) -> str:
     # Links first, keeping their text ("Download source code: first release coming soon"); rewriting the sdist URL
     # first would turn the source-code button into a broken href="git+https://..." link.
     html = LINK.sub(lambda m: f'<a class="pending" href="#no-release">{m.group(1)}: {NOTE.lower()}</a>', html)
+    html = re.sub(re.escape(REPO) + r"/releases/(?:latest/)?download/coal_app_src\.tar\.gz",
+                  "git+" + REPO + "#subdirectory=apps/coal-app", html)
     html = re.sub(re.escape(REPO) + r"/releases/(?:latest/)?download/coal_src\.tar\.gz", "git+" + REPO, html)
     if 'id="no-release"' not in html:
         html = re.sub(r'(<main\b[^>]*>)', lambda m: m.group(1) + "\n" + BANNER, html, count=1)

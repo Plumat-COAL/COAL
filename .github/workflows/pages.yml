@@ -10,7 +10,7 @@ on:
       - "README.md"
       - ".github/workflows/pages.yml"
       - ".github/workflows/release.yml"
-      - "tests_app/test_site.py"
+      - "tests/test_docs_site.py"
   # The site's download buttons depend on a published release, so the site is also rebuilt when one is published
   # (otherwise a release published after the last push to main would leave "first release coming soon" in place).
   release:
@@ -41,7 +41,7 @@ jobs:
           COAL_REQUIRE_EXTRAS: gui   # makes a missing PyYAML fail instead of skip
         run: |
           python -m pip install pyyaml==6.0.2
-          python -m unittest tests_app/test_site.py -v
+          python -m unittest tests/test_docs_site.py -v
       - name: Assemble (the site's own files only)
         run: |
           mkdir _site

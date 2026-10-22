@@ -5,7 +5,7 @@ The report is built while the pipeline runs and written at the end, also when th
 see why.
 
 Per-sequence messages, statuses, hints and methods text follow the rules of the app report
-(src/coal_app/core.py: build_fallback_report, mismatch_probe, id_hints, genetic_code_hint, methods_text,
+(apps/coal-app/src/coal_app/core.py: build_fallback_report, mismatch_probe, id_hints, genetic_code_hint, methods_text,
 viewer.locate_breaks), computed here from the engine's own results instead of parsed from stderr: the same
 message codes and texts, suspect genes "failed" but written, mismatches counted only for A/C/G/T codons,
 methods text counted by message code, genetic-code hint from real mismatches only and tested on all genes
@@ -146,7 +146,7 @@ def gene_kind(entry: dict) -> str:
     return st
 
 
-# The app's rules (src/coal_app/core.py real_mismatches, _fixable, _fits_now,
+# The app's rules (apps/coal-app/src/coal_app/core.py real_mismatches, _fixable, _fits_now,
 # _code_distance, annotate_mismatch_patterns, GENETIC_CODES), so the engine's report says what the app's would.
 APP_CODE_NAMES = {
     1: "Standard (nuclear genes of most organisms)", 2: "Vertebrate mitochondrial", 3: "Yeast mitochondrial",
@@ -654,7 +654,7 @@ class RunReport:
                             self.entries[k]["messages"].insert(0, ev)
                     if k in marks:
                         annotate_mismatch_pattern(row, self.entries[k])
-        # The app's hint (src/coal_app/core.py genetic_code_hint), computed here
+        # The app's hint (apps/coal-app/src/coal_app/core.py genetic_code_hint), computed here
         if not self.want_hint:
             return
         view = [self.entry_view(k, aborted) for k in range(n)]
@@ -901,7 +901,7 @@ class RunReport:
         return lines
 
     def methods_text(self, rep: dict | None = None) -> str:
-        """A ready-to-paste methods sentence: the app's rules (src/coal_app/core.py methods_text) on this report."""
+        """A ready-to-paste methods sentence: the app's rules (coal_app.core.methods_text) on this report."""
         import shlex
         rep = rep or self.to_dict(methods=False)
         if not self.completed():

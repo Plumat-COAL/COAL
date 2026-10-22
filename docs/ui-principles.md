@@ -1,6 +1,6 @@
 # COAL app: usability principles and what they mean here
 
-Design principles for the web GUI and Windows app (`src/coal_app`). The owner's rule comes first: if
+Design principles for the web GUI and Windows app (`apps/coal-app/src/coal_app`). The owner's rule comes first: if
 the experience isn't clean, then for a user the tool does not work. The recommendations below come from published
 guidance and are listed in priority order. "Done" means it is in the app now.
 
@@ -83,7 +83,7 @@ placeholder under it added nothing; the area is simply absent until it has conte
 
 Removed: the splash line "This computer only. No internet needed." and the footer "Nothing leaves your computer:
 COAL runs here, on this machine." (reassurance, not something to act on; the facts stay in README.md,
-desktop/README.md and on the site; the hosted Space keeps its note, because there files do go to a server). Gradio's
+apps/coal-app/desktop/README.md and on the site; the hosted Space keeps its note, because there files do go to a server). Gradio's
 own footer link "Settings" (display language and theme for Gradio's labels only) is hidden, so COAL has one
 settings place, its Settings tab; "Use via API or MCP" stays. The round 3 rows above that mention the footer note
 and "Results appear here." describe that round.
