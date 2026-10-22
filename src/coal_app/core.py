@@ -255,7 +255,7 @@ def paths_from_query(params) -> tuple[str, str]:
     return str(get("protein") or ""), str(get("dna") or "")
 
 
-# No note when running locally (that nothing leaves the computer is said in README.md, desktop/README.md and the
+# No note when running locally (that nothing leaves the computer is said in docs/install.md, desktop/README.md and the
 # site). The hosted note matters: there, files do go to a shared server, and people need to know.
 INTRO_LOCAL = ""
 INTRO_HOSTED = ("This copy runs on a shared Hugging Face server: files you upload are processed there and "

@@ -281,9 +281,11 @@ class TestSiteFiles(unittest.TestCase):
         self.assertNotIn("-", "coal_src")
 
     def test_claims_are_in_the_readme(self):
-        """Every measured number on the page (data-check) is quoted from README.md or tests/README.md, which
+        """Every measured number on the page (data-check) is quoted from README.md, docs/ or tests/README.md, which
         test_docs_numbers guards (the test counts are in tests/README.md)."""
-        readme = re.sub(r"\s+", " ", _read("README.md") + " " + _read("tests", "README.md")).replace("**", "")
+        docs = [os.path.join("docs", f) for f in sorted(os.listdir(os.path.join(ROOT, "docs"))) if f.endswith(".md")]
+        readme = re.sub(r"\s+", " ", " ".join(_read(*p.split(os.sep)) for p in ["README.md", *docs, "tests/README.md"]))
+        readme = readme.replace("**", "")
         claims = re.findall(r'data-check="([^"]+)">([^<]*)<', self.all)  # all pages
         self.assertGreaterEqual(len(claims), 10)
         for value, shown in claims:

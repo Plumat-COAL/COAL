@@ -245,12 +245,11 @@ jobs:
             echo "::error::C++ tests were skipped, so the C++ engine was not fully exercised"; exit 1
           fi
 
-  # Builds the packaged Windows app (PyInstaller + Inno Setup, desktop\build.ps1) on every push to main or a
-  # keanu_overnight branch, so a broken pin is caught before a release (release.yml builds it only after a tag), and
+  # Builds the packaged Windows app (PyInstaller + Inno Setup, desktop\build.ps1) on every push to main, so a broken pin is caught before a release (release.yml builds it only after a tag), and
   # keeps the installer as a workflow artifact for testing.
   windows-app:
     name: Windows app build (installer + portable)
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/keanu_overnight/'))
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: windows-latest
     timeout-minutes: 90
     defaults:

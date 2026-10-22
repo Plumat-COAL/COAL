@@ -54,14 +54,14 @@ class TestDocsNumbers(unittest.TestCase):
         for rel in ("README.md", "tests/README.md"):
             self.assertNotIn(f"Exit status in all {self.n}", _read(rel))
 
-    def test_readme_scaling_extrapolation(self):
+    def test_benchmarks_scaling_extrapolation(self):
         import csv
         with open(os.path.join(ROOT, "benchmarks", "results", "bench_windows_20261016_2356.csv"),
                   encoding="utf-8") as fh:
             row = next(r for r in csv.DictReader(fh) if (r["n_seqs"], r["n_codons"]) == ("10000", "500"))
         t = float(row["pal2nal_median_s"])
         m100k, m500k = round(t * 10 / 60), round(t * 50 / 60)
-        self.expect("README.md", f"10,000-sequence time ({t:.1f} s)", f"roughly {m100k} and {m500k} minutes")
+        self.expect("docs/benchmarks.md", f"10,000-sequence time ({t:.1f} s)", f"roughly {m100k} and {m500k} minutes")
 
     # One compatibility claim, built from the harness's counts and the fuzz run below (with the normalised-ID mode);
     # every breakdown must add up to the total. No "on well-formed input" claim: well-formed mito -codontable 2 -nogap

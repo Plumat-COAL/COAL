@@ -5,7 +5,7 @@
 
 An unchanged PAL2NAL command line works: the default output format is clustal, as in PAL2NAL, and all four
 formats, -nogap, -nomismatch, -blockonly and every -codontable give PAL2NAL v14's output byte for byte, except for
-COAL's documented deliberate differences (README.md: newer NCBI genetic-code tables, -nogap using the chosen code's
+COAL's documented deliberate differences (docs/differences.md: newer NCBI genetic-code tables, -nogap using the chosen code's
 stop codons, the chosen code's start codons in the fallback, and inputs where PAL2NAL v14 writes malformed output or
 fails). The command line is read as PAL2NAL v14 reads it (a dangling -output or -codontable is ignored,
 "-codontable 2x" is code 2). The codon alignment goes to standard output, messages to standard error.

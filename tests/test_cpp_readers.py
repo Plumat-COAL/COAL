@@ -21,7 +21,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-REF_BRANCH = "origin/keanu_overnight/integration"
+REF_BRANCH = "origin/main"
 TIMEOUT = 60
 
 

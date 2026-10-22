@@ -715,8 +715,7 @@ PyInstaller. Mitigations, in order of effect:
 
 ## 8. Changes this design needs outside `desktop/` (for a human to decide)
 
-The desktop branch may only edit `desktop/` and `overnight/windows-app/`. These are proposals;
-exact wording is also in `overnight/windows-app/LOG.md` under "Needs a human decision".
+These are proposals for changes outside `desktop/`; some may already be done.
 
 1. **Engine: accept a UTF-8 BOM.** In `src/coal/seqio.py`, open text files with
    `encoding="utf-8-sig"` and then check `seq.isascii()` (or decode the first line with

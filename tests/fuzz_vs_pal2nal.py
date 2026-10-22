@@ -14,7 +14,7 @@ line, once for each output format (-output clustal / paml / fasta / codon), so 4
 Rule per comparison: PAL2NAL always exits 0; it succeeded if its stdout is non-empty. Then COAL (the ``pal2nal``
 command, run in-process) must exit 0 with byte-identical stdout; if PAL2NAL failed, COAL must exit non-zero with
 empty stdout. stderr is not compared (COAL's messages are its own). The only exceptions are the deliberate
-differences in DELIBERATE below (each is in README.md's list).
+differences in DELIBERATE below (each is in docs/differences.md).
 A difference is accepted only if it is exactly the documented one. The generator
 also writes a neutralised copy of each case (U residues -> B, RNA -> DNA, alternative start codons -> ATG, table-10
 TGA codons -> TGC, each IUPAC codon -> one of its readings chosen so that it matches the residue / is a stop exactly
@@ -46,7 +46,7 @@ from coal_compat.cli import main as pal2nal_main  # noqa: E402
 
 FORMATS = ("clustal", "paml", "fasta", "codon")
 
-# Deliberate differences (README.md, "Deliberate differences"): feature -> why COAL may differ from PAL2NAL.
+# Deliberate differences (docs/differences.md): feature -> why COAL may differ from PAL2NAL.
 # A case is allowed to differ only if the generator gave it one of these features.
 DELIBERATE = {
     "invalid_char": "invalid protein characters (e.g. '@', '#'): PAL2NAL drops a codon silently, COAL refuses (exit 1)",
