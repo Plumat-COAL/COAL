@@ -27,5 +27,8 @@ build/coal-cpp pep.aln nuc.fasta -o codon_aln.fasta       # Windows (Visual Stud
 | 100,000 × 500 | 2.945 s | 0.964 s | 3.1× | 125 / 37 MB |
 
   (Default `-j` for both engines; outputs byte-identical. `--impl both` in `benchmarks/run_bench.py` reproduces it.)
+- **Not in coal-cpp:** `--batch` (many small runs in one process, [usage.md](usage.md#batch-mode)) is a Python-side
+  driver; `coal-cpp --batch` says so and exits 2. coal-cpp starts in a few milliseconds, so one process per job is
+  cheap, and `coal --batch` never hands a batch to it.
 - **Tests:** `COAL_IMPL=cpp COAL_CPP_BIN=build/coal-cpp python -m unittest tests.test_differential
   tests.test_cpp_vs_python tests.test_cpp_cli` (the C++ tests skip when the binary isn't built).

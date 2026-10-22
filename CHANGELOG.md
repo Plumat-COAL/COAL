@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Batch mode (`coal --batch JOBS`, #15):** thousands of small conversions in one process, one `coal` command line
+  per line of JOBS (`-` = stdin), the command line's options as the defaults of every job, `--batch-out-dir DIR` for
+  jobs without `-o`, a `coal.batch/1` report with `--report`/`--json`, per-job stderr prefixes
+  (`coal: [k/n PEP] warning: ...`) and a `coal: batch:` summary line. A failing job does not stop the batch (exit 1
+  at the end; 2 if jobs only left sequences out; mistakes in JOBS are reported with their line number before
+  anything runs). Every output is byte-identical to the single run; about 40× less wall time on tiny jobs. Python
+  only: `coal-cpp --batch` is a clear error and batches are never dispatched to it. `--resume` and cross-job
+  parallelism are not supported in a batch yet.
 - **Repository tidied for outside users:** a short README with a section on using COAL in pipelines; the detailed
   documentation is in `docs/`. Hackathon logs and pitch material are removed (kept on the `hackathon-archive` tag),
   review-round markers are gone from comments, and engine test modules are named after what they test. No change to

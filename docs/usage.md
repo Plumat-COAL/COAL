@@ -85,3 +85,59 @@ file.
   the real output file); the output is byte-identical to an uninterrupted run. If no checkpoint was written yet, an
   interrupted run leaves nothing behind. Not for piped inputs or an output that is not a regular file (COAL says so
   and runs normally).
+
+## Batch mode
+
+A pipeline with thousands of small alignments (one per gene family or ortholog pair) spends most of its COAL time
+starting Python: `python -m coal` on a tiny input costs about 65 ms of start-up for about 2 ms of work. `coal --batch
+JOBS` runs many conversions in one process instead, each through the same code as a single run, so every output is
+byte-identical to running that job alone. Measured on 200 jobs of `examples/clean` (2-core Linux VM): 23 s as 200
+`python -m coal` processes, 0.6 s as one `coal --batch`, about 40× less wall time on tiny jobs (200 `coal-cpp`
+processes take 2.3 s).
+
+```
+coal --batch jobs.txt -codontable 11 --strict -q --report batch.json
+```
+
+`jobs.txt` has one job per line: a `coal` command line without the program name (blank lines and lines starting
+with `#` are skipped; `-` reads the jobs from stdin). Words are split with POSIX shell rules (`shlex`: quotes and
+backslashes as in `sh`, also on Windows). Each job names its own input files, and every job must write to a file:
+
+```
+# family   protein alignment   coding DNA           output          options of this job
+fam001/pep.aln fam001/nuc.fa -o fam001/codon.fa
+fam002/pep.aln fam002/nuc.fa -o fam002/codon.fa -codontable 2
+"fam 003/pep.aln" "fam 003/nuc.fa" -o fam003.aln -output clustal --report fam003.json
+```
+
+- **Defaults and overrides:** the options on the `coal --batch` command line (`-codontable`, `-output`, `-nogap`,
+  `--strict`, `--keep-going`, `-q`, `-j`, `--max-warnings`, ...) are the defaults of every job; a job line's own
+  options come last and override them. The input files must come from the job lines (an error if the command line
+  has any), and a job line may not carry `--batch`, `--batch-out-dir`, `--resume` or `--json`.
+- **Output files:** `-o` on the job line, or `--batch-out-dir DIR` on the command line, in which case a job without
+  `-o` writes `DIR/<name of its protein file without extension>.<ext>` with `ext` = `fasta`, `aln` (clustal), `paml`
+  or `codon` by its `-output` format (DIR is created). Two jobs writing the same file are an error before anything
+  runs, so families whose alignments are all called `pep.aln` need `-o` on each line.
+- **Reports:** `--report FILE.json` on a job line writes that job's `coal.report/1` report as usual. `--report
+  FILE.json` on the `coal --batch` command line writes one batch report instead (schema `coal.batch/1`): `{"schema",
+  "version", "command_line", "jobs": [{"index", "line", "exit_code", "output", "report": <the job's coal.report/1>},
+  ...], "summary": {"jobs", "ok", "failed", "skipped_sequences"}}`; `--json` prints it to stdout. A per-job
+  `command_line` is the command-line defaults followed by the job line, i.e. the single command that job equals.
+- **Messages:** each job's stderr lines carry the job's number and protein file after `coal: `, so they can be told
+  apart: `coal: [12/400 fam012/pep.aln] warning: ...`, likewise `error:`, `notice:` and `summary:`. `--progress`
+  prints `coal: progress: job k/n <protein file>` before each job (the percent lines of a job with over 10,000
+  sequences are not prefixed). The batch ends with `coal: batch: 400 jobs, 398 ok, 2 failed` (`-q` silences it, as
+  it silences the `coal: summary:` lines).
+- **Failures:** a failing job (bad input, a gene that cannot be converted) does not stop the batch; its output is not
+  written and the batch goes on. Jobs run one after the other; `-j N` keeps its meaning inside a job (cross-job
+  parallelism is a planned follow-up). Ctrl-C, SIGTERM and a closed pipe stop the batch with the exit codes of a
+  single run, and a job's half-written output is removed as it is for a single run (each job writes a temporary file
+  and renames it at the end). Batches always run in the Python engine (never handed to `coal-cpp`, which has no
+  batch mode and refuses `--batch`); `--resume` is not supported with `--batch` yet.
+
+| Exit code | Meaning |
+|---|---|
+| 0 | every job ok |
+| 2 | some job left sequences out (`--keep-going`) and no job failed; or, before anything runs, a mistake in the JOBS file or the command line (the message names the line) |
+| 1 | at least one job failed (the others still ran) |
+| 130 / 143 / 141 | interrupted, terminated, closed pipe (as a single run) |

@@ -73,6 +73,10 @@ Example inputs are in `examples/` (`clean`, `mito`, `messy_ids`, `one_broken_gen
   pairing and a genetic-code suggestion, also when the run fails ([docs/usage.md](docs/usage.md#run-report-and-long-runs)).
 - **Parallel jobs:** with many COAL processes running at once (one per gene family), pass `-j 1` so each uses one
   core. Without it, COAL uses all cores for large inputs.
+- **Thousands of small alignments:** `coal --batch jobs.txt` runs one job per line of `jobs.txt` (a `coal` command
+  line each, every one with `-o`) in a single process, so Python starts once instead of once per gene: about 40×
+  less wall time on tiny jobs, with byte-identical outputs
+  ([docs/usage.md](docs/usage.md#batch-mode)).
 - **Reading from a pipe:** pass `/dev/stdin` as an input path.
 - **From Python** (the API is not yet frozen; it may change before 1.0):
 
