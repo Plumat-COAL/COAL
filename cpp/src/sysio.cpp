@@ -148,8 +148,8 @@ std::string os_error(int err, const std::string& path) {
 // A character or block device as an input (`coal /dev/zero n.fa`, `coal - n.fa </dev/urandom`) would be copied to a
 // temp file without end, filling the disk: refused before anything is read (pipeline.py _refuse_device). A terminal
 // on standard input is read until EOF as before, and the null device is still an empty input.
+#ifndef _WIN32  // Windows has no device nodes a path could name; the function would be unused (MSVC C4505 under /WX)
 static void refuse_device(int fd, const std::string& name) {
-#ifndef _WIN32
     struct stat st;
     if (fd < 0 || ::fstat(fd, &st) != 0) return;
     if (!S_ISCHR(st.st_mode) && !S_ISBLK(st.st_mode)) return;
@@ -157,11 +157,8 @@ static void refuse_device(int fd, const std::string& name) {
     struct stat null_st;
     if (S_ISCHR(st.st_mode) && ::stat("/dev/null", &null_st) == 0 && null_st.st_rdev == st.st_rdev) return;
     throw InputError("cannot read " + name + ": it is a device, not a file", "file_error");
-#else
-    (void)fd;
-    (void)name;
-#endif
 }
+#endif
 
 #ifndef _WIN32
 // Reads a file descriptor with the small part of std::istream's surface the spool loop uses (read, gcount,

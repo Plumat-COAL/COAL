@@ -398,6 +398,25 @@ def _abandon_pool(ex) -> None:
                 p.join(1.0)
         except (OSError, ValueError, AttributeError, AssertionError):
             pass
+    # The call queue's feeder thread may be blocked writing a batch into the pipe (a 2 MB batch does not fit the
+    # pipe buffer): with the workers gone nothing reads it, but this process still holds the read end, so the write
+    # never fails, and the pool's management thread joins that feeder forever (Python 3.10: terminate_broken ->
+    # join_executor_internals -> call_queue.join_thread()). Draining the read end lets the feeder finish.
+    call_queue = getattr(ex, "_call_queue", None)
+    reader = getattr(call_queue, "_reader", None)
+    feeder = getattr(call_queue, "_thread", None)
+    try:
+        call_queue.close()  # the feeder stops once its buffer is sent
+    except Exception:  # noqa: BLE001 - best effort on private attributes
+        pass
+    deadline = time.monotonic() + 5.0
+    while feeder is not None and feeder.is_alive() and time.monotonic() < deadline:
+        try:
+            while reader is not None and reader.poll(0.02):
+                reader.recv_bytes()
+        except (OSError, EOFError, ValueError):
+            break
+        feeder.join(0.02)
     # A worker killed in the middle of sending a result leaves the pool's management thread reading a message that
     # never completes, and the interpreter joins that thread at exit: closing this process's write end of the result
     # pipe gives it EOF (the workers' ends are gone with them) so it ends as for a broken pool.
