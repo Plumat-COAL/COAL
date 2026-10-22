@@ -244,6 +244,22 @@ jobs:
           if grep -iE "\.\.\. skipped" cpp_tests.txt | grep -viqE "live comparison needs Python|peak memory read with getrusage|POSIX"; then
             echo "::error::C++ tests were skipped, so the C++ engine was not fully exercised"; exit 1
           fi
+      # The library as an outside program uses it: install to a prefix, build examples/cpp-embed with
+      # find_package(coal CONFIG), run it and check its codon alignment.
+      - name: Install and build the embedding example (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          cmake --install build --prefix "$RUNNER_TEMP/coal-prefix"
+          test -f "$RUNNER_TEMP/coal-prefix/include/coal/core.hpp"
+          test -x "$RUNNER_TEMP/coal-prefix/bin/coal-cpp"
+          e="$RUNNER_TEMP/build-embed"
+          cmake -S examples/cpp-embed -B "$e" -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/coal-prefix" \
+            -DCMAKE_CXX_FLAGS="-Wall -Wextra -Werror"
+          cmake --build "$e" -j 2
+          printf '>human\nATGAAAGTT---GCTCTG\n>mouse\nATGAAGGTCTCAGCACTA\n' > "$e/want.txt"
+          "$e/coal-embed-example" > "$e/got.txt"
+          diff "$e/want.txt" "$e/got.txt"
 
   # Builds the packaged Windows app (PyInstaller + Inno Setup, desktop\build.ps1) on every push to main, so a broken pin is caught before a release (release.yml builds it only after a tag), and
   # keeps the installer as a workflow artifact for testing.

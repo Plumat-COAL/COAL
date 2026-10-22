@@ -497,8 +497,14 @@ class RunReport:
         self.resumed_from: int | None = None
         self._dict = None
         self.finished = False
+        self.input_hashes: dict[int, str | None] = {}  # input number (0 = protein) -> sha256 of what was read
 
     # -------------------------------------------------- filled in by the pipeline
+    def set_input_hashes(self, hashes: dict):
+        """sha256 of inputs read through a temp copy (`-` = standard input, pipes), by input number (0 = protein):
+        the argument itself cannot be read again when the report is written."""
+        self.input_hashes = dict(hashes)
+
     def set_inputs(self, ids, dna_counts=None, dna_ids=None):
         """Protein IDs (input order); DNA records per file and DNA IDs in file order, once the DNA is read."""
         self.ids = list(ids)
@@ -980,10 +986,15 @@ class RunReport:
         entries = self._all_entries()
         c = self.counts(entries)
         n = len(self.ids) if self.ids is not None else len(self.kinds)
-        inputs = [{"role": "protein", "path": self.pep, "sha256": sha256_file(self.pep),
+        # "path" is the argument as given (`-` for standard input); "sha256" is of the data read
+        def _hash(k, p):
+            if k in self.input_hashes:
+                return self.input_hashes[k]
+            return None if p == "-" else sha256_file(p)  # `-` never names a file in the current folder
+        inputs = [{"role": "protein", "path": self.pep, "sha256": _hash(0, self.pep),
                    "sequences": len(self.ids) if self.ids is not None else None}]
         for i, p in enumerate(self.nucs):
-            inputs.append({"role": "dna", "path": p, "sha256": sha256_file(p),
+            inputs.append({"role": "dna", "path": p, "sha256": _hash(i + 1, p),
                            "sequences": self.dna_counts[i] if self.dna_counts else None})
         p2n = ["pal2nal.pl", self.pep, *self.nucs, "-output", self.fmt]
         if self.table != 1:

@@ -9,6 +9,7 @@ COAL's documented deliberate differences (docs/differences.md: newer NCBI geneti
 stop codons, the chosen code's start codons in the fallback, and inputs where PAL2NAL v14 writes malformed output or
 fails). The command line is read as PAL2NAL v14 reads it (a dangling -output or -codontable is ignored,
 "-codontable 2x" is code 2). The codon alignment goes to standard output, messages to standard error.
+``-`` as the protein alignment or one DNA file reads standard input (as for ``coal``; at most one ``-``).
 ``-nostderr`` is accepted and mapped to COAL's ``-q``: warnings and notices are silenced, errors still go to
 standard error (as with PAL2NAL's ``-nostderr``, which silences its warnings but not its ERROR messages).
 ``-html`` (PAL2NAL's web-server mode) gives a clear error.
@@ -99,6 +100,9 @@ def translate(argv: list[str], supported_formats=FORMATS) -> list[str]:
             files.append(a)
     if len(files) < 2:
         raise UsageError("give a protein alignment and at least one DNA file")
+    if files.count("-") > 1:
+        from coal.pipeline import STDIN_TWICE
+        raise UsageError(STDIN_TWICE)
     if fmt not in supported_formats:
         raise UsageError(f"this COAL cannot write '{fmt}' output. Supported: {', '.join(supported_formats)}")
     out = ["-output", fmt]

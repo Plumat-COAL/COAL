@@ -1386,13 +1386,18 @@ int main(int argc, char** argv) {
     if (o.resume && o.out.empty())
         return usage_error("--resume requires -o (only runs that write to a file can be resumed)");
     if (o.max_warnings < 0) return usage_error("--max-warnings must be 0 (no limit) or more");
+    {
+        std::vector<std::string> in{o.pep};
+        in.insert(in.end(), o.nucs.begin(), o.nucs.end());
+        if (stdin_count(in) > 1) return usage_error(STDIN_TWICE);
+    }
 
     RunReport rec(o.argv, o.pep, o.nucs, o.out, o.fmt, o.table, o.nogap, o.nomismatch, o.keep_going,
                   !o.report.empty() || o.json, o.strict, o.blockonly);
     rec.want_hint = !o.quiet || !o.report.empty() || o.json;
     install_signal_handlers();
-    // Pipes, /dev/stdin and FIFOs are copied to temp files first; messages name
-    // the argument, not the temp copy
+    // `-` (standard input), pipes, /dev/stdin and FIFOs are copied to temp files first; messages name
+    // the argument ("standard input" for `-`), not the temp copy
     std::vector<std::pair<std::string, std::string>> spooled;
     struct SpoolCleanup {
         std::vector<std::pair<std::string, std::string>>& s;
