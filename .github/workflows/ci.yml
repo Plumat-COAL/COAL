@@ -3,6 +3,7 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:  # Actions > CI > Run workflow: also builds the Windows app for the chosen branch
 
 permissions:
   contents: read
@@ -263,11 +264,12 @@ jobs:
             echo "::error::C++ tests were skipped, so the C++ engine was not fully exercised"; exit 1
           fi
 
-  # Builds the packaged Windows app (PyInstaller + Inno Setup, apps\coal-app\desktop\build.ps1) on every push to main, so a broken pin is caught before a release (release.yml builds it only after a tag), and
-  # keeps the installer as a workflow artifact for testing.
+  # Builds the packaged Windows app (PyInstaller + Inno Setup, apps\coal-app\desktop\build.ps1) on every push to main,
+  # so a broken pin is caught before a release (release.yml builds it only after a tag), and keeps the installer as a
+  # workflow artifact for testing. Run it on any branch with "Run workflow" (workflow_dispatch).
   windows-app:
     name: Windows app build (installer + portable)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     timeout-minutes: 90
     defaults:
