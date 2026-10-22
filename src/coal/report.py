@@ -14,11 +14,8 @@ did check keep their status. The C++ engine mirrors this module (cpp/src/report.
 """
 from __future__ import annotations
 
-import hashlib
-import json
 import os
 import re
-import shlex
 import sys
 import time
 from itertools import product
@@ -343,6 +340,7 @@ def break_event(row: str, dna: str, table: int) -> dict | None:
 # ------------------------------------------------------------------ helpers
 
 def sha256_file(path) -> str | None:
+    import hashlib
     try:
         h = hashlib.sha256()
         with open(path, "rb") as fh:
@@ -813,6 +811,7 @@ class RunReport:
 
     def command(self) -> str:
         """The command that reproduces the output (options that change it, then -o), as the app writes it."""
+        import shlex
         parts = ["coal", self.pep, *self.nucs]
         if self.fmt != "fasta":
             parts += ["-output", self.fmt]
@@ -897,6 +896,7 @@ class RunReport:
 
     def methods_text(self, rep: dict | None = None) -> str:
         """A ready-to-paste methods sentence: the app's rules (src/coal_app/core.py methods_text) on this report."""
+        import shlex
         rep = rep or self.to_dict(methods=False)
         if not self.completed():
             return ""
@@ -976,6 +976,7 @@ class RunReport:
         return text
 
     def to_dict(self, methods: bool = True) -> dict:
+        import shlex
         entries = self._all_entries()
         c = self.counts(entries)
         n = len(self.ids) if self.ids is not None else len(self.kinds)
@@ -1027,6 +1028,7 @@ class RunReport:
 
     def write(self, path: str):
         """Write atomically (temp file + rename); never leaves the temp file behind."""
+        import json
         tmp = f"{path}.tmp{os.getpid()}"
         try:
             with open(tmp, "w", encoding="utf-8", newline="\n") as fh:

@@ -36,8 +36,8 @@ from itertools import islice
 from . import checkpoint as _ck
 from .checkpoint import Checkpoint, durable_size, open_append
 from .core import (
-    MISMATCH_WARNING, CoalError, apply_slices, column_widths, expand, keep_slices, nogap_bad_triplets,
-    pair_ids, prepare_row, row_length_message, thread_one,
+    MISMATCH_WARNING, CoalError, apply_slices, column_widths, expand, keep_slices, limit_blas_threads,
+    nogap_bad_triplets, pair_ids, prepare_row, row_length_message, thread_one,
 )
 from .seqio import DnaIndex, InputFormatError, clustal_mask, is_clustal, iter_fasta, open_error_message, read_clustal
 from .tables import get_code
@@ -126,15 +126,14 @@ def _protein_rows(path):
 _W: dict = {}
 
 
-def mp_child() -> bool:
-    import multiprocessing
-    return multiprocessing.parent_process() is not None
+def _init_pool_worker(*init_args):
+    """Initializer of a worker process: ignore Ctrl-C (the main process reports it once, no worker tracebacks)."""
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    limit_blas_threads()
+    _init_worker(*init_args)
 
 
 def _init_worker(table, widths, two_pass, nogap, strict=False, out_format="fasta", keep_going=False):
-    # Workers ignore Ctrl-C (the main process reports it once, no worker tracebacks).
-    if mp_child():
-        signal.signal(signal.SIGINT, signal.SIG_IGN)
     _W.update(table=table, widths=widths, wide=any(w != 3 for w in widths),
               two_pass=two_pass, nogap=nogap, strict=strict,
               record=paml_record if out_format == "paml" else fasta_record,
@@ -316,7 +315,7 @@ def _results(batches, jobs: int, init_args):
         return
     from concurrent.futures import ProcessPoolExecutor  # imported only when needed
 
-    with ProcessPoolExecutor(max_workers=jobs, initializer=_init_worker, initargs=init_args) as ex:
+    with ProcessPoolExecutor(max_workers=jobs, initializer=_init_pool_worker, initargs=init_args) as ex:
         pending: deque = deque()
         for b in batches:
             pending.append(ex.submit(_work, b))
