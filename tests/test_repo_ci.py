@@ -131,7 +131,13 @@ class TestCiConditions(unittest.TestCase):
         self.assertNotIn("always()", cond.group(1))
 
     def test_explainer_job_is_required(self):
-        self.assertIsNone(self.re.search(r"^\s+continue-on-error:", self._job("explainer"), self.re.M))
+        """The job and its test step are required; only the best-effort apt step may continue on error (the test
+        step fails loudly when Chromium cannot start, so a slow mirror never hides a real failure)."""
+        job = self._job("explainer")
+        self.assertNotIn("continue-on-error", job.split("steps:")[0])  # not at the job level
+        for step in job.split("\n      - ")[1:]:
+            if "continue-on-error" in step:
+                self.assertIn("Chromium's system libraries", step.splitlines()[0], step)
 
     # the GUI job and the desktop step are required on every OS, Windows included
     def test_windows_gui_job_is_required(self):

@@ -190,7 +190,7 @@ static bool blank(const std::string& s) {
 }
 
 ProteinReader::ProteinReader(const std::string& path) : path_(path) {
-    clustal_ = is_clustal(path);
+    clustal_ = coal::is_clustal(path);
     if (clustal_) {
         LineReader lr(path);
         std::string line;
@@ -231,24 +231,31 @@ bool ProteinReader::next(std::string& id, std::string& row) {
     }
     std::string line;
     row.clear();
+    // Header checks, in the reference's order: empty header, then duplicate ID.
+    auto start_record = [&](const std::string& hdr, long long lineno) {
+        auto parts = split_ws(hdr, 1);
+        if (parts.empty()) throw InputError(path_ + ":" + std::to_string(lineno) + ": " + EMPTY_HEADER);
+        const std::string& rid = parts[0];
+        if (seen_.count(rid)) throw InputError(duplicate_message(path_, rid));
+        seen_[rid] = 1;
+        id = rid;
+    };
     bool in_rec = have_pending_;
-    if (in_rec) id = pending_id_;
+    if (in_rec) {
+        have_pending_ = false;
+        start_record(pending_line_, pending_lineno_);
+    }
     while (lr_->next(line)) {
         if (!line.empty() && line[0] == '>') {
-            auto parts = split_ws(line, 1);
-            if (parts.empty())
-                throw InputError(path_ + ":" + std::to_string(lr_->lineno()) + ": " + EMPTY_HEADER);
-            const std::string& rid = parts[0];
-            if (seen_.count(rid)) throw InputError(duplicate_message(path_, rid));
-            seen_[rid] = 1;
             if (in_rec) {
-                pending_id_ = rid;
+                // Hand the finished record back first; this header is checked on the next call.
+                pending_line_ = line;
+                pending_lineno_ = lr_->lineno();
                 have_pending_ = true;
                 return true;
             }
-            id = rid;
+            start_record(line, lr_->lineno());
             in_rec = true;
-            have_pending_ = false;
         } else if (!blank(line)) {
             if (!in_rec)
                 throw InputError(path_ + ":" + std::to_string(lr_->lineno()) + ": " + BEFORE_HEADER_PROTEIN);

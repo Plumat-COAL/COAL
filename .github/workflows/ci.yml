@@ -127,7 +127,7 @@ jobs:
     # Runs tests/test_docs_explainer.py (site/explainer.html in Chromium).
     name: "Explainer page in Chromium (Playwright)"
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw-browsers
     steps:
@@ -149,7 +149,20 @@ jobs:
       - name: Install the engine and Playwright with Chromium
         run: |
           python -m pip install -e . playwright==1.48.0
-          python -m playwright install --with-deps chromium
+          python -m playwright install chromium        # skipped when the cache above restored it
+      # The system libraries come from apt, which is what stalled this job twice (15 min, no output); a bounded
+      # step with one retry turns a slow mirror into a visible failure instead of a cancelled job.
+      # Best effort: the runner image already has nearly all of them, and the test step fails loudly ("must not
+      # skip") if Chromium cannot start, so a slow apt mirror cannot cancel the whole job.
+      - name: Chromium's system libraries
+        timeout-minutes: 8
+        continue-on-error: true
+        run: |
+          for attempt in 1 2; do
+            python -m playwright install-deps chromium && exit 0
+            echo "install-deps failed (attempt $attempt); retrying in 20 s"; sleep 20
+          done
+          exit 1
       - name: Explainer tests (must not skip)
         shell: bash
         run: |
@@ -233,9 +246,14 @@ jobs:
             apps/coal-app/pyproject.toml
             apps/coal-app/desktop/requirements.txt
       - name: Build
+        shell: bash
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCOAL_WARNINGS_AS_ERRORS=ON
-          cmake --build build --config Release -j 2
+          # Compiler diagnostics as annotations: they are readable from the checks API, the raw log is not always.
+          if ! cmake --build build --config Release -j 2 2>&1 | tee build.log; then
+            grep -iE "error|warning" build.log | head -40 | while IFS= read -r line; do echo "::error::$line"; done
+            exit 1
+          fi
       - name: Require the binary and its comparison tests
         shell: bash
         run: |
@@ -263,6 +281,22 @@ jobs:
           if grep -iE "\.\.\. skipped" cpp_tests.txt | grep -viqE "live comparison needs Python|peak memory read with getrusage|POSIX"; then
             echo "::error::C++ tests were skipped, so the C++ engine was not fully exercised"; exit 1
           fi
+      # The library as an outside program uses it: install to a prefix, build examples/cpp-embed with
+      # find_package(coal CONFIG), run it and check its codon alignment.
+      - name: Install and build the embedding example (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          cmake --install build --prefix "$RUNNER_TEMP/coal-prefix"
+          test -f "$RUNNER_TEMP/coal-prefix/include/coal/core.hpp"
+          test -x "$RUNNER_TEMP/coal-prefix/bin/coal-cpp"
+          e="$RUNNER_TEMP/build-embed"
+          cmake -S examples/cpp-embed -B "$e" -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/coal-prefix" \
+            -DCMAKE_CXX_FLAGS="-Wall -Wextra -Werror"
+          cmake --build "$e" -j 2
+          printf '>human\nATGAAAGTT---GCTCTG\n>mouse\nATGAAGGTCTCAGCACTA\n' > "$e/want.txt"
+          "$e/coal-embed-example" > "$e/got.txt"
+          diff "$e/want.txt" "$e/got.txt"
 
   # Builds the packaged Windows app (PyInstaller + Inno Setup, apps\coal-app\desktop\build.ps1) on every push to main,
   # so a broken pin is caught before a release (release.yml builds it only after a tag), and keeps the installer as a

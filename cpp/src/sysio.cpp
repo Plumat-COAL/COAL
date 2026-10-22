@@ -14,6 +14,7 @@
 #include "seqio.hpp"
 
 #ifdef _WIN32
+#include <fcntl.h>
 #include <io.h>
 #include <process.h>
 #define COAL_UNLINK _unlink
@@ -91,10 +92,56 @@ std::string os_error(int err, const std::string& path) {
     return "[Errno " + std::to_string(err) + "] " + std::strerror(err) + ": " + py_repr(path);
 }
 
+// `-`: standard input copied, as bytes, to a temp file (pipeline.py _spool_stdin). The same mechanism as a pipe or
+// /dev/stdin, so CRLF and BOM handling are those of file input; also on Windows (no /dev/stdin; binary mode).
+static std::string spool_stdin(std::vector<std::pair<std::string, std::string>>& spooled) {
+    const std::string closed = std::string("cannot read ") + STDIN_NAME + ": it is closed";
+#ifdef _WIN32
+    if (_fileno(stdin) < 0 || _get_osfhandle(_fileno(stdin)) == -1) throw InputError(closed, "file_error");
+    _setmode(_fileno(stdin), _O_BINARY);
+#else
+    if (::fcntl(0, F_GETFD) == -1) throw InputError(closed, "file_error");
+#endif
+    std::string tmp = (fs::temp_directory_path() / (".coal_in_" + unique_name() + "_stdin")).string();
+    register_temp(tmp);
+    spooled.push_back({tmp, STDIN_NAME});
+    std::ofstream dst(tmp, std::ios::binary | std::ios::trunc);
+    if (!dst) throw InputError(os_error(errno ? errno : EACCES, tmp), "file_error");
+    std::vector<char> buf(1 << 20);
+    for (;;) {
+        errno = 0;
+        size_t n = std::fread(buf.data(), 1, buf.size(), stdin);
+        if (n > 0) dst.write(buf.data(), (std::streamsize)n);
+        if (n < buf.size()) {
+            if (std::ferror(stdin)) {
+                int e = errno ? errno : EIO;
+                throw InputError(std::string("cannot read ") + STDIN_NAME + ": " +
+                                     (e == EBADF ? std::string("it is closed") : std::string(std::strerror(e))),
+                                 "file_error");
+            }
+            break;
+        }
+    }
+    dst.flush();
+    if (!dst) throw InputError(std::string("could not copy ") + STDIN_NAME + " to a temporary file (disk full?)",
+                               "file_error");
+    return tmp;
+}
+
+int stdin_count(const std::vector<std::string>& args) {
+    int n = 0;
+    for (const std::string& a : args) n += a == STDIN_ARG;
+    return n;
+}
+
 std::vector<std::string> spool_inputs(const std::vector<std::string>& args,
                                       std::vector<std::pair<std::string, std::string>>& spooled) {
     std::vector<std::string> out;
     for (const std::string& a : args) {
+        if (a == STDIN_ARG) {
+            out.push_back(spool_stdin(spooled));
+            continue;
+        }
         std::error_code ec;
         if (fs::is_regular_file(a, ec)) {
             out.push_back(a);

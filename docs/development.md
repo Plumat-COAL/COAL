@@ -61,6 +61,14 @@ corresponding codon alignments. *Nucleic Acids Res.* 34:W609–W612.
    version-free copies of the downloads. **Wait until it has published, then merge to `main`**, which redeploys the
    website (https://plumat-coal.github.io/COAL/, from `site/`, via `.github/workflows/pages.yml`). The site links to
    `releases/latest/download/<version-free name>`, so it offers the new release at once.
+4. **PyPI** (`coal-align`, `coal-align-app`): the `pypi` job of the same workflow uploads the versioned wheels and
+   sdists by [trusted publishing](https://docs.pypi.org/trusted-publishers/), after the GitHub Release exists. It
+   runs only when the repository variable `PYPI_PUBLISH` is `true`. One-time setup: on PyPI, create both projects
+   (or add a pending publisher) with owner `Plumat-COAL`, repository `COAL`, workflow `release.yml`, environment
+   `pypi`; on GitHub, create the `pypi` environment (Settings > Environments; optionally with required reviewers)
+   and the variable `PYPI_PUBLISH=true` (Settings > Secrets and variables > Actions > Variables). No API token is
+   stored anywhere. To publish a release that was built before the variable was set, re-run its workflow from the
+   Actions tab (`workflow_dispatch` with the tag).
 
 The Windows app is not code-signed yet (the release notes say so, with the SmartScreen and Smart App Control steps).
 Details and the one-time setup checklist: `site/README.md`.

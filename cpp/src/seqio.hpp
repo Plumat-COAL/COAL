@@ -59,6 +59,7 @@ class ProteinReader {
 public:
     explicit ProteinReader(const std::string& path);
     bool next(std::string& id, std::string& row);  // raw row (not yet prepared)
+    bool is_clustal() const { return clustal_; }
 
 private:
     std::string path_;
@@ -66,7 +67,11 @@ private:
     std::vector<std::pair<std::string, std::string>> clustal_recs_;
     size_t ci_ = 0;
     std::unique_ptr<LineReader> lr_;
-    std::string pending_id_;
+    // The '>' line that ended the previous record, kept raw: like iter_fasta in the
+    // reference, its header checks (empty, duplicate) run only when the next record is
+    // asked for, after the caller has seen the previous one.
+    std::string pending_line_;
+    long long pending_lineno_ = 0;
     bool have_pending_ = false;
     std::unordered_map<std::string, int> seen_;
 };
