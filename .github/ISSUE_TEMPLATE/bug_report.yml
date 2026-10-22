@@ -1,0 +1,84 @@
+name: Bug report
+description: COAL gave a wrong result, an error it should not give, crashed, or differs from PAL2NAL v14 in an undocumented way.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks. A reproducible report is one we can fix: the exact command line and, if you can share them, the two
+        input files (or a cut-down pair that still shows the problem). `coal --report run.json` writes everything COAL
+        knows about the run; attach it if there is one.
+  - type: input
+    id: version
+    attributes:
+      label: COAL version
+      description: The output of `coal --version` (or `coal-cpp --version`; for the Windows app, Help > About).
+      placeholder: coal 0.4.2
+    validations:
+      required: true
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Which engine or front end
+      description: "How did you run COAL? `coal` hands large inputs to `coal-cpp` when it finds one; `coal: notice:` lines on stderr say so."
+      options:
+        - coal (Python command line)
+        - coal-cpp (C++ command line)
+        - pal2nal drop-in command
+        - GUI (web app or Windows app)
+        - MCP server (from an AI agent)
+        - Python API (import coal)
+        - not sure
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and Python
+      description: e.g. Ubuntu 24.04, Python 3.12; Windows 11, the installed app; macOS 15.
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Exact command line
+      description: Copy it as typed, options included. For the GUI, the "Command" shown with the result (or the report's `command` field).
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What happened, and what you expected
+      description: The error or the wrong output, with the `coal:` lines from stderr. If a sequence is wrong, which one and which column.
+    validations:
+      required: true
+  - type: textarea
+    id: report
+    attributes:
+      label: Run report (--report FILE.json)
+      description: Re-run with `--report run.json` (the GUI saves one next to the result) and paste it here, or attach it. It holds the versions, options, input checksums and each sequence's status. Leave empty if there is none.
+      render: json
+  - type: dropdown
+    id: pal2nal
+    attributes:
+      label: Does PAL2NAL v14 give a different result?
+      description: If you can run `pal2nal.pl` on the same inputs (`perl pal2nal.pl pep.aln nuc.fasta -output fasta`), does it agree with COAL? Documented differences are listed in docs/differences.md.
+      options:
+        - I have not tried
+        - PAL2NAL gives the same result
+        - PAL2NAL gives a different result (please paste the difference below)
+        - PAL2NAL fails on this input too
+    validations:
+      required: true
+  - type: textarea
+    id: inputs
+    attributes:
+      label: Input files or a minimal example
+      description: Attach the protein alignment and the DNA (drag and drop), or paste a cut-down pair that still shows the problem. Say if the data cannot be shared.
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: The PAL2NAL output if it differs, what you already tried, a link to the data's origin.

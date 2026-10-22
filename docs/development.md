@@ -10,6 +10,10 @@
 | `tests/fuzz_vs_pal2nal.py` | random comparison with the real PAL2NAL v14 (needs Perl; `python scripts/fetch_pal2nal.py`) | `PAL2NAL=PAL2NAL/pal2nal.v14/pal2nal.pl python tests/fuzz_vs_pal2nal.py` |
 
 What each comparison checks, the counts and the list of deliberate differences: [tests/README.md](../tests/README.md).
+The short practical guide (setup, the rule that both engines stay byte-identical, how to add a deliberate
+difference, help-text regeneration): [CONTRIBUTING.md](../CONTRIBUTING.md). The public Python API and the 1.0
+versioning promise: [python-api.md](python-api.md); the run report's fields and JSON Schema:
+[report-schema.md](report-schema.md) (`tests/test_report_schema.py` validates both engines' reports against it).
 
 ## Two packages
 
