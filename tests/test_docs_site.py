@@ -107,7 +107,17 @@ class TestReleaseWorkflow(unittest.TestCase):
         on = wf.get("on", wf.get(True))  # YAML 1.1 reads a bare `on` key as True
         self.assertEqual(on["push"]["tags"], ["v*"])
         self.assertIn("workflow_dispatch", on)
-        self.assertEqual(set(wf["jobs"]), {"python", "windows", "release"})
+        self.assertEqual(set(wf["jobs"]), {"python", "windows", "release", "pypi"})
+
+    def test_pypi_job_is_opt_in_and_uses_trusted_publishing(self):
+        job = _workflow("release.yml")["jobs"]["pypi"]
+        self.assertEqual(job["if"], "vars.PYPI_PUBLISH == 'true'")  # off until the variable is set
+        self.assertEqual(job["environment"], "pypi")
+        self.assertEqual(job["permissions"], {"id-token": "write", "contents": "read"})  # no API token
+        self.assertIn("release", job["needs"])  # the GitHub Release exists before PyPI gets the files
+        uses = [st["uses"] for st in job["steps"] if "uses" in st]
+        self.assertTrue(any(u.startswith("pypa/gh-action-pypi-publish@") and "#" not in u and len(u.split("@")[1]) == 40
+                            for u in uses), uses)  # pinned to a commit
 
     def test_permissions_minimal(self):
         wf = _workflow("release.yml")
@@ -115,6 +125,8 @@ class TestReleaseWorkflow(unittest.TestCase):
         for name, job in wf["jobs"].items():
             if name == "release":
                 self.assertEqual(job["permissions"], {"contents": "write"})
+            elif name == "pypi":
+                self.assertEqual(job["permissions"], {"id-token": "write", "contents": "read"})
             else:
                 self.assertNotIn("permissions", job, name)
 

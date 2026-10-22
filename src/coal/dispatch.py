@@ -14,10 +14,7 @@ cannot be started, the run goes on in Python after one `coal: notice:` line. Onl
 from __future__ import annotations
 
 import os
-import shutil
-import subprocess
 import sys
-import sysconfig
 
 from . import __version__
 
@@ -35,6 +32,7 @@ class EngineError(Exception):
 
 def _dirs() -> list[str]:
     """Folders next to the Python running COAL: a frozen app's folder and its _internal, a venv's bin/Scripts."""
+    import sysconfig
     out = []
     exe = os.path.dirname(os.path.abspath(sys.executable)) if sys.executable else ""
     if exe:
@@ -56,6 +54,7 @@ def _dirs() -> list[str]:
 
 def find_cpp() -> str | None:
     """coal-cpp's path: COAL_CPP (that path only), else next to the Python running COAL, else on PATH."""
+    import shutil
     env = os.environ.get("COAL_CPP")
     if env:
         return env if os.path.isfile(env) else None
@@ -91,6 +90,7 @@ def _supported(args, defaults) -> bool:
 
 def _version_ok(path: str) -> tuple[bool, str]:
     """(runs and is this version, why not)."""
+    import subprocess
     try:
         r = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=30,
                            stdin=subprocess.DEVNULL)
@@ -141,6 +141,7 @@ def choose(args, argv, defaults, note=None) -> str | None:
 def run_cpp(path: str, argv: list[str]) -> int | str:
     """Run coal-cpp with this command line in this process's place; its exit code, or why it could not start.
     POSIX: exec (signals, pipes and the exit code are coal-cpp's own); Windows: a child with the same handles."""
+    import subprocess
     for s in (sys.stdout, sys.stderr):
         try:
             s.flush()

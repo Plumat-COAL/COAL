@@ -16,8 +16,10 @@ options:
   --version             show program's version number and exit
 
 Core:
-  pep_aln               protein alignment (FASTA or CLUSTAL)
-  nuc_fasta             coding DNA (FASTA; one or more files)
+  pep_aln               protein alignment (FASTA or CLUSTAL; - reads standard
+                        input)
+  nuc_fasta             coding DNA (FASTA; one or more files; - reads standard
+                        input)
   -codontable, --codontable N
                         NCBI genetic code (default 1): 1-6, 9-16, 21-23
   -o, --out FILE        output file (default: standard output)

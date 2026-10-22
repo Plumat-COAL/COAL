@@ -77,7 +77,9 @@ Example inputs are in `examples/` (`clean`, `mito`, `messy_ids`, `one_broken_gen
   line each, every one with `-o`) in a single process, so Python starts once instead of once per gene: about 40×
   less wall time on tiny jobs, with byte-identical outputs
   ([docs/usage.md](docs/usage.md#batch-mode)).
-- **Reading from a pipe:** pass `/dev/stdin` as an input path.
+- **Reading from a pipe:** pass `-` as the protein alignment or one DNA file (`zcat nuc.fa.gz | coal pep.aln -`);
+  works the same on Windows, with `coal-cpp` and with the `pal2nal` drop-in. Only one `-` per command line.
+- **From Python** (the API is not yet frozen; it may change before 1.0):
 - **From Python** (the API is not yet frozen; it may change before 1.0):
 
   ```python

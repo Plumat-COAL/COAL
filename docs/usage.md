@@ -2,6 +2,13 @@
 
 - **Input:** a protein alignment (FASTA or CLUSTAL) and the unaligned coding DNA (FASTA, one or more files).
   Non-letters in the DNA (gaps, digits, spaces) are ignored, as in PAL2NAL.
+  `-` as an input path reads standard input, for the protein alignment or for one DNA file (`cat pep.aln | coal -
+  nuc.fasta`, `zcat nuc.fa.gz | coal pep.aln -`); the same in `coal`, `coal-cpp` and the `pal2nal` drop-in, on every
+  system (Windows too). Standard input is read as bytes into a temporary file first, as pipes, FIFOs and
+  `<(...)` are, so line ends (CRLF, CR) and a UTF-8 BOM are handled exactly as in a file, and the output is
+  byte-identical to giving the file's path. Messages name it `standard input` (e.g. `standard input:3: empty FASTA
+  header ...`). Only one `-` per command line (two is a usage error, exit 2). The run report records `"path": "-"`
+  and the sha256 of the data that was read.
 - **Output:** a codon alignment, using the protein-alignment IDs, in any of PAL2NAL v14's formats, as PAL2NAL writes
   them (byte for byte, apart from the documented differences): `-output fasta` (COAL's default; 60 columns per line),
   `clustal` (PAL2NAL's default), `paml` (codeml's input) or `codon` (amino acids above their codons; not combinable
@@ -83,8 +90,8 @@ file.
 - `--progress` shows percent done and time left on stderr for inputs over 10,000 sequences.
 - `--resume` continues an interrupted `-o` run from `<out>.coal-checkpoint.json` (written at most every 2 s next to
   the real output file); the output is byte-identical to an uninterrupted run. If no checkpoint was written yet, an
-  interrupted run leaves nothing behind. Not for piped inputs or an output that is not a regular file (COAL says so
-  and runs normally).
+  interrupted run leaves nothing behind. Not for piped inputs (`-`, `/dev/stdin`, FIFOs) or an output that is not a
+  regular file (COAL says so in a notice and runs normally).
 
 ## Batch mode
 

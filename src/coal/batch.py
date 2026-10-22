@@ -141,6 +141,9 @@ def plan(ap: argparse.ArgumentParser, args: argparse.Namespace, argv: list[str],
         for dest, name in NOT_IN_A_JOB.items():
             if getattr(ns, dest):
                 raise JobsError(n, f"{name} is not allowed on a job line")
+        if "-" in (ns.pep_aln, *ns.nuc_fasta):
+            raise JobsError(n, "'-' (standard input) cannot be a job's input: standard input can be read once, and "
+                               "`--batch -` may be reading the job list from it; give a file path")
         if not ns.out:
             if not args.batch_out_dir:
                 raise JobsError(n, "the job has no -o (every job of a batch writes to a file; or give "
@@ -181,6 +184,7 @@ def write_json(path: str, data: dict) -> None:
 def main(ap: argparse.ArgumentParser, args: argparse.Namespace, argv: list[str]) -> int:
     """Run a `coal --batch` command line (parsed by cli.main with build_parser(batch=True))."""
     from .cli import install_signal_handlers, run_job
+    from .core import limit_blas_threads
     try:
         lines = read_jobs(args.batch)
     except KeyboardInterrupt:  # Ctrl-C while `--batch -` waits for stdin
@@ -200,6 +204,7 @@ def main(ap: argparse.ArgumentParser, args: argparse.Namespace, argv: list[str])
         except OSError as e:
             ap.error(f"cannot create --batch-out-dir {args.batch_out_dir}: {e.strerror or e}")
     reporting = bool(args.report or args.json)
+    limit_blas_threads()  # this process and its workers are COAL's own
     install_signal_handlers()
     n = len(jobs)
     done, ok, failed, skipped = [], 0, 0, 0

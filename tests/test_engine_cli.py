@@ -458,7 +458,7 @@ class TestAutomaticCppDispatch(unittest.TestCase):
             self.assertEqual(dispatch.find_cpp(), str(fake_py.parent / "coal-cpp"))  # next to Python first
             os.unlink(fake_py.parent / "coal-cpp")
             os.unlink(internal / "coal-cpp")
-            with mock.patch.object(dispatch.sysconfig, "get_path", lambda name: str(self.tmp / "none")), \
+            with mock.patch("sysconfig.get_path", lambda name: str(self.tmp / "none")), \
                     mock.patch.dict(os.environ, {"PATH": str(self.tmp)}):
                 self.assertEqual(dispatch.find_cpp(), str(self.tmp / "coal-cpp"))  # then PATH
 

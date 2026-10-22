@@ -14,8 +14,6 @@ sequences and carries on; the result is byte-identical to an uninterrupted run.
 """
 from __future__ import annotations
 
-import hashlib
-import json
 import os
 
 from . import __version__
@@ -29,6 +27,7 @@ CHANGED = ("The input files or options changed since the interrupted run, so it 
 
 class Checkpoint:
     def __init__(self, out_path: str, options: dict, inputs: list[str]):
+        import hashlib, json
         base = os.path.abspath(out_path)
         self.partial = base + ".coal-partial"
         self.stage = base + ".coal-stage"
@@ -50,6 +49,7 @@ class Checkpoint:
     def load_for_resume(self, sink_path: str) -> dict | None:
         """The saved state if this run can resume, None if there is nothing to resume.
         Raises CoalError(code="resume_mismatch") if inputs or options changed."""
+        import json
         if not os.path.exists(self.path):
             self.why = "no checkpoint"
             return None
@@ -73,6 +73,7 @@ class Checkpoint:
         return st
 
     def save(self, state: dict):
+        import json
         self.count += 1
         st = dict(state, engine=ENGINE, coal_version=__version__, options_hash=self.options_hash,
                   inputs=self._signature())
