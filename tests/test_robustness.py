@@ -851,8 +851,10 @@ class TestDnaFileChanged(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             p = os.path.join(d, "n.fa")
             with open(p, "w") as fh:
+                # 15 KB per record, 3 MB in all: record 150 lies beyond any read-ahead buffer of the first read
+                # (128 KiB on Python 3.14), so the shrunk file is really read, not served from the buffer
                 for k in range(200):
-                    fh.write(f">s{k}\n" + "ATGAAAGTTGCTCTG" * 10 + "\n")
+                    fh.write(f">s{k}\n" + "ATGAAAGTTGCTCTG" * 1000 + "\n")
             ix = DnaIndex([p])
             self.assertTrue(ix.get(0).startswith("ATGAAAGTT"))
             with open(p, "w") as fh:  # the file shrinks after it was indexed
