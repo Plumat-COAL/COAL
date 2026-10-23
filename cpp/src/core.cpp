@@ -243,6 +243,9 @@ long long find(Target& t, const std::vector<Token>& toks) {
     long long last = (long long)t.code.size() - total_length(toks);
     if (last < 0) return -1;
     if (toks.empty()) return 0;
+    // The usual case, a CDS that is exactly the protein's, fits at 0: checked before any frame is translated (the
+    // string search below cost 16 us per clean 400-codon gene, 2.3x the run time at -j 1 on a million genes)
+    if (matches_at(t, 0, toks)) return 0;
     bool plain = true;
     for (size_t i = 0; i < toks.size() && plain; ++i)
         if (!toks[i].residue || toks[i].any || (i > 0 && toks[i].mode != NORMAL)) plain = false;
