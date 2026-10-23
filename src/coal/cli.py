@@ -235,9 +235,30 @@ def run_job(args, argv, prefix: str = "", want_report: bool = False) -> tuple[in
     return rc, rec
 
 
+def cpp_path_main() -> int:
+    """`coal --cpp-path`: print the path of the coal-cpp that `coal` would hand large inputs to (the lookup order of
+    coal/dispatch.py: COAL_CPP, the binary bundled in a platform wheel, next to Python, PATH) and exit 0; exit 1 with
+    the reason on stderr when there is none or it is not this version. For pipelines and install checks:
+    `cpp=$(coal --cpp-path) && "$cpp" pep.aln nuc.fasta`. Handled before argparse so coal-cpp's own help and parser,
+    which mirror `coal --help`, stay unchanged."""
+    from . import dispatch
+    path = dispatch.find_cpp()
+    if path is None:
+        print(f"coal: coal-cpp not found (looked at {dispatch.LOOKUP_ORDER})", file=sys.stderr)
+        return 1
+    ok, why = dispatch._version_ok(path)
+    if not ok:
+        print(f"coal: {why}", file=sys.stderr)
+        return 1
+    print(path)
+    return 0
+
+
 def main(argv=None) -> int:
     command_line = argv is None  # only the command line may hand the run to coal-cpp
     argv = sys.argv[1:] if argv is None else list(argv)
+    if argv == ["--cpp-path"]:
+        return cpp_path_main()
     batch = wants_batch(argv)
     ap = build_parser(batch=batch)
     args = ap.parse_args(argv)
