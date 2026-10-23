@@ -747,3 +747,51 @@ takes 2.9 s / 543 MB in the Python engine and 1.0 s / 306 MB in coal-cpp (three 
   number is the pure-Python path.
 - **Timings on a real Linux kernel.** Everything ran on WSL 1 (slow file opens, no `forkserver`); absolute times are
   comparable within this report, not with `docs/benchmarks.md`.
+
+
+## Re-test on v0.5.0
+
+v0.5.0 (tag `v0.5.0`, 22 commits after the tested `c6f5728`) changes only version strings, one cosmetic vector
+initialiser in `cpp/src/report.cpp`, packaging, the website and docs: `src/coal`, `cpp/src/core.cpp`,
+`cpp/src/seqio.cpp`, `cpp/src/sysio.cpp` and the app are byte-identical apart from the version. Every finding was
+rerun against an untouched v0.5.0 build (`~/work/COAL050`, its own venv and `coal-cpp`; `group050.jsonl`) and
+reproduced unchanged:
+
+| finding | v0.4.2 (`c6f5728`) | v0.5.0 |
+|---|---|---|
+| 1 concurrent runs into one `-o` | exit 0 with another run's / an empty output | same (cpp: `-nogap` run's output survives a paml run that exited 0; python: 2 of 2 trials) |
+| 2 > 65,535 DNA files | `OverflowError` traceback (python) | same |
+| 3 1,000 DNA files, 16 workers | python "too many open files", cpp fine | same; 60,000 files 8.1 GB |
+| 4 LF then lone CR after 64 kB | both engines: count error | same |
+| 5 `nohup` + SIGHUP | exit 129, no output | same |
+| 8 gui extra on 3.14 | pydantic-core build fails | same pins |
+| 9 memory per warning | 20,000 unrelated genes: 3.1 GB (python) / 1.15 GB (cpp) | same (3.14 / 1.15 GB) |
+| 10 quadratic exact-fit scan | 50,000 residues: cpp 8.5 s | 9.2 s |
+| 11 hint cost | 1M-residue gene: python 30 s / 694 MB, `-q` 1.7 s | 35.8 s / 691 MB, `-q` 1.6 s |
+| clean inputs | 1M x 400: cpp 16.9 s / 201 MB, python 34 s / 1.07 GB | 16.9 s / 201 MB, 37.7 s / 1.07 GB |
+| `--resume` | byte-identical | byte-identical (2 rounds per engine) |
+
+## Fixes (branch `stress-fixes-0.5.0`, on v0.5.0)
+
+Each fix is in both engines unless said, with a test in `tests/test_stress_findings.py` (17 tests, 1.8 s; the
+quadratic one under `COAL_SLOW`), and every differential suite (`test_differential`, `test_cpp_vs_python`,
+`test_cpp_vs_reference`, `test_realdata`, `test_engine_fuzz`) plus 2,300 extra engine-fuzz cases (seeds 7, 11, 23,
+31) agree between the engines after them. The full suite shows only the two WSL 1 artefacts (`/proc` permission
+wording, the pool test under `fork`).
+
+| finding | fix | commit |
+|---|---|---|
+| 1 | `<out>.coal-lock` (process id) next to the output while a run writes it; a second run on the same file is refused with `coal: error: another COAL run (process N) is writing out.fa: wait for it to finish, or write to another file (if that process is gone, remove out.fa.coal-lock)`, exit 1; a lock of a dead process is replaced; removed by the normal end, an error and the signal handlers | `a7b40ae` |
+| 2 | `DnaIndex.fno` is an unsigned int (python) / `uint32_t` (cpp, which wrapped silently) | `e2e7699`, `a7b40ae` |
+| 3 | an open-file budget: the soft limit raised towards the hard limit when the files need it, at most limit minus headroom files open, least recently used closed first; python read buffers sized to about 64 MB in all. 600 files round robin with a hard limit of 160 descriptors work in both engines | `a7b40ae` |
+| 4 | `\n`, `\r\n` and a lone `\r` end a line wherever they are in a DNA file (as the protein reader) | `6416b17` |
+| 5 | an already ignored SIGHUP stays ignored | `19ab856` |
+| 6 | `coal: error: out of memory: ...` (exit 1, report code `out_of_memory`) for a `MemoryError` / `std::bad_alloc` in the main process | `6416b17` |
+| 7 | the GUI's console output uses `errors="replace"` on a non-UTF-8 console (`tolerant_console`); the MCP stdio server is untouched | `6416b17` |
+| 9 | partial: with `-q` and no `--report`/`--json` the run report keeps no per-sequence entries (20,000 unrelated genes: cpp 103 MB instead of 1,149 MB; python 1.16 GB instead of 3.15 GB, the rest being warnings in flight between workers). The default mode still keeps every message for the summary and the hint; `docs/usage.md` now gives the per-gene cost and the follow-up (keep only what the summary and hint need, stream the rest to the entries file) | `0eb8791` |
+| 10 | coal-cpp `find()`: a pattern of ordinary residues is a KMP string search in the translated frames; mixed patterns search their first run of residues and probe the last residue before the full check. 200,000-residue repeat: 138 s to 0.16 s; 1,000,000: not finished in 30 min to 0.8 s | `a7b40ae` |
+| 11 | genes of more than 100,000 residues are left out of the genetic-code hint's sample: the 1M-residue gene with one wrong codon takes 1.6 s (python) / 0.5 s (cpp) instead of 30 s / 5.7 s | `99bd164` |
+| 14 | messages name at most three input files and the count | `99bd164` |
+
+Not fixed, by choice: 12 (the default worker count; a documented ceiling), 13, 15, 16, 17, 18, 19 (environment),
+20, and the default-mode memory of 9 (a redesign of the run report's per-sequence store, both engines).
