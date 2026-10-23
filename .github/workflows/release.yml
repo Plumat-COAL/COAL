@@ -162,7 +162,8 @@ jobs:
           case " $archs " in *" arm64 "*) ;; *) echo "::error::no arm64 slice"; exit 1;; esac
           case " $archs " in *" x86_64 "*) ;; *) echo "::error::no x86_64 slice"; exit 1;; esac
           otool -L build-wheel/coal-cpp
-          if otool -L build-wheel/coal-cpp | tail -n +2 | grep -v "/usr/lib/"; then
+          # library lines are indented (the per-architecture headers are not); only system libraries are allowed
+          if otool -L build-wheel/coal-cpp | grep -E '^[[:space:]]' | grep -v "/usr/lib/"; then
             echo "::error::coal-cpp links libraries outside /usr/lib"; exit 1
           fi
           echo "BIN=build-wheel/coal-cpp" >> "$GITHUB_ENV"
@@ -185,18 +186,19 @@ jobs:
           ls -l wheelhouse
           test -s "wheelhouse/coal_align-${V}-py3-none-${TAG_NAME}.whl"
       - name: The wheel installs and `coal` uses its coal-cpp
+        # A fresh venv in the workspace (plain relative paths: this step runs in bash on Windows too). `coal
+        # --cpp-path` exits 1 unless the binary it found runs and is this version.
         run: |
-          python -m venv "$RUNNER_TEMP/pw"
-          if [ -d "$RUNNER_TEMP/pw/Scripts" ]; then b="$RUNNER_TEMP/pw/Scripts"; else b="$RUNNER_TEMP/pw/bin"; fi
+          python -m venv pw-venv
+          if [ -d pw-venv/Scripts ]; then b=pw-venv/Scripts; else b=pw-venv/bin; fi
           "$b/python" -m pip install "wheelhouse/coal_align-${V}-py3-none-${TAG_NAME}.whl"
-          test "$("$b/coal" --version)" = "coal ${V}"
-          cpp=$("$b/coal" --cpp-path)
+          test "$("$b/python" -m coal --version)" = "coal ${V}"
+          cpp=$("$b/python" -m coal --cpp-path)
           echo "coal-cpp: $cpp"
           case "$cpp" in *site-packages*coal*bin*coal-cpp*) ;; *) echo "::error::coal --cpp-path is not the bundled binary"; exit 1;; esac
-          test "$("$cpp" --version | cut -d' ' -f1,2)" = "coal ${V}"
-          COAL_ENGINE=cpp "$b/coal" examples/clean/protein.aln.fasta examples/clean/dna.fasta -o "$RUNNER_TEMP/cpp.fa"
-          COAL_ENGINE=python "$b/coal" examples/clean/protein.aln.fasta examples/clean/dna.fasta -o "$RUNNER_TEMP/py.fa"
-          cmp "$RUNNER_TEMP/cpp.fa" "$RUNNER_TEMP/py.fa"
+          COAL_ENGINE=cpp "$b/python" -m coal examples/clean/protein.aln.fasta examples/clean/dna.fasta -o pw-cpp.fa
+          COAL_ENGINE=python "$b/python" -m coal examples/clean/protein.aln.fasta examples/clean/dna.fasta -o pw-py.fa
+          cmp pw-cpp.fa pw-py.fa
           echo "bundled coal-cpp output is byte-identical to the Python engine's"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
