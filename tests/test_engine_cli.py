@@ -365,10 +365,12 @@ class TestAutomaticCppDispatch(unittest.TestCase):
         if rep:
             rep = json.loads(rep)
             rep.pop("runtime_seconds")
+            rep.pop("engine")  # the only field that says which engine ran
         stdout = r.stdout
         if "--json" in args:  # the report on stdout: the same but for its run time
             stdout = json.loads(stdout)
             stdout.pop("runtime_seconds")
+            stdout.pop("engine")
         return r.returncode, stdout, r.stderr, out, rep, self.mark.exists()
 
     def test_large_input_uses_cpp_with_identical_results(self):
@@ -452,7 +454,21 @@ class TestAutomaticCppDispatch(unittest.TestCase):
         internal.mkdir(exist_ok=True)
         shutil.copy(self.wrapper, internal / "coal-cpp")
         env = {k: v for k, v in os.environ.items() if k != "COAL_CPP"}
+        # a platform wheel's bundled binary (coal/bin/coal-cpp next to dispatch.py) comes right after COAL_CPP
+        pkg = self.tmp / "pkg" / "coal"
+        (pkg / "bin").mkdir(parents=True, exist_ok=True)
+        bundled = pkg / "bin" / "coal-cpp"
         with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(sys, "executable", str(fake_py)):
+            with mock.patch.object(dispatch, "__file__", str(pkg / "dispatch.py")):
+                self.assertEqual(dispatch.find_cpp(), str(internal / "coal-cpp"))  # no coal/bin: not consulted
+                shutil.copy(self.wrapper, bundled)
+                self.assertEqual(dispatch.find_cpp(), str(bundled))  # bundled beats next-to-Python
+                bundled.chmod(0o644)
+                self.assertEqual(dispatch.find_cpp(), str(internal / "coal-cpp"))  # only if executable
+                bundled.chmod(0o755)
+                with mock.patch.dict(os.environ, {"COAL_CPP": str(self.wrapper)}):
+                    self.assertEqual(dispatch.find_cpp(), str(self.wrapper))  # COAL_CPP beats bundled
+                bundled.unlink()
             self.assertEqual(dispatch.find_cpp(), str(internal / "coal-cpp"))  # a frozen app's _internal
             shutil.copy(self.wrapper, fake_py.parent / "coal-cpp")
             self.assertEqual(dispatch.find_cpp(), str(fake_py.parent / "coal-cpp"))  # next to Python first
@@ -461,6 +477,26 @@ class TestAutomaticCppDispatch(unittest.TestCase):
             with mock.patch("sysconfig.get_path", lambda name: str(self.tmp / "none")), \
                     mock.patch.dict(os.environ, {"PATH": str(self.tmp)}):
                 self.assertEqual(dispatch.find_cpp(), str(self.tmp / "coal-cpp"))  # then PATH
+
+    def test_cpp_path_flag(self):
+        """`coal --cpp-path` prints the coal-cpp that coal would use, or says why not (exit 1)."""
+        env = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "COAL_CPP": str(self.wrapper)}
+        r = subprocess.run([sys.executable, "-m", "coal", "--cpp-path"], capture_output=True, text=True, env=env)
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, f"{self.wrapper}\n", ""))
+        env["COAL_CPP"] = str(self.tmp / "missing")
+        r = subprocess.run([sys.executable, "-m", "coal", "--cpp-path"], capture_output=True, text=True, env=env)
+        self.assertEqual((r.returncode, r.stdout), (1, ""))
+        self.assertIn("coal: coal-cpp not found (looked at COAL_CPP, then coal/bin", r.stderr)
+        stale = self.tmp / "stale-for-path"
+        stale.write_text('#!/bin/sh\necho "coal 0.0.1 (C++)"\n')
+        stale.chmod(0o755)
+        env["COAL_CPP"] = str(stale)
+        r = subprocess.run([sys.executable, "-m", "coal", "--cpp-path"], capture_output=True, text=True, env=env)
+        self.assertEqual((r.returncode, r.stdout), (1, ""))
+        self.assertIn("is coal 0.0.1 (C++), not coal ", r.stderr)
+        # only the bare flag: with anything else it is argparse's business (unknown option, exit 2)
+        r = subprocess.run([sys.executable, "-m", "coal", "--cpp-path", "x"], capture_output=True, text=True, env=env)
+        self.assertEqual(r.returncode, 2)
 
 
 if __name__ == "__main__":

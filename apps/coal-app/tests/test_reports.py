@@ -350,7 +350,9 @@ class TestNotCheckedWording(ExampleVariantCase):
         self.assertNotIn("earlier error", before)
         self.assertIn("Not checked", after)
         self.assertIn("OG0001_sp14", after)
-        self.assertEqual(r.report["summary"]["not_checked"], 19)
+        # the engine's report: 13 genes checked before the error (counted as what COAL found), 6 never reached
+        self.assertEqual(r.report["summary"]["not_checked"], 6)
+        self.assertEqual(r.report["summary"]["ok"], 13)
 
 
 class TestMalformedReports(unittest.TestCase):

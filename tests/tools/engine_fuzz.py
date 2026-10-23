@@ -39,7 +39,7 @@ from coal.tables import SUPPORTED, get_code  # noqa: E402
 
 FORMATS = ["fasta", "clustal", "paml", "codon"]
 BASES = "ACGT"
-VOLATILE = ("runtime_seconds", "command", "command_line", "source", "methods_text", "coal_version")
+VOLATILE = ("runtime_seconds", "engine", "command", "command_line", "source", "methods_text", "coal_version")
 SANITIZER = re.compile(r"AddressSanitizer|LeakSanitizer|runtime error")
 # Both engines see the same environment: the Python one as the Python engine (COAL_ENGINE=python keeps `coal`
 # from delegating to a coal-cpp on PATH), UTF-8 I/O, the C locale, this repo's src/ first.

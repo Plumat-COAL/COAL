@@ -27,8 +27,8 @@ Speed-up of COAL over PAL2NAL v14, from warm medians (5 timed runs after a warm-
   proteins longer than about 22,000–24,000 residues (reproduced on three Perl builds).
 
 Machine: Intel i5-13600KF (14 cores / 20 threads), 32 GB, Windows 11. Memory is peak committed memory. Full results,
-including PAL2NAL v16 and the method: `benchmarks/results/windows_47f57f1/SUMMARY.md` on the `bench/windows-47f57f1`
-branch.
+including PAL2NAL v16 and the method: `benchmarks/results/windows_47f57f1/SUMMARY.md` (the per-gene diffs and per-tier
+correctness tables, 17 MB, are on the `bench-windows-47f57f1` tag).
 
 The sections below are from earlier versions of the Python engine (the commit is named in each section).
 

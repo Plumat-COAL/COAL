@@ -252,6 +252,7 @@ class TestNightlyWorkflow(unittest.TestCase):
     def test_the_ci_cpp_test_set_is_the_nightly_one(self):
         """ci.yml's C++ job and the sanitizer job run the same core modules (the nightly adds four)."""
         ci_mods = set(re.findall(r"tests\.test_\w+", self.ci.split("  cpp:")[1]))
+        ci_mods.discard("tests.test_wheels")  # packaging (the platform wheel installs): no sanitizer business
         san_mods = set(re.findall(r"tests\.test_\w+", self._job("sanitizers")))
         self.assertTrue(ci_mods <= san_mods, ci_mods - san_mods)
 
@@ -294,7 +295,10 @@ class TestNightlySteps(unittest.TestCase):
             self.assertNotEqual(r.returncode, 0, step)
 
     def test_cpp_fuzz_step_requires_the_cpp_engine_line(self):
-        ok = "import sys\nprint('fuzz engine cpp, seed 123, 1 cases', file=sys.stderr)\n"
+        # Under `-v` unittest has already printed "test_... ... " on that line, so the marker is not at a line start
+        # (the first real nightly run failed on exactly that)
+        ok = ("import sys\nprint('test_random_inputs_identical (...) ... ', end='', file=sys.stderr)\n"
+              "print('fuzz engine cpp, seed 123, 1 cases', file=sys.stderr)\n")
         r, _ = self._run("pal2nal-fuzz", self.CPP_STEP, {self.FUZZ: ok})
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         r, _ = self._run("pal2nal-fuzz", self.CPP_STEP, {self.FUZZ: ok.replace("cpp", "python")})

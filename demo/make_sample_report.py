@@ -51,6 +51,8 @@ def build() -> dict:
     # The engine writes its own methods_text naming the real COAL version, which contradicts coal_version "demo"
     # and overrides the app's methods_text, so the sample drops it
     rep.pop("methods_text", None)
+    # Nor is it one engine's report: "source" says what it is, so the engine's name goes too
+    rep.pop("engine", None)
     rep["source"] = DEMO_SOURCE
     rep["demo"] = True
     rep["runtime_seconds"] = 0.0

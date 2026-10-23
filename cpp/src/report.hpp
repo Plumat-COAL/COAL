@@ -82,9 +82,9 @@ private:
     std::string command() const;
     Json entry_view(long long k, int aborted = -1) const;  // -1: aborted = no output
     long long first_fail() const;
-    // Statuses per kinds_ (views = false), or as the entry views of a run that stopped show them (views = true, the
-    // report's summary: every sequence not_checked but the failed one)
-    std::map<std::string, long long> counts(bool views = false) const;
+    // The summary's counters: ok / warning / failed by what COAL found for each processed sequence (kinds_), plus
+    // not_checked for the sequences it never reached; they add up to total() (report.py RunReport.counts)
+    std::map<std::string, long long> counts() const;
     // A non-ok sequence's entry (parsed from its compact line) and the store that keeps it
     Json entry(long long k) const;
     void store(long long k, const Json& e);

@@ -1,0 +1,45 @@
+| scenario | p2n14 | p2n16 | coal-py@j1 | coal-py@jdefault | coal-cpp@j1 | coal-cpp@jdefault |
+|---|---|---|---|---|---|---|
+| baseline | T30 | T30 | T30 | T30 | T30 | T30 |
+| divergent | T20 | T20 | T20 | T20 | T20 | T20 |
+| indel_heavy | T20 | T20 | T20 | T20 | T20 | T20 |
+| large_family | T3 | T3 | T3 | T3 | T3 | T3 |
+| long_genes | T3 | T3 | T3 | T3 | T3 | T3 |
+| short_genes | T30 | T30 | T30 | T30 | T30 | T30 |
+| pairs | T20 | T20 | T20 | T20 | T20 | T20 |
+| utr_stop | T30 | T30 | T30 | T30 | T30 | T30 |
+| protein_stop | T15 | T15 | T15 | T15 | T15 | T15 |
+| internal_stop | T15 | T15 | T15 | T15 | T15 | T15 |
+| alt_start_t1 | T8 | T8 | T8 | T8 | T8 | T8 |
+| alt_start_t11 | T8 | T8 | T8 | T8 | T8 | T8 |
+| lowercase | T10 | T10 | T10 | T10 | T10 | T10 |
+| mixedcase_utr | T10 | T10 | T10 | T10 | T10 | T10 |
+| rna | T10 | T10 | T10 | T10 | T10 | T10 |
+| iupac | T15 | T15 | T15 | T15 | T15 | T15 |
+| frameshift | T15 | T15 | T15 | T15 | T15 | T15 |
+| mismatch | T15 | T15 | T15 | T15 | T15 | T15 |
+| shuffled_ids | T10 | T10 | T10 | T10 | T10 | T10 |
+| pair_by_position | T10 | T10 | T10 | T10 | T10 | T10 |
+| split_nuc | T10 | T10 | T10 | T10 | T10 | T10 |
+| headers_wrap | T10 | T10 | T10 | T10 | T10 | T10 |
+| crlf | T5 | T5 | T5 | T5 | T5 | T5 |
+| kitchen_sink | T10 | T10 | T10 | T10 | T10 | T10 |
+| table2 | T5 | T5 | T5 | T5 | T5 | T5 |
+| table3 | T5 | T5 | T5 | T5 | T5 | T5 |
+| table4 | T5 | T5 | T5 | T5 | T5 | T5 |
+| table5 | T5 | T5 | T5 | T5 | T5 | T5 |
+| table6 | T5 | T5 | T5 | T5 | T5 | T5 |
+| table9 | T5 | T5 | T5 | T5 | T5 | T5 |
+| table10 | T5 | T5 | T5 | T5 | T5 | T5 |
+| table11 | T5 | T5 | T5 | T5 | T5 | T5 |
+| table12 | T5 | T5 | T5 | T5 | T5 | T5 |
+| table13 | T5 | T5 | T5 | T5 | T5 | T5 |
+| table14 | T5 | T5 | T5 | T5 | T5 | T5 |
+| table15 | T5 | T5 | T5 | T5 | T5 | T5 |
+| table16 | T5 | T5 | T5 | T5 | T5 | T5 |
+| table21 | T5 | T5 | T5 | T5 | T5 | T5 |
+| table22 | T5 | T5 | T5 | T5 | T5 | T5 |
+| table23 | T5 | T5 | T5 | T5 | T5 | T5 |
+| **all** | T412 | T412 | T412 | T412 | T412 | T412 |
+
+T=TRUTH R=REF K=KNOWN_DIV M=MISMATCH E=ERROR TO=TIMEOUT OOM=OOM

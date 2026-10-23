@@ -27,6 +27,13 @@ command and the Python module are both `coal`. Until it is on PyPI, install from
 python -m pip install "coal-align @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz"
 ```
 
+Once it is on PyPI, `python -m pip install coal-align` also brings the C++ engine `coal-cpp` on Linux (x86_64 and
+aarch64, glibc 2.28+), macOS 11+ (Apple silicon and Intel) and Windows x64: each release has a wheel per platform
+with the binary inside (`coal_align-<version>-py3-none-<platform>.whl` on the
+[Releases page](https://github.com/plumat-coal/COAL/releases/latest); `pip install` that file to get it from a
+release), and `coal` hands large inputs to it with no settings. `coal --cpp-path` prints where it is. Other
+platforms get the pure-Python wheel or the sdist: the same `coal`, without the C++ engine.
+
 From source, with the C++ engine (needs a C++17 compiler and CMake 3.16+; optional but recommended for large inputs
 and for many small runs):
 

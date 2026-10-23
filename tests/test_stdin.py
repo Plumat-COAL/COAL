@@ -187,6 +187,7 @@ class TestStdinResumeAndReport(StdinCase):
             self.assertEqual(rc, 0, err)
             rep = json.loads((self.d / "r.json").read_text())
             rep.pop("runtime_seconds")
+            rep.pop("engine")
             reports[name] = rep
         rep = reports["python"]
         prot = rep["inputs"][0]
@@ -209,6 +210,7 @@ class TestStdinResumeAndReport(StdinCase):
             self.assertEqual(rc, 0, err)
             rep = json.loads((self.d / "r.json").read_text())
             rep.pop("runtime_seconds")
+            rep.pop("engine")
             reports[name] = rep
         self.assertEqual(reports["python"]["inputs"][1]["path"], "/dev/stdin")
         self.assertEqual(reports["python"]["inputs"][1]["sha256"], hashlib.sha256(data).hexdigest())
@@ -222,6 +224,7 @@ class TestStdinResumeAndReport(StdinCase):
             self.assertEqual(rc, 1, err)
             rep = json.loads((self.d / "r.json").read_text())
             rep.pop("runtime_seconds")
+            rep.pop("engine")
             reports[name] = rep
         rep = reports["python"]
         self.assertEqual(rep["inputs"][0]["path"], "-")

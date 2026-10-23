@@ -13,7 +13,7 @@
 
 namespace coal {
 
-static const char* VERSION = "0.4.2";
+static const char* VERSION = "0.5.0";
 static const char* SCHEMA = "coal.report/1";
 static const char* REPO_URL = "https://github.com/plumat-coal/COAL";
 // The hint re-tests at most 50 sequences and drops a code as soon as it cannot fit as many as the best so far;
@@ -425,12 +425,16 @@ static void annotate_mismatch_pattern(const std::string& row, Json& e) {
         return;
     }
     std::vector<std::vector<long long>> runs;
-    std::vector<long long> cur{idx[0]};
+    // push_back, not `cur = {x}`: GCC 14's -Warray-bounds misreads the initializer_list temporary of the assignment
+    // as an out-of-bounds memcpy (a false positive that broke the manylinux wheel build under -Werror)
+    std::vector<long long> cur;
+    cur.push_back(idx[0]);
     for (size_t i = 1; i < idx.size(); ++i) {
         if (idx[i] - cur.back() <= 2) cur.push_back(idx[i]);
         else {
             runs.push_back(cur);
-            cur = {idx[i]};
+            cur.clear();
+            cur.push_back(idx[i]);
         }
     }
     runs.push_back(cur);
@@ -978,15 +982,12 @@ Json RunReport::entry_view(long long k, int aborted) const {
     return e;
 }
 
-std::map<std::string, long long> RunReport::counts(bool views) const {
+std::map<std::string, long long> RunReport::counts() const {
+    // By what COAL found for each sequence it processed (its kind: failed for f/e, warning for m/u/x, ok for o), plus
+    // not_checked for the ones it never reached (report.py counts): in a run that stopped at an error these are the
+    // numbers of the "coal: summary:" lines, not the entry views' statuses (which mark the sequences checked before
+    // the error not_checked / not_written too, as no output holds them)
     std::map<std::string, long long> c{{"ok", 0}, {"warning", 0}, {"failed", 0}, {"not_checked", 0}};
-    if (views && !has_output_) {
-        // entry_view of a run that stopped: failed for the sequence it stopped at (kind 'e'), else not_checked
-        for (char ch : kinds_) c[ch == 'e' ? "failed" : "not_checked"] += 1;
-        c["not_checked"] += std::max<long long>(0, total() - (long long)kinds_.size());
-        return c;
-    }
-    // Otherwise a view's status is its entry's: failed for kinds f/e, warning for m/u/x (gene_kind), ok for o
     for (char ch : kinds_) {
         switch (ch) {
             case 'o': c["ok"]++; break;
@@ -1390,7 +1391,7 @@ std::string RunReport::methods_text(const Json& rep) const {
 }
 
 void RunReport::write_json(std::ostream& out) const {
-    auto c = counts(true);
+    auto c = counts();
     long long n = total();
     Json inputs = Json::array();
     auto hash = [&](size_t i, const std::string& p) {
@@ -1442,6 +1443,7 @@ void RunReport::write_json(std::ostream& out) const {
     d.set("schema", SCHEMA);
     d.set("coal_version", VERSION);
     d.set("source", "coal");
+    d.set("engine", "coal-cpp");  // the same string as the --resume checkpoint's "engine" (main.cpp)
     d.set("command", command());
     std::vector<std::string> cl{"coal"};
     cl.insert(cl.end(), argv_.begin(), argv_.end());
