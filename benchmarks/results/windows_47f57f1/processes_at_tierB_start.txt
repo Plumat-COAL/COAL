@@ -1,0 +1,18 @@
+﻿
+Name               WS_MB         CPU
+----               -----         ---
+Memory Compression  3831   261.84375
+vmmem               1480  7607.34375
+claude               964  2874.34375
+opera                754 1171.328125
+MsMpEng              658 3639.734375
+opera                547   445.28125
+opera                498  332.296875
+Discord              474    1506.125
+opera                469   88.390625
+opera                462    33.03125
+opera                458  100.140625
+opera                398  105.859375
+
+
+
