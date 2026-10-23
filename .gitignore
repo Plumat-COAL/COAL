@@ -1,53 +1,54 @@
-# PAL2NAL reference distribution (GPL-2.0): not redistributed, so never commit it.
+
+!.vscode/extensions.json
+# C++ build output (cmake -S . -B build; build-asan: the sanitizer build of CONTRIBUTING.md "Nightly checks")
+# Editors / OS
 # Fetch locally with: python scripts/fetch_pal2nal.py
-PAL2NAL/
-*.tar.gz
-
-# Run outputs
-out/
-ref_*
-*.log
-
 # Large / generated data (add small fixtures under tests/fixtures/ explicitly)
-data/
+# Launcher environments (desktop\run_from_source.bat, desktop\setup_mcp.bat) and
+# PAL2NAL reference distribution (GPL-2.0): not redistributed, so never commit it.
+# PAL2NAL temp files (left behind if it cannot delete them)
+# Python
+# Run outputs
+# stray local files at the repo root (run outputs, debug logs, old launchers; the launchers live in desktop/)
+*.egg-info/
 *.fa.gz
 *.fasta.gz
-
-# Python
-__pycache__/
+*.log
 *.py[cod]
-.venv/
-venv/
-.pytest_cache/
-*.egg-info/
-src/coal/bin/      # a coal-cpp copied here for `pip install -e .`; the platform wheels get theirs from packaging/wheels/
-
-# Editors / OS
-.vscode/*
-!.vscode/extensions.json
-.idea/
+*.tar.gz
 .DS_Store
-Thumbs.db
-
-# PAL2NAL temp files (left behind if it cannot delete them)
-tmpwhich.*
-erraafile.*
-errnucfile.*
-tbln.out.*
-
-# C++ build output (cmake -S . -B build; build-asan: the sanitizer build of CONTRIBUTING.md "Nightly checks")
-build/
-build-asan/
-build-manylinux/   # packaging/wheels/build_linux_binary.sh
-build-wheel/       # release.yml: the coal-cpp that goes into a platform wheel
-
-# Launcher environments (desktop\run_from_source.bat, desktop\setup_mcp.bat) and
-# stray local files at the repo root (run outputs, debug logs, old launchers; the launchers live in desktop/)
+.idea/
+.pytest_cache/
 .venv-gui/
 .venv-mcp/
-/*_out.fasta
-/*_check*.txt
-/*_check*.py
-/coal_test_log.txt
+.venv/
+.vscode/*
 /*.bat
+/*_check*.py
+/*_check*.txt
+/*_out.fasta
+/coal_test_log.txt
+PAL2NAL/
+Thumbs.db
+__pycache__/
 build-app/
+build-asan/
+build-clang/
+build-gcc14/
+build-manylinux/
+build-wheel/       # release.yml: the coal-cpp that goes into a platform wheel
+build/
+data/
+dist-ci/
+erraafile.*
+errnucfile.*
+out/
+ref_*
+src/coal/bin/      # a coal-cpp copied here for `pip install -e .`; the platform wheels get theirs from packaging/wheels/
+tbln.out.*
+tmpwhich.*
+venv/
+wheelhouse-ci/
+dist/
+wheelhouse/
+build-*/

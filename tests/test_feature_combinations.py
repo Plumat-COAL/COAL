@@ -2,10 +2,10 @@
 --progress, and one version everywhere. Inputs are built in temp dirs; every subprocess has a timeout."""
 from __future__ import annotations
 
-import re
 import io
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -334,7 +334,8 @@ class TestMrg8Version(unittest.TestCase):
         # files that are absent are skipped (tests/test_cpp_vs_reference.py runs this module in a
         # partial copy of the repository); in the repository itself pyproject.toml must be there, so at least that
         # check always runs.
-        checks = [("pyproject.toml", f'version = "{v}"'), ("CMakeLists.txt", f"VERSION {v} "),
+        numeric = re.sub(r"(a|b|rc)\d+$", "", v)  # CMake's project(VERSION) takes digits only: 0.5.0 for 0.5.0rc1
+        checks = [("pyproject.toml", f'version = "{v}"'), ("CMakeLists.txt", f"VERSION {numeric} "),
                   ("cpp/src/main.cpp", f'VERSION = "{v}"'), ("cpp/src/report.cpp", f'VERSION = "{v}"'),
                   ("CITATION.cff", f"version: {v}"), ("site/index.html", f'data-version="{v}">{v}<'),
                   ("site/cite.html", f"<span data-version-ref>{v}</span>"), ("CHANGELOG.md", f"## {v}")]
