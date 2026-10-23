@@ -27,7 +27,6 @@
     <ul>
       <li><a href="install.html">Install</a></li>
       <li><a href="guide.html">Guide</a></li>
-      <li><a href="differences.html">Why use it</a></li>
       <li><a href="cite.html">Cite</a></li>
       <li><a href="https://github.com/plumat-coal/COAL">GitHub</a></li>
     </ul>
@@ -37,53 +36,42 @@
 <main id="main">
 <div class="intro">
   <h1>COAL</h1>
-  <p>COAL makes codon alignments. Give it a protein alignment and the coding DNA of the same genes, and it writes
-    the DNA back under the protein, three bases to a residue, with a gap of three wherever the protein has a gap.
-    It checks every codon against its amino acid as it goes, and when a gene does not fit it says which gene,
-    at which column, and what is probably wrong.</p>
-  <p>It does the job of PAL2NAL v14, with the same input files and options and the same output apart from
-    <a href="differences.html#pal2nal">a few documented differences</a>, and it is much quicker on large data.
-    A million genes of 400 codons took <span data-check="12.5 s">12.5 s</span> with COAL's C++ engine and
-    <span data-check="62 min">62 min</span> with PAL2NAL v14 <a href="differences.html#speed">on the same
-    machine</a>. There is a Windows app, a command line for pipelines and a Python package, all under the MIT
-    licence.</p>
+  <p>COAL makes codon alignments<a class="star" href="differences.html" aria-label="Why use it">*</a>. Give it a
+    protein alignment and the coding DNA of the same genes, and it writes the DNA back under the protein, three
+    bases to a residue, with a gap of three wherever the protein has a gap. It checks every codon against its
+    amino acid as it goes, and when a gene does not fit it says which gene, at which column, and what is probably
+    wrong.</p>
+  <p>COAL works as a Python and C++ replacement for PAL2NAL v14, for faster research across the tree of life. See
+    the <a href="differences.html#speed">benchmarked speed increases</a>.</p>
 </div>
 
 <section class="sec" id="download" aria-labelledby="dl-title">
   <h2 id="dl-title">Download</h2>
   <p class="meta">Version <span id="version" data-version="0.4.2">0.4.2</span>.
     <a href="https://github.com/plumat-coal/COAL/releases">Release notes and older versions</a>.</p>
-  <dl class="dl">
-    <dt>Windows 10 and 11</dt>
-    <dd>
-      <p><a class="dl-file" id="win-download" href="https://github.com/plumat-coal/COAL/releases/latest/download/COAL-Setup-windows-x64.exe">COAL-Setup-windows-x64.exe</a>,
-        the installer (64-bit). It installs for your user account and needs no administrator rights. It is not
-        code-signed, so Windows asks you to confirm before it runs; <a href="install.html#windows">the install page</a>
-        shows the two screens. The C++ engine is included.</p>
-      <p class="fine">Without an installer: <a href="https://github.com/plumat-coal/COAL/releases/latest/download/COAL-windows-x64.zip">COAL-windows-x64.zip</a>, unzip and
-        run <code>COAL\COAL.exe</code>.</p>
-    </dd>
-    <dt>macOS and Linux</dt>
-    <dd>
-      <p>With Python 3.10 or newer, in a terminal:</p>
-      <div class="cmd" data-copy-group><code id="pip-cmd">python3 -m venv ~/coal-env
+  <div class="cards">
+    <div class="card" id="card-windows">
+      <h3>Windows</h3>
+      <p class="req">64-bit Windows 10 and 11</p>
+      <p class="act"><a class="btn" id="win-download" href="https://github.com/plumat-coal/COAL/releases/latest/download/COAL-Setup-windows-x64.exe">Download Windows installer</a></p>
+      <p class="fine">Zip file: <a href="https://github.com/plumat-coal/COAL/releases/latest/download/COAL-windows-x64.zip">COAL-windows-x64.zip</a>.</p>
+    </div>
+    <div class="card" id="card-pip">
+      <h3 id="pip-title">macOS and Linux</h3>
+      <p class="req">Python 3.10 or newer, with pip</p>
+      <p class="act"><button type="button" class="btn" data-copy="pip-cmd" aria-describedby="pip-title">Copy install commands</button></p>
+      <div class="cmd"><code id="pip-cmd">python3 -m venv ~/coal-env
 ~/coal-env/bin/python -m pip install "coal-align @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz" "coal-align-app[gui] @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_app_src.tar.gz"
-~/coal-env/bin/coal-gui</code><button type="button" class="copy" data-copy="pip-cmd" aria-label="Copy the install commands">Copy</button></div>
-      <p class="fine">This makes a virtual environment in <code>~/coal-env</code>, installs the engine
-        (<code>coal-align</code>) and the app (<code>coal-align-app</code>) into it, and starts the app in your
-        browser. Step by step: <a href="install.html#macos">macOS</a>, <a href="install.html#linux">Linux</a>,
-        <a href="install.html#cli">command line</a>. COAL is not on PyPI; <code>pip install coal</code> is a
-        different package.</p>
-    </dd>
-    <dt>Source</dt>
-    <dd>
-      <p><a href="https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz">coal_src.tar.gz</a> (the engine) and
-        <a href="https://github.com/plumat-coal/COAL/releases/latest/download/coal_app_src.tar.gz">coal_app_src.tar.gz</a> (the app), or the
-        <a href="https://github.com/plumat-coal/COAL">repository on GitHub</a>.
-        <a href="https://github.com/plumat-coal/COAL/releases/latest/download/SHA256SUMS.txt">SHA256SUMS.txt</a> covers every file; <a href="install.html#verify">how to
-        check one</a>.</p>
-    </dd>
-  </dl>
+~/coal-env/bin/coal-gui</code></div>
+    </div>
+    <div class="card" id="card-source">
+      <h3>Source code</h3>
+      <p class="req">Python source packages</p>
+      <p class="act"><a class="btn secondary" href="https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz">Download source code</a></p>
+      <p class="fine"><a href="https://github.com/plumat-coal/COAL/releases/latest/download/coal_app_src.tar.gz">coal_app_src.tar.gz</a> (the app),
+        <a href="https://github.com/plumat-coal/COAL/releases/latest/download/SHA256SUMS.txt">SHA256SUMS.txt</a>, and the <a href="https://github.com/plumat-coal/COAL">repository</a>.</p>
+    </div>
+  </div>
   <p class="status" id="copy-status" role="status" aria-live="polite"></p>
 </section>
 
@@ -145,8 +133,8 @@ export COAL_CPP=$PWD/build/coal-cpp</code></pre>
 
 <footer class="foot" id="credits">
   <div class="foot-text">
-    <p>Made by Chloe Newton and Keanu Murati.</p>
-    <p>Set in Libertinus Serif (<a href="assets/fonts/OFL.txt">SIL Open Font License</a>).</p>
+    <p>Developed by Chloe Newton and Keanu Murati.</p>
+    <p>Last updated <time datetime="2026-10-23">23 October 2026</time>.</p>
   </div>
   <div class="rail"><svg class="train" viewBox="140 204 1120 582" aria-hidden="true" focusable="false"><g class="ts" fill="#CFC8BE"><circle cx="304" cy="328" r="32"/><circle cx="368" cy="272" r="44"/><circle cx="456" cy="236" r="28"/></g><g class="tb" fill="#1E1E1E"><rect x="264" y="368" width="72" height="124" rx="12.4"/></g><g class="tbo" fill="#2A2A2A"><rect x="216" y="480" width="376" height="216" rx="40"/></g><g class="tb" fill="#1E1E1E"><path d="M216 600V696H144Z"/><rect x="568" y="316" width="200" height="380" rx="20"/><rect x="552" y="296" width="232" height="36" rx="12.4"/><rect x="792" y="496" width="464" height="200" rx="21"/><rect x="760" y="622" width="40" height="20" rx="0"/><circle cx="320" cy="720" r="52"/><circle cx="480" cy="720" r="52"/><circle cx="672" cy="712" r="64"/><circle cx="880" cy="732" r="40"/><circle cx="1024" cy="732" r="40"/><circle cx="1168" cy="732" r="40"/></g><g class="ta" fill="#FFC24B"><rect x="616" y="368" width="104" height="88" rx="12"/></g><g class="th" fill="#4A4744"><circle cx="320" cy="719.5" r="15.5"/><circle cx="480" cy="719.5" r="15.5"/><circle cx="672" cy="711.5" r="19.5"/><circle cx="880" cy="732" r="11"/><circle cx="1024" cy="732" r="11"/><circle cx="1168" cy="732" r="11"/></g><g class="tc" fill="#2A2A2A"><rect x="848" y="448" width="40" height="40" rx="8"/><rect x="878" y="400" width="40" height="40" rx="8"/><rect x="974" y="400" width="40" height="40" rx="8"/><rect x="1004" y="352" width="40" height="40" rx="8"/><rect x="1052" y="352" width="40" height="40" rx="8"/><rect x="1052" y="448" width="40" height="40" rx="8"/><rect x="1082" y="400" width="40" height="40" rx="8"/></g><g class="tsl" fill="#4A4744"><rect x="926" y="400" width="40" height="40" rx="8"/><rect x="956" y="352" width="40" height="40" rx="8"/></g><g class="te" fill="#FF6A13"><rect x="800" y="448" width="40" height="40" rx="8"/><rect x="896" y="448" width="40" height="40" rx="8"/><rect x="1004" y="448" width="40" height="40" rx="8"/><rect x="1034" y="400" width="40" height="40" rx="8"/><rect x="1112" y="448" width="40" height="40" rx="8"/><rect x="1208" y="448" width="40" height="40" rx="8"/></g><g class="ta" fill="#FFC24B"><rect x="956" y="448" width="40" height="40" rx="8"/><rect x="1130" y="400" width="40" height="40" rx="8"/><rect x="1160" y="448" width="40" height="40" rx="8"/></g></svg></div>
 </footer>

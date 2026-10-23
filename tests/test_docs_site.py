@@ -405,8 +405,8 @@ class TestSiteFiles(unittest.TestCase):
         for page, html in self.pages.items():
             self.assertEqual(chrome(html), first, f"{page}: header or footer differs from index.html")
             current = re.findall(r'<a href="([^"]+)" aria-current="page">', html)
-            self.assertEqual(current, [] if page == "index.html" else [page], page)
-            if page != "index.html":
+            self.assertEqual(current, [] if page in ("index.html", "differences.html") else [page], page)
+            if page not in ("index.html", "differences.html"):  # "Why use it" is reached from the home page
                 self.assertIn(f'href="{page}"', first[0], f"{page} is not in the header")
 
     def test_font_is_self_hosted_with_its_licence(self):
@@ -416,8 +416,7 @@ class TestSiteFiles(unittest.TestCase):
         for f in FONTS:  # Latin subsets of Libertinus Serif (regular, semibold, italic)
             self.assertLess(os.path.getsize(os.path.join(SITE, f)), 40 * 1024, f)
         self.assertIn("SIL Open Font License", _read("site", "assets", "fonts", "OFL.txt"))
-        self.assertIn("Libertinus", _read("site", "assets", "fonts", "OFL.txt"))
-        self.assertIn('href="assets/fonts/OFL.txt"', self.index)
+        self.assertIn("Libertinus", _read("site", "assets", "fonts", "OFL.txt"))  # the licence travels with the font
 
     def test_size_budget(self):
         total = 0

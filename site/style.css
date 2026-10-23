@@ -35,7 +35,12 @@
   --rule: #57524D;
   --code-bg: #1C1A19;
   --codon-bg: #2E2B28;
-  --accent: #FFC24B;       /* the logo's amber, 11.7:1 on the page: current page, a few rules */
+  --accent: #FFC24B;       /* the logo's amber, 11.7:1 on the page: current page, the download buttons */
+  --accent-hover: #FFD27A;
+  --on-accent: #1E1E1E;    /* 10.4:1 on amber */
+  --card-bg: #2A2421;      /* raised card surface; text 11.6:1, muted 6.9:1 */
+  --card-line: #564D46;
+  --card-code-bg: #171514;
   --amber: #FFC24B;
   --focus: #FFC24B;
   --ok: #8FD19E;
@@ -104,7 +109,8 @@ kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3p
 /* Page body: text at a reading measure; transcripts, tables and figures wider. */
 main { width: calc(100% - 2 * var(--gutter)); max-width: var(--wide); margin: 0 auto; }
 .sec > *, .page-head > *, .intro > * { max-width: var(--measure); }
-.sec > pre, .sec > figure, .sec > .table-scroll, .sec > .dl, .sec > .explainer, .sec > .look { max-width: var(--wide); }
+.sec > pre, .sec > figure, .sec > .table-scroll, .sec > .cards, .sec > .explainer, .sec > .look { max-width: var(--wide); }
+.star { text-decoration: none; color: var(--accent); font-weight: 600; }
 .sec { padding: 2rem 0 0.75rem; border-top: 1px solid var(--line); }
 .sec > h2 { margin-bottom: 0.8rem; }
 .intro { padding: 2.25rem 0 1.5rem; }
@@ -115,15 +121,27 @@ main { width: calc(100% - 2 * var(--gutter)); max-width: var(--wide); margin: 0 
 .meta { color: var(--muted); font-size: var(--fs-sm); margin: 0 0 1rem; }
 .meta a { color: var(--muted); }
 
-/* Downloads: one row per system, the file or the command beside it. */
-.dl { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.6rem 1.5rem; margin: 0 0 1rem; }
-@media (min-width: 44rem) { .dl { grid-template-columns: 11rem minmax(0, 1fr); } }
-.dl dt { font-weight: 600; color: var(--ink); padding-top: 0.15rem; }
-.dl dd { margin: 0 0 0.6rem; }
-@media (min-width: 44rem) { .dl dd { margin-bottom: 0.9rem; } }
-.dl dd p { margin: 0 0 0.35rem; }
-.dl .cmd { margin: 0.35rem 0 0.4rem; }
-.dl-file { font-weight: 600; }
+/* Download cards: one per system, one action each, at the same height in every card. */
+.cards { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); margin: 0 0 1rem; }
+@media (min-width: 52rem) { .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.25rem; } }
+.card { display: flex; flex-direction: column; min-width: 0; background: var(--card-bg); border: 1px solid var(--card-line);
+  border-radius: 8px; padding: 1.1rem 1.2rem 1rem; }
+.card h3 { font-size: 1.3rem; margin: 0; }
+.card .req { font-size: var(--fs-sm); color: var(--muted); margin: 0.1rem 0 0.9rem; }
+.card .act { margin: 0 0 0.8rem; }
+.card .fine { margin: 0; }
+.card code { background: var(--card-code-bg); }
+.card .cmd { margin: 0; background: var(--card-code-bg); border-color: var(--card-line); }
+.card .cmd code { font-size: 0.74rem; }
+.btn { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 2.8rem; background: var(--accent);
+  color: var(--on-accent); font: inherit; font-weight: 600; padding: 0.5rem 1rem; border: 2px solid var(--accent);
+  border-radius: 5px; text-decoration: none; cursor: pointer; }
+.btn:hover { background: var(--accent-hover); border-color: var(--accent-hover); text-decoration: none; }
+.btn.secondary { background: transparent; color: var(--ink); border-color: #8C827A; }
+.btn.secondary:hover { border-color: var(--accent); }
+.btn[data-copied] { background: var(--ok); border-color: var(--ok); }
+.card .act a.pending { display: block; padding: 0.6rem 1rem; border: 2px dashed #8C827A; border-radius: 5px; color: var(--text);
+  text-align: center; text-decoration: none; }
 .also { display: flex; flex-wrap: wrap; gap: 0.2rem 1.2rem; list-style: none; padding: 0; margin: 0;
   font-size: var(--fs-sm); color: var(--muted); }
 .also a { color: var(--text); }
@@ -161,8 +179,8 @@ pre.term code { white-space: pre-wrap; overflow-wrap: anywhere; }
 .shot { margin: 1.25rem 0 1rem; }
 
 /* The explainer animation, inline on the guide. */
-.explainer { display: block; width: 100%; aspect-ratio: 16 / 9; min-height: 20rem; border: 1px solid var(--line);
-  background: var(--code-bg); margin: 0 0 0.5rem; }
+.explainer { display: block; width: 100%; aspect-ratio: 16 / 7; min-height: 19rem; border: 0; background: transparent;
+  margin: 0 0 0.5rem; }
 
 /* The alignment, one block per codon. */
 .aln { margin: 0 0 1.25rem; }
@@ -252,6 +270,6 @@ details.ss[open] summary { margin-bottom: 0.75rem; }
   /* print on white paper */
   :root { --paper: #FFFFFF; --ink: #1E1E1E; --text: #2A2A2A; --muted: #4A4744; --line: #DDD8D2; --code-bg: #F2F0ED;
     --codon-bg: #E9E5E0; --rule: #BDB7B0; color-scheme: light; }
-  .top nav, .copy, .rail, .explainer, .status { display: none; }
+  .top nav, .copy, .rail, .explainer, .status, .cards { display: none; }
   a { text-decoration: none; }
 }

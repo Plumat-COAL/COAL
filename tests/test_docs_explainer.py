@@ -38,7 +38,7 @@ class TestExplainer(unittest.TestCase):
             try:
                 pg = b.new_page(viewport={"width": width, "height": height}, reduced_motion="reduce")
                 pg.goto(PAGE, timeout=30000)
-                pg.click("#play")  # pause autoplay, step by hand
+                pg.evaluate("document.getElementById('play').click()")  # pause autoplay (the button is hidden), step by hand
                 for i in range(5):
                     if i:
                         pg.click("#next")

@@ -9,7 +9,7 @@
   var MOVED = {
     install: "install.html", windows: "install.html", "smart-app-control": "install.html", macos: "install.html",
     linux: "install.html", cli: "install.html", downloads: "install.html", files: "install.html",
-    verify: "install.html", example: "guide.html", misfit: "guide.html", limits: "guide.html", docs: "guide.html",
+    verify: "install.html", example: "guide.html", misfit: "guide.html", docs: "guide.html",
     pal2nal: "differences.html", speed: "differences.html", reasons: "differences.html", cite: "cite.html",
     how: "guide.html"
   };
