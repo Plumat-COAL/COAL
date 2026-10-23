@@ -1,6 +1,7 @@
 # Release: on a pushed tag v* (or by hand), build the Python wheels + sdists of both packages (the engine coal-align
-# from the repository root, the app coal-align-app from apps/coal-app) and the Windows app (installer + portable zip),
-# check them, and publish a GitHub Release with every file, version-free copies and SHA256SUMS.txt.
+# from the repository root, the app coal-align-app from apps/coal-app), the engine's platform wheels with coal-cpp
+# inside (Linux x86_64/aarch64, macOS, Windows) and the Windows app (installer + portable zip), check them, and
+# publish a GitHub Release with every file, version-free copies and SHA256SUMS.txt.
 # The website (site/) links to https://github.com/plumat-coal/COAL/releases/latest/download/<version-free name>,
 # so a new release updates the download buttons without editing the site. See site/README.md.
 name: Release
@@ -99,6 +100,110 @@ jobs:
           path: release/
           if-no-files-found: error
 
+  # Platform wheels of the engine: the pure wheel from the python job plus coal-cpp built for that platform, so
+  # `pip install coal-align` gives both engines on Linux x86_64 / aarch64 (glibc 2.28+), macOS 11+ (one universal2
+  # wheel) and Windows x64; pip falls back to the py3-none-any wheel or the sdist elsewhere. packaging/wheels/
+  # has the scripts; docs/cpp-engine.md "Where coal looks for coal-cpp" the lookup order. Linux builds in the
+  # manylinux_2_28 containers with libstdc++/libgcc static and auditwheel checks the tag; aarch64 runs on GitHub's
+  # native arm runner (free for public repositories; the QEMU alternative is docker/setup-qemu-action plus
+  # `docker run --platform linux/arm64`, several times slower).
+  cpp-wheels:
+    name: Engine wheel with coal-cpp (${{ matrix.tag }})
+    needs: python
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            tag: manylinux_2_28_x86_64
+            image: quay.io/pypa/manylinux_2_28_x86_64
+          - os: ubuntu-24.04-arm
+            tag: manylinux_2_28_aarch64
+            image: quay.io/pypa/manylinux_2_28_aarch64
+          - os: macos-latest
+            tag: macosx_11_0_universal2
+          - os: windows-latest
+            tag: win_amd64
+    defaults:
+      run:
+        shell: bash
+    env:
+      V: ${{ needs.python.outputs.version }}
+      TAG_NAME: ${{ matrix.tag }}
+      IMAGE: ${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: dist-python
+          path: release/
+      - name: Build coal-cpp (Linux, inside the manylinux_2_28 container)
+        if: runner.os == 'Linux'
+        run: |
+          docker run --rm -v "$PWD:/io" -w /io "$IMAGE" bash packaging/wheels/build_linux_binary.sh /io /io/build-wheel
+          sudo chown -R "$(id -u):$(id -g)" build-wheel
+          echo "BIN=build-wheel/coal-cpp" >> "$GITHUB_ENV"
+      - name: Build coal-cpp (macOS, universal2)
+        if: runner.os == 'macOS'
+        run: |
+          cmake -S . -B build-wheel -DCMAKE_BUILD_TYPE=Release -DCOAL_WARNINGS_AS_ERRORS=ON -DCOAL_BUILD_TOOLS=OFF \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+          cmake --build build-wheel -j 3
+          archs=$(lipo -archs build-wheel/coal-cpp)
+          echo "architectures: $archs"
+          case " $archs " in *" arm64 "*) ;; *) echo "::error::no arm64 slice"; exit 1;; esac
+          case " $archs " in *" x86_64 "*) ;; *) echo "::error::no x86_64 slice"; exit 1;; esac
+          otool -L build-wheel/coal-cpp
+          if otool -L build-wheel/coal-cpp | tail -n +2 | grep -v "/usr/lib/"; then
+            echo "::error::coal-cpp links libraries outside /usr/lib"; exit 1
+          fi
+          echo "BIN=build-wheel/coal-cpp" >> "$GITHUB_ENV"
+      - name: Build coal-cpp (Windows, static CRT)
+        if: runner.os == 'Windows'
+        run: |
+          cmake -S . -B build-wheel -A x64 -DCOAL_WARNINGS_AS_ERRORS=ON -DCOAL_BUILD_TOOLS=OFF \
+            -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+          cmake --build build-wheel --config Release -j 2
+          test -f build-wheel/Release/coal-cpp.exe
+          echo "BIN=build-wheel/Release/coal-cpp.exe" >> "$GITHUB_ENV"
+      - name: Make the platform wheel
+        run: |
+          python -m pip install wheel==0.45.1
+          audit=()
+          if [ "$RUNNER_OS" = Linux ]; then python -m pip install auditwheel==6.4.2; audit=(--audit); fi
+          "$BIN" --version
+          python packaging/wheels/build_platform_wheel.py --binary "$BIN" \
+            --wheel "release/coal_align-${V}-py3-none-any.whl" --platform-tag "$TAG_NAME" --outdir wheelhouse "${audit[@]}"
+          ls -l wheelhouse
+          test -s "wheelhouse/coal_align-${V}-py3-none-${TAG_NAME}.whl"
+      - name: The wheel installs and `coal` uses its coal-cpp
+        run: |
+          python -m venv "$RUNNER_TEMP/pw"
+          if [ -d "$RUNNER_TEMP/pw/Scripts" ]; then b="$RUNNER_TEMP/pw/Scripts"; else b="$RUNNER_TEMP/pw/bin"; fi
+          "$b/python" -m pip install "wheelhouse/coal_align-${V}-py3-none-${TAG_NAME}.whl"
+          test "$("$b/coal" --version)" = "coal ${V}"
+          cpp=$("$b/coal" --cpp-path)
+          echo "coal-cpp: $cpp"
+          case "$cpp" in *site-packages*coal*bin*coal-cpp*) ;; *) echo "::error::coal --cpp-path is not the bundled binary"; exit 1;; esac
+          test "$("$cpp" --version | cut -d' ' -f1,2)" = "coal ${V}"
+          COAL_ENGINE=cpp "$b/coal" examples/clean/protein.aln.fasta examples/clean/dna.fasta -o "$RUNNER_TEMP/cpp.fa"
+          COAL_ENGINE=python "$b/coal" examples/clean/protein.aln.fasta examples/clean/dna.fasta -o "$RUNNER_TEMP/py.fa"
+          cmp "$RUNNER_TEMP/cpp.fa" "$RUNNER_TEMP/py.fa"
+          echo "bundled coal-cpp output is byte-identical to the Python engine's"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: dist-wheel-${{ matrix.tag }}
+          path: wheelhouse/
+          if-no-files-found: error
+
   windows:
     name: Windows app (installer + portable zip)
     runs-on: windows-latest
@@ -191,7 +296,7 @@ jobs:
 
   release:
     name: GitHub Release
-    needs: [python, windows]
+    needs: [python, cpp-wheels, windows]
     if: ${{ github.event_name == 'push' || inputs.publish }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -224,6 +329,10 @@ jobs:
             "COAL-${V}-windows-x64.zip"
             "COAL-windows-x64.zip"
             "coal_align-${V}-py3-none-any.whl"
+            "coal_align-${V}-py3-none-manylinux_2_28_x86_64.whl"
+            "coal_align-${V}-py3-none-manylinux_2_28_aarch64.whl"
+            "coal_align-${V}-py3-none-macosx_11_0_universal2.whl"
+            "coal_align-${V}-py3-none-win_amd64.whl"
             "coal_align-${V}.tar.gz"
             "coal_src.tar.gz"
             "coal_align_app-${V}-py3-none-any.whl"
@@ -259,7 +368,7 @@ jobs:
   # with a trusted publisher for this repository, workflow release.yml, environment pypi (docs/development.md).
   pypi:
     name: Publish to PyPI (coal-align, coal-align-app)
-    needs: [python, release]
+    needs: [python, cpp-wheels, release]
     if: vars.PYPI_PUBLISH == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -270,15 +379,20 @@ jobs:
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
         with:
-          name: dist-python
+          pattern: dist-*   # dist-python and dist-wheel-<tag>; dist-windows comes along and is left alone
+          merge-multiple: true
           path: release/
       - name: Only the versioned wheels and sdists (not the version-free copies or checksums)
+        # The engine's platform wheels (coal-cpp inside) and its pure wheel (the fallback) go up together, so pip
+        # picks the platform wheel where there is one and the pure wheel or the sdist elsewhere.
         env:
           V: ${{ needs.python.outputs.version }}
         run: |
           mkdir -p dist
-          cp "release/coal_align-${V}-py3-none-any.whl" "release/coal_align-${V}.tar.gz" \
+          cp release/coal_align-${V}-py3-none-*.whl "release/coal_align-${V}.tar.gz" \
              "release/coal_align_app-${V}-py3-none-any.whl" "release/coal_align_app-${V}.tar.gz" dist/
+          test -s "dist/coal_align-${V}-py3-none-any.whl"
+          test "$(ls dist/coal_align-${V}-py3-none-*.whl | wc -l)" -eq 5
           ls -l dist
       - uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e  # v1.13.0
         with:
