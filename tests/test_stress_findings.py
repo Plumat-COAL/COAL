@@ -203,7 +203,9 @@ class ConcurrentSameOutput(unittest.TestCase):
                 finally:
                     p1.terminate()
                     p1.communicate(timeout=60)
-                self.assertFalse((d / "same.fa.coal-lock").exists(), (engine, "the lock must go with the run"))
+                if os.name != "nt":  # SIGTERM is handled and releases the lock; TerminateProcess cannot (stale lock)
+                    self.assertFalse((d / "same.fa.coal-lock").exists(), (engine, "the lock must go with the run"))
+                # a stale lock (Windows) or none: the next run goes ahead quietly
                 p3 = subprocess.run(self.cmd(engine, ["pep.fasta", "nuc.fasta", "-o", "same.fa"]), cwd=tmp, env=ENV,
                                     capture_output=True, timeout=60)
                 self.assertEqual((p3.returncode, p3.stderr), (0, b""), engine)

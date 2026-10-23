@@ -342,11 +342,11 @@ std::string name_files(const std::vector<std::string>& paths) {
 }
 
 size_t open_file_budget(size_t nfiles) {
-    const size_t headroom = 96 + 4 * (size_t)std::max(1u, std::thread::hardware_concurrency());
 #ifdef _WIN32
     (void)nfiles;
     return 1024;  // the C runtime allows 8,192 low-level descriptors; stay well under it
 #else
+    const size_t headroom = 96 + 4 * (size_t)std::max(1u, std::thread::hardware_concurrency());
     struct rlimit rl;
     if (getrlimit(RLIMIT_NOFILE, &rl) != 0) return 512;
     const rlim_t want = (rlim_t)(nfiles + headroom);
