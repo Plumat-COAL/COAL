@@ -195,9 +195,10 @@ class ConcurrentSameOutput(unittest.TestCase):
                     p2 = subprocess.run(self.cmd(engine, ["pep.fasta", "nuc.fasta", "-o", "same.fa"]), cwd=tmp, env=ENV,
                                         capture_output=True, timeout=60)
                     self.assertEqual(p2.returncode, 1, (engine, p2.stderr[:300]))
-                    self.assertTrue(p2.stderr.startswith(
-                        f"coal: error: another COAL run (process {p1.pid}) is writing same.fa".encode()),
-                        (engine, p2.stderr[:300]))
+                    # (on Windows a venv's python.exe is a launcher whose child holds the lock: the id differs)
+                    who = f"process {p1.pid}" if os.name != "nt" else "process "
+                    self.assertTrue(p2.stderr.startswith(f"coal: error: another COAL run ({who}".encode())
+                                    and b") is writing same.fa" in p2.stderr, (engine, p2.stderr[:300]))
                     self.assertFalse((d / "same.fa").exists(), engine)
                 finally:
                     p1.terminate()
