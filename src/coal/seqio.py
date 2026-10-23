@@ -279,7 +279,8 @@ class DnaIndex:
         self.paths = [str(p) for p in paths]
         self.ids: list[str] = []
         # compact per-record location: file number, byte start, byte end
-        self.fno, self.start, self.end = array("H"), array("q"), array("q")
+        # file number as an unsigned int: an unsigned short overflowed (a traceback) with more than 65,535 DNA files
+        self.fno, self.start, self.end = array("I"), array("q"), array("q")
         self.pos: dict[str, int] = {}
         for fno, path in enumerate(self.paths):
             self._scan(fno, path)
