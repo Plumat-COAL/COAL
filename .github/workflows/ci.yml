@@ -286,9 +286,18 @@ jobs:
         env:
           COAL_IMPL: cpp
         run: |
+          # Not `... | tee f` + PIPESTATUS: under the runner's `bash -eo pipefail` a failing pipeline ends the script
+          # right there, before any diagnostics below run.
+          status=0
           python -m unittest -v tests.test_differential tests.test_cpp_vs_python tests.test_cpp_cli \
-            tests.test_cpp_readers tests.test_cpp_tables tests.test_cpp_pool tests.test_wheels 2>&1 | tee cpp_tests.txt
-          test "${PIPESTATUS[0]}" -eq 0
+            tests.test_cpp_readers tests.test_cpp_tables tests.test_cpp_pool tests.test_wheels > cpp_tests.txt 2>&1 || status=$?
+          cat cpp_tests.txt
+          if [ "$status" -ne 0 ]; then
+            # The raw log is not always readable from the checks API: name the failed tests as annotations
+            grep -E "^(FAIL|ERROR):|Error:|^Ran |^FAILED" cpp_tests.txt | head -30 | while IFS= read -r line; do echo "::error::$line"; done
+            tail -60 cpp_tests.txt | while IFS= read -r line; do echo "::warning::$line"; done
+            exit "$status"
+          fi
           if grep -iE "\.\.\. skipped" cpp_tests.txt | grep -viqE "live comparison needs Python|peak memory read with getrusage|POSIX"; then
             echo "::error::C++ tests were skipped, so the C++ engine was not fully exercised"; exit 1
           fi

@@ -160,7 +160,7 @@ class TestPlatformWheel(unittest.TestCase):
         self.assertTrue(path.is_file())
         self.assertTrue(os.access(path, os.X_OK))
         self.assertEqual(path.read_bytes(), cpp_binary().read_bytes())
-        self.assertTrue(path.is_relative_to(venv))
+        self.assertTrue(path.resolve().is_relative_to(venv.resolve()), (path, venv))  # macOS: /var -> /private/var
         with_cpp = run([str(coal), *map(str, EXAMPLE)], env={**env, "COAL_ENGINE": "cpp"}, cwd=str(self.tmp))
         self.assertEqual(with_cpp.returncode, 0, with_cpp.stderr)
         with_py = run([str(coal), *map(str, EXAMPLE)], env={**env, "COAL_ENGINE": "python"}, cwd=str(self.tmp))
