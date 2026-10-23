@@ -254,7 +254,9 @@ class TestAlignFilesExample(unittest.TestCase):
         report = rec.to_dict()
         self.assertEqual(report["error"]["code"], "inconsistent")
         self.assertIsNone(report["output"])
-        self.assertEqual(report["summary"]["not_checked"], 19)
+        # 13 genes checked before OG0001_sp14 failed, 6 never reached (as the summary line counts them)
+        self.assertEqual(report["summary"], {"total": 20, "ok": 13, "warning": 0, "failed": 1, "pairing": "id",
+                                             "not_checked": 6})
 
 
 if __name__ == "__main__":

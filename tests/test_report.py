@@ -19,8 +19,8 @@ from coal import __version__  # noqa: E402
 from coal.cli import main as coal_main  # noqa: E402
 from coal.tables import get_code  # noqa: E402
 
-TOP_KEYS = ["schema", "coal_version", "command", "pal2nal_equivalent", "options", "inputs", "output",
-            "summary", "hints", "sequences", "runtime_seconds", "exit_code"]
+TOP_KEYS = ["schema", "coal_version", "source", "engine", "command", "pal2nal_equivalent", "options", "inputs",
+            "output", "summary", "hints", "sequences", "runtime_seconds", "exit_code"]
 
 
 def run(d: Path, args: list[str]):
@@ -96,6 +96,11 @@ class TestReport(unittest.TestCase):
             self.assertIn(k, r)
         self.assertEqual(r["schema"], "coal.report/1")
         self.assertEqual(r["coal_version"], __version__)
+        # which engine wrote it, named as the --resume checkpoint names it ("coal-cpp" when test_cpp_vs_reference
+        # runs this module against coal-cpp; test_report_schema checks each engine's exact value)
+        from coal.checkpoint import ENGINE_NAMES
+        self.assertIn(r["engine"], ENGINE_NAMES)
+        self.assertEqual(list(r)[:5], ["schema", "coal_version", "source", "engine", "command"])
         # "command" reproduces the output (as the app writes it); the exact argv is "command_line"
         self.assertEqual(r["command"], "coal pep.fasta nuc.fasta -output paml -o out.paml")
         self.assertEqual(r["command_line"], "coal pep.fasta nuc.fasta -o out.paml -output paml --report r.json")
@@ -167,11 +172,49 @@ class TestReport(unittest.TestCase):
                          [("not_checked", ["not_written"]), ("not_checked", ["not_written"]),
                           ("failed", ["frameshift", "inconsistent"]), ("not_checked", ["not_reached"])])
         self.assertIsNone(r["output"])
-        self.assertEqual(r["summary"]["failed"], 1)
+        # the counters say what COAL found (g0, g1 checked and fine) and how many it never reached (g3), as the
+        # summary line does; the entries of g0 and g1 still say not_checked / not_written (no output holds them)
+        self.assertEqual(r["summary"], {"total": 4, "ok": 2, "warning": 0, "failed": 1, "pairing": "id",
+                                        "not_checked": 1})
         # the error is said once (not repeated in the summary)
         self.assertIn("coal: summary: g2: Frameshift at column", err)
         self.assertIn("coal: summary: The run stopped at g2: 1 sequence was not checked and no output was written. Add "
                       "--keep-going to write the other sequences and leave this one out.", err)
+
+    def test_summary_counters_add_up(self):
+        """ok + warning + failed + not_checked == total in every kind of run, and in a run that stopped at an error
+        not_checked is the number the summary line gives (the sequences never reached), while the sequences checked
+        before the error keep their own count (ok / warning / failed) although their entries are not_checked."""
+        def counters(r):
+            s = r["summary"]
+            return {k: s.get(k, 0) for k in ("ok", "warning", "failed", "not_checked")}
+        # stopped at g3: g0 and g2 ok, g1 with a mismatch, g4 and g5 never reached
+        write_genes(self.d, 6, broken={3}, wrong={1})
+        rc, _, err = run(self.d, ["pep.fasta", "nuc.fasta", "-o", "o.fa", "--report", "r.json"])
+        self.assertEqual(rc, 1)
+        r = self.report()
+        self.assertEqual(counters(r), {"ok": 2, "warning": 1, "failed": 1, "not_checked": 2})
+        self.assertEqual(sum(counters(r).values()), r["summary"]["total"])
+        self.assertIn("coal: summary: The run stopped at g3: 2 sequences were not checked", err)
+        self.assertEqual([s["status"] for s in r["sequences"]], ["not_checked"] * 3 + ["failed"] + ["not_checked"] * 2)
+        self.assertEqual([m["code"] for m in r["sequences"][1]["messages"]], ["not_written", "mismatch"])
+        # the same run with --keep-going: the counters are the entries' statuses
+        rc, _, _ = run(self.d, ["pep.fasta", "nuc.fasta", "-o", "o.fa", "--keep-going", "--report", "r.json"])
+        self.assertEqual(rc, 2)
+        r = self.report()
+        self.assertEqual(counters(r), {"ok": 4, "warning": 1, "failed": 1, "not_checked": 0})
+        self.assertNotIn("not_checked", r["summary"])
+        # a run that failed before any sequence was checked: all never reached
+        (self.d / "nuc.fasta").write_text(">g0\nATG\n")
+        rc, _, _ = run(self.d, ["pep.fasta", "nuc.fasta", "-o", "o.fa", "--report", "r.json"])
+        self.assertEqual(rc, 1)
+        r = self.report()
+        self.assertEqual(counters(r), {"ok": 0, "warning": 0, "failed": 0, "not_checked": 6})
+        # a clean run
+        write_genes(self.d, 3)
+        rc, _, _ = run(self.d, ["pep.fasta", "nuc.fasta", "-o", "o.fa", "--report", "r.json"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(counters(self.report()), {"ok": 3, "warning": 0, "failed": 0, "not_checked": 0})
 
     def test_input_error_report(self):
         write_genes(self.d, 3)

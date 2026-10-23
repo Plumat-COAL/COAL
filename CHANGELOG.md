@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **Run report: a new top-level `engine` field** (`coal.report/1`, next to `source`): `"coal-python"` or
+  `"coal-cpp"`, the same strings as the `--resume` checkpoint's `engine`, so a pipeline or the app can tell which
+  engine wrote a report (also when `coal` handed a large input to `coal-cpp`). The per-job reports of a
+  `coal --batch` report (`coal.batch/1`) carry it too. Apart from `engine` and `runtime_seconds` the two engines'
+  reports stay identical (#18).
+- **Changed: `summary.not_checked` of a run that stopped at an error now counts only the sequences the run never
+  reached**, the number the `coal: summary:` line "N sequences were not checked" gives; the sequences checked
+  before the error are counted as what COAL found (`ok`, `warning`, `failed`), so `ok + warning + failed +
+  not_checked == total`. It used to count every sequence but the failed one (e.g. `examples/one_broken_gene`
+  without `--keep-going`: `ok 0, failed 1, not_checked 19`; now `ok 13, failed 1, not_checked 6`). The per-sequence
+  entries are unchanged (`not_checked` with `not_written` before the error, `not_reached` after it). Both engines;
+  documented in `docs/report-schema.md` (#18).
 - **`pip install coal-align` brings the C++ engine** (issue #16): each release now has one wheel per platform with
   `coal-cpp` inside, at `coal/bin/coal-cpp` in the installed package: Linux x86_64 and aarch64 (`manylinux_2_28`,
   glibc 2.28+, `libstdc++` linked statically), macOS 11+ (one `universal2` wheel for Apple silicon and Intel) and
@@ -13,7 +25,6 @@
   pipelines that call the binary directly. The wheels are made by `packaging/wheels/build_platform_wheel.py` (no
   cibuildwheel, no compiled extension) in `release.yml`'s new `cpp-wheels` job and checked there (auditwheel, lipo, a
   fresh-venv install whose output equals the Python engine's); `tests/test_wheels.py` does the same with a local build.
-
 - **Nightly fuzz workflow** (`.github/workflows/nightly.yml`, 03:17 UTC, or by hand with a seed): the fuzz against
   the real PAL2NAL v14 with a fresh seed each night, once per engine (`COAL_FUZZ_ENGINE=cpp` in
   `tests/fuzz_vs_pal2nal.py` runs `coal-cpp`), the new `tests/tools/engine_fuzz.py` (coal-cpp vs the Python engine

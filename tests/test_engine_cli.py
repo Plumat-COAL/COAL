@@ -365,10 +365,12 @@ class TestAutomaticCppDispatch(unittest.TestCase):
         if rep:
             rep = json.loads(rep)
             rep.pop("runtime_seconds")
+            rep.pop("engine")  # the only field that says which engine ran
         stdout = r.stdout
         if "--json" in args:  # the report on stdout: the same but for its run time
             stdout = json.loads(stdout)
             stdout.pop("runtime_seconds")
+            stdout.pop("engine")
         return r.returncode, stdout, r.stderr, out, rep, self.mark.exists()
 
     def test_large_input_uses_cpp_with_identical_results(self):

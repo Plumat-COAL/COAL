@@ -29,7 +29,8 @@ All of these are present in every report, in this order, except `error` and `res
 |---|---|---|
 | `schema` | string | always `"coal.report/1"` |
 | `coal_version` | string | the engine's version, as `coal --version` prints it (e.g. `"0.4.2"`) |
-| `source` | string | always `"coal"`: the engine wrote the report (the COAL app writes `coal_app ...` here when it has to build a report from an engine without `--report`; such a report is not covered by this page). There is no separate engine field: `coal` and `coal-cpp` write the same report |
+| `source` | string | always `"coal"`: the engine wrote the report (the COAL app writes `coal_app ...` here when it has to build a report from an engine without `--report`; such a report is not covered by this page) |
+| `engine` | string | which engine wrote it: `"coal-python"` (the Python engine) or `"coal-cpp"` (the C++ engine, also when `coal` handed the run to it); closed. The same strings as the `engine` of the `--resume` checkpoint file. It is the only field whose value depends on the engine: apart from it and `runtime_seconds`, the two engines write the same report |
 | `command` | string | a command that reproduces the alignment: `coal`, the input paths, the options that change the output (`-output`, `-codontable`, `-nogap`, `-nomismatch`, `-blockonly`, `--strict`, `--keep-going`) and `-o`; shell-quoted. `--report`, `-j`, `-q` and the like are left out |
 | `command_line` | string | the command line as given, shell-quoted, starting with `coal` |
 | `pal2nal_equivalent` | string | the PAL2NAL v14 command line with the same meaning: `pal2nal.pl PEP NUC -output FMT [-codontable N] [-nogap] [-nomismatch] [-blockonly]` |
@@ -52,8 +53,8 @@ All of these are present in every report, in this order, except `error` and `res
 | Field | Type | Meaning |
 |---|---|---|
 | `total` | integer | proteins in the alignment (`len(sequences)`) |
-| `ok`, `warning`, `failed` | integer | sequences with that `status` |
-| `not_checked` | integer | **only when non-zero**: sequences with status `not_checked`. In a run that stopped at an error this counts every sequence except the failed one, i.e. also the ones that had been checked before it (they are `not_written`); the `summary_text` line "N sequences were not checked" counts only the ones never reached |
+| `ok`, `warning`, `failed` | integer | sequences COAL found to be so: in a completed run, the sequences with that `status`. In a run that stopped at an error, the sequences checked before it are counted here by what COAL found (their entries say `not_checked` with a `not_written` message, because no output holds them) |
+| `not_checked` | integer | **only when non-zero**: the sequences the run never reached because it stopped at an error before them, the number the `summary_text` line "N sequences were not checked" gives (up to 0.4.2 this counted every sequence but the failed one). `ok + warning + failed + not_checked` (0 when absent) `== total` always |
 | `pairing` | string or `null` | how proteins were paired with DNA records: `"id"` (every protein ID is a DNA ID), `"normalised"` (some IDs matched only after removing a version suffix, case or database fields, where file order would have mispaired them), `"order"` (by position in the files, as PAL2NAL), or `null` when the run failed before pairing (count mismatch, unreadable file). Closed |
 | `columns_removed` | integer | **only with `-nomismatch` and an output written**: alignment columns removed because a codon did not match its amino acid (or held a B/Z/J/O/U residue) |
 | `columns_removed_ambiguous` | integer | **with `columns_removed`**: how many of those columns were removed only because of codons with N or other ambiguous bases (no definite mismatch) |
@@ -84,8 +85,8 @@ Statuses:
   refused by `--strict` carries the `inconsistent` failure message.
 - `not_checked`: the run stopped at an error before this sequence was finished with. In a stopped run every
   sequence but the failed one is `not_checked`: the ones before it carry `not_written` plus their own messages (they
-  were checked but no output exists), the ones after it carry `not_reached`; when the run failed before pairing, all
-  are `not_checked` with no messages.
+  were checked but no output exists; `summary` counts them by what was found), the ones after it carry `not_reached`
+  (`summary.not_checked` counts these); when the run failed before pairing, all are `not_checked` with no messages.
 
 ## Messages
 
@@ -163,6 +164,7 @@ gene left out, exit status 2.
  "schema": "coal.report/1",
  "coal_version": "0.4.2",
  "source": "coal",
+ "engine": "coal-python",
  "command": "coal protein.aln.fasta dna.fasta --keep-going -o codon.fasta",
  "command_line": "coal protein.aln.fasta dna.fasta --keep-going -o codon.fasta --report report.json",
  "pal2nal_equivalent": "pal2nal.pl protein.aln.fasta dna.fasta -output fasta",

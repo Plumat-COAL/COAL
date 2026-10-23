@@ -78,10 +78,10 @@ Result:
   "needs_attention": true,
   "counts": {
     "total": 20,
-    "ok": 0,
+    "ok": 13,
     "warning": 0,
     "failed": 1,
-    "not_checked": 19
+    "not_checked": 6
   },
   "suggested_codontable": null,
   "next_step": "COAL stopped before writing an alignment: call explain_report(report_path) for the cause and fix.",
@@ -90,13 +90,13 @@ Result:
   "exit_code": 1,
   "summary": {
     "total": 20,
-    "ok": 0,
+    "ok": 13,
     "warning": 0,
     "failed": 1,
     "pairing": "id",
-    "not_checked": 19
+    "not_checked": 6
   },
-  "summary_text": "20 sequences: 0 OK, 0 with warnings, 1 failed, 19 not checked.",
+  "summary_text": "20 sequences: 13 OK, 0 with warnings, 1 failed, 6 not checked.",
   "hints": [],
   "problems": [
     {
@@ -120,7 +120,7 @@ Result:
 ### 2. `explain_report` on that report
 
 ```
-20 sequences: 0 OK, 0 with warnings, 1 failed, 19 not checked.
+20 sequences: 13 OK, 0 with warnings, 1 failed, 6 not checked.
 Proteins and DNA were paired by matching their IDs exactly.
 No alignment was written, because COAL stopped at an error.
 

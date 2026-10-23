@@ -93,7 +93,8 @@ unsupported format is a tool error (isError), not a result.
 ## How to read the report (`report_path` from `codon_align`, schema `coal.report/1`)
 
 - `summary`: `total`, `ok`, `warning`, `failed`, `not_checked` (genes COAL never reached because it stopped
-  at an earlier error), and `pairing` = how proteins met their DNA: `id` (exact IDs) or `order` (by position,
+  at an earlier error; the genes it checked before the error are counted as `ok` / `warning` / `failed` even
+  though their entries say `not_checked` + `not_written`), and `pairing` = how proteins met their DNA: `id` (exact IDs) or `order` (by position,
   because not every protein ID is a DNA ID; risky, check it); `null` if COAL stopped before pairing.
 - `sequences[]`: one entry per sequence with `status` `ok` / `warning` / `failed` and `messages[]`
   (`code`, `text`, `column` = protein-alignment column, 1-based).

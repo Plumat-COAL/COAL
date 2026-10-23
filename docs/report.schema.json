@@ -4,13 +4,14 @@
   "title": "COAL run report (coal.report/1)",
   "description": "The JSON that `coal --report FILE.json` / `--json` and `coal-cpp` write. Field meanings: docs/report-schema.md. Readers must ignore fields they do not know: fields are added without a schema bump.",
   "type": "object",
-  "required": ["schema", "coal_version", "source", "command", "command_line", "pal2nal_equivalent", "options", "inputs",
+  "required": ["schema", "coal_version", "source", "engine", "command", "command_line", "pal2nal_equivalent", "options", "inputs",
                "output", "summary", "hints", "errors", "sequences", "runtime_seconds", "exit_code", "summary_text",
                "methods_text"],
   "properties": {
     "schema": {"const": "coal.report/1"},
     "coal_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+((a|b|rc)[0-9]+)?$"},
     "source": {"const": "coal"},
+    "engine": {"enum": ["coal-python", "coal-cpp"]},
     "command": {"type": "string"},
     "command_line": {"type": "string"},
     "pal2nal_equivalent": {"type": "string"},
@@ -54,12 +55,13 @@
     "summary": {
       "type": "object",
       "required": ["total", "ok", "warning", "failed", "pairing"],
+      "description": "ok + warning + failed + not_checked (0 when absent) == total. ok, warning and failed count what COAL found for each sequence it processed; not_checked the sequences it never reached. In a run that stopped at an error the sequences checked before it keep their count here while their entries say not_checked with a not_written message (no output holds them).",
       "properties": {
         "total": {"type": "integer", "minimum": 0},
         "ok": {"type": "integer", "minimum": 0},
         "warning": {"type": "integer", "minimum": 0},
         "failed": {"type": "integer", "minimum": 0},
-        "not_checked": {"type": "integer", "minimum": 1},
+        "not_checked": {"type": "integer", "minimum": 1, "description": "Only when non-zero: the sequences the run never reached (it stopped at an error before them), the number the summary_text line 'N sequences were not checked' gives."},
         "pairing": {"enum": ["id", "normalised", "order", null]},
         "columns_removed": {"type": "integer", "minimum": 0},
         "columns_removed_ambiguous": {"type": "integer", "minimum": 0}

@@ -10,7 +10,8 @@ viewer.locate_breaks), computed here from the engine's own results instead of pa
 message codes and texts, suspect genes "failed" but written, mismatches counted only for A/C/G/T codons,
 methods text counted by message code, genetic-code hint from real mismatches only and tested on all genes
 (start-codon-only ties prefer code 11), sequences an aborted run never reached "not_checked" while the ones it
-did check keep their status. The C++ engine mirrors this module (cpp/src/report.cpp).
+did check keep their status in the summary's counters (their entries say "not_checked" with a "not_written" message,
+as the app's: no output holds them). The C++ engine mirrors this module (cpp/src/report.cpp).
 """
 from __future__ import annotations
 
@@ -22,6 +23,7 @@ import time
 from itertools import product
 
 from . import __version__
+from .checkpoint import ENGINE  # the report's "engine": the same string as the --resume checkpoint's
 from .codon import IUPAC
 from .tables import SUPPORTED, get_code
 
@@ -792,12 +794,13 @@ class RunReport:
         n = len(self.ids) if self.ids is not None else len(self.kinds)
         return [self.entry_view(k) for k in range(n)]
 
-    def counts(self, entries=None) -> dict:
+    def counts(self) -> dict:
+        """The summary's counters, from what COAL found for each sequence it processed (its kind: ok, a warning,
+        failed) plus `not_checked` for the sequences it never reached; they add up to the total. In a run that stopped
+        at an error these are the numbers the `coal: summary:` lines give ("N sequences were not checked"), not the
+        entry views' statuses, which also mark the sequences checked before the error `not_checked` (`not_written`)
+        because no output holds them."""
         c = dict.fromkeys(STATUSES, 0)
-        if entries is not None:
-            for e in entries:
-                c[e["status"]] += 1
-            return c
         n = len(self.ids) if self.ids is not None else len(self.kinds)
         st = {"o": "ok", "m": "warning", "u": "warning", "x": "warning", "f": "failed", "e": "failed",
               "n": "not_checked"}
@@ -1033,7 +1036,7 @@ class RunReport:
         """to_dict with the given entry views (a list, or in _write_json a callable giving a fresh iterator)."""
         import shlex
         views = entries if callable(entries) else (lambda: entries)
-        c = self.counts(views())
+        c = self.counts()
         n = len(self.ids) if self.ids is not None else len(self.kinds)
         # "path" is the argument as given (`-` for standard input); "sha256" is of the data read
         def _hash(k, p):
@@ -1062,6 +1065,7 @@ class RunReport:
             "schema": SCHEMA,
             "coal_version": __version__,
             "source": "coal",
+            "engine": ENGINE,
             "command": self.command(),
             "command_line": " ".join(shlex.quote(a) for a in ["coal", *self.argv]),
             "pal2nal_equivalent": " ".join(shlex.quote(str(a)) for a in p2n),
