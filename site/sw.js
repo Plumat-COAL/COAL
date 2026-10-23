@@ -3,9 +3,10 @@
 // from github.com are never touched.
 "use strict";
 // Bump the cache name whenever FILES or their content changes.
-var CACHE = "coal-site-v6";
+var CACHE = "coal-site-v7";
 var FILES = ["./", "index.html", "install.html", "guide.html", "differences.html", "cite.html", "style.css", "main.js",
-  "favicon.svg", "explainer.html", "img/broken-gene.webp", "assets/fonts/AtkinsonHyperlegibleNext-wght.woff2",
+  "favicon.svg", "explainer.html", "img/broken-gene.webp", "assets/fonts/LibertinusSerif-Regular.woff2", "assets/fonts/LibertinusSerif-Semibold.woff2",
+  "assets/fonts/LibertinusSerif-Italic.woff2",
   "assets/coal-mark-dark.svg", "assets/favicon-32.png", "assets/apple-touch-icon.png"];
 
 self.addEventListener("install", function (event) {

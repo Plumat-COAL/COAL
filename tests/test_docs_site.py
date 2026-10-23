@@ -218,7 +218,8 @@ class TestPagesWorkflow(unittest.TestCase):
 
 # Several pages, a self-hosted font and its licence, a WebP screenshot, logo, mark and icons.
 PAGES = ("index.html", "install.html", "guide.html", "differences.html", "cite.html")
-SITE_FILES = PAGES + ("assets/fonts/AtkinsonHyperlegibleNext-wght.woff2", "assets/fonts/OFL.txt") + ("index.html", "style.css", "main.js", "sw.js", "favicon.svg", "explainer.html", "img/broken-gene.webp",
+FONTS = tuple(f"assets/fonts/LibertinusSerif-{w}.woff2" for w in ("Regular", "Semibold", "Italic"))
+SITE_FILES = PAGES + FONTS + ("assets/fonts/OFL.txt",) + ("index.html", "style.css", "main.js", "sw.js", "favicon.svg", "explainer.html", "img/broken-gene.webp",
               "assets/coal-mark.svg", "assets/coal-mark-dark.svg", "assets/coal-logo.png", "assets/coal-logo@2x.png", "assets/coal-logo-dark.png",
               "assets/coal-logo-dark@2x.png", "assets/favicon-32.png", "assets/apple-touch-icon.png",
               "assets/icon-512.png", "assets/coal-train.svg")
@@ -411,10 +412,11 @@ class TestSiteFiles(unittest.TestCase):
     def test_font_is_self_hosted_with_its_licence(self):
         """The only font file is ours, small, and the OFL travels with it."""
         css = _read("site", "style.css")
-        self.assertEqual(re.findall(r'url\("([^"]+)"\)', css), ["assets/fonts/AtkinsonHyperlegibleNext-wght.woff2"])
-        size = os.path.getsize(os.path.join(SITE, "assets", "fonts", "AtkinsonHyperlegibleNext-wght.woff2"))
-        self.assertLess(size, 60 * 1024)
+        self.assertEqual(re.findall(r'url\("([^"]+)"\)', css), list(FONTS))
+        for f in FONTS:  # Latin subsets of Libertinus Serif (regular, semibold, italic)
+            self.assertLess(os.path.getsize(os.path.join(SITE, f)), 40 * 1024, f)
         self.assertIn("SIL Open Font License", _read("site", "assets", "fonts", "OFL.txt"))
+        self.assertIn("Libertinus", _read("site", "assets", "fonts", "OFL.txt"))
         self.assertIn('href="assets/fonts/OFL.txt"', self.index)
 
     def test_size_budget(self):

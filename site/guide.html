@@ -1,20 +1,20 @@
 <!doctype html>
-<!-- The site is split into short pages (index, install, guide, differences, cite) that share this
-     header and footer; tests/test_docs_site.py checks they stay the same on every page. -->
+<!-- One of five short pages (index, install, guide, differences, cite) that share this header and footer;
+     tests/test_docs_site.py checks they stay the same on every page. Plain HTML, nothing loaded from other sites. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; frame-src 'self'; base-uri 'self'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
-<title>COAL guide: example, warnings and errors</title>
-<meta name="description" content="How to run COAL, what its warnings and errors mean, and its limitations.">
+<title>COAL guide</title>
+<meta name="description" content="How a codon alignment is made, how to run COAL, what its warnings and errors mean, how to get the C++ engine, and what it does not do.">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#121110">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<link rel="preload" href="assets/fonts/AtkinsonHyperlegibleNext-wght.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/LibertinusSerif-Regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="style.css">
 <script src="main.js" defer></script>
 </head>
@@ -22,12 +22,12 @@
 <a class="skip" href="#main">Skip to content</a>
 
 <header class="top">
-  <a class="home" href="./"><img src="assets/coal-mark-dark.svg" width="38" height="30" alt=""><span>COAL</span></a>
+  <a class="home" href="./"><img src="assets/coal-mark-dark.svg" width="32" height="25" alt=""><span>COAL</span></a>
   <nav aria-label="Main">
     <ul>
       <li><a href="install.html">Install</a></li>
       <li><a href="guide.html" aria-current="page">Guide</a></li>
-      <li><a href="differences.html">Differences</a></li>
+      <li><a href="differences.html">Why use it</a></li>
       <li><a href="cite.html">Cite</a></li>
       <li><a href="https://github.com/plumat-coal/COAL">GitHub</a></li>
     </ul>
@@ -37,20 +37,31 @@
 <main id="main">
 <div class="page-head">
   <h1>Guide</h1>
-  <p class="lead">How to run COAL, what its warnings and errors mean, and what it does not do yet. Every option is in
-    the <a href="https://github.com/plumat-coal/COAL/blob/main/docs/usage.md">documentation</a>.</p>
   <ul class="toc" aria-label="On this page">
-    <li><a href="#example">Example</a></li>
+    <li><a href="#how">How it works</a></li>
+    <li><a href="#example">Running COAL</a></li>
     <li><a href="#misfit">Warnings and errors</a></li>
-    <li><a href="#limits">Limitations</a></li>
-    <li><a href="#docs">Docs and help</a></li>
+    <li><a href="#cpp">The C++ engine</a></li>
+    <li><a href="#limits">What it does not do</a></li>
+    <li><a href="#docs">Help</a></li>
   </ul>
 </div>
 
+<section class="sec" id="how" aria-labelledby="how-title">
+  <h2 id="how-title">How it works</h2>
+  <p>A protein alignment lines up the amino acids of related genes, one letter each. A codon alignment is the same
+    picture written in DNA: three bases under each amino acid, and <code>---</code> under each gap. COAL writes it
+    from the protein alignment and the unaligned DNA, and checks that each codon really codes for the letter above
+    it. Twenty seconds, five steps:</p>
+  <iframe class="explainer" src="explainer.html" title="How COAL builds a codon alignment: a five-step animation" loading="lazy"></iframe>
+  <p class="fine">Space or the right arrow key moves to the next step.
+    <a href="explainer.html">Open the animation on its own page</a>.</p>
+</section>
+
 <section class="sec" id="example" aria-labelledby="example-title">
-  <h2 id="example-title">Example</h2>
-  <p>The repository's <code>clean</code> example has 8 genes of 140 to 144 codons (plus a stop codon), aligned in
-    150 columns, with gaps in the protein alignment only.</p>
+  <h2 id="example-title">Running COAL</h2>
+  <p>COAL takes two files: the protein alignment (FASTA or CLUSTAL) and the coding DNA of the same genes (FASTA,
+    not aligned). Sequences are paired by name. The repository's <code>clean</code> example has 8 genes:</p>
 <pre class="term" tabindex="0" aria-label="Terminal: running COAL on the clean example"><code><span class="ps">$</span> coal examples/clean/protein.aln.fasta examples/clean/dna.fasta -o codon.aln.fasta
 <span class="ps">$</span> echo $?
 0
@@ -58,6 +69,7 @@
 &gt;gene01
 ATG---GCGAGG---CCTTCCACTACTACCGTGAATATGTGGGGCTCGACACCAGTTTGG
 AATGGAGGG---AAAATG---TGGTTTGCTATGGGCGCCGTTGATAATATGCCTACCATG</code></pre>
+  <p>An exit status of 0 means every gene fitted. The output is the codon alignment:</p>
   <figure class="aln">
     <div class="aln-scroll" tabindex="0" role="group" aria-labelledby="aln-cap">
       <table class="triplets">
@@ -70,20 +82,30 @@ AATGGAGGG---AAAATG---TGGTTTGCTATGGGCGCCGTTGATAATATGCCTACCATG</code></pre>
         </tbody>
       </table>
     </div>
-    <figcaption id="aln-cap">Columns 1 to 14 of the output for 4 of the 8 genes, each codon under its residue.</figcaption>
+    <figcaption id="aln-cap">The first 14 columns of the output for 4 of the 8 genes: each codon under its residue,
+      <code>---</code> under each gap.</figcaption>
   </figure>
-  <p>PAL2NAL-style options work as they are, for example
-    <code>coal pep.aln nuc.fasta -codontable 2 -o out.fasta</code>. The package also installs a <code>pal2nal</code>
-    command that takes a PAL2NAL command line unchanged. With <code>-nogap</code>, COAL removes the stop codons of
-    the genetic code you chose; PAL2NAL v14 always removes the standard code's.</p>
-  <p>Large inputs are split across processes automatically. <code>-j</code> sets the maximum.</p>
+  <p>The options are PAL2NAL's. The ones most people need:</p>
+  <ul>
+    <li><code>-codontable 2</code> chooses the genetic code (here, vertebrate mitochondrial; 1, the standard code,
+      is the default).</li>
+    <li><code>-output clustal</code>, <code>paml</code> or <code>codon</code> chooses the output format;
+      <code>coal</code> writes FASTA unless told otherwise.</li>
+    <li><code>-nogap</code> removes every column that has a gap or a stop codon.</li>
+    <li><code>--keep-going</code> leaves out any gene that cannot be converted and writes the rest.</li>
+  </ul>
+  <p>The <code>pal2nal</code> command, installed with COAL, takes a PAL2NAL command line exactly as it is, and writes
+    CLUSTAL by default as PAL2NAL does. Large inputs are split across processes on their own; <code>-j</code> sets
+    the maximum.</p>
 </section>
 
 <section class="sec" id="misfit" aria-labelledby="misfit-title">
   <h2 id="misfit-title">Warnings and errors</h2>
-  <p>The <code>mito</code> example has 24 vertebrate mitochondrial genes. With the standard genetic code (the
-    default), COAL writes the alignment but warns about every codon that does not match its residue, then
-    suggests a code:</p>
+  <p>COAL checks that the DNA spells the protein. There are two kinds of message.</p>
+  <h3>A warning: the gene fits, but some codons do not match</h3>
+  <p>The alignment is still written. The usual cause is the wrong genetic code. The <code>mito</code> example has
+    24 mitochondrial genes; with the standard code, COAL warns about each codon that does not match and then says
+    which code would fit:</p>
 <pre class="term" tabindex="0" aria-label="Terminal: the mito example with the standard and then the mitochondrial genetic code"><code><span class="ps">$</span> coal examples/mito/protein.aln.fasta examples/mito/dna.fasta -o codon.aln.fasta
 coal: warning: Homo_COX1 pepAlnPos 1: M does not correspond to ATA
 coal: warning: Homo_COX1 pepAlnPos 7: M does not correspond to ATA
@@ -92,55 +114,79 @@ coal: warning: Homo_COX1 pepAlnPos 36: W does not correspond to TGA
 coal: summary: 24 of 24 sequences have codons that do not match their amino acid (kept in the alignment). Under genetic code 2 (Vertebrate mitochondrial), all 24 sequences match their protein; under code 1, none do. Codes 5 and 13 fit these sequences too: choose the code of the organism and organelle the genes come from. Re-run with -codontable 2.
 <span class="ps">$</span> coal examples/mito/protein.aln.fasta examples/mito/dna.fasta -codontable 2 -o codon.aln.fasta
 <span class="ps">$</span></code></pre>
-  <p>The desktop app runs the same engine and gives one line per gene instead of one per codon:</p>
+  <p>The app says the same thing in one line per gene, and offers the re-run as a button:</p>
   <div class="said" role="group" aria-label="What the COAL app shows for the mito example">
     <p><samp>Homo_COX1: 7 codons do not match their amino acid (first at column 1): the protein says M but the DNA
       has ATA. Kept in the alignment; check the genetic code.</samp></p>
   </div>
-  <p>In the <code>one_broken_gene</code> example, 1 of 20 genes is missing a base. The run stops and nothing is
-    written:</p>
+  <h3>An error: the gene does not fit at all</h3>
+  <p>Nothing is written and the exit status is 1. In the <code>one_broken_gene</code> example, one gene has lost a
+    base, so from that point on its codons are read out of step:</p>
 <pre class="term" tabindex="0" aria-label="Terminal: the one_broken_gene example stops with an error"><code><span class="ps">$</span> coal examples/one_broken_gene/protein.aln.fasta examples/one_broken_gene/dna.fasta -o codon.aln.fasta
 coal: error: OG0001_sp14: protein and DNA are inconsistent (no match found)
 coal: summary: OG0001_sp14: Frameshift at column 102: one base is missing in the DNA, so from here on the codons are read out of step.
 coal: summary: The run stopped at OG0001_sp14: 6 sequences were not checked and no output was written. Add --keep-going to write the other sequences and leave this one out.
 <span class="ps">$</span> echo $?
 1</code></pre>
-  <p>PAL2NAL v14 reports an inconsistency here too, but exits with status 0, so a pipeline would carry on.</p>
-  <p>Not every frameshift stops the run. A base missing near the end of a gene can still let the gene fit, with a few
-    mismatch warnings; the app then says the run of mismatches looks like a frameshift.</p>
+  <p>PAL2NAL v14 reports the inconsistency too, but exits with status 0, so a pipeline would carry on. With
+    <code>--keep-going</code>, COAL writes the other 19 genes and leaves this one out, with exit status 2.</p>
+  <p>A base lost near the end of a gene may not stop the run: the gene still fits, with a few mismatch warnings at
+    the end, and the app points out that the run of mismatches looks like a frameshift.</p>
   <figure class="shot">
-    <img src="img/broken-gene.webp" width="1280" height="720" loading="lazy"
-      alt="COAL's alignment view of the one_broken_gene example: genes OG0001_sp06 to sp20 in rows of codons under their amino acids. OG0001_sp14 is marked failed, and column 102 is outlined where its codons go out of step.">
-    <figcaption>The app's alignment view of the same example. The app also writes a methods paragraph and a JSON
-      report with checksums of the inputs. <a href="explainer.html">A short animation</a> shows how a codon
-      alignment is built.</figcaption>
+    <img src="img/broken-gene.webp" width="1600" height="1323" loading="lazy"
+      alt="COAL's results for the one_broken_gene example in the desktop app: 19 of 20 genes aligned, 1 failed. Below, the codon alignment around column 102: OG0001_sp14 is marked failed, with a frameshift at column 102, outlined, where its codons go out of step.">
+    <figcaption>The same example in the app, which runs with <code>--keep-going</code>: 19 genes aligned, the failed
+      one shown at the column where it breaks. The app also writes a methods sentence and a JSON report with
+      checksums of the inputs.</figcaption>
   </figure>
 </section>
 
-<section class="sec" id="limits" aria-labelledby="limits-title">
-  <h2 id="limits-title">Limitations</h2>
+<section class="sec" id="cpp" aria-labelledby="cpp-title">
+  <h2 id="cpp-title">The C++ engine</h2>
+  <p>COAL has two engines with byte-identical output. The Python engine comes with the pip install and runs
+    anywhere. The C++ engine, <code>coal-cpp</code>, is the fast one: it did a million genes in
+    <span data-check="12.5 s">12.5 s</span>, where the Python engine takes under a minute and PAL2NAL v14 took
+    <span data-check="62 min">62 min</span>. Both engines take the same options.</p>
   <ul>
-    <li>COAL does not read Gblocks-format input or write PAL2NAL's <code>-html</code> web-server output.</li>
-    <li><code>coal</code> writes FASTA unless you ask for another format. The <code>pal2nal</code> command defaults
-      to CLUSTAL, as PAL2NAL does.</li>
-    <li>The Windows installer is not code-signed. SmartScreen asks you to confirm, and Smart App Control blocks it
-      outright.</li>
-    <li>COAL is not on PyPI. Install it from the release with the commands on the <a href="install.html">Install</a> page.</li>
-    <li>More than 4 processes do not help yet, because one main process reads and writes everything.</li>
+    <li><strong>Windows app:</strong> <code>coal-cpp</code> is included, and the app uses it on its own for inputs of
+      1 MB or more. Nothing to set up.</li>
+    <li><strong>pip install, any system:</strong> build it from the source. You need a C++17 compiler (GCC, Clang or
+      Visual Studio) and CMake 3.16 or newer:
+<pre class="code"><code>git clone https://github.com/plumat-coal/COAL &amp;&amp; cd COAL
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release &amp;&amp; cmake --build build --config Release
+export COAL_CPP=$PWD/build/coal-cpp</code></pre>
+      On Windows the program is <code>build\Release\coal-cpp.exe</code>. With <code>COAL_CPP</code> set (or
+      <code>coal-cpp</code> on your <code>PATH</code>), <code>coal</code> hands inputs of 1 MB or more to it. You can
+      also run <code>coal-cpp</code> directly, with the same options as <code>coal</code>. <code>COAL_ENGINE=python</code>
+      or <code>COAL_ENGINE=cpp</code> forces one engine.</li>
+  </ul>
+  <p>More, including how to use the engine as a C++ library, in
+    <a href="https://github.com/plumat-coal/COAL/blob/main/docs/cpp-engine.md">docs/cpp-engine.md</a>.</p>
+</section>
+
+<section class="sec" id="limits" aria-labelledby="limits-title">
+  <h2 id="limits-title">What it does not do</h2>
+  <ul>
+    <li>Read Gblocks-format input, or write PAL2NAL's <code>-html</code> web-server output.</li>
+    <li>Install from PyPI. Use the commands on the <a href="install.html">Install page</a>; <code>pip install
+      coal</code> is a different package.</li>
+    <li>Pass a code-signing check on Windows. SmartScreen asks you to confirm, and Smart App Control blocks the
+      installer outright (<a href="install.html#smart-app-control">what to do then</a>).</li>
+    <li>Use more than about 4 processes well: one main process reads and writes everything.</li>
   </ul>
 </section>
 
 <section class="sec" id="docs" aria-labelledby="docs-title">
-  <h2 id="docs-title">Docs and help</h2>
+  <h2 id="docs-title">Help</h2>
   <ul class="links">
-    <li><a href="https://github.com/plumat-coal/COAL/blob/main/docs/usage.md">Documentation</a>: options, input formats, every difference
-      from PAL2NAL v14, benchmarks.</li>
+    <li><a href="https://github.com/plumat-coal/COAL/blob/main/docs/usage.md">Documentation</a>: every option, the
+      input formats, the run report.</li>
     <li><a href="https://github.com/plumat-coal/COAL/issues">Issues</a>: bugs and questions. Please include the
       output of <code>coal --version</code>, your operating system and, if you can, a small file that shows the
       problem.</li>
     <li><a href="https://github.com/plumat-coal/COAL/blob/main/.claude/skills/coal/SKILL.md">SKILL.md</a>: how an
       AI agent should call COAL. The app also works as an MCP server.</li>
-    <li><a href="https://github.com/plumat-coal/COAL">Source code</a> and
+    <li><a href="https://github.com/plumat-coal/COAL">Source code</a>,
       <a href="https://github.com/plumat-coal/COAL/blob/main/LICENSE">MIT licence</a>.</li>
   </ul>
 </section>
@@ -149,8 +195,7 @@ coal: summary: The run stopped at OG0001_sp14: 6 sequences were not checked and 
 <footer class="foot" id="credits">
   <div class="foot-text">
     <p>Made by Chloe Newton and Keanu Murati.</p>
-    <p>No cookies, trackers or external scripts. Set in Atkinson Hyperlegible Next
-      (<a href="assets/fonts/OFL.txt">SIL Open Font License</a>).</p>
+    <p>Set in Libertinus Serif (<a href="assets/fonts/OFL.txt">SIL Open Font License</a>).</p>
   </div>
   <div class="rail"><svg class="train" viewBox="140 204 1120 582" aria-hidden="true" focusable="false"><g class="ts" fill="#CFC8BE"><circle cx="304" cy="328" r="32"/><circle cx="368" cy="272" r="44"/><circle cx="456" cy="236" r="28"/></g><g class="tb" fill="#1E1E1E"><rect x="264" y="368" width="72" height="124" rx="12.4"/></g><g class="tbo" fill="#2A2A2A"><rect x="216" y="480" width="376" height="216" rx="40"/></g><g class="tb" fill="#1E1E1E"><path d="M216 600V696H144Z"/><rect x="568" y="316" width="200" height="380" rx="20"/><rect x="552" y="296" width="232" height="36" rx="12.4"/><rect x="792" y="496" width="464" height="200" rx="21"/><rect x="760" y="622" width="40" height="20" rx="0"/><circle cx="320" cy="720" r="52"/><circle cx="480" cy="720" r="52"/><circle cx="672" cy="712" r="64"/><circle cx="880" cy="732" r="40"/><circle cx="1024" cy="732" r="40"/><circle cx="1168" cy="732" r="40"/></g><g class="ta" fill="#FFC24B"><rect x="616" y="368" width="104" height="88" rx="12"/></g><g class="th" fill="#4A4744"><circle cx="320" cy="719.5" r="15.5"/><circle cx="480" cy="719.5" r="15.5"/><circle cx="672" cy="711.5" r="19.5"/><circle cx="880" cy="732" r="11"/><circle cx="1024" cy="732" r="11"/><circle cx="1168" cy="732" r="11"/></g><g class="tc" fill="#2A2A2A"><rect x="848" y="448" width="40" height="40" rx="8"/><rect x="878" y="400" width="40" height="40" rx="8"/><rect x="974" y="400" width="40" height="40" rx="8"/><rect x="1004" y="352" width="40" height="40" rx="8"/><rect x="1052" y="352" width="40" height="40" rx="8"/><rect x="1052" y="448" width="40" height="40" rx="8"/><rect x="1082" y="400" width="40" height="40" rx="8"/></g><g class="tsl" fill="#4A4744"><rect x="926" y="400" width="40" height="40" rx="8"/><rect x="956" y="352" width="40" height="40" rx="8"/></g><g class="te" fill="#FF6A13"><rect x="800" y="448" width="40" height="40" rx="8"/><rect x="896" y="448" width="40" height="40" rx="8"/><rect x="1004" y="448" width="40" height="40" rx="8"/><rect x="1034" y="400" width="40" height="40" rx="8"/><rect x="1112" y="448" width="40" height="40" rx="8"/><rect x="1208" y="448" width="40" height="40" rx="8"/></g><g class="ta" fill="#FFC24B"><rect x="956" y="448" width="40" height="40" rx="8"/><rect x="1130" y="400" width="40" height="40" rx="8"/><rect x="1160" y="448" width="40" height="40" rx="8"/></g></svg></div>
 </footer>

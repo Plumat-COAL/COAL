@@ -5,14 +5,14 @@ step, nothing loaded from other sites (no CDNs, font services, trackers or analy
 
 | File | What it is |
 |---|---|
-| `index.html` | home: what COAL is, the three downloads, a short example, three reasons, a cite pointer |
-| `install.html` | install steps for Windows (SmartScreen, Smart App Control), macOS, Linux, command line only; files and checksums |
-| `guide.html` | example run, warnings and errors, limitations, links to the README and help |
-| `differences.html` | differences from PAL2NAL v14 (the test counts) and the speed table |
+| `index.html` | home: what COAL is, the downloads, a short example, why use it, how to get the C++ engine, a cite pointer |
+| `install.html` | install steps for Windows (SmartScreen, Smart App Control), macOS, Linux, the command line; files and checksums |
+| `guide.html` | the explainer animation inline (an iframe of `explainer.html`), an example run, warnings and errors, the C++ engine, what it does not do, help |
+| `differences.html` | "Why use it" in the menu: the reasons, the differences from PAL2NAL v14 (the test counts) and the speed table |
 | `cite.html` | how to cite COAL and PAL2NAL (the version is in a `data-version-ref` span) |
 | `style.css` | styles for every page; dark only, light when printed |
-| `assets/fonts/` | Atkinson Hyperlegible Next, variable weight 400 to 800, Latin subset as WOFF2 (25 KB), with its licence `OFL.txt` (SIL Open Font License 1.1) |
-| `main.js` | copy buttons, registers `sw.js`; all three downloads are always shown, and the card for the visitor's system gets a "For this computer" mark, and old one-page links (`#windows`, `#speed`, ...) are sent to the page that now holds that section |
+| `assets/fonts/` | Libertinus Serif 7.051 (regular, semibold, italic), Latin subsets as WOFF2 (about 20 KB each), with its licence `OFL.txt` (SIL Open Font License 1.1) |
+| `main.js` | copy buttons, registers `sw.js`; old one-page links (`#windows`, `#speed`, ...) are sent to the page that now holds that section |
 | `sw.js` | keeps a copy of the site's own files so it opens offline after one visit (never touches downloads) |
 | `explainer.html` | the 20-second explainer animation (the only copy; the pitch uses it too; `tests/test_docs_explainer.py` plays it in Chromium) |
 | `img/broken-gene.webp` | screenshot of the alignment view (`pitch/backup/1_broken_gene_frameshift.png`, lossless WebP) |
@@ -23,9 +23,10 @@ step, nothing loaded from other sites (no CDNs, font services, trackers or analy
 | `assets/favicon-32.png`, `apple-touch-icon.png`, `icon-512.png` | PNG icons (written by `apps/coal-app/desktop/make_icon.py --site site`) |
 
 <!-- Several pages with one shared header and footer (a test checks they are identical; when you
-     change the header or footer, change it in every page). The font was made from google/fonts
-     ofl/atkinsonhyperlegiblenext with fontTools: `fontTools.varLib.instancer ... wght=400:800`, then `pyftsubset`
-     to Basic Latin, Latin-1 and common punctuation, `--flavor=woff2`. -->
+     change the header or footer, change it in every page). The fonts were made from the Libertinus 7.051 release
+     (github.com/alerque/libertinus, static/OTF) with fontTools: `pyftsubset LibertinusSerif-<style>.otf
+     --unicodes="U+0000-00FF,U+0152-0153,U+2000-206F,U+2190-2193,U+2212,U+00D7,..." --layout-features=kern,liga,onum,lnum,pnum,tnum,calt
+     --flavor=woff2 --no-hinting --desubroutinize`. -->
 
 All internal links are relative, so the same files work at `/COAL/` and later at a custom domain.
 
