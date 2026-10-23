@@ -36,7 +36,6 @@ build-asan/
 build-clang/
 build-gcc14/
 build-manylinux/
-build-manylinux/   # packaging/wheels/build_linux_binary.sh
 build-wheel/       # release.yml: the coal-cpp that goes into a platform wheel
 build/
 data/
@@ -50,3 +49,6 @@ tbln.out.*
 tmpwhich.*
 venv/
 wheelhouse-ci/
+dist/
+wheelhouse/
+build-*/

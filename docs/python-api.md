@@ -14,7 +14,7 @@ Everything else in the package (`coal.core`, `coal.pipeline`, `coal.report`, `co
 change in any release. The `coal.report.RunReport` class is documented below because `align_files` takes one to
 produce the run report; only the parts named there are covered by the promise.
 
-The examples on this page were run with COAL 0.5.0rc3; `tests/test_python_api.py` runs them on every change.
+The examples on this page were run with COAL 0.5.0; `tests/test_python_api.py` runs them on every change.
 
 ## `codon_align`
 

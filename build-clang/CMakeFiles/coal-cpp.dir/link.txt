@@ -1,1 +1,0 @@
-/usr/bin/clang++ -O3 -DNDEBUG "CMakeFiles/coal-cpp.dir/cpp/src/main.cpp.o" "CMakeFiles/coal-cpp.dir/cpp/src/args.cpp.o" "CMakeFiles/coal-cpp.dir/cpp/src/sysio.cpp.o" -o coal-cpp  libcoal_core.a 

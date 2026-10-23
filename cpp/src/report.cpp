@@ -13,7 +13,7 @@
 
 namespace coal {
 
-static const char* VERSION = "0.5.0rc3";
+static const char* VERSION = "0.5.0";
 static const char* SCHEMA = "coal.report/1";
 static const char* REPO_URL = "https://github.com/plumat-coal/COAL";
 // The hint re-tests at most 50 sequences and drops a code as soon as it cannot fit as many as the best so far;
