@@ -497,7 +497,9 @@ static bool pid_alive(long long pid) {
 
 std::string take_output_lock(const std::string& real, const std::string& name) {
     const std::string path = real + ".coal-lock";
-    for (int attempt = 0; attempt < 2; ++attempt) {
+    bool removed = false;
+    double waited = 0.0;
+    for (;;) {
 #ifdef _WIN32
         int fd = ::_open(path.c_str(), _O_WRONLY | _O_CREAT | _O_EXCL, _S_IREAD | _S_IWRITE);
 #else
@@ -527,16 +529,22 @@ std::string take_output_lock(const std::string& real, const std::string& name) {
             std::ifstream in(path);
             if (!(in >> pid)) pid = -1;
         }
+        if (pid <= 0 && waited < 2.0) {
+            // empty: another run created it an instant ago and has not written its id yet (pipeline.py): not stale
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            waited += 0.05;
+            continue;
+        }
         if (pid > 0 && pid_alive(pid))
             throw CoalError("another COAL run (process " + std::to_string(pid) + ") is writing " + name +
                                 ": wait for it to finish, or write to another file (if that process is gone, remove " +
                                 path + ")",
                             "file_error");
-        if (attempt) throw CoalError("cannot write " + name + ": " + path + " is in the way and cannot be removed", "file_error");
+        if (removed) throw CoalError("cannot write " + name + ": " + path + " is in the way and cannot be removed", "file_error");
         std::error_code ec;
-        fs::remove(path, ec);
+        fs::remove(path, ec);  // a lock whose process is gone (or one empty for 2 s): replaced
+        removed = true;
     }
-    return path;  // not reached
 }
 
 void release_output_lock(const std::string& path) {

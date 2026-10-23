@@ -727,27 +727,36 @@ def take_output_lock(real_out: str, name: str) -> str:
     or an empty file. A lock left by a run that was killed (its process is gone) is replaced. The same words and
     file in coal-cpp (sysio.cpp take_output_lock)."""
     path = real_out + ".coal-lock"
-    for attempt in range(2):
+    removed = False
+    waited = 0.0
+    while True:
         try:
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
         except FileExistsError:
             pid = _lock_pid(path)
-            if pid is not None and pid != os.getpid() and _pid_alive(pid):
+            if pid is None:
+                # Empty (or unreadable): another run created it an instant ago and has not written its id yet (the
+                # window between the two calls below), so it is not stale; only one that stays empty is
+                if waited < 2.0:
+                    time.sleep(0.05)
+                    waited += 0.05
+                    continue
+            elif pid != os.getpid() and _pid_alive(pid):
                 raise CoalError(f"another COAL run (process {pid}) is writing {name}: wait for it to finish, or write to another file (if that process is gone, remove {path})", code="file_error") from None
-            if attempt:
+            if removed:
                 raise CoalError(f"cannot write {name}: {path} is in the way and cannot be removed",
                                 code="file_error") from None
             try:
-                os.unlink(path)
+                os.unlink(path)  # a lock whose process is gone (or one empty for 2 s): replaced
             except OSError:
                 pass
+            removed = True
             continue
         except OSError as e:  # e.g. a folder that cannot be written: the usual output error
             raise _output_error(name, e) from None
         with os.fdopen(fd, "w") as fh:
             fh.write(f"{os.getpid()}\n")
         return path
-    return path  # not reached
 
 
 def release_output_lock(path: str | None) -> None:
