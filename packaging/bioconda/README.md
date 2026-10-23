@@ -9,9 +9,13 @@ coal --version        # Python engine, the `coal` and `pal2nal` commands, `impor
 coal-cpp --version    # C++ engine; `coal` hands inputs >= 1 MB to it automatically
 ```
 
-`coal` finds `coal-cpp` without any setting: `coal.dispatch.find_cpp()` looks at `COAL_CPP`, then next to the Python
-interpreter running COAL (`$CONDA_PREFIX/bin`, where `build.sh` installs the binary), then on `PATH`. The recipe test
-`test_dispatch.sh` checks both the discovery and that a 1 MB input really runs through `coal-cpp`.
+`coal` finds `coal-cpp` without any setting: `coal.dispatch.find_cpp()` looks at `COAL_CPP`, then inside the installed
+package (`coal/bin/coal-cpp`, where the PyPI platform wheels carry it; a conda build from the sdist has no `coal/bin`,
+so this step finds nothing here), then next to the Python interpreter running COAL (`$CONDA_PREFIX/bin`, where
+`build.sh` installs the binary), then on `PATH`. The recipe test `test_dispatch.sh` checks both the discovery and that
+a 1 MB input really runs through `coal-cpp`. The recipe builds from the sdist on purpose (Bioconda builds from source,
+and the conda package's own `coal-cpp` in `$PREFIX/bin` is the one `coal` should run), so it does not use the platform
+wheels. `coal --cpp-path` prints which binary `coal` found.
 
 Files:
 
