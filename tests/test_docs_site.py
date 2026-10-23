@@ -65,14 +65,16 @@ class TestReleaseScripts(unittest.TestCase):
         app, pin = rv.app_versions()
         self.assertEqual(app, init, "apps/coal-app/pyproject.toml has another version than the engine")
         self.assertEqual(pin, init, "apps/coal-app/pyproject.toml must depend on coal-align==<the same version>")
-        self.assertEqual(rv.check("v" + init), (init, False))
+        self.assertEqual(rv.cpp_versions(), (init, init), "cpp/src/main.cpp and report.cpp VERSION must be the engine's")
+        self.assertEqual(rv.check("v" + init), (init, bool(re.search(r"(a|b|rc)\d+$", init))))
         for bad in ("v9.9.9", init, "v" + init + "x", "", "release-" + init):
             with self.assertRaises(ValueError, msg=bad):
                 rv.check(bad)
         r = subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "release_version.py"), "v9.9.9"],
                            capture_output=True, text=True, timeout=60)
         self.assertEqual(r.returncode, 1)
-        self.assertIn("bump all four", r.stderr)
+        self.assertIn("bump all six", r.stderr)
+        self.assertIn("cpp/src/main.cpp", r.stderr)
         self.assertIn("apps/coal-app/pyproject.toml", r.stderr)
 
     def test_prerelease_tags(self):

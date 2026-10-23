@@ -61,6 +61,12 @@ class TestAuditParse(unittest.TestCase):
         m = _load_script()
         ok28 = 'x.whl is consistent with\nthe following platform tag: "manylinux_2_28_x86_64".\n'
         self.assertTrue(m.manylinux_ok(ok28, "manylinux_2_28_x86_64")[0])
+        # auditwheel 6.4 wraps the sentence at ~70 columns, so the break can fall anywhere in it (this exact text
+        # failed the v0.5.0rc2 Linux wheel jobs)
+        real = ('\ncoal_align-0.5.0rc2-py3-none-manylinux_2_28_x86_64.whl is consistent\nwith the following platform tag: '
+                '"manylinux_2_28_x86_64".\n\nThe wheel references external versioned symbols in these\n')
+        self.assertTrue(m.manylinux_ok(real, "manylinux_2_28_x86_64")[0])
+        self.assertFalse(m.manylinux_ok(real.replace("2_28_x86_64\".", "2_38_x86_64\"."), "manylinux_2_28_x86_64")[0])
         self.assertTrue(m.manylinux_ok(ok28.replace("2_28", "2_17"), "manylinux_2_28_x86_64")[0])  # lower is fine
         ok, why = m.manylinux_ok(ok28.replace("2_28", "2_39"), "manylinux_2_28_x86_64")
         self.assertFalse(ok)

@@ -5,7 +5,7 @@ and CoalError. Everything else in the package is internal.
 """
 from .core import CoalError, codon_align
 
-__version__ = "0.4.2"
+__version__ = "0.5.0rc3"
 
 from .pipeline import run as align_files  # noqa: E402  (pipeline needs __version__)
 

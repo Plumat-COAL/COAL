@@ -130,15 +130,18 @@ An *unexplained* difference found by the fuzz is a bug in COAL until shown other
 
 ## Releasing
 
-The version lives in four places and must be the same in all: `src/coal/__init__.py`, `pyproject.toml`,
-`apps/coal-app/pyproject.toml` (its `version` and its `coal-align==` pin), plus the `id="version"` span in
-`site/index.html`. `scripts/release_version.py vX.Y.Z` checks a tag against them (it is what
+The version lives in six places and must be the same in all: `src/coal/__init__.py`, `pyproject.toml`,
+`apps/coal-app/pyproject.toml` (its `version` and its `coal-align==` pin), the C++ engine's `VERSION` in
+`cpp/src/main.cpp` and `cpp/src/report.cpp` (`coal` only hands work to a `coal-cpp` of its own version), plus the
+`id="version"` span in `site/index.html`, the `data-version-ref` span in `site/cite.html`, `CITATION.cff` and
+`CMakeLists.txt` (`project(... VERSION x.y.z)`, no rc suffix). `tests/report_example.json` and its copy in
+`docs/report-schema.md` embed the version too: regenerate them (docs/report-schema.md says how). `scripts/release_version.py vX.Y.Z` checks a tag against them (it is what
 `.github/workflows/release.yml` runs; it refuses a tag that disagrees with the source) and prints the version:
 
 ```
 python scripts/release_version.py v0.4.2       # prints 0.4.2, exit 0; exit 1 with the mismatch spelled out
 ```
 
-Steps: bump the four places, add a `## <version>` section to `CHANGELOG.md`, commit, `git tag vX.Y.Z && git push
+Steps: bump the places above, add a `## <version>` section to `CHANGELOG.md`, commit, `git tag vX.Y.Z && git push
 origin vX.Y.Z`; the release workflow builds and checks both packages and the Windows app and publishes the GitHub
 Release; then merge to `main`, which redeploys the website. Details: [docs/development.md](docs/development.md#releasing-coal).
