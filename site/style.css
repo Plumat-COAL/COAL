@@ -60,7 +60,7 @@
   --fs-h2: 1.45rem;
   --fs-h1: 2rem;
   --gutter: 16px;
-  --measure: 42rem;
+  --measure: 60rem;        /* text runs the full width of the page column, as the owner asked */
   --wide: 60rem;
   color-scheme: dark;
 }
