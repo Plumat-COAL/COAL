@@ -38,7 +38,8 @@ def mixed_endings_case(d: Path, first_record_bytes: int):
 
 
 class MixedLineEndings(unittest.TestCase):
-    """Stress-test finding 2: a lone-CR record after the first 64 kB of a DNA file is not seen as a record."""
+    """Stress-test finding: a lone-CR record after the first 64 kB of a DNA file was not seen as a record (fixed:
+    a lone CR ends a line wherever it is, in both engines)."""
 
     def check(self, engine, first_record_bytes):
         with tempfile.TemporaryDirectory() as tmp:
@@ -54,14 +55,23 @@ class MixedLineEndings(unittest.TestCase):
     def test_lone_cr_record_within_64kb_cpp(self):
         self.check("cpp", 1000)
 
-    @unittest.expectedFailure
     def test_lone_cr_record_after_64kb_python(self):
         self.check("python", 70_000)
 
     @unittest.skipUnless(HAVE_CPP, "build/coal-cpp not built")
-    @unittest.expectedFailure
     def test_lone_cr_record_after_64kb_cpp(self):
         self.check("cpp", 70_000)
+
+    def test_cr_inside_a_record_and_crlf_mixed(self):
+        """LF, CRLF and lone CR in one file, the switch inside a record's data: every record is seen."""
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            (d / "pep.fasta").write_bytes(b">a\nMAAA\n>b\nMWWW\n>c\nMKKK\n")
+            (d / "nuc.fasta").write_bytes(b">a\r\nATGGCT\rGCTGCT\r>b\nATG\r\nTGGTGGTGG\r>c\rATGAAAAAAAAA")
+            want = b">a\nATGGCTGCTGCT\n>b\nATGTGGTGGTGG\n>c\nATGAAAAAAAAA\n"
+            for engine in ("python", "cpp") if HAVE_CPP else ("python",):
+                p = run(engine, ["pep.fasta", "nuc.fasta", "-output", "fasta"], tmp)
+                self.assertEqual((engine, p.returncode, p.stdout), (engine, 0, want), p.stderr[:300])
 
 
 def repeat_case(d: Path, n: int):
@@ -92,6 +102,27 @@ class QuadraticExactFitScan(unittest.TestCase):
                 self.assertEqual(p.returncode, 0, p.stderr[:300])
         ratio = times[20_000] / max(times[10_000], 1e-3)
         self.assertLess(ratio, 3.0, f"2x the gene length took {ratio:.1f}x the time ({times})")
+
+
+class OutOfMemoryMessage(unittest.TestCase):
+    """Stress-test finding: the main process running out of memory was a raw MemoryError traceback (seen with the
+    1,000,000-sequence input in a 256 MB Windows job). It is one `coal: error: out of memory ...` line, exit 1."""
+
+    def test_memory_error_is_one_error_line(self):
+        import io
+        from unittest import mock
+        from coal import cli
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            mixed_endings_case(d, 100)
+            err = io.StringIO()
+            with mock.patch.object(cli, "run", side_effect=MemoryError()), mock.patch("sys.stderr", err):
+                rc = cli.main([str(d / "pep.fasta"), str(d / "nuc.fasta"), "-o", str(d / "out.fa")])
+        self.assertEqual(rc, 1)
+        lines = err.getvalue().splitlines()
+        self.assertTrue(lines and lines[0].startswith("coal: error: out of memory"), lines)
+        self.assertNotIn("Traceback", err.getvalue())
+        self.assertFalse((d / "out.fa").exists())
 
 
 @unittest.skipUnless(hasattr(signal, "SIGHUP"), "POSIX only")

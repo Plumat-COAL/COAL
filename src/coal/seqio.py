@@ -247,23 +247,16 @@ _LETTERS = bytes(range(65, 91)) + bytes(range(97, 123))
 _LINES = re.compile(rb"[^\r\n]*(?:\r\n|\r|\n)|[^\r\n]+")
 
 
-def _has_lone_cr(fh) -> bool:
-    """True if the first 64 kB of the (seekable) binary file have a \\r not followed by
-    \\n (old Mac line endings); position kept. Checking only the start keeps \\n and
-    \\r\\n files on the fast path."""
-    pos = fh.tell()
-    try:
-        c = fh.read(1 << 16)
-        if c.endswith(b"\r"):
-            c += fh.read(1)
-        return c.count(b"\r") != c.count(b"\r\n") + c.endswith(b"\r")
-    finally:
-        fh.seek(pos)
-
-
-def _cr_lines(fh):
+def _any_newline_lines(fh):
+    """The lines of a binary file where \\n, \\r\\n and a lone \\r all end a line, wherever they are (a file
+    whose line ends change part-way, e.g. exports of two tools concatenated, used to lose every record after the
+    first lone \\r beyond 64 kB). The \\n-split lines of the file object are kept as they are unless one holds a
+    \\r that is not its \\r\\n terminator; only that line is split further."""
     for raw in fh:
-        yield from _LINES.findall(raw)
+        if b"\r" in raw and raw.count(b"\r") > (1 if raw.endswith(b"\r\n") else 0):
+            yield from _LINES.findall(raw)
+        else:
+            yield raw
 _NON_LETTER_BYTES = bytes(b for b in range(256) if b not in _LETTERS)
 
 
@@ -287,8 +280,8 @@ class DnaIndex:
         self._fh: dict[int, object] = {}
 
     def _scan(self, fno: int, path: str) -> None:
-        # A BOM is skipped, a lone \r also ends a line, and '#' lines before the first header are skipped (as
-        # read_fasta does).
+        # A BOM is skipped, a lone \r also ends a line wherever it is, and '#' lines before the first header are
+        # skipped (as read_fasta does).
         with open(path, "rb") as fh:
             offset, start = 0, None
             if fh.read(len(codecs.BOM_UTF8)) == codecs.BOM_UTF8:
@@ -296,7 +289,7 @@ class DnaIndex:
             else:
                 fh.seek(0)
             # Errors are "<file>:<line>: ..." as for protein files.
-            for lineno, line in enumerate(_cr_lines(fh) if _has_lone_cr(fh) else fh, 1):
+            for lineno, line in enumerate(_any_newline_lines(fh), 1):
                 if line.startswith(b">"):
                     if start is not None:
                         self._add(fno, start, offset)

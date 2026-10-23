@@ -1591,6 +1591,12 @@ int main(int argc, char** argv) {
         std::cerr << "coal: error: " << shorten(restore_names(e.what())) << '\n';
         rc = 1;
         rec.fail(e.code, restore_names(e.what()), false);
+    } catch (const std::bad_alloc&) {
+        // the same words as cli.py OUT_OF_MEMORY
+        static const char* OOM = "out of memory: this run needs more memory than is free on this machine; run with -j 1 (fewer worker processes), split the input, or use a machine with more memory";
+        std::cerr << "coal: error: " << OOM << '\n';
+        rc = 1;
+        rec.fail("out_of_memory", OOM, false);
     } catch (const std::exception& e) {
         std::cerr << "coal: error: " << shorten(restore_names(e.what())) << '\n';
         rc = 1;

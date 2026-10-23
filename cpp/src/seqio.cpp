@@ -346,26 +346,9 @@ void DnaIndex::scan(int fno, const std::string& path) {
         in.clear();
         in.seekg(offset);
     }
-    // Classic Mac files: a lone \r also ends a line (decided from the first 64 kB, as the Python engine)
-    bool cr_mode = false;
-    {
-        std::string c(1 << 16, '\0');
-        in.read(&c[0], (std::streamsize)c.size());
-        c.resize((size_t)in.gcount());
-        if (!c.empty() && c.back() == '\r') {
-            char x;
-            if (in.get(x)) c.push_back(x);
-        }
-        size_t r = 0, rn = 0;
-        for (size_t i = 0; i < c.size(); ++i)
-            if (c[i] == '\r') {
-                ++r;
-                if (i + 1 < c.size() && c[i + 1] == '\n') ++rn;
-            }
-        cr_mode = r != rn + (!c.empty() && c.back() == '\r' ? 1 : 0);
-        in.clear();
-        in.seekg(offset);
-    }
+    // \n, \r\n and a lone \r (classic Mac) all end a line, wherever they are in the file (as the Python engine
+    // and the protein reader): a file whose line ends change part-way used to lose every record after the first
+    // lone \r beyond 64 kB.
     std::string joined;
     for (size_t k = 0; k < paths_.size(); ++k) joined += (k ? ", " : "") + paths_[k];
     std::vector<char> buf(1 << 20);
@@ -415,13 +398,14 @@ void DnaIndex::scan(int fno, const std::string& path) {
                 finish_line();
             }
             if (!line_start && !header && start >= 0) {
-                // inside sequence data: only the end of the line matters
+                // inside sequence data: only the end of the line matters. The \n is found with memchr; a \r
+                // before it that is not its \r\n partner is a lone \r, which ends the line there instead.
                 size_t q = k;
-                if (cr_mode) {
-                    while (q < n && buf[q] != '\n' && buf[q] != '\r') ++q;
-                } else {
+                {
                     const char* nl = (const char*)std::memchr(buf.data() + k, '\n', n - k);
                     q = nl ? (size_t)(nl - buf.data()) : n;
+                    const char* cr = (const char*)std::memchr(buf.data() + k, '\r', q - k);
+                    if (cr && (size_t)(cr - buf.data()) + 1 != q) q = (size_t)(cr - buf.data());
                 }
                 offset += (long long)(q - k);
                 k = q;
@@ -440,7 +424,7 @@ void DnaIndex::scan(int fno, const std::string& path) {
             if (header) line.push_back(c);
             else if (!bytes_space((unsigned char)c)) data_seen = true;
             if (c == '\n') finish_line();
-            else if (cr_mode && c == '\r') pending_cr = true;
+            else if (c == '\r') pending_cr = true;
         }
     }
     if (pending_cr || !line_start) finish_line();

@@ -23,6 +23,8 @@ from .tables import SUPPORTED
 
 
 MAX_WARNINGS = 20  # default --max-warnings
+# The same words in coal-cpp (main.cpp, std::bad_alloc)
+OUT_OF_MEMORY = ("out of memory: this run needs more memory than is free on this machine; run with -j 1 (fewer worker processes), split the input, or use a machine with more memory")
 BATCH_DESTS = ("batch", "batch_out_dir")  # the Batch group's options (coal only; coal-cpp rejects them)
 
 
@@ -214,6 +216,11 @@ def run_job(args, argv, prefix: str = "", want_report: bool = False) -> tuple[in
         code = (e.code if isinstance(e, CoalError) else
                 "input_format" if isinstance(e, UnicodeDecodeError) else "file_error")
         rec.fail(code, str(e), getattr(e, "seq_id", None))
+    except MemoryError:
+        # The main process (a worker that dies of it is "a worker process died"): one line, exit 1, no traceback
+        say(f"error: {OUT_OF_MEMORY}")
+        rc = 1
+        rec.fail("out_of_memory", OUT_OF_MEMORY, None)
     if hidden[0]:
         where = "see the report" if reporting else "see them all with --max-warnings 0 or --report FILE.json"
         say(f"warning: ... and {hidden[0]:,} more warnings ({where})")
