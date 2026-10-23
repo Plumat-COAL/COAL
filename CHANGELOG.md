@@ -25,7 +25,8 @@ Found by the stress test of 2026-10-23 (`docs/stress-test-2026-10-23.md`), both 
   `out_of_memory`) instead of a traceback (a worker dying of it was already handled).
 - **App: `python -m coal_app` no longer dies on a non-UTF-8 console** (Gradio's MCP banner emoji on a cp1252
   Windows console or pipe).
-- **`-q` without `--report`/`--json` keeps no per-sequence entries**, so memory stays flat on data where every
+- **`-q` without `--report`/`--json` keeps no per-sequence entries** and writes none to the `--resume` entries
+  file (a million genes of unrelated DNA wrote 55 GB of it), so memory and disk stay flat on data where every
   codon mismatches (the summary lines, the hint and the report, which read them, are not produced under `-q`).
   Otherwise every per-codon message of a mismatching sequence stays in memory until the end of the run: about
   55 KB (coal-cpp) / 150 KB (Python) per 400-codon gene of unrelated DNA, which `docs/usage.md` now says; a run of

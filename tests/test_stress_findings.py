@@ -299,6 +299,32 @@ class QuietKeepsNoEntries(unittest.TestCase):
         self.assertEqual(bytes(quiet.kinds), bytes(loud.kinds))
         self.assertEqual(quiet.counts(), loud.counts())
 
+    def test_quiet_run_writes_no_resume_entries(self):
+        """With -q and no report the --resume entries file stays empty (a million unrelated genes wrote 55 GB of
+        it); with the hint wanted it is written, in both engines."""
+        rng = random.Random(11)
+        hold = dict(ENV, COAL_TEST_HOOKS="1", COAL_TEST_PAUSE_AFTER_CHECKPOINT="1", COAL_CHECKPOINT_EVERY="0",
+                    COAL_BATCH_NT="1", COAL_MIN_NT_PER_JOB="0")
+        for engine in ("python", "cpp") if HAVE_CPP else ("python",):
+            for quiet in (True, False):
+                with tempfile.TemporaryDirectory() as tmp:
+                    d = Path(tmp)
+                    n = 4
+                    genes = ["".join(rng.choice(["GCT", "AAA", "CTG", "GAC"]) for _ in range(30)) for _ in range(n)]
+                    (d / "pep.fasta").write_text("".join(f">s{k}\nM" + "W" * 29 + "\n" for k in range(n)))
+                    (d / "nuc.fasta").write_text("".join(f">s{k}\n{genes[k]}\n" for k in range(n)))
+                    cmd = ([sys.executable, "-m", "coal"] if engine == "python" else [CPP]) + \
+                          ["pep.fasta", "nuc.fasta", "-o", "out.fa", "-j", "1"] + (["-q"] if quiet else [])
+                    p = subprocess.Popen(cmd, cwd=tmp, env=hold, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                    try:
+                        line = p.stderr.readline()
+                        self.assertIn(b"paused after checkpoint 1", line, (engine, quiet, line))
+                        size = (d / "out.fa.coal-entries.jsonl").stat().st_size
+                        self.assertEqual(size == 0, quiet, (engine, quiet, size))
+                    finally:
+                        p.terminate()
+                        p.communicate(timeout=60)
+
     def test_quiet_output_unchanged_on_unrelated_dna(self):
         rng = random.Random(9)
         with tempfile.TemporaryDirectory() as tmp:

@@ -1113,6 +1113,9 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         OutFile sink, entries, prot;
         sink.open(sink_path, resuming ? get("sink_bytes") : -1);
         if (ck) entries.open(ck->entries, resuming ? get("entries_bytes") : -1);
+        // the entries file feeds a resumed run's report, summary and hint; with -q and no report a resumed run
+        // reads none of it (RunReport::restore), so it is not written (pipeline.py)
+        const bool write_entries = rec.keep_entries || rec.want_hint;
         if (!prot_path.empty()) prot.open(prot_path, resuming ? get("prot_bytes") : -1);
         std::vector<char> drop((o.nomismatch || block_cols) ? (size_t)ncol : 0, 0), bad;
         long long skipped = 0;
@@ -1208,7 +1211,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                 if (it.failed) warn("skipped " + it.error);
                 const std::string* e = it.failed ? rec.add_sequence(done, it.id, {}, {}, it.error_code, it.error)
                                                  : rec.add_sequence(done, it.id, shown(it.warnings), it.notices);
-                if (ck && e) entries.f << *e << '\n';
+                if (ck && e && write_entries) entries.f << *e << '\n';
                 if (it.failed) {
                     ++skipped;
                     skip_idx.insert(done);

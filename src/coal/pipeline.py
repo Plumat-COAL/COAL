@@ -1047,7 +1047,10 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                             notice(f"skipped {failure[1]}")
                     if rec is not None:
                         entry = rec.add_sequence(done, pid, _shown(warns), notes, failure)
-                        if entries_fh is not None and entry is not None:
+                        # The entries file feeds a resumed run's report, summary and hint; with -q and no report a
+                        # resumed run reads none of it (RunReport.restore), so it is not written: a million genes
+                        # of unrelated DNA wrote 55 GB of it
+                        if entries_fh is not None and entry is not None and (rec.keep_entries or rec.want_hint):
                             entries_fh.write(json.dumps(entry) + "\n")
                     if failure:
                         skipped += 1
