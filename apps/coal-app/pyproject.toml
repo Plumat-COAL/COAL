@@ -7,12 +7,12 @@ build-backend = "setuptools.build_meta"
 # it as `python -m coal`. Built from this folder: python -m build apps/coal-app
 [project]
 name = "coal-align-app"
-version = "0.5.0rc4"  # always the same as coal-align (scripts/release_version.py and tests/test_site.py check it)
+version = "0.5.0"  # always the same as coal-align (scripts/release_version.py and tests/test_site.py check it)
 description = "COAL web GUI and MCP server (codon alignment, PAL2NAL alternative)"
 readme = "README.md"
 license = {text = "MIT"}  # LICENSE (a copy of the repository's) is picked up by setuptools' default license-files
 requires-python = ">=3.10"
-dependencies = ["coal-align==0.5.0rc4"]
+dependencies = ["coal-align==0.5.0"]
 
 [project.optional-dependencies]
 # Web GUI + MCP server for AI agents (python -m coal_app / coal-gui). Pinned exactly.
