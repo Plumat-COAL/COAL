@@ -53,8 +53,8 @@ All of these are present in every report, in this order, except `error` and `res
 | Field | Type | Meaning |
 |---|---|---|
 | `total` | integer | proteins in the alignment (`len(sequences)`) |
-| `ok`, `warning`, `failed` | integer | sequences with that `status` |
-| `not_checked` | integer | **only when non-zero**: sequences with status `not_checked`. In a run that stopped at an error this counts every sequence except the failed one, i.e. also the ones that had been checked before it (they are `not_written`); the `summary_text` line "N sequences were not checked" counts only the ones never reached |
+| `ok`, `warning`, `failed` | integer | sequences COAL found to be so: in a completed run, the sequences with that `status`. In a run that stopped at an error, the sequences checked before it are counted here by what COAL found (their entries say `not_checked` with a `not_written` message, because no output holds them) |
+| `not_checked` | integer | **only when non-zero**: the sequences the run never reached because it stopped at an error before them, the number the `summary_text` line "N sequences were not checked" gives (up to 0.4.2 this counted every sequence but the failed one). `ok + warning + failed + not_checked` (0 when absent) `== total` always |
 | `pairing` | string or `null` | how proteins were paired with DNA records: `"id"` (every protein ID is a DNA ID), `"normalised"` (some IDs matched only after removing a version suffix, case or database fields, where file order would have mispaired them), `"order"` (by position in the files, as PAL2NAL), or `null` when the run failed before pairing (count mismatch, unreadable file). Closed |
 | `columns_removed` | integer | **only with `-nomismatch` and an output written**: alignment columns removed because a codon did not match its amino acid (or held a B/Z/J/O/U residue) |
 | `columns_removed_ambiguous` | integer | **with `columns_removed`**: how many of those columns were removed only because of codons with N or other ambiguous bases (no definite mismatch) |
@@ -85,8 +85,8 @@ Statuses:
   refused by `--strict` carries the `inconsistent` failure message.
 - `not_checked`: the run stopped at an error before this sequence was finished with. In a stopped run every
   sequence but the failed one is `not_checked`: the ones before it carry `not_written` plus their own messages (they
-  were checked but no output exists), the ones after it carry `not_reached`; when the run failed before pairing, all
-  are `not_checked` with no messages.
+  were checked but no output exists; `summary` counts them by what was found), the ones after it carry `not_reached`
+  (`summary.not_checked` counts these); when the run failed before pairing, all are `not_checked` with no messages.
 
 ## Messages
 

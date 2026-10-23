@@ -29,8 +29,8 @@ OPTION_SETS = [
 # What may legitimately differ, and why:
 #   hints "engine_warning"/"nomismatch_unknown": stderr-parsing artefacts of the fallback (the engine knows)
 #   genetic_code hint: the engine tests every gene and all 17 codes (the fallback: 9 codes on the problem genes)
-#   "not_checked": the fallback marks every gene of an aborted run "not checked"; the engine only those it never
-#   reached (the others keep their status: "checked, but not written")
+#   "not_checked": the fallback's summary marks every gene of an aborted run "not checked"; the engine's summary
+#   only those it never reached (the others count as what was found: "checked, but not written")
 
 
 def inputs():
