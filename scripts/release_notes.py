@@ -13,6 +13,8 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REPO = "https://github.com/plumat-coal/COAL"
+# the engine wheels with coal-cpp inside that release.yml builds (job cpp-wheels), in its order
+PLATFORM_TAGS = ("manylinux_2_28_x86_64", "manylinux_2_28_aarch64", "macosx_11_0_universal2", "win_amd64")
 NO_CHANGELOG = 3
 
 
@@ -34,6 +36,7 @@ def changelog_section(version, path=os.path.join(ROOT, "CHANGELOG.md")):
 def fixed_part(version):
     wheel = f"coal_align-{version}-py3-none-any.whl"
     app_wheel = f"coal_align_app-{version}-py3-none-any.whl"
+    platform_wheels = ", ".join(f"`coal_align-{version}-py3-none-{t}.whl`" for t in PLATFORM_TAGS)
     return f"""COAL {version}: turns a protein alignment plus the matching coding DNA into a codon alignment
 (for dN/dS and DNA phylogenies). A fast, MIT-licensed replacement for PAL2NAL.
 
@@ -45,7 +48,8 @@ Website and install steps: https://plumat-coal.github.io/COAL/
 |---|---|
 | `COAL-Setup-{version}.exe` (same file: `COAL-Setup-windows-x64.exe`) | Windows 10/11 installer, 64-bit, installs for you only (no administrator rights) |
 | `COAL-{version}-windows-x64.zip` (same file: `COAL-windows-x64.zip`) | Windows portable app: unzip anywhere, run `COAL\\COAL.exe` |
-| `{wheel}` | Python wheel of the engine, `coal-align` (Windows, macOS, Linux; Python 3.10+; no dependencies) |
+| {platform_wheels} | Python wheels of the engine, `coal-align`, with the C++ engine `coal-cpp` inside (Linux x86_64 and aarch64 with glibc 2.28+, macOS 11+ on Apple silicon and Intel, Windows x64; Python 3.10+; no dependencies). `pip install` picks the one for your platform |
+| `{wheel}` | Python wheel of the engine without `coal-cpp` (any platform with Python 3.10+; the fallback pip uses where no wheel above fits) |
 | `coal_align-{version}.tar.gz` (same file: `coal_src.tar.gz`) | Python source distribution of the engine |
 | `{app_wheel}` | Python wheel of the app, `coal-align-app` (web GUI and MCP server; needs the engine wheel) |
 | `coal_align_app-{version}.tar.gz` (same file: `coal_app_src.tar.gz`) | Python source distribution of the app |
@@ -69,13 +73,16 @@ COAL has no code-signing certificate yet, so Windows doesn't know the publisher:
 Needs Python 3.10 or newer. In a virtual environment, the engine and the app:
 
 ```
-python -m pip install "coal-align @ {REPO}/releases/download/v{version}/{wheel}" \\
+python -m pip install "coal-align @ {REPO}/releases/download/v{version}/coal_align-{version}.tar.gz" \\
     "coal-align-app[gui] @ {REPO}/releases/download/v{version}/{app_wheel}"
 coal-gui        # the app, at http://127.0.0.1:7860
 coal --help     # the command line
 ```
 
 For the command line alone (pipelines), install only the first package, `coal-align`: it has no dependencies.
+To get the C++ engine with it, install the wheel for your platform from the table above instead of the
+`.tar.gz` (download it, then `python -m pip install coal_align-{version}-py3-none-<platform>.whl`); `coal --cpp-path`
+then prints where `coal-cpp` is. On PyPI, `python -m pip install coal-align` chooses that wheel by itself.
 A plain `pip install coal` installs a different project.
 
 ## Check a download

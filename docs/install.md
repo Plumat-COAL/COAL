@@ -35,6 +35,26 @@ For the command line alone (pipelines such as OrthologR or a DIAMOND workflow), 
 different project. Check downloads against
 [SHA256SUMS.txt](https://github.com/plumat-coal/COAL/releases/latest/download/SHA256SUMS.txt).
 
+### The C++ engine comes with the wheel
+
+Every release also has one wheel per platform with the C++ engine `coal-cpp` inside, next to the pure-Python
+wheel and the sdist:
+
+| Wheel | For |
+| --- | --- |
+| `coal_align-<version>-py3-none-manylinux_2_28_x86_64.whl` | Linux x86_64, glibc 2.28+ (RHEL/Rocky 8+, Debian 10+, Ubuntu 18.10+ and anything newer) |
+| `coal_align-<version>-py3-none-manylinux_2_28_aarch64.whl` | Linux aarch64 (ARM servers, Raspberry Pi OS 64-bit), glibc 2.28+ |
+| `coal_align-<version>-py3-none-macosx_11_0_universal2.whl` | macOS 11+, Apple silicon and Intel (one file) |
+| `coal_align-<version>-py3-none-win_amd64.whl` | Windows 10/11, 64-bit |
+| `coal_align-<version>-py3-none-any.whl`, `coal_align-<version>.tar.gz` | everything else: the same `coal`, Python engine only |
+
+Once `coal-align` is on PyPI, `python -m pip install coal-align` picks the right one by itself. From a release,
+download the wheel for your platform and `python -m pip install coal_align-<version>-py3-none-<platform>.whl`
+(the `.tar.gz` command above installs the Python engine only). Either way nothing else is needed: `coal` hands
+inputs of 1 MB or more to the bundled `coal-cpp` ([cpp-engine.md](cpp-engine.md) "Where coal looks for
+coal-cpp"), and `coal --cpp-path` prints its path (exit 1 if there is none), e.g. to call it directly from a
+pipeline. A `coal-cpp` you built yourself still wins when `COAL_CPP` points at it.
+
 ## Conda (Bioconda): prepared, not yet published
 
 A Bioconda recipe is ready under `packaging/bioconda/` (with `packaging/bioconda/README.md` on testing and
@@ -78,7 +98,8 @@ the extras (`"apps/coal-app[gui]"`): some shells (zsh, PowerShell) treat bare br
   accepts an unchanged PAL2NAL v14 command line, with PAL2NAL's default clustal output, all four formats,
   `-blockonly` and `-nostderr` (= `-q`); `-html` is a clear error.
 - **AI agents (MCP):** two tools, `codon_align` and `explain_report`; see [mcp.md](mcp.md).
-- **C++ engine for the largest jobs:** `coal-cpp`, same options and output ([cpp-engine.md](cpp-engine.md)).
+- **C++ engine for the largest jobs:** `coal-cpp`, same options and output ([cpp-engine.md](cpp-engine.md)); it
+  comes inside the platform wheels (above) and the Windows app, or build it from source.
 - **Two-species preset:** `demo/diamond_pipeline.py` (DIAMOND reciprocal best hits, then COAL on every pair).
 - **Hosted demo:** a Hugging Face Space is prepared but not deployed yet: `apps/coal-app/space/README.md`,
   `apps/coal-app/space/DEPLOY.md`.

@@ -20,6 +20,7 @@ __pycache__/
 venv/
 .pytest_cache/
 *.egg-info/
+src/coal/bin/      # a coal-cpp copied here for `pip install -e .`; the platform wheels get theirs from packaging/wheels/
 
 # Editors / OS
 .vscode/*
@@ -37,6 +38,8 @@ tbln.out.*
 # C++ build output (cmake -S . -B build; build-asan: the sanitizer build of CONTRIBUTING.md "Nightly checks")
 build/
 build-asan/
+build-manylinux/   # packaging/wheels/build_linux_binary.sh
+build-wheel/       # release.yml: the coal-cpp that goes into a platform wheel
 
 # Launcher environments (desktop\run_from_source.bat, desktop\setup_mcp.bat) and
 # stray local files at the repo root (run outputs, debug logs, old launchers; the launchers live in desktop/)

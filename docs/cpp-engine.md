@@ -2,8 +2,10 @@
 
 `coal-cpp` is a C++17 implementation of the same engine (standard library only, MIT). It takes the same options as
 `coal` and writes the same output, warnings, report and exit codes, so it can replace `coal` in any command line.
-`coal` itself hands inputs of 1 MB or more to `coal-cpp` when it finds the same version (set `COAL_CPP` to its path,
-or put it next to Python or on `PATH`; `COAL_ENGINE=python|cpp` chooses), and the Windows app ships it. To build it:
+`coal` itself hands inputs of 1 MB or more to `coal-cpp` when it finds the same version (`COAL_ENGINE=python|cpp`
+forces one engine). The platform wheels of `coal-align` (Linux x86_64 and aarch64, macOS, Windows x64;
+[install.md](install.md)) and the Windows app ship it, so most installs have it without a build. To build it
+yourself:
 
 ```
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -32,6 +34,37 @@ build/coal-cpp pep.aln nuc.fasta -o codon_aln.fasta       # Windows (Visual Stud
   cheap, and `coal --batch` never hands a batch to it.
 - **Tests:** `COAL_IMPL=cpp COAL_CPP_BIN=build/coal-cpp python -m unittest tests.test_differential
   tests.test_cpp_vs_python tests.test_cpp_cli` (the C++ tests skip when the binary isn't built).
+
+## Where coal looks for coal-cpp
+
+`coal.dispatch.find_cpp()` takes the first of these; `coal --cpp-path` prints the result (and exits 1, saying why,
+when there is none or it is another version), so a pipeline can call the binary directly:
+`cpp=$(coal --cpp-path) && "$cpp" pep.aln nuc.fasta -o out.fasta`.
+
+1. **`COAL_CPP`**, if set: that path and nothing else (a build of your own, a shared install).
+2. **Inside the installed package:** `coal/bin/coal-cpp` (`coal-cpp.exe` on Windows), where the platform wheels
+   put it (`packaging/wheels/build_platform_wheel.py`); used only if it is executable. The pure wheel, the sdist and
+   a source checkout have no `coal/bin`.
+3. **Next to the Python running `coal`:** the interpreter's folder, its `_internal` (the frozen Windows app) and the
+   environment's `bin`/`Scripts` (where Bioconda installs it).
+4. **`PATH`.**
+
+A found `coal-cpp` is used only when its `--version` is this package's version; otherwise `coal` says so once
+(`coal: notice: ... using the Python engine`) and goes on in Python, unless `COAL_ENGINE=cpp` demands it (exit 1).
+
+### How the platform wheels are made
+
+`release.yml` (job `cpp-wheels`) builds `coal-cpp` per platform and `packaging/wheels/build_platform_wheel.py` copies
+it into the pure wheel as `coal/bin/coal-cpp` with the executable bit set in the zip, rewrites `RECORD`, and retags the
+wheel (`py3-none-manylinux_2_28_x86_64`, `..._aarch64`, `py3-none-macosx_11_0_universal2`, `py3-none-win_amd64`).
+No compiled Python extension is involved: the wheel is the pure package plus one data file that `coal` execs. Linux
+binaries are built in the `manylinux_2_28` containers with `libstdc++`/`libgcc` linked statically
+(`packaging/wheels/build_linux_binary.sh`), so glibc 2.28 is the only requirement, and `auditwheel show` confirms
+the tag; the macOS binary is a universal2 build (`CMAKE_OSX_ARCHITECTURES="arm64;x86_64"`, deployment target 11.0,
+checked with `lipo -archs`); the Windows one links the CRT statically (no Visual C++ redistributable needed). To
+make one by hand from a local build: `python -m build --wheel` then
+`python packaging/wheels/build_platform_wheel.py --binary build/coal-cpp --wheel dist/coal_align-<v>-py3-none-any.whl --platform-tag <tag>`
+(`tests/test_wheels.py` does exactly this and installs the result).
 
 ## Embedding the library
 
