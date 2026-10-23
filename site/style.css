@@ -92,7 +92,7 @@ kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3p
   display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.3rem 1.5rem;
   border-bottom: 1px solid var(--line); }
 .home { display: inline-flex; align-items: center; gap: 0.5rem; font-weight: 600; font-size: 1.2rem;
-  letter-spacing: 0.04em; text-decoration: none; color: var(--ink); }
+  text-decoration: none; color: var(--ink); }
 .home img { display: block; width: 32px; height: 25px; }
 .top ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.1rem 1.3rem; }
 .top li a { display: inline-block; padding: 0.2rem 0; color: var(--text); text-decoration: none;
@@ -161,8 +161,8 @@ pre.term code { white-space: pre-wrap; overflow-wrap: anywhere; }
 .shot { margin: 1.25rem 0 1rem; }
 
 /* The explainer animation, inline on the guide. */
-.explainer { display: block; width: 100%; aspect-ratio: 16 / 10; min-height: 22rem; border: 1px solid var(--line);
-  background: #101418; margin: 0 0 0.5rem; }
+.explainer { display: block; width: 100%; aspect-ratio: 16 / 9; min-height: 20rem; border: 1px solid var(--line);
+  background: var(--code-bg); margin: 0 0 0.5rem; }
 
 /* The alignment, one block per codon. */
 .aln { margin: 0 0 1.25rem; }
@@ -184,7 +184,7 @@ figcaption { font-size: var(--fs-sm); color: var(--muted); margin-top: 0.5rem; }
 .nums caption { text-align: left; font-size: var(--fs-sm); color: var(--muted); padding-bottom: 0.4rem; }
 .nums th, .nums td { padding: 0.35rem 1.1rem 0.35rem 0; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
 .nums th:first-child { text-align: left; }
-.nums thead th { font-size: var(--fs-sm); color: var(--muted); font-weight: 600; white-space: normal; vertical-align: bottom; }
+.nums thead th { font-size: var(--fs-sm); color: var(--muted); font-weight: 400; white-space: normal; vertical-align: bottom; }
 @media (max-width: 30rem) { .nums { min-width: 0; font-size: 0.94rem; } .nums th, .nums td { padding-right: 0.7rem; } }
 .nums tbody th { font-weight: 400; }
 .nums td:last-child { font-weight: 600; color: var(--ink); }
@@ -213,7 +213,7 @@ details.ss[open] summary { margin-bottom: 0.75rem; }
 
 .files { border-collapse: collapse; width: 100%; min-width: 26rem; font-size: 0.96rem; }
 .files th, .files td { text-align: left; vertical-align: top; padding: 0.45rem 1rem 0.45rem 0; border-bottom: 1px solid var(--line); }
-.files thead th { font-size: var(--fs-sm); color: var(--muted); font-weight: 600; }
+.files thead th { font-size: var(--fs-sm); color: var(--muted); font-weight: 400; }
 .files td:first-child { font-family: var(--mono); font-size: 0.82rem; white-space: nowrap; }
 .verify dt { font-weight: 600; color: var(--ink); margin-top: 0.9rem; }
 .verify dd { margin: 0.3rem 0 0; }

@@ -5,22 +5,26 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>COAL explainer</title>
 <style>
+  @font-face { font-family: "Libertinus Serif"; src: url("assets/fonts/LibertinusSerif-Regular.woff2") format("woff2");
+    font-weight: 400; font-style: normal; font-display: swap; }
+  @font-face { font-family: "Libertinus Serif"; src: url("assets/fonts/LibertinusSerif-Semibold.woff2") format("woff2");
+    font-weight: 600; font-style: normal; font-display: swap; }
   :root {
-    --bg: #101418; --fg: #f4f4f0; --muted: #a9b1b8; --panel: #1b2229;
-    --aa: #56B4E9; --nt: #f4f4f0; --gap: #a9b1b8; --bad: #E69F00; --ok: #009E73;
+    --bg: #121110; --fg: #E4E0DB; --ink: #F4F1ED; --muted: #B3ADA6; --panel: #1C1A19; --line: #3A3633;
+    --aa: #FFC24B; --nt: #F4F1ED; --gap: #8C8782; --bad: #FF6A13; --ok: #8FD19E;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
-    font-family: system-ui, "Segoe UI", Helvetica, Arial, sans-serif; }
+    font-family: "Libertinus Serif", Georgia, "Times New Roman", serif; }
   body { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2vh 3vw; }
-  h1 { font-size: clamp(22px, 3.2vw, 48px); margin: 0 0 3vh; font-weight: 700; letter-spacing: 0.01em; }
-  h1 .brand { color: var(--aa); }
-  .stage { background: var(--panel); border-radius: 18px; padding: 4vh 3vw 6vh; width: min(96vw, 1500px);
+  h1 { font-size: clamp(18px, 2vw, 28px); margin: 0 0 3vh; font-weight: 600; color: var(--ink); }
+  .embedded h1 { display: none; }
+  .stage { background: var(--panel); border: 1px solid var(--line); padding: 4vh 3vw 6vh; width: min(96vw, 1500px);
     display: flex; flex-direction: column; gap: 4vh; align-items: center; }
   .row { display: flex; align-items: flex-end; gap: 0.25em;
     font-family: ui-monospace, "Cascadia Mono", Consolas, Menlo, monospace; font-size: clamp(13px, 3.9vw, 66px); }
   /* a larger minimum (e.g. 22px) overflows a 390 px phone screen */
-  .name { font-family: system-ui, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 0.5em; color: var(--muted);
+  .name { font-family: "Libertinus Serif", Georgia, serif; font-size: 0.5em; color: var(--muted);
     width: 4.2em; text-align: right; padding-right: 0.5em; align-self: center; }
   .cell { position: relative; width: 1.25em; height: 1.9em; transition: width 0.6s ease;
     transition-delay: calc(var(--i) * 0.12s); border-radius: 0.15em; }
@@ -43,7 +47,7 @@
   .s3 .bad { animation: flash 0.5s ease-in-out 0.2s 4; }
   @keyframes flash { 50% { background: var(--bad); } }
   .s3 .bad::after, .s4 .bad::after { content: "TGA = STOP"; position: absolute; top: 100%; left: 50%;
-    transform: translateX(-50%); margin-top: 0.15em; font-family: system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
+    transform: translateX(-50%); margin-top: 0.15em; font-family: "Libertinus Serif", Georgia, serif;
     font-size: 0.32em; font-weight: 700; color: var(--bad); white-space: nowrap; }
   /* matches the last step's caption (mito: TGA = W) */
   .s4 .bad::after { content: "TGA = W (mito)"; color: var(--ok); }
@@ -52,11 +56,12 @@
   .caption strong { color: var(--bad); }
   .caption em { color: var(--ok); font-style: normal; font-weight: 700; }
   .controls { margin-top: 3vh; display: flex; gap: 1em; align-items: center; font-size: clamp(14px, 1.4vw, 22px); }
-  button { font: inherit; color: var(--fg); background: #2a333c; border: 2px solid #44505c; border-radius: 10px;
-    padding: 0.4em 1em; cursor: pointer; }
+  button { font: inherit; color: var(--ink); background: transparent; border: 1px solid var(--muted);
+    padding: 0.3em 0.9em; cursor: pointer; }
+  button:hover { border-color: var(--aa); }
   button:focus-visible { outline: 3px solid var(--aa); outline-offset: 2px; }
   .dots { display: flex; gap: 0.5em; }
-  .dot { width: 0.8em; height: 0.8em; border-radius: 50%; background: #44505c; }
+  .dot { width: 0.8em; height: 0.8em; border-radius: 50%; background: var(--line); }
   .dot.on { background: var(--aa); }
   .help { color: var(--muted); font-size: clamp(12px, 1.1vw, 18px); margin-top: 1.5vh; }
   @media (prefers-reduced-motion: reduce) {
@@ -66,7 +71,7 @@
 </style>
 </head>
 <body>
-  <h1><span class="brand">COAL</span>: from a protein alignment to a codon alignment</h1>
+  <h1>From a protein alignment to a codon alignment</h1>
   <div class="stage s0" id="stage" aria-hidden="true">
     <div class="row" id="r0"><span class="name">Human</span></div>
     <div class="row" id="r1"><span class="name">Mouse</span></div>
@@ -82,6 +87,7 @@
 <script>
 (function () {
   "use strict";
+  if (window.self !== window.top) { document.body.className = "embedded"; }  // inside the guide: no title
   // Protein alignment and the codons that produce it ("---" for a gap).
   var rows = [
     { aa: "MKT-LWG", nt: ["ATG", "AAA", "ACC", "---", "CTG", "TGG", "GGC"] },

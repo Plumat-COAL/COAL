@@ -42,10 +42,11 @@
     It checks every codon against its amino acid as it goes, and when a gene does not fit it says which gene,
     at which column, and what is probably wrong.</p>
   <p>It does the job of PAL2NAL v14, with the same input files and options and the same output apart from
-    <a href="differences.html#pal2nal">a few documented differences</a>, and it is a good deal quicker on large
-    data: a million genes of 400 codons took <span data-check="12.5 s">12.5 s</span> with COAL's C++ engine and
+    <a href="differences.html#pal2nal">a few documented differences</a>, and it is much quicker on large data.
+    A million genes of 400 codons took <span data-check="12.5 s">12.5 s</span> with COAL's C++ engine and
     <span data-check="62 min">62 min</span> with PAL2NAL v14 <a href="differences.html#speed">on the same
-    machine</a>. There is a Windows app, a command line for pipelines, and a Python package. MIT licence.</p>
+    machine</a>. There is a Windows app, a command line for pipelines and a Python package, all under the MIT
+    licence.</p>
 </div>
 
 <section class="sec" id="download" aria-labelledby="dl-title">
@@ -88,8 +89,9 @@
 
 <section class="sec" id="look" aria-labelledby="look-title">
   <h2 id="look-title">What it looks like</h2>
-  <p>In the repository's <code>one_broken_gene</code> example, one of 20 genes is missing a base. On the command
-    line, COAL stops, names the gene and the column, and writes nothing:</p>
+  <p>In the <code>one_broken_gene</code> example (in the app under <q>Try an example</q>, and in the repository's
+    <code>examples/</code> folder), one of 20 genes is missing a base. On the command line, COAL stops, names the
+    gene and the column, and writes nothing:</p>
   <div class="look">
 <pre class="term" tabindex="0" aria-label="Terminal: the one_broken_gene example stops with an error"><code><span class="ps">$</span> coal examples/one_broken_gene/protein.aln.fasta examples/one_broken_gene/dna.fasta -o codon.aln.fasta
 coal: error: OG0001_sp14: protein and DNA are inconsistent (no match found)
@@ -99,7 +101,7 @@ coal: summary: The run stopped at OG0001_sp14: 6 sequences were not checked and 
 1</code></pre>
     <figure>
       <img src="img/broken-gene.webp" width="1600" height="1323"
-        alt="COAL's results for the one_broken_gene example in the desktop app: 19 of 20 genes aligned, 1 failed. Below, the codon alignment around column 102: OG0001_sp14 is marked failed, with a frameshift at column 102, outlined, where its codons go out of step.">
+        alt="COAL's results for the one_broken_gene example in the app: 19 of 20 genes aligned, 1 failed. Below, the codon alignment around column 102: OG0001_sp14 is marked failed, with a frameshift at column 102, outlined, where its codons go out of step.">
     </figure>
   </div>
   <p><a href="guide.html">The guide</a> has more examples, and what each warning means.</p>
@@ -113,12 +115,12 @@ coal: summary: The run stopped at OG0001_sp14: 6 sequences were not checked and 
       <span data-check="285 checks">285 checks</span>.</li>
     <li>A gene that does not fit is an error, with exit status 1 and the gene and column named. PAL2NAL v14 prints
       a note and exits with 0, so a pipeline carries on with a bad alignment.</li>
-    <li>Large inputs finish. A million genes took <span data-check="18.6 GB">18.6 GB</span> of memory with PAL2NAL v14
-      and <span data-check="172 MB">172 MB</span> with COAL.</li>
+    <li>A million genes take 12.5 s and <span data-check="172 MB">172 MB</span> of memory; PAL2NAL v14 took 62 min
+      and <span data-check="18.6 GB">18.6 GB</span> on the same machine.</li>
     <li>Mitochondrial and other genetic codes use the current NCBI tables, and when the genes fit another code better,
       COAL says which.</li>
   </ul>
-  <p><a href="differences.html">What differs from PAL2NAL, and the timings</a>.</p>
+  <p>More under <a href="differences.html">Why use it</a>: the differences from PAL2NAL and the timings.</p>
 </section>
 
 <section class="sec" id="cpp" aria-labelledby="cpp-title">

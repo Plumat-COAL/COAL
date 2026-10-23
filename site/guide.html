@@ -51,8 +51,8 @@
   <h2 id="how-title">How it works</h2>
   <p>A protein alignment lines up the amino acids of related genes, one letter each. A codon alignment is the same
     picture written in DNA: three bases under each amino acid, and <code>---</code> under each gap. COAL writes it
-    from the protein alignment and the unaligned DNA, and checks that each codon really codes for the letter above
-    it. Twenty seconds, five steps:</p>
+    from the protein alignment and the coding DNA (unaligned), and checks that each codon really codes for the
+    letter above it. The animation below takes about twenty seconds:</p>
   <iframe class="explainer" src="explainer.html" title="How COAL builds a codon alignment: a five-step animation" loading="lazy"></iframe>
   <p class="fine">Space or the right arrow key moves to the next step.
     <a href="explainer.html">Open the animation on its own page</a>.</p>
@@ -61,7 +61,9 @@
 <section class="sec" id="example" aria-labelledby="example-title">
   <h2 id="example-title">Running COAL</h2>
   <p>COAL takes two files: the protein alignment (FASTA or CLUSTAL) and the coding DNA of the same genes (FASTA,
-    not aligned). Sequences are paired by name. The repository's <code>clean</code> example has 8 genes:</p>
+    not aligned). Sequences are paired by name. The examples below are in the
+    <a href="https://github.com/plumat-coal/COAL/tree/main/examples"><code>examples/</code> folder</a> of the
+    repository and under <q>Try an example</q> in the app. The <code>clean</code> example has 8 genes:</p>
 <pre class="term" tabindex="0" aria-label="Terminal: running COAL on the clean example"><code><span class="ps">$</span> coal examples/clean/protein.aln.fasta examples/clean/dna.fasta -o codon.aln.fasta
 <span class="ps">$</span> echo $?
 0
@@ -73,7 +75,7 @@ AATGGAGGG---AAAATG---TGGTTTGCTATGGGCGCCGTTGATAATATGCCTACCATG</code></pre>
   <figure class="aln">
     <div class="aln-scroll" tabindex="0" role="group" aria-labelledby="aln-cap">
       <table class="triplets">
-        <caption class="visually-hidden">Protein alignment columns 1 to 14 with the codon COAL placed under each residue, for four genes</caption>
+        <caption class="visually-hidden">Protein alignment columns 1 to 14 with the codon COAL placed under each residue, for 4 genes</caption>
         <tbody>
           <tr><th scope="row">gene01</th><td>M<br><span>ATG</span></td><td class="gap">-<br><span>---</span></td><td>A<br><span>GCG</span></td><td>R<br><span>AGG</span></td><td class="gap">-<br><span>---</span></td><td>P<br><span>CCT</span></td><td>S<br><span>TCC</span></td><td>T<br><span>ACT</span></td><td>T<br><span>ACT</span></td><td>T<br><span>ACC</span></td><td>V<br><span>GTG</span></td><td>N<br><span>AAT</span></td><td>M<br><span>ATG</span></td><td>W<br><span>TGG</span></td></tr>
           <tr><th scope="row">gene02</th><td>M<br><span>ATG</span></td><td>K<br><span>AAA</span></td><td>A<br><span>GCG</span></td><td>R<br><span>AGG</span></td><td>G<br><span>GGG</span></td><td>E<br><span>GAA</span></td><td>N<br><span>AAT</span></td><td>T<br><span>ACT</span></td><td>T<br><span>ACT</span></td><td>T<br><span>ACT</span></td><td>V<br><span>GTT</span></td><td>S<br><span>TCA</span></td><td>Q<br><span>CAA</span></td><td>W<br><span>TGG</span></td></tr>
@@ -87,21 +89,23 @@ AATGGAGGG---AAAATG---TGGTTTGCTATGGGCGCCGTTGATAATATGCCTACCATG</code></pre>
   </figure>
   <p>The options are PAL2NAL's. The ones most people need:</p>
   <ul>
-    <li><code>-codontable 2</code> chooses the genetic code (here, vertebrate mitochondrial; 1, the standard code,
-      is the default).</li>
+    <li><code>-codontable 2</code> chooses the genetic code, by its NCBI number: 1 is the standard code and the
+      default, 2 vertebrate mitochondrial, 4 mould and protozoan mitochondrial, 11 bacteria and plastids.</li>
     <li><code>-output clustal</code>, <code>paml</code> or <code>codon</code> chooses the output format;
-      <code>coal</code> writes FASTA unless told otherwise.</li>
-    <li><code>-nogap</code> removes every column that has a gap or a stop codon.</li>
+      <code>coal</code> writes FASTA unless told otherwise. <code>paml</code> is what PAML's codeml reads.</li>
+    <li><code>-nogap</code> removes every column that has a gap or a stop codon, which some dN/dS programs need.</li>
     <li><code>--keep-going</code> leaves out any gene that cannot be converted and writes the rest.</li>
   </ul>
   <p>The <code>pal2nal</code> command, installed with COAL, takes a PAL2NAL command line exactly as it is, and writes
-    CLUSTAL by default as PAL2NAL does. Large inputs are split across processes on their own; <code>-j</code> sets
-    the maximum.</p>
+    CLUSTAL by default as PAL2NAL does. Large inputs are split across CPU cores automatically (each extra process
+    needs about 4 million bases of DNA to pay for its start-up); <code>-j 2</code> limits it to two processes.</p>
 </section>
 
 <section class="sec" id="misfit" aria-labelledby="misfit-title">
   <h2 id="misfit-title">Warnings and errors</h2>
-  <p>COAL checks that the DNA spells the protein. There are two kinds of message.</p>
+  <p>COAL checks that the DNA spells the protein. Two kinds of message matter for the output. (A third, a notice,
+    flags data that is probably wrong, such as DNA from a different gene; <code>--strict</code> turns it into an
+    error.)</p>
   <h3>A warning: the gene fits, but some codons do not match</h3>
   <p>The alignment is still written. The usual cause is the wrong genetic code. The <code>mito</code> example has
     24 mitochondrial genes; with the standard code, COAL warns about each codon that does not match and then says
@@ -114,7 +118,8 @@ coal: warning: Homo_COX1 pepAlnPos 36: W does not correspond to TGA
 coal: summary: 24 of 24 sequences have codons that do not match their amino acid (kept in the alignment). Under genetic code 2 (Vertebrate mitochondrial), all 24 sequences match their protein; under code 1, none do. Codes 5 and 13 fit these sequences too: choose the code of the organism and organelle the genes come from. Re-run with -codontable 2.
 <span class="ps">$</span> coal examples/mito/protein.aln.fasta examples/mito/dna.fasta -codontable 2 -o codon.aln.fasta
 <span class="ps">$</span></code></pre>
-  <p>The app says the same thing in one line per gene, and offers the re-run as a button:</p>
+  <p><code>pepAlnPos</code> is the column in the protein alignment. The app says the same thing in one line per
+    gene, and offers the re-run as a button:</p>
   <div class="said" role="group" aria-label="What the COAL app shows for the mito example">
     <p><samp>Homo_COX1: 7 codons do not match their amino acid (first at column 1): the protein says M but the DNA
       has ATA. Kept in the alignment; check the genetic code.</samp></p>
@@ -134,9 +139,9 @@ coal: summary: The run stopped at OG0001_sp14: 6 sequences were not checked and 
     the end, and the app points out that the run of mismatches looks like a frameshift.</p>
   <figure class="shot">
     <img src="img/broken-gene.webp" width="1600" height="1323" loading="lazy"
-      alt="COAL's results for the one_broken_gene example in the desktop app: 19 of 20 genes aligned, 1 failed. Below, the codon alignment around column 102: OG0001_sp14 is marked failed, with a frameshift at column 102, outlined, where its codons go out of step.">
-    <figcaption>The same example in the app, which runs with <code>--keep-going</code>: 19 genes aligned, the failed
-      one shown at the column where it breaks. The app also writes a methods sentence and a JSON report with
+      alt="COAL's results for the one_broken_gene example in the app: 19 of 20 genes aligned, 1 failed. Below, the codon alignment around column 102: OG0001_sp14 is marked failed, with a frameshift at column 102, outlined, where its codons go out of step.">
+    <figcaption>The same example in the app, which always runs with <code>--keep-going</code>: 19 genes aligned, the
+      failed one shown at the column where it breaks. The app also writes a methods sentence and a JSON report with
       checksums of the inputs.</figcaption>
   </figure>
 </section>
@@ -149,7 +154,7 @@ coal: summary: The run stopped at OG0001_sp14: 6 sequences were not checked and 
     <span data-check="62 min">62 min</span>. Both engines take the same options.</p>
   <ul>
     <li><strong>Windows app:</strong> <code>coal-cpp</code> is included, and the app uses it on its own for inputs of
-      1 MB or more. Nothing to set up.</li>
+      1 MB or more.</li>
     <li><strong>pip install, any system:</strong> build it from the source. You need a C++17 compiler (GCC, Clang or
       Visual Studio) and CMake 3.16 or newer:
 <pre class="code"><code>git clone https://github.com/plumat-coal/COAL &amp;&amp; cd COAL
@@ -167,7 +172,8 @@ export COAL_CPP=$PWD/build/coal-cpp</code></pre>
 <section class="sec" id="limits" aria-labelledby="limits-title">
   <h2 id="limits-title">What it does not do</h2>
   <ul>
-    <li>Read Gblocks-format input, or write PAL2NAL's <code>-html</code> web-server output.</li>
+    <li>Read Gblocks-format input, or write PAL2NAL's <code>-html</code> output (two options of the PAL2NAL web
+      server).</li>
     <li>Install from PyPI. Use the commands on the <a href="install.html">Install page</a>; <code>pip install
       coal</code> is a different package.</li>
     <li>Pass a code-signing check on Windows. SmartScreen asks you to confirm, and Smart App Control blocks the
@@ -185,7 +191,7 @@ export COAL_CPP=$PWD/build/coal-cpp</code></pre>
       output of <code>coal --version</code>, your operating system and, if you can, a small file that shows the
       problem.</li>
     <li><a href="https://github.com/plumat-coal/COAL/blob/main/.claude/skills/coal/SKILL.md">SKILL.md</a>: how an
-      AI agent should call COAL. The app also works as an MCP server.</li>
+      AI assistant such as Claude Desktop should call COAL (the app works as an MCP server).</li>
     <li><a href="https://github.com/plumat-coal/COAL">Source code</a>,
       <a href="https://github.com/plumat-coal/COAL/blob/main/LICENSE">MIT licence</a>.</li>
   </ul>

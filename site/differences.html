@@ -48,9 +48,11 @@
   <h2 id="reasons-title">In short</h2>
   <ul>
     <li>A PAL2NAL command line works as it is, and the output is the same.</li>
-    <li>A gene that does not fit is an error with exit status 1, naming the gene and the column. A pipeline cannot
-      miss it.</li>
-    <li>Large inputs finish, in seconds rather than hours, and in a few hundred megabytes of memory.</li>
+    <li>A gene that does not fit is an error with exit status 1, naming the gene and the column, so a pipeline
+      stops.</li>
+    <li>A million genes take <span data-check="12.5 s">12.5 s</span> and <span data-check="172 MB">172 MB</span> of
+      memory; PAL2NAL v14 took <span data-check="62 min">62 min</span> and <span data-check="18.6 GB">18.6 GB</span>
+      on the same machine.</li>
     <li>Genetic codes follow the current NCBI tables, and when the genes fit another code better, COAL says which.</li>
     <li>There is an app for people who do not use a terminal, with the alignment on screen and the problems marked.</li>
   </ul>
@@ -58,13 +60,14 @@
 
 <section class="sec" id="pal2nal" aria-labelledby="pal2nal-title">
   <h2 id="pal2nal-title">Compared with PAL2NAL</h2>
-  <p>PAL2NAL is by Suyama, Torrents and Bork (2006). We wrote COAL independently, in Python, and it
-    contains none of PAL2NAL's code: we ran PAL2NAL version 14 as a separate program, only to compare outputs.
+  <p>PAL2NAL is by Suyama, Torrents and Bork (2006). We wrote COAL independently, in Python and C++, and it
+    contains none of PAL2NAL's code: we ran PAL2NAL v14 as a separate program, only to compare outputs.
     PAL2NAL is GPL-2.0; COAL is MIT.</p>
   <p>COAL's output is identical to PAL2NAL v14's except for a short list of documented, deliberate differences.
-    These are newer NCBI genetic-code tables (codes 3, 10, 11 and 13), <code>-nogap</code> removing the chosen
-    code's stop codons, the chosen code's start codons for the first Met, pairing by IDs that match only after
-    normalising, and inputs where PAL2NAL v14 writes malformed output or fails.</p>
+    These are newer NCBI genetic-code tables (codes 3, 10, 11 and 13); <code>-nogap</code> removing the chosen
+    code's stop codons; the chosen code's other start codons (such as TTG and CTG) accepted for the first Met;
+    sequences paired by name even when the names differ only in case, a version suffix or a database prefix; and
+    inputs where PAL2NAL v14 writes malformed output or fails.</p>
   <p>Our test suite compares COAL with stored PAL2NAL v14 output on <span data-check="39 input cases">39 input cases</span>,
     with every option combination in all 4 output formats: <span data-check="285 checks">285 checks</span>.</p>
   <ul>
@@ -75,7 +78,7 @@
       6 deliberate errors, 3 with different output and 14 <code>-nogap</code> checks with a non-standard genetic
       code.</li>
   </ul>
-  <p>Some of the differences, as measured against PAL2NAL v14:</p>
+  <p>Some of the differences:</p>
   <ul>
     <li>An invalid character in the protein alignment is an error. PAL2NAL treats it as X, and its output can lose
       a codon without saying so.</li>
@@ -96,7 +99,7 @@
   <h2 id="speed-title">Speed</h2>
   <div class="table-scroll" tabindex="0" role="group" aria-labelledby="speed-cap">
     <table class="nums">
-      <caption id="speed-cap">Wall-clock time of the whole command, start-up included; warm medians on synthetic data. COAL: the C++ engine, one thread</caption>
+      <caption id="speed-cap">Wall-clock time of the whole command, start-up included; warm medians on synthetic data; COAL is the C++ engine on one thread.</caption>
       <thead><tr><th scope="col">Genes × codons</th><th scope="col">PAL2NAL v14</th><th scope="col">COAL</th><th scope="col">PAL2NAL ÷ COAL</th></tr></thead>
       <tbody>
         <tr><th scope="row">1,000 × 400</th><td><span data-check="2.31 s">2.31 s</span></td><td><span data-check="0.031 s">0.031 s</span></td><td><span data-check="74×">74×</span></td></tr>
@@ -111,9 +114,9 @@
     than their length; COAL's grows in proportion to the input. PAL2NAL v14 cannot process proteins longer than about
     22,000 residues (Perl's limit on capture groups in one regex); COAL can.</p>
   <p>At a million genes PAL2NAL v14 needed <span data-check="18.6 GB">18.6 GB</span> of memory and COAL
-    <span data-check="172 MB">172 MB</span>. COAL's Python engine gives the same output more slowly:
-    <span data-check="74×">74×</span> faster than PAL2NAL v14 at a million genes, and slower than it on many tiny
-    files run one process at a time. <a href="guide.html#cpp">How to get the C++ engine</a>.</p>
+    <span data-check="172 MB">172 MB</span>. COAL's Python engine gives the same output more slowly: under a minute
+    at a million genes (<span data-check="74×">74×</span> faster than PAL2NAL v14), and slower than PAL2NAL on many
+    tiny files run one process at a time. <a href="guide.html#cpp">How to get the C++ engine</a>.</p>
   <p class="fine">Measured on one Windows 11 machine (Intel i5-13600KF, 32 GB), COAL commit 47f57f1; the million-gene
     PAL2NAL run is a single run. Raw data and the method are in the
     <a href="https://github.com/plumat-coal/COAL/blob/main/docs/benchmarks.md">benchmark results</a>.</p>
