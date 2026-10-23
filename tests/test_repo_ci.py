@@ -252,6 +252,7 @@ class TestNightlyWorkflow(unittest.TestCase):
     def test_the_ci_cpp_test_set_is_the_nightly_one(self):
         """ci.yml's C++ job and the sanitizer job run the same core modules (the nightly adds four)."""
         ci_mods = set(re.findall(r"tests\.test_\w+", self.ci.split("  cpp:")[1]))
+        ci_mods.discard("tests.test_wheels")  # packaging (the platform wheel installs): no sanitizer business
         san_mods = set(re.findall(r"tests\.test_\w+", self._job("sanitizers")))
         self.assertTrue(ci_mods <= san_mods, ci_mods - san_mods)
 

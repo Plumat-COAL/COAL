@@ -44,6 +44,11 @@ def _steps(wf, job):
     return {s.get("name", s.get("uses", "")): s for s in wf["jobs"][job]["steps"]}
 
 
+def platform_wheel_tags():
+    """The platform tags of the engine wheels with coal-cpp inside, from the cpp-wheels job's matrix."""
+    return [m["tag"] for m in _workflow("release.yml")["jobs"]["cpp-wheels"]["strategy"]["matrix"]["include"]]
+
+
 def release_file_names(version="9.9.9"):
     """The exact file list the release job checks (step "Check the release files"), with ${V} filled in."""
     run = _steps(_workflow("release.yml"), "release")["Check the release files"]["run"]
@@ -107,7 +112,7 @@ class TestReleaseWorkflow(unittest.TestCase):
         on = wf.get("on", wf.get(True))  # YAML 1.1 reads a bare `on` key as True
         self.assertEqual(on["push"]["tags"], ["v*"])
         self.assertIn("workflow_dispatch", on)
-        self.assertEqual(set(wf["jobs"]), {"python", "windows", "release", "pypi"})
+        self.assertEqual(set(wf["jobs"]), {"python", "cpp-wheels", "windows", "release", "pypi"})
 
     def test_pypi_job_is_opt_in_and_uses_trusted_publishing(self):
         job = _workflow("release.yml")["jobs"]["pypi"]
@@ -188,6 +193,10 @@ class TestReleaseWorkflow(unittest.TestCase):
         wf = _workflow("release.yml")
         made = "\n".join(s.get("run", "") for j in ("python", "windows") for s in wf["jobs"][j]["steps"])
         made = made.replace("$v", "${V}").replace("${env:VERSION}", "${V}")
+        # the cpp-wheels job names its wheel through the matrix tag
+        wheels = "\n".join(s.get("run", "") for s in wf["jobs"]["cpp-wheels"]["steps"])
+        for tag in platform_wheel_tags():
+            made += "\n" + wheels.replace("${TAG_NAME}", tag)
         for name in release_file_names("${V}"):
             if name == "SHA256SUMS.txt":
                 continue
@@ -195,6 +204,49 @@ class TestReleaseWorkflow(unittest.TestCase):
                             and "python -m build" in made, f"no build step makes {name}")
         sums = _steps(wf, "release")["SHA-256 of every file"]["run"]
         self.assertIn("> SHA256SUMS.txt", sums)
+
+    def test_platform_wheels_job(self):
+        """One engine wheel with coal-cpp per platform (issue #16): built from the pure wheel by
+        packaging/wheels/build_platform_wheel.py, checked (auditwheel on Linux, both slices on macOS, an install
+        whose `coal --cpp-path` is the bundled binary and whose output equals the Python engine's) and uploaded for
+        the release and PyPI jobs; the pure wheel stays in the release as the fallback."""
+        wf = _workflow("release.yml")
+        job = wf["jobs"]["cpp-wheels"]
+        self.assertEqual(job["needs"], "python")  # the pure wheel comes from there
+        tags = platform_wheel_tags()
+        self.assertEqual(tags, ["manylinux_2_28_x86_64", "manylinux_2_28_aarch64", "macosx_11_0_universal2",
+                                "win_amd64"])
+        rn = _load("release_notes")
+        self.assertEqual(list(rn.PLATFORM_TAGS), tags)  # the notes list the same wheels
+        by_tag = {m["tag"]: m for m in job["strategy"]["matrix"]["include"]}
+        for tag in ("manylinux_2_28_x86_64", "manylinux_2_28_aarch64"):
+            self.assertEqual(by_tag[tag]["image"], f"quay.io/pypa/{tag}", tag)
+        self.assertEqual(by_tag["manylinux_2_28_aarch64"]["os"], "ubuntu-24.04-arm")  # native, no QEMU
+        self.assertTrue(by_tag["macosx_11_0_universal2"]["os"].startswith("macos"))
+        self.assertTrue(by_tag["win_amd64"]["os"].startswith("windows"))
+        runs = "\n".join(s.get("run", "") for s in job["steps"])
+        self.assertIn("packaging/wheels/build_linux_binary.sh", runs)
+        self.assertIn("packaging/wheels/build_platform_wheel.py", runs)
+        self.assertIn("--audit", runs)  # auditwheel confirms the manylinux tag
+        self.assertIn('-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"', runs)
+        self.assertIn("lipo -archs", runs)
+        self.assertIn("-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded", runs)  # no VC redistributable needed
+        self.assertIn("-DCOAL_WARNINGS_AS_ERRORS=ON", runs)
+        self.assertIn("--cpp-path", runs)
+        self.assertIn("COAL_ENGINE=cpp", runs)
+        self.assertIn("cmp ", runs)
+        uploads = [st for st in job["steps"] if st.get("uses", "").startswith("actions/upload-artifact@")]
+        self.assertEqual(len(uploads), 1)
+        self.assertEqual(uploads[0]["with"]["name"], "dist-wheel-${{ matrix.tag }}")
+        for j in ("release", "pypi"):
+            self.assertIn("cpp-wheels", wf["jobs"][j]["needs"], j)
+        names = release_file_names("1.2.3")
+        self.assertIn("coal_align-1.2.3-py3-none-any.whl", names)  # the fallback wheel is still released
+        for tag in tags:
+            self.assertIn(f"coal_align-1.2.3-py3-none-{tag}.whl", names)
+        pypi = "\n".join(s.get("run", "") for s in wf["jobs"]["pypi"]["steps"])
+        self.assertIn("coal_align-${V}-py3-none-*.whl", pypi)
+        self.assertIn("-eq 5", pypi)  # the pure wheel and the four platform wheels go to PyPI
 
 
 class TestPagesWorkflow(unittest.TestCase):

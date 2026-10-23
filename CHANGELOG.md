@@ -14,6 +14,17 @@
   without `--keep-going`: `ok 0, failed 1, not_checked 19`; now `ok 13, failed 1, not_checked 6`). The per-sequence
   entries are unchanged (`not_checked` with `not_written` before the error, `not_reached` after it). Both engines;
   documented in `docs/report-schema.md` (#18).
+- **`pip install coal-align` brings the C++ engine** (issue #16): each release now has one wheel per platform with
+  `coal-cpp` inside, at `coal/bin/coal-cpp` in the installed package: Linux x86_64 and aarch64 (`manylinux_2_28`,
+  glibc 2.28+, `libstdc++` linked statically), macOS 11+ (one `universal2` wheel for Apple silicon and Intel) and
+  Windows x64 (static CRT). pip picks it by itself from PyPI; from a GitHub Release, install the wheel file for your
+  platform. The pure `py3-none-any` wheel and the sdist stay as the fallback everywhere else. `coal` finds the bundled
+  binary with no settings: the lookup order is now `COAL_CPP`, then `coal/bin` inside the package, then next to
+  Python, then `PATH` (docs/cpp-engine.md "Where coal looks for coal-cpp"). New `coal --cpp-path` prints the
+  `coal-cpp` that `coal` would use (exit 1 with the reason when there is none or it is another version), for
+  pipelines that call the binary directly. The wheels are made by `packaging/wheels/build_platform_wheel.py` (no
+  cibuildwheel, no compiled extension) in `release.yml`'s new `cpp-wheels` job and checked there (auditwheel, lipo, a
+  fresh-venv install whose output equals the Python engine's); `tests/test_wheels.py` does the same with a local build.
 - **Nightly fuzz workflow** (`.github/workflows/nightly.yml`, 03:17 UTC, or by hand with a seed): the fuzz against
   the real PAL2NAL v14 with a fresh seed each night, once per engine (`COAL_FUZZ_ENGINE=cpp` in
   `tests/fuzz_vs_pal2nal.py` runs `coal-cpp`), the new `tests/tools/engine_fuzz.py` (coal-cpp vs the Python engine

@@ -52,12 +52,31 @@ def _dirs() -> list[str]:
     return res
 
 
+def bundled_cpp() -> str | None:
+    """The coal-cpp a platform wheel ships inside the package (coal/bin/coal-cpp, coal-cpp.exe on Windows;
+    packaging/wheels/build_platform_wheel.py puts it there), if it is there and executable. The pure wheel, the
+    sdist and a source checkout have no coal/bin, so this is None for them."""
+    here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bin")
+    for n in NAMES:
+        p = os.path.join(here, n)
+        if os.path.isfile(p) and os.access(p, os.X_OK):
+            return p
+    return None
+
+
+LOOKUP_ORDER = "COAL_CPP, then coal/bin inside the installed package, then next to Python, then PATH"
+
+
 def find_cpp() -> str | None:
-    """coal-cpp's path: COAL_CPP (that path only), else next to the Python running COAL, else on PATH."""
+    """coal-cpp's path: COAL_CPP (that path only), else the binary bundled in the package (coal/bin), else next to
+    the Python running COAL, else on PATH (LOOKUP_ORDER)."""
     import shutil
     env = os.environ.get("COAL_CPP")
     if env:
         return env if os.path.isfile(env) else None
+    p = bundled_cpp()
+    if p:
+        return p
     for d in _dirs():
         for n in NAMES:
             p = os.path.join(d, n)
@@ -144,7 +163,7 @@ def choose(args, argv, defaults, note=None) -> str | None:
     if path is None:
         if mode == "cpp":
             raise EngineError("COAL_ENGINE=cpp: coal-cpp was not found (set COAL_CPP to its path, or put it next to "
-                              "Python or on PATH)")
+                              "Python or on PATH; `coal --cpp-path` shows where coal looks)")
         return None
     ok, why = _version_ok(path)
     if not ok:
