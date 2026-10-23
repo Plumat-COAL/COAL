@@ -1,6 +1,6 @@
 {
  "schema": "coal.report/1",
- "coal_version": "0.4.2",
+ "coal_version": "0.5.0rc1",
  "source": "coal",
  "engine": "coal-python",
  "command": "coal protein.aln.fasta dna.fasta --keep-going -o codon.fasta",
@@ -222,5 +222,5 @@
  "summary_text": [
   "1 sequence of 20 could not be converted and was left out (first: OG0001_sp14: protein and DNA are inconsistent (no match found). Frameshift at column 102: one base is missing in the DNA, so from here on the codons are read out of step.)"
  ],
- "methods_text": "Codon alignments were built with COAL v0.4.2 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 20 sequences, 19 matched their protein exactly, and 1 could not be aligned and was excluded. Command: coal protein.aln.fasta dna.fasta --keep-going -o codon.fasta"
+ "methods_text": "Codon alignments were built with COAL v0.5.0rc1 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 20 sequences, 19 matched their protein exactly, and 1 could not be aligned and was excluded. Command: coal protein.aln.fasta dna.fasta --keep-going -o codon.fasta"
 }

@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.16)
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND (NOT DEFINED CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL ""))
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type (Release, Debug, RelWithDebInfo, MinSizeRel)")
 endif()
-project(coal_cpp VERSION 0.4.2 LANGUAGES CXX)
+project(coal_cpp VERSION 0.5.0 LANGUAGES CXX)
 
 # coal-cpp: C++17, standard library only. Builds with MSVC, Clang and GCC (Windows, macOS, Linux).
 #   cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release

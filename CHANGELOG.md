@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0rc1
 
 - **Run report: a new top-level `engine` field** (`coal.report/1`, next to `source`): `"coal-python"` or
   `"coal-cpp"`, the same strings as the `--resume` checkpoint's `engine`, so a pipeline or the app can tell which
