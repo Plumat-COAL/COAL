@@ -1,0 +1,1 @@
+/usr/bin/clang++ -O3 -DNDEBUG "CMakeFiles/coal-cpp-dump.dir/cpp/tools/dump.cpp.o" -o coal-cpp-dump  libcoal_core.a 

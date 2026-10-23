@@ -13,7 +13,7 @@
 
 namespace coal {
 
-static const char* VERSION = "0.5.0rc1";
+static const char* VERSION = "0.5.0rc2";
 static const char* SCHEMA = "coal.report/1";
 static const char* REPO_URL = "https://github.com/plumat-coal/COAL";
 // The hint re-tests at most 50 sequences and drops a code as soon as it cannot fit as many as the best so far;
@@ -425,12 +425,16 @@ static void annotate_mismatch_pattern(const std::string& row, Json& e) {
         return;
     }
     std::vector<std::vector<long long>> runs;
-    std::vector<long long> cur{idx[0]};
+    // push_back, not `cur = {x}`: GCC 14's -Warray-bounds misreads the initializer_list temporary of the assignment
+    // as an out-of-bounds memcpy (a false positive that broke the manylinux wheel build under -Werror)
+    std::vector<long long> cur;
+    cur.push_back(idx[0]);
     for (size_t i = 1; i < idx.size(); ++i) {
         if (idx[i] - cur.back() <= 2) cur.push_back(idx[i]);
         else {
             runs.push_back(cur);
-            cur = {idx[i]};
+            cur.clear();
+            cur.push_back(idx[i]);
         }
     }
     runs.push_back(cur);
