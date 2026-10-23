@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Python API: every error is a `CoalError`** (issue #18). `coal.codon_align` and `coal.align_files` with an
+  unsupported `table` now raise `CoalError` with `code="unknown_table"` (the message lists the supported NCBI codes)
+  instead of a bare `ValueError`.
+- **Python API: `coal.seqio.InputFormatError` is a `CoalError`** with `code="input_format"` (issue #18), so one
+  `except CoalError` catches a file that is not FASTA or CLUSTAL too; it stays a `ValueError` for code that catches
+  that. The `coal` command's messages, exit code and report are unchanged.
+- **`pal2nal | head` no longer prints a traceback** (issue #18): the drop-in's usage text into a closed pipe is a
+  silent exit 141, as for `coal` and for the alignment output.
 - **Batch mode (`coal --batch JOBS`, #15):** thousands of small conversions in one process, one `coal` command line
   per line of JOBS (`-` = stdin), the command line's options as the defaults of every job, `--batch-out-dir DIR` for
   jobs without `-o`, a `coal.batch/1` report with `--report`/`--json`, per-job stderr prefixes

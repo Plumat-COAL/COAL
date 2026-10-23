@@ -20,6 +20,8 @@ bad input (``coal`` itself uses 2 for a usage error), 130 / 141 / 143 as for ``c
 """
 from __future__ import annotations
 
+import errno
+import os
 import re
 import sys
 
@@ -117,7 +119,15 @@ def main(argv=None) -> int:
     from coal.cli import _on_sigterm
     signal.signal(signal.SIGTERM, _on_sigterm)  # SIGTERM before the engine starts -> exit 143 too
     if not argv or argv[0] in ("-h", "-help", "--help"):
-        print(USAGE)
+        # `pal2nal | head`: a closed stdout is a silent exit 141, as for `coal` (Windows reports it as EINVAL)
+        try:
+            print(USAGE)
+            sys.stdout.flush()
+        except OSError as e:
+            if isinstance(e, BrokenPipeError) or (os.name == "nt" and e.errno == errno.EINVAL):
+                from coal.cli import closed_stdout_exit
+                return closed_stdout_exit()
+            raise
         return 0
     # The engine runs in this process, so its own list of formats is used.
     from coal.pipeline import FORMATS as ENGINE_FORMATS

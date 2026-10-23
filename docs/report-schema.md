@@ -133,6 +133,8 @@ for the run `count_mismatch`, `row_lengths`, `no_sequences`, `partial_id_match` 
 `input_format` (not FASTA / CLUSTAL, undecodable bytes), `resume_mismatch` (`--resume` with changed inputs or
 options) and `error` (an invalid option combination). The code `stopped` is reserved for the COAL app, which adds it
 to `errors` when it finds a run was interrupted; the engine never writes it (an interrupted run writes no report).
+`unknown_table` (Python API only: an unsupported `table`) never reaches a report written by the command line, which
+rejects the number as a usage error before the run starts.
 
 ## Validating and regenerating
 

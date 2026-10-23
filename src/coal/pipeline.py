@@ -36,11 +36,10 @@ from itertools import islice
 from . import checkpoint as _ck
 from .checkpoint import Checkpoint, durable_size, open_append
 from .core import (
-    MISMATCH_WARNING, CoalError, apply_slices, column_widths, expand, keep_slices, limit_blas_threads,
+    MISMATCH_WARNING, CoalError, apply_slices, check_table, column_widths, expand, keep_slices, limit_blas_threads,
     nogap_bad_triplets, pair_ids, prepare_row, row_length_message, thread_one,
 )
 from .seqio import DnaIndex, InputFormatError, clustal_mask, is_clustal, iter_fasta, open_error_message, read_clustal
-from .tables import get_code
 
 WRAP = 60
 _DIGIT = re.compile(r"[0-9]")
@@ -437,14 +436,14 @@ def run(pep_path, nuc_paths, *args, **kw) -> int:
             # A run whose input came through a pipe cannot be resumed (its data is gone), so it keeps no checkpoint.
             kw.setdefault("_resumable", not spooled)
             return _run(sps[0], sps[1:], *args, **kw)
-        except (CoalError, InputFormatError) as e:
+        except CoalError as e:  # InputFormatError included
             msg = str(e)
             for tmp_name in spooled:
                 msg = msg.replace(tmp_name, names[tmp_name])
             if msg != str(e):
-                if isinstance(e, CoalError):
-                    raise CoalError(msg, e.code, e.seq_id, e.index) from None
-                raise type(e)(msg) from None
+                if isinstance(e, InputFormatError):
+                    raise InputFormatError(msg) from None
+                raise CoalError(msg, e.code, e.seq_id, e.index) from None
             raise
         except OSError as e:
             # "cannot open 'x.fa': no such file" (also: permission denied, it is a folder), not Python's wording.
@@ -500,7 +499,7 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
         raise CoalError(f"unknown output format '{out_format}' (one of {', '.join(FORMATS)})")
     if out_format == "codon" and (nogap or nomismatch or blockonly):
         raise CoalError("-output codon cannot be combined with -nogap, -nomismatch or -blockonly (as in PAL2NAL)")
-    get_code(table)
+    check_table(table)  # CoalError `unknown_table` (the command line never gets here: argparse checks the choices)
     rows = _protein_rows(pep_path)
     # PAL2NAL reads '#' block marks from a CLUSTAL input's conservation lines: -blockonly keeps only those columns,
     # and clustal / codon output show the marks under each block (when -blockonly is not given)

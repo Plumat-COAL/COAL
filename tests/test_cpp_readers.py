@@ -58,7 +58,9 @@ def load_reference(module: str, tmp: Path):
         src = r.stdout
     path = tmp / f"ref_{module}.py"
     path.write_text(src, encoding="utf-8")
-    spec = importlib.util.spec_from_file_location(f"ref_{module}", path)
+    # Named as a submodule of `coal` (not registered in sys.modules), so the file's relative imports (seqio.py:
+    # `from .core import CoalError`) resolve against the importable coal package.
+    spec = importlib.util.spec_from_file_location(f"coal.{module}", path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

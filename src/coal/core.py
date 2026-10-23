@@ -22,7 +22,7 @@ from functools import lru_cache
 from itertools import accumulate
 
 from .codon import ANCHOR_START, NORMAL, START, accepted, codon_ok, fast_code, residue_regex
-from .tables import get_code
+from .tables import SUPPORTED, get_code
 
 GAP = "-"
 STANDARD_AA = set("ACDEFGHIKLMNPQRSTVWY*X")
@@ -55,6 +55,14 @@ class CoalError(Exception):
 
     def __reduce__(self):  # keep code/seq_id/index (and any extra attributes) across worker processes
         return (CoalError, (str(self), self.code, self.seq_id, self.index), dict(self.__dict__))
+
+
+def check_table(table) -> None:
+    """Raise CoalError `unknown_table` unless `table` is a supported NCBI genetic-code number (tables.SUPPORTED).
+    The public API's check: tables.get_code itself raises ValueError, as an internal helper."""
+    if table not in SUPPORTED:
+        raise CoalError(f"unknown genetic code table {table!r}: the supported NCBI tables are "
+                        f"{', '.join(map(str, SUPPORTED))}", code="unknown_table")
 
 
 class Threaded:
@@ -751,7 +759,7 @@ def codon_align(
     strict: bool = False,
 ) -> tuple[list[tuple[str, str]], list[str]]:
     """Return ([(protein_id, codon_aligned_dna)], warnings). `strict`: see thread_one / pair_sequences."""
-    get_code(table)  # validates the table number
+    check_table(table)  # CoalError `unknown_table`, not tables.get_code's ValueError
     proteins = [(pid, prepare_row(pid, aln)) for pid, aln in proteins]
     lengths = {len(s) for _, s in proteins}
     if len(lengths) > 1:
