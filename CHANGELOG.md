@@ -6,7 +6,9 @@ Found by the stress test of 2026-10-23 (`docs/stress-test-2026-10-23.md`), both 
 
 - **Two runs writing the same `-o` file at the same time are refused** instead of sharing one `<out>.coal-partial`
   file, which could end a run with exit 0 and an empty or another run's output. A run with `-o` keeps
-  `<out>.coal-lock` while it runs; a lock left by a killed run is replaced once its process is gone.
+  `<out>.coal-lock` while it runs; a lock left by a killed run is replaced once its process is gone (a lock
+  file that is still empty is one being created by another run, not a stale one: the second iteration of the
+  stress test caught two runs reading each other's empty lock and both going ahead).
 - **Thousands of DNA files:** at most about as many files as the open-file limit allows stay open (least recently
   used closed first, the limit raised towards its hard limit when needed) and their read buffers together take
   about 64 MB at most. 1,000 files failed with "too many open files" in the Python engine with workers, 60,000 open
@@ -28,6 +30,9 @@ Found by the stress test of 2026-10-23 (`docs/stress-test-2026-10-23.md`), both 
 - **`-q` without `--report`/`--json` keeps no per-sequence entries** and writes none to the `--resume` entries
   file (a million genes of unrelated DNA wrote 55 GB of it), so memory and disk stay flat on data where every
   codon mismatches (the summary lines, the hint and the report, which read them, are not produced under `-q`).
+  The Python engine with workers still holds one batch of per-codon messages per worker in flight (about
+  140 MB per worker on 400-codon genes of unrelated DNA, so 2.5 GB with 16 workers; `-j 4` or `coal-cpp`,
+  which stays flat, for such data).
   Otherwise every per-codon message of a mismatching sequence stays in memory until the end of the run: about
   55 KB (coal-cpp) / 150 KB (Python) per 400-codon gene of unrelated DNA, which `docs/usage.md` now says; a run of
   100,000 such genes needs 5.5 / 14 GB and a million cannot be run on a 32 GB machine. Keeping only what the

@@ -105,8 +105,10 @@ killed, so a pipeline reading COAL's output never waits on an orphaned worker.
   Python engine, for a gene with a handful of mismatches; a gene of 400 codons of unrelated DNA, every codon
   mismatching, keeps about 55 KB / 150 KB, so a million genes of wrong DNA need more memory than most machines
   have). The summary lines, the genetic-code hint and the report read them; with `-q` and no `--report`/`--json`
-  none of those is produced and nothing is kept, so memory stays flat whatever the data. `--report`/`--json` is
-  written one sequence at a time, so it adds little beyond the entries.
+  none of those is produced and nothing is kept, so memory stays flat whatever the data (the Python engine with
+  workers still holds one batch of per-codon messages per worker in flight: about 140 MB per worker on
+  400-codon genes of unrelated DNA, 2.5 GB with 16 workers; use `-j 4` or `coal-cpp`, which stays flat, for
+  such data). `--report`/`--json` is written one sequence at a time, so it adds little beyond the entries.
 - `-q --progress` still prints the progress lines (`-q` silences warnings, notices and the summary, not progress).
 - One run at a time per output file: a run with `-o` keeps `<out>.coal-lock` (holding its process number) next to
   the output while it runs, because the partial output and checkpoint files it writes there have fixed names. A
