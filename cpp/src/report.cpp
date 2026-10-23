@@ -1442,6 +1442,7 @@ void RunReport::write_json(std::ostream& out) const {
     d.set("schema", SCHEMA);
     d.set("coal_version", VERSION);
     d.set("source", "coal");
+    d.set("engine", "coal-cpp");  // the same string as the --resume checkpoint's "engine" (main.cpp)
     d.set("command", command());
     std::vector<std::string> cl{"coal"};
     cl.insert(cl.end(), argv_.begin(), argv_.end());

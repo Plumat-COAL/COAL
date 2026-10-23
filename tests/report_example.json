@@ -2,6 +2,7 @@
  "schema": "coal.report/1",
  "coal_version": "0.4.2",
  "source": "coal",
+ "engine": "coal-python",
  "command": "coal protein.aln.fasta dna.fasta --keep-going -o codon.fasta",
  "command_line": "coal protein.aln.fasta dna.fasta --keep-going -o codon.fasta --report report.json",
  "pal2nal_equivalent": "pal2nal.pl protein.aln.fasta dna.fasta -output fasta",

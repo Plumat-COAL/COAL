@@ -19,8 +19,8 @@ from coal import __version__  # noqa: E402
 from coal.cli import main as coal_main  # noqa: E402
 from coal.tables import get_code  # noqa: E402
 
-TOP_KEYS = ["schema", "coal_version", "command", "pal2nal_equivalent", "options", "inputs", "output",
-            "summary", "hints", "sequences", "runtime_seconds", "exit_code"]
+TOP_KEYS = ["schema", "coal_version", "source", "engine", "command", "pal2nal_equivalent", "options", "inputs",
+            "output", "summary", "hints", "sequences", "runtime_seconds", "exit_code"]
 
 
 def run(d: Path, args: list[str]):
@@ -96,6 +96,11 @@ class TestReport(unittest.TestCase):
             self.assertIn(k, r)
         self.assertEqual(r["schema"], "coal.report/1")
         self.assertEqual(r["coal_version"], __version__)
+        # which engine wrote it, named as the --resume checkpoint names it (coal-cpp writes "coal-cpp")
+        from coal.checkpoint import ENGINE_NAMES
+        self.assertEqual(r["engine"], "coal-python")
+        self.assertIn(r["engine"], ENGINE_NAMES)
+        self.assertEqual(list(r)[:5], ["schema", "coal_version", "source", "engine", "command"])
         # "command" reproduces the output (as the app writes it); the exact argv is "command_line"
         self.assertEqual(r["command"], "coal pep.fasta nuc.fasta -output paml -o out.paml")
         self.assertEqual(r["command_line"], "coal pep.fasta nuc.fasta -o out.paml -output paml --report r.json")

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Run report: a new top-level `engine` field** (`coal.report/1`, next to `source`): `"coal-python"` or
+  `"coal-cpp"`, the same strings as the `--resume` checkpoint's `engine`, so a pipeline or the app can tell which
+  engine wrote a report (also when `coal` handed a large input to `coal-cpp`). The per-job reports of a
+  `coal --batch` report (`coal.batch/1`) carry it too. Apart from `engine` and `runtime_seconds` the two engines'
+  reports stay identical (#18).
 - **Nightly fuzz workflow** (`.github/workflows/nightly.yml`, 03:17 UTC, or by hand with a seed): the fuzz against
   the real PAL2NAL v14 with a fresh seed each night, once per engine (`COAL_FUZZ_ENGINE=cpp` in
   `tests/fuzz_vs_pal2nal.py` runs `coal-cpp`), the new `tests/tools/engine_fuzz.py` (coal-cpp vs the Python engine

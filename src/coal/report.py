@@ -22,6 +22,7 @@ import time
 from itertools import product
 
 from . import __version__
+from .checkpoint import ENGINE  # the report's "engine": the same string as the --resume checkpoint's
 from .codon import IUPAC
 from .tables import SUPPORTED, get_code
 
@@ -1062,6 +1063,7 @@ class RunReport:
             "schema": SCHEMA,
             "coal_version": __version__,
             "source": "coal",
+            "engine": ENGINE,
             "command": self.command(),
             "command_line": " ".join(shlex.quote(a) for a in ["coal", *self.argv]),
             "pal2nal_equivalent": " ".join(shlex.quote(str(a)) for a in p2n),

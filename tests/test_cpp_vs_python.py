@@ -9,7 +9,7 @@ any supported genetic code (with the matching or the default -codontable),
 any output format, -nogap / -nomismatch, --keep-going, --max-warnings, and --json
 run reports.  Compared: stdout, full stderr (warnings, error messages and the
 "coal: summary:" lines), exit code, and for --json runs the report (all fields
-except runtime_seconds) and the output file.
+except engine and runtime_seconds) and the output file.
 
 Skipped if the binary is not built (COAL_CPP_BIN, default ./build/coal-cpp).
 COAL_RANDOM_CHUNK=0..3 runs one quarter of the inputs; COAL_RANDOM_N changes the count.
@@ -193,6 +193,7 @@ def normalise(res, d: Path, opts):
     rep = json.loads(out) if out.strip() else None
     if rep:
         rep.pop("runtime_seconds", None)
+        rep.pop("engine", None)  # "coal-cpp" / "coal-python": the one field that names the engine
     f = d / "out.txt"
     data = f.read_bytes() if f.exists() else None
     if f.exists():
@@ -369,7 +370,7 @@ class TestCppResumeAndProgress(unittest.TestCase):
                 # CPP-27: the merged report repeats the command (output path, --resume) in two more fields
                 b["methods_text"] = b["methods_text"].replace(out_cc.name, out_py.name)
                 for x in (a, b):
-                    for k in ("runtime_seconds", "command", "command_line", "output"):
+                    for k in ("runtime_seconds", "engine", "command", "command_line", "output"):
                         x.pop(k)
                 self.assertEqual(a, b)
 

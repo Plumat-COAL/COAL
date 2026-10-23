@@ -29,7 +29,8 @@ All of these are present in every report, in this order, except `error` and `res
 |---|---|---|
 | `schema` | string | always `"coal.report/1"` |
 | `coal_version` | string | the engine's version, as `coal --version` prints it (e.g. `"0.4.2"`) |
-| `source` | string | always `"coal"`: the engine wrote the report (the COAL app writes `coal_app ...` here when it has to build a report from an engine without `--report`; such a report is not covered by this page). There is no separate engine field: `coal` and `coal-cpp` write the same report |
+| `source` | string | always `"coal"`: the engine wrote the report (the COAL app writes `coal_app ...` here when it has to build a report from an engine without `--report`; such a report is not covered by this page) |
+| `engine` | string | which engine wrote it: `"coal-python"` (the Python engine) or `"coal-cpp"` (the C++ engine, also when `coal` handed the run to it); closed. The same strings as the `engine` of the `--resume` checkpoint file. It is the only field whose value depends on the engine: apart from it and `runtime_seconds`, the two engines write the same report |
 | `command` | string | a command that reproduces the alignment: `coal`, the input paths, the options that change the output (`-output`, `-codontable`, `-nogap`, `-nomismatch`, `-blockonly`, `--strict`, `--keep-going`) and `-o`; shell-quoted. `--report`, `-j`, `-q` and the like are left out |
 | `command_line` | string | the command line as given, shell-quoted, starting with `coal` |
 | `pal2nal_equivalent` | string | the PAL2NAL v14 command line with the same meaning: `pal2nal.pl PEP NUC -output FMT [-codontable N] [-nogap] [-nomismatch] [-blockonly]` |
@@ -163,6 +164,7 @@ gene left out, exit status 2.
  "schema": "coal.report/1",
  "coal_version": "0.4.2",
  "source": "coal",
+ "engine": "coal-python",
  "command": "coal protein.aln.fasta dna.fasta --keep-going -o codon.fasta",
  "command_line": "coal protein.aln.fasta dna.fasta --keep-going -o codon.fasta --report report.json",
  "pal2nal_equivalent": "pal2nal.pl protein.aln.fasta dna.fasta -output fasta",

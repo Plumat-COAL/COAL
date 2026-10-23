@@ -2,7 +2,7 @@
 
 Every scenario below runs through the Python engine (in-process) and, when build/coal-cpp (COAL_CPP_BIN) is built,
 through the C++ engine; each report must validate against the JSON Schema, and the two engines' reports must be
-equal apart from runtime_seconds and the report path in command_line. docs/report-schema.md's complete example and
+equal apart from engine, runtime_seconds and the report path in command_line. docs/report-schema.md's complete example and
 tests/report_example.json (the same report) are validated too.
 
 Validation uses the `jsonschema` package when it is importable (draft 2020-12), and always the small dependency-free
@@ -182,8 +182,10 @@ def generate(engine: str, name: str, tmp: Path) -> tuple[int, dict]:
 
 
 def comparable(rep: dict) -> dict:
+    """The report without the two fields that differ between the engines (the engine's name and its run time)."""
     rep = dict(rep)
     rep.pop("runtime_seconds", None)
+    rep.pop("engine", None)
     return rep
 
 
@@ -249,6 +251,7 @@ class TestReportSchema(unittest.TestCase):
                 self.assertEqual(rc, rc_expected)
                 self.check(cpp, f"coal-cpp {name}")
                 _, py = generate("py", name, self.ref)
+                self.assertEqual((cpp["engine"], py["engine"]), ("coal-cpp", "coal-python"))
                 self.assertEqual(comparable(cpp), comparable(py), f"{name}: the C++ and Python reports differ")
 
     def test_json_option_is_the_same_report(self):
