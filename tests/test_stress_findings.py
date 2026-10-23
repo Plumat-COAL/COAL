@@ -312,16 +312,20 @@ class QuietKeepsNoEntries(unittest.TestCase):
                     n = 4
                     aa = {"GCT": "A", "AAA": "K", "CTG": "L", "GAC": "D"}
                     genes = [[rng.choice(list(aa)) for _ in range(30)] for _ in range(n)]
-                    (d / "pep.fasta").write_text("".join(f">s{k}\n" + "".join(aa[c] for c in g) + "\n"
-                                                         for k, g in enumerate(genes)))
+                    peps = ["".join(aa[c] for c in g) for g in genes]
+                    peps[0] = "W" + peps[0][1:]  # one mismatch: a clean sequence has no entry in either mode
+                    (d / "pep.fasta").write_text("".join(f">s{k}\n{pep}\n" for k, pep in enumerate(peps)))
                     (d / "nuc.fasta").write_text("".join(f">s{k}\n" + "".join(g) + "\n" for k, g in enumerate(genes)))
                     cmd = ([sys.executable, "-m", "coal"] if engine == "python" else [CPP]) + \
                           ["pep.fasta", "nuc.fasta", "-o", "out.fa", "-j", "1"] + (["-q"] if quiet else [])
                     p = subprocess.Popen(cmd, cwd=tmp, env=hold, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
                     try:
-                        line = p.stderr.readline()
-                        self.assertIn(b"paused after checkpoint 1", line, (engine, quiet, line))
-                        time.sleep(0.2)  # the entries line is written just before the pause message
+                        for _ in range(8):  # the mismatch warning first (default mode), then the pause
+                            line = p.stderr.readline()
+                            if b"paused after checkpoint 1" in line:
+                                break
+                        else:
+                            self.fail((engine, quiet, line))
                         size = (d / "out.fa.coal-entries.jsonl").stat().st_size
                         self.assertEqual(size == 0, quiet, (engine, quiet, size))
                     finally:
