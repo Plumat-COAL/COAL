@@ -311,6 +311,11 @@ jobs:
             bash packaging/wheels/build_linux_binary.sh /io /io/build-manylinux
           sudo chown -R "$(id -u):$(id -g)" build-manylinux
           ./build-manylinux/coal-cpp --version
+          # and the wheel step of the release, auditwheel check included (v0.5.0rc2 failed there)
+          python -m pip install auditwheel==6.4.2
+          python -m build --wheel -o dist-ci .
+          python packaging/wheels/build_platform_wheel.py --binary build-manylinux/coal-cpp \
+            --wheel dist-ci/coal_align-*-py3-none-any.whl --platform-tag manylinux_2_28_x86_64 --outdir wheelhouse-ci --audit
       # The library as an outside program uses it: install to a prefix, build examples/cpp-embed with
       # find_package(coal CONFIG), run it and check its codon alignment.
       - name: Install and build the embedding example (Linux)

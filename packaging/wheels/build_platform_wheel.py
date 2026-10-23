@@ -134,7 +134,8 @@ def manylinux_ok(audit_text: str, platform_tag: str) -> tuple[bool, str]:
     want = _glibc(platform_tag)
     if want is None:
         return True, "not a manylinux tag; nothing to check"
-    m = re.search(r'consistent with\s+the following platform tag:\s+"(manylinux_\d+_\d+_\w+)"', audit_text)
+    # auditwheel wraps its text at ~70 columns, so any of these spaces may be a line break
+    m = re.search(r'consistent\s+with\s+the\s+following\s+platform\s+tag:\s+"(manylinux_\d+_\d+_\w+)"', audit_text)
     if not m:
         return False, "auditwheel show named no manylinux tag:\n" + audit_text
     got = _glibc(m.group(1))

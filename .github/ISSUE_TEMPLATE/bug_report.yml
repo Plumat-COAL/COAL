@@ -14,7 +14,7 @@ body:
     attributes:
       label: COAL version
       description: The output of `coal --version` (or `coal-cpp --version`; for the Windows app, Help > About).
-      placeholder: coal 0.5.0rc2
+      placeholder: coal 0.5.0rc3
     validations:
       required: true
   - type: dropdown
