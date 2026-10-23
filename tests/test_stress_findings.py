@@ -310,15 +310,18 @@ class QuietKeepsNoEntries(unittest.TestCase):
                 with tempfile.TemporaryDirectory() as tmp:
                     d = Path(tmp)
                     n = 4
-                    genes = ["".join(rng.choice(["GCT", "AAA", "CTG", "GAC"]) for _ in range(30)) for _ in range(n)]
-                    (d / "pep.fasta").write_text("".join(f">s{k}\nM" + "W" * 29 + "\n" for k in range(n)))
-                    (d / "nuc.fasta").write_text("".join(f">s{k}\n{genes[k]}\n" for k in range(n)))
+                    aa = {"GCT": "A", "AAA": "K", "CTG": "L", "GAC": "D"}
+                    genes = [[rng.choice(list(aa)) for _ in range(30)] for _ in range(n)]
+                    (d / "pep.fasta").write_text("".join(f">s{k}\n" + "".join(aa[c] for c in g) + "\n"
+                                                         for k, g in enumerate(genes)))
+                    (d / "nuc.fasta").write_text("".join(f">s{k}\n" + "".join(g) + "\n" for k, g in enumerate(genes)))
                     cmd = ([sys.executable, "-m", "coal"] if engine == "python" else [CPP]) + \
                           ["pep.fasta", "nuc.fasta", "-o", "out.fa", "-j", "1"] + (["-q"] if quiet else [])
                     p = subprocess.Popen(cmd, cwd=tmp, env=hold, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
                     try:
                         line = p.stderr.readline()
                         self.assertIn(b"paused after checkpoint 1", line, (engine, quiet, line))
+                        time.sleep(0.2)  # the entries line is written just before the pause message
                         size = (d / "out.fa.coal-entries.jsonl").stat().st_size
                         self.assertEqual(size == 0, quiet, (engine, quiet, size))
                     finally:
