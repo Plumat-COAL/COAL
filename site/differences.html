@@ -1,20 +1,20 @@
 <!doctype html>
-<!-- The site is split into short pages (index, install, guide, differences, cite) that share this
-     header and footer; tests/test_docs_site.py checks they stay the same on every page. -->
+<!-- One of five short pages (index, install, guide, differences, cite) that share this header and footer;
+     tests/test_docs_site.py checks they stay the same on every page. Plain HTML, nothing loaded from other sites. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; frame-src 'self'; base-uri 'self'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
-<title>COAL: differences from PAL2NAL</title>
-<meta name="description" content="How COAL's output, exit status and speed compare with PAL2NAL v14.">
+<title>Why use COAL</title>
+<meta name="description" content="Why COAL instead of PAL2NAL: the same output, errors you cannot miss, and the timings on the same machine.">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#121110">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<link rel="preload" href="assets/fonts/AtkinsonHyperlegibleNext-wght.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/Literata-Regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="style.css">
 <script src="main.js" defer></script>
 </head>
@@ -22,12 +22,11 @@
 <a class="skip" href="#main">Skip to content</a>
 
 <header class="top">
-  <a class="home" href="./"><img src="assets/coal-mark-dark.svg" width="38" height="30" alt=""><span>COAL</span></a>
+  <a class="home" href="./"><img src="assets/coal-mark-dark.svg" width="32" height="25" alt=""><span>COAL</span></a>
   <nav aria-label="Main">
     <ul>
       <li><a href="install.html">Install</a></li>
       <li><a href="guide.html">Guide</a></li>
-      <li><a href="differences.html" aria-current="page">Differences</a></li>
       <li><a href="cite.html">Cite</a></li>
       <li><a href="https://github.com/plumat-coal/COAL">GitHub</a></li>
     </ul>
@@ -36,23 +35,38 @@
 
 <main id="main">
 <div class="page-head">
-  <h1>Differences from PAL2NAL</h1>
-  <p class="lead">What we compared COAL with, what differs on purpose, and how long each tool takes.</p>
+  <h1>Why use it</h1>
   <ul class="toc" aria-label="On this page">
-    <li><a href="#pal2nal">Output and exit status</a></li>
+    <li><a href="#reasons">In short</a></li>
+    <li><a href="#pal2nal">Compared with PAL2NAL</a></li>
     <li><a href="#speed">Speed</a></li>
   </ul>
 </div>
 
+<section class="sec" id="reasons" aria-labelledby="reasons-title">
+  <h2 id="reasons-title">In short</h2>
+  <ul>
+    <li>A PAL2NAL command line works as it is, and the output is the same.</li>
+    <li>A gene that does not fit is an error with exit status 1, naming the gene and the column, so a pipeline
+      stops.</li>
+    <li>A million genes take <span data-check="12.5 s">12.5 s</span> and <span data-check="172 MB">172 MB</span> of
+      memory; PAL2NAL v14 took <span data-check="62 min">62 min</span> and <span data-check="18.6 GB">18.6 GB</span>
+      on the same machine.</li>
+    <li>Genetic codes follow the current NCBI tables, and when the genes fit another code better, COAL says which.</li>
+    <li>There is an app for people who do not use a terminal, with the alignment on screen and the problems marked.</li>
+  </ul>
+</section>
+
 <section class="sec" id="pal2nal" aria-labelledby="pal2nal-title">
-  <h2 id="pal2nal-title">Output and exit status</h2>
-  <p>PAL2NAL is by Suyama, Torrents and Bork (2006). We wrote COAL independently, in Python, and it
-    contains none of PAL2NAL's code: we ran PAL2NAL version 14 as a separate program, only to compare outputs. PAL2NAL is GPL-2.0;
-    COAL is MIT.</p>
+  <h2 id="pal2nal-title">Compared with PAL2NAL</h2>
+  <p>PAL2NAL is by Suyama, Torrents and Bork (2006). We wrote COAL independently, in Python and C++, and it
+    contains none of PAL2NAL's code: we ran PAL2NAL v14 as a separate program, only to compare outputs.
+    PAL2NAL is GPL-2.0; COAL is MIT.</p>
   <p>COAL's output is identical to PAL2NAL v14's except for a short list of documented, deliberate differences.
-    These are newer NCBI genetic-code tables (codes 3, 10, 11 and 13), <code>-nogap</code> removing the chosen
-    code's stop codons, the chosen code's start codons for the first Met, pairing by IDs that match only after
-    normalising, and inputs where PAL2NAL v14 writes malformed output or fails.</p>
+    These are newer NCBI genetic-code tables (codes 3, 10, 11 and 13); <code>-nogap</code> removing the chosen
+    code's stop codons; the chosen code's other start codons (such as TTG and CTG) accepted for the first Met;
+    sequences paired by name even when the names differ only in case, a version suffix or a database prefix; and
+    inputs where PAL2NAL v14 writes malformed output or fails.</p>
   <p>Our test suite compares COAL with stored PAL2NAL v14 output on <span data-check="39 input cases">39 input cases</span>,
     with every option combination in all 4 output formats: <span data-check="285 checks">285 checks</span>.</p>
   <ul>
@@ -63,8 +77,8 @@
       6 deliberate errors, 3 with different output and 14 <code>-nogap</code> checks with a non-standard genetic
       code.</li>
   </ul>
-  <p>Some of the differences, as measured against PAL2NAL v14:</p>
-  <ul class="diffs">
+  <p>Some of the differences:</p>
+  <ul>
     <li>An invalid character in the protein alignment is an error. PAL2NAL treats it as X, and its output can lose
       a codon without saying so.</li>
     <li><code>.</code> is read as a gap. In PAL2NAL it misaligns the output row.</li>
@@ -75,8 +89,8 @@
       stderr. With <code>--strict</code> it is an error.</li>
     <li>Any error gives a non-zero exit status. PAL2NAL always exits with 0.</li>
   </ul>
-  <p>The full list is in the
-    <a href="https://github.com/plumat-coal/COAL/blob/main/docs/differences.md">COAL documentation</a> and
+  <p>The full list is in
+    <a href="https://github.com/plumat-coal/COAL/blob/main/docs/differences.md">docs/differences.md</a> and
     <a href="https://github.com/plumat-coal/COAL/blob/main/tests/README.md">tests/README.md</a>.</p>
 </section>
 
@@ -84,7 +98,7 @@
   <h2 id="speed-title">Speed</h2>
   <div class="table-scroll" tabindex="0" role="group" aria-labelledby="speed-cap">
     <table class="nums">
-      <caption id="speed-cap">Wall-clock time of the whole command, start-up included; warm medians on synthetic data. COAL: the C++ engine, one thread</caption>
+      <caption id="speed-cap">Wall-clock time of the whole command, start-up included; warm medians on synthetic data; COAL is the C++ engine on one thread.</caption>
       <thead><tr><th scope="col">Genes × codons</th><th scope="col">PAL2NAL v14</th><th scope="col">COAL</th><th scope="col">PAL2NAL ÷ COAL</th></tr></thead>
       <tbody>
         <tr><th scope="row">1,000 × 400</th><td><span data-check="2.31 s">2.31 s</span></td><td><span data-check="0.031 s">0.031 s</span></td><td><span data-check="74×">74×</span></td></tr>
@@ -99,9 +113,9 @@
     than their length; COAL's grows in proportion to the input. PAL2NAL v14 cannot process proteins longer than about
     22,000 residues (Perl's limit on capture groups in one regex); COAL can.</p>
   <p>At a million genes PAL2NAL v14 needed <span data-check="18.6 GB">18.6 GB</span> of memory and COAL
-    <span data-check="172 MB">172 MB</span>. COAL's Python engine gives the same output more slowly:
-    <span data-check="74×">74×</span> faster than PAL2NAL v14 at a million genes, and slower than it on many tiny
-    files run one process at a time.</p>
+    <span data-check="172 MB">172 MB</span>. COAL's Python engine gives the same output more slowly: under a minute
+    at a million genes (<span data-check="74×">74×</span> faster than PAL2NAL v14), and slower than PAL2NAL on many
+    tiny files run one process at a time. <a href="guide.html#cpp">How to get the C++ engine</a>.</p>
   <p class="fine">Measured on one Windows 11 machine (Intel i5-13600KF, 32 GB), COAL commit 47f57f1; the million-gene
     PAL2NAL run is a single run. Raw data and the method are in the
     <a href="https://github.com/plumat-coal/COAL/blob/main/docs/benchmarks.md">benchmark results</a>.</p>
@@ -110,9 +124,8 @@
 
 <footer class="foot" id="credits">
   <div class="foot-text">
-    <p>Made by Chloe Newton and Keanu Murati.</p>
-    <p>No cookies, trackers or external scripts. Set in Atkinson Hyperlegible Next
-      (<a href="assets/fonts/OFL.txt">SIL Open Font License</a>).</p>
+    <p>Developed by Chloe Newton and Keanu Murati.</p>
+    <p>Last updated <time datetime="2026-10-23">23 October 2026</time>.</p>
   </div>
   <div class="rail"><svg class="train" viewBox="140 204 1120 582" aria-hidden="true" focusable="false"><g class="ts" fill="#CFC8BE"><circle cx="304" cy="328" r="32"/><circle cx="368" cy="272" r="44"/><circle cx="456" cy="236" r="28"/></g><g class="tb" fill="#1E1E1E"><rect x="264" y="368" width="72" height="124" rx="12.4"/></g><g class="tbo" fill="#2A2A2A"><rect x="216" y="480" width="376" height="216" rx="40"/></g><g class="tb" fill="#1E1E1E"><path d="M216 600V696H144Z"/><rect x="568" y="316" width="200" height="380" rx="20"/><rect x="552" y="296" width="232" height="36" rx="12.4"/><rect x="792" y="496" width="464" height="200" rx="21"/><rect x="760" y="622" width="40" height="20" rx="0"/><circle cx="320" cy="720" r="52"/><circle cx="480" cy="720" r="52"/><circle cx="672" cy="712" r="64"/><circle cx="880" cy="732" r="40"/><circle cx="1024" cy="732" r="40"/><circle cx="1168" cy="732" r="40"/></g><g class="ta" fill="#FFC24B"><rect x="616" y="368" width="104" height="88" rx="12"/></g><g class="th" fill="#4A4744"><circle cx="320" cy="719.5" r="15.5"/><circle cx="480" cy="719.5" r="15.5"/><circle cx="672" cy="711.5" r="19.5"/><circle cx="880" cy="732" r="11"/><circle cx="1024" cy="732" r="11"/><circle cx="1168" cy="732" r="11"/></g><g class="tc" fill="#2A2A2A"><rect x="848" y="448" width="40" height="40" rx="8"/><rect x="878" y="400" width="40" height="40" rx="8"/><rect x="974" y="400" width="40" height="40" rx="8"/><rect x="1004" y="352" width="40" height="40" rx="8"/><rect x="1052" y="352" width="40" height="40" rx="8"/><rect x="1052" y="448" width="40" height="40" rx="8"/><rect x="1082" y="400" width="40" height="40" rx="8"/></g><g class="tsl" fill="#4A4744"><rect x="926" y="400" width="40" height="40" rx="8"/><rect x="956" y="352" width="40" height="40" rx="8"/></g><g class="te" fill="#FF6A13"><rect x="800" y="448" width="40" height="40" rx="8"/><rect x="896" y="448" width="40" height="40" rx="8"/><rect x="1004" y="448" width="40" height="40" rx="8"/><rect x="1034" y="400" width="40" height="40" rx="8"/><rect x="1112" y="448" width="40" height="40" rx="8"/><rect x="1208" y="448" width="40" height="40" rx="8"/></g><g class="ta" fill="#FFC24B"><rect x="956" y="448" width="40" height="40" rx="8"/><rect x="1130" y="400" width="40" height="40" rx="8"/><rect x="1160" y="448" width="40" height="40" rx="8"/></g></svg></div>
 </footer>

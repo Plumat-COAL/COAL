@@ -1,6 +1,6 @@
 <!doctype html>
-<!-- The site is split into short pages (index, install, guide, differences, cite) that share this
-     header and footer; tests/test_docs_site.py checks they stay the same on every page. -->
+<!-- One of five short pages (index, install, guide, differences, cite) that share this header and footer;
+     tests/test_docs_site.py checks they stay the same on every page. Plain HTML, nothing loaded from other sites. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -8,13 +8,13 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; frame-src 'self'; base-uri 'self'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <title>Cite COAL</title>
-<meta name="description" content="How to cite COAL and PAL2NAL in published work.">
+<meta name="description" content="How to cite COAL and PAL2NAL.">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#121110">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<link rel="preload" href="assets/fonts/AtkinsonHyperlegibleNext-wght.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/Literata-Regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="style.css">
 <script src="main.js" defer></script>
 </head>
@@ -22,12 +22,11 @@
 <a class="skip" href="#main">Skip to content</a>
 
 <header class="top">
-  <a class="home" href="./"><img src="assets/coal-mark-dark.svg" width="38" height="30" alt=""><span>COAL</span></a>
+  <a class="home" href="./"><img src="assets/coal-mark-dark.svg" width="32" height="25" alt=""><span>COAL</span></a>
   <nav aria-label="Main">
     <ul>
       <li><a href="install.html">Install</a></li>
       <li><a href="guide.html">Guide</a></li>
-      <li><a href="differences.html">Differences</a></li>
       <li><a href="cite.html" aria-current="page">Cite</a></li>
       <li><a href="https://github.com/plumat-coal/COAL">GitHub</a></li>
     </ul>
@@ -37,27 +36,25 @@
 <main id="main">
 <div class="page-head">
   <h1>Cite COAL</h1>
-  <p class="lead">If you use COAL in published work, please cite the version you used. <code>coal --version</code>
-    prints it.</p>
+  <p class="lead">If you use COAL in published work, please cite the version you used. Use <code>coal --version</code>
+    for a specific model reference.</p>
 </div>
 
 <section class="sec" id="cite" aria-labelledby="cite-title">
   <h2 id="cite-title">References</h2>
   <blockquote class="cite"><p>Newton C, Murati K (2026). COAL: codon alignments from protein alignments, version
     <span data-version-ref>0.5.0</span>. https://github.com/plumat-coal/COAL</p></blockquote>
-  <p>COAL follows PAL2NAL's method, so please cite PAL2NAL too:</p>
+  <p class="also-cite">COAL follows PAL2NAL's method, so please cite PAL2NAL too:</p>
   <blockquote class="cite"><p>Suyama M, Torrents D, Bork P (2006). PAL2NAL: robust conversion of protein sequence
     alignments into the corresponding codon alignments. <i>Nucleic Acids Research</i> 34:W609–W612.</p></blockquote>
-  <p class="fine">The repository's <a href="https://github.com/plumat-coal/COAL/blob/main/CITATION.cff">CITATION.cff</a>
-    holds the COAL reference in a form that reference managers can read.</p>
+  <p class="finer"><a href="https://github.com/plumat-coal/COAL/blob/main/CITATION.cff">CITATION.cff</a></p>
 </section>
 </main>
 
 <footer class="foot" id="credits">
   <div class="foot-text">
-    <p>Made by Chloe Newton and Keanu Murati.</p>
-    <p>No cookies, trackers or external scripts. Set in Atkinson Hyperlegible Next
-      (<a href="assets/fonts/OFL.txt">SIL Open Font License</a>).</p>
+    <p>Developed by Chloe Newton and Keanu Murati.</p>
+    <p>Last updated <time datetime="2026-10-23">23 October 2026</time>.</p>
   </div>
   <div class="rail"><svg class="train" viewBox="140 204 1120 582" aria-hidden="true" focusable="false"><g class="ts" fill="#CFC8BE"><circle cx="304" cy="328" r="32"/><circle cx="368" cy="272" r="44"/><circle cx="456" cy="236" r="28"/></g><g class="tb" fill="#1E1E1E"><rect x="264" y="368" width="72" height="124" rx="12.4"/></g><g class="tbo" fill="#2A2A2A"><rect x="216" y="480" width="376" height="216" rx="40"/></g><g class="tb" fill="#1E1E1E"><path d="M216 600V696H144Z"/><rect x="568" y="316" width="200" height="380" rx="20"/><rect x="552" y="296" width="232" height="36" rx="12.4"/><rect x="792" y="496" width="464" height="200" rx="21"/><rect x="760" y="622" width="40" height="20" rx="0"/><circle cx="320" cy="720" r="52"/><circle cx="480" cy="720" r="52"/><circle cx="672" cy="712" r="64"/><circle cx="880" cy="732" r="40"/><circle cx="1024" cy="732" r="40"/><circle cx="1168" cy="732" r="40"/></g><g class="ta" fill="#FFC24B"><rect x="616" y="368" width="104" height="88" rx="12"/></g><g class="th" fill="#4A4744"><circle cx="320" cy="719.5" r="15.5"/><circle cx="480" cy="719.5" r="15.5"/><circle cx="672" cy="711.5" r="19.5"/><circle cx="880" cy="732" r="11"/><circle cx="1024" cy="732" r="11"/><circle cx="1168" cy="732" r="11"/></g><g class="tc" fill="#2A2A2A"><rect x="848" y="448" width="40" height="40" rx="8"/><rect x="878" y="400" width="40" height="40" rx="8"/><rect x="974" y="400" width="40" height="40" rx="8"/><rect x="1004" y="352" width="40" height="40" rx="8"/><rect x="1052" y="352" width="40" height="40" rx="8"/><rect x="1052" y="448" width="40" height="40" rx="8"/><rect x="1082" y="400" width="40" height="40" rx="8"/></g><g class="tsl" fill="#4A4744"><rect x="926" y="400" width="40" height="40" rx="8"/><rect x="956" y="352" width="40" height="40" rx="8"/></g><g class="te" fill="#FF6A13"><rect x="800" y="448" width="40" height="40" rx="8"/><rect x="896" y="448" width="40" height="40" rx="8"/><rect x="1004" y="448" width="40" height="40" rx="8"/><rect x="1034" y="400" width="40" height="40" rx="8"/><rect x="1112" y="448" width="40" height="40" rx="8"/><rect x="1208" y="448" width="40" height="40" rx="8"/></g><g class="ta" fill="#FFC24B"><rect x="956" y="448" width="40" height="40" rx="8"/><rect x="1130" y="400" width="40" height="40" rx="8"/><rect x="1160" y="448" width="40" height="40" rx="8"/></g></svg></div>
 </footer>

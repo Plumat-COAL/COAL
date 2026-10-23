@@ -1,6 +1,6 @@
-// COAL website: copy buttons, the suggested download, old links, and the offline cache.
-// All three downloads show, in the same order; the card for the visitor's system only gets a "For this computer"
-// mark. Links to the old one-page site (index.html#windows and so on) go to the page that now holds that section. The Copy button keeps its own label.
+// COAL website: copy buttons, old links, and the offline cache.
+// Links to the old one-page site (index.html#windows and so on) go to the page that now holds that section. The Copy
+// button keeps its own label.
 // No external requests. Without JavaScript everything still shows; only the Copy buttons do nothing.
 (function () {
   "use strict";
@@ -9,8 +9,9 @@
   var MOVED = {
     install: "install.html", windows: "install.html", "smart-app-control": "install.html", macos: "install.html",
     linux: "install.html", cli: "install.html", downloads: "install.html", files: "install.html",
-    verify: "install.html", example: "guide.html", misfit: "guide.html", limits: "guide.html", docs: "guide.html",
-    pal2nal: "differences.html", speed: "differences.html", cite: "cite.html"
+    verify: "install.html", example: "guide.html", misfit: "guide.html", docs: "guide.html",
+    pal2nal: "differences.html", speed: "differences.html", reasons: "differences.html", cite: "cite.html",
+    how: "guide.html"
   };
   var id = location.hash.slice(1);
   if (id && MOVED[id] && !document.getElementById(id)) {
@@ -38,22 +39,7 @@
     return ok;
   }
 
-  function suggest() {
-    // Phones and tablets get no mark: COAL runs on a desktop or laptop.
-    var ua = navigator.userAgent || "";
-    if (/Android|iPhone|iPad|iPod|Mobile/i.test(ua)) return;
-    var p = ((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || ua).toLowerCase();
-    var card = null;
-    if (p.indexOf("win") === 0) card = document.getElementById("card-windows");
-    else if (p.indexOf("mac") === 0 || p.indexOf("linux") !== -1) card = document.getElementById("card-pip");
-    if (!card) return;
-    card.classList.add("is-suggested");
-    var mark = card.querySelector(".suggest");
-    if (mark) mark.hidden = false;
-  }
-
   function init() {
-    suggest();
     var status = document.getElementById("copy-status");
     var buttons = document.querySelectorAll("button[data-copy]");
     for (var k = 0; k < buttons.length; k++) {
