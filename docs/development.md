@@ -8,6 +8,7 @@
 | `apps/coal-app/tests/` | the app: GUI form and layout, viewer, reports, MCP tools, settings, hosted Space, packaging, launchers (Gradio / mcp tests skip without the extra) | `python -m unittest discover -s apps/coal-app/tests` |
 | `apps/coal-app/desktop/` | the Windows wrapper (`test_wrapper.py`) and an end-to-end smoke test of the local app (`test_smoke.py`) | `cd apps/coal-app/desktop && python -m unittest test_wrapper test_smoke` |
 | `tests/fuzz_vs_pal2nal.py` | random comparison with the real PAL2NAL v14 (needs Perl; `python scripts/fetch_pal2nal.py`) | `PAL2NAL=PAL2NAL/pal2nal.v14/pal2nal.pl python tests/fuzz_vs_pal2nal.py` |
+| `tests/tools/engine_fuzz.py` | random `coal-cpp` vs Python engine comparison on malformed inputs and every option (bytes, exit code, report); run nightly with the PAL2NAL fuzz for both engines and an ASan/UBSan build by `.github/workflows/nightly.yml` (see [CONTRIBUTING.md](../CONTRIBUTING.md#nightly-checks)) | `COAL_CPP_BIN=build/coal-cpp python tests/tools/engine_fuzz.py --n 500 --seed 1` |
 
 What each comparison checks, the counts and the list of deliberate differences: [tests/README.md](../tests/README.md).
 The short practical guide (setup, the rule that both engines stay byte-identical, how to add a deliberate

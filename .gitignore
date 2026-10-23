@@ -34,8 +34,9 @@ erraafile.*
 errnucfile.*
 tbln.out.*
 
-# C++ build output (cmake -S . -B build)
+# C++ build output (cmake -S . -B build; build-asan: the sanitizer build of CONTRIBUTING.md "Nightly checks")
 build/
+build-asan/
 
 # Launcher environments (desktop\run_from_source.bat, desktop\setup_mcp.bat) and
 # stray local files at the repo root (run outputs, debug logs, old launchers; the launchers live in desktop/)

@@ -4,8 +4,13 @@ Needs Perl and PAL2NAL v14 (fetch it with ``python scripts/fetch_pal2nal.py``; i
 
     PAL2NAL=PAL2NAL/pal2nal.v14/pal2nal.pl python tests/fuzz_vs_pal2nal.py          # FUZZ_N cases (default 3000)
     PAL2NAL=... FUZZ_N=500 FUZZ_SEED=7 python tests/fuzz_vs_pal2nal.py
+    PAL2NAL=... COAL_FUZZ_ENGINE=cpp COAL_CPP_BIN=build/coal-cpp python tests/fuzz_vs_pal2nal.py   # coal-cpp instead
 
-Without PAL2NAL set the test is skipped. Every case is a random protein alignment (FASTA or CLUSTAL, sometimes with
+Without PAL2NAL set the test is skipped. By default COAL is the Python ``pal2nal`` command run in-process;
+``COAL_FUZZ_ENGINE=cpp`` runs coal-cpp (``COAL_CPP_BIN``, default ``build/coal-cpp``) through the same comparison,
+with the PAL2NAL command line translated by the drop-in's own ``coal_compat.cli.translate`` (what
+tests/test_cpp_vs_reference.py does). ``FUZZ_KEEP=DIR`` copies every case with an unexplained difference to
+``DIR/c<N>/`` with its command line in ``args.txt``. Every case is a random protein alignment (FASTA or CLUSTAL, sometimes with
 a '#'-marked block line) plus coding DNA (UTRs, stop codons, mismatching / unrelated / masked / lower-case / RNA DNA,
 frameshift digits, other genetic codes, shuffled / different / partly matching IDs ...) and a random option set
 (-codontable, -nogap, -nomismatch, -blockonly). Each case runs through both tools with exactly the same command
@@ -659,6 +664,54 @@ def run_coal(d, args):
     return rc, out.getvalue(), err.getvalue()
 
 
+def cpp_binary():
+    """coal-cpp from COAL_CPP_BIN (default build/coal-cpp; .exe and build/Release/ tried too), or None."""
+    p = Path(os.environ.get("COAL_CPP_BIN", ROOT / "build" / "coal-cpp"))
+    if not p.is_absolute():
+        p = ROOT / p
+    for cand in (p, p.with_suffix(".exe"), p.parent / "Release" / (p.name + ".exe")):
+        if cand.is_file():
+            return cand
+    return None
+
+
+def cpp_run_coal(binary):
+    """A `run_coal` that runs coal-cpp with the PAL2NAL command line translated as the drop-in does."""
+    from coal.pipeline import FORMATS as ENGINE_FORMATS
+    from coal_compat.cli import UsageError, translate
+
+    def run(d, args):
+        try:
+            cargs = translate(list(args), ENGINE_FORMATS)
+        except UsageError as e:
+            return 2, "", f"pal2nal: error: {e}\n"
+        r = subprocess.run([str(binary), "--max-warnings", "0", *cargs], cwd=d, capture_output=True, timeout=120)
+        err = r.stderr.decode("utf-8", "replace").replace("\r\n", "\n")
+        err = "".join(ln for ln in err.splitlines(True) if not ln.startswith("coal: summary:"))
+        return r.returncode, r.stdout.decode("latin-1"), err
+    return run
+
+
+def select_engine(name=None):
+    """Point `run_coal` at the engine named by COAL_FUZZ_ENGINE ("python", the default, or "cpp"); returns the
+    name. "cpp" without a binary raises FileNotFoundError."""
+    global run_coal
+    name = (name or os.environ.get("COAL_FUZZ_ENGINE") or "python").lower()
+    if name == "python":
+        run_coal = _python_run_coal
+    elif name == "cpp":
+        binary = cpp_binary()
+        if binary is None:
+            raise FileNotFoundError("COAL_FUZZ_ENGINE=cpp but coal-cpp is not built (build/coal-cpp or COAL_CPP_BIN)")
+        run_coal = cpp_run_coal(binary)
+    else:
+        raise ValueError(f"COAL_FUZZ_ENGINE={name!r}: expected 'python' or 'cpp'")
+    return name
+
+
+_python_run_coal = run_coal
+
+
 def fuzz(pal2nal, n, seed, report=print, keep_dir=None, formats=FORMATS):
     """Run n cases; return (counts per format, list of unexplained differences)."""
     rng = random.Random(seed)
@@ -784,6 +837,8 @@ class TestFuzzVsPal2nal(unittest.TestCase):
         n = int(os.environ.get("FUZZ_N", "3000"))
         seed = int(os.environ.get("FUZZ_SEED", "20261017"))
         formats = tuple(os.environ.get("FUZZ_FORMATS", ",".join(FORMATS)).split(","))  # e.g. fasta,paml
+        engine = select_engine()  # COAL_FUZZ_ENGINE: python (default) or cpp
+        print(f"fuzz engine {engine}, seed {seed}, {n} cases", file=sys.stderr)
         counts, bad = fuzz(pal2nal, n, seed, report=lambda s: print(s, file=sys.stderr),
                            keep_dir=os.environ.get("FUZZ_KEEP"), formats=formats)
         for b in bad[:5]:

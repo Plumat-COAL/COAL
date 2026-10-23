@@ -1,8 +1,11 @@
 """FIN-C10: the fuzz harness's check of deliberate differences (no PAL2NAL needed)."""
 from __future__ import annotations
 
+import os
 import sys
+import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -60,6 +63,45 @@ class TestCheckDeliberate(unittest.TestCase):
         self.assertEqual(fz.parse_output("clustal", "CLUSTAL W multiple sequence alignment\n\na     ATG\nbb    ATG\n"
                                                     "      ###\n\na     AAA\nbb    ---\n\n"),
                          [("a", "ATGAAA"), ("bb", "ATG---")])
+
+
+class TestEngineSelection(unittest.TestCase):
+    """COAL_FUZZ_ENGINE (nightly.yml runs the fuzz once per engine): python in-process by default, coal-cpp with
+    the PAL2NAL command line translated by the drop-in."""
+
+    def tearDown(self):
+        fz.select_engine("python")
+
+    def test_python_is_the_default_and_runs_in_process(self):
+        self.assertEqual(fz.select_engine("python"), "python")
+        self.assertIs(fz.run_coal, fz._python_run_coal)
+        env = dict(os.environ)
+        env.pop("COAL_FUZZ_ENGINE", None)
+        with unittest.mock.patch.dict(os.environ, env, clear=True):
+            self.assertEqual(fz.select_engine(), "python")
+
+    def test_cpp_without_a_binary_is_an_error_not_a_silent_python_run(self):
+        with unittest.mock.patch.dict(os.environ, {"COAL_CPP_BIN": str(Path(__file__).parent / "no-such-binary")}):
+            with self.assertRaises(FileNotFoundError):
+                fz.select_engine("cpp")
+        with self.assertRaises(ValueError):
+            fz.select_engine("rust")
+
+    def test_cpp_runs_the_binary_with_the_translated_command_line(self):
+        binary = fz.cpp_binary()
+        if binary is None:
+            self.skipTest("coal-cpp not built (build/coal-cpp or COAL_CPP_BIN)")
+        self.assertEqual(fz.select_engine("cpp"), "cpp")
+        self.assertIsNot(fz.run_coal, fz._python_run_coal)
+        with tempfile.TemporaryDirectory() as d:
+            Path(d, "pep.fasta").write_text(">a\nMK\n")
+            Path(d, "nuc.fasta").write_text(">a\nATGAAA\n")
+            args = ["pep.fasta", "nuc.fasta", "-output", "fasta"]
+            rc, out, err = fz.run_coal(d, args)
+            self.assertEqual((rc, out), (0, ">a\nATGAAA\n"), err)
+            self.assertEqual(fz._python_run_coal(d, args)[:2], (0, ">a\nATGAAA\n"))
+            rc, out, err = fz.run_coal(d, ["pep.fasta", "nuc.fasta", "-output", "nonsense"])
+            self.assertEqual((rc, out), (2, ""))  # a usage error of the drop-in's translation, as in-process
 
 
 if __name__ == "__main__":
