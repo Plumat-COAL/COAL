@@ -1,2 +1,0 @@
-/usr/bin/ar qc libcoal_core.a CMakeFiles/coal_core.dir/cpp/src/tables.cpp.o CMakeFiles/coal_core.dir/cpp/src/core.cpp.o CMakeFiles/coal_core.dir/cpp/src/seqio.cpp.o CMakeFiles/coal_core.dir/cpp/src/json.cpp.o CMakeFiles/coal_core.dir/cpp/src/report.cpp.o
-/usr/bin/ranlib libcoal_core.a

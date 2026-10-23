@@ -1,9 +1,0 @@
-/home/claude/wt/rel/build-clang/CMakeFiles/coal_core.dir
-/home/claude/wt/rel/build-clang/CMakeFiles/coal-cpp.dir
-/home/claude/wt/rel/build-clang/CMakeFiles/coal-cpp-dump.dir
-/home/claude/wt/rel/build-clang/CMakeFiles/edit_cache.dir
-/home/claude/wt/rel/build-clang/CMakeFiles/rebuild_cache.dir
-/home/claude/wt/rel/build-clang/CMakeFiles/list_install_components.dir
-/home/claude/wt/rel/build-clang/CMakeFiles/install.dir
-/home/claude/wt/rel/build-clang/CMakeFiles/install/local.dir
-/home/claude/wt/rel/build-clang/CMakeFiles/install/strip.dir
