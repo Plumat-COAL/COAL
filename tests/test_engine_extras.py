@@ -344,7 +344,9 @@ class TestResume(unittest.TestCase):
         self.assertTrue(interrupt(cmd, self.d, extra_env=env, on_pause=on_pause), "run did not reach its checkpoint")
         ck = Path(str(out) + ".coal-checkpoint.json")
         self.assertTrue(ck.exists())
-        self.assertGreater(json.loads(ck.read_text())["completed"], 0)
+        st = json.loads(ck.read_text())
+        self.assertGreater(st["completed"], 0)
+        self.engine = st["engine"]   # which engine the `coal` command ran (coal-cpp in test_cpp_vs_reference's copy)
         self.assertFalse(out.exists())                     # nothing moved into place yet
         r = run_sub(cmd + ["--resume", "--report", "r.json"], self.d, env=env)
         self.assertEqual(r.returncode, expect_rc, r.stderr[-300:])
@@ -368,12 +370,14 @@ class TestResume(unittest.TestCase):
         # workers start, and the run is checked to have them while it is paused at its checkpoint.
         try:
             import psutil  # noqa: F401
-        except ImportError:
-            self.skipTest("psutil")
-        from test_robustness import worker_processes
+            from test_robustness import worker_processes
+        except ImportError:  # no psutil, or the reference-test copy of test_cpp_vs_reference (coal-cpp: threads)
+            worker_processes = None
         seen = []
         self.check(["-output", "fasta", "-j", "2"], env={"COAL_ENGINE": "python", "COAL_MIN_NT_PER_JOB": "0"},
-                   on_pause=lambda pid: seen.append(len(worker_processes(pid))))
+                   on_pause=lambda pid: seen.append(len(worker_processes(pid)) if worker_processes else None))
+        if worker_processes is None or self.engine != "coal-python":
+            self.skipTest("the worker count needs psutil and the Python engine")
         self.assertEqual(seen, [2], "the interrupted run did not have two worker processes")
 
     def test_resume_keep_going(self):
