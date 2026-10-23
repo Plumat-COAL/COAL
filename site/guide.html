@@ -151,16 +151,32 @@ coal: summary: The run stopped at OG0001_sp14: 6 sequences were not checked and 
   <ul>
     <li><strong>Windows app:</strong> <code>coal-cpp</code> is included, and the app uses it on its own for inputs of
       1 MB or more.</li>
-    <li><strong>pip install, any system:</strong> build it from the source. You need a C++17 compiler (GCC, Clang or
-      Visual Studio) and CMake 3.16 or newer:
+    <li><strong>pip:</strong> each release has one wheel per system with <code>coal-cpp</code> inside. Download yours
+      from the <a href="https://github.com/plumat-coal/COAL/releases/latest">release page</a> and install it with
+      <code>python -m pip install coal_align-&lt;version&gt;-py3-none-&lt;platform&gt;.whl</code>:
+      <div class="table-scroll" tabindex="0" role="group" aria-label="Which wheel for which system">
+      <table class="files">
+        <thead><tr><th scope="col">Wheel</th><th scope="col">For</th></tr></thead>
+        <tbody>
+          <tr><td>…manylinux_2_28_x86_64.whl</td><td>Linux x86_64 (RHEL or Rocky 8+, Debian 10+, Ubuntu 18.10+ and newer)</td></tr>
+          <tr><td>…manylinux_2_28_aarch64.whl</td><td>Linux aarch64 (ARM servers, Raspberry Pi OS 64-bit)</td></tr>
+          <tr><td>…macosx_11_0_universal2.whl</td><td>macOS 11 or newer, Apple silicon and Intel</td></tr>
+          <tr><td>…win_amd64.whl</td><td>Windows 10 and 11, 64-bit</td></tr>
+          <tr><td>…py3-none-any.whl, .tar.gz</td><td>Any other system: the same <code>coal</code>, Python engine only</td></tr>
+        </tbody>
+      </table>
+      </div>
+      The <code>coal_src.tar.gz</code> command on the Install page installs the Python engine only.</li>
+    <li><strong>From source:</strong> with a C++17 compiler (GCC, Clang or Visual Studio) and CMake 3.16 or newer:
 <pre class="code"><code>git clone https://github.com/plumat-coal/COAL &amp;&amp; cd COAL
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release &amp;&amp; cmake --build build --config Release
 export COAL_CPP=$PWD/build/coal-cpp</code></pre>
-      On Windows the program is <code>build\Release\coal-cpp.exe</code>. With <code>COAL_CPP</code> set (or
-      <code>coal-cpp</code> on your <code>PATH</code>), <code>coal</code> hands inputs of 1 MB or more to it. You can
-      also run <code>coal-cpp</code> directly, with the same options as <code>coal</code>. <code>COAL_ENGINE=python</code>
-      or <code>COAL_ENGINE=cpp</code> forces one engine.</li>
+      On Windows the program is <code>build\Release\coal-cpp.exe</code>. A <code>coal-cpp</code> you built yourself
+      wins when <code>COAL_CPP</code> points at it.</li>
   </ul>
+  <p>Either way, <code>coal</code> hands inputs of 1 MB or more to <code>coal-cpp</code>, <code>coal --cpp-path</code>
+    prints where it is, and <code>coal-cpp</code> itself takes the same options as <code>coal</code>.
+    <code>COAL_ENGINE=python</code> or <code>COAL_ENGINE=cpp</code> forces one engine.</p>
   <p>More, including how to use the engine as a C++ library, in
     <a href="https://github.com/plumat-coal/COAL/blob/main/docs/cpp-engine.md">docs/cpp-engine.md</a>.</p>
 </section>

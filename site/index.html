@@ -114,14 +114,11 @@ coal: summary: The run stopped at OG0001_sp14: 6 sequences were not checked and 
 <section class="sec" id="cpp" aria-labelledby="cpp-title">
   <h2 id="cpp-title">The C++ engine</h2>
   <p>COAL has two engines that give byte-identical output. The Python engine installs anywhere with pip. The C++
-    engine, <code>coal-cpp</code>, is the fast one on large data. The Windows app includes it and uses it on its
-    own for inputs of 1 MB or more. With a pip install, build it from the source; you need a C++17 compiler and
-    CMake 3.16 or newer:</p>
-<pre class="code"><code>git clone https://github.com/plumat-coal/COAL &amp;&amp; cd COAL
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release &amp;&amp; cmake --build build --config Release
-export COAL_CPP=$PWD/build/coal-cpp</code></pre>
-  <p><code>coal</code> then hands large inputs to <code>coal-cpp</code>, and <code>coal-cpp</code> itself takes the
-    same options as <code>coal</code>. Details in the <a href="guide.html#cpp">guide</a>.</p>
+    engine, <code>coal-cpp</code>, is the fast one on large data, and <code>coal</code> hands it any input of 1 MB or
+    more on its own. The Windows app includes it. With pip, install the wheel for your system from the
+    <a href="https://github.com/plumat-coal/COAL/releases/latest">release page</a> (Linux x86_64 and aarch64, macOS,
+    Windows), and the C++ engine comes inside; the <code>coal_src.tar.gz</code> command above gives the Python engine
+    only. Which wheel is which, and building it yourself: the <a href="guide.html#cpp">guide</a>.</p>
 </section>
 
 <section class="sec" id="cite-short" aria-labelledby="cite-title">
