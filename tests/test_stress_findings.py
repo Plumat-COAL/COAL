@@ -225,6 +225,60 @@ class ConcurrentSameOutput(unittest.TestCase):
                 self.assertFalse((d / "same.fa.coal-lock").exists(), engine)
 
 
+def wrong_code_gene(d: Path, n: int):
+    """One gene of n residues built with code 2 (TGA = Trp, ATA = Met), run under code 1: a few mismatches."""
+    rng = random.Random(5)
+    aas = [("W", "TGA"), ("M", "ATA"), ("A", "GCT"), ("K", "AAA"), ("L", "CTG"), ("D", "GAC")]
+    picks = [rng.choice(aas) for _ in range(n - 1)]
+    (d / "pep.fasta").write_text(">g\nM" + "".join(a for a, _ in picks) + "\n")
+    (d / "nuc.fasta").write_text(">g\nATG" + "".join(c for _, c in picks) + "\n")
+
+
+class HintSkipsEnormousGenes(unittest.TestCase):
+    """Stress-test finding: the genetic-code hint re-threaded a 1,000,000-residue gene under 17 codes (28 s of a 30 s
+    run). Genes over 100,000 residues are left out of the hint in both engines; shorter ones still get it, and the
+    two engines' stderr stays identical."""
+
+    def run_both(self, args, tmp):
+        outs = []
+        for engine in ("python", "cpp") if HAVE_CPP else ("python",):
+            p = run(engine, args, tmp)
+            self.assertEqual(p.returncode, 0, (engine, p.stderr[-300:]))
+            outs.append(p.stderr)
+        self.assertEqual(len(set(outs)), 1, outs)
+        return outs[0]
+
+    def test_short_gene_gets_the_hint_and_a_huge_one_does_not(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            wrong_code_gene(Path(tmp), 1_000)
+            err = self.run_both(["pep.fasta", "nuc.fasta", "-o", "out.fa"], tmp)
+            self.assertIn(b"wrong genetic code?", err)
+        with tempfile.TemporaryDirectory() as tmp:
+            wrong_code_gene(Path(tmp), 100_001)
+            t = time.monotonic()
+            err = self.run_both(["pep.fasta", "nuc.fasta", "-o", "out.fa"], tmp)
+            self.assertNotIn(b"genetic code", err)
+            self.assertIn(b"does not correspond to", err)
+            self.assertLess(time.monotonic() - t, 60)
+
+
+class FileListsInMessages(unittest.TestCase):
+    """Stress-test finding: with thousands of DNA files the duplicate-ID and no-sequences messages listed every path."""
+
+    def test_at_most_three_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            (d / "pep.fasta").write_text(">a\nMK\n>b\nMK\n")
+            for k in range(5):
+                (d / f"n{k}.fa").write_text(f">a\nATGAAA\n" if k in (0, 4) else f">x{k}\nATGAAA\n")
+            nucs = [f"n{k}.fa" for k in range(5)]
+            for engine in ("python", "cpp") if HAVE_CPP else ("python",):
+                p = run(engine, ["pep.fasta", *nucs], tmp)
+                self.assertEqual(p.returncode, 1, engine)
+                self.assertTrue(p.stderr.startswith(b"coal: error: n0.fa, n1.fa, n2.fa and 2 more files: duplicate sequence ID 'a'"),
+                                (engine, p.stderr[:200]))
+
+
 @unittest.skipUnless(hasattr(signal, "SIGHUP"), "POSIX only")
 class SighupUnderNohup(unittest.TestCase):
     """Stress-test finding: `nohup coal ...` died with exit 129 on SIGHUP, because both engines installed their SIGHUP

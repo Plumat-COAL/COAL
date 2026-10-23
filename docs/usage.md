@@ -31,7 +31,9 @@
   DNA, in any reading frame, where the whole protein fits.
 - **Genetic codes:** `-codontable N` for the 17 NCBI codes PAL2NAL supports (1–6, 9–16, 21–23). The first Met may use
   any start codon of that code (also when the gene doesn't fit exactly and COAL needs its fallback placement, unlike
-  PAL2NAL v14). When the genes fit another code better, COAL says so once, before the per-codon warnings.
+  PAL2NAL v14). When the genes fit another code better, COAL says so once, before the per-codon warnings (genes of
+  more than 100,000 residues are left out of that test: re-threading one under the 17 other codes took 28 s of a
+  30 s run).
 - **Frameshifts:** a digit N in the protein alignment means N bases (PAL2NAL convention). That column is widened
   to the next multiple of 3 for every sequence. tfastx/tfasty notation is read as PAL2NAL reads it: `\` = 1 base,
   `/` followed by (gaps and) a residue = a gap, then 2 bases.

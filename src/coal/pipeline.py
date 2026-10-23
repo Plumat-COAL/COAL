@@ -39,7 +39,8 @@ from .core import (
     MISMATCH_WARNING, CoalError, apply_slices, check_table, column_widths, expand, keep_slices, limit_blas_threads,
     nogap_bad_triplets, pair_ids, prepare_row, row_length_message, thread_one,
 )
-from .seqio import DnaIndex, InputFormatError, clustal_mask, is_clustal, iter_fasta, open_error_message, read_clustal
+from .seqio import (DnaIndex, InputFormatError, clustal_mask, is_clustal, iter_fasta, name_files, open_error_message,
+                    read_clustal)
 
 WRAP = 60
 _DIGIT = re.compile(r"[0-9]")
@@ -834,7 +835,7 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
     dna = DnaIndex(nuc_paths)
     try:
         if not len(dna):
-            raise CoalError(f"{', '.join(map(str, nuc_paths))}: no sequences found: the file"
+            raise CoalError(f"{name_files(nuc_paths)}: no sequences found: the file"
                             + ("s are" if len(nuc_paths) > 1 else " is")
                             + " empty or ha" + ("ve" if len(nuc_paths) > 1 else "s")
                             + " no '>' header lines (expected the coding DNA in FASTA format)", code="no_sequences")

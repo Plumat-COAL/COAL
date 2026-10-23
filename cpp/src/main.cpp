@@ -951,8 +951,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
     const std::vector<std::string>& ids = rec.ids();  // one copy, owned by the report
     DnaIndex dna(o.nucs);
     if (dna.size() == 0) {
-        std::string joined;
-        for (size_t i = 0; i < o.nucs.size(); ++i) joined += (i ? ", " : "") + o.nucs[i];
+        const std::string joined = name_files(o.nucs);
         const bool many = o.nucs.size() > 1;
         throw CoalError(joined + ": no sequences found: the file" + (many ? "s are" : " is") + " empty or ha" +
                             (many ? "ve" : "s") + " no '>' header lines (expected the coding DNA in FASTA format)",

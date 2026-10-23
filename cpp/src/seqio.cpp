@@ -332,6 +332,15 @@ std::string clustal_mask(const std::string& path) {
 
 // ------------------------------------------------------------------ DNA index
 
+std::string name_files(const std::vector<std::string>& paths) {
+    if (paths.size() <= 3) {
+        std::string s;
+        for (size_t k = 0; k < paths.size(); ++k) s += (k ? ", " : "") + paths[k];
+        return s;
+    }
+    return paths[0] + ", " + paths[1] + ", " + paths[2] + " and " + std::to_string(paths.size() - 3) + " more files";
+}
+
 size_t open_file_budget(size_t nfiles) {
     const size_t headroom = 96 + 4 * (size_t)std::max(1u, std::thread::hardware_concurrency());
 #ifdef _WIN32
@@ -376,8 +385,7 @@ void DnaIndex::scan(int fno, const std::string& path) {
     // \n, \r\n and a lone \r (classic Mac) all end a line, wherever they are in the file (as the Python engine
     // and the protein reader): a file whose line ends change part-way used to lose every record after the first
     // lone \r beyond 64 kB.
-    std::string joined;
-    for (size_t k = 0; k < paths_.size(); ++k) joined += (k ? ", " : "") + paths_[k];
+    const std::string joined = name_files(paths_);
     std::vector<char> buf(1 << 20);
     long long start = -1, lineno = 0, line_off = offset;
     std::string line;  // header lines only

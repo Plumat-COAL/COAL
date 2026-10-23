@@ -25,6 +25,9 @@ Found by the stress test of 2026-10-23 (`docs/stress-test-2026-10-23.md`), both 
   `out_of_memory`) instead of a traceback (a worker dying of it was already handled).
 - **App: `python -m coal_app` no longer dies on a non-UTF-8 console** (Gradio's MCP banner emoji on a cp1252
   Windows console or pipe).
+- **The genetic-code hint no longer re-tests genes of more than 100,000 residues** (28 s of a 30 s run on one
+  1,000,000-residue gene with one wrong codon; `-q` already skipped it).
+- **Messages name at most three input files** ("a.fa, b.fa, c.fa and 997 more files") instead of every path.
 - `tests/tools/stress_*.py`: the stress-test generator, harness and helpers; `tests/test_stress_findings.py`.
 
 ## 0.5.0

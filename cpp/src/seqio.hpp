@@ -81,6 +81,8 @@ private:
 };
 
 bool is_clustal(const std::string& path);
+// The input files for a message: all of them up to three, else the first three and how many more (seqio.py).
+std::string name_files(const std::vector<std::string>& paths);
 // PAL2NAL's '#' mark line of a CLUSTAL alignment (one character per column; see seqio.cpp).
 std::string clustal_mask(const std::string& path);
 

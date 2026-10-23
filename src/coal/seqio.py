@@ -41,6 +41,15 @@ BEFORE_HEADER_PROTEIN = _BEFORE + "; a CLUSTAL file must start with 'CLUSTAL')"
 BEFORE_HEADER_DNA = _BEFORE + ")"
 
 
+def name_files(paths) -> str:
+    """The input files for a message: all of them up to three, else the first three and how many more (a run with
+    thousands of DNA files gave messages that listed every path)."""
+    names = [str(p) for p in paths]
+    if len(names) <= 3:
+        return ", ".join(names)
+    return f"{names[0]}, {names[1]}, {names[2]} and {len(names) - 3} more files"
+
+
 def duplicate_message(where, rid: str) -> str:
     if len(rid) > 200:  # (raised before the IDs are known to the message layer: shortened here)
         rid = rid[:100] + "..." + rid[-20:]
@@ -204,7 +213,7 @@ def read_dna(paths) -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
     for p in paths:
         out += read_fasta(p, letters_only=True)
-    _check_unique([r[0] for r in out], ", ".join(map(str, paths)))
+    _check_unique([r[0] for r in out], name_files(paths))
     return out
 
 
@@ -340,7 +349,7 @@ class DnaIndex:
                     except UnicodeDecodeError:
                         raise InputFormatError(f"{path}:{lineno}: {NON_ASCII_ID}") from None
                     if rid in self.pos:
-                        raise InputFormatError(duplicate_message(", ".join(self.paths), rid))
+                        raise InputFormatError(duplicate_message(name_files(self.paths), rid))
                     self.pos[rid] = len(self.ids)
                     self.ids.append(rid)
                     start = offset + len(line)
