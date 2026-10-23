@@ -161,15 +161,17 @@ class TestReportPath(EngineCase):
 
     def test_report_into_a_missing_folder_is_a_usage_error(self):
         # Checked before the run (as the input / output conflicts), so a full run never ends by losing its report.
-        # The engines print the folder as the absolute path from their working directory, as given (no symlink or
-        # Windows short-name resolution), hence abspath here, not realpath
-        nodir = os.path.join(os.path.abspath(self.d), "nodir")
+        # The engines print the folder as an absolute path from their working directory as the OS reports it (macOS
+        # resolves /var to /private/var, Windows keeps a short name as given), so the expectation is built the same way
+        cwd = subprocess.run([sys.executable, "-c", "import os; print(os.getcwd(), end='')"], cwd=self.d,
+                             capture_output=True, text=True, check=True).stdout
+        nodir = os.path.join(cwd, "nodir")
         for args, what in ((["p.fa", "n.fa", "-o", "o.fa", "--report", "nodir/r.json"],
                             f"nodir/r.json: folder {nodir} does not exist"),
                            (["p.fa", "n.fa", "-o", "o.fa", "--report", "nodir/deeper/r.json"],
                             f"nodir/deeper/r.json: folder {os.path.join(nodir, 'deeper')} does not exist"),
                            (["p.fa", "n.fa", "-o", "o.fa", "--report", "p.fa/r.json"],
-                            f"p.fa/r.json: {os.path.join(os.path.abspath(self.d), 'p.fa')} is not a folder")):
+                            f"p.fa/r.json: {os.path.join(cwd, 'p.fa')} is not a folder")):
             with self.subTest(args=args):
                 rc, out, err = self.both(args)
                 self.assertEqual((rc, out), (2, b""), err)
@@ -352,7 +354,7 @@ class TestWorkerProcesses(unittest.TestCase):
         p, kids = self.start(["-o", str(out)])
         kids[0].kill()
         try:
-            _, err = p.communicate(timeout=10)
+            _, err = p.communicate(timeout=30)  # ending the pool takes up to ~7 s of grace periods; a hang is forever
         except subprocess.TimeoutExpired:
             p.kill()
             for k in kids:
