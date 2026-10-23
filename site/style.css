@@ -1,26 +1,26 @@
-/* COAL website. One column of text, set in Libertinus Serif (OFL, assets/fonts/), on the dark charcoal of the
+/* COAL website. One column of text, set in Literata (OFL, assets/fonts/), on the dark charcoal of the
    logo; the logo's amber marks the current page and nothing much else. No cards, no shadows: downloads are a
    list, reasons are a list, numbers are tables. Dark only; print stays light (see @media print).
    Several pages (index, install, guide, differences, cite) share this file.
    Contrast (WCAG 2.1, computed): every text/background pair below is at least 4.5:1. */
 
 @font-face {
-  font-family: "Libertinus Serif";
-  src: url("assets/fonts/LibertinusSerif-Regular.woff2") format("woff2");
+  font-family: "Literata";
+  src: url("assets/fonts/Literata-Regular.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: "Libertinus Serif";
-  src: url("assets/fonts/LibertinusSerif-Semibold.woff2") format("woff2");
+  font-family: "Literata";
+  src: url("assets/fonts/Literata-Semibold.woff2") format("woff2");
   font-weight: 600;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: "Libertinus Serif";
-  src: url("assets/fonts/LibertinusSerif-Italic.woff2") format("woff2");
+  font-family: "Literata";
+  src: url("assets/fonts/Literata-Italic.woff2") format("woff2");
   font-weight: 400;
   font-style: italic;
   font-display: swap;
@@ -52,10 +52,10 @@
   --tr-coal: #45413E;
   --tr-slate: #6A655F;
   --ss-blue: #0B5CAD;
-  --serif: "Libertinus Serif", "Linux Libertine", Georgia, "Times New Roman", serif;
+  --serif: "Literata", Georgia, "Times New Roman", serif;
   --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
   --fs-sm: 0.94rem;
-  --fs-body: 1.125rem;     /* 18 px: a serif wants a little more size than a sans */
+  --fs-body: 1.0625rem;    /* 17 px; Literata is a wide face */
   --fs-h3: 1.2rem;
   --fs-h2: 1.45rem;
   --fs-h1: 2rem;
@@ -110,7 +110,7 @@ kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3p
 main { width: calc(100% - 2 * var(--gutter)); max-width: var(--wide); margin: 0 auto; }
 .sec > *, .page-head > *, .intro > * { max-width: var(--measure); }
 .sec > pre, .sec > figure, .sec > .table-scroll, .sec > .cards, .sec > .explainer, .sec > .look { max-width: var(--wide); }
-.star { text-decoration: none; color: var(--accent); font-weight: 600; }
+.why { color: #FF6A13; text-decoration-color: #FF6A13; font-weight: 600; }  /* the logo's ember, 7.2:1 on the page */
 .sec { padding: 2rem 0 0.75rem; border-top: 1px solid var(--line); }
 .sec > h2 { margin-bottom: 0.8rem; }
 .intro { padding: 2.25rem 0 1.5rem; }
@@ -134,7 +134,7 @@ main { width: calc(100% - 2 * var(--gutter)); max-width: var(--wide); margin: 0 
 .card .cmd { margin: 0; background: var(--card-code-bg); border-color: var(--card-line); }
 .card .cmd code { font-size: 0.74rem; }
 .btn { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 2.8rem; background: var(--accent);
-  color: var(--on-accent); font: inherit; font-weight: 600; padding: 0.5rem 1rem; border: 2px solid var(--accent);
+  color: var(--on-accent); font: inherit; font-size: 0.97rem; font-weight: 600; padding: 0.5rem 0.75rem; border: 2px solid var(--accent);
   border-radius: 5px; text-decoration: none; cursor: pointer; }
 .btn:hover { background: var(--accent-hover); border-color: var(--accent-hover); text-decoration: none; }
 .btn.secondary { background: transparent; color: var(--ink); border-color: #8C827A; }

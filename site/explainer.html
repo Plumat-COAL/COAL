@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>COAL explainer</title>
 <style>
-  @font-face { font-family: "Libertinus Serif"; src: url("assets/fonts/LibertinusSerif-Regular.woff2") format("woff2");
+  @font-face { font-family: "Literata"; src: url("assets/fonts/Literata-Regular.woff2") format("woff2");
     font-weight: 400; font-style: normal; font-display: swap; }
-  @font-face { font-family: "Libertinus Serif"; src: url("assets/fonts/LibertinusSerif-Semibold.woff2") format("woff2");
+  @font-face { font-family: "Literata"; src: url("assets/fonts/Literata-Semibold.woff2") format("woff2");
     font-weight: 600; font-style: normal; font-display: swap; }
   :root {
     --bg: #121110; --fg: #E4E0DB; --ink: #F4F1ED; --muted: #B3ADA6; --panel: #1C1A19; --line: #3A3633;
@@ -15,7 +15,7 @@
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
-    font-family: "Libertinus Serif", Georgia, "Times New Roman", serif; }
+    font-family: "Literata", Georgia, serif; }
   body { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2vh 3vw; }
   h1 { font-size: clamp(18px, 2vw, 28px); margin: 0 0 3vh; font-weight: 600; color: var(--ink); }
   .embedded h1 { display: none; }
@@ -24,7 +24,7 @@
   .row { display: flex; align-items: flex-end; gap: 0.25em;
     font-family: ui-monospace, "Cascadia Mono", Consolas, Menlo, monospace; font-size: clamp(13px, 3.9vw, 66px); }
   /* a larger minimum (e.g. 22px) overflows a 390 px phone screen */
-  .name { font-family: "Libertinus Serif", Georgia, serif; font-size: 0.5em; color: var(--muted);
+  .name { font-family: "Literata", Georgia, serif; font-size: 0.5em; color: var(--muted);
     width: 4.2em; text-align: right; padding-right: 0.5em; align-self: center; }
   .cell { position: relative; width: 1.25em; height: 1.9em; transition: width 0.6s ease;
     transition-delay: calc(var(--i) * 0.12s); border-radius: 0.15em; }
@@ -47,7 +47,7 @@
   .s3 .bad { animation: flash 0.5s ease-in-out 0.2s 4; }
   @keyframes flash { 50% { background: var(--bad); } }
   .s3 .bad::after, .s4 .bad::after { content: "TGA = STOP"; position: absolute; top: 100%; left: 50%;
-    transform: translateX(-50%); margin-top: 0.15em; font-family: "Libertinus Serif", Georgia, serif;
+    transform: translateX(-50%); margin-top: 0.15em; font-family: "Literata", Georgia, serif;
     font-size: 0.32em; font-weight: 700; color: var(--bad); white-space: nowrap; }
   /* matches the last step's caption (mito: TGA = W) */
   .s4 .bad::after { content: "TGA = W (mito)"; color: var(--ok); }

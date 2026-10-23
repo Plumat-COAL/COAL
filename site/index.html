@@ -14,7 +14,7 @@
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<link rel="preload" href="assets/fonts/LibertinusSerif-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/Literata-Regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="style.css">
 <script src="main.js" defer></script>
 </head>
@@ -36,11 +36,8 @@
 <main id="main">
 <div class="intro">
   <h1>COAL</h1>
-  <p>COAL makes codon alignments<a class="star" href="differences.html" aria-label="Why use it">*</a>. Give it a
-    protein alignment and the coding DNA of the same genes, and it writes the DNA back under the protein, three
-    bases to a residue, with a gap of three wherever the protein has a gap. It checks every codon against its
-    amino acid as it goes, and when a gene does not fit it says which gene, at which column, and what is probably
-    wrong.</p>
+  <p>COAL makes codon alignments. When a gene does not fit it outputs which, at which column, and what the likely
+    diagnosis is. <a class="why" href="differences.html">Why use it?</a></p>
   <p>COAL works as a Python and C++ replacement for PAL2NAL v14, for faster research across the tree of life. See
     the <a href="differences.html#speed">benchmarked speed increases</a>.</p>
 </div>

@@ -11,7 +11,7 @@ step, nothing loaded from other sites (no CDNs, font services, trackers or analy
 | `differences.html` | "Why use it" in the menu: the reasons, the differences from PAL2NAL v14 (the test counts) and the speed table |
 | `cite.html` | how to cite COAL and PAL2NAL (the version is in a `data-version-ref` span) |
 | `style.css` | styles for every page; dark only, light when printed |
-| `assets/fonts/` | Libertinus Serif 7.051 (regular, semibold, italic), Latin subsets as WOFF2 (about 20 KB each), with its licence `OFL.txt` (SIL Open Font License 1.1) |
+| `assets/fonts/` | Literata (regular, semibold, italic), Latin subsets as WOFF2 (about 21 KB each), with its licence `OFL.txt` (SIL Open Font License 1.1) |
 | `main.js` | copy buttons, registers `sw.js`; old one-page links (`#windows`, `#speed`, ...) are sent to the page that now holds that section |
 | `sw.js` | keeps a copy of the site's own files so it opens offline after one visit (never touches downloads) |
 | `explainer.html` | the 20-second explainer animation (the only copy; the pitch uses it too; `tests/test_docs_explainer.py` plays it in Chromium) |
@@ -23,10 +23,11 @@ step, nothing loaded from other sites (no CDNs, font services, trackers or analy
 | `assets/favicon-32.png`, `apple-touch-icon.png`, `icon-512.png` | PNG icons (written by `apps/coal-app/desktop/make_icon.py --site site`) |
 
 <!-- Several pages with one shared header and footer (a test checks they are identical; when you
-     change the header or footer, change it in every page). The fonts were made from the Libertinus 7.051 release
-     (github.com/alerque/libertinus, static/OTF) with fontTools: `pyftsubset LibertinusSerif-<style>.otf
-     --unicodes="U+0000-00FF,U+0152-0153,U+2000-206F,U+2190-2193,U+2212,U+00D7,..." --layout-features=kern,liga,onum,lnum,pnum,tnum,calt
-     --flavor=woff2 --no-hinting --desubroutinize`. -->
+     change the header or footer, change it in every page). The fonts were made from google/fonts ofl/literata
+     (the variable fonts) with fontTools: `fontTools.varLib.instancer` at wght=400 / 600 (italic 400) and opsz=18,
+     then `pyftsubset --unicodes="U+0000-00FF,U+0152-0153,U+2000-206F,U+2190-2193,U+2212,U+00D7,..."
+     --layout-features=kern,liga,onum,lnum,pnum,tnum,calt --flavor=woff2 --no-hinting --desubroutinize`.
+     The footer's "Last updated" date is typed by hand: change it when the site changes. -->
 
 All internal links are relative, so the same files work at `/COAL/` and later at a custom domain.
 

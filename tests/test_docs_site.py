@@ -218,7 +218,7 @@ class TestPagesWorkflow(unittest.TestCase):
 
 # Several pages, a self-hosted font and its licence, a WebP screenshot, logo, mark and icons.
 PAGES = ("index.html", "install.html", "guide.html", "differences.html", "cite.html")
-FONTS = tuple(f"assets/fonts/LibertinusSerif-{w}.woff2" for w in ("Regular", "Semibold", "Italic"))
+FONTS = tuple(f"assets/fonts/Literata-{w}.woff2" for w in ("Regular", "Semibold", "Italic"))
 SITE_FILES = PAGES + FONTS + ("assets/fonts/OFL.txt",) + ("index.html", "style.css", "main.js", "sw.js", "favicon.svg", "explainer.html", "img/broken-gene.webp",
               "assets/coal-mark.svg", "assets/coal-mark-dark.svg", "assets/coal-logo.png", "assets/coal-logo@2x.png", "assets/coal-logo-dark.png",
               "assets/coal-logo-dark@2x.png", "assets/favicon-32.png", "assets/apple-touch-icon.png",
@@ -413,10 +413,10 @@ class TestSiteFiles(unittest.TestCase):
         """The only font file is ours, small, and the OFL travels with it."""
         css = _read("site", "style.css")
         self.assertEqual(re.findall(r'url\("([^"]+)"\)', css), list(FONTS))
-        for f in FONTS:  # Latin subsets of Libertinus Serif (regular, semibold, italic)
+        for f in FONTS:  # Latin subsets of Literata (regular, semibold, italic)
             self.assertLess(os.path.getsize(os.path.join(SITE, f)), 40 * 1024, f)
         self.assertIn("SIL Open Font License", _read("site", "assets", "fonts", "OFL.txt"))
-        self.assertIn("Libertinus", _read("site", "assets", "fonts", "OFL.txt"))  # the licence travels with the font
+        self.assertIn("Literata", _read("site", "assets", "fonts", "OFL.txt"))  # the licence travels with the font
 
     def test_size_budget(self):
         total = 0
