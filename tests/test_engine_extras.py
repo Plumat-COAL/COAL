@@ -285,9 +285,9 @@ def run_sub(cmd, cwd, env=None, timeout=120):
     return subprocess.run(cmd, cwd=cwd, env=e, capture_output=True, timeout=timeout)
 
 
-def interrupt(cmd, cwd, after_checkpoint=3, extra_env=None):
+def interrupt(cmd, cwd, after_checkpoint=3, extra_env=None, on_pause=None):
     """Start a run that pauses after its n-th checkpoint, then kill it (like a crash or a
-    cluster time limit). A watchdog kills it anyway after 60 s."""
+    cluster time limit). A watchdog kills it anyway after 60 s. on_pause(pid) is called while the run is paused."""
     env = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "COAL_BATCH_NT": "20000",
            "COAL_CHECKPOINT_EVERY": "0", "COAL_TEST_PAUSE_AFTER_CHECKPOINT": str(after_checkpoint),
            "COAL_TEST_HOOKS": "1",  # the hooks need this too
@@ -301,8 +301,15 @@ def interrupt(cmd, cwd, after_checkpoint=3, extra_env=None):
             if line.startswith("coal: test: paused"):
                 paused = True
                 break
+        if paused and on_pause is not None:
+            on_pause(p.pid)
         p.terminate()
-        p.wait(timeout=30)
+        try:
+            p.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            p.kill()                          # never leave an hour-long orphan behind a failed test
+            p.wait(timeout=30)
+            raise
     finally:
         dog.cancel()
         p.stderr.close()
@@ -326,20 +333,22 @@ class TestResume(unittest.TestCase):
     def tearDownClass(cls):
         cls._tmp.cleanup()
 
-    def check(self, opts, nuc="nuc.fasta", expect_rc=0):
+    def check(self, opts, nuc="nuc.fasta", expect_rc=0, env=None, on_pause=None):
         ref = self.d / "ref.out"
-        r = run_sub(coal_cmd("pep.fasta", nuc, "-o", str(ref), *opts), self.d)
+        r = run_sub(coal_cmd("pep.fasta", nuc, "-o", str(ref), *opts), self.d, env=env)
         self.assertEqual(r.returncode, expect_rc, r.stderr[-300:])
         out = self.d / "res.out"
         if out.exists():
             out.unlink()                                   # left by the previous subtest
         cmd = coal_cmd("pep.fasta", nuc, "-o", str(out), *opts)
-        self.assertTrue(interrupt(cmd, self.d), "run did not reach its checkpoint")
+        self.assertTrue(interrupt(cmd, self.d, extra_env=env, on_pause=on_pause), "run did not reach its checkpoint")
         ck = Path(str(out) + ".coal-checkpoint.json")
         self.assertTrue(ck.exists())
-        self.assertGreater(json.loads(ck.read_text())["completed"], 0)
+        st = json.loads(ck.read_text())
+        self.assertGreater(st["completed"], 0)
+        self.engine = st["engine"]   # which engine the `coal` command ran (coal-cpp in test_cpp_vs_reference's copy)
         self.assertFalse(out.exists())                     # nothing moved into place yet
-        r = run_sub(cmd + ["--resume", "--report", "r.json"], self.d)
+        r = run_sub(cmd + ["--resume", "--report", "r.json"], self.d, env=env)
         self.assertEqual(r.returncode, expect_rc, r.stderr[-300:])
         self.assertIn(b"coal: notice: resuming", r.stderr)
         self.assertEqual(out.read_bytes(), ref.read_bytes())
@@ -357,7 +366,19 @@ class TestResume(unittest.TestCase):
                 self.check([*opts, "-j", "1"])
 
     def test_resume_with_workers(self):
-        self.check(["-output", "fasta", "-j", "2"])
+        # The input is far below MIN_NT_PER_JOB, so `-j 2` alone would run in one process: the override makes two
+        # workers start, and the run is checked to have them while it is paused at its checkpoint.
+        try:
+            import psutil  # noqa: F401
+            from test_robustness import worker_processes
+        except ImportError:  # no psutil, or the reference-test copy of test_cpp_vs_reference (coal-cpp: threads)
+            worker_processes = None
+        seen = []
+        self.check(["-output", "fasta", "-j", "2"], env={"COAL_ENGINE": "python", "COAL_MIN_NT_PER_JOB": "0"},
+                   on_pause=lambda pid: seen.append(len(worker_processes(pid)) if worker_processes else None))
+        if worker_processes is None or self.engine != "coal-python":
+            self.skipTest("the worker count needs psutil and the Python engine")
+        self.assertEqual(seen, [2], "the interrupted run did not have two worker processes")
 
     def test_resume_keep_going(self):
         for opts in (["-output", "fasta"], ["-output", "paml"]):

@@ -22,6 +22,7 @@
 #include <random>
 #include <set>
 #include <unordered_map>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -639,6 +640,8 @@ struct Checkpoint {
     std::vector<std::string> inputs;
     int count = 0;
     std::string why = "no checkpoint";  // why load_for_resume() returned false
+    std::string other_engine;           // the engine named by a checkpoint this engine cannot resume
+    std::string name;                   // how messages name the output (the -o argument)
 
     Checkpoint(const std::string& out, const std::string& canon, const std::vector<std::string>& in) : inputs(in) {
         std::string base = fs::absolute(fs::path(out)).string();
@@ -665,68 +668,141 @@ struct Checkpoint {
         return a;
     }
 
-    // true + state if this run can resume; false if there is nothing to resume.
+    // true + state if this run can resume; false if there is nothing to resume (`why` says why).
     // Throws CoalError(resume_mismatch) if inputs or options changed.
-    bool load_for_resume(Json& st, const std::vector<std::string>& needed) {
-        std::ifstream in(path, std::ios::binary);
-        if (!in) {
+    // Every field is checked (types, ranges against nseq and the partial files' sizes, the entries file's lines)
+    // and any problem counts as an unreadable checkpoint, so an edited or corrupted checkpoint can never make a
+    // resumed run write a truncated or wrong output (checkpoint.py load_for_resume / _well_formed).
+    // ncol: protein columns (bounds `drop`); ntriplets: output codon columns (bounds `bad`): a crafted entry such
+    // as 4000000000000 is an unreadable checkpoint, not a std::bad_alloc from resizing a vector to it.
+    bool load_for_resume(Json& st, const std::vector<std::string>& needed, long long nseq, long long ncol,
+                         long long ntriplets, std::vector<Json>& lines_out) {
+        std::error_code ec;
+        if (!fs::exists(path, ec)) {
             why = "no checkpoint";
             return false;
         }
-        std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        why = "an unreadable checkpoint";
+        std::string text;
         try {
+            std::ifstream in(path, std::ios::binary);
+            if (!in) return false;
+            text.assign((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            if (in.bad()) return false;  // e.g. the path is a folder (libstdc++ may throw instead)
             st = json_parse(text);
         } catch (...) {
-            why = "an unreadable checkpoint";
             return false;
         }
-        if (st.type != Json::Object) {
-            why = "an unreadable checkpoint";
-            return false;
-        }
+        if (st.type != Json::Object) return false;
         auto str = [&](const char* k) {
             const Json* v = st.get(k);
             return v ? v->as_str() : std::string();
         };
         const Json* ins = st.get("inputs");
         if (str("engine") != "coal-cpp" || str("coal_version") != VERSION || str("options_hash") != options_hash ||
-            !ins || json_dump(*ins) != json_dump(signature()))
+            !ins || json_dump(*ins) != json_dump(signature())) {
+            std::string e = str("engine");
+            if (e == "coal-python") {
+                // Each engine resumes only its own runs: the error says which one must (checkpoint.py
+                // other_engine_message; the Python command line picks that engine by itself)
+                other_engine = e;
+                throw CoalError(name + " was interrupted by the Python engine (coal-python), which must resume it: "
+                                "run again with COAL_ENGINE=python, or start a new run without --resume",
+                                "resume_mismatch");
+            }
             throw CoalError(CHANGED, "resume_mismatch");
+        }
+        auto is_int = [&](const Json* v) { return v && v->type == Json::Int && v->i >= 0; };
+        auto int_list = [&](const Json* v, long long below) {
+            if (!v || v->type != Json::Array) return false;
+            for (auto& x : v->a)
+                if (x.type != Json::Int || x.i < 0 || (below >= 0 && x.i >= below)) return false;
+            return true;
+        };
+        for (const char* k : {"completed", "nseq", "sink_bytes", "entries_bytes", "skipped"})
+            if (!is_int(st.get(k))) return false;
+        const long long completed = st.get("completed")->i, skipped = st.get("skipped")->i;
+        if (st.get("nseq")->i != nseq || completed > nseq || skipped > completed) return false;
+        if (!int_list(st.get("skip_idx"), completed) || !int_list(st.get("drop"), ncol) ||
+            !int_list(st.get("bad"), ntriplets))
+            return false;
+        if ((long long)st.get("skip_idx")->a.size() != skipped) return false;
+        if (const Json* rec = st.get("rec"); rec && rec->type != Json::Null) {
+            if (rec->type != Json::Object) return false;
+            const Json* kinds = rec->get("kinds");
+            if (!kinds || kinds->type != Json::String || (long long)kinds->s.size() != completed) return false;
+            if (!int_list(rec->get("cols"), -1) || !int_list(rec->get("real_cols"), -1)) return false;
+        }
         why = "a checkpoint whose partial output is missing or incomplete";
         static const char* keys[] = {"sink_bytes", "entries_bytes", "prot_bytes"};
         for (size_t i = 0; i < needed.size(); ++i) {
             if (needed[i].empty()) continue;
-            std::error_code ec;
             auto n = fs::file_size(needed[i], ec);
             const Json* v = st.get(keys[i]);
-            if (ec || !v || (long long)n < v->as_int()) return false;
+            if (ec || !is_int(v) || (long long)n < v->i) return false;
+        }
+        // the entries file: one JSON object per line with an "index" below `completed`
+        why = "an unreadable checkpoint";
+        std::ifstream ein(entries, std::ios::binary);
+        if (!ein) return false;
+        std::string etext((size_t)st.get("entries_bytes")->i, '\0');
+        ein.read(&etext[0], (std::streamsize)etext.size());
+        if ((long long)ein.gcount() != (long long)etext.size()) return false;
+        size_t a = 0;
+        while (a < etext.size()) {
+            size_t b = etext.find('\n', a);
+            if (b == std::string::npos) b = etext.size();
+            std::string line = etext.substr(a, b - a);
+            a = b + 1;
+            if (line.find_first_not_of(" \t\r") == std::string::npos) continue;
+            Json e;
+            try {
+                e = json_parse(line);
+            } catch (...) {
+                return false;
+            }
+            if (e.type != Json::Object || !is_int(e.get("index")) || e.get("index")->i >= completed) return false;
+            lines_out.push_back(std::move(e));
         }
         return true;
     }
 
-    void save(Json st) {
+    // Returns 0, or the errno when the checkpoint could not be written (no temp file is left behind).
+    int save(Json st) {
         ++count;
         st.set("engine", "coal-cpp");
         st.set("coal_version", VERSION);
         st.set("options_hash", options_hash);
         st.set("inputs", signature());
         std::string tmp = path + ".tmp";
+        int err = 0;
         {
+            errno = 0;
             std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
+            if (!f) return errno ? errno : EIO;
             f << json_dump(st);
             f.flush();
+            if (!f) err = errno ? errno : EIO;
         }
-        fsync_path(tmp);
         std::error_code ec;
-        fs::rename(tmp, path, ec);
+        if (!err) {
+            fsync_path(tmp);
+            fs::rename(tmp, path, ec);
+            if (ec) err = ec.value();
+        }
+        if (err) fs::remove(tmp, ec);
+        return err;
     }
 
     void remove(bool keep_partial = false) {
         std::error_code ec;
-        for (auto* p : {&path, &entries, &stage, &prot}) fs::remove(*p, ec);
-        fs::remove(stage + ".grid", ec);
-        fs::remove(path + ".tmp", ec);
-        if (!keep_partial) fs::remove(partial, ec);
+        auto rm = [&](const std::string& p) {  // files only: a folder in the way is left alone (os.unlink)
+            if (!fs::is_directory(p, ec)) fs::remove(p, ec);
+        };
+        for (auto* p : {&path, &entries, &stage, &prot}) rm(*p);
+        rm(stage + ".grid");
+        rm(path + ".tmp");
+        if (!keep_partial) rm(partial);
     }
 };
 
@@ -743,6 +819,13 @@ static void test_pause(int count) {
         std::cerr << "coal: test: paused after checkpoint " << count << std::endl;
         std::this_thread::sleep_for(std::chrono::seconds(3600));
     }
+}
+
+// A write that failed (disk full, quota, I/O error): "cannot write <out>: no space left on device" (out "" =
+// a temporary file in the temp folder), as pipeline.py _output_error
+static CoalError write_failed(const std::string& out) {
+    int e = errno ? errno : ENOSPC;
+    return CoalError(output_error(out, e), "file_error");
 }
 
 // The -o argument ("" = stdout), for output_error() when a file of the run cannot be created.
@@ -921,6 +1004,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
     // ---- files: deterministic names next to -o (resumable), temp files for stdout
     std::unique_ptr<Checkpoint> ck;
     Json state;
+    std::vector<Json> resume_entries;  // the checked lines of the entries file (load_for_resume)
     bool resuming = false;
     std::string out_tmp, stage_path, prot_path;
     // -o PATH is checked before any work. Symlinks are written through;
@@ -953,11 +1037,13 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         std::vector<std::string> inputs{o.pep};
         inputs.insert(inputs.end(), o.nucs.begin(), o.nucs.end());
         ck = std::make_unique<Checkpoint>(target.real, canon, inputs);
+        ck->name = o.out;
         out_tmp = ck->partial;
         if (staged) stage_path = ck->stage;
         if (o.fmt == "codon") prot_path = ck->prot;
         if (o.resume) {
-            resuming = ck->load_for_resume(state, {staged ? stage_path : out_tmp, ck->entries, prot_path});
+            resuming = ck->load_for_resume(state, {staged ? stage_path : out_tmp, ck->entries, prot_path}, nseq,
+                                           ncol, wtotal / 3, resume_entries);
             if (resuming)
                 note("resuming " + o.out + ": " + fmt_n(state.get("completed")->as_int()) + " of " + fmt_n(nseq) +
                      " sequences were already done" +
@@ -980,7 +1066,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                  (o.resumable ? "the output is not a regular file" : "an input is not a regular file") +
                  "); starting a normal run");
         // the output's temp file goes next to the real target when it is renamed onto it (same file system)
-        fs::path d = (!o.out.empty() && !direct) ? fs::path(target.real).parent_path() : fs::temp_directory_path();
+        fs::path d = (!o.out.empty() && !direct) ? fs::path(target.real).parent_path() : fs::path(temp_dir());
         out_tmp = (d / (".coal_" + unique_suffix() + ".tmp")).string();
         if (staged) stage_path = (d / (".coal_rows_" + unique_suffix() + ".tmp")).string();
         if (o.fmt == "codon") prot_path = (d / (".coal_prot_" + unique_suffix() + ".tmp")).string();
@@ -1042,15 +1128,8 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                         bad[(size_t)t] = 1;
                     }
                 }
-            std::vector<Json> nonok;
-            {
-                std::ifstream in(ck->entries, std::ios::binary);
-                std::string line;
-                while (std::getline(in, line))
-                    if (!line.empty()) nonok.push_back(json_parse(line));
-            }
             const Json* rst = state.get("rec");
-            rec.restore(rst ? *rst : Json::object(), nonok, start);
+            rec.restore(rst ? *rst : Json::object(), resume_entries, start);
             if (const Json* v = state.get("skip_idx"))
                 for (auto& x : v->a) skip_idx.insert(x.as_int());
         } else if (o.fmt == "paml" && !staged) {
@@ -1088,6 +1167,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         if (o.progress && nseq > PROGRESS_MIN_SEQS) prog = std::make_unique<Progress>(nseq);
         auto last_ck = std::chrono::steady_clock::now();
         long long done = start;
+        bool ck_saves = true;
         // thread each batch while the next one is read; results written in input order (pool.hpp)
         // With -blockonly, as PAL2NAL, only warnings about kept ('#') columns are printed
         auto kept_col = [&](const std::string& w) {
@@ -1124,9 +1204,9 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                         warn(it.id + " " + w);
                 for (auto& n : it.notices) warn(n);
                 if (it.failed) warn("skipped " + it.error);
-                const Json* e = it.failed ? rec.add_sequence(done, it.id, {}, {}, it.error_code, it.error)
-                                          : rec.add_sequence(done, it.id, shown(it.warnings), it.notices);
-                if (ck && e) entries.f << json_dump(*e) << '\n';
+                const std::string* e = it.failed ? rec.add_sequence(done, it.id, {}, {}, it.error_code, it.error)
+                                                 : rec.add_sequence(done, it.id, shown(it.warnings), it.notices);
+                if (ck && e) entries.f << *e << '\n';
                 if (it.failed) {
                     ++skipped;
                     skip_idx.insert(done);
@@ -1151,7 +1231,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                 std::cerr << "coal: test: paused before any checkpoint" << std::endl;
                 std::this_thread::sleep_for(std::chrono::seconds(3600));
             }
-            if (ck && done < nseq &&
+            if (ck && ck_saves && done < nseq &&
                 std::chrono::duration<double>(std::chrono::steady_clock::now() - last_ck).count() >= CHECKPOINT_EVERY) {
                 Json st = Json::object();
                 st.set("completed", done);
@@ -1171,7 +1251,13 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                 for (long long x : skip_idx) sk.push(x);
                 st.set("skip_idx", sk);
                 st.set("rec", rec.checkpoint_state());
-                ck->save(st);
+                if (int err = ck->save(st)) {
+                    // A checkpoint that cannot be written (its path is a folder, disk full ...) does not end the
+                    // run: it only cannot be resumed (pipeline.py)
+                    ck_saves = false;
+                    note("cannot write the checkpoint " + ck->path + ": " + lower_reason(err) +
+                         "; the run cannot be resumed if it is interrupted");
+                }
                 if (ck_registered) {  // a checkpoint describes them now: kept after a signal
                     for (auto* q : {&ck->partial, &ck->stage, &ck->prot, &ck->entries}) unregister_temp(*q);
                     unregister_temp(ck->stage + ".grid");
@@ -1182,6 +1268,18 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
             }
         };
         run_ordered<Item>(read_batch, [&](Item& it) { work(it, ctx); }, emit, o.jobs);
+        // the rows (and the entries, residue lines) were written as they came: a failed write (disk full ...) is
+        // an error naming the output, or the temp folder while the rows go to a temporary file there
+        sink.f.flush();
+        if (!sink.f) throw write_failed(staged && !ck ? std::string() : o.out);
+        if (!prot_path.empty()) {
+            prot.f.flush();
+            if (!prot.f) throw write_failed(ck ? o.out : std::string());
+        }
+        if (ck) {
+            entries.f.flush();
+            if (!entries.f) throw write_failed(o.out);
+        }
         if (prog && prog->printed) prog->update(done, true);
         if (o.keep_going && skipped == nseq)
             throw CoalError("none of the " + std::to_string(nseq) + " sequences could be converted: check that the DNA "
@@ -1237,6 +1335,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                         grid.f.write(s2.data(), (std::streamsize)s2.size());
                     }
                     grid.f.flush();
+                    if (!grid.f) throw write_failed(ck ? o.out : std::string());
                     g = &grid.f;
                 }
                 if (!prot_path.empty()) prot.f.flush();
@@ -1255,11 +1354,11 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                 }
             }
             out.f.flush();
-            if (!out.f) throw CoalError("could not write the output (disk full?)");
+            if (!out.f) throw write_failed(o.out);
             out.f.close();
         } else {
             sink.f.flush();
-            if (!sink.f) throw CoalError("could not write the output (disk full?)");
+            if (!sink.f) throw write_failed(o.out);
         }
         sink.f.close();
         entries.f.close();
@@ -1278,7 +1377,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
             if (!dst) throw CoalError(output_error(o.out, errno ? errno : EIO), "file_error");
             dst << in.rdbuf();
             dst.flush();
-            if (!dst) throw CoalError("could not write " + o.out + " (disk full?)", "file_error");
+            if (!dst) throw write_failed(o.out);
         } else {
 #ifdef _WIN32
             _setmode(_fileno(stdout), _O_BINARY);
@@ -1388,6 +1487,7 @@ int main(int argc, char** argv) {
     o.blockonly = args.given(a_block);
     if (args.given(a_fmt)) o.fmt = args.get(a_fmt);
     if (args.given(a_out)) o.out = args.get(a_out);
+    if (o.out == "-") o.out.clear();  // `-o -` is standard output (the default), as cli.py
     if (args.given(a_jobs)) o.jobs = to_int(args.get(a_jobs));
     o.quiet = args.given(a_quiet);
     o.keep_going = args.given(a_keep);
@@ -1407,6 +1507,10 @@ int main(int argc, char** argv) {
         std::vector<std::string> in{o.pep};
         in.insert(in.end(), o.nucs.begin(), o.nucs.end());
         if (stdin_count(in) > 1) return usage_error(STDIN_TWICE);
+        // --report naming an input or the output is refused before anything runs (cli.py)
+        std::string why = report_path_conflict(o.report, in, o.out);
+        if (why.empty()) why = report_folder_missing(o.report);  // and a folder that does not exist (cli.py)
+        if (!why.empty()) return usage_error(why);
     }
 
     RunReport rec(o.argv, o.pep, o.nucs, o.out, o.fmt, o.table, o.nogap, o.nomismatch, o.keep_going,
@@ -1425,6 +1529,29 @@ int main(int argc, char** argv) {
             for (size_t at; (at = msg.find(sp.first)) != std::string::npos;) msg.replace(at, sp.first.size(), sp.second);
         return msg;
     };
+    // IDs over 200 characters are shortened on stderr (the report keeps them whole), as cli.py IdShortener
+    std::vector<std::string> long_ids;
+    size_t long_seen_p = 0, long_seen_d = 0;
+    auto shorten = [&](std::string text) {
+        if (rec.ids().size() != long_seen_p || rec.dna_file_ids().size() != long_seen_d) {
+            long_seen_p = rec.ids().size();
+            long_seen_d = rec.dna_file_ids().size();
+            std::set<std::string> found;
+            for (auto* lst : {&rec.ids(), &rec.dna_file_ids()})
+                for (auto& i : *lst)
+                    if (i.size() > 200) found.insert(i);
+            long_ids.assign(found.begin(), found.end());
+            std::sort(long_ids.begin(), long_ids.end(),
+                      [](const std::string& a, const std::string& b) { return a.size() > b.size(); });
+        }
+        for (auto& rid : long_ids)
+            for (size_t at = 0; (at = text.find(rid, at)) != std::string::npos;) {
+                std::string sh = short_id(rid);
+                text.replace(at, rid.size(), sh);
+                at += sh.size();
+            }
+        return text;
+    };
     long long shown = 0, hidden = 0;
     WarnFn warn = [&](const std::string& w) {
         if (o.quiet) return;
@@ -1435,11 +1562,11 @@ int main(int argc, char** argv) {
             }
             ++shown;
         }
-        std::cerr << "coal: warning: " << w << '\n';
+        std::cerr << "coal: warning: " << shorten(w) << '\n';
     };
     WarnFn note = [&](const std::string& t) {
         // -q: no notices (as the Python CLI)
-        if (!o.quiet) std::cerr << "coal: notice: " << t << std::endl;
+        if (!o.quiet) std::cerr << "coal: notice: " << shorten(t) << std::endl;
     };
     RunState rs;
     int rc = 0;
@@ -1457,15 +1584,15 @@ int main(int argc, char** argv) {
     } catch (const BrokenPipe&) {
         return 141;  // a closed stdout pipe ends the run silently; temp files are gone
     } catch (const CoalError& e) {
-        std::cerr << "coal: error: " << restore_names(e.what()) << '\n';
+        std::cerr << "coal: error: " << shorten(restore_names(e.what())) << '\n';
         rc = 1;
         rec.fail(e.code, restore_names(e.what()), !e.seq_id.empty());
     } catch (const InputError& e) {
-        std::cerr << "coal: error: " << restore_names(e.what()) << '\n';
+        std::cerr << "coal: error: " << shorten(restore_names(e.what())) << '\n';
         rc = 1;
         rec.fail(e.code, restore_names(e.what()), false);
     } catch (const std::exception& e) {
-        std::cerr << "coal: error: " << restore_names(e.what()) << '\n';
+        std::cerr << "coal: error: " << shorten(restore_names(e.what())) << '\n';
         rc = 1;
         rec.fail("file_error", restore_names(e.what()), false);
     }
@@ -1476,32 +1603,33 @@ int main(int argc, char** argv) {
     }
     rec.exit_code = rc;
     if (!o.quiet)
-        for (auto& l : rec.summary_lines()) std::cerr << "coal: summary: " << l << '\n';
+        for (auto& l : rec.summary_lines()) std::cerr << "coal: summary: " << shorten(l) << '\n';
     std::cerr.flush();
     if (!o.report.empty()) {
-        std::string tmp = o.report + ".tmp" + unique_suffix();
-        bool ok;
-        int err = 0;
-        {
-            errno = 0;
-            std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
-            f << json_dump(rec.to_dict(), 1) << '\n';
-            f.flush();
-            ok = (bool)f;
-            if (!ok) err = errno ? errno : EIO;
-        }
-        std::error_code ec;
-        if (ok) fs::rename(tmp, o.report, ec);
-        if (!ok || ec) {
-            if (ec) err = ec.value();
+        int err = write_json_file(o.report, [&](std::ostream& f) { rec.write_json(f); f << '\n'; });
+        if (err) {
             std::error_code rm;
-            fs::remove(tmp, rm);
             // As cli.py: the error gives the reason
             std::string why = fs::is_directory(o.report, rm) ? "it is a folder, not a file" : std::strerror(err);
             std::cerr << "coal: error: could not write the report " << o.report << ": " << why << '\n';
             if (!rc) rc = 1;
         }
     }
-    if (o.json) std::cout << json_dump(rec.to_dict(), 1) << '\n' << std::flush;
+    if (o.json) {
+        try {
+            // Streamed straight to stdout (StdoutBuf), one sequence at a time: the report is never held whole in
+            // memory; a closed pipe / write error is thrown by finish()
+            StdoutBuf sb;
+            std::ostream out(&sb);
+            rec.write_json(out);
+            out << '\n';
+            sb.finish();
+        } catch (const BrokenPipe&) {  // `--json | head`: silent exit 141, as for the alignment
+            return 141;
+        } catch (const std::exception& e) {
+            std::cerr << "coal: error: cannot write the report to standard output: " << e.what() << '\n';
+            return rc ? rc : 1;
+        }
+    }
     return rc;
 }

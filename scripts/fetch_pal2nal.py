@@ -45,7 +45,12 @@ def safe_extract(tar: tarfile.TarFile, dest: Path) -> None:
         target = (dest / m.name).resolve()
         if not str(target).startswith(str(dest)) or m.issym() or m.islnk():
             sys.exit(f"Refusing unsafe archive member: {m.name}")
-    tar.extractall(dest)
+    # Python 3.12+ (and security backports): say which extraction filter to use. "data" also refuses what the
+    # loop above checks and drops odd modes; 3.12/3.13 warn (DeprecationWarning) without it, 3.14 makes it the default.
+    if hasattr(tarfile, "data_filter"):
+        tar.extractall(dest, filter="data")
+    else:
+        tar.extractall(dest)
 
 
 def _download(url: str) -> bytes:

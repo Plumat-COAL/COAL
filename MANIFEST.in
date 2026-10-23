@@ -1,0 +1,3 @@
+# Source distribution contents (setuptools reads this in addition to its defaults).
+# The tests need fixtures and the whole repository (examples, benchmarks, coal-cpp), so they are not shipped.
+prune tests

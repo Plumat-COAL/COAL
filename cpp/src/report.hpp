@@ -6,6 +6,7 @@
 #include <chrono>
 #include <functional>
 #include <map>
+#include <ostream>
 #include <set>
 #include <string>
 #include <utility>
@@ -46,22 +47,26 @@ public:
     // The report owns the protein IDs (the pipeline reads them through ids()), one copy per run
     void set_inputs(std::vector<std::string>&& ids);
     const std::vector<std::string>& ids() const { return ids_; }
+    const std::vector<std::string>& dna_file_ids() const { return dna_file_ids_; }
     void set_dna_inputs(const std::vector<long long>& dna_counts, const std::vector<std::string>& dna_file_ids);
     // mode id / order / normalised; per_seq: per-protein "id"/"normalised" (empty unless normalised);
     // pairing[k] = the DNA record (index into dna_file_ids) of protein k
     void set_pairing(const std::string& mode, const std::vector<std::string>& per_seq,
                      const std::vector<size_t>& pairing, const std::vector<std::string>& notes);
     // warnings: thread_one's ("pepAlnPos ..."); notices: with the ID; failure: code + message (code empty = none).
-    // Returns the entry (nullptr for an ok sequence).
-    const Json* add_sequence(long long k, const std::string& pid, const std::vector<std::string>& warnings,
-                             const std::vector<std::string>& notices, const std::string& fail_code = "",
-                             const std::string& fail_msg = "");
+    // Returns the entry as one compact JSON line (json_dump(entry): the entries file's format), or nullptr for an ok
+    // sequence.
+    const std::string* add_sequence(long long k, const std::string& pid, const std::vector<std::string>& warnings,
+                                    const std::vector<std::string>& notices, const std::string& fail_code = "",
+                                    const std::string& fail_msg = "");
     void fail(const std::string& code, const std::string& message, bool has_seq_id);
     void set_output(const std::string& path, const std::string& sha, long long n);
     // End of run, inputs still open: break locations, mismatch patterns, genetic-code hint.
     void finish(const RowsFn& rows, const DnaFn& dna, bool aborted = false);
     std::vector<std::string> summary_lines() const;
-    Json to_dict() const;
+    // The report (json.dump(report.to_dict(), indent=1) of report.py, without the final newline), streamed: one
+    // sequence entry at a time, so a run of a million sequences does not hold a million entries at once.
+    void write_json(std::ostream& out) const;
     // --resume
     Json checkpoint_state() const;
     void restore(const Json& state, const std::vector<Json>& nonok, long long completed);
@@ -77,8 +82,12 @@ private:
     std::string command() const;
     Json entry_view(long long k, int aborted = -1) const;  // -1: aborted = no output
     long long first_fail() const;
-    std::map<std::string, long long> counts(const std::vector<Json>* entries = nullptr) const;
-    std::vector<Json> all_entries() const;
+    // Statuses per kinds_ (views = false), or as the entry views of a run that stopped show them (views = true, the
+    // report's summary: every sequence not_checked but the failed one)
+    std::map<std::string, long long> counts(bool views = false) const;
+    // A non-ok sequence's entry (parsed from its compact line) and the store that keeps it
+    Json entry(long long k) const;
+    void store(long long k, const Json& e);
     std::vector<Json> id_hints() const;
     std::vector<Json> hints() const;
     bool completed() const;
@@ -108,7 +117,16 @@ private:
     std::vector<Json> pair_hints_;
     bool partial_ = false;
     std::string kinds_;
-    std::map<long long, Json> entries_;
+    // Non-ok sequences only, as report.py keeps them (ok sequences are counted in kinds_), each as its compact
+    // JSON line rather than a Json tree (about a tenth of the memory per sequence), plus what the summary lines and
+    // the end-of-run step read from every entry without parsing it
+    struct Kept {
+        std::string json;
+        bool failed_nocol = false;  // status failed with no column message (break_event candidates)
+        bool real_mm = false;       // a definite (A/C/G/T) mismatch
+        bool unknown_aa = false;    // an unknown_aa message
+    };
+    std::map<long long, Kept> entries_;
     std::vector<long long> cols_, real_cols_;  // sorted unique
     bool has_error_ = false;
     Json error_;

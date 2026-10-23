@@ -5,6 +5,8 @@
 //   * -o: symlinks written through, FIFOs / devices / hard-linked files written in place, an existing file keeps
 //     its permissions, clear errors for symlink loops and missing folders.
 #pragma once
+#include <functional>
+#include <streambuf>
 #include <string>
 #include <utility>
 #include <vector>
@@ -19,6 +21,14 @@ void install_signal_handlers();
 // Temp files removed by the signal handlers (and by unregister_temp's caller as usual).
 void register_temp(const std::string& path);
 void unregister_temp(const std::string& path);
+
+// The folder for temporary files, searched as Python's tempfile.gettempdir() (TMPDIR, TEMP, TMP, /tmp, ..., cwd).
+std::string temp_dir();
+
+// strerror with a lower-case first letter ("no space left on device"), as the Python engine words reasons.
+std::string lower_reason(int err);
+// "cannot copy <name> to a temporary file in <folder>: <reason>" (pipeline.py _copy_error).
+std::string copy_error(const std::string& name, int err);
 
 // "[Errno N] <text>: '<path>'" (Python's OSError message) for the current errno.
 std::string os_error(int err, const std::string& path);
@@ -47,6 +57,23 @@ OutTarget resolve_output(const std::string& out);
 // "cannot write <out>: <reason in plain words>" (pipeline.py _output_error); out "" = stdout's temp file.
 std::string output_error(const std::string& out, int err);
 
+// Python's os.path.realpath (non-strict): the final component's symlinks followed, the folder resolved.
+std::string real_path(const std::string& p);
+// Whether two paths name the same file (by identity when both exist, else by resolved path).
+bool same_file(const std::string& a, const std::string& b);
+// Why --report REPORT cannot be written (it names an input or the -o output; a usage error), or "" (report.py
+// report_path_conflict).
+std::string report_path_conflict(const std::string& report, const std::vector<std::string>& inputs,
+                                 const std::string& out);
+// Why --report REPORT could not be written at the end: its folder does not exist / is not a folder (a usage error
+// before anything runs), or "" (report.py report_folder_missing).
+std::string report_folder_missing(const std::string& report);
+// Writes a JSON text as the alignment is written: temp file + rename through symlinks, in place for a FIFO, device
+// or hard-linked file (report.py write_json). Returns 0 or the errno.
+int write_json_file(const std::string& path, const std::string& text);
+// The same, with the text produced by `writer` (the run report is streamed one sequence at a time).
+int write_json_file(const std::string& path, const std::function<void(std::ostream&)>& writer);
+
 // Gives `tmp` the permissions `real` has (existing file) before it replaces it.
 void copy_mode(const std::string& real, const std::string& tmp);
 
@@ -54,5 +81,29 @@ void copy_mode(const std::string& real, const std::string& tmp);
 void write_stdout(const char* data, size_t n);
 // fflush(stdout) with the same error handling.
 void flush_stdout();
+
+// A std::streambuf onto standard output through write_stdout, so a report can be streamed to stdout one piece at
+// a time (`--json`) instead of being built whole in memory first. A stream error does not escape the streambuf
+// (the ostream would turn it into badbit): it is kept, the stream goes bad and stops producing output, and
+// finish() throws it (BrokenPipe for a closed pipe, std::runtime_error otherwise) after flushing.
+class StdoutBuf : public std::streambuf {
+public:
+    StdoutBuf();
+    ~StdoutBuf() override;
+    // Flushes; then rethrows the first error met while writing, if any (BrokenPipe / std::runtime_error).
+    void finish();
+
+protected:
+    int overflow(int ch) override;
+    std::streamsize xsputn(const char* s, std::streamsize n) override;
+    int sync() override;
+
+private:
+    bool send(const char* data, size_t n);  // false after an error (recorded once)
+    bool flush_buffer();
+    std::vector<char> buf_;
+    bool broken_ = false;
+    std::string error_;
+};
 
 }  // namespace coal

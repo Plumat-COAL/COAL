@@ -29,10 +29,13 @@ std::string open_error(const std::string& path);
 // The reader messages (src/coal/seqio.py NON_ASCII, NON_ASCII_ID, EMPTY_HEADER, BEFORE_HEADER_*).
 extern const char* const NON_ASCII;
 extern const char* const NON_ASCII_ID;
+extern const char* const CONTROL_CHAR;
 extern const char* const EMPTY_HEADER;
 extern const char* const BEFORE_HEADER_PROTEIN;
 extern const char* const BEFORE_HEADER_DNA;
 std::string duplicate_message(const std::string& where, const std::string& rid);
+// An ID over 200 characters as stderr shows it: the first 100 and the last 20 (report.py short_id).
+std::string short_id(const std::string& rid);
 // Python str.split() whitespace (ASCII).
 bool py_space(unsigned char c);
 
@@ -100,6 +103,7 @@ public:
 
 private:
     void scan(int fno, const std::string& path);
+    long long line_of(int f, long long offset) const;
     std::vector<std::string> paths_;
     std::vector<std::string> ids_;
     std::unordered_map<std::string, size_t> pos_;

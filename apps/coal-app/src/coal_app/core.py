@@ -8,6 +8,7 @@ with the same schema (``coal.report/1``) from COAL's stderr instead.
 """
 from __future__ import annotations
 
+import errno
 import hashlib
 import html
 import json
@@ -137,14 +138,33 @@ def prune_runs(max_age_hours: float = RUNS_MAX_AGE_HOURS) -> int:
     return removed
 
 
+def ensure_runs_dir() -> str:
+    """Create RUNS_DIR if needed and return it. An unusable folder (COAL_RUNS_DIR under a path that cannot hold
+    one, an existing file, no permission) is a ValueError with one plain sentence, so the GUI shows a banner, the
+    MCP tool a tool error and the launcher a message instead of a traceback."""
+    try:
+        os.makedirs(RUNS_DIR, exist_ok=True)
+        if not os.access(RUNS_DIR, os.W_OK):
+            raise PermissionError(errno.EACCES, os.strerror(errno.EACCES))
+    except OSError as e:
+        raise ValueError(f"Could not create the results folder {RUNS_DIR}: {e.strerror or e}. "
+                         "Set COAL_RUNS_DIR to a folder COAL can write to.") from e
+    return RUNS_DIR
+
+
 def new_run_dir() -> str:
-    """A fresh folder for one run's outputs inside RUNS_DIR (old runs are pruned first)."""
-    os.makedirs(RUNS_DIR, exist_ok=True)
+    """A fresh folder for one run's outputs inside RUNS_DIR (old runs are pruned first). ValueError when RUNS_DIR
+    cannot be used (see ensure_runs_dir)."""
+    ensure_runs_dir()
     prune_runs()
-    d = tempfile.mkdtemp(prefix="run_", dir=RUNS_DIR)
-    with open(os.path.join(d, RUN_MARKER), "w", encoding="utf-8") as fh:
-        fh.write("Made by COAL; this folder is deleted automatically after "
-                 f"{RUNS_MAX_AGE_HOURS} hours.\n")
+    try:
+        d = tempfile.mkdtemp(prefix="run_", dir=RUNS_DIR)
+        with open(os.path.join(d, RUN_MARKER), "w", encoding="utf-8") as fh:
+            fh.write("Made by COAL; this folder is deleted automatically after "
+                     f"{RUNS_MAX_AGE_HOURS} hours.\n")
+    except OSError as e:
+        raise ValueError(f"Could not create a run folder in {RUNS_DIR}: {e.strerror or e}. "
+                         "Set COAL_RUNS_DIR to a folder COAL can write to.") from e
     return d
 
 

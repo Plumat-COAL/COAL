@@ -40,6 +40,13 @@ class TestSettingsFile(SettingsDirCase):
         self.assertEqual(data, dict(settings.DEFAULTS, strict=True))  # only the valid value kept
         self.assertEqual(settings.clean([1, 2]), settings.DEFAULTS)
 
+    def test_non_utf8_file_is_damaged_not_a_crash(self):
+        with open(settings.settings_path(), "wb") as fh:
+            fh.write(b"\xff\xfe\x00garbage")
+        data, note = settings.load()
+        self.assertEqual(data, settings.DEFAULTS)
+        self.assertIn("damaged", note)
+
     def test_format_the_engine_cannot_write_is_not_kept(self):
         self.assertEqual(settings.clean({"output_format": "paml"}, formats=["fasta"])["output_format"], "fasta")
 

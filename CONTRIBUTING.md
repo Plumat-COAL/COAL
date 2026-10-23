@@ -10,13 +10,16 @@ app in `apps/coal-app`. This page is the short version of how to work on it; the
 git clone https://github.com/Plumat-COAL/COAL && cd COAL
 python -m venv .venv && . .venv/bin/activate          # Windows: .venv\Scripts\activate
 python -m pip install -e . -e "apps/coal-app[gui]"      # the engine (coal-align) and the app (coal-align-app)
+python -m pip install psutil                            # tests only (the worker-process tests)
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release -j 4   # coal-cpp
 export COAL_CPP_BIN=$PWD/build/coal-cpp                 # Windows: build\Release\coal-cpp.exe
 ```
 
 Python 3.10+; a C++17 compiler and CMake 3.16+ for `coal-cpp`; Perl 5 only for the PAL2NAL comparison. The `[mcp]`
 extra may not install next to `[gui]` (pins): use a second environment for it. `numpy` (optional, `[fast]`) and
-`pyyaml` (the workflow checks in `tests/test_docs_*`) are worth installing in a development environment.
+`pyyaml` (the workflow checks in `tests/test_docs_*`) are worth installing in a development environment; `psutil`
+is needed only by the tests that watch COAL's worker processes (`tests/test_robustness.py`,
+`tests/test_engine_extras.py`), which skip without it. It is not a dependency of the package.
 
 `COAL_CPP_BIN` tells the tests where the binary is (default `./build/coal-cpp`); without it the C++ tests skip.
 `COAL_IMPL=cpp` makes the reference comparison run the C++ engine; at run time `coal` hands large inputs to
@@ -88,7 +91,7 @@ An *unexplained* difference found by the fuzz is a bug in COAL until shown other
 - One topic per PR; tests for the change (the examples in `docs/python-api.md` and `docs/report-schema.md` are
   tests too: `tests/test_python_api.py`, `tests/test_report_schema.py`).
 - Run `COAL_CPP_BIN=$PWD/build/coal-cpp python -m unittest discover -s tests` and the app tests before pushing. CI
-  runs them on Linux, Windows and macOS with Python 3.10 and 3.13; the C++ build uses warnings as errors
+  runs them on Linux, Windows and macOS with Python 3.10 and 3.13, and on Linux with 3.14; the C++ build uses warnings as errors
   (`-DCOAL_WARNINGS_AS_ERRORS=ON`).
 - Output bytes, exit codes, the report schema (`coal.report/1`: additive only) and the public Python API are
   covered by the versioning promise in [docs/python-api.md](docs/python-api.md#versioning-promise): a change to any

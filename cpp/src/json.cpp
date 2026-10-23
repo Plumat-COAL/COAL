@@ -201,10 +201,17 @@ std::string json_dump(const Json& j, int indent) {
     return out;
 }
 
+void json_dump_to(std::string& out, const Json& j, int indent, int depth) { dump(out, j, indent, depth); }
+
 namespace {
+// Nesting deeper than this is malformed input (a checkpoint or report never nests more than a few levels):
+// the parser recurses once per level, so without a limit a file of 100,000 '[' overflows the stack.
+constexpr int MAX_DEPTH = 64;
+
 struct Parser {
     const std::string& t;
     size_t p = 0;
+    int depth = 0;
     [[noreturn]] void fail() { throw std::runtime_error("malformed JSON at offset " + std::to_string(p)); }
     void ws() {
         while (p < t.size() && (t[p] == ' ' || t[p] == '\n' || t[p] == '\r' || t[p] == '\t')) ++p;
@@ -237,6 +244,8 @@ struct Parser {
                 case 'f': s += '\f'; break;
                 case 'u': {
                     if (p + 4 > t.size()) fail();
+                    for (size_t k = p; k < p + 4; ++k)
+                        if (!isxdigit((unsigned char)t[k])) fail();
                     unsigned v = (unsigned)std::stoul(t.substr(p, 4), nullptr, 16);
                     p += 4;
                     if (v < 0x80) s += char(v);
@@ -258,6 +267,12 @@ struct Parser {
         return s;
     }
     Json value() {
+        if (++depth > MAX_DEPTH) fail();
+        Json v = value_at_depth();
+        --depth;
+        return v;
+    }
+    Json value_at_depth() {
         ws();
         if (p >= t.size()) fail();
         char c = t[p];
@@ -324,8 +339,12 @@ struct Parser {
         }
         if (p == q) fail();
         std::string num = t.substr(q, p - q);
-        if (flt) return Json(std::stod(num));
-        return Json((long long)std::stoll(num));
+        try {
+            if (flt) return Json(std::stod(num));
+            return Json((long long)std::stoll(num));
+        } catch (const std::exception&) {  // not a number, or out of range
+            fail();
+        }
     }
 };
 }  // namespace
