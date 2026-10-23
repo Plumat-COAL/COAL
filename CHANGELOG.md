@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased
+
+Found by the stress test of 2026-10-23 (`docs/stress-test-2026-10-23.md`), both engines unless said:
+
+- **Two runs writing the same `-o` file at the same time are refused** instead of sharing one `<out>.coal-partial`
+  file, which could end a run with exit 0 and an empty or another run's output. A run with `-o` keeps
+  `<out>.coal-lock` while it runs; a lock left by a killed run is replaced once its process is gone.
+- **Thousands of DNA files:** at most about as many files as the open-file limit allows stay open (least recently
+  used closed first, the limit raised towards its hard limit when needed) and their read buffers together take
+  about 64 MB at most. 1,000 files failed with "too many open files" in the Python engine with workers, 60,000 open
+  files took 8 GB (129 KB each on Python 3.14), and more than 65,535 files overflowed a 16-bit file number: a
+  traceback in the Python engine, a silent wrap in coal-cpp.
+- **coal-cpp: the exact-fit search is linear in the DNA** (a string search over the translated frames) instead of
+  trying every start codon by codon: a 200,000-residue low-complexity gene behind a near-copy of itself took 138 s
+  (an hour at 1,000,000 residues), now well under a second, as in the Python engine. Same answer everywhere
+  (the differential tests and the engine fuzz).
+- **A lone `\r` ends a line anywhere in a DNA file** (universal newlines, as the protein reader): the style used to
+  be decided from the first 64 kB, so a file whose line ends change part-way lost every record after the first lone
+  `\r` beyond that and failed with a misleading count error. PAL2NAL v14 reads such files.
+- **`nohup coal ...` survives the terminal closing:** an already ignored SIGHUP stays ignored (the handler used to
+  replace nohup's setting; the run died with exit 129).
+- **Out of memory in the main process is one `coal: error: out of memory ...` line** (exit 1, report code
+  `out_of_memory`) instead of a traceback (a worker dying of it was already handled).
+- **App: `python -m coal_app` no longer dies on a non-UTF-8 console** (Gradio's MCP banner emoji on a cp1252
+  Windows console or pipe).
+- `tests/tools/stress_*.py`: the stress-test generator, harness and helpers; `tests/test_stress_findings.py`.
+
 ## 0.5.0
 
 - **Run report: a new top-level `engine` field** (`coal.report/1`, next to `source`): `"coal-python"` or

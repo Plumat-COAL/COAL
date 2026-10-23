@@ -183,10 +183,127 @@ bool matches_at(const Target& t, long long s, const std::vector<Token>& toks) {
     return true;
 }
 
-// Leftmost start where every token matches consecutively, or -1.
-long long find(const Target& t, const std::vector<Token>& toks) {
+// Every occurrence of `pat` in `txt`, in increasing order, until `hit(position)` returns true (Knuth-Morris-Pratt:
+// linear in the text whatever it holds).
+template <class F>
+static void kmp_each(const std::string& txt, const std::string& pat, F hit) {
+    const size_t m = pat.size();
+    if (m == 0 || txt.size() < m) return;
+    std::vector<size_t> fail(m, 0);
+    for (size_t i = 1, k = 0; i < m; ++i) {
+        while (k && pat[i] != pat[k]) k = fail[k - 1];
+        if (pat[i] == pat[k]) ++k;
+        fail[i] = k;
+    }
+    for (size_t i = 0, k = 0; i < txt.size(); ++i) {
+        while (k && txt[i] != pat[k]) k = fail[k - 1];
+        if (txt[i] == pat[k]) ++k;
+        if (k == m) {
+            if (hit(i + 1 - m)) return;
+            k = fail[k - 1];
+        }
+    }
+}
+
+// The longest run of ordinary residues (not X, NORMAL mode) among the first RUN_WINDOW tokens, at most RUN_MAX
+// long, with its nucleotide offset from the pattern start (core.py _plain_run); "" when shorter than RUN_MIN.
+static std::string plain_run(const std::vector<Token>& toks, long long& run_off) {
+    constexpr size_t RUN_WINDOW = 24, RUN_MIN = 4, RUN_MAX = 8;
+    std::string cur, best;
+    long long off = 0, cur_off = 0, best_off = 0;
+    for (size_t i = 0; i < toks.size() && i < RUN_WINDOW; ++i) {
+        const Token& tk = toks[i];
+        if (tk.residue && !tk.any && tk.mode == NORMAL) {
+            if (cur.empty()) cur_off = off;
+            cur.push_back(tk.aa);
+            if (cur.size() > best.size()) {
+                best = cur;
+                best_off = cur_off;
+            }
+            if (cur.size() >= RUN_MAX) break;
+        } else {
+            cur.clear();
+        }
+        off += tk.n;
+    }
+    if (best.size() < RUN_MIN) return "";
+    run_off = best_off;
+    return best;
+}
+
+// Leftmost start where every token matches consecutively, or -1. Three ways, all giving the same answer as
+// matches_at at every start (core.py _find):
+//  1. every token an ordinary residue (the first may carry its first-Met mode): the pattern is a string search in
+//     the three translated frames, linear in the DNA. Trying every start and verifying it codon by codon was
+//     quadratic for a long low-complexity gene placed after a near-copy of itself (138 s at 200,000 residues);
+//  2. otherwise, a run of ordinary residues near the start: its occurrences in the frames are the only possible
+//     starts, each verified (the last checkable residue first, then the whole pattern);
+//  3. no such run (e.g. only X or digits): every start, filtered on the first checkable residue.
+long long find(Target& t, const std::vector<Token>& toks) {
     long long last = (long long)t.code.size() - total_length(toks);
     if (last < 0) return -1;
+    if (toks.empty()) return 0;
+    bool plain = true;
+    for (size_t i = 0; i < toks.size() && plain; ++i)
+        if (!toks[i].residue || toks[i].any || (i > 0 && toks[i].mode != NORMAL)) plain = false;
+    if (plain) {
+        t.build_frames();
+        const bool first_special = toks[0].mode != NORMAL;  // its codon is checked with its own allowed set
+        std::string pat;
+        pat.reserve(toks.size());
+        for (size_t i = first_special ? 1 : 0; i < toks.size(); ++i) pat.push_back(toks[i].aa);
+        long long best = -1;
+        for (int f = 0; f < 3; ++f) {
+            const std::string& tr = t.frames[f];
+            if (pat.empty()) {  // one first-Met token: the first codon of this frame it accepts
+                for (size_t k = 0; k < tr.size(); ++k) {
+                    long long st = f + 3 * (long long)k;
+                    if (st > last) break;
+                    if (t.ok(st, toks[0].allowed)) {
+                        if (best < 0 || st < best) best = st;
+                        break;
+                    }
+                }
+                continue;
+            }
+            kmp_each(tr, pat, [&](size_t k) {
+                long long st = f + 3 * (long long)k - (first_special ? 3 : 0);
+                if (st < 0) return false;
+                if (st > last) return true;
+                if (first_special && !t.ok(st, toks[0].allowed)) return false;
+                if (best < 0 || st < best) best = st;
+                return true;
+            });
+        }
+        return best;
+    }
+    long long run_off = 0;
+    const std::string run = plain_run(toks, run_off);
+    if (!run.empty()) {
+        t.build_frames();
+        std::vector<long long> cands;
+        for (int f = 0; f < 3; ++f)
+            kmp_each(t.frames[f], run, [&](size_t k) {
+                long long st = f + 3 * (long long)k - run_off;
+                if (st >= 0 && st <= last) cands.push_back(st);
+                return false;
+            });
+        std::sort(cands.begin(), cands.end());
+        const Token* lastr = nullptr;
+        long long last_off = 0, o = 0;
+        for (const Token& tk : toks) {
+            if (tk.residue && !tk.any) {
+                lastr = &tk;
+                last_off = o;
+            }
+            o += tk.n;
+        }
+        for (long long st : cands) {
+            if (lastr && !residue_ok(t, st + last_off, *lastr)) continue;
+            if (matches_at(t, st, toks)) return st;
+        }
+        return -1;
+    }
     // Filter on the first checkable residue (fixed offset from the start).
     long long off = 0;
     const Token* first = nullptr;

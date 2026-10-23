@@ -22,6 +22,8 @@
 #include <fcntl.h>
 #include <io.h>
 #include <process.h>
+#include <sys/stat.h>
+#include <windows.h>
 #define COAL_UNLINK _unlink
 #define COAL_WRITE _write
 #define COAL_EXIT _exit
@@ -476,6 +478,72 @@ int write_json_file(const std::string& path, const std::function<void(std::ostre
     }
     unregister_temp(tmp);
     return err;
+}
+
+static bool pid_alive(long long pid) {
+    if (pid <= 0) return false;
+#ifdef _WIN32
+    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, (DWORD)pid);
+    if (!h) return false;
+    DWORD code = 0;
+    bool alive = !GetExitCodeProcess(h, &code) || code == STILL_ACTIVE;
+    CloseHandle(h);
+    return alive;
+#else
+    if (::kill((pid_t)pid, 0) == 0) return true;
+    return errno == EPERM;
+#endif
+}
+
+std::string take_output_lock(const std::string& real, const std::string& name) {
+    const std::string path = real + ".coal-lock";
+    for (int attempt = 0; attempt < 2; ++attempt) {
+#ifdef _WIN32
+        int fd = ::_open(path.c_str(), _O_WRONLY | _O_CREAT | _O_EXCL, _S_IREAD | _S_IWRITE);
+#else
+        int fd = ::open(path.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0644);
+#endif
+        if (fd >= 0) {
+            const std::string pid = std::to_string((long long)
+#ifdef _WIN32
+                                                       _getpid()
+#else
+                                                       ::getpid()
+#endif
+                                                       ) + "\n";
+            (void)!COAL_WRITE(fd, pid.data(), (unsigned)pid.size());
+#ifdef _WIN32
+            ::_close(fd);
+#else
+            ::close(fd);
+#endif
+            register_temp(path);
+            return path;
+        }
+        const int err = errno;
+        if (err != EEXIST) throw CoalError(output_error(name, err), "file_error");
+        long long pid = -1;
+        {
+            std::ifstream in(path);
+            if (!(in >> pid)) pid = -1;
+        }
+        if (pid > 0 && pid_alive(pid))
+            throw CoalError("another COAL run (process " + std::to_string(pid) + ") is writing " + name +
+                                ": wait for it to finish, or write to another file (if that process is gone, remove " +
+                                path + ")",
+                            "file_error");
+        if (attempt) throw CoalError("cannot write " + name + ": " + path + " is in the way and cannot be removed", "file_error");
+        std::error_code ec;
+        fs::remove(path, ec);
+    }
+    return path;  // not reached
+}
+
+void release_output_lock(const std::string& path) {
+    if (path.empty()) return;
+    std::error_code ec;
+    fs::remove(path, ec);
+    unregister_temp(path);
 }
 
 void copy_mode(const std::string& real, const std::string& tmp) {

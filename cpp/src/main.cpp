@@ -1025,6 +1025,8 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         }
     }
     const bool direct = !o.out.empty() && target.direct;
+    // One run at a time per output file (the partial and checkpoint files next to it have fixed names)
+    const std::string out_lock = (!o.out.empty() && !direct) ? take_output_lock(target.real, o.out) : std::string();
     // A checkpoint only for an output that is (or will be) a regular file - hard-linked
     // files included (written in place at the end) - and inputs that are regular files
     std::error_code ex_ec;
@@ -1080,6 +1082,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         std::function<void()> fn;
         ~Cleanup() { fn(); }
     } cleanup{[&]() {
+        release_output_lock(out_lock);
         if (ck) {
             std::error_code ec;
             // otherwise (crash, kill, disk full ...) keep partial + checkpoint for --resume, if one was written

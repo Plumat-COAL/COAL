@@ -102,6 +102,16 @@ killed, so a pipeline reading COAL's output never waits on an orphaned worker.
   memory (about 0.6 KB each with `coal-cpp`, 1.4 KB with the Python engine); `--report`/`--json` is written one
   sequence at a time, so it adds little.
 - `-q --progress` still prints the progress lines (`-q` silences warnings, notices and the summary, not progress).
+- One run at a time per output file: a run with `-o` keeps `<out>.coal-lock` (holding its process number) next to
+  the output while it runs, because the partial output and checkpoint files it writes there have fixed names. A
+  second run writing the same file at the same time is refused before it starts (`coal: error: another COAL run
+  (process 12345) is writing out.fa: wait for it to finish, or write to another file ...`, exit 1); a lock left
+  behind by a run that was killed is replaced once that process is gone. Different output files in one folder never
+  wait for each other.
+- Many DNA files: at most about as many files as the open-file limit allows stay open at once (the least recently
+  used is closed first; the limit is raised towards its hard limit when the files need it), with read buffers that
+  together take about 64 MB at most. Thousands of DNA files are fine; a few more files than records in them is the
+  slow way to give the data.
 - The `--resume` checkpoint is written about every 2 seconds of processing; under heavy I/O contention it can be
   later, since each checkpoint flushes the partial output to disk first (best effort, never less than the data the
   checkpoint describes).

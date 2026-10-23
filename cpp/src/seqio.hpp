@@ -3,6 +3,7 @@
 #pragma once
 #include <cstdint>
 #include <fstream>
+#include <list>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -107,10 +108,18 @@ private:
     std::vector<std::string> paths_;
     std::vector<std::string> ids_;
     std::unordered_map<std::string, size_t> pos_;
-    std::vector<uint16_t> fno_;
+    std::vector<uint32_t> fno_;  // (a uint16_t wrapped silently above 65,535 files)
     std::vector<long long> start_, end_;
     std::vector<std::unique_ptr<std::ifstream>> fh_;
+    // At most open_file_budget() files stay open: least recently used first (the Python engine's policy)
+    std::list<int> open_order_;
+    std::vector<std::list<int>::iterator> where_;
+    size_t budget_ = 0;
     std::string raw_;
 };
+
+// How many DNA files may stay open at once: the open-file limit (raised towards its hard limit when the files need
+// it) minus a headroom for the output and temp files, never below 16 (seqio.py open_file_budget).
+size_t open_file_budget(size_t nfiles);
 
 }  // namespace coal

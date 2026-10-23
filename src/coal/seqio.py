@@ -6,6 +6,7 @@ import errno
 import os
 import re
 from array import array
+from collections import OrderedDict
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -260,12 +261,46 @@ def _any_newline_lines(fh):
 _NON_LETTER_BYTES = bytes(b for b in range(256) if b not in _LETTERS)
 
 
+# Descriptors kept free for the worker pool's pipes, the output and its temp files when DNA files stay open.
+OPEN_FILE_HEADROOM = 96
+
+
+def open_file_budget(nfiles: int) -> int:
+    """How many DNA files may stay open at once: the open-file limit, raised towards its hard limit when the
+    files need it, minus a headroom for pipes and temp files (never below 16). With 1,000 DNA files the default
+    limit of 1,024 was hit as soon as the worker pool started; the same policy in coal-cpp (seqio.cpp)."""
+    headroom = OPEN_FILE_HEADROOM + 4 * (os.cpu_count() or 1)
+    try:
+        import resource
+    except ImportError:  # Windows: the C runtime allows 8,192 low-level descriptors; stay well under it
+        return 1024
+    try:
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    except (ValueError, OSError):
+        return 512
+    want = nfiles + headroom
+    if soft != resource.RLIM_INFINITY and soft < want:
+        new = want if hard == resource.RLIM_INFINITY else min(hard, want)
+        if new > soft:
+            try:
+                resource.setrlimit(resource.RLIMIT_NOFILE, (new, hard))
+                soft = new
+            except (ValueError, OSError):
+                pass
+    if soft == resource.RLIM_INFINITY:
+        return max(16, nfiles)
+    return max(16, soft - headroom)
+
+
 class DnaIndex:
     """Byte-offset index of one or more DNA FASTA files.
 
     Only IDs and offsets are kept in memory; each sequence is read from disk
     when needed. Sequences in the order they will be requested (the usual case)
-    are read sequentially.
+    are read sequentially. At most open_file_budget() files stay open (the least
+    recently used is closed first), with read buffers sized so that all of them
+    together take about 64 MB at most: with thousands of files, one 128 KB
+    buffer per file (Python 3.14's default) was 129 KB of memory per file.
     """
 
     def __init__(self, paths):
@@ -277,7 +312,9 @@ class DnaIndex:
         self.pos: dict[str, int] = {}
         for fno, path in enumerate(self.paths):
             self._scan(fno, path)
-        self._fh: dict[int, object] = {}
+        self._fh: OrderedDict[int, object] = OrderedDict()  # open files, least recently used first
+        self._budget = 0  # computed when the first file is opened (after the scan, which opens files one at a time)
+        self._bufsize = max(4096, min(1 << 17, (64 << 20) // max(1, len(self.paths))))
 
     def _scan(self, fno: int, path: str) -> None:
         # A BOM is skipped, a lone \r also ends a line wherever it is, and '#' lines before the first header are
@@ -334,7 +371,14 @@ class DnaIndex:
         fno, a, b = self.fno[i], self.start[i], self.end[i]
         fh = self._fh.get(fno)
         if fh is None:
-            fh = self._fh[fno] = open(self.paths[fno], "rb")
+            if not self._budget:
+                self._budget = open_file_budget(len(self.paths))
+            if len(self._fh) >= self._budget:
+                _, old = self._fh.popitem(last=False)  # the least recently used file
+                old.close()
+            fh = self._fh[fno] = open(self.paths[fno], "rb", buffering=self._bufsize)
+        elif len(self._fh) > 1:
+            self._fh.move_to_end(fno)
         fh.seek(a)
         raw = fh.read(b - a)
         if len(raw) != b - a:

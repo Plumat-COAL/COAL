@@ -686,6 +686,77 @@ def _lower_reason(e: OSError) -> str:
     return why[:1].lower() + why[1:]
 
 
+def _pid_alive(pid: int) -> bool:
+    """Whether a process with this id exists (a lock left by a killed run names a process that is gone)."""
+    if pid <= 0:
+        return False
+    if _WINDOWS:
+        import ctypes
+        k32 = ctypes.windll.kernel32
+        h = k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not h:
+            return False
+        try:
+            code = ctypes.c_ulong()
+            if not k32.GetExitCodeProcess(h, ctypes.byref(code)):
+                return True
+            return code.value == 259  # STILL_ACTIVE
+        finally:
+            k32.CloseHandle(h)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _lock_pid(path: str) -> int | None:
+    try:
+        with open(path, encoding="ascii", errors="replace") as fh:
+            return int(fh.read(64).split()[0])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def take_output_lock(real_out: str, name: str) -> str:
+    """Create `<out>.coal-lock` holding this process's id, or refuse: two runs writing the same -o file at the same
+    time shared one `<out>.coal-partial` (the --resume file), so one of them could finish with the other's output
+    or an empty file. A lock left by a run that was killed (its process is gone) is replaced. The same words and
+    file in coal-cpp (sysio.cpp take_output_lock)."""
+    path = real_out + ".coal-lock"
+    for attempt in range(2):
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+        except FileExistsError:
+            pid = _lock_pid(path)
+            if pid is not None and pid != os.getpid() and _pid_alive(pid):
+                raise CoalError(f"another COAL run (process {pid}) is writing {name}: wait for it to finish, or write to another file (if that process is gone, remove {path})", code="file_error") from None
+            if attempt:
+                raise CoalError(f"cannot write {name}: {path} is in the way and cannot be removed",
+                                code="file_error") from None
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+            continue
+        except OSError as e:  # e.g. a folder that cannot be written: the usual output error
+            raise _output_error(name, e) from None
+        with os.fdopen(fd, "w") as fh:
+            fh.write(f"{os.getpid()}\n")
+        return path
+    return path  # not reached
+
+
+def release_output_lock(path: str | None) -> None:
+    if path:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
 def _output_error(out_path, e: OSError) -> CoalError:
     """The error for an output (or its partial file) that cannot be created, naming the user's -o path (not COAL's
     hidden temp file) in plain words. ENOENT in a folder that exists (e.g. /proc) is not "folder ... does not
@@ -843,6 +914,8 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
         existing = bool(real_out) and os.path.isfile(real_out)
         direct = bool(real_out) and os.path.exists(real_out) and (
             not existing or os.stat(real_out).st_nlink > 1)
+        # One run at a time per output file (the partial and checkpoint files next to it have fixed names)
+        lock = take_output_lock(real_out, out_path) if real_out and not direct else None
 
         # Checkpoints for --resume (checkpoint.py). Kept only for an output that is (or will be) a regular file and
         # inputs that are regular files: the partial output <real out>.coal-partial (rows: .coal-stage) lives next
@@ -1109,5 +1182,6 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                 # them, so --resume can continue; otherwise they are removed
                 if finished or failed or not os.path.exists(ck.path):
                     ck.remove()
+            release_output_lock(lock)
     finally:
         dna.close()

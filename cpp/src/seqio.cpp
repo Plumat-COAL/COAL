@@ -5,6 +5,10 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
+#include <thread>
+#ifndef _WIN32
+#include <sys/resource.h>
+#endif
 #include <filesystem>
 
 namespace coal {
@@ -328,9 +332,32 @@ std::string clustal_mask(const std::string& path) {
 
 // ------------------------------------------------------------------ DNA index
 
+size_t open_file_budget(size_t nfiles) {
+    const size_t headroom = 96 + 4 * (size_t)std::max(1u, std::thread::hardware_concurrency());
+#ifdef _WIN32
+    (void)nfiles;
+    return 1024;  // the C runtime allows 8,192 low-level descriptors; stay well under it
+#else
+    struct rlimit rl;
+    if (getrlimit(RLIMIT_NOFILE, &rl) != 0) return 512;
+    const rlim_t want = (rlim_t)(nfiles + headroom);
+    if (rl.rlim_cur != RLIM_INFINITY && rl.rlim_cur < want) {
+        rlim_t target = rl.rlim_max == RLIM_INFINITY ? want : std::min(rl.rlim_max, want);
+        if (target > rl.rlim_cur) {
+            struct rlimit nl = rl;
+            nl.rlim_cur = target;
+            if (setrlimit(RLIMIT_NOFILE, &nl) == 0) rl.rlim_cur = target;
+        }
+    }
+    if (rl.rlim_cur == RLIM_INFINITY) return std::max<size_t>(16, nfiles);
+    return (size_t)rl.rlim_cur > headroom + 16 ? (size_t)rl.rlim_cur - headroom : 16;
+#endif
+}
+
 DnaIndex::DnaIndex(const std::vector<std::string>& paths) : paths_(paths) {
     for (size_t f = 0; f < paths_.size(); ++f) scan((int)f, paths_[f]);
     fh_.resize(paths_.size());
+    where_.resize(paths_.size());
 }
 
 void DnaIndex::scan(int fno, const std::string& path) {
@@ -363,7 +390,7 @@ void DnaIndex::scan(int fno, const std::string& path) {
             size_t j = i;
             while (j < line.size() && !bytes_space((unsigned char)line[j])) ++j;
             if (start >= 0) {
-                fno_.push_back((uint16_t)fno);
+                fno_.push_back((uint32_t)fno);
                 start_.push_back(start);
                 end_.push_back(line_off);
             }
@@ -429,7 +456,7 @@ void DnaIndex::scan(int fno, const std::string& path) {
     }
     if (pending_cr || !line_start) finish_line();
     if (start >= 0) {
-        fno_.push_back((uint16_t)fno);
+        fno_.push_back((uint32_t)fno);
         start_.push_back(start);
         end_.push_back(offset);
     }
@@ -459,8 +486,20 @@ long long DnaIndex::line_of(int f, long long offset) const {
 }
 
 std::string DnaIndex::get(size_t i) {
-    int f = fno_[i];
-    if (!fh_[f]) fh_[f] = std::make_unique<std::ifstream>(paths_[f], std::ios::binary);
+    int f = (int)fno_[i];
+    if (!fh_[f]) {
+        if (budget_ == 0) budget_ = open_file_budget(paths_.size());
+        if (open_order_.size() >= budget_) {  // close the least recently used file
+            int victim = open_order_.front();
+            open_order_.pop_front();
+            fh_[(size_t)victim].reset();
+        }
+        fh_[f] = std::make_unique<std::ifstream>(paths_[f], std::ios::binary);
+        open_order_.push_back(f);
+        where_[f] = std::prev(open_order_.end());
+    } else if (open_order_.size() > 1 && std::next(where_[f]) != open_order_.end()) {
+        open_order_.splice(open_order_.end(), open_order_, where_[f]);  // most recently used last
+    }
     std::ifstream& in = *fh_[f];
     // Never fall back to the previous record's bytes: a file that cannot be (re)opened, or that
     // shrank or changed after it was indexed, is an error, not another gene's DNA.
