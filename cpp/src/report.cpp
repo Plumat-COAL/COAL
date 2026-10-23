@@ -877,8 +877,14 @@ const std::string* RunReport::add_sequence(long long k, const std::string& pid, 
     Json arr = Json::array();
     for (auto& m : msgs) arr.push(m);
     e.set("messages", arr);
-    store(k, e);
     set_kind(k, kind_char(gene_kind(e)));
+    // With -q and no report nothing reads the entries (no summary lines, no hint, no report): keep none, as
+    // report.py add_sequence; the line is still handed to the --resume entries file
+    if (!keep_entries && !want_hint) {
+        last_line_ = json_dump(e);
+        return &last_line_;
+    }
+    store(k, e);
     return &entries_[k].json;
 }
 
@@ -939,10 +945,11 @@ void RunReport::restore(const Json& state, const std::vector<Json>& nonok, long 
     if (const Json* c = state.get("real_cols"))
         for (auto& x : c->a) add_sorted(real_cols_, x.as_int());
     entries_.clear();
-    for (auto& e : nonok) {
-        long long idx = e.get("index") ? e.get("index")->as_int() : -1;
-        if (idx >= 0 && idx < completed) store(idx, e);
-    }
+    if (keep_entries || want_hint)  // (as add_sequence: nothing is read from them otherwise)
+        for (auto& e : nonok) {
+            long long idx = e.get("index") ? e.get("index")->as_int() : -1;
+            if (idx >= 0 && idx < completed) store(idx, e);
+        }
     resumed_from_ = completed;
 }
 

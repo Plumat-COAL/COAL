@@ -279,6 +279,44 @@ class FileListsInMessages(unittest.TestCase):
                                 (engine, p.stderr[:200]))
 
 
+class QuietKeepsNoEntries(unittest.TestCase):
+    """Stress-test finding: a million mismatching genes kept every per-codon message in memory (about 150 KB per
+    gene of unrelated DNA). With -q and no report nothing reads them, so the run report keeps none; the output and
+    exit status are unchanged, and both engines agree."""
+
+    def test_report_object_keeps_nothing_under_quiet(self):
+        from coal.report import RunReport
+        warns = [f"pepAlnPos {c}: A does not correspond to TTT" for c in range(1, 401)]
+        quiet = RunReport([], "p", ["n"], None, "fasta", 1, False, False, keep_entries=False, hint=False)
+        loud = RunReport([], "p", ["n"], None, "fasta", 1, False, False, keep_entries=False, hint=True)
+        for k in range(50):
+            e1 = quiet.add_sequence(k, f"s{k}", warns, [f"s{k}: protein and DNA are probably unrelated: 400 of 400"])
+            e2 = loud.add_sequence(k, f"s{k}", warns, [f"s{k}: protein and DNA are probably unrelated: 400 of 400"])
+            self.assertEqual(e1, e2)  # the --resume entries file gets the same line
+        self.assertEqual(len(quiet.entries), 0)
+        self.assertEqual(len(loud.entries), 50)
+        self.assertEqual(bytes(quiet.kinds), bytes(loud.kinds))
+        self.assertEqual(quiet.counts(), loud.counts())
+
+    def test_quiet_output_unchanged_on_unrelated_dna(self):
+        rng = random.Random(9)
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            n = 200
+            genes = ["".join(rng.choice(["GCT", "AAA", "CTG", "GAC"]) for _ in range(30)) for _ in range(n)]
+            (d / "pep.fasta").write_text("".join(f">s{k}\nM" + "W" * 29 + "\n" for k in range(n)))
+            (d / "nuc.fasta").write_text("".join(f">s{k}\n{genes[k]}\n" for k in range(n)))
+            outs = {}
+            for engine in ("python", "cpp") if HAVE_CPP else ("python",):
+                p = run(engine, ["pep.fasta", "nuc.fasta", "-output", "fasta"], tmp)
+                q = run(engine, ["pep.fasta", "nuc.fasta", "-output", "fasta", "-q"], tmp)
+                self.assertEqual((p.returncode, q.returncode, q.stderr), (0, 0, b""), engine)
+                self.assertEqual(p.stdout, q.stdout, engine)
+                self.assertIn(b"probably unrelated", p.stderr, engine)
+                outs[engine] = (p.stdout, p.stderr)
+            self.assertEqual(len(set(outs.values())), 1)
+
+
 @unittest.skipUnless(hasattr(signal, "SIGHUP"), "POSIX only")
 class SighupUnderNohup(unittest.TestCase):
     """Stress-test finding: `nohup coal ...` died with exit 129 on SIGHUP, because both engines installed their SIGHUP

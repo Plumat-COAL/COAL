@@ -616,7 +616,12 @@ class RunReport:
             return None
         entry = {"id": pid, "index": k, "dna_id": self._dna_of(k), "pairing": self._pairing_of(k),
                  "status": status, "messages": msgs}
-        self.entries[k] = entry
+        # The entries are read by the summary lines, the end-of-run hint and the report. With -q and no report none
+        # of them is produced, so nothing is kept (the entry is still returned for the --resume entries file): a
+        # million mismatching genes otherwise keep every per-codon message in memory (about 150 KB per gene of
+        # unrelated DNA).
+        if self.keep_entries or self.want_hint:
+            self.entries[k] = entry
         self._set_kind(k, KIND_CHAR[gene_kind(entry)])
         return entry
 
@@ -653,7 +658,8 @@ class RunReport:
         self.kinds = bytearray(state.get("kinds", "o" * completed).encode("ascii"))[:completed]
         self._ff_cache = None
         self.cols, self.real_cols = set(state.get("cols", ())), set(state.get("real_cols", ()))
-        self.entries = {e["index"]: e for e in nonok if e["index"] < completed}
+        if self.keep_entries or self.want_hint:  # (as add_sequence: nothing is read from them otherwise)
+            self.entries = {e["index"]: e for e in nonok if e["index"] < completed}
         self.resumed_from = completed
 
     # -------------------------------------------------- end of run (called inside the pipeline, inputs open)
