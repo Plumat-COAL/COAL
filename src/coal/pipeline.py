@@ -130,6 +130,9 @@ def _protein_rows(path):
 _W: dict = {}
 
 
+_ALIVE_W: dict = {}  # coal's write end of the worker liveness pipe while a pool runs (see _watch_parent)
+
+
 def _init_pool_worker(coal_pid, alive, *init_args):
     """Initializer of a worker process: ignore Ctrl-C (the main process reports it once, no worker tracebacks); let
     SIGTERM / SIGHUP end the worker (the main process's handlers, inherited with the fork start method, would raise
@@ -154,13 +157,14 @@ def _watch_parent(coal_pid: int, alive=None) -> None:
     - On Linux the kernel sends SIGKILL (PR_SET_PDEATHSIG). That signal is tied to the *thread that forked this
       process*: the pool's thread in coal with the fork start method, but the fork server's with forkserver (the
       default on Linux from Python 3.14), which outlives coal as long as a worker lives, so it cannot be relied on.
-    - Everywhere a small thread checks every 0.5 s. With fork and spawn the worker's parent is coal, and a parent
-      that changed (to init / a subreaper) means coal is gone; this also covers macOS, Windows and a parent that
-      died before prctl ran. With forkserver the parent is the fork server, which stays alive while its children
-      do, so the thread waits instead for EOF on `alive`: the read end of a pipe whose only write end coal holds
-      (multiprocessing passes the descriptor to the worker; nothing is ever written to it). Comparing getppid()
-      with coal_pid there would make every worker exit at once: that was the "a worker process died" of every
-      multi-worker run on Python 3.14."""
+    - Everywhere a small thread waits for EOF on `alive`: the read end of a pipe whose only write end coal holds
+      (multiprocessing passes the descriptor to the worker; nothing is ever written to it; a worker forked from coal
+      closes its inherited copy of the write end first, see _ALIVE_W). That works whatever the start method and
+      the platform: with forkserver the parent is the fork server, which stays alive while its children do, and on
+      Windows getppid() keeps returning a dead parent's pid, so neither can be told by the parent pid alone. When
+      coal is the parent (fork, spawn) the thread also checks getppid() every 0.5 s, which covers a parent that died
+      before prctl ran. Comparing getppid() with coal_pid under forkserver would make every worker exit at once:
+      that was the "a worker process died" of every multi-worker run on Python 3.14."""
     import threading
     if sys.platform.startswith("linux"):
         try:
@@ -169,21 +173,27 @@ def _watch_parent(coal_pid: int, alive=None) -> None:
             libc.prctl(1, 9, 0, 0, 0)  # PR_SET_PDEATHSIG, SIGKILL
         except (OSError, AttributeError, ValueError):
             pass
+    w = _ALIVE_W.pop("conn", None)  # the fork start method inherits coal's write end: close it, or EOF never comes
+    if w is not None:
+        try:
+            w.close()
+        except (OSError, ValueError):
+            pass
     try:
         parent_pid = os.getppid()
     except OSError:
         parent_pid = coal_pid
-    pipe = alive if parent_pid != coal_pid else None  # forkserver: coal is not the parent (fork / spawn: it is)
+    check_ppid = parent_pid == coal_pid  # fork / spawn: coal is the parent (forkserver: the fork server is)
 
     def watch():
         while True:
             try:
-                if pipe is not None:
-                    if pipe.poll(0.5):  # readable: only ever EOF, since coal never writes -> coal is gone
+                if alive is not None:
+                    if alive.poll(0.5):  # readable: only ever EOF, since coal never writes -> coal is gone
                         os._exit(1)
                 else:
                     time.sleep(0.5)
-                if os.getppid() != parent_pid:
+                if check_ppid and os.getppid() != parent_pid:
                     os._exit(1)
             except (OSError, ValueError, EOFError):
                 os._exit(1)
@@ -377,6 +387,7 @@ def _results(batches, jobs: int, init_args):
     import multiprocessing
     # The read end goes to every worker (see _watch_parent); the write end stays here, so its EOF means coal is gone
     alive_r, alive_w = multiprocessing.Pipe(duplex=False)
+    _ALIVE_W["conn"] = alive_w  # so a forked worker can close its inherited copy (_watch_parent)
     ex = ProcessPoolExecutor(max_workers=jobs, initializer=_init_pool_worker,
                              initargs=(os.getpid(), alive_r, *init_args))
     ok = False
@@ -398,6 +409,7 @@ def _results(batches, jobs: int, init_args):
             ex.shutdown(wait=True)
         else:
             _abandon_pool(ex)
+        _ALIVE_W.pop("conn", None)
         for c in (alive_r, alive_w):
             try:
                 c.close()

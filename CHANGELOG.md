@@ -40,8 +40,9 @@
   reading it waiting for EOF forever.
 - **Python 3.14 on Linux: every multi-worker run failed** with `a worker process died (out of memory?)` after
   half a second. 3.14 made `forkserver` the default start method there, so the workers' parent is the fork server,
-  not `coal`, and the watchdog above took that for a dead parent. The workers now watch the parent they really have
-  and, under the fork server, wait for EOF on a pipe only `coal` holds. `COAL_MIN_NT_PER_JOB` (default 4,000,000)
+  not `coal`, and the watchdog above took that for a dead parent. The workers now wait for EOF on a pipe whose only
+  write end `coal` holds, whatever the start method; that also fixes **Windows, where a killed `coal` left its worker
+  processes running** (there `getppid()` keeps returning the dead parent's pid). `COAL_MIN_NT_PER_JOB` (default 4,000,000)
   can now be set in the environment, as `COAL_BATCH_NT`, so tests can force worker processes on a small input; CI
   runs the suite on 3.14 (Linux).
 - **Worker processes end as soon as the main process fails** (Python engine): after an error on the writing side
