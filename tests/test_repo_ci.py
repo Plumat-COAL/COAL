@@ -294,7 +294,10 @@ class TestNightlySteps(unittest.TestCase):
             self.assertNotEqual(r.returncode, 0, step)
 
     def test_cpp_fuzz_step_requires_the_cpp_engine_line(self):
-        ok = "import sys\nprint('fuzz engine cpp, seed 123, 1 cases', file=sys.stderr)\n"
+        # Under `-v` unittest has already printed "test_... ... " on that line, so the marker is not at a line start
+        # (the first real nightly run failed on exactly that)
+        ok = ("import sys\nprint('test_random_inputs_identical (...) ... ', end='', file=sys.stderr)\n"
+              "print('fuzz engine cpp, seed 123, 1 cases', file=sys.stderr)\n")
         r, _ = self._run("pal2nal-fuzz", self.CPP_STEP, {self.FUZZ: ok})
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         r, _ = self._run("pal2nal-fuzz", self.CPP_STEP, {self.FUZZ: ok.replace("cpp", "python")})
