@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import random
+import signal
 import subprocess
 import sys
 import tempfile
@@ -91,6 +92,34 @@ class QuadraticExactFitScan(unittest.TestCase):
                 self.assertEqual(p.returncode, 0, p.stderr[:300])
         ratio = times[20_000] / max(times[10_000], 1e-3)
         self.assertLess(ratio, 3.0, f"2x the gene length took {ratio:.1f}x the time ({times})")
+
+
+@unittest.skipUnless(hasattr(signal, "SIGHUP"), "POSIX only")
+class SighupUnderNohup(unittest.TestCase):
+    """Stress-test finding: `nohup coal ...` died with exit 129 on SIGHUP, because both engines installed their SIGHUP
+    handler even when the signal was ignored (what nohup does). The engine must keep an ignored SIGHUP ignored.
+    Deterministic: the DNA comes from standard input, which is held open until after the signal."""
+
+    def check(self, engine):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            expected = mixed_endings_case(d, 100)
+            nuc = (d / "nuc.fasta").read_bytes().replace(b"\r", b"\n")
+            cmd = ([sys.executable, "-m", "coal"] if engine == "python" else [CPP]) + ["pep.fasta", "-", "-output", "fasta"]
+            p = subprocess.Popen(cmd, cwd=tmp, env=ENV, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE, preexec_fn=lambda: signal.signal(signal.SIGHUP, signal.SIG_IGN))
+            time.sleep(0.5)  # the engine is now blocked reading standard input
+            os.kill(p.pid, signal.SIGHUP)
+            time.sleep(0.2)
+            out, err = p.communicate(nuc, timeout=60)
+            self.assertEqual((p.returncode, out), (0, expected), err[:300])
+
+    def test_python_engine_keeps_ignored_sighup(self):
+        self.check("python")
+
+    @unittest.skipUnless(HAVE_CPP, "build/coal-cpp not built")
+    def test_cpp_engine_keeps_ignored_sighup(self):
+        self.check("cpp")
 
 
 if __name__ == "__main__":

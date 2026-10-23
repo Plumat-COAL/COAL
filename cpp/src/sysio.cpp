@@ -71,7 +71,8 @@ void install_signal_handlers() {
     std::signal(SIGTERM, on_signal);
     std::signal(SIGINT, on_signal);
 #ifdef SIGHUP
-    std::signal(SIGHUP, on_signal);
+    // an ignored SIGHUP (nohup, setsid) stays ignored, as the Python engine does
+    if (std::signal(SIGHUP, SIG_IGN) != SIG_IGN) std::signal(SIGHUP, on_signal);
 #endif
 #ifdef SIGPIPE
     std::signal(SIGPIPE, SIG_IGN);  // a closed stdout pipe makes writes fail with EPIPE: exit 141

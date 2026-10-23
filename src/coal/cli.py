@@ -157,7 +157,9 @@ def install_signal_handlers() -> None:
     """SIGTERM -> SystemExit (cleanup runs, so no .coal_*.tmp files are left; exit 143), Ctrl-C -> "coal: interrupted",
     exit 130, broken pipe -> silent exit 141. SIGHUP (terminal closed) -> same cleanup, exit 129."""
     signal.signal(signal.SIGTERM, _on_sigterm)
-    if hasattr(signal, "SIGHUP"):
+    # An ignored SIGHUP (nohup, setsid) stays ignored: installing the handler regardless made `nohup coal ...` die
+    # with exit 129 when the terminal closed
+    if hasattr(signal, "SIGHUP") and signal.getsignal(signal.SIGHUP) != signal.SIG_IGN:
         signal.signal(signal.SIGHUP, _on_sigterm)
 
 
