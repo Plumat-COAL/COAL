@@ -60,7 +60,7 @@
   --fs-h2: 1.45rem;
   --fs-h1: 2rem;
   --gutter: 16px;
-  --measure: 38rem;
+  --measure: 42rem;
   --wide: 60rem;
   color-scheme: dark;
 }
@@ -81,7 +81,7 @@ h2 { font-size: var(--fs-h2); margin: 0 0 0.6rem; }
 h3 { font-size: var(--fs-h3); margin: 1.4em 0 0.35em; }
 h4 { font-size: var(--fs-body); margin: 0 0 0.35em; }
 code, kbd, samp, pre { font-family: var(--mono); font-size: 0.82em; }
-code { background: var(--code-bg); padding: 0.05em 0.25em; border-radius: 3px; }
+code { background: var(--code-bg); padding: 0.05em 0.25em; border-radius: 3px; white-space: nowrap; }
 pre code { background: none; padding: 0; font-size: inherit; }
 kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3px; padding: 0 0.3em; }
 .visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);
@@ -109,8 +109,10 @@ kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3p
 /* Page body: text at a reading measure; transcripts, tables and figures wider. */
 main { width: calc(100% - 2 * var(--gutter)); max-width: var(--wide); margin: 0 auto; }
 .sec > *, .page-head > *, .intro > * { max-width: var(--measure); }
-.sec > pre, .sec > figure, .sec > .table-scroll, .sec > .cards, .sec > .explainer, .sec > .look { max-width: var(--wide); }
-.why { color: #FF6A13; text-decoration-color: #FF6A13; font-weight: 600; }  /* the logo's ember, 7.2:1 on the page */
+.sec > pre, .sec > figure, .sec > .table-scroll, .sec > .cards, .sec > .look { max-width: var(--wide); }
+.finer { font-size: 0.85rem; color: var(--muted); }
+.also-cite { margin-top: 1.75rem; }
+.why { color: var(--accent); text-decoration-color: var(--accent); font-weight: 600; }
 .sec { padding: 2rem 0 0.75rem; border-top: 1px solid var(--line); }
 .sec > h2 { margin-bottom: 0.8rem; }
 .intro { padding: 2.25rem 0 1.5rem; }
@@ -125,16 +127,20 @@ main { width: calc(100% - 2 * var(--gutter)); max-width: var(--wide); margin: 0 
 .cards { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); margin: 0 0 1rem; }
 @media (min-width: 52rem) { .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.25rem; } }
 .card { display: flex; flex-direction: column; min-width: 0; background: var(--card-bg); border: 1px solid var(--card-line);
-  border-radius: 8px; padding: 1.1rem 1.2rem 1rem; }
-.card h3 { font-size: 1.3rem; margin: 0; }
-.card .req { font-size: var(--fs-sm); color: var(--muted); margin: 0.1rem 0 0.9rem; }
-.card .act { margin: 0 0 0.8rem; }
-.card .fine { margin: 0; }
+  border-radius: 8px; padding: 1rem 1.1rem 0.9rem; }
+.card h3 { font-size: 1.15rem; margin: 0; }
+.card .req { font-size: 0.88rem; color: var(--muted); margin: 0.1rem 0 0.8rem; }
+.card .act { margin: 0 0 0.6rem; }
+.card .fine { margin: 0; font-size: 0.85rem; }
 .card code { background: var(--card-code-bg); }
-.card .cmd { margin: 0; background: var(--card-code-bg); border-color: var(--card-line); }
-.card .cmd code { font-size: 0.74rem; }
-.btn { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 2.8rem; background: var(--accent);
-  color: var(--on-accent); font: inherit; font-size: 0.97rem; font-weight: 600; padding: 0.5rem 0.75rem; border: 2px solid var(--accent);
+.card .cmd { margin: 0.4rem 0 0.6rem; background: var(--card-code-bg); border-color: var(--card-line); }
+.card .cmd code { font-size: 0.72rem; }
+.show { font-size: 0.85rem; color: var(--muted); margin: 0 0 0.5rem; }
+.show summary { cursor: pointer; width: fit-content; color: var(--text); text-decoration: underline;
+  text-decoration-thickness: 1px; text-underline-offset: 0.16em; }
+.show summary::marker { color: var(--muted); }
+.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 2.3rem; background: var(--accent);
+  color: var(--on-accent); font: inherit; font-size: 0.92rem; font-weight: 600; padding: 0.3rem 0.9rem; border: 2px solid var(--accent);
   border-radius: 5px; text-decoration: none; cursor: pointer; }
 .btn:hover { background: var(--accent-hover); border-color: var(--accent-hover); text-decoration: none; }
 .btn.secondary { background: transparent; color: var(--ink); border-color: #8C827A; }
@@ -179,8 +185,8 @@ pre.term code { white-space: pre-wrap; overflow-wrap: anywhere; }
 .shot { margin: 1.25rem 0 1rem; }
 
 /* The explainer animation, inline on the guide. */
-.explainer { display: block; width: 100%; aspect-ratio: 16 / 7; min-height: 19rem; border: 0; background: transparent;
-  margin: 0 0 0.5rem; }
+.explainer { display: block; width: 100%; max-width: var(--measure); aspect-ratio: 16 / 9; min-height: 19rem; border: 0;
+  background: transparent; margin: 0 0 0.5rem; }
 
 /* The alignment, one block per codon. */
 .aln { margin: 0 0 1.25rem; }
