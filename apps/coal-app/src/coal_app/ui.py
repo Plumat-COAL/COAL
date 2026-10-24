@@ -2,7 +2,8 @@
 
 Written for Gradio 5.x (``pip install -e "apps/coal-app[gui]"``). All logic lives in ``core``
 (tested without Gradio); this file only lays out components and wires events.
-Offline: no CDN fonts (system fonts only) and analytics disabled.
+Offline: no CDN fonts (system fonts only) and analytics disabled (Gradio's page still asks a CDN for its iframe-resizer
+helper script, which the app does not need; the page works with that request blocked).
 """
 from __future__ import annotations
 
@@ -184,6 +185,9 @@ button.label-wrap > span.icon { display:inline-flex; align-items:center; justify
 #coal-centre { align-items:flex-end !important; gap:8px !important; flex-wrap:wrap !important; }
 #coal-centre > * { flex:0 1 auto !important; min-width:0 !important; }
 #coal-view-dl-note p { margin:0; }
+/* Gradio renders the tab bar twice (the copy measures its width); the hidden copy's buttons stayed focusable (axe
+   aria-hidden-focus), so it leaves the accessibility tree and the tab order altogether. */
+.tab-container.visually-hidden, .tab-container.visually-hidden * { display:none !important; }
 /* Section headings, as the site's type scale (site/style.css h3: 1.1875rem, bold, ink): one per
    group (Files, Genetic code, Output, Results); more space above a heading than between the fields of a group;
    field labels lighter than headings (theme: block title #4A4744 / #B3ADA6, regular weight) */
@@ -382,6 +386,7 @@ def _results(report, output_path, report_path, coal_cmd, pal2nal_cmd, stderr, ba
         gr.update(value=view_path, visible=bool(view_path)),
         gr.update(value=core.methods_text(report) if report else "",
                   visible=bool(report and core.methods_text(report))),
+        gr.update(visible=bool(report and core.methods_text(report))),  # its copy button
         ctx,
         gr.update(visible=bool(preview and preview.get("preview") and preview.get("last", 0) - preview.get("first", 1)
                                + 1 < preview.get("ncols", 0))),
@@ -423,10 +428,12 @@ def run_ui(protein, dna, fmt, code, nogap, nomismatch, protein_path="", dna_path
     except ValueError as e:
         return _results({}, None, None, "", "", str(e), gui_html.message_banner("failed", "Could not run", str(e)))
     head = core.banner_head(r.ok, r.report.get("summary", {}), r.hints)  # see core.banner_head
+    sentence = core.summary_sentence(r.report)
+    if not r.ok:  # a run that stopped before pairing: the banner says why (the engine's own message), not just that
+        sentence = f"{sentence} {core.stop_reason(r.report, [protein, dna, out_dir])}".strip()
     # the HTML summary banner (headline with counts, one tile per gene, the sentence and which files were used:
     # path box or upload)
-    banner = gui_html.run_banner(head, r.report, core.summary_sentence(r.report),
-                                 f"Files used: protein {p_desc}; DNA {d_desc}.")
+    banner = gui_html.run_banner(head, r.report, sentence, f"Files used: protein {p_desc}; DNA {d_desc}.")
     fix = core.code_fix(r.report)
     if fix:  # the genetic-code hint explains the run: say so first, with the fix
         banner = gui_html.code_fix_banner(fix, r.report, CODE_SHORT, f"Files used: protein {p_desc}; DNA {d_desc}.")
@@ -644,8 +651,13 @@ def build(demo_mode: bool = False) -> gr.Blocks:
                                                     variant="secondary", size="md", elem_id="coal-view-dl")
                     # methods, commands, raw messages and the glossary in one area
                     with gr.Accordion("Methods, commands and glossary", open=False, elem_id="coal-details"):
-                        methods = gr.Textbox(label="Methods paragraph", lines=4,
-                                             max_lines=8, interactive=False, show_copy_button=True, visible=False)
+                        # The textbox's own copy button sits inside its <label>, which then labels the button, not the
+                        # text (assistive technology announced an unnamed field): a separate button copies instead.
+                        methods = gr.Textbox(label="Methods paragraph", lines=4, max_lines=8, interactive=False,
+                                             visible=False, elem_id="coal-methods")
+                        methods_copy = gr.Button("Copy methods paragraph", size="sm", variant="secondary",
+                                                 visible=False, elem_id="coal-methods-copy")
+                        methods_copy.click(None, [methods], None, js="(t) => { navigator.clipboard.writeText(t); }")
                         cmds = gr.Code(label="Equivalent commands", language="shell", interactive=False)
                         raw = gr.Textbox(label="Raw COAL messages", lines=6, max_lines=20, interactive=False)
                         gr.Markdown("**Glossary**\n" + GLOSSARY)
@@ -689,7 +701,8 @@ def build(demo_mode: bool = False) -> gr.Blocks:
         else:
             s_store = gr.State(dict(settings.DEFAULTS))
 
-        outputs = [banner, hint_md, hint_btn, hint_code, dl_out, dl_rep, table, cmds, raw, view, dl_view, methods]
+        outputs = [banner, hint_md, hint_btn, hint_code, dl_out, dl_rep, table, cmds, raw, view, dl_view, methods,
+                   methods_copy]
         # the run context (for "Centre the preview on column") and that control's row
         run_ctx = gr.State(None)
         outputs += [run_ctx, centre_row]

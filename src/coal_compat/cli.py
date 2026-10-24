@@ -16,7 +16,8 @@ standard error (as with PAL2NAL's ``-nostderr``, which silences its warnings but
 COAL's own options (``--strict``, ``-j``, ``-o`` ...) are not accepted here; use ``coal`` for those.
 
 Differences from PAL2NAL: the exit code is non-zero on errors (PAL2NAL always exits 0): 1 for a usage error or
-bad input (``coal`` itself uses 2 for a usage error), 130 / 141 / 143 as for ``coal``.
+bad input (``coal`` itself uses 2 for a usage error; no arguments at all prints this usage to standard error and
+exits 1, ``-h`` prints it to standard output and exits 0), 130 / 141 / 143 as for ``coal``.
 """
 from __future__ import annotations
 
@@ -118,8 +119,13 @@ def main(argv=None) -> int:
     import signal
     from coal.cli import _on_sigterm
     signal.signal(signal.SIGTERM, _on_sigterm)  # SIGTERM before the engine starts -> exit 143 too
-    if not argv or argv[0] in ("-h", "-help", "--help"):
-        # `pal2nal | head`: a closed stdout is a silent exit 141, as for `coal` (Windows reports it as EINVAL)
+    if not argv:
+        # No files: a usage error (exit 1, usage on stderr), so a pipeline step that forgot its arguments does not
+        # get the usage text as its "alignment" with exit 0. PAL2NAL prints its usage to stderr here too.
+        print(USAGE, file=sys.stderr)
+        return 1
+    if argv[0] in ("-h", "-help", "--help"):
+        # `pal2nal -h | head`: a closed stdout is a silent exit 141, as for `coal` (Windows reports it as EINVAL)
         try:
             print(USAGE)
             sys.stdout.flush()

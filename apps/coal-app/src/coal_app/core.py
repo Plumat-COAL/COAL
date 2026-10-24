@@ -1137,6 +1137,17 @@ def has_problem_hint(hints) -> bool:
     return any(isinstance(h, dict) and h.get("code") in PROBLEM_HINTS for h in hints or [])
 
 
+def stop_reason(report: dict, paths=()) -> str:
+    """Why a run wrote no alignment, for the banner: the first run-level error of the report (the engine's own
+    sentence, e.g. 'garbage.fasta:1: control character: sequence files must be plain text ...'), with the given
+    paths shown as file names only; '' when the report has none."""
+    for e in report.get("errors") or []:
+        text = (e.get("text") or "").strip() if isinstance(e, dict) else str(e).strip()
+        if text:
+            return public_error(text, paths)
+    return ""
+
+
 def banner_head(ok: bool, summary: dict, hints=()) -> str:
     """"Every sequence matched" also needs no removed columns and no run-level problem (e.g. a partial ID
     match)."""
@@ -1432,8 +1443,9 @@ def code_fix(report: dict) -> dict | None:
         if fit < CODE_FIX_SHARE * checked or fit <= fit_cur:
             continue
         m = re.search(r"Codes? [\d, and]+ fits? [^.]*\.", h.get("text") or "")
+        total = int((report.get("summary") or {}).get("total") or 0)
         return {"current": cur, "code": int(sug), "checked": checked, "fit": fit, "fit_current": fit_cur,
-                "others": m.group(0) if m else ""}
+                "total": total, "others": m.group(0) if m else ""}
     return None
 
 

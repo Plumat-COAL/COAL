@@ -257,7 +257,8 @@ are missing is skipped):
 Run only locally (not redistributable or not committed): PAML's examples (GPL-3: lysozyme, HIV env, mtCDNA primates,
 MouseLemurs, lysin, MHC; `abglobin.nuc` was not read: interleaved with `.` match characters), PAL2NAL's own
 `test.aln`/`test.nuc` (GPL), HyPhy's SARS-CoV-2 spike (GISAID-derived IDs), influenza HA and camelid VHH sets.
-Result on all 17 local codon alignments plus the 8 pairs: COAL Python, COAL C++ and PAL2NAL v14 wrote the same stdout
+Result on all 17 local codon alignments (the 12 datasets committed under `tests/realdata`, which `test_realdata.py`
+rebuilds on every run, plus the 5 local-only sets above) and the 8 pairs: COAL Python, COAL C++ and PAL2NAL v14 wrote the same stdout
 in all four formats on every input that rebuilds without frameshifts. stderr differs only as documented: PAL2NAL v14's
 fixed IUPAC list gave 113 spurious warnings on hiv_rt and 3 on influenza HA (YTA/YTG for L, ATM/ATW for I, MGA/MGG for R),
 COAL none. With `-nogap` on code-2/4 data PAL2NAL v14 also removes the columns with TGA (Trp there): it keeps 493 of 510

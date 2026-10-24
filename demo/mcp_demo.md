@@ -73,30 +73,29 @@ Call:
 Result:
 ```json
 {
-  "completed": false,
+  "completed": true,
   "all_ok": false,
   "needs_attention": true,
   "counts": {
     "total": 20,
-    "ok": 13,
+    "ok": 19,
     "warning": 0,
     "failed": 1,
-    "not_checked": 6
+    "not_checked": 0
   },
   "suggested_codontable": null,
-  "next_step": "COAL stopped before writing an alignment: call explain_report(report_path) for the cause and fix.",
-  "output_path": null,
+  "next_step": "0 sequence(s) with warnings and 1 failed: call explain_report(report_path) and tell the user which genes need checking before using the alignment.",
+  "output_path": "<tmp>/protein.codon.fasta",
   "report_path": "<tmp>/protein.report.json",
-  "exit_code": 1,
+  "exit_code": 2,
   "summary": {
     "total": 20,
-    "ok": 13,
+    "ok": 19,
     "warning": 0,
     "failed": 1,
-    "pairing": "id",
-    "not_checked": 6
+    "pairing": "id"
   },
-  "summary_text": "20 sequences: 13 OK, 0 with warnings, 1 failed, 6 not checked.",
+  "summary_text": "20 sequences: 19 OK, 0 with warnings, 1 failed.",
   "hints": [],
   "problems": [
     {
@@ -107,11 +106,11 @@ Result:
   ],
   "problems_total": 1,
   "engine_messages": [
-    "coal: error: OG0001_sp14: protein and DNA are inconsistent (no match found)"
+    "coal: summary: 1 sequence of 20 could not be converted and was left out (first: OG0001_sp14: protein and DNA are inconsistent (no match found). Frameshift at column 102: one base is missing in the DNA, so from here on the codons are read out of step.)"
   ],
-  "warning_lines": 0,
-  "methods_text": "",
-  "coal_command": "coal protein.aln.fasta dna.fasta -o protein.codon.fasta",
+  "warning_lines": 1,
+  "methods_text": "Codon alignments were built with COAL v0.5.0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 20 sequences, 19 matched their protein exactly, and 1 could not be aligned and was excluded. Command: coal protein.aln.fasta dna.fasta --keep-going -o protein.codon.fasta",
+  "coal_command": "coal protein.aln.fasta dna.fasta --keep-going -o protein.codon.fasta",
   "pal2nal_command": "pal2nal.pl protein.aln.fasta dna.fasta -output fasta > protein.codon.fasta",
   "pal2nal_caveats": []
 }
@@ -120,14 +119,17 @@ Result:
 ### 2. `explain_report` on that report
 
 ```
-20 sequences: 13 OK, 0 with warnings, 1 failed, 6 not checked.
+20 sequences: 19 OK, 0 with warnings, 1 failed.
 Proteins and DNA were paired by matching their IDs exactly.
-No alignment was written, because COAL stopped at an error.
+The codon alignment was written to <tmp>/protein.codon.fasta (fasta format).
 
 Failed sequences:
 - OG0001_sp14: Frameshift at column 102: one base is missing in the DNA, so from here on the codons are read out of step. Check the DNA near there (a sequencing or assembly error?).
 
 How to fix a failed sequence: check it is the right DNA for that protein (same gene, same species), look for a missing or extra base near where it stops matching, and make sure the genetic code is right for where the gene comes from (for example code 2 for vertebrate mitochondria).
+
+Methods text (ready to paste):
+Codon alignments were built with COAL v0.5.0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 20 sequences, 19 matched their protein exactly, and 1 could not be aligned and was excluded. Command: coal protein.aln.fasta dna.fasta --keep-going -o protein.codon.fasta
 ```
 
 ### 3. `codon_align` on mito (default genetic code 1)
@@ -186,10 +188,13 @@ How to fix a failed sequence: check it is the right DNA for that protein (same g
     "... 7 more"
   ],
   "problems_total": 24,
-  "engine_messages": [],
-  "warning_lines": 179,
-  "methods_text": "Codon alignments were built with COAL v0.3.0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 24 sequences, 0 matched their protein exactly, and 24 contained codons that did not match the aligned amino acid (kept in the alignment). Command: coal protein.aln.fasta dna.fasta -o protein.codon.fasta",
-  "coal_command": "coal protein.aln.fasta dna.fasta -o protein.codon.fasta",
+  "engine_messages": [
+    "coal: notice: wrong genetic code? Under genetic code 2 (Vertebrate mitochondrial), all 24 sequences match their protein; under code 1, none do. Re-run with -codontable 2.",
+    "coal: summary: 24 of 24 sequences have codons that do not match their amino acid (kept in the alignment). Under genetic code 2 (Vertebrate mitochondrial), all 24 sequences match their protein; under code 1, none do. Codes 5 and 13 fit these sequences too: choose the code of the organism and organelle the genes come from. Re-run with -codontable 2."
+  ],
+  "warning_lines": 21,
+  "methods_text": "Fix the warnings first: only 0 of 24 sequences matched their protein exactly, so this alignment is probably not ready to use (see the hints and the messages for each sequence). Methods text for this run as it stands: Codon alignments were built with COAL v0.5.0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 24 sequences, 0 matched their protein exactly, and 24 contained codons that did not match the aligned amino acid (kept in the alignment). Command: coal protein.aln.fasta dna.fasta --keep-going -o protein.codon.fasta",
+  "coal_command": "coal protein.aln.fasta dna.fasta --keep-going -o protein.codon.fasta",
   "pal2nal_command": "pal2nal.pl protein.aln.fasta dna.fasta -output fasta > protein.codon.fasta",
   "pal2nal_caveats": []
 }
@@ -227,8 +232,8 @@ How to fix a failed sequence: check it is the right DNA for that protein (same g
   "problems_total": 0,
   "engine_messages": [],
   "warning_lines": 0,
-  "methods_text": "Codon alignments were built with COAL v0.3.0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the vertebrate mitochondrial genetic code (NCBI translation table 2). Of 24 sequences, 24 matched their protein exactly. Command: coal protein.aln.fasta dna.fasta -codontable 2 -o protein.codon.fasta",
-  "coal_command": "coal protein.aln.fasta dna.fasta -codontable 2 -o protein.codon.fasta",
+  "methods_text": "Codon alignments were built with COAL v0.5.0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the vertebrate mitochondrial genetic code (NCBI translation table 2). Of 24 sequences, 24 matched their protein exactly. Command: coal protein.aln.fasta dna.fasta -codontable 2 --keep-going -o protein.codon.fasta",
+  "coal_command": "coal protein.aln.fasta dna.fasta -codontable 2 --keep-going -o protein.codon.fasta",
   "pal2nal_command": "pal2nal.pl protein.aln.fasta dna.fasta -output fasta -codontable 2 > protein.codon.fasta",
   "pal2nal_caveats": []
 }

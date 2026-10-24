@@ -573,16 +573,46 @@ def check_deliberate(case, fmt, rc, out, ref_out, coal_without_nogap=None):
     if [i for i, _ in want] != [i for i, _ in got]:
         return "different IDs or order"
     for (sid, w), (_, g) in zip(want, got):
-        if len(w) != len(g):
-            return f"{sid}: length {len(g)}, expected {len(w)}"
-        for k in range(0, len(w), 3):
-            c3, r3 = g[k:k + 3], w[k:k + 3]
-            if c3.replace("U", "T").replace("u", "t") == r3:
-                continue
-            marked = [a.isupper() != b.isupper() for a, b in zip(c3, r3) if a.isalpha() and b.isalpha()]
-            if any(marked) and _allowed_codon(table, c3, r3):
-                continue
-            return f"{sid} at nt {k + 1}: COAL {c3}, expected {r3}"
+        why = _row_difference(table, sid, w, g)
+        if why is not None:
+            return why
+    return None
+
+
+def _marked_span(w, k):
+    """(start, end) of the run of lower-case (substituted) reference letters that touches codon k..k+2 of row
+    `w`, or None."""
+    i = next((i for i in range(k, min(k + 3, len(w))) if w[i].islower()), None)
+    if i is None:
+        return None
+    s, e = i, i + 1
+    while s > 0 and w[s - 1].islower():
+        s -= 1
+    while e < len(w) and w[e].islower():
+        e += 1
+    return s, e
+
+
+def _row_difference(table, sid, w, g):
+    """None if COAL's row `g` equals the reference's row `w` except for documented substitutions (lower-case
+    letters in `w`, see _allowed_codon), else the first difference. A substituted codon is judged on the
+    alignment's codon grid first; when the gene sits in another frame than the generator's (both programs place
+    a mostly-unknown gene by position, 1 or 2 nt off the frame the generator wrote its TGA in), the
+    substitution straddles two grid codons, so it is then judged on the reference's own marked span."""
+    if len(w) != len(g):
+        return f"{sid}: length {len(g)}, expected {len(w)}"
+    for k in range(0, len(w), 3):
+        c3, r3 = g[k:k + 3], w[k:k + 3]
+        if c3.replace("U", "T").replace("u", "t") == r3:
+            continue
+        marked = [a.isupper() != b.isupper() for a, b in zip(c3, r3) if a.isalpha() and b.isalpha()]
+        if any(marked) and _allowed_codon(table, c3, r3):
+            continue
+        span = _marked_span(w, k) if any(marked) else None
+        if span and span[1] - span[0] == 3 and (span[0] % 3) and _allowed_codon(table, g[span[0]:span[1]], w[span[0]:span[1]]) \
+                and all(g[i].replace("U", "T").replace("u", "t") == w[i] for i in range(k, k + 3) if not span[0] <= i < span[1]):
+            continue
+        return f"{sid} at nt {k + 1}: COAL {c3}, expected {r3}"
     return None
 
 

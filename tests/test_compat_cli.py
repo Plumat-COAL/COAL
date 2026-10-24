@@ -51,11 +51,20 @@ class TestCommand(unittest.TestCase):
         self.assertEqual(r.returncode, 0)
         self.assertIn("-codontable", r.stdout)
 
+    def test_no_arguments_is_a_usage_error(self):
+        # `pal2nal > out.fa` by mistake: the usage goes to stderr and the exit code is 1 (the drop-in's documented
+        # usage-error code), not to stdout with exit 0, so the pipeline does not get the usage text as its output
+        r = subprocess.run([sys.executable, "-m", "coal_compat"], capture_output=True, text=True, timeout=60,
+                           stdin=subprocess.DEVNULL)
+        self.assertEqual(r.returncode, 1)
+        self.assertEqual(r.stdout, "")
+        self.assertIn("-codontable", r.stderr)
+
     @unittest.skipIf(os.name == "nt", "a closed pipe is EPIPE on POSIX only (Windows reports EINVAL)")
-    def test_usage_into_a_closed_pipe_is_141_and_silent(self):  # pal2nal | head
+    def test_usage_into_a_closed_pipe_is_141_and_silent(self):  # pal2nal -h | head
         # stdout is a pipe whose read end is already closed, so the first write fails with EPIPE (Python ignores
         # SIGPIPE, so it is a BrokenPipeError): no traceback, exit 141 as for `coal` (docs/usage.md).
-        for argv in ([], ["-h"]):
+        for argv in (["-h"],):
             with self.subTest(argv=argv):
                 rfd, wfd = os.pipe()
                 os.close(rfd)

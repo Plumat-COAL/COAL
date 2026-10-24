@@ -27,6 +27,27 @@ class TestGui(unittest.TestCase):
         out = ui.run_ui(p, d, "fasta", 1, False, False)
         self.assertEqual(out[3], 2)  # suggested genetic code from the hint
 
+    def test_download_buttons_hand_out_the_alignment_and_the_report(self):
+        # mutation testing (verify 2026-10-24, V-16): no test looked at the file behind "Download codon alignment"
+        import json
+        from coal_app import core, ui
+        p, d = core.example_paths("clean")
+        for fmt, first in (("fasta", ">"), ("paml", " ")):
+            with self.subTest(fmt=fmt):
+                out = ui.run_ui(p, d, fmt, 1, False, False)
+                aln, rep = out[4]["value"], out[5]["value"]
+                self.assertTrue(out[4]["visible"] and out[5]["visible"])
+                self.assertTrue(aln.endswith(".codon." + fmt), aln)
+                with open(aln, encoding="utf-8") as fh:
+                    text = fh.read()
+                self.assertTrue(text.startswith(first), text[:40])
+                self.assertEqual(text.count("gene0") + text.count("gene1"), 8)  # the 8 genes of the example
+                with open(rep, encoding="utf-8") as fh:
+                    report = json.load(fh)
+                self.assertEqual(report["schema"], "coal.report/1")
+                self.assertEqual(report["summary"]["ok"], 8)
+                self.assertNotEqual(aln, rep)
+
     def test_path_box_wins_and_is_not_copied(self):  # APP-L1
         from coal_app import core, ui
         p, d = core.example_paths("mito")
