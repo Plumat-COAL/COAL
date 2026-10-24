@@ -1027,6 +1027,13 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
     const bool direct = !o.out.empty() && target.direct;
     // One run at a time per output file (the partial and checkpoint files next to it have fixed names)
     const std::string out_lock = (!o.out.empty() && !direct) ? take_output_lock(target.real, o.out) : std::string();
+    // The checkpoint set-up below can throw (a --resume refused because the inputs changed, or a checkpoint of the
+    // other engine) before the Cleanup object further down exists, and left the lock behind (found 2026-10-24):
+    // this guard releases it on any exit; a second release by Cleanup is harmless (the file is gone).
+    struct LockGuard {
+        const std::string& path;
+        ~LockGuard() { release_output_lock(path); }
+    } lock_guard{out_lock};
     // A checkpoint only for an output that is (or will be) a regular file - hard-linked
     // files included (written in place at the end) - and inputs that are regular files
     std::error_code ex_ec;
@@ -1492,6 +1499,7 @@ int main(int argc, char** argv) {
     // abbreviations resolve as in Python and so the error is a clear one, not "unrecognized arguments".
     const int a_batch = ap.add({Kind::Value, {"--batch"}, "", false, {}, true});
     const int a_batch_dir = ap.add({Kind::Value, {"--batch-out-dir"}, "", false, {}, true});
+    const int a_batch_par = ap.add({Kind::Value, {"--batch-parallel"}, "", false, {}, true});
     ap.add({Kind::Version, {"--version"}, "", false, {}, true});
 
     // `coal-cpp --batch JOBS` has no positionals, so say why before the parser asks for them
@@ -1523,7 +1531,7 @@ int main(int argc, char** argv) {
     if (args.given(a_report)) o.report = args.get(a_report);
     o.json = args.given(a_json);
     o.strict = args.given(a_strict);
-    if (args.given(a_batch) || args.given(a_batch_dir)) return usage_error(BATCH_ERROR);
+    if (args.given(a_batch) || args.given(a_batch_dir) || args.given(a_batch_par)) return usage_error(BATCH_ERROR);
     if (o.json && o.out.empty())
         return usage_error("--json requires -o (the alignment and the report cannot both go to stdout)");
     if (o.resume && o.out.empty())

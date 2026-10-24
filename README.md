@@ -10,8 +10,10 @@ alignment to produce a codon alignment, ready for dN/dS (PAML codeml, HyPhy) or 
   ([tests/README.md](tests/README.md#test-numbers)).
 - **Fast and scalable:** with the C++ engine (`coal-cpp`, one thread), about **300× faster** than PAL2NAL v14 on
   1 million sequences (12.5 s against 62 min, and 172 MB against 18.6 GB of memory) and over **1,000× faster** on
-  long genes (1,000 sequences × 10,000 codons: 0.25 s against 280 s). PAL2NAL v14 cannot process proteins longer
-  than about 22,000 residues; COAL can. The Python engine gives byte-identical output, more slowly
+  long genes (1,000 sequences × 10,000 codons: 0.25 s against 280 s), measured on Windows; on Linux, where Perl
+  runs faster, the same desktop gave about 120× at 1 million sequences and 410× on 100 × 10,000 codons
+  ([docs/benchmarks.md](docs/benchmarks.md)). PAL2NAL v14 cannot process proteins longer than about 22,000
+  residues; COAL can. The Python engine gives byte-identical output, more slowly
   ([docs/benchmarks.md](docs/benchmarks.md)).
 - **Pipeline-friendly:** non-zero exit codes on errors (PAL2NAL always exits 0), `--strict` to refuse
   probably-wrong genes, a JSON run report, and a `pal2nal` command that accepts an unchanged PAL2NAL v14 command
@@ -84,7 +86,7 @@ Example inputs are in `examples/` (`clean`, `mito`, `messy_ids`, `one_broken_gen
   core. Without it, COAL uses all cores for large inputs.
 - **Thousands of small alignments:** `coal --batch jobs.txt` runs one job per line of `jobs.txt` (a `coal` command
   line each, every one with `-o`) in a single process, so Python starts once instead of once per gene: about 40×
-  less wall time on tiny jobs, with byte-identical outputs
+  less wall time on tiny jobs, with byte-identical outputs; `--batch-parallel N` runs N jobs at a time
   ([docs/usage.md](docs/usage.md#batch-mode)).
 - **Reading from a pipe:** pass `-` as the protein alignment or one DNA file (`zcat nuc.fa.gz | coal pep.aln -`);
   works the same on Windows, with `coal-cpp` and with the `pal2nal` drop-in. Only one `-` per command line.

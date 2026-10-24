@@ -212,6 +212,43 @@ class ConcurrentSameOutput(unittest.TestCase):
                 self.assertEqual((d / "same.fa").read_bytes(), expected, engine)
                 self.assertFalse((d / "same.fa.coal-lock").exists(), engine)
 
+    def test_a_refused_resume_leaves_no_lock(self):
+        # Found by the --batch-parallel SIGTERM test (2026-10-24): the lock was taken before the checkpoint set-up and
+        # only released by the try block after it, so an error raised in between (a --resume refused because the
+        # inputs changed) or a signal there left <out>.coal-lock behind, and the next run reported a stale lock
+        hold = dict(ENV, COAL_TEST_HOOKS="1", COAL_TEST_PAUSE_AFTER_CHECKPOINT="1", COAL_CHECKPOINT_EVERY="0",
+                    COAL_BATCH_NT="1", COAL_MIN_NT_PER_JOB="0")
+        for engine in self.engines():
+            with tempfile.TemporaryDirectory() as tmp:
+                d = Path(tmp)
+                mixed_endings_case(d, 100)
+                (d / "nuc.fasta").write_bytes((d / "nuc.fasta").read_bytes().replace(b"\r", b"\n"))
+                # a checkpoint from a run killed after its first checkpoint (SIGKILL keeps the resumable files)
+                p1 = subprocess.Popen(self.cmd(engine, ["pep.fasta", "nuc.fasta", "-o", "same.fa", "-j", "1"]), cwd=tmp,
+                                      env=hold, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                line = p1.stderr.readline()
+                self.assertIn(b"paused after checkpoint 1", line, (engine, line))
+                p1.kill()
+                p1.communicate(timeout=60)
+                self.assertTrue((d / "same.fa.coal-checkpoint.json").exists(), engine)
+                (d / "same.fa.coal-lock").unlink(missing_ok=True)  # a kill leaves the lock, as documented
+                # the inputs change, so --resume is refused before anything runs
+                with open(d / "pep.fasta", "a", encoding="ascii") as fh:
+                    fh.write(">extra\nMKMKMKMKMK\n")  # the case's rows are 10 residues wide
+                with open(d / "nuc.fasta", "a", encoding="ascii") as fh:
+                    fh.write(">extra\n" + "ATGAAA" * 5 + "\n")
+                p2 = subprocess.run(self.cmd(engine, ["pep.fasta", "nuc.fasta", "-o", "same.fa", "--resume"]), cwd=tmp,
+                                    env=ENV, capture_output=True, timeout=60)
+                self.assertEqual(p2.returncode, 1, (engine, p2.stderr[:300]))
+                self.assertIn(b"error:", p2.stderr, engine)
+                self.assertFalse((d / "same.fa.coal-lock").exists(), (engine, "the refused run left its lock behind"))
+                # and the next plain run goes ahead quietly
+                p3 = subprocess.run(self.cmd(engine, ["pep.fasta", "nuc.fasta", "-o", "same.fa"]), cwd=tmp, env=ENV,
+                                    capture_output=True, timeout=60)
+                self.assertEqual(p3.returncode, 0, (engine, p3.stderr[:300]))
+                self.assertNotIn(b"lock", p3.stderr, engine)
+                self.assertFalse((d / "same.fa.coal-lock").exists(), engine)
+
     def test_stale_lock_of_a_dead_process_is_replaced(self):
         dead = subprocess.Popen([sys.executable, "-c", "pass"])
         dead.wait()

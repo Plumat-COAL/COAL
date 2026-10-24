@@ -25,7 +25,7 @@ from .tables import SUPPORTED
 MAX_WARNINGS = 20  # default --max-warnings
 # The same words in coal-cpp (main.cpp, std::bad_alloc)
 OUT_OF_MEMORY = ("out of memory: this run needs more memory than is free on this machine; run with -j 1 (fewer worker processes), split the input, or use a machine with more memory")
-BATCH_DESTS = ("batch", "batch_out_dir")  # the Batch group's options (coal only; coal-cpp rejects them)
+BATCH_DESTS = ("batch", "batch_out_dir", "batch_parallel")  # the Batch group's options (coal only; coal-cpp rejects them)
 
 
 def _on_sigterm(signum, frame):
@@ -118,6 +118,9 @@ def build_parser(batch: bool = False) -> argparse.ArgumentParser:
                           "(not in coal-cpp)")
     bat.add_argument("--batch-out-dir", metavar="DIR",
                      help="with --batch: a job without -o writes DIR/<its protein file's name>.<fasta|aln|paml|codon>")
+    bat.add_argument("--batch-parallel", metavar="N", type=int, default=None,  # None: one after the other
+                     help="with --batch: N jobs at a time in worker processes (0 = one per CPU core; default: "
+                          "one after the other), each job's messages printed together when it ends")
     ap.add_argument("--version", action="version", version=f"coal {__version__}")
     return ap
 
