@@ -4,7 +4,8 @@ Branch `verify/full-2026-10-24` of a fresh clone of `main` at `4159e10` (merge o
 latest release tag `v0.5.0`; every version string in the repository is `0.5.0` (the one exception is a finding below).
 Run unattended by Claude Code following `full-test-prompt.md`; the decisions it took are in `verify/LOG.md`.
 **Update, later on 2026-10-24:** every finding V-1 to V-16 was fixed and merged into `main` as PR #44 (3d525ce);
-section 4 records a second pass at the human checklist, which added the 1,000,000-sequence benchmark and V-17.
+section 4 records a second pass at the human checklist, which added the 1,000,000-sequence benchmark and V-17, itself
+fixed in PR #45 (4eba899: the residue palette on a lightness ladder, a test holds the simulated distances).
 
 ## 1. Verdict per area
 
@@ -15,7 +16,7 @@ section 4 records a second pass at the human checklist, which added the 1,000,00
 | `pal2nal` drop-in | PASS (1 minor) | V-2: no-argument usage goes to stdout with exit 0 |
 | Report and flags | PASS | schema valid, checksums right, counts consistent, `--resume` identical after a kill in every format, both engines |
 | MCP server | PASS | both tools, every parameter, clean stdout, `save_as` rules, large-input hand-over |
-| GUI | PASS (6 usability / minor) | every control and flow right, downloads byte-identical to the CLI; V-8 CDN script vs the offline claim, V-9 axe (Gradio), V-10 tip wording, V-11 unlabelled box, V-12 error reason hidden (all fixed in PR #44); V-17 the residue palette merges for colour-blind readers (second pass, open) |
+| GUI | PASS (6 usability / minor) | every control and flow right, downloads byte-identical to the CLI; V-8 CDN script vs the offline claim, V-9 axe (Gradio), V-10 tip wording, V-11 unlabelled box, V-12 error reason hidden (all fixed in PR #44); V-17 the residue palette merged for colour-blind readers (second pass; fixed in PR #45) |
 | Windows app and installer | PASS | installer, uninstaller, both optional tasks, Claude Desktop connect/disconnect, installed and portable apps, bundled `coal-cpp.exe`, MCP via `COAL.exe`: all as documented; long paths, drag-and-drop, high-DPI, Smart App Control and a real Claude Desktop chat are on the human checklist |
 | Tests and harness | PASS (5 minor) | 502 tests pass on WSL both engines; on Windows 2 environment failures (V-14 symlink privilege, V-15 venv launcher count); V-1 fuzz neutralisation gap, V-13 explainer test skipped by its Linux-only lookup; 15 planted bugs: 12 caught, 2 equivalent mutants, 1 gap (V-16, the GUI download file) |
 | Distribution | PASS (1 docs) | wheels, sdists, git install, platform wheel with `coal-cpp` inside; V-5 stale installer name in the desktop README |
@@ -104,9 +105,10 @@ the rest.
 
 ## 5. Suggested fix order
 
-V-1 to V-16 below are fixed in PR #44 (merged into `main`); V-17, found in the second pass, is open.
+Every finding is fixed: V-1 to V-16 in PR #44 and V-17 in PR #45 (both merged into `main` on 2026-10-24). The order
+below is the one proposed before the fixes, kept for the record.
 
-0. **V-17** (GUI): a residue-class palette that also varies lightness, or a switch to turn the residue colours off.
+0. **V-17** (GUI): a residue-class palette that also varies lightness (done: Okabe-Ito hues on a lightness ladder).
 
 1. **V-12** (GUI): show the engine's reason in the banner when a run stops before pairing (one line from the raw
    messages); the message exists, it is just hidden.
