@@ -50,7 +50,7 @@ Everything in this section was measured on this machine during the run (WSL 2 Ub
 | DrvFs | 100 × 10,000 | 12.9 s (0.0417 GB) | 0.628 s (21.9 MB) | 20.6× | 0.598 s | 21.6× | True |
 | ext4 | 10,000 × 500 | 11.3 s (0.187 GB) | 0.581 s (44.4 MB) | 19.5× | 0.431 s | 26.2× | True |
 | ext4 | 100 × 10,000 | 12.8 s (0.0417 GB) | 0.215 s (21.4 MB) | 59.5× | 0.215 s | 59.4× | True |
-| ext4 | 1,000,000 × 400 | 1.04e+03 s (14.6 GB) | 39.1 s (345 MB) | 26.5× | – s | –× | True |
+| ext4 | 1,000,000 × 400 | 1,035 s (14.6 GB) | 39.1 s (345 MB) | 26.5× | – s | –× | True |
 
 Compared with the committed tables: `docs/benchmarks.md` (v0.3 table, commit 58a1219) has 10,000 × 500 at 24.7 s PAL2NAL / 0.864 s COAL and 100 × 10,000 at 24.5 s / 0.207 s; here (ext4) 11.3 s / 0.58 s and 12.8 s / 0.215 s, so PAL2NAL is about twice as fast on this CPU and the Python engine's long-gene case is the same; the speed-ups keep their shape (sequences: ~20×, long genes: ~60×). The 47f57f1 Windows table has 100,000 × 400 at 1.07 s (coal-cpp, 1 thread) and 5.04 s (Python, 1 process); here 100,000 × 500 took 0.90 s and 4.13 s. The 1,000,000 × 400 row was run in the second pass (one timed run each, data on the WSL ext4 home, no all-core PAL2NAL comparison): PAL2NAL v14 1,035 s and 14.9 GB here against 3,714 s and 18.6 GB in the committed Windows table, coal-cpp 8.4 s (1 thread) against 12.5 s, the Python engine 36 s (345 MB) against 50.3 s (1.2 GB), so the speed-ups on this Linux CPU are about 120× (coal-cpp) and 27× (Python) rather than 297× and 74×: PAL2NAL's Perl runs much faster here than on the Windows machine of the table, COAL's shape and memory hold.
 
