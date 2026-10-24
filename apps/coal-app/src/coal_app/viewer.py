@@ -379,7 +379,11 @@ def build_rows(protein: list[tuple[str, str]], codon: list[tuple[str, str]] | No
 
 # Every colour is a variable, set for light, for Gradio's dark theme (the ".dark" body class) and, in the downloaded
 # page, for a dark system theme; rules are "div.coalv ..." so they win over Gradio's ".prose ..." styles. Residue
-# tints use the Okabe-Ito hues (dark versions: text 7.1-10.2:1). Text colours are !important: Gradio's own rules for
+# tints use the Okabe-Ito hue families on an even lightness ladder (L* 58 to 96 in light, 14 to 42 in dark), so the
+# seven classes stay apart for protanopes, deuteranopes and tritanopes (smallest simulated CIE76 distance 16 light /
+# 13 dark) and in greyscale (L* steps of 6.3 / 4.5); the text is >= 5:1 on every tint. Pastel tints of equal
+# lightness (the first palette) merged under red-green deficiency (verification 2026-10-24, V-17;
+# tests/test_gui_layout.py checks the distances). Text colours are !important: Gradio's own rules for
 # h2/th/td/a/code must not win in either theme.
 # ov*: colours of the overview (graphics: problem marks >= 3:1 on the background, WCAG 1.4.11).
 # Statuses follow the app (warning ember #D45400 / #FF6A13, failed crimson #E0284F) so that none looks like the
@@ -389,15 +393,15 @@ _LIGHT = {"bg": "#ffffff", "fg": "#1a1a1a", "muted": "#5f6b75", "line": "#d5dbe0
           "ovbox": "#1a1a1a", "ovun": "#d5d0ca", "prevbg": "#fff6dc", "prevline": "#8A5A00",
           "mark": "#000000", "hl": "#fff3b0", "hlring": "#8A5A00", "link": "#0057a0", "notebg": "#eef3f7",
           "noteline": "#0072B2", "hatch": "rgba(0,0,0,0.12)", "hatch2": "rgba(0,0,0,0.06)",
-          "hy": "#d4ebf9", "ar": "#f0d6e6", "po": "#c9dcef", "ne": "#f8d5c2", "pl": "#c9eadf", "sp": "#faf4c0",
-          "st": "#d9d9d9"}
+          "hy": "#eaf5fe", "ar": "#b68fba", "po": "#b4bbef", "ne": "#dc9e8c", "pl": "#a0ddbf", "sp": "#f5dfac",
+          "st": "#8b8b8b"}
 _DARK = {"bg": "#1c1a19", "fg": "#ede9e4", "muted": "#b3ada6", "line": "#3a3633", "gap": "#9a938c",
          "ovok": "#6a655f", "ovwarn": "#FF6A13", "ovfail": "#E0284F", "ovgap": "#7d7670", "ovprob": "#FF8A45",
          "ovbox": "#ede9e4", "ovun": "#4a4642", "prevbg": "#2e2614", "prevline": "#FFC24B",
          "mark": "#ede9e4", "hl": "#5c4a10", "hlring": "#FFC24B", "link": "#8cc4ff", "notebg": "#262321",
          "noteline": "#56B4E9", "hatch": "rgba(255,255,255,0.18)", "hatch2": "rgba(255,255,255,0.08)",
-         "hy": "#1e3b52", "ar": "#4a2a40", "po": "#2f3157", "ne": "#573420", "pl": "#1d4537", "sp": "#48421c",
-         "st": "#3d3b39"}
+         "hy": "#00273a", "ar": "#7b577f", "po": "#34406b", "ne": "#4e1f14", "pl": "#29624a", "sp": "#5a4c1f",
+         "st": "#383838"}
 
 
 def _vars(d: dict) -> str:

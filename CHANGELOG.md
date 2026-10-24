@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **GUI: the alignment view's residue-class colours are readable for colour-blind users.** The seven classes keep
+  their Okabe-Ito hue families but now sit on an even lightness ladder, so they stay apart under protanopia,
+  deuteranopia and tritanopia and in greyscale (the pastel tints of equal lightness merged there; verification
+  2026-10-24, V-17); the text stays at 5:1 or better on every tint, in the light and the dark theme. A test holds
+  the simulated distances. The letters, outlines and legend carried the meaning before and still do.
+
 Found by the full verification of 2026-10-24 (`verify/REPORT.md` on the branch `verify/full-2026-10-24`: 16 minor,
 usability, docs and test findings, no wrong output):
 
