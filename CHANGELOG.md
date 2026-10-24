@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **A refused `--resume` (or a signal) no longer leaves `<out>.coal-lock` behind, both engines.** The lock was taken
+  before the checkpoint set-up and only released by the block after it, so an error raised in between (the inputs
+  changed since the checkpoint, a checkpoint of the other engine) or a signal there left the lock, and the next run
+  reported a stale lock of a dead process. Found by the new `--batch-parallel` SIGTERM test on a macOS CI runner;
+  a test refuses a resume in both engines and checks the lock is gone.
 - **`coal --batch --batch-parallel N`: N jobs at a time.** Worker processes each import COAL once and take jobs
   from a queue (`0` = one per CPU core; the default is still one job after the other), every job's output
   byte-identical to running it alone; a job's messages are printed together when it ends, so the lines of two

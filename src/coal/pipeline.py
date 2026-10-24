@@ -760,8 +760,15 @@ def take_output_lock(real_out: str, name: str) -> str:
             continue
         except OSError as e:  # e.g. a folder that cannot be written: the usual output error
             raise _output_error(name, e) from None
-        with os.fdopen(fd, "w") as fh:
-            fh.write(f"{os.getpid()}\n")
+        try:
+            with os.fdopen(fd, "w") as fh:
+                fh.write(f"{os.getpid()}\n")
+        except BaseException:  # a signal between creating the lock and writing the id into it: leave nothing behind
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+            raise
         return path
 
 
@@ -933,32 +940,36 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
         # One run at a time per output file (the partial and checkpoint files next to it have fixed names)
         lock = take_output_lock(real_out, out_path) if real_out and not direct else None
 
-        # Checkpoints for --resume (checkpoint.py). Kept only for an output that is (or will be) a regular file and
-        # inputs that are regular files: the partial output <real out>.coal-partial (rows: .coal-stage) lives next
-        # to the real target, so symlinks, hard links and modes are handled as above; FIFOs/devices (e.g.
-        # /dev/null) and piped inputs use hidden temp files and cannot be resumed.
-        ck = state = None
-        if out_path and _resumable and (not os.path.exists(real_out) or existing):
-            ck = Checkpoint(real_out, {"fmt": out_format, "table": table, "nogap": nogap,
-                                       "nomismatch": nomismatch, "blockonly": blockonly, "strict": strict,
-                                       "keep_going": keep_going, "staged": two_pass},
-                            [pep_path, *nuc_paths])
-            ck.name = out_path
-            if resume:
-                state = ck.load_for_resume(ck.stage if two_pass else ck.partial, nseq, ncol, sum(widths) // 3)
-                if note:
-                    if state:
-                        note(f"resuming {out_path}: {state['completed']:,} of {nseq:,} sequences were already done"
-                             + (" (this format/option needs a second pass, which is redone in full)"
-                                if two_pass else ""))
-                    else:
-                        note(("no checkpoint to resume" if ck.why == "no checkpoint" else
-                              f"found {ck.why}, so nothing can be resumed") + f" for {out_path}; starting a normal run")
-            if state is None:
-                ck.remove()  # a stale checkpoint must never describe this run's files
-        elif resume and note:
-            note(f"{out_path} cannot be resumed (" + ("an input is not a regular file" if not _resumable else
-                 "the output is not a regular file") + "); starting a normal run")
+        try:
+            # Checkpoints for --resume (checkpoint.py). Kept only for an output that is (or will be) a regular file and
+            # inputs that are regular files: the partial output <real out>.coal-partial (rows: .coal-stage) lives next
+            # to the real target, so symlinks, hard links and modes are handled as above; FIFOs/devices (e.g.
+            # /dev/null) and piped inputs use hidden temp files and cannot be resumed.
+            ck = state = None
+            if out_path and _resumable and (not os.path.exists(real_out) or existing):
+                ck = Checkpoint(real_out, {"fmt": out_format, "table": table, "nogap": nogap,
+                                           "nomismatch": nomismatch, "blockonly": blockonly, "strict": strict,
+                                           "keep_going": keep_going, "staged": two_pass},
+                                [pep_path, *nuc_paths])
+                ck.name = out_path
+                if resume:
+                    state = ck.load_for_resume(ck.stage if two_pass else ck.partial, nseq, ncol, sum(widths) // 3)
+                    if note:
+                        if state:
+                            note(f"resuming {out_path}: {state['completed']:,} of {nseq:,} sequences were already done"
+                                 + (" (this format/option needs a second pass, which is redone in full)"
+                                    if two_pass else ""))
+                        else:
+                            note(("no checkpoint to resume" if ck.why == "no checkpoint" else
+                                  f"found {ck.why}, so nothing can be resumed") + f" for {out_path}; starting a normal run")
+                if state is None:
+                    ck.remove()  # a stale checkpoint must never describe this run's files
+            elif resume and note:
+                note(f"{out_path} cannot be resumed (" + ("an input is not a regular file" if not _resumable else
+                     "the output is not a regular file") + "); starting a normal run")
+        except BaseException:  # a refused --resume, or a signal here: the lock must not stay behind
+            release_output_lock(lock)
+            raise
 
         dest_dir = os.path.dirname(real_out) if out_path and not direct else None
         scratch: list = []  # fixed-width temp files of the clustal / codon writer
