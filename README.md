@@ -10,8 +10,10 @@ alignment to produce a codon alignment, ready for dN/dS (PAML codeml, HyPhy) or 
   ([tests/README.md](tests/README.md#test-numbers)).
 - **Fast and scalable:** with the C++ engine (`coal-cpp`, one thread), about **300× faster** than PAL2NAL v14 on
   1 million sequences (12.5 s against 62 min, and 172 MB against 18.6 GB of memory) and over **1,000× faster** on
-  long genes (1,000 sequences × 10,000 codons: 0.25 s against 280 s). PAL2NAL v14 cannot process proteins longer
-  than about 22,000 residues; COAL can. The Python engine gives byte-identical output, more slowly
+  long genes (1,000 sequences × 10,000 codons: 0.25 s against 280 s), measured on Windows; on Linux, where Perl
+  runs faster, the same desktop gave about 120× at 1 million sequences and 410× on 100 × 10,000 codons
+  ([docs/benchmarks.md](docs/benchmarks.md)). PAL2NAL v14 cannot process proteins longer than about 22,000
+  residues; COAL can. The Python engine gives byte-identical output, more slowly
   ([docs/benchmarks.md](docs/benchmarks.md)).
 - **Pipeline-friendly:** non-zero exit codes on errors (PAL2NAL always exits 0), `--strict` to refuse
   probably-wrong genes, a JSON run report, and a `pal2nal` command that accepts an unchanged PAL2NAL v14 command
