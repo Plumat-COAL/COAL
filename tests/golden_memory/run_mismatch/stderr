@@ -1,0 +1,9 @@
+coal: warning: g3 pepAlnPos 33: H does not correspond to TGG
+coal: warning: g3 pepAlnPos 34: Q does not correspond to TGG
+coal: warning: g3 pepAlnPos 35: S does not correspond to TGG
+coal: warning: g3 pepAlnPos 36: K does not correspond to TGG
+coal: warning: g3 pepAlnPos 37: D does not correspond to TGG
+coal: warning: g3 pepAlnPos 38: V does not correspond to TGG
+coal: warning: g3 pepAlnPos 39: F does not correspond to TGG
+coal: warning: g3 pepAlnPos 40: V does not correspond to TGG
+coal: summary: 1 of 6 sequences has codons that do not match their amino acid (kept in the alignment).

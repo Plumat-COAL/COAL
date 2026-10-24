@@ -224,6 +224,10 @@ inconsistent OG0001_sp14 13
 - `rec.to_dict()`: the report, a JSON-ready dict with schema `coal.report/1` ([docs/report-schema.md](report-schema.md)).
 - `rec.write(path)`: `to_dict()` as JSON, written atomically, as `--report` does.
 - `rec.summary_lines()`: the plain-language `coal: summary:` lines (a list of strings, empty for a clean run).
+- `rec.close()`: once the report is read or written. `align_files` streams the per-sequence entries of the report
+  to a file as the run goes (`<out>.coal-entries.jsonl` next to `out`, or a temporary file without `out`), so a
+  run with a million warnings does not keep them in memory; `to_dict()` and `write()` read it back, and `close()`
+  removes it (it is also removed when the `RunReport` is garbage-collected).
 
 ## Versioning promise
 

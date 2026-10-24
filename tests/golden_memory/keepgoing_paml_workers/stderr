@@ -1,0 +1,26 @@
+coal: warning: skipped g2: protein and DNA are inconsistent (no match found)
+coal: warning: g5 pepAlnPos 1: M does not correspond to TGC
+coal: warning: g5 pepAlnPos 2: Q does not correspond to TCT
+coal: warning: g5 pepAlnPos 3: H does not correspond to GGC
+coal: warning: g5 pepAlnPos 4: H does not correspond to AAT
+coal: warning: g5 pepAlnPos 5: E does not correspond to AAG
+coal: warning: g5 pepAlnPos 6: I does not correspond to ATG
+coal: warning: g5 pepAlnPos 7: A does not correspond to ACT
+coal: warning: g5 pepAlnPos 8: K does not correspond to GCC
+coal: warning: g5 pepAlnPos 9: Y does not correspond to GTG
+coal: warning: g5 pepAlnPos 10: R does not correspond to CCC
+coal: warning: g5 pepAlnPos 11: A does not correspond to CAC
+coal: warning: g5 pepAlnPos 12: C does not correspond to CAT
+coal: warning: g5 pepAlnPos 13: N does not correspond to CGC
+coal: warning: g5 pepAlnPos 14: K does not correspond to TTG
+coal: warning: g5 pepAlnPos 15: T does not correspond to GCT
+coal: warning: g5 pepAlnPos 16: C does not correspond to AAC
+coal: warning: g5 pepAlnPos 17: C does not correspond to AAT
+coal: warning: g5 pepAlnPos 18: D does not correspond to AAC
+coal: warning: g5 pepAlnPos 19: D does not correspond to ACG
+coal: warning: g5 pepAlnPos 20: Q does not correspond to TGC
+coal: warning: g5: protein and DNA are probably unrelated: 40 of 40 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: skipped g7: protein and DNA are inconsistent (no match found)
+coal: warning: ... and 20 more warnings (see the report)
+coal: summary: 1 sequence of 9 was written to the output but is probably wrong (first: g5: 40 of the 40 codons COAL could check do not match this protein, so this is almost certainly the wrong DNA for it (or the wrong genetic code). COAL still wrote its row, codon by position, as PAL2NAL does: do not trust it. Run COAL with --strict (in the app: 'Refuse probably-wrong genes') to refuse such genes.) Remove it before analysis, or use --strict to refuse such genes.
+coal: summary: 2 sequences of 9 could not be converted and were left out (first: g2: protein and DNA are inconsistent (no match found). Frameshift at column 21: there is one extra base in the DNA, so from here on the codons are read out of step.)

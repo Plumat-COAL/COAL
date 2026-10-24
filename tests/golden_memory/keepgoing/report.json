@@ -1,0 +1,440 @@
+{
+ "schema": "coal.report/1",
+ "coal_version": "0.5.0",
+ "source": "coal",
+ "engine": "coal-python",
+ "command": "coal pep.fasta nuc.fasta --keep-going -o out.fa",
+ "command_line": "coal pep.fasta nuc.fasta --keep-going -o out.fa --report r.json",
+ "pal2nal_equivalent": "pal2nal.pl pep.fasta nuc.fasta -output fasta",
+ "options": {
+  "output_format": "fasta",
+  "codontable": 1,
+  "nogap": false,
+  "nomismatch": false,
+  "keep_going": true,
+  "strict": false,
+  "blockonly": false
+ },
+ "inputs": [
+  {
+   "role": "protein",
+   "path": "pep.fasta",
+   "sha256": "607acbd546ab1645dc1bd18be719ea3a3626b26229b4e8aca2f3a727ef57fdb8",
+   "sequences": 9
+  },
+  {
+   "role": "dna",
+   "path": "nuc.fasta",
+   "sha256": "12cc363d4ea8a33c87e16417152bf15fec95c28bfde99102be8e32c280509cdb",
+   "sequences": 9
+  }
+ ],
+ "output": {
+  "path": "out.fa",
+  "format": "fasta",
+  "sha256": "d646d6b3bdcd4af9531877ae33d06d39c641a749e1833a0600f47ac1b4d2f6c1",
+  "sequences": 7
+ },
+ "summary": {
+  "total": 9,
+  "ok": 6,
+  "warning": 0,
+  "failed": 3,
+  "pairing": "id"
+ },
+ "hints": [],
+ "errors": [],
+ "sequences": [
+  {
+   "id": "g0",
+   "index": 0,
+   "dna_id": "g0",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "g1",
+   "index": 1,
+   "dna_id": "g1",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "g2",
+   "index": 2,
+   "dna_id": "g2",
+   "pairing": "id",
+   "status": "failed",
+   "messages": [
+    {
+     "code": "frameshift",
+     "column": 21,
+     "shift": 1,
+     "text": "Frameshift at column 21: there is one extra base in the DNA, so from here on the codons are read out of step."
+    },
+    {
+     "code": "inconsistent",
+     "text": "protein and DNA are inconsistent (no match found)"
+    }
+   ]
+  },
+  {
+   "id": "g3",
+   "index": 3,
+   "dna_id": "g3",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "g4",
+   "index": 4,
+   "dna_id": "g4",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "g5",
+   "index": 5,
+   "dna_id": "g5",
+   "pairing": "id",
+   "status": "failed",
+   "messages": [
+    {
+     "code": "suspect_unrelated",
+     "text": "40 of the 40 codons COAL could check do not match this protein, so this is almost certainly the wrong DNA for it (or the wrong genetic code). COAL still wrote its row, codon by position, as PAL2NAL does: do not trust it. Run COAL with --strict (in the app: 'Refuse probably-wrong genes') to refuse such genes."
+    },
+    {
+     "code": "mismatch",
+     "column": 1,
+     "text": "Column 1: amino acid M does not match codon TGC.",
+     "residue": "M",
+     "codon": "TGC"
+    },
+    {
+     "code": "mismatch",
+     "column": 2,
+     "text": "Column 2: amino acid Q does not match codon TCT.",
+     "residue": "Q",
+     "codon": "TCT"
+    },
+    {
+     "code": "mismatch",
+     "column": 3,
+     "text": "Column 3: amino acid H does not match codon GGC.",
+     "residue": "H",
+     "codon": "GGC"
+    },
+    {
+     "code": "mismatch",
+     "column": 4,
+     "text": "Column 4: amino acid H does not match codon AAT.",
+     "residue": "H",
+     "codon": "AAT"
+    },
+    {
+     "code": "mismatch",
+     "column": 5,
+     "text": "Column 5: amino acid E does not match codon AAG.",
+     "residue": "E",
+     "codon": "AAG"
+    },
+    {
+     "code": "mismatch",
+     "column": 6,
+     "text": "Column 6: amino acid I does not match codon ATG.",
+     "residue": "I",
+     "codon": "ATG"
+    },
+    {
+     "code": "mismatch",
+     "column": 7,
+     "text": "Column 7: amino acid A does not match codon ACT.",
+     "residue": "A",
+     "codon": "ACT"
+    },
+    {
+     "code": "mismatch",
+     "column": 8,
+     "text": "Column 8: amino acid K does not match codon GCC.",
+     "residue": "K",
+     "codon": "GCC"
+    },
+    {
+     "code": "mismatch",
+     "column": 9,
+     "text": "Column 9: amino acid Y does not match codon GTG.",
+     "residue": "Y",
+     "codon": "GTG"
+    },
+    {
+     "code": "mismatch",
+     "column": 10,
+     "text": "Column 10: amino acid R does not match codon CCC.",
+     "residue": "R",
+     "codon": "CCC"
+    },
+    {
+     "code": "mismatch",
+     "column": 11,
+     "text": "Column 11: amino acid A does not match codon CAC.",
+     "residue": "A",
+     "codon": "CAC"
+    },
+    {
+     "code": "mismatch",
+     "column": 12,
+     "text": "Column 12: amino acid C does not match codon CAT.",
+     "residue": "C",
+     "codon": "CAT"
+    },
+    {
+     "code": "mismatch",
+     "column": 13,
+     "text": "Column 13: amino acid N does not match codon CGC.",
+     "residue": "N",
+     "codon": "CGC"
+    },
+    {
+     "code": "mismatch",
+     "column": 14,
+     "text": "Column 14: amino acid K does not match codon TTG.",
+     "residue": "K",
+     "codon": "TTG"
+    },
+    {
+     "code": "mismatch",
+     "column": 15,
+     "text": "Column 15: amino acid T does not match codon GCT.",
+     "residue": "T",
+     "codon": "GCT"
+    },
+    {
+     "code": "mismatch",
+     "column": 16,
+     "text": "Column 16: amino acid C does not match codon AAC.",
+     "residue": "C",
+     "codon": "AAC"
+    },
+    {
+     "code": "mismatch",
+     "column": 17,
+     "text": "Column 17: amino acid C does not match codon AAT.",
+     "residue": "C",
+     "codon": "AAT"
+    },
+    {
+     "code": "mismatch",
+     "column": 18,
+     "text": "Column 18: amino acid D does not match codon AAC.",
+     "residue": "D",
+     "codon": "AAC"
+    },
+    {
+     "code": "mismatch",
+     "column": 19,
+     "text": "Column 19: amino acid D does not match codon ACG.",
+     "residue": "D",
+     "codon": "ACG"
+    },
+    {
+     "code": "mismatch",
+     "column": 20,
+     "text": "Column 20: amino acid Q does not match codon TGC.",
+     "residue": "Q",
+     "codon": "TGC"
+    },
+    {
+     "code": "mismatch",
+     "column": 21,
+     "text": "Column 21: amino acid K does not match codon CTT.",
+     "residue": "K",
+     "codon": "CTT"
+    },
+    {
+     "code": "mismatch",
+     "column": 22,
+     "text": "Column 22: amino acid W does not match codon GCG.",
+     "residue": "W",
+     "codon": "GCG"
+    },
+    {
+     "code": "mismatch",
+     "column": 23,
+     "text": "Column 23: amino acid P does not match codon AAC.",
+     "residue": "P",
+     "codon": "AAC"
+    },
+    {
+     "code": "mismatch",
+     "column": 24,
+     "text": "Column 24: amino acid S does not match codon CCC.",
+     "residue": "S",
+     "codon": "CCC"
+    },
+    {
+     "code": "mismatch",
+     "column": 25,
+     "text": "Column 25: amino acid G does not match codon CCG.",
+     "residue": "G",
+     "codon": "CCG"
+    },
+    {
+     "code": "mismatch",
+     "column": 26,
+     "text": "Column 26: amino acid S does not match codon TGG.",
+     "residue": "S",
+     "codon": "TGG"
+    },
+    {
+     "code": "mismatch",
+     "column": 27,
+     "text": "Column 27: amino acid Y does not match codon CGA.",
+     "residue": "Y",
+     "codon": "CGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 28,
+     "text": "Column 28: amino acid L does not match codon GCC.",
+     "residue": "L",
+     "codon": "GCC"
+    },
+    {
+     "code": "mismatch",
+     "column": 29,
+     "text": "Column 29: amino acid I does not match codon ACG.",
+     "residue": "I",
+     "codon": "ACG"
+    },
+    {
+     "code": "mismatch",
+     "column": 30,
+     "text": "Column 30: amino acid V does not match codon GCT.",
+     "residue": "V",
+     "codon": "GCT"
+    },
+    {
+     "code": "mismatch",
+     "column": 31,
+     "text": "Column 31: amino acid H does not match codon ACC.",
+     "residue": "H",
+     "codon": "ACC"
+    },
+    {
+     "code": "mismatch",
+     "column": 32,
+     "text": "Column 32: amino acid V does not match codon TAC.",
+     "residue": "V",
+     "codon": "TAC"
+    },
+    {
+     "code": "mismatch",
+     "column": 33,
+     "text": "Column 33: amino acid Y does not match codon GCG.",
+     "residue": "Y",
+     "codon": "GCG"
+    },
+    {
+     "code": "mismatch",
+     "column": 34,
+     "text": "Column 34: amino acid A does not match codon GGT.",
+     "residue": "A",
+     "codon": "GGT"
+    },
+    {
+     "code": "mismatch",
+     "column": 35,
+     "text": "Column 35: amino acid F does not match codon GTG.",
+     "residue": "F",
+     "codon": "GTG"
+    },
+    {
+     "code": "mismatch",
+     "column": 36,
+     "text": "Column 36: amino acid G does not match codon CTT.",
+     "residue": "G",
+     "codon": "CTT"
+    },
+    {
+     "code": "mismatch",
+     "column": 37,
+     "text": "Column 37: amino acid Y does not match codon CGT.",
+     "residue": "Y",
+     "codon": "CGT"
+    },
+    {
+     "code": "mismatch",
+     "column": 38,
+     "text": "Column 38: amino acid P does not match codon CTA.",
+     "residue": "P",
+     "codon": "CTA"
+    },
+    {
+     "code": "mismatch",
+     "column": 39,
+     "text": "Column 39: amino acid T does not match codon GGG.",
+     "residue": "T",
+     "codon": "GGG"
+    },
+    {
+     "code": "mismatch",
+     "column": 40,
+     "text": "Column 40: amino acid W does not match codon TTC.",
+     "residue": "W",
+     "codon": "TTC"
+    },
+    {
+     "code": "possible_frameshift",
+     "column": 1,
+     "end_column": 40,
+     "text": "The mismatches form one run, from column 1 to the end of the gene: this looks like a missing or extra base (a frameshift) or a small insertion/deletion in the DNA near column 1, not a genetic-code problem. Check the DNA there (a sequencing or assembly error?)."
+    }
+   ]
+  },
+  {
+   "id": "g6",
+   "index": 6,
+   "dna_id": "g6",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "g7",
+   "index": 7,
+   "dna_id": "g7",
+   "pairing": "id",
+   "status": "failed",
+   "messages": [
+    {
+     "code": "missing_dna",
+     "column": 31,
+     "text": "The DNA ends before the protein does (at column 31)."
+    },
+    {
+     "code": "inconsistent",
+     "text": "protein and DNA are inconsistent (no match found)"
+    }
+   ]
+  },
+  {
+   "id": "g8",
+   "index": 8,
+   "dna_id": "g8",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  }
+ ],
+ "runtime_seconds": 0.011,
+ "exit_code": 2,
+ "summary_text": [
+  "1 sequence of 9 was written to the output but is probably wrong (first: g5: 40 of the 40 codons COAL could check do not match this protein, so this is almost certainly the wrong DNA for it (or the wrong genetic code). COAL still wrote its row, codon by position, as PAL2NAL does: do not trust it. Run COAL with --strict (in the app: 'Refuse probably-wrong genes') to refuse such genes.) Remove it before analysis, or use --strict to refuse such genes.",
+  "2 sequences of 9 could not be converted and were left out (first: g2: protein and DNA are inconsistent (no match found). Frameshift at column 21: there is one extra base in the DNA, so from here on the codons are read out of step.)"
+ ],
+ "methods_text": "Codon alignments were built with COAL v0.5.0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 9 sequences, 6 matched their protein exactly; 1 was written to the output but flagged as probably wrong (most likely the wrong DNA, a shifted position or the wrong genetic code); remove it before analysis; and 2 could not be aligned and were excluded. Command: coal pep.fasta nuc.fasta --keep-going -o out.fa"
+}

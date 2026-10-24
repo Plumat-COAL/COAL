@@ -165,11 +165,12 @@ def install_signal_handlers() -> None:
         signal.signal(signal.SIGHUP, _on_sigterm)
 
 
-def run_job(args, argv, prefix: str = "", want_report: bool = False) -> tuple[int, RunReport]:
+def run_job(args, argv, prefix: str = "", want_report: bool = False, close: bool = True) -> tuple[int, RunReport]:
     """One conversion from parsed arguments: the body of a single `coal` run, also used for every job of a batch.
     Returns (exit code, the run report); 130 and 141 mean interrupted / closed pipe (the caller stops).
     Every stderr line is `coal: <prefix><kind>: ...` (prefix "" for a single run, "[k/n PEP] " in a batch).
-    want_report: keep the per-sequence entries although args has no --report/--json (the batch report wants them)."""
+    want_report: keep the per-sequence entries although args has no --report/--json (the batch report wants them).
+    close: close the report's entries file on the way out (close=False: the caller reads the report first)."""
     reporting = bool(args.report or args.json or want_report)
     # Always collected (it also drives the end-of-run "coal: summary:" lines); per-sequence entries
     # of ok sequences only when a report is asked for
@@ -197,6 +198,14 @@ def run_job(args, argv, prefix: str = "", want_report: bool = False) -> tuple[in
     notice = None if args.quiet else (lambda w: say(f"warning: {w}"))
     # the three prefixes: error, warning, notice
     note = None if args.quiet else (lambda t: say(f"notice: {t}"))
+    try:
+        return _run_job(args, rec, say, warn, notice, note, reporting, hidden)
+    finally:
+        if close:
+            rec.close()  # the entries file (also on SIGTERM / Ctrl-C between the run and the report)
+
+
+def _run_job(args, rec, say, warn, notice, note, reporting, hidden) -> tuple[int, RunReport]:
     rc = 0
     try:
         skipped = run(args.pep_aln, args.nuc_fasta, out_path=args.out, table=args.codontable,

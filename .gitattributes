@@ -4,6 +4,7 @@
 # Test inputs and expected outputs must be byte-identical on every OS.
 tests/fixtures/** text eol=lf
 tests/golden/** text eol=lf
+tests/golden_memory/** text eol=lf
 tests/cases.json text eol=lf
 # Examples are LF everywhere so their sha256 matches src/coal_app/sample_report.json on every OS.
 examples/** text eol=lf

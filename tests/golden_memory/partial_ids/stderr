@@ -1,0 +1,3 @@
+coal: warning: only 4 of 6 protein IDs are DNA IDs; pairing sequences by order instead (e.g. protein 'g2' gets DNA 'other2') (--strict makes this an error)
+coal: warning: g2 pepAlnPos 11: E does not correspond to TGG
+coal: summary: 1 sequence of 6 was written to the output but is probably wrong (first: g2: Paired with DNA 'other2' only by its position in the files: check that this is the right DNA.) Remove it before analysis, or use --strict to refuse such genes.

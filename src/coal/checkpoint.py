@@ -80,7 +80,7 @@ class Checkpoint:
         Every field is checked (types, ranges against `nseq`, `ncol` (protein columns, bounding `drop`), `ntriplets`
         (output codon columns, bounding `bad`) and the partial files' sizes, the entries file's lines) and any
         problem counts as an unreadable checkpoint, so an edited or corrupted checkpoint can never make a resumed
-        run write a truncated or wrong output; the checked entries are returned as state["_entries"].
+        run write a truncated or wrong output; the entries are checked line by line and not kept.
         The C++ engine applies the same rules (main.cpp Checkpoint::load_for_resume)."""
         import json
         if not os.path.exists(self.path):
@@ -110,23 +110,26 @@ class Checkpoint:
                 return None
             if os.path.getsize(self.entries) < st["entries_bytes"]:
                 return None
-            with open(self.entries, "rb") as fh:
-                lines = fh.read(st["entries_bytes"]).decode("utf-8").splitlines()
-        except (OSError, UnicodeDecodeError):
+        except OSError:
             return None
         self.why = "an unreadable checkpoint"
-        entries = []
-        for line in lines:
-            if not line.strip():
-                continue
-            try:
-                e = json.loads(line)
-            except ValueError:
-                return None
-            if not isinstance(e, dict) or not _is_int(e.get("index")) or not 0 <= e["index"] < st["completed"]:
-                return None
-            entries.append(e)
-        st["_entries"] = entries
+        # The entries are checked one line at a time and not kept (RunReport.restore reads them again the same
+        # way): a run of a million genes of unrelated DNA has an entries file of tens of gigabytes
+        try:
+            left = st["entries_bytes"]
+            with open(self.entries, "rb") as fh:
+                for line in fh:
+                    if left <= 0:
+                        break
+                    take = line[:left]
+                    left -= len(take)
+                    if not take.strip():
+                        continue
+                    e = json.loads(take.decode("utf-8"))
+                    if not isinstance(e, dict) or not _is_int(e.get("index")) or not 0 <= e["index"] < st["completed"]:
+                        return None
+        except (OSError, UnicodeDecodeError, ValueError):
+            return None
         return st
 
     def save(self, state: dict):
@@ -148,8 +151,11 @@ class Checkpoint:
                 pass
             raise
 
-    def remove(self, *, keep_partial: bool = False):
-        for p in (self.path, self.path + ".tmp", self.entries, self.stage) + (() if keep_partial else (self.partial,)):
+    def remove(self, *, keep_partial: bool = False, keep_entries: bool = False):
+        """Remove the checkpoint and its files. keep_entries: the entries file stays (the run report reads it back
+        for --report and removes it itself, RunReport.close)."""
+        for p in ((self.path, self.path + ".tmp", self.stage) + (() if keep_entries else (self.entries,))
+                  + (() if keep_partial else (self.partial,))):
             try:
                 os.unlink(p)
             except OSError:

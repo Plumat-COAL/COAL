@@ -1,0 +1,141 @@
+{
+ "schema": "coal.report/1",
+ "coal_version": "0.5.0",
+ "source": "coal",
+ "engine": "coal-python",
+ "command": "coal pep.fasta nuc.fasta -o out.fa",
+ "command_line": "coal pep.fasta nuc.fasta -o out.fa --report r.json",
+ "pal2nal_equivalent": "pal2nal.pl pep.fasta nuc.fasta -output fasta",
+ "options": {
+  "output_format": "fasta",
+  "codontable": 1,
+  "nogap": false,
+  "nomismatch": false,
+  "keep_going": false,
+  "strict": false,
+  "blockonly": false
+ },
+ "inputs": [
+  {
+   "role": "protein",
+   "path": "pep.fasta",
+   "sha256": "c1bc23a9d11688fc26fbc60d98e11e82462f88b64d3a3abccfea67196909fd5a",
+   "sequences": 6
+  },
+  {
+   "role": "dna",
+   "path": "nuc.fasta",
+   "sha256": "0960c7bc02e2b26082e234a8ad6a82c3ce59ade7242cc37df82de150722e7df6",
+   "sequences": 6
+  }
+ ],
+ "output": {
+  "path": "out.fa",
+  "format": "fasta",
+  "sha256": "0c94f8331eeff151d0a2736034d65ac546f7f62bc8ed7e25869dc06d5d94719f",
+  "sequences": 6
+ },
+ "summary": {
+  "total": 6,
+  "ok": 3,
+  "warning": 3,
+  "failed": 0,
+  "pairing": "id"
+ },
+ "hints": [],
+ "errors": [],
+ "sequences": [
+  {
+   "id": "g0",
+   "index": 0,
+   "dna_id": "g0",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "g1",
+   "index": 1,
+   "dna_id": "g1",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 4,
+     "text": "Column 4: amino acid G does not match codon NNN.",
+     "residue": "G",
+     "codon": "NNN"
+    },
+    {
+     "code": "mismatch",
+     "column": 8,
+     "text": "Column 8: amino acid Y does not match codon NNN.",
+     "residue": "Y",
+     "codon": "NNN"
+    }
+   ]
+  },
+  {
+   "id": "g2",
+   "index": 2,
+   "dna_id": "g2",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "unknown_aa",
+     "column": 6,
+     "residue": "U",
+     "text": "Column 6: 'U' (selenocysteine) is not one of the 20 standard amino acids, so COAL did not check its codon (any codon accepted)."
+    }
+   ]
+  },
+  {
+   "id": "g3",
+   "index": 3,
+   "dna_id": "g3",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "g4",
+   "index": 4,
+   "dna_id": "g4",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 4,
+     "text": "Column 4: amino acid N does not match codon NNN.",
+     "residue": "N",
+     "codon": "NNN"
+    },
+    {
+     "code": "mismatch",
+     "column": 8,
+     "text": "Column 8: amino acid I does not match codon NNN.",
+     "residue": "I",
+     "codon": "NNN"
+    }
+   ]
+  },
+  {
+   "id": "g5",
+   "index": 5,
+   "dna_id": "g5",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  }
+ ],
+ "runtime_seconds": 0.003,
+ "exit_code": 0,
+ "summary_text": [
+  "2 of 6 sequences have codons with unknown or ambiguous bases (e.g. N) that could not be checked: missing sequence data, not a genetic-code problem.",
+  "1 of 6 sequences contain non-standard amino acids (U, O, B, Z or J) whose codons were not checked."
+ ],
+ "methods_text": "Codon alignments were built with COAL v0.5.0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 6 sequences, 3 matched their protein exactly; 2 contained codons with unknown or ambiguous bases (e.g. N) that could not be checked (kept in the alignment); and 1 contained non-standard amino acids (such as U, B or Z) whose codons were not checked. Command: coal pep.fasta nuc.fasta -o out.fa"
+}

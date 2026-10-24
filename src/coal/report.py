@@ -59,6 +59,18 @@ KIND_CHAR = {"ok": "o", "mismatch": "m", "unchecked": "u", "other": "x", "flagge
              "not_checked": "n"}
 STATUSES = ("ok", "warning", "failed", "not_checked")
 AS_X_NAMES = {"U": "selenocysteine", "O": "pyrrolysine", "B": "D or N", "Z": "E or Q", "J": "I or L"}
+# Per-sequence flags kept next to `kinds` (one byte per sequence, 0 for a clean one): everything the summary lines,
+# the methods text and the genetic-code hint read from a non-ok entry, so the entry itself (with every per-codon
+# message) need not stay in memory (RunReport.flags; the C++ engine mirrors them).
+F_REAL_MM = 1          # a definite (A/C/G/T) mismatch
+F_FRAMESHIFT = 2       # a possible_frameshift message
+F_UNRELATED = 4        # a suspect_unrelated message
+F_ALL_START = 8        # every definite mismatch is a first-Met one (start_codon)
+F_UNKNOWN_AA = 16      # an unknown_aa message
+F_PAIRING = 32         # a suspect_pairing message
+F_OTHER_CODE = 64      # a message whose code is neither unknown_aa nor suspect_pairing
+F_FAILED_NOCOL = 128   # status failed with no column message: a break_event candidate
+NO_CODON = b"   "      # RunReport.codons for a sequence without a definite mismatch
 
 _MISMATCH = re.compile(r"^pepAlnPos (\d+): (\S+) does not correspond to (\S+)")
 _UNKNOWN = re.compile(r"^pepAlnPos (\d+): (\S+) (?:unknown AA type|\([^)]*\) is not checked)")
@@ -134,6 +146,38 @@ def notice_message(pid: str, n: str) -> dict:
 def failure_message(pid: str, code: str, message: str) -> dict:
     rest = message[len(pid) + 2:] if message.startswith(pid + ": ") else message
     return {"code": code, "text": rest}
+
+
+def entry_flags(entry: dict) -> tuple[int, bytes]:
+    """The F_* flags of an entry and the codon of its first definite mismatch (NO_CODON if none): what the report
+    keeps per sequence instead of the entry (RunReport.flags / codons)."""
+    f, codon, all_start = 0, NO_CODON, True
+    has_col = False
+    for m in entry.get("messages") or []:
+        code = m.get("code")
+        if isinstance(m.get("column"), int):
+            has_col = True
+        if code == "mismatch":
+            if not is_ambiguous_codon(m.get("codon")):
+                if not f & F_REAL_MM:
+                    codon = (str(m.get("codon")).encode("utf-8", "replace") + NO_CODON)[:3]
+                f |= F_REAL_MM
+                all_start = all_start and bool(m.get("start_codon"))
+        elif code == "possible_frameshift":
+            f |= F_FRAMESHIFT
+        elif code == "suspect_unrelated":
+            f |= F_UNRELATED
+        elif code == "unknown_aa":
+            f |= F_UNKNOWN_AA
+        elif code == "suspect_pairing":
+            f |= F_PAIRING
+        if code not in ("unknown_aa", "suspect_pairing"):
+            f |= F_OTHER_CODE
+    if f & F_REAL_MM and all_start:
+        f |= F_ALL_START
+    if entry.get("status") == "failed" and not has_col:
+        f |= F_FAILED_NOCOL
+    return f, codon
 
 
 def gene_kind(entry: dict) -> str:
@@ -495,7 +539,16 @@ def early_code_notice(rows, dna_of, table: int, total: int, memo=None) -> str | 
 
 
 class RunReport:
-    """Collects one run's results. keep_entries=False (no --report/--json): ok sequences are only counted."""
+    """Collects one run's results. keep_entries=False (no --report/--json): ok sequences are only counted.
+
+    Per sequence the report keeps one `kinds` byte, one `flags` byte (F_*) and the first definite mismatch's codon
+    (`codons`), plus the first flagged and the first excluded entry whole and the break events of up to
+    BREAK_SAMPLE failed genes: everything the `coal: summary:` lines, the methods text and the genetic-code hint
+    read. The per-sequence entries themselves (every per-codon message) are written to the entries file as they
+    come (`attach_entries` / `open_entries_temp`: the pipeline attaches the `--resume` entries file, or a temporary
+    file when a report is wanted without `-o`) and read back in order when the report is written, so memory does
+    not grow with the number of warnings (a 400-codon gene of unrelated DNA has about 370). Without an entries
+    file, the entries wanted for a report stay in memory (the Python API with a RunReport and no pipeline)."""
 
     def __init__(self, argv, pep: str, nucs, out: str | None, fmt: str, table: int, nogap: bool, nomismatch: bool,
                  keep_going: bool = False, keep_entries: bool = True, strict: bool = False, blockonly: bool = False,
@@ -504,6 +557,18 @@ class RunReport:
         self.want_hint = hint  # False (-q without --report/--json): the hint is never shown
         self.fit_memo: dict = {}  # (sequence, code) -> fits, shared with early_code_notice
         self.keep_entries = keep_entries
+        self.flags = bytearray()                   # F_* per processed sequence (parallel to kinds)
+        self.codons = bytearray()                  # 3 bytes per processed sequence: the first definite mismatch's codon
+        self.first_flagged: dict | None = None     # the first entry whose gene_kind is "flagged" (summary lines)
+        self.first_excluded: dict | None = None    # ... "excluded" (summary lines, the aborted entry views)
+        self.nocol: list[int] = []                 # the first BREAK_SAMPLE failed sequences without a column message
+        self.break_events: dict[int, dict] = {}    # sequence -> break_event message (finish), applied when read back
+        self._pending_marks: set[int] = set()      # entries kept in memory that finish() still has to annotate
+        self._store: dict[int, dict] = {}          # entries kept in memory (no entries file attached)
+        self._sink = None                          # the entries file (text, append) while the run goes
+        self._sink_path: str | None = None
+        self._sink_owned = False                   # this report removes the entries file in close()
+        self._sink_lines = 0                       # entries written to the file by this run
         self.argv = list(argv)
         self.pep, self.nucs, self.out, self.fmt, self.table = pep, list(nucs), out, fmt, table
         self.nogap, self.nomismatch, self.keep_going = nogap, nomismatch, keep_going
@@ -520,7 +585,6 @@ class RunReport:
         self.partial = False
         self.kinds = bytearray()                   # gene_kind initial per processed sequence
         self._ff_cache: tuple | None = None        # (key, first failed index): _first_fail is called per entry
-        self.entries: dict[int, dict] = {}         # non-ok entries (all entries are rebuilt from these)
         self.cols: set[int] = set()                # -nomismatch: columns with a mismatch warning
         self.real_cols: set[int] = set()           # ... of which with a definite (A/C/G/T) mismatch
         self.error: dict | None = None
@@ -575,25 +639,137 @@ class RunReport:
     def _dna_of(self, k):
         return self.dna_ids[k] if self.dna_ids is not None and k < len(self.dna_ids) else None
 
-    def add_sequence(self, k: int, pid: str, warnings, notices, failure=None):
-        """Record sequence number k. warnings: thread_one's warnings as printed (or, with -nomismatch, as they
-        would be); notices: its notices; failure: (code, message) if it failed. Returns the entry if not ok."""
+    # -------------------------------------------------- the entries file (attached by the pipeline)
+    def attach_entries(self, fh, path: str, owned: bool = False) -> None:
+        """Write the non-ok entries to `fh` (open for appending at `path`) as they come, instead of keeping them: the
+        `--resume` entries file next to the output (`owned=False`: the checkpoint removes it unless this report
+        takes it over at the end of the run) or a file of this report's own. The report reads it back in order."""
+        self._sink, self._sink_path, self._sink_owned, self._sink_lines = fh, path, owned, 0
+
+    def open_entries_temp(self):
+        """Attach a temporary entries file of this report's own (a report wanted for a run without -o, whose rows
+        go through the temp folder too); removed in close(). Returns the open file."""
+        import tempfile
+        fd, path = tempfile.mkstemp(prefix=".coal_entries_", suffix=".jsonl")  # (not NamedTemporaryFile: its
+        fh = os.fdopen(fd, "w", newline="\n", encoding="utf-8")                # wrapper closes the file when freed)
+        self.attach_entries(fh, path, owned=True)
+        return fh
+
+    @property
+    def entries_file(self) -> str | None:
+        """The path of the attached entries file, if any."""
+        return self._sink_path
+
+    def finish_entries(self, keep: bool) -> None:
+        """End of the pipeline: close the entries file. keep=True (the run ended, normally or with an error, and a
+        report is wanted): the file stays for the report and this report removes it in close(); keep=False: a
+        file of this report's own is removed now, the --resume one is left to the checkpoint."""
+        if self._sink is not None:
+            try:
+                self._sink.close()
+            except OSError:
+                pass
+            self._sink = None
+        if self._sink_path is None:
+            return
+        if keep:
+            self._sink_owned = True
+        elif self._sink_owned:
+            try:
+                os.unlink(self._sink_path)
+            except OSError:
+                pass
+            self._sink_path, self._sink_owned = None, False
+
+    def owns_entries(self) -> bool:
+        """True while this report will remove the entries file itself (close())."""
+        return self._sink_path is not None and self._sink_owned
+
+    def close(self) -> None:
+        """Remove the entries file this report owns. Idempotent; the command line and the batch driver call it
+        once the report is written (the report can be written several times before)."""
+        self.finish_entries(keep=False)
+        if self._sink_path is not None and self._sink_owned:
+            try:
+                os.unlink(self._sink_path)
+            except OSError:
+                pass
+        self._sink_path, self._sink_owned = None, False
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:  # noqa: BLE001 - never raise from a finalizer
+            pass
+
+    def _record(self, k: int, entry: dict) -> None:
+        """Keep an entry for the report: in the entries file when one is attached (when a report or the hint wants
+        it: the --resume one also feeds a resumed run's report), else in memory when a report is wanted."""
+        if self._sink is not None:
+            if self.keep_entries or self.want_hint:
+                import json
+                self._sink.write(json.dumps(entry) + "\n")
+                self._sink_lines += 1
+        elif self.keep_entries:
+            self._store[k] = entry
+
+    def _entries(self):
+        """The non-ok entries in index order: (k, entry), from the entries file or the memory store, with the break
+        events of finish() applied."""
+        if self._sink_path is not None:
+            import json
+            if self._sink is not None:
+                self._sink.flush()
+            with open(self._sink_path, encoding="utf-8") as fh:
+                for line in fh:
+                    if not line.strip():
+                        continue
+                    e = json.loads(line)
+                    k = e["index"]
+                    ev = self.break_events.get(k)
+                    if ev is not None:
+                        e["messages"].insert(0, ev)
+                    yield k, e
+        else:
+            for k in sorted(self._store):
+                yield k, self._store[k]
+
+    def add_sequence(self, k: int, pid: str, warnings, notices, failure=None, *, mismatches=None, row=None):
+        """Record sequence number k. warnings: thread_one's warning strings as printed (or, with -nomismatch, as
+        they would be); with `mismatches` given, only the X/B/Z/J/O/U ones, and the per-codon mismatches come as
+        (column, residue, codon) in column order (the strings are never built). notices: its notices; failure:
+        (code, message) if it failed. row: the prepared protein row, so the mismatch pattern is annotated now
+        (else finish() does it from the rows, for entries kept in memory). Returns the entry if not ok."""
         self._dict = None
         while len(self.kinds) < k:
-            self.kinds.append(ord("n"))
+            self._set_seq(len(self.kinds), "n", 0, NO_CODON)
         msgs = []
         if failure:
             status, msgs = "failed", [failure_message(pid, *failure)]
         else:
+            if mismatches is None:
+                mm = [warning_message(w, removed=self.nomismatch) for w in warnings if _MISMATCH.match(w)]
+                others = [warning_message(w) for w in warnings if not _MISMATCH.match(w)]
+                in_order = None if self.nomismatch else [warning_message(w) for w in warnings]
+            else:
+                mm = []
+                for col, aa, codon in mismatches:
+                    m = {"code": "mismatch", "column": col,
+                         "text": f"Column {col}: amino acid {aa} does not match codon {codon}.", "residue": aa,
+                         "codon": codon}
+                    if self.nomismatch:
+                        m["removed"] = True
+                    mm.append(m)
+                others = [warning_message(w) for w in warnings]
+                in_order = None if self.nomismatch else others + mm  # thread_one's order: X/B/Z/J/O/U first
             if self.nomismatch:
-                mm = [warning_message(w, removed=True) for w in warnings if _MISMATCH.match(w)]
                 for m in mm:
                     self.cols.add(m["column"])
                     if not is_ambiguous_codon(m["codon"]):
                         self.real_cols.add(m["column"])
-                msgs = mm + [warning_message(w) for w in warnings if not _MISMATCH.match(w)]
+                msgs = mm + others
             else:
-                msgs = [warning_message(w) for w in warnings]
+                msgs = in_order
             msgs += [notice_message(pid, n) for n in notices]
             d = self._dna_of(k)
             mispaired = self.pairing == "order" and self.partial and d is not None and d != pid
@@ -612,25 +788,49 @@ class RunReport:
             else:
                 status = "warning" if msgs else "ok"
         if status == "ok":
-            self._set_kind(k, "o")
+            self._set_seq(k, "o", 0, NO_CODON)
             return None
         entry = {"id": pid, "index": k, "dna_id": self._dna_of(k), "pairing": self._pairing_of(k),
                  "status": status, "messages": msgs}
-        # The entries are read by the summary lines, the end-of-run hint and the report. With -q and no report none
-        # of them is produced, so nothing is kept (the entry is still returned for the --resume entries file): a
-        # million mismatching genes otherwise keep every per-codon message in memory (about 150 KB per gene of
-        # unrelated DNA).
-        if self.keep_entries or self.want_hint:
-            self.entries[k] = entry
-        self._set_kind(k, KIND_CHAR[gene_kind(entry)])
+        # The mismatch pattern (start-codon-only, a run of mismatches) is marked now, with the row at hand, so the
+        # entry written to the entries file is final; without the row, finish() marks the entries kept in memory
+        if (self.keep_entries or self.want_hint) and any(m["code"] == "mismatch" and not is_ambiguous_codon(m["codon"])
+                                                        for m in msgs):  # (with -q and no report nothing reads it)
+            if row is not None:
+                annotate_mismatch_pattern(row, entry)
+            elif self._sink is None and self.keep_entries:
+                self._pending_marks.add(k)
+        self._digest(k, entry)
+        self._record(k, entry)
         return entry
 
-    def _set_kind(self, k, ch):
+    def _digest(self, k: int, entry: dict) -> None:
+        """Keep of a non-ok entry what the summary, the methods text and the hint need (kinds, flags, codons, the
+        first flagged / excluded entry, the break_event candidates). Also used when a run is resumed."""
+        kind = KIND_CHAR[gene_kind(entry)]
+        f, codon = entry_flags(entry)
+        self._set_seq(k, kind, f, codon)
+        if kind == "f" and self.first_flagged is None:
+            self.first_flagged = entry
+        elif kind == "e" and self.first_excluded is None:
+            self.first_excluded = entry
+        if f & F_FAILED_NOCOL and len(self.nocol) < BREAK_SAMPLE:
+            self.nocol.append(k)
+
+    def _set_seq(self, k, ch, flags=0, codon=NO_CODON):
         self._ff_cache = None
         if k < len(self.kinds):
             self.kinds[k] = ord(ch)
+            self.flags[k] = flags
+            self.codons[3 * k:3 * k + 3] = codon
         else:
             self.kinds.append(ord(ch))
+            self.flags.append(flags)
+            self.codons += codon
+
+    def _set_kind(self, k, ch):
+        self._set_seq(k, ch, self.flags[k] if k < len(self.flags) else 0,
+                      bytes(self.codons[3 * k:3 * k + 3]) if k < len(self.kinds) else NO_CODON)
 
     def fail(self, code: str, message: str, seq_id: str | None = None):
         self._dict = None
@@ -652,14 +852,33 @@ class RunReport:
     def checkpoint_state(self) -> dict:
         return {"kinds": self.kinds.decode("ascii"), "cols": sorted(self.cols), "real_cols": sorted(self.real_cols)}
 
-    def restore(self, state, nonok: list[dict], completed: int):
+    def restore(self, state, entries_path: str | None, entries_bytes: int, completed: int):
+        """Continue from a checkpoint: `completed` sequences are done; the first `entries_bytes` bytes of the entries
+        file hold their non-ok entries (checked by Checkpoint.load_for_resume), read once, one at a time, to rebuild
+        what add_sequence kept of each (nothing is read with -q and no report, as nothing is read then)."""
         self._dict = None
         state = state or {}
         self.kinds = bytearray(state.get("kinds", "o" * completed).encode("ascii"))[:completed]
+        self.flags = bytearray(len(self.kinds))
+        self.codons = bytearray(NO_CODON * len(self.kinds))
+        self.first_flagged = self.first_excluded = None
+        self.nocol, self.break_events, self._pending_marks, self._store = [], {}, set(), {}
         self._ff_cache = None
         self.cols, self.real_cols = set(state.get("cols", ())), set(state.get("real_cols", ()))
-        if self.keep_entries or self.want_hint:  # (as add_sequence: nothing is read from them otherwise)
-            self.entries = {e["index"]: e for e in nonok if e["index"] < completed}
+        if (self.keep_entries or self.want_hint) and entries_path and entries_bytes > 0:
+            import json
+            left = entries_bytes
+            with open(entries_path, "rb") as fh:
+                for line in fh:
+                    if left <= 0:
+                        break
+                    take = line[:left]
+                    left -= len(take)
+                    if not take.strip():
+                        continue
+                    e = json.loads(take)
+                    if e["index"] < completed:
+                        self._digest(e["index"], e)
         self.resumed_from = completed
 
     # -------------------------------------------------- end of run (called inside the pipeline, inputs open)
@@ -680,41 +899,63 @@ class RunReport:
 
     def _finish(self, rows, dna, pairing, aborted):
         n = len(self.ids) if self.ids is not None else len(self.kinds)
-        failed = {k for k, e in self.entries.items() if e["status"] == "failed"
-                  and not any(isinstance(m.get("column"), int) for m in e["messages"])}
-        marks = {k for k, e in self.entries.items() if real_mismatches(e)}
-        need = set(sorted(failed)[:BREAK_SAMPLE]) | marks
-        rowof = {}
+        # Where the first BREAK_SAMPLE failed genes without a column message break (the app viewer's rule), from
+        # their rows and DNA: kept apart and put in front of the entry's messages when it is read back. Nothing to
+        # locate with -q and no report (no entry is kept then, as before).
+        failed = set(self.nocol) if (self.keep_entries or self.want_hint) else set()
+        need = failed | self._pending_marks
         if need:
+            last = max(need)
             for k, (pid, row) in enumerate(rows()):
-                if k in need:
-                    rowof[k] = row
-                    if k in failed:
-                        ev = break_event(row, dna.get(pairing[k]), self.table)
-                        if ev:
-                            self.entries[k]["messages"].insert(0, ev)
-                    if k in marks:
-                        annotate_mismatch_pattern(row, self.entries[k])
+                if k in failed:
+                    ev = break_event(row, dna.get(pairing[k]), self.table)
+                    if ev and self._sink_path is None and k in self._store:
+                        self._store[k]["messages"].insert(0, ev)  # (the first flagged / excluded entry is this object)
+                    elif ev:
+                        self.break_events[k] = ev
+                        for first in (self.first_flagged, self.first_excluded):
+                            if first is not None and first["index"] == k:
+                                first["messages"].insert(0, ev)
+                if k in self._pending_marks:  # entries kept in memory and added without their row
+                    annotate_mismatch_pattern(row, self._store[k])
+                    f, codon = entry_flags(self._store[k])
+                    self.flags[k], self.codons[3 * k:3 * k + 3] = f, codon
+                if k >= last:
+                    break
+            self._pending_marks = set()
         # The app's hint (apps/coal-app/src/coal_app/core.py genetic_code_hint), computed here
         if not self.want_hint:
             return
-        # One entry view at a time (a list of all n took ~400 B per sequence); a clean sequence of a run that was not
-        # aborted is never fixable, so its view is not even built. Of the problems' views only the start-codon summary
-        # is kept: whether every definite mismatch is a first-Met one, and the first such codon (the text below).
+        # From the per-sequence flags, one sequence at a time: which sequences another genetic code might fix
+        # (fixable() of their entry views), and of those with definite mismatches whether every mismatch is a
+        # first-Met one and the first such codon (the text below). A clean sequence of a run that was not aborted
+        # is never fixable; in an aborted run the sequences before the failed gene count as written (not_written,
+        # fixable only with a definite mismatch) and those after it as not reached (fixable).
         problems = []
         any_start, all_start, first_codon = False, True, None
-        ent, kinds = self.entries, self.kinds
+        kinds, flags = self.kinds, self.flags
+        nk = len(kinds)
+        ff = self._first_fail() if aborted else None
         for k in range(n):
-            if not aborted and k < len(kinds) and kinds[k] == 111 and k not in ent:  # ord("o")
-                continue
-            e = self.entry_view(k, aborted)
-            if fixable(e):
+            kind = chr(kinds[k]) if k < nk else "n"
+            f = flags[k] if k < nk else 0
+            if not aborted or kind == "e":
+                if kind == "o":
+                    continue
+                fix = (kind == "m" and not f & F_FRAMESHIFT) or (kind == "f" and f & (F_UNRELATED | F_REAL_MM)) \
+                    or kind in ("e", "n")
+                has_mm = f & F_REAL_MM
+            elif ff is None or k > ff:
+                fix, has_mm = True, False
+            else:
+                fix = has_mm = f & F_REAL_MM
+            if fix:
                 problems.append(k)
-                for m in real_mismatches(e):
+                if has_mm:
                     if not any_start:
-                        first_codon = m.get("codon")
+                        first_codon = bytes(self.codons[3 * k:3 * k + 3]).decode("utf-8", "replace")
                     any_start = True
-                    all_start = all_start and bool(m.get("start_codon"))
+                    all_start = all_start and bool(f & F_ALL_START)
         if not problems:
             return
         pset = set(problems)
@@ -773,12 +1014,17 @@ class RunReport:
                         "checked": nt, "fit": top, "fit_current": fits_now}
 
     def entry_view(self, k: int, aborted: bool | None = None) -> dict:
-        """Sequence k as the report shows it. In a run that stopped at an error (no output), as the app's:
-        genes before the first failed gene are 'not_checked' with a 'not_written' message (and their own messages),
-        genes after it 'not_checked' with 'not_reached'; failed genes stay failed."""
+        """Sequence k as the report shows it (views() gives them all, in order, reading the entries once)."""
+        e = next((x for i, x in self._entries() if i == k), None)
+        return self._view(k, e, aborted)
+
+    def _view(self, k: int, e: dict | None, aborted: bool | None = None) -> dict:
+        """Sequence k as the report shows it, from its kept entry (None for a clean or unreached sequence). In a run
+        that stopped at an error (no output), as the app's: genes before the first failed gene are 'not_checked'
+        with a 'not_written' message (and their own messages), genes after it 'not_checked' with 'not_reached';
+        failed genes stay failed."""
         if aborted is None:
             aborted = self.output is None
-        e = self.entries.get(k)
         if e is None:
             pid = self.ids[k] if self.ids is not None else None
             st = "ok" if k < len(self.kinds) and chr(self.kinds[k]) == "o" else "not_checked"
@@ -791,10 +1037,24 @@ class RunReport:
         if ff is None:
             msgs = []
         elif k < ff:
-            msgs = [{"code": "not_written", "failed_id": self.entries[ff]["id"]}] + own
+            msgs = [{"code": "not_written", "failed_id": self.first_excluded["id"]}] + own
         else:
-            msgs = [{"code": "not_reached", "failed_id": self.entries[ff]["id"]}]
+            msgs = [{"code": "not_reached", "failed_id": self.first_excluded["id"]}]
         return dict(e, status="not_checked", messages=msgs)
+
+    def views(self, aborted: bool | None = None):
+        """Every sequence's entry view, in index order, reading the kept entries once (the report's "sequences")."""
+        n = len(self.ids) if self.ids is not None else len(self.kinds)
+        it = self._entries()
+        nxt = next(it, None)
+        for k in range(n):
+            e = None
+            while nxt is not None and nxt[0] < k:  # (an entry beyond n is never written)
+                nxt = next(it, None)
+            if nxt is not None and nxt[0] == k:
+                e = nxt[1]
+                nxt = next(it, None)
+            yield self._view(k, e, aborted)
 
     def _first_fail(self):
         # Cached: entry_view calls this for every sequence, and a full scan each time made a run that stopped on a
@@ -808,8 +1068,7 @@ class RunReport:
 
     # -------------------------------------------------- views
     def _all_entries(self) -> list[dict]:
-        n = len(self.ids) if self.ids is not None else len(self.kinds)
-        return [self.entry_view(k) for k in range(n)]
+        return list(self.views())
 
     def counts(self) -> dict:
         """The summary's counters, from what COAL found for each sequence it processed (its kind: ok, a warning,
@@ -899,7 +1158,6 @@ class RunReport:
         PAL2NAL); the report holds both."""
         kc = self.kind_counts()
         n = len(self.ids) if self.ids is not None else len(self.kinds)
-        ent = self.entries
         lines = []
         hint = self.gc_hint_cli if self.gc_hint else None  # the command-line wording
         k = 0 if self.nomismatch else kc.get("m", 0)
@@ -915,25 +1173,27 @@ class RunReport:
             lines.append(f"{_n(k)} of {_n(n)} sequences " + ("has" if k == 1 else "have") + " codons with unknown or "
                          "ambiguous bases (e.g. N) that could not be checked: missing sequence data, not a "
                          "genetic-code problem.")
-        fl = sorted(i for i, e in ent.items() if gene_kind(e) == "flagged")
+        # (a gene's kind is the one recorded at add_sequence: the end-of-run break events and pattern marks never
+        # change it)
+        fl = kc.get("f", 0)
         if fl:
-            first = ent[fl[0]]
-            lines.append(f"{_seqs(len(fl))} of {_n(n)} {'was' if len(fl) == 1 else 'were'} written to the output but "
-                         f"{'is' if len(fl) == 1 else 'are'} probably wrong (first: {first['id']}: "
-                         f"{first['messages'][0]['text']}) Remove {'it' if len(fl) == 1 else 'them'} before "
+            first = self.first_flagged
+            lines.append(f"{_seqs(fl)} of {_n(n)} {'was' if fl == 1 else 'were'} written to the output but "
+                         f"{'is' if fl == 1 else 'are'} probably wrong (first: {first['id']}: "
+                         f"{first['messages'][0]['text']}) Remove {'it' if fl == 1 else 'them'} before "
                          f"analysis, or use --strict to refuse such genes.")
-        ex = sorted(i for i, e in ent.items() if gene_kind(e) == "excluded")
+        ex = kc.get("e", 0)
         c = self.counts()
         if ex:
-            first = ent[ex[0]]
+            first = self.first_excluded
             why = next((m["text"] for m in first["messages"] if m["code"] not in ("frameshift", "missing_dna")
                         and not (m["code"] == "inconsistent" and "column" in m)), first["messages"][-1]["text"])
             where = next((m["text"] for m in first["messages"] if "column" in m), "")
             gc = " " + hint if hint and (self.nomismatch or not kc.get("m")) else ""
             if self.keep_going:
-                left = (" and " + ("was" if len(ex) == 1 else "were") + " left out") if not self.errors else ""
+                left = (" and " + ("was" if ex == 1 else "were") + " left out") if not self.errors else ""
                 where = " " + where if where else ""
-                lines.append(f"{_seqs(len(ex))} of {_n(n)} could not be converted{left} (first: {first['id']}: "
+                lines.append(f"{_seqs(ex)} of {_n(n)} could not be converted{left} (first: {first['id']}: "
                              f"{why}.{where}){gc}")
             else:
                 # Where the gene breaks, without repeating the error just printed, and what to do (--keep-going).
@@ -955,7 +1215,7 @@ class RunReport:
             eg = f", e.g. protein {self.ids[j]} = DNA {self.dna_ids[j]}" if j is not None and self.ids else ""
             lines.append(f"{_n(k)} of {_n(n)} IDs matched only after normalising (version suffix, case or database "
                          f"fields){eg}; COAL paired by those IDs where PAL2NAL's file order would mispair them.")
-        unk = sum(1 for e in ent.values() if any(m.get("code") == "unknown_aa" for m in e["messages"]))
+        unk = sum(1 for f in self.flags if f & F_UNKNOWN_AA)
         if unk:
             lines.append(f"{_n(unk)} of {_n(n)} sequences contain non-standard amino acids (U, O, B, Z or J) whose "
                          f"codons were not checked.")
@@ -974,14 +1234,24 @@ class RunReport:
         parts = [f"Codon alignments were built with COAL v{__version__} ({REPO_URL}), which places each coding DNA "
                  f"sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; "
                  f"Suyama et al. 2006), using the {phrase} (NCBI translation table {n})."]
-        # Counted in one pass over the entries ("sequences" may be a one-shot iterator: _write_json streams them)
+        # The kind of every sequence's entry view: the run completed (its output was written), so a view is its
+        # entry, whose kind is the one recorded in `kinds`; the message codes of the "other" entries are in the
+        # flags (the C++ engine counts them the same way), so the entries are not read again here
         kinds: dict[str, int] = {}
-        codes: set = set()  # the message codes of the "other" entries
-        for sq in rep["sequences"]:
-            g = gene_kind(sq)
+        names = {"o": "ok", "m": "mismatch", "u": "unchecked", "x": "other", "f": "flagged", "e": "excluded",
+                 "n": "not_checked"}
+        for ch in self.kinds:
+            g = names[chr(ch)]
             kinds[g] = kinds.get(g, 0) + 1
-            if g == "other":
-                codes.update(m.get("code") for m in sq.get("messages") or [])
+        codes: set = set()  # the message codes of the "other" entries
+        for ch, f in zip(self.kinds, self.flags):
+            if ch == 120:  # ord("x")
+                if f & F_UNKNOWN_AA:
+                    codes.add("unknown_aa")
+                if f & F_PAIRING:
+                    codes.add("suspect_pairing")
+                if f & F_OTHER_CODE:
+                    codes.add("other")
         nomm = self.nomismatch
         clauses = []
 
@@ -1112,7 +1382,7 @@ class RunReport:
         run of a million sequences never holds a million entry dicts at once."""
         import json
         n = len(self.ids) if self.ids is not None else len(self.kinds)
-        d = self._dict_with(lambda: (self.entry_view(k) for k in range(n)))
+        d = self._dict_with(self.views)
         head = {k: v for k, v in d.items() if k != "sequences"}
         keys = list(d)
         at = keys.index("sequences")
@@ -1124,9 +1394,9 @@ class RunReport:
             fh.write("[]")
         else:
             fh.write("[")
-            for k in range(n):
+            for k, view in enumerate(self.views()):
                 fh.write(",\n  " if k else "\n  ")
-                fh.write(json.dumps(self.entry_view(k), indent=1).replace("\n", "\n  "))
+                fh.write(json.dumps(view, indent=1).replace("\n", "\n  "))
             fh.write("\n ]")
         fh.write("," + json.dumps({k: head[k] for k in keys[at + 1:]}, indent=1)[1:])
 

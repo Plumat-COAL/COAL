@@ -1,0 +1,127 @@
+{
+ "schema": "coal.report/1",
+ "coal_version": "0.5.0",
+ "source": "coal",
+ "engine": "coal-python",
+ "command": "coal pep.fasta nuc.fasta -o out.fa",
+ "command_line": "coal pep.fasta nuc.fasta -o out.fa --report r.json",
+ "pal2nal_equivalent": "pal2nal.pl pep.fasta nuc.fasta -output fasta",
+ "options": {
+  "output_format": "fasta",
+  "codontable": 1,
+  "nogap": false,
+  "nomismatch": false,
+  "keep_going": false,
+  "strict": false,
+  "blockonly": false
+ },
+ "inputs": [
+  {
+   "role": "protein",
+   "path": "pep.fasta",
+   "sha256": "0f92b51d6fe1946fd22dc0c63b879787e4dc15fd33aaeb042539d7fe7a68c652",
+   "sequences": 6
+  },
+  {
+   "role": "dna",
+   "path": "nuc.fasta",
+   "sha256": "3372ffebe2981e3a9ad55104ab17fb1175d3962f18102815f7bb997bd72b3082",
+   "sequences": 6
+  }
+ ],
+ "output": {
+  "path": "out.fa",
+  "format": "fasta",
+  "sha256": "42d1ac741857298041037fe11fb4b95006675d5de23d5fa8705ca639ee144a70",
+  "sequences": 6
+ },
+ "summary": {
+  "total": 6,
+  "ok": 4,
+  "warning": 1,
+  "failed": 1,
+  "pairing": "order"
+ },
+ "hints": [
+  {
+   "code": "partial_id_match",
+   "text": "Only 4 of 6 protein IDs were found in the DNA file, so COAL paired the sequences by their order in the files instead (for example protein 'g2' got DNA 'other2'). Some proteins are probably paired with the wrong DNA: make the names match (or put both files in the same order) and run again."
+  }
+ ],
+ "errors": [],
+ "sequences": [
+  {
+   "id": "g0",
+   "index": 0,
+   "dna_id": "g0",
+   "pairing": "order",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "g1",
+   "index": 1,
+   "dna_id": "g1",
+   "pairing": "order",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "g2",
+   "index": 2,
+   "dna_id": "other2",
+   "pairing": "order",
+   "status": "failed",
+   "messages": [
+    {
+     "code": "suspect_pairing",
+     "dna_id": "other2",
+     "text": "Paired with DNA 'other2' only by its position in the files: check that this is the right DNA."
+    },
+    {
+     "code": "mismatch",
+     "column": 11,
+     "text": "Column 11: amino acid E does not match codon TGG.",
+     "residue": "E",
+     "codon": "TGG"
+    }
+   ]
+  },
+  {
+   "id": "g3",
+   "index": 3,
+   "dna_id": "g3",
+   "pairing": "order",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "g4",
+   "index": 4,
+   "dna_id": "other4",
+   "pairing": "order",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "suspect_pairing",
+     "dna_id": "other4",
+     "text": "Paired with DNA 'other4' only by its position in the files: check that this is the right DNA."
+    }
+   ]
+  },
+  {
+   "id": "g5",
+   "index": 5,
+   "dna_id": "g5",
+   "pairing": "order",
+   "status": "ok",
+   "messages": []
+  }
+ ],
+ "runtime_seconds": 0.007,
+ "exit_code": 0,
+ "summary_text": [
+  "1 sequence of 6 was written to the output but is probably wrong (first: g2: Paired with DNA 'other2' only by its position in the files: check that this is the right DNA.) Remove it before analysis, or use --strict to refuse such genes."
+ ],
+ "methods_text": "Codon alignments were built with COAL v0.5.0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 6 sequences, 4 matched their protein exactly; 1 were paired with their DNA only by their order in the files; and 1 was written to the output but flagged as probably wrong (most likely the wrong DNA, a shifted position or the wrong genetic code); remove it before analysis. Command: coal pep.fasta nuc.fasta -o out.fa"
+}

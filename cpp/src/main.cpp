@@ -676,7 +676,7 @@ struct Checkpoint {
     // ncol: protein columns (bounds `drop`); ntriplets: output codon columns (bounds `bad`): a crafted entry such
     // as 4000000000000 is an unreadable checkpoint, not a std::bad_alloc from resizing a vector to it.
     bool load_for_resume(Json& st, const std::vector<std::string>& needed, long long nseq, long long ncol,
-                         long long ntriplets, std::vector<Json>& lines_out) {
+                         long long ntriplets) {
         std::error_code ec;
         if (!fs::exists(path, ec)) {
             why = "no checkpoint";
@@ -741,19 +741,18 @@ struct Checkpoint {
             const Json* v = st.get(keys[i]);
             if (ec || !is_int(v) || (long long)n < v->i) return false;
         }
-        // the entries file: one JSON object per line with an "index" below `completed`
+        // the entries file: one JSON object per line with an "index" below `completed`, checked one line at a time
+        // and not kept (RunReport::restore reads them again the same way): a run of a million genes of unrelated
+        // DNA has an entries file of tens of gigabytes (checkpoint.py load_for_resume)
         why = "an unreadable checkpoint";
         std::ifstream ein(entries, std::ios::binary);
         if (!ein) return false;
-        std::string etext((size_t)st.get("entries_bytes")->i, '\0');
-        ein.read(&etext[0], (std::streamsize)etext.size());
-        if ((long long)ein.gcount() != (long long)etext.size()) return false;
-        size_t a = 0;
-        while (a < etext.size()) {
-            size_t b = etext.find('\n', a);
-            if (b == std::string::npos) b = etext.size();
-            std::string line = etext.substr(a, b - a);
-            a = b + 1;
+        long long left = st.get("entries_bytes")->i;
+        std::string line;
+        while (left > 0 && std::getline(ein, line)) {
+            long long took = (long long)line.size() + (ein.eof() ? 0 : 1);
+            if (took > left) line.resize((size_t)left);
+            left -= took;
             if (line.find_first_not_of(" \t\r") == std::string::npos) continue;
             Json e;
             try {
@@ -762,8 +761,8 @@ struct Checkpoint {
                 return false;
             }
             if (e.type != Json::Object || !is_int(e.get("index")) || e.get("index")->i >= completed) return false;
-            lines_out.push_back(std::move(e));
         }
+        if (left > 0) return false;  // the file is shorter than recorded
         return true;
     }
 
@@ -794,12 +793,14 @@ struct Checkpoint {
         return err;
     }
 
-    void remove(bool keep_partial = false) {
+    // keep_entries: the entries file stays (the run report reads it back for --report and removes it itself)
+    void remove(bool keep_partial = false, bool keep_entries = false) {
         std::error_code ec;
         auto rm = [&](const std::string& p) {  // files only: a folder in the way is left alone (os.unlink)
             if (!fs::is_directory(p, ec)) fs::remove(p, ec);
         };
-        for (auto* p : {&path, &entries, &stage, &prot}) rm(*p);
+        for (auto* p : {&path, &stage, &prot}) rm(*p);
+        if (!keep_entries) rm(entries);
         rm(stage + ".grid");
         rm(path + ".tmp");
         if (!keep_partial) rm(partial);
@@ -1003,9 +1004,9 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
     // ---- files: deterministic names next to -o (resumable), temp files for stdout
     std::unique_ptr<Checkpoint> ck;
     Json state;
-    std::vector<Json> resume_entries;  // the checked lines of the entries file (load_for_resume)
     bool resuming = false;
     std::string out_tmp, stage_path, prot_path;
+    std::string entries_tmp;  // the report's entries file for a run without -o (a report wanted)
     // -o PATH is checked before any work. Symlinks are written through;
     // FIFOs, devices and files with other hard links are written in place (from a temp file, no checkpoint).
     OutTarget target;
@@ -1044,7 +1045,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         if (o.fmt == "codon") prot_path = ck->prot;
         if (o.resume) {
             resuming = ck->load_for_resume(state, {staged ? stage_path : out_tmp, ck->entries, prot_path}, nseq,
-                                           ncol, wtotal / 3, resume_entries);
+                                           ncol, wtotal / 3);
             if (resuming)
                 note("resuming " + o.out + ": " + fmt_n(state.get("completed")->as_int()) + " of " + fmt_n(nseq) +
                      " sequences were already done" +
@@ -1074,6 +1075,10 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         // removed by the signal handlers too
         for (auto* q : {&out_tmp, &stage_path, &prot_path}) register_temp(*q);
         if (!stage_path.empty()) register_temp(stage_path + ".grid");
+        if (rec.keep_entries) {  // the report's entries file goes to the temp folder (pipeline.py open_entries_temp)
+            entries_tmp = (fs::path(temp_dir()) / (".coal_entries_" + unique_suffix() + ".jsonl")).string();
+            register_temp(entries_tmp);
+        }
     }
     const std::string sink_path = staged ? stage_path : out_tmp;
     bool finished = false, failed = false;
@@ -1082,10 +1087,13 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         ~Cleanup() { fn(); }
     } cleanup{[&]() {
         release_output_lock(out_lock);
+        // The entries file stays for the report when the run ended (normally or with an error): the report removes
+        // it once written (RunReport::close_entries, main); a temporary one of an interrupted run goes now
+        rec.finish_entries((finished || failed) && rec.keep_entries);
         if (ck) {
             std::error_code ec;
             // otherwise (crash, kill, disk full ...) keep partial + checkpoint for --resume, if one was written
-            if (finished || failed || !fs::exists(ck->path, ec)) ck->remove();
+            if (finished || failed || !fs::exists(ck->path, ec)) ck->remove(false, rec.owns_entries());
             if (ck_registered) {
                 for (auto* q : {&ck->partial, &ck->stage, &ck->prot, &ck->entries}) unregister_temp(*q);
                 unregister_temp(ck->stage + ".grid");
@@ -1101,7 +1109,13 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                 fs::remove(stage_path + ".grid", ec);
                 unregister_temp(stage_path + ".grid");
             }
+            if (!entries_tmp.empty() && !rec.owns_entries()) {
+                fs::remove(entries_tmp, ec);
+                unregister_temp(entries_tmp);
+            }
         }
+        // a signal between the end of the run and the report must not leave the entries file behind
+        if (rec.owns_entries()) register_temp(rec.entries_path());
     }};
 
     try {
@@ -1112,10 +1126,16 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         long long start = resuming ? get("completed") : 0;
         OutFile sink, entries, prot;
         sink.open(sink_path, resuming ? get("sink_bytes") : -1);
-        if (ck) entries.open(ck->entries, resuming ? get("entries_bytes") : -1);
-        // the entries file feeds a resumed run's report, summary and hint; with -q and no report a resumed run
-        // reads none of it (RunReport::restore), so it is not written (pipeline.py)
-        const bool write_entries = rec.keep_entries || rec.want_hint;
+        // The non-ok entries go to the --resume entries file as they come (when a report or the hint wants them:
+        // it also feeds a resumed run's report), or to the report's temporary file, and are read back for --report
+        // (RunReport::add_sequence; pipeline.py)
+        if (ck) {
+            entries.open(ck->entries, resuming ? get("entries_bytes") : -1);
+            rec.attach_entries(&entries.f, ck->entries);
+        } else if (!entries_tmp.empty()) {
+            entries.open(entries_tmp);
+            rec.attach_entries(&entries.f, entries_tmp);
+        }
         if (!prot_path.empty()) prot.open(prot_path, resuming ? get("prot_bytes") : -1);
         std::vector<char> drop((o.nomismatch || block_cols) ? (size_t)ncol : 0, 0), bad;
         long long skipped = 0;
@@ -1134,7 +1154,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                     }
                 }
             const Json* rst = state.get("rec");
-            rec.restore(rst ? *rst : Json::object(), resume_entries, start);
+            rec.restore(rst ? *rst : Json::object(), ck->entries, get("entries_bytes"), start);
             if (const Json* v = state.get("skip_idx"))
                 for (auto& x : v->a) skip_idx.insert(x.as_int());
         } else if (o.fmt == "paml" && !staged) {
@@ -1197,7 +1217,8 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                     if (cur[i].failed) {
                         // the sequences before it in its batch were checked (not written): report only
                         for (size_t j = 0; j < i; ++j)
-                            rec.add_sequence(done + (long long)j, cur[j].id, shown(cur[j].warnings), cur[j].notices);
+                            rec.add_sequence(done + (long long)j, cur[j].id, shown(cur[j].warnings), cur[j].notices, "",
+                                             "", &cur[j].row);
                         rec.add_sequence(done + (long long)i, cur[i].id, {}, {}, cur[i].error_code, cur[i].error);
                         throw CoalError(cur[i].error, cur[i].error_code, cur[i].id);
                     }
@@ -1209,9 +1230,9 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                         warn(it.id + " " + w);
                 for (auto& n : it.notices) warn(n);
                 if (it.failed) warn("skipped " + it.error);
-                const std::string* e = it.failed ? rec.add_sequence(done, it.id, {}, {}, it.error_code, it.error)
-                                                 : rec.add_sequence(done, it.id, shown(it.warnings), it.notices);
-                if (ck && e && write_entries) entries.f << *e << '\n';
+                // the report keeps counts and flags per sequence and writes the entry to its entries file
+                if (it.failed) rec.add_sequence(done, it.id, {}, {}, it.error_code, it.error);
+                else rec.add_sequence(done, it.id, shown(it.warnings), it.notices, "", "", &it.row);
                 if (it.failed) {
                     ++skipped;
                     skip_idx.insert(done);
@@ -1281,9 +1302,9 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
             prot.f.flush();
             if (!prot.f) throw write_failed(ck ? o.out : std::string());
         }
-        if (ck) {
+        if (!rec.entries_path().empty()) {
             entries.f.flush();
-            if (!entries.f) throw write_failed(o.out);
+            if (!entries.f) throw write_failed(ck ? o.out : std::string());
         }
         if (prog && prog->printed) prog->update(done, true);
         if (o.keep_going && skipped == nseq)
@@ -1521,6 +1542,16 @@ int main(int argc, char** argv) {
     RunReport rec(o.argv, o.pep, o.nucs, o.out, o.fmt, o.table, o.nogap, o.nomismatch, o.keep_going,
                   !o.report.empty() || o.json, o.strict, o.blockonly);
     rec.want_hint = !o.quiet || !o.report.empty() || o.json;
+    // The report's entries file goes once the report is written, on every way out of main (cli.py run_job)
+    struct RecClose {
+        RunReport& r;
+        ~RecClose() {
+            std::string p = r.entries_path();
+            bool owned = r.owns_entries();
+            r.close_entries();
+            if (owned) unregister_temp(p);
+        }
+    } rec_close{rec};
     install_signal_handlers();
     // `-` (standard input), pipes, /dev/stdin and FIFOs are copied to temp files first; messages name
     // the argument ("standard input" for `-`), not the temp copy

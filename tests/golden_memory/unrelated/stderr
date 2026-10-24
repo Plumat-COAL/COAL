@@ -1,0 +1,62 @@
+coal: warning: g0 pepAlnPos 1: M does not correspond to ACA
+coal: warning: g0 pepAlnPos 2: Y does not correspond to CGT
+coal: warning: g0 pepAlnPos 3: H does not correspond to CTC
+coal: warning: g0 pepAlnPos 4: W does not correspond to CAT
+coal: warning: g0 pepAlnPos 5: P does not correspond to ATC
+coal: warning: g0 pepAlnPos 6: S does not correspond to ACT
+coal: warning: g0 pepAlnPos 7: C does not correspond to GGC
+coal: warning: g0 pepAlnPos 8: V does not correspond to TCG
+coal: warning: g0 pepAlnPos 9: H does not correspond to GCT
+coal: warning: g0 pepAlnPos 10: I does not correspond to GGT
+coal: warning: g0 pepAlnPos 11: L does not correspond to CCC
+coal: warning: g0 pepAlnPos 12: T does not correspond to GGG
+coal: warning: g0 pepAlnPos 13: H does not correspond to TGC
+coal: warning: g0 pepAlnPos 14: N does not correspond to TGT
+coal: warning: g0 pepAlnPos 15: S does not correspond to CAC
+coal: warning: g0 pepAlnPos 16: D does not correspond to CGC
+coal: warning: g0 pepAlnPos 17: K does not correspond to TCA
+coal: warning: g0 pepAlnPos 18: H does not correspond to CGA
+coal: warning: g0 pepAlnPos 19: G does not correspond to ATG
+coal: warning: g0 pepAlnPos 20: D does not correspond to CGT
+coal: warning: g0: protein and DNA are probably unrelated: 30 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g1: protein and DNA are probably unrelated: 27 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g2: protein and DNA are probably unrelated: 29 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g3: protein and DNA are probably unrelated: 29 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g4: protein and DNA are probably unrelated: 28 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g5: protein and DNA are probably unrelated: 29 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g6: protein and DNA are probably unrelated: 30 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g7: protein and DNA are probably unrelated: 30 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g8: protein and DNA are probably unrelated: 29 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g9: protein and DNA are probably unrelated: 26 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g10: protein and DNA are probably unrelated: 27 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g11: protein and DNA are probably unrelated: 29 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g12: protein and DNA are probably unrelated: 29 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g13: protein and DNA are probably unrelated: 27 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g14: protein and DNA are probably unrelated: 29 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g15: protein and DNA are probably unrelated: 29 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g16: protein and DNA are probably unrelated: 30 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g17: protein and DNA are probably unrelated: 30 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g18: protein and DNA are probably unrelated: 29 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g19: protein and DNA are probably unrelated: 28 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g20: protein and DNA are probably unrelated: 29 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g21: protein and DNA are probably unrelated: 28 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g22: protein and DNA are probably unrelated: 29 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g23: protein and DNA are probably unrelated: 28 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g24: protein and DNA are probably unrelated: 29 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g25: protein and DNA are probably unrelated: 29 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g26: protein and DNA are probably unrelated: 30 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g27: protein and DNA are probably unrelated: 29 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g28: protein and DNA are probably unrelated: 29 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g29: protein and DNA are probably unrelated: 29 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g30: protein and DNA are probably unrelated: 27 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g31: protein and DNA are probably unrelated: 29 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g32: protein and DNA are probably unrelated: 29 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g33: protein and DNA are probably unrelated: 30 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g34: protein and DNA are probably unrelated: 28 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g35: protein and DNA are probably unrelated: 30 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g36: protein and DNA are probably unrelated: 27 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g37: protein and DNA are probably unrelated: 30 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g38: protein and DNA are probably unrelated: 28 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: g39: protein and DNA are probably unrelated: 30 of 30 checkable codons do not match the protein. The row was written as PAL2NAL writes it, but it is probably the wrong DNA or the wrong genetic code (--strict makes this an error)
+coal: warning: ... and 1,131 more warnings (see the report)
+coal: summary: 40 sequences of 40 were written to the output but are probably wrong (first: g0: 30 of the 30 codons COAL could check do not match this protein, so this is almost certainly the wrong DNA for it (or the wrong genetic code). COAL still wrote its row, codon by position, as PAL2NAL does: do not trust it. Run COAL with --strict (in the app: 'Refuse probably-wrong genes') to refuse such genes.) Remove them before analysis, or use --strict to refuse such genes.

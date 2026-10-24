@@ -218,12 +218,15 @@ def main(ap: argparse.ArgumentParser, args: argparse.Namespace, argv: list[str])
         prefix = f"[{job.index}/{n} {job.args.pep_aln}] "
         if args.progress:
             print(f"coal: progress: job {job.index}/{n} {job.args.pep_aln}", file=sys.stderr, flush=True)
-        code, rec = run_job(job.args, job.argv, prefix=prefix, want_report=reporting)
-        if code in (130, 141):  # interrupted / closed pipe: stop here, as a single run does
-            return code
-        entry = {"index": job.index, "line": job.line, "exit_code": code, "output": job.output}
-        if reporting:
-            entry["report"] = rec.to_dict()
+        code, rec = run_job(job.args, job.argv, prefix=prefix, want_report=reporting, close=False)
+        try:
+            if code in (130, 141):  # interrupted / closed pipe: stop here, as a single run does
+                return code
+            entry = {"index": job.index, "line": job.line, "exit_code": code, "output": job.output}
+            if reporting:
+                entry["report"] = rec.to_dict()
+        finally:
+            rec.close()  # the job's entries file
         done.append(entry)
         if code == 1:
             failed += 1
