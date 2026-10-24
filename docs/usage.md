@@ -100,15 +100,18 @@ killed, so a pipeline reading COAL's output never waits on an orphaned worker.
   engine (one process: 86 MB at 100,000 sequences, 140 MB at 300,000, 367 MB at 1,000,000, all of 400
   codons; 500,000 sequences of 150 codons: 203 / 203 / 209 MB for fasta / clustal / codon output) and about
   190 bytes with `coal-cpp` (36 / 73 / 204 MB; 112 / 136 / 148 MB). Each extra Python
-  worker process adds its own footprint (about 150 MB). Sequences with warnings keep their report entry in
-  memory, with every one of their per-codon messages (about 0.6 KB per sequence with `coal-cpp`, 1.4 KB with the
-  Python engine, for a gene with a handful of mismatches; a gene of 400 codons of unrelated DNA, every codon
-  mismatching, keeps about 55 KB / 150 KB, so a million genes of wrong DNA need more memory than most machines
-  have). The summary lines, the genetic-code hint and the report read them; with `-q` and no `--report`/`--json`
-  none of those is produced and nothing is kept, so memory stays flat whatever the data (the Python engine with
-  workers still holds one batch of per-codon messages per worker in flight: about 140 MB per worker on
-  400-codon genes of unrelated DNA, 2.5 GB with 16 workers; use `-j 4` or `coal-cpp`, which stays flat, for
-  such data). `--report`/`--json` is written one sequence at a time, so it adds little beyond the entries.
+  worker process adds its own footprint (about 150 MB resident, 50 MB of its own pages). Sequences with warnings
+  do not add to that: the run report keeps one byte for each sequence's kind and one for a few flags (plus the
+  first flagged and the first excluded gene, for the summary lines) and writes each sequence's messages to the
+  `--resume` entries file next to the output as the run goes (to a temporary file when a report is wanted
+  without `-o`; nothing with `-q` and no report), reading them back one at a time when `--report`/`--json` is
+  written. So memory stays flat whatever the data, also on genes of wrong DNA where every codon mismatches
+  (measured on 100,000 genes of 400 codons of unrelated DNA, default mode: 118 MB with `coal-cpp`, 69 MB with
+  the Python engine in one process and 885 MB with 16 workers, the workers' own footprint; the same input in
+  clean form costs about the same). The Python engine's workers hand back each sequence's mismatch columns and
+  codons, not its warning strings, so the batch in flight stays small on such data too. The entries file of
+  such a run is large while it runs (about 55 KB per 400-codon gene of unrelated DNA: a million of them write
+  55 GB next to the output, removed at the end).
 - `-q --progress` still prints the progress lines (`-q` silences warnings, notices and the summary, not progress).
 - One run at a time per output file: a run with `-o` keeps `<out>.coal-lock` (holding its process number) next to
   the output while it runs, because the partial output and checkpoint files it writes there have fixed names. A

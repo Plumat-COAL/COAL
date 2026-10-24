@@ -411,8 +411,9 @@ def _fasta(recs):
 
 
 def _write(d: Path, peps, nucs, pep_name="pep.fasta"):
-    (d / pep_name).write_text(_fasta(peps))
-    (d / "nuc.fasta").write_text(_fasta(nucs))
+    # LF on every platform: the report records the inputs' sha256
+    (d / pep_name).write_text(_fasta(peps), newline="\n")
+    (d / "nuc.fasta").write_text(_fasta(nucs), newline="\n")
 
 
 def unrelated_case(d: Path, n=40, ncod=30):
@@ -523,8 +524,8 @@ def blockonly_case(d: Path, n=3, ncod=30):
         nucs.append((f"g{k}", s))
     marks = "#" * (ncod // 2) + " " * (ncod - ncod // 2)
     (d / "pep.aln").write_text("CLUSTAL W (1.83) multiple sequence alignment\n\n\n"
-                               + "".join(f"{i:<10}{s}\n" for i, s in peps) + " " * 10 + marks + "\n")
-    (d / "nuc.fasta").write_text(_fasta(nucs))
+                               + "".join(f"{i:<10}{s}\n" for i, s in peps) + " " * 10 + marks + "\n", newline="\n")
+    (d / "nuc.fasta").write_text(_fasta(nucs), newline="\n")
 
 
 GOLDEN_CASES = {
@@ -577,7 +578,8 @@ def run_case(engine, name, tmp):
     stdin = (d / stdin_name).read_bytes() if stdin_name else None
     p = subprocess.run(cmd, cwd=tmp, capture_output=True, env=dict(ENV, **extra), input=stdin, timeout=300)
     rep = (d / "r.json").read_bytes() if (d / "r.json").exists() else None
-    return p.returncode, p.stdout, p.stderr, rep
+    # stderr is a text stream: CRLF on Windows in both engines (the alignment on stdout is written in binary mode)
+    return p.returncode, p.stdout, p.stderr.replace(b"\r\n", b"\n"), rep
 
 
 class ReportGoldens(unittest.TestCase):
@@ -592,7 +594,7 @@ class ReportGoldens(unittest.TestCase):
                 g = GOLDEN_DIR / name
                 if WRITE_GOLDENS and engine == "python":
                     g.mkdir(parents=True, exist_ok=True)
-                    (g / "rc").write_text(f"{rc}\n")
+                    (g / "rc").write_text(f"{rc}\n", newline="\n")
                     (g / "stdout").write_bytes(out)
                     (g / "stderr").write_bytes(err)
                     if rep is not None:

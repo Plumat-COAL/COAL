@@ -30,13 +30,27 @@ Found by the stress test of 2026-10-23 (`docs/stress-test-2026-10-23.md`), both 
 - **`-q` without `--report`/`--json` keeps no per-sequence entries** and writes none to the `--resume` entries
   file (a million genes of unrelated DNA wrote 55 GB of it), so memory and disk stay flat on data where every
   codon mismatches (the summary lines, the hint and the report, which read them, are not produced under `-q`).
-  The Python engine with workers still holds one batch of per-codon messages per worker in flight (about
-  140 MB per worker on 400-codon genes of unrelated DNA, so 2.5 GB with 16 workers; `-j 4` or `coal-cpp`,
-  which stays flat, for such data).
-  Otherwise every per-codon message of a mismatching sequence stays in memory until the end of the run: about
-  55 KB (coal-cpp) / 150 KB (Python) per 400-codon gene of unrelated DNA, which `docs/usage.md` now says; a run of
-  100,000 such genes needs 5.5 / 14 GB and a million cannot be run on a 32 GB machine. Keeping only what the
-  summary and the hint need, and streaming the rest to the `--resume` entries file, is the follow-up.
+- **Memory no longer grows with the number of per-codon warnings, in either engine** (finding 9 of the stress
+  test, both halves). The run report keeps, per sequence, one byte for its kind, one for a few flags and the
+  codon of its first definite mismatch (plus the first flagged and the first excluded gene whole, for the
+  summary lines, and where up to 200 failed genes break), instead of every per-sequence entry with every message
+  until the end of the run; the entries go to the `--resume` entries file next to the output as the run goes
+  (or to a temporary file when a report is wanted without `-o`; nothing with `-q` and no report), and `--report`
+  / `--json` read them back in order. A resumed run rebuilds its state from that file one line at a time (the
+  checkpoint check no longer loads the whole file either). The Python engine's worker processes hand back each
+  sequence's mismatch columns and codons instead of its warning strings (about 2 KB against 35 KB for a
+  400-codon gene of unrelated DNA, per gene of the batch in flight in every worker and in the main process), and
+  the main process formats a warning only when it prints it; the strings, the report, stderr, the exit status
+  and `--resume` are unchanged byte for byte (`tests/golden_memory`: recorded from the previous `main`, both
+  engines). Measured on 400-codon genes of unrelated DNA, every codon a warning (peak memory as the summed PSS
+  over the process tree; 16 threads): 20,000 genes in default mode, coal-cpp 1,172 MB before and 103 MB after,
+  the Python engine 2,822 MB and 45 MB (`-j 1`), 3,226 MB and 338 MB (`-j 16`, 7 workers); 100,000 genes,
+  coal-cpp 5,654 MB and 118 MB, the Python engine 13,761 MB and 69 MB (`-j 1`), 14,647 MB and 885 MB (`-j 16`,
+  16 workers, which is the workers' own footprint: the same as `-q`). The default mode is also faster on such
+  data (100,000 genes, `-j 1`: 213 s to 158 s in Python, 185 s to 161 s in coal-cpp) since no entry store grows;
+  the one cost is the main process formatting the strings the workers formatted in parallel before, which only
+  shows when stderr takes most of a run. A run with `-o` on such data writes the entries file next to the
+  output while it runs (about 55 KB per 400-codon gene of unrelated DNA, removed at the end).
 - **The genetic-code hint no longer re-tests genes of more than 100,000 residues** (28 s of a 30 s run on one
   1,000,000-residue gene with one wrong codon; `-q` already skipped it).
 - **Messages name at most three input files** ("a.fa, b.fa, c.fa and 997 more files") instead of every path.

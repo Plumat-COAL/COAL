@@ -788,13 +788,14 @@ wording, the pool test under `fork`).
 | 5 | an already ignored SIGHUP stays ignored | `5c8721b` |
 | 6 | `coal: error: out of memory: ...` (exit 1, report code `out_of_memory`) for a `MemoryError` / `std::bad_alloc` in the main process | `3331211` |
 | 7 | the GUI's console output uses `errors="replace"` on a non-UTF-8 console (`tolerant_console`); the MCP stdio server is untouched | `3331211` |
-| 9 | partial: with `-q` and no `--report`/`--json` the run report keeps no per-sequence entries (20,000 unrelated genes: cpp 103 MB instead of 1,149 MB; python 1.16 GB instead of 3.15 GB, the rest being warnings in flight between workers). The default mode still keeps every message for the summary and the hint; `docs/usage.md` now gives the per-gene cost and the follow-up (keep only what the summary and hint need, stream the rest to the entries file) | `5982087` |
+| 9 | first round, partial: with `-q` and no `--report`/`--json` the run report keeps no per-sequence entries (20,000 unrelated genes: cpp 103 MB instead of 1,149 MB; python 1.16 GB instead of 3.15 GB, the rest being warnings in flight between workers). **Fixed in full on 2026-10-24** (the follow-up section at the end): the run report keeps counts and flags per sequence and streams the entries to the entries file, in both engines, and the Python engine's workers return mismatch columns instead of warning strings: 100,000 unrelated genes in default mode cpp 118 MB instead of 5,654 MB, python 69 MB instead of 13,761 MB | `5982087`, the follow-up PR |
 | 10 | coal-cpp `find()`: a pattern of ordinary residues is a KMP string search in the translated frames; mixed patterns search their first run of residues and probe the last residue before the full check. 200,000-residue repeat: 138 s to 0.16 s; 1,000,000: not finished in 30 min to 0.8 s | `de5e9e5` |
 | 11 | genes of more than 100,000 residues are left out of the genetic-code hint's sample: the 1M-residue gene with one wrong codon takes 1.6 s (python) / 0.5 s (cpp) instead of 30 s / 5.7 s | `243451d` |
 | 14 | messages name at most three input files and the count | `243451d` |
 
-Not fixed, by choice: 12 (the default worker count; a documented ceiling), 13, 15, 16, 17, 18, 19 (environment),
-20, and the default-mode memory of 9 (a redesign of the run report's per-sequence store, both engines).
+Not fixed, by choice: 12 (the default worker count; a documented ceiling), 13, 15, 16, 17, 18, 19 (environment)
+and 20. The default-mode memory of 9 (a redesign of the run report's per-sequence store, both engines) was left
+open here and fixed on 2026-10-24: see the follow-up section at the end.
 
 ## Iteration 2: the whole stress test again on the fixed code
 
@@ -822,12 +823,12 @@ on the branch, with tests):
 | coal-cpp slower at `-j 1` | `many_1M_j1`: 14.8 s in iteration 1, 30.2 s in iteration 2 (`-j 16`: 15.9 s both times). Re-timed on an idle machine against the untouched v0.5.0 build: v0.5.0 12.9-13.4 s at `-j 1` and 13.2-13.3 s at `-j 16`; the branch 29.4-29.5 s and 14.1-14.2 s (two rounds each); the Python engine unchanged (74.6 s against 76.0 s at `-j 1`). After the fix: 12.8-12.9 s and 13.1-13.2 s (`e7551aa`). The linear exact-fit search of the first round translated the three frames and ran the string search for every sequence, also when the DNA fits at position 0 (a CDS that is exactly the protein's: the usual case): 16 us per clean 400-codon gene, hidden behind the reader thread at `-j 16`. | A fit at 0 is checked before any frame is translated (`matches_at`, as before the first round); the repeat cases stay at 0.1 s and the differential suites agree. |
 | `-q` memory of the Python engine with workers | `unrelated_1M_quiet`: coal-cpp 429 MB flat, Python engine 4.9 GB. Not a leak in the run report (fixed in the first round) but the per-codon messages in flight: a 400-codon gene of unrelated DNA produces 370 warning strings (35 KB of Python objects); a work batch is about 1,700 such genes, so each of the 16 workers holds about 140 MB (its result, the pickled copy and the pipe buffer) and the main process one batch at a time. Measured over the whole million-gene run (`-q -j 16`, PSS every 10 s): the 16 workers stay between 2.6 and 3.0 GB from the first batch to the last, the main process grows slowly from 320 to 530 MB (about 0.2 KB per gene; fragmentation after unpickling 600 batch results of 60 MB each is the likely cause), peak 3.5 GB on an idle machine (4.9 GB in the loaded iteration-2 run). `-j 1`: 188 MB at 100,000 genes. | Documented (`docs/usage.md`, CHANGELOG): about 140 MB per worker on such data, `-j 4` or `coal-cpp` for it. Carrying the mismatch warnings as columns instead of strings and formatting them in the main process would remove it; that touches the worker protocol, the report and both engines' stderr ordering, so it is left as the follow-up next to the default-mode cost of finding 9. |
 
-**Tests.** `tests/test_stress_findings.py` has 18 tests (the lock, the entries file, the open-file budget, the
-line endings, SIGHUP, out-of-memory, the hint cap, the file-name lists, `-q` keeping nothing); every other test module passes (36 modules), apart from the two WSL 1 artefacts of the first round, which fail identically on untouched v0.5.0: `test_engine_ux` (writing to `/proc` says *permission denied* here, not *no such file*) and the `RLIMIT_FSIZE` pool test (`ulimit -f` is not enforced). The app's test folder needs the `coal_app` package installed (`pip install -e apps/coal-app`), which the 3.14 venv cannot do (the `gui` extra, finding 8); its console-encoding test ran under Windows Python 3.13.
+**Tests.** `tests/test_stress_findings.py` had 18 tests after this iteration (the lock, the entries file, the open-file budget, the
+line endings, SIGHUP, out-of-memory, the hint cap, the file-name lists, `-q` keeping nothing; the follow-up of 2026-10-24 added 9: the goldens of warning-heavy runs, kill/resume identity, the memory slope of both engines, the worker protocol); every other test module passes (36 modules), apart from the two WSL 1 artefacts of the first round, which fail identically on untouched v0.5.0: `test_engine_ux` (writing to `/proc` says *permission denied* here, not *no such file*) and the `RLIMIT_FSIZE` pool test (`ulimit -f` is not enforced). The app's test folder needs the `coal_app` package installed (`pip install -e apps/coal-app`), which the 3.14 venv cannot do (the `gui` extra, finding 8); its console-encoding test ran under Windows Python 3.13.
 
-**Still open, by choice:** the default-mode memory per warning (finding 9, both engines: the run report's
+**Still open, by choice (after iteration 2):** the default-mode memory per warning (finding 9, both engines: the run report's
 per-sequence store is a redesign), the Python engine's in-flight cost above, and the environment findings of the
-first round (12, 13, 15-20).
+first round (12, 13, 15-20). The first two were fixed on 2026-10-24 (the follow-up section at the end).
 
 ### Iteration 2: every case
 
@@ -1240,12 +1241,12 @@ first round (12, 13, 15-20).
 | wrongcode_1M | 1,000,000 x 400 wrong code | 1,648.8 | cpp | 161.85 | 3,376 | 0 | truth =, engines = |
 | wrongcode_1M_maxwarn0_report | 1,000,000 x 400 wrong code, --max-warnings 0 --report | 1,648.8 | python | 400.36 | 6,374 | 0 | truth =, engines = |
 | wrongcode_1M_maxwarn0_report | 1,000,000 x 400 wrong code, --max-warnings 0 --report | 1,648.8 | cpp | 430.80 | 3,380 | 0 | truth =, engines = |
-| unrelated_100k | 100,000 x 400 unrelated DNA | 164.7 | python | 380.06 | 14,526 | 0 | truth =, engines =; default mode: finding 9, documented |
-| unrelated_100k | 100,000 x 400 unrelated DNA | 164.7 | cpp | 347.96 | 5,484 | 0 | truth =, engines =; default mode: finding 9, documented |
+| unrelated_100k | 100,000 x 400 unrelated DNA | 164.7 | python | 380.06 | 14,526 | 0 | truth =, engines =; default mode: finding 9, documented (fixed on 2026-10-24: 69 MB at `-j 1`, 885 MB at `-j 16`; the follow-up section) |
+| unrelated_100k | 100,000 x 400 unrelated DNA | 164.7 | cpp | 347.96 | 5,484 | 0 | truth =, engines =; default mode: finding 9, documented (fixed on 2026-10-24: 118 MB; the follow-up section) |
 | unrelated_100k_strict_keepgoing | 100,000 x 400 unrelated, --strict --keep-going | 164.7 | python | 13.28 | 513 | 1 | engines =; exit 1 is right (--strict stops at the first unrelated gene) |
 | unrelated_100k_strict_keepgoing | 100,000 x 400 unrelated, --strict --keep-going | 164.7 | cpp | 4.30 | 70 | 1 | engines =; exit 1 is right (--strict stops at the first unrelated gene) |
-| unrelated_1M | 1,000,000 x 400 unrelated DNA | 1,648.8 | python | 134.25 | 15,231 | -9 | killed by the memory watchdog at 16 GB; default mode: every per-codon message kept for the summary and the hint (finding 9, not fixed: documented) |
-| unrelated_1M | 1,000,000 x 400 unrelated DNA | 1,648.8 | cpp | 513.99 | 11,352 | -9 | killed by the memory watchdog at 16 GB; default mode: every per-codon message kept for the summary and the hint (finding 9, not fixed: documented) |
+| unrelated_1M | 1,000,000 x 400 unrelated DNA | 1,648.8 | python | 134.25 | 15,231 | -9 | killed by the memory watchdog at 16 GB; default mode: every per-codon message kept for the summary and the hint (finding 9, not fixed: documented); fixed on 2026-10-24: the follow-up section |
+| unrelated_1M | 1,000,000 x 400 unrelated DNA | 1,648.8 | cpp | 513.99 | 11,352 | -9 | killed by the memory watchdog at 16 GB; default mode: every per-codon message kept for the summary and the hint (finding 9, not fixed: documented); fixed on 2026-10-24: the follow-up section |
 | unrelated_1M_quiet | 1,000,000 x 400 unrelated DNA, -q | 1,648.8 | python | 651.12 | 4,882 | 0 | truth =, engines =; ran to the end: the Python engine's -q memory is jobs x one batch of warnings in flight (see 'What iteration 2 found' above) |
 | unrelated_1M_quiet | 1,000,000 x 400 unrelated DNA, -q | 1,648.8 | cpp | 544.27 | 429 | 0 | truth =, engines =; ran to the end, flat |
 | unrelated_1M_report_maxwarn0 | 1,000,000 x 400 unrelated, --report --max-warnings 0 | 1,648.8 | python | 487.58 | 15,076 | -9 | killed by the memory watchdog at 16 GB; default mode with --report: finding 9, not fixed; killed by the 16 GB watchdog |
@@ -1256,3 +1257,52 @@ first round (12, 13, 15-20).
 | half_ids_1M | 1,000,000 x 400, 50% of DNA IDs differ (by order) | 1,649.8 | cpp | 18.18 | 606 | 0 | truth =, engines = |
 | half_ids_1M_strict | 1,000,000 x 400, 50% IDs differ, --strict | 1,649.8 | python | 13.43 | 269 | 1 | engines =; error by design: partial ID match with --strict; exit 1 is right (--strict refuses the partial ID match) |
 | half_ids_1M_strict | 1,000,000 x 400, 50% IDs differ, --strict | 1,649.8 | cpp | 2.78 | 203 | 1 | engines =; error by design: partial ID match with --strict; exit 1 is right (--strict refuses the partial ID match) |
+
+## Follow-up of 2026-10-24: finding 9 fixed in both engines
+
+The default-mode half of finding 9 (every per-codon message of a mismatching sequence kept until the end of the
+run) and the Python engine's in-flight cost found in iteration 2 were fixed on 2026-10-24, on a 20-thread Windows
+11 machine (32 GB) with the engines in WSL 2 (Ubuntu 26.04, Python 3.13.13, g++ 15.2), 16 threads:
+
+- **Both engines:** the run report keeps per sequence one byte for its kind, one for a few flags and the codon of
+  its first definite mismatch (plus the first flagged and the first excluded entry whole, and where up to 200
+  failed genes break), instead of the entry with every message; the entries go to the `--resume` entries file
+  next to the output as the run goes (or to a temporary file when a report is wanted without `-o`; nothing with
+  `-q` and no report), and `--report` / `--json` read them back in order. The mismatch pattern is marked when the
+  entry is made, with the row at hand; a resumed run rebuilds its state from the entries file one line at a time,
+  and the checkpoint check no longer loads the whole file either.
+- **Python engine:** the workers hand back each sequence's mismatch columns and codons (`core.Threaded`
+  `mm_cols` / `mm_codons`, about 2 KB per 400-codon gene of unrelated DNA against 35 KB of strings) and the main
+  process formats a warning string only when it prints it.
+- Output, stderr, exit status, the report JSON and `--resume` are unchanged byte for byte: `tests/golden_memory`
+  holds 18 warning-heavy cases recorded from `main` at `fd46a4e` before the change, checked for both engines by
+  `tests/test_stress_findings.py` (with kill/resume identity, the memory slope of both engines and the worker
+  protocol: 9 new tests), plus every differential suite, the engine fuzz (seeds 20261024 and 31337, 600 cases
+  each) and the PAL2NAL fuzz (seed 20261024, 2,000 cases: one unexplained difference, case 1957, which untouched
+  `main` shows identically, so it is a finding for the next verification, not a regression).
+
+Measured with `tests/tools/stress_run.py` (summed PSS over the process tree, sampled every 50 ms; wall time of
+the whole process), `-o` output, 400-codon genes of unrelated DNA from `stress_gen.py --mismatch unrelated`:
+
+| input | options | engine | before: s / MB | after: s / MB |
+|---|---|---|---:|---:|
+| 20,000 genes | default, `-j 1` | coal-cpp | 33.9 / 1,172 | 30.6 / 103 |
+| 20,000 genes | default, `-j 1` | Python | 37.9 / 2,822 | 34.7 / 45 |
+| 20,000 genes | default, `-j 16` (7 workers) | coal-cpp | 33.1 / 1,174 | 30.8 / 104 |
+| 20,000 genes | default, `-j 16` (7 workers) | Python | 29.1 / 3,226 | 23.7 / 338 |
+| 20,000 genes | `-q -j 1` | coal-cpp | 11.3 / 102 | 13.4 / 103 |
+| 20,000 genes | `-q -j 1` | Python | 16.7 / 162 | 18.1 / 45 |
+| 20,000 genes | `-q -j 16` (7 workers) | coal-cpp | 10.3 / 104 | 12.9 / 104 |
+| 20,000 genes | `-q -j 16` (7 workers) | Python | 9.1 / 944 | 10.6 / 337 |
+| 100,000 genes | default, `-j 1` | coal-cpp | 184.8 / 5,654 | 160.5 / 118 |
+| 100,000 genes | default, `-j 1` | Python | 212.6 / 13,761 | 157.5 / 69 |
+| 100,000 genes | default, `-j 16` (16 workers) | coal-cpp | 186.0 / 5,725 | 120.7 / 155 |
+| 100,000 genes | default, `-j 16` (16 workers) | Python | 163.1 / 14,647 | 120.5 / 885 |
+| 100,000 genes | `-q -j 1` | coal-cpp | 53.5 / 117 | 55.6 / 118 |
+| 100,000 genes | `-q -j 1` | Python | 80.2 / 190 | 88.3 / 65 |
+| 100,000 genes | `-q -j 16` (16 workers) | coal-cpp | 50.3 / 155 | 52.0 / 155 |
+| 100,000 genes | `-q -j 16` (16 workers) | Python | 50.4 / 909 | 61.0 / 918 |
+
+(the "after" timings were taken while other jobs ran on the machine; the Python engine's `-j 16` figures are
+the 17 processes' own footprint, about 50 MB each, which clean data costs as well.) Both engines agree byte for
+byte on every row, as before. The million-gene rows are in the pull request.
