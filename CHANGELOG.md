@@ -46,7 +46,8 @@ Found by the stress test of 2026-10-23 (`docs/stress-test-2026-10-23.md`), both 
   over the process tree; 16 threads): 20,000 genes in default mode, coal-cpp 1,172 MB before and 103 MB after,
   the Python engine 2,822 MB and 45 MB (`-j 1`), 3,226 MB and 338 MB (`-j 16`, 7 workers); 100,000 genes,
   coal-cpp 5,654 MB and 118 MB, the Python engine 13,761 MB and 69 MB (`-j 1`), 14,647 MB and 885 MB (`-j 16`,
-  16 workers, which is the workers' own footprint: the same as `-q`). The default mode is also faster on such
+  16 workers: 545 MB of that is what the same input in clean form costs with 17 processes, the rest the batches
+  in flight). The default mode is also faster on such
   data (100,000 genes, `-j 1`: 213 s to 158 s in Python, 185 s to 161 s in coal-cpp) since no entry store grows;
   the one cost is the main process formatting the strings the workers formatted in parallel before, which only
   shows when stderr takes most of a run. A run with `-o` on such data writes the entries file next to the

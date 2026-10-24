@@ -107,8 +107,8 @@ killed, so a pipeline reading COAL's output never waits on an orphaned worker.
   without `-o`; nothing with `-q` and no report), reading them back one at a time when `--report`/`--json` is
   written. So memory stays flat whatever the data, also on genes of wrong DNA where every codon mismatches
   (measured on 100,000 genes of 400 codons of unrelated DNA, default mode: 118 MB with `coal-cpp`, 69 MB with
-  the Python engine in one process and 885 MB with 16 workers, the workers' own footprint; the same input in
-  clean form costs about the same). The Python engine's workers hand back each sequence's mismatch columns and
+  the Python engine in one process and 885 MB with 16 workers, of which 545 MB is what the same input in clean
+  form costs with 17 processes). The Python engine's workers hand back each sequence's mismatch columns and
   codons, not its warning strings, so the batch in flight stays small on such data too. The entries file of
   such a run is large while it runs (about 55 KB per 400-codon gene of unrelated DNA: a million of them write
   55 GB next to the output, removed at the end).

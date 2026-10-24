@@ -1303,6 +1303,7 @@ the whole process), `-o` output, 400-codon genes of unrelated DNA from `stress_g
 | 100,000 genes | `-q -j 16` (16 workers) | coal-cpp | 50.3 / 155 | 52.0 / 155 |
 | 100,000 genes | `-q -j 16` (16 workers) | Python | 50.4 / 909 | 61.0 / 918 |
 
-(the "after" timings were taken while other jobs ran on the machine; the Python engine's `-j 16` figures are
-the 17 processes' own footprint, about 50 MB each, which clean data costs as well.) Both engines agree byte for
+(the "after" timings were taken while other jobs ran on the machine. The floor: the same 100,000 genes in clean
+form cost 545 MB in the Python engine with 16 workers and 47 MB in coal-cpp, default mode or `-q`, so the
+Python engine's `-j 16` rows are about 340 MB above it: the batches in flight in 17 processes.) Both engines agree byte for
 byte on every row, as before. The million-gene rows are in the pull request.
