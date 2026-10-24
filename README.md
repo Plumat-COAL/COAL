@@ -84,7 +84,7 @@ Example inputs are in `examples/` (`clean`, `mito`, `messy_ids`, `one_broken_gen
   core. Without it, COAL uses all cores for large inputs.
 - **Thousands of small alignments:** `coal --batch jobs.txt` runs one job per line of `jobs.txt` (a `coal` command
   line each, every one with `-o`) in a single process, so Python starts once instead of once per gene: about 40×
-  less wall time on tiny jobs, with byte-identical outputs
+  less wall time on tiny jobs, with byte-identical outputs; `--batch-parallel N` runs N jobs at a time
   ([docs/usage.md](docs/usage.md#batch-mode)).
 - **Reading from a pipe:** pass `-` as the protein alignment or one DNA file (`zcat nuc.fa.gz | coal pep.aln -`);
   works the same on Windows, with `coal-cpp` and with the `pal2nal` drop-in. Only one `-` per command line.

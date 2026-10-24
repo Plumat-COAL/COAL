@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **`coal --batch --batch-parallel N`: N jobs at a time.** Worker processes each import COAL once and take jobs
+  from a queue (`0` = one per CPU core; the default is still one job after the other), every job's output
+  byte-identical to running it alone; a job's messages are printed together when it ends, so the lines of two
+  jobs never interleave, and the batch report keeps job order. Ctrl-C and SIGTERM end every worker and remove
+  half-written outputs; a worker killed from outside fails its job and the batch goes on. coal-cpp refuses the
+  option like the other batch options. 64 jobs of 2,000 × 300 (16-core WSL 2): 4.15 s one after the other, 1.20 s
+  with 4 workers, 0.71 s with 16; tiny jobs gain nothing (docs/usage.md).
 - **Docs: Linux benchmark numbers.** `docs/benchmarks.md` has the 2026-10-24 run on the same desktop as the Windows
   table but under WSL 2 (up to 1,000,000 sequences, PAL2NAL v14 against both engines, raw data in
   `benchmarks/results/linux_wsl_4159e10/`): COAL's times and memory hold, PAL2NAL's Perl runs about 3.6× faster there
