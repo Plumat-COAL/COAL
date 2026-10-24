@@ -1,0 +1,11 @@
+date: 2026-10-24 04:36
+platform: Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.43
+cpu: x86_64
+python: 3.13.13
+perl: n/a
+repeats: 3
+psutil: True
+cpu_count: 16
+coal_jobs: [1, 0]
+impl: both
+data_dir: /mnt/d/coal-stress/verify/bench-data

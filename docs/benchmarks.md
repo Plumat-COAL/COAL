@@ -30,6 +30,26 @@ Machine: Intel i5-13600KF (14 cores / 20 threads), 32 GB, Windows 11. Memory is 
 including PAL2NAL v16 and the method: `benchmarks/results/windows_47f57f1/SUMMARY.md` (the per-gene diffs and per-tier
 correctness tables, 17 MB, are on the `bench-windows-47f57f1` tag).
 
+## COAL 4159e10 vs PAL2NAL v14 (Linux under WSL 2, up to 1 million sequences)
+
+The same desktop as the table above, as a WSL 2 guest (Ubuntu 26.04, 16 logical CPUs, 29 GB), data on the guest's
+own disk; medians of 3 timed runs after a warm-up (one run at 1M). Made during the verification of 2026-10-24.
+
+| Workload | PAL2NAL v14 | coal-cpp, 1 thread | Speed-up | coal-py, 1 process | Speed-up |
+|---|---:|---:|---:|---:|---:|
+| 1,000,000 sequences × 400 codons | 1,035 s (17 min), 14.9 GB | 8.44 s | **123×** | 35.9 s, 345 MB | 29× |
+| 100,000 sequences × 500 codons | not run | 0.898 s | | 4.18 s | |
+| 10,000 sequences × 500 codons | 11.3 s | 0.108 s | 105× | 0.581 s | 19.5× |
+| 100 sequences × 10,000 codons | 12.8 s | 0.031 s | 413× | 0.215 s | 59.5× |
+
+- Every output pair was identical. With all cores, coal-cpp takes 7.53 s at 1M and the Python engine 17.8 s.
+- PAL2NAL v14 runs about 3.6× faster under this Linux Perl than on Windows (1,035 s against 3,714 s at 1M), so the
+  speed-ups here are lower than the Windows headline, with COAL's own times and memory as before or better (the
+  Python engine's 345 MB at 1M is after the 2026-10-23 memory work). Which figure a user sees depends on their Perl.
+- Raw data and notes: `benchmarks/results/linux_wsl_4159e10/SUMMARY.md` (also the same runs with the data on the
+  Windows drive mounted into WSL, where file I/O dominates: 23.6 s instead of 4.2 s for the Python engine at
+  100,000 × 500).
+
 The sections below are from earlier versions of the Python engine (the commit is named in each section).
 
 ## COAL vs PAL2NAL v14 (v0.3)
