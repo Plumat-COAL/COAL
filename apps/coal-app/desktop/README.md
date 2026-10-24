@@ -6,8 +6,9 @@ acid. You need one before measuring selection (dN/dS with PAML or HyPhy) or buil
 DNA. COAL does what PAL2NAL does, but runs on Windows with no terminal, and tells you in plain
 words when a gene doesn't fit.
 
-- **Nothing leaves your computer.** COAL works offline. It doesn't upload your files, check for
-  updates or collect statistics.
+- **None of your data leaves your computer.** COAL works offline. It doesn't upload your files, check for
+  updates or collect statistics. (The page asks a public CDN for one small helper script that Gradio adds for
+  embedding; it is not needed, carries nothing of yours, and the page works without it.)
 - **No administrator rights needed.** It installs just for you.
 - **Free and open source** (MIT licence).
 
@@ -15,7 +16,7 @@ words when a gene doesn't fit.
 
 ## Install
 
-1. Download `COAL-Setup-0.4.2.exe`.
+1. Download `COAL-Setup-windows-x64.exe` (the current version; the release page also lists it with the version number in its name).
 2. Edge may say the file **"isn't commonly downloaded"**. Click the **…** next to the message,
    then **Keep**, then **Show more** and **Keep anyway**.
 3. Double-click the file. Windows shows a blue box, **"Windows protected your PC"**. Click

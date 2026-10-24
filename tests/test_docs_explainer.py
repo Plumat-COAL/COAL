@@ -10,14 +10,17 @@ PAGE = "file://" + os.path.join(ROOT, "site", "explainer.html")
 
 
 def _chromium():
+    """An explicit Chromium binary (the CI image keeps one under /opt/pw-browsers), else None: Playwright then
+    uses the browser `python -m playwright install chromium` put in its own folder, on every platform."""
     roots = [os.environ.get("PLAYWRIGHT_BROWSERS_PATH", ""), "/opt/pw-browsers"]
     for r in roots:
-        for p in glob.glob(os.path.join(r, "chromium-*", "chrome-linux", "chrome")) if r else []:
-            return p
+        for p in glob.glob(os.path.join(r, "chromium-*", "chrome-*", "chrome*")) if r else []:
+            if os.path.basename(p) in ("chrome", "chrome.exe", "Chromium"):
+                return p
     return None
 
 
-HAVE = importlib.util.find_spec("playwright") is not None and _chromium() is not None
+HAVE = importlib.util.find_spec("playwright") is not None
 
 GEOMETRY = """() => {
   const rows = [...document.querySelectorAll('.row')].map(r => [...r.querySelectorAll('.cell')]
@@ -34,7 +37,10 @@ class TestExplainer(unittest.TestCase):
         from playwright.sync_api import sync_playwright
         out = []
         with sync_playwright() as pw:
-            b = pw.chromium.launch(executable_path=_chromium())
+            try:
+                b = pw.chromium.launch(**({"executable_path": _chromium()} if _chromium() else {}))
+            except Exception as e:  # noqa: BLE001 - no browser build: Playwright's own error names the install command
+                self.skipTest(f"no Chromium build for Playwright ({type(e).__name__}); python -m playwright install chromium")
             try:
                 pg = b.new_page(viewport={"width": width, "height": height}, reduced_motion="reduce")
                 pg.goto(PAGE, timeout=30000)

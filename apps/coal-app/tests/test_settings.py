@@ -116,10 +116,10 @@ class TestSettingsTab(UiCase):
     def test_run_uses_preview_size_and_offers_centring(self):
         p, d = core.example_paths("one_broken_gene")
         out = self.ui.run_ui(None, None, "fasta", 1, False, False, p, d, False, False, "small")
-        self.assertEqual(len(out), 15)  # including the results area (shown by every result)
-        ctx = out[12]
+        self.assertEqual(len(out), 16)  # including the results area (shown by every result) and the methods copy button
+        ctx = out[13]
         self.assertEqual(ctx["preview"], "small")
-        self.assertFalse(out[13]._kw.get("visible"))  # 20 genes, all columns drawn: no centring needed
+        self.assertFalse(out[14]._kw.get("visible"))  # 20 genes, all columns drawn: no centring needed
         view, dl, table = self.ui.centre_ui(ctx, 30)
         self.assertIn("coalv", view._kw["value"])
         self.assertIn("coalv-OG0001_sp14", table._kw["value"])

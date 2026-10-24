@@ -51,6 +51,13 @@ class TestCheckDeliberate(unittest.TestCase):
         c = _case(["-codontable", "10"], {"genetic_code"})
         self.assertIsNone(fz.check_deliberate(c, "fasta", 0, ">a\nATGTGA\n", ">a\nATGtgc\n"))  # table 10 Cys
         self.assertIsNotNone(fz.check_deliberate(c, "fasta", 0, ">a\nATGTGG\n", ">a\nATGtgc\n"))
+        # the gene placed 1 nt off the generator's frame (fuzz seed 20261024 case 1957, seed 20261025 case 1380:
+        # both programs assign a mostly-N gene by position): the neutralised TGA -> tgc then straddles two codons of
+        # the alignment grid, and is still the documented substitution
+        self.assertIsNone(fz.check_deliberate(c, "fasta", 0, ">a\nNNTGANNNN\n", ">a\nNNtgcNNNN\n"))
+        self.assertIsNone(fz.check_deliberate(c, "fasta", 0, ">a\nNTGANNNNN\n", ">a\nNtgcNNNNN\n"))
+        self.assertIsNotNone(fz.check_deliberate(c, "fasta", 0, ">a\nNNTGGNNNN\n", ">a\nNNtgcNNNN\n"))  # not a TGA
+        self.assertIsNotNone(fz.check_deliberate(c, "fasta", 0, ">a\nNNTGANNNA\n", ">a\nNNtgcNNNN\n"))  # and a real difference
         c = _case(["-codontable", "2"], {"first_met_code"})
         self.assertIsNone(fz.check_deliberate(c, "fasta", 0, ">a\nATTAAA\n", ">a\natgAAA\n"))  # code-2 start
         self.assertIsNotNone(fz.check_deliberate(c, "fasta", 0, ">a\nCCCAAA\n", ">a\natgAAA\n"))

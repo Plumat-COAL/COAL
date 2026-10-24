@@ -81,7 +81,8 @@ small ones (each extra process needs about 4 million nucleotides of DNA to pay f
 threads. `-j N` caps the number of workers and `-j 1` forces one (an `N` above the number of cores is used as given,
 in both engines). Output is always in the input order. Output is
 written to a temporary file and only moved into place if the whole run succeeds, so an error never leaves a partial
-file. If a worker process is killed (the out-of-memory killer, usually), the run stops with `coal: error: a worker
+file (a run writing to standard output uses a `.coal_<random>.tmp` file in the temp folder; only a `kill -9`, which
+no program can act on, leaves that file behind, as it leaves the resumable files next to `-o`). If a worker process is killed (the out-of-memory killer, usually), the run stops with `coal: error: a worker
 process died (out of memory?)` (exit 1) instead of hanging, and the workers die with the main process when that is
 killed, so a pipeline reading COAL's output never waits on an orphaned worker.
 

@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+Found by the full verification of 2026-10-24 (`verify/REPORT.md` on the branch `verify/full-2026-10-24`: 16 minor,
+usability, docs and test findings, no wrong output):
+
+- **`pal2nal` without arguments is a usage error:** the usage text goes to standard error with exit 1 (as the
+  drop-in's help says and as PAL2NAL's own usage goes to stderr), not to standard output with exit 0, so a pipeline
+  step that forgot its files no longer gets the usage text as its "alignment". `pal2nal -h` is unchanged (stdout, 0).
+- **GUI: a run that stops before pairing says why in the banner** (the engine's own sentence, e.g. "control character:
+  sequence files must be plain text (is this a binary or word-processor file?)", file names only); it used to say
+  only "COAL stopped: no alignment was written" with the reason inside the collapsed raw-messages box.
+- **GUI: the genetic-code tip on a large input says it tested a sample** ("50 of the 50 genes COAL tested (a sample
+  of the 100,000)") instead of "50 of 50 genes".
+- **GUI accessibility:** the "Methods paragraph" box is announced by its label (its copy button, which sat inside the
+  label and took the label for itself, is now a separate "Copy methods paragraph" button), and Gradio's hidden
+  duplicate tab bar no longer holds focusable buttons (axe `aria-hidden-focus`).
+- **Docs:** the desktop README's privacy line says none of *your data* leaves the computer and names the one helper
+  script Gradio's page requests from a CDN (not needed; the page works with it blocked); the installer name is the
+  version-free `COAL-Setup-windows-x64.exe`; `docs/usage.md` says a `kill -9` of a run writing to standard output can
+  leave `.coal_<random>.tmp` in the temp folder; `tests/README.md` says which of the "17 local codon alignments" are
+  in the repository (12) and which are local-only (5); SKILL.md's "after the engine update" and "not yet verified on
+  Windows" sections are current (both engines verified on Windows 2026-10-24); `demo/mcp_demo.md` regenerated
+  (`codon_align` keeps going past a broken gene and returns `completed: true` with `exit_code: 2`).
+- **Tests:** `test_docs_explainer` finds Playwright's Chromium on every platform (it looked for a Linux-only path and
+  was always skipped elsewhere); `test_cpp_vs_reference` copies instead of symlinking where symlinks need a privilege
+  (a stock Windows account); `test_resume_with_workers` ignores a venv launcher's same-argv child on Windows; new
+  tests for the GUI's download buttons (the one gap found by mutation testing: 12 of 15 planted bugs were caught),
+  the stop reason, the sampled tip and the methods label. The PAL2NAL fuzz harness no longer reports a difference
+  for `-codontable 10` genes that both programs place by position 1 or 2 nt off the generator's frame (the
+  neutralised TGA then straddles two codons of the alignment grid; seeds 20261024 and 20261025 each had one such
+  case, with COAL's output equal to PAL2NAL's on the original input). `test_cpp_vs_reference` is skipped on
+  Windows with the reason: its shim runs coal-cpp as a child process there, so the reference tests that interrupt
+  a run watch the wrong process (before, the test errored on the symlink privilege before getting that far).
+
 Found by the stress test of 2026-10-23 (`docs/stress-test-2026-10-23.md`), both engines unless said:
 
 - **Two runs writing the same `-o` file at the same time are refused** instead of sharing one `<out>.coal-partial`

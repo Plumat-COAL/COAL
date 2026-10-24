@@ -37,6 +37,33 @@ class TestGui1Banner(unittest.TestCase):
         html = gui_html.run_banner("### ✖ COAL stopped: no alignment was written", stop, "s.")
         self.assertEqual(html.count("COAL stopped: no alignment was written"), 1)  # not twice
 
+    def test_stopped_run_banner_says_why(self):
+        # a run that stopped before pairing (an unreadable file): the engine's reason is in the banner, file names only
+        rep = {"summary": {"total": 1, "ok": 0}, "sequences": [],
+               "errors": [{"code": "error", "text": "/srv/up/abc/garbage.fasta:1: control character: sequence files "
+                                                   "must be plain text (is this a binary or word-processor file?)"}]}
+        why = core.stop_reason(rep, ["/srv/up/abc/garbage.fasta", "/srv/up/abc/dna.fasta"])
+        self.assertTrue(why.startswith("garbage.fasta:1: control character"), why)
+        self.assertNotIn("/srv/", why)
+        html = gui_html.run_banner("### ✖ COAL stopped: no alignment was written", rep,
+                                   f"{core.summary_sentence(rep)} {why}", "Files used: x")
+        self.assertIn("control character", html)
+        self.assertIn("word-processor file?", html)
+        self.assertEqual(core.stop_reason({"summary": {}}), "")
+
+    def test_code_fix_banner_says_when_the_engine_tested_a_sample(self):
+        names = {1: "Standard (nuclear)", 2: "Vertebrate mitochondrial (x)"}
+        fix = {"current": 2, "code": 1, "checked": 50, "fit": 50, "fit_current": 0, "total": 100000, "others": ""}
+        html = gui_html.code_fix_banner(fix, {"summary": {"total": 100000, "warning": 50}}, names)
+        self.assertIn("50 of the 50 genes COAL tested (a sample of the 100,000)", html)
+        self.assertIn("all 50 of the sample match", html)
+        small = dict(fix, total=24, checked=24, fit=24)
+        self.assertIn("24 of 24 genes have mismatched codons", gui_html.code_fix_banner(small, {"summary": {"total": 24}}, names))
+        rep = {"summary": {"total": 100000}, "options": {"codontable": 2},
+               "hints": [{"code": "genetic_code", "suggested_codontable": 1, "checked": 50, "fit": 50, "fit_current": 0,
+                          "text": "..."}]}
+        self.assertEqual(core.code_fix(rep)["total"], 100000)
+
     def test_strip_is_capped_and_escaped(self):
         big = {"summary": {"total": 401, "ok": 401}, "sequences": [_seq(i) for i in range(401)]}
         self.assertNotIn("coal-strip", gui_html.run_banner("### ✔ Done", big, "s."))

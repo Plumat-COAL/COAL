@@ -154,8 +154,13 @@ def code_fix_banner(fix: dict, report: dict, names: dict | None = None, files: s
     checked, fit, bad = fix["checked"], fix["fit"], fix["checked"] - fix["fit_current"]
     used = _code_name(cur, names) if cur else "the code used"
     good = f"all {checked:,}" if fit == checked else f"{fit:,} of {checked:,}"
-    text = (f"With {used} {bad:,} of {_plural(checked, 'gene')} have mismatched codons; with "
-            f"{_code_name(new, names)} {good} match.")
+    total = int(fix.get("total") or 0)
+    if total > checked:  # the engine tested a sample of a large input: say so, or '50 of 50' reads as the whole file
+        text = (f"With {used} {bad:,} of the {checked:,} genes COAL tested (a sample of the {total:,}) have mismatched "
+                f"codons; with {_code_name(new, names)} {good} of the sample match.")
+    else:
+        text = (f"With {used} {bad:,} of {_plural(checked, 'gene')} have mismatched codons; with "
+                f"{_code_name(new, names)} {good} match.")
     real = {k: s.get(k) for k in ("failed", "not_checked") if s.get(k)}
     return (
         '<div class="coal-banner coal-info coal-codefix" role="status">'

@@ -185,6 +185,18 @@ REF_TEST_MODULES = ("test_decisions", "test_io_robustness", "test_fuzz_findings"
                     "test_feature_combinations", "test_report", "test_engine_extras")
 
 
+def _link(src: Path, dst: Path) -> None:
+    """A symlink, or a copy where symlinks need a privilege (a stock Windows account outside Developer Mode)."""
+    try:
+        os.symlink(src, dst)
+    except OSError:
+        import shutil
+        if src.is_dir():
+            shutil.copytree(src, dst, ignore=shutil.ignore_patterns("__pycache__"))
+        else:
+            shutil.copyfile(src, dst)
+
+
 def build_shim(tmp: Path) -> Path:
     """A copy of the reference's test layout whose `coal` command (python -m coal, and coal.cli.main used by the
     `pal2nal` drop-in) runs coal-cpp; every other module is the reference's. Returns the tests folder."""
@@ -197,16 +209,16 @@ def build_shim(tmp: Path) -> Path:
     (src / "coal" / "cli.py").write_text(SHIM_CLI.format(cpp=cpp))
     for name in ("coal_compat", "coal_app"):
         if (REF_SRC / name).exists():
-            os.symlink(REF_SRC / name, src / name)
+            _link(REF_SRC / name, src / name)
     (tmp / "tests").mkdir()
     for name in ("fixtures", "golden", "cases.json", "report_example.json"):
-        os.symlink(ref_root / "tests" / name, tmp / "tests" / name)
+        _link(ref_root / "tests" / name, tmp / "tests" / name)
     # apps/: the app (apps/coal-app/src/coal_app), which report_vs_app and test_fuzz_findings compare with; an older
     # reference has src/coal_app instead (linked above)
     for name in ("scripts", "benchmarks", "examples", "README.md", "pyproject.toml", "CMakeLists.txt", "site",
                  "CHANGELOG.md", "apps"):
         if (ref_root / name).exists():
-            os.symlink(ref_root / name, tmp / name)
+            _link(ref_root / name, tmp / name)
     for m in REF_TEST_MODULES + ("report_vs_app",):
         (tmp / "tests" / f"{m}.py").write_bytes((ref_root / "tests" / f"{m}.py").read_bytes())
     return tmp / "tests"
@@ -244,6 +256,9 @@ NOT_APPLICABLE = ("TestDec3ClosedPipe.test_posix_broken_pipe_is_141_and_silent_i
                   "TestDec3ClosedPipe.test_windows_einval_is_141_too")
 
 
+@unittest.skipIf(os.name == "nt", "the shim's `python -m coal` cannot exec coal-cpp on Windows (it runs it as a child), so the "
+                 "reference tests that interrupt or kill a run watch the wrong process; coal-cpp's Windows coverage is "
+                 "test_differential, test_cpp_vs_python and the test_cpp_* modules")
 @unittest.skipIf(_skip_reason(), _skip_reason() or "")
 class TestReferenceTestsWithCpp(unittest.TestCase):
     """The reference's own engine tests (REF_TEST_MODULES: the decision, review, fuzz, final-fix, merge, report and

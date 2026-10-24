@@ -69,6 +69,26 @@ class TestNoEmptyResults(StubUiCase):
             self.assertIs(out[-1]._kw.get("visible"), True)
 
 
+class TestMethodsBoxIsLabelled(StubUiCase):
+    def test_label_is_not_taken_by_a_copy_button_inside_it(self):
+        # Gradio puts show_copy_button's button inside the <label>, which then labels the button, not the textarea
+        # (axe: an unnamed text field): the box keeps a plain label and a separate button copies it
+        self.ui.build()
+        box = self.comps("Textbox", label="Methods paragraph")
+        self.assertEqual(len(box), 1)
+        self.assertFalse(box[0]._kw.get("show_copy_button"))
+        self.assertEqual(box[0]._kw.get("elem_id"), "coal-methods")
+        btn = self.comps("Button", elem_id="coal-methods-copy")
+        self.assertEqual(len(btn), 1)
+        self.assertEqual(btn[0]._args[0], "Copy methods paragraph")
+        self.assertIn("navigator.clipboard.writeText", self.src)
+
+    def test_hidden_duplicate_tab_bar_is_out_of_the_tab_order(self):
+        # Gradio's second, visually hidden tab bar kept two focusable buttons (axe aria-hidden-focus)
+        self.assertIn(".tab-container.visually-hidden, .tab-container.visually-hidden * { display:none !important; }",
+                      self.ui.CSS)
+
+
 class TestNoReassuranceLines(StubUiCase):
     def test_splash_and_footer_lines_are_gone(self):
         with open(os.path.join(APP, "desktop", "coal_desktop.py"), encoding="utf-8") as fh:

@@ -35,7 +35,7 @@ command is not on PATH (common on Windows).
 
 ## First: check what this engine supports
 
-Run `python -m coal --help` before using any option. Engines differ (see "After the engine update" below);
+Run `python -m coal --help` before using any option (both engines take the same options; coal-cpp has no `--batch`);
 an option the engine doesn't know is a **usage error**: argparse prints it and exits with code **2**.
 
 ## The most common commands (current engine)
@@ -74,7 +74,7 @@ without `-nomismatch` and reports per-gene warnings and `summary.columns_removed
 Exit codes: 0 = success (warnings possible), 1 = error (nothing written; the first error stops the run),
 2 = usage error (bad option or a file name starting with `-`: put `--` before the file names), 130 =
 interrupted (Ctrl-C), 141 = output pipe closed (e.g. `| head`), 143 = stopped by SIGTERM, 129 = SIGHUP;
-in all of these nothing is written. On Windows (expected, not yet verified there): Ctrl-C gives 130 and a
+in all of these nothing is written. On Windows (verified 2026-10-24, both engines): Ctrl-C gives 130 and a
 closed pipe 141, but a process killed from outside (Task Manager, `taskkill /F`) exits 1 without cleaning up.
 
 Genetic codes (`-codontable N`): 1 standard (nuclear), 2 vertebrate mitochondrial, 3 yeast mito,
@@ -83,8 +83,7 @@ and plastids; also 6, 10, 12-16, 21-23.
 
 GUI for people: `python -m coal_app` (opens on http://127.0.0.1:7860 and serves MCP there too). AI agents:
 `python -m coal_app --mcp` gives two MCP tools, `codon_align(...)` and `explain_report(report_path)`;
-`codon_align` returns a `report_path` even with the current engine (the app builds the report from
-COAL's messages). Give both tools **absolute paths**. In the result, `completed` only means COAL finished;
+`codon_align` returns a `report_path` (the engine's own `--report` file). Give both tools **absolute paths**. In the result, `completed` only means COAL finished;
 use the alignment only when `all_ok` is true. If `needs_attention` is true, read `counts`
 (ok / warning / failed), `next_step` and `problems`, or call `explain_report(report_path)`; if
 `suggested_codontable` is set, re-run `codon_align` with it. A missing file, an unknown genetic code or an
@@ -129,15 +128,13 @@ For a plain-English summary call the MCP tool `explain_report(report_path)`.
 
 Never "fix" a mismatch by editing sequences silently: report which genes failed and why.
 
-## After the engine update (only if `python -m coal --help` lists these)
-
-These are being built on the engine branch; do not use them unless `--help` shows them.
+## Pipelines: `--keep-going` and `--report`
 
 ```
 coal pep.aln nuc.fasta --keep-going --report run.json -o codon.fasta   # pipelines: keep going, write a report
 ```
 
 - With `--keep-going`, exit code 2 also means **partial success**: some genes failed, the rest were written
-  (check the report). Without `--keep-going` support, exit 2 is only ever a usage error.
-- `--report run.json` writes the `coal.report/1` report directly.
+  (check the report). Without `--keep-going`, exit 2 is only ever a usage error.
+- `--report run.json` writes the `coal.report/1` report directly (the app and the MCP tools pass it through).
 - ID normalisation: `pairing: normalised` (IDs matched after tidying, e.g. `.1` removed).

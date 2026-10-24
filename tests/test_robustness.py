@@ -299,16 +299,22 @@ def worker_processes(pid: int):
     the fork server, which is itself a child of coal and shares its command line with the workers it forks, so it is
     told apart by its position, not its name. The resource tracker is never a worker."""
     try:
-        kids = psutil.Process(pid).children(recursive=True)
+        me = psutil.Process(pid)
+        kids = me.children(recursive=True)
+        own = me.cmdline()
     except psutil.Error:
         return []
     out = []
     for k in kids:
         try:
-            cmd = " ".join(k.cmdline())
+            args = k.cmdline()
+            cmd = " ".join(args)
             direct = k.ppid() == pid
         except psutil.Error:
             continue
+        if os.name == "nt" and direct and args == own:
+            continue  # a venv's python.exe on Windows is a launcher: the real interpreter is its child with the same argv
+            # (on POSIX a forked worker also carries the parent's argv, so the rule is Windows-only)
         if "python" not in cmd.lower() or "multiprocessing.resource_tracker" in cmd:
             continue
         if direct and "multiprocessing.forkserver" in cmd:
