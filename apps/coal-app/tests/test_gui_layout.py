@@ -136,6 +136,48 @@ class TestGui2ViewerTheme(unittest.TestCase):
             for k in ("muted", "gap", "link"):
                 self.assertGreaterEqual(ratio(pal[k], pal["bg"]), 4.5, k)
 
+    def test_residue_classes_stay_apart_for_colour_blind_readers(self):
+        # verification 2026-10-24, V-17: the pastel tints of equal lightness merged under red-green deficiency and were
+        # one grey in greyscale. The palette now varies lightness too: every pair of the seven classes keeps a CIE76
+        # distance under the Machado et al. (2009) simulations of protanopia, deuteranopia and tritanopia, and a
+        # lightness step in greyscale (the letters, outlines and legend still carry the meaning on their own).
+        import itertools
+        import math
+        sims = {
+            "protan": [[0.152286, 1.052583, -0.204868], [0.114503, 0.786281, 0.099216], [-0.003882, -0.048116, 1.051998]],
+            "deutan": [[0.367322, 0.860646, -0.227968], [0.280085, 0.672501, 0.047413], [-0.011820, 0.042940, 0.968881]],
+            "tritan": [[1.255528, -0.076749, -0.178779], [-0.078411, 0.930809, 0.147602], [0.004733, 0.691367, 0.303900]],
+        }
+
+        def lin(h):
+            out = []
+            for i in (1, 3, 5):
+                c = int(h[i:i + 2], 16) / 255
+                out.append(c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4)
+            return out
+
+        def lab(rgb):
+            r, g, b = rgb
+            x = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047
+            y = 0.2126 * r + 0.7152 * g + 0.0722 * b
+            z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883
+            f = lambda t: t ** (1 / 3) if t > 0.008856 else 7.787 * t + 16 / 116  # noqa: E731
+            return 116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z))
+
+        def sim(rgb, m):
+            return [max(0.0, min(1.0, sum(m[i][j] * rgb[j] for j in range(3)))) for i in range(3)]
+
+        classes = ("hy", "ar", "po", "ne", "pl", "sp", "st")
+        for pal, floor in ((viewer._LIGHT, 12.0), (viewer._DARK, 10.0)):
+            for name, m in sims.items():
+                labs = {k: lab(sim(lin(pal[k]), m)) for k in classes}
+                for a, b in itertools.combinations(classes, 2):
+                    d = math.sqrt(sum((p - q) ** 2 for p, q in zip(labs[a], labs[b])))
+                    self.assertGreaterEqual(d, floor, f"{name}: {a} vs {b} ({d:.1f})")
+            lights = sorted(lab(lin(pal[k]))[0] for k in classes)
+            for lo, hi in zip(lights, lights[1:]):
+                self.assertGreaterEqual(hi - lo, 4.0, f"greyscale step {lo:.1f} -> {hi:.1f}")
+
 
 class TestGui3Layout(unittest.TestCase):
     def setUp(self):
