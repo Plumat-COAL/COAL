@@ -6,6 +6,9 @@
   table but under WSL 2 (up to 1,000,000 sequences, PAL2NAL v14 against both engines, raw data in
   `benchmarks/results/linux_wsl_4159e10/`): COAL's times and memory hold, PAL2NAL's Perl runs about 3.6× faster there
   than on Windows, so the speed-ups are 123× (coal-cpp) and 29× (Python) at 1M on that setup.
+- **GUI: a "Colour residues by class" setting.** Off, the alignment view and its downloadable page show the
+  letters only (the mismatch outlines, frameshift hatching and the key's mark entries stay): for colour-blind
+  readers who prefer no tints, and for printing. On by default; saved with the other settings.
 - **GUI: the alignment view's residue-class colours are readable for colour-blind users.** The seven classes keep
   their Okabe-Ito hue families but now sit on an even lightness ladder, so they stay apart under protanopia,
   deuteranopia and tritanopia and in greyscale (the pastel tints of equal lightness merged there; verification

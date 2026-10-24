@@ -47,6 +47,7 @@ DEFAULTS: dict = {
     "nomismatch": False,
     "strict": False,
     "preview": "standard",
+    "residue_colours": True,  # the alignment view tints cells by residue class; False: letters only
 }
 KEYS = [k for k in DEFAULTS if k != "version"]
 
@@ -88,7 +89,7 @@ def clean(data, formats=None) -> dict:
     fmt = data.get("output_format")
     if isinstance(fmt, str) and fmt in (formats or core.OUTPUT_FORMATS):
         out["output_format"] = fmt
-    for k in ("nogap", "nomismatch", "strict"):
+    for k in ("nogap", "nomismatch", "strict", "residue_colours"):
         if isinstance(data.get(k), bool):
             out[k] = data[k]
     if data.get("preview") in PREVIEW_SIZES:

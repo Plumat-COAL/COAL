@@ -83,35 +83,58 @@ class TestSettingsTab(UiCase):
         self.ui.build()
         events = [(c, ev, a, kw) for c, ev, a, kw in _Comp.REG]
         inputs = [e for e in events if e[1] == "input"]
-        self.assertEqual(len(inputs), 6)  # genetic code, format, three options, preview size
+        self.assertEqual(len(inputs), 7)  # genetic code, format, three options, preview size, residue colours
         outs = inputs[0][2][2]
-        self.assertEqual(len(outs), 6 + 5 + 2)  # settings, main form, status, browser store
+        self.assertEqual(len(outs), 7 + 5 + 2)  # settings, main form, status, browser store
         loads = [e for e in events if e[1] == "load"]
-        self.assertTrue(any(len(a[2]) == 13 for _, _, a, _ in loads if len(a) > 2 and isinstance(a[2], list)))
+        self.assertTrue(any(len(a[2]) == 14 for _, _, a, _ in loads if len(a) > 2 and isinstance(a[2], list)))
         clicks = [c._kw.get("value", c._args[0] if c._args else "") for c, ev, _, _ in events if ev == "click"]
         self.assertIn("Reset to defaults", clicks)
         self.assertIn("Show these columns", clicks)
         self.assertEqual([ev for _, ev, _, _ in events].count("change"), 2)  # unchanged (path boxes)
 
     def test_save_applies_to_the_form_and_persists(self):
-        out = self.ui.save_settings_ui(2, "fasta", True, False, False, "small")
-        self.assertEqual(list(out[:6]), [2, "fasta", True, False, False, "small"])
-        self.assertEqual(list(out[6:11]), [2, "fasta", True, False, False])
-        self.assertIn("Saved", out[11])
-        self.assertEqual(out[12]["codontable"], 2)
+        out = self.ui.save_settings_ui(2, "fasta", True, False, False, "small", False)
+        self.assertEqual(list(out[:7]), [2, "fasta", True, False, False, "small", False])
+        self.assertEqual(list(out[7:12]), [2, "fasta", True, False, False])
+        self.assertIn("Saved", out[12])
+        self.assertEqual(out[13]["codontable"], 2)
         self.assertEqual(settings.load()[0]["preview"], "small")
+        self.assertIs(settings.load()[0]["residue_colours"], False)  # the new key round-trips
         again = self.ui.load_settings_ui(None)
         self.assertEqual(again[0], 2)
         reset = self.ui.reset_settings_ui()
         self.assertEqual(reset[0], 1)
-        self.assertIn("defaults", reset[11])
+        self.assertIs(reset[6], True)
+        self.assertIn("defaults", reset[12])
 
     def test_hosted_reads_the_browser_store(self):
         os.environ["COAL_HOSTED"] = "1"
-        out = self.ui.load_settings_ui({"codontable": 11, "preview": "large"})
-        self.assertEqual((out[0], out[5], out[6]), (11, "large", 11))
+        out = self.ui.load_settings_ui({"codontable": 11, "preview": "large", "residue_colours": "no"})
+        self.assertEqual((out[0], out[5], out[6], out[7]), (11, "large", True, 11))  # a non-bool is the default
         self.assertIn("browser", self.ui._settings_where())
         self.assertEqual(os.listdir(self.dir), [])
+
+    def test_residue_colours_off_draws_letters_only(self):
+        # the Settings tab's "Colour residues by class" off: the view and its download page carry the coalv-plain
+        # class (no residue tints; the problem marks and the key's mark entries stay), also after re-centring
+        p, d = core.example_paths("one_broken_gene")
+        out = self.ui.run_ui(None, None, "fasta", 1, False, False, p, d, False, False, "small", False)
+        view = out[9]._kw["value"]
+        self.assertIn('<div class="coalv coalv-plain">', view)
+        self.assertIn("coalv-plain td.hy", view)  # the rule that blanks the tints is in the fragment's own style
+        self.assertIn('aria-label="Key"', view)
+        self.assertIn("frameshift (double outline, hatched)", view)
+        self.assertIn("coalv-OG0001_sp14-c102", view)  # the problem marks are still drawn
+        with open(out[10]._kw["value"], encoding="utf-8") as fh:
+            self.assertIn('class="coalv coalv-plain"', fh.read())
+        ctx = out[13]
+        self.assertFalse(ctx["colours"])
+        view2 = self.ui.centre_ui(ctx, 30)[0]._kw["value"]
+        self.assertIn('<div class="coalv coalv-plain">', view2)
+        on = self.ui.run_ui(None, None, "fasta", 1, False, False, p, d, False, False, "small", True)
+        self.assertNotIn("coalv-plain\">", on[9]._kw["value"])
+        self.assertIn('aria-label="Colour key"', on[9]._kw["value"])
 
     def test_run_uses_preview_size_and_offers_centring(self):
         p, d = core.example_paths("one_broken_gene")
@@ -120,8 +143,10 @@ class TestSettingsTab(UiCase):
         ctx = out[13]
         self.assertEqual(ctx["preview"], "small")
         self.assertFalse(out[14]._kw.get("visible"))  # 20 genes, all columns drawn: no centring needed
+        self.assertTrue(ctx["colours"])
         view, dl, table = self.ui.centre_ui(ctx, 30)
         self.assertIn("coalv", view._kw["value"])
+        self.assertNotIn('<div class="coalv coalv-plain">', view._kw["value"])  # (the style sheet names the class)
         self.assertIn("coalv-OG0001_sp14", table._kw["value"])
         self.assertIn("Type a column number", self.ui.centre_ui(ctx, None)[0]._kw["value"])
 

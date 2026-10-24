@@ -446,6 +446,9 @@ div.coalv td { padding:1px 2px; text-align:center; min-width:2.6em; scroll-margi
 div.coalv td b { display:block; font-size:12px; line-height:1.1; font-weight:700; color:inherit !important; }
 div.coalv td i { display:block; font-style:normal; letter-spacing:0.02em; color:inherit !important; }
 div.coalv td.gap { color:var(--gap) !important; }
+div.coalv.coalv-plain td.hy, div.coalv.coalv-plain td.ar, div.coalv.coalv-plain td.po, div.coalv.coalv-plain td.ne,
+div.coalv.coalv-plain td.pl, div.coalv.coalv-plain td.sp, div.coalv.coalv-plain td.st { background:var(--bg) !important; }
+div.coalv.coalv-plain .legend .resclass { display:none; }
 div.coalv td.hy{background:var(--hy)} div.coalv td.ar{background:var(--ar)} div.coalv td.po{background:var(--po)}
 div.coalv td.ne{background:var(--ne)} div.coalv td.pl{background:var(--pl)} div.coalv td.sp{background:var(--sp)}
 div.coalv td.st{background:var(--st)}
@@ -622,11 +625,12 @@ FULL_VIEW_HELP = ("To see every sequence and column, open the codon alignment fi
 def render_fragment(rows: list[dict], ncols: int, notes: list[str] | None = None, report: dict | None = None,
                     title: str = "Codon alignment", max_seqs: int = MAX_SEQS, max_cols: int = MAX_COLS,
                     total_rows: int | None = None, col_start: int = 1, max_cells: int = MAX_CELLS,
-                    overview: str = "", selection: dict | None = None) -> str:
+                    overview: str = "", selection: dict | None = None, colours: bool = True) -> str:
     """HTML fragment (a <style> plus a <div class="coalv">) for embedding in another page.
     total_rows: how many sequences the alignment has when `rows` holds only some (see view()).
     col_start: first column drawn; overview: the overview block (overview.overview_html); selection: the row
-    selection (select_rows) for the "Preview: ..." line."""
+    selection (select_rows) for the "Preview: ..." line. colours=False: no residue-class tints (letters only,
+    the problem marks stay), for colour-blind readers and printing; the Settings tab's "Colour residues"."""
     notes = list(notes or [])
     shown_rows = rows[:max_seqs]
     total = max(len(rows), total_rows or 0)
@@ -634,7 +638,8 @@ def render_fragment(rows: list[dict], ncols: int, notes: list[str] | None = None
     c0 = max(1, col_start)
     c1 = c0 + cols - 1
     is_preview = total > len(shown_rows) or c0 > 1 or c1 < ncols
-    out = [f"<style>{CSS}</style>", '<div class="coalv">', f"<h2>{html.escape(title)}</h2>"]
+    out = [f"<style>{CSS}</style>", '<div class="coalv">' if colours else '<div class="coalv coalv-plain">',
+           f"<h2>{html.escape(title)}</h2>"]
     if is_preview:
         out.append(f'<div class="preview" role="note"><p><strong>{html.escape(preview_sentence(len(shown_rows), total, (c0, c1), ncols, selection))}'
                    f'</strong> Drawing all of it would make the page slow, so only this part is drawn; problems '
@@ -643,9 +648,9 @@ def render_fragment(rows: list[dict], ncols: int, notes: list[str] | None = None
     for n in notes:
         out.append(f'<p class="note">{html.escape(n)}</p>')
     out.append(_issues(shown_rows, report, (c0, c1), {r["id"] for r in shown_rows}, is_preview))
-    out.append('<div class="legend" aria-label="Colour key">')
+    out.append('<div class="legend" aria-label="Colour key">' if colours else '<div class="legend" aria-label="Key">')
     for cls, label in LEGEND:
-        out.append(f'<span><span class="sw" style="background:var(--{cls})"></span>{label}</span>')
+        out.append(f'<span class="resclass"><span class="sw" style="background:var(--{cls})"></span>{label}</span>')
     out.append('<span><b>≠</b> codon does not match its amino acid (outlined)</span>'
                '<span><b>↯</b> frameshift (double outline, hatched)</span>'
                '<span class="gapkey">--- gap</span></div>')
@@ -701,7 +706,7 @@ def render_page(fragment: str, title: str = "COAL alignment view") -> str:
 def view(protein_path: str, codon_path: str | None = None, report: dict | str | None = None,
          dna_path: str | None = None, codontable: int | None = None, page: bool = True,
          max_seqs: int = MAX_SEQS, max_cols: int = MAX_COLS, max_cells: int = MAX_CELLS,
-         centre: int | None = None, info: dict | None = None) -> str:
+         centre: int | None = None, info: dict | None = None, colours: bool = True) -> str:
     """Render a COAL run as HTML. `report` may be a dict, a path to a coal.report/1 file, or None.
     An honest preview at scale: rows chosen by select_rows (problems first, then OK ones from
     across the file), a column window (centre: the column to centre it on; by default column 1, or the first
@@ -769,13 +774,13 @@ def view(protein_path: str, codon_path: str | None = None, report: dict | str | 
                      "total": total, "shown": len(rows)})
     title = f"Codon alignment: {os.path.basename(protein_path)}"
     frag = render_fragment(rows, ncols, notes, report, title, max_seqs, max_cols, total_rows=total, col_start=c0,
-                           max_cells=max_cells, overview=over, selection=selection)
+                           max_cells=max_cells, overview=over, selection=selection, colours=colours)
     return render_page(frag, title) if page else frag
 
 
 def render_run(protein_path: str, output_path: str | None, report: dict, dna_path: str | None, codontable: int,
                out_dir: str, limits: tuple[int, int, int] | None = None, centre: int | None = None,
-               info: dict | None = None) -> tuple[str, str]:
+               info: dict | None = None, colours: bool = True) -> tuple[str, str]:
     """Renders once: (fragment for the GUI, path of the downloadable page written into out_dir).
     limits (sequences, columns, cells: the preview size from the settings), centre (a column to
     centre the preview on) and info (filled by view()); the downloadable page is the same preview."""
@@ -793,7 +798,7 @@ def render_run(protein_path: str, output_path: str | None, report: dict, dna_pat
     ms, mc, mx = limits or (MAX_SEQS, MAX_COLS, MAX_CELLS)
     try:
         frag = view(protein_path, output_path, report, dna_path, codontable, page=False, max_seqs=ms, max_cols=mc,
-                    max_cells=mx, centre=centre, info=info)
+                    max_cells=mx, centre=centre, info=info, colours=colours)
     finally:
         if tmp and os.path.exists(tmp):
             os.remove(tmp)
