@@ -3,6 +3,8 @@
 Branch `verify/full-2026-10-24` of a fresh clone of `main` at `4159e10` (merge of PR #43, the memory improvements);
 latest release tag `v0.5.0`; every version string in the repository is `0.5.0` (the one exception is a finding below).
 Run unattended by Claude Code following `full-test-prompt.md`; the decisions it took are in `verify/LOG.md`.
+**Update, later on 2026-10-24:** every finding V-1 to V-16 was fixed and merged into `main` as PR #44 (3d525ce);
+section 4 records a second pass at the human checklist, which added the 1,000,000-sequence benchmark and V-17.
 
 ## 1. Verdict per area
 
@@ -13,7 +15,7 @@ Run unattended by Claude Code following `full-test-prompt.md`; the decisions it 
 | `pal2nal` drop-in | PASS (1 minor) | V-2: no-argument usage goes to stdout with exit 0 |
 | Report and flags | PASS | schema valid, checksums right, counts consistent, `--resume` identical after a kill in every format, both engines |
 | MCP server | PASS | both tools, every parameter, clean stdout, `save_as` rules, large-input hand-over |
-| GUI | PASS (5 usability / minor) | every control and flow right, downloads byte-identical to the CLI; V-8 CDN script vs the offline claim, V-9 axe (Gradio), V-10 tip wording, V-11 unlabelled box, V-12 error reason hidden |
+| GUI | PASS (6 usability / minor) | every control and flow right, downloads byte-identical to the CLI; V-8 CDN script vs the offline claim, V-9 axe (Gradio), V-10 tip wording, V-11 unlabelled box, V-12 error reason hidden (all fixed in PR #44); V-17 the residue palette merges for colour-blind readers (second pass, open) |
 | Windows app and installer | PASS | installer, uninstaller, both optional tasks, Claude Desktop connect/disconnect, installed and portable apps, bundled `coal-cpp.exe`, MCP via `COAL.exe`: all as documented; long paths, drag-and-drop, high-DPI, Smart App Control and a real Claude Desktop chat are on the human checklist |
 | Tests and harness | PASS (5 minor) | 502 tests pass on WSL both engines; on Windows 2 environment failures (V-14 symlink privilege, V-15 venv launcher count); V-1 fuzz neutralisation gap, V-13 explainer test skipped by its Linux-only lookup; 15 planted bugs: 12 caught, 2 equivalent mutants, 1 gap (V-16, the GUI download file) |
 | Distribution | PASS (1 docs) | wheels, sdists, git install, platform wheel with `coal-cpp` inside; V-5 stale installer name in the desktop README |
@@ -38,17 +40,19 @@ Everything in this section was measured on this machine during the run (WSL 2 Ub
 | ext4 | 10,000 × 500 | 0.595 s | 0.44 s | 0.108 s | 0.0779 s | True |
 | ext4 | 100 × 10,000 | 0.21 s | 0.231 s | 0.0311 s | 0.0262 s | True |
 | ext4 | 100,000 × 500 | 4.18 s | 2.19 s | 0.898 s | 0.749 s | True |
+| ext4 | 1,000,000 × 400 | 36.7 s | 17.8 s | 8.44 s | 7.53 s | True |
 
 **Against PAL2NAL v14 (Perl 5, same inputs).**
 
-| Data | Workload | PAL2NAL v14 | Python engine | speed-up | Python, all cores | speed-up | identical |
+| Data | Workload | PAL2NAL v14 (peak memory) | Python engine, 1 process (peak) | speed-up | Python, all cores | speed-up | identical |
 |---|---|---|---|---|---|---|---|
-| DrvFs | 10,000 × 500 | 11.7 s | 2.61 s | 4.48× | 2.63 s | 4.44× | True |
-| DrvFs | 100 × 10,000 | 12.9 s | 0.628 s | 20.6× | 0.598 s | 21.6× | True |
-| ext4 | 10,000 × 500 | 11.3 s | 0.581 s | 19.5× | 0.431 s | 26.2× | True |
-| ext4 | 100 × 10,000 | 12.8 s | 0.215 s | 59.5× | 0.215 s | 59.4× | True |
+| DrvFs | 10,000 × 500 | 11.7 s (0.187 GB) | 2.61 s (44.5 MB) | 4.48× | 2.63 s | 4.44× | True |
+| DrvFs | 100 × 10,000 | 12.9 s (0.0417 GB) | 0.628 s (21.9 MB) | 20.6× | 0.598 s | 21.6× | True |
+| ext4 | 10,000 × 500 | 11.3 s (0.187 GB) | 0.581 s (44.4 MB) | 19.5× | 0.431 s | 26.2× | True |
+| ext4 | 100 × 10,000 | 12.8 s (0.0417 GB) | 0.215 s (21.4 MB) | 59.5× | 0.215 s | 59.4× | True |
+| ext4 | 1,000,000 × 400 | 1.04e+03 s (14.6 GB) | 39.1 s (345 MB) | 26.5× | – s | –× | True |
 
-Compared with the committed tables: `docs/benchmarks.md` (v0.3 table, commit 58a1219) has 10,000 × 500 at 24.7 s PAL2NAL / 0.864 s COAL and 100 × 10,000 at 24.5 s / 0.207 s; here (ext4) 11.3 s / 0.58 s and 12.8 s / 0.215 s, so PAL2NAL is about twice as fast on this CPU and the Python engine's long-gene case is the same; the speed-ups keep their shape (sequences: ~20×, long genes: ~60×). The 47f57f1 Windows table has 100,000 × 400 at 1.07 s (coal-cpp, 1 thread) and 5.04 s (Python, 1 process); here 100,000 × 500 took 0.90 s and 4.13 s. The 1,000,000-sequence row (62 min of PAL2NAL) was not re-run (human checklist).
+Compared with the committed tables: `docs/benchmarks.md` (v0.3 table, commit 58a1219) has 10,000 × 500 at 24.7 s PAL2NAL / 0.864 s COAL and 100 × 10,000 at 24.5 s / 0.207 s; here (ext4) 11.3 s / 0.58 s and 12.8 s / 0.215 s, so PAL2NAL is about twice as fast on this CPU and the Python engine's long-gene case is the same; the speed-ups keep their shape (sequences: ~20×, long genes: ~60×). The 47f57f1 Windows table has 100,000 × 400 at 1.07 s (coal-cpp, 1 thread) and 5.04 s (Python, 1 process); here 100,000 × 500 took 0.90 s and 4.13 s. The 1,000,000 × 400 row was run in the second pass (one timed run each, data on the WSL ext4 home, no all-core PAL2NAL comparison): PAL2NAL v14 1,035 s and 14.9 GB here against 3,714 s and 18.6 GB in the committed Windows table, coal-cpp 8.4 s (1 thread) against 12.5 s, the Python engine 36 s (345 MB) against 50.3 s (1.2 GB), so the speed-ups on this Linux CPU are about 120× (coal-cpp) and 27× (Python) rather than 297× and 74×: PAL2NAL's Perl runs much faster here than on the Windows machine of the table, COAL's shape and memory hold.
 
 **Peak memory at 500,000 sequences × 150 codons (`tests/tools/stress_run.py`, summed PSS of the process tree, `-j 1`, output to a file).**
 
@@ -63,32 +67,46 @@ Compared with the committed tables: `docs/benchmarks.md` (v0.3 table, commit 58a
 
 **Other numbers.** Engine suite: 502 tests OK on both engines (8 skipped, each explained in phase 1); fuzz: 3 new seeds × 2,000 cases × 4 formats × both engines, 2 harness-level unexplained differences (V-1), 0 wrong alignments; adversarial: 50 cases, engines identical on every one; GUI: 100,000 sequences through the path boxes in 10.7 s; mutation testing: see phase 13.
 
-## 4. Human checklist (what an unattended run could not verify)
+## 4. Human checklist (what an unattended run could not verify), and the second pass at it
 
-Each item names the phase it belongs to and why it needs a person.
+Each item names the phase it belongs to and why it needs a person. After the first report the owner asked for this
+list to be worked through; the second pass (2026-10-24, later the same day) settled what a script could and records
+the rest.
 
-- **Windows (phase 8).** The owner ran the installer by hand before the run (SmartScreen "Windows protected your PC" /
-  "Unknown publisher", More info, Run anyway; per-user; "Connect COAL to Claude Desktop" ticked) and the Windows pass
-  drove everything else silently. Still for a person: (1) restart Claude Desktop and ask it to run `codon_align` on
-  `examples/clean` in a chat (the config entry is in place and `COAL.exe -m coal_app --mcp` answers the protocol);
-  (2) drag two files from Explorer onto the COAL window; (3) a high-DPI screen at 150 % and 200 %; (4) a path longer
-  than 260 characters after turning `LongPathsEnabled` on (off on this PC, so neither the harness nor COAL could be
-  tried); (5) the wizard's pages and the uninstaller's own prompts (the pass used `/VERYSILENT`); (6) the
-  "Open with" entry from Explorer's menu (the registry command is right).
-- **Smart App Control (phase 8, E02 / T07).** The text the docs give for machines with Smart App Control on could not
-  be checked here (it is off on this PC).
-- **Screen reader (phase 7, G24).** axe-core and the keyboard flow were run; a read-through with NVDA or Narrator was
-  not (the unnamed methods box, V-11, and the hidden duplicate tabs, V-9, are the two things to listen for).
-- **Colour (phase 7).** Contrast was measured; whether the residue-class palette is readable for colour-blind users
-  was not judged.
-- **The 1,000,000-sequence benchmark (phase 11).** Not re-run: PAL2NAL v14 needs 62 minutes and 18.6 GB on it. The
-  three smaller sizes were re-run on this machine (section 3) and keep the documented shape.
-- **PAL2NAL v16 (phase 2).** The repository compares against v14 only; v16 is not committed and was not fetched.
-- **Root-only and WSL-only tests (phase 1).** Two tmpfs tests need root and two Chromium tests need `libnspr4` in WSL;
-  the GUI tests ran from the Windows host instead, the tmpfs tests did not run.
-- **`demo/race.py` (phase 12).** Removed from the repository; nothing to run.
+- **Done in the second pass.** (1) The 1,000,000-sequence benchmark (phase 11): PAL2NAL v14 and both engines on this
+  machine, numbers in section 3. (2) Colour (phase 7): the residue-class palette simulated for the four common
+  deficiencies, with Chromium's own emulation and numerically: finding V-17 (the classes merge; the letters and
+  outlines carry the meaning). (3) The exit codes on Windows (SKILL.md's "not yet verified there"): verified by the
+  Windows pass, docs updated in PR #44.
+- **Could not be done by the agent, still for a person.**
+  - *A real Claude Desktop chat (phase 8).* The agent runs inside Claude Desktop and may not drive that application.
+    Steps: restart Claude Desktop, open a new chat, check that the tools menu lists `coal`, and ask "Build a codon
+    alignment from `D:\coal-handoff-kit\COAL\examples\clean\protein.aln.fasta` and `...\dna.fasta`"; the answer
+    should name the output file and say all 8 genes match (`COAL.exe -m coal_app --mcp` answers the protocol, and the
+    config entry is in place).
+  - *Drag-and-drop onto the COAL window, the "Open with" entry in Explorer's menu, the wizard's and the uninstaller's
+    own pages (phase 8).* The owner declined desktop control for Explorer and COAL in the second pass, so these stay by
+    hand: drop two files from Explorer onto the window (it should fill both boxes); right-click a `.fasta` file and look
+    for COAL under "Open with" (only after an install with that task ticked; the registry command is right); run
+    `COAL-Setup-0.5.0.exe` once more and read each page (the silent pass checked what each page does).
+  - *High-DPI (phase 8).* Changing the display scaling is a system setting the agent does not touch: set 150 % and
+    200 % in Settings > System > Display and open COAL from the Start menu; the page itself was checked at 200 % zoom.
+  - *Long paths (phase 8).* `LongPathsEnabled` is off on this PC (a registry key under HKLM the agent does not set):
+    turn it on, then align `examples/clean` from a folder whose path is longer than 260 characters through the path
+    boxes.
+  - *Smart App Control (phase 8, E02 / T07).* Off on this PC and only switchable on by reinstalling Windows: the docs'
+    text for it cannot be checked here.
+  - *Screen reader (phase 7, G24).* axe-core and the keyboard flow were run; a read-through with NVDA or Narrator was
+    not (after PR #44 the methods box is named; the hidden duplicate tabs are gone from the tab order).
+  - *PAL2NAL v16 (phase 2).* The repository compares against v14 only; v16 is not committed and was not fetched.
+  - *Root-only tests (phase 1).* Two tmpfs tests need root in WSL (no passwordless sudo on this account).
+  - *`demo/race.py` (phase 12).* Removed from the repository; nothing to run.
 
 ## 5. Suggested fix order
+
+V-1 to V-16 below are fixed in PR #44 (merged into `main`); V-17, found in the second pass, is open.
+
+0. **V-17** (GUI): a residue-class palette that also varies lightness, or a switch to turn the residue colours off.
 
 1. **V-12** (GUI): show the engine's reason in the banner when a run stops before pairing (one line from the raw
    messages); the message exists, it is just hidden.
@@ -282,6 +300,19 @@ MINOR. Every reproducer is under `verify/repro/V-n/`.
   download button; a test that runs an example through `run_alignment`'s outputs and asserts the download value is
   the alignment path (and the report button's the report path) would catch it. The other app mutant (MCP `all_ok` true
   with a failed gene) is caught by four tests.
+
+### V-17 (USABILITY / MINOR; GUI) — the residue-class colours of the alignment view are not distinguishable for colour-blind readers
+
+- **Steps:** `verify/colour_vision.py` (added after the first report, for the human-checklist item "colour"): the
+  one-broken-gene example rendered in Chromium with its vision-deficiency emulation (`verify/p7/colour/view_*.png`)
+  and the seven class colours simulated numerically (Machado et al. 2009), smallest CIE76 distance between any two
+  classes: normal vision 5.8 (Hydrophobic `rgb(212,235,249)` against Positive `rgb(201,220,239)`), protanopia 4,
+  deuteranopia 4 (Aromatic against Polar), tritanopia 4, greyscale 0 (every class the same grey).
+- **Actual:** the pastel palette tells the classes apart mainly by hue at nearly equal lightness, so two of them are
+  already close for everyone and most pairs merge under red-green deficiency. Nothing is lost in meaning: every cell
+  carries its residue letter and codon, mismatches and frameshifts are outlines and hatching, and the legend names
+  each class, so colour is a secondary cue (docs/ui-principles.md: never colour alone). A palette that also varies
+  lightness (or a "no residue colours" switch) would make the classes readable for colour-blind users.
 
 ## 7. What was run, phase by phase
 

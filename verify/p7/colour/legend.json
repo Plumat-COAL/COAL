@@ -1,0 +1,64 @@
+{
+ "legend": [
+  [
+   "Hydrophobic (A V L I M)",
+   "rgba(0, 0, 0, 0)",
+   "rgb(42, 42, 42)"
+  ],
+  [
+   "Aromatic (F W Y)",
+   "rgba(0, 0, 0, 0)",
+   "rgb(42, 42, 42)"
+  ],
+  [
+   "Positive (K R H)",
+   "rgba(0, 0, 0, 0)",
+   "rgb(42, 42, 42)"
+  ],
+  [
+   "Negative (D E)",
+   "rgba(0, 0, 0, 0)",
+   "rgb(42, 42, 42)"
+  ],
+  [
+   "Polar (S T N Q)",
+   "rgba(0, 0, 0, 0)",
+   "rgb(42, 42, 42)"
+  ],
+  [
+   "Special (G P C)",
+   "rgba(0, 0, 0, 0)",
+   "rgb(42, 42, 42)"
+  ],
+  [
+   "Stop (*)",
+   "rgba(0, 0, 0, 0)",
+   "rgb(42, 42, 42)"
+  ],
+  [
+   "\u2260 codon does not match its amino acid (outlined)",
+   "rgba(0, 0, 0, 0)",
+   "rgb(42, 42, 42)"
+  ],
+  [
+   "\u21af frameshift (double outline, hatched)",
+   "rgba(0, 0, 0, 0)",
+   "rgb(42, 42, 42)"
+  ],
+  [
+   "--- gap",
+   "rgba(0, 0, 0, 0)",
+   "rgb(110, 119, 128)"
+  ]
+ ],
+ "cells": {
+  "hy": "rgb(212, 235, 249)",
+  "sp": "rgb(250, 244, 192)",
+  "ar": "rgb(240, 214, 230)",
+  "po": "rgb(201, 220, 239)",
+  "ne": "rgb(248, 213, 194)",
+  "pl": "rgb(201, 234, 223)",
+  "gap": "rgba(0, 0, 0, 0)",
+  "po fs": "rgb(201, 220, 239)"
+ }
+}

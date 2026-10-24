@@ -179,4 +179,4 @@ Every option, tool parameter, control, installer option and numeric or factual c
 | J01 | demos | demo/race.py against the real PAL2NAL | 12 | SKIPPED (demo/race.py removed with the hackathon material in dfe0049) |
 | J02 | demos | demo/diamond_pipeline.py (stand-in test only without diamond) | 12 | PASS |
 | J03 | demos | demo/mcp_demo.md tool outputs still match the tools | 12 | FINDING V-4 (demo/mcp_demo.md shows the old stop-at-first-error output) |
-| U01 | mutations | about 15 realistic bugs in a scratch copy; each not caught is a test gap | 13 | DONE: 15 bugs, 12 caught, 2 equivalent mutants (Python start-codon set is a fast path only; -blockonly keep_col), 1 test gap: V-16 (GUI download button file untested); C++ reverse-order mutant caught by a hang, not an assertion |
+| U01 | mutations | about 15 realistic bugs in a scratch copy; each not caught is a test gap | 13 | DONE: 15 bugs, 12 caught, 2 equivalent mutants (Python start-codon set is a fast path only; -blockonly keep_col), 1 test gap: V-16 (GUI download button file untested); the C++ reverse-order mutant caught by a hang, not an assertion |

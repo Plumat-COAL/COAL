@@ -185,7 +185,7 @@ ROWS = [
     ("F01", "correctness", "fuzz with 3 new seeds x FUZZ_N >= 2,000, all 4 formats, -nogap, -nomismatch, all 17 codes: every difference maps to a DELIBERATE row", "2", "PASS (0 wrong alignments in 12,000 cases); FINDING V-1 in the harness"),
     ("F02", "correctness", "adversarial generator: every case of the prompt's list through PAL2NAL, Python and C++", "2", "PASS"),
     ("F03", "correctness", "real data: published alignments rebuilt in all 4 formats with both engines; '17 rebuilt exactly' claim", "2", "PASS (12 datasets rebuilt exactly, both engines); V-7: the '17' figure is local-only"),
-    ("K01", "perf", "benchmarks/run_bench.py at 10,000x500, 100x10,000, 100,000x500 (Python vs C++, -j 1 and default), PAL2NAL at the two smaller", "11", "PASS (shape reproduced on ext4; numbers in section 3)"),
+    ("K01", "perf", "benchmarks/run_bench.py at 10,000x500, 100x10,000, 100,000x500 (Python vs C++, -j 1 and default), PAL2NAL at the two smaller", "11", "PASS (shape reproduced on ext4 at 3 sizes; the 1,000,000 x 400 row run in the second pass: PAL2NAL 1,035 s / 14.9 GB, Python 36 s / 345 MB, coal-cpp 8.4 s; numbers in section 3)"),
     ("K02", "perf", "peak memory at 500,000 x 150 codons in every format, both engines (streaming claim)", "11", "PASS (500,000 x 150: Python 190 / 191 / 190 / 197 MB, coal-cpp 112 / 137 / 113 / 149 MB for fasta / clustal / paml / codon, identical outputs; usage.md figures met)"),
     ("J01", "demos", "demo/race.py against the real PAL2NAL", "12", "SKIPPED (demo/race.py removed with the hackathon material in dfe0049)"),
     ("J02", "demos", "demo/diamond_pipeline.py (stand-in test only without diamond)", "12", "PASS"),
