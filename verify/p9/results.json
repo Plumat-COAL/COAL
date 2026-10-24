@@ -1,0 +1,157 @@
+[
+ {
+  "name": "release v0.5.0 assets downloaded",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "SHA256SUMS.txt matches every downloaded asset",
+  "ok": true,
+  "detail": "[]"
+ },
+ {
+  "name": "py3.10: release pure wheel + app wheel install",
+  "ok": true,
+  "detail": "\n[notice] A new release of pip is available: 23.0.1 -> 26.2.2\n[notice] To update, run: /mnt/d/coal-stress/verify/p9/venv-wheel-3.10/bin/python -m pip install --upgrade pip\n"
+ },
+ {
+  "name": "py3.10: coal --version == coal 0.5.0",
+  "ok": true,
+  "detail": "coal 0.5.0\n"
+ },
+ {
+  "name": "py3.10: the clean example runs from the wheel",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "py3.10: pal2nal entry point installed",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "py3.10: python -m coal_app --check works",
+  "ok": true,
+  "detail": "coal 0.5.0: formats=fasta,clustal,paml,codon report=True json=True keep_going=True\nexamples: clean, mito, messy_ids, one_broken_gene\n"
+ },
+ {
+  "name": "py3.10: pure wheel has no coal-cpp (--cpp-path exits 1 with a reason)",
+  "ok": true,
+  "detail": "(1, 'coal: coal-cpp not found (looked at COAL_CPP, then coal/bin inside the installed package, then next to Python, then PATH)\\n')"
+ },
+ {
+  "name": "py3.10: manylinux platform wheel installs",
+  "ok": true,
+  "detail": "\n[notice] A new release of pip is available: 23.0.1 -> 26.2.2\n[notice] To update, run: /mnt/d/coal-stress/verify/p9/venv-plat-3.10/bin/python -m pip install --upgrade pip\n"
+ },
+ {
+  "name": "py3.10: --cpp-path finds the bundled coal-cpp",
+  "ok": true,
+  "detail": "(0, '/mnt/d/coal-stress/verify/p9/venv-plat-3.10/lib/python3.10/site-packages/coal/bin/coal-cpp\\n', '')"
+ },
+ {
+  "name": "py3.10: bundled coal-cpp --version == coal 0.5.0 (C++)",
+  "ok": true,
+  "detail": "coal 0.5.0 (C++)\n"
+ },
+ {
+  "name": "py3.10: bundled coal-cpp output equals the Python engine's on the clean example",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "py3.10: release sdists install",
+  "ok": true,
+  "detail": "\n[notice] A new release of pip is available: 23.0.1 -> 26.2.2\n[notice] To update, run: /mnt/d/coal-stress/verify/p9/venv-sdist-3.10/bin/python -m pip install --upgrade pip\n"
+ },
+ {
+  "name": "py3.10: sdist coal --version",
+  "ok": true,
+  "detail": "coal 0.5.0\n"
+ },
+ {
+  "name": "py3.13: release pure wheel + app wheel install",
+  "ok": true,
+  "detail": "\n[notice] A new release of pip is available: 26.0.1 -> 26.2.2\n[notice] To update, run: /mnt/d/coal-stress/verify/p9/venv-wheel-3.13/bin/python -m pip install --upgrade pip\n"
+ },
+ {
+  "name": "py3.13: coal --version == coal 0.5.0",
+  "ok": true,
+  "detail": "coal 0.5.0\n"
+ },
+ {
+  "name": "py3.13: the clean example runs from the wheel",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "py3.13: pal2nal entry point installed",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "py3.13: python -m coal_app --check works",
+  "ok": true,
+  "detail": "coal 0.5.0: formats=fasta,clustal,paml,codon report=True json=True keep_going=True\nexamples: clean, mito, messy_ids, one_broken_gene\n"
+ },
+ {
+  "name": "py3.13: pure wheel has no coal-cpp (--cpp-path exits 1 with a reason)",
+  "ok": true,
+  "detail": "(1, 'coal: coal-cpp not found (looked at COAL_CPP, then coal/bin inside the installed package, then next to Python, then PATH)\\n')"
+ },
+ {
+  "name": "py3.13: manylinux platform wheel installs",
+  "ok": true,
+  "detail": "\n[notice] A new release of pip is available: 26.0.1 -> 26.2.2\n[notice] To update, run: /mnt/d/coal-stress/verify/p9/venv-plat-3.13/bin/python -m pip install --upgrade pip\n"
+ },
+ {
+  "name": "py3.13: --cpp-path finds the bundled coal-cpp",
+  "ok": true,
+  "detail": "(0, '/mnt/d/coal-stress/verify/p9/venv-plat-3.13/lib/python3.13/site-packages/coal/bin/coal-cpp\\n', '')"
+ },
+ {
+  "name": "py3.13: bundled coal-cpp --version == coal 0.5.0 (C++)",
+  "ok": true,
+  "detail": "coal 0.5.0 (C++)\n"
+ },
+ {
+  "name": "py3.13: bundled coal-cpp output equals the Python engine's on the clean example",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "py3.13: release sdists install",
+  "ok": true,
+  "detail": "\n[notice] A new release of pip is available: 26.0.1 -> 26.2.2\n[notice] To update, run: /mnt/d/coal-stress/verify/p9/venv-sdist-3.13/bin/python -m pip install --upgrade pip\n"
+ },
+ {
+  "name": "py3.13: sdist coal --version",
+  "ok": true,
+  "detail": "coal 0.5.0\n"
+ },
+ {
+  "name": "python -m build --sdist from the checkout",
+  "ok": true,
+  "detail": "t.license-files`. (Both options available on setuptools>=77.0.0).\n\n        By 2027-Feb-18, you need to update your project and remove deprecated calls\n        or your builds will no longer be supported.\n\n        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.\n        ********************************************************************************\n\n!!\n"
+ },
+ {
+  "name": "built sdist installs",
+  "ok": true,
+  "detail": "\n[notice] A new release of pip is available: 26.0.1 -> 26.2.2\n[notice] To update, run: /mnt/d/coal-stress/verify/p9/venv-build/bin/python -m pip install --upgrade pip\n"
+ },
+ {
+  "name": "pip install git+https://github.com/Plumat-COAL/COAL",
+  "ok": true,
+  "detail": "\n[notice] A new release of pip is available: 26.0.1 -> 26.2.2\n[notice] To update, run: /mnt/d/coal-stress/verify/p9/venv-git/bin/python -m pip install --upgrade pip\n"
+ },
+ {
+  "name": "git install: coal --version",
+  "ok": true,
+  "detail": "coal 0.5.0\n"
+ },
+ {
+  "name": "every version string agrees (0.5.0)",
+  "ok": false,
+  "detail": "{'desktop/README.md installer name': '0.4.2', 'SKILL.md': '0.0.1'}"
+ }
+]

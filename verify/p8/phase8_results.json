@@ -1,0 +1,227 @@
+[
+ {
+  "name": "installed COAL.exe --version",
+  "ok": true,
+  "detail": "COAL desktop 0.5.0"
+ },
+ {
+  "name": "installed COAL.exe -m coal --version is coal 0.5.0",
+  "ok": true,
+  "detail": "coal 0.5.0"
+ },
+ {
+  "name": "installed COAL.exe -m coal --cpp-path names the bundled coal-cpp.exe",
+  "ok": true,
+  "detail": "C:\\Users\\chloe\\AppData\\Local\\Programs\\COAL\\_internal\\coal-cpp.exe"
+ },
+ {
+  "name": "bundled coal-cpp.exe --version is coal 0.5.0 (C++)",
+  "ok": true,
+  "detail": "coal 0.5.0 (C++)"
+ },
+ {
+  "name": "installed COAL.exe -m coal on 13.7 MB: exit 0, engine coal-cpp (the bundled one)",
+  "ok": true,
+  "detail": "(0, 'coal-cpp', '')"
+ },
+ {
+  "name": "installed COAL.exe -m coal_app --check",
+  "ok": false,
+  "detail": "(2, \"COAL: only '-m coal' and '-m coal_app --mcp' are supported here, not '-m coal_app'\\r\\n\")"
+ },
+ {
+  "name": "installed COAL.exe -m other: refused with a plain message, non-zero",
+  "ok": true,
+  "detail": "(2, \"COAL: only '-m coal' and '-m coal_app --mcp' are supported here, not '-m other'\\r\\n\")"
+ },
+ {
+  "name": "installed COAL.exe -m coal_app --mcp: initialize answers",
+  "ok": true,
+  "detail": "{'jsonrpc': '2.0', 'id': 1, 'result': {'protocolVersion': '2025-06-18', 'capabilities': {'experimental': {}, 'prompts': {'listChanged': False}, 'resources': {'subscribe': False, 'listChanged': False},"
+ },
+ {
+  "name": "installed MCP: tools/list gives codon_align and explain_report",
+  "ok": true,
+  "detail": "['codon_align', 'explain_report']"
+ },
+ {
+  "name": "installed MCP: codon_align on the clean example completes, all_ok",
+  "ok": true,
+  "detail": "{'completed': True, 'all_ok': True, 'needs_attention': False, 'counts': {'total': 8, 'ok': 8, 'warning': 0, 'failed': 0, 'not_checked': 0}, 'suggested_codontable': None, 'next_step': 'All sequences match their protein; the alignment at output_path is ready to use.', 'output_path': 'C:\\\\Users\\\\chloe\\"
+ },
+ {
+  "name": "installed MCP: explain_report on that report is plain text",
+  "ok": false,
+  "detail": "{'result': '8 sequences: 8 OK, 0 with warnings, 0 failed.\\nProteins and DNA were paired by matching their IDs exactly.\\nThe codon alignment was written to C:\\\\Users\\\\chloe\\\\AppData\\\\Local\\\\Temp\\\\coal_"
+ },
+ {
+  "name": "installed MCP: a 13.7 MB input runs in the bundled coal-cpp (report engine coal-cpp)",
+  "ok": true,
+  "detail": "('coal-cpp', \"coal 'D:\\\\coal-stress\\\\verify\\\\bench-data\\\\n10000_L500\\\\pep.fasta' 'D:\\\\coal-stress\\\\verify\\\\bench-data\\\\n10000_L500\\\\nuc.fasta' -\")"
+ },
+ {
+  "name": "installed MCP: nothing on stdout outside the protocol",
+  "ok": true,
+  "detail": "[]"
+ },
+ {
+  "name": "installed MCP: no traceback on stderr",
+  "ok": true,
+  "detail": "b\"eteFieldDefinitionWarning: Field 'lifespan' has an incomplete definition: its annotation contains an unresolved forward reference, so settings sources may fail to correctly resolve its value. Call `model_rebuild()` on the model where the field is defined, once all the referenced types are defined.\\r\\n\""
+ },
+ {
+  "name": "--connect-claude adds a coal entry (COAL.exe -m coal_app --mcp)",
+  "ok": true,
+  "detail": "{'command': 'C:\\\\Users\\\\chloe\\\\AppData\\\\Local\\\\Programs\\\\COAL\\\\COAL.exe', 'args': ['-m', 'coal_app', '--mcp']}"
+ },
+ {
+  "name": "--connect-claude keeps the other server and other keys",
+  "ok": true,
+  "detail": "{'mcpServers': {'other': {'command': 'C:\\\\\\\\x\\\\\\\\other.exe', 'args': ['--serve']}, 'coal': {'command': 'C:\\\\Users\\\\chloe\\\\AppData\\\\Local\\\\Programs\\\\COAL\\\\COAL.exe', 'args': ['-m', 'coal_app', '--mcp']}}, 'theme': 'dark'}"
+ },
+ {
+  "name": "--connect-claude writes claude_desktop_config.json.bak-coal, byte for byte the old file",
+  "ok": true,
+  "detail": "True"
+ },
+ {
+  "name": "--connect-claude exits 0",
+  "ok": true,
+  "detail": "(0, '')"
+ },
+ {
+  "name": "--connect-claude twice: one coal entry, file unchanged",
+  "ok": true,
+  "detail": "(0, '')"
+ },
+ {
+  "name": "--disconnect-claude removes coal, keeps the other server and keys",
+  "ok": true,
+  "detail": "(0, \"{'mcpServers': {'other': {'command': 'C:\\\\\\\\\\\\\\\\x\\\\\\\\\\\\\\\\other.exe', 'args': ['--serve']}}, 'theme': 'dark'}\", '')"
+ },
+ {
+  "name": "installed: --serve prints COAL-READY <url>",
+  "ok": true,
+  "detail": "(b'COAL-READY http://127.0.0.1:7870/\\r\\n', '5.360911399999168')"
+ },
+ {
+  "name": "installed: the port is bound to 127.0.0.1 only",
+  "ok": true,
+  "detail": "['TCP    127.0.0.1:7870         0.0.0.0:0              LISTENING       37408']"
+ },
+ {
+  "name": "installed: example 'Clean nuclear genes' runs (8)",
+  "ok": true,
+  "detail": "('0.5s', '\u2714 All 8 genes match codon for codon\\n\\nFiles used: protein protein.aln.fasta, 1.3 KB (uploaded); DNA dna.fasta, 3.6 KB (up')"
+ },
+ {
+  "name": "installed: example 'Mitochondrial (wrong code)' runs (24)",
+  "ok": true,
+  "detail": "('0.5s', '\u2139 Wrong genetic code?\\n\\nWith code 1 (Standard) 24 of 24 genes have mismatched codons; with code 2 (Vertebrate mitochondri')"
+ },
+ {
+  "name": "installed: example 'Messy IDs' runs (a result)",
+  "ok": true,
+  "detail": "('0.5s', '\u2714 All 10 genes match codon for codon\\n\\nFiles used: protein protein.aln.fasta, 1.4 KB (uploaded); DNA dna.fasta, 3.6 KB (u')"
+ },
+ {
+  "name": "installed: example 'One broken gene' runs (19 of 20)",
+  "ok": true,
+  "detail": "('0.5s', '\u26a0 19 of 20 genes aligned\\n\\n\u2716 1 failed\\n\u2716\\n\\nFiles used: protein protein.aln.fasta, 4.3 KB (uploaded); DNA dna.fasta, 11.9 KB')"
+ },
+ {
+  "name": "installed: path boxes with spaces and a 'OneDrive - ...' folder: 8 genes match",
+  "ok": true,
+  "detail": "\u2714 All 8 genes match codon for codon\n\nFiles used: protein protein aln.fasta, 1.3 KB (read in place); DNA dna seqs.fasta, 3.6 KB (read in place)."
+ },
+ {
+  "name": "installed: long path",
+  "ok": false,
+  "detail": "FileNotFoundError(2, 'The filename or extension is too long')"
+ },
+ {
+  "name": "installed: 10,000 x 500 through the path boxes runs in the bundled coal-cpp",
+  "ok": true,
+  "detail": "('2.7s', 'coal-cpp', '\u2714 All 10,000 genes match codon for codon\\n\\nFiles used: protein pep.fasta, 5.1 MB (read in place); DNA')"
+ },
+ {
+  "name": "installed: dark theme renders (dark body background)",
+  "ok": true,
+  "detail": "rgb(18, 17, 16)"
+ },
+ {
+  "name": "installed: --serve exits when its stdin closes",
+  "ok": true,
+  "detail": "0"
+ },
+ {
+  "name": "COAL.exe window: the local app is ready within 90 s (log says 'ready at')",
+  "ok": false,
+  "detail": "(None, None, '')"
+ },
+ {
+  "name": "COAL.exe window: the window and its local-app child are running (2 COAL.exe processes)",
+  "ok": true,
+  "detail": "\"Image Name\",\"PID\",\"Session Name\",\"Session#\",\"Mem Usage\"\r\n\"COAL.exe\",\"36040\",\"Console\",\"2\",\"111,616 K\"\r\n\"COAL.exe\",\"14000\",\"Console\",\"2\",\"160,392 K\"\r\n"
+ },
+ {
+  "name": "COAL.exe window: killing the window leaves no COAL.exe behind",
+  "ok": true,
+  "detail": "INFO: No tasks are running which match the specified criteria.\r\n"
+ },
+ {
+  "name": "portable zip: holds COAL.exe",
+  "ok": true,
+  "detail": "['COAL\\\\COAL.exe']"
+ },
+ {
+  "name": "portable COAL.exe --version",
+  "ok": true,
+  "detail": "(0, 'COAL desktop 0.5.0', '')"
+ },
+ {
+  "name": "portable COAL.exe -m coal --cpp-path names its own bundled coal-cpp.exe",
+  "ok": true,
+  "detail": "(0, 'D:\\\\coal-stress\\\\verify\\\\p8\\\\portable\\\\COAL\\\\_internal\\\\coal-cpp.exe')"
+ },
+ {
+  "name": "portable COAL.exe -m coal on 13.7 MB: exit 0, engine coal-cpp",
+  "ok": true,
+  "detail": "(0, 'coal-cpp', '')"
+ },
+ {
+  "name": "portable: --serve prints COAL-READY <url>",
+  "ok": true,
+  "detail": "(b'COAL-READY http://127.0.0.1:7871/\\r\\n', '5.989266300020972')"
+ },
+ {
+  "name": "portable: the port is bound to 127.0.0.1 only",
+  "ok": true,
+  "detail": "['TCP    127.0.0.1:7871         0.0.0.0:0              LISTENING       41760']"
+ },
+ {
+  "name": "portable: example 'Clean nuclear genes' runs (8)",
+  "ok": true,
+  "detail": "('0.5s', '\u2714 All 8 genes match codon for codon\\n\\nFiles used: protein protein.aln.fasta, 1.3 KB (uploaded); DNA dna.fasta, 3.6 KB (up')"
+ },
+ {
+  "name": "portable: example 'Mitochondrial (wrong code)' runs (24)",
+  "ok": true,
+  "detail": "('0.5s', '\u2139 Wrong genetic code?\\n\\nWith code 1 (Standard) 24 of 24 genes have mismatched codons; with code 2 (Vertebrate mitochondri')"
+ },
+ {
+  "name": "portable: example 'Messy IDs' runs (a result)",
+  "ok": true,
+  "detail": "('0.5s', '\u2714 All 10 genes match codon for codon\\n\\nFiles used: protein protein.aln.fasta, 1.4 KB (uploaded); DNA dna.fasta, 3.6 KB (u')"
+ },
+ {
+  "name": "portable: example 'One broken gene' runs (19 of 20)",
+  "ok": true,
+  "detail": "('0.5s', '\u26a0 19 of 20 genes aligned\\n\\n\u2716 1 failed\\n\u2716\\n\\nFiles used: protein protein.aln.fasta, 4.3 KB (uploaded); DNA dna.fasta, 11.9 KB')"
+ },
+ {
+  "name": "portable: --serve exits when its stdin closes",
+  "ok": true,
+  "detail": "0"
+ }
+]

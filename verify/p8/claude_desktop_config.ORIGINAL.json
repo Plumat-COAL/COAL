@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "coal": {
+      "command": "C:\\Users\\chloe\\AppData\\Local\\Programs\\COAL\\COAL.exe",
+      "args": [
+        "-m",
+        "coal_app",
+        "--mcp"
+      ]
+    }
+  }
+}

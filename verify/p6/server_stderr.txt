@@ -1,0 +1,7 @@
+Tool 'codon_align' failed: "Error executing tool codon_align: file not found: /mnt/d/coal-stress/verify/p6/missing.fasta (give an absolute path; relative paths resolve against the server's working directory /mnt/d/coal-stress/verify/p6)"
+Tool 'codon_align' rejected arguments: ['codontable']
+Tool 'codon_align' rejected arguments: ['output_format']
+Tool 'codon_align' failed: 'Error executing tool codon_align: not saved: /mnt/d/coal-stress/verify/p6/saved.fasta already exists (COAL never overwrites a file; choose another name). The alignment is at /mnt/d/coal-stress/verify/p6/runs/run__qrplcxt/pep.codon.fasta'
+Tool 'codon_align' failed: 'Error executing tool codon_align: not saved: the folder /mnt/d/coal-stress/verify/p6/no_such_dir does not exist. The alignment is at /mnt/d/coal-stress/verify/p6/runs/run_e3jnie8g/pep.codon.fasta'
+Tool 'explain_report' failed: 'Error executing tool explain_report: Could not read the report: /mnt/d/coal-stress/verify/p6/pep.fasta is not JSON (Expecting value: line 1 column 1 (char 0))'
+Tool 'explain_report' failed: "Error executing tool explain_report: Could not read the report: [Errno 2] No such file or directory: '/mnt/d/coal-stress/verify/p6/nope.json'"

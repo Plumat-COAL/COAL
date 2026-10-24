@@ -1,0 +1,117 @@
+{
+ "schema": "coal.report/1",
+ "coal_version": "0.5.0",
+ "source": "coal",
+ "engine": "coal-python",
+ "command": "coal D:/coal-handoff-kit/COAL/examples/clean/protein.aln.fasta D:/coal-handoff-kit/COAL/examples/clean/dna.fasta -o clean.out.fa",
+ "command_line": "coal D:/coal-handoff-kit/COAL/examples/clean/protein.aln.fasta D:/coal-handoff-kit/COAL/examples/clean/dna.fasta -o clean.out.fa --report clean.report.json",
+ "pal2nal_equivalent": "pal2nal.pl D:/coal-handoff-kit/COAL/examples/clean/protein.aln.fasta D:/coal-handoff-kit/COAL/examples/clean/dna.fasta -output fasta",
+ "options": {
+  "output_format": "fasta",
+  "codontable": 1,
+  "nogap": false,
+  "nomismatch": false,
+  "keep_going": false,
+  "strict": false,
+  "blockonly": false
+ },
+ "inputs": [
+  {
+   "role": "protein",
+   "path": "D:/coal-handoff-kit/COAL/examples/clean/protein.aln.fasta",
+   "sha256": "b047eada16a111673ac11673520a729fec4b9edd3c9cdd76249c1f6763af3823",
+   "sequences": 8
+  },
+  {
+   "role": "dna",
+   "path": "D:/coal-handoff-kit/COAL/examples/clean/dna.fasta",
+   "sha256": "a61ff415004d10cee0370d583444d7f953409680b5173a9de7e2f35555433e25",
+   "sequences": 8
+  }
+ ],
+ "output": {
+  "path": "clean.out.fa",
+  "format": "fasta",
+  "sha256": "ff1753b88355f090e64747f2cb8b734abdc71a96eeb5937e3167fcbaf5813185",
+  "sequences": 8
+ },
+ "summary": {
+  "total": 8,
+  "ok": 8,
+  "warning": 0,
+  "failed": 0,
+  "pairing": "id"
+ },
+ "hints": [],
+ "errors": [],
+ "sequences": [
+  {
+   "id": "gene01",
+   "index": 0,
+   "dna_id": "gene01",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "gene02",
+   "index": 1,
+   "dna_id": "gene02",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "gene03",
+   "index": 2,
+   "dna_id": "gene03",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "gene04",
+   "index": 3,
+   "dna_id": "gene04",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "gene05",
+   "index": 4,
+   "dna_id": "gene05",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "gene06",
+   "index": 5,
+   "dna_id": "gene06",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "gene07",
+   "index": 6,
+   "dna_id": "gene07",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "gene08",
+   "index": 7,
+   "dna_id": "gene08",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  }
+ ],
+ "runtime_seconds": 0.007,
+ "exit_code": 0,
+ "summary_text": [],
+ "methods_text": "Codon alignments were built with COAL v0.5.0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 8 sequences, 8 matched their protein exactly. Command: coal protein.aln.fasta dna.fasta -o clean.out.fa"
+}

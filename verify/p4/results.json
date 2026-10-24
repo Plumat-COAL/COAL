@@ -1,0 +1,997 @@
+[
+ {
+  "name": "report/success/python: exit 0",
+  "ok": true,
+  "detail": "rc=0 b'coal: warning: g1 pepAlnPos 6: V does not correspond to TGG\\ncoal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment).\\n'"
+ },
+ {
+  "name": "report/success/python: schema valid",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "report/success/python: schema id",
+  "ok": true,
+  "detail": "coal.report/1"
+ },
+ {
+  "name": "report/success/python: sha256 of pep_ok.fasta",
+  "ok": true,
+  "detail": "df6dff864b942fc7f4f31d0c9566a4eaa73ecef4724e7c8f03449f7b946d0ba5"
+ },
+ {
+  "name": "report/success/python: sha256 of nuc_ok.fasta",
+  "ok": true,
+  "detail": "924561afe92570b809d98cf59827eb7fe7c3787837272b1da788487b341a1c35"
+ },
+ {
+  "name": "report/success/python: output sha256",
+  "ok": true,
+  "detail": "{'path': 's.fa', 'format': 'fasta', 'sha256': 'af83c30b7cb3fed87cbecf1b7f91be63b1b64e33771ed81243b994cc57ead7c9', 'sequences': 5}"
+ },
+ {
+  "name": "report/success/python: output.sequences == records written",
+  "ok": true,
+  "detail": "(5, 5)"
+ },
+ {
+  "name": "report/success/python: counts add up",
+  "ok": true,
+  "detail": "{'total': 5, 'ok': 4, 'warning': 1, 'failed': 0, 'pairing': 'id'}"
+ },
+ {
+  "name": "report/success/python: sequences length == total",
+  "ok": true,
+  "detail": "5"
+ },
+ {
+  "name": "report/success/cpp: exit 0",
+  "ok": true,
+  "detail": "rc=0 b'coal: warning: g1 pepAlnPos 6: V does not correspond to TGG\\ncoal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment).\\n'"
+ },
+ {
+  "name": "report/success/cpp: schema valid",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "report/success/cpp: schema id",
+  "ok": true,
+  "detail": "coal.report/1"
+ },
+ {
+  "name": "report/success/cpp: sha256 of pep_ok.fasta",
+  "ok": true,
+  "detail": "df6dff864b942fc7f4f31d0c9566a4eaa73ecef4724e7c8f03449f7b946d0ba5"
+ },
+ {
+  "name": "report/success/cpp: sha256 of nuc_ok.fasta",
+  "ok": true,
+  "detail": "924561afe92570b809d98cf59827eb7fe7c3787837272b1da788487b341a1c35"
+ },
+ {
+  "name": "report/success/cpp: output sha256",
+  "ok": true,
+  "detail": "{'path': 's.fa', 'format': 'fasta', 'sha256': 'af83c30b7cb3fed87cbecf1b7f91be63b1b64e33771ed81243b994cc57ead7c9', 'sequences': 5}"
+ },
+ {
+  "name": "report/success/cpp: output.sequences == records written",
+  "ok": true,
+  "detail": "(5, 5)"
+ },
+ {
+  "name": "report/success/cpp: counts add up",
+  "ok": true,
+  "detail": "{'total': 5, 'ok': 4, 'warning': 1, 'failed': 0, 'pairing': 'id'}"
+ },
+ {
+  "name": "report/success/cpp: sequences length == total",
+  "ok": true,
+  "detail": "5"
+ },
+ {
+  "name": "report/success: engines identical (minus engine, runtime)",
+  "ok": true,
+  "detail": "differs"
+ },
+ {
+  "name": "report/warnings_json/python: exit 0",
+  "ok": true,
+  "detail": "rc=0 b'coal: warning: g1 pepAlnPos 6: V does not correspond to TGG\\ncoal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment).\\n'"
+ },
+ {
+  "name": "report/warnings_json/python: schema valid",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "report/warnings_json/python: schema id",
+  "ok": true,
+  "detail": "coal.report/1"
+ },
+ {
+  "name": "report/warnings_json/python: sha256 of pep_ok.fasta",
+  "ok": true,
+  "detail": "df6dff864b942fc7f4f31d0c9566a4eaa73ecef4724e7c8f03449f7b946d0ba5"
+ },
+ {
+  "name": "report/warnings_json/python: sha256 of nuc_ok.fasta",
+  "ok": true,
+  "detail": "924561afe92570b809d98cf59827eb7fe7c3787837272b1da788487b341a1c35"
+ },
+ {
+  "name": "report/warnings_json/python: output sha256",
+  "ok": true,
+  "detail": "{'path': 'w.fa', 'format': 'fasta', 'sha256': 'af83c30b7cb3fed87cbecf1b7f91be63b1b64e33771ed81243b994cc57ead7c9', 'sequences': 5}"
+ },
+ {
+  "name": "report/warnings_json/python: output.sequences == records written",
+  "ok": true,
+  "detail": "(5, 5)"
+ },
+ {
+  "name": "report/warnings_json/python: counts add up",
+  "ok": true,
+  "detail": "{'total': 5, 'ok': 4, 'warning': 1, 'failed': 0, 'pairing': 'id'}"
+ },
+ {
+  "name": "report/warnings_json/python: sequences length == total",
+  "ok": true,
+  "detail": "5"
+ },
+ {
+  "name": "report/warnings_json/cpp: exit 0",
+  "ok": true,
+  "detail": "rc=0 b'coal: warning: g1 pepAlnPos 6: V does not correspond to TGG\\ncoal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment).\\n'"
+ },
+ {
+  "name": "report/warnings_json/cpp: schema valid",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "report/warnings_json/cpp: schema id",
+  "ok": true,
+  "detail": "coal.report/1"
+ },
+ {
+  "name": "report/warnings_json/cpp: sha256 of pep_ok.fasta",
+  "ok": true,
+  "detail": "df6dff864b942fc7f4f31d0c9566a4eaa73ecef4724e7c8f03449f7b946d0ba5"
+ },
+ {
+  "name": "report/warnings_json/cpp: sha256 of nuc_ok.fasta",
+  "ok": true,
+  "detail": "924561afe92570b809d98cf59827eb7fe7c3787837272b1da788487b341a1c35"
+ },
+ {
+  "name": "report/warnings_json/cpp: output sha256",
+  "ok": true,
+  "detail": "{'path': 'w.fa', 'format': 'fasta', 'sha256': 'af83c30b7cb3fed87cbecf1b7f91be63b1b64e33771ed81243b994cc57ead7c9', 'sequences': 5}"
+ },
+ {
+  "name": "report/warnings_json/cpp: output.sequences == records written",
+  "ok": true,
+  "detail": "(5, 5)"
+ },
+ {
+  "name": "report/warnings_json/cpp: counts add up",
+  "ok": true,
+  "detail": "{'total': 5, 'ok': 4, 'warning': 1, 'failed': 0, 'pairing': 'id'}"
+ },
+ {
+  "name": "report/warnings_json/cpp: sequences length == total",
+  "ok": true,
+  "detail": "5"
+ },
+ {
+  "name": "report/warnings_json: engines identical (minus engine, runtime)",
+  "ok": true,
+  "detail": "differs"
+ },
+ {
+  "name": "report/failure/python: exit 1",
+  "ok": true,
+  "detail": "rc=1 b'ment).\\ncoal: summary: g3: Frameshift at column 14: there is one extra base in the DNA, so from here on the codons are read out of step.\\ncoal: summary: The run stopped at g3: 2 sequences were not checked and no output was written. Add --keep-going to write the other sequences and leave this one out.\\n'"
+ },
+ {
+  "name": "report/failure/python: schema valid",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "report/failure/python: schema id",
+  "ok": true,
+  "detail": "coal.report/1"
+ },
+ {
+  "name": "report/failure/python: sha256 of pep.fasta",
+  "ok": true,
+  "detail": "493010df98363bd39376cb2e155b9c9da9cbf13ffae3749036887c46b2315ed7"
+ },
+ {
+  "name": "report/failure/python: sha256 of nuc.fasta",
+  "ok": true,
+  "detail": "940025be6d9dab568e2da60f69b92cddc939cd9dc9e06a3d2a1e5e1652d62cb6"
+ },
+ {
+  "name": "report/failure/python: counts add up",
+  "ok": true,
+  "detail": "{'total': 6, 'ok': 2, 'warning': 1, 'failed': 1, 'pairing': 'id', 'not_checked': 2}"
+ },
+ {
+  "name": "report/failure/python: sequences length == total",
+  "ok": true,
+  "detail": "6"
+ },
+ {
+  "name": "report/failure/python: error recorded",
+  "ok": true,
+  "detail": "{'code': 'inconsistent', 'text': 'g3: protein and DNA are inconsistent (no match found)', 'detail': 'g3: protein and DNA are inconsistent (no match found)'}"
+ },
+ {
+  "name": "report/failure/python: not_checked present and output null",
+  "ok": true,
+  "detail": "{'total': 6, 'ok': 2, 'warning': 1, 'failed': 1, 'pairing': 'id', 'not_checked': 2}"
+ },
+ {
+  "name": "report/failure/cpp: exit 1",
+  "ok": true,
+  "detail": "rc=1 b'ment).\\ncoal: summary: g3: Frameshift at column 14: there is one extra base in the DNA, so from here on the codons are read out of step.\\ncoal: summary: The run stopped at g3: 2 sequences were not checked and no output was written. Add --keep-going to write the other sequences and leave this one out.\\n'"
+ },
+ {
+  "name": "report/failure/cpp: schema valid",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "report/failure/cpp: schema id",
+  "ok": true,
+  "detail": "coal.report/1"
+ },
+ {
+  "name": "report/failure/cpp: sha256 of pep.fasta",
+  "ok": true,
+  "detail": "493010df98363bd39376cb2e155b9c9da9cbf13ffae3749036887c46b2315ed7"
+ },
+ {
+  "name": "report/failure/cpp: sha256 of nuc.fasta",
+  "ok": true,
+  "detail": "940025be6d9dab568e2da60f69b92cddc939cd9dc9e06a3d2a1e5e1652d62cb6"
+ },
+ {
+  "name": "report/failure/cpp: counts add up",
+  "ok": true,
+  "detail": "{'total': 6, 'ok': 2, 'warning': 1, 'failed': 1, 'pairing': 'id', 'not_checked': 2}"
+ },
+ {
+  "name": "report/failure/cpp: sequences length == total",
+  "ok": true,
+  "detail": "6"
+ },
+ {
+  "name": "report/failure/cpp: error recorded",
+  "ok": true,
+  "detail": "{'code': 'inconsistent', 'text': 'g3: protein and DNA are inconsistent (no match found)', 'detail': 'g3: protein and DNA are inconsistent (no match found)'}"
+ },
+ {
+  "name": "report/failure/cpp: not_checked present and output null",
+  "ok": true,
+  "detail": "{'total': 6, 'ok': 2, 'warning': 1, 'failed': 1, 'pairing': 'id', 'not_checked': 2}"
+ },
+ {
+  "name": "report/failure: engines identical (minus engine, runtime)",
+  "ok": true,
+  "detail": "differs"
+ },
+ {
+  "name": "report/keep_going/python: exit 2",
+  "ok": true,
+  "detail": "rc=2 b'do not match their amino acid (kept in the alignment).\\ncoal: summary: 1 sequence of 6 could not be converted and was left out (first: g3: protein and DNA are inconsistent (no match found). Frameshift at column 14: there is one extra base in the DNA, so from here on the codons are read out of step.)\\n'"
+ },
+ {
+  "name": "report/keep_going/python: schema valid",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "report/keep_going/python: schema id",
+  "ok": true,
+  "detail": "coal.report/1"
+ },
+ {
+  "name": "report/keep_going/python: sha256 of pep.fasta",
+  "ok": true,
+  "detail": "493010df98363bd39376cb2e155b9c9da9cbf13ffae3749036887c46b2315ed7"
+ },
+ {
+  "name": "report/keep_going/python: sha256 of nuc.fasta",
+  "ok": true,
+  "detail": "940025be6d9dab568e2da60f69b92cddc939cd9dc9e06a3d2a1e5e1652d62cb6"
+ },
+ {
+  "name": "report/keep_going/python: output sha256",
+  "ok": true,
+  "detail": "{'path': 'k.fa', 'format': 'fasta', 'sha256': 'af83c30b7cb3fed87cbecf1b7f91be63b1b64e33771ed81243b994cc57ead7c9', 'sequences': 5}"
+ },
+ {
+  "name": "report/keep_going/python: output.sequences == records written",
+  "ok": true,
+  "detail": "(5, 5)"
+ },
+ {
+  "name": "report/keep_going/python: counts add up",
+  "ok": true,
+  "detail": "{'total': 6, 'ok': 4, 'warning': 1, 'failed': 1, 'pairing': 'id'}"
+ },
+ {
+  "name": "report/keep_going/python: sequences length == total",
+  "ok": true,
+  "detail": "6"
+ },
+ {
+  "name": "report/keep_going/python: failed gene is g3 and others in input order",
+  "ok": true,
+  "detail": "['ok', 'warning', 'ok', 'failed', 'ok', 'ok']"
+ },
+ {
+  "name": "report/keep_going/cpp: exit 2",
+  "ok": true,
+  "detail": "rc=2 b'do not match their amino acid (kept in the alignment).\\ncoal: summary: 1 sequence of 6 could not be converted and was left out (first: g3: protein and DNA are inconsistent (no match found). Frameshift at column 14: there is one extra base in the DNA, so from here on the codons are read out of step.)\\n'"
+ },
+ {
+  "name": "report/keep_going/cpp: schema valid",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "report/keep_going/cpp: schema id",
+  "ok": true,
+  "detail": "coal.report/1"
+ },
+ {
+  "name": "report/keep_going/cpp: sha256 of pep.fasta",
+  "ok": true,
+  "detail": "493010df98363bd39376cb2e155b9c9da9cbf13ffae3749036887c46b2315ed7"
+ },
+ {
+  "name": "report/keep_going/cpp: sha256 of nuc.fasta",
+  "ok": true,
+  "detail": "940025be6d9dab568e2da60f69b92cddc939cd9dc9e06a3d2a1e5e1652d62cb6"
+ },
+ {
+  "name": "report/keep_going/cpp: output sha256",
+  "ok": true,
+  "detail": "{'path': 'k.fa', 'format': 'fasta', 'sha256': 'af83c30b7cb3fed87cbecf1b7f91be63b1b64e33771ed81243b994cc57ead7c9', 'sequences': 5}"
+ },
+ {
+  "name": "report/keep_going/cpp: output.sequences == records written",
+  "ok": true,
+  "detail": "(5, 5)"
+ },
+ {
+  "name": "report/keep_going/cpp: counts add up",
+  "ok": true,
+  "detail": "{'total': 6, 'ok': 4, 'warning': 1, 'failed': 1, 'pairing': 'id'}"
+ },
+ {
+  "name": "report/keep_going/cpp: sequences length == total",
+  "ok": true,
+  "detail": "6"
+ },
+ {
+  "name": "report/keep_going/cpp: failed gene is g3 and others in input order",
+  "ok": true,
+  "detail": "['ok', 'warning', 'ok', 'failed', 'ok', 'ok']"
+ },
+ {
+  "name": "report/keep_going: engines identical (minus engine, runtime)",
+  "ok": true,
+  "detail": "differs"
+ },
+ {
+  "name": "report/keep_going_paml/python: exit 2",
+  "ok": true,
+  "detail": "rc=2 b'do not match their amino acid (kept in the alignment).\\ncoal: summary: 1 sequence of 6 could not be converted and was left out (first: g3: protein and DNA are inconsistent (no match found). Frameshift at column 14: there is one extra base in the DNA, so from here on the codons are read out of step.)\\n'"
+ },
+ {
+  "name": "report/keep_going_paml/python: schema valid",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "report/keep_going_paml/python: schema id",
+  "ok": true,
+  "detail": "coal.report/1"
+ },
+ {
+  "name": "report/keep_going_paml/python: sha256 of pep.fasta",
+  "ok": true,
+  "detail": "493010df98363bd39376cb2e155b9c9da9cbf13ffae3749036887c46b2315ed7"
+ },
+ {
+  "name": "report/keep_going_paml/python: sha256 of nuc.fasta",
+  "ok": true,
+  "detail": "940025be6d9dab568e2da60f69b92cddc939cd9dc9e06a3d2a1e5e1652d62cb6"
+ },
+ {
+  "name": "report/keep_going_paml/python: output sha256",
+  "ok": true,
+  "detail": "{'path': 'k.paml', 'format': 'paml', 'sha256': '1d7e89968117525ae4bf78beb4b5f7c4829c080c4c25889b53e5881d7d2fb6db', 'sequences': 5}"
+ },
+ {
+  "name": "report/keep_going_paml/python: counts add up",
+  "ok": true,
+  "detail": "{'total': 6, 'ok': 4, 'warning': 1, 'failed': 1, 'pairing': 'id'}"
+ },
+ {
+  "name": "report/keep_going_paml/python: sequences length == total",
+  "ok": true,
+  "detail": "6"
+ },
+ {
+  "name": "report/keep_going_paml/cpp: exit 2",
+  "ok": true,
+  "detail": "rc=2 b'do not match their amino acid (kept in the alignment).\\ncoal: summary: 1 sequence of 6 could not be converted and was left out (first: g3: protein and DNA are inconsistent (no match found). Frameshift at column 14: there is one extra base in the DNA, so from here on the codons are read out of step.)\\n'"
+ },
+ {
+  "name": "report/keep_going_paml/cpp: schema valid",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "report/keep_going_paml/cpp: schema id",
+  "ok": true,
+  "detail": "coal.report/1"
+ },
+ {
+  "name": "report/keep_going_paml/cpp: sha256 of pep.fasta",
+  "ok": true,
+  "detail": "493010df98363bd39376cb2e155b9c9da9cbf13ffae3749036887c46b2315ed7"
+ },
+ {
+  "name": "report/keep_going_paml/cpp: sha256 of nuc.fasta",
+  "ok": true,
+  "detail": "940025be6d9dab568e2da60f69b92cddc939cd9dc9e06a3d2a1e5e1652d62cb6"
+ },
+ {
+  "name": "report/keep_going_paml/cpp: output sha256",
+  "ok": true,
+  "detail": "{'path': 'k.paml', 'format': 'paml', 'sha256': '1d7e89968117525ae4bf78beb4b5f7c4829c080c4c25889b53e5881d7d2fb6db', 'sequences': 5}"
+ },
+ {
+  "name": "report/keep_going_paml/cpp: counts add up",
+  "ok": true,
+  "detail": "{'total': 6, 'ok': 4, 'warning': 1, 'failed': 1, 'pairing': 'id'}"
+ },
+ {
+  "name": "report/keep_going_paml/cpp: sequences length == total",
+  "ok": true,
+  "detail": "6"
+ },
+ {
+  "name": "report/keep_going_paml: engines identical (minus engine, runtime)",
+  "ok": true,
+  "detail": "differs"
+ },
+ {
+  "name": "report: every top-level schema field appears in a success report (or is optional)",
+  "ok": false,
+  "detail": "missing=['engine', 'error', 'resumed_from', 'runtime_seconds'] extra=[]"
+ },
+ {
+  "name": "strict-off/python: unrelated gene written with a notice, exit 0",
+  "ok": true,
+  "detail": "b\" position, as PAL2NAL does: do not trust it. Run COAL with --strict (in the app: 'Refuse probably-wrong genes') to refuse such genes.) Remove it before analysis, or use --strict to refuse such genes.\\n\""
+ },
+ {
+  "name": "strict/python: unrelated gene -> exit 1, nothing written",
+  "ok": true,
+  "detail": "(1, b' this protein in any reading frame.\\ncoal: summary: The run stopped at g1: 2 sequences were not checked and no output was written. Add --keep-going to write the other sequences and leave this one out.\\n')"
+ },
+ {
+  "name": "strict/python: partial ID match -> exit 1",
+  "ok": true,
+  "detail": "(1, b\"coal: error: nuc_partial.fasta: duplicate sequence ID 'g0': every sequence needs its own ID\\n\")"
+ },
+ {
+  "name": "-q/python: silent stderr, same output and exit",
+  "ok": true,
+  "detail": "b''"
+ },
+ {
+  "name": "--max-warnings default/python: 20 per-codon lines then a count line",
+  "ok": true,
+  "detail": "(20, [b'coal: warning: ... and 15 more warnings (see them all with --max-warnings 0 or --report FILE.json)'])"
+ },
+ {
+  "name": "--max-warnings 0/python: all warnings, no count line",
+  "ok": true,
+  "detail": "35"
+ },
+ {
+  "name": "--max-warnings 5/python",
+  "ok": true,
+  "detail": "b\" position, as PAL2NAL does: do not trust it. Run COAL with --strict (in the app: 'Refuse probably-wrong genes') to refuse such genes.) Remove it before analysis, or use --strict to refuse such genes.\\n\""
+ },
+ {
+  "name": "--max-warnings -1/python: usage error exit 2",
+  "ok": true,
+  "detail": "2"
+ },
+ {
+  "name": "strict-off/cpp: unrelated gene written with a notice, exit 0",
+  "ok": true,
+  "detail": "b\" position, as PAL2NAL does: do not trust it. Run COAL with --strict (in the app: 'Refuse probably-wrong genes') to refuse such genes.) Remove it before analysis, or use --strict to refuse such genes.\\n\""
+ },
+ {
+  "name": "strict/cpp: unrelated gene -> exit 1, nothing written",
+  "ok": true,
+  "detail": "(1, b' this protein in any reading frame.\\ncoal: summary: The run stopped at g1: 2 sequences were not checked and no output was written. Add --keep-going to write the other sequences and leave this one out.\\n')"
+ },
+ {
+  "name": "strict/cpp: partial ID match -> exit 1",
+  "ok": true,
+  "detail": "(1, b\"coal: error: nuc_partial.fasta: duplicate sequence ID 'g0': every sequence needs its own ID\\n\")"
+ },
+ {
+  "name": "-q/cpp: silent stderr, same output and exit",
+  "ok": true,
+  "detail": "b''"
+ },
+ {
+  "name": "--max-warnings default/cpp: 20 per-codon lines then a count line",
+  "ok": true,
+  "detail": "(20, [b'coal: warning: ... and 15 more warnings (see them all with --max-warnings 0 or --report FILE.json)'])"
+ },
+ {
+  "name": "--max-warnings 0/cpp: all warnings, no count line",
+  "ok": true,
+  "detail": "35"
+ },
+ {
+  "name": "--max-warnings 5/cpp",
+  "ok": true,
+  "detail": "b\" position, as PAL2NAL does: do not trust it. Run COAL with --strict (in the app: 'Refuse probably-wrong genes') to refuse such genes.) Remove it before analysis, or use --strict to refuse such genes.\\n\""
+ },
+ {
+  "name": "--max-warnings -1/cpp: usage error exit 2",
+  "ok": true,
+  "detail": "2"
+ },
+ {
+  "name": "pal2nal drop-in: prints every per-codon warning (no cap)",
+  "ok": false,
+  "detail": "b''"
+ },
+ {
+  "name": "--progress small/python: no progress lines, stdout clean",
+  "ok": true,
+  "detail": "b''"
+ },
+ {
+  "name": "--progress small/cpp: no progress lines, stdout clean",
+  "ok": true,
+  "detail": "b''"
+ },
+ {
+  "name": "--progress 12,000 seqs/python: progress lines on stderr, none on stdout, exit 0",
+  "ok": true,
+  "detail": "b'coal: progress: 100% (12,000 of 12,000 sequences), about 0 s left\\ncoal: progress: 100% (12,000 of 12,000 sequences), done in 0.1 s\\n'"
+ },
+ {
+  "name": "-q --progress/python: progress still printed",
+  "ok": true,
+  "detail": "b'coal: progress: 100% (12,000 of 12,000 sequences), about 0 s left\\ncoal: progress: 100% (12,000 of 12,000 sequences), done in 0.1 s\\n'"
+ },
+ {
+  "name": "--progress 12,000 seqs/cpp: progress lines on stderr, none on stdout, exit 0",
+  "ok": true,
+  "detail": "b'coal: progress: 100% (12,000 of 12,000 sequences), about 0 s left\\ncoal: progress: 100% (12,000 of 12,000 sequences), done in 0.8 s\\n'"
+ },
+ {
+  "name": "-q --progress/cpp: progress still printed",
+  "ok": true,
+  "detail": "b'coal: progress: 100% (12,000 of 12,000 sequences), about 0 s left\\ncoal: progress: 100% (12,000 of 12,000 sequences), done in 0.8 s\\n'"
+ },
+ {
+  "name": "resume/fasta/python: reference run ok",
+  "ok": true,
+  "detail": "b'15 checkable codons do not match)\\ncoal: warning: ... and 1 more warnings (see the report)\\ncoal: summary: 21 of 20,000 sequences have codons that do not match their amino acid (kept in the alignment).\\n'"
+ },
+ {
+  "name": "resume/fasta/python: run paused at checkpoint 4 then killed",
+  "ok": true,
+  "detail": "no pause marker"
+ },
+ {
+  "name": "resume/fasta/python: resumed run exit 0 with the resuming notice",
+  "ok": true,
+  "detail": "b'coal: notice: resuming int.python.fa: 2,668 of 20,000 sequences were already done\\ncoal: warning: g2991 pepAlnPos 4: Y does not correspond to TGG\\ncoal: warning: g2991: no 10-residue segment of the protein was found in the DNA; codons were assigned by position (1 of 15 checkable codons do not match)\\nc'"
+ },
+ {
+  "name": "resume/fasta/python: output byte-identical to the uninterrupted run",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "resume/fasta/python: report identical (minus runtime, command, output path, resumed_from)",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "resume/fasta/python: no checkpoint or temp files left",
+  "ok": true,
+  "detail": "[]"
+ },
+ {
+  "name": "resume/fasta/cpp: reference run ok",
+  "ok": true,
+  "detail": "b'15 checkable codons do not match)\\ncoal: warning: ... and 1 more warnings (see the report)\\ncoal: summary: 21 of 20,000 sequences have codons that do not match their amino acid (kept in the alignment).\\n'"
+ },
+ {
+  "name": "resume/fasta/cpp: run paused at checkpoint 4 then killed",
+  "ok": true,
+  "detail": "no pause marker"
+ },
+ {
+  "name": "resume/fasta/cpp: resumed run exit 0 with the resuming notice",
+  "ok": true,
+  "detail": "b'coal: notice: resuming int.cpp.fa: 2,668 of 20,000 sequences were already done\\ncoal: warning: g2991 pepAlnPos 4: Y does not correspond to TGG\\ncoal: warning: g2991: no 10-residue segment of the protein was found in the DNA; codons were assigned by position (1 of 15 checkable codons do not match)\\ncoal'"
+ },
+ {
+  "name": "resume/fasta/cpp: output byte-identical to the uninterrupted run",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "resume/fasta/cpp: report identical (minus runtime, command, output path, resumed_from)",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "resume/fasta/cpp: no checkpoint or temp files left",
+  "ok": true,
+  "detail": "[]"
+ },
+ {
+  "name": "resume/clustal/python: reference run ok",
+  "ok": true,
+  "detail": "b'15 checkable codons do not match)\\ncoal: warning: ... and 1 more warnings (see the report)\\ncoal: summary: 21 of 20,000 sequences have codons that do not match their amino acid (kept in the alignment).\\n'"
+ },
+ {
+  "name": "resume/clustal/python: run paused at checkpoint 4 then killed",
+  "ok": true,
+  "detail": "no pause marker"
+ },
+ {
+  "name": "resume/clustal/python: resumed run exit 0 with the resuming notice",
+  "ok": true,
+  "detail": "b'coal: notice: resuming int.python.aln: 2,668 of 20,000 sequences were already done (this format/option needs a second pass, which is redone in full)\\ncoal: warning: g2991 pepAlnPos 4: Y does not correspond to TGG\\ncoal: warning: g2991: no 10-residue segment of the protein was found in the DNA; codons '"
+ },
+ {
+  "name": "resume/clustal/python: output byte-identical to the uninterrupted run",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "resume/clustal/python: report identical (minus runtime, command, output path, resumed_from)",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "resume/clustal/python: no checkpoint or temp files left",
+  "ok": true,
+  "detail": "[]"
+ },
+ {
+  "name": "resume/clustal/cpp: reference run ok",
+  "ok": true,
+  "detail": "b'15 checkable codons do not match)\\ncoal: warning: ... and 1 more warnings (see the report)\\ncoal: summary: 21 of 20,000 sequences have codons that do not match their amino acid (kept in the alignment).\\n'"
+ },
+ {
+  "name": "resume/clustal/cpp: run paused at checkpoint 4 then killed",
+  "ok": true,
+  "detail": "no pause marker"
+ },
+ {
+  "name": "resume/clustal/cpp: resumed run exit 0 with the resuming notice",
+  "ok": true,
+  "detail": "b'coal: notice: resuming int.cpp.aln: 2,668 of 20,000 sequences were already done (this format/option needs a second pass, which is redone in full)\\ncoal: warning: g2991 pepAlnPos 4: Y does not correspond to TGG\\ncoal: warning: g2991: no 10-residue segment of the protein was found in the DNA; codons wer'"
+ },
+ {
+  "name": "resume/clustal/cpp: output byte-identical to the uninterrupted run",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "resume/clustal/cpp: report identical (minus runtime, command, output path, resumed_from)",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "resume/clustal/cpp: no checkpoint or temp files left",
+  "ok": true,
+  "detail": "[]"
+ },
+ {
+  "name": "resume/paml/python: reference run ok",
+  "ok": true,
+  "detail": "b'15 checkable codons do not match)\\ncoal: warning: ... and 1 more warnings (see the report)\\ncoal: summary: 21 of 20,000 sequences have codons that do not match their amino acid (kept in the alignment).\\n'"
+ },
+ {
+  "name": "resume/paml/python: run paused at checkpoint 4 then killed",
+  "ok": true,
+  "detail": "no pause marker"
+ },
+ {
+  "name": "resume/paml/python: resumed run exit 0 with the resuming notice",
+  "ok": true,
+  "detail": "b'coal: notice: resuming int.python.paml: 2,668 of 20,000 sequences were already done\\ncoal: warning: g2991 pepAlnPos 4: Y does not correspond to TGG\\ncoal: warning: g2991: no 10-residue segment of the protein was found in the DNA; codons were assigned by position (1 of 15 checkable codons do not match)'"
+ },
+ {
+  "name": "resume/paml/python: output byte-identical to the uninterrupted run",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "resume/paml/python: report identical (minus runtime, command, output path, resumed_from)",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "resume/paml/python: no checkpoint or temp files left",
+  "ok": true,
+  "detail": "[]"
+ },
+ {
+  "name": "resume/paml/cpp: reference run ok",
+  "ok": true,
+  "detail": "b'15 checkable codons do not match)\\ncoal: warning: ... and 1 more warnings (see the report)\\ncoal: summary: 21 of 20,000 sequences have codons that do not match their amino acid (kept in the alignment).\\n'"
+ },
+ {
+  "name": "resume/paml/cpp: run paused at checkpoint 4 then killed",
+  "ok": true,
+  "detail": "no pause marker"
+ },
+ {
+  "name": "resume/paml/cpp: resumed run exit 0 with the resuming notice",
+  "ok": true,
+  "detail": "b'coal: notice: resuming int.cpp.paml: 2,668 of 20,000 sequences were already done\\ncoal: warning: g2991 pepAlnPos 4: Y does not correspond to TGG\\ncoal: warning: g2991: no 10-residue segment of the protein was found in the DNA; codons were assigned by position (1 of 15 checkable codons do not match)\\nco'"
+ },
+ {
+  "name": "resume/paml/cpp: output byte-identical to the uninterrupted run",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "resume/paml/cpp: report identical (minus runtime, command, output path, resumed_from)",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "resume/paml/cpp: no checkpoint or temp files left",
+  "ok": true,
+  "detail": "[]"
+ },
+ {
+  "name": "resume/codon/python: reference run ok",
+  "ok": true,
+  "detail": "b'15 checkable codons do not match)\\ncoal: warning: ... and 1 more warnings (see the report)\\ncoal: summary: 21 of 20,000 sequences have codons that do not match their amino acid (kept in the alignment).\\n'"
+ },
+ {
+  "name": "resume/codon/python: run paused at checkpoint 4 then killed",
+  "ok": true,
+  "detail": "no pause marker"
+ },
+ {
+  "name": "resume/codon/python: resumed run exit 0 with the resuming notice",
+  "ok": true,
+  "detail": "b'coal: notice: resuming int.python.codon: 2,668 of 20,000 sequences were already done (this format/option needs a second pass, which is redone in full)\\ncoal: warning: g2991 pepAlnPos 4: Y does not correspond to TGG\\ncoal: warning: g2991: no 10-residue segment of the protein was found in the DNA; codon'"
+ },
+ {
+  "name": "resume/codon/python: output byte-identical to the uninterrupted run",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "resume/codon/python: report identical (minus runtime, command, output path, resumed_from)",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "resume/codon/python: no checkpoint or temp files left",
+  "ok": true,
+  "detail": "[]"
+ },
+ {
+  "name": "resume/codon/cpp: reference run ok",
+  "ok": true,
+  "detail": "b'15 checkable codons do not match)\\ncoal: warning: ... and 1 more warnings (see the report)\\ncoal: summary: 21 of 20,000 sequences have codons that do not match their amino acid (kept in the alignment).\\n'"
+ },
+ {
+  "name": "resume/codon/cpp: run paused at checkpoint 4 then killed",
+  "ok": true,
+  "detail": "no pause marker"
+ },
+ {
+  "name": "resume/codon/cpp: resumed run exit 0 with the resuming notice",
+  "ok": true,
+  "detail": "b'coal: notice: resuming int.cpp.codon: 2,668 of 20,000 sequences were already done (this format/option needs a second pass, which is redone in full)\\ncoal: warning: g2991 pepAlnPos 4: Y does not correspond to TGG\\ncoal: warning: g2991: no 10-residue segment of the protein was found in the DNA; codons w'"
+ },
+ {
+  "name": "resume/codon/cpp: output byte-identical to the uninterrupted run",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "resume/codon/cpp: report identical (minus runtime, command, output path, resumed_from)",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "resume/codon/cpp: no checkpoint or temp files left",
+  "ok": true,
+  "detail": "[]"
+ },
+ {
+  "name": "resume changed inputs/python: refused with the documented message, exit 1",
+  "ok": true,
+  "detail": "(1, b\"coal: error: The input files or options changed since the interrupted run, so it can't be resumed safely. Start a new run without --resume.\\n\")"
+ },
+ {
+  "name": "resume changed inputs/cpp: refused with the documented message, exit 1",
+  "ok": true,
+  "detail": "(1, b\"coal: error: The input files or options changed since the interrupted run, so it can't be resumed safely. Start a new run without --resume.\\n\")"
+ },
+ {
+  "name": "signal SIGINT/python: exit 130",
+  "ok": true,
+  "detail": "(130, b'coal: interrupted\\n')"
+ },
+ {
+  "name": "signal SIGINT/python: only resumable files left (no lock, no .coal_ temp)",
+  "ok": true,
+  "detail": "['sig.python.fa.coal-checkpoint.json', 'sig.python.fa.coal-entries.jsonl', 'sig.python.fa.coal-partial']"
+ },
+ {
+  "name": "signal SIGTERM/python: exit 143",
+  "ok": true,
+  "detail": "(143, b'')"
+ },
+ {
+  "name": "signal SIGTERM/python: only resumable files left (no lock, no .coal_ temp)",
+  "ok": true,
+  "detail": "['sig.python.fa.coal-checkpoint.json', 'sig.python.fa.coal-entries.jsonl', 'sig.python.fa.coal-partial']"
+ },
+ {
+  "name": "closed pipe/python: exit 141 and silent stderr",
+  "ok": true,
+  "detail": "(b'141\\n', b'')"
+ },
+ {
+  "name": "closed pipe/python: no temp files",
+  "ok": true,
+  "detail": "[]"
+ },
+ {
+  "name": "signal SIGINT/cpp: exit 130",
+  "ok": true,
+  "detail": "(130, b'coal: interrupted\\n')"
+ },
+ {
+  "name": "signal SIGINT/cpp: only resumable files left (no lock, no .coal_ temp)",
+  "ok": true,
+  "detail": "['sig.cpp.fa.coal-checkpoint.json', 'sig.cpp.fa.coal-entries.jsonl', 'sig.cpp.fa.coal-partial']"
+ },
+ {
+  "name": "signal SIGTERM/cpp: exit 143",
+  "ok": true,
+  "detail": "(143, b'')"
+ },
+ {
+  "name": "signal SIGTERM/cpp: only resumable files left (no lock, no .coal_ temp)",
+  "ok": true,
+  "detail": "['sig.cpp.fa.coal-checkpoint.json', 'sig.cpp.fa.coal-entries.jsonl', 'sig.cpp.fa.coal-partial']"
+ },
+ {
+  "name": "closed pipe/cpp: exit 141 and silent stderr",
+  "ok": true,
+  "detail": "(b'141\\n', b'')"
+ },
+ {
+  "name": "closed pipe/cpp: no temp files",
+  "ok": true,
+  "detail": "[]"
+ },
+ {
+  "name": "no .coal_ files left in the temp folder after the phase",
+  "ok": false,
+  "detail": "['.coal_5gsz2hf0.tmp', '.coal_8e4ny0mo.tmp']"
+ },
+ {
+  "name": "pairing normalised/python: exit 0, pairing 'normalised', notice printed, every gene ok",
+  "ok": true,
+  "detail": "(0, {'total': 4, 'ok': 4, 'warning': 0, 'failed': 0, 'pairing': 'normalised'}, b'coal: warning: 4 of 4 protein IDs match a DNA ID only after normalising (version suffix, case or database fields), so sequences were paired by those IDs, not by file order as PAL2NAL pairs them: by or')"
+ },
+ {
+  "name": "pairing ambiguous/python: no normalised pairing when two DNA IDs tidy to one protein ID (pairing != normalised, or every pair verified)",
+  "ok": true,
+  "detail": "({'total': 4, 'ok': 4, 'warning': 0, 'failed': 0, 'pairing': 'order'}, b'')"
+ },
+ {
+  "name": "pairing by order/python: pairing 'order', id_mismatch hint in the report",
+  "ok": true,
+  "detail": "({'total': 4, 'ok': 4, 'warning': 0, 'failed': 0, 'pairing': 'order'}, ['id_mismatch'])"
+ },
+ {
+  "name": "pairing normalised/cpp: exit 0, pairing 'normalised', notice printed, every gene ok",
+  "ok": true,
+  "detail": "(0, {'total': 4, 'ok': 4, 'warning': 0, 'failed': 0, 'pairing': 'normalised'}, b'coal: warning: 4 of 4 protein IDs match a DNA ID only after normalising (version suffix, case or database fields), so sequences were paired by those IDs, not by file order as PAL2NAL pairs them: by or')"
+ },
+ {
+  "name": "pairing ambiguous/cpp: no normalised pairing when two DNA IDs tidy to one protein ID (pairing != normalised, or every pair verified)",
+  "ok": true,
+  "detail": "({'total': 4, 'ok': 4, 'warning': 0, 'failed': 0, 'pairing': 'order'}, b'')"
+ },
+ {
+  "name": "pairing by order/cpp: pairing 'order', id_mismatch hint in the report",
+  "ok": true,
+  "detail": "({'total': 4, 'ok': 4, 'warning': 0, 'failed': 0, 'pairing': 'order'}, ['id_mismatch'])"
+ },
+ {
+  "name": "mito hint/python: suggests code 2",
+  "ok": true,
+  "detail": "[{'code': 'genetic_code', 'text': 'Under genetic code 2 (Vertebrate mitochondrial), all 24 sequences match their protein; under code 1, none do. Codes 5 and 13 fit these sequences too: choose the code of the organism and organelle the genes come from. Re-run with code 2?', 'suggested_codontable': 2, 'checked': 24, 'fit': 24, 'fit_current': 0}]"
+ },
+ {
+  "name": "mito hint/python: early notice on stderr names code 2",
+  "ok": true,
+  "detail": "b'coal: notice: wrong genetic code? Under genetic code 2 (Vertebrate mitochondrial), all 24 sequences match their protein; under code 1, none do. Re-run with -codontable 2.\\ncoal: warning: Homo_COX1 pepAlnPos 1: M does not correspond to ATA\\ncoal: warning: Homo_COX1 pepAlnPos 7: M does not correspond to'"
+ },
+ {
+  "name": "mito with code 2/python: all ok, no hint",
+  "ok": true,
+  "detail": "{'total': 24, 'ok': 24, 'warning': 0, 'failed': 0, 'pairing': 'id'}"
+ },
+ {
+  "name": "methods_text/python: version, URL, code name, counts",
+  "ok": true,
+  "detail": "Codon alignments were built with COAL v0.5.0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the vertebrate mitochondrial genetic code (NCBI translation table 2"
+ },
+ {
+  "name": "mito hint/cpp: suggests code 2",
+  "ok": true,
+  "detail": "[{'code': 'genetic_code', 'text': 'Under genetic code 2 (Vertebrate mitochondrial), all 24 sequences match their protein; under code 1, none do. Codes 5 and 13 fit these sequences too: choose the code of the organism and organelle the genes come from. Re-run with code 2?', 'suggested_codontable': 2, 'checked': 24, 'fit': 24, 'fit_current': 0}]"
+ },
+ {
+  "name": "mito hint/cpp: early notice on stderr names code 2",
+  "ok": true,
+  "detail": "b'coal: notice: wrong genetic code? Under genetic code 2 (Vertebrate mitochondrial), all 24 sequences match their protein; under code 1, none do. Re-run with -codontable 2.\\ncoal: warning: Homo_COX1 pepAlnPos 1: M does not correspond to ATA\\ncoal: warning: Homo_COX1 pepAlnPos 7: M does not correspond to'"
+ },
+ {
+  "name": "mito with code 2/cpp: all ok, no hint",
+  "ok": true,
+  "detail": "{'total': 24, 'ok': 24, 'warning': 0, 'failed': 0, 'pairing': 'id'}"
+ },
+ {
+  "name": "methods_text/cpp: version, URL, code name, counts",
+  "ok": true,
+  "detail": "Codon alignments were built with COAL v0.5.0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the vertebrate mitochondrial genetic code (NCBI translation table 2"
+ },
+ {
+  "name": "no 'chloe-newt' anywhere in the repository",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "no false hint/python: one wrong codon under the right code gives no genetic-code hint",
+  "ok": true,
+  "detail": "[]"
+ },
+ {
+  "name": "no false hint/cpp: one wrong codon under the right code gives no genetic-code hint",
+  "ok": true,
+  "detail": "[]"
+ }
+]

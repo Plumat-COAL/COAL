@@ -1,0 +1,364 @@
+[
+ {
+  "name": "py: mismatch warning column off by one",
+  "file": "src/coal/core.py",
+  "suites": [
+   "engine"
+  ],
+  "applied": true,
+  "suites_result": {
+   "engine": {
+    "summary": "FAILED (failures=104, errors=67, skipped=66)",
+    "failures": [
+     "ERROR: test_library_default_is_not_strict (test_decisions.TestDec1DefaultIsPal2nal.test_library_default_is_not_strict)",
+     "ERROR: test_posix_broken_pipe_is_141_and_silent_in_both_commands (test_decisions.TestDec3ClosedPipe.test_posix_broken_pipe_is_141_and_silent_in_both_commands) (module='coal')",
+     "ERROR: test_posix_broken_pipe_is_141_and_silent_in_both_commands (test_decisions.TestDec3ClosedPipe.test_posix_broken_pipe_is_141_and_silent_in_both_commands) (module='coal_compat')",
+     "ERROR: test_windows_einval_is_141_too (test_decisions.TestDec3ClosedPipe.test_windows_einval_is_141_too) (module='coal')",
+     "ERROR: test_windows_einval_is_141_too (test_decisions.TestDec3ClosedPipe.test_windows_einval_is_141_too) (module='coal_compat')",
+     "ERROR: test_all_cases (test_differential.TestAgainstPal2nal.test_all_cases) (case='table4', variant='fasta')",
+     "ERROR: test_all_cases (test_differential.TestAgainstPal2nal.test_all_cases) (case='table4', variant='clustal')",
+     "ERROR: test_all_cases (test_differential.TestAgainstPal2nal.test_all_cases) (case='table4', variant='paml')"
+    ],
+    "n_failed": 171,
+    "rc": 1
+   }
+  },
+  "caught": true,
+  "seconds": 41.7
+ },
+ {
+  "name": "py: CTG no longer a standard-code start codon",
+  "file": "src/coal/tables.py",
+  "suites": [
+   "engine"
+  ],
+  "applied": true,
+  "suites_result": {
+   "engine": {
+    "summary": "OK",
+    "failures": [],
+    "n_failed": 0,
+    "rc": 0
+   }
+  },
+  "caught": false,
+  "seconds": 49.3
+ },
+ {
+  "name": "py: -nogap keeps TAG stop columns",
+  "file": "src/coal/core.py",
+  "suites": [
+   "engine"
+  ],
+  "applied": true,
+  "suites_result": {
+   "engine": {
+    "summary": "FAILED (failures=31, errors=1, skipped=66)",
+    "failures": [
+     "ERROR: setUpClass (test_docs_numbers.TestDocsNumbers)",
+     "FAIL: test_all_cases (test_differential.TestAgainstPal2nal.test_all_cases) (case='table6', variant='fasta_nogap')",
+     "FAIL: test_all_cases (test_differential.TestAgainstPal2nal.test_all_cases) (case='table15', variant='fasta_nogap')",
+     "FAIL: test_all_cases (test_differential.TestAgainstPal2nal.test_all_cases) (case='table16', variant='fasta_nogap')",
+     "FAIL: test_all_cases (test_differential.TestAgainstPal2nal.test_all_cases) (case='table22', variant='fasta_nogap')",
+     "FAIL: test_every_table_upper_and_lower_case (test_fuzz_findings.TestFZ5NogapUsesTheSelectedCode.test_every_table_upper_and_lower_case) (table=1, case='upper')",
+     "FAIL: test_every_table_upper_and_lower_case (test_fuzz_findings.TestFZ5NogapUsesTheSelectedCode.test_every_table_upper_and_lower_case) (table=1, case='lower')",
+     "FAIL: test_every_table_upper_and_lower_case (test_fuzz_findings.TestFZ5NogapUsesTheSelectedCode.test_every_table_upper_and_lower_case) (table=2, case='upper')"
+    ],
+    "n_failed": 32,
+    "rc": 1
+   }
+  },
+  "caught": true,
+  "seconds": 49.3
+ },
+ {
+  "name": "py: table 2 TGA translated as a stop",
+  "file": "src/coal/tables.py",
+  "suites": [
+   "engine"
+  ],
+  "applied": true,
+  "suites_result": {
+   "engine": {
+    "summary": "FAILED (failures=39, errors=1, skipped=66)",
+    "failures": [
+     "ERROR: setUpClass (test_docs_numbers.TestDocsNumbers)",
+     "FAIL: test_defaults_and_overrides (test_batch.TestBatchEqualsSingleRuns.test_defaults_and_overrides)",
+     "FAIL: test_three_jobs_byte_identical (test_batch.TestBatchEqualsSingleRuns.test_three_jobs_byte_identical)",
+     "FAIL: test_names_by_format (test_batch.TestOutDir.test_names_by_format)",
+     "FAIL: test_jobs_from_stdin (test_batch.TestReportAndStdin.test_jobs_from_stdin)",
+     "FAIL: test_all_cases (test_differential.TestAgainstPal2nal.test_all_cases) (case='codontable2', variant='fasta_ct2')",
+     "FAIL: test_all_cases (test_differential.TestAgainstPal2nal.test_all_cases) (case='codontable2', variant='fasta_nomismatch_ct2')",
+     "FAIL: test_all_cases (test_differential.TestAgainstPal2nal.test_all_cases) (case='codontable2', variant='fasta_nogap_ct2')"
+    ],
+    "n_failed": 42,
+    "rc": 1
+   }
+  },
+  "caught": true,
+  "seconds": 55.7
+ },
+ {
+  "name": "py: exit code 0 after a CoalError",
+  "file": "src/coal/cli.py",
+  "suites": [
+   "engine"
+  ],
+  "applied": true,
+  "suites_result": {
+   "engine": {
+    "summary": "FAILED (failures=139, errors=1, skipped=66)",
+    "failures": [
+     "ERROR: setUpClass (test_docs_numbers.TestDocsNumbers)",
+     "FAIL: test_exit_2_when_a_job_left_sequences_out_and_none_failed (test_batch.TestFailurePolicy.test_exit_2_when_a_job_left_sequences_out_and_none_failed)",
+     "FAIL: test_failing_middle_job_does_not_stop_the_batch (test_batch.TestFailurePolicy.test_failing_middle_job_does_not_stop_the_batch)",
+     "FAIL: test_batch_report_shape (test_batch.TestReportAndStdin.test_batch_report_shape)",
+     "FAIL: test_every_job_line_is_prefixed (test_batch.TestStderrPrefixes.test_every_job_line_is_prefixed)",
+     "FAIL: test_strict_spellings_turn_each_rule_into_an_error (test_decisions.TestDec1Strict.test_strict_spellings_turn_each_rule_into_an_error) (flag='--strict', pep='up.fa')",
+     "FAIL: test_strict_spellings_turn_each_rule_into_an_error (test_decisions.TestDec1Strict.test_strict_spellings_turn_each_rule_into_an_error) (flag='--strict', pep='mp.fa')",
+     "FAIL: test_strict_spellings_turn_each_rule_into_an_error (test_decisions.TestDec1Strict.test_strict_spellings_turn_each_rule_into_an_error) (flag='--strict', pep='ip.fa')"
+    ],
+    "n_failed": 140,
+    "rc": 1
+   }
+  },
+  "caught": true,
+  "seconds": 48.0
+ },
+ {
+  "name": "py: report summary ok count off by one",
+  "file": "src/coal/report.py",
+  "suites": [
+   "engine"
+  ],
+  "applied": true,
+  "suites_result": {
+   "engine": {
+    "summary": "FAILED (failures=29, skipped=66)",
+    "failures": [
+     "FAIL: test_one_bad_gene_in_20 (test_engine_extras.TestKeepGoing.test_one_bad_gene_in_20)",
+     "FAIL: test_methods_text (test_engine_extras.TestMethodsAndMaxWarnings.test_methods_text)",
+     "FAIL: test_methods_text_keep_going_and_nogap (test_engine_extras.TestMethodsAndMaxWarnings.test_methods_text_keep_going_and_nogap)",
+     "FAIL: test_genetic_code_hint_names_the_option_report_keeps_app_text (test_engine_ux.TestMessages.test_genetic_code_hint_names_the_option_report_keeps_app_text)",
+     "FAIL: test_engine_report_equals_app_fallback_on_examples (test_feature_combinations.TestMrg2Report.test_engine_report_equals_app_fallback_on_examples)",
+     "FAIL: test_fail_records_the_error (test_python_api.TestAlignFilesExample.test_fail_records_the_error)",
+     "FAIL: test_keep_going_with_report (test_python_api.TestAlignFilesExample.test_keep_going_with_report)",
+     "FAIL: test_clean_run_report (test_report.TestReport.test_clean_run_report)"
+    ],
+    "n_failed": 29,
+    "rc": 1
+   }
+  },
+  "caught": true,
+  "seconds": 50.3
+ },
+ {
+  "name": "py: -nomismatch drops the column after the mismatch",
+  "file": "src/coal/pipeline.py",
+  "suites": [
+   "engine"
+  ],
+  "applied": true,
+  "suites_result": {
+   "engine": {
+    "summary": "FAILED (failures=23, errors=1, skipped=66)",
+    "failures": [
+     "ERROR: setUpClass (test_docs_numbers.TestDocsNumbers)",
+     "FAIL: test_marked_clustal_input_in_both_commands (test_decisions.TestDec4FormatsAndDropIn.test_marked_clustal_input_in_both_commands) (opts=('-output', 'paml', '-nomismatch'), module='coal')",
+     "FAIL: test_marked_clustal_input_in_both_commands (test_decisions.TestDec4FormatsAndDropIn.test_marked_clustal_input_in_both_commands) (opts=('-output', 'paml', '-nomismatch'), module='coal_compat')",
+     "FAIL: test_unknown_residue_column_removed_by_nomismatch (test_decisions.TestDec4FormatsAndDropIn.test_unknown_residue_column_removed_by_nomismatch)",
+     "FAIL: test_all_cases (test_differential.TestAgainstPal2nal.test_all_cases) (case='long_mismatch', variant='fasta_nomismatch')",
+     "FAIL: test_all_cases (test_differential.TestAgainstPal2nal.test_all_cases) (case='table2', variant='fasta_nomismatch')",
+     "FAIL: test_all_cases (test_differential.TestAgainstPal2nal.test_all_cases) (case='table3', variant='fasta_nomismatch')",
+     "FAIL: test_all_cases (test_differential.TestAgainstPal2nal.test_all_cases) (case='table4', variant='fasta_nomismatch')"
+    ],
+    "n_failed": 24,
+    "rc": 1
+   }
+  },
+  "caught": true,
+  "seconds": 49.7
+ },
+ {
+  "name": "py: genetic-code hint suggests the worst tied code",
+  "file": "src/coal/report.py",
+  "suites": [
+   "engine"
+  ],
+  "applied": true,
+  "suites_result": {
+   "engine": {
+    "summary": "FAILED (failures=15, skipped=66)",
+    "failures": [
+     "FAIL: test_quiet_skips_the_hint (test_engine_cli.TestCheapHint.test_quiet_skips_the_hint)",
+     "FAIL: test_mito_example_with_code_1 (test_engine_cli.TestSuggestionFirst.test_mito_example_with_code_1)",
+     "FAIL: test_synthetic_with_code_2 (test_engine_cli.TestSuggestionFirst.test_synthetic_with_code_2)",
+     "FAIL: test_mito_genes_run_with_code_1 (test_engine_extras.TestSummaryHint.test_mito_genes_run_with_code_1)",
+     "FAIL: test_genetic_code_hint_names_the_option_report_keeps_app_text (test_engine_ux.TestMessages.test_genetic_code_hint_names_the_option_report_keeps_app_text)",
+     "FAIL: test_standard_code_is_suggested_when_it_fits (test_engine_ux.TestMessages.test_standard_code_is_suggested_when_it_fits)",
+     "FAIL: test_start_codon_only_ties_prefer_code_11 (test_feature_combinations.TestMrg2Report.test_start_codon_only_ties_prefer_code_11)",
+     "FAIL: test_require_switch_turns_skips_into_failures (test_repo_ci.TestCiJobs.test_require_switch_turns_skips_into_failures)"
+    ],
+    "n_failed": 17,
+    "rc": 1
+   }
+  },
+  "caught": true,
+  "seconds": 50.2
+ },
+ {
+  "name": "py: paml header counts one sequence too many",
+  "file": "src/coal/pipeline.py",
+  "suites": [
+   "engine"
+  ],
+  "applied": true,
+  "suites_result": {
+   "engine": {
+    "summary": "FAILED (failures=38, errors=11, skipped=66)",
+    "failures": [
+     "ERROR: setUpClass (test_docs_numbers.TestDocsNumbers)",
+     "ERROR: test_algae_coxI (test_realdata.TestRoundTrip.test_algae_coxI) (dataset='algae_coxI', output='paml')",
+     "ERROR: test_cd2 (test_realdata.TestRoundTrip.test_cd2) (dataset='cd2', output='paml')",
+     "ERROR: test_ciliates (test_realdata.TestRoundTrip.test_ciliates) (dataset='ciliates', output='paml')",
+     "ERROR: test_coxI_mammals (test_realdata.TestRoundTrip.test_coxI_mammals) (dataset='coxI_mammals', output='paml')",
+     "ERROR: test_hiv_rt (test_realdata.TestRoundTrip.test_hiv_rt) (dataset='hiv_rt', output='paml')",
+     "ERROR: test_mtdna_carnivores (test_realdata.TestRoundTrip.test_mtdna_carnivores) (dataset='mtdna_carnivores', output='paml')",
+     "ERROR: test_pts_bacteria (test_realdata.TestRoundTrip.test_pts_bacteria) (dataset='pts_bacteria', output='paml')"
+    ],
+    "n_failed": 49,
+    "rc": 1
+   }
+  },
+  "caught": true,
+  "seconds": 48.9
+ },
+ {
+  "name": "py: --keep-going exit 0 instead of 2",
+  "file": "src/coal/cli.py",
+  "suites": [
+   "engine"
+  ],
+  "applied": true,
+  "suites_result": {
+   "engine": {
+    "summary": "FAILED (failures=25, skipped=66)",
+    "failures": [
+     "FAIL: test_exit_2_when_a_job_left_sequences_out_and_none_failed (test_batch.TestFailurePolicy.test_exit_2_when_a_job_left_sequences_out_and_none_failed)",
+     "FAIL: test_one_bad_gene_in_20 (test_engine_extras.TestKeepGoing.test_one_bad_gene_in_20)",
+     "FAIL: test_output_equals_run_without_the_bad_gene (test_engine_extras.TestKeepGoing.test_output_equals_run_without_the_bad_gene) (fmt='fasta', extra=[])",
+     "FAIL: test_output_equals_run_without_the_bad_gene (test_engine_extras.TestKeepGoing.test_output_equals_run_without_the_bad_gene) (fmt='fasta', extra=['-nogap'])",
+     "FAIL: test_output_equals_run_without_the_bad_gene (test_engine_extras.TestKeepGoing.test_output_equals_run_without_the_bad_gene) (fmt='fasta', extra=['-nomismatch'])",
+     "FAIL: test_output_equals_run_without_the_bad_gene (test_engine_extras.TestKeepGoing.test_output_equals_run_without_the_bad_gene) (fmt='clustal', extra=[])",
+     "FAIL: test_output_equals_run_without_the_bad_gene (test_engine_extras.TestKeepGoing.test_output_equals_run_without_the_bad_gene) (fmt='clustal', extra=['-nogap'])",
+     "FAIL: test_output_equals_run_without_the_bad_gene (test_engine_extras.TestKeepGoing.test_output_equals_run_without_the_bad_gene) (fmt='clustal', extra=['-nomismatch'])"
+    ],
+    "n_failed": 25,
+    "rc": 1
+   }
+  },
+  "caught": true,
+  "seconds": 48.3
+ },
+ {
+  "name": "py: -blockonly keeps the column after each mark",
+  "file": "src/coal/pipeline.py",
+  "suites": [
+   "engine"
+  ],
+  "applied": true,
+  "suites_result": {
+   "engine": {
+    "summary": "OK",
+    "failures": [],
+    "n_failed": 0,
+    "rc": 0
+   }
+  },
+  "caught": false,
+  "seconds": 49.7
+ },
+ {
+  "name": "cpp: output rows emitted in reverse batch order with -j 4",
+  "file": "cpp/src/pool.hpp",
+  "suites": [
+   "cpp"
+  ],
+  "applied": true,
+  "build": "[100%] Linking CXX executable coal-cpp\n[100%] Built target coal-cpp\n",
+  "suites_result": {
+   "cpp": {
+    "summary": "TIMEOUT",
+    "failures": [],
+    "n_failed": 0,
+    "rc": null
+   }
+  },
+  "caught": true,
+  "seconds": 1509.6
+ },
+ {
+  "name": "cpp: only ATG accepted as the first Met (standard code)",
+  "file": "cpp/src/tables.cpp",
+  "suites": [
+   "cpp"
+  ],
+  "applied": true,
+  "build": "[100%] Linking CXX executable coal-cpp\n[100%] Built target coal-cpp\n",
+  "suites_result": {
+   "cpp": {
+    "summary": "FAILED (failures=9, skipped=1)",
+    "failures": [
+     "FAIL: test_all_cases (tests.test_differential.TestAgainstPal2nal.test_all_cases) (case='alt_start', variant='fasta')",
+     "FAIL: test_all_cases (tests.test_differential.TestAgainstPal2nal.test_all_cases) (case='alt_start', variant='clustal')",
+     "FAIL: test_all_cases (tests.test_differential.TestAgainstPal2nal.test_all_cases) (case='alt_start', variant='paml')",
+     "FAIL: test_all_cases (tests.test_differential.TestAgainstPal2nal.test_all_cases) (case='alt_start', variant='codon')",
+     "FAIL: test_all_cases (tests.test_differential.TestAgainstPal2nal.test_all_cases) (case='alt_start', variant='fasta_nogap')",
+     "FAIL: test_all_cases (tests.test_differential.TestAgainstPal2nal.test_all_cases) (case='alt_start', variant='fasta_nomismatch')",
+     "FAIL: test_random_inputs (tests.test_cpp_vs_python.TestCppMatchesPython.test_random_inputs)",
+     "FAIL: test_fuzz (tests.test_cpp_vs_reference.TestCppVsPal2nalFuzz.test_fuzz)"
+    ],
+    "n_failed": 9,
+    "rc": 1
+   }
+  },
+  "caught": true,
+  "seconds": 55.1
+ },
+ {
+  "name": "app: GUI download hands out the report instead of the alignment",
+  "file": "apps/coal-app/src/coal_app/ui.py",
+  "suites": [
+   "app"
+  ],
+  "applied": true,
+  "suites_result": {
+   "app": {
+    "summary": "OK",
+    "failures": [],
+    "n_failed": 0,
+    "rc": 0
+   }
+  },
+  "caught": false,
+  "seconds": 40.0
+ },
+ {
+  "name": "app: MCP all_ok true with a failed gene",
+  "file": "apps/coal-app/src/coal_app/tools.py",
+  "suites": [
+   "app"
+  ],
+  "applied": true,
+  "suites_result": {
+   "app": {
+    "summary": "OK",
+    "failures": [],
+    "n_failed": 0,
+    "rc": 0
+   }
+  },
+  "caught": false,
+  "seconds": 39.7
+ }
+]

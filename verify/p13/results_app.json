@@ -1,0 +1,68 @@
+[
+ {
+  "name": "app: GUI download hands out the report instead of the alignment",
+  "file": "apps/coal-app/src/coal_app/ui.py",
+  "gui": {
+   "ran": 257,
+   "summary": "OK (skipped=1)",
+   "rc": 0,
+   "failures": [],
+   "n_skipped": 1,
+   "skip_reasons": [
+    "set COAL_SMOKE_EXE to the frozen COAL.exe (apps\\\\coal-app\\\\desktop\\\\build.ps1)"
+   ],
+   "seconds": 39.8
+  },
+  "mcp": {
+   "ran": 257,
+   "summary": "OK (skipped=5)",
+   "rc": 0,
+   "failures": [],
+   "n_skipped": 2,
+   "skip_reasons": [
+    "gradio not installed",
+    "set COAL_SMOKE_EXE to the frozen COAL.exe (apps\\\\coal-app\\\\desktop\\\\build.ps1)"
+   ],
+   "seconds": 36.9
+  },
+  "caught": false
+ },
+ {
+  "name": "app: MCP all_ok true with a failed gene",
+  "file": "apps/coal-app/src/coal_app/tools.py",
+  "gui": {
+   "ran": 257,
+   "summary": "FAILED (failures=4, skipped=1)",
+   "rc": 1,
+   "failures": [
+    "FAIL: test_schemas_errors_and_version (test_mcp_tools.TestStdioMcpServer.test_schemas_errors_and_version)",
+    "FAIL: test_a_genetic_code_hint_means_not_all_ok_even_if_counts_are_clean (test_mcp_tools.TestTruthfulResult.test_a_genetic_code_hint_means_not_all_ok_even_if_counts_are_clean)",
+    "FAIL: test_summarise_counts_and_hint (test_mcp_tools.TestTruthfulResult.test_summarise_counts_and_hint)",
+    "FAIL: test_wrong_code_completes_but_needs_attention (test_mcp_tools.TestTruthfulResult.test_wrong_code_completes_but_needs_attention)"
+   ],
+   "n_skipped": 1,
+   "skip_reasons": [
+    "set COAL_SMOKE_EXE to the frozen COAL.exe (apps\\\\coal-app\\\\desktop\\\\build.ps1)"
+   ],
+   "seconds": 39.3
+  },
+  "mcp": {
+   "ran": 257,
+   "summary": "FAILED (failures=4, skipped=5)",
+   "rc": 1,
+   "failures": [
+    "FAIL: test_schemas_errors_and_version (test_mcp_tools.TestStdioMcpServer.test_schemas_errors_and_version)",
+    "FAIL: test_a_genetic_code_hint_means_not_all_ok_even_if_counts_are_clean (test_mcp_tools.TestTruthfulResult.test_a_genetic_code_hint_means_not_all_ok_even_if_counts_are_clean)",
+    "FAIL: test_summarise_counts_and_hint (test_mcp_tools.TestTruthfulResult.test_summarise_counts_and_hint)",
+    "FAIL: test_wrong_code_completes_but_needs_attention (test_mcp_tools.TestTruthfulResult.test_wrong_code_completes_but_needs_attention)"
+   ],
+   "n_skipped": 2,
+   "skip_reasons": [
+    "gradio not installed",
+    "set COAL_SMOKE_EXE to the frozen COAL.exe (apps\\\\coal-app\\\\desktop\\\\build.ps1)"
+   ],
+   "seconds": 36.8
+  },
+  "caught": true
+ }
+]

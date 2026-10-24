@@ -1,0 +1,338 @@
+{
+ "jsonrpc": "2.0",
+ "id": 2,
+ "result": {
+  "tools": [
+   {
+    "description": "Build a codon alignment from a protein alignment and the matching unaligned coding DNA (PAL2NAL replacement).\n\nUse this when you have aligned protein sequences and the DNA (CDS) of the same genes and need\nthe DNA aligned codon by codon, for example before dN/dS analysis (PAML codeml, HyPhy).\nSequences are paired by ID. Codons that don't match their amino acid are reported as warnings.\nRead all_ok / needs_attention, not completed, to know whether the alignment can be used.\n\nArgs:\n    protein_alignment_path: Absolute path to the protein multiple sequence alignment (FASTA or CLUSTAL).\n    dna_fasta_path: Absolute path to the unaligned coding DNA sequences (FASTA), one per protein.\n    output_format: \"fasta\" (default), \"clustal\", \"paml\" or \"codon\".\n    codontable: NCBI genetic code number: 1 = standard (nuclear), 2 = vertebrate mitochondrial,\n        5 = invertebrate mitochondrial, 11 = bacteria/plastids. Also 3, 4, 6, 9, 10, 12-16, 21-23.\n    nogap: If true, remove codon columns that contain a gap or a stop codon.\n    nomismatch: If true, remove columns where a codon doesn't match its amino acid.\n    strict: If true, refuse probably-wrong genes (protein and DNA probably unrelated, or position of the gene a\n        guess): they are left out of the alignment and reported as failed, and the other genes are still\n        written; only a partial ID match (sequences that would be paired by order) stops the run. By default\n        such genes are written, as PAL2NAL does, and reported as failed.\n    blockonly: If true, keep only the columns marked '#' under the blocks of a CLUSTAL protein alignment.\n    save_as: Optional absolute path (or existing folder) to save the codon alignment to, for example next to\n        the input files, so the person finds it. Never overwrites a file. Empty: COAL's own run folder.\n\nReturns:\n    A dict with: completed (COAL finished and wrote an alignment), all_ok (every sequence matched its\n    protein and no hint says the data looks wrong), needs_attention (the opposite of all_ok), counts\n    (total / ok / warning / failed / not_checked sequences), suggested_codontable (a better genetic code,\n    or null), next_step (what to do now), output_path (the codon alignment file, or null), report_path\n    (a coal.report/1 JSON file, pass it to explain_report), summary and summary_text, hints (suggestions,\n    e.g. {\"code\": \"genetic_code\", \"suggested_codontable\": 2, \"text\": ...}), problems (the first few\n    {id, status, explanation} with a warning or failure; problems_total counts them all), engine_messages\n    (COAL's first errors and notices) and warning_lines (how many per-codon warnings it printed),\n    methods_text (a ready-to-paste methods sentence), coal_command, pal2nal_command (the closest PAL2NAL v14\n    command line) and pal2nal_caveats (when that command does not do the same, e.g. -nogap with another\n    genetic code). A missing file, an unknown genetic code or an unsupported format is a tool error.\n",
+    "inputSchema": {
+     "properties": {
+      "protein_alignment_path": {
+       "description": "Absolute path to the protein multiple sequence alignment (FASTA or CLUSTAL).",
+       "title": "Protein Alignment Path",
+       "type": "string"
+      },
+      "dna_fasta_path": {
+       "description": "Absolute path to the unaligned coding DNA (FASTA), one sequence per protein, same IDs.",
+       "title": "Dna Fasta Path",
+       "type": "string"
+      },
+      "output_format": {
+       "default": "fasta",
+       "description": "Output format of the codon alignment: fasta (default), clustal, paml (codeml) or codon.",
+       "enum": [
+        "fasta",
+        "clustal",
+        "paml",
+        "codon"
+       ],
+       "title": "Output Format",
+       "type": "string"
+      },
+      "codontable": {
+       "default": 1,
+       "description": "NCBI genetic code: 1 standard (nuclear), 2 vertebrate mitochondrial, 3 yeast mito, 4 mold/protozoan mito and Mycoplasma, 5 invertebrate mito, 9 echinoderm/flatworm mito, 11 bacteria, archaea and plastids; also 6, 10, 12-16, 21-23.",
+       "enum": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        21,
+        22,
+        23
+       ],
+       "title": "Codontable",
+       "type": "integer"
+      },
+      "nogap": {
+       "default": false,
+       "description": "Remove codon columns that contain a gap or a stop codon.",
+       "title": "Nogap",
+       "type": "boolean"
+      },
+      "nomismatch": {
+       "default": false,
+       "description": "Remove columns where a codon doesn't match its amino acid.",
+       "title": "Nomismatch",
+       "type": "boolean"
+      },
+      "strict": {
+       "default": false,
+       "description": "Refuse probably-wrong genes (left out and reported as failed; the others are written).",
+       "title": "Strict",
+       "type": "boolean"
+      },
+      "blockonly": {
+       "default": false,
+       "description": "Keep only the columns marked '#' under the blocks of a CLUSTAL protein alignment.",
+       "title": "Blockonly",
+       "type": "boolean"
+      },
+      "save_as": {
+       "default": "",
+       "description": "Optional absolute path to save the codon alignment to, e.g. next to the input files (C:\\data\\genes.codon.fasta). An existing folder means: save there under COAL's file name. Never overwrites an existing file. Default: COAL's own run folder (output_path).",
+       "title": "Save As",
+       "type": "string"
+      }
+     },
+     "required": [
+      "protein_alignment_path",
+      "dna_fasta_path"
+     ],
+     "type": "object",
+     "title": "codon_alignArguments"
+    },
+    "name": "codon_align",
+    "outputSchema": {
+     "properties": {
+      "completed": {
+       "title": "Completed",
+       "type": "boolean"
+      },
+      "all_ok": {
+       "title": "All Ok",
+       "type": "boolean"
+      },
+      "needs_attention": {
+       "title": "Needs Attention",
+       "type": "boolean"
+      },
+      "counts": {
+       "$ref": "#/$defs/Counts"
+      },
+      "suggested_codontable": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Suggested Codontable"
+      },
+      "next_step": {
+       "title": "Next Step",
+       "type": "string"
+      },
+      "output_path": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Output Path"
+      },
+      "report_path": {
+       "title": "Report Path",
+       "type": "string"
+      },
+      "exit_code": {
+       "title": "Exit Code",
+       "type": "integer"
+      },
+      "summary": {
+       "additionalProperties": true,
+       "title": "Summary",
+       "type": "object"
+      },
+      "summary_text": {
+       "title": "Summary Text",
+       "type": "string"
+      },
+      "hints": {
+       "items": {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       "title": "Hints",
+       "type": "array"
+      },
+      "problems": {
+       "items": {
+        "$ref": "#/$defs/Problem"
+       },
+       "title": "Problems",
+       "type": "array"
+      },
+      "problems_total": {
+       "title": "Problems Total",
+       "type": "integer"
+      },
+      "engine_messages": {
+       "items": {
+        "type": "string"
+       },
+       "title": "Engine Messages",
+       "type": "array"
+      },
+      "warning_lines": {
+       "title": "Warning Lines",
+       "type": "integer"
+      },
+      "methods_text": {
+       "title": "Methods Text",
+       "type": "string"
+      },
+      "coal_command": {
+       "title": "Coal Command",
+       "type": "string"
+      },
+      "pal2nal_command": {
+       "title": "Pal2Nal Command",
+       "type": "string"
+      },
+      "pal2nal_caveats": {
+       "items": {
+        "type": "string"
+       },
+       "title": "Pal2Nal Caveats",
+       "type": "array"
+      }
+     },
+     "required": [
+      "completed",
+      "all_ok",
+      "needs_attention",
+      "counts",
+      "suggested_codontable",
+      "next_step",
+      "output_path",
+      "report_path",
+      "exit_code",
+      "summary",
+      "summary_text",
+      "hints",
+      "problems",
+      "problems_total",
+      "engine_messages",
+      "warning_lines",
+      "methods_text",
+      "coal_command",
+      "pal2nal_command",
+      "pal2nal_caveats"
+     ],
+     "type": "object",
+     "$defs": {
+      "Counts": {
+       "properties": {
+        "total": {
+         "title": "Total",
+         "type": "integer"
+        },
+        "ok": {
+         "title": "Ok",
+         "type": "integer"
+        },
+        "warning": {
+         "title": "Warning",
+         "type": "integer"
+        },
+        "failed": {
+         "title": "Failed",
+         "type": "integer"
+        },
+        "not_checked": {
+         "title": "Not Checked",
+         "type": "integer"
+        }
+       },
+       "required": [
+        "total",
+        "ok",
+        "warning",
+        "failed",
+        "not_checked"
+       ],
+       "title": "Counts",
+       "type": "object"
+      },
+      "Problem": {
+       "properties": {
+        "id": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "title": "Id"
+        },
+        "status": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "title": "Status"
+        },
+        "explanation": {
+         "title": "Explanation",
+         "type": "string"
+        }
+       },
+       "required": [
+        "id",
+        "status",
+        "explanation"
+       ],
+       "title": "Problem",
+       "type": "object"
+      }
+     },
+     "description": "What codon_align returns (also published as the MCP outputSchema).",
+     "title": "CodonAlignResult"
+    }
+   },
+   {
+    "description": "Explain a COAL run report (coal.report/1 JSON) in plain English: what failed, why, and how to fix it.\n\nArgs:\n    report_path: Absolute path to the report JSON written by COAL (--report) or returned by codon_align.\n\nReturns:\n    A short plain-English explanation: counts of OK / warning / failed sequences, how proteins and\n    DNA were paired, one line per problem sequence with its likely cause (wrong genetic code,\n    mismatched IDs, frameshift), suggested fixes, and a ready-to-paste methods sentence.\n    A report that cannot be read is a tool error.\n",
+    "inputSchema": {
+     "properties": {
+      "report_path": {
+       "description": "Absolute path to a coal.report/1 JSON file (report_path from codon_align, or COAL --report).",
+       "title": "Report Path",
+       "type": "string"
+      }
+     },
+     "required": [
+      "report_path"
+     ],
+     "type": "object",
+     "title": "explain_reportArguments"
+    },
+    "name": "explain_report",
+    "outputSchema": {
+     "properties": {
+      "result": {
+       "title": "Result",
+       "type": "string"
+      }
+     },
+     "required": [
+      "result"
+     ],
+     "type": "object",
+     "title": "explain_reportOutput"
+    }
+   }
+  ]
+ }
+}

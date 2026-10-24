@@ -1,0 +1,16 @@
+5 sequences: 0 OK, 5 with warnings, 0 failed.
+Proteins and DNA were paired by matching their IDs exactly.
+The codon alignment was written to /mnt/d/coal-stress/verify/p6/runs/run_h54sch5l/pep_mito.codon.fasta (fasta format).
+
+Sequences with warnings (still in the alignment):
+- m0: 6 codons do not match their amino acid (first at column 8): the protein says W but the DNA has TGA. Kept in the alignment; check the genetic code. No 10-residue stretch of the protein was found in the DNA, so codons were assigned by position (6 of 40 checkable codons do not match). Is this the right DNA for this protein, and the right genetic code?
+- m1: 3 codons do not match their amino acid (first at column 8): the protein says W but the DNA has TGA. Kept in the alignment; check the genetic code.
+- m2: 3 codons do not match their amino acid (first at column 9): the protein says M but the DNA has ATA. Kept in the alignment; check the genetic code.
+- m3: 7 codons do not match their amino acid (first at column 3): the protein says W but the DNA has TGA. Kept in the alignment; check the genetic code. No 10-residue stretch of the protein was found in the DNA, so codons were assigned by position (7 of 40 checkable codons do not match). Is this the right DNA for this protein, and the right genetic code?
+- m4: 8 codons do not match their amino acid (first at column 7): the protein says W but the DNA has TGA. Kept in the alignment; check the genetic code. No 10-residue stretch of the protein was found in the DNA, so codons were assigned by position (8 of 40 checkable codons do not match). Is this the right DNA for this protein, and the right genetic code?
+
+Suggestions:
+- Under genetic code 2 (Vertebrate mitochondrial), all 5 sequences match their protein; under code 1, none do. Codes 5 and 13 fit these sequences too: choose the code of the organism and organelle the genes come from. Re-run with code 2?
+
+Methods text (ready to paste):
+Fix the warnings first: only 0 of 5 sequences matched their protein exactly, so this alignment is probably not ready to use (see the hints and the messages for each sequence). Methods text for this run as it stands: Codon alignments were built with COAL v0.5.0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 5 sequences, 0 matched their protein exactly, and 5 contained codons that did not match the aligned amino acid (kept in the alignment). Command: coal pep_mito.fasta nuc_mito.fasta --keep-going -o pep_mito.codon.fasta

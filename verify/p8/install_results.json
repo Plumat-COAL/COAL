@@ -1,0 +1,127 @@
+﻿[
+    {
+        "name":  "uninstall (silent) exits 0",
+        "ok":  true,
+        "detail":  "exit 0, 3 s"
+    },
+    {
+        "name":  "uninstall removes the app folder",
+        "ok":  true,
+        "detail":  "False"
+    },
+    {
+        "name":  "uninstall removes the Start Menu shortcut",
+        "ok":  true,
+        "detail":  "False"
+    },
+    {
+        "name":  "uninstall removes the Add/Remove entry",
+        "ok":  true,
+        "detail":  "False"
+    },
+    {
+        "name":  "uninstall removes the coal entry from claude_desktop_config.json",
+        "ok":  true,
+        "detail":  "{\r\n  \"mcpServers\": {\r\n    \"other\": {\r\n      \"command\": \"C:\\\\x\\\\other.exe\"\r\n    }\r\n  },\r\n  \"theme\": \"dark\"\r\n}\r\n"
+    },
+    {
+        "name":  "uninstall keeps the other server and other keys",
+        "ok":  true,
+        "detail":  "{\r\n  \"mcpServers\": {\r\n    \"other\": {\r\n      \"command\": \"C:\\\\x\\\\other.exe\"\r\n    }\r\n  },\r\n  \"theme\": \"dark\"\r\n}\r\n"
+    },
+    {
+        "name":  "uninstall leaves %TEMP%\\gradio (documented)",
+        "ok":  true,
+        "detail":  "True"
+    },
+    {
+        "name":  "uninstall leaves the per-user data folder %LOCALAPPDATA%\\COAL (logs; not documented either way)",
+        "ok":  true,
+        "detail":  "False"
+    },
+    {
+        "name":  "uninstall leaves .fasta\u0027s default program and UserChoice as they were",
+        "ok":  true,
+        "detail":  " / "
+    },
+    {
+        "name":  "install with /TASKS=desktopicon,openwith exits 0 (no UAC: per-user)",
+        "ok":  true,
+        "detail":  "exit 0, 11 s"
+    },
+    {
+        "name":  "install: app folder, COAL.exe, Start Menu shortcut, Add/Remove entry",
+        "ok":  true,
+        "detail":  "{\"label\":\"2_after_install_tasks\",\"app_dir\":true,\"exe\":true,\"start_menu\":true,\"desktop\":true,\"uninstall_entry\":true,\"openwith\":[],\"progid\":true,\"claude\":{\"value\":\"{\\r\\n  \\\"mcpServers\\\": {\\r\\n    \\\"other\\\": {\\r\\n      \\\"command\\\": \\\"C:\\\\\\\\x\\\\\\\\other.exe\\\"\\r\\n    }\\r\\n  },\\r\\n  \\\"theme\\\": \\\"dark\\\"\\r\\n}\\r\\n\",\"PSPath\":\"C:\\\\Users\\\\chloe\\\\AppData\\\\Roaming\\\\Claude\\\\claude_desktop_config.json\",\"PSParentPath\":\"C:\\\\Users\\\\chloe\\\\AppData\\\\Roaming\\\\Claude\",\"PSChildName\":\"claude_desktop_config.json\",\"PSDrive\":{\"CurrentLocation\":\"\",\"Name\":\"C\",\"Provider\":\"Microsoft.PowerShell.Core\\\\FileSystem\",\"Root\":\"C:\\\\\",\"Description\":\"\",\"MaximumSize\":null,\"Credential\":\"System.Management.Automation.PSCredential\",\"DisplayRoot\":null},\"PSProvider\":{\"ImplementingType\":\"Microsoft.PowerShell.Commands.FileSystemProvider\",\"HelpFile\":\"System.Management.Automation.dll-Help.xml\",\"Name\":\"FileSystem\",\"PSSnapIn\":\"Microsoft.PowerShell.Core\",\"ModuleName\":\"Microsoft.PowerShell.Core\",\"Module\":null,\"Description\":\"\",\"Capabilities\":52,\"Home\":\"C:\\\\Users\\\\chloe\",\"Drives\":\"C D E\"},\"ReadCount\":1},\"claude_bak\":true,\"temp_gradio\":true,\"temp_runs\":false,\"data_dir\":false,\"fasta_default\":null,\"fasta_userchoice\":null}"
+    },
+    {
+        "name":  "desktop shortcut task creates COAL.lnk on the Desktop",
+        "ok":  true,
+        "detail":  "C:\\Users\\chloe\\Desktop\\COAL.lnk"
+    },
+    {
+        "name":  "Open-with task registers COAL.SequenceFile for .aln .fasta .fa .fas .faa .fna",
+        "ok":  false,
+        "detail":  ""
+    },
+    {
+        "name":  "Open-with task leaves .fasta\u0027s default program and UserChoice unchanged",
+        "ok":  true,
+        "detail":  " / "
+    },
+    {
+        "name":  "Add/Remove entry says COAL 0.5.0 in %LOCALAPPDATA%\\Programs\\COAL",
+        "ok":  true,
+        "detail":  "0.5.0 C:\\Users\\chloe\\AppData\\Local\\Programs\\COAL\\"
+    },
+    {
+        "name":  "install log: no \u0027Error\u0027 / \u0027Failed\u0027 lines",
+        "ok":  false,
+        "detail":  "2026-10-24 05:07:56.155   Dest filename: C:\\Users\\chloe\\AppData\\Local\\Programs\\COAL\\_internal\\api-ms-win-core-errorhandling-l1-1-0.dll\r | 2026-10-24 05:07:58.960   Dest filename: C:\\Users\\chloe\\AppData\\Local\\Programs\\COAL\\_internal\\gradio\\templates\\frontend\\static\\img\\logo_error.svg\r | 2026-10-24 05:08:02.324   Dest filename: C:\\Users\\chloe\\AppData\\Local\\Programs\\COAL\\_internal\\gradio\\templates\\node\\build\\server\\chunks\\error.svelte-uehjnFTh.js\r"
+    },
+    {
+        "name":  "install log says a non-administrative (per-user) install",
+        "ok":  false,
+        "detail":  "2026-10-24 05:07:55.876   Administrative install mode: No\r | 2026-10-24 05:08:06.689   Detected previous administrative 64-bit install? No\r | 2026-10-24 05:08:06.689   Detected previous administrative 32-bit install? No\r"
+    },
+    {
+        "name":  "Open-with command is COAL.exe \"%1\"",
+        "ok":  true,
+        "detail":  "\"C:\\Users\\chloe\\AppData\\Local\\Programs\\COAL\\COAL.exe\" \"%1\""
+    },
+    {
+        "name":  "wizard\u0027s Connect step (COAL.exe --connect-claude): coal entry added, other server and keys kept, .bak-coal written",
+        "ok":  true,
+        "detail":  "{\r\n  \"mcpServers\": {\r\n    \"other\": {\r\n      \"command\": \"C:\\\\x\\\\other.exe\"\r\n    },\r\n    \"coal\": {\r\n      \"command\": \"C:\\\\Users\\\\chloe\\\\AppData\\\\Local\\\\Programs\\\\COAL\\\\COAL.exe\",\r\n      \"args\": [\r\n        \"-m\",\r\n        \"coal_app\",\r\n        \"--mcp\"\r\n      ]\r\n    }\r\n  },\r\n  \"theme\": \"dark\"\r\n}\r\n"
+    },
+    {
+        "name":  "second uninstall removes the desktop shortcut, the Open-with entries and the ProgId",
+        "ok":  true,
+        "detail":  "{\"label\":\"3_after_uninstall_2\",\"app_dir\":false,\"exe\":false,\"start_menu\":false,\"desktop\":false,\"uninstall_entry\":false,\"openwith\":[],\"progid\":false,\"claude\":{\"value\":\"{\\r\\n  \\\"mcpServers\\\": {\\r\\n    \\\"other\\\": {\\r\\n      \\\"command\\\": \\\"C:\\\\\\\\x\\\\\\\\other.exe\\\"\\r\\n    }\\r\\n  },\\r\\n  \\\"theme\\\": \\\"dark\\\"\\r\\n}\\r\\n\",\"PSPath\":\"C:\\\\Users\\\\chloe\\\\AppData\\\\Roaming\\\\Claude\\\\claude_desktop_config.json\",\"PSParentPath\":\"C:\\\\Users\\\\chloe\\\\AppData\\\\Roaming\\\\Claude\",\"PSChildName\":\"claude_desktop_config.json\",\"PSDrive\":{\"CurrentLocation\":\"\",\"Name\":\"C\",\"Provider\":\"Microsoft.PowerShell.Core\\\\FileSystem\",\"Root\":\"C:\\\\\",\"Description\":\"\",\"MaximumSize\":null,\"Credential\":\"System.Management.Automation.PSCredential\",\"DisplayRoot\":null},\"PSProvider\":{\"ImplementingType\":\"Microsoft.PowerShell.Commands.FileSystemProvider\",\"HelpFile\":\"System.Management.Automation.dll-Help.xml\",\"Name\":\"FileSystem\",\"PSSnapIn\":\"Microsoft.PowerShell.Core\",\"ModuleName\":\"Microsoft.PowerShell.Core\",\"Module\":null,\"Description\":\"\",\"Capabilities\":52,\"Home\":\"C:\\\\Users\\\\chloe\",\"Drives\":\"C D E\"},\"ReadCount\":1},\"claude_bak\":true,\"temp_gradio\":true,\"temp_runs\":false,\"data_dir\":false,\"fasta_default\":null,\"fasta_userchoice\":null}"
+    },
+    {
+        "name":  "second uninstall removes coal from Claude\u0027s config, keeps the other server",
+        "ok":  true,
+        "detail":  "{\r\n  \"mcpServers\": {\r\n    \"other\": {\r\n      \"command\": \"C:\\\\x\\\\other.exe\"\r\n    }\r\n  },\r\n  \"theme\": \"dark\"\r\n}\r\n"
+    },
+    {
+        "name":  "uninstall does not restore the .bak-coal copy over the current file (keeps the user\u0027s later edits)",
+        "ok":  true,
+        "detail":  "{\r\n  \"mcpServers\": {\r\n    \"other\": {\r\n      \"command\": \"C:\\\\x\\\\other.exe\"\r\n    }\r\n  },\r\n  \"theme\": \"dark\"\r\n}\r\n"
+    },
+    {
+        "name":  "final install (defaults) exits 0",
+        "ok":  true,
+        "detail":  "0"
+    },
+    {
+        "name":  "final state equals the state before (app, shortcut, no desktop shortcut, no Open-with, Claude entry)",
+        "ok":  true,
+        "detail":  "{\"label\":\"4_final\",\"app_dir\":true,\"exe\":true,\"start_menu\":true,\"desktop\":false,\"uninstall_entry\":true,\"openwith\":[],\"progid\":false,\"claude\":{\"value\":\"{\\r\\n  \\\"mcpServers\\\": {\\r\\n    \\\"coal\\\": {\\r\\n      \\\"command\\\": \\\"C:\\\\\\\\Users\\\\\\\\chloe\\\\\\\\AppData\\\\\\\\Local\\\\\\\\Programs\\\\\\\\COAL\\\\\\\\COAL.exe\\\",\\r\\n      \\\"args\\\": [\\r\\n        \\\"-m\\\",\\r\\n        \\\"coal_app\\\",\\r\\n        \\\"--mcp\\\"\\r\\n      ]\\r\\n    }\\r\\n  }\\r\\n}\\r\\n\",\"PSPath\":\"C:\\\\Users\\\\chloe\\\\AppData\\\\Roaming\\\\Claude\\\\claude_desktop_config.json\",\"PSParentPath\":\"C:\\\\Users\\\\chloe\\\\AppData\\\\Roaming\\\\Claude\",\"PSChildName\":\"claude_desktop_config.json\",\"PSDrive\":{\"CurrentLocation\":\"\",\"Name\":\"C\",\"Provider\":\"Microsoft.PowerShell.Core\\\\FileSystem\",\"Root\":\"C:\\\\\",\"Description\":\"\",\"MaximumSize\":null,\"Credential\":\"System.Management.Automation.PSCredential\",\"DisplayRoot\":null},\"PSProvider\":{\"ImplementingType\":\"Microsoft.PowerShell.Commands.FileSystemProvider\",\"HelpFile\":\"System.Management.Automation.dll-Help.xml\",\"Name\":\"FileSystem\",\"PSSnapIn\":\"Microsoft.PowerShell.Core\",\"ModuleName\":\"Microsoft.PowerShell.Core\",\"Module\":null,\"Description\":\"\",\"Capabilities\":52,\"Home\":\"C:\\\\Users\\\\chloe\",\"Drives\":\"C D E\"},\"ReadCount\":1},\"claude_bak\":false,\"temp_gradio\":true,\"temp_runs\":false,\"data_dir\":false,\"fasta_default\":null,\"fasta_userchoice\":null}"
+    },
+    {
+        "name":  "final COAL.exe --version",
+        "ok":  true,
+        "detail":  "COAL desktop 0.5.0\r\n"
+    }
+]

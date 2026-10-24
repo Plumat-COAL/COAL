@@ -1,0 +1,54 @@
+{
+ "cpp_path": "C:\\Users\\chloe\\AppData\\Local\\Programs\\COAL\\_internal\\coal-cpp.exe",
+ "installed_big_command": "coal 'D:\\coal-stress\\verify\\bench-data\\n10000_L500\\pep.fasta' 'D:\\coal-stress\\verify\\bench-data\\n10000_L500\\nuc.fasta' --keep-going -o 'C:\\Users\\chloe\\AppData\\Local\\Temp\\coal_app_runs\\run_6rfw7i8v\\pep.codon.fasta'",
+ "mcp_clean": {
+  "completed": true,
+  "all_ok": true,
+  "needs_attention": false,
+  "counts": {
+   "total": 8,
+   "ok": 8,
+   "warning": 0,
+   "failed": 0,
+   "not_checked": 0
+  },
+  "suggested_codontable": null,
+  "next_step": "All sequences match their protein; the alignment at output_path is ready to use.",
+  "output_path": "C:\\Users\\chloe\\AppData\\Local\\Temp\\coal_app_runs\\run_mb4e40kf\\protein.codon.fasta",
+  "report_path": "C:\\Users\\chloe\\AppData\\Local\\Temp\\coal_app_runs\\run_mb4e40kf\\protein.report.json",
+  "exit_code": 0,
+  "summary": {
+   "total": 8,
+   "ok": 8,
+   "warning": 0,
+   "failed": 0,
+   "pairing": "id"
+  },
+  "summary_text": "8 sequences: 8 OK, 0 with warnings, 0 failed.",
+  "hints": [],
+  "problems": [],
+  "problems_total": 0,
+  "engine_messages": [],
+  "warning_lines": 0,
+  "methods_text": "Codon alignments were built with COAL v0.5.0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 8 sequences, 8 matched their protein exactly. Command: coal protein.aln.fasta dna.fasta --keep-going -o protein.codon.fasta",
+  "coal_command": "coal protein.aln.fasta dna.fasta --keep-going -o protein.codon.fasta",
+  "pal2nal_command": "pal2nal.pl protein.aln.fasta dna.fasta -output fasta > protein.codon.fasta",
+  "pal2nal_caveats": [],
+  "isError": false
+ },
+ "mcp_big_report_command": "coal 'D:\\coal-stress\\verify\\bench-data\\n10000_L500\\pep.fasta' 'D:\\coal-stress\\verify\\bench-data\\n10000_L500\\nuc.fasta' --keep-going -o 'C:\\Users\\chloe\\AppData\\Local\\Temp\\coal_app_runs\\run_7y_a84vm\\pep.codon.fasta'",
+ "connect_out": [
+  0,
+  "",
+  ""
+ ],
+ "disconnect_out": [
+  0,
+  "",
+  ""
+ ],
+ "installed_ready_s": 5.360911399999168,
+ "window_launch_s": null,
+ "window_log_tail": "",
+ "portable_ready_s": 5.989266300020972
+}

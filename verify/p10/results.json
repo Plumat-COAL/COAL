@@ -1,0 +1,122 @@
+[
+ {
+  "name": "site/guide: the mito example prints 20 warnings then '... and 159 more warnings' (179 in all) and the summary with code 2",
+  "ok": true,
+  "detail": "['coal: warning: Mus_COX1 pepAlnPos 59: M does not correspond to ATA', 'coal: warning: ... and 159 more warnings (see them all with --max-warnings 0 or --report FILE.json)', 'coal: summary: 24 of 24 sequences have codons that do not match their amino acid (kept in the alignment). Under genetic code 2 (Vertebrate mitochondrial), all 24 sequences match their protein; under code 1, none do. Codes 5 and 13 fit these sequences too: choose the code of the organism and organelle the genes come from. Re-run with -codontable 2.']"
+ },
+ {
+  "name": "site/index+guide: one_broken_gene without --keep-going: error for OG0001_sp14, frameshift at column 102, 6 not checked, exit 1",
+  "ok": true,
+  "detail": "coal: error: OG0001_sp14: protein and DNA are inconsistent (no match found)\ncoal: summary: OG0001_sp14: Frameshift at column 102: one base is missing in the DNA, so from here on the codons are read out of step.\ncoal: summary: The run stopped at OG0001_sp14: 6 sequences were not checked and no output was written. Add --keep-going to write the other sequences and leave this one out.\nrc=1\n"
+ },
+ {
+  "name": "site/guide: with --keep-going 19 genes written, exit 2",
+  "ok": true,
+  "detail": "d DNA are inconsistent (no match found)\ncoal: summary: 1 sequence of 20 could not be converted and was left out (first: OG0001_sp14: protein and DNA are inconsistent (no match found). Frameshift at column 102: one base is missing in the DNA, so from here on the codons are read out of step.)\nrc=2\n19\n"
+ },
+ {
+  "name": "site/guide: the clean example has 8 genes, exit 0",
+  "ok": true,
+  "detail": "8\nrc=0\n"
+ },
+ {
+  "name": "site/guide: the mito example with -codontable 2 is clean (no warnings, exit 0)",
+  "ok": true,
+  "detail": "rc=0\n"
+ },
+ {
+  "name": "README: codon_align example gives the shown rows",
+  "ok": true,
+  "detail": "True []\n"
+ },
+ {
+  "name": "README exit codes list 0/1/2/141/130/143/129",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "site fetch index.html: 200",
+  "ok": true,
+  "detail": "200"
+ },
+ {
+  "name": "site fetch install.html: 200",
+  "ok": true,
+  "detail": "200"
+ },
+ {
+  "name": "site fetch guide.html: 200",
+  "ok": true,
+  "detail": "200"
+ },
+ {
+  "name": "site fetch differences.html: 200",
+  "ok": true,
+  "detail": "200"
+ },
+ {
+  "name": "site fetch cite.html: 200",
+  "ok": true,
+  "detail": "200"
+ },
+ {
+  "name": "site fetch explainer.html: 200",
+  "ok": true,
+  "detail": "200"
+ },
+ {
+  "name": "site index shows version 0.5.0",
+  "ok": true,
+  "detail": "['data-version=\"0.5.0\"']"
+ },
+ {
+  "name": "site index equals the repository's site/index.html (deployed from main)",
+  "ok": true,
+  "detail": "live 10828 bytes vs repo 10828 bytes"
+ },
+ {
+  "name": "site: no broken links (28 checked)",
+  "ok": true,
+  "detail": "{}"
+ },
+ {
+  "name": "site: download links present",
+  "ok": true,
+  "detail": "['https://github.com/plumat-coal/COAL/releases/latest/download/coal_app_src.tar.gz', 'https://github.com/plumat-coal/COAL/releases/latest/download/COAL-windows-x64.zip', 'https://github.com/plumat-coal/COAL/releases/latest/download/SHA256SUMS.txt', 'https://github.com/plumat-coal/COAL/releases/latest/download/COAL-Setup-windows-x64.exe', 'https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz']"
+ },
+ {
+  "name": "SHA256SUMS.txt downloadable from the latest release",
+  "ok": true,
+  "detail": "14"
+ },
+ {
+  "name": "site download coal_app_src.tar.gz: sha256 matches SHA256SUMS",
+  "ok": true,
+  "detail": "4bc63508d798105417151538cfd9a06e9f4e9cb143c7bd8a70e83f71fed88c18"
+ },
+ {
+  "name": "site download coal_src.tar.gz: sha256 matches SHA256SUMS",
+  "ok": true,
+  "detail": "29f6a2decef39306f41586dd4bb9536e69d169963787d0618c9bc677ef10a529"
+ },
+ {
+  "name": "site: Windows installer and zip links are release assets",
+  "ok": true,
+  "detail": "['https://github.com/plumat-coal/COAL/releases/latest/download/COAL-windows-x64.zip', 'https://github.com/plumat-coal/COAL/releases/latest/download/COAL-Setup-windows-x64.exe']"
+ },
+ {
+  "name": "site install: Windows / macOS / Linux steps, pip commands and checksum instructions",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "claims absent: NVIDIA Brev, hosted web version, code signing, DIAMOND on real genomes",
+  "ok": true,
+  "detail": "{}"
+ },
+ {
+  "name": "README/install: 'pip install coal-align' only as a future (PyPI) statement",
+  "ok": true,
+  "detail": "['pip install coal-align', 'pip install coal-align']"
+ }
+]

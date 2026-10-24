@@ -1,0 +1,31 @@
+{
+ "dl_html": "<button class=\"md secondary  svelte-o34uqh\" id=\"coal-view-dl\">  Download alignment view (HTML)</button>",
+ "dl_buttons": [
+  "View alignment\n\u25bc",
+  "OG0001_sp14",
+  "column 102 (frameshift)",
+  "Download alignment view (HTML)"
+ ],
+ "dl": "TimeoutError('Locator.click: Timeout 30000ms exceeded.\\nCall log:\\n  - waiting for locator(\"#coal-view-dl\").locator(\"button, a\").first\\n')",
+ "row_html": "<tr class=\"coal-failed\"><td><span class=\"coal-badge coal-failed\" aria-hidden=\"true\">\u2716</span> <strong>Failed</strong></td><td><code>OG0001_sp14</code></td><td>Frameshift at column 102: one base is missing in the DNA, so from here on the codons are read out of step. Check the DNA near there (a sequencing or assembly error?).<br><span class=\"coal-small\">Column <a href=\"#coalv-OG0001_sp14-c102\" aria-label=\"column 102\">102</a></span></td></tr>",
+ "links_in_health": 1,
+ "view_scroll_before": [
+  0,
+  0,
+  0
+ ],
+ "hash_after": "#coalv-OG0001_sp14-c102",
+ "view_scroll_after": [
+  0,
+  0,
+  1182
+ ],
+ "target_exists": true,
+ "active_marked": [
+  "po fs"
+ ],
+ "bad_banner": "\u2716 COAL stopped: no alignment was written\n\nFiles used: protein garbage.fasta, 2.6 KB (uploaded); DNA dna.fasta, 10 bytes (uploaded).",
+ "bad_health": "",
+ "bad_raw": "coal: error: /tmp/gradio/dc252cccd4bde1fe08a2cd5399ae952d240cd207e60c747f323f706f329dd5ec/garbage.fasta:1: control character: sequence files must be plain text (is this a binary or word-processor file?)\n",
+ "bad_body_error": "Could not draw the alignment: garbage.fasta: not FASTA or CLUSTAL"
+}

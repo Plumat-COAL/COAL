@@ -1,0 +1,197 @@
+[
+ {
+  "name": "GUI page loads with the Align and Settings tabs and Start alignment",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "clean example: banner says everything matched",
+  "ok": true,
+  "detail": "\u2714 All 8 genes match codon for codon\n\nFiles used: protein protein.aln.fasta, 1.3 KB (uploaded); DNA dna.fasta, 3.6 KB (uploaded)."
+ },
+ {
+  "name": "clean example: time to result under 30 s",
+  "ok": true,
+  "detail": "0.5142800000030547"
+ },
+ {
+  "name": "clean example: health table lists the 8 genes with a symbol and a word",
+  "ok": true,
+  "detail": "Sequences\nStatus\tSequence\tWhat this means\n\u2714 OK\t\nAll 8 genes match codon for codon"
+ },
+ {
+  "name": "clean example download (fasta): byte-identical to the CLI",
+  "ok": true,
+  "detail": "('protein.codon.fasta', 3728, 3728)"
+ },
+ {
+  "name": "clean example download (clustal): byte-identical to the CLI",
+  "ok": true,
+  "detail": "('protein.codon.aln', 4607, 4607)"
+ },
+ {
+  "name": "clean example download (paml): byte-identical to the CLI",
+  "ok": true,
+  "detail": "('protein.codon.paml', 3732, 3732)"
+ },
+ {
+  "name": "clean example download (codon): byte-identical to the CLI",
+  "ok": true,
+  "detail": "('protein.codon.codon.txt', 11272, 11272)"
+ },
+ {
+  "name": "Sample report button loads a report into the results (banner and health table filled)",
+  "ok": true,
+  "detail": "('\u2139 Sample report, not your data\\n\\n24 of 24 genes aligned\\n\\n\u26a0 24 with warnings\\n!\\n!\\n!\\n!\\n!\\n!\\n!\\n!\\n!\\n!\\n!\\n!\\n!\\n!\\n!\\n!\\n!\\n!\\n!\\n!\\n!\\n!\\n!', 'Sequences\\nStatus\\tSequence\\tWhat this means\\n\u26a0 Warning\\t\\n24 genes with mismatched codons under code 1: expected with the wro')"
+ },
+ {
+  "name": "clean example report (JSON): schema coal.report/1, 8 ok",
+  "ok": true,
+  "detail": "{'total': 8, 'ok': 8, 'warning': 0, 'failed': 0, 'pairing': 'id'}"
+ },
+ {
+  "name": "methods paragraph present with COAL v0.5.0 and the standard code",
+  "ok": true,
+  "detail": "Codon alignments were built with COAL v0.5.0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL"
+ },
+ {
+  "name": "methods paragraph has a copy button",
+  "ok": true,
+  "detail": "1"
+ },
+ {
+  "name": "raw COAL messages box present",
+  "ok": true,
+  "detail": "(no messages)"
+ },
+ {
+  "name": "equivalent commands shown (coal and pal2nal)",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "mito example: banner says something is wrong and the tip names code 2",
+  "ok": true,
+  "detail": "('\u2139 Wrong genetic code?\\n\\nWith code 1 (Standard) 24 of 24 genes have mismatched codons; with code 2 (Vertebrate mitochondrial) all 24 match.\\n\\nCodes 5 and', '')"
+ },
+ {
+  "name": "hint re-run with code 2: all genes ok, code dropdown shows 2",
+  "ok": true,
+  "detail": "('\u2714 All 24 genes match codon for codon\\n\\nFiles used: protein protein.aln.fasta, 3.0 KB (uploaded); DNA dna.fasta, 8.0 KB (uploaded).', '2: Vertebrate mitochondrial')"
+ },
+ {
+  "name": "messy IDs example: banner/health mention the pairing or tidy IDs",
+  "ok": true,
+  "detail": "\u2714 All 10 genes match codon for codon\n\nFiles used: protein protein.aln.fasta, 1.4 KB (uploaded); DNA dna.fasta, 3.6 KB (uploaded)."
+ },
+ {
+  "name": "one broken gene: the failed gene listed first with a sentence (frameshift) and a symbol + word",
+  "ok": true,
+  "detail": "Sequences\nStatus\tSequence\tWhat this means\n\u2716 Failed\tOG0001_sp14\tFrameshift at column 102: one base is missing in the DNA, so from here on the codons are read out of step. Check the DNA near there (a sequencing or assembly error?).\nColumn 102\n\u2714 OK\t\n19 genes match codon for codon"
+ },
+ {
+  "name": "alignment view has a centre-on-column number box",
+  "ok": false,
+  "detail": "View alignment\n\u25bc"
+ },
+ {
+  "name": "view (harness)",
+  "ok": false,
+  "detail": "TimeoutError('Locator.fill: Timeout 30000ms exceeded.\\nCall log:\\n  - waiting for locator(\"input[type=number]\").first\\n')"
+ },
+ {
+  "name": "settings: saved confirmation with the settings file path",
+  "ok": false,
+  "detail": "\u2714 Saved at 04:34"
+ },
+ {
+  "name": "settings persist across a reload: Align tab's genetic code is 2",
+  "ok": true,
+  "detail": "2: Vertebrate mitochondrial"
+ },
+ {
+  "name": "settings (harness)",
+  "ok": false,
+  "detail": "TimeoutError('Locator.click: Timeout 30000ms exceeded.\\nCall log:\\n  - waiting for locator(\"#coal-set-reset\").locator(\"button\").first\\n')"
+ },
+ {
+  "name": "bad upload (harness)",
+  "ok": false,
+  "detail": "TimeoutError('Locator.set_input_files: Timeout 30000ms exceeded.\\nCall log:\\n  - waiting for locator(\"input[type=file]\").first\\n')"
+ },
+ {
+  "name": "uploads (harness)",
+  "ok": false,
+  "detail": "TimeoutError('Locator.set_input_files: Timeout 30000ms exceeded.\\nCall log:\\n  - waiting for locator(\"input[type=file]\").first\\n')"
+ },
+ {
+  "name": "100,000 sequences through the path boxes: result within 10 minutes",
+  "ok": false,
+  "detail": "('17.6s', '\u2139 Wrong genetic code?\\n\\nWith code 2 (Vertebrate mitochondrial) 50 of 50 genes have mismatched codons; with code 1 (Standard) all 50 match.\\n\\nCodes 4, 10')"
+ },
+ {
+  "name": "browser stays responsive during the run (page eval under 2 s)",
+  "ok": true,
+  "detail": "max 0.00s"
+ },
+ {
+  "name": "preview says what it hides on a 100,000-sequence input",
+  "ok": true,
+  "detail": "View alignment\n\u25bc\n\nPreview: 100 of 100,000 sequences, problems first (90 of the 99,400 with problems, then 10 OK ones from across the file); all 100 columns. Drawing all of it would make the page slow,"
+ },
+ {
+  "name": "offline: no request to any host but 127.0.0.1 (fonts, CDNs, analytics)",
+  "ok": false,
+  "detail": "['https://cdnjs.cloudflare.com/ajax/libs/iframe-resizer/4.3.1/iframeResizer.contentWindow.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/iframe-resizer/4.3.1/iframeResizer.contentWindow.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/iframe-resizer/4.3.1/iframeResizer.contentWindow.min.js']"
+ },
+ {
+  "name": "keyboard: Tab reaches the example button",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "keyboard: focus is visible on the focused button (outline or box-shadow)",
+  "ok": true,
+  "detail": "solid|3px|none"
+ },
+ {
+  "name": "keyboard: Tab reaches Start alignment",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "keyboard-only run completes",
+  "ok": true,
+  "detail": "\u2714 All 8 genes match codon for codon\n\nFiles used: protein protein.aln.fasta, 1.3 KB (uploaded); DNA dna.fasta, 3.6 KB (uploaded)."
+ },
+ {
+  "name": "axe-core: no serious or critical WCAG 2 A/AA violations",
+  "ok": false,
+  "detail": "[('aria-hidden-focus', 'serious', 1)]"
+ },
+ {
+  "name": "axe-core: no colour-contrast violations (4.5:1)",
+  "ok": true,
+  "detail": "[]"
+ },
+ {
+  "name": "status never by colour alone: health rows carry a symbol and a word",
+  "ok": true,
+  "detail": "Sequences\nStatus\tSequence\tWhat this means\n\u2714 OK\t\nAll 8 genes match codon for codon"
+ },
+ {
+  "name": "200 % zoom (683 CSS px wide, scale 2): no horizontal page overflow",
+  "ok": true,
+  "detail": "683 > 683"
+ },
+ {
+  "name": "dark mode renders with a dark background",
+  "ok": true,
+  "detail": "rgb(18, 17, 16) / dark"
+ },
+ {
+  "name": "GUI serves MCP at /gradio_api/mcp/sse (event stream)",
+  "ok": true,
+  "detail": "text/event-stream; charset=utf-8"
+ }
+]

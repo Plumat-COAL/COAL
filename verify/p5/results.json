@@ -1,0 +1,420 @@
+{
+ "checks": [
+  {
+   "name": "drop-in default (no -output): stdout identical to PAL2NAL or both fail",
+   "ok": true,
+   "detail": "coal rc=0 pal rc=0 pal_output=True same=True coal_err=['coal: warning: g1 pepAlnPos 11: S does not correspond to TGG', 'coal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment).'] pal_err=['#------------------------------------------------------------------------#', '#  Input files:  pep.fasta nuc.fasta']"
+  },
+  {
+   "name": "drop-in default output is CLUSTAL",
+   "ok": true,
+   "detail": "b'CLUSTAL W multiple sequence alignment\\n\\ng'"
+  },
+  {
+   "name": "drop-in prints the per-codon warning PAL2NAL prints (gene g1)",
+   "ok": true,
+   "detail": "b'coal: warning: g1 pepAlnPos 11: S does not correspond to TGG\\ncoal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment).\\n'"
+  },
+  {
+   "name": "drop-in -output clustal: stdout identical to PAL2NAL or both fail",
+   "ok": true,
+   "detail": "coal rc=0 pal rc=0 pal_output=True same=True coal_err=['coal: warning: g1 pepAlnPos 11: S does not correspond to TGG', 'coal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment).'] pal_err=['#------------------------------------------------------------------------#', '#  Input files:  pep.fasta nuc.fasta']"
+  },
+  {
+   "name": "drop-in -output paml: stdout identical to PAL2NAL or both fail",
+   "ok": true,
+   "detail": "coal rc=0 pal rc=0 pal_output=True same=True coal_err=['coal: warning: g1 pepAlnPos 11: S does not correspond to TGG', 'coal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment).'] pal_err=['#------------------------------------------------------------------------#', '#  Input files:  pep.fasta nuc.fasta']"
+  },
+  {
+   "name": "drop-in -output fasta: stdout identical to PAL2NAL or both fail",
+   "ok": true,
+   "detail": "coal rc=0 pal rc=0 pal_output=True same=True coal_err=['coal: warning: g1 pepAlnPos 11: S does not correspond to TGG', 'coal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment).'] pal_err=['#------------------------------------------------------------------------#', '#  Input files:  pep.fasta nuc.fasta']"
+  },
+  {
+   "name": "drop-in -output codon: stdout identical to PAL2NAL or both fail",
+   "ok": true,
+   "detail": "coal rc=0 pal rc=0 pal_output=True same=True coal_err=['coal: warning: g1 pepAlnPos 11: S does not correspond to TGG', 'coal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment).'] pal_err=['#------------------------------------------------------------------------#', '#  Input files:  pep.fasta nuc.fasta']"
+  },
+  {
+   "name": "drop-in -codontable 2: stdout identical to PAL2NAL or both fail",
+   "ok": true,
+   "detail": "coal rc=0 pal rc=0 pal_output=True same=True coal_err=[] pal_err=['#------------------------------------------------------------------------#', '#  Input files:  pep2.fasta nuc2.fasta']"
+  },
+  {
+   "name": "drop-in -codontable 2 -output paml -nogap: stdout identical to PAL2NAL or both fail",
+   "ok": false,
+   "detail": "coal rc=0 pal rc=0 pal_output=True same=False coal_err=[] pal_err=['#------------------------------------------------------------------------#', '#  Input files:  pep2.fasta nuc2.fasta']"
+  },
+  {
+   "name": "drop-in -nogap: stdout identical to PAL2NAL or both fail",
+   "ok": true,
+   "detail": "coal rc=0 pal rc=0 pal_output=True same=True coal_err=['coal: warning: g1 pepAlnPos 11: S does not correspond to TGG', 'coal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment).'] pal_err=['#------------------------------------------------------------------------#', '#  Input files:  pep.fasta nuc.fasta']"
+  },
+  {
+   "name": "drop-in -nomismatch: stdout identical to PAL2NAL or both fail",
+   "ok": true,
+   "detail": "coal rc=0 pal rc=0 pal_output=True same=True coal_err=[] pal_err=[]"
+  },
+  {
+   "name": "drop-in -nomismatch: no mismatch warnings (as PAL2NAL)",
+   "ok": true,
+   "detail": "b''"
+  },
+  {
+   "name": "drop-in -nomismatch -output fasta: stdout identical to PAL2NAL or both fail",
+   "ok": true,
+   "detail": "coal rc=0 pal rc=0 pal_output=True same=True coal_err=[] pal_err=[]"
+  },
+  {
+   "name": "drop-in -blockonly (CLUSTAL with marks): stdout identical to PAL2NAL or both fail",
+   "ok": true,
+   "detail": "coal rc=0 pal rc=0 pal_output=True same=True coal_err=['coal: warning: g1 pepAlnPos 11: S does not correspond to TGG', 'coal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment).'] pal_err=['#------------------------------------------------------------------------#', '#  Input files:  pep.aln nuc.fasta']"
+  },
+  {
+   "name": "drop-in -blockonly -output paml: stdout identical to PAL2NAL or both fail",
+   "ok": true,
+   "detail": "coal rc=0 pal rc=0 pal_output=True same=True coal_err=['coal: warning: g1 pepAlnPos 11: S does not correspond to TGG', 'coal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment).'] pal_err=['#------------------------------------------------------------------------#', '#  Input files:  pep.aln nuc.fasta']"
+  },
+  {
+   "name": "drop-in -nostderr: stdout identical to PAL2NAL or both fail",
+   "ok": true,
+   "detail": "coal rc=0 pal rc=0 pal_output=True same=True coal_err=[] pal_err=[]"
+  },
+  {
+   "name": "drop-in -nostderr: no warnings on stderr",
+   "ok": true,
+   "detail": "b''"
+  },
+  {
+   "name": "drop-in options before files: stdout identical to PAL2NAL or both fail",
+   "ok": true,
+   "detail": "coal rc=0 pal rc=0 pal_output=True same=True coal_err=['coal: warning: g1 pepAlnPos 11: S does not correspond to TGG', 'coal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment).'] pal_err=['#------------------------------------------------------------------------#', '#  Input files:  pep.fasta nuc.fasta']"
+  },
+  {
+   "name": "drop-in dangling -codontable: stdout identical to PAL2NAL or both fail",
+   "ok": true,
+   "detail": "coal rc=0 pal rc=0 pal_output=True same=True coal_err=['coal: warning: g1 pepAlnPos 11: S does not correspond to TGG', 'coal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment).'] pal_err=['#------------------------------------------------------------------------#', '#  Input files:  pep.fasta nuc.fasta']"
+  },
+  {
+   "name": "drop-in dangling -output: stdout identical to PAL2NAL or both fail",
+   "ok": true,
+   "detail": "coal rc=0 pal rc=0 pal_output=True same=True coal_err=['coal: warning: g1 pepAlnPos 11: S does not correspond to TGG', 'coal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment).'] pal_err=['#------------------------------------------------------------------------#', '#  Input files:  pep.fasta nuc.fasta']"
+  },
+  {
+   "name": "drop-in -codontable 2x (means 2): stdout identical to PAL2NAL or both fail",
+   "ok": true,
+   "detail": "coal rc=0 pal rc=0 pal_output=True same=True coal_err=[] pal_err=['#------------------------------------------------------------------------#', '#  Input files:  pep2.fasta nuc2.fasta']"
+  },
+  {
+   "name": "drop-in two DNA files: stdout identical to PAL2NAL or both fail",
+   "ok": true,
+   "detail": "coal rc=1 pal rc=0 pal_output=False same=True coal_err=[\"coal: error: nuc.fasta, nuc.fasta: duplicate sequence ID 'g0': every sequence needs its own ID\"] pal_err=['', 'ERROR: number of input seqs differ (aa: 5;  nuc: 10)!!']"
+  },
+  {
+   "name": "drop-in refuses -html with a clear error and exit 1",
+   "ok": true,
+   "detail": "rc=1 out=b'' err=b\"pal2nal (COAL): error: -html (PAL2NAL's web-server mode: HTML with <pre> and coloured mismatches on standard output) is not supported by COAL; leave it out to get PAL2NAL's plain output.\\n\""
+  },
+  {
+   "name": "drop-in refuses --strict with a clear error and exit 1",
+   "ok": true,
+   "detail": "rc=1 out=b'' err=b'pal2nal (COAL): error: unknown option --strict (PAL2NAL options: -output, -codontable, -nogap, -nomismatch, -blockonly, -nostderr, -h)\\n'"
+  },
+  {
+   "name": "drop-in refuses -j 2 with a clear error and exit 1",
+   "ok": true,
+   "detail": "rc=1 out=b'' err=b'pal2nal (COAL): error: unknown option -j (PAL2NAL options: -output, -codontable, -nogap, -nomismatch, -blockonly, -nostderr, -h)\\n'"
+  },
+  {
+   "name": "drop-in refuses -o x.fa with a clear error and exit 1",
+   "ok": true,
+   "detail": "rc=1 out=b'' err=b'pal2nal (COAL): error: unknown option -o (PAL2NAL options: -output, -codontable, -nogap, -nomismatch, -blockonly, -nostderr, -h)\\n'"
+  },
+  {
+   "name": "drop-in refuses --report r.json with a clear error and exit 1",
+   "ok": true,
+   "detail": "rc=1 out=b'' err=b'pal2nal (COAL): error: unknown option --report (PAL2NAL options: -output, -codontable, -nogap, -nomismatch, -blockonly, -nostderr, -h)\\n'"
+  },
+  {
+   "name": "drop-in refuses -foo with a clear error and exit 1",
+   "ok": true,
+   "detail": "rc=1 out=b'' err=b'pal2nal (COAL): error: unknown option -foo (PAL2NAL options: -output, -codontable, -nogap, -nomismatch, -blockonly, -nostderr, -h)\\n'"
+  },
+  {
+   "name": "drop-in without arguments: usage text, exit 1",
+   "ok": false,
+   "detail": "(0, b\"``pal2nal``: accepts PAL2NAL v14's command line and runs COAL instead.\\n\\n    pal2\", b'')"
+  },
+  {
+   "name": "drop-in -h: usage text, exit 0",
+   "ok": true,
+   "detail": "(0, b\"``pal2nal``: accepts PAL2NAL v14's command line and runs COAL instead.\\n\\n    pal2\")"
+  },
+  {
+   "name": "drop-in `-` reads the protein from standard input, same output",
+   "ok": true,
+   "detail": "(0, b'coal: warning: g1 pepAlnPos 11: S does not correspond to TGG\\ncoal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment).\\n')"
+  },
+  {
+   "name": "drop-in closed pipe (pep.fasta nuc.fasta): exit 141, silent",
+   "ok": false,
+   "detail": "(b'0\\n', b'coal: warning: g1 pepAlnPos 11: S does not correspond to TGG\\ncoal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment).\\n')"
+  },
+  {
+   "name": "drop-in closed pipe (usage text): exit 141, silent",
+   "ok": false,
+   "detail": "(b'0\\n', b'')"
+  },
+  {
+   "name": "drop-in bad input (count mismatch): exit 1 with a message",
+   "ok": true,
+   "detail": "(1, b'coal: error: number of sequences differs (protein: 1, DNA: 5): each protein needs exactly one DNA record; remove the 4 extra DNA records or check you used the right files\\n')"
+  },
+  {
+   "name": "drop-in entry point works from a fresh login shell",
+   "ok": true,
+   "detail": "(0, b'>g0\\nATGGACCACTTCCTGG', b'coal: warning: g1 pepAlnPos 11: S does not correspond to TGG\\ncoal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment).\\n')"
+  }
+ ],
+ "lines": {
+  "default (no -output)": {
+   "coal_rc": 0,
+   "pal_rc": 0,
+   "pal_output": true,
+   "same_stdout": true,
+   "coal_stderr": [
+    "coal: warning: g1 pepAlnPos 11: S does not correspond to TGG",
+    "coal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment)."
+   ],
+   "pal_stderr": [
+    "#------------------------------------------------------------------------#",
+    "#  Input files:  pep.fasta nuc.fasta",
+    "#  WARNING: g1 pepAlnPos 11: S does not correspond to TGG"
+   ]
+  },
+  "-output clustal": {
+   "coal_rc": 0,
+   "pal_rc": 0,
+   "pal_output": true,
+   "same_stdout": true,
+   "coal_stderr": [
+    "coal: warning: g1 pepAlnPos 11: S does not correspond to TGG",
+    "coal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment)."
+   ],
+   "pal_stderr": [
+    "#------------------------------------------------------------------------#",
+    "#  Input files:  pep.fasta nuc.fasta",
+    "#  WARNING: g1 pepAlnPos 11: S does not correspond to TGG"
+   ]
+  },
+  "-output paml": {
+   "coal_rc": 0,
+   "pal_rc": 0,
+   "pal_output": true,
+   "same_stdout": true,
+   "coal_stderr": [
+    "coal: warning: g1 pepAlnPos 11: S does not correspond to TGG",
+    "coal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment)."
+   ],
+   "pal_stderr": [
+    "#------------------------------------------------------------------------#",
+    "#  Input files:  pep.fasta nuc.fasta",
+    "#  WARNING: g1 pepAlnPos 11: S does not correspond to TGG"
+   ]
+  },
+  "-output fasta": {
+   "coal_rc": 0,
+   "pal_rc": 0,
+   "pal_output": true,
+   "same_stdout": true,
+   "coal_stderr": [
+    "coal: warning: g1 pepAlnPos 11: S does not correspond to TGG",
+    "coal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment)."
+   ],
+   "pal_stderr": [
+    "#------------------------------------------------------------------------#",
+    "#  Input files:  pep.fasta nuc.fasta",
+    "#  WARNING: g1 pepAlnPos 11: S does not correspond to TGG"
+   ]
+  },
+  "-output codon": {
+   "coal_rc": 0,
+   "pal_rc": 0,
+   "pal_output": true,
+   "same_stdout": true,
+   "coal_stderr": [
+    "coal: warning: g1 pepAlnPos 11: S does not correspond to TGG",
+    "coal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment)."
+   ],
+   "pal_stderr": [
+    "#------------------------------------------------------------------------#",
+    "#  Input files:  pep.fasta nuc.fasta",
+    "#  WARNING: g1 pepAlnPos 11: S does not correspond to TGG"
+   ]
+  },
+  "-codontable 2": {
+   "coal_rc": 0,
+   "pal_rc": 0,
+   "pal_output": true,
+   "same_stdout": true,
+   "coal_stderr": [],
+   "pal_stderr": [
+    "#------------------------------------------------------------------------#",
+    "#  Input files:  pep2.fasta nuc2.fasta",
+    "#  Codontable 2 is used"
+   ]
+  },
+  "-codontable 2 -output paml -nogap": {
+   "coal_rc": 0,
+   "pal_rc": 0,
+   "pal_output": true,
+   "same_stdout": false,
+   "coal_stderr": [],
+   "pal_stderr": [
+    "#------------------------------------------------------------------------#",
+    "#  Input files:  pep2.fasta nuc2.fasta",
+    "#  Codontable 2 is used"
+   ]
+  },
+  "-nogap": {
+   "coal_rc": 0,
+   "pal_rc": 0,
+   "pal_output": true,
+   "same_stdout": true,
+   "coal_stderr": [
+    "coal: warning: g1 pepAlnPos 11: S does not correspond to TGG",
+    "coal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment)."
+   ],
+   "pal_stderr": [
+    "#------------------------------------------------------------------------#",
+    "#  Input files:  pep.fasta nuc.fasta",
+    "#  WARNING: g1 pepAlnPos 11: S does not correspond to TGG"
+   ]
+  },
+  "-nomismatch": {
+   "coal_rc": 0,
+   "pal_rc": 0,
+   "pal_output": true,
+   "same_stdout": true,
+   "coal_stderr": [],
+   "pal_stderr": []
+  },
+  "-nomismatch -output fasta": {
+   "coal_rc": 0,
+   "pal_rc": 0,
+   "pal_output": true,
+   "same_stdout": true,
+   "coal_stderr": [],
+   "pal_stderr": []
+  },
+  "-blockonly (CLUSTAL with marks)": {
+   "coal_rc": 0,
+   "pal_rc": 0,
+   "pal_output": true,
+   "same_stdout": true,
+   "coal_stderr": [
+    "coal: warning: g1 pepAlnPos 11: S does not correspond to TGG",
+    "coal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment)."
+   ],
+   "pal_stderr": [
+    "#------------------------------------------------------------------------#",
+    "#  Input files:  pep.aln nuc.fasta",
+    "#  WARNING: g1 pepAlnPos 11: S does not correspond to TGG"
+   ]
+  },
+  "-blockonly -output paml": {
+   "coal_rc": 0,
+   "pal_rc": 0,
+   "pal_output": true,
+   "same_stdout": true,
+   "coal_stderr": [
+    "coal: warning: g1 pepAlnPos 11: S does not correspond to TGG",
+    "coal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment)."
+   ],
+   "pal_stderr": [
+    "#------------------------------------------------------------------------#",
+    "#  Input files:  pep.aln nuc.fasta",
+    "#  WARNING: g1 pepAlnPos 11: S does not correspond to TGG"
+   ]
+  },
+  "-nostderr": {
+   "coal_rc": 0,
+   "pal_rc": 0,
+   "pal_output": true,
+   "same_stdout": true,
+   "coal_stderr": [],
+   "pal_stderr": []
+  },
+  "options before files": {
+   "coal_rc": 0,
+   "pal_rc": 0,
+   "pal_output": true,
+   "same_stdout": true,
+   "coal_stderr": [
+    "coal: warning: g1 pepAlnPos 11: S does not correspond to TGG",
+    "coal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment)."
+   ],
+   "pal_stderr": [
+    "#------------------------------------------------------------------------#",
+    "#  Input files:  pep.fasta nuc.fasta",
+    "#  WARNING: g1 pepAlnPos 11: S does not correspond to TGG"
+   ]
+  },
+  "dangling -codontable": {
+   "coal_rc": 0,
+   "pal_rc": 0,
+   "pal_output": true,
+   "same_stdout": true,
+   "coal_stderr": [
+    "coal: warning: g1 pepAlnPos 11: S does not correspond to TGG",
+    "coal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment)."
+   ],
+   "pal_stderr": [
+    "#------------------------------------------------------------------------#",
+    "#  Input files:  pep.fasta nuc.fasta",
+    "#  WARNING: g1 pepAlnPos 11: S does not correspond to TGG"
+   ]
+  },
+  "dangling -output": {
+   "coal_rc": 0,
+   "pal_rc": 0,
+   "pal_output": true,
+   "same_stdout": true,
+   "coal_stderr": [
+    "coal: warning: g1 pepAlnPos 11: S does not correspond to TGG",
+    "coal: summary: 1 of 5 sequences has codons that do not match their amino acid (kept in the alignment)."
+   ],
+   "pal_stderr": [
+    "#------------------------------------------------------------------------#",
+    "#  Input files:  pep.fasta nuc.fasta",
+    "#  WARNING: g1 pepAlnPos 11: S does not correspond to TGG"
+   ]
+  },
+  "-codontable 2x (means 2)": {
+   "coal_rc": 0,
+   "pal_rc": 0,
+   "pal_output": true,
+   "same_stdout": true,
+   "coal_stderr": [],
+   "pal_stderr": [
+    "#------------------------------------------------------------------------#",
+    "#  Input files:  pep2.fasta nuc2.fasta",
+    "#  Codontable 2x is used"
+   ]
+  },
+  "two DNA files": {
+   "coal_rc": 1,
+   "pal_rc": 0,
+   "pal_output": false,
+   "same_stdout": true,
+   "coal_stderr": [
+    "coal: error: nuc.fasta, nuc.fasta: duplicate sequence ID 'g0': every sequence needs its own ID"
+   ],
+   "pal_stderr": [
+    "",
+    "ERROR: number of input seqs differ (aa: 5;  nuc: 10)!!",
+    ""
+   ]
+  }
+ }
+}

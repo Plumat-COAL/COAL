@@ -1,0 +1,33 @@
+{
+ "checked": [
+  "https://github.com/plumat-coal/COAL",
+  "https://github.com/plumat-coal/COAL/blob/main/.claude/skills/coal/SKILL.md",
+  "https://github.com/plumat-coal/COAL/blob/main/CITATION.cff",
+  "https://github.com/plumat-coal/COAL/blob/main/LICENSE",
+  "https://github.com/plumat-coal/COAL/blob/main/docs/benchmarks.md",
+  "https://github.com/plumat-coal/COAL/blob/main/docs/cpp-engine.md",
+  "https://github.com/plumat-coal/COAL/blob/main/docs/differences.md",
+  "https://github.com/plumat-coal/COAL/blob/main/docs/usage.md",
+  "https://github.com/plumat-coal/COAL/blob/main/tests/README.md",
+  "https://github.com/plumat-coal/COAL/issues",
+  "https://github.com/plumat-coal/COAL/releases",
+  "https://github.com/plumat-coal/COAL/releases/latest",
+  "https://github.com/plumat-coal/COAL/releases/latest/download/COAL-Setup-windows-x64.exe",
+  "https://github.com/plumat-coal/COAL/releases/latest/download/COAL-windows-x64.zip",
+  "https://github.com/plumat-coal/COAL/releases/latest/download/SHA256SUMS.txt",
+  "https://github.com/plumat-coal/COAL/releases/latest/download/coal_app_src.tar.gz",
+  "https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz",
+  "https://github.com/plumat-coal/COAL/tree/main/examples",
+  "https://plumat-coal.github.io/COAL/",
+  "https://plumat-coal.github.io/COAL/assets/apple-touch-icon.png",
+  "https://plumat-coal.github.io/COAL/assets/favicon-32.png",
+  "https://plumat-coal.github.io/COAL/assets/fonts/Literata-Regular.woff2",
+  "https://plumat-coal.github.io/COAL/cite.html",
+  "https://plumat-coal.github.io/COAL/differences.html",
+  "https://plumat-coal.github.io/COAL/favicon.svg",
+  "https://plumat-coal.github.io/COAL/guide.html",
+  "https://plumat-coal.github.io/COAL/install.html",
+  "https://plumat-coal.github.io/COAL/style.css"
+ ],
+ "broken": {}
+}

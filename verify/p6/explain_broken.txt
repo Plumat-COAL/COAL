@@ -1,0 +1,14 @@
+6 sequences: 4 OK, 1 with warnings, 1 failed.
+Proteins and DNA were paired by matching their IDs exactly.
+The codon alignment was written to /mnt/d/coal-stress/verify/p6/runs/run_raz9cz0l/pep.codon.fasta (fasta format).
+
+Failed sequences:
+- g4: Frameshift at column 21: there is one extra base in the DNA, so from here on the codons are read out of step. Check the DNA near there (a sequencing or assembly error?).
+
+Sequences with warnings (still in the alignment):
+- g2: 1 codon does not match its amino acid (first at column 11): the protein says E but the DNA has TGG. Kept in the alignment; check the genetic code.
+
+How to fix a failed sequence: check it is the right DNA for that protein (same gene, same species), look for a missing or extra base near where it stops matching, and make sure the genetic code is right for where the gene comes from (for example code 2 for vertebrate mitochondria).
+
+Methods text (ready to paste):
+Codon alignments were built with COAL v0.5.0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 6 sequences, 4 matched their protein exactly; 1 contained codons that did not match the aligned amino acid (kept in the alignment); and 1 could not be aligned and was excluded. Command: coal pep.fasta nuc_broken.fasta --keep-going -o pep.codon.fasta

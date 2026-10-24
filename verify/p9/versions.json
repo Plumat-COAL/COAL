@@ -1,0 +1,19 @@
+{
+ "src/coal/__init__.py": "0.5.0",
+ "pyproject.toml": "0.5.0",
+ "apps/coal-app/pyproject.toml": "0.5.0",
+ "app pin coal-align==": "0.5.0",
+ "cpp/src/main.cpp": "0.5.0",
+ "cpp/src/report.cpp": "0.5.0",
+ "CMakeLists.txt": "0.5.0",
+ "CITATION.cff": "0.5.0",
+ "site/index.html": "0.5.0",
+ "site/cite.html": "0.5.0",
+ "tests/report_example.json coal_version": "0.5.0",
+ "CHANGELOG first release heading": "0.5.0",
+ "coal --version": "0.5.0",
+ "coal-cpp --version": "0.5.0",
+ "latest release tag": "0.5.0",
+ "desktop/README.md installer name": "0.4.2",
+ "SKILL.md": "0.0.1"
+}

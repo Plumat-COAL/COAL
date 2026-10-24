@@ -1,0 +1,2695 @@
+{
+ "empty_files": {
+  "note": "both files empty",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 1,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "coal: error: pep.fasta: no sequences found: the file is empty or has no '>' header lines (expected a protein alignment in FASTA or CLUSTAL format)"
+    ],
+    "stderr_sha": "d702d7aefd811c89173b90382239b0b1783329cc5e0f778f6821bab9a75e547b"
+   },
+   "cpp": {
+    "rc": 1,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "coal: error: pep.fasta: no sequences found: the file is empty or has no '>' header lines (expected a protein alignment in FASTA or CLUSTAL format)"
+    ],
+    "stderr_sha": "d702d7aefd811c89173b90382239b0b1783329cc5e0f778f6821bab9a75e547b"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "both fail",
+  "leftovers": []
+ },
+ "empty_dna": {
+  "note": "protein ok, DNA file empty",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 1,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "coal: error: nuc.fasta: no sequences found: the file is empty or has no '>' header lines (expected the coding DNA in FASTA format)"
+    ],
+    "stderr_sha": "cc7654e01694bf1152c33c529090a9a6f56c9578f1cdc5a0c1a23f8965588925"
+   },
+   "cpp": {
+    "rc": 1,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "coal: error: nuc.fasta: no sequences found: the file is empty or has no '>' header lines (expected the coding DNA in FASTA format)"
+    ],
+    "stderr_sha": "cc7654e01694bf1152c33c529090a9a6f56c9578f1cdc5a0c1a23f8965588925"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "",
+     "ERROR: number of input seqs differ (aa: 3;  nuc: 0)!!",
+     "",
+     "   aa  'g0 g1 g2'",
+     "   nuc ''"
+    ],
+    "stderr_sha": "ec26b74a12221cd8e4e2f91bf9e66cefe57f1e2fa219b6dd06f09560a08b7cd0"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "both fail",
+  "leftovers": []
+ },
+ "header_only": {
+  "note": "headers without sequences",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 1,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "coal: error: a: protein sequence is empty (its alignment row has only gaps): remove it from both files",
+     "coal: summary: The run stopped at a: 1 sequence was not checked and no output was written. Add --keep-going to write the other sequences and leave this one out."
+    ],
+    "stderr_sha": "9d75d117b8474c7d3a4589b86c49564a9766e6600da95e6ac7adbad7e14a52a6"
+   },
+   "cpp": {
+    "rc": 1,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "coal: error: a: protein sequence is empty (its alignment row has only gaps): remove it from both files",
+     "coal: summary: The run stopped at a: 1 sequence was not checked and no output was written. Add --keep-going to write the other sequences and leave this one out."
+    ],
+    "stderr_sha": "9d75d117b8474c7d3a4589b86c49564a9766e6600da95e6ac7adbad7e14a52a6"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "#---  ERROR: inconsistency between the following pep and nuc seqs  ---#",
+     ">a",
+     "",
+     ">a",
+     "",
+     ""
+    ],
+    "stderr_sha": "3c7e09d9b9dd6250ff3e8e4ad5c0abebc3d5f4a2e02926ba26264f9d36d702b7"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "both fail",
+  "leftovers": []
+ },
+ "one_sequence": {
+  "note": "a single gene",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "7d2c4ac1e6804e91376625454225df932b760202d61a4d2011d41b243b442dad",
+     "bytes": 96,
+     "head": ">g0\nATGGAAGACTACATGGGCCGTGTTATGGGCTGCCGTCTGGTTTACTACCACAAACAGATG\nTACGAACACTGCGAAGGCCGTCAGGAACTG\n"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "7d2c4ac1e6804e91376625454225df932b760202d61a4d2011d41b243b442dad",
+     "bytes": 96,
+     "head": ">g0\nATGGAAGACTACATGGGCCGTGTTATGGGCTGCCGTCTGGTTTACTACCACAAACAGATG\nTACGAACACTGCGAAGGCCGTCAGGAACTG\n"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "7d2c4ac1e6804e91376625454225df932b760202d61a4d2011d41b243b442dad",
+     "bytes": 96,
+     "head": ">g0\nATGGAAGACTACATGGGCCGTGTTATGGGCTGCCGTCTGGTTTACTACCACAAACAGATG\nTACGAACACTGCGAAGGCCGTCAGGAACTG\n"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "very_long_gene": {
+  "note": "one gene of 1,000,000 codons (PAL2NAL's regex limit is about 22,000 residues)",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "094dcca71eee6a0025c9ebc499dd430debe126e5d98cb3680338683588dbddc3",
+     "bytes": 3050006,
+     "head": ">long\nATGATCGCTTTCGTTGAACACTACTCTTGGCCATCTCCAGAAGCTCGTAACAACTTCGAC\nGAACTGACCCTGTGCGACAACATGTGGTGGTTCGACGAAGAAATCGTTGGCTACCTGTTC\nGAAGCTCTGCCAATCCACTACCGTCTGCCAAA"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "094dcca71eee6a0025c9ebc499dd430debe126e5d98cb3680338683588dbddc3",
+     "bytes": 3050006,
+     "head": ">long\nATGATCGCTTTCGTTGAACACTACTCTTGGCCATCTCCAGAAGCTCGTAACAACTTCGAC\nGAACTGACCCTGTGCGACAACATGTGGTGGTTCGACGAAGAAATCGTTGGCTACCTGTTC\nGAAGCTCTGCCAATCCACTACCGTCTGCCAAA"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "pal2nal": {
+    "rc": null,
+    "timeout": true,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "not run",
+  "leftovers": []
+ },
+ "protein_all_gaps": {
+  "note": "one row is only gaps",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 1,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "coal: error: g1: protein sequence is empty (its alignment row has only gaps): remove it from both files",
+     "coal: summary: The run stopped at g1: 1 sequence was not checked and no output was written. Add --keep-going to write the other sequences and leave this one out."
+    ],
+    "stderr_sha": "273905d1a395d90e2bf71f2270969d622aff25b45b6827dc01f0873789085212"
+   },
+   "cpp": {
+    "rc": 1,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "coal: error: g1: protein sequence is empty (its alignment row has only gaps): remove it from both files",
+     "coal: summary: The run stopped at g1: 1 sequence was not checked and no output was written. Add --keep-going to write the other sequences and leave this one out."
+    ],
+    "stderr_sha": "273905d1a395d90e2bf71f2270969d622aff25b45b6827dc01f0873789085212"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "#---  ERROR: inconsistency between the following pep and nuc seqs  ---#",
+     ">g1",
+     "",
+     ">g1",
+     "ATGATGTCTTGGTCTGCTTTCATCTTCGTTCCATCTGCTGACAAACTGATCTGCTGCGGC",
+     ""
+    ],
+    "stderr_sha": "d2a931b173ec9b58ab54238e5cc5bc01a47136c870414c35aa7ef5952eaad88b"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "both fail",
+  "leftovers": []
+ },
+ "all_gap_columns": {
+  "note": "two columns are gaps in every row",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "184acf3dce3668c99dbfdbd2e6688658051fdd005a478cea4f5aca3bddc4be7e",
+     "bytes": 216,
+     "head": ">g0\nATGATGACCATCCCA------CTGTTCCACCTGCAGTCTCCAGCTAACCCAGCTTCTGAA\nGGCTGG\n>g1\nATGTGGAAAGACAAA------ACCGCTCGTACCGCTAAAGCTCAGGGCTACGGCGCTCAG\nACCCAC\n>g2\nATGAAAAACATC"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "184acf3dce3668c99dbfdbd2e6688658051fdd005a478cea4f5aca3bddc4be7e",
+     "bytes": 216,
+     "head": ">g0\nATGATGACCATCCCA------CTGTTCCACCTGCAGTCTCCAGCTAACCCAGCTTCTGAA\nGGCTGG\n>g1\nATGTGGAAAGACAAA------ACCGCTCGTACCGCTAAAGCTCAGGGCTACGGCGCTCAG\nACCCAC\n>g2\nATGAAAAACATC"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "184acf3dce3668c99dbfdbd2e6688658051fdd005a478cea4f5aca3bddc4be7e",
+     "bytes": 216,
+     "head": ">g0\nATGATGACCATCCCA------CTGTTCCACCTGCAGTCTCCAGCTAACCCAGCTTCTGAA\nGGCTGG\n>g1\nATGTGGAAAGACAAA------ACCGCTCGTACCGCTAAAGCTCAGGGCTACGGCGCTCAG\nACCCAC\n>g2\nATGAAAAACATC"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "internal_stop_star": {
+  "note": "an internal stop codon with '*' in the protein",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "93b11b3098155cbc57b533d48a3dca12c707461b353d90668dd78d3845d583cd",
+     "bytes": 195,
+     "head": ">g0\nATGTGCGAAAAAATCATGCAGACCGGCGCTTAAACCGACTACTGGCAGCCACACGACGAC\n>g1\nATGTGCATCATGATCGACTGGTCTCTGCACGACGCTGAAAACTTCATCGCTCACTACAAC\n>g2\nATGAACAACGTTATCATCGAAGTTTC"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "93b11b3098155cbc57b533d48a3dca12c707461b353d90668dd78d3845d583cd",
+     "bytes": 195,
+     "head": ">g0\nATGTGCGAAAAAATCATGCAGACCGGCGCTTAAACCGACTACTGGCAGCCACACGACGAC\n>g1\nATGTGCATCATGATCGACTGGTCTCTGCACGACGCTGAAAACTTCATCGCTCACTACAAC\n>g2\nATGAACAACGTTATCATCGAAGTTTC"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "93b11b3098155cbc57b533d48a3dca12c707461b353d90668dd78d3845d583cd",
+     "bytes": 195,
+     "head": ">g0\nATGTGCGAAAAAATCATGCAGACCGGCGCTTAAACCGACTACTGGCAGCCACACGACGAC\n>g1\nATGTGCATCATGATCGACTGGTCTCTGCACGACGCTGAAAACTTCATCGCTCACTACAAC\n>g2\nATGAACAACGTTATCATCGAAGTTTC"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "internal_stop_no_star": {
+  "note": "an internal stop codon where the protein has a residue",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "086a1420745754f0968dbdfe9c6595383c77963cb19f362e0ac45f24baa55631",
+     "bytes": 195,
+     "head": ">g0\nATGATGCGTGCTGGCATGGGCGCTAACCAGTAATACCACCCAGTTATCCAGGCTTTCTGG\n>g1\nATGTGGTGCCGTCGTATCTGCCAGGTTGACCCACACTCTTCTGACCAGACCATCTGGCTG\n>g2\nATGTCTGGCGACTCTTGCTACACCGA"
+    },
+    "stderr_lines": [
+     "coal: warning: g0 pepAlnPos 11: Y does not correspond to TAA",
+     "coal: summary: 1 of 3 sequences has codons that do not match their amino acid (kept in the alignment)."
+    ],
+    "stderr_sha": "f88351e9a1a7c5462ab36e68aed74781f95571b748057bdc06d89626f45b61ea"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "086a1420745754f0968dbdfe9c6595383c77963cb19f362e0ac45f24baa55631",
+     "bytes": 195,
+     "head": ">g0\nATGATGCGTGCTGGCATGGGCGCTAACCAGTAATACCACCCAGTTATCCAGGCTTTCTGG\n>g1\nATGTGGTGCCGTCGTATCTGCCAGGTTGACCCACACTCTTCTGACCAGACCATCTGGCTG\n>g2\nATGTCTGGCGACTCTTGCTACACCGA"
+    },
+    "stderr_lines": [
+     "coal: warning: g0 pepAlnPos 11: Y does not correspond to TAA",
+     "coal: summary: 1 of 3 sequences has codons that do not match their amino acid (kept in the alignment)."
+    ],
+    "stderr_sha": "f88351e9a1a7c5462ab36e68aed74781f95571b748057bdc06d89626f45b61ea"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "086a1420745754f0968dbdfe9c6595383c77963cb19f362e0ac45f24baa55631",
+     "bytes": 195,
+     "head": ">g0\nATGATGCGTGCTGGCATGGGCGCTAACCAGTAATACCACCCAGTTATCCAGGCTTTCTGG\n>g1\nATGTGGTGCCGTCGTATCTGCCAGGTTGACCCACACTCTTCTGACCAGACCATCTGGCTG\n>g2\nATGTCTGGCGACTCTTGCTACACCGA"
+    },
+    "stderr_lines": [
+     "#------------------------------------------------------------------------#",
+     "#  Input files:  pep.fasta nuc.fasta",
+     "#  WARNING: g0 pepAlnPos 11: Y does not correspond to TAA",
+     "#------------------------------------------------------------------------#",
+     ""
+    ],
+    "stderr_sha": "8ad9cfe6ab0d810d3e638b88c48107c6cbc1095c46c87f35d56ab84944e67a45"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "terminal_stop": {
+  "note": "DNA ends with a stop codon the protein does not have",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "9b487f668cd7205789da3b518c167943784c73effa4ec47303194cfd1e94592b",
+     "bytes": 195,
+     "head": ">g0\nATGATGGACTGCATCCAGCCACGTGAACTGGGCTTCCACTGGGCTGAACTGCGTTACCAC\n>g1\nATGGGCGGCCTGTACATCAAACAGCTGCAGTCTATGGGCTCTAACGACTACCTGACCCGT\n>g2\nATGCTGTCTATCAACTTCCCAACCAT"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "9b487f668cd7205789da3b518c167943784c73effa4ec47303194cfd1e94592b",
+     "bytes": 195,
+     "head": ">g0\nATGATGGACTGCATCCAGCCACGTGAACTGGGCTTCCACTGGGCTGAACTGCGTTACCAC\n>g1\nATGGGCGGCCTGTACATCAAACAGCTGCAGTCTATGGGCTCTAACGACTACCTGACCCGT\n>g2\nATGCTGTCTATCAACTTCCCAACCAT"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "9b487f668cd7205789da3b518c167943784c73effa4ec47303194cfd1e94592b",
+     "bytes": 195,
+     "head": ">g0\nATGATGGACTGCATCCAGCCACGTGAACTGGGCTTCCACTGGGCTGAACTGCGTTACCAC\n>g1\nATGGGCGGCCTGTACATCAAACAGCTGCAGTCTATGGGCTCTAACGACTACCTGACCCGT\n>g2\nATGCTGTCTATCAACTTCCCAACCAT"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "terminal_stop_star": {
+  "note": "protein ends with '*' and the DNA with a stop",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e43031564b3dbdaf3608f229df734340a590be5fe71d2c11789b584ec8207c69",
+     "bytes": 207,
+     "head": ">g0\nATGTACATGAAATCTGACGCTCGTCGTCACCTGGGCCCAATCCGTCACGACAAACCAGAA\nTAG\n>g1\nATGTTCATGTCTTACGACATGCACGCTTGCGAACCACAGAACTGGGACGGCTCTCTGAAA\nTAG\n>g2\nATGTGCGACATGGAAGCT"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e43031564b3dbdaf3608f229df734340a590be5fe71d2c11789b584ec8207c69",
+     "bytes": 207,
+     "head": ">g0\nATGTACATGAAATCTGACGCTCGTCGTCACCTGGGCCCAATCCGTCACGACAAACCAGAA\nTAG\n>g1\nATGTTCATGTCTTACGACATGCACGCTTGCGAACCACAGAACTGGGACGGCTCTCTGAAA\nTAG\n>g2\nATGTGCGACATGGAAGCT"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e43031564b3dbdaf3608f229df734340a590be5fe71d2c11789b584ec8207c69",
+     "bytes": 207,
+     "head": ">g0\nATGTACATGAAATCTGACGCTCGTCGTCACCTGGGCCCAATCCGTCACGACAAACCAGAA\nTAG\n>g1\nATGTTCATGTCTTACGACATGCACGCTTGCGAACCACAGAACTGGGACGGCTCTCTGAAA\nTAG\n>g2\nATGTGCGACATGGAAGCT"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "lowercase_mixed": {
+  "note": "lower-case protein and mixed-case DNA",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "91eba23eb6ada438d8257db3654c3e1accc8e7aadcb99ec2e39368daaa604c67",
+     "bytes": 195,
+     "head": ">g0\nAtGtCtTgGcGtAaAtTcTtCgCtTaCgAcTtCcGtCtGtGcTcTgTtGaCcAcTcTaAa\n>g1\nAtGaAcCaCgTtCcAgCtAtCcGtAcCcGtCaGcGtCaGaTgTcTgTtTtCcAcGgCcAc\n>g2\nAtGtTcTgCtCtCtGcGtGaAaTcCa"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "91eba23eb6ada438d8257db3654c3e1accc8e7aadcb99ec2e39368daaa604c67",
+     "bytes": 195,
+     "head": ">g0\nAtGtCtTgGcGtAaAtTcTtCgCtTaCgAcTtCcGtCtGtGcTcTgTtGaCcAcTcTaAa\n>g1\nAtGaAcCaCgTtCcAgCtAtCcGtAcCcGtCaGcGtCaGaTgTcTgTtTtCcAcGgCcAc\n>g2\nAtGtTcTgCtCtCtGcGtGaAaTcCa"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "91eba23eb6ada438d8257db3654c3e1accc8e7aadcb99ec2e39368daaa604c67",
+     "bytes": 195,
+     "head": ">g0\nAtGtCtTgGcGtAaAtTcTtCgCtTaCgAcTtCcGtCtGtGcTcTgTtGaCcAcTcTaAa\n>g1\nAtGaAcCaCgTtCcAgCtAtCcGtAcCcGtCaGcGtCaGaTgTcTgTtTtCcAcGgCcAc\n>g2\nAtGtTcTgCtCtCtGcGtGaAaTcCa"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "iupac_and_n_runs": {
+  "note": "IUPAC codes and a run of N in the DNA",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "4c93a47c9f5119ce1df074d133a96e36308bb8cf03e654e89c29f5a531f3ff8f",
+     "bytes": 288,
+     "head": ">g0\nATGAAAGCTNNNNNNNNNGAAAAAAACTGCGCNGCTACCTGGTGGTGGCACCTGTACTCT\nCCACGTGCTGACGGCGGCTGGCTGAACATG\n>g1\nATGCACCTYTACCGTACCCGTCAGCTGTGGCTGATCATGATCCGTAACTTCCAGCTGCAC"
+    },
+    "stderr_lines": [
+     "coal: warning: g0 pepAlnPos 4: V does not correspond to NNN",
+     "coal: warning: g0 pepAlnPos 5: Q does not correspond to NNN",
+     "coal: warning: g0 pepAlnPos 6: F does not correspond to NNN",
+     "coal: warning: g0 pepAlnPos 11: I does not correspond to GCN",
+     "coal: warning: g1 pepAlnPos 3: D does not correspond to CTY",
+     "coal: summary: 2 of 3 sequences have codons with unknown or ambiguous bases (e.g. N) that could not be checked: missing sequence data, not a genetic-code problem."
+    ],
+    "stderr_sha": "70d77ae158351005a2cdf74649a700ebea023b2c4d4e62454199f7f11ffd4727"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "4c93a47c9f5119ce1df074d133a96e36308bb8cf03e654e89c29f5a531f3ff8f",
+     "bytes": 288,
+     "head": ">g0\nATGAAAGCTNNNNNNNNNGAAAAAAACTGCGCNGCTACCTGGTGGTGGCACCTGTACTCT\nCCACGTGCTGACGGCGGCTGGCTGAACATG\n>g1\nATGCACCTYTACCGTACCCGTCAGCTGTGGCTGATCATGATCCGTAACTTCCAGCTGCAC"
+    },
+    "stderr_lines": [
+     "coal: warning: g0 pepAlnPos 4: V does not correspond to NNN",
+     "coal: warning: g0 pepAlnPos 5: Q does not correspond to NNN",
+     "coal: warning: g0 pepAlnPos 6: F does not correspond to NNN",
+     "coal: warning: g0 pepAlnPos 11: I does not correspond to GCN",
+     "coal: warning: g1 pepAlnPos 3: D does not correspond to CTY",
+     "coal: summary: 2 of 3 sequences have codons with unknown or ambiguous bases (e.g. N) that could not be checked: missing sequence data, not a genetic-code problem."
+    ],
+    "stderr_sha": "70d77ae158351005a2cdf74649a700ebea023b2c4d4e62454199f7f11ffd4727"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "4c93a47c9f5119ce1df074d133a96e36308bb8cf03e654e89c29f5a531f3ff8f",
+     "bytes": 288,
+     "head": ">g0\nATGAAAGCTNNNNNNNNNGAAAAAAACTGCGCNGCTACCTGGTGGTGGCACCTGTACTCT\nCCACGTGCTGACGGCGGCTGGCTGAACATG\n>g1\nATGCACCTYTACCGTACCCGTCAGCTGTGGCTGATCATGATCCGTAACTTCCAGCTGCAC"
+    },
+    "stderr_lines": [
+     "#------------------------------------------------------------------------#",
+     "#  Input files:  pep.fasta nuc.fasta",
+     "#  WARNING: g0 pepAlnPos 4: V does not correspond to NNN",
+     "#  WARNING: g0 pepAlnPos 5: Q does not correspond to NNN",
+     "#  WARNING: g0 pepAlnPos 6: F does not correspond to NNN",
+     "#  WARNING: g0 pepAlnPos 11: I does not correspond to GCN"
+    ],
+    "stderr_sha": "7d94bdc58ca38e96f357cab69a25c74d97b4207bbcac706beff368a9dc389251"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "xuobzj_residues": {
+  "note": "X, U, O, B, Z and J residues",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "1233337b3f56a4989783f7d172767ee979fa76f33ada22b4a894fcc1129c5ca0",
+     "bytes": 192,
+     "head": ">g0\nATGGACCACGACCACTACCGTACCAACGACATCTGGCCAAACAACGTTCTGGACGAAAAC\nATCCGTACCAAAGACCGTTGCTGGTGCACC\n>g1\nATGCCACGTTGGGGCCTGGACTTCTCTCTGTACGGCGCTTCTTGCGAATGCTTCTCTCTG"
+    },
+    "stderr_lines": [
+     "coal: warning: g0 pepAlnPos 9: U (selenocysteine) is not checked; any codon is accepted",
+     "coal: warning: g0 pepAlnPos 13: O (pyrrolysine) is not checked; any codon is accepted",
+     "coal: warning: g0 pepAlnPos 17: B (D or N) is not checked; any codon is accepted",
+     "coal: warning: g0 pepAlnPos 21: Z (E or Q) is not checked; any codon is accepted",
+     "coal: warning: g0 pepAlnPos 25: J (I or L) is not checked; any codon is accepted",
+     "coal: summary: 1 of 2 sequences contain non-standard amino acids (U, O, B, Z or J) whose codons were not checked."
+    ],
+    "stderr_sha": "50bbf9218a39f4c4e5238ebdbebf5a06935450078bb80d1258b8c42a0775fdf9"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "1233337b3f56a4989783f7d172767ee979fa76f33ada22b4a894fcc1129c5ca0",
+     "bytes": 192,
+     "head": ">g0\nATGGACCACGACCACTACCGTACCAACGACATCTGGCCAAACAACGTTCTGGACGAAAAC\nATCCGTACCAAAGACCGTTGCTGGTGCACC\n>g1\nATGCCACGTTGGGGCCTGGACTTCTCTCTGTACGGCGCTTCTTGCGAATGCTTCTCTCTG"
+    },
+    "stderr_lines": [
+     "coal: warning: g0 pepAlnPos 9: U (selenocysteine) is not checked; any codon is accepted",
+     "coal: warning: g0 pepAlnPos 13: O (pyrrolysine) is not checked; any codon is accepted",
+     "coal: warning: g0 pepAlnPos 17: B (D or N) is not checked; any codon is accepted",
+     "coal: warning: g0 pepAlnPos 21: Z (E or Q) is not checked; any codon is accepted",
+     "coal: warning: g0 pepAlnPos 25: J (I or L) is not checked; any codon is accepted",
+     "coal: summary: 1 of 2 sequences contain non-standard amino acids (U, O, B, Z or J) whose codons were not checked."
+    ],
+    "stderr_sha": "50bbf9218a39f4c4e5238ebdbebf5a06935450078bb80d1258b8c42a0775fdf9"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "1233337b3f56a4989783f7d172767ee979fa76f33ada22b4a894fcc1129c5ca0",
+     "bytes": 192,
+     "head": ">g0\nATGGACCACGACCACTACCGTACCAACGACATCTGGCCAAACAACGTTCTGGACGAAAAC\nATCCGTACCAAAGACCGTTGCTGGTGCACC\n>g1\nATGCCACGTTGGGGCCTGGACTTCTCTCTGTACGGCGCTTCTTGCGAATGCTTCTCTCTG"
+    },
+    "stderr_lines": [
+     "#------------------------------------------------------------------------#",
+     "#  Input files:  pep.fasta nuc.fasta",
+     "#  WARNING: g0 pepAlnPos 13: O unknown AA type. Taken as 'X'",
+     "#  WARNING: g0 pepAlnPos 17: B unknown AA type. Taken as 'X'",
+     "#  WARNING: g0 pepAlnPos 21: Z unknown AA type. Taken as 'X'",
+     "#  WARNING: g0 pepAlnPos 25: J unknown AA type. Taken as 'X'"
+    ],
+    "stderr_sha": "6b060fa3572bb40f4d73aee79ec6518bac57e4edc6f11273d3797d5b26d47c20"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "frameshift_digits": {
+  "note": "frameshift digits 1, 2, 4 in the protein alignment",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "393c9a1860e6e26c82298d169b95213406e585d50b5b7a30282d013e79aac401",
+     "bytes": 207,
+     "head": ">g0\nATGTTCTTCGTTAAAGT----CACTGGCTGCACATCTGCCAGTACCCAATCCCACAGCCA\nTTC\n>g1\nATGGACTTCAAAAAAG-----TACATCTGCGACACCTGGGGCGTTTTCATGCTGGCTCTG\nCAC\n>g2\nATGTTCGACAACGAAGTA"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "393c9a1860e6e26c82298d169b95213406e585d50b5b7a30282d013e79aac401",
+     "bytes": 207,
+     "head": ">g0\nATGTTCTTCGTTAAAGT----CACTGGCTGCACATCTGCCAGTACCCAATCCCACAGCCA\nTTC\n>g1\nATGGACTTCAAAAAAG-----TACATCTGCGACACCTGGGGCGTTTTCATGCTGGCTCTG\nCAC\n>g2\nATGTTCGACAACGAAGTA"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "393c9a1860e6e26c82298d169b95213406e585d50b5b7a30282d013e79aac401",
+     "bytes": 207,
+     "head": ">g0\nATGTTCTTCGTTAAAGT----CACTGGCTGCACATCTGCCAGTACCCAATCCCACAGCCA\nTTC\n>g1\nATGGACTTCAAAAAAG-----TACATCTGCGACACCTGGGGCGTTTTCATGCTGGCTCTG\nCAC\n>g2\nATGTTCGACAACGAAGTA"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "tfastx_notation": {
+  "note": "tfastx '\\' (1 base) and '/' (gap then 2 bases)",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "b989667f1d7630c31a6c4262b6669e9395869d0f480ab7c85e56c11e2e1234cf",
+     "bytes": 130,
+     "head": ">g0\nATGCAGTGGTACGACG--CTGCCAGCTGTTCTGTGGATGAACGACGAATGGCGTATGGTT\n>g1\nATGTACTGCGAAGGC---GT-GGCGACCAGGACATCTTCCGTTGGTTCGCTCTGAACTTC\n"
+    },
+    "stderr_lines": [
+     "coal: warning: g1 pepAlnPos 8: D does not correspond to GGC",
+     "coal: warning: g1 pepAlnPos 9: Q does not correspond to GAC",
+     "coal: warning: g1 pepAlnPos 10: D does not correspond to CAG",
+     "coal: warning: g1 pepAlnPos 11: I does not correspond to GAC",
+     "coal: warning: g1 pepAlnPos 12: F does not correspond to ATC",
+     "coal: warning: g1 pepAlnPos 13: R does not correspond to TTC"
+    ],
+    "stderr_sha": "8e8c1ca430400bc5f450f08a598aac6c5544395bc0a432dfcb13f24a51100c0f"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "b989667f1d7630c31a6c4262b6669e9395869d0f480ab7c85e56c11e2e1234cf",
+     "bytes": 130,
+     "head": ">g0\nATGCAGTGGTACGACG--CTGCCAGCTGTTCTGTGGATGAACGACGAATGGCGTATGGTT\n>g1\nATGTACTGCGAAGGC---GT-GGCGACCAGGACATCTTCCGTTGGTTCGCTCTGAACTTC\n"
+    },
+    "stderr_lines": [
+     "coal: warning: g1 pepAlnPos 8: D does not correspond to GGC",
+     "coal: warning: g1 pepAlnPos 9: Q does not correspond to GAC",
+     "coal: warning: g1 pepAlnPos 10: D does not correspond to CAG",
+     "coal: warning: g1 pepAlnPos 11: I does not correspond to GAC",
+     "coal: warning: g1 pepAlnPos 12: F does not correspond to ATC",
+     "coal: warning: g1 pepAlnPos 13: R does not correspond to TTC"
+    ],
+    "stderr_sha": "8e8c1ca430400bc5f450f08a598aac6c5544395bc0a432dfcb13f24a51100c0f"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "b989667f1d7630c31a6c4262b6669e9395869d0f480ab7c85e56c11e2e1234cf",
+     "bytes": 130,
+     "head": ">g0\nATGCAGTGGTACGACG--CTGCCAGCTGTTCTGTGGATGAACGACGAATGGCGTATGGTT\n>g1\nATGTACTGCGAAGGC---GT-GGCGACCAGGACATCTTCCGTTGGTTCGCTCTGAACTTC\n"
+    },
+    "stderr_lines": [
+     "#------------------------------------------------------------------------#",
+     "#  Input files:  pep.fasta nuc.fasta",
+     "#  WARNING: g1 pepAlnPos 8: D does not correspond to GGC",
+     "#  WARNING: g1 pepAlnPos 9: Q does not correspond to GAC",
+     "#  WARNING: g1 pepAlnPos 10: D does not correspond to CAG",
+     "#  WARNING: g1 pepAlnPos 11: I does not correspond to GAC"
+    ],
+    "stderr_sha": "ed5486c70dd0ddaf46deeccd3f1b15a4f842153b6c0d82fb789c4c06df57f4c2"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "utr_before_after": {
+  "note": "extra DNA before and after every gene",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "75d292b18c2cef5ba44fc8548b5c0b27704dfbe9a938b05e999031bb71bc2986",
+     "bytes": 288,
+     "head": ">g0\nATGTGGTGCTACTCTGACAAAATCTACATCCGTCGTTGCAAAGAAATGAAACACCAGATG\nACCATGGCTAAAATCAACATCCACGTTCGT\n>g1\nATGGCTTTCGCTAACATCAACCCAGGCGAAATCATCGTTATCCTGGGCGGCTTCATGCCA"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "75d292b18c2cef5ba44fc8548b5c0b27704dfbe9a938b05e999031bb71bc2986",
+     "bytes": 288,
+     "head": ">g0\nATGTGGTGCTACTCTGACAAAATCTACATCCGTCGTTGCAAAGAAATGAAACACCAGATG\nACCATGGCTAAAATCAACATCCACGTTCGT\n>g1\nATGGCTTTCGCTAACATCAACCCAGGCGAAATCATCGTTATCCTGGGCGGCTTCATGCCA"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "75d292b18c2cef5ba44fc8548b5c0b27704dfbe9a938b05e999031bb71bc2986",
+     "bytes": 288,
+     "head": ">g0\nATGTGGTGCTACTCTGACAAAATCTACATCCGTCGTTGCAAAGAAATGAAACACCAGATG\nACCATGGCTAAAATCAACATCCACGTTCGT\n>g1\nATGGCTTTCGCTAACATCAACCCAGGCGAAATCATCGTTATCCTGGGCGGCTTCATGCCA"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "reverse_complement": {
+  "note": "the DNA is the reverse complement of the gene: must fail clearly, never align silently",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "279765ba846485f96f6c5cb9ac027838acd08a9018bf493c6507d973813d9b9f",
+     "bytes": 288,
+     "head": ">g0\nATGCACGGCTTCCGTTTCGAAACCATCTGGCAGTTCACCATCAACATCTGCGGCAACCAG\nATGCACATGTACCAGTGCCGTAACTTCATG\n>g1\nTGGGTTGTTGTGTTTGTCCAGGTCAGATGGAGAGATTTCCTGGTATGGCTGGATCATCAG"
+    },
+    "stderr_lines": [
+     "coal: warning: g1 pepAlnPos 1: M does not correspond to TGG",
+     "coal: warning: g1 pepAlnPos 2: M does not correspond to GTT",
+     "coal: warning: g1 pepAlnPos 3: M does not correspond to GTT",
+     "coal: warning: g1 pepAlnPos 4: L does not correspond to GTG",
+     "coal: warning: g1 pepAlnPos 5: C does not correspond to TTT",
+     "coal: warning: g1 pepAlnPos 6: H does not correspond to GTC"
+    ],
+    "stderr_sha": "4cc9a108884d057fe319c440b80f2ee567dd4284e79e471aa29b556cf5a0c676"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "279765ba846485f96f6c5cb9ac027838acd08a9018bf493c6507d973813d9b9f",
+     "bytes": 288,
+     "head": ">g0\nATGCACGGCTTCCGTTTCGAAACCATCTGGCAGTTCACCATCAACATCTGCGGCAACCAG\nATGCACATGTACCAGTGCCGTAACTTCATG\n>g1\nTGGGTTGTTGTGTTTGTCCAGGTCAGATGGAGAGATTTCCTGGTATGGCTGGATCATCAG"
+    },
+    "stderr_lines": [
+     "coal: warning: g1 pepAlnPos 1: M does not correspond to TGG",
+     "coal: warning: g1 pepAlnPos 2: M does not correspond to GTT",
+     "coal: warning: g1 pepAlnPos 3: M does not correspond to GTT",
+     "coal: warning: g1 pepAlnPos 4: L does not correspond to GTG",
+     "coal: warning: g1 pepAlnPos 5: C does not correspond to TTT",
+     "coal: warning: g1 pepAlnPos 6: H does not correspond to GTC"
+    ],
+    "stderr_sha": "4cc9a108884d057fe319c440b80f2ee567dd4284e79e471aa29b556cf5a0c676"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "279765ba846485f96f6c5cb9ac027838acd08a9018bf493c6507d973813d9b9f",
+     "bytes": 288,
+     "head": ">g0\nATGCACGGCTTCCGTTTCGAAACCATCTGGCAGTTCACCATCAACATCTGCGGCAACCAG\nATGCACATGTACCAGTGCCGTAACTTCATG\n>g1\nTGGGTTGTTGTGTTTGTCCAGGTCAGATGGAGAGATTTCCTGGTATGGCTGGATCATCAG"
+    },
+    "stderr_lines": [
+     "#------------------------------------------------------------------------#",
+     "#  Input files:  pep.fasta nuc.fasta",
+     "#  WARNING: g1 pepAlnPos 1: M does not correspond to TGG",
+     "#  WARNING: g1 pepAlnPos 2: M does not correspond to GTT",
+     "#  WARNING: g1 pepAlnPos 3: M does not correspond to GTT",
+     "#  WARNING: g1 pepAlnPos 4: L does not correspond to GTG"
+    ],
+    "stderr_sha": "70090d4fcdfa15af1bb63c2201cebef0cd61acaec96b64a9b389fd9563c0ba5e"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "wrong_gene_dna": {
+  "note": "one protein gets another gene's DNA",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "77fe93356600bea48b8631f5968f70bed86c41c01eaa6cab9721893fdfcd9887",
+     "bytes": 504,
+     "head": ">g0\nATGGTTTACGCTAAAATGATCCACGAACACGCTTACGACTGGCAGGAATACATGACCATG\nTTCGAAATGTGGGCTCCATTCCGTCTGGCTCAGCCAGCTTACCACGCTCGTTGCATGTTC\n>g1\nATGTCTCAGTGCAACGCTACCCAGATCTAC"
+    },
+    "stderr_lines": [
+     "coal: warning: g2 pepAlnPos 2: N does not correspond to GGC",
+     "coal: warning: g2 pepAlnPos 3: G does not correspond to ACC",
+     "coal: warning: g2 pepAlnPos 4: R does not correspond to ACC",
+     "coal: warning: g2 pepAlnPos 5: C does not correspond to GGC",
+     "coal: warning: g2 pepAlnPos 6: K does not correspond to GAC",
+     "coal: warning: g2 pepAlnPos 7: I does not correspond to GAA"
+    ],
+    "stderr_sha": "238557d106db5b8fa17927954caa07ba9df0c12fed7fabd2e2f1c0fc587931de"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "77fe93356600bea48b8631f5968f70bed86c41c01eaa6cab9721893fdfcd9887",
+     "bytes": 504,
+     "head": ">g0\nATGGTTTACGCTAAAATGATCCACGAACACGCTTACGACTGGCAGGAATACATGACCATG\nTTCGAAATGTGGGCTCCATTCCGTCTGGCTCAGCCAGCTTACCACGCTCGTTGCATGTTC\n>g1\nATGTCTCAGTGCAACGCTACCCAGATCTAC"
+    },
+    "stderr_lines": [
+     "coal: warning: g2 pepAlnPos 2: N does not correspond to GGC",
+     "coal: warning: g2 pepAlnPos 3: G does not correspond to ACC",
+     "coal: warning: g2 pepAlnPos 4: R does not correspond to ACC",
+     "coal: warning: g2 pepAlnPos 5: C does not correspond to GGC",
+     "coal: warning: g2 pepAlnPos 6: K does not correspond to GAC",
+     "coal: warning: g2 pepAlnPos 7: I does not correspond to GAA"
+    ],
+    "stderr_sha": "238557d106db5b8fa17927954caa07ba9df0c12fed7fabd2e2f1c0fc587931de"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "77fe93356600bea48b8631f5968f70bed86c41c01eaa6cab9721893fdfcd9887",
+     "bytes": 504,
+     "head": ">g0\nATGGTTTACGCTAAAATGATCCACGAACACGCTTACGACTGGCAGGAATACATGACCATG\nTTCGAAATGTGGGCTCCATTCCGTCTGGCTCAGCCAGCTTACCACGCTCGTTGCATGTTC\n>g1\nATGTCTCAGTGCAACGCTACCCAGATCTAC"
+    },
+    "stderr_lines": [
+     "#------------------------------------------------------------------------#",
+     "#  Input files:  pep.fasta nuc.fasta",
+     "#  WARNING: g2 pepAlnPos 2: N does not correspond to GGC",
+     "#  WARNING: g2 pepAlnPos 3: G does not correspond to ACC",
+     "#  WARNING: g2 pepAlnPos 4: R does not correspond to ACC",
+     "#  WARNING: g2 pepAlnPos 5: C does not correspond to GGC"
+    ],
+    "stderr_sha": "fb882f3856f48b9ab878fc28810cc443a398a466f54fea25ca8a5cd97e55c030"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "wrong_genetic_code": {
+  "note": "mitochondrial (code 2) genes run with the standard code",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "d910fd44c4e69523f6c2415164c2e18c4e81912d4b2d787912aabf10c3d64899",
+     "bytes": 756,
+     "head": ">g0\nATGTCTTGCATATCTTGCAAAGCTTTCGGCCAGGCTTCTTCTAACTGCGCTCTGTCTACC\nCACGAATGAGCTGACCCACCATGCGTTGTTTTCCGTCCACAGTTCTGACAGGAAGAACAC\n>g1\nATGTGACCACCAATCTGAGAATCTCAGTGA"
+    },
+    "stderr_lines": [
+     "coal: notice: wrong genetic code? Under genetic code 2 (Vertebrate mitochondrial), all 6 sequences match their protein; under code 1, only 1 does. Re-run with -codontable 2.",
+     "coal: warning: g0 pepAlnPos 4: M does not correspond to ATA",
+     "coal: warning: g0 pepAlnPos 23: W does not correspond to TGA",
+     "coal: warning: g0 pepAlnPos 36: W does not correspond to TGA",
+     "coal: warning: g1 pepAlnPos 2: W does not correspond to TGA",
+     "coal: warning: g1 pepAlnPos 6: W does not correspond to TGA"
+    ],
+    "stderr_sha": "39b16db894fb5609fd0321c03bc92db9a703e000cf5535d24afe6c4f79c7f950"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "d910fd44c4e69523f6c2415164c2e18c4e81912d4b2d787912aabf10c3d64899",
+     "bytes": 756,
+     "head": ">g0\nATGTCTTGCATATCTTGCAAAGCTTTCGGCCAGGCTTCTTCTAACTGCGCTCTGTCTACC\nCACGAATGAGCTGACCCACCATGCGTTGTTTTCCGTCCACAGTTCTGACAGGAAGAACAC\n>g1\nATGTGACCACCAATCTGAGAATCTCAGTGA"
+    },
+    "stderr_lines": [
+     "coal: notice: wrong genetic code? Under genetic code 2 (Vertebrate mitochondrial), all 6 sequences match their protein; under code 1, only 1 does. Re-run with -codontable 2.",
+     "coal: warning: g0 pepAlnPos 4: M does not correspond to ATA",
+     "coal: warning: g0 pepAlnPos 23: W does not correspond to TGA",
+     "coal: warning: g0 pepAlnPos 36: W does not correspond to TGA",
+     "coal: warning: g1 pepAlnPos 2: W does not correspond to TGA",
+     "coal: warning: g1 pepAlnPos 6: W does not correspond to TGA"
+    ],
+    "stderr_sha": "39b16db894fb5609fd0321c03bc92db9a703e000cf5535d24afe6c4f79c7f950"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "d910fd44c4e69523f6c2415164c2e18c4e81912d4b2d787912aabf10c3d64899",
+     "bytes": 756,
+     "head": ">g0\nATGTCTTGCATATCTTGCAAAGCTTTCGGCCAGGCTTCTTCTAACTGCGCTCTGTCTACC\nCACGAATGAGCTGACCCACCATGCGTTGTTTTCCGTCCACAGTTCTGACAGGAAGAACAC\n>g1\nATGTGACCACCAATCTGAGAATCTCAGTGA"
+    },
+    "stderr_lines": [
+     "#------------------------------------------------------------------------#",
+     "#  Input files:  pep.fasta nuc.fasta",
+     "#  WARNING: g0 pepAlnPos 4: M does not correspond to ATA",
+     "#  WARNING: g0 pepAlnPos 23: W does not correspond to TGA",
+     "#  WARNING: g0 pepAlnPos 36: W does not correspond to TGA",
+     "#  WARNING: g1 pepAlnPos 2: W does not correspond to TGA"
+    ],
+    "stderr_sha": "a3c820f51e79ea1e9c1b45c7703b16b0d1a19c4b57b22914afd27424d39298bc"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "right_genetic_code_2": {
+  "note": "the same genes with -codontable 2",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-codontable",
+   "2",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "a023efda75cdfc00ba55a21b31961eafb40e655fa526d984b4304cfd4deb275b",
+     "bytes": 756,
+     "head": ">g0\nATGGAAAAACTGTGCCACTACTGATGCGACTGAGCTGCTGTTAACTGCAAACTGAACCGT\nGCTGCTAAATGCCACCAGTACATCAACCAGTGAGACAACTTCGCTCCAGCTCAGCTGGAA\n>g1\nATGCACTGACGTGACGCTGGCGACCCACAC"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "a023efda75cdfc00ba55a21b31961eafb40e655fa526d984b4304cfd4deb275b",
+     "bytes": 756,
+     "head": ">g0\nATGGAAAAACTGTGCCACTACTGATGCGACTGAGCTGCTGTTAACTGCAAACTGAACCGT\nGCTGCTAAATGCCACCAGTACATCAACCAGTGAGACAACTTCGCTCCAGCTCAGCTGGAA\n>g1\nATGCACTGACGTGACGCTGGCGACCCACAC"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "a023efda75cdfc00ba55a21b31961eafb40e655fa526d984b4304cfd4deb275b",
+     "bytes": 756,
+     "head": ">g0\nATGGAAAAACTGTGCCACTACTGATGCGACTGAGCTGCTGTTAACTGCAAACTGAACCGT\nGCTGCTAAATGCCACCAGTACATCAACCAGTGAGACAACTTCGCTCCAGCTCAGCTGGAA\n>g1\nATGCACTGACGTGACGCTGGCGACCCACAC"
+    },
+    "stderr_lines": [
+     "#------------------------------------------------------------------------#",
+     "#  Input files:  pep.fasta nuc.fasta",
+     "#  Codontable 2 is used",
+     "#------------------------------------------------------------------------#",
+     ""
+    ],
+    "stderr_sha": "847d4fae02c37720d42746daecee92a995482ff997c2c6b46fe9066a865a382f"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "duplicate_ids": {
+  "note": "two proteins with the same ID",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 1,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "coal: error: pep.fasta: duplicate sequence ID 'g0': every sequence needs its own ID"
+    ],
+    "stderr_sha": "683fd3639e6a0c9bc1aae52612efe016610a4bd86cff93da68890f0cf44f54e6"
+   },
+   "cpp": {
+    "rc": 1,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "coal: error: pep.fasta: duplicate sequence ID 'g0': every sequence needs its own ID"
+    ],
+    "stderr_sha": "683fd3639e6a0c9bc1aae52612efe016610a4bd86cff93da68890f0cf44f54e6"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "b462ae6cc5ef394471e0d8f87e69989fc7a1769127e4d3639331c063238e1202",
+     "bytes": 317,
+     "head": ">g0\nATGTACGGCGACGAAATCAAATGGACCGCTGGCCACAACGAAGCTGTTTTCTGCGAATCT\nATGATCCTGTGCTTCCTGTGGCCATGGTGCGACTTCTGGTCTGCTCGTAAAGGCCCAGCT\n>g1\nATGTGCCCAAACTCTACCTCTGAACTGTAC"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "PAL2NAL output, COAL error",
+  "leftovers": []
+ },
+ "empty_id": {
+  "note": "a '>' header without a name",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 1,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "coal: error: pep.fasta:3: empty FASTA header: a '>' line without a sequence ID (every record needs a name after '>')"
+    ],
+    "stderr_sha": "404e8acff36b69a35a9035ef27bb430eafbae181374f055d016a27247bfd9413"
+   },
+   "cpp": {
+    "rc": 1,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "coal: error: pep.fasta:3: empty FASTA header: a '>' line without a sequence ID (every record needs a name after '>')"
+    ],
+    "stderr_sha": "404e8acff36b69a35a9035ef27bb430eafbae181374f055d016a27247bfd9413"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "#---  ERROR: inconsistency between the following pep and nuc seqs  ---#",
+     ">g0",
+     "MKWIYIWNNGWCVLQHWSVR>MVRGLFMWAFSATWQTAAQI",
+     ">g0",
+     "ATGAAATGGATCTACATCTGGAACAACGGCTGGTGCGTTCTGCAGCACTGGTCTGTTCGT",
+     "ATGGTTCGTGGCCTGTTCATGTGGGCTTTCTCTGCTACCTGGCAGACCGCTGCTCAGATC"
+    ],
+    "stderr_sha": "1dcbc5ff72a09b089ddc6fb59478dfd15d469520601be03d7db574e4367f6f1d"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "both fail",
+  "leftovers": []
+ },
+ "pipe_style_ids": {
+  "note": "sp|P12345|NAME_HUMAN style IDs in both files",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "7bc6de329438043543cbecb9834fb5b3eb9d5e59f5151ae0768d4342c4a94f92",
+     "bytes": 243,
+     "head": ">sp|P12340|G0_HUMAN\nATGCGTGGCCCACCATTCACCGGCTCTGGCATGATGGACATGGACATGCCAGACGGCGCT\n>sp|P12341|G1_HUMAN\nATGTGCGCTTTCCTGTACTACTCTATGGCTCAGAAAAACCAGCAGTTCTGGTACATGTG"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "7bc6de329438043543cbecb9834fb5b3eb9d5e59f5151ae0768d4342c4a94f92",
+     "bytes": 243,
+     "head": ">sp|P12340|G0_HUMAN\nATGCGTGGCCCACCATTCACCGGCTCTGGCATGATGGACATGGACATGCCAGACGGCGCT\n>sp|P12341|G1_HUMAN\nATGTGCGCTTTCCTGTACTACTCTATGGCTCAGAAAAACCAGCAGTTCTGGTACATGTG"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "7bc6de329438043543cbecb9834fb5b3eb9d5e59f5151ae0768d4342c4a94f92",
+     "bytes": 243,
+     "head": ">sp|P12340|G0_HUMAN\nATGCGTGGCCCACCATTCACCGGCTCTGGCATGATGGACATGGACATGCCAGACGGCGCT\n>sp|P12341|G1_HUMAN\nATGTGCGCTTTCCTGTACTACTCTATGGCTCAGAAAAACCAGCAGTTCTGGTACATGTG"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "versioned_ids_reordered": {
+  "note": "protein IDs with .1 suffix, DNA without, DNA in another order",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e8279178b7986696f5bc5376f3fdfafda0209b415a84dc341f58b95a3c491af5",
+     "bytes": 284,
+     "head": ">AT1G00.1\nATGTCTGACAAAGACACCATGTTCCGTTGGGTTATCTCTCAGGAATCTACCCACAAAATG\n>AT1G01.1\nATGACCCACTACTGCTACTACATCGGCTGGCGTCAGGACATGGGCCAGCCAGTTTGGAAC\n>AT1G02.1\nATGCGTTA"
+    },
+    "stderr_lines": [
+     "coal: warning: 4 of 4 protein IDs match a DNA ID only after normalising (version suffix, case or database fields), so sequences were paired by those IDs, not by file order as PAL2NAL pairs them: by order, 4 of 4 proteins would get the DNA of another gene (e.g. by file order, protein 'AT1G00.1' would get DNA 'AT1G03'; COAL paired it with 'AT1G00')",
+     "coal: summary: 4 of 4 IDs matched only after normalising (version suffix, case or database fields), e.g. protein AT1G00.1 = DNA AT1G00; COAL paired by those IDs where PAL2NAL's file order would mispair them."
+    ],
+    "stderr_sha": "67f7896efc169585bd3a85c2b33f8f6bf9eb999a749c828c6491c584be65162b"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e8279178b7986696f5bc5376f3fdfafda0209b415a84dc341f58b95a3c491af5",
+     "bytes": 284,
+     "head": ">AT1G00.1\nATGTCTGACAAAGACACCATGTTCCGTTGGGTTATCTCTCAGGAATCTACCCACAAAATG\n>AT1G01.1\nATGACCCACTACTGCTACTACATCGGCTGGCGTCAGGACATGGGCCAGCCAGTTTGGAAC\n>AT1G02.1\nATGCGTTA"
+    },
+    "stderr_lines": [
+     "coal: warning: 4 of 4 protein IDs match a DNA ID only after normalising (version suffix, case or database fields), so sequences were paired by those IDs, not by file order as PAL2NAL pairs them: by order, 4 of 4 proteins would get the DNA of another gene (e.g. by file order, protein 'AT1G00.1' would get DNA 'AT1G03'; COAL paired it with 'AT1G00')",
+     "coal: summary: 4 of 4 IDs matched only after normalising (version suffix, case or database fields), e.g. protein AT1G00.1 = DNA AT1G00; COAL paired by those IDs where PAL2NAL's file order would mispair them."
+    ],
+    "stderr_sha": "67f7896efc169585bd3a85c2b33f8f6bf9eb999a749c828c6491c584be65162b"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e170c3f6a47c91636730d5ad352890b0a5ab38d0ead8363d89f84cb7beb7d133",
+     "bytes": 284,
+     "head": ">AT1G00.1\nATGACCTCTGCTCTGGAATCTATGCGTACCGAATTCGACGACCGTAAAACCCAGCAGAAA\n>AT1G01.1\nATGCGTTACATCCACCTGCCAATCCACGCTGCTCGTCACTGCTACCGTGTTGAATTCTAC\n>AT1G02.1\nATGACCCA"
+    },
+    "stderr_lines": [
+     "#------------------------------------------------------------------------#",
+     "#  Input files:  pep.fasta nuc.fasta",
+     "#  WARNING: AT1G00.1 pepAlnPos 2: S does not correspond to ACC",
+     "#  WARNING: AT1G00.1 pepAlnPos 3: D does not correspond to TCT",
+     "#  WARNING: AT1G00.1 pepAlnPos 4: K does not correspond to GCT",
+     "#  WARNING: AT1G00.1 pepAlnPos 5: D does not correspond to CTG"
+    ],
+    "stderr_sha": "76f8ae5eca529675e4512383d3dd5d4cb3898fd3813519ff8830cb768c6b448f"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "DIFFERENT output",
+  "leftovers": []
+ },
+ "whitespace_ids": {
+  "note": "IDs with descriptions after a space and a tab",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "0f1bf7ab3dc9165b2f0b244e430046f7fc35dffa8878262fd5b720e7b9f8ba21",
+     "bytes": 195,
+     "head": ">g0\nATGAACTGCACCCCACAGGTTTACCACATCCGTAAAAAAGTTAAAAACAAAGCTATGCTG\n>g1\nATGGAACAGTCTGGCTGCAACCAGAAAGACAAAGACCAGCAGTGCACCATGTTCGCTGTT\n>g2\nATGGGCATGAACATCGAACAGCGTTG"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "0f1bf7ab3dc9165b2f0b244e430046f7fc35dffa8878262fd5b720e7b9f8ba21",
+     "bytes": 195,
+     "head": ">g0\nATGAACTGCACCCCACAGGTTTACCACATCCGTAAAAAAGTTAAAAACAAAGCTATGCTG\n>g1\nATGGAACAGTCTGGCTGCAACCAGAAAGACAAAGACCAGCAGTGCACCATGTTCGCTGTT\n>g2\nATGGGCATGAACATCGAACAGCGTTG"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "0f1bf7ab3dc9165b2f0b244e430046f7fc35dffa8878262fd5b720e7b9f8ba21",
+     "bytes": 195,
+     "head": ">g0\nATGAACTGCACCCCACAGGTTTACCACATCCGTAAAAAAGTTAAAAACAAAGCTATGCTG\n>g1\nATGGAACAGTCTGGCTGCAACCAGAAAGACAAAGACCAGCAGTGCACCATGTTCGCTGTT\n>g2\nATGGGCATGAACATCGAACAGCGTTG"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "different_counts": {
+  "note": "DNA has one record more",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 1,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "coal: error: number of sequences differs (protein: 3, DNA: 4): each protein needs exactly one DNA record; remove the 1 extra DNA record (e.g. 'extra', which is not in the protein alignment) or check you used the right files"
+    ],
+    "stderr_sha": "0d064c71e5e56374c7a5ea1c8248e4a52a16a89d3c08292ee7faff521815f574"
+   },
+   "cpp": {
+    "rc": 1,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "coal: error: number of sequences differs (protein: 3, DNA: 4): each protein needs exactly one DNA record; remove the 1 extra DNA record (e.g. 'extra', which is not in the protein alignment) or check you used the right files"
+    ],
+    "stderr_sha": "0d064c71e5e56374c7a5ea1c8248e4a52a16a89d3c08292ee7faff521815f574"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "",
+     "ERROR: number of input seqs differ (aa: 3;  nuc: 4)!!",
+     "",
+     "   aa  'g0 g1 g2'",
+     "   nuc 'g0 g1 g2 extra'"
+    ],
+    "stderr_sha": "5a96dc6c999f982d357c340ec5502fc1419a292534c85034e689f735a757b22b"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "both fail",
+  "leftovers": []
+ },
+ "ids_other_order": {
+  "note": "same IDs, DNA records in another order",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "5947ce1d0c07a84d1eb127ca358b52796b8c4a2a04d4113a53f50adcd4128d95",
+     "bytes": 325,
+     "head": ">g0\nATGGGCGCTGGCTACCACCACTGGAACGACGGCCAGGAATACCAGACCCACGACTCTTAC\n>g1\nATGGCTATCCCACACCACGAATTCAAATACGGCTGGTACTGGGACGACGACGACAAATAC\n>g2\nATGGACTCTATGGGCCAGTGCAACTC"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "5947ce1d0c07a84d1eb127ca358b52796b8c4a2a04d4113a53f50adcd4128d95",
+     "bytes": 325,
+     "head": ">g0\nATGGGCGCTGGCTACCACCACTGGAACGACGGCCAGGAATACCAGACCCACGACTCTTAC\n>g1\nATGGCTATCCCACACCACGAATTCAAATACGGCTGGTACTGGGACGACGACGACAAATAC\n>g2\nATGGACTCTATGGGCCAGTGCAACTC"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "5947ce1d0c07a84d1eb127ca358b52796b8c4a2a04d4113a53f50adcd4128d95",
+     "bytes": 325,
+     "head": ">g0\nATGGGCGCTGGCTACCACCACTGGAACGACGGCCAGGAATACCAGACCCACGACTCTTAC\n>g1\nATGGCTATCCCACACCACGAATTCAAATACGGCTGGTACTGGGACGACGACGACAAATAC\n>g2\nATGGACTCTATGGGCCAGTGCAACTC"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "crlf": {
+  "note": "CRLF line ends in both files",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "59c4750bc0eb6a2525dddecbe10f24b8c8af18a83d1a4c58a3678d80b0bc7e5e",
+     "bytes": 195,
+     "head": ">g0\nATGCACTTCGAAGTTTCTTTCGGCCACGCTCTGATCCCAGAATACTGCTCTAACAAATCT\n>g1\nATGTGGTCTAACTGGCCAAAATGCTGGTCTACCTCTATGGCTGAAGCTTTCTCTTTCAAC\n>g2\nATGGTTCTGTACACCAAAGAAAACAC"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "59c4750bc0eb6a2525dddecbe10f24b8c8af18a83d1a4c58a3678d80b0bc7e5e",
+     "bytes": 195,
+     "head": ">g0\nATGCACTTCGAAGTTTCTTTCGGCCACGCTCTGATCCCAGAATACTGCTCTAACAAATCT\n>g1\nATGTGGTCTAACTGGCCAAAATGCTGGTCTACCTCTATGGCTGAAGCTTTCTCTTTCAAC\n>g2\nATGGTTCTGTACACCAAAGAAAACAC"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "59c4750bc0eb6a2525dddecbe10f24b8c8af18a83d1a4c58a3678d80b0bc7e5e",
+     "bytes": 195,
+     "head": ">g0\nATGCACTTCGAAGTTTCTTTCGGCCACGCTCTGATCCCAGAATACTGCTCTAACAAATCT\n>g1\nATGTGGTCTAACTGGCCAAAATGCTGGTCTACCTCTATGGCTGAAGCTTTCTCTTTCAAC\n>g2\nATGGTTCTGTACACCAAAGAAAACAC"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "lone_cr": {
+  "note": "lone CR line ends",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "f3f623a306d9e3e084ab3833733a4be923f14e59ce11c142fb2d4b73f006935e",
+     "bytes": 195,
+     "head": ">g0\nATGAAATTCCCACGTCTGAAACACTTCTCTATGAAATCTTGCATGAACGTTTGCTGCCTG\n>g1\nATGGCTAAAATGTGGTGGCCAAACTGGCTGAAACGTCACGTTGACCCAAAAGCTTTCATG\n>g2\nATGTGGACCCACGCTTGGATGCTGCA"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "f3f623a306d9e3e084ab3833733a4be923f14e59ce11c142fb2d4b73f006935e",
+     "bytes": 195,
+     "head": ">g0\nATGAAATTCCCACGTCTGAAACACTTCTCTATGAAATCTTGCATGAACGTTTGCTGCCTG\n>g1\nATGGCTAAAATGTGGTGGCCAAACTGGCTGAAACGTCACGTTGACCCAAAAGCTTTCATG\n>g2\nATGTGGACCCACGCTTGGATGCTGCA"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "f3f623a306d9e3e084ab3833733a4be923f14e59ce11c142fb2d4b73f006935e",
+     "bytes": 195,
+     "head": ">g0\nATGAAATTCCCACGTCTGAAACACTTCTCTATGAAATCTTGCATGAACGTTTGCTGCCTG\n>g1\nATGGCTAAAATGTGGTGGCCAAACTGGCTGAAACGTCACGTTGACCCAAAAGCTTTCATG\n>g2\nATGTGGACCCACGCTTGGATGCTGCA"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "utf8_bom": {
+  "note": "UTF-8 BOM at the start of both files",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "3741e5579d8f4a5b59372a7f48bb7f54cf7671c233e287658a2bc5854b35a790",
+     "bytes": 195,
+     "head": ">g0\nATGTCTGAAAACCCAGCTGTTGGCCAGGGCACCTGGCGTAAAGACCCACAGGACCCATGG\n>g1\nATGTTCGACGGCATGCCAAAAAACGACATGGTTCACTCTTGGGACACCGACTACCGTCAC\n>g2\nATGGGCCACCCAAAATCTCAGTGGGC"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "3741e5579d8f4a5b59372a7f48bb7f54cf7671c233e287658a2bc5854b35a790",
+     "bytes": 195,
+     "head": ">g0\nATGTCTGAAAACCCAGCTGTTGGCCAGGGCACCTGGCGTAAAGACCCACAGGACCCATGG\n>g1\nATGTTCGACGGCATGCCAAAAAACGACATGGTTCACTCTTGGGACACCGACTACCGTCAC\n>g2\nATGGGCCACCCAAAATCTCAGTGGGC"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "",
+     "ERROR: number of input seqs differ (aa: 6;  nuc: 2)!!",
+     "",
+     "   aa  '\ufeff>g0 MSENPAVGQGTWRKDPQDPW >g1 MFDGMPKNDMVHSWDTDYRH >g2 MGHPKSQWAPVWVVQWFHGR'",
+     "   nuc 'g1 g2'"
+    ],
+    "stderr_sha": "d1813d601a484f44d2289e89c1bedcce8b37e85852bd42e1b16acc80c38ab2eb"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "COAL output, PAL2NAL failed",
+  "leftovers": []
+ },
+ "non_ascii_headers": {
+  "note": "non-ASCII characters in the headers",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 1,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "coal: error: pep.fasta:1: non-ASCII character in the sequence ID: use only ASCII letters, digits and punctuation in IDs"
+    ],
+    "stderr_sha": "b359651542fb498fff875332335b802c2c2e59c0b5e080f24a7bc4cb9bad6499"
+   },
+   "cpp": {
+    "rc": 1,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "coal: error: pep.fasta:1: non-ASCII character in the sequence ID: use only ASCII letters, digits and punctuation in IDs"
+    ],
+    "stderr_sha": "b359651542fb498fff875332335b802c2c2e59c0b5e080f24a7bc4cb9bad6499"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "0c32e54ca1c8fa3b5dce34dd9af900a9f0e098f1fe18908e1722d34052f3198a",
+     "bytes": 219,
+     "head": ">g\u00e8ne_0_\u00fc\nATGTGGCGTAAATGCCTGCCAAAAACCAACATCTCTTGGATCAAATACGAATGGTGGGGC\n>g\u00e8ne_1_\u00fc\nATGCAGGACCGTGACGCTGAATTCACCCAGCACGGCTGGTACGGCTACGGCGAAGACAAA\n>g\u00e8ne_2_\u00fc\nAT"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "PAL2NAL output, COAL error",
+  "leftovers": []
+ },
+ "clustal_input": {
+  "note": "CLUSTAL protein alignment",
+  "args": [
+   "pep.aln",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "4f00b1963f9ab66bfac4f846e90277d346db441a4e4aba3e25b03646412934a0",
+     "bytes": 872,
+     "head": ">g0\nATGCCACACCGTCAGATCGGCTACTACCTGTTCTGGATCTGGACCACCCCAGACGAACTG\nACCGCTGCTATGTTCGGCCGTCAGCACACCAAACGTCCAGTTCAGCACCGTATCGCTCTG\nGCTGACCGTAACCCAGAACGTTGCCTGAAAATCT"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "4f00b1963f9ab66bfac4f846e90277d346db441a4e4aba3e25b03646412934a0",
+     "bytes": 872,
+     "head": ">g0\nATGCCACACCGTCAGATCGGCTACTACCTGTTCTGGATCTGGACCACCCCAGACGAACTG\nACCGCTGCTATGTTCGGCCGTCAGCACACCAAACGTCCAGTTCAGCACCGTATCGCTCTG\nGCTGACCGTAACCCAGAACGTTGCCTGAAAATCT"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "4f00b1963f9ab66bfac4f846e90277d346db441a4e4aba3e25b03646412934a0",
+     "bytes": 872,
+     "head": ">g0\nATGCCACACCGTCAGATCGGCTACTACCTGTTCTGGATCTGGACCACCCCAGACGAACTG\nACCGCTGCTATGTTCGGCCGTCAGCACACCAAACGTCCAGTTCAGCACCGTATCGCTCTG\nGCTGACCGTAACCCAGAACGTTGCCTGAAAATCT"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "clustal_marks_blockonly": {
+  "note": "CLUSTAL with '#' marks and -blockonly",
+  "args": [
+   "pep.aln",
+   "nuc.fasta",
+   "-blockonly",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "0c37b98008653b3f9efd1634c597227750b08369f9190f833acaa21e013ba83c",
+     "bytes": 378,
+     "head": ">g0\nGACTGCTGCGACTGCCCAATGTGCGACCACTACGGCACCCTGGAACGTATCGACATCGAC\nCACATCTTCTTCTGGTCTATGCTGCGTTCTGTTAACACCTACCCAAAAAACACCCCAGTT\n>g1\nCACAAACGTGTTGACCTGTACCTGGGCGAC"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "0c37b98008653b3f9efd1634c597227750b08369f9190f833acaa21e013ba83c",
+     "bytes": 378,
+     "head": ">g0\nGACTGCTGCGACTGCCCAATGTGCGACCACTACGGCACCCTGGAACGTATCGACATCGAC\nCACATCTTCTTCTGGTCTATGCTGCGTTCTGTTAACACCTACCCAAAAAACACCCCAGTT\n>g1\nCACAAACGTGTTGACCTGTACCTGGGCGAC"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "0c37b98008653b3f9efd1634c597227750b08369f9190f833acaa21e013ba83c",
+     "bytes": 378,
+     "head": ">g0\nGACTGCTGCGACTGCCCAATGTGCGACCACTACGGCACCCTGGAACGTATCGACATCGAC\nCACATCTTCTTCTGGTCTATGCTGCGTTCTGTTAACACCTACCCAAAAAACACCCCAGTT\n>g1\nCACAAACGTGTTGACCTGTACCTGGGCGAC"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "clustal_no_header_line": {
+  "note": "CLUSTAL without the 'CLUSTAL W' first line (variant)",
+  "args": [
+   "pep.aln",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 1,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "coal: error: pep.aln:3: sequence data before the first '>' header: not a FASTA file? (each FASTA record starts with a '>name' line; a CLUSTAL file must start with 'CLUSTAL')"
+    ],
+    "stderr_sha": "83eea6e0915770fea2deb3639ce2c93063f9d75d74cbf1cb7db3645a897a10c3"
+   },
+   "cpp": {
+    "rc": 1,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "coal: error: pep.aln:3: sequence data before the first '>' header: not a FASTA file? (each FASTA record starts with a '>name' line; a CLUSTAL file must start with 'CLUSTAL')"
+    ],
+    "stderr_sha": "83eea6e0915770fea2deb3639ce2c93063f9d75d74cbf1cb7db3645a897a10c3"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "8f7b86e38119a2edcb89ababc8f4b072d850f47139bb592a20b72e77197a409f",
+     "bytes": 288,
+     "head": ">g0\nATGCAGAAAGAACCAGTTGAAACCCTGTGGGTTACCCTGGGCCAGACCATCAAAACCTGC\nTGCGACATGGTTAAATGCTGGTGCTTCATC\n>g1\nATGATGCTGGTTACCCCATACAACTCTACCCTGCACGAAATGCACGGCTGGAACGAACTG"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "PAL2NAL output, COAL error",
+  "leftovers": []
+ },
+ "path_with_spaces_and_unicode": {
+  "note": "input paths with spaces and non-ASCII characters",
+  "args": [
+   "my data \u00e9/pep file.fasta",
+   "my data \u00e9/nuc file.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "1be32ec0c52f626d068a9c45d74a6b330bac6984a42967a5469b0f585560d6e6",
+     "bytes": 195,
+     "head": ">g0\nATGGACTCTATGGAATGGTCTTGGTGCCTGCCATCTATCATGATCGGCATCTTCGTTTAC\n>g1\nATGCGTGCTGAACGTCTGTGCCTGTCTAAACTGACCCACCCATTCATCATGTGCGGCGAC\n>g2\nATGCACGTTACCTGGGTTATCCAGTC"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "1be32ec0c52f626d068a9c45d74a6b330bac6984a42967a5469b0f585560d6e6",
+     "bytes": 195,
+     "head": ">g0\nATGGACTCTATGGAATGGTCTTGGTGCCTGCCATCTATCATGATCGGCATCTTCGTTTAC\n>g1\nATGCGTGCTGAACGTCTGTGCCTGTCTAAACTGACCCACCCATTCATCATGTGCGGCGAC\n>g2\nATGCACGTTACCTGGGTTATCCAGTC"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "1be32ec0c52f626d068a9c45d74a6b330bac6984a42967a5469b0f585560d6e6",
+     "bytes": 195,
+     "head": ">g0\nATGGACTCTATGGAATGGTCTTGGTGCCTGCCATCTATCATGATCGGCATCTTCGTTTAC\n>g1\nATGCGTGCTGAACGTCTGTGCCTGTCTAAACTGACCCACCCATTCATCATGTGCGGCGAC\n>g2\nATGCACGTTACCTGGGTTATCCAGTC"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "readonly_output_folder": {
+  "note": "-o into a read-only folder",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-o",
+   "ro/out.fa",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "outfile": {
+     "sha256": "7cfb389d39018dc1513d63687fe0b855436d36445fb81b38f4055c99e22b6515",
+     "bytes": 195,
+     "head": ">g0\nATGAAAGACGACATCGAATCTTCTACCCCAGGCACCTACAACTTCCCATCTGAAGAAAAA\n>g1\nATGCTGACCAAACAGTGCTGGGAATCTATCGTTATGCAGATCATGATGCGTTCTTGGCAC\n>g2\nATGTGGCAGCTGCGTGGCGTTTACAT"
+    }
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "outfile": {
+     "sha256": "7cfb389d39018dc1513d63687fe0b855436d36445fb81b38f4055c99e22b6515",
+     "bytes": 195,
+     "head": ">g0\nATGAAAGACGACATCGAATCTTCTACCCCAGGCACCTACAACTTCCCATCTGAAGAAAAA\n>g1\nATGCTGACCAAACAGTGCTGGGAATCTATCGTTATGCAGATCATGATGCGTTCTTGGCAC\n>g2\nATGTGGCAGCTGCGTGGCGTTTACAT"
+    }
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "7cfb389d39018dc1513d63687fe0b855436d36445fb81b38f4055c99e22b6515",
+     "bytes": 195,
+     "head": ">g0\nATGAAAGACGACATCGAATCTTCTACCCCAGGCACCTACAACTTCCCATCTGAAGAAAAA\n>g1\nATGCTGACCAAACAGTGCTGGGAATCTATCGTTATGCAGATCATGATGCGTTCTTGGCAC\n>g2\nATGTGGCAGCTGCGTGGCGTTTACAT"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "outfile": {
+     "sha256": "7cfb389d39018dc1513d63687fe0b855436d36445fb81b38f4055c99e22b6515",
+     "bytes": 195,
+     "head": ">g0\nATGAAAGACGACATCGAATCTTCTACCCCAGGCACCTACAACTTCCCATCTGAAGAAAAA\n>g1\nATGCTGACCAAACAGTGCTGGGAATCTATCGTTATGCAGATCATGATGCGTTCTTGGCAC\n>g2\nATGTGGCAGCTGCGTGGCGTTTACAT"
+    }
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "DIFFERENT output",
+  "leftovers": []
+ },
+ "output_equals_input": {
+  "note": "-o names the DNA input: must never destroy it",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-o",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 1,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "coal: error: cannot write nuc.fasta: it is one of the input files; choose another name for the output"
+    ],
+    "stderr_sha": "af6ff7786ee2da03fa841af92874b03366f98e77464509e62f3069b3d0b23807",
+    "outfile": {
+     "sha256": "9f6a011bf875e55c1ea42ae90421a1537b5456e6226af34fc87ad172598cdb93",
+     "bytes": 195,
+     "head": ">g0\nATGAACTTCTGCCCAATGCTGCGTTCTGGCTTCCGTGCTGAAATGCTGAACCGTACCTAC\n>g1\nATGATGTTCTTCCACGCTCACCACCAGGCTTACTACTACCAGACCACCTTCTCTTTCACC\n>g2\nATGTCTGAATGCGGCCTGTACGCTTT"
+    }
+   },
+   "cpp": {
+    "rc": 1,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "coal: error: cannot write nuc.fasta: it is one of the input files; choose another name for the output"
+    ],
+    "stderr_sha": "af6ff7786ee2da03fa841af92874b03366f98e77464509e62f3069b3d0b23807",
+    "outfile": {
+     "sha256": "9f6a011bf875e55c1ea42ae90421a1537b5456e6226af34fc87ad172598cdb93",
+     "bytes": 195,
+     "head": ">g0\nATGAACTTCTGCCCAATGCTGCGTTCTGGCTTCCGTGCTGAAATGCTGAACCGTACCTAC\n>g1\nATGATGTTCTTCCACGCTCACCACCAGGCTTACTACTACCAGACCACCTTCTCTTTCACC\n>g2\nATGTCTGAATGCGGCCTGTACGCTTT"
+    }
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "9f6a011bf875e55c1ea42ae90421a1537b5456e6226af34fc87ad172598cdb93",
+     "bytes": 195,
+     "head": ">g0\nATGAACTTCTGCCCAATGCTGCGTTCTGGCTTCCGTGCTGAAATGCTGAACCGTACCTAC\n>g1\nATGATGTTCTTCCACGCTCACCACCAGGCTTACTACTACCAGACCACCTTCTCTTTCACC\n>g2\nATGTCTGAATGCGGCCTGTACGCTTT"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "outfile": {
+     "sha256": "9f6a011bf875e55c1ea42ae90421a1537b5456e6226af34fc87ad172598cdb93",
+     "bytes": 195,
+     "head": ">g0\nATGAACTTCTGCCCAATGCTGCGTTCTGGCTTCCGTGCTGAAATGCTGAACCGTACCTAC\n>g1\nATGATGTTCTTCCACGCTCACCACCAGGCTTACTACTACCAGACCACCTTCTCTTTCACC\n>g2\nATGTCTGAATGCGGCCTGTACGCTTT"
+    }
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "PAL2NAL output, COAL error",
+  "leftovers": []
+ },
+ "stdin_protein": {
+  "note": "protein alignment from standard input",
+  "args": [
+   "-",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e9462a21cf185da1fdbcfb47e7185f5831429bbc2844ff92482ea944f92d8f21",
+     "bytes": 195,
+     "head": ">g0\nATGAAATACGAAGCTTACTGCATCACCAACGTTATCGAACCAATGACCATGAACACCATC\n>g1\nATGTACAAACACCAGAAATACCGTGGCCGTAACTACGTTTCTGCTATCGGCCGTAAACCA\n>g2\nATGCTGGGCTGCATGTACCGTTGGAA"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e9462a21cf185da1fdbcfb47e7185f5831429bbc2844ff92482ea944f92d8f21",
+     "bytes": 195,
+     "head": ">g0\nATGAAATACGAAGCTTACTGCATCACCAACGTTATCGAACCAATGACCATGAACACCATC\n>g1\nATGTACAAACACCAGAAATACCGTGGCCGTAACTACGTTTCTGCTATCGGCCGTAAACCA\n>g2\nATGCTGGGCTGCATGTACCGTTGGAA"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "pal2nal": {
+    "rc": null,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "(not run: PAL2NAL has no standard-input mode)"
+    ],
+    "stderr_sha": "edb36e57538e48ff5c490ec18f34f67606c0dfae3393c74e767196ebc4686336"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "not run",
+  "leftovers": []
+ },
+ "stdin_dna": {
+  "note": "DNA from standard input",
+  "args": [
+   "pep.fasta",
+   "-",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "175d8b07cdfc7818d1334ee213a96051d0690eb4fc03086c03126c00b44c44a9",
+     "bytes": 195,
+     "head": ">g0\nATGTGCACCCTGTGGTTCTGCGACTCTATCGACAAACAGCTGGGCCTGGGCCGTAACCCA\n>g1\nATGGTTCTGAAAGCTGGCCACCAGCTGACCCAGTGGGTTGTTGAAAAAAACAAAGTTTTC\n>g2\nATGTTCTTCGGCAAAATGTCTGTTAA"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "175d8b07cdfc7818d1334ee213a96051d0690eb4fc03086c03126c00b44c44a9",
+     "bytes": 195,
+     "head": ">g0\nATGTGCACCCTGTGGTTCTGCGACTCTATCGACAAACAGCTGGGCCTGGGCCGTAACCCA\n>g1\nATGGTTCTGAAAGCTGGCCACCAGCTGACCCAGTGGGTTGTTGAAAAAAACAAAGTTTTC\n>g2\nATGTTCTTCGGCAAAATGTCTGTTAA"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "pal2nal": {
+    "rc": null,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "(not run: PAL2NAL has no standard-input mode)"
+    ],
+    "stderr_sha": "edb36e57538e48ff5c490ec18f34f67606c0dfae3393c74e767196ebc4686336"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "not run",
+  "leftovers": []
+ },
+ "two_dna_files": {
+  "note": "DNA split over two files",
+  "args": [
+   "pep.fasta",
+   "nuc0.fasta",
+   "nuc1.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "d36c3d81948d3c47692ea12ac60ab52f85492d08cb3c27b1cd8598be5bab1e6b",
+     "bytes": 260,
+     "head": ">g0\nATGCAGTGCATGGACAAACACCAGATCTGGATCGGCTGCATCGAACAGTGGCTGGACCCA\n>g1\nATGAAACCATTCCACGTTCGTGACCGTAACCGTATGCACGTTACCGGCTGGGACTCTTTC\n>g2\nATGCGTGACTGGTTCAACTGGGACGG"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "d36c3d81948d3c47692ea12ac60ab52f85492d08cb3c27b1cd8598be5bab1e6b",
+     "bytes": 260,
+     "head": ">g0\nATGCAGTGCATGGACAAACACCAGATCTGGATCGGCTGCATCGAACAGTGGCTGGACCCA\n>g1\nATGAAACCATTCCACGTTCGTGACCGTAACCGTATGCACGTTACCGGCTGGGACTCTTTC\n>g2\nATGCGTGACTGGTTCAACTGGGACGG"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "d36c3d81948d3c47692ea12ac60ab52f85492d08cb3c27b1cd8598be5bab1e6b",
+     "bytes": 260,
+     "head": ">g0\nATGCAGTGCATGGACAAACACCAGATCTGGATCGGCTGCATCGAACAGTGGCTGGACCCA\n>g1\nATGAAACCATTCCACGTTCGTGACCGTAACCGTATGCACGTTACCGGCTGGGACTCTTTC\n>g2\nATGCGTGACTGGTTCAACTGGGACGG"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "nogap_code2": {
+  "note": "-nogap with code 2 (TGA = Trp kept, AGA/AGG stops removed)",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-codontable",
+   "2",
+   "-nogap",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "d35a5eabb12866ce8dc97bd9512937068ee1401e93545a115cd5479aadfd834c",
+     "bytes": 279,
+     "head": ">g0\nATGCTGGTTAAATGCGCTCTGTACCTGGACACCACCACCCACTCTCCATTCATGATGTTC\nCACAAAATCGACGACCCATGAGTTCAC\n>g1\nATGATGTCTGACAACTGAATCTACAACGCTTGAGACGCTTACAACTGCACCCACTACTGA\nAT"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "d35a5eabb12866ce8dc97bd9512937068ee1401e93545a115cd5479aadfd834c",
+     "bytes": 279,
+     "head": ">g0\nATGCTGGTTAAATGCGCTCTGTACCTGGACACCACCACCCACTCTCCATTCATGATGTTC\nCACAAAATCGACGACCCATGAGTTCAC\n>g1\nATGATGTCTGACAACTGAATCTACAACGCTTGAGACGCTTACAACTGCACCCACTACTGA\nAT"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "5842b0bee86bcb5d7faf0879a51128d0e7a0dc6b0ddd56899ad0e9cb482db308",
+     "bytes": 225,
+     "head": ">g0\nATGCTGAAACTGTACCTGGACAGAACCCACTCTCCATTCATGATGCACAAAATCGACGAC\nCCAGTTCAC\n>g1\nATGATGGACATCTACAACGCTAGAGCTTACAACTGCACCCACTACATCGACCAGTTCAAA\nCAGTGCGGC\n>g2\nATGTTC"
+    },
+    "stderr_lines": [
+     "#------------------------------------------------------------------------#",
+     "#  Input files:  pep.fasta nuc.fasta",
+     "#  Codontable 2 is used",
+     "#------------------------------------------------------------------------#",
+     ""
+    ],
+    "stderr_sha": "847d4fae02c37720d42746daecee92a995482ff997c2c6b46fe9066a865a382f"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "DIFFERENT output",
+  "leftovers": []
+ },
+ "nomismatch_mixed": {
+  "note": "-nomismatch on genes with a few wrong codons",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-nomismatch",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "fd1484f9b8740d029259b0f0bf8f0f158b863ca13376d2512705715b03ae67af",
+     "bytes": 372,
+     "head": ">g0\nATGGAATCTGGCGACTCTCGTTACCGTGAATTCATGTGCGTTGACTACCCACTGAACACC\nGACTACGCTGACCCAGCTTGGGAAAAA\n>g1\nATGTGGATGGAAGTTGAACACTTCCAGAACTCTATCGAACCAGTTAACATGGAATACAAC\nCG"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "fd1484f9b8740d029259b0f0bf8f0f158b863ca13376d2512705715b03ae67af",
+     "bytes": 372,
+     "head": ">g0\nATGGAATCTGGCGACTCTCGTTACCGTGAATTCATGTGCGTTGACTACCCACTGAACACC\nGACTACGCTGACCCAGCTTGGGAAAAA\n>g1\nATGTGGATGGAAGTTGAACACTTCCAGAACTCTATCGAACCAGTTAACATGGAATACAAC\nCG"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "fd1484f9b8740d029259b0f0bf8f0f158b863ca13376d2512705715b03ae67af",
+     "bytes": 372,
+     "head": ">g0\nATGGAATCTGGCGACTCTCGTTACCGTGAATTCATGTGCGTTGACTACCCACTGAACACC\nGACTACGCTGACCCAGCTTGGGAAAAA\n>g1\nATGTGGATGGAAGTTGAACACTTCCAGAACTCTATCGAACCAGTTAACATGGAATACAAC\nCG"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "codon_format": {
+  "note": "-output codon",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "codon"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "8dec54f9a1d22ef3e6e665d9cb46dd020ef713baa10dc0d13efd2253b51f28b8",
+     "bytes": 758,
+     "head": "              M   K   T   F   C   N   T   D   Q   I   R   N   A   K   G   N   Y   Q   Y   L\ng0            ATG AAA ACC TTC TGC AAC ACC GAC CAG ATC CGT AAC GCT AA"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "8dec54f9a1d22ef3e6e665d9cb46dd020ef713baa10dc0d13efd2253b51f28b8",
+     "bytes": 758,
+     "head": "              M   K   T   F   C   N   T   D   Q   I   R   N   A   K   G   N   Y   Q   Y   L\ng0            ATG AAA ACC TTC TGC AAC ACC GAC CAG ATC CGT AAC GCT AA"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "8dec54f9a1d22ef3e6e665d9cb46dd020ef713baa10dc0d13efd2253b51f28b8",
+     "bytes": 758,
+     "head": "              M   K   T   F   C   N   T   D   Q   I   R   N   A   K   G   N   Y   Q   Y   L\ng0            ATG AAA ACC TTC TGC AAC ACC GAC CAG ATC CGT AAC GCT AA"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "paml_format": {
+  "note": "-output paml",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "paml"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "f8d49ac1f7828305dcb6cfd1dd33a5b7e73313a40b21b35dbea1a12c8432ec7c",
+     "bytes": 252,
+     "head": "   3     75\ng0\nATGGACGAAGACAAAACCAAATGGGACAACAAATGGGTTCTGCTGTCTCTGCGTCGTGCT\nACCTCTACCGACTAC\ng1\nATGGAACTGCCATCTTGCAAAATCCGTAAACGTTGGGGCGCTGAACTGGAACAGGGCTAC\nATCG"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "f8d49ac1f7828305dcb6cfd1dd33a5b7e73313a40b21b35dbea1a12c8432ec7c",
+     "bytes": 252,
+     "head": "   3     75\ng0\nATGGACGAAGACAAAACCAAATGGGACAACAAATGGGTTCTGCTGTCTCTGCGTCGTGCT\nACCTCTACCGACTAC\ng1\nATGGAACTGCCATCTTGCAAAATCCGTAAACGTTGGGGCGCTGAACTGGAACAGGGCTAC\nATCG"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "f8d49ac1f7828305dcb6cfd1dd33a5b7e73313a40b21b35dbea1a12c8432ec7c",
+     "bytes": 252,
+     "head": "   3     75\ng0\nATGGACGAAGACAAAACCAAATGGGACAACAAATGGGTTCTGCTGTCTCTGCGTCGTGCT\nACCTCTACCGACTAC\ng1\nATGGAACTGCCATCTTGCAAAATCCGTAAACGTTGGGGCGCTGAACTGGAACAGGGCTAC\nATCG"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "clustal_format": {
+  "note": "-output clustal",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "clustal"
+  ],
+  "tools": {
+   "python": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "bc181b552af9f28776539d4552aebc6a07ce0111da90fd1e41c4ce9c5fd816aa",
+     "bytes": 808,
+     "head": "CLUSTAL W multiple sequence alignment\n\ng0            ATGGCTCTGCAGTCTAACGAAGTTATGACCGACCACATCCACGCTACCCGTCAGTTCGAA\ng1            ATGGAAATGAACGAATGGGGCCACTTCTGGAT"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "cpp": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "bc181b552af9f28776539d4552aebc6a07ce0111da90fd1e41c4ce9c5fd816aa",
+     "bytes": 808,
+     "head": "CLUSTAL W multiple sequence alignment\n\ng0            ATGGCTCTGCAGTCTAACGAAGTTATGACCGACCACATCCACGCTACCCGTCAGTTCGAA\ng1            ATGGAAATGAACGAATGGGGCCACTTCTGGAT"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "bc181b552af9f28776539d4552aebc6a07ce0111da90fd1e41c4ce9c5fd816aa",
+     "bytes": 808,
+     "head": "CLUSTAL W multiple sequence alignment\n\ng0            ATGGCTCTGCAGTCTAACGAAGTTATGACCGACCACATCCACGCTACCCGTCAGTTCGAA\ng1            ATGGAAATGAACGAATGGGGCCACTTCTGGAT"
+    },
+    "stderr_lines": [],
+    "stderr_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "identical",
+  "leftovers": []
+ },
+ "dna_too_short": {
+  "note": "DNA truncated before the end of the protein",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 1,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "coal: error: g0: protein and DNA are inconsistent (no match found)",
+     "coal: summary: g0: The DNA ends before the protein does (at column 21).",
+     "coal: summary: The run stopped at g0: 2 sequences were not checked and no output was written. Add --keep-going to write the other sequences and leave this one out."
+    ],
+    "stderr_sha": "3524a1fd547b62c92211e32fab42c49a7c329af22e4dc7c5d008c361c8bbf122"
+   },
+   "cpp": {
+    "rc": 1,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "coal: error: g0: protein and DNA are inconsistent (no match found)",
+     "coal: summary: g0: The DNA ends before the protein does (at column 21).",
+     "coal: summary: The run stopped at g0: 2 sequences were not checked and no output was written. Add --keep-going to write the other sequences and leave this one out."
+    ],
+    "stderr_sha": "3524a1fd547b62c92211e32fab42c49a7c329af22e4dc7c5d008c361c8bbf122"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "#---  ERROR: inconsistency between the following pep and nuc seqs  ---#",
+     ">g0",
+     "MDPKRHMSFASMSEWMVWGGAYMGPCCNQM",
+     ">g0",
+     "ATGGACCCAAAACGTCACATGTCTTTCGCTTCTATGTCTGAATGGATGGTTTGGGGCGGC",
+     ""
+    ],
+    "stderr_sha": "75927cb18c1ef7adbc2cdc94a8842e8153db455f7854bf36d1d8ce32e9b04031"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "both fail",
+  "leftovers": []
+ },
+ "files_swapped": {
+  "note": "DNA given as the protein alignment and vice versa",
+  "args": [
+   "nuc.fasta",
+   "pep.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 1,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "coal: error: g0: protein and DNA are inconsistent (no match found); its protein row looks like DNA: are the two files the other way round? (coal PROTEIN_ALIGNMENT DNA_FASTA)",
+     "coal: summary: g0: The DNA does not spell the start of this protein in any reading frame.",
+     "coal: summary: The run stopped at g0: 2 sequences were not checked and no output was written. Add --keep-going to write the other sequences and leave this one out."
+    ],
+    "stderr_sha": "9645e5b6f5b2c59665ed5dba48fcea36728d7e1087cd6b7b259ef1995fcf04ec"
+   },
+   "cpp": {
+    "rc": 1,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "coal: error: g0: protein and DNA are inconsistent (no match found); its protein row looks like DNA: are the two files the other way round? (coal PROTEIN_ALIGNMENT DNA_FASTA)",
+     "coal: summary: g0: The DNA does not spell the start of this protein in any reading frame.",
+     "coal: summary: The run stopped at g0: 2 sequences were not checked and no output was written. Add --keep-going to write the other sequences and leave this one out."
+    ],
+    "stderr_sha": "9645e5b6f5b2c59665ed5dba48fcea36728d7e1087cd6b7b259ef1995fcf04ec"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "#---  ERROR: inconsistency between the following pep and nuc seqs  ---#",
+     ">g0",
+     "ATGCGTTACAACCTGAAAAAACACATCCGTTGGCGTGACTTCGTTGTTCCACGTCACCGT",
+     "CACCAGGAAACCCTGATCAACTACCACTCT",
+     ">g0",
+     "MRYNLKKHIRWRDFVVPRHRHQETLINYHS"
+    ],
+    "stderr_sha": "ee1099858fee91ec0da8dadf609d0f026db2b904adab0aca0bf9148301540250"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "both fail",
+  "leftovers": []
+ },
+ "binary_file": {
+  "note": "a binary (NUL bytes) file as the DNA",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 1,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "coal: error: number of sequences differs (protein: 3, DNA: 1): each protein needs exactly one DNA record; 2 proteins have no DNA record (e.g. 'g1'): add the missing DNA, remove those proteins from the alignment, or check you used the right files"
+    ],
+    "stderr_sha": "3d51a48ea2409966115aae4824b07b5fbb4297f890ab8c30ea57cb5401ee21b0"
+   },
+   "cpp": {
+    "rc": 1,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "coal: error: number of sequences differs (protein: 3, DNA: 1): each protein needs exactly one DNA record; 2 proteins have no DNA record (e.g. 'g1'): add the missing DNA, remove those proteins from the alignment, or check you used the right files"
+    ],
+    "stderr_sha": "3d51a48ea2409966115aae4824b07b5fbb4297f890ab8c30ea57cb5401ee21b0"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "",
+     "ERROR: number of input seqs differ (aa: 3;  nuc: 1)!!",
+     "",
+     "   aa  'g0 g1 g2'",
+     "   nuc 'g0'"
+    ],
+    "stderr_sha": "e6edecd00252f60c0581a625082a454bd3457e95279984e80492498d0c7459cd"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "both fail",
+  "leftovers": []
+ },
+ "rows_different_lengths": {
+  "note": "protein rows of different lengths (not aligned)",
+  "args": [
+   "pep.fasta",
+   "nuc.fasta",
+   "-output",
+   "fasta"
+  ],
+  "tools": {
+   "python": {
+    "rc": 1,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "coal: error: protein alignment rows have different lengths (30 and 32, at g1): is pep.fasta an aligned protein file, e.g. from MAFFT or MUSCLE? Every row of an alignment has the same length, gaps included"
+    ],
+    "stderr_sha": "2211be59e6905741780097eb77580b6399f15fd8429ad6276e5f4a32dce0523f"
+   },
+   "cpp": {
+    "rc": 1,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "coal: error: protein alignment rows have different lengths (30 and 32, at g1): is pep.fasta an aligned protein file, e.g. from MAFFT or MUSCLE? Every row of an alignment has the same length, gaps included"
+    ],
+    "stderr_sha": "2211be59e6905741780097eb77580b6399f15fd8429ad6276e5f4a32dce0523f"
+   },
+   "pal2nal": {
+    "rc": 0,
+    "timeout": false,
+    "stdout": {
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "bytes": 0,
+     "head": ""
+    },
+    "stderr_lines": [
+     "#---  ERROR: inconsistency between the following pep and nuc seqs  ---#",
+     ">g1",
+     "MIPMVIVHDYLRMRTEQDWQTVKNGPNIATAA",
+     ">g1",
+     "ATGATCCCAATGGTTATCGTTCACGACTACCTGCGTATGCGTACCGAACAGGACTGGCAG",
+     "ACCGTTAAAAACGGCCCAAACATCGCTACC"
+    ],
+    "stderr_sha": "96a7111730a3cc0b30f6f4c478bbaafd73bcb4485b8686fbbbf42cefdf1daf41"
+   }
+  },
+  "engines_identical": true,
+  "vs_pal2nal": "both fail",
+  "leftovers": []
+ }
+}

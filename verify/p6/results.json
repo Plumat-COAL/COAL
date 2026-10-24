@@ -1,0 +1,207 @@
+[
+ {
+  "name": "MCP initialize answers with serverInfo",
+  "ok": true,
+  "detail": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"capabilities\": {\"experimental\": {}, \"prompts\": {\"listChanged\": false}, \"resources\": {\"listChanged\": false, \"subscribe\": false}, \"tools\": {\"listChanged\": false}}, \"instructions\": \"COAL turns a protein multiple sequence alignment plus the unaligned coding DNA of"
+ },
+ {
+  "name": "MCP serverInfo.version is COAL's version (0.5.0)",
+  "ok": true,
+  "detail": "{'name': 'coal', 'title': 'COAL codon alignment', 'version': '0.5.0'}"
+ },
+ {
+  "name": "MCP tools/list: exactly codon_align and explain_report",
+  "ok": true,
+  "detail": "['codon_align', 'explain_report']"
+ },
+ {
+  "name": "codon_align schema: the nine parameters with descriptions",
+  "ok": true,
+  "detail": "['blockonly', 'codontable', 'dna_fasta_path', 'nogap', 'nomismatch', 'output_format', 'protein_alignment_path', 'save_as', 'strict']"
+ },
+ {
+  "name": "codon_align: codontable limited to the 17 codes",
+  "ok": true,
+  "detail": "{'default': 1, 'description': 'NCBI genetic code: 1 standard (nuclear), 2 vertebrate mitochondrial, 3 yeast mito, 4 mold/protozoan mito and Mycoplasma, 5 invertebrate mito, 9 echinoderm/flatworm mito, 11 bacteria, archaea and plastids; also 6, 10, 12-16, 21-23.', 'enum': [1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 16, 21, 22, 23], 'title': 'Codontable', 'type': 'integer'}"
+ },
+ {
+  "name": "codon_align: output_format enum of the 4 formats",
+  "ok": true,
+  "detail": "{'default': 'fasta', 'description': 'Output format of the codon alignment: fasta (default), clustal, paml (codeml) or codon.', 'enum': ['fasta', 'clustal', 'paml', 'codon'], 'title': 'Output Format', 'type': 'string'}"
+ },
+ {
+  "name": "codon_align has a description (docstring) mentioning all_ok / needs_attention",
+  "ok": true,
+  "detail": "Build a codon alignment from a protein alignment and the matching unaligned coding DNA (PAL2NAL replacement).\n\nUse this when you have aligned protein sequences and the DNA (CDS) of the same genes and "
+ },
+ {
+  "name": "explain_report schema: report_path only, described",
+  "ok": true,
+  "detail": "{'properties': {'report_path': {'description': 'Absolute path to a coal.report/1 JSON file (report_path from codon_align, or COAL --report).', 'title': 'Report Path', 'type': 'string'}}, 'required': ['report_path'], 'type': 'object', 'title': 'explain_reportArguments'}"
+ },
+ {
+  "name": "codon_align clean: completed, all_ok, counts ok=6",
+  "ok": true,
+  "detail": "{'completed': True, 'all_ok': True, 'needs_attention': False, 'counts': {'total': 6, 'ok': 6, 'warning': 0, 'failed': 0, 'not_checked': 0}, 'suggested_codontable': None, 'next_step': 'All sequences match their protein; the alignment at output_path is ready to use.', 'output_path': '/mnt/d/coal-stress/verify/p6/runs/run_94a3i3l9/pep.codon.fasta', 'report_path': '/mnt/d/coal-stress/verify/p6/runs/run_94a3i3l9/pep.report.json', 'exit_code': 0, 'summary': {'total': 6, 'ok': 6, 'warning': 0, 'failed': 0, 'pairing': 'id'}, 'summary_text': '6 sequences: 6 OK, 0 with warnings, 0 failed.', 'hints': [], 'problems': [], 'problems_total': 0, 'engine_messages': [], 'warning_lines': 0, 'methods_text': 'Codon alignments were built with COAL v0.5.0 (https://github.com/plumat-coal/COAL), which places each "
+ },
+ {
+  "name": "codon_align clean: output_path and report_path exist",
+  "ok": true,
+  "detail": "('/mnt/d/coal-stress/verify/p6/runs/run_94a3i3l9/pep.codon.fasta', '/mnt/d/coal-stress/verify/p6/runs/run_94a3i3l9/pep.report.json')"
+ },
+ {
+  "name": "codon_align clean: alignment byte-identical to the CLI",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "codon_align with one mismatch: needs_attention, counts warning=1, problems named",
+  "ok": true,
+  "detail": "{'completed': True, 'all_ok': False, 'needs_attention': True, 'counts': {'total': 6, 'ok': 5, 'warning': 1, 'failed': 0, 'not_checked': 0}, 'suggested_codontable': None, 'next_step': '1 sequence(s) with warnings and 0 failed: call explain_report(report_path) and tell the user which genes need checking before using the alignment.', 'output_path': '/mnt/d/coal-stress/verify/p6/runs/run_si0gro9s/pep.codon.fasta', 'report_path': '/mnt/d/coal-stress/verify/p6/runs/run_si0gro9s/pep.report.json', 'exit_code': 0, 'summary': {'total': 6, 'ok': 5, 'warning': 1, 'failed': 0, 'pairing': 'id'}, 'summary_text': '6 sequences: 5 OK, 1 with warnings, 0 failed.', 'hints': [], 'problems': [{'id': 'g2', 'status': 'warning', 'explanation': '1 codon does not match its amino acid (first at column 11): the protei"
+ },
+ {
+  "name": "codon_align with one broken gene: completed (keep-going), failed=1, needs_attention, next_step says what to do",
+  "ok": true,
+  "detail": "{'completed': True, 'all_ok': False, 'needs_attention': True, 'counts': {'total': 6, 'ok': 4, 'warning': 1, 'failed': 1, 'not_checked': 0}, 'suggested_codontable': None, 'next_step': '1 sequence(s) with warnings and 1 failed: call explain_report(report_path) and tell the user which genes need checking before using the alignment.', 'output_path': '/mnt/d/coal-stress/verify/p6/runs/run_raz9cz0l/pep.codon.fasta', 'report_path': '/mnt/d/coal-stress/verify/p6/runs/run_raz9cz0l/pep.report.json', 'exit_code': 2, 'summary': {'total': 6, 'ok': 4, 'warning': 1, 'failed': 1, 'pairing': 'id'}, 'summary_text': '6 sequences: 4 OK, 1 with warnings, 1 failed.', 'hints': [], 'problems': [{'id': 'g2', 'status': 'warning', 'explanation': '1 codon does not match its amino acid (first at column 11): the protei"
+ },
+ {
+  "name": "codon_align mito under code 1: suggested_codontable == 2",
+  "ok": true,
+  "detail": "{'completed': True, 'all_ok': False, 'needs_attention': True, 'counts': {'total': 5, 'ok': 0, 'warning': 5, 'failed': 0, 'not_checked': 0}, 'suggested_codontable': 2, 'next_step': 'Re-run codon_align with codontable=2 (see hints), then check again.', 'output_path': '/mnt/d/coal-stress/verify/p6/runs/run_h54sch5l/pep_mito.codon.fasta', 'report_path': '/mnt/d/coal-stress/verify/p6/runs/run_h54sch5l/pep_mito.report.json', 'exit_code': 0, 'summary': {'total': 5, 'ok': 0, 'warning': 5, 'failed': 0, 'pairing': 'id'}, 'summary_text': '5 sequences: 0 OK, 5 with warnings, 0 failed.', 'hints': [{'code': 'genetic_code', 'text': 'Under genetic code 2 (Vertebrate mitochondrial), all 5 sequences match their protein; under code 1, none do. Codes 5 and 13 fit these sequences too: choose the code of the or"
+ },
+ {
+  "name": "codon_align mito with code 2: all_ok",
+  "ok": true,
+  "detail": "{'completed': True, 'all_ok': True, 'needs_attention': False, 'counts': {'total': 5, 'ok': 5, 'warning': 0, 'failed': 0, 'not_checked': 0}, 'suggested_codontable': None, 'next_step': 'All sequences match their protein; the alignment at output_path is ready to use.', 'output_path': '/mnt/d/coal-stress/verify/p6/runs/run_as1zqak2/pep_mito.codon.fasta', 'report_path': '/mnt/d/coal-stress/verify/p6/runs/run_as1zqak2/pep_mito.report.json', 'exit_code': 0, 'summary': {'total': 5, 'ok': 5, 'warning': 0, 'failed': 0, 'pairing': 'id'}, 'summary_text': '5 sequences: 5 OK, 0 with warnings, 0 failed.', 'hints': [], 'problems': [], 'problems_total': 0, 'engine_messages': [], 'warning_lines': 0, 'methods_text': 'Codon alignments were built with COAL v0.5.0 (https://github.com/plumat-coal/COAL), which pl"
+ },
+ {
+  "name": "codon_align output_format=clustal: identical to the CLI",
+  "ok": true,
+  "detail": "/mnt/d/coal-stress/verify/p6/runs/run_qbw0qzyv/pep.codon.aln"
+ },
+ {
+  "name": "codon_align output_format=paml: identical to the CLI",
+  "ok": true,
+  "detail": "/mnt/d/coal-stress/verify/p6/runs/run_ruqa5i51/pep.codon.paml"
+ },
+ {
+  "name": "codon_align output_format=codon: identical to the CLI",
+  "ok": true,
+  "detail": "/mnt/d/coal-stress/verify/p6/runs/run_qjrjchu_/pep.codon.codon.txt"
+ },
+ {
+  "name": "codon_align nogap=true: same alignment as the CLI with that option",
+  "ok": true,
+  "detail": "(True, {'total': 6, 'ok': 5, 'warning': 1, 'failed': 0, 'not_checked': 0}, '/mnt/d/coal-stress/verify/p6/runs/run_tgu6mwth/pep.codon.fasta')"
+ },
+ {
+  "name": "codon_align nomismatch=true: same alignment as the CLI with that option",
+  "ok": true,
+  "detail": "(True, {'total': 6, 'ok': 5, 'warning': 1, 'failed': 0, 'not_checked': 0}, '/mnt/d/coal-stress/verify/p6/runs/run_apv6ke2w/pep.codon.fasta')"
+ },
+ {
+  "name": "codon_align strict=true: same alignment as the CLI with that option",
+  "ok": true,
+  "detail": "(True, {'total': 6, 'ok': 5, 'warning': 1, 'failed': 0, 'not_checked': 0}, '/mnt/d/coal-stress/verify/p6/runs/run_knmgz0mh/pep.codon.fasta')"
+ },
+ {
+  "name": "codon_align blockonly=true: same alignment as the CLI with that option",
+  "ok": true,
+  "detail": "(True, {'total': 6, 'ok': 5, 'warning': 1, 'failed': 0, 'not_checked': 0}, '/mnt/d/coal-stress/verify/p6/runs/run_9u1w73i_/pep.codon.fasta')"
+ },
+ {
+  "name": "codon_align missing file: tool error (isError)",
+  "ok": true,
+  "detail": "{'isError': True, 'text': \"Error executing tool codon_align: file not found: /mnt/d/coal-stress/verify/p6/missing.fasta (give an absolute path; relative paths resolve against the server's working directory /mnt/d/coal-stress/verify/p6)\"}"
+ },
+ {
+  "name": "codon_align relative path: resolved against the server's folder or a clear error (docs say absolute)",
+  "ok": true,
+  "detail": "{'completed': True, 'all_ok': True, 'needs_attention': False, 'counts': {'total': 6, 'ok': 6, 'warning': 0, 'failed': 0, 'not_checked': 0}, 'suggested_codontable': None, 'next_step': 'All sequences match their protein; the alignment at output_path is ready to use.', 'output_path': '/mnt/d/coal-stress/verify/p6/runs/run_evelnz6h/pep.codon.fasta', 'report_path': '/mnt/d/coal-stress/verify/p6/runs/run_evelnz6h/pep.report.json', 'exit_code': 0, 'summary': {'total': 6, 'ok': 6, 'warning': 0, 'failed': 0, 'pairing': 'id'}, 'summary_text': '6 sequences: 6 OK, 0 with warnings, 0 failed.', 'hints': [], 'problems': [], 'problems_total': 0, 'engine_messages': [], 'warning_lines': 0, 'methods_text': 'Codon alignments were built with COAL v0.5.0 (https://github.com/plumat-coal/COAL), which places each "
+ },
+ {
+  "name": "codon_align paths with spaces: ok",
+  "ok": true,
+  "detail": "{'completed': True, 'all_ok': True, 'needs_attention': False, 'counts': {'total': 6, 'ok': 6, 'warning': 0, 'failed': 0, 'not_checked': 0}, 'suggested_codontable': None, 'next_step': 'All sequences match their protein; the alignment at output_path is ready to use.', 'output_path': '/mnt/d/coal-stress/verify/p6/runs/run_1gjxwthc/pep.codon.fasta', 'report_path': '/mnt/d/coal-stress/verify/p6/runs/run_1gjxwthc/pep.report.json', 'exit_code': 0, 'summary': {'total': 6, 'ok': 6, 'warning': 0, 'failed': 0, 'pairing': 'id'}, 'summary_text': '6 sequences: 6 OK, 0 with warnings, 0 failed.', 'hints': [], 'problems': [], 'problems_total': 0, 'engine_messages': [], 'warning_lines': 0, 'methods_text': 'Codon alignments were built with COAL v0.5.0 (https://github.com/plumat-coal/COAL), which places each "
+ },
+ {
+  "name": "codon_align files swapped: a clear error or a failed result, never all_ok",
+  "ok": true,
+  "detail": "{'completed': False, 'all_ok': False, 'needs_attention': True, 'counts': {'total': 6, 'ok': 0, 'warning': 0, 'failed': 6, 'not_checked': 0}, 'suggested_codontable': None, 'next_step': 'COAL stopped before writing an alignment: call explain_report(report_path) for the cause and fix.', 'output_path': None, 'report_path': '/mnt/d/coal-stress/verify/p6/runs/run_yrhxohmh/nuc.report.json', 'exit_code': 1, 'summary': {'total': 6, 'ok': 0, 'warning': 0, 'failed': 6, 'pairing': 'id'}, 'summary_text': '6 sequences: 0 OK, 0 with warnings, 6 failed.', 'hints': [], 'problems': [{'id': 'g0', 'status': 'failed', 'explanation': 'The DNA does not spell the start of this protein in any reading frame. Is this the right DNA for this protein, and the right genetic code?'}, {'id': 'g1', 'status': 'failed', 'exp"
+ },
+ {
+  "name": "codon_align codontable 7 (unknown): tool / validation error",
+  "ok": true,
+  "detail": "{'isError': True, 'text': 'Error executing tool codon_align: 1 validation error for codon_alignArguments\\ncodontable\\n  Input should be 1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 16, 21, 22 or 23 [type=literal_error, input_value=7, input_type=int]\\n    For further information visit https://errors.pydantic.dev/2.14/v/literal_error'}"
+ },
+ {
+  "name": "codon_align output_format nexus: tool / validation error",
+  "ok": true,
+  "detail": "{'isError': True, 'text': \"Error executing tool codon_align: 1 validation error for codon_alignArguments\\noutput_format\\n  Input should be 'fasta', 'clustal', 'paml' or 'codon' [type=literal_error, input_value='nexus', input_type=str]\\n    For further information visit https://errors.pydantic.dev/2.14/v/literal_error\"}"
+ },
+ {
+  "name": "codon_align save_as new file: written there",
+  "ok": true,
+  "detail": "/mnt/d/coal-stress/verify/p6/saved.fasta"
+ },
+ {
+  "name": "codon_align save_as existing file: not overwritten (documented), result says where it went or errors",
+  "ok": true,
+  "detail": "(None, True, 'Error executing tool codon_align: not saved: /mnt/d/coal-stress/verify/p6/saved.fasta already exists (COAL never overwrites a file; choose another name). The alignment is at /mnt/d/coal-stress/verify/')"
+ },
+ {
+  "name": "codon_align save_as existing folder: saved inside it",
+  "ok": true,
+  "detail": "/mnt/d/coal-stress/verify/p6/savefolder/pep.codon.fasta"
+ },
+ {
+  "name": "codon_align save_as into a missing folder: tool error or clear message, no crash",
+  "ok": true,
+  "detail": "{'isError': True, 'text': 'Error executing tool codon_align: not saved: the folder /mnt/d/coal-stress/verify/p6/no_such_dir does not exist. The alignment is at /mnt/d/coal-stress/verify/p6/runs/run_e3jnie8g/pep.codon.fasta'}"
+ },
+ {
+  "name": "codon_align large input (>= 1 MB): completed, all_ok, report says which engine ran",
+  "ok": true,
+  "detail": "({'total': 12000, 'ok': 12000, 'warning': 0, 'failed': 0, 'not_checked': 0}, 'coal-cpp', '1.0s')"
+ },
+ {
+  "name": "codon_align large input: engine is coal-cpp (hand-over through the app layer)",
+  "ok": true,
+  "detail": "coal-cpp"
+ },
+ {
+  "name": "explain_report clean: plain text, mentions counts",
+  "ok": true,
+  "detail": "6 sequences: 6 OK, 0 with warnings, 0 failed.\nProteins and DNA were paired by matching their IDs exactly.\nThe codon alignment was written to /mnt/d/coal-stress/verify/p6/runs/run_94a3i3l9/pep.codon.fasta (fasta format).\nNothing went wrong: every protein matched its DNA.\n\nMethods text (ready to paste"
+ },
+ {
+  "name": "explain_report broken: plain text, mentions counts",
+  "ok": true,
+  "detail": "6 sequences: 4 OK, 1 with warnings, 1 failed.\nProteins and DNA were paired by matching their IDs exactly.\nThe codon alignment was written to /mnt/d/coal-stress/verify/p6/runs/run_raz9cz0l/pep.codon.fasta (fasta format).\n\nFailed sequences:\n- g4: Frameshift at column 21: there is one extra base in the"
+ },
+ {
+  "name": "explain_report mito: plain text, mentions counts",
+  "ok": true,
+  "detail": "5 sequences: 0 OK, 5 with warnings, 0 failed.\nProteins and DNA were paired by matching their IDs exactly.\nThe codon alignment was written to /mnt/d/coal-stress/verify/p6/runs/run_h54sch5l/pep_mito.codon.fasta (fasta format).\n\nSequences with warnings (still in the alignment):\n- m0: 6 codons do not ma"
+ },
+ {
+  "name": "explain_report on a non-report file: tool error",
+  "ok": true,
+  "detail": "{'isError': True, 'text': 'Error executing tool explain_report: Could not read the report: /mnt/d/coal-stress/verify/p6/pep.fasta is not JSON (Expecting value: line 1 column 1 (char 0))'}"
+ },
+ {
+  "name": "explain_report missing file: tool error",
+  "ok": true,
+  "detail": "{'isError': True, 'text': \"Error executing tool explain_report: Could not read the report: [Errno 2] No such file or directory: '/mnt/d/coal-stress/verify/p6/nope.json'\"}"
+ },
+ {
+  "name": "MCP server wrote nothing to stdout outside the protocol",
+  "ok": true,
+  "detail": "[]"
+ },
+ {
+  "name": "MCP server stderr holds no tracebacks",
+  "ok": true,
+  "detail": "b'/coal-stress/verify/p6/no_such_dir does not exist. The alignment is at /mnt/d/coal-stress/verify/p6/runs/run_e3jnie8g/pep.codon.fasta\\'\\nTool \\'explain_report\\' failed: \\'Error executing tool explain_report: Could not read the report: /mnt/d/coal-stress/verify/p6/pep.fasta is not JSON (Expecting value: line 1 column 1 (char 0))\\'\\nTool \\'explain_report\\' failed: \"Error executing tool explain_report: Could not read the report: [Errno 2] No such file or directory: \\'/mnt/d/coal-stress/verify/p6/nope.json\\'\"\\n'"
+ }
+]

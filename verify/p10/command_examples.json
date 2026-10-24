@@ -1,0 +1,54 @@
+{
+ "coal examples/clean/protein.aln.fasta examples/clean/dna.fasta -o codon.aln.fasta": {
+  "source": "site/guide.html",
+  "rc": 0,
+  "stdout_head": "",
+  "stderr": []
+ },
+ "coal examples/mito/protein.aln.fasta examples/mito/dna.fasta -o codon.aln.fasta": {
+  "source": "site/guide.html",
+  "rc": 0,
+  "stdout_head": "",
+  "stderr": [
+   "coal: notice: wrong genetic code? Under genetic code 2 (Vertebrate mitochondrial), all 24 sequences match their protein; under code 1, none do. Re-run with -codontable 2.",
+   "coal: warning: Homo_COX1 pepAlnPos 1: M does not correspond to ATA",
+   "coal: warning: Homo_COX1 pepAlnPos 7: M does not correspond to ATA",
+   "coal: warning: Homo_COX1 pepAlnPos 36: W does not correspond to TGA",
+   "coal: warning: Homo_COX1 pepAlnPos 59: M does not correspond to ATA",
+   "coal: warning: Homo_COX1 pepAlnPos 63: W does not correspond to TGA",
+   "coal: warning: Homo_COX1 pepAlnPos 81: W does not correspond to TGA",
+   "coal: warning: Homo_COX1 pepAlnPos 98: W does not correspond to TGA",
+   "coal: warning: Pan_COX1 pepAlnPos 1: M does not correspond to ATA",
+   "coal: warning: Pan_COX1 pepAlnPos 44: M does not correspond to ATA",
+   "coal: warning: Pan_COX1 pepAlnPos 81: W does not correspond to TGA",
+   "coal: warning: Pan_COX1 pepAlnPos 98: W does not correspond to TGA",
+   "coal: warning: Mus_COX1 pepAlnPos 1: M does not correspond to ATA",
+   "coal: warning: Mus_COX1 pepAlnPos 7: M does not correspond to ATA",
+   "coal: warning: Mus_COX1 pepAlnPos 30: W does not correspond to TGA",
+   "coal: warning: Mus_COX1 pepAlnPos 36: W does not correspond to TGA",
+   "coal: warning: Mus_COX1 pepAlnPos 39: M does not correspond to ATA",
+   "coal: warning: Mus_COX1 pepAlnPos 44: M does not correspond to ATA",
+   "coal: warning: Mus_COX1 pepAlnPos 49: M does not correspond to ATA",
+   "coal: warning: Mus_COX1 pepAlnPos 56: M does not correspond to ATA",
+   "coal: warning: Mus_COX1 pepAlnPos 59: M does not correspond to ATA",
+   "coal: warning: ... and 159 more warnings (see them all with --max-warnings 0 or --report FILE.json)",
+   "coal: summary: 24 of 24 sequences have codons that do not match their amino acid (kept in the alignment). Under genetic code 2 (Vertebrate mitochondrial), all 24 sequences match their protein; under code 1, none do. Codes 5 and 13 fit these sequences too: choose the code of the organism and organelle the genes come from. Re-run with -codontable 2."
+  ]
+ },
+ "coal examples/mito/protein.aln.fasta examples/mito/dna.fasta -codontable 2 -o codon.aln.fasta": {
+  "source": "site/guide.html",
+  "rc": 0,
+  "stdout_head": "",
+  "stderr": []
+ },
+ "coal examples/one_broken_gene/protein.aln.fasta examples/one_broken_gene/dna.fasta -o codon.aln.fasta": {
+  "source": "site/guide.html",
+  "rc": 1,
+  "stdout_head": "",
+  "stderr": [
+   "coal: error: OG0001_sp14: protein and DNA are inconsistent (no match found)",
+   "coal: summary: OG0001_sp14: Frameshift at column 102: one base is missing in the DNA, so from here on the codons are read out of step.",
+   "coal: summary: The run stopped at OG0001_sp14: 6 sequences were not checked and no output was written. Add --keep-going to write the other sequences and leave this one out."
+  ]
+ }
+}

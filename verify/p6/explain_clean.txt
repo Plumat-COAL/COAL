@@ -1,0 +1,7 @@
+6 sequences: 6 OK, 0 with warnings, 0 failed.
+Proteins and DNA were paired by matching their IDs exactly.
+The codon alignment was written to /mnt/d/coal-stress/verify/p6/runs/run_94a3i3l9/pep.codon.fasta (fasta format).
+Nothing went wrong: every protein matched its DNA.
+
+Methods text (ready to paste):
+Codon alignments were built with COAL v0.5.0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 6 sequences, 6 matched their protein exactly. Command: coal pep.fasta nuc.fasta --keep-going -o pep.codon.fasta
