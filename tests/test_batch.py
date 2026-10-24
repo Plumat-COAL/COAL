@@ -77,6 +77,127 @@ class _Tmp(unittest.TestCase):
         return (self.tmp / name).read_bytes()
 
 
+def run_cmd(args, cwd, timeout=300):
+    """`python -m coal ...` as a subprocess (the parallel path starts worker processes, which a test process run
+    under `-m unittest` should not do in-process); (exit code, stdout, stderr)."""
+    env = dict(os.environ, PYTHONPATH=str(ROOT / "src"), PYTHONIOENCODING="utf-8")
+    env.pop("COAL_IMPL", None)
+    r = subprocess.run([sys.executable, "-m", "coal", *args], cwd=cwd, env=env, capture_output=True, text=True,
+                       encoding="utf-8", timeout=timeout, stdin=subprocess.DEVNULL)
+    return r.returncode, r.stdout, r.stderr
+
+
+class TestBatchParallel(_Tmp):
+    """--batch-parallel N: the same outputs and report as the sequential batch, each job's messages in one block, the
+    failure policy and exit codes unchanged, the option refused on a job line and by coal-cpp."""
+    LINES = [f"{CLEAN[0]} {CLEAN[1]} -o a.fa --report a.json",
+             f"{TABLE2[0]} {TABLE2[1]} -codontable 2 -output clustal -o b.aln --report b.json",
+             f"{CLUSTAL[0]} {CLUSTAL[1]} -blockonly -output paml -o c.phy --report c.json",
+             f"{WARN[0]} {WARN[1]} -o d.fa --report d.json"]
+
+    def test_parallel_batch_equals_the_sequential_batch(self):
+        seq, par = self.tmp / "seq", self.tmp / "par"
+        for d in (seq, par):
+            d.mkdir()
+        jobs = self.jobs(self.LINES)
+        rc1, out1, err1 = run_cmd(["--batch", str(self.tmp / jobs), "--report", "batch.json"], seq)
+        rc2, out2, err2 = run_cmd(["--batch", str(self.tmp / jobs), "--report", "batch.json", "--batch-parallel", "3"], par)
+        self.assertEqual((rc1, out1), (0, ""), err1)
+        self.assertEqual((rc2, out2), (0, ""), err2)
+        for n in ("a.fa", "b.aln", "c.phy", "d.fa"):
+            self.assertEqual((par / n).read_bytes(), (seq / n).read_bytes(), n)
+        for n in ("a.json", "b.json", "c.json", "d.json"):
+            self.assertEqual(strip(json.loads((par / n).read_text())), strip(json.loads((seq / n).read_text())), n)
+        b1, b2 = json.loads((seq / "batch.json").read_text()), json.loads((par / "batch.json").read_text())
+        self.assertEqual(b2["summary"], b1["summary"])
+        self.assertEqual([j["index"] for j in b2["jobs"]], [1, 2, 3, 4])  # job order, whatever order they ended in
+        for j1, j2 in zip(b1["jobs"], b2["jobs"]):
+            self.assertEqual({k: v for k, v in j2.items() if k != "report"}, {k: v for k, v in j1.items() if k != "report"})
+            self.assertEqual(strip(j2["report"]), strip(j1["report"]))
+            self.assertEqual(j2["report"]["command_line"], j1["report"]["command_line"])  # no --batch-parallel in it
+        self.assertEqual(sorted(err2.splitlines()), sorted(err1.splitlines()))  # the same lines, maybe another order
+        self.assertEqual(err2.splitlines()[-1], "coal: batch: 4 jobs, 4 ok, 0 failed")
+        # each job's lines are one contiguous block
+        seen = []
+        for line in err2.splitlines()[:-1]:
+            k = line.split("[", 1)[1].split("/", 1)[0]
+            if not seen or seen[-1] != k:
+                seen.append(k)
+        self.assertEqual(len(seen), len(set(seen)), err2)
+
+    def test_failing_job_exit_codes_and_progress(self):
+        lines = [f"{CLEAN[0]} {CLEAN[1]} -o a.fa", f"{BROKEN[0]} {BROKEN[1]} -o b.fa", f"{CLEAN[0]} {CLEAN[1]} -o c.fa"]
+        rc, out, err = run_cmd(["--batch", self.jobs(lines), "--batch-parallel", "0", "--progress"], self.tmp)
+        self.assertEqual(rc, 1, err)
+        self.assertTrue((self.tmp / "a.fa").is_file() and (self.tmp / "c.fa").is_file())
+        self.assertFalse((self.tmp / "b.fa").exists())
+        self.assertEqual(err.splitlines()[-1], "coal: batch: 3 jobs, 2 ok, 1 failed")
+        self.assertEqual(sum(1 for ln in err.splitlines() if ln.startswith("coal: progress: job ")), 3)
+        self.assertIn("coal: [2/3 ", err)
+        # --keep-going: exit 2 and the skipped count, as the sequential batch
+        rc, out, err = run_cmd(["--batch", self.jobs(lines), "--batch-parallel", "2", "--keep-going", "--json"], self.tmp)
+        self.assertEqual(rc, 2, err)
+        rep = json.loads(out)
+        self.assertEqual(rep["summary"]["jobs"], 3)
+        self.assertEqual(rep["summary"]["failed"], 0)
+        rc1, out1, _ = run_cmd(["--batch", self.jobs(lines), "--keep-going", "--json"], self.tmp)
+        self.assertEqual(rc1, 2)
+        self.assertEqual(rep["summary"], json.loads(out1)["summary"])
+
+    def test_option_checks(self):
+        rc, _, err = run_py(["--batch", self.jobs([f"{CLEAN[0]} {CLEAN[1]} -o a.fa --batch-parallel 2"])], self.tmp)
+        self.assertEqual(rc, 2)
+        self.assertIn("--batch-parallel is not allowed on a job line", err)
+        rc, _, err = run_py(["--batch", self.jobs([f"{CLEAN[0]} {CLEAN[1]} -o a.fa"]), "--batch-parallel", "-1"], self.tmp)
+        self.assertEqual(rc, 2)
+        self.assertIn("--batch-parallel must be 0", err)
+        rc, _, err = run_py(["--batch", self.jobs([f"{CLEAN[0]} {CLEAN[1]} -o a.fa"]), "--batch-parallel", "1"], self.tmp)
+        self.assertEqual(rc, 0, err)  # 1 is the sequential path
+
+    @unittest.skipIf(os.name == "nt", "POSIX signals")
+    def test_sigterm_stops_every_worker_and_leaves_no_partial_output(self):
+        # a slow batch (8 jobs of 4,000 synthetic genes, 2 at a time) killed with SIGTERM: exit 143 as a single run,
+        # every worker gone, and no job's half-written output or temporary file left behind
+        import signal
+        import time
+        sys.path.insert(0, str(ROOT / "tests" / "tools"))
+        gen = ROOT / "tests" / "tools" / "stress_gen.py"
+        data = self.tmp / "data"
+        subprocess.run([sys.executable, str(gen), "--nseq", "4000", "--ncodons", "200", "--mismatch", "none", str(data)],
+                       check=True, capture_output=True, timeout=120)
+        lines = [f"{data / 'pep.fasta'} {data / 'nuc.fasta'} -o job{i}.fa" for i in range(8)]
+        env = dict(os.environ, PYTHONPATH=str(ROOT / "src"))
+        env.pop("COAL_IMPL", None)
+        p = subprocess.Popen([sys.executable, "-m", "coal", "--batch", self.jobs(lines), "--batch-parallel", "2", "-q"],
+                             cwd=self.tmp, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        t0 = time.monotonic()
+        while time.monotonic() - t0 < 20 and not list(self.tmp.glob("job*.fa")):
+            time.sleep(0.05)  # the first job has finished: the next ones are in flight
+        p.send_signal(signal.SIGTERM)
+        try:
+            _, err = p.communicate(timeout=30)
+        except subprocess.TimeoutExpired:
+            p.kill()
+            self.fail("the batch did not stop within 30 s of SIGTERM")
+        self.assertEqual(p.returncode, 143, err)
+        self.assertLess(len(list(self.tmp.glob("job*.fa"))), 8)
+        self.assertEqual([x.name for x in self.tmp.iterdir() if ".coal" in x.name or x.name.startswith(".coal_")], [])
+        self.assertNotIn("Traceback", err)
+        time.sleep(0.5)
+        try:
+            import psutil
+        except ImportError:  # the worker check needs psutil (CI installs it); the rest of the test stands
+            return
+        self.assertEqual([c for c in psutil.Process().children(recursive=True) if "coal" in " ".join(c.cmdline())], [])
+
+    @unittest.skipUnless(cpp_binary(), "coal-cpp not built")
+    def test_cpp_refuses_batch_parallel(self):
+        r = subprocess.run([str(cpp_binary()), str(CLEAN[0]), str(CLEAN[1]), "--batch-parallel", "2"],
+                           capture_output=True, text=True, timeout=60)
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("--batch is only available in the Python command", r.stderr)
+
+
 class TestBatchEqualsSingleRuns(_Tmp):
     def test_three_jobs_byte_identical(self):
         lines = [f"{CLEAN[0]} {CLEAN[1]} -o a.fa --report a.json",

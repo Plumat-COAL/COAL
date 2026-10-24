@@ -4,8 +4,10 @@ A pipeline with thousands of gene families pays Python's start-up (~65 ms) once 
 a COAL command line without the program name, one per line of JOBS; the options of the `coal --batch` command line
 are the defaults of every job and a job line may override them. Every job runs in this process through the same
 code path as a single run (cli.run_job), so its output is byte-identical to running it alone. Jobs run one after the
-other; `-j` keeps its per-job meaning (cross-job parallelism is a follow-up). Batches are never handed to coal-cpp
-(dispatch.py): coal-cpp has no batch mode, and the Python engine is where start-up is worth saving.
+other, or up to N at a time in worker processes with `--batch-parallel N` (each worker imports COAL once and takes
+jobs from a queue; a job's stderr lines are kept and printed together when it ends, so the lines of two jobs never
+interleave; `-j` keeps its per-job meaning inside each job). Batches are never handed to coal-cpp (dispatch.py):
+coal-cpp has no batch mode, and the Python engine is where start-up is worth saving.
 
 Exit status: 0 every job ok; 2 some job left sequences out (--keep-going) and none failed; 1 some job failed
 (the batch goes on after a failed job); 2 before anything runs for a mistake in JOBS (the message names the line);
@@ -26,7 +28,8 @@ SCHEMA = "coal.batch/1"
 # --batch-out-dir: the output file's extension per -output format
 EXTENSION = {"fasta": "fasta", "clustal": "aln", "paml": "paml", "codon": "codon"}
 # options a job line may not carry: batch-level ones, and --resume (not supported in a batch yet)
-NOT_IN_A_JOB = {"batch": "--batch", "batch_out_dir": "--batch-out-dir", "resume": "--resume",
+NOT_IN_A_JOB = {"batch": "--batch", "batch_out_dir": "--batch-out-dir", "batch_parallel": "--batch-parallel",
+                "resume": "--resume",
                 "json": "--json (print the batch report with --json on the coal --batch command line)"}
 
 
@@ -91,7 +94,7 @@ def _job_parser() -> argparse.ArgumentParser:
 def _default_tokens(ap: argparse.ArgumentParser, argv: list[str]) -> list[str]:
     """The `coal --batch` command line without its batch-level options (--batch, --batch-out-dir, --report, --json):
     what every job's command line starts with."""
-    drop = {"batch", "batch_out_dir", "report", "json"}
+    drop = {"batch", "batch_out_dir", "batch_parallel", "report", "json"}
     out, skip = [], False
     for i, tok in enumerate(argv):
         if skip:
@@ -120,6 +123,8 @@ def plan(ap: argparse.ArgumentParser, args: argparse.Namespace, argv: list[str],
         raise JobsError(0, "--resume is not supported with --batch yet")
     if args.max_warnings < 0:
         raise JobsError(0, "--max-warnings must be 0 (no limit) or more")
+    if args.batch_parallel is not None and args.batch_parallel < 0:
+        raise JobsError(0, "--batch-parallel must be 0 (one job per CPU core) or more")
     if not lines:
         raise JobsError(0, f"no jobs in {args.batch} (one coal command line per line; # starts a comment)")
     jp = _job_parser()
@@ -140,7 +145,7 @@ def plan(ap: argparse.ArgumentParser, args: argparse.Namespace, argv: list[str],
         except JobsError as e:
             raise JobsError(n, str(e)) from None
         for dest, name in NOT_IN_A_JOB.items():
-            if getattr(ns, dest):
+            if getattr(ns, dest) not in (None, False):
                 raise JobsError(n, f"{name} is not allowed on a job line")
         if "-" in (ns.pep_aln, *ns.nuc_fasta):
             raise JobsError(n, "'-' (standard input) cannot be a job's input: standard input can be read once, and "
@@ -178,6 +183,126 @@ def plan(ap: argparse.ArgumentParser, args: argparse.Namespace, argv: list[str],
     return jobs
 
 
+def _prefix(job: Job, n: int) -> str:
+    return f"[{job.index}/{n} {job.args.pep_aln}] "
+
+
+def _entry(job: Job, code: int, rec, reporting: bool) -> dict:
+    """The batch report's entry for a finished job (its `_skipped` count is taken out by main)."""
+    entry = {"index": job.index, "line": job.line, "exit_code": code, "output": job.output, "_skipped": 0}
+    if reporting:
+        entry["report"] = rec.to_dict()
+    if code == 2:
+        left = (rec.output or {}).get("sequences")
+        total = len(rec.ids) if rec.ids is not None else None
+        entry["_skipped"] = (total - left) if (left is not None and total is not None) else 0
+    return entry
+
+
+def _worker(todo, results, n: int, reporting: bool) -> None:
+    """A --batch-parallel worker process: takes jobs from `todo` until None, runs each through cli.run_job with
+    its stderr lines kept, and sends {'started'} then {'index', 'code', 'stderr', 'entry'} to `results`."""
+    import io
+    from .cli import install_signal_handlers, run_job
+    from .core import limit_blas_threads
+    limit_blas_threads()
+    install_signal_handlers()
+    while True:
+        job = todo.get()
+        if job is None:
+            return
+        results.put({"started": job.index, "pid": os.getpid()})
+        buf = io.StringIO()
+        real = sys.stderr
+        sys.stderr = buf  # cli.run_job's say() prints to sys.stderr at call time
+        try:
+            try:
+                code, rec = run_job(job.args, job.argv, prefix=_prefix(job, n), want_report=reporting, close=False)
+                try:
+                    entry = _entry(job, code, rec, reporting) if code not in (130, 141) else None
+                finally:
+                    rec.close()
+            except KeyboardInterrupt:
+                code, entry = 130, None
+            except SystemExit as e:  # SIGTERM / SIGHUP: cli's handler raises SystemExit(128 + signal)
+                code, entry = (e.code if isinstance(e.code, int) else 1), None
+        finally:
+            sys.stderr = real
+        results.put({"index": job.index, "code": code, "stderr": buf.getvalue(), "entry": entry})
+        if code in (130, 141, 143, 129):
+            return
+
+
+def _run_parallel(jobs: list[Job], workers: int, reporting: bool, progress: bool) -> tuple[int, list[dict]]:
+    """Run the jobs up to `workers` at a time. Returns (code, entries in job order): code 0 when every job ran
+    (their own exit codes are in the entries), or 130 / 143 when a job was interrupted or the batch was stopped
+    (the other workers are ended, as a single run's workers are)."""
+    import multiprocessing as mp
+    n = len(jobs)
+    ctx = mp.get_context()
+    todo, results = ctx.Queue(), ctx.Queue()
+    for job in jobs:
+        todo.put(job)
+    for _ in range(workers):
+        todo.put(None)
+    procs = [ctx.Process(target=_worker, args=(todo, results, n, reporting), daemon=False) for _ in range(workers)]
+    for p in procs:
+        p.start()
+    entries: dict[int, dict] = {}
+    running: dict[int, int] = {}  # worker pid -> the job it is on
+    stop = 0
+    by_index = {job.index: job for job in jobs}
+    try:
+        while len(entries) < n:
+            try:
+                msg = results.get(timeout=0.5)
+            except Exception:  # queue.Empty: see whether a worker died with a job in hand
+                for p in procs:
+                    if not p.is_alive() and p.pid in running:
+                        k = running.pop(p.pid)
+                        job = by_index[k]
+                        sys.stderr.write(f"coal: {_prefix(job, n)}error: the job's worker process died "
+                                         f"(out of memory?)\n")
+                        entries[k] = {"index": k, "line": job.line, "exit_code": 1, "output": job.output, "_skipped": 0}
+                if not any(p.is_alive() for p in procs) and len(entries) < n:
+                    for job in jobs:  # jobs no worker ever started
+                        if job.index not in entries:
+                            sys.stderr.write(f"coal: {_prefix(job, n)}error: no worker process left to run the job\n")
+                            entries[job.index] = {"index": job.index, "line": job.line, "exit_code": 1,
+                                                  "output": job.output, "_skipped": 0}
+                continue
+            if "started" in msg:
+                running[msg["pid"]] = msg["started"]
+                if progress:
+                    job = by_index[msg["started"]]
+                    print(f"coal: progress: job {job.index}/{n} {job.args.pep_aln}", file=sys.stderr, flush=True)
+                continue
+            running = {pid: k for pid, k in running.items() if k != msg["index"]}
+            sys.stderr.write(msg["stderr"])
+            sys.stderr.flush()
+            if msg["entry"] is None:  # interrupted inside the job: stop the batch, as a single run stops
+                stop = msg["code"]
+                break
+            entries[msg["index"]] = msg["entry"]
+    except KeyboardInterrupt:
+        stop = 130
+        print("coal: interrupted", file=sys.stderr)
+    except SystemExit as e:  # SIGTERM / SIGHUP to the batch
+        stop = e.code if isinstance(e.code, int) else 143
+    finally:
+        for p in procs:
+            if stop and p.is_alive():
+                p.terminate()  # SIGTERM: the worker's own handler removes its job's half-written output
+        for p in procs:
+            p.join(timeout=10)
+            if p.is_alive():
+                p.kill()
+                p.join()
+        for q in (todo, results):
+            q.close()
+    return stop, [entries[k] for k in sorted(entries)]
+
+
 def main(ap: argparse.ArgumentParser, args: argparse.Namespace, argv: list[str]) -> int:
     """Run a `coal --batch` command line (parsed by cli.main with build_parser(batch=True))."""
     from .cli import install_signal_handlers, run_job
@@ -213,29 +338,27 @@ def main(ap: argparse.ArgumentParser, args: argparse.Namespace, argv: list[str])
     limit_blas_threads()  # this process and its workers are COAL's own
     install_signal_handlers()
     n = len(jobs)
-    done, ok, failed, skipped = [], 0, 0, 0
-    for job in jobs:
-        prefix = f"[{job.index}/{n} {job.args.pep_aln}] "
-        if args.progress:
-            print(f"coal: progress: job {job.index}/{n} {job.args.pep_aln}", file=sys.stderr, flush=True)
-        code, rec = run_job(job.args, job.argv, prefix=prefix, want_report=reporting, close=False)
-        try:
-            if code in (130, 141):  # interrupted / closed pipe: stop here, as a single run does
-                return code
-            entry = {"index": job.index, "line": job.line, "exit_code": code, "output": job.output}
-            if reporting:
-                entry["report"] = rec.to_dict()
-        finally:
-            rec.close()  # the job's entries file
-        done.append(entry)
-        if code == 1:
-            failed += 1
-        else:
-            ok += 1
-        if code == 2:
-            left = (rec.output or {}).get("sequences")
-            total = len(rec.ids) if rec.ids is not None else None
-            skipped += (total - left) if (left is not None and total is not None) else 0
+    parallel = 1 if args.batch_parallel is None else args.batch_parallel  # 0: one worker per CPU core
+    workers = min(parallel or (os.cpu_count() or 1), n)
+    if workers > 1:
+        code, done = _run_parallel(jobs, workers, reporting, args.progress)
+        if code in (130, 141, 143):
+            return code
+    else:
+        done = []
+        for job in jobs:
+            if args.progress:
+                print(f"coal: progress: job {job.index}/{n} {job.args.pep_aln}", file=sys.stderr, flush=True)
+            code, rec = run_job(job.args, job.argv, prefix=_prefix(job, n), want_report=reporting, close=False)
+            try:
+                if code in (130, 141):  # interrupted / closed pipe: stop here, as a single run does
+                    return code
+                done.append(_entry(job, code, rec, reporting))
+            finally:
+                rec.close()  # the job's entries file
+    ok = sum(1 for e in done if e["exit_code"] != 1)
+    failed = sum(1 for e in done if e["exit_code"] == 1)
+    skipped = sum(e.pop("_skipped") for e in done)
     partial = sum(1 for e in done if e["exit_code"] == 2)
     rc = 1 if failed else (2 if partial else 0)
     if not args.quiet:

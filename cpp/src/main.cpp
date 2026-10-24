@@ -1492,6 +1492,7 @@ int main(int argc, char** argv) {
     // abbreviations resolve as in Python and so the error is a clear one, not "unrecognized arguments".
     const int a_batch = ap.add({Kind::Value, {"--batch"}, "", false, {}, true});
     const int a_batch_dir = ap.add({Kind::Value, {"--batch-out-dir"}, "", false, {}, true});
+    const int a_batch_par = ap.add({Kind::Value, {"--batch-parallel"}, "", false, {}, true});
     ap.add({Kind::Version, {"--version"}, "", false, {}, true});
 
     // `coal-cpp --batch JOBS` has no positionals, so say why before the parser asks for them
@@ -1523,7 +1524,7 @@ int main(int argc, char** argv) {
     if (args.given(a_report)) o.report = args.get(a_report);
     o.json = args.given(a_json);
     o.strict = args.given(a_strict);
-    if (args.given(a_batch) || args.given(a_batch_dir)) return usage_error(BATCH_ERROR);
+    if (args.given(a_batch) || args.given(a_batch_dir) || args.given(a_batch_par)) return usage_error(BATCH_ERROR);
     if (o.json && o.out.empty())
         return usage_error("--json requires -o (the alignment and the report cannot both go to stdout)");
     if (o.resume && o.out.empty())
