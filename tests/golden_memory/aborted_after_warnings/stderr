@@ -1,0 +1,4 @@
+coal: error: g6: protein and DNA are inconsistent (no match found)
+coal: summary: 1 sequence of 9 was written to the output but is probably wrong (first: g1: 36 of the 40 codons COAL could check do not match this protein, so this is almost certainly the wrong DNA for it (or the wrong genetic code). COAL still wrote its row, codon by position, as PAL2NAL does: do not trust it. Run COAL with --strict (in the app: 'Refuse probably-wrong genes') to refuse such genes.) Remove it before analysis, or use --strict to refuse such genes.
+coal: summary: g6: Frameshift at column 21: there is one extra base in the DNA, so from here on the codons are read out of step.
+coal: summary: The run stopped at g6: 2 sequences were not checked and no output was written. Add --keep-going to write the other sequences and leave this one out.

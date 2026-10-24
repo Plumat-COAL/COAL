@@ -1,0 +1,180 @@
+{
+ "schema": "coal.report/1",
+ "coal_version": "0.5.0",
+ "source": "coal",
+ "engine": "coal-python",
+ "command": "coal pep.fasta nuc.fasta -o out.fa",
+ "command_line": "coal pep.fasta nuc.fasta -o out.fa --report r.json",
+ "pal2nal_equivalent": "pal2nal.pl pep.fasta nuc.fasta -output fasta",
+ "options": {
+  "output_format": "fasta",
+  "codontable": 1,
+  "nogap": false,
+  "nomismatch": false,
+  "keep_going": false,
+  "strict": false,
+  "blockonly": false
+ },
+ "inputs": [
+  {
+   "role": "protein",
+   "path": "pep.fasta",
+   "sha256": "308718889d13fa11b9f33a65840ba61dfe02b8a93b2b6ccc8a048a88848687e9",
+   "sequences": 9
+  },
+  {
+   "role": "dna",
+   "path": "nuc.fasta",
+   "sha256": "f13fc1413bcc6f278dfc13d4f4773d9eb9a3dfd3dc5ed54a52b94e58c1892c8f",
+   "sequences": 9
+  }
+ ],
+ "output": null,
+ "summary": {
+  "total": 9,
+  "ok": 4,
+  "warning": 0,
+  "failed": 1,
+  "pairing": "id",
+  "not_checked": 4
+ },
+ "hints": [],
+ "errors": [],
+ "sequences": [
+  {
+   "id": "g0",
+   "index": 0,
+   "dna_id": "g0",
+   "pairing": "id",
+   "status": "not_checked",
+   "messages": [
+    {
+     "code": "not_written",
+     "failed_id": "g4"
+    }
+   ]
+  },
+  {
+   "id": "g1",
+   "index": 1,
+   "dna_id": "g1",
+   "pairing": "id",
+   "status": "not_checked",
+   "messages": [
+    {
+     "code": "not_written",
+     "failed_id": "g4"
+    }
+   ]
+  },
+  {
+   "id": "g2",
+   "index": 2,
+   "dna_id": "g2",
+   "pairing": "id",
+   "status": "not_checked",
+   "messages": [
+    {
+     "code": "not_written",
+     "failed_id": "g4"
+    }
+   ]
+  },
+  {
+   "id": "g3",
+   "index": 3,
+   "dna_id": "g3",
+   "pairing": "id",
+   "status": "not_checked",
+   "messages": [
+    {
+     "code": "not_written",
+     "failed_id": "g4"
+    }
+   ]
+  },
+  {
+   "id": "g4",
+   "index": 4,
+   "dna_id": "g4",
+   "pairing": "id",
+   "status": "failed",
+   "messages": [
+    {
+     "code": "frameshift",
+     "column": 21,
+     "shift": 1,
+     "text": "Frameshift at column 21: there is one extra base in the DNA, so from here on the codons are read out of step."
+    },
+    {
+     "code": "inconsistent",
+     "text": "protein and DNA are inconsistent (no match found)"
+    }
+   ]
+  },
+  {
+   "id": "g5",
+   "index": 5,
+   "dna_id": "g5",
+   "pairing": "id",
+   "status": "not_checked",
+   "messages": [
+    {
+     "code": "not_reached",
+     "failed_id": "g4"
+    }
+   ]
+  },
+  {
+   "id": "g6",
+   "index": 6,
+   "dna_id": "g6",
+   "pairing": "id",
+   "status": "not_checked",
+   "messages": [
+    {
+     "code": "not_reached",
+     "failed_id": "g4"
+    }
+   ]
+  },
+  {
+   "id": "g7",
+   "index": 7,
+   "dna_id": "g7",
+   "pairing": "id",
+   "status": "not_checked",
+   "messages": [
+    {
+     "code": "not_reached",
+     "failed_id": "g4"
+    }
+   ]
+  },
+  {
+   "id": "g8",
+   "index": 8,
+   "dna_id": "g8",
+   "pairing": "id",
+   "status": "not_checked",
+   "messages": [
+    {
+     "code": "not_reached",
+     "failed_id": "g4"
+    }
+   ]
+  }
+ ],
+ "runtime_seconds": 0.008,
+ "exit_code": 1,
+ "summary_text": [
+  "g4: Frameshift at column 21: there is one extra base in the DNA, so from here on the codons are read out of step.",
+  "The run stopped at g4: 4 sequences were not checked and no output was written. Add --keep-going to write the other sequences and leave this one out."
+ ],
+ "methods_text": "",
+ "error": {
+  "code": "inconsistent",
+  "text": "g4: protein and DNA are inconsistent (no match found)",
+  "detail": "g4: protein and DNA are inconsistent (no match found)"
+ }
+}

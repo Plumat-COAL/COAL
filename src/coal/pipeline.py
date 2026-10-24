@@ -21,7 +21,6 @@ destination when everything succeeded, so an error never leaves partial output
 from __future__ import annotations
 
 import errno
-import json
 import os
 import re
 import time
@@ -209,10 +208,17 @@ def _init_worker(table, widths, two_pass, nogap, strict=False, out_format="fasta
               keep_going=keep_going)
 
 
+_NO_COLS = array("I")
+
+
 def _work(batch):
     """Thread one batch. Returns (text, items, mismatch columns, nogap triplets): text is finished FASTA/PAML, or
-    'id<TAB>row' lines for the staged pass; items = [(id, warnings, notices, failure)] for every sequence in input
-    order (failure = (code, message) of a sequence skipped by --keep-going, else None).
+    'id<TAB>row' lines for the staged pass; items = [(id, row, other warnings, mismatch columns, mismatch codons,
+    notices, failure)] for every sequence in input order: the X/B/Z/J/O/U warnings as strings, the per-codon
+    mismatches as an array of columns and one string of their codons (core.Threaded: about 2 KB for a 400-codon
+    gene of unrelated DNA against 35 KB of warning strings, held per batch in every worker and in the main
+    process, which formats the strings only when it prints or keeps them), failure = (code, message) of a
+    sequence skipped by --keep-going, else None.
     Without --keep-going a CoalError is raised, with .index = position in the batch."""
     # Per-sequence items, so --keep-going can skip a sequence and the run report can keep each sequence's messages
     parts, items, mcols, bad = [], [], set(), set()
@@ -222,13 +228,13 @@ def _work(batch):
             it = thread_one(pid, row, dna, _W["table"], _W["strict"])
         except CoalError as e:
             if _W["keep_going"] and e.seq_id is not None:
-                items.append((pid, [], [], (e.code, str(e))))
+                items.append((pid, row, [], _NO_COLS, "", [], (e.code, str(e))))
                 continue
             e.index = i
             e.done_items = items  # the batch's sequences before it (for the run report only)
             raise
         exp = expand(it, _W["widths"], _W["wide"])
-        items.append((pid, it.warnings, it.notices, None))
+        items.append((pid, row, it.other_warnings, it.mm_cols, it.mm_codons, it.notices, None))
         if two_pass:
             parts.append(f"{pid}\t{exp}\n")
             mcols |= it.mismatch_cols
@@ -970,7 +976,16 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                     entries_fh = open_append(ck.entries, state["entries_bytes"] if state else None)
                 except OSError as e:
                     raise _output_error(out_path, e) from None
-            else:
+                if rec is not None:
+                    # The non-ok entries go to the --resume entries file as they come (when a report or the hint
+                    # wants them: it also feeds a resumed run's report) and are read back for --report
+                    rec.attach_entries(entries_fh, ck.entries)
+            elif rec is not None and rec.keep_entries:
+                try:
+                    entries_fh = rec.open_entries_temp()  # a report without -o: the entries go to the temp folder
+                except OSError as e:
+                    raise _output_error(None, e) from None
+            if ck is None:
                 try:
                     t = tempfile.NamedTemporaryFile("w", delete=False, newline="\n", dir=dest_dir,
                                                     prefix=".coal_", suffix=".tmp", encoding="ascii")
@@ -994,7 +1009,7 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                 drop, bad, skipped = set(state["drop"]), set(state["bad"]), state["skipped"]
                 skip_idx = set(state.get("skip_idx", ()))
                 if rec is not None:
-                    rec.restore(state["rec"], state["_entries"], start)
+                    rec.restore(state["rec"], ck.entries, state["entries_bytes"], start)
             else:
                 drop, bad, skipped, skip_idx = set(), set(), 0, set()
                 if not two_pass and out_format == "paml":
@@ -1004,6 +1019,13 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
             def _shown(warns):  # the warnings -blockonly keeps (as on stderr)
                 return [w for w in warns if not (keep_col and (m := _ALNPOS.search(" " + w))
                                                  and not keep_col(int(m.group(1))))]
+
+            def _mismatches(row, cols, codons):  # the per-codon mismatches -blockonly keeps, as (column, residue, codon)
+                return [(c, row[c - 1], codons[3 * i:3 * i + 3]) for i, c in enumerate(cols)
+                        if not keep_col or keep_col(c)]
+            # The per-codon warning strings are built here, per sequence, only when something prints them (A2 of
+            # the memory improvements: the workers hand back columns and codons)
+            want_strings = warn is not None
             if note and warn and not nomismatch:
                 # The genetic-code suggestion comes first, before the per-codon warnings it explains (not only in the
                 # last summary line, after e.g. 834 warnings on coxI).
@@ -1033,34 +1055,39 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                         if rec is not None:
                             # the sequences before it in its batch were checked (not written): report only, stderr
                             # stays as it was (they were never printed)
-                            for k, (pid, warns, notes, _f) in enumerate(getattr(e, "done_items", ())):
-                                rec.add_sequence(done + k, pid, _shown(warns), notes, None)
+                            for k, (pid, row, other, cols, codons, notes, _f) in enumerate(getattr(e, "done_items", ())):
+                                rec.add_sequence(done + k, pid, _shown(other), notes, None,
+                                                 mismatches=_mismatches(row, cols, codons), row=row)
                             rec.add_sequence(e.index, e.seq_id, [], [], (e.code, str(e)))
                     raise e from None
-                for pid, warns, notes, failure in items:
+                for pid, row, other, cols, codons, notes, failure in items:
                     if failure:
                         failure = (failure[0], _paired(done, *failure))
-                    for w in warns:
-                        printed = not (nomismatch and MISMATCH_WARNING in w)
-                        if keep_col:  # -blockonly: as PAL2NAL, only warnings in kept columns
-                            m = _ALNPOS.search(" " + w)
-                            if m and not keep_col(int(m.group(1))):
-                                continue
-                        # As PAL2NAL, no mismatch warnings with -nomismatch.
-                        if warn and printed:
+                    if want_strings:
+                        # The X/B/Z/J/O/U warnings first, then the mismatches by column (thread_one's order);
+                        # with -blockonly, as PAL2NAL, only warnings in kept columns
+                        for w in other:
+                            if keep_col:
+                                m = _ALNPOS.search(" " + w)
+                                if m and not keep_col(int(m.group(1))):
+                                    continue
                             warn(f"{pid} {w}")
+                        if not nomismatch:  # as PAL2NAL, no mismatch warnings with -nomismatch
+                            for i, c in enumerate(cols):
+                                if keep_col and not keep_col(c):
+                                    continue
+                                warn(f"{pid} pepAlnPos {c}: {row[c - 1]}{MISMATCH_WARNING}{codons[3 * i:3 * i + 3]}")
                     if notice:
                         for n in notes:
                             notice(n)
                         if failure:  # --keep-going names each skipped sequence
                             notice(f"skipped {failure[1]}")
                     if rec is not None:
-                        entry = rec.add_sequence(done, pid, _shown(warns), notes, failure)
-                        # The entries file feeds a resumed run's report, summary and hint; with -q and no report a
-                        # resumed run reads none of it (RunReport.restore), so it is not written: a million genes
-                        # of unrelated DNA wrote 55 GB of it
-                        if entries_fh is not None and entry is not None and (rec.keep_entries or rec.want_hint):
-                            entries_fh.write(json.dumps(entry) + "\n")
+                        # The report keeps counts and flags per sequence and writes the entry to its entries file
+                        # (the --resume one, which feeds a resumed run's report, or a temporary one): nothing per
+                        # warning stays in memory
+                        rec.add_sequence(done, pid, _shown(other), notes, failure,
+                                         mismatches=_mismatches(row, cols, codons), row=row)
                     if failure:
                         skipped += 1
                         skip_idx.add(done)  # every format: the checkpoint requires len(skip_idx) == skipped
@@ -1179,6 +1206,10 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                 # yield: closing it runs its finally, which ends the workers now, not when the cyclic garbage
                 # collector gets to the frame
                 results.close()
+            if rec is not None:
+                # The entries file stays for the report when the run ended (normally or with an error): the report
+                # removes it once written (RunReport.close); a temporary one of an interrupted run goes now
+                rec.finish_entries(keep=(finished or failed) and rec.keep_entries)
             for f in (tmp, stage, entries_fh, *scratch):
                 if f is not None:
                     try:
@@ -1194,7 +1225,7 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                 # After a crash, kill or signal (cleanup) the partial files are kept only when a checkpoint describes
                 # them, so --resume can continue; otherwise they are removed
                 if finished or failed or not os.path.exists(ck.path):
-                    ck.remove()
+                    ck.remove(keep_entries=rec is not None and rec.owns_entries())
             release_output_lock(lock)
     finally:
         dna.close()

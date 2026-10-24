@@ -53,12 +53,30 @@ public:
     // pairing[k] = the DNA record (index into dna_file_ids) of protein k
     void set_pairing(const std::string& mode, const std::vector<std::string>& per_seq,
                      const std::vector<size_t>& pairing, const std::vector<std::string>& notes);
-    // warnings: thread_one's ("pepAlnPos ..."); notices: with the ID; failure: code + message (code empty = none).
+    // warnings: thread_one's ("pepAlnPos ..."); notices: with the ID; failure: code + message (code empty = none);
+    // row: the prepared protein row, so the mismatch pattern (start-codon-only, a run of mismatches) is marked now
+    // and the entry written to the entries file is final (without it, finish() marks the entries kept in memory).
     // Returns the entry as one compact JSON line (json_dump(entry): the entries file's format), or nullptr for an ok
-    // sequence.
+    // sequence. The line is written to the attached entries file (or kept in memory) by this call.
     const std::string* add_sequence(long long k, const std::string& pid, const std::vector<std::string>& warnings,
                                     const std::vector<std::string>& notices, const std::string& fail_code = "",
-                                    const std::string& fail_msg = "");
+                                    const std::string& fail_msg = "", const std::string* row = nullptr);
+    // The non-ok entries go to this file as they come (the --resume entries file next to -o, when a report or the
+    // hint wants them, or a temporary file of the run's own when a report is wanted without -o) and are read back
+    // in index order for the report; without one, the entries a report needs stay in memory (report.py).
+    void attach_entries(std::ostream* f, const std::string& path) {
+        sink_ = f;
+        sink_path_ = path;
+    }
+    const std::string& entries_path() const { return sink_path_; }
+    // End of the pipeline: keep = the run ended (normally or with an error) and a report is wanted: the file stays
+    // for the report and this report removes it in close_entries(); else the pipeline / checkpoint disposes of it.
+    void finish_entries(bool keep) {
+        sink_ = nullptr;
+        if (keep) owned_ = true;
+    }
+    bool owns_entries() const { return owned_ && !sink_path_.empty(); }
+    void close_entries();  // remove the entries file this report owns (idempotent)
     void fail(const std::string& code, const std::string& message, bool has_seq_id);
     void set_output(const std::string& path, const std::string& sha, long long n);
     // End of run, inputs still open: break locations, mismatch patterns, genetic-code hint.
@@ -67,9 +85,10 @@ public:
     // The report (json.dump(report.to_dict(), indent=1) of report.py, without the final newline), streamed: one
     // sequence entry at a time, so a run of a million sequences does not hold a million entries at once.
     void write_json(std::ostream& out) const;
-    // --resume
+    // --resume: `completed` sequences are done; the first `entries_bytes` bytes of the entries file hold their
+    // non-ok entries (checked by Checkpoint::load_for_resume), read once, one at a time
     Json checkpoint_state() const;
-    void restore(const Json& state, const std::vector<Json>& nonok, long long completed);
+    void restore(const Json& state, const std::string& entries_path, long long entries_bytes, long long completed);
 
     bool keep_entries;
     bool want_hint = true;  // false under -q without --report/--json (report.py want_hint)
@@ -78,22 +97,26 @@ public:
     int exit_code = 0;
 
 private:
+    struct EntryCursor;  // the kept entries in index order (report.cpp)
+    friend struct EntryCursor;
     long long total() const;
     std::string command() const;
-    Json entry_view(long long k, int aborted = -1) const;  // -1: aborted = no output
+    // Sequence k as the report shows it, from its kept entry (nullptr for a clean or unreached one); aborted -1:
+    // aborted = no output (report.py RunReport._view)
+    Json view(long long k, const Json* e, int aborted = -1) const;
     long long first_fail() const;
     // The summary's counters: ok / warning / failed by what COAL found for each processed sequence (kinds_), plus
     // not_checked for the sequences it never reached; they add up to total() (report.py RunReport.counts)
     std::map<std::string, long long> counts() const;
-    // A non-ok sequence's entry (parsed from its compact line) and the store that keeps it
-    Json entry(long long k) const;
-    void store(long long k, const Json& e);
+    // What the summary, the methods text and the hint need of a non-ok entry: its kind, flags and first definite
+    // mismatch's codon, the first flagged / excluded entry, the break_event candidates (report.py _digest)
+    void digest(long long k, const Json& e);
     std::vector<Json> id_hints() const;
     std::vector<Json> hints() const;
     bool completed() const;
     std::string methods_text(const Json& rep) const;
     void finish_impl(const RowsFn& rows, const DnaFn& dna, bool aborted);
-    void set_kind(long long k, char ch);
+    void set_seq(long long k, char kind, unsigned char flags, const std::string& codon);
 
     std::chrono::steady_clock::time_point t0_;
     std::vector<std::string> argv_;
@@ -117,17 +140,18 @@ private:
     std::vector<Json> pair_hints_;
     bool partial_ = false;
     std::string kinds_;
-    // Non-ok sequences only, as report.py keeps them (ok sequences are counted in kinds_), each as its compact
-    // JSON line rather than a Json tree (about a tenth of the memory per sequence), plus what the summary lines and
-    // the end-of-run step read from every entry without parsing it
-    struct Kept {
-        std::string json;
-        bool failed_nocol = false;  // status failed with no column message (break_event candidates)
-        bool real_mm = false;       // a definite (A/C/G/T) mismatch
-        bool unknown_aa = false;    // an unknown_aa message
-    };
-    std::map<long long, Kept> entries_;
-    std::string last_line_;  // the entry of the last non-ok sequence when none is kept (-q, no report)
+    // Per processed sequence, next to its kind: the F_* flags (report.cpp) and the codon of its first definite
+    // mismatch (3 characters, spaces if none). The entries themselves are not kept (report.py RunReport.flags).
+    std::string flags_, codons_;
+    bool has_first_flagged_ = false, has_first_excluded_ = false;
+    Json first_flagged_, first_excluded_;       // the first entry of each kind (summary lines, aborted views)
+    std::vector<long long> nocol_;              // the first BREAK_SAMPLE failed sequences without a column message
+    std::map<long long, Json> break_events_;    // sequence -> break_event message (finish), applied when read back
+    std::map<long long, std::string> store_;    // entries kept in memory (no entries file attached), compact lines
+    std::ostream* sink_ = nullptr;              // the entries file while the run goes
+    std::string sink_path_;
+    bool owned_ = false;                        // this report removes the entries file in close_entries()
+    std::string last_line_;                     // the line add_sequence returns
     std::vector<long long> cols_, real_cols_;  // sorted unique
     bool has_error_ = false;
     Json error_;

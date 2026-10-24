@@ -1,0 +1,108 @@
+{
+ "schema": "coal.report/1",
+ "coal_version": "0.5.0",
+ "source": "coal",
+ "engine": "coal-python",
+ "command": "coal pep.aln nuc.fasta -output codon -o out.codon",
+ "command_line": "coal pep.aln nuc.fasta -output codon -o out.codon --report r.json",
+ "pal2nal_equivalent": "pal2nal.pl pep.aln nuc.fasta -output codon",
+ "options": {
+  "output_format": "codon",
+  "codontable": 1,
+  "nogap": false,
+  "nomismatch": false,
+  "keep_going": false,
+  "strict": false,
+  "blockonly": false
+ },
+ "inputs": [
+  {
+   "role": "protein",
+   "path": "pep.aln",
+   "sha256": "850d7f75b1417f6417f163d798e81d8edc0fe42ee7394a67324413ed9fd46065",
+   "sequences": 3
+  },
+  {
+   "role": "dna",
+   "path": "nuc.fasta",
+   "sha256": "38760acb85ca67c2911f70c488b9909995ffe56e7b180bbca4769774b49d3b69",
+   "sequences": 3
+  }
+ ],
+ "output": {
+  "path": "out.codon",
+  "format": "codon",
+  "sha256": "46fad6d02a47cf891ec519358679504e5389ea8377877944f9596320492dbefd",
+  "sequences": 3
+ },
+ "summary": {
+  "total": 3,
+  "ok": 2,
+  "warning": 1,
+  "failed": 0,
+  "pairing": "id"
+ },
+ "hints": [],
+ "errors": [],
+ "sequences": [
+  {
+   "id": "g0",
+   "index": 0,
+   "dna_id": "g0",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "g1",
+   "index": 1,
+   "dna_id": "g1",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 5,
+     "text": "Column 5: amino acid T does not match codon TGG.",
+     "residue": "T",
+     "codon": "TGG"
+    },
+    {
+     "code": "mismatch",
+     "column": 6,
+     "text": "Column 6: amino acid H does not match codon TGG.",
+     "residue": "H",
+     "codon": "TGG"
+    },
+    {
+     "code": "mismatch",
+     "column": 21,
+     "text": "Column 21: amino acid P does not match codon TGG.",
+     "residue": "P",
+     "codon": "TGG"
+    },
+    {
+     "code": "mismatch",
+     "column": 22,
+     "text": "Column 22: amino acid W does not match codon GCT.",
+     "residue": "W",
+     "codon": "GCT"
+    }
+   ]
+  },
+  {
+   "id": "g2",
+   "index": 2,
+   "dna_id": "g2",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  }
+ ],
+ "runtime_seconds": 0.006,
+ "exit_code": 0,
+ "summary_text": [
+  "1 of 3 sequences has codons that do not match their amino acid (kept in the alignment)."
+ ],
+ "methods_text": "Codon alignments were built with COAL v0.5.0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 3 sequences, 2 matched their protein exactly, and 1 contained codons that did not match the aligned amino acid (kept in the alignment). Command: coal pep.aln nuc.fasta -output codon -o out.codon"
+}

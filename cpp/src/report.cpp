@@ -6,6 +6,8 @@
 #include <cstdlib>
 #include <exception>
 #include <cctype>
+#include <filesystem>
+#include <fstream>
 #include <set>
 
 #include "core.hpp"
@@ -25,6 +27,11 @@ static long long residues_of(const std::string& row) {
     return (long long)row.size() - std::count(row.begin(), row.end(), '-');
 }
 static const int BREAK_SAMPLE = 200;
+// Per-sequence flags kept next to the kind (report.py F_*): everything the summary lines, the methods text and the
+// genetic-code hint read from a non-ok entry, so the entry itself need not stay in memory
+static const int F_REAL_MM = 1, F_FRAMESHIFT = 2, F_UNRELATED = 4, F_ALL_START = 8, F_UNKNOWN_AA = 16, F_PAIRING = 32,
+                 F_OTHER_CODE = 64, F_FAILED_NOCOL = 128;
+static const char* NO_CODON = "   ";
 
 static std::string code_name(int t) {  // CODE_NAMES (names inside a sentence)
     switch (t) {
@@ -382,18 +389,39 @@ static std::vector<const Json*> real_mismatches(const Json& e) {
     return out;
 }
 
-static bool has_code(const Json& e, const char* code) {
-    for (auto& m : msgs_of(e))
-        if (sget(m, "code") == code) return true;
-    return false;
-}
-
-static bool fixable(const Json& e) {
-    std::string k = gene_kind(e);
-    if (k == "mismatch") return !has_code(e, "possible_frameshift");
-    if (k == "flagged") return has_code(e, "suspect_unrelated") || !real_mismatches(e).empty();
-    if (k == "not_checked") return has_code(e, "not_written") ? !real_mismatches(e).empty() : true;
-    return k == "excluded";
+// The F_* flags of an entry and the codon of its first definite mismatch (NO_CODON if none): report.py entry_flags
+static int entry_flags(const Json& e, std::string& codon) {
+    int f = 0;
+    bool all_start = true, has_col = false;
+    codon = NO_CODON;
+    for (auto& m : msgs_of(e)) {
+        std::string code = sget(m, "code");
+        const Json* col = m.get("column");
+        if (col && col->type == Json::Int) has_col = true;
+        if (code == "mismatch") {
+            if (!is_ambiguous_codon(sget(m, "codon"))) {
+                if (!(f & F_REAL_MM)) {
+                    codon = sget(m, "codon") + NO_CODON;
+                    codon.resize(3);
+                }
+                f |= F_REAL_MM;
+                const Json* sc = m.get("start_codon");
+                all_start = all_start && sc && sc->type == Json::Bool && sc->b;
+            }
+        } else if (code == "possible_frameshift") {
+            f |= F_FRAMESHIFT;
+        } else if (code == "suspect_unrelated") {
+            f |= F_UNRELATED;
+        } else if (code == "unknown_aa") {
+            f |= F_UNKNOWN_AA;
+        } else if (code == "suspect_pairing") {
+            f |= F_PAIRING;
+        }
+        if (code != "unknown_aa" && code != "suspect_pairing") f |= F_OTHER_CODE;
+    }
+    if ((f & F_REAL_MM) && all_start) f |= F_ALL_START;
+    if (sget(e, "status") == "failed" && !has_col) f |= F_FAILED_NOCOL;
+    return f;
 }
 
 static long long code_distance(int a, int b) {  // the first part of the app's _code_distance (codons that differ)
@@ -794,9 +822,46 @@ void RunReport::set_pairing(const std::string& mode, const std::vector<std::stri
     }
 }
 
-void RunReport::set_kind(long long k, char ch) {
-    if (k < (long long)kinds_.size()) kinds_[(size_t)k] = ch;
-    else kinds_ += ch;
+void RunReport::set_seq(long long k, char kind, unsigned char flags, const std::string& codon) {
+    while ((long long)kinds_.size() < k) {  // (sequences skipped over are "not checked")
+        kinds_ += 'n';
+        flags_ += '\0';
+        codons_ += NO_CODON;
+    }
+    if (k < (long long)kinds_.size()) {
+        kinds_[(size_t)k] = kind;
+        flags_[(size_t)k] = (char)flags;
+        codons_.replace((size_t)k * 3, 3, codon);
+    } else {
+        kinds_ += kind;
+        flags_ += (char)flags;
+        codons_ += codon;
+    }
+}
+
+void RunReport::digest(long long k, const Json& e) {
+    const char kind = kind_char(gene_kind(e));
+    std::string codon;
+    const int f = entry_flags(e, codon);
+    set_seq(k, kind, (unsigned char)f, codon);
+    if (kind == 'f' && !has_first_flagged_) {
+        first_flagged_ = e;
+        has_first_flagged_ = true;
+    } else if (kind == 'e' && !has_first_excluded_) {
+        first_excluded_ = e;
+        has_first_excluded_ = true;
+    }
+    if ((f & F_FAILED_NOCOL) && (long long)nocol_.size() < BREAK_SAMPLE) nocol_.push_back(k);
+}
+
+void RunReport::close_entries() {
+    sink_ = nullptr;
+    if (owned_ && !sink_path_.empty()) {
+        std::error_code ec;
+        std::filesystem::remove(sink_path_, ec);
+    }
+    sink_path_.clear();
+    owned_ = false;
 }
 
 static void add_sorted(std::vector<long long>& v, long long x) {
@@ -806,8 +871,8 @@ static void add_sorted(std::vector<long long>& v, long long x) {
 
 const std::string* RunReport::add_sequence(long long k, const std::string& pid, const std::vector<std::string>& warnings,
                                     const std::vector<std::string>& notices, const std::string& fail_code,
-                                    const std::string& fail_msg) {
-    while ((long long)kinds_.size() < k) kinds_ += 'n';
+                                    const std::string& fail_msg, const std::string* row) {
+    while ((long long)kinds_.size() < k) set_seq((long long)kinds_.size(), 'n', 0, NO_CODON);
     std::vector<Json> msgs;
     std::string status;
     if (!fail_code.empty()) {
@@ -865,7 +930,7 @@ const std::string* RunReport::add_sequence(long long k, const std::string& pid, 
         }
     }
     if (status == "ok") {
-        set_kind(k, 'o');
+        set_seq(k, 'o', 0, NO_CODON);
         return nullptr;
     }
     Json e = Json::object();
@@ -877,28 +942,61 @@ const std::string* RunReport::add_sequence(long long k, const std::string& pid, 
     Json arr = Json::array();
     for (auto& m : msgs) arr.push(m);
     e.set("messages", arr);
-    set_kind(k, kind_char(gene_kind(e)));
-    // With -q and no report nothing reads the entries (no summary lines, no hint, no report): keep none, as
-    // report.py add_sequence; the line is still handed to the --resume entries file
-    if (!keep_entries && !want_hint) {
-        last_line_ = json_dump(e);
-        return &last_line_;
+    // The mismatch pattern (start-codon-only, a run of mismatches) is marked now, with the row at hand, so the
+    // entry written to the entries file is final (report.py add_sequence)
+    if (row && (keep_entries || want_hint) && !real_mismatches(e).empty()) annotate_mismatch_pattern(*row, e);
+    digest(k, e);
+    last_line_ = json_dump(e);
+    // The entry goes to the entries file when a report or the hint wants it (the --resume file also feeds a
+    // resumed run's report); without a file, it stays in memory when a report is wanted. With -q and no report
+    // nothing reads the entries (no summary lines, no hint, no report): nothing is kept (report.py _record)
+    if (sink_) {
+        if (keep_entries || want_hint) *sink_ << last_line_ << '\n';
+    } else if (keep_entries) {
+        store_[k] = last_line_;
     }
-    store(k, e);
-    return &entries_[k].json;
+    return &last_line_;
 }
 
-void RunReport::store(long long k, const Json& e) {
-    Kept& kp = entries_[k];
-    kp.json = json_dump(e);
-    bool col = false;
-    for (auto& m : msgs_of(e)) col = col || (m.get("column") && m.get("column")->type == Json::Int);
-    kp.failed_nocol = sget(e, "status") == "failed" && !col;
-    kp.real_mm = !real_mismatches(e).empty();
-    kp.unknown_aa = has_code(e, "unknown_aa");
-}
-
-Json RunReport::entry(long long k) const { return json_parse(entries_.at(k).json); }
+// The kept non-ok entries in index order, from the entries file (flushed first) or the memory store, with the break
+// events of finish() in front of their messages (report.py RunReport._entries)
+struct RunReport::EntryCursor {
+    const RunReport& r;
+    std::ifstream in;
+    std::map<long long, std::string>::const_iterator it, end;
+    bool from_file;
+    explicit EntryCursor(const RunReport& rep) : r(rep), from_file(!rep.sink_path_.empty()) {
+        if (from_file) {
+            if (r.sink_) r.sink_->flush();
+            in.open(r.sink_path_, std::ios::binary);
+        } else {
+            it = r.store_.begin();
+            end = r.store_.end();
+        }
+    }
+    // The next entry, or false at the end
+    bool next(long long& k, Json& e) {
+        std::string line;
+        for (;;) {
+            if (from_file) {
+                if (!in || !std::getline(in, line)) return false;
+            } else {
+                if (it == end) return false;
+                line = it->second;
+                ++it;
+            }
+            if (line.find_first_not_of(" \t\r") == std::string::npos) continue;
+            e = json_parse(line);
+            k = e.get("index") ? e.get("index")->as_int() : -1;
+            auto ev = r.break_events_.find(k);
+            if (ev != r.break_events_.end()) {
+                Json* ms = field(e, "messages");
+                if (ms) ms->a.insert(ms->a.begin(), ev->second);
+            }
+            return true;
+        }
+    }
+};
 
 void RunReport::fail(const std::string& code, const std::string& message, bool has_seq_id) {
     error_ = Json::object();
@@ -934,22 +1032,38 @@ Json RunReport::checkpoint_state() const {
     return s;
 }
 
-void RunReport::restore(const Json& state, const std::vector<Json>& nonok, long long completed) {
+void RunReport::restore(const Json& state, const std::string& entries_path, long long entries_bytes, long long completed) {
     const Json* k = state.get("kinds");
     kinds_ = k && k->type == Json::String ? k->s : std::string((size_t)completed, 'o');
     if ((long long)kinds_.size() > completed) kinds_.resize((size_t)completed);
+    flags_.assign(kinds_.size(), '\0');
+    codons_.clear();
+    for (size_t i = 0; i < kinds_.size(); ++i) codons_ += NO_CODON;
+    has_first_flagged_ = has_first_excluded_ = false;
+    nocol_.clear();
+    break_events_.clear();
+    store_.clear();
     cols_.clear();
     real_cols_.clear();
     if (const Json* c = state.get("cols"))
         for (auto& x : c->a) add_sorted(cols_, x.as_int());
     if (const Json* c = state.get("real_cols"))
         for (auto& x : c->a) add_sorted(real_cols_, x.as_int());
-    entries_.clear();
-    if (keep_entries || want_hint)  // (as add_sequence: nothing is read from them otherwise)
-        for (auto& e : nonok) {
+    // The entries of the sequences done so far, one at a time (with -q and no report nothing reads them)
+    if ((keep_entries || want_hint) && !entries_path.empty() && entries_bytes > 0) {
+        std::ifstream in(entries_path, std::ios::binary);
+        std::string line;
+        long long left = entries_bytes;
+        while (left > 0 && in && std::getline(in, line)) {
+            long long took = (long long)line.size() + (in.eof() ? 0 : 1);
+            if (took > left) line.resize((size_t)left);
+            left -= took;
+            if (line.find_first_not_of(" \t\r") == std::string::npos) continue;
+            Json e = json_parse(line);
             long long idx = e.get("index") ? e.get("index")->as_int() : -1;
-            if (idx >= 0 && idx < completed) store(idx, e);
+            if (idx >= 0 && idx < completed) digest(idx, e);
         }
+    }
     resumed_from_ = completed;
 }
 
@@ -960,12 +1074,11 @@ long long RunReport::first_fail() const {
     return p == std::string::npos ? -1 : (long long)p;
 }
 
-Json RunReport::entry_view(long long k, int aborted) const {
+Json RunReport::view(long long k, const Json* kept, int aborted) const {
     bool ab = aborted < 0 ? !has_output_ : aborted != 0;
     Json e;
-    auto it = entries_.find(k);
-    if (it != entries_.end()) {
-        e = json_parse(it->second.json);
+    if (kept) {
+        e = *kept;
     } else {
         std::string st = k < (long long)kinds_.size() && kinds_[(size_t)k] == 'o' ? "ok" : "not_checked";
         e = Json::object();
@@ -981,7 +1094,7 @@ Json RunReport::entry_view(long long k, int aborted) const {
     long long ff = first_fail();
     Json msgs = Json::array();
     if (ff >= 0) {
-        std::string fid = sget(entry(ff), "id");
+        std::string fid = has_first_excluded_ ? sget(first_excluded_, "id") : std::string();  // (the first 'e')
         Json m = Json::object();
         m.set("code", k < ff ? "not_written" : "not_reached");
         m.set("failed_id", fid);
@@ -1029,50 +1142,70 @@ void RunReport::finish(const RowsFn& rows, const DnaFn& dna, bool aborted) {
 
 void RunReport::finish_impl(const RowsFn& rows, const DnaFn& dna, bool aborted) {
     const long long n = total();
-    std::vector<long long> failed, marks;
-    for (auto& [k, kp] : entries_) {
-        if (kp.failed_nocol) failed.push_back(k);
-        if (kp.real_mm) marks.push_back(k);
-    }
-    std::set<long long> fset(failed.begin(), failed.begin() + (std::ptrdiff_t)std::min<size_t>(failed.size(), BREAK_SAMPLE));
-    std::set<long long> mset(marks.begin(), marks.end());
-    std::set<long long> need = fset;
-    need.insert(mset.begin(), mset.end());
-    if (!need.empty()) {
+    // Where the first BREAK_SAMPLE failed genes without a column message break (the app viewer's rule), from their
+    // rows and DNA: kept apart and put in front of the entry's messages when it is read back (report.py _finish).
+    // Nothing to locate with -q and no report (no entry is kept then)
+    if ((keep_entries || want_hint) && !nocol_.empty()) {
+        std::set<long long> failed(nocol_.begin(), nocol_.end());
+        const long long last = *failed.rbegin();
         rows([&](long long k, const std::string&, const std::string& row) {
-            if (need.count(k)) {
-                Json e = entry(k);
-                if (std::find(failed.begin(), failed.end(), k) != failed.end()) {  // (all failed, as Python)
-                    Json ev;
-                    if (break_event(row, dna(k), table_, ev)) {
+            if (failed.count(k)) {
+                Json ev;
+                if (break_event(row, dna(k), table_, ev)) {
+                    auto st = store_.find(k);
+                    if (st != store_.end()) {  // kept in memory: the entry itself gets the event
+                        Json e = json_parse(st->second);
                         Json* ms = field(e, "messages");
                         ms->a.insert(ms->a.begin(), ev);
+                        st->second = json_dump(e);
+                    } else {
+                        break_events_[k] = ev;
+                    }
+                    for (int which = 0; which < 2; ++which) {
+                        Json& first = which ? first_excluded_ : first_flagged_;
+                        bool has = which ? has_first_excluded_ : has_first_flagged_;
+                        if (has && first.get("index") && first.get("index")->as_int() == k) {
+                            Json* ms = field(first, "messages");
+                            ms->a.insert(ms->a.begin(), ev);
+                        }
                     }
                 }
-                if (mset.count(k)) annotate_mismatch_pattern(row, e);
-                store(k, e);
             }
-            return k + 1 < n;
+            return k < last;
         });
     }
     if (!want_hint) return;  // -q without --report/--json never shows it
-    // One entry view at a time (keeping all n of them took ~1.1 KB per sequence: 114 MB at 100,000, and keeping the
-    // problem ones ~2 KB per mismatching sequence); a clean sequence of a run that was not aborted is never fixable,
-    // so its view is not even built. Of the problems' views only the start-codon summary is kept: whether every
-    // definite mismatch is a first-Met one, and the first such codon (the text below).
+    // From the per-sequence flags, one sequence at a time (report.py _finish): which sequences another genetic code
+    // might fix (fixable() of their entry views), and of those with definite mismatches whether every mismatch is a
+    // first-Met one and the first such codon (the text below). A clean sequence of a run that was not aborted is
+    // never fixable; in an aborted run the sequences before the failed gene count as written (not_written, fixable
+    // only with a definite mismatch) and those after it as not reached (fixable).
     std::vector<long long> problems;
     bool any_start = false, all_start = true;
     std::string first_codon;
+    const long long nk = (long long)kinds_.size();
+    const long long ff = aborted ? first_fail() : -1;
     for (long long k = 0; k < n; ++k) {
-        if (!aborted && k < (long long)kinds_.size() && kinds_[(size_t)k] == 'o' && !entries_.count(k)) continue;
-        Json v = entry_view(k, aborted ? 1 : 0);
-        if (fixable(v)) {
+        const char kind = k < nk ? kinds_[(size_t)k] : 'n';
+        const int f = k < nk ? (unsigned char)flags_[(size_t)k] : 0;
+        bool fix, has_mm;
+        if (!aborted || kind == 'e') {
+            if (kind == 'o') continue;
+            fix = (kind == 'm' && !(f & F_FRAMESHIFT)) || (kind == 'f' && (f & (F_UNRELATED | F_REAL_MM))) ||
+                  kind == 'e' || kind == 'n';
+            has_mm = f & F_REAL_MM;
+        } else if (ff < 0 || k > ff) {
+            fix = true;
+            has_mm = false;
+        } else {
+            fix = has_mm = f & F_REAL_MM;
+        }
+        if (fix) {
             problems.push_back(k);
-            for (auto* m : real_mismatches(v)) {
-                if (!any_start) first_codon = sget(*m, "codon");
+            if (has_mm) {
+                if (!any_start) first_codon = codons_.substr((size_t)k * 3, 3);
                 any_start = true;
-                const Json* sc = m->get("start_codon");
-                all_start = all_start && sc && sc->type == Json::Bool && sc->b;
+                all_start = all_start && (f & F_ALL_START);
             }
         }
     }
@@ -1241,25 +1374,20 @@ std::vector<std::string> RunReport::summary_lines() const {
         lines.push_back(fmt_n(k) + " of " + fmt_n(n) + " sequences " + (k == 1 ? "has" : "have") +
                         " codons with unknown or ambiguous bases (e.g. N) that could not be checked: missing "
                         "sequence data, not a genetic-code problem.");
-    std::vector<long long> fl, ex;
-    for (auto& [i, kp] : entries_) {
-        // gene_kind(entry) is the kind recorded in kinds_ (set_kind at add_sequence; the end-of-run step's
-        // break_event and mismatch-pattern messages never change a kind)
-        char g = i < (long long)kinds_.size() ? kinds_[(size_t)i] : kind_char(gene_kind(json_parse(kp.json)));
-        if (g == 'f') fl.push_back(i);
-        if (g == 'e') ex.push_back(i);
-    }
-    if (!fl.empty()) {
-        const Json first = entry(fl[0]);
-        bool one = fl.size() == 1;
-        lines.push_back(seqs((long long)fl.size()) + " of " + fmt_n(n) + " " + (one ? "was" : "were") +
+    // (a gene's kind is the one recorded at add_sequence: the end-of-run break events and pattern marks never
+    // change it; the first flagged / excluded entries are kept whole for these lines)
+    const long long fl = kc['f'], ex = kc['e'];
+    if (fl) {
+        const Json& first = first_flagged_;
+        bool one = fl == 1;
+        lines.push_back(seqs(fl) + " of " + fmt_n(n) + " " + (one ? "was" : "were") +
                         " written to the output but " + (one ? "is" : "are") + " probably wrong (first: " +
                         sget(first, "id") + ": " + sget(msgs_of(first)[0], "text") + ") Remove " + (one ? "it" : "them") +
                         " before analysis, or use --strict to refuse such genes.");
     }
     auto c = counts();
-    if (!ex.empty()) {
-        const Json first = entry(ex[0]);
+    if (ex) {
+        const Json& first = first_excluded_;
         const auto& ms = msgs_of(first);
         std::string why = ms.empty() ? "" : sget(ms.back(), "text"), where;
         for (auto& m : ms) {
@@ -1277,8 +1405,8 @@ std::vector<std::string> RunReport::summary_lines() const {
         std::string gc = has_gc_hint_ && (nomismatch_ || !kc['m']) ? " " + gc_hint_cli_ : "";
         const std::string fid = sget(first, "id");
         if (keep_going_) {
-            std::string left = errors_.empty() ? std::string(" and ") + (ex.size() == 1 ? "was" : "were") + " left out" : "";
-            lines.push_back(seqs((long long)ex.size()) + " of " + fmt_n(n) + " could not be converted" + left + " (first: " +
+            std::string left = errors_.empty() ? std::string(" and ") + (ex == 1 ? "was" : "were") + " left out" : "";
+            lines.push_back(seqs(ex) + " of " + fmt_n(n) + " could not be converted" + left + " (first: " +
                             fid + ": " + why + "." + (where.empty() ? "" : " " + where) + ")" + gc);
         } else {
             // Where the gene breaks without repeating the error, then what to do (report.py)
@@ -1305,7 +1433,7 @@ std::vector<std::string> RunReport::summary_lines() const {
                         "database fields)" + eg + "; COAL paired by those IDs where PAL2NAL's file order would mispair them.");
     }
     long long unk = 0;
-    for (auto& [i, kp] : entries_) unk += kp.unknown_aa;
+    for (char f : flags_) unk += ((unsigned char)f & F_UNKNOWN_AA) != 0;
     if (unk)
         lines.push_back(fmt_n(unk) + " of " + fmt_n(n) + " sequences contain non-standard amino acids (U, O, B, Z or J) "
                         "whose codons were not checked.");
@@ -1340,18 +1468,19 @@ std::string RunReport::methods_text(const Json& rep) const {
         clauses.push_back(std::to_string(kinds["unchecked"]) + " contained codons with unknown or ambiguous bases "
                           "(e.g. N) that could not be checked" + (nomismatch_ ? "" : " (kept in the alignment)"));
     if (kinds["other"]) {
-        std::set<std::string> codes;
-        for (auto& [k, kp] : entries_)
-            if (k < (long long)kinds_.size() && kinds_[(size_t)k] == 'x') {
-                const Json e = json_parse(kp.json);
-                for (auto& m : msgs_of(e)) codes.insert(sget(m, "code"));
+        // the message codes of the "other" entries, from their flags (report.py methods_text)
+        bool unknown = false, pairing = false, other = false;
+        for (size_t k = 0; k < kinds_.size(); ++k)
+            if (kinds_[k] == 'x') {
+                int f = (unsigned char)flags_[k];
+                unknown = unknown || (f & F_UNKNOWN_AA);
+                pairing = pairing || (f & F_PAIRING);
+                other = other || (f & F_OTHER_CODE);
             }
         std::vector<std::string> why;
-        if (codes.count("unknown_aa"))
+        if (unknown)
             why.push_back("contained non-standard amino acids (such as U, B or Z) whose codons were not checked");
-        if (codes.count("suspect_pairing")) why.push_back("were paired with their DNA only by their order in the files");
-        bool other = false;
-        for (auto& x : codes) other = other || (x != "unknown_aa" && x != "suspect_pairing");
+        if (pairing) why.push_back("were paired with their DNA only by their order in the files");
         if (other) why.push_back("had other warnings (see the report)");
         std::string w;
         if (why.size() == 1) w = why[0];
@@ -1502,11 +1631,19 @@ void RunReport::write_json(std::ostream& out) const {
     if (n == 0) {
         out << "[]";
     } else {
+        // the kept entries once, in order, merged with the clean / unreached sequences (report.py views)
+        EntryCursor cur(*this);
+        long long nk = -1;
+        Json ne;
+        bool have = cur.next(nk, ne);
         out << '[';
         for (long long k = 0; k < n; ++k) {
+            while (have && nk < k) have = cur.next(nk, ne);
+            const Json* kept = have && nk == k ? &ne : nullptr;
             std::string s = k ? ",\n  " : "\n  ";
-            json_dump_to(s, entry_view(k), 1, 2);
+            json_dump_to(s, view(k, kept), 1, 2);
             out << s;
+            if (kept) have = cur.next(nk, ne);
         }
         out << "\n ]";
     }

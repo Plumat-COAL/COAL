@@ -1,0 +1,7 @@
+coal: warning: g1 pepAlnPos 4: G does not correspond to NNN
+coal: warning: g1 pepAlnPos 8: Y does not correspond to NNN
+coal: warning: g2 pepAlnPos 6: U (selenocysteine) is not checked; any codon is accepted
+coal: warning: g4 pepAlnPos 4: N does not correspond to NNN
+coal: warning: g4 pepAlnPos 8: I does not correspond to NNN
+coal: summary: 2 of 6 sequences have codons with unknown or ambiguous bases (e.g. N) that could not be checked: missing sequence data, not a genetic-code problem.
+coal: summary: 1 of 6 sequences contain non-standard amino acids (U, O, B, Z or J) whose codons were not checked.

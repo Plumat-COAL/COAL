@@ -1,0 +1,166 @@
+{
+ "schema": "coal.report/1",
+ "coal_version": "0.5.0",
+ "source": "coal",
+ "engine": "coal-python",
+ "command": "coal pep.fasta nuc.fasta -o out.fa",
+ "command_line": "coal pep.fasta nuc.fasta -o out.fa --report r.json",
+ "pal2nal_equivalent": "pal2nal.pl pep.fasta nuc.fasta -output fasta",
+ "options": {
+  "output_format": "fasta",
+  "codontable": 1,
+  "nogap": false,
+  "nomismatch": false,
+  "keep_going": false,
+  "strict": false,
+  "blockonly": false
+ },
+ "inputs": [
+  {
+   "role": "protein",
+   "path": "pep.fasta",
+   "sha256": "fd268c159aa02e773b788dd84b30e829b6f3ed9d0556efb2d8f18339dbb3d7eb",
+   "sequences": 6
+  },
+  {
+   "role": "dna",
+   "path": "nuc.fasta",
+   "sha256": "8dbbbc33e430c979967e9d17bc6fb75681fca5fdfb111890c3404772d3a5e7c5",
+   "sequences": 6
+  }
+ ],
+ "output": {
+  "path": "out.fa",
+  "format": "fasta",
+  "sha256": "5f63214a7ae8de6d06713e7f1a329eea60cd2fdaff9d7a48deab8e3da1767419",
+  "sequences": 6
+ },
+ "summary": {
+  "total": 6,
+  "ok": 5,
+  "warning": 1,
+  "failed": 0,
+  "pairing": "id"
+ },
+ "hints": [],
+ "errors": [],
+ "sequences": [
+  {
+   "id": "g0",
+   "index": 0,
+   "dna_id": "g0",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "g1",
+   "index": 1,
+   "dna_id": "g1",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "g2",
+   "index": 2,
+   "dna_id": "g2",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "g3",
+   "index": 3,
+   "dna_id": "g3",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 33,
+     "text": "Column 33: amino acid H does not match codon TGG.",
+     "residue": "H",
+     "codon": "TGG"
+    },
+    {
+     "code": "mismatch",
+     "column": 34,
+     "text": "Column 34: amino acid Q does not match codon TGG.",
+     "residue": "Q",
+     "codon": "TGG"
+    },
+    {
+     "code": "mismatch",
+     "column": 35,
+     "text": "Column 35: amino acid S does not match codon TGG.",
+     "residue": "S",
+     "codon": "TGG"
+    },
+    {
+     "code": "mismatch",
+     "column": 36,
+     "text": "Column 36: amino acid K does not match codon TGG.",
+     "residue": "K",
+     "codon": "TGG"
+    },
+    {
+     "code": "mismatch",
+     "column": 37,
+     "text": "Column 37: amino acid D does not match codon TGG.",
+     "residue": "D",
+     "codon": "TGG"
+    },
+    {
+     "code": "mismatch",
+     "column": 38,
+     "text": "Column 38: amino acid V does not match codon TGG.",
+     "residue": "V",
+     "codon": "TGG"
+    },
+    {
+     "code": "mismatch",
+     "column": 39,
+     "text": "Column 39: amino acid F does not match codon TGG.",
+     "residue": "F",
+     "codon": "TGG"
+    },
+    {
+     "code": "mismatch",
+     "column": 40,
+     "text": "Column 40: amino acid V does not match codon TGG.",
+     "residue": "V",
+     "codon": "TGG"
+    },
+    {
+     "code": "possible_frameshift",
+     "column": 33,
+     "end_column": 40,
+     "text": "The mismatches form one run, from column 33 to the end of the gene: this looks like a missing or extra base (a frameshift) or a small insertion/deletion in the DNA near column 33, not a genetic-code problem. Check the DNA there (a sequencing or assembly error?)."
+    }
+   ]
+  },
+  {
+   "id": "g4",
+   "index": 4,
+   "dna_id": "g4",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  },
+  {
+   "id": "g5",
+   "index": 5,
+   "dna_id": "g5",
+   "pairing": "id",
+   "status": "ok",
+   "messages": []
+  }
+ ],
+ "runtime_seconds": 0.006,
+ "exit_code": 0,
+ "summary_text": [
+  "1 of 6 sequences has codons that do not match their amino acid (kept in the alignment)."
+ ],
+ "methods_text": "Codon alignments were built with COAL v0.5.0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 6 sequences, 5 matched their protein exactly, and 1 contained codons that did not match the aligned amino acid (kept in the alignment). Command: coal pep.fasta nuc.fasta -o out.fa"
+}

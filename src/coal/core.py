@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 import re
+from array import array
 from functools import lru_cache
 from itertools import accumulate
 
@@ -67,27 +68,57 @@ def check_table(table) -> None:
                         f"{', '.join(map(str, SUPPORTED))}", code="unknown_table")
 
 
+def mismatch_warnings(row: str, cols, codons: str) -> list[str]:
+    """The per-codon mismatch warnings of a sequence as strings, from their 1-based columns and their codons
+    (3 characters each, joined): the text thread_one printed when it kept them as strings."""
+    return [f"pepAlnPos {c}: {row[c - 1]}{MISMATCH_WARNING}{codons[3 * i:3 * i + 3]}" for i, c in enumerate(cols)]
+
+
 class Threaded:
     """Per-sequence result: the matched DNA and the column layout. (A plain class, not a dataclass: importing
-    dataclasses costs ~20 ms of start-up, which shows on pipelines that run COAL once per small file.)"""
-    __slots__ = ("seq_id", "row", "dna", "warnings", "mismatch_cols", "notices")
+    dataclasses costs ~20 ms of start-up, which shows on pipelines that run COAL once per small file.)
+
+    The per-codon mismatches are kept as columns and codons (`mm_cols`: the 1-based alignment columns in ascending
+    order, an array; `mm_codons`: their codons, 3 characters each, one string) and only turned into the
+    "pepAlnPos N: X does not correspond to CCC" strings by `warnings` when something reads them: a 400-codon gene of
+    unrelated DNA has about 370 of them, 35 KB as strings against about 2 KB this way, and the Python engine's
+    worker processes hand these fields back to the main process (pipeline._work), which formats the strings only
+    when it prints or keeps them. The X/B/Z/J/O/U warnings (a few per sequence at most) stay strings in
+    `other_warnings`."""
+    __slots__ = ("seq_id", "row", "dna", "other_warnings", "mm_cols", "mm_codons", "mismatch_cols", "notices")
+    _FIELDS = ("seq_id", "row", "dna", "warnings", "mismatch_cols", "notices")
 
     def __init__(self, seq_id: str, row: str, dna: str, warnings: list[str] | None = None,
                  mismatch_cols: set[int] | None = None, notices: list[str] | None = None):
         self.seq_id = seq_id
         self.row = row            # aligned protein row (upper case, '.' -> '-')
         self.dna = dna            # matched DNA, original case
-        self.warnings = [] if warnings is None else warnings
+        self.other_warnings = [] if warnings is None else list(warnings)  # warnings given as strings
+        self.mm_cols = array("I")   # mismatch columns (1-based, ascending), see add_mismatch
+        self.mm_codons = ""         # their codons, 3 characters each
         self.mismatch_cols = set() if mismatch_cols is None else mismatch_cols  # 1-based alignment columns
         self.notices = [] if notices is None else notices  # probably-wrong data, apart from per-codon warnings
 
+    @property
+    def warnings(self) -> list[str]:
+        """The per-codon warnings as strings, in the order thread_one always gave them: the X/B/Z/J/O/U warnings
+        first, then the mismatches by column."""
+        return self.other_warnings + mismatch_warnings(self.row, self.mm_cols, self.mm_codons)
+
+    def add_mismatch(self, col: int, codon: str) -> None:
+        """Record that the codon at alignment column `col` (1-based; columns come in ascending order) does not
+        match its residue. `codon` is always 3 characters: the matched DNA holds a whole codon per residue."""
+        self.mm_cols.append(col)
+        self.mm_codons += codon
+        self.mismatch_cols.add(col)
+
     def __repr__(self):
-        return f"Threaded({', '.join(f'{k}={getattr(self, k)!r}' for k in self.__slots__)})"
+        return f"Threaded({', '.join(f'{k}={getattr(self, k)!r}' for k in self._FIELDS)})"
 
     def __eq__(self, other):
         if not isinstance(other, Threaded):
             return NotImplemented
-        return all(getattr(self, k) == getattr(other, k) for k in self.__slots__)
+        return all(getattr(self, k) == getattr(other, k) for k in self._FIELDS)
 
     __hash__ = None
 
@@ -629,7 +660,7 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int, strict: bool = F
     for m in _AS_X.finditer(row):
         # PAL2NAL says "U unknown AA type. Taken as 'X'", but U is a known amino acid (selenocysteine); same
         # behaviour and stdout, clearer wording (also for B/Z/J/O).
-        res.warnings.append(f"pepAlnPos {m.start() + 1}: {m.group()} ({AS_X_NAMES[m.group()]}) is not checked; "
+        res.other_warnings.append(f"pepAlnPos {m.start() + 1}: {m.group()} ({AS_X_NAMES[m.group()]}) is not checked; "
                             f"any codon is accepted")
         # -nomismatch removes it, as PAL2NAL v14 removes every column it printed a message for
         res.mismatch_cols.add(m.start() + 1)
@@ -741,8 +772,7 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int, strict: bool = F
                 bad.insert(0, 0)
         for i in bad:
             c = toks[i][2]
-            res.warnings.append(f"pepAlnPos {c}: {row[c - 1]}{MISMATCH_WARNING}{res.dna[3 * i:3 * i + 3]}")
-            res.mismatch_cols.add(c)
+            res.add_mismatch(c, res.dna[3 * i:3 * i + 3])
             nbad_chk += i not in amb
     else:
         pos, first = 0, True
@@ -758,8 +788,7 @@ def thread_one(seq_id: str, row: str, raw_dna: str, table: int, strict: bool = F
             checkable = not cu.strip("ACGT")
             nchk += checkable
             if not codon_ok(table, cu, aa, mode):
-                res.warnings.append(f"pepAlnPos {c}: {row[c - 1]}{MISMATCH_WARNING}{codon}")
-                res.mismatch_cols.add(c)
+                res.add_mismatch(c, codon)
                 nbad_chk += checkable
             first = False
             pos += 3

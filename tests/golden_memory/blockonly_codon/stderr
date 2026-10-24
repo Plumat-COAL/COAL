@@ -1,0 +1,5 @@
+coal: warning: g1 pepAlnPos 5: T does not correspond to TGG
+coal: warning: g1 pepAlnPos 6: H does not correspond to TGG
+coal: warning: g1 pepAlnPos 21: P does not correspond to TGG
+coal: warning: g1 pepAlnPos 22: W does not correspond to GCT
+coal: summary: 1 of 3 sequences has codons that do not match their amino acid (kept in the alignment).

@@ -1,0 +1,10 @@
+coal: notice: wrong genetic code? Under genetic code 11 (Bacterial, archaeal and plant plastid), all 8 sequences match their protein; under code 1, none do. Re-run with -codontable 11.
+coal: warning: g0 pepAlnPos 1: M does not correspond to ATA
+coal: warning: g1 pepAlnPos 1: M does not correspond to ATA
+coal: warning: g2 pepAlnPos 1: M does not correspond to ATA
+coal: warning: g3 pepAlnPos 1: M does not correspond to ATA
+coal: warning: g4 pepAlnPos 1: M does not correspond to ATA
+coal: warning: g5 pepAlnPos 1: M does not correspond to ATA
+coal: warning: g6 pepAlnPos 1: M does not correspond to ATA
+coal: warning: g7 pepAlnPos 1: M does not correspond to ATA
+coal: summary: 8 of 8 sequences have codons that do not match their amino acid (kept in the alignment). The only mismatches are at the first codon of 8 sequences (for example ATA where the protein starts with M): an alternative start codon, which code 11 accepts. Under genetic code 11 (Bacterial, archaeal and plant plastid), all 8 sequences match their protein; under code 1, none do. Codes 4, 2, 5 and 13 fit as well, but code 11 differs least from code 1. Re-run with -codontable 11.

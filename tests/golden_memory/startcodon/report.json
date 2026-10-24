@@ -1,0 +1,200 @@
+{
+ "schema": "coal.report/1",
+ "coal_version": "0.5.0",
+ "source": "coal",
+ "engine": "coal-python",
+ "command": "coal pep.fasta nuc.fasta -o out.fa",
+ "command_line": "coal pep.fasta nuc.fasta -o out.fa --report r.json",
+ "pal2nal_equivalent": "pal2nal.pl pep.fasta nuc.fasta -output fasta",
+ "options": {
+  "output_format": "fasta",
+  "codontable": 1,
+  "nogap": false,
+  "nomismatch": false,
+  "keep_going": false,
+  "strict": false,
+  "blockonly": false
+ },
+ "inputs": [
+  {
+   "role": "protein",
+   "path": "pep.fasta",
+   "sha256": "6946213ecc2cbf918d718c87792779ab9823dafd9b68a8eb17dc64e71e8ad281",
+   "sequences": 8
+  },
+  {
+   "role": "dna",
+   "path": "nuc.fasta",
+   "sha256": "dd78380bdf5234fe948b95cce4d9b2308bd6c1df59757d73a623895a9f98bce1",
+   "sequences": 8
+  }
+ ],
+ "output": {
+  "path": "out.fa",
+  "format": "fasta",
+  "sha256": "902c58f130cb969ae5232f5a010eefb5f8a6241e13ec3d3b0c74b874fa59744d",
+  "sequences": 8
+ },
+ "summary": {
+  "total": 8,
+  "ok": 0,
+  "warning": 8,
+  "failed": 0,
+  "pairing": "id"
+ },
+ "hints": [
+  {
+   "code": "genetic_code",
+   "text": "The only mismatches are at the first codon of 8 sequences (for example ATA where the protein starts with M): an alternative start codon, which code 11 accepts. Under genetic code 11 (Bacterial, archaeal and plant plastid), all 8 sequences match their protein; under code 1, none do. Codes 4, 2, 5 and 13 fit as well, but code 11 differs least from code 1. Re-run with code 11?",
+   "suggested_codontable": 11,
+   "checked": 8,
+   "fit": 8,
+   "fit_current": 0
+  }
+ ],
+ "errors": [],
+ "sequences": [
+  {
+   "id": "g0",
+   "index": 0,
+   "dna_id": "g0",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 1,
+     "text": "Column 1: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA",
+     "start_codon": true
+    }
+   ]
+  },
+  {
+   "id": "g1",
+   "index": 1,
+   "dna_id": "g1",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 1,
+     "text": "Column 1: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA",
+     "start_codon": true
+    }
+   ]
+  },
+  {
+   "id": "g2",
+   "index": 2,
+   "dna_id": "g2",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 1,
+     "text": "Column 1: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA",
+     "start_codon": true
+    }
+   ]
+  },
+  {
+   "id": "g3",
+   "index": 3,
+   "dna_id": "g3",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 1,
+     "text": "Column 1: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA",
+     "start_codon": true
+    }
+   ]
+  },
+  {
+   "id": "g4",
+   "index": 4,
+   "dna_id": "g4",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 1,
+     "text": "Column 1: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA",
+     "start_codon": true
+    }
+   ]
+  },
+  {
+   "id": "g5",
+   "index": 5,
+   "dna_id": "g5",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 1,
+     "text": "Column 1: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA",
+     "start_codon": true
+    }
+   ]
+  },
+  {
+   "id": "g6",
+   "index": 6,
+   "dna_id": "g6",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 1,
+     "text": "Column 1: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA",
+     "start_codon": true
+    }
+   ]
+  },
+  {
+   "id": "g7",
+   "index": 7,
+   "dna_id": "g7",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 1,
+     "text": "Column 1: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA",
+     "start_codon": true
+    }
+   ]
+  }
+ ],
+ "runtime_seconds": 0.007,
+ "exit_code": 0,
+ "summary_text": [
+  "8 of 8 sequences have codons that do not match their amino acid (kept in the alignment). The only mismatches are at the first codon of 8 sequences (for example ATA where the protein starts with M): an alternative start codon, which code 11 accepts. Under genetic code 11 (Bacterial, archaeal and plant plastid), all 8 sequences match their protein; under code 1, none do. Codes 4, 2, 5 and 13 fit as well, but code 11 differs least from code 1. Re-run with -codontable 11."
+ ],
+ "methods_text": "Fix the warnings first: only 0 of 8 sequences matched their protein exactly, so this alignment is probably not ready to use (see the hints and the messages for each sequence). Methods text for this run as it stands: Codon alignments were built with COAL v0.5.0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 8 sequences, 0 matched their protein exactly, and 8 contained codons that did not match the aligned amino acid (kept in the alignment). Command: coal pep.fasta nuc.fasta -o out.fa"
+}

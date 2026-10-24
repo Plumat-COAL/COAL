@@ -1,0 +1,1134 @@
+{
+ "schema": "coal.report/1",
+ "coal_version": "0.5.0",
+ "source": "coal",
+ "engine": "coal-python",
+ "command": "coal - nuc.fasta",
+ "command_line": "coal - nuc.fasta --report r.json",
+ "pal2nal_equivalent": "pal2nal.pl - nuc.fasta -output fasta",
+ "options": {
+  "output_format": "fasta",
+  "codontable": 1,
+  "nogap": false,
+  "nomismatch": false,
+  "keep_going": false,
+  "strict": false,
+  "blockonly": false
+ },
+ "inputs": [
+  {
+   "role": "protein",
+   "path": "-",
+   "sha256": "ded698978a59af3a193c323cd8cfa4c103ce1d5c222e920c622ed057a93906a5",
+   "sequences": 30
+  },
+  {
+   "role": "dna",
+   "path": "nuc.fasta",
+   "sha256": "f3a91111761fb2aed2ae8d524c973aecd94443c9b555440dd6add4038089ec4b",
+   "sequences": 30
+  }
+ ],
+ "output": {
+  "path": null,
+  "format": "fasta",
+  "sha256": "3cc7a01018724077c03c4a295f351303203313b0617765c155c6105f4d0b4f81",
+  "sequences": 30
+ },
+ "summary": {
+  "total": 30,
+  "ok": 0,
+  "warning": 30,
+  "failed": 0,
+  "pairing": "id"
+ },
+ "hints": [
+  {
+   "code": "genetic_code",
+   "text": "Under genetic code 2 (Vertebrate mitochondrial), all 30 sequences match their protein; under code 1, none do. Codes 5 and 13 fit these sequences too: choose the code of the organism and organelle the genes come from. Re-run with code 2?",
+   "suggested_codontable": 2,
+   "checked": 30,
+   "fit": 30,
+   "fit_current": 0
+  }
+ ],
+ "errors": [],
+ "sequences": [
+  {
+   "id": "g0",
+   "index": 0,
+   "dna_id": "g0",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 13,
+     "text": "Column 13: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 14,
+     "text": "Column 14: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 30,
+     "text": "Column 30: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    }
+   ]
+  },
+  {
+   "id": "g1",
+   "index": 1,
+   "dna_id": "g1",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 6,
+     "text": "Column 6: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 19,
+     "text": "Column 19: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 28,
+     "text": "Column 28: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 38,
+     "text": "Column 38: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "no_anchor",
+     "text": "No 10-residue stretch of the protein was found in the DNA, so codons were assigned by position (4 of 40 checkable codons do not match). Is this the right DNA for this protein, and the right genetic code?"
+    }
+   ]
+  },
+  {
+   "id": "g2",
+   "index": 2,
+   "dna_id": "g2",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 19,
+     "text": "Column 19: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    }
+   ]
+  },
+  {
+   "id": "g3",
+   "index": 3,
+   "dna_id": "g3",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 5,
+     "text": "Column 5: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 18,
+     "text": "Column 18: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    }
+   ]
+  },
+  {
+   "id": "g4",
+   "index": 4,
+   "dna_id": "g4",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 14,
+     "text": "Column 14: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 23,
+     "text": "Column 23: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 39,
+     "text": "Column 39: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    }
+   ]
+  },
+  {
+   "id": "g5",
+   "index": 5,
+   "dna_id": "g5",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 21,
+     "text": "Column 21: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 34,
+     "text": "Column 34: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    }
+   ]
+  },
+  {
+   "id": "g6",
+   "index": 6,
+   "dna_id": "g6",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 21,
+     "text": "Column 21: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    }
+   ]
+  },
+  {
+   "id": "g7",
+   "index": 7,
+   "dna_id": "g7",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 13,
+     "text": "Column 13: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 27,
+     "text": "Column 27: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    }
+   ]
+  },
+  {
+   "id": "g8",
+   "index": 8,
+   "dna_id": "g8",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 3,
+     "text": "Column 3: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 13,
+     "text": "Column 13: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    }
+   ]
+  },
+  {
+   "id": "g9",
+   "index": 9,
+   "dna_id": "g9",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 20,
+     "text": "Column 20: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 24,
+     "text": "Column 24: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    }
+   ]
+  },
+  {
+   "id": "g10",
+   "index": 10,
+   "dna_id": "g10",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 5,
+     "text": "Column 5: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 19,
+     "text": "Column 19: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 23,
+     "text": "Column 23: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 31,
+     "text": "Column 31: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 32,
+     "text": "Column 32: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 37,
+     "text": "Column 37: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "no_anchor",
+     "text": "No 10-residue stretch of the protein was found in the DNA, so codons were assigned by position (6 of 40 checkable codons do not match). Is this the right DNA for this protein, and the right genetic code?"
+    }
+   ]
+  },
+  {
+   "id": "g11",
+   "index": 11,
+   "dna_id": "g11",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 3,
+     "text": "Column 3: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 8,
+     "text": "Column 8: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 17,
+     "text": "Column 17: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 20,
+     "text": "Column 20: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 31,
+     "text": "Column 31: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 40,
+     "text": "Column 40: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    }
+   ]
+  },
+  {
+   "id": "g12",
+   "index": 12,
+   "dna_id": "g12",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 4,
+     "text": "Column 4: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 5,
+     "text": "Column 5: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 10,
+     "text": "Column 10: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 27,
+     "text": "Column 27: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 36,
+     "text": "Column 36: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    }
+   ]
+  },
+  {
+   "id": "g13",
+   "index": 13,
+   "dna_id": "g13",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 2,
+     "text": "Column 2: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 7,
+     "text": "Column 7: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 22,
+     "text": "Column 22: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 23,
+     "text": "Column 23: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 28,
+     "text": "Column 28: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    }
+   ]
+  },
+  {
+   "id": "g14",
+   "index": 14,
+   "dna_id": "g14",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 2,
+     "text": "Column 2: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 18,
+     "text": "Column 18: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 30,
+     "text": "Column 30: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 32,
+     "text": "Column 32: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "no_anchor",
+     "text": "No 10-residue stretch of the protein was found in the DNA, so codons were assigned by position (4 of 40 checkable codons do not match). Is this the right DNA for this protein, and the right genetic code?"
+    }
+   ]
+  },
+  {
+   "id": "g15",
+   "index": 15,
+   "dna_id": "g15",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 2,
+     "text": "Column 2: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 7,
+     "text": "Column 7: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 14,
+     "text": "Column 14: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 27,
+     "text": "Column 27: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    }
+   ]
+  },
+  {
+   "id": "g16",
+   "index": 16,
+   "dna_id": "g16",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 3,
+     "text": "Column 3: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 16,
+     "text": "Column 16: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 20,
+     "text": "Column 20: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 22,
+     "text": "Column 22: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 26,
+     "text": "Column 26: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 32,
+     "text": "Column 32: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "no_anchor",
+     "text": "No 10-residue stretch of the protein was found in the DNA, so codons were assigned by position (6 of 40 checkable codons do not match). Is this the right DNA for this protein, and the right genetic code?"
+    }
+   ]
+  },
+  {
+   "id": "g17",
+   "index": 17,
+   "dna_id": "g17",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 14,
+     "text": "Column 14: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 16,
+     "text": "Column 16: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 21,
+     "text": "Column 21: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 35,
+     "text": "Column 35: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    }
+   ]
+  },
+  {
+   "id": "g18",
+   "index": 18,
+   "dna_id": "g18",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 15,
+     "text": "Column 15: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 17,
+     "text": "Column 17: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    }
+   ]
+  },
+  {
+   "id": "g19",
+   "index": 19,
+   "dna_id": "g19",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 6,
+     "text": "Column 6: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 20,
+     "text": "Column 20: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 26,
+     "text": "Column 26: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 30,
+     "text": "Column 30: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 37,
+     "text": "Column 37: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 39,
+     "text": "Column 39: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "no_anchor",
+     "text": "No 10-residue stretch of the protein was found in the DNA, so codons were assigned by position (6 of 40 checkable codons do not match). Is this the right DNA for this protein, and the right genetic code?"
+    }
+   ]
+  },
+  {
+   "id": "g20",
+   "index": 20,
+   "dna_id": "g20",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 10,
+     "text": "Column 10: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 27,
+     "text": "Column 27: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    }
+   ]
+  },
+  {
+   "id": "g21",
+   "index": 21,
+   "dna_id": "g21",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 3,
+     "text": "Column 3: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 5,
+     "text": "Column 5: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 38,
+     "text": "Column 38: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 40,
+     "text": "Column 40: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    }
+   ]
+  },
+  {
+   "id": "g22",
+   "index": 22,
+   "dna_id": "g22",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 7,
+     "text": "Column 7: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 8,
+     "text": "Column 8: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 22,
+     "text": "Column 22: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 30,
+     "text": "Column 30: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 33,
+     "text": "Column 33: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 34,
+     "text": "Column 34: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    }
+   ]
+  },
+  {
+   "id": "g23",
+   "index": 23,
+   "dna_id": "g23",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 7,
+     "text": "Column 7: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 15,
+     "text": "Column 15: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 19,
+     "text": "Column 19: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 21,
+     "text": "Column 21: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 37,
+     "text": "Column 37: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "no_anchor",
+     "text": "No 10-residue stretch of the protein was found in the DNA, so codons were assigned by position (5 of 40 checkable codons do not match). Is this the right DNA for this protein, and the right genetic code?"
+    }
+   ]
+  },
+  {
+   "id": "g24",
+   "index": 24,
+   "dna_id": "g24",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 4,
+     "text": "Column 4: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 8,
+     "text": "Column 8: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 11,
+     "text": "Column 11: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    }
+   ]
+  },
+  {
+   "id": "g25",
+   "index": 25,
+   "dna_id": "g25",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 22,
+     "text": "Column 22: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 32,
+     "text": "Column 32: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 33,
+     "text": "Column 33: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    }
+   ]
+  },
+  {
+   "id": "g26",
+   "index": 26,
+   "dna_id": "g26",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 4,
+     "text": "Column 4: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 9,
+     "text": "Column 9: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 29,
+     "text": "Column 29: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    }
+   ]
+  },
+  {
+   "id": "g27",
+   "index": 27,
+   "dna_id": "g27",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 8,
+     "text": "Column 8: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 14,
+     "text": "Column 14: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 18,
+     "text": "Column 18: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 22,
+     "text": "Column 22: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    }
+   ]
+  },
+  {
+   "id": "g28",
+   "index": 28,
+   "dna_id": "g28",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 7,
+     "text": "Column 7: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 14,
+     "text": "Column 14: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 16,
+     "text": "Column 16: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 17,
+     "text": "Column 17: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 18,
+     "text": "Column 18: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "possible_frameshift",
+     "column": 14,
+     "end_column": 18,
+     "text": "The mismatches form one run, from column 14 up to column 18: this looks like a missing or extra base (a frameshift) or a small insertion/deletion in the DNA near column 14, not a genetic-code problem. Check the DNA there (a sequencing or assembly error?)."
+    }
+   ]
+  },
+  {
+   "id": "g29",
+   "index": 29,
+   "dna_id": "g29",
+   "pairing": "id",
+   "status": "warning",
+   "messages": [
+    {
+     "code": "mismatch",
+     "column": 10,
+     "text": "Column 10: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 12,
+     "text": "Column 12: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 16,
+     "text": "Column 16: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    },
+    {
+     "code": "mismatch",
+     "column": 31,
+     "text": "Column 31: amino acid M does not match codon ATA.",
+     "residue": "M",
+     "codon": "ATA"
+    },
+    {
+     "code": "mismatch",
+     "column": 36,
+     "text": "Column 36: amino acid W does not match codon TGA.",
+     "residue": "W",
+     "codon": "TGA"
+    }
+   ]
+  }
+ ],
+ "runtime_seconds": 0.011,
+ "exit_code": 0,
+ "summary_text": [
+  "30 of 30 sequences have codons that do not match their amino acid (kept in the alignment). Under genetic code 2 (Vertebrate mitochondrial), all 30 sequences match their protein; under code 1, none do. Codes 5 and 13 fit these sequences too: choose the code of the organism and organelle the genes come from. Re-run with -codontable 2."
+ ],
+ "methods_text": "Fix the warnings first: only 0 of 30 sequences matched their protein exactly, so this alignment is probably not ready to use (see the hints and the messages for each sequence). Methods text for this run as it stands: Codon alignments were built with COAL v0.5.0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 30 sequences, 0 matched their protein exactly, and 30 contained codons that did not match the aligned amino acid (kept in the alignment). Command: coal - nuc.fasta"
+}

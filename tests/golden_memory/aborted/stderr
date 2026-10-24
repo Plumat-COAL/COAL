@@ -1,0 +1,3 @@
+coal: error: g4: protein and DNA are inconsistent (no match found)
+coal: summary: g4: Frameshift at column 21: there is one extra base in the DNA, so from here on the codons are read out of step.
+coal: summary: The run stopped at g4: 4 sequences were not checked and no output was written. Add --keep-going to write the other sequences and leave this one out.
