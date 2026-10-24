@@ -407,8 +407,9 @@ VIEW_EMPTY = '<p class="coal-small">Drawn after a run.</p>'
 
 
 def run_ui(protein, dna, fmt, code, nogap, nomismatch, protein_path="", dna_path="", strict=False, blockonly=False,
-           preview_size="standard"):
-    # preview_size: the Settings tab's "Alignment preview" (settings.PREVIEW_SIZES)
+           preview_size="standard", residue_colours=True):
+    # preview_size: the Settings tab's "Alignment preview" (settings.PREVIEW_SIZES); residue_colours: its "Colour
+    # residues by class" (off: the view shows letters only)
     # a typed/pasted path (local only) wins over an upload and is read in place, never copied
     try:
         protein, p_desc = core.resolve_input(protein, protein_path)
@@ -440,11 +441,12 @@ def run_ui(protein, dna, fmt, code, nogap, nomismatch, protein_path="", dna_path
     view_html, view_path, view_ok = "", None, False
     info: dict = {}
     ctx = {"protein": protein, "output": r.output_path, "report": r.report_path, "dna": dna, "code": int(code),
-           "out_dir": out_dir, "preview": preview_size}
+           "out_dir": out_dir, "preview": preview_size, "colours": bool(residue_colours)}
     try:
         # fragment and page rendered once
         view_html, view_path = viewer.render_run(protein, r.output_path, r.report, dna, int(code), out_dir,
-                                                 limits=settings.preview_limits(preview_size), info=info)
+                                                 limits=settings.preview_limits(preview_size), info=info,
+                                                 colours=bool(residue_colours))
         view_html += _view_tail(info)
         view_ok = True
     except (OSError, ValueError) as e:
@@ -474,7 +476,7 @@ def centre_ui(ctx, column):
         info: dict = {}
         frag, path = viewer.render_run(ctx["protein"], ctx["output"], report, ctx["dna"], ctx["code"],
                                        ctx["out_dir"], limits=settings.preview_limits(ctx.get("preview")),
-                                       centre=max(1, col), info=info)
+                                       centre=max(1, col), info=info, colours=ctx.get("colours", True))
     except (OSError, ValueError, KeyError, TypeError) as e:
         msg = core.public_error(e, [ctx.get("protein"), ctx.get("dna"), ctx.get("out_dir")])
         return (gr.update(value=f"<p>Could not draw the alignment: {_html.escape(msg)}</p>"), gr.update(),
@@ -503,7 +505,7 @@ def show_sample():
 
 # ---------------------------------------------------------------- settings
 
-SETTING_ORDER = ["codontable", "output_format", "nogap", "nomismatch", "strict", "preview"]
+SETTING_ORDER = ["codontable", "output_format", "nogap", "nomismatch", "strict", "preview", "residue_colours"]
 
 
 def _settings_where() -> str:
@@ -534,10 +536,11 @@ def load_settings_ui(stored=None, formats=None):
     return _apply(data, note)
 
 
-def save_settings_ui(code, fmt, nogap, nomismatch, strict, preview, formats=None):
+def save_settings_ui(code, fmt, nogap, nomismatch, strict, preview, residue_colours=True, formats=None):
     """A settings control changed: save at once (no Save button) and apply to the main form."""
     data, err = settings.save({"codontable": code, "output_format": fmt, "nogap": nogap, "nomismatch": nomismatch,
-                               "strict": strict, "preview": preview}, formats)
+                               "strict": strict, "preview": preview, "residue_colours": bool(residue_colours)},
+                              formats)
     return _apply(data, err or f"✔ Saved at {_now()}")
 
 
@@ -682,6 +685,9 @@ def build(demo_mode: bool = False) -> gr.Blocks:
                     s_preview = gr.Radio([(settings.PREVIEW_LABELS[k], k) for k in settings.PREVIEW_SIZES],
                                          value=saved["preview"], label="Largest preview (sequences × columns)",
                                          elem_id="coal-set-preview")
+                    s_colours = gr.Checkbox(value=saved["residue_colours"], label="Colour residues by class",
+                                            info="Off: letters only (for colour-blind readers, or printing); problem "
+                                                 "marks stay", elem_id="coal-set-colours")
                     gr.HTML(_sec("About"), padding=False)
                     gr.Markdown(
                         _settings_where() + f"\n\nResults are deleted after {core.RUNS_MAX_AGE_HOURS} hours"
@@ -707,7 +713,8 @@ def build(demo_mode: bool = False) -> gr.Blocks:
         run_ctx = gr.State(None)
         outputs += [run_ctx, centre_row]
         outputs += [results_box]
-        inputs = [protein, dna, fmt, code, nogap, nomismatch, protein_path, dna_path, strict, blockonly, s_preview]
+        inputs = [protein, dna, fmt, code, nogap, nomismatch, protein_path, dna_path, strict, blockonly, s_preview,
+                  s_colours]
         run_btn.click(run_ui, inputs, outputs, show_api=False)
         protein_path.change(core.path_status, protein_path, protein_info, show_api=False)
         dna_path.change(core.path_status, dna_path, dna_info, show_api=False)
@@ -719,11 +726,11 @@ def build(demo_mode: bool = False) -> gr.Blocks:
 
         # Settings: "input" events only (the user's own changes), so loading or resetting them
         # does not save again. Each change is saved and applied to the main form at once.
-        s_controls = [s_code, s_fmt, s_nogap, s_nomismatch, s_strict, s_preview]
+        s_controls = [s_code, s_fmt, s_nogap, s_nomismatch, s_strict, s_preview, s_colours]
         s_outputs = s_controls + [code, fmt, nogap, nomismatch, strict, s_status, s_store]
 
-        def _save(c, f, g, m, st, pv):
-            return save_settings_ui(c, f, g, m, st, pv, formats)
+        def _save(c, f, g, m, st, pv, rc):  # one parameter per control in s_controls, in that order
+            return save_settings_ui(c, f, g, m, st, pv, rc, formats)
 
         for comp in s_controls:
             comp.input(_save, s_controls, s_outputs, show_api=False)
