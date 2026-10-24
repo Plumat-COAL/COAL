@@ -22,6 +22,8 @@
 #include <fcntl.h>
 #include <io.h>
 #include <process.h>
+#include <sys/stat.h>
+#include <windows.h>
 #define COAL_UNLINK _unlink
 #define COAL_WRITE _write
 #define COAL_EXIT _exit
@@ -71,7 +73,8 @@ void install_signal_handlers() {
     std::signal(SIGTERM, on_signal);
     std::signal(SIGINT, on_signal);
 #ifdef SIGHUP
-    std::signal(SIGHUP, on_signal);
+    // an ignored SIGHUP (nohup, setsid) stays ignored, as the Python engine does
+    if (std::signal(SIGHUP, SIG_IGN) != SIG_IGN) std::signal(SIGHUP, on_signal);
 #endif
 #ifdef SIGPIPE
     std::signal(SIGPIPE, SIG_IGN);  // a closed stdout pipe makes writes fail with EPIPE: exit 141
@@ -475,6 +478,80 @@ int write_json_file(const std::string& path, const std::function<void(std::ostre
     }
     unregister_temp(tmp);
     return err;
+}
+
+static bool pid_alive(long long pid) {
+    if (pid <= 0) return false;
+#ifdef _WIN32
+    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, (DWORD)pid);
+    if (!h) return false;
+    DWORD code = 0;
+    bool alive = !GetExitCodeProcess(h, &code) || code == STILL_ACTIVE;
+    CloseHandle(h);
+    return alive;
+#else
+    if (::kill((pid_t)pid, 0) == 0) return true;
+    return errno == EPERM;
+#endif
+}
+
+std::string take_output_lock(const std::string& real, const std::string& name) {
+    const std::string path = real + ".coal-lock";
+    bool removed = false;
+    double waited = 0.0;
+    for (;;) {
+#ifdef _WIN32
+        int fd = ::_open(path.c_str(), _O_WRONLY | _O_CREAT | _O_EXCL, _S_IREAD | _S_IWRITE);
+#else
+        int fd = ::open(path.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0644);
+#endif
+        if (fd >= 0) {
+            const std::string pid = std::to_string((long long)
+#ifdef _WIN32
+                                                       _getpid()
+#else
+                                                       ::getpid()
+#endif
+                                                       ) + "\n";
+            (void)!COAL_WRITE(fd, pid.data(), (unsigned)pid.size());
+#ifdef _WIN32
+            ::_close(fd);
+#else
+            ::close(fd);
+#endif
+            register_temp(path);
+            return path;
+        }
+        const int err = errno;
+        if (err != EEXIST) throw CoalError(output_error(name, err), "file_error");
+        long long pid = -1;
+        {
+            std::ifstream in(path);
+            if (!(in >> pid)) pid = -1;
+        }
+        if (pid <= 0 && waited < 2.0) {
+            // empty: another run created it an instant ago and has not written its id yet (pipeline.py): not stale
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            waited += 0.05;
+            continue;
+        }
+        if (pid > 0 && pid_alive(pid))
+            throw CoalError("another COAL run (process " + std::to_string(pid) + ") is writing " + name +
+                                ": wait for it to finish, or write to another file (if that process is gone, remove " +
+                                path + ")",
+                            "file_error");
+        if (removed) throw CoalError("cannot write " + name + ": " + path + " is in the way and cannot be removed", "file_error");
+        std::error_code ec;
+        fs::remove(path, ec);  // a lock whose process is gone (or one empty for 2 s): replaced
+        removed = true;
+    }
+}
+
+void release_output_lock(const std::string& path) {
+    if (path.empty()) return;
+    std::error_code ec;
+    fs::remove(path, ec);
+    unregister_temp(path);
 }
 
 void copy_mode(const std::string& real, const std::string& tmp) {

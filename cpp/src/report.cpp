@@ -19,6 +19,11 @@ static const char* REPO_URL = "https://github.com/plumat-coal/COAL";
 // The hint re-tests at most 50 sequences and drops a code as soon as it cannot fit as many as the best so far;
 // break locations are found for up to 200 failed genes (report.py HINT_SAMPLE, BREAK_SAMPLE)
 static const int HINT_SAMPLE = 50;
+static const long long HINT_MAX_RESIDUES = 100000;  // longer genes are not re-tested for the hint (report.py)
+
+static long long residues_of(const std::string& row) {
+    return (long long)row.size() - std::count(row.begin(), row.end(), '-');
+}
 static const int BREAK_SAMPLE = 200;
 
 static std::string code_name(int t) {  // CODE_NAMES (names inside a sentence)
@@ -700,6 +705,7 @@ std::string early_code_notice(const RowsFn& rows, const DnaFn& dna, int table, l
     const GeneticCode* gc = get_code(table);
     rows([&](long long k, const std::string& pid, const std::string& row) {
         if (k >= HINT_SAMPLE) return false;
+        if (residues_of(row) > HINT_MAX_RESIDUES) return k + 1 < HINT_SAMPLE;
         data[k] = HintGene{pid, row, dna(k)};
         tested.push_back(k);
         bool fits = memo[std::make_pair(k, table)] = gene_fits(data[k], *gc);
@@ -871,8 +877,14 @@ const std::string* RunReport::add_sequence(long long k, const std::string& pid, 
     Json arr = Json::array();
     for (auto& m : msgs) arr.push(m);
     e.set("messages", arr);
-    store(k, e);
     set_kind(k, kind_char(gene_kind(e)));
+    // With -q and no report nothing reads the entries (no summary lines, no hint, no report): keep none, as
+    // report.py add_sequence; the line is still handed to the --resume entries file
+    if (!keep_entries && !want_hint) {
+        last_line_ = json_dump(e);
+        return &last_line_;
+    }
+    store(k, e);
     return &entries_[k].json;
 }
 
@@ -933,10 +945,11 @@ void RunReport::restore(const Json& state, const std::vector<Json>& nonok, long 
     if (const Json* c = state.get("real_cols"))
         for (auto& x : c->a) add_sorted(real_cols_, x.as_int());
     entries_.clear();
-    for (auto& e : nonok) {
-        long long idx = e.get("index") ? e.get("index")->as_int() : -1;
-        if (idx >= 0 && idx < completed) store(idx, e);
-    }
+    if (keep_entries || want_hint)  // (as add_sequence: nothing is read from them otherwise)
+        for (auto& e : nonok) {
+            long long idx = e.get("index") ? e.get("index")->as_int() : -1;
+            if (idx >= 0 && idx < completed) store(idx, e);
+        }
     resumed_from_ = completed;
 }
 
@@ -1074,9 +1087,14 @@ void RunReport::finish_impl(const RowsFn& rows, const DnaFn& dna, bool aborted) 
     std::set<long long> want(tested.begin(), tested.end());
     std::map<long long, HintGene> data;
     rows([&](long long k, const std::string& pid, const std::string& row) {
-        if (want.count(k)) data[k] = HintGene{pid, row, dna(k)};
+        if (want.count(k)) {
+            if (residues_of(row) > HINT_MAX_RESIDUES) want.erase(k);
+            else data[k] = HintGene{pid, row, dna(k)};
+        }
         return data.size() < want.size();
     });
+    tested.erase(std::remove_if(tested.begin(), tested.end(), [&](long long k) { return !data.count(k); }), tested.end());
+    if (tested.empty()) return;
     const long long nt = (long long)tested.size();
     CodeSearch found = search_codes(tested, problems, data, table_, fit_memo);
     if (found.tied.empty()) return;

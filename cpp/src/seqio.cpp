@@ -5,6 +5,10 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
+#include <thread>
+#ifndef _WIN32
+#include <sys/resource.h>
+#endif
 #include <filesystem>
 
 namespace coal {
@@ -328,9 +332,41 @@ std::string clustal_mask(const std::string& path) {
 
 // ------------------------------------------------------------------ DNA index
 
+std::string name_files(const std::vector<std::string>& paths) {
+    if (paths.size() <= 3) {
+        std::string s;
+        for (size_t k = 0; k < paths.size(); ++k) s += (k ? ", " : "") + paths[k];
+        return s;
+    }
+    return paths[0] + ", " + paths[1] + ", " + paths[2] + " and " + std::to_string(paths.size() - 3) + " more files";
+}
+
+size_t open_file_budget(size_t nfiles) {
+#ifdef _WIN32
+    (void)nfiles;
+    return 1024;  // the C runtime allows 8,192 low-level descriptors; stay well under it
+#else
+    const size_t headroom = 96 + 4 * (size_t)std::max(1u, std::thread::hardware_concurrency());
+    struct rlimit rl;
+    if (getrlimit(RLIMIT_NOFILE, &rl) != 0) return 512;
+    const rlim_t want = (rlim_t)(nfiles + headroom);
+    if (rl.rlim_cur != RLIM_INFINITY && rl.rlim_cur < want) {
+        rlim_t target = rl.rlim_max == RLIM_INFINITY ? want : std::min(rl.rlim_max, want);
+        if (target > rl.rlim_cur) {
+            struct rlimit nl = rl;
+            nl.rlim_cur = target;
+            if (setrlimit(RLIMIT_NOFILE, &nl) == 0) rl.rlim_cur = target;
+        }
+    }
+    if (rl.rlim_cur == RLIM_INFINITY) return std::max<size_t>(16, nfiles);
+    return (size_t)rl.rlim_cur > headroom + 16 ? (size_t)rl.rlim_cur - headroom : 16;
+#endif
+}
+
 DnaIndex::DnaIndex(const std::vector<std::string>& paths) : paths_(paths) {
     for (size_t f = 0; f < paths_.size(); ++f) scan((int)f, paths_[f]);
     fh_.resize(paths_.size());
+    where_.resize(paths_.size());
 }
 
 void DnaIndex::scan(int fno, const std::string& path) {
@@ -346,28 +382,10 @@ void DnaIndex::scan(int fno, const std::string& path) {
         in.clear();
         in.seekg(offset);
     }
-    // Classic Mac files: a lone \r also ends a line (decided from the first 64 kB, as the Python engine)
-    bool cr_mode = false;
-    {
-        std::string c(1 << 16, '\0');
-        in.read(&c[0], (std::streamsize)c.size());
-        c.resize((size_t)in.gcount());
-        if (!c.empty() && c.back() == '\r') {
-            char x;
-            if (in.get(x)) c.push_back(x);
-        }
-        size_t r = 0, rn = 0;
-        for (size_t i = 0; i < c.size(); ++i)
-            if (c[i] == '\r') {
-                ++r;
-                if (i + 1 < c.size() && c[i + 1] == '\n') ++rn;
-            }
-        cr_mode = r != rn + (!c.empty() && c.back() == '\r' ? 1 : 0);
-        in.clear();
-        in.seekg(offset);
-    }
-    std::string joined;
-    for (size_t k = 0; k < paths_.size(); ++k) joined += (k ? ", " : "") + paths_[k];
+    // \n, \r\n and a lone \r (classic Mac) all end a line, wherever they are in the file (as the Python engine
+    // and the protein reader): a file whose line ends change part-way used to lose every record after the first
+    // lone \r beyond 64 kB.
+    const std::string joined = name_files(paths_);
     std::vector<char> buf(1 << 20);
     long long start = -1, lineno = 0, line_off = offset;
     std::string line;  // header lines only
@@ -380,7 +398,7 @@ void DnaIndex::scan(int fno, const std::string& path) {
             size_t j = i;
             while (j < line.size() && !bytes_space((unsigned char)line[j])) ++j;
             if (start >= 0) {
-                fno_.push_back((uint16_t)fno);
+                fno_.push_back((uint32_t)fno);
                 start_.push_back(start);
                 end_.push_back(line_off);
             }
@@ -415,13 +433,14 @@ void DnaIndex::scan(int fno, const std::string& path) {
                 finish_line();
             }
             if (!line_start && !header && start >= 0) {
-                // inside sequence data: only the end of the line matters
+                // inside sequence data: only the end of the line matters. The \n is found with memchr; a \r
+                // before it that is not its \r\n partner is a lone \r, which ends the line there instead.
                 size_t q = k;
-                if (cr_mode) {
-                    while (q < n && buf[q] != '\n' && buf[q] != '\r') ++q;
-                } else {
+                {
                     const char* nl = (const char*)std::memchr(buf.data() + k, '\n', n - k);
                     q = nl ? (size_t)(nl - buf.data()) : n;
+                    const char* cr = (const char*)std::memchr(buf.data() + k, '\r', q - k);
+                    if (cr && (size_t)(cr - buf.data()) + 1 != q) q = (size_t)(cr - buf.data());
                 }
                 offset += (long long)(q - k);
                 k = q;
@@ -440,12 +459,12 @@ void DnaIndex::scan(int fno, const std::string& path) {
             if (header) line.push_back(c);
             else if (!bytes_space((unsigned char)c)) data_seen = true;
             if (c == '\n') finish_line();
-            else if (cr_mode && c == '\r') pending_cr = true;
+            else if (c == '\r') pending_cr = true;
         }
     }
     if (pending_cr || !line_start) finish_line();
     if (start >= 0) {
-        fno_.push_back((uint16_t)fno);
+        fno_.push_back((uint32_t)fno);
         start_.push_back(start);
         end_.push_back(offset);
     }
@@ -475,8 +494,20 @@ long long DnaIndex::line_of(int f, long long offset) const {
 }
 
 std::string DnaIndex::get(size_t i) {
-    int f = fno_[i];
-    if (!fh_[f]) fh_[f] = std::make_unique<std::ifstream>(paths_[f], std::ios::binary);
+    int f = (int)fno_[i];
+    if (!fh_[f]) {
+        if (budget_ == 0) budget_ = open_file_budget(paths_.size());
+        if (open_order_.size() >= budget_) {  // close the least recently used file
+            int victim = open_order_.front();
+            open_order_.pop_front();
+            fh_[(size_t)victim].reset();
+        }
+        fh_[f] = std::make_unique<std::ifstream>(paths_[f], std::ios::binary);
+        open_order_.push_back(f);
+        where_[f] = std::prev(open_order_.end());
+    } else if (open_order_.size() > 1 && std::next(where_[f]) != open_order_.end()) {
+        open_order_.splice(open_order_.end(), open_order_, where_[f]);  // most recently used last
+    }
     std::ifstream& in = *fh_[f];
     // Never fall back to the previous record's bytes: a file that cannot be (re)opened, or that
     // shrank or changed after it was indexed, is an error, not another gene's DNA.

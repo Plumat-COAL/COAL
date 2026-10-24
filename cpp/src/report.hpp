@@ -127,6 +127,7 @@ private:
         bool unknown_aa = false;    // an unknown_aa message
     };
     std::map<long long, Kept> entries_;
+    std::string last_line_;  // the entry of the last non-ok sequence when none is kept (-q, no report)
     std::vector<long long> cols_, real_cols_;  // sorted unique
     bool has_error_ = false;
     Json error_;

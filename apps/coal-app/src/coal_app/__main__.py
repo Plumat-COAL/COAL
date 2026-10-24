@@ -22,6 +22,19 @@ def _is_loopback(host: str) -> bool:
         return False
 
 
+def tolerant_console() -> None:
+    """Let the GUI's console output survive a non-UTF-8 console: Gradio prints an emoji in its MCP banner, which
+    killed `python -m coal_app` on Windows with a cp1252 console or pipe (`UnicodeEncodeError` before the server
+    answered). Unencodable characters become '?' instead; UTF-8 consoles are left alone."""
+    for s in (sys.stdout, sys.stderr):
+        try:
+            enc = (getattr(s, "encoding", None) or "").replace("-", "").lower()
+            if enc != "utf8" and getattr(s, "errors", None) == "strict":
+                s.reconfigure(errors="replace")
+        except (AttributeError, ValueError, OSError):
+            pass
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="coal-gui", description="COAL web GUI and MCP server.")
     ap.add_argument("--host", default="127.0.0.1", help="address to listen on (default 127.0.0.1, this computer only)")
@@ -67,6 +80,7 @@ def main(argv=None) -> int:
               "(from a COAL checkout: pip install -e . -e \"apps/coal-app[gui]\")",
               file=sys.stderr)
         return 1
+    tolerant_console()
     ui.launch(host=args.host, port=args.port, mcp=not args.no_mcp, demo_mode=args.demo)
     return 0
 
