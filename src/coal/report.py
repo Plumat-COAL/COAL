@@ -33,6 +33,9 @@ REPO_URL = "https://github.com/plumat-coal/COAL"
 # whole, so the engine's report equals the app's), and drops a code as soon as it can no longer fit as many as the
 # best code so far. Break locations are found for up to BREAK_SAMPLE failed genes.
 HINT_SAMPLE = 50
+# Genes with more residues than this are not re-tested for the hint: threading one 1,000,000-residue gene under the
+# 17 other codes took 28 s of a 30 s run (the hint's value is in the other genes; the C++ engine does the same)
+HINT_MAX_RESIDUES = 100_000
 BREAK_SAMPLE = 200
 
 # Names inside a sentence: common words lower case, genus names capitalised as NCBI writes them
@@ -470,6 +473,8 @@ def early_code_notice(rows, dna_of, table: int, total: int, memo=None) -> str | 
     for k, (pid, row) in enumerate(rows):
         if k >= HINT_SAMPLE:
             break
+        if len(row) - row.count("-") > HINT_MAX_RESIDUES:
+            continue
         data[k] = (pid, row, dna_of(k))
         ok = _fits(*data[k], table)
         if memo is not None:
@@ -611,7 +616,12 @@ class RunReport:
             return None
         entry = {"id": pid, "index": k, "dna_id": self._dna_of(k), "pairing": self._pairing_of(k),
                  "status": status, "messages": msgs}
-        self.entries[k] = entry
+        # The entries are read by the summary lines, the end-of-run hint and the report. With -q and no report none
+        # of them is produced, so nothing is kept (the entry is still returned for the --resume entries file): a
+        # million mismatching genes otherwise keep every per-codon message in memory (about 150 KB per gene of
+        # unrelated DNA).
+        if self.keep_entries or self.want_hint:
+            self.entries[k] = entry
         self._set_kind(k, KIND_CHAR[gene_kind(entry)])
         return entry
 
@@ -648,7 +658,8 @@ class RunReport:
         self.kinds = bytearray(state.get("kinds", "o" * completed).encode("ascii"))[:completed]
         self._ff_cache = None
         self.cols, self.real_cols = set(state.get("cols", ())), set(state.get("real_cols", ()))
-        self.entries = {e["index"]: e for e in nonok if e["index"] < completed}
+        if self.keep_entries or self.want_hint:  # (as add_sequence: nothing is read from them otherwise)
+            self.entries = {e["index"]: e for e in nonok if e["index"] < completed}
         self.resumed_from = completed
 
     # -------------------------------------------------- end of run (called inside the pipeline, inputs open)
@@ -714,9 +725,15 @@ class RunReport:
             return
         for k, (pid, row) in enumerate(rows()):
             if k in want:
-                data[k] = (pid, row, dna.get(pairing[k]))
+                if len(row) - row.count("-") > HINT_MAX_RESIDUES:
+                    want.discard(k)
+                else:
+                    data[k] = (pid, row, dna.get(pairing[k]))
             if len(data) == len(want):
                 break
+        tested = [k for k in tested if k in data]
+        if not tested:
+            return
         found = search_codes(tested, problems, data, self.table, self.fit_memo)
         if found is None:
             return

@@ -6,6 +6,7 @@ import errno
 import os
 import re
 from array import array
+from collections import OrderedDict
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -38,6 +39,15 @@ EMPTY_HEADER = "empty FASTA header: a '>' line without a sequence ID (every reco
 _BEFORE = "sequence data before the first '>' header: not a FASTA file? (each FASTA record starts with a '>name' line"
 BEFORE_HEADER_PROTEIN = _BEFORE + "; a CLUSTAL file must start with 'CLUSTAL')"
 BEFORE_HEADER_DNA = _BEFORE + ")"
+
+
+def name_files(paths) -> str:
+    """The input files for a message: all of them up to three, else the first three and how many more (a run with
+    thousands of DNA files gave messages that listed every path)."""
+    names = [str(p) for p in paths]
+    if len(names) <= 3:
+        return ", ".join(names)
+    return f"{names[0]}, {names[1]}, {names[2]} and {len(names) - 3} more files"
 
 
 def duplicate_message(where, rid: str) -> str:
@@ -203,7 +213,7 @@ def read_dna(paths) -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
     for p in paths:
         out += read_fasta(p, letters_only=True)
-    _check_unique([r[0] for r in out], ", ".join(map(str, paths)))
+    _check_unique([r[0] for r in out], name_files(paths))
     return out
 
 
@@ -247,24 +257,48 @@ _LETTERS = bytes(range(65, 91)) + bytes(range(97, 123))
 _LINES = re.compile(rb"[^\r\n]*(?:\r\n|\r|\n)|[^\r\n]+")
 
 
-def _has_lone_cr(fh) -> bool:
-    """True if the first 64 kB of the (seekable) binary file have a \\r not followed by
-    \\n (old Mac line endings); position kept. Checking only the start keeps \\n and
-    \\r\\n files on the fast path."""
-    pos = fh.tell()
-    try:
-        c = fh.read(1 << 16)
-        if c.endswith(b"\r"):
-            c += fh.read(1)
-        return c.count(b"\r") != c.count(b"\r\n") + c.endswith(b"\r")
-    finally:
-        fh.seek(pos)
-
-
-def _cr_lines(fh):
+def _any_newline_lines(fh):
+    """The lines of a binary file where \\n, \\r\\n and a lone \\r all end a line, wherever they are (a file
+    whose line ends change part-way, e.g. exports of two tools concatenated, used to lose every record after the
+    first lone \\r beyond 64 kB). The \\n-split lines of the file object are kept as they are unless one holds a
+    \\r that is not its \\r\\n terminator; only that line is split further."""
     for raw in fh:
-        yield from _LINES.findall(raw)
+        if b"\r" in raw and raw.count(b"\r") > (1 if raw.endswith(b"\r\n") else 0):
+            yield from _LINES.findall(raw)
+        else:
+            yield raw
 _NON_LETTER_BYTES = bytes(b for b in range(256) if b not in _LETTERS)
+
+
+# Descriptors kept free for the worker pool's pipes, the output and its temp files when DNA files stay open.
+OPEN_FILE_HEADROOM = 96
+
+
+def open_file_budget(nfiles: int) -> int:
+    """How many DNA files may stay open at once: the open-file limit, raised towards its hard limit when the
+    files need it, minus a headroom for pipes and temp files (never below 16). With 1,000 DNA files the default
+    limit of 1,024 was hit as soon as the worker pool started; the same policy in coal-cpp (seqio.cpp)."""
+    headroom = OPEN_FILE_HEADROOM + 4 * (os.cpu_count() or 1)
+    try:
+        import resource
+    except ImportError:  # Windows: the C runtime allows 8,192 low-level descriptors; stay well under it
+        return 1024
+    try:
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    except (ValueError, OSError):
+        return 512
+    want = nfiles + headroom
+    if soft != resource.RLIM_INFINITY and soft < want:
+        new = want if hard == resource.RLIM_INFINITY else min(hard, want)
+        if new > soft:
+            try:
+                resource.setrlimit(resource.RLIMIT_NOFILE, (new, hard))
+                soft = new
+            except (ValueError, OSError):
+                pass
+    if soft == resource.RLIM_INFINITY:
+        return max(16, nfiles)
+    return max(16, soft - headroom)
 
 
 class DnaIndex:
@@ -272,22 +306,28 @@ class DnaIndex:
 
     Only IDs and offsets are kept in memory; each sequence is read from disk
     when needed. Sequences in the order they will be requested (the usual case)
-    are read sequentially.
+    are read sequentially. At most open_file_budget() files stay open (the least
+    recently used is closed first), with read buffers sized so that all of them
+    together take about 64 MB at most: with thousands of files, one 128 KB
+    buffer per file (Python 3.14's default) was 129 KB of memory per file.
     """
 
     def __init__(self, paths):
         self.paths = [str(p) for p in paths]
         self.ids: list[str] = []
         # compact per-record location: file number, byte start, byte end
-        self.fno, self.start, self.end = array("H"), array("q"), array("q")
+        # file number as an unsigned int: an unsigned short overflowed (a traceback) with more than 65,535 DNA files
+        self.fno, self.start, self.end = array("I"), array("q"), array("q")
         self.pos: dict[str, int] = {}
         for fno, path in enumerate(self.paths):
             self._scan(fno, path)
-        self._fh: dict[int, object] = {}
+        self._fh: OrderedDict[int, object] = OrderedDict()  # open files, least recently used first
+        self._budget = 0  # computed when the first file is opened (after the scan, which opens files one at a time)
+        self._bufsize = max(4096, min(1 << 17, (64 << 20) // max(1, len(self.paths))))
 
     def _scan(self, fno: int, path: str) -> None:
-        # A BOM is skipped, a lone \r also ends a line, and '#' lines before the first header are skipped (as
-        # read_fasta does).
+        # A BOM is skipped, a lone \r also ends a line wherever it is, and '#' lines before the first header are
+        # skipped (as read_fasta does).
         with open(path, "rb") as fh:
             offset, start = 0, None
             if fh.read(len(codecs.BOM_UTF8)) == codecs.BOM_UTF8:
@@ -295,7 +335,7 @@ class DnaIndex:
             else:
                 fh.seek(0)
             # Errors are "<file>:<line>: ..." as for protein files.
-            for lineno, line in enumerate(_cr_lines(fh) if _has_lone_cr(fh) else fh, 1):
+            for lineno, line in enumerate(_any_newline_lines(fh), 1):
                 if line.startswith(b">"):
                     if start is not None:
                         self._add(fno, start, offset)
@@ -309,7 +349,7 @@ class DnaIndex:
                     except UnicodeDecodeError:
                         raise InputFormatError(f"{path}:{lineno}: {NON_ASCII_ID}") from None
                     if rid in self.pos:
-                        raise InputFormatError(duplicate_message(", ".join(self.paths), rid))
+                        raise InputFormatError(duplicate_message(name_files(self.paths), rid))
                     self.pos[rid] = len(self.ids)
                     self.ids.append(rid)
                     start = offset + len(line)
@@ -340,7 +380,14 @@ class DnaIndex:
         fno, a, b = self.fno[i], self.start[i], self.end[i]
         fh = self._fh.get(fno)
         if fh is None:
-            fh = self._fh[fno] = open(self.paths[fno], "rb")
+            if not self._budget:
+                self._budget = open_file_budget(len(self.paths))
+            if len(self._fh) >= self._budget:
+                _, old = self._fh.popitem(last=False)  # the least recently used file
+                old.close()
+            fh = self._fh[fno] = open(self.paths[fno], "rb", buffering=self._bufsize)
+        elif len(self._fh) > 1:
+            self._fh.move_to_end(fno)
         fh.seek(a)
         raw = fh.read(b - a)
         if len(raw) != b - a:

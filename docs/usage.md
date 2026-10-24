@@ -31,7 +31,9 @@
   DNA, in any reading frame, where the whole protein fits.
 - **Genetic codes:** `-codontable N` for the 17 NCBI codes PAL2NAL supports (1–6, 9–16, 21–23). The first Met may use
   any start codon of that code (also when the gene doesn't fit exactly and COAL needs its fallback placement, unlike
-  PAL2NAL v14). When the genes fit another code better, COAL says so once, before the per-codon warnings.
+  PAL2NAL v14). When the genes fit another code better, COAL says so once, before the per-codon warnings (genes of
+  more than 100,000 residues are left out of that test: re-threading one under the 17 other codes took 28 s of a
+  30 s run).
 - **Frameshifts:** a digit N in the protein alignment means N bases (PAL2NAL convention). That column is widened
   to the next multiple of 3 for every sequence. tfastx/tfasty notation is read as PAL2NAL reads it: `\` = 1 base,
   `/` followed by (gaps and) a residue = a gap, then 2 bases.
@@ -99,9 +101,25 @@ killed, so a pipeline reading COAL's output never waits on an orphaned worker.
   codons; 500,000 sequences of 150 codons: 203 / 203 / 209 MB for fasta / clustal / codon output) and about
   190 bytes with `coal-cpp` (36 / 73 / 204 MB; 112 / 136 / 148 MB). Each extra Python
   worker process adds its own footprint (about 150 MB). Sequences with warnings keep their report entry in
-  memory (about 0.6 KB each with `coal-cpp`, 1.4 KB with the Python engine); `--report`/`--json` is written one
-  sequence at a time, so it adds little.
+  memory, with every one of their per-codon messages (about 0.6 KB per sequence with `coal-cpp`, 1.4 KB with the
+  Python engine, for a gene with a handful of mismatches; a gene of 400 codons of unrelated DNA, every codon
+  mismatching, keeps about 55 KB / 150 KB, so a million genes of wrong DNA need more memory than most machines
+  have). The summary lines, the genetic-code hint and the report read them; with `-q` and no `--report`/`--json`
+  none of those is produced and nothing is kept, so memory stays flat whatever the data (the Python engine with
+  workers still holds one batch of per-codon messages per worker in flight: about 140 MB per worker on
+  400-codon genes of unrelated DNA, 2.5 GB with 16 workers; use `-j 4` or `coal-cpp`, which stays flat, for
+  such data). `--report`/`--json` is written one sequence at a time, so it adds little beyond the entries.
 - `-q --progress` still prints the progress lines (`-q` silences warnings, notices and the summary, not progress).
+- One run at a time per output file: a run with `-o` keeps `<out>.coal-lock` (holding its process number) next to
+  the output while it runs, because the partial output and checkpoint files it writes there have fixed names. A
+  second run writing the same file at the same time is refused before it starts (`coal: error: another COAL run
+  (process 12345) is writing out.fa: wait for it to finish, or write to another file ...`, exit 1); a lock left
+  behind by a run that was killed is replaced once that process is gone. Different output files in one folder never
+  wait for each other.
+- Many DNA files: at most about as many files as the open-file limit allows stay open at once (the least recently
+  used is closed first; the limit is raised towards its hard limit when the files need it), with read buffers that
+  together take about 64 MB at most. Thousands of DNA files are fine; a few more files than records in them is the
+  slow way to give the data.
 - The `--resume` checkpoint is written about every 2 seconds of processing; under heavy I/O contention it can be
   later, since each checkpoint flushes the partial output to disk first (best effort, never less than the data the
   checkpoint describes).

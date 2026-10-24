@@ -39,7 +39,8 @@ from .core import (
     MISMATCH_WARNING, CoalError, apply_slices, check_table, column_widths, expand, keep_slices, limit_blas_threads,
     nogap_bad_triplets, pair_ids, prepare_row, row_length_message, thread_one,
 )
-from .seqio import DnaIndex, InputFormatError, clustal_mask, is_clustal, iter_fasta, open_error_message, read_clustal
+from .seqio import (DnaIndex, InputFormatError, clustal_mask, is_clustal, iter_fasta, name_files, open_error_message,
+                    read_clustal)
 
 WRAP = 60
 _DIGIT = re.compile(r"[0-9]")
@@ -686,6 +687,86 @@ def _lower_reason(e: OSError) -> str:
     return why[:1].lower() + why[1:]
 
 
+def _pid_alive(pid: int) -> bool:
+    """Whether a process with this id exists (a lock left by a killed run names a process that is gone)."""
+    if pid <= 0:
+        return False
+    if _WINDOWS:
+        import ctypes
+        k32 = ctypes.windll.kernel32
+        h = k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not h:
+            return False
+        try:
+            code = ctypes.c_ulong()
+            if not k32.GetExitCodeProcess(h, ctypes.byref(code)):
+                return True
+            return code.value == 259  # STILL_ACTIVE
+        finally:
+            k32.CloseHandle(h)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _lock_pid(path: str) -> int | None:
+    try:
+        with open(path, encoding="ascii", errors="replace") as fh:
+            return int(fh.read(64).split()[0])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def take_output_lock(real_out: str, name: str) -> str:
+    """Create `<out>.coal-lock` holding this process's id, or refuse: two runs writing the same -o file at the same
+    time shared one `<out>.coal-partial` (the --resume file), so one of them could finish with the other's output
+    or an empty file. A lock left by a run that was killed (its process is gone) is replaced. The same words and
+    file in coal-cpp (sysio.cpp take_output_lock)."""
+    path = real_out + ".coal-lock"
+    removed = False
+    waited = 0.0
+    while True:
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+        except FileExistsError:
+            pid = _lock_pid(path)
+            if pid is None:
+                # Empty (or unreadable): another run created it an instant ago and has not written its id yet (the
+                # window between the two calls below), so it is not stale; only one that stays empty is
+                if waited < 2.0:
+                    time.sleep(0.05)
+                    waited += 0.05
+                    continue
+            elif pid != os.getpid() and _pid_alive(pid):
+                raise CoalError(f"another COAL run (process {pid}) is writing {name}: wait for it to finish, or write to another file (if that process is gone, remove {path})", code="file_error") from None
+            if removed:
+                raise CoalError(f"cannot write {name}: {path} is in the way and cannot be removed",
+                                code="file_error") from None
+            try:
+                os.unlink(path)  # a lock whose process is gone (or one empty for 2 s): replaced
+            except OSError:
+                pass
+            removed = True
+            continue
+        except OSError as e:  # e.g. a folder that cannot be written: the usual output error
+            raise _output_error(name, e) from None
+        with os.fdopen(fd, "w") as fh:
+            fh.write(f"{os.getpid()}\n")
+        return path
+
+
+def release_output_lock(path: str | None) -> None:
+    if path:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
 def _output_error(out_path, e: OSError) -> CoalError:
     """The error for an output (or its partial file) that cannot be created, naming the user's -o path (not COAL's
     hidden temp file) in plain words. ENOENT in a folder that exists (e.g. /proc) is not "folder ... does not
@@ -763,7 +844,7 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
     dna = DnaIndex(nuc_paths)
     try:
         if not len(dna):
-            raise CoalError(f"{', '.join(map(str, nuc_paths))}: no sequences found: the file"
+            raise CoalError(f"{name_files(nuc_paths)}: no sequences found: the file"
                             + ("s are" if len(nuc_paths) > 1 else " is")
                             + " empty or ha" + ("ve" if len(nuc_paths) > 1 else "s")
                             + " no '>' header lines (expected the coding DNA in FASTA format)", code="no_sequences")
@@ -843,6 +924,8 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
         existing = bool(real_out) and os.path.isfile(real_out)
         direct = bool(real_out) and os.path.exists(real_out) and (
             not existing or os.stat(real_out).st_nlink > 1)
+        # One run at a time per output file (the partial and checkpoint files next to it have fixed names)
+        lock = take_output_lock(real_out, out_path) if real_out and not direct else None
 
         # Checkpoints for --resume (checkpoint.py). Kept only for an output that is (or will be) a regular file and
         # inputs that are regular files: the partial output <real out>.coal-partial (rows: .coal-stage) lives next
@@ -973,7 +1056,10 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                             notice(f"skipped {failure[1]}")
                     if rec is not None:
                         entry = rec.add_sequence(done, pid, _shown(warns), notes, failure)
-                        if entries_fh is not None and entry is not None:
+                        # The entries file feeds a resumed run's report, summary and hint; with -q and no report a
+                        # resumed run reads none of it (RunReport.restore), so it is not written: a million genes
+                        # of unrelated DNA wrote 55 GB of it
+                        if entries_fh is not None and entry is not None and (rec.keep_entries or rec.want_hint):
                             entries_fh.write(json.dumps(entry) + "\n")
                     if failure:
                         skipped += 1
@@ -1109,5 +1195,6 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
                 # them, so --resume can continue; otherwise they are removed
                 if finished or failed or not os.path.exists(ck.path):
                     ck.remove()
+            release_output_lock(lock)
     finally:
         dna.close()

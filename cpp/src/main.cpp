@@ -951,8 +951,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
     const std::vector<std::string>& ids = rec.ids();  // one copy, owned by the report
     DnaIndex dna(o.nucs);
     if (dna.size() == 0) {
-        std::string joined;
-        for (size_t i = 0; i < o.nucs.size(); ++i) joined += (i ? ", " : "") + o.nucs[i];
+        const std::string joined = name_files(o.nucs);
         const bool many = o.nucs.size() > 1;
         throw CoalError(joined + ": no sequences found: the file" + (many ? "s are" : " is") + " empty or ha" +
                             (many ? "ve" : "s") + " no '>' header lines (expected the coding DNA in FASTA format)",
@@ -1025,6 +1024,8 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         }
     }
     const bool direct = !o.out.empty() && target.direct;
+    // One run at a time per output file (the partial and checkpoint files next to it have fixed names)
+    const std::string out_lock = (!o.out.empty() && !direct) ? take_output_lock(target.real, o.out) : std::string();
     // A checkpoint only for an output that is (or will be) a regular file - hard-linked
     // files included (written in place at the end) - and inputs that are regular files
     std::error_code ex_ec;
@@ -1080,6 +1081,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         std::function<void()> fn;
         ~Cleanup() { fn(); }
     } cleanup{[&]() {
+        release_output_lock(out_lock);
         if (ck) {
             std::error_code ec;
             // otherwise (crash, kill, disk full ...) keep partial + checkpoint for --resume, if one was written
@@ -1111,6 +1113,9 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
         OutFile sink, entries, prot;
         sink.open(sink_path, resuming ? get("sink_bytes") : -1);
         if (ck) entries.open(ck->entries, resuming ? get("entries_bytes") : -1);
+        // the entries file feeds a resumed run's report, summary and hint; with -q and no report a resumed run
+        // reads none of it (RunReport::restore), so it is not written (pipeline.py)
+        const bool write_entries = rec.keep_entries || rec.want_hint;
         if (!prot_path.empty()) prot.open(prot_path, resuming ? get("prot_bytes") : -1);
         std::vector<char> drop((o.nomismatch || block_cols) ? (size_t)ncol : 0, 0), bad;
         long long skipped = 0;
@@ -1206,7 +1211,7 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
                 if (it.failed) warn("skipped " + it.error);
                 const std::string* e = it.failed ? rec.add_sequence(done, it.id, {}, {}, it.error_code, it.error)
                                                  : rec.add_sequence(done, it.id, shown(it.warnings), it.notices);
-                if (ck && e) entries.f << *e << '\n';
+                if (ck && e && write_entries) entries.f << *e << '\n';
                 if (it.failed) {
                     ++skipped;
                     skip_idx.insert(done);
@@ -1591,6 +1596,12 @@ int main(int argc, char** argv) {
         std::cerr << "coal: error: " << shorten(restore_names(e.what())) << '\n';
         rc = 1;
         rec.fail(e.code, restore_names(e.what()), false);
+    } catch (const std::bad_alloc&) {
+        // the same words as cli.py OUT_OF_MEMORY
+        static const char* OOM = "out of memory: this run needs more memory than is free on this machine; run with -j 1 (fewer worker processes), split the input, or use a machine with more memory";
+        std::cerr << "coal: error: " << OOM << '\n';
+        rc = 1;
+        rec.fail("out_of_memory", OOM, false);
     } catch (const std::exception& e) {
         std::cerr << "coal: error: " << shorten(restore_names(e.what())) << '\n';
         rc = 1;
