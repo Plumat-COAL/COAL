@@ -86,6 +86,13 @@ class TestSettingsTab(UiCase):
         self.assertEqual(len(inputs), 7)  # genetic code, format, three options, preview size, residue colours
         outs = inputs[0][2][2]
         self.assertEqual(len(outs), 7 + 5 + 2)  # settings, main form, status, browser store
+        # the wired function takes one value per control and returns one per output (a seventh control once
+        # broke the wrapper's fixed argument list at runtime, which only the wiring can show)
+        fn, ins = inputs[0][2][0], inputs[0][2][1]
+        self.assertEqual(len(ins), 7)
+        out = fn(1, "fasta", False, False, False, "standard", False)
+        self.assertEqual(len(out), len(outs))
+        self.assertIs(out[6], False)
         loads = [e for e in events if e[1] == "load"]
         self.assertTrue(any(len(a[2]) == 14 for _, _, a, _ in loads if len(a) > 2 and isinstance(a[2], list)))
         clicks = [c._kw.get("value", c._args[0] if c._args else "") for c, ev, _, _ in events if ev == "click"]

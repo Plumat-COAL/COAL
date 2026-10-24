@@ -729,8 +729,8 @@ def build(demo_mode: bool = False) -> gr.Blocks:
         s_controls = [s_code, s_fmt, s_nogap, s_nomismatch, s_strict, s_preview, s_colours]
         s_outputs = s_controls + [code, fmt, nogap, nomismatch, strict, s_status, s_store]
 
-        def _save(c, f, g, m, st, pv):
-            return save_settings_ui(c, f, g, m, st, pv, formats)
+        def _save(c, f, g, m, st, pv, rc):  # one parameter per control in s_controls, in that order
+            return save_settings_ui(c, f, g, m, st, pv, rc, formats)
 
         for comp in s_controls:
             comp.input(_save, s_controls, s_outputs, show_api=False)
