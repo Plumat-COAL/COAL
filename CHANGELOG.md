@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **`demo/diamond_pipeline.py` runs with the engine alone.** Since the app moved to its own package it imported
+  `coal_app.core.run_engine_command`, so on an engine-only install (`coal-align`, as `docs/install.md` tells pipeline
+  users to install) it died with `ModuleNotFoundError: No module named 'coal_app'` after DIAMOND and every protein
+  alignment had already run. It now uses the app's function when the app is installed and the same behaviour of its
+  own otherwise (SIGTERM, grace period, SIGKILL of the engine's process group, `.coal_*.tmp` removed); a test runs the
+  whole demo with `coal_app` hidden. Found by running the demo on orthologr's 1,000-gene example.
+- **Docs: `packaging/orthologr/README.md` is current.** No version hard-coded in the `--version` check; the install
+  step says `coal-align` is not on PyPI yet and points to the release's platform wheels until it is; the batch-mode
+  bullet shows `coal --batch` (it said batch mode was not built yet); a new bullet records the 2026-10-29 test in
+  orthologr 0.4.3: identical output on its 1,000-gene example, and one gene over about 21,800 codons stopping the
+  whole `dNdS()` run with PAL2NAL (protein ends in `*` → Perl's capture-group limit → empty output orthologr does
+  not check) but not with the stand-in.
 - **A refused `--resume` (or a signal) no longer leaves `<out>.coal-lock` behind, both engines.** The lock was taken
   before the checkpoint set-up and only released by the block after it, so an error raised in between (the inputs
   changed since the checkpoint, a checkpoint of the other engine) or a signal there left the lock, and the next run
