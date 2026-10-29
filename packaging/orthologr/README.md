@@ -20,8 +20,14 @@ line with a PAL2NAL option that `coal-cpp` does not take (`-nostderr`, `-h`) alw
 accepts all of PAL2NAL's. Output is
 PAL2NAL v14's, byte for byte, apart from the [documented differences](../../docs/differences.md).
 
-In R, with COAL installed (`pip install coal-align`, or `conda install -c bioconda coal-align` once the recipe is
-accepted; both put `coal`, `pal2nal` and `coal-cpp` on `PATH`):
+Install COAL first, so that `coal`, `pal2nal` and `coal-cpp` are on `PATH`. `coal-align` is not on PyPI yet
+(`pip install coal-align` will work once it is published, `conda install -c bioconda coal-align` once the recipe is
+accepted). Until then, download the wheel for your platform from the
+[latest GitHub Release](https://github.com/plumat-coal/COAL/releases/latest) (`coal_align-<version>-py3-none-<platform>.whl`,
+with `coal-cpp` inside) and `python -m pip install` that file; `coal --cpp-path` then shows the bundled `coal-cpp`
+([docs/install.md](../../docs/install.md)).
+
+Then, in R:
 
 ```r
 standin <- "path/to/COAL/packaging/orthologr/pal2nal.pl"   # this file
@@ -33,7 +39,7 @@ file.copy(standin, target, overwrite = TRUE)
 Reinstalling or updating orthologr restores the original file. To check which program runs:
 
 ```r
-system2("perl", c(target, "--version"))   # "coal 0.4.2 (C++)" or "coal 0.4.2"; PAL2NAL v14 prints its usage
+system2("perl", c(target, "--version"))   # "coal <version> (C++)" or "coal <version>"; PAL2NAL v14 prints its usage
 ```
 
 ## 2. Add `tool = "coal"` to orthologr (the proper fix; needs a pull request there)
@@ -44,7 +50,7 @@ In `R/codon_aln.R`, accept `"coal"` in the `tool` check and, in the `tool == "co
 ```r
 # untested sketch; COAL takes PAL2NAL's -output and -codontable options and writes the file itself with -o
 exe <- Sys.which("coal-cpp"); if (exe == "") exe <- Sys.which("coal")
-if (exe == "") stop("COAL is not installed: pip install coal-align (or conda install -c bioconda coal-align)")
+if (exe == "") stop("COAL is not installed: see https://github.com/plumat-coal/COAL/blob/main/docs/install.md")
 status <- system2(exe, c(shQuote(file_aln), shQuote(file_nuc), "-output", format, "-o", shQuote(file.out), params))
 if (status != 0) stop("COAL failed on ", file_aln, " (exit status ", status, "); see its messages above")
 ```
@@ -71,6 +77,24 @@ Measured here (Linux, one pair per process, median of 5–20 runs; outputs ident
   is faster per pair, 15× at 5,000 codons.
 - **Correctness:** on 2,595 real Ensembl Compara trees COAL matched the truth on all; PAL2NAL v14 failed 22
   (19 with selenocysteine, 1 over Perl's regex capture-group limit, which stops it on proteins longer than about
-  22,000 residues; `docs/benchmarks.md`). Those pairs come back as missing dN/dS values in orthologr today.
+  22,000 residues; `docs/benchmarks.md`).
+- **Inside orthologr, one very long gene stops the whole run with PAL2NAL** (tested 2026-10-29, orthologr 0.4.3):
+  orthologr keeps the stop codon in the protein (`*` at the end), which sends PAL2NAL into the regex search that
+  hits Perl's capture-group limit on proteins over about 21,800 residues. PAL2NAL then exits 255 with no output,
+  orthologr does not check the status, and `dNdS()` stops for every pair with "Please check the correct path to
+  Comeron...". With the stand-in the same run completes. On orthologr's own 1,000-gene example
+  (*A. thaliana* vs *A. lyrata*), every codon alignment and every dN/dS value was identical with PAL2NAL and with
+  the stand-in.
 - **A real speed-up for whole-genome runs** needs one COAL process for all pairs instead of one per pair, which is
-  a change to orthologr's loop (a batch mode in COAL would make that call a one-liner; not built yet).
+  a change to orthologr's loop. COAL's batch mode makes that one call: write one job line per pair and run
+  `coal --batch jobs.txt` (add `--batch-parallel N` for N worker processes); every output is byte-identical to
+  running that pair alone ([docs/usage.md](../../docs/usage.md#batch-mode)):
+
+  ```
+  # jobs.txt: one pair per line, the PAL2NAL arguments plus -o
+  pair0001_AA.aln pair0001.fasta -output fasta -o pair0001_pal2nal.aln
+  pair0002_AA.aln pair0002.fasta -output fasta -o pair0002_pal2nal.aln
+  ```
+
+  `coal --batch jobs.txt --report batch.json` also records each pair's exit code, so a failed pair shows up as one
+  failed job instead of an empty file.

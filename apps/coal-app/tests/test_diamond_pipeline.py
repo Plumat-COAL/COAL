@@ -97,6 +97,38 @@ class TestDiamondPipeline(unittest.TestCase):
                     aa = "".join(code[seq[i:i + 3]] for i in range(0, len(seq), 3) if seq[i:i + 3] != "---")
                     self.assertEqual(aa, prots[tid])
 
+    def test_pipeline_without_the_app_package(self):
+        # docs/install.md: pipeline users install only the engine (coal-align). The demo used to import
+        # coal_app.core and die with ModuleNotFoundError after DIAMOND and the alignments had run.
+        hide_app = ("import runpy, sys\n"
+                    "class NoApp:\n"
+                    "    def find_spec(self, name, path=None, target=None):\n"
+                    "        if name == 'coal_app' or name.startswith('coal_app.'):\n"
+                    "            raise ModuleNotFoundError(\"No module named 'coal_app'\", name=name)\n"
+                    "sys.meta_path.insert(0, NoApp())\n"
+                    "sys.argv = sys.argv[1:]\n"
+                    "runpy.run_path(sys.argv[0], run_name='__main__')\n")
+        with tempfile.TemporaryDirectory() as t:
+            p = make_input(t)
+            out = os.path.join(t, "o")
+            r = subprocess.run([sys.executable, "-c", hide_app, SCRIPT, "--a-protein", p["ap"], "--a-cds", p["ac"],
+                                "--b-protein", p["bp"], "--b-cds", p["bc"], "--out", out, "--diamond", STUB,
+                                "--threads", "1"],
+                               capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertNotIn("coal_app", r.stderr)
+            self.assertEqual(len(os.listdir(os.path.join(out, "pairs"))), 5)
+
+    def test_builtin_engine_runner(self):
+        rc, out, err = dp._run_engine_command([sys.executable, "-c", "print('ok')"], 60)
+        self.assertEqual((rc, out.strip()), (0, "ok"))
+        with tempfile.TemporaryDirectory() as t:
+            leftover = os.path.join(t, ".coal_x.tmp")
+            open(leftover, "w", encoding="utf-8").close()
+            with self.assertRaises(subprocess.TimeoutExpired):
+                dp._run_engine_command([sys.executable, "-c", "import time; time.sleep(60)"], 0.5, t, grace=1)
+            self.assertFalse(os.path.exists(leftover))
+
     def test_one_broken_pair_is_dropped_not_fatal(self):  # R2-A5
         self._broken_pair_run()
 

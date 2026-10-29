@@ -415,6 +415,62 @@ def drop_reason(stderr: str) -> str:
     return lines[-1].replace("\t", " ") if lines else "COAL error"
 
 
+def _engine_runner():
+    """The app's run_engine_command when coal-align-app is installed, else the same behaviour here: the demo must
+    work with the engine alone (`pip install coal-align`), as docs/install.md tells pipeline users to install."""
+    try:
+        from coal_app.core import run_engine_command
+        return run_engine_command
+    except ImportError:
+        return _run_engine_command
+
+
+def _run_engine_command(cmd: list, timeout: float, temp_dir: str | None = None, grace: float = 5.0):
+    """Runs `cmd`, returns (returncode, stdout, stderr). On timeout or interrupt: SIGTERM (Windows: taskkill /T /F),
+    `grace` seconds, then SIGKILL of the engine's process group (its workers too), its .coal_*.tmp files in
+    `temp_dir` removed, and the exception re-raised (subprocess.TimeoutExpired on timeout). Mirrors
+    coal_app.core.run_engine_command."""
+    import signal
+    posix = os.name != "nt"
+    p = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                         encoding="utf-8", errors="replace", start_new_session=posix)
+    try:
+        out, err = p.communicate(timeout=timeout)
+    except BaseException:
+        if p.poll() is None:
+            if posix:
+                p.terminate()
+            else:
+                try:
+                    subprocess.run(["taskkill", "/T", "/F", "/PID", str(p.pid)], capture_output=True, timeout=30,
+                                   stdin=subprocess.DEVNULL)
+                except (OSError, subprocess.SubprocessError):
+                    pass
+            try:
+                p.communicate(timeout=grace)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(p.pid, signal.SIGKILL) if posix else p.kill()
+                except OSError:
+                    p.kill()
+                try:
+                    p.communicate(timeout=grace)
+                except subprocess.TimeoutExpired:  # an orphan still holds the pipes: stop reading them
+                    for fh in (p.stdout, p.stderr):
+                        if fh is not None:
+                            fh.close()
+                    p.wait()
+        if temp_dir:
+            for n in os.listdir(temp_dir) if os.path.isdir(temp_dir) else []:
+                if n.startswith(".coal_") and n.endswith(".tmp"):
+                    try:
+                        os.remove(os.path.join(temp_dir, n))
+                    except OSError:
+                        pass
+        raise
+    return p.returncode, out, err
+
+
 def run_batch(items, a, h, tag, stderr_log, cds):
     """One COAL run on `items` (pairs). Returns {id: codon row} on success, else (sequence id COAL named or "",
     its stderr)."""
@@ -443,9 +499,9 @@ def run_batch(items, a, h, tag, stderr_log, cds):
     cmd += ["--", batch_pep, batch_cds]
     if tag == "batch":
         print(f"running COAL on {len(pep)} sequences ({len(items)} pairs)")
-    # The app's run_engine_command (SIGTERM, grace, kill; temp files removed), not subprocess.run(timeout=), which
-    # kills only the engine: its workers keep running and its .coal_*.tmp files stay.
-    from coal_app.core import run_engine_command
+    # run_engine_command (SIGTERM, grace, kill; temp files removed), not subprocess.run(timeout=), which kills only
+    # the engine: its workers keep running and its .coal_*.tmp files stay.
+    run_engine_command = _engine_runner()
     try:
         rc, _, err = run_engine_command(cmd, a.timeout, a.out)
     except subprocess.TimeoutExpired:
