@@ -9,7 +9,7 @@ perl <orthologr>/pal2nal/pal2nal.v14/pal2nal.pl <pair>_AA.aln <pair>.fasta -outp
 
 `codon_aln()` accepts only `tool = "pal2nal"` and has no argument, option or environment variable for another
 program (orthologr `codon_aln.R`, checked October 2026), so COAL's `pal2nal` command on `PATH` is not picked up.
-Two ways in:
+Three ways in:
 
 ## 1. Replace orthologr's bundled script with the stand-in (works today)
 
@@ -36,7 +36,34 @@ Reinstalling or updating orthologr restores the original file. To check which pr
 system2("perl", c(target, "--version"))   # "coal 0.4.2 (C++)" or "coal 0.4.2"; PAL2NAL v14 prints its usage
 ```
 
-## 2. Add `tool = "coal"` to orthologr (the proper fix; needs a pull request there)
+## 2. The fork with COAL built in (Plumat-COAL/orthologr, branch `feat/coal`)
+
+The fork adds COAL to orthologr as an optional dependency (the R package [`coalr`](../r/coalr), see
+[docs/r.md](../../docs/r.md); or the `coal-cpp` program when `coalr` is not installed). Not merged upstream.
+
+```r
+remotes::install_github("Plumat-COAL/COAL", subdir = "packaging/r/coalr")
+remotes::install_github("Plumat-COAL/orthologr", ref = "feat/coal")
+
+dNdS(q, s, codon_aln_tool = "coal")                                         # PAL2NAL's step without Perl
+dNdS(q, s, dnds_est.method = "YN", codon_aln_tool = "coal", kaks_tool = "coal")   # ... and without KaKs_Calculator
+dNdS(q, s, dnds_est.method = "YN", engine = "coal", comp_cores = 8)         # all pairs in one call to COAL
+dNdS_clusters(c(q, s), aa_aln_tool = "clustalo")                            # every pair of each DeepClust cluster
+```
+
+- `codon_aln_tool = "coal"` gives the same codon alignments as `"pal2nal"` (so the same dN/dS), one pair at a
+  time; the gain is robustness (no Perl, no length limit, a checked result).
+- `kaks_tool = "coal"` computes NG, LWL, MLWL, LPB, MLPB, YN and MYN with COAL's engine ([docs/kaks.md](../../docs/kaks.md)).
+- `engine = "coal"` (`dNdS_coal()`) keeps orthologr's DIAMOND/BLAST reciprocal-best-hit search and hands every
+  pair to `coalr::coal_dnds_pairs()`: no file and no process per pair. It returns `dNdS()`'s table.
+- `dNdS_clusters()` uses `deepclust()` / `deepclust_realign()` tables with `coalr::coal_dnds_clusters()`.
+
+The fork's `NEWS.md` also lists its fixes to orthologr's own path (BLOSUM62 scoring and full-length alignments in
+`pairwise_aln()`, exit-status checks, one failing pair no longer ends a run, hyphens in gene IDs, input files of
+the same name).
+
+## 3. Add `tool = "coal"` to upstream orthologr yourself
+
 
 In `R/codon_aln.R`, accept `"coal"` in the `tool` check and, in the `tool == "coal"` branch, run COAL directly
 (no Perl, no shell redirection, and a checked exit status):
@@ -72,5 +99,5 @@ Measured here (Linux, one pair per process, median of 5–20 runs; outputs ident
 - **Correctness:** on 2,595 real Ensembl Compara trees COAL matched the truth on all; PAL2NAL v14 failed 22
   (19 with selenocysteine, 1 over Perl's regex capture-group limit, which stops it on proteins longer than about
   22,000 residues; `docs/benchmarks.md`). Those pairs come back as missing dN/dS values in orthologr today.
-- **A real speed-up for whole-genome runs** needs one COAL process for all pairs instead of one per pair, which is
-  a change to orthologr's loop (a batch mode in COAL would make that call a one-liner; not built yet).
+- **A real speed-up for whole-genome runs** needs one COAL call for all pairs instead of one process per pair:
+  that is `dNdS(engine = "coal")` in the fork (section 2), built on `coalr::coal_dnds_pairs()`.

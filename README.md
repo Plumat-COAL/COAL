@@ -73,8 +73,8 @@ Example inputs are in `examples/` (`clean`, `mito`, `messy_ids`, `one_broken_gen
 
 - **Replacing PAL2NAL:** `pal2nal pep.aln nuc.fasta [PAL2NAL options]` accepts an unchanged PAL2NAL v14 command line
   (clustal output by default, as PAL2NAL). To call COAL's own options, use `coal`, whose default output is FASTA.
-- **orthologr:** its `dNdS()` runs a bundled `pal2nal.pl`; `packaging/orthologr/` has a stand-in for that file and
-  notes on what COAL changes there.
+- **orthologr:** its `dNdS()` runs a bundled `pal2nal.pl`; `packaging/orthologr/` has a stand-in for that file,
+  notes on what COAL changes there, and the fork whose `dNdS(engine = "coal")` hands all pairs to COAL at once.
 - **R:** `remotes::install_github("Plumat-COAL/COAL", subdir = "packaging/r/coalr")` installs `coalr`: dN/dS for
   ortholog pairs or clusters, Ka/Ks, codon alignment and protein alignment inside the R process
   ([docs/r.md](docs/r.md)).
