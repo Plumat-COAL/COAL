@@ -111,6 +111,7 @@ Example inputs are in `examples/` (`clean`, `mito`, `messy_ids`, `one_broken_gen
 | The run report's fields (`--report` / `--json`, schema `coal.report/1`) and its JSON Schema | [docs/report-schema.md](docs/report-schema.md), [docs/report.schema.json](docs/report.schema.json) |
 | How and why COAL's output differs from PAL2NAL v14 | [docs/differences.md](docs/differences.md) |
 | The C++ engine | [docs/cpp-engine.md](docs/cpp-engine.md) |
+| Ka/Ks (dN/dS): `coal kaks` (KaKs_Calculator drop-in), `coal dnds`, methods, policy, validation | [docs/kaks.md](docs/kaks.md) |
 | Speed and memory vs PAL2NAL | [docs/benchmarks.md](docs/benchmarks.md) |
 | Windows app, web GUI, other install options | [docs/install.md](docs/install.md), [apps/coal-app/desktop/README.md](apps/coal-app/desktop/README.md) |
 | Running COAL from an AI agent (MCP) | [docs/mcp.md](docs/mcp.md) |

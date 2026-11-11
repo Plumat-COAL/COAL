@@ -44,7 +44,7 @@ include(GNUInstallDirs)
 # Installed under <prefix>/include/coal/ and included as <coal/core.hpp>. In the build tree the same names are
 # forwarding headers generated below, so add_subdirectory users and installed users write the same #include, and
 # cpp/src (generic names such as json.hpp) is never on a consumer's include path.
-set(COAL_PUBLIC_HEADERS core.hpp tables.hpp seqio.hpp)
+set(COAL_PUBLIC_HEADERS core.hpp tables.hpp seqio.hpp kaks.hpp)
 set(COAL_GEN_INCLUDE "${CMAKE_CURRENT_BINARY_DIR}/coal_include")
 foreach(h IN LISTS COAL_PUBLIC_HEADERS)
   file(GENERATE OUTPUT "${COAL_GEN_INCLUDE}/coal/${h}"
@@ -52,7 +52,8 @@ foreach(h IN LISTS COAL_PUBLIC_HEADERS)
 endforeach()
 configure_file(cpp/src/version.hpp.in "${COAL_GEN_INCLUDE}/coal/version.hpp" @ONLY)
 
-add_library(coal_core STATIC cpp/src/tables.cpp cpp/src/core.cpp cpp/src/seqio.cpp cpp/src/json.cpp cpp/src/report.cpp)
+add_library(coal_core STATIC cpp/src/tables.cpp cpp/src/core.cpp cpp/src/seqio.cpp cpp/src/json.cpp cpp/src/report.cpp
+            cpp/src/kaks.cpp)
 add_library(coal::core ALIAS coal_core)
 set_target_properties(coal_core PROPERTIES EXPORT_NAME core OUTPUT_NAME coal_core)
 target_compile_features(coal_core PUBLIC cxx_std_17)
@@ -65,7 +66,7 @@ if(COAL_BUILD_CLI OR COAL_BUILD_TOOLS)
   find_package(Threads REQUIRED)
 endif()
 if(COAL_BUILD_CLI)
-  add_executable(coal-cpp cpp/src/main.cpp cpp/src/args.cpp cpp/src/sysio.cpp)
+  add_executable(coal-cpp cpp/src/main.cpp cpp/src/args.cpp cpp/src/sysio.cpp cpp/src/kaks_cli.cpp)
   target_include_directories(coal-cpp PRIVATE cpp/src)
   target_link_libraries(coal-cpp PRIVATE coal_core Threads::Threads)
   list(APPEND COAL_TARGETS coal-cpp)

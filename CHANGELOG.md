@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Ka/Ks (dN/dS) engine: `coal kaks` and `coal dnds`.** Native C++ (no external programs): YN00 (default), NG86,
+  LWL85, MLWL, LPB93, MLPB and MYN, for AXT or aligned FASTA (every pair of an MSA, or consecutive pairs), any of
+  COAL's genetic codes, on all threads. `coal kaks -i in.axt -o out.kaks -m YN` is a drop-in for KaKs_Calculator
+  2.0 (its flags, 22 columns and NA rules); `coal dnds` writes a tidy TSV with standard errors and a per-pair
+  status (ok, warning for internal stop codons, saturated, no_data, error), so one bad pair never stops a run.
+  Validated on 999 orthologr pairs and 600 simulated pairs: KaKs_Calculator 2.0 to 1e-13 (YN, MYN) or exactly
+  (NG, LWL family), PAML yn00 to 1e-12, every other difference explained (docs/kaks.md). C++ API
+  `<coal/kaks.hpp>` in `coal::core`. GY94 ML, MS/MA and the gamma variants are not implemented and are refused.
 - **A refused `--resume` (or a signal) no longer leaves `<out>.coal-lock` behind, both engines.** The lock was taken
   before the checkpoint set-up and only released by the block after it, so an error raised in between (the inputs
   changed since the checkpoint, a checkpoint of the other engine) or a signal there left the lock, and the next run

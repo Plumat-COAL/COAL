@@ -14,6 +14,11 @@
 | `tests/fuzz_vs_pal2nal.py` | random comparison with the real PAL2NAL v14 (not collected by `discover`) | see below |
 | `tests/tools/engine_fuzz.py` | random `coal-cpp` vs Python engine comparison (wide input space; not collected by `discover`; `test_engine_fuzz.py` runs 20 cases); nightly with a fresh seed, with the PAL2NAL fuzz for both engines and a sanitizer build: `.github/workflows/nightly.yml` | `COAL_CPP_BIN=build/coal-cpp python tests/tools/engine_fuzz.py --n 500 --seed 1` |
 
+Ka/Ks (`coal kaks` / `coal dnds`, docs/kaks.md): `tests/test_kaks.py` compares coal-cpp with the KaKs_Calculator 2.0
+and PAML yn00 outputs stored in `tests/kaks/golden/` (inputs `tests/kaks/edge_cases.axt`, `tests/kaks/sim_small.axt`;
+`python tests/kaks/make_fixtures.py --help` remakes them), allowing only the documented differences, and checks the
+policy statuses and the command line. The 999-pair orthologr validation is `benchmarks/kaks/validate_kaks.py`.
+
 ## Test numbers
 
 **Compatibility:** COAL's output is identical to PAL2NAL v14's except for a short list of documented, deliberate differences (newer NCBI genetic-code tables for codes 3, 10, 11 and 13; `-nogap` removing the selected code's stop codons; the selected code's start codons for the first Met; pairing by IDs that match only after normalising where PAL2NAL v14's file order would give a protein another gene's DNA; and inputs where PAL2NAL v14 writes malformed output or fails). Tested: all 285 stored reference checks pass (238 byte-identical, 4 of them with deliberately different warnings; 24 where both tools fail; 23 deliberate output or exit-status differences: 6 deliberate errors, 3 different outputs, 14 `-nogap` checks with a non-standard code), and in 20,000 random comparisons with the real PAL2NAL v14 (5,000 cases x 4 output formats) 13,826 were byte-identical, 4,681 both failed and 1,493 were deliberate differences, each checked to be exactly the documented change; 0 unexplained differences.

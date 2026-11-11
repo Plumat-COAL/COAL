@@ -1,0 +1,312 @@
+# Ka/Ks (dN/dS): `coal kaks` and `coal dnds`
+
+COAL estimates Ka (dN) and Ks (dS) for pairs of aligned coding sequences with its own C++ engine
+(`cpp/src/kaks.cpp`). No external program runs. It has two commands:
+
+- **`coal kaks`** replaces `KaKs_Calculator -i IN.axt -o OUT.kaks -m YN`. It takes KaKs_Calculator's flags and
+  writes its tab-separated format: the same 22 columns, the same NA rules and 6 significant digits.
+- **`coal dnds`** writes a tidy TSV from the same engine, with one row per pair and method, plus standard errors,
+  a status and a note.
+
+```
+coal kaks -i pairs.axt -o pairs.kaks                     # YN00 (the default)
+coal kaks -i pairs.axt -o pairs.kaks -m NG -m YN -m MYN  # several methods; rows come in KaKs_Calculator's order
+coal dnds codon_aln.fasta -o dnds.tsv                    # every pair of an aligned FASTA (MSA), YN00
+coal dnds pairs.fasta --pairs consecutive -m YN -m NG -j 8 -c 2
+```
+
+Both commands are subcommands of `coal-cpp`, and `coal` (Python) hands them to the `coal-cpp` of its own version
+(the lookup of `coal --cpp-path`). The platform wheels and the Windows app include `coal-cpp`. A pure-Python
+install has no Ka/Ks engine; `coal kaks` then says so and exits 1.
+
+## Methods
+
+| `-m` | Method | Reference | Standard errors (`coal dnds`) |
+|---|---|---|---|
+| `YN` (default) | Yang & Nielsen (2000): kappa from non-degenerate and 4-fold sites, codon frequencies F3x4, pathways weighted by P(t) and iterated, F84 distances with K80/JC69 fallbacks | Mol Biol Evol 17:32-43 | yes (F84 / K80 / JC69 variance, as PAML) |
+| `NG` | Nei & Gojobori (1986), Jukes-Cantor correction | Mol Biol Evol 3:418-426 | yes (Jukes-Cantor variance) |
+| `LWL` | Li, Wu & Luo (1985): 0-, 2- and 4-fold sites, K2P per class | Mol Biol Evol 2:150-174 | NA |
+| `MLWL` | LWL with Tzeng, Pan & Li's (2004) kappa-based sites and Ile/Arg rules | Mol Biol Evol 21:2290-2298 | NA |
+| `LPB` | Li (1993); Pamilo & Bianchi (1993) | J Mol Evol 36:96-99; Mol Biol Evol 10:271-281 | NA |
+| `MLPB` | LPB with Tzeng et al.'s (2004) Ile/Arg rules | Mol Biol Evol 21:2290-2298 | NA |
+| `MYN` | Zhang, Li & Yu (2006): YN00 with separate transition rates for purines and pyrimidines (TN93) | BMC Evol Biol 6:44 | yes (TN93 variance; F84 fallback) |
+
+The other KaKs_Calculator methods are refused with exit status 2 and the message "COAL does not implement
+natively". These are `GY` (maximum likelihood), `MS` and `MA` (model selection and averaging), `NONE`, the gamma
+variants `GNG GLWL GLPB GMLWL GMLPB GYN GMYN`, and `ALL`. KaKs_Calculator's default method is MA. COAL's default is
+YN, so `coal kaks` without `-m` gives YN rows.
+
+The engine is an independent implementation of the published methods. KaKs_Calculator 2.0 (GPL-3) and PAML's
+yn00 served only as references: their source was read to pin down conventions, and none of their code is copied.
+Neither tool is included in or redistributed with COAL.
+
+## Policy
+
+COAL applies the same rules to every pair and every method. When a pair cannot be used, it gets a status
+(below), and the rest of the run carries on. One bad pair never stops a run.
+
+| Situation | What COAL does | Status |
+|---|---|---|
+| Stop codon as the last codon of a sequence (its last codon that is not a gap) | that column is dropped | `ok` (not a warning) |
+| Gap (`-` or `.`) anywhere in a codon of either sequence | that column is skipped (pairwise deletion) | `ok` |
+| A letter other than A/C/G/T/U in a codon of either sequence (N, IUPAC, X) | that column is skipped | `ok` |
+| Stop codon anywhere else (internal) in either sequence | that column is skipped; the note gives the number | `warning` |
+| Multiple-hit correction undefined (log of a non-positive number; for YN00/MYN, F84, K80 and JC69 all fail, or P + Q > 1) | that estimate is NA; the note says which (Ka, Ks) | `saturated` |
+| No codon column left, or no synonymous (nonsynonymous) site (e.g. Met/Trp only) | the affected estimates are NA | `no_data` |
+| Rows of different length, or a length that is not a multiple of 3 | nothing is estimated | `error` |
+
+Lower case and RNA (`U`) are read as upper-case DNA. Codon columns are counted on the alignment, so a codon that a
+gap splits (`A-G`) counts as a gap. When several statuses apply, the most serious one wins
+(error > no_data > saturated > warning > ok), and the note lists all of them. The genetic code is set with `-c` /
+`--codontable` and takes the NCBI table numbers that COAL's `--codontable` accepts (1-6, 9-16, 21-23).
+
+## Output
+
+**`coal kaks`** writes KaKs_Calculator 2.0's header (`KaKs.cpp`) verbatim:
+
+```
+Sequence  Method  Ka  Ks  Ka/Ks  P-Value(Fisher)  Length  S-Sites  N-Sites  Fold-Sites(0:2:4)  Substitutions
+S-Substitutions  N-Substitutions  Fold-S-Substitutions(0:2:4)  Fold-N-Substitutions(0:2:4)  Divergence-Time
+Substitution-Rate-Ratio(rTC:rAG:rTA:rCG:rTG:rCA/rCA)  GC(1:2:3)  ML-Score  AICc  Akaike-Weight  Model
+```
+
+The header is the same in KaKs_Calculator 3.0's documentation; KaKs_Calculator 3.0 itself was not run (its licence
+allows academic use only, and it has no public repository). Values follow KaKs_Calculator's rules:
+
+- Ka, Ks, the site counts and Divergence-Time below 1e-6 print as `NA`. So Ka = 0 prints as `NA` there, as in
+  KaKs_Calculator.
+- `Length` is the number of nucleotides compared.
+- `Fold-*` are given for the LWL family only.
+- Substitution-Rate-Ratio is `kappa:kappa:1:1:1:1`. For MYN it is `kappa_TC:kappa_AG:1:1:1:1`, and for NG
+  `1:1:1:1:1:1`.
+- `GC` is computed over both rows as given, with gaps included in the length.
+- ML-Score, AICc, Akaike-Weight and Model are `NA`; they belong to the GY, MS and MA methods.
+
+Rows come per pair in KaKs_Calculator's method order (NG, LWL, MLWL, LPB, MLPB, YN, MYN). Pairs with status
+`error` are left out, as KaKs_Calculator leaves out pairs it cannot read, and the summary on stderr counts them.
+`--digits N` sets the number of significant digits.
+
+**`coal dnds`** (`--digits` default 8):
+
+| Column | Meaning |
+|---|---|
+| `seq1`, `seq2` | the two IDs. For FASTA input, the record IDs. For AXT, the name line split at the first `&`; when there is no `&`, seq1 is the whole name line and seq2 is `NA` |
+| `method` | NG, LWL, MLWL, LPB, MLPB, YN or MYN |
+| `dN`, `dS`, `dNdS` | Ka, Ks, Ka/Ks. `NA` when not available; dNdS is `NA` when dS < 1e-6. Zeros print as 0 |
+| `SE_dN`, `SE_dS` | standard errors (YN, MYN, NG); `NA` elsewhere |
+| `N_sites`, `S_sites` | nonsynonymous and synonymous sites |
+| `Nd`, `Sd` | nonsynonymous and synonymous differences |
+| `codons_compared` | codon columns used after the policy |
+| `status`, `note` | see Policy |
+
+**Input.** The format is detected from the first non-blank character (`>` means FASTA, anything else AXT), or set
+with `--format`.
+
+- **AXT** is KaKs_Calculator's format: a name line, the two aligned sequences, then a blank line. When a record
+  has more than two sequence lines, they are joined and split in half, as KaKs_Calculator does. Lines starting
+  with `#` before a record are skipped.
+- **Aligned FASTA**: `--pairs all` (the default) compares every pair of the alignment in AXTConvertor's order
+  (1-2, 1-3, ... 2-3, ...). `--pairs consecutive` compares records 1 and 2, 3 and 4, and so on. In `coal kaks`, a
+  FASTA pair is named `id1&id2`, as KaKs_Calculator's AXTConvertor names it.
+- Standard input (`-`) is not read; give a file.
+
+**Exit status.** 0 when the run finished, even if some pairs have a status other than `ok`. 1 when the input
+cannot be read or the output cannot be written. 2 for a command-line error, including a method that is not
+implemented. `-j N` sets the number of threads (default: all hardware threads). Pairs are computed in parallel
+and written in input order, and the output does not depend on `-j`.
+
+`--yn-flavour paml` and `--yn-weighting 0|1` choose which reference YN00 follows where the two differ (below).
+`--yn-weighting 0` gives equal pathway weights in one round, which is the default control file of PAML's yn00
+(`weighting = 0`). KaKs_Calculator always weights pathways.
+
+## C++ API
+
+`#include <coal/kaks.hpp>` (installed with `coal::core`, docs/cpp-engine.md). The library writes nothing to
+stdout or stderr and has no global mutable state. It never throws for bad data: problems are reported in
+`Result::status` and `Result::note`. It can be called from many threads at once.
+
+```cpp
+#include <coal/kaks.hpp>
+const coal::GeneticCode* code = coal::get_code(1);            // NCBI table; nullptr if not supported
+coal::kaks::Result r = coal::kaks::compute(row1, row2, coal::kaks::Method::YN, *code);
+// r.ka, r.ks, r.ka_ks, r.se_ka, r.se_ks (NaN = NA), r.S, r.N, r.Sd, r.Nd, r.codons_compared,
+// r.status (ok / warning / saturated / no_data / error), r.note
+
+// several methods for one pair: apply the policy once
+coal::kaks::Prepared p = coal::kaks::prepare(row1, row2, *code);
+for (auto m : {coal::kaks::Method::YN, coal::kaks::Method::NG}) use(coal::kaks::compute(p, m, *code));
+
+coal::kaks::Method m; std::string why;
+if (!coal::kaks::parse_method("GY", m, why)) { /* why: "... does not implement natively ..." */ }
+```
+
+`Options{yn_flavour, yn_weighting}` is the fourth argument (the defaults follow KaKs_Calculator).
+`Result` also carries the fields KaKs_Calculator prints: `p_fisher`, `divergence`, `rates[6]`, `fold_*`, `gc[4]`,
+`substitutions` and `length`. It also has the policy counts (`gap_codons`, `ambiguous_codons`, `internal_stops`,
+`terminal_stop_dropped`) and, for YN/MYN, `iterations` and `converged`.
+
+## Validation
+
+The validation compares COAL with two references:
+
+- **KaKs_Calculator 2.0.1** (bioconda `kakscalculator2`, the build orthologr embeds as gestimator) in two builds.
+  The stock binary prints 6 significant digits. A local build of the same source with `stream.precision(15)` in
+  `CONVERT` was used for the numeric comparison.
+- **PAML 4.10.10 yn00**, built from source with the `rst` line printed at `%.12g`; the stock binary prints 4
+  decimals. It was run once per pair, because yn00 carries t over from one data set to the next, with
+  `weighting = 1` and `weighting = 0`. PAML refuses stop codons, so columns with a gap, an ambiguous base or a stop
+  were removed first, which matches COAL's policy.
+
+The scripts are in `benchmarks/kaks/`:
+
+- `make_orthologr_pairs.py` builds the orthologr set.
+- `simulate_pairs.py` makes known-omega pairs.
+- `validate_kaks.py` runs the comparisons and classifies every difference.
+- `known_omega.py` summarises the simulations.
+- `bench_kaks.py` measures speed.
+
+Results of 2026-11-11, branch `feat/kaks-engine`:
+
+**Data sets**
+
+- **orthologr 1k.** orthologr's example genes `inst/seqs/ortho_{thal,lyra}_cds_1000.fasta` (A. thaliana and
+  A. lyrata) were paired by DIAMOND 2.2.8 reciprocal best hits, giving 999 pairs. The proteins were aligned
+  globally (Biopython PairwiseAligner, BLOSUM62, gap open 11, extend 1, full length, no end truncation) and turned
+  into codon alignments by coal-cpp.
+- **Simulated.** 600 pairs of 500 codons under GY94 with kappa = 2 and unequal F3x4 frequencies: omega 0.1, 0.5,
+  1 and 2, crossed with t = 0.3, 1 and 2 substitutions per codon, 50 replicates each.
+- **Test fixtures** in `tests/kaks/`: 15 hand-made edge cases and 48 simulated pairs, with the reference outputs
+  stored in `tests/kaks/golden/`.
+
+**COAL compared with KaKs_Calculator 2.0, 15 significant digits.** "Max |diff|" is over pairs where both tools
+give a number.
+
+| Method | Set | Ka max abs diff | Ks max abs diff | Ka/Ks max abs diff | Pearson r (Ka, Ks) | Pairs > 1e-4 |
+|---|---|---:|---:|---:|---:|---:|
+| NG, LWL, MLWL, LPB, MLPB | orthologr 999 | 0 | 0 | 0 | 1 | 0 |
+| YN | orthologr 999 | 1.0e-15 | 1.0e-15 | 1.0e-14 | 1 | 0 |
+| MYN | orthologr 999 | 1.0e-15 | 1.0e-14 | 2.0e-14 | 1 | 0 |
+| NG, LWL, MLWL, LPB, MLPB | simulated 600 | 0 | 0 | 0 | 1 | 0 |
+| YN | simulated 600 | 1.0e-15 | 1.4e-13 | 1.0e-14 | 1 | 0 |
+| MYN | simulated 600 | 1.0e-15 | 2.9e-14 | 1.0e-14 | 1 | 0 |
+
+Fisher's p-values agree to 2e-12 apart from the two documented cases below.
+
+**COAL `--yn-flavour paml` compared with PAML yn00, 12 significant digits.** The result is the same for
+weighting 1 and 0.
+
+| Set | dN max abs diff | dS max abs diff | S, N sites max abs diff | SE max abs diff | Pairs > 1e-4 |
+|---|---:|---:|---:|---:|---:|
+| orthologr 999 | 4.8e-13 | 5.0e-13 | 5.0e-9 | 4.7e-13 | 0 |
+| simulated 600 | 5.0e-13 | 5.0e-12 | 5.0e-9 | 4.5e-11 | 0 |
+
+These differences are the 12-digit printing of yn00.
+
+**Text of every row compared with the stock KaKs_Calculator, 6 digits.** Every differing field is classified;
+the categories are explained in the next section.
+
+| Set | Method | Rows identical | -0 | nan | p-obs | p-neg | saturated | Unexplained |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| orthologr | NG | 965 / 999 | 11 | 0 | 22 | 0 | 1 | 0 |
+| orthologr | LWL / MLWL | 998 / 999 | 0 | 0 | 0 | 1 | 1 | 0 |
+| orthologr | LPB / MLPB | 992 / 987 of 999 | 0 | 6 / 11 | 0 | 0 | 1 | 0 |
+| orthologr | YN | 970 / 999 | 11 | 0 | 17 | 0 | 1 | 0 |
+| orthologr | MYN | 975 / 999 | 11 | 0 | 13 | 0 | 0 | 0 |
+| simulated | NG | 596 / 600 | 0 | 0 | 4 | 0 | 0 | 0 |
+| simulated | LWL / MLWL / LPB / MLPB | 480 / 495 / 528 / 515 of 600 | 0 | 0 | 0 | 118 / 103 / 70 / 83 | 2 | 0 |
+| simulated | YN / MYN | 599 / 600 | 0 | 0 | 0 | 0 | 1 | 0 |
+
+### Differences from KaKs_Calculator, all deliberate and checked
+
+1. **`saturated`.** KaKs_Calculator replaces an undefined correction with a number. YN and MYN (when TN93 fails)
+   report JC69's capped distance: when P >= 0.75, P is set to 0.75(n-1)/n, or t to 99 when P + Q > 1. The LWL
+   family sets the class's K to 0, which underestimates Ks. COAL gives NA with status `saturated`. Example: the
+   orthologr pair AT1G04625.1, whose proportion of synonymous differences is about 0.8. There KaKs_Calculator
+   reports YN Ks = 3.69 and LWL Ks = 1.24, and COAL reports NA for both. PAML yn00 reports the same capped
+   values, so the same pair is the one "NA in one" row against PAML.
+2. **`p-obs`.** KaKs_Calculator's Fisher test sums the tables that are "no more probable than the observed one".
+   Its log-factorial approximation sometimes makes the observed table itself appear 1e-13 more probable than
+   itself, so it is left out. COAL counts ties within a relative 1e-7, as R's `fisher.test` does. Every such case
+   was checked: COAL's p minus KaKs_Calculator's p equals P(observed table). This affects 52 of 7 × 999 orthologr
+   rows.
+3. **`p-neg`.** LPB93 sets S = Sd/Ks, so once Ks > 1 the table [Sd, S-Sd; Nd, N-Nd] has a negative cell. The LWL
+   family hits the same once Sd > S. KaKs_Calculator still computes a p-value, and its log-factorial returns 1 for
+   the negative cell. COAL gives NA for the test only; Ka and Ks are unaffected. This is common in the
+   high-divergence simulations.
+4. **`-0`.** KaKs_Calculator prints Ka/Ks = `-0` when Ka is a negative zero. COAL prints `0`.
+5. **`nan`.** Where KaKs_Calculator prints `nan` or `-nan` (LPB's N = Nd/Ka with Ka = 0; pairs with nothing to
+   compare), COAL prints `NA`.
+6. **RNA and lower case.** KaKs_Calculator's NG and LWL family compare codon letters, so `U` in one sequence
+   against `T` in the other counts as a difference; its YN and MYN read U as T. KaKs_Calculator's GC column counts
+   upper-case G and C only. COAL reads U as T and ignores case everywhere (edge case `lowercase_rna`).
+7. **Pairs that KaKs_Calculator cannot read** (a length that is not a multiple of 3): both tools leave them out of
+   the `.kaks` file. `coal dnds` lists them with status `error`.
+
+The categories, tolerances and checks are those of `tests/test_kaks.py` and `benchmarks/kaks/validate_kaks.py`.
+Apart from the cases above, all fields agree to 1e-9.
+
+### Where KaKs_Calculator and PAML differ (YN00)
+
+On the 999 orthologr pairs and 600 simulated pairs, KaKs_Calculator's YN and PAML yn00 with `weighting = 1` give
+the same dN, dS and dN/dS (COAL matches both to about 1e-13). Both start the iteration at t = 0.4 and omega = 1
+and use the same tolerance (5e-4, 10 rounds). They differ only in edge cases, which `--yn-flavour` selects:
+
+- **kappa when none can be estimated.** KaKs_Calculator uses 2. PAML uses 4.6, the initial value of its main
+  loop.
+- **kappa above 99.** KaKs_Calculator resets it to 2. PAML caps it at 999.
+- **dN/dS when dN = 0.** PAML prints its floor `omega = 1e-5`; COAL prints 0. This is the 1e-5 maximum difference
+  in the dN/dS row of the PAML comparison.
+- **Pathway weighting.** PAML's distributed `yn00.ctl` has `weighting = 0` (equal weights, one round).
+  KaKs_Calculator always weights. COAL's default follows KaKs_Calculator; `--yn-weighting 0` matches PAML's
+  default.
+
+### Recovering a known omega (simulated data)
+
+The table gives the median dN/dS over 50 pairs of 500 codons. Within each cell, the three values are for
+t = 0.3, 1 and 2 substitutions per codon.
+
+| Method | omega 0.1 | omega 0.5 | omega 1 | omega 2 | NA (of 600) |
+|---|---|---|---|---|---:|
+| YN | 0.11 / 0.08 / 0.09 | 0.53 / 0.49 / 0.48 | 1.06 / 1.03 / 1.04 | 2.02 / 2.01 / 1.95 | 1 |
+| MYN | 0.10 / 0.08 / 0.10 | 0.53 / 0.49 / 0.46 | 1.07 / 1.04 / 1.06 | 2.14 / 2.09 / 2.05 | 1 |
+| LPB | 0.12 / 0.12 / 0.13 | 0.53 / 0.51 / 0.54 | 1.05 / 1.01 / 0.93 | 1.92 / 1.72 / 1.61 | 2 |
+| MLPB | 0.11 / 0.11 / 0.12 | 0.51 / 0.49 / 0.51 | 1.02 / 0.97 / 0.92 | 1.81 / 1.69 / 1.55 | 2 |
+| NG | 0.09 / 0.08 / 0.07 | 0.46 / 0.45 / 0.45 | 0.91 / 0.89 / 0.86 | 1.71 / 1.64 / 1.49 | 27 |
+| LWL | 0.10 / 0.10 / 0.11 | 0.44 / 0.43 / 0.43 | 0.85 / 0.86 / 0.78 | 1.58 / 1.44 / 1.37 | 2 |
+| MLWL | 0.11 / 0.10 / 0.10 | 0.46 / 0.44 / 0.44 | 0.87 / 0.86 / 0.78 | 1.60 / 1.45 / 1.31 | 2 |
+
+YN00 and MYN recover omega to within about 10 % at every divergence; at omega = 0.1 and t = 1 they run about 20 %
+low. The methods that ignore the transition/transversion bias (NG, LWL) underestimate omega, increasingly so at
+high divergence and high omega. This is the bias Yang & Nielsen (2000) describe. NG's 27 NA are Ks saturations
+(Jukes-Cantor) at omega = 0.1, t = 2.
+
+## Benchmark
+
+The benchmark used the 999 orthologr pairs on the cloud workspace, a 2-core Xeon VM at 2.1 GHz that other jobs
+were also using (load average about 5). Wall times there are noisy, so CPU time (user + sys) is the fair
+single-thread measure. Thread scaling could not be measured on that machine, and the headline numbers are to be
+taken on a 16-thread desktop. KaKs_Calculator is single-threaded. Each figure is the best of 3 runs
+(`benchmarks/kaks/bench_kaks.py`).
+
+| Method | KaKs_Calculator CPU s | coal -j 1 CPU s | Pairs per CPU-second, KaKs_Calculator | Pairs per CPU-second, COAL | CPU speed-up |
+|---|---:|---:|---:|---:|---:|
+| YN | 1.88 | 1.15 | 530 | 871 | 1.6x |
+| MYN | 2.38 | 1.71 | 420 | 585 | 1.4x |
+| NG | 0.53 | 0.07 | 1,877 | 13,787 | 7.3x |
+| LWL | 0.76 | 0.09 | 1,321 | 11,249 | 8.5x |
+| MLWL | 0.70 | 0.09 | 1,431 | 11,706 | 8.2x |
+| LPB | 0.67 | 0.09 | 1,484 | 11,654 | 7.9x |
+| MLPB | 0.81 | 0.09 | 1,236 | 11,435 | 9.2x |
+
+YN00 and MYN spend about 90 % of their time on P(t) (a 61 × 61 symmetric eigendecomposition per iteration, as in
+both reference tools), so their single-thread gain is modest. The gain comes from threads (`-j`): pairs are
+independent and computed on the thread pool. In a pipeline, Ka/Ks takes a small share of the time (in the orthologr 0.4.3
+profile of 2026-10-29, about 0.5 %); alignment dominates.
+
+## Not done (yet)
+
+- GY94 maximum likelihood, model selection and averaging (MS, MA), and the gamma variants.
+- Standard input.
+- A Python API: the commands are reachable from `coal`, and an in-process binding is planned with the R/Python
+  bindings work.
+- KaKs_Calculator 3.0 was not run (see Output).

@@ -37,6 +37,7 @@
 #include "help_text.hpp"
 #include "pool.hpp"
 #include "json.hpp"
+#include "kaks_cli.hpp"
 #include "report.hpp"
 #include "seqio.hpp"
 #include "sysio.hpp"
@@ -1466,6 +1467,12 @@ static int to_int(const std::string& norm) {
 
 int main(int argc, char** argv) {
     std::ios::sync_with_stdio(false);
+    // Subcommands (docs/kaks.md): `coal-cpp kaks ...` and `coal-cpp dnds ...` (a protein alignment file named
+    // exactly "kaks" or "dnds" can still be given as ./kaks).
+    if (argc >= 2 && (std::strcmp(argv[1], "kaks") == 0 || std::strcmp(argv[1], "dnds") == 0)) {
+        std::vector<std::string> rest(argv + 2, argv + argc);
+        return coal::kaks_main(argv[1], rest);
+    }
     Options o;
     for (int i = 1; i < argc; ++i) o.argv.push_back(argv[i]);
 

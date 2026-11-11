@@ -2,6 +2,8 @@
 
     coal PEP_ALN NUC_FASTA [NUC_FASTA ...] [-codontable N] [-nogap] [-nomismatch] [-o OUT]
     coal --batch JOBS [defaults for every job]          (coal/batch.py: many small runs in one process)
+    coal kaks -i IN.axt -o OUT.kaks [-m YN ...]         (Ka/Ks, KaKs_Calculator format; run by coal-cpp)
+    coal dnds IN [-o OUT.tsv] [-m YN ...]               (dN/dS, tidy TSV; run by coal-cpp)
 
 `-` as one input path (the protein alignment or one DNA file) reads standard input.
 
@@ -275,11 +277,33 @@ def cpp_path_main() -> int:
     return 0
 
 
+def kaks_main(argv) -> int:
+    """`coal kaks ...` / `coal dnds ...`: the Ka/Ks engine is native code only (coal-cpp, docs/kaks.md), so the
+    command line is handed to the coal-cpp of this version (the lookup of `coal --cpp-path`)."""
+    from . import dispatch
+    path = dispatch.find_cpp()
+    if path is None:
+        print(f"coal {argv[0]}: needs coal-cpp, which was not found (looked at {dispatch.LOOKUP_ORDER}); "
+              "install a platform wheel of coal-align or build it (docs/cpp-engine.md)", file=sys.stderr)
+        return 1
+    ok, why = dispatch._version_ok(path)
+    if not ok:
+        print(f"coal {argv[0]}: {why}", file=sys.stderr)
+        return 1
+    rc = dispatch.run_cpp(path, argv)
+    if isinstance(rc, str):
+        print(f"coal {argv[0]}: {rc}", file=sys.stderr)
+        return 1
+    return rc
+
+
 def main(argv=None) -> int:
     command_line = argv is None  # only the command line may hand the run to coal-cpp
     argv = sys.argv[1:] if argv is None else list(argv)
     if argv == ["--cpp-path"]:
         return cpp_path_main()
+    if argv and argv[0] in ("kaks", "dnds"):
+        return kaks_main(argv)
     batch = wants_batch(argv)
     ap = build_parser(batch=batch)
     args = ap.parse_args(argv)
