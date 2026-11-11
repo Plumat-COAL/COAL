@@ -1,5 +1,7 @@
 # COAL
 
+**Website:** [plumat-coal.github.io/COAL](https://plumat-coal.github.io/COAL/) · [Install](https://plumat-coal.github.io/COAL/install.html) · [Guide](https://plumat-coal.github.io/COAL/guide.html)
+
 **Codon alignments from a protein alignment and its coding DNA.** COAL is a fast, open-source alternative to
 [PAL2NAL](https://www.bork.embl.de/pal2nal/): it maps unaligned coding DNA onto an existing protein multiple sequence
 alignment to produce a codon alignment, ready for dN/dS (PAML codeml, HyPhy) or DNA phylogenies.
