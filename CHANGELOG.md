@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **R package `coalr` (packaging/r/coalr, docs/r.md).** COAL's C++ core compiled into an R package with Rcpp:
+  `coal_dnds_pairs()` (CDS of ortholog pairs to dN, dS, dN/dS: the columns of `dnds.tsv`), `coal_dnds_clusters()`
+  (every pair of each cluster and the per-cluster summary of `cluster_summary.tsv`; protein alignments from given
+  rows, an aligner function such as `coal_msa_aligner("clustalo")`, or the built-in pairwise aligner),
+  `coal_kaks()`, `coal_codon_align()` (PAL2NAL's job), `coal_align_pairs()` and `coal_translate()`. Everything runs
+  inside the R process: no program is started, no file is written, worker threads never touch R, a user interrupt
+  stops the run within about 0.1 s, and bad data is a row with a status, not an error. `coal_pipeline_pairs()` /
+  `coal_pipeline_clusters()` run the whole `coal pipeline` through reticulate when Python with `coal-align` is
+  there. The package holds a copy of `cpp/src` (`scripts/sync_r_sources.py`; `tests/test_r_bindings.py` checks it
+  is current), so `remotes::install_github("Plumat-COAL/COAL", subdir = "packaging/r/coalr")` works. On
+  orthologr's 1,000-gene example its 999 pairs equal `coal pipeline pairs` in every column and take 1.5 s on one
+  thread. `R CMD check --as-cran`: no error or warning. Built and tested on Linux only so far.
 - **One step from coding sequences to dN/dS: `coal pipeline` (docs/pipeline.md).**
   `coal pipeline pairs --query q_cds.fa --subject s_cds.fa -o out` translates both files, finds orthologs with
   DIAMOND (reciprocal best hits, or best hits; or takes a pairs file), aligns each pair's proteins (COAL's global

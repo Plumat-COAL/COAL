@@ -1,0 +1,3 @@
+CXX_STD = CXX17
+PKG_CPPFLAGS = -Icoal
+OBJECTS = RcppExports.o coalr.o coal/tables.o coal/core.o coal/kaks.o coal/align.o coal/dnds.o

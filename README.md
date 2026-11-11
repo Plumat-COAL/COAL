@@ -75,6 +75,9 @@ Example inputs are in `examples/` (`clean`, `mito`, `messy_ids`, `one_broken_gen
   (clustal output by default, as PAL2NAL). To call COAL's own options, use `coal`, whose default output is FASTA.
 - **orthologr:** its `dNdS()` runs a bundled `pal2nal.pl`; `packaging/orthologr/` has a stand-in for that file and
   notes on what COAL changes there.
+- **R:** `remotes::install_github("Plumat-COAL/COAL", subdir = "packaging/r/coalr")` installs `coalr`: dN/dS for
+  ortholog pairs or clusters, Ka/Ks, codon alignment and protein alignment inside the R process
+  ([docs/r.md](docs/r.md)).
 - **Exit codes:** 0 success; 1 bad input or a gene that cannot be converted; 2 usage error (`coal`), or some
   sequences left out with `--keep-going`; 141 closed output pipe; 130 / 143 / 129 interrupted. Messages go to stderr,
   each line starting `coal: error:`, `coal: warning:`, `coal: notice:` or `coal: summary:`.
@@ -113,6 +116,7 @@ Example inputs are in `examples/` (`clean`, `mito`, `messy_ids`, `one_broken_gen
 | The C++ engine | [docs/cpp-engine.md](docs/cpp-engine.md) |
 | Ka/Ks (dN/dS): `coal kaks` (KaKs_Calculator drop-in), `coal dnds`, methods, policy, validation | [docs/kaks.md](docs/kaks.md) |
 | One step from CDS to dN/dS: `coal pipeline pairs` (DIAMOND reciprocal best hits) and `coal pipeline clusters` (DeepClust, per-cluster summary), output tables, validation, timings | [docs/pipeline.md](docs/pipeline.md), [docs/pipeline.schema.json](docs/pipeline.schema.json) |
+| R: the `coalr` package (in-process `coal_dnds_pairs()`, `coal_dnds_clusters()`, `coal_kaks()`, `coal_codon_align()`; the whole pipeline through reticulate), install, examples, when to use which | [docs/r.md](docs/r.md), [packaging/r/coalr](packaging/r/coalr) |
 | Protein alignment before the codon step: pairwise (BLOSUM62 NW), Clustal Omega / MAFFT for clusters, DIAMOND hits | [docs/alignment.md](docs/alignment.md) |
 | Speed and memory vs PAL2NAL | [docs/benchmarks.md](docs/benchmarks.md) |
 | Windows app, web GUI, other install options | [docs/install.md](docs/install.md), [apps/coal-app/desktop/README.md](apps/coal-app/desktop/README.md) |
