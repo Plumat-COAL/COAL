@@ -307,7 +307,7 @@ jobs:
         shell: bash
         env:
           COAL_REQUIRE_ALIGN: "1"
-        run: python -m unittest -v tests.test_align tests.test_msa
+        run: python -m unittest -v tests.test_align tests.test_msa tests.test_dnds_pipeline
       # The release's Linux wheels are built inside the manylinux_2_28 container (GCC 14, -Werror): build there on
       # every change too, so a warning that only that compiler raises fails CI, not the release (v0.5.0rc1 did).
       - name: Build inside the manylinux_2_28 container, as the release does (Linux)

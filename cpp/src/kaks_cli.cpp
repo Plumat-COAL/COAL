@@ -423,6 +423,12 @@ int parse(const std::vector<std::string>& a, Cli& c) {
 
 }  // namespace
 
+const char* kaks_compat_header() { return COMPAT_HEADER; }
+std::string kaks_compat_row(const std::string& name, const kaks::Result& r, int digits) {
+    return compat_row(name, r, digits);
+}
+std::string kaks_num(double v, int digits) { return num(v, digits); }
+
 int kaks_main(const std::string& sub, const std::vector<std::string>& argv) {
     Cli c;
     c.compat = sub == "kaks";

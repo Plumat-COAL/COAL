@@ -37,6 +37,7 @@
 #include "help_text.hpp"
 #include "pool.hpp"
 #include "json.hpp"
+#include "dnds_cli.hpp"
 #include "kaks_cli.hpp"
 #include "report.hpp"
 #include "seqio.hpp"
@@ -1472,6 +1473,11 @@ int main(int argc, char** argv) {
     if (argc >= 2 && (std::strcmp(argv[1], "kaks") == 0 || std::strcmp(argv[1], "dnds") == 0)) {
         std::vector<std::string> rest(argv + 2, argv + argc);
         return coal::kaks_main(argv[1], rest);
+    }
+    // `coal-cpp translate ...` and `coal-cpp codon-dnds ...`: the native steps of `coal pipeline` (docs/pipeline.md)
+    if (argc >= 2 && (std::strcmp(argv[1], "translate") == 0 || std::strcmp(argv[1], "codon-dnds") == 0)) {
+        std::vector<std::string> rest(argv + 2, argv + argc);
+        return std::strcmp(argv[1], "translate") == 0 ? coal::translate_main(rest) : coal::codon_dnds_main(rest);
     }
     Options o;
     for (int i = 1; i < argc; ++i) o.argv.push_back(argv[i]);

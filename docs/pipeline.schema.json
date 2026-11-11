@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/plumat-coal/COAL/blob/main/docs/pipeline.schema.json",
+  "title": "COAL pipeline run report (coal.pipeline/1)",
+  "description": "What `coal pipeline pairs|clusters` writes to <out_dir>/report.json (or --report). The tables it refers to (dnds.tsv, cluster_summary.tsv, genes.tsv, failed.tsv) are described in docs/pipeline.md.",
+  "type": "object",
+  "required": ["schema", "coal_version", "mode", "out_dir", "exit_code", "parameters", "tools", "stages", "seconds", "counts", "failures_total", "failures", "failures_truncated", "outputs"],
+  "properties": {
+    "schema": {"const": "coal.pipeline/1"},
+    "coal_version": {"type": "string"},
+    "mode": {"enum": ["pairs", "clusters"]},
+    "command": {"type": ["array", "null"], "items": {"type": "string"}},
+    "out_dir": {"type": "string"},
+    "exit_code": {"enum": [0, 1, 2]},
+    "error": {"type": "string"},
+    "parameters": {"type": "object"},
+    "tools": {
+      "type": "object",
+      "properties": {
+        "coal-cpp": {"$ref": "#/$defs/tool"},
+        "diamond": {"$ref": "#/$defs/tool"},
+        "clustalo": {"$ref": "#/$defs/tool"},
+        "mafft": {"$ref": "#/$defs/tool"}
+      }
+    },
+    "stages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "seconds", "cached"],
+        "properties": {
+          "name": {"type": "string"},
+          "seconds": {"type": "number", "minimum": 0},
+          "cached": {"type": "boolean"},
+          "msa_seconds": {"type": "number", "minimum": 0},
+          "align_codon_seconds": {"type": "number", "minimum": 0},
+          "kaks_seconds": {"type": "number", "minimum": 0}
+        }
+      }
+    },
+    "seconds": {"type": "number", "minimum": 0},
+    "counts": {
+      "type": "object",
+      "properties": {
+        "genes": {
+          "type": "object",
+          "required": ["total", "ok", "warning", "failed"],
+          "properties": {
+            "total": {"type": "integer", "minimum": 0},
+            "ok": {"type": "integer", "minimum": 0},
+            "warning": {"type": "integer", "minimum": 0},
+            "failed": {"type": "integer", "minimum": 0}
+          }
+        },
+        "orthologs": {"type": "integer", "minimum": 0},
+        "unpaired": {
+          "type": "object",
+          "required": ["no_hit", "not_reciprocal"],
+          "properties": {
+            "no_hit": {"type": "integer", "minimum": 0},
+            "not_reciprocal": {"type": "integer", "minimum": 0}
+          }
+        },
+        "pairs": {
+          "type": "object",
+          "required": ["total", "ok", "warning", "saturated", "no_data", "error"],
+          "properties": {
+            "total": {"type": "integer", "minimum": 0},
+            "ok": {"type": "integer", "minimum": 0},
+            "warning": {"type": "integer", "minimum": 0},
+            "saturated": {"type": "integer", "minimum": 0},
+            "no_data": {"type": "integer", "minimum": 0},
+            "error": {"type": "integer", "minimum": 0}
+          }
+        },
+        "clusters": {
+          "type": "object",
+          "required": ["total", "singletons", "all_pairs", "above_max_size", "skipped", "msa_fallback", "members_dropped"],
+          "properties": {
+            "total": {"type": "integer", "minimum": 0},
+            "singletons": {"type": "integer", "minimum": 0},
+            "all_pairs": {"type": "integer", "minimum": 0},
+            "above_max_size": {"type": "integer", "minimum": 0},
+            "skipped": {"type": "integer", "minimum": 0},
+            "msa_fallback": {"type": "integer", "minimum": 0},
+            "members_dropped": {"type": "integer", "minimum": 0}
+          }
+        }
+      }
+    },
+    "failures_total": {"type": "integer", "minimum": 0},
+    "failures_truncated": {"type": "boolean"},
+    "failures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["level", "code", "message"],
+        "properties": {
+          "level": {"enum": ["gene", "pair", "cluster"]},
+          "code": {"type": "string"},
+          "message": {"type": "string"},
+          "cluster_id": {"type": "string"},
+          "seq1": {"type": "string"},
+          "seq2": {"type": "string"}
+        }
+      }
+    },
+    "outputs": {"type": "object"}
+  },
+  "$defs": {
+    "tool": {
+      "type": "object",
+      "required": ["path", "version"],
+      "properties": {"path": {"type": "string"}, "version": {"type": "string"}}
+    }
+  }
+}

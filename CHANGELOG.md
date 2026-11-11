@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- **One step from coding sequences to dN/dS: `coal pipeline` (docs/pipeline.md).**
+  `coal pipeline pairs --query q_cds.fa --subject s_cds.fa -o out` translates both files, finds orthologs with
+  DIAMOND (reciprocal best hits, or best hits; or takes a pairs file), aligns each pair's proteins (COAL's global
+  aligner by default; Clustal Omega, MAFFT or DIAMOND's own alignment as options), builds the codon alignment and
+  computes Ka/Ks (YN00 by default, several methods allowed). `coal pipeline clusters --cds all_cds.fa -o out`
+  clusters with DIAMOND DeepClust (or takes its two-column clusters file), aligns each cluster with Clustal Omega
+  (two members: the global aligner), and computes Ka/Ks for every pair of a cluster, with a per-cluster summary
+  (counts by status; median, mean, quartiles, minimum and maximum of dN, dS and dN/dS). Clusters above
+  `--max-cluster-size` (200) are computed against the representative, sampled reproducibly (`--pair-sample`,
+  `--seed`) or skipped. Output: `dnds.tsv`, `cluster_summary.tsv`, `genes.tsv`, `failed.tsv` and a JSON report
+  (`docs/pipeline.schema.json`); optionally KaKs_Calculator's format and the codon alignments. One bad gene, pair or
+  cluster never stops a run (exit 2 when something failed). No process or temporary file per pair: the new native
+  steps `coal-cpp translate` and `coal-cpp codon-dnds` (C++ API `<coal/dnds.hpp>`) do translation, pair alignment,
+  codon threading and Ka/Ks in one threaded process fed through a pipe; output order does not depend on `-j`.
+  `coal pipeline install diamond` installs DIAMOND into COAL's cache, like Clustal Omega. On orthologr's
+  1,000-gene example (999 pairs): 2.5 s on 2 cores, every value equal to the steps run one by one and to
+  KaKs_Calculator 2.0 on the same codon alignments; 19,980 pairs in 20.5 s with 41 MB.
 - **Ka/Ks (dN/dS) engine: `coal kaks` and `coal dnds`.** Native C++ (no external programs): YN00 (default), NG86,
   LWL85, MLWL, LPB93, MLPB and MYN, for AXT or aligned FASTA (every pair of an MSA, or consecutive pairs), any of
   COAL's genetic codes, on all threads. `coal kaks -i in.axt -o out.kaks -m YN` is a drop-in for KaKs_Calculator

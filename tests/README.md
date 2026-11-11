@@ -19,6 +19,13 @@ and PAML yn00 outputs stored in `tests/kaks/golden/` (inputs `tests/kaks/edge_ca
 `python tests/kaks/make_fixtures.py --help` remakes them), allowing only the documented differences, and checks the
 policy statuses and the command line. The 999-pair orthologr validation is `benchmarks/kaks/validate_kaks.py`.
 
+One-step pipeline (`coal pipeline`, docs/pipeline.md): `tests/test_dnds_pipeline.py` runs pair mode and cluster mode
+on synthetic fixtures (`tests/fixtures/pipeline/`, remade by `python tests/tools/make_pipeline_fixture.py`) and
+compares them with the same steps done one by one, with statistics recomputed in the test, and with the report's
+JSON Schema; it covers the edge cases (internal stop, length not a multiple of 3, ambiguous bases, identical
+sequences, no hit, unusable records), failures and exit codes. The parts that need DIAMOND or Clustal Omega skip
+without them. The 1,000-gene validation is `benchmarks/pipeline/validate_pairs.py` and `validate_clusters.py`.
+
 ## Test numbers
 
 **Compatibility:** COAL's output is identical to PAL2NAL v14's except for a short list of documented, deliberate differences (newer NCBI genetic-code tables for codes 3, 10, 11 and 13; `-nogap` removing the selected code's stop codons; the selected code's start codons for the first Met; pairing by IDs that match only after normalising where PAL2NAL v14's file order would give a protein another gene's DNA; and inputs where PAL2NAL v14 writes malformed output or fails). Tested: all 285 stored reference checks pass (238 byte-identical, 4 of them with deliberately different warnings; 24 where both tools fail; 23 deliberate output or exit-status differences: 6 deliberate errors, 3 different outputs, 14 `-nogap` checks with a non-standard code), and in 20,000 random comparisons with the real PAL2NAL v14 (5,000 cases x 4 output formats) 13,826 were byte-identical, 4,681 both failed and 1,493 were deliberate differences, each checked to be exactly the documented change; 0 unexplained differences.

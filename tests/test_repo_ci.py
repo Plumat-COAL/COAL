@@ -310,7 +310,7 @@ class TestNightlySteps(unittest.TestCase):
         files = {"tests/__init__.py": ""}
         for mod in ("test_differential", "test_cpp_vs_python", "test_cpp_cli", "test_cpp_readers", "test_cpp_tables",
                     "test_cpp_pool", "test_stdin", "test_robustness", "test_cpp_error_precedence", "test_batch",
-                    "test_align", "test_msa"):
+                    "test_align", "test_msa", "test_dnds_pipeline"):
             files[f"tests/{mod}.py"] = "import unittest\nclass T(unittest.TestCase):\n    def test_x(self):\n        pass\n"
         r, _ = self._run("sanitizers", step, files)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)

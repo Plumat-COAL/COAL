@@ -4,6 +4,8 @@
     coal --batch JOBS [defaults for every job]          (coal/batch.py: many small runs in one process)
     coal kaks -i IN.axt -o OUT.kaks [-m YN ...]         (Ka/Ks, KaKs_Calculator format; run by coal-cpp)
     coal dnds IN [-o OUT.tsv] [-m YN ...]               (dN/dS, tidy TSV; run by coal-cpp)
+    coal pipeline pairs|clusters ... -o DIR             (CDS in, dN/dS table out: coal/dnds_pipeline.py)
+    coal translate / coal codon-dnds                    (the pipeline's native steps; run by coal-cpp)
 
 `-` as one input path (the protein alignment or one DNA file) reads standard input.
 
@@ -278,7 +280,8 @@ def cpp_path_main() -> int:
 
 
 def kaks_main(argv) -> int:
-    """`coal kaks ...` / `coal dnds ...`: the Ka/Ks engine is native code only (coal-cpp, docs/kaks.md), so the
+    """`coal kaks ...` / `coal dnds ...` (and `coal translate`, `coal codon-dnds`, the native steps of
+    `coal pipeline`): the Ka/Ks engine is native code only (coal-cpp, docs/kaks.md), so the
     command line is handed to the coal-cpp of this version (the lookup of `coal --cpp-path`)."""
     from . import dispatch
     path = dispatch.find_cpp()
@@ -302,8 +305,11 @@ def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else list(argv)
     if argv == ["--cpp-path"]:
         return cpp_path_main()
-    if argv and argv[0] in ("kaks", "dnds"):
+    if argv and argv[0] in ("kaks", "dnds", "translate", "codon-dnds"):
         return kaks_main(argv)
+    if argv and argv[0] == "pipeline":  # CDS -> orthologs / clusters -> alignment -> codon alignment -> Ka/Ks
+        from .dnds_pipeline import main as pipeline_main
+        return pipeline_main(argv[1:])
     batch = wants_batch(argv)
     ap = build_parser(batch=batch)
     args = ap.parse_args(argv)

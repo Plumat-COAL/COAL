@@ -324,8 +324,8 @@ r dN/dS for DIAMOND split by hit coverage:
 
 - The platform wheels ship `coal-cpp` but not yet `coal-cpp-align` (`packaging/wheels/build_platform_wheel.py`
   copies one binary). Without it, `coal.align.align_pairs` falls back to pure Python.
-- There is no CLI subcommand in `coal`/`coal-cpp` for alignment. That is the pipeline's (agent C's) job; the
-  library, tool and Python APIs are in place.
+- There is no alignment-only subcommand in `coal`/`coal-cpp`. `coal pipeline` ([pipeline.md](pipeline.md)) runs
+  the aligner as one of its steps; alone, it is the `coal-cpp-align` tool and the library and Python APIs.
 - The official clustal.org download route is untested against the real server (unreachable here), and those
   binaries have no published checksums. The macOS binary is x86_64 only.
 - The AVX2 path is x86 only. ARM (Apple Silicon, Linux aarch64) gets the compiler-vectorised baseline and the scalar
