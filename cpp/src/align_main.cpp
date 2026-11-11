@@ -1,0 +1,333 @@
+// coal-cpp-align: pairwise protein alignment for the codon step (align.hpp), many pairs at once.
+//
+//   coal-cpp-align [options] A.fasta [B.fasta]
+//
+// Pairs: the n-th record of A with the n-th record of B; with one file, consecutive records (1+2, 3+4, ...);
+// with --pairs TSV, the IDs in its first two columns (first in A, second in B, or in A when B is not given).
+// --diamond TSV expands DIAMOND hits to full length instead of aligning (docs/alignment.md).
+// Output (-o, default standard output): FASTA, the two gapped rows of every pair one after the other, in input
+// order. --scores TSV: one line per pair. Exit status: 0 = every pair aligned, 2 = some pairs failed (each named on
+// stderr and in --scores; the others are written), 1 = nothing could be done (bad option, unreadable input).
+#include <algorithm>
+#include <cctype>
+#include <cerrno>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <fstream>
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
+#include "align.hpp"
+#include "core.hpp"
+#include "pool.hpp"
+
+using namespace coal;
+
+namespace {
+
+const char* USAGE =
+    "usage: coal-cpp-align [options] A.fasta [B.fasta]\n"
+    "\n"
+    "Global pairwise protein alignment (Needleman-Wunsch/Gotoh, affine gaps), full length: overhangs are gapped,\n"
+    "never cut off. Pairs: the n-th record of A with the n-th of B; one file: records 1+2, 3+4, ...\n"
+    "\n"
+    "options:\n"
+    "  --pairs TSV           align the ID pairs in the first two columns of TSV (first ID in A, second in B,\n"
+    "                        or in A if B is not given); '#' lines are skipped\n"
+    "  --diamond TSV         no alignment: expand DIAMOND hits to full length. TSV is DIAMOND --outfmt 6 with\n"
+    "                        the columns qseqid sseqid qstart qend sstart send qseq_gapped sseq_gapped (more\n"
+    "                        columns after them are ignored); queries in A, subjects in B (or A). The first\n"
+    "                        line of each query-subject pair is used\n"
+    "  --flanks gap|align    --diamond: unaligned ends against gaps (default) or aligned globally\n"
+    "  -m, --matrix NAME     BLOSUM62 (default), BLOSUM45, BLOSUM80, PAM250\n"
+    "  --gap-open X          cost of a gap of length 1 (default 10)\n"
+    "  --gap-extend X        cost of each further gap position (default 0.5)\n"
+    "  --end-gaps free|penalized\n"
+    "                        gaps at either end of either sequence (default free, as EMBOSS needle)\n"
+    "  --preset needle|pwalign\n"
+    "                        needle: the defaults above; pwalign: pwalign::pairwiseAlignment(type='global',\n"
+    "                        BLOSUM62) with its default gaps (open 14, extend 4, end gaps penalized).\n"
+    "                        Options given after --preset change it\n"
+    "  --max-cells N         refuse pairs with more than N dynamic-programming cells (default 4e9; 0 = none)\n"
+    "  -j, --jobs N          threads (default: one per hardware thread)\n"
+    "  -o, --output FILE     aligned pairs (FASTA; default: standard output)\n"
+    "  --scores FILE         one TSV line per pair: pair, id_a, id_b, len_a, len_b, length, score,\n"
+    "                        identities, similarities, gaps, status\n"
+    "  -h, --help            this help\n";
+
+struct Rec {
+    std::string id, seq;
+};
+
+[[noreturn]] void die(const std::string& msg, int rc = 1) {
+    std::cerr << "coal-cpp-align: error: " << msg << '\n';
+    std::exit(rc);
+}
+
+std::vector<Rec> read_fasta(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) die("cannot open '" + path + "': " + std::strerror(errno));
+    std::vector<Rec> recs;
+    std::string line;
+    bool have = false;
+    while (std::getline(in, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (!line.empty() && line[0] == '>') {
+            size_t s = 1;
+            while (s < line.size() && std::isspace((unsigned char)line[s])) ++s;
+            size_t e = s;
+            while (e < line.size() && !std::isspace((unsigned char)line[e])) ++e;
+            recs.push_back({line.substr(s, e - s), ""});
+            have = true;
+        } else if (have) {
+            for (char c : line)
+                if (!std::isspace((unsigned char)c)) recs.back().seq.push_back(c);
+        } else if (line.find_first_not_of(" \t") != std::string::npos) {
+            die("'" + path + "' is not FASTA: text before the first '>' line");
+        }
+    }
+    return recs;
+}
+
+std::unordered_map<std::string, size_t> index_of(const std::vector<Rec>& recs, const std::string& path) {
+    std::unordered_map<std::string, size_t> m;
+    for (size_t i = 0; i < recs.size(); ++i)
+        if (!m.emplace(recs[i].id, i).second) die("duplicate ID '" + recs[i].id + "' in '" + path + "'");
+    return m;
+}
+
+std::vector<std::string> split_tab(const std::string& line) {
+    std::vector<std::string> f;
+    size_t s = 0;
+    while (true) {
+        size_t t = line.find('\t', s);
+        f.push_back(line.substr(s, t == std::string::npos ? std::string::npos : t - s));
+        if (t == std::string::npos) break;
+        s = t + 1;
+    }
+    return f;
+}
+
+double parse_num(const std::string& opt, const std::string& v) {
+    char* end = nullptr;
+    errno = 0;
+    double x = std::strtod(v.c_str(), &end);
+    if (v.empty() || *end || errno) die(opt + ": not a number: '" + v + "'");
+    return x;
+}
+
+long long parse_coord(const std::string& v, const std::string& where) {
+    char* end = nullptr;
+    long long x = std::strtoll(v.c_str(), &end, 10);
+    if (v.empty() || *end) die(where + ": not a coordinate: '" + v + "'");
+    return x;
+}
+
+struct Job {
+    std::string id_a, id_b;
+    size_t ia = 0, ib = 0;
+    bool local = false;
+    LocalHit hit;
+    PairAlignment res;
+};
+
+}  // namespace
+
+int main(int argc, char** argv) {
+    AlignParams p;
+    std::string pairs_tsv, diamond_tsv, out_path, scores_path;
+    Flanks flanks = Flanks::Gap;
+    int jobs = 0;
+    std::vector<std::string> files;
+    for (int k = 1; k < argc; ++k) {
+        std::string a = argv[k];
+        auto val = [&]() -> std::string {
+            if (k + 1 >= argc) die(a + " needs a value", 1);
+            return argv[++k];
+        };
+        if (a == "-h" || a == "--help") {
+            std::cout << USAGE;
+            return 0;
+        } else if (a == "--pairs") pairs_tsv = val();
+        else if (a == "--diamond") diamond_tsv = val();
+        else if (a == "--flanks") {
+            std::string v = val();
+            if (v == "gap") flanks = Flanks::Gap;
+            else if (v == "align") flanks = Flanks::Align;
+            else die("--flanks: gap or align, not '" + v + "'");
+        } else if (a == "-m" || a == "--matrix") p.matrix = val();
+        else if (a == "--gap-open") p.gap_open = parse_num(a, val());
+        else if (a == "--gap-extend") p.gap_extend = parse_num(a, val());
+        else if (a == "--end-gaps") {
+            std::string v = val();
+            if (v == "free") p.free_end_gaps = true;
+            else if (v == "penalized" || v == "penalised") p.free_end_gaps = false;
+            else die("--end-gaps: free or penalized, not '" + v + "'");
+        } else if (a == "--preset") {
+            std::string v = val();
+            uint64_t mc = p.max_cells;
+            if (v == "needle") p = AlignParams::needle();
+            else if (v == "pwalign") p = AlignParams::pwalign();
+            else die("--preset: needle or pwalign, not '" + v + "'");
+            p.max_cells = mc;
+        } else if (a == "--max-cells") p.max_cells = (uint64_t)parse_num(a, val());
+        else if (a == "-j" || a == "--jobs") jobs = (int)parse_num(a, val());
+        else if (a == "-o" || a == "--output") out_path = val();
+        else if (a == "--scores") scores_path = val();
+        else if (a.size() > 1 && a[0] == '-') die("unknown option " + a + " (see --help)");
+        else files.push_back(a);
+    }
+    if (files.empty() || files.size() > 2) {
+        std::cerr << USAGE;
+        return 1;
+    }
+    if (!pairs_tsv.empty() && !diamond_tsv.empty()) die("--pairs and --diamond cannot be combined");
+    try {
+        check_align_params(p);
+    } catch (const CoalError& e) {
+        die(e.what());
+    }
+
+    std::vector<Rec> A = read_fasta(files[0]), B;
+    const bool two = files.size() == 2;
+    if (two) B = read_fasta(files[1]);
+    const std::vector<Rec>& Bref = two ? B : A;
+    std::vector<Job> todo;
+    auto read_lines = [&](const std::string& path, auto&& fn) {
+        std::ifstream in(path, std::ios::binary);
+        if (!in) die("cannot open '" + path + "': " + std::strerror(errno));
+        std::string line;
+        long long ln = 0;
+        while (std::getline(in, line)) {
+            ++ln;
+            if (!line.empty() && line.back() == '\r') line.pop_back();
+            if (line.empty() || line[0] == '#') continue;
+            fn(split_tab(line), path + " line " + std::to_string(ln));
+        }
+    };
+    if (!pairs_tsv.empty() || !diamond_tsv.empty()) {
+        auto ia = index_of(A, files[0]);
+        auto ib = two ? index_of(B, files[1]) : ia;
+        auto find = [&](const std::unordered_map<std::string, size_t>& m, const std::string& id, const std::string& f,
+                        const std::string& where) {
+            auto it = m.find(id);
+            if (it == m.end()) die(where + ": ID '" + id + "' is not in '" + f + "'");
+            return it->second;
+        };
+        const std::string fb = two ? files[1] : files[0];
+        if (!pairs_tsv.empty()) {
+            read_lines(pairs_tsv, [&](const std::vector<std::string>& f, const std::string& where) {
+                if (f.size() < 2) die(where + ": expected two tab-separated IDs");
+                Job j;
+                j.id_a = f[0];
+                j.id_b = f[1];
+                j.ia = find(ia, f[0], files[0], where);
+                j.ib = find(ib, f[1], fb, where);
+                todo.push_back(std::move(j));
+            });
+        } else {
+            std::unordered_map<std::string, int> seen;
+            read_lines(diamond_tsv, [&](const std::vector<std::string>& f, const std::string& where) {
+                if (f.size() < 8)
+                    die(where + ": expected qseqid sseqid qstart qend sstart send qseq_gapped sseq_gapped");
+                if (!seen.emplace(f[0] + '\t' + f[1], 1).second) return;  // first hit of a pair only
+                Job j;
+                j.local = true;
+                j.id_a = f[0];
+                j.id_b = f[1];
+                j.ia = find(ia, f[0], files[0], where);
+                j.ib = find(ib, f[1], fb, where);
+                j.hit.qstart = parse_coord(f[2], where);
+                j.hit.qend = parse_coord(f[3], where);
+                j.hit.sstart = parse_coord(f[4], where);
+                j.hit.send = parse_coord(f[5], where);
+                j.hit.qseq_gapped = f[6];
+                j.hit.sseq_gapped = f[7];
+                todo.push_back(std::move(j));
+            });
+        }
+    } else if (two) {
+        if (A.size() != B.size())
+            die("'" + files[0] + "' has " + std::to_string(A.size()) + " records and '" + files[1] + "' has " +
+                std::to_string(B.size()) + ": pairing by order needs the same number (or use --pairs)");
+        for (size_t i = 0; i < A.size(); ++i) {
+            Job j;
+            j.id_a = A[i].id;
+            j.id_b = B[i].id;
+            j.ia = j.ib = i;
+            todo.push_back(std::move(j));
+        }
+    } else {
+        if (A.size() % 2) die("'" + files[0] + "' has an odd number of records (" + std::to_string(A.size()) + ")");
+        for (size_t i = 0; i < A.size(); i += 2) {
+            Job j;
+            j.id_a = A[i].id;
+            j.id_b = A[i + 1].id;
+            j.ia = i;
+            j.ib = i + 1;
+            todo.push_back(std::move(j));
+        }
+    }
+
+    // biggest first: one giant pair must not start last
+    std::vector<size_t> order(todo.size());
+    for (size_t i = 0; i < order.size(); ++i) order[i] = i;
+    std::stable_sort(order.begin(), order.end(), [&](size_t x, size_t y) {
+        auto cells = [&](size_t i) { return A[todo[i].ia].seq.size() * Bref[todo[i].ib].seq.size(); };
+        return cells(x) > cells(y);
+    });
+    auto work = [&](size_t& i) {
+        Job& j = todo[i];
+        try {
+            j.res = j.local ? expand_local_hit(A[j.ia].seq, Bref[j.ib].seq, j.hit, flanks, p)
+                            : align_pair(A[j.ia].seq, Bref[j.ib].seq, p);
+        } catch (const std::exception& e) {
+            j.res = PairAlignment();
+            j.res.error = e.what();
+        }
+    };
+    parallel_batch(order, work, resolve_jobs(jobs));
+
+    std::ofstream fout;
+    std::ostream* out = &std::cout;
+    if (!out_path.empty()) {
+        fout.open(out_path, std::ios::binary);
+        if (!fout) die("cannot write '" + out_path + "': " + std::strerror(errno));
+        out = &fout;
+    }
+    std::ofstream sout;
+    if (!scores_path.empty()) {
+        sout.open(scores_path, std::ios::binary);
+        if (!sout) die("cannot write '" + scores_path + "': " + std::strerror(errno));
+        sout << "pair\tid_a\tid_b\tlen_a\tlen_b\tlength\tscore\tidentities\tsimilarities\tgaps\tstatus\n";
+    }
+    size_t failed = 0;
+    for (size_t i = 0; i < todo.size(); ++i) {
+        const Job& j = todo[i];
+        if (j.res.error.empty()) {
+            *out << '>' << j.id_a << '\n' << j.res.a << '\n' << '>' << j.id_b << '\n' << j.res.b << '\n';
+        } else {
+            ++failed;
+            std::cerr << "coal-cpp-align: warning: pair " << (i + 1) << " (" << j.id_a << ", " << j.id_b
+                      << ") skipped: " << j.res.error << '\n';
+        }
+        if (sout.is_open()) {
+            std::ostringstream sc;
+            sc.precision(12);
+            sc << j.res.score;
+            sout << (i + 1) << '\t' << j.id_a << '\t' << j.id_b << '\t' << A[j.ia].seq.size() << '\t'
+                 << Bref[j.ib].seq.size() << '\t' << j.res.length << '\t' << (j.res.error.empty() ? sc.str() : "NA")
+                 << '\t' << j.res.identities << '\t' << j.res.similarities << '\t' << j.res.gaps << '\t'
+                 << (j.res.error.empty() ? "ok" : j.res.error) << '\n';
+        }
+    }
+    out->flush();
+    if (!*out) die("cannot write the output");
+    if (failed) std::cerr << "coal-cpp-align: " << failed << " of " << todo.size() << " pairs failed\n";
+    return failed ? 2 : 0;
+}
