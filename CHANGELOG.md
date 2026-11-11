@@ -10,6 +10,14 @@
   Validated on 999 orthologr pairs and 600 simulated pairs: KaKs_Calculator 2.0 to 1e-13 (YN, MYN) or exactly
   (NG, LWL family), PAML yn00 to 1e-12, every other difference explained (docs/kaks.md). C++ API
   `<coal/kaks.hpp>` in `coal::core`. GY94 ML, MS/MA and the gamma variants are not implemented and are refused.
+- **Protein alignment for the codon step (docs/alignment.md).** `<coal/align.hpp>` and the `coal-cpp-align` tool: a
+  global Needleman-Wunsch/Gotoh aligner (BLOSUM62/45/80, PAM250, affine gaps; EMBOSS needle defaults, a pwalign
+  preset), full length (overhangs gapped, never cut off), AVX2 row loops picked at run time, multithreaded; optimal
+  scores equal Biopython's and EMBOSS needle's. The expansion of DIAMOND `qseq_gapped`/`sseq_gapped` hits to
+  full-length alignments without realigning. Python: `coal.align` (the same, with a pure-Python fallback) and
+  `coal.msa` (Clustal Omega / MAFFT for clusters: find, install into COAL's cache, run, batch; stop codons handled).
+  Clustal Omega (GPL) is installed on demand, not bundled. Benchmark on orthologr's 1,000-gene set:
+  `benchmarks/results/align_layer_linux_20261111/`. `coal::core` now links `Threads::Threads`.
 - **A refused `--resume` (or a signal) no longer leaves `<out>.coal-lock` behind, both engines.** The lock was taken
   before the checkpoint set-up and only released by the block after it, so an error raised in between (the inputs
   changed since the checkpoint, a checkpoint of the other engine) or a signal there left the lock, and the next run

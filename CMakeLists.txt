@@ -44,7 +44,7 @@ include(GNUInstallDirs)
 # Installed under <prefix>/include/coal/ and included as <coal/core.hpp>. In the build tree the same names are
 # forwarding headers generated below, so add_subdirectory users and installed users write the same #include, and
 # cpp/src (generic names such as json.hpp) is never on a consumer's include path.
-set(COAL_PUBLIC_HEADERS core.hpp tables.hpp seqio.hpp kaks.hpp)
+set(COAL_PUBLIC_HEADERS core.hpp tables.hpp seqio.hpp kaks.hpp align.hpp)
 set(COAL_GEN_INCLUDE "${CMAKE_CURRENT_BINARY_DIR}/coal_include")
 foreach(h IN LISTS COAL_PUBLIC_HEADERS)
   file(GENERATE OUTPUT "${COAL_GEN_INCLUDE}/coal/${h}"
@@ -53,7 +53,7 @@ endforeach()
 configure_file(cpp/src/version.hpp.in "${COAL_GEN_INCLUDE}/coal/version.hpp" @ONLY)
 
 add_library(coal_core STATIC cpp/src/tables.cpp cpp/src/core.cpp cpp/src/seqio.cpp cpp/src/json.cpp cpp/src/report.cpp
-            cpp/src/kaks.cpp)
+            cpp/src/kaks.cpp cpp/src/align.cpp)
 add_library(coal::core ALIAS coal_core)
 set_target_properties(coal_core PROPERTIES EXPORT_NAME core OUTPUT_NAME coal_core)
 target_compile_features(coal_core PUBLIC cxx_std_17)
@@ -61,15 +61,20 @@ target_include_directories(coal_core
   PUBLIC "$<BUILD_INTERFACE:${COAL_GEN_INCLUDE}>" "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
   PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/cpp/src")
 
+# align_pairs() (align.cpp) runs pairs on std::threads, so the library itself needs the thread library.
+find_package(Threads REQUIRED)
+target_link_libraries(coal_core PUBLIC Threads::Threads)
+
 set(COAL_TARGETS coal_core)
-if(COAL_BUILD_CLI OR COAL_BUILD_TOOLS)
-  find_package(Threads REQUIRED)
-endif()
 if(COAL_BUILD_CLI)
   add_executable(coal-cpp cpp/src/main.cpp cpp/src/args.cpp cpp/src/sysio.cpp cpp/src/kaks_cli.cpp)
   target_include_directories(coal-cpp PRIVATE cpp/src)
   target_link_libraries(coal-cpp PRIVATE coal_core Threads::Threads)
-  list(APPEND COAL_TARGETS coal-cpp)
+  # pairwise protein alignment for the codon step (cpp/src/align.hpp, docs/alignment.md)
+  add_executable(coal-cpp-align cpp/src/align_main.cpp)
+  target_include_directories(coal-cpp-align PRIVATE cpp/src)
+  target_link_libraries(coal-cpp-align PRIVATE coal_core Threads::Threads)
+  list(APPEND COAL_TARGETS coal-cpp coal-cpp-align)
 endif()
 if(COAL_BUILD_TOOLS)
   add_executable(coal-cpp-dump cpp/tools/dump.cpp)
@@ -105,7 +110,7 @@ if(COAL_INSTALL)
   install(FILES ${COAL_HEADER_FILES} "${COAL_GEN_INCLUDE}/coal/version.hpp"
           DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/coal")
   if(COAL_BUILD_CLI)
-    install(TARGETS coal-cpp RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+    install(TARGETS coal-cpp coal-cpp-align RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
   endif()
   install(EXPORT coalTargets NAMESPACE coal:: FILE coalTargets.cmake DESTINATION "${COAL_CMAKE_DIR}")
   configure_package_config_file(cmake/coalConfig.cmake.in "${CMAKE_CURRENT_BINARY_DIR}/coalConfig.cmake"

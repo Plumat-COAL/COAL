@@ -301,6 +301,13 @@ jobs:
           if grep -iE "\.\.\. skipped" cpp_tests.txt | grep -viqE "live comparison needs Python|peak memory read with getrusage|POSIX"; then
             echo "::error::C++ tests were skipped, so the C++ engine was not fully exercised"; exit 1
           fi
+      - name: Alignment layer tests (coal-cpp-align required)
+        # Biopython, EMBOSS needle, DIAMOND, Clustal Omega and MAFFT are optional here (their live checks skip; the
+        # stored Biopython / needle optima in tests/fixtures/align are always checked); coal-cpp-align is not.
+        shell: bash
+        env:
+          COAL_REQUIRE_ALIGN: "1"
+        run: python -m unittest -v tests.test_align tests.test_msa
       # The release's Linux wheels are built inside the manylinux_2_28 container (GCC 14, -Werror): build there on
       # every change too, so a warning that only that compiler raises fails CI, not the release (v0.5.0rc1 did).
       - name: Build inside the manylinux_2_28 container, as the release does (Linux)

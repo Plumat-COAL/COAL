@@ -201,7 +201,7 @@ jobs:
           python -m unittest -v tests.test_differential tests.test_cpp_vs_python tests.test_cpp_cli \
             tests.test_cpp_readers tests.test_cpp_tables tests.test_cpp_pool \
             tests.test_stdin tests.test_robustness tests.test_cpp_error_precedence tests.test_batch \
-            2>&1 | tee san-tests.txt
+            tests.test_align tests.test_msa 2>&1 | tee san-tests.txt
           status=${PIPESTATUS[0]}
           if grep -qE "AddressSanitizer|LeakSanitizer|runtime error" san-tests.txt; then
             echo "::error::a sanitizer reported during the C++ tests (see san-tests.txt)"; exit 1

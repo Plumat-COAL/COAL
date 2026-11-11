@@ -104,7 +104,10 @@ target_link_libraries(myapp PRIVATE coal::core)
 
 **Headers:** `<coal/core.hpp>` (the algorithm), `<coal/tables.hpp>` (genetic codes), `<coal/seqio.hpp>` (the FASTA /
 CLUSTAL readers coal-cpp uses, if you read files), `<coal/kaks.hpp>` (the Ka/Ks engine: YN00, NG86, LWL85, LPB93,
-MYN and the M variants; [kaks.md](kaks.md#c-api)) and `<coal/version.hpp>` (`COAL_VERSION_STRING`). The run report
+MYN and the M variants; [kaks.md](kaks.md#c-api)), `<coal/align.hpp>` (pairwise protein alignment and DIAMOND-hit
+expansion for the step before: [alignment.md](alignment.md); the `coal-cpp-align` tool is built and installed with
+coal-cpp) and `<coal/version.hpp>` (`COAL_VERSION_STRING`). `coal::core` links the thread library
+(`Threads::Threads`, found by the CMake package) because `coal::align_pairs` runs on threads. The run report
 (`report.hpp`, `json.hpp`) is compiled into the library for coal-cpp but is not a public header: its output is tied
 to coal-cpp's command line and messages. The API follows the engine and is not frozen before 1.0.
 
