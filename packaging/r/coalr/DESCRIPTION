@@ -3,8 +3,17 @@ Type: Package
 Title: Fast Codon Alignment and dN/dS (Ka/Ks) with the 'COAL' C++ Engine
 Version: 0.5.0
 Authors@R: c(
-    person("Chloe", "Newton", email = "chloenewton2323@gmail.com", role = c("aut", "cre")),
-    person("Keanu", "Murati", role = "aut"))
+    person("Chloe", "Newton", email = "chloenewton2323@gmail.com", role = c("aut", "cre", "cph")),
+    person("Keanu", "Murati", role = c("aut", "cph")),
+    person("Da-Peng", "Wang", role = "ctb",
+           comment = "KaKs_Calculator 2.0, from which src/coal/kaks.cpp is derived"),
+    person("Yu-Bin", "Zhang", role = "ctb", comment = "KaKs_Calculator 2.0"),
+    person("Zhang", "Zhang", role = "ctb", comment = "KaKs_Calculator 1.0"),
+    person("Kristian K", "Ullrich", role = "ctb", comment = "kakscalculator2 2.0.1"),
+    person("Beijing Institute of Genomics of CAS", role = "cph", comment = "KaKs_Calculator 2.0"),
+    person("Ziheng", "Yang", role = c("ctb", "cph"),
+           comment = "PAML yn00.c, from which src/coal/kaks.cpp is derived"))
+Copyright: See the file inst/COPYRIGHTS
 Description: In-process R bindings to the C++ core of 'COAL', a fast replacement for 'PAL2NAL'.
     Translates coding sequences, aligns the proteins (global Needleman-Wunsch with 'BLOSUM62'),
     threads the codons onto the protein alignment and estimates dN, dS and dN/dS (Ka/Ks) with the

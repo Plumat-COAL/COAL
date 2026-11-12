@@ -44,6 +44,41 @@ class TestLicence(unittest.TestCase):
         self.assertIn("0.5.0 and earlier were\nreleased under the MIT License and stay MIT", _read("README.md"))
         self.assertIn("install(FILES LICENSE NOTICE", _read("CMakeLists.txt"))
 
+    def test_kaks_engine_attribution(self):
+        """The Ka/Ks engine is derived from KaKs_Calculator 2.0 and PAML yn00 (GPL v3), and says so everywhere."""
+        notices = ("Copyright (C) 2009, Beijing Institute of Genomics of CAS", "Da-Peng Wang", "Yu-Bin Zhang",
+                   "Zhang Zhang", "Kristian K Ullrich", "Copyright, 1998, Ziheng Yang", "yn00.c",
+                   "GNU General Public License, version 3")
+        for rel in (("cpp", "src", "kaks.cpp"), ("NOTICE",), ("packaging", "r", "coalr", "inst", "COPYRIGHTS"),
+                    ("packaging", "r", "coalr", "src", "coal", "kaks.cpp")):
+            text = _read(*rel)
+            for must in notices:
+                self.assertIn(must, text, rel)
+        head = _read("cpp", "src", "kaks.cpp").split("#include")[0]
+        self.assertIn("SPDX-License-Identifier: GPL-3.0-only", head)
+        self.assertIn("is derived from", head)
+        self.assertIn("Modified for COAL by Chloe Newton and Keanu Murati, 2026. What was changed:", head)
+        for rel in (("cpp", "src", "kaks.hpp"), ("cpp", "src", "kaks_cli.cpp")):
+            flat = " ".join(_read(*rel).replace("//", " ").split())
+            self.assertTrue("Beijing Institute of Genomics of CAS" in flat, rel)
+        desc = _read("packaging", "r", "coalr", "DESCRIPTION")
+        for must in ('person("Ziheng", "Yang", role = c("ctb", "cph")', "Beijing Institute of Genomics of CAS",
+                     "Copyright: See the file inst/COPYRIGHTS"):
+            self.assertIn(must, desc)
+        # the claim the independent review of 2026-11-12 found to be false is gone, everywhere
+        for rel in (("docs", "kaks.md"), ("README.md",), ("CHANGELOG.md",), ("docs", "r.md"), ("docs", "pipeline.md"),
+                    ("packaging", "r", "coalr", "README.md"), ("cpp", "src", "kaks.cpp"), ("cpp", "src", "kaks.hpp"),
+                    ("cpp", "src", "kaks_cli.cpp")):
+            text = " ".join(_read(*rel).split())
+            for false_claim in ("independent implementation of the published methods",
+                                "none of their code is copied", "Independent implementation",
+                                "a drop-in for `KaKs_Calculator", "is a drop-in for KaKs_Calculator",
+                                "KaKs_Calculator drop-in"):
+                self.assertNotIn(false_claim, text, rel)
+        kaks_doc = " ".join(_read("docs", "kaks.md").split())
+        self.assertIn("The engine is not an independent implementation", kaks_doc)
+        self.assertIn("derived from the source code of KaKs_Calculator 2.0", kaks_doc)
+
     def test_nothing_still_calls_coal_mit(self):
         """'MIT' is left only where it is true: the earlier releases, and third-party test data."""
         allowed = re.compile(r"0\.5\.0|earlier|MIT at the time|HyPhy|hyphy|license_family: MIT|license: MIT")

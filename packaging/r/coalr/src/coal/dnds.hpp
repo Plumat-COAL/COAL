@@ -1,4 +1,6 @@
 // Vendored from COAL cpp/src/dnds.hpp by scripts/sync_r_sources.py. Do not edit here: edit cpp/src and sync.
+// Licence: GPL-3.0-only, as COAL (https://github.com/Plumat-COAL/COAL); copyright and third-party notices
+// (KaKs_Calculator 2.0 and PAML for kaks.cpp / kaks.hpp): inst/COPYRIGHTS of this package.
 // The one-step dN/dS core: coding sequences (CDS) -> translation -> protein alignment -> codon alignment ->
 // Ka/Ks, for a pair of genes or for a group (cluster) of genes. It ties together tables.hpp (genetic codes),
 // align.hpp (pairwise alignment, DIAMOND-hit expansion), core.hpp (codon threading) and kaks.hpp (Ka/Ks).

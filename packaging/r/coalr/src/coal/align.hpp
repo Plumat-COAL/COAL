@@ -1,4 +1,6 @@
 // Vendored from COAL cpp/src/align.hpp by scripts/sync_r_sources.py. Do not edit here: edit cpp/src and sync.
+// Licence: GPL-3.0-only, as COAL (https://github.com/Plumat-COAL/COAL); copyright and third-party notices
+// (KaKs_Calculator 2.0 and PAML for kaks.cpp / kaks.hpp): inst/COPYRIGHTS of this package.
 // Pairwise protein alignment for the codon step: global Needleman-Wunsch / Gotoh with affine gaps, and the
 // reconstruction of a full-length pairwise alignment from a local (DIAMOND) hit. docs/alignment.md has the
 // defaults, the validation against Biopython / EMBOSS needle and the benchmark.

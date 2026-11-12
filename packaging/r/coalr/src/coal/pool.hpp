@@ -1,4 +1,6 @@
 // Vendored from COAL cpp/src/pool.hpp by scripts/sync_r_sources.py. Do not edit here: edit cpp/src and sync.
+// Licence: GPL-3.0-only, as COAL (https://github.com/Plumat-COAL/COAL); copyright and third-party notices
+// (KaKs_Calculator 2.0 and PAML for kaks.cpp / kaks.hpp): inst/COPYRIGHTS of this package.
 // Parallel infrastructure: an ordered, streaming thread pool over sequences.
 //
 //   run_ordered<Item>(read_batch, work, emit, jobs)

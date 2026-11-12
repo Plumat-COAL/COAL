@@ -1,10 +1,14 @@
 # Ka/Ks (dN/dS): `coal kaks` and `coal dnds`
 
-COAL estimates Ka (dN) and Ks (dS) for pairs of aligned coding sequences with its own C++ engine
-(`cpp/src/kaks.cpp`). No external program runs. It has two commands:
+COAL estimates Ka (dN) and Ks (dS) for pairs of aligned coding sequences in process, with a C++ engine
+(`cpp/src/kaks.cpp`) derived from KaKs_Calculator 2.0 and PAML's yn00 (see "Where the code comes from" below). No
+external program runs. It has two commands:
 
-- **`coal kaks`** replaces `KaKs_Calculator -i IN.axt -o OUT.kaks -m YN`. It takes KaKs_Calculator's flags and
-  writes its tab-separated format: the same 22 columns, the same NA rules and 6 significant digits.
+- **`coal kaks`** does the job of `KaKs_Calculator -i IN.axt -o OUT.kaks -m METHOD` for seven of KaKs_Calculator's
+  methods (NG, LWL, MLWL, LPB, MLPB, YN, MYN). It takes KaKs_Calculator's `-i`, `-o`, `-m` and `-c` and writes its
+  tab-separated format: the same 22 columns, the same NA rules and 6 significant digits. It is not a drop-in for
+  every KaKs_Calculator command line: the other methods are refused, and without `-m` it computes YN, where
+  KaKs_Calculator computes MA (model averaging).
 - **`coal dnds`** writes a tidy TSV from the same engine, with one row per pair and method, plus standard errors,
   a status and a note.
 
@@ -36,9 +40,14 @@ natively". These are `GY` (maximum likelihood), `MS` and `MA` (model selection a
 variants `GNG GLWL GLPB GMLWL GMLPB GYN GMYN`, and `ALL`. KaKs_Calculator's default method is MA. COAL's default is
 YN, so `coal kaks` without `-m` gives YN rows.
 
-The engine is an independent implementation of the published methods. KaKs_Calculator 2.0 (GPL-3) and PAML's
-yn00 served only as references: their source was read to pin down conventions, and none of their code is copied.
-Neither tool is included in or redistributed with COAL.
+**Where the code comes from.** The engine is not an independent implementation: `cpp/src/kaks.cpp` is derived
+from the source code of KaKs_Calculator 2.0 (Copyright (C) 2009 Beijing Institute of Genomics of CAS; Da-Peng Wang,
+Yu-Bin Zhang, Zhang Zhang, Kristian K Ullrich) and of PAML's `yn00.c` (Copyright 1998 Ziheng Yang), both under the
+GNU GPL version 3. Its functions follow theirs in structure, constants and order of operations, which is why the
+numbers are the same; they were rewritten without classes and global state, for any of COAL's genetic codes and
+for threads, and changed where listed under "Differences from KaKs_Calculator". The header of `kaks.cpp` and the
+`NOTICE` file give the details. This is the reason COAL is distributed under GPL-3.0-only from this release on.
+Neither program is included as such, and `coal kaks` / `coal dnds` do not run them.
 
 ## Policy
 

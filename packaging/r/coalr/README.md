@@ -9,7 +9,7 @@ remotes::install_github("Plumat-COAL/COAL", subdir = "packaging/r/coalr")
 library(coalr)
 res <- coal_dnds_pairs("query_cds.fasta", "subject_cds.fasta", pairs = ortholog_table, threads = 4)
 cl  <- coal_dnds_clusters(cds, clusters)             # every pair of each cluster + a per-cluster summary
-coal_kaks(codon_row_1, codon_row_2, method = "YN")   # KaKs_Calculator's numbers, without KaKs_Calculator
+coal_kaks(codon_row_1, codon_row_2, method = "YN")   # KaKs_Calculator's numbers, without running it
 coal_codon_align(protein_rows, cds)                  # PAL2NAL's job
 ```
 

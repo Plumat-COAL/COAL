@@ -23,7 +23,9 @@ SRC = ROOT / "cpp" / "src"
 DST = ROOT / "packaging" / "r" / "coalr" / "src" / "coal"
 FILES = ["tables.hpp", "tables.cpp", "core.hpp", "core.cpp", "kaks.hpp", "kaks.cpp", "align.hpp", "align.cpp",
          "dnds.hpp", "dnds.cpp", "pool.hpp"]
-HEADER = "// Vendored from COAL cpp/src/{name} by scripts/sync_r_sources.py. Do not edit here: edit cpp/src and sync.\n"
+HEADER = ("// Vendored from COAL cpp/src/{name} by scripts/sync_r_sources.py. Do not edit here: edit cpp/src and sync.\n"
+          "// Licence: GPL-3.0-only, as COAL (https://github.com/Plumat-COAL/COAL); copyright and third-party notices\n"
+          "// (KaKs_Calculator 2.0 and PAML for kaks.cpp / kaks.hpp): inst/COPYRIGHTS of this package.\n")
 
 
 def coal_version() -> str:
@@ -41,7 +43,8 @@ def wanted() -> dict[str, bytes]:
         "// Written by scripts/sync_r_sources.py: the COAL version the vendored sources come from.\n"
         "#pragma once\n"
         f'#define COAL_VERSION_STRING "{version}"\n').encode()
-    lines = [f"COAL {version}", "sha256 of the vendored files (scripts/sync_r_sources.py --check verifies them)"]
+    lines = [f"COAL {version}", "Licence: GPL-3.0-only (see inst/COPYRIGHTS for the third-party notices)",
+             "sha256 of the vendored files (scripts/sync_r_sources.py --check verifies them)"]
     lines += [f"{hashlib.sha256(out[n]).hexdigest()}  {n}" for n in sorted(out)]
     out["VENDORED.txt"] = ("\n".join(lines) + "\n").encode()
     return out

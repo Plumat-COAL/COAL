@@ -1,7 +1,43 @@
 // Vendored from COAL cpp/src/kaks.cpp by scripts/sync_r_sources.py. Do not edit here: edit cpp/src and sync.
-// Ka/Ks engine (kaks.hpp). Independent implementation of the published methods, written to reproduce the
-// numbers of KaKs_Calculator 2.0 (and, for YN00, PAML's yn00) including their documented conventions; see
-// docs/kaks.md for every place where the reference tools differ from each other or from this engine.
+// Licence: GPL-3.0-only, as COAL (https://github.com/Plumat-COAL/COAL); copyright and third-party notices
+// (KaKs_Calculator 2.0 and PAML for kaks.cpp / kaks.hpp): inst/COPYRIGHTS of this package.
+// SPDX-License-Identifier: GPL-3.0-only
+//
+// Ka/Ks engine (kaks.hpp): NG86, LWL85, MLWL85, LPB93, MLPB93, YN00 and MYN.
+//
+// This file is derived from two programs that are distributed under the GNU General Public License, version 3,
+// and it is distributed under the same licence (COAL as a whole is GPL-3.0-only; see LICENSE and NOTICE):
+//
+//   KaKs_Calculator 2.0 (the kakscalculator2 2.0.1 sources, https://github.com/kullrich/kakscalculator2;
+//   original project https://sourceforge.net/projects/kakscalculator2/): base.cpp (Fisher's exact test, the
+//   derived output values), NG86.cpp, LWL85.cpp, LPB93.cpp, YN00.cpp and MYN.cpp.
+//     Copyright (C) 2009, Beijing Institute of Genomics of CAS. All rights reserved.
+//     Version 2.0: Da-Peng Wang, Yu-Bin Zhang. Version 1.0: Zhang Zhang.
+//     Modified versions 2.0.1 and 2.0.2: Kristian K Ullrich.
+//
+//   PAML 4.10 (https://github.com/abacus-gene/paml), yn00.c: "Pairwise estimation of dS and dN by the method of
+//   Yang & Nielsen (2000 Mol. Biol. Evol. 17:32-43)". Copyright, 1998, Ziheng Yang. KaKs_Calculator's YN00.cpp is
+//   itself adapted from yn00.c; the functions here follow yn00.c's GetKappa, GetFreqs, CountSites, GetPMatCodon,
+//   CountDiffs, DistanceF84 and DistanceYN00 (and eigenQREV of PAML's tools.c) in structure, constants and order
+//   of operations, so that the numbers are the same.
+//
+// Modified for COAL by Chloe Newton and Keanu Murati, 2026. What was changed:
+//   - rewritten as free functions on codon indices 0..63 (NCBI order T C A G) for any genetic code of COAL's
+//     tables; no classes, no global or static state (the references keep the pair, kappa, t and omega in
+//     members and globals), so pairs can be computed on several threads;
+//   - one gap / ambiguity / stop-codon policy applied to the pair before every method (prepare());
+//   - an undefined multiple-hit correction is reported as NA with the status `saturated` where the references
+//     substitute a capped value (JC69 with P = 0.75(n-1)/n, t = 99, or K = 0);
+//   - Fisher's exact test: log-factorials by log_gamma() below (the references use an approximation; the C
+//     library's lgamma is not thread-safe), tables as probable as the observed one within 1e-7 count, and no
+//     test when a cell would be negative;
+//   - YN00 and MYN: standard errors are returned; with sites of one kind only (S = 0 or N = 0) the estimate
+//     that has sites is still made; base frequencies at the sites are averaged over the sequences that have
+//     such sites; PAML's variant of the edge cases is an option (Options::yn_flavour, yn_weighting);
+//   - MYN: a class of sites with weight 0 is left out of the mean kappa (the reference adds 0 x NaN), and TN93
+//     with no T-C pair or no A-G pair is the F84 distance (the reference divides by zero);
+//   - the symmetric eigen solver is the EISPACK tred2/tql2 algorithm on transposed storage.
+// docs/kaks.md lists every place where this engine gives something else than the references, and why.
 //
 // References:
 //   NG86  Nei M, Gojobori T (1986) Mol Biol Evol 3:418-426

@@ -1,11 +1,19 @@
 // Vendored from COAL cpp/src/kaks.hpp by scripts/sync_r_sources.py. Do not edit here: edit cpp/src and sync.
-// Ka/Ks (dN/dS) for pairs of aligned coding sequences: NG86, LWL85, MLWL85, LPB93, MLPB93, YN00 and MYN,
-// implemented natively (no external binaries), so that results match KaKs_Calculator 2.0 (and PAML's yn00 for
-// YN00, with Options::yn_flavour = Flavour::paml). Methods, the gap / stop / ambiguity policy, the validation and
-// every deliberate difference from the reference tools: docs/kaks.md.
+// Licence: GPL-3.0-only, as COAL (https://github.com/Plumat-COAL/COAL); copyright and third-party notices
+// (KaKs_Calculator 2.0 and PAML for kaks.cpp / kaks.hpp): inst/COPYRIGHTS of this package.
+// SPDX-License-Identifier: GPL-3.0-only
 //
-// Thread-safe: no global mutable state; compute() may be called from many threads at once (coal-cpp kaks/dnds does,
-// from its thread pool). Never throws for bad data: problems are reported in Result::status / Result::note, so one
+// Ka/Ks (dN/dS) for pairs of aligned coding sequences: NG86, LWL85, MLWL85, LPB93, MLPB93, YN00 and MYN, in
+// process (no external binaries). The implementation (kaks.cpp) is derived from KaKs_Calculator 2.0
+// (Copyright (C) 2009, Beijing Institute of Genomics of CAS; Da-Peng Wang, Yu-Bin Zhang, Zhang Zhang,
+// Kristian K Ullrich; GPL v3) and from PAML's yn00.c (Copyright, 1998, Ziheng Yang; GPL v3); kaks.cpp's header
+// and the NOTICE file say what was taken and what was changed. Results match KaKs_Calculator 2.0 (and PAML's
+// yn00 for YN00, with Options::yn_flavour = Flavour::paml). Methods, the gap / stop / ambiguity policy, the
+// validation and every deliberate difference from the reference tools: docs/kaks.md.
+//
+// Thread-safe: no global or static mutable state, and no call into a C library function that has one (the
+// log-gamma of Fisher's test is computed in kaks.cpp, not with lgamma(), which writes `signgam`); compute() may
+// be called from many threads at once (coal-cpp kaks/dnds does, from its thread pool). Never throws for bad data: problems are reported in Result::status / Result::note, so one
 // bad pair never stops a run. (parse_method() is the only function that reports through its return value.)
 //
 //   #include <coal/kaks.hpp>

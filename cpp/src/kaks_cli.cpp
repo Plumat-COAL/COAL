@@ -1,4 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//
 // `coal kaks` (KaKs_Calculator-compatible) and `coal dnds` (tidy TSV): the command lines around kaks.hpp.
+// The header line and the row format of `coal kaks` (compat_row: the columns, the "below 1e-6 is NA" rule, the
+// composite fields) reproduce KaKs_Calculator 2.0's KaKs.cpp and base.cpp (Copyright (C) 2009, Beijing Institute
+// of Genomics of CAS; Da-Peng Wang, Yu-Bin Zhang, Zhang Zhang, Kristian K Ullrich; GPL v3). See kaks.cpp, NOTICE.
 // Input: AXT (KaKs_Calculator's format: a name line, the two aligned sequences, a blank line) or aligned FASTA
 // (every pair of the alignment, or consecutive pairs). Pairs are computed on a thread pool (pool.hpp) and written
 // in input order. A malformed pair never stops the run: it gets status "error" (dnds) or is left out with a
@@ -39,8 +44,9 @@ const char* KAKS_HELP =
     "usage: coal kaks -i IN -o OUT [-m METHOD ...] [-c TABLE] [-j N] [--pairs all|consecutive]\n"
     "                 [--digits N] [--yn-flavour kaks|paml] [--yn-weighting 0|1]\n"
     "\n"
-    "Ka/Ks for pairs of aligned coding sequences, written in KaKs_Calculator 2.0's tab-separated format\n"
-    "(a drop-in for `KaKs_Calculator -i IN -o OUT -m METHOD`). Native engine; see docs/kaks.md.\n"
+    "Ka/Ks for pairs of aligned coding sequences, written in KaKs_Calculator 2.0's tab-separated format.\n"
+    "Takes KaKs_Calculator's -i -o -m -c for the seven methods below (the default is YN; KaKs_Calculator's is\n"
+    "MA). The engine is derived from KaKs_Calculator 2.0 and PAML yn00 (GPL v3); see docs/kaks.md.\n"
     "\n"
     "  -i IN          AXT (name line, two aligned sequences, blank line) or aligned FASTA\n"
     "  -o OUT         output file ('-' or none: standard output)\n"

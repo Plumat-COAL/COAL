@@ -1,0 +1,21 @@
+coalr: R bindings to the C++ core of COAL (https://github.com/Plumat-COAL/COAL)
+Copyright (C) 2026 Chloe Newton and Keanu Murati
+Licence: GNU General Public License, version 3 only (DESCRIPTION: `License: GPL-3`).
+
+src/coal/ is a copy of COAL's cpp/src (scripts/sync_r_sources.py in the COAL repository), under the same licence.
+
+src/coal/kaks.cpp and src/coal/kaks.hpp (the Ka/Ks engine) are derived from:
+
+- KaKs_Calculator 2.0 (kakscalculator2 2.0.1, https://github.com/kullrich/kakscalculator2; original project
+  https://sourceforge.net/projects/kakscalculator2/): base.cpp, KaKs.cpp, NG86.cpp, LWL85.cpp, LPB93.cpp,
+  YN00.cpp, MYN.cpp.
+  Copyright (C) 2009, Beijing Institute of Genomics of CAS. All rights reserved.
+  Authors: Da-Peng Wang and Yu-Bin Zhang (version 2.0), Zhang Zhang (version 1.0), Kristian K Ullrich
+  (modified versions 2.0.1, 2.0.2).
+  Licence: GNU General Public License, version 3.
+
+- PAML 4.10 (https://github.com/abacus-gene/paml): yn00.c and the routines of tools.c it uses.
+  Copyright, 1998, Ziheng Yang.
+  Licence: GNU General Public License, version 3.
+
+The header of src/coal/kaks.cpp says what was changed for COAL (Chloe Newton and Keanu Murati, 2026).

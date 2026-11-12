@@ -10,6 +10,32 @@ implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 
 COAL 0.5.0 and earlier releases were published under the MIT License and remain available under it.
 
+Third-party code in COAL
+-----------------------
+
+The Ka/Ks (dN/dS) engine, cpp/src/kaks.cpp and kaks.hpp (and the output format in cpp/src/kaks_cli.cpp; the
+copies of kaks.cpp and kaks.hpp in packaging/r/coalr/src/coal/), is derived from two programs distributed under
+the GNU General Public License, version 3. It is a modified version of their code, not an independent
+implementation; the header of cpp/src/kaks.cpp says what was changed (Chloe Newton and Keanu Murati, 2026).
+
+- KaKs_Calculator 2.0 (kakscalculator2 2.0.1, https://github.com/kullrich/kakscalculator2; original project
+  https://sourceforge.net/projects/kakscalculator2/): base.cpp, KaKs.cpp, NG86.cpp, LWL85.cpp, LPB93.cpp,
+  YN00.cpp, MYN.cpp.
+  Copyright (C) 2009, Beijing Institute of Genomics of CAS. All rights reserved.
+  Authors: Da-Peng Wang and Yu-Bin Zhang (version 2.0), Zhang Zhang (version 1.0), Kristian K Ullrich
+  (modified versions 2.0.1, 2.0.2).
+  Licence: GNU General Public License, version 3 (the LICENSE file of that project; the same text as COAL's).
+  Wang D, Zhang Y, Zhang Z, Zhu J, Yu J (2010) Genomics Proteomics Bioinformatics 8:77-80.
+
+- PAML 4.10 (https://github.com/abacus-gene/paml): yn00.c, "Pairwise estimation of dS and dN by the method of
+  Yang & Nielsen (2000 Mol. Biol. Evol. 17:32-43)", and the routines of tools.c it uses.
+  Copyright, 1998, Ziheng Yang.
+  Licence: GNU General Public License, version 3 (PAML's LICENSE and README).
+  Yang Z (2007) Mol Biol Evol 24:1586-1591.
+
+Neither program is included as such; `coal kaks` and `coal dnds` do not run them. The reference outputs under
+tests/kaks/golden/ were written by KaKs_Calculator 2.0.1 and PAML 4.10.10 yn00.
+
 Third-party material in this repository (not part of the COAL programs)
 ------------------------------------------------------------------------
 

@@ -42,14 +42,23 @@
   `coal pipeline install diamond` installs DIAMOND into COAL's cache, like Clustal Omega. On orthologr's
   1,000-gene example (999 pairs): 2.5 s on 2 cores, every value equal to the steps run one by one and to
   KaKs_Calculator 2.0 on the same codon alignments; 19,980 pairs in 20.5 s with 41 MB.
-- **Ka/Ks (dN/dS) engine: `coal kaks` and `coal dnds`.** Native C++ (no external programs): YN00 (default), NG86,
-  LWL85, MLWL, LPB93, MLPB and MYN, for AXT or aligned FASTA (every pair of an MSA, or consecutive pairs), any of
-  COAL's genetic codes, on all threads. `coal kaks -i in.axt -o out.kaks -m YN` is a drop-in for KaKs_Calculator
-  2.0 (its flags, 22 columns and NA rules); `coal dnds` writes a tidy TSV with standard errors and a per-pair
+- **Ka/Ks (dN/dS) engine: `coal kaks` and `coal dnds`.** In-process C++ (no external program runs), **derived
+  from the source code of KaKs_Calculator 2.0 and of PAML's yn00** (both GPL version 3; attribution in
+  `cpp/src/kaks.cpp`, `NOTICE` and docs/kaks.md; this is why COAL is GPL-3.0-only from this release). Methods:
+  YN00 (default), NG86, LWL85, MLWL, LPB93, MLPB and MYN, for AXT or aligned FASTA (every pair of an MSA, or
+  consecutive pairs), any of COAL's genetic codes, on all threads. `coal kaks -i in.axt -o out.kaks -m YN` takes
+  KaKs_Calculator 2.0's `-i -o -m -c` and writes its format (22 columns, NA rules) for these seven methods; it is
+  not a drop-in for every KaKs_Calculator call: GY94 ML, MS/MA and the gamma variants are refused, and the default
+  method is YN where KaKs_Calculator's is MA. `coal dnds` writes a tidy TSV with standard errors and a per-pair
   status (ok, warning for internal stop codons, saturated, no_data, error), so one bad pair never stops a run.
-  Validated on 999 orthologr pairs and 600 simulated pairs: KaKs_Calculator 2.0 to 1e-13 (YN, MYN) or exactly
-  (NG, LWL family), PAML yn00 to 1e-12, every other difference explained (docs/kaks.md). C++ API
-  `<coal/kaks.hpp>` in `coal::core`. GY94 ML, MS/MA and the gamma variants are not implemented and are refused.
+  NG is KaKs_Calculator's NG, whose site counting is not the textbook Nei-Gojobori one (docs/kaks.md).
+  Validation on 999 orthologr pairs and 600 simulated pairs (docs/kaks.md): against a KaKs_Calculator 2.0.1 built
+  to print 15 digits, Ka and Ks differ by at most 1.4e-13 (YN, MYN) or not at all (NG, LWL family) wherever both
+  give a number; against PAML 4.10.10 yn00 built to print 12 digits, run one pair at a time on the columns
+  without gaps, ambiguous bases or stop codons and compared with `coal dnds --yn-flavour paml`, dN and dS differ
+  by at most 5e-12, which is yn00's printing precision. Every row that differs from the stock KaKs_Calculator's
+  text is classified (docs/kaks.md lists the deliberate differences). C++ API `<coal/kaks.hpp>` in `coal::core`;
+  the library has no global mutable state and can be called from many threads.
 - **Protein alignment for the codon step (docs/alignment.md).** `<coal/align.hpp>` and the `coal-cpp-align` tool: a
   global Needleman-Wunsch/Gotoh aligner (BLOSUM62/45/80, PAM250, affine gaps; EMBOSS needle defaults, a pwalign
   preset), full length (overhangs gapped, never cut off), AVX2 row loops picked at run time, multithreaded; optimal
