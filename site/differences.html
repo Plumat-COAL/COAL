@@ -59,9 +59,11 @@
 
 <section class="sec" id="pal2nal" aria-labelledby="pal2nal-title">
   <h2 id="pal2nal-title">Compared with PAL2NAL</h2>
-  <p>PAL2NAL is by Suyama, Torrents and Bork (2006). We wrote COAL independently, in Python and C++, and it
-    contains none of PAL2NAL's code: we ran PAL2NAL v14 as a separate program, only to compare outputs.
-    PAL2NAL is GPL-2.0. COAL is GPL-3.0-only from the release after 0.5.0; COAL 0.5.0 and earlier are MIT.</p>
+  <p>PAL2NAL is by Suyama, Torrents and Bork (2006). We wrote COAL's codon aligner independently, in Python and
+    C++, and it contains none of PAL2NAL's code: we ran PAL2NAL v14 as a separate program, only to compare outputs.
+    PAL2NAL is GPL-2.0. COAL is GPL-3.0-only from the release after 0.5.0; COAL 0.5.0 and earlier are MIT.
+    The reason for the change is the Ka/Ks (dN/dS) engine that comes with that release: it is not an independent
+    implementation but derived from the code of KaKs_Calculator 2.0 and PAML's yn00, which are GPL version 3.</p>
   <p>COAL's output is identical to PAL2NAL v14's except for a short list of documented, deliberate differences.
     These are newer NCBI genetic-code tables (codes 3, 10, 11 and 13); <code>-nogap</code> removing the chosen
     code's stop codons; the chosen code's other start codons (such as TTG and CTG) accepted for the first Met;

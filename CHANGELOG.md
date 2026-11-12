@@ -13,6 +13,43 @@
   links its library (the C++ `coal::core`, `import coal` in Python) and is distributed must be under a
   GPL-3-compatible licence; programs that only start `coal` / `coal-cpp` as a separate process are not affected.
   The third-party notices already in the repository (the website's font, the real-data test sets) are unchanged.
+
+Found by the independent review of 2026-11-12 of the Ka/Ks engine, the pipeline and the R package (all in code
+not yet released):
+
+- **Attribution corrected.** The documentation said the Ka/Ks engine was an independent implementation with no
+  copied code. It is derived from KaKs_Calculator 2.0 and PAML's yn00 (GPL v3). The sources, `NOTICE`, the R
+  package and docs/kaks.md now say so, with the upstream copyright notices and the list of changes; COAL's licence
+  changed accordingly (first entry). `coal kaks` is described as KaKs_Calculator's format for seven of its methods
+  with the default YN, not as a drop-in; `-m NG` is documented as KaKs_Calculator's site convention, which is not
+  the textbook NG86 one.
+- **Ka/Ks: YN and MYN keep the estimate that has sites.** With no nonsynonymous sites (`GCT` against `GCA`) or no
+  synonymous sites (Met/Trp only) both Ka and Ks were NA; the one that has sites is now estimated, with the
+  numbers KaKs_Calculator's YN and PAML give (docs/kaks.md, difference 8).
+- **Ka/Ks: MYN gives the defined value where KaKs_Calculator prints `nan`** (a kappa class of weight 0 added as
+  0 × NaN; TN93 dividing 0 by 0 when the sites have no T-C or no A-G pair; site base frequencies of a sequence
+  without such sites). An identical short pair was reported as "Ka saturated"; it is Ka = 0 now (differences 9
+  and 10). Checked on 4,000 random short pairs against the reference and against the reference with those two
+  lines corrected.
+- **Ka/Ks: no data race.** Fisher's test took log-factorials from `lgamma()`, which writes the global `signgam`;
+  the engine has its own log-gamma now (ThreadSanitizer: one race before, none after; results unchanged).
+- **`coal kaks` / `coal dnds` (and `coal translate`, `coal codon-dnds`) refuse an output file that is the input**
+  (exit 2) instead of emptying it, and **an AXT record with one sequence line is that record's error**, no longer
+  cut in half and compared with itself.
+- **Installers verify before they run anything.** Downloads are kept only if their SHA-256 is the pinned one:
+  micromamba is one fixed release (2.10.0-0) with pinned hashes, not `latest`; the DIAMOND 2.2.8 archives are
+  pinned. The official Clustal Omega binary of clustal.org (plain HTTP, no published checksum, host unreachable
+  when the hashes were collected) has no pinned hash and is refused unless `--sha256 HEX` (`sha256=`) or
+  `--allow-unverified` (`allow_unverified=True`) is given; on Windows that means `--install-tools` no longer
+  installs Clustal Omega by itself (docs/alignment.md).
+- **`coal pipeline`: one run per output folder** (`<out_dir>.coal-lock`; a second run is refused), **an earlier
+  run's files are removed when a run starts** (no `dnds.kaks` or `codon_alignments.fasta` of another run next to
+  a new `dnds.tsv`), **an interrupt ends the engine and is reported** (SIGINT/SIGTERM to the Python process kill
+  `coal-cpp codon-dnds` and the aligners; `report.json` gets `"status": "interrupted"`, a new report field, and
+  the exit code is 130 or 128 + signal), **a protein file is explained before DIAMOND runs**, and **a non-ASCII
+  sequence ID is that gene's failure** (`id_not_ascii`), not the end of the run (docs/pipeline.md).
+- **coalr: a path-like string that names no file is the error "file not found"**, not a sequence (docs/r.md).
+
 - **R package `coalr` (packaging/r/coalr, docs/r.md).** COAL's C++ core compiled into an R package with Rcpp:
   `coal_dnds_pairs()` (CDS of ortholog pairs to dN, dS, dN/dS: the columns of `dnds.tsv`), `coal_dnds_clusters()`
   (every pair of each cluster and the per-cluster summary of `cluster_summary.tsv`; protein alignments from given
@@ -39,7 +76,7 @@
   cluster never stops a run (exit 2 when something failed). No process or temporary file per pair: the new native
   steps `coal-cpp translate` and `coal-cpp codon-dnds` (C++ API `<coal/dnds.hpp>`) do translation, pair alignment,
   codon threading and Ka/Ks in one threaded process fed through a pipe; output order does not depend on `-j`.
-  `coal pipeline install diamond` installs DIAMOND into COAL's cache, like Clustal Omega. On orthologr's
+  `coal pipeline install diamond` installs DIAMOND into COAL's cache, like Clustal Omega (pinned by SHA-256). On orthologr's
   1,000-gene example (999 pairs): 2.5 s on 2 cores, every value equal to the steps run one by one and to
   KaKs_Calculator 2.0 on the same codon alignments; 19,980 pairs in 20.5 s with 41 MB.
 - **Ka/Ks (dN/dS) engine: `coal kaks` and `coal dnds`.** In-process C++ (no external program runs), **derived
@@ -65,7 +102,8 @@
   scores equal Biopython's and EMBOSS needle's. The expansion of DIAMOND `qseq_gapped`/`sseq_gapped` hits to
   full-length alignments without realigning. Python: `coal.align` (the same, with a pure-Python fallback) and
   `coal.msa` (Clustal Omega / MAFFT for clusters: find, install into COAL's cache, run, batch; stop codons handled).
-  Clustal Omega (GPL) is installed on demand, not bundled. Benchmark on orthologr's 1,000-gene set:
+  Clustal Omega (GPL-2.0-or-later) is installed on demand, not bundled (bundling would be licence-compatible now
+  that COAL is GPL-3.0-only; it is not done). Benchmark on orthologr's 1,000-gene set:
   `benchmarks/results/align_layer_linux_20261111/`. `coal::core` now links `Threads::Threads`.
 - **A refused `--resume` (or a signal) no longer leaves `<out>.coal-lock` behind, both engines.** The lock was taken
   before the checkpoint set-up and only released by the block after it, so an error raised in between (the inputs
