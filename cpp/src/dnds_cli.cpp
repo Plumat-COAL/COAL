@@ -35,6 +35,7 @@
 #include "kaks_cli.hpp"
 #include "pool.hpp"
 #include "seqio.hpp"
+#include "sysio.hpp"
 #include "tables.hpp"
 
 namespace coal {
@@ -191,6 +192,10 @@ int translate_main_(const std::vector<std::string>& argv) {
     }
     if (ins.empty()) return usage(prog, "the CDS FASTA file is required");
     if (out == "-") out.clear();
+    for (const std::string& in : ins)  // an output opened onto an input would empty it before it is read
+        for (const std::string* o : {&out, &genes})
+            if (!o->empty() && same_file(in, *o))
+                return usage(prog, "the output file " + *o + " is the input file " + in + ": choose another name");
     const GeneticCode* code = get_code(table);
     try {
         std::ofstream fout, fgenes;
@@ -523,9 +528,13 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
         return usage(prog, e.what());
     }
     const std::vector<Method>& ms = c.opt.methods;
+    const bool from_stdin = c.in.empty() || c.in == "-";
+    if (!from_stdin)
+        for (const std::string* o : {&c.out, &c.codon_out, &c.kaks_out, &c.failures})
+            if (!o->empty() && same_file(c.in, *o))
+                return usage(prog, "the output file " + *o + " is the input file: choose another name");
     try {
         std::ifstream fin;
-        const bool from_stdin = c.in.empty() || c.in == "-";
         if (from_stdin) {
             binary_stdio(true, false);
         } else {

@@ -25,6 +25,7 @@
 #include "kaks.hpp"
 #include "pool.hpp"
 #include "seqio.hpp"
+#include "sysio.hpp"
 #include "tables.hpp"
 
 namespace coal {
@@ -128,7 +129,8 @@ std::string strip_ws(const std::string& s) {
 }
 
 // AXT as KaKs_Calculator reads it: a name line, then sequence lines up to a blank line; with exactly two lines
-// they are the two sequences, otherwise the concatenation is split in half.
+// they are the two sequences, with three or more the concatenation is split in half (wrapped sequences). One
+// line is an error for that record (KaKs_Calculator would split it in half as well).
 class AxtReader {
 public:
     explicit AxtReader(const std::string& path) : lr_(path) {}
@@ -163,6 +165,10 @@ public:
         if (rows.size() == 2) {
             p.own1 = rows[0];
             p.own2 = rows[1];
+        } else if (rows.size() == 1) {
+            // a name and one sequence line: the second sequence is missing (a truncated file, or a blank line
+            // lost between two records). Never cut the one line in half and compare the halves.
+            p.read_error = "record has one sequence line: the name line must be followed by two aligned sequences";
         } else {
             std::string all;
             for (auto& r : rows) all += r;
@@ -418,6 +424,10 @@ int parse(const std::vector<std::string>& a, Cli& c) {
     if (c.digits < 0) c.digits = c.compat ? 6 : 8;
     if (c.out == "-") c.out.clear();
     if (c.in == "-") return usage(c, "reading standard input ('-') is not supported: give a file");
+    // The output is opened (and emptied) before the input is read to the end, so writing onto the input would
+    // destroy it: refused, whatever the spelling of the two paths (./x, a symbolic or hard link).
+    if (!c.out.empty() && same_file(c.in, c.out))
+        return usage(c, "the output file " + c.out + " is the input file: choose another name for -o");
     return -1;
 }
 
@@ -459,6 +469,7 @@ int kaks_main(const std::string& sub, const std::vector<std::string>& argv) {
         }
         std::ofstream fout;
         if (!c.out.empty()) {
+            // (checked in parse() too, before anything is read; opening the output truncates it)
             fout.open(c.out, std::ios::binary);
             if (!fout) throw InputError("cannot write '" + c.out + "'", "file_error");
         }

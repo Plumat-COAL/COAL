@@ -424,6 +424,53 @@ class TestCli(KaKsBase):
                 self.assertGreater(float(f[3]), 0)
                 self.assertGreater(float(f[4]), 0)
 
+    def test_output_onto_the_input_is_refused(self):
+        """The output is opened before the input is read to its end: -o naming the input would empty it."""
+        text = "a&b\nATGAAACCC\nATGAAGCCC\n\n"
+        with tempfile.TemporaryDirectory() as td:
+            axt = Path(td) / "in.axt"
+            axt.write_text(text)
+            spellings = [axt, Path(td) / "." / "in.axt"]
+            if os.name != "nt":
+                os.symlink(axt, Path(td) / "link.axt")
+                os.link(axt, Path(td) / "hard.axt")
+                spellings += [Path(td) / "link.axt", Path(td) / "hard.axt"]
+            for out in spellings:
+                for cmd in (["kaks", "-i", axt, "-o", out], ["dnds", axt, "-o", out], ["dnds", out, "-o", axt]):
+                    r = self.run_cpp(*cmd, check=False)
+                    self.assertEqual(r.returncode, 2, (cmd, r.stderr))
+                    self.assertIn("is the input file", r.stderr)
+                    self.assertEqual(axt.read_text(), text, f"{cmd}: the input was changed")
+            fa = Path(td) / "cds.fa"
+            fa.write_text(">g\nATGAAA\n")
+            for cmd in (["translate", fa, "-o", fa], ["translate", fa, "--genes", fa],
+                        ["codon-dnds", "-i", fa, "-o", fa]):
+                r = self.run_cpp(*cmd, check=False)
+                self.assertEqual(r.returncode, 2, (cmd, r.stderr))
+                self.assertIn("is the input file", r.stderr)
+                self.assertEqual(fa.read_text(), ">g\nATGAAA\n")
+            r = self.run_cpp("kaks", "-i", axt, "-o", Path(td) / "out.kaks", "-q")  # another file: fine
+            self.assertEqual((Path(td) / "out.kaks").read_text().count("\n"), 2)
+
+    def test_axt_record_with_one_sequence_line(self):
+        """A name and one sequence line is an error for that record; it is never cut in half and compared."""
+        with tempfile.TemporaryDirectory() as td:
+            axt = Path(td) / "in.axt"
+            axt.write_text("a&b\nATGAAACCC\nATGAAGCCC\n\none\nATGAAACCCATGAAGCCC\n\n"
+                           "wrapped\nATGAAA\nCCC\nATGAAG\nCCC\n\nc&d\nATGAAA\nATGAAG\n")
+            r = self.run_cpp("dnds", axt)
+            rows = {f[0]: f for f in (l.split("\t") for l in r.stdout.splitlines()[1:])}
+            self.assertEqual(list(rows), ["a", "one", "wrapped", "c"])
+            self.assertEqual(rows["one"][13], "error")
+            self.assertIn("one sequence line", rows["one"][14])
+            self.assertEqual(rows["one"][3:6], ["NA", "NA", "NA"])
+            self.assertEqual(rows["a"][3:13], rows["wrapped"][3:13])   # 4 lines: joined and split in half
+            self.assertEqual((rows["a"][13], rows["c"][13]), ("ok", "ok"))
+            self.assertIn("1 error", r.stderr)
+            k = self.run_cpp("kaks", "-i", axt)   # KaKs_Calculator's format: the record is left out, with a warning
+            self.assertEqual([l.split("\t")[0] for l in k.stdout.splitlines()[1:]], ["a&b", "wrapped", "c&d"])
+            self.assertIn("one: record has one sequence line", k.stderr)
+
     def test_python_hands_over(self):
         env = dict(os.environ, COAL_CPP=str(self.bin), PYTHONPATH=str(ROOT / "src"))
         r = subprocess.run([sys.executable, "-m", "coal", "dnds", str(KDIR / "edge_cases.axt"), "-q"],
