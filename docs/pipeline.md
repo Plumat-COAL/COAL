@@ -7,7 +7,7 @@ has two modes:
 ```
 coal pipeline pairs    --query q_cds.fa --subject s_cds.fa -o out_dir      # orthologs between two species
 coal pipeline clusters --cds all_cds.fa [--clusters clusters.tsv] -o out_dir   # every pair within each cluster
-coal pipeline install diamond clustalo                                      # the external tools, into COAL's cache
+coal pipeline install diamond clustalo                                      # the external tools, into COAL's cache (verified)
 ```
 
 | Step | Pair mode | Cluster mode | Done by |
@@ -370,6 +370,10 @@ machine is still to be done.
 - **Protein input is not accepted**: the pipeline starts from CDS, so that protein and CDS always match.
 - **Python holds every ID** (and a byte offset per record), so memory grows with the number of sequences, not
   with their length.
-- The installer's DIAMOND download (GitHub release binaries: Linux x86_64, macOS, Windows x64) has no published
-  checksum; the binary is accepted when it runs and reports its version. Elsewhere Bioconda is used.
+- **Installers verify what they download** ([alignment.md](alignment.md#clusters-clustal-omega-and-mafft-coalmsa),
+  "Verification"). The DIAMOND 2.2.8 release archives (Linux x86_64, macOS, Windows x64) and micromamba are pinned
+  by SHA-256 in COAL's source; DIAMOND publishes no checksums, so those hashes are the ones of the files as
+  downloaded on 2026-11-12. The official Clustal Omega binary has no known hash and is refused unless
+  `coal pipeline install clustalo` gets `--sha256 HEX` or `--allow-unverified`; `--install-tools` during a run
+  never installs an unverified file. Elsewhere Bioconda is used.
 - Thread scaling beyond 2 cores and whole-proteome wall times are to be measured on the 16-thread desktop.

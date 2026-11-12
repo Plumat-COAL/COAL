@@ -107,16 +107,32 @@ def _diamond_version(exe: str) -> str:
 _DIAMOND_ASSETS = {("Linux", "x86_64"): "diamond-linux64.tar.gz", ("Darwin", "x86_64"): "diamond-macos.tar.gz",
                    ("Darwin", "arm64"): "diamond-macos.tar.gz", ("Windows", "AMD64"): "diamond-windows.zip"}
 _DIAMOND_URL = "https://github.com/bbuchfink/diamond/releases/download/v{version}/{asset}"
+# SHA-256 of the release assets COAL installs, by (version, asset). DIAMOND's releases publish no checksums: these
+# were computed from the files downloaded from the URL above on 2026-11-12 (the Linux binary reports "diamond
+# version 2.2.8"). An archive is unpacked only after its hash matched; a version that is not listed here needs
+# sha256=... or allow_unverified=True (install_diamond).
+_DIAMOND_SHA256 = {
+    ("2.2.8", "diamond-linux64.tar.gz"): "33a765d192ae4f5b388f15fe2e7c23d3aaea0f9e3f6872efe8c324aec261fbc7",
+    ("2.2.8", "diamond-macos.tar.gz"): "7d17c9c72b927d74ae1e72b4b7ca44f6100af02e9f753ad1ecded9abb30a3b22",
+    ("2.2.8", "diamond-windows.zip"): "8035ece14562e13576da6e9583c74ab1aaff9d0c96086d93ab337e95cd288ce1",
+}
 
 
 def install_diamond(method: str = "auto", version: str = DIAMOND_VERSION, force: bool = False,
-                    quiet: bool = False, timeout: float = 1800) -> str:
+                    quiet: bool = False, timeout: float = 1800, sha256: str | None = None,
+                    allow_unverified: bool = False) -> str:
     """Install DIAMOND into COAL's cache folder (coal.msa.cache_dir()) and return its path (an existing one when
     force is False). Works like coal.msa.install_clustalo() and orthologr's diamond_install().
 
-    method: "official" (the pre-compiled binary of that version from DIAMOND's GitHub releases: Linux x86_64, macOS,
-    Windows x64; accepted only if it runs and reports a version, the releases publish no checksums), "conda" /
-    "micromamba" (Bioconda, into the cache), or "auto" (official, then conda or micromamba)."""
+    method: "official" (the pre-compiled binary of that version from DIAMOND's GitHub releases, over HTTPS: Linux
+    x86_64, macOS, Windows x64), "conda" / "micromamba" (Bioconda, into the cache), or "auto" (official, then
+    conda or micromamba).
+
+    Verification: the archive of DIAMOND_VERSION is kept and unpacked only if its SHA-256 is the one pinned in
+    this module (_DIAMOND_SHA256). For another `version` there is no pinned hash: give `sha256` (the download is
+    deleted if it differs) or allow_unverified=True (unpack and run whatever arrives; the hash is printed);
+    without either the official route refuses before downloading. Nothing downloaded runs before this check."""
+    _msa._check_hash_argument(sha256)
     if not force:
         for c in _msa._cached("diamond"):
             if os.path.isfile(c) and _diamond_version(c):
@@ -132,7 +148,7 @@ def install_diamond(method: str = "auto", version: str = DIAMOND_VERSION, force:
     for m in order:
         try:
             if m == "official":
-                exe = _install_diamond_official(version, quiet)
+                exe = _install_diamond_official(version, quiet, sha256, allow_unverified)
             else:
                 conda = _msa._conda_exe() if m == "conda" else _msa._get_micromamba(quiet)
                 if conda is None:
@@ -150,14 +166,20 @@ def install_diamond(method: str = "auto", version: str = DIAMOND_VERSION, force:
                         "-c bioconda diamond`, or https://github.com/bbuchfink/diamond/releases) or set COAL_DIAMOND.")
 
 
-def _install_diamond_official(version: str, quiet: bool) -> str:
+def _install_diamond_official(version: str, quiet: bool, sha256: str | None = None,
+                              allow_unverified: bool = False) -> str:
     asset = _DIAMOND_ASSETS.get(_msa._platform())
     if asset is None:
         raise _msa.MsaError(f"no pre-compiled DIAMOND for {_msa._platform()}")
+    version = version.lstrip("v")
     d = os.path.join(_msa.cache_dir(), "tools", "diamond")
     os.makedirs(d, exist_ok=True)
     archive = os.path.join(d, asset)
-    _msa._download(_DIAMOND_URL.format(version=version.lstrip("v"), asset=asset), archive, quiet)
+    _msa._fetch_verified([_DIAMOND_URL.format(version=version, asset=asset)], archive, quiet,
+                         _DIAMOND_SHA256.get((version, asset)), sha256, allow_unverified,
+                         what=f"DIAMOND {version} ({asset})",
+                         hint=f"COAL pins the hashes of DIAMOND {DIAMOND_VERSION} only. Or install it another way: "
+                              "`conda install -c bioconda diamond`; or set COAL_DIAMOND")
     exe = os.path.join(d, "diamond" + _EXE)
     try:
         if asset.endswith(".zip"):
@@ -1262,6 +1284,13 @@ def build_parser() -> argparse.ArgumentParser:
                                    "docs/alignment.md \"Licences\").")
     p.add_argument("tools", nargs="+", choices=("diamond", "clustalo", "mafft"))
     p.add_argument("--force", action="store_true", help="install again even if one is there")
+    p.add_argument("--sha256", metavar="HEX",
+                   help="the SHA-256 the downloaded file must have (one tool at a time): for a download COAL has "
+                        "no pinned hash for, which is the official Clustal Omega binary of clustal.org. The file "
+                        "is deleted, not run, if it differs")
+    p.add_argument("--allow-unverified", action="store_true",
+                   help="accept a download that nobody can verify (no pinned hash, no --sha256): it is kept and "
+                        "run as it arrives, and its SHA-256 is printed. Without this such a download is refused")
     p.add_argument("-q", "--quiet", action="store_true")
     return ap
 
@@ -1360,12 +1389,20 @@ def main(argv=None) -> int:
         ap.print_help(sys.stderr)
         return 2
     if a.mode == "install":
+        if a.sha256 and len(a.tools) != 1:
+            ap.error("--sha256 names one file: install one tool at a time with it")
+        try:
+            _msa._check_hash_argument(a.sha256)
+        except ValueError as e:
+            ap.error(f"--{e}")
         try:
             for t in a.tools:
                 if t == "diamond":
-                    path = install_diamond(force=a.force, quiet=a.quiet)
+                    path = install_diamond(force=a.force, quiet=a.quiet, sha256=a.sha256,
+                                           allow_unverified=a.allow_unverified)
                 elif t == "clustalo":
-                    path = _msa.install_clustalo(force=a.force, quiet=a.quiet)
+                    path = _msa.install_clustalo(force=a.force, quiet=a.quiet, sha256=a.sha256,
+                                                 allow_unverified=a.allow_unverified)
                 else:
                     path = _msa.install_mafft(force=a.force, quiet=a.quiet)
                 print(path)

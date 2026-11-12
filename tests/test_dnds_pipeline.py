@@ -18,6 +18,7 @@ Each part is skipped when its tool is missing. No network.
 """
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import math
@@ -29,7 +30,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -228,14 +229,38 @@ class Units(unittest.TestCase):
                 mock.patch.object(msa, "_platform", return_value=("Linux", "x86_64")):
             script = b"#!/bin/sh\necho 'diamond version 2.2.8'\n"
 
-            def fake(url, dest, quiet):
-                self.assertIn("/v2.2.8/diamond-linux64.tar.gz", url)
-                with tarfile.open(dest, "w:gz") as tf:
+            def archive(body: bytes) -> bytes:
+                buf = io.BytesIO()
+                with tarfile.open(fileobj=buf, mode="w:gz") as tf:
                     info = tarfile.TarInfo("diamond")
-                    info.size = len(script)
+                    info.size = len(body)
                     info.mode = 0o755
-                    tf.addfile(info, io.BytesIO(script))
-            with mock.patch.object(msa, "_download", side_effect=fake) as dl:
+                    tf.addfile(info, io.BytesIO(body))
+                return buf.getvalue()
+            good = archive(script)
+            asset = ("2.2.8", "diamond-linux64.tar.gz")
+
+            def serving(data, calls):
+                def fake(url, dest, quiet):
+                    calls.append(url)
+                    with open(dest + ".part", "wb") as fh:
+                        fh.write(data)
+                    return hashlib.sha256(data).hexdigest()
+                return mock.patch.object(msa, "_download", side_effect=fake)
+            calls = []
+            # the real pinned hash: a file that is not the release asset is deleted, never unpacked or run
+            self.assertRegex(P._DIAMOND_SHA256[asset], r"^[0-9a-f]{64}$")
+            with serving(good, calls):
+                with self.assertRaises(P.PipelineError) as cm:
+                    P.install_diamond(method="official", quiet=True)
+            self.assertIn("failed its SHA-256 check and was deleted", str(cm.exception))
+            self.assertIn("/v2.2.8/diamond-linux64.tar.gz", calls[0])
+            self.assertTrue(calls[0].startswith("https://github.com/bbuchfink/diamond/releases/download/"))
+            self.assertEqual(os.listdir(os.path.join(td, "tools", "diamond")), [])
+            # with the hash of the served file pinned, the install goes through
+            calls.clear()
+            with serving(good, calls) as dl, \
+                    mock.patch.dict(P._DIAMOND_SHA256, {asset: hashlib.sha256(good).hexdigest()}):
                 exe = P.install_diamond(method="official", quiet=True)
                 self.assertTrue(os.access(exe, os.X_OK))
                 self.assertEqual(P._diamond_version(exe), "2.2.8")
@@ -244,18 +269,37 @@ class Units(unittest.TestCase):
             with mock.patch.dict(os.environ, {"PATH": ""}):
                 os.environ.pop("COAL_DIAMOND", None)
                 self.assertEqual(P.find_diamond(), exe)
+            # a version COAL has no hash for: refused before downloading; fine with the caller's hash
+            calls.clear()
+            with serving(good, calls):
+                with self.assertRaises(P.PipelineError) as cm:
+                    P.install_diamond(method="official", version="2.1.0", quiet=True, force=True)
+                self.assertIn("refusing to download and run DIAMOND 2.1.0", str(cm.exception))
+                self.assertEqual(calls, [])
+                self.assertEqual(P.install_diamond(method="official", version="2.1.0", quiet=True, force=True,
+                                                   sha256=hashlib.sha256(good).hexdigest()), exe)
             # a binary that does not run is refused
-            bad = b"#!/bin/sh\nexit 3\n"
-
-            def fake_bad(url, dest, quiet):
-                with tarfile.open(dest, "w:gz") as tf:
-                    info = tarfile.TarInfo("diamond")
-                    info.size = len(bad)
-                    info.mode = 0o755
-                    tf.addfile(info, io.BytesIO(bad))
-            with mock.patch.object(msa, "_download", side_effect=fake_bad):
+            bad = archive(b"#!/bin/sh\nexit 3\n")
+            with serving(bad, calls), mock.patch.dict(P._DIAMOND_SHA256, {asset: hashlib.sha256(bad).hexdigest()}):
                 with self.assertRaises(P.PipelineError):
                     P.install_diamond(method="official", quiet=True, force=True)
+
+    def test_install_command_takes_a_hash_or_explicit_permission(self):
+        seen = {}
+
+        def fake_clustalo(**kw):
+            seen.update(kw)
+            return "/cache/clustalo"
+        with mock.patch.object(msa, "install_clustalo", fake_clustalo), redirect_stdout(io.StringIO()):
+            self.assertEqual(P.main(["install", "clustalo", "--sha256", "A" * 64, "-q"]), 0)
+            self.assertEqual((seen["sha256"], seen["allow_unverified"]), ("A" * 64, False))
+            self.assertEqual(P.main(["install", "clustalo", "--allow-unverified", "-q"]), 0)
+            self.assertEqual((seen["sha256"], seen["allow_unverified"]), (None, True))
+        for argv in (["install", "clustalo", "--sha256", "abc"],
+                     ["install", "clustalo", "diamond", "--sha256", "a" * 64]):
+            with self.assertRaises(SystemExit) as cm, redirect_stderr(io.StringIO()):
+                P.main(argv)
+            self.assertEqual(cm.exception.code, 2, argv)
 
     def test_command_line_errors(self):
         for argv in ([], ["pairs", "-o", "x"], ["clusters", "--cds", "a", "-o", "x", "--max-cluster-size", "0"],

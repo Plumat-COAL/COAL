@@ -8,8 +8,10 @@
 Neither tool is bundled with COAL (docs/alignment.md "Licences": COAL is GPL-3.0-only and Clustal Omega
 GPL-2.0-or-later, so bundling would be licence-compatible, but it is not done).
 install_clustalo() puts one into COAL's cache folder (cache_dir()), like orthologr's diamond_install(): through
-conda / mamba / micromamba from Bioconda (micromamba itself is fetched from its GitHub releases, SHA-256 checked, if no
-conda is installed), or the official static binary from clustal.org (method="official"; the only way on Windows).
+conda / mamba / micromamba from Bioconda (micromamba itself is one pinned release fetched from GitHub and kept only
+if its SHA-256 is the pinned one, if no conda is installed), or the official static binary from clustal.org
+(method="official"; the only way on Windows), which has no published checksum: that route needs sha256=... or
+allow_unverified=True. No downloaded file is run before its SHA-256 was checked.
 
 Stop codons: '*' at the end of a sequence is removed before aligning and given back as a last column of its own
 ('*' in the rows that had one, '-' in the others); an internal '*' is aligned as X and put back afterwards. (Clustal
@@ -34,28 +36,44 @@ from dataclasses import dataclass
 from typing import Iterable, Mapping, Sequence
 
 __all__ = ["cache_dir", "find_clustalo", "find_mafft", "install_clustalo", "install_mafft", "tool_version",
-           "run_msa", "align_clusters", "MsaResult", "MsaError", "CLUSTALO_VERSION"]
+           "run_msa", "align_clusters", "MsaResult", "MsaError", "CLUSTALO_VERSION", "MICROMAMBA_VERSION"]
 
 CLUSTALO_VERSION = "1.2.4"
 _EXE = ".exe" if os.name == "nt" else ""
 
-# Official Clustal Omega binaries (http://www.clustal.org/omega/). Their SHA-256 sums are not published; the binary
-# is accepted when it runs and reports a 1.2 version.
+# ---- Downloads that COAL runs afterwards: each is pinned to one file by its SHA-256 ------------------------------
+# A downloaded file is moved into the cache only after its SHA-256 matched the pinned value (or the one the caller
+# gave); a file with no known hash is refused unless the caller passes allow_unverified=True. Nothing fetched is
+# ever executed before this check.
+#
+# Official Clustal Omega binaries (www.clustal.org/omega/). clustal.org publishes no checksums and serves plain
+# HTTP (https is tried first, in case the host offers it), and the host could not be reached from the machine
+# these tables were made on (2026-11-12), so no hash is pinned for these files yet: this route refuses to run
+# unless the caller gives a hash (sha256=...) or accepts an unverified download (allow_unverified=True). To pin
+# one: download the file from a network you trust, check it, and put its `sha256sum` here.
+# (system, machine) -> (path under www.clustal.org, member of the zip or None, SHA-256 or None)
+_OFFICIAL_HOST = "www.clustal.org"
 _OFFICIAL = {
-    ("Linux", "x86_64"): ("http://www.clustal.org/omega/clustalo-1.2.4-Ubuntu-x86_64", None),
-    ("Darwin", "x86_64"): ("http://www.clustal.org/omega/clustal-omega-1.2.3-macosx", None),
-    ("Darwin", "arm64"): ("http://www.clustal.org/omega/clustal-omega-1.2.3-macosx", None),  # x86_64, Rosetta 2
-    ("Windows", "AMD64"): ("http://www.clustal.org/omega/clustal-omega-1.2.2-win64.zip", "clustalo.exe"),
+    ("Linux", "x86_64"): ("/omega/clustalo-1.2.4-Ubuntu-x86_64", None, None),
+    ("Darwin", "x86_64"): ("/omega/clustal-omega-1.2.3-macosx", None, None),
+    ("Darwin", "arm64"): ("/omega/clustal-omega-1.2.3-macosx", None, None),  # x86_64, Rosetta 2
+    ("Windows", "AMD64"): ("/omega/clustal-omega-1.2.2-win64.zip", "clustalo.exe", None),
 }
-# micromamba (static, BSD-3-Clause) from https://github.com/mamba-org/micromamba-releases; the release publishes a
-# <asset>.sha256 next to every asset, which is checked.
+# micromamba (static, BSD-3-Clause) from https://github.com/mamba-org/micromamba-releases: one fixed release, not
+# "latest", with the SHA-256 of each asset (computed from the downloads on 2026-11-12; each equals the
+# <asset>.sha256 file the release publishes).
+MICROMAMBA_VERSION = "2.10.0-0"
 _MICROMAMBA = {
-    ("Linux", "x86_64"): "micromamba-linux-64",
-    ("Linux", "aarch64"): "micromamba-linux-aarch64",
-    ("Darwin", "x86_64"): "micromamba-osx-64",
-    ("Darwin", "arm64"): "micromamba-osx-arm64",
+    ("Linux", "x86_64"): ("micromamba-linux-64",
+                          "701f39c06f8e6a670a0e186c8479b9e5c0502a2f0cda6cef65d83bdd2875e8bd"),
+    ("Linux", "aarch64"): ("micromamba-linux-aarch64",
+                           "3bb56786e21b9b24024f599fe9185b4a59dc3f9f59937a42311ee583adbbb23c"),
+    ("Darwin", "x86_64"): ("micromamba-osx-64",
+                           "8421462a1ef1df9f7acd114f9e2a24c1332ce4f4e29f44465b4acb44e2755172"),
+    ("Darwin", "arm64"): ("micromamba-osx-arm64",
+                          "c547639f5caf742236641c362746abb4a3505774753ecd08fe341643670c4c01"),
 }
-_MICROMAMBA_URL = "https://github.com/mamba-org/micromamba-releases/releases/latest/download/"
+_MICROMAMBA_URL = "https://github.com/mamba-org/micromamba-releases/releases/download/{version}/{asset}"
 
 
 class MsaError(RuntimeError):
@@ -126,13 +144,17 @@ def tool_version(exe: str, timeout: float = 60) -> str:
     return out[0].strip() if out else ""
 
 
-def _download(url: str, dest: str, quiet: bool) -> None:
+def _download(url: str, dest: str, quiet: bool) -> str:
+    """Fetch url into dest + ".part" (dest itself is not touched) and return the SHA-256 of what was fetched."""
     if not quiet:
         print(f"coal: downloading {url}", file=sys.stderr)
     tmp = dest + ".part"
+    h = hashlib.sha256()
     with urllib.request.urlopen(url, timeout=600) as r, open(tmp, "wb") as fh:  # noqa: S310 (fixed https/http URLs)
-        shutil.copyfileobj(r, fh)
-    os.replace(tmp, dest)
+        for chunk in iter(lambda: r.read(1 << 20), b""):
+            h.update(chunk)
+            fh.write(chunk)
+    return h.hexdigest()
 
 
 def _sha256(path: str) -> str:
@@ -141,6 +163,58 @@ def _sha256(path: str) -> str:
         for chunk in iter(lambda: fh.read(1 << 20), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _check_hash_argument(sha256: str | None) -> str | None:
+    if sha256 is None:
+        return None
+    v = sha256.strip().lower()
+    if len(v) != 64 or any(c not in "0123456789abcdef" for c in v):
+        raise ValueError("sha256: expected the 64 hexadecimal digits of a SHA-256 sum")
+    return v
+
+
+def _fetch_verified(urls: Sequence[str], dest: str, quiet: bool, pinned: str | None, sha256: str | None = None,
+                    allow_unverified: bool = False, what: str = "the file", hint: str = "") -> str:
+    """Download one file (the first of `urls` that answers; https before http) to `dest`, and keep it only if its
+    SHA-256 is the expected one: `pinned` (COAL's own table) or else `sha256` (the caller's). With neither, the
+    download is refused before anything is fetched, unless allow_unverified is True; then the file is kept, a
+    warning names its hash, and the caller has accepted that nobody checked it. Returns the SHA-256.
+
+    Raises MsaError: no hash and no permission, every URL failed, or the hash does not match (the file is deleted,
+    never moved to `dest`, never run)."""
+    given = _check_hash_argument(sha256)
+    if pinned and given and given != pinned.lower():
+        raise MsaError(f"the SHA-256 given for {what} ({given}) is not the one COAL pins for it ({pinned}); "
+                       f"leave sha256 out to use the pinned value")
+    want = (pinned or given or "").lower() or None
+    if want is None and not allow_unverified:
+        plain = any(u.startswith("http://") for u in urls)
+        raise MsaError(
+            f"refusing to download and run {what}: no SHA-256 is known for {urls[-1]} (its publisher gives none"
+            + (", and the host serves plain HTTP" if plain else "") + "). Download and check the file yourself and "
+            "pass its hash (sha256=\"...\"; `coal pipeline install ... --sha256 HEX`), or accept an unverified "
+            "download (allow_unverified=True; `--allow-unverified`)" + (". " + hint if hint else ""))
+    tmp = dest + ".part"
+    errors, got = [], None
+    for url in urls:
+        try:
+            got = _download(url, dest, quiet)
+            break
+        except (OSError, ValueError) as e:   # URLError and HTTPError are OSErrors
+            errors.append(f"{url}: {e}")
+            if os.path.exists(tmp):
+                os.remove(tmp)
+    if got is None:
+        raise MsaError("download failed (" + "; ".join(errors) + ")")
+    if want is not None and got != want:
+        os.remove(tmp)
+        raise MsaError(f"{what} failed its SHA-256 check and was deleted: expected {want}, got {got} ({url})")
+    if want is None:
+        print(f"coal: warning: {what} from {url} was NOT verified (no SHA-256 is known for it); its SHA-256 is "
+              f"{got}. Pass sha256=\"{got}\" next time to accept exactly this file.", file=sys.stderr)
+    os.replace(tmp, dest)
+    return got
 
 
 def _conda_exe() -> str | None:
@@ -156,21 +230,16 @@ def _conda_exe() -> str | None:
 
 
 def _get_micromamba(quiet: bool) -> str:
-    asset = _MICROMAMBA.get(_platform())
-    if asset is None:
+    """micromamba MICROMAMBA_VERSION into the cache, kept only if its SHA-256 is the pinned one."""
+    entry = _MICROMAMBA.get(_platform())
+    if entry is None:
         raise MsaError(f"no micromamba binary for {_platform()}; install conda, or use method='official'")
+    asset, pinned = entry
     d = os.path.join(cache_dir(), "tools", "micromamba")
     os.makedirs(d, exist_ok=True)
     exe = os.path.join(d, "micromamba")
-    _download(_MICROMAMBA_URL + asset, exe, quiet)
-    sums = exe + ".sha256"
-    _download(_MICROMAMBA_URL + asset + ".sha256", sums, quiet)
-    with open(sums, encoding="utf-8") as fh:
-        want = fh.read().split()[0].strip().lower()
-    got = _sha256(exe)
-    if got != want:
-        os.remove(exe)
-        raise MsaError(f"micromamba download failed its SHA-256 check (expected {want}, got {got})")
+    _fetch_verified([_MICROMAMBA_URL.format(version=MICROMAMBA_VERSION, asset=asset)], exe, quiet, pinned,
+                    what=f"micromamba {MICROMAMBA_VERSION}")
     os.chmod(exe, os.stat(exe).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     return exe
 
@@ -192,11 +261,18 @@ def _conda_install(tool: str, spec: str, conda: str, quiet: bool, timeout: float
 
 
 def install_clustalo(method: str = "auto", force: bool = False, quiet: bool = False,
-                     timeout: float = 1800) -> str:
+                     timeout: float = 1800, sha256: str | None = None, allow_unverified: bool = False) -> str:
     """Install Clustal Omega into cache_dir() and return its path (an existing one when force is False).
 
     method: "auto" (conda/mamba/micromamba if one is installed, else micromamba fetched into the cache, else the
-    official binary; Windows: the official binary), "conda", "micromamba", "official"."""
+    official binary; Windows: the official binary), "conda", "micromamba", "official".
+
+    Verification: conda fetches from conda-forge / Bioconda over HTTPS and checks each package against the
+    channel's index; micromamba itself is one pinned release with a pinned SHA-256. The official binary of
+    clustal.org has no published checksum and no hash is pinned for it here, so that route needs `sha256` (the
+    SHA-256 of the file you expect: the download is deleted if it differs) or allow_unverified=True (keep and run
+    whatever arrives; the hash is printed). Without either it refuses before downloading."""
+    _check_hash_argument(sha256)
     if not force:
         for c in _cached("clustalo"):
             if os.path.isfile(c) and tool_version(c).startswith("1.2"):
@@ -218,7 +294,7 @@ def install_clustalo(method: str = "auto", force: bool = False, quiet: bool = Fa
                     raise MsaError("no conda, mamba or micromamba found")
                 exe = _conda_install("clustalo", f"clustalo={CLUSTALO_VERSION}", conda, quiet, timeout)
             else:
-                exe = _install_official(sysname, machine, quiet)
+                exe = _install_official(sysname, machine, quiet, sha256=sha256, allow_unverified=allow_unverified)
             v = tool_version(exe)
             if not v.startswith("1.2"):
                 raise MsaError(f"{exe} does not run or is not Clustal Omega 1.2 ({v or 'no output'})")
@@ -231,23 +307,27 @@ def install_clustalo(method: str = "auto", force: bool = False, quiet: bool = Fa
                    "-c bioconda clustalo`, `apt install clustalo`, `brew install clustal-omega`) or set COAL_CLUSTALO.")
 
 
-def _install_official(sysname: str, machine: str, quiet: bool) -> str:
+def _install_official(sysname: str, machine: str, quiet: bool, sha256: str | None = None,
+                      allow_unverified: bool = False) -> str:
     entry = _OFFICIAL.get((sysname, machine))
     if entry is None:
         raise MsaError(f"no official Clustal Omega binary for {sysname} {machine}")
-    url, member = entry
+    path, member, pinned = entry
+    urls = [f"https://{_OFFICIAL_HOST}{path}", f"http://{_OFFICIAL_HOST}{path}"]
+    hint = ""  # (install_clustalo's own message names the other ways to install it)
     d = os.path.join(cache_dir(), "tools", "clustalo")
     os.makedirs(d, exist_ok=True)
     exe = os.path.join(d, "clustalo" + _EXE)
+    what = "the official Clustal Omega binary"
     if member is None:
-        _download(url, exe, quiet)
+        _fetch_verified(urls, exe, quiet, pinned, sha256, allow_unverified, what, hint)
     else:
         z = exe + ".zip"
-        _download(url, z, quiet)
+        _fetch_verified(urls, z, quiet, pinned, sha256, allow_unverified, what, hint)
         with zipfile.ZipFile(z) as zf:
             names = [n for n in zf.namelist() if n.replace("\\", "/").rsplit("/", 1)[-1].lower() == member]
             if not names:
-                raise MsaError(f"{url} has no {member}")
+                raise MsaError(f"{urls[-1]} has no {member}")
             top = names[0].rsplit("/", 1)[0] + "/" if "/" in names[0] else ""
             # the Windows build needs the DLLs next to it: extract the whole folder, flattened
             for n in zf.namelist():
