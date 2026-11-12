@@ -90,7 +90,10 @@ def needs(have, why: str, *require_env: str):
 
 
 needs_cpp = needs(CPP, "build/coal-cpp (COAL_CPP_BIN) is not built", "COAL_REQUIRE_CPP")
-needs_diamond = needs(CPP and DIAMOND, "needs coal-cpp and DIAMOND", "COAL_REQUIRE_CPP", "COAL_REQUIRE_DIAMOND")
+# A missing coal-cpp fails where COAL_REQUIRE_CPP is set; a missing DIAMOND only where COAL_REQUIRE_DIAMOND is
+# (CI's macOS job builds coal-cpp but installs no DIAMOND: there these tests skip).
+needs_diamond = needs(CPP and DIAMOND, "needs coal-cpp and DIAMOND",
+                      *(("COAL_REQUIRE_DIAMOND",) if CPP else ("COAL_REQUIRE_CPP", "COAL_REQUIRE_DIAMOND")))
 needs_clustalo = unittest.skipUnless(CPP and CLUSTALO, "needs coal-cpp and Clustal Omega")
 
 
