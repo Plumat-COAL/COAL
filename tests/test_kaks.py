@@ -92,6 +92,8 @@ class KaKsBase(unittest.TestCase):
     def setUpClass(cls):
         cls.bin = cpp_bin()
         if cls.bin is None:
+            if os.environ.get("COAL_REQUIRE_CPP"):   # CI's C++ job: the Ka/Ks engine must be tested, not skipped
+                raise AssertionError("coal-cpp not built (COAL_REQUIRE_CPP is set)")
             raise unittest.SkipTest("coal-cpp not built (cmake --build build)")
 
     def run_cpp(self, *args, check=True, **kw):
@@ -123,7 +125,7 @@ class TestAgainstKaKsCalculator(KaKsBase):
         status = {k: v[13] for k, v in self.dnds(axt, *sum((["-m", m] for m in METHODS), [])).items()}
         counts = {}
         for m in METHODS:
-            ref = read_rows((GOLD / f"{name}.KaKs_Calculator.{m}.kaks").read_text())
+            ref = read_rows((GOLD / f"{name}.KaKs_Calculator.{m}.kaks").read_text(encoding="utf-8"))
             for key, rf in ref.items():
                 pair = key[0]
                 if pair in RNA_PAIRS and m not in ("YN", "MYN"):
@@ -209,7 +211,7 @@ class TestOneKindOfSite(KaKsBase):
     def test_no_synonymous_sites(self):
         self.check("no_syn_sites_multi_step", 0.513345885278, 0.357217254156, None, None, "no synonymous sites")
         # one difference per codon: KaKs_Calculator's YN gives this Ka (golden file), and MYN equals YN
-        kk = read_rows((GOLD / "edge_cases.KaKs_Calculator.YN.kaks").read_text())[("no_syn_sites_single_step", "YN")]
+        kk = read_rows((GOLD / "edge_cases.KaKs_Calculator.YN.kaks").read_text(encoding="utf-8"))[("no_syn_sites_single_step", "YN")]
         self.check("no_syn_sites_single_step", float(kk[2]), 0.40654667384577, None, None, "no synonymous sites")
 
     def test_no_sites_at_all(self):
@@ -248,7 +250,7 @@ class TestMynNan(KaKsBase):
         self.assertEqual(m[13], "ok")
         for col, want in ((3, 0.136556085877548), (4, 0.97117192633034), (8, 16.2479079015356), (9, 7.75209209846442)):
             self.assertTrue(close(float(m[col]), want, 1e-9), f"col {col}: {m[col]} != {want}")
-        kk = read_rows((GOLD / "edge_cases.KaKs_Calculator.MYN.kaks").read_text())[("myn_nan_kappa", "MYN")]
+        kk = read_rows((GOLD / "edge_cases.KaKs_Calculator.MYN.kaks").read_text(encoding="utf-8"))[("myn_nan_kappa", "MYN")]
         self.assertIn("nan", kk[2])  # the unmodified reference: the whole row is nan
 
 
@@ -256,7 +258,7 @@ class TestAgainstPAML(KaKsBase):
     def test_yn00(self):
         for w in (1, 0):
             ours = self.dnds(KDIR / "sim_small.axt", "-m", "YN", "--yn-flavour", "paml", "--yn-weighting", str(w))
-            lines = (GOLD / f"sim_small.yn00_w{w}.tsv").read_text().splitlines()[1:]
+            lines = (GOLD / f"sim_small.yn00_w{w}.tsv").read_text(encoding="utf-8").splitlines()[1:]
             self.assertEqual(len(lines), 48)
             for line in lines:
                 pair, dN, dS, S, N, SEdN, SEdS = line.split("\t")
@@ -288,9 +290,9 @@ class TestRegression(KaKsBase):
         for name in ("edge_cases", "sim_small"):
             axt = KDIR / f"{name}.axt"
             self.compare(self.run_cpp("kaks", "-i", axt, "-q", *flags).stdout,
-                         (GOLD / f"{name}.coal.kaks").read_text(), f"{name} kaks")
+                         (GOLD / f"{name}.coal.kaks").read_text(encoding="utf-8"), f"{name} kaks")
             self.compare(self.run_cpp("dnds", axt, "-q", *flags).stdout,
-                         (GOLD / f"{name}.coal.dnds.tsv").read_text(), f"{name} dnds")
+                         (GOLD / f"{name}.coal.dnds.tsv").read_text(encoding="utf-8"), f"{name} dnds")
 
 
 class TestPolicy(KaKsBase):
@@ -299,7 +301,7 @@ class TestPolicy(KaKsBase):
         super().setUpClass()
         cls.rows = {}
         r = subprocess.run([str(cls.bin), "dnds", str(KDIR / "edge_cases.axt"), "-q",
-                            *sum((["-m", m] for m in METHODS), [])], capture_output=True, text=True, check=True)
+                            *sum((["-m", m] for m in METHODS), [])], capture_output=True, text=True, check=True, encoding="utf-8")
         for line in r.stdout.splitlines()[1:]:
             f = line.split("\t")
             cls.rows[(f[0], f[2])] = f
@@ -327,11 +329,11 @@ class TestPolicy(KaKsBase):
             self.assertEqual(self.rows[("all_synonymous", m)][3], "0")
 
     def test_rna_lowercase_same_as_upper_dna(self):
-        text = (KDIR / "edge_cases.axt").read_text().split("\n\n")
+        text = (KDIR / "edge_cases.axt").read_text(encoding="utf-8").split("\n\n")
         rec = [r for r in text if r.startswith("lowercase_rna")][0].splitlines()
         with tempfile.TemporaryDirectory() as td:
             p = Path(td) / "u.axt"
-            p.write_text(f"upper\n{rec[1].upper().replace('U', 'T')}\n{rec[2].upper()}\n\n")
+            p.write_text(f"upper\n{rec[1].upper().replace('U', 'T')}\n{rec[2].upper()}\n\n", encoding="utf-8")
             r = self.run_cpp("dnds", p, "-q", *sum((["-m", m] for m in METHODS), []))
             for line in r.stdout.splitlines()[1:]:
                 f = line.split("\t")
@@ -353,7 +355,7 @@ class TestCli(KaKsBase):
         with tempfile.TemporaryDirectory() as td:
             out = Path(td) / "o.kaks"
             self.run_cpp("kaks", "-I", KDIR / "edge_cases.axt", "-O", out, "-M", "ng", "-m", "YN", "-C", "1", "-q")
-            rows = out.read_text().splitlines()[1:]
+            rows = out.read_text(encoding="utf-8").splitlines()[1:]
             methods = [l.split("\t")[1] for l in rows]
             self.assertEqual(methods[:2], ["NG", "YN"])  # KaKs_Calculator's order, one row per method and pair
 
@@ -374,10 +376,10 @@ class TestCli(KaKsBase):
         self.assertEqual(r.returncode, 1)
 
     def test_fasta_pairs(self):
-        recs = (KDIR / "sim_small.axt").read_text().split("\n\n")[:3]
+        recs = (KDIR / "sim_small.axt").read_text(encoding="utf-8").split("\n\n")[:3]
         with tempfile.TemporaryDirectory() as td:
             fa = Path(td) / "a.fasta"
-            with open(fa, "w") as f:
+            with open(fa, "w", encoding="utf-8") as f:
                 for i, r in enumerate(recs):
                     l = r.strip().splitlines()
                     f.write(f">s{i}a\n{l[1]}\n>s{i}b\n{l[2]}\n")
@@ -387,7 +389,7 @@ class TestCli(KaKsBase):
             self.assertEqual([l.split("\t")[:2] for l in cons], [["s0a", "s0b"], ["s1a", "s1b"], ["s2a", "s2b"]])
             # consecutive FASTA pairs = the AXT records
             axt = Path(td) / "a.axt"
-            axt.write_text("\n\n".join(recs) + "\n\n")
+            axt.write_text("\n\n".join(recs) + "\n\n", encoding="utf-8")
             a = self.run_cpp("dnds", axt, "-q").stdout.splitlines()[1:]
             self.assertEqual([l.split("\t")[3:] for l in a], [l.split("\t")[3:] for l in cons])
             k = self.run_cpp("kaks", "-i", fa, "-q", "--pairs", "consecutive").stdout.splitlines()[1]
@@ -415,7 +417,7 @@ class TestCli(KaKsBase):
         s2 = "".join(s2)
         with tempfile.TemporaryDirectory() as td:
             p = Path(td) / "long.axt"
-            p.write_text(f"long\n{s1}\n{s2}\n\n")
+            p.write_text(f"long\n{s1}\n{s2}\n\n", encoding="utf-8")
             r = self.run_cpp("dnds", p, "-q", *sum((["-m", m] for m in METHODS), []), timeout=120)
             rows = [l.split("\t") for l in r.stdout.splitlines()[1:]]
             self.assertEqual(len(rows), 7)
@@ -429,7 +431,7 @@ class TestCli(KaKsBase):
         text = "a&b\nATGAAACCC\nATGAAGCCC\n\n"
         with tempfile.TemporaryDirectory() as td:
             axt = Path(td) / "in.axt"
-            axt.write_text(text)
+            axt.write_text(text, encoding="utf-8")
             spellings = [axt, Path(td) / "." / "in.axt"]
             if os.name != "nt":
                 os.symlink(axt, Path(td) / "link.axt")
@@ -440,24 +442,24 @@ class TestCli(KaKsBase):
                     r = self.run_cpp(*cmd, check=False)
                     self.assertEqual(r.returncode, 2, (cmd, r.stderr))
                     self.assertIn("is the input file", r.stderr)
-                    self.assertEqual(axt.read_text(), text, f"{cmd}: the input was changed")
+                    self.assertEqual(axt.read_text(encoding="utf-8"), text, f"{cmd}: the input was changed")
             fa = Path(td) / "cds.fa"
-            fa.write_text(">g\nATGAAA\n")
+            fa.write_text(">g\nATGAAA\n", encoding="utf-8")
             for cmd in (["translate", fa, "-o", fa], ["translate", fa, "--genes", fa],
                         ["codon-dnds", "-i", fa, "-o", fa]):
                 r = self.run_cpp(*cmd, check=False)
                 self.assertEqual(r.returncode, 2, (cmd, r.stderr))
                 self.assertIn("is the input file", r.stderr)
-                self.assertEqual(fa.read_text(), ">g\nATGAAA\n")
+                self.assertEqual(fa.read_text(encoding="utf-8"), ">g\nATGAAA\n")
             r = self.run_cpp("kaks", "-i", axt, "-o", Path(td) / "out.kaks", "-q")  # another file: fine
-            self.assertEqual((Path(td) / "out.kaks").read_text().count("\n"), 2)
+            self.assertEqual((Path(td) / "out.kaks").read_text(encoding="utf-8").count("\n"), 2)
 
     def test_axt_record_with_one_sequence_line(self):
         """A name and one sequence line is an error for that record; it is never cut in half and compared."""
         with tempfile.TemporaryDirectory() as td:
             axt = Path(td) / "in.axt"
             axt.write_text("a&b\nATGAAACCC\nATGAAGCCC\n\none\nATGAAACCCATGAAGCCC\n\n"
-                           "wrapped\nATGAAA\nCCC\nATGAAG\nCCC\n\nc&d\nATGAAA\nATGAAG\n")
+                           "wrapped\nATGAAA\nCCC\nATGAAG\nCCC\n\nc&d\nATGAAA\nATGAAG\n", encoding="utf-8")
             r = self.run_cpp("dnds", axt)
             rows = {f[0]: f for f in (l.split("\t") for l in r.stdout.splitlines()[1:])}
             self.assertEqual(list(rows), ["a", "one", "wrapped", "c"])
@@ -474,12 +476,12 @@ class TestCli(KaKsBase):
     def test_python_hands_over(self):
         env = dict(os.environ, COAL_CPP=str(self.bin), PYTHONPATH=str(ROOT / "src"))
         r = subprocess.run([sys.executable, "-m", "coal", "dnds", str(KDIR / "edge_cases.axt"), "-q"],
-                           capture_output=True, text=True, env=env)
+                           capture_output=True, text=True, env=env, encoding="utf-8")
         self.assertEqual(r.returncode, 0, r.stderr)
         direct = self.run_cpp("dnds", KDIR / "edge_cases.axt", "-q").stdout
         self.assertEqual(r.stdout, direct)
         env["COAL_CPP"] = str(Path(tempfile.gettempdir()) / "no-such-coal-cpp")
-        r = subprocess.run([sys.executable, "-m", "coal", "kaks", "-i", "x"], capture_output=True, text=True, env=env)
+        r = subprocess.run([sys.executable, "-m", "coal", "kaks", "-i", "x"], capture_output=True, text=True, env=env, encoding="utf-8")
         self.assertEqual(r.returncode, 1)
         self.assertIn("needs coal-cpp", r.stderr)
 

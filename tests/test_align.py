@@ -84,12 +84,13 @@ def params_of(cfg) -> A.AlignParams:
 
 
 def run_cpp(binary, args, **kw):
-    return subprocess.run([str(binary), *map(str, args)], capture_output=True, text=True, timeout=TIMEOUT, **kw)
+    return subprocess.run([str(binary), *map(str, args)], capture_output=True, text=True, timeout=TIMEOUT, encoding="utf-8",
+                          **kw)
 
 
 def read_rows(path):
     rows = []
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:
         for line in fh:
             if not line.startswith(">"):
                 rows.append(line.rstrip("\n"))
@@ -97,7 +98,7 @@ def read_rows(path):
 
 
 def write_pairs(path, pairs):
-    with open(path, "w", newline="\n") as fh:
+    with open(path, "w", newline="\n", encoding="utf-8") as fh:
         for i, (a, b) in enumerate(pairs):
             fh.write(f">a{i}\n{a}\n>b{i}\n{b}\n")
 
@@ -115,7 +116,7 @@ class ReferenceScores(unittest.TestCase, FullLength):
 
     @classmethod
     def setUpClass(cls):
-        with open(FIXTURE) as fh:
+        with open(FIXTURE, encoding="utf-8") as fh:
             cls.data = json.load(fh)
         cls.binary = align_binary()
 
@@ -162,7 +163,7 @@ class ReferenceScores(unittest.TestCase, FullLength):
                 r = run_cpp(self.binary, [inp, "-o", out, "--scores", sc, *p.args()])
                 self.assertEqual(r.returncode, 0, r.stderr)
                 rows = read_rows(out)
-                with open(sc) as fh:
+                with open(sc, encoding="utf-8") as fh:
                     scores = [float(line.split("\t")[6]) for line in fh.read().splitlines()[1:]]
                 for k, ((a, b), (ra, rb)) in enumerate(zip(pairs, rows)):
                     self.assertEqual(scores[k], cfg["biopython"][k], (cfg, k))
@@ -225,10 +226,23 @@ class CppTool(unittest.TestCase, FullLength):
         for j in (1, 2, 0):
             r = run_cpp(self.binary, [self.path("in.fa"), "-j", j, "--scores", self.path("s.tsv")])
             self.assertEqual(r.returncode, 0, r.stderr)
-            with open(self.path("s.tsv")) as fh:
+            with open(self.path("s.tsv"), encoding="utf-8") as fh:
                 outs.append(r.stdout + fh.read())
         self.assertEqual(outs[0], outs[1])
         self.assertEqual(outs[0], outs[2])
+
+    def test_stdout_and_files_have_the_same_bytes_on_every_system(self):
+        # Windows: standard output in text mode would write \r\n where the -o file has \n
+        write_pairs(self.path("in.fa"), random_pairs(5, n=20, maxlen=60))
+        r = subprocess.run([str(self.binary), self.path("in.fa"), "--scores", self.path("s.tsv")], capture_output=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        r2 = subprocess.run([str(self.binary), self.path("in.fa"), "-o", self.path("o.fa")], capture_output=True)
+        self.assertEqual(r2.returncode, 0, r2.stderr)
+        with open(self.path("o.fa"), "rb") as fh:
+            self.assertEqual(r.stdout, fh.read())
+        self.assertGreater(r.stdout.count(b"\n"), 39)
+        with open(self.path("s.tsv"), "rb") as fh:
+            self.assertNotIn(b"\r", r.stdout + fh.read())
 
     def test_edge_residues(self):
         pairs = [("", ""), ("", "MKV"), ("M", ""), ("m", "M"), ("mkvJOU*", "MKVXXX*"), ("BZX", "DEA"),
@@ -238,7 +252,7 @@ class CppTool(unittest.TestCase, FullLength):
             r = run_cpp(self.binary, [self.path("in.fa"), "--scores", self.path("s.tsv"), *p.args()])
             self.assertEqual(r.returncode, 0, r.stderr)
             rows = [x for x in r.stdout.splitlines() if not x.startswith(">")]
-            with open(self.path("s.tsv")) as fh:
+            with open(self.path("s.tsv"), encoding="utf-8") as fh:
                 scores = [float(x.split("\t")[6]) for x in fh.read().splitlines()[1:]]
             for k, (a, b) in enumerate(pairs):
                 ra, rb = rows[2 * k], rows[2 * k + 1]
@@ -261,7 +275,7 @@ class CppTool(unittest.TestCase, FullLength):
         self.assertIn("pair 3 (a2, b2) skipped", r.stderr)
         self.assertIn("2 of 4 pairs failed", r.stderr)
         self.assertEqual(r.stdout.count(">"), 4)
-        with open(self.path("s.tsv")) as fh:
+        with open(self.path("s.tsv"), encoding="utf-8") as fh:
             status = [x.split("\t")[10] for x in fh.read().splitlines()[1:]]
         self.assertEqual(status[0], "ok")
         self.assertTrue(status[1].startswith("first sequence"))
@@ -293,25 +307,25 @@ class CppTool(unittest.TestCase, FullLength):
         r2 = run_cpp(self.binary, [self.path("in.fa"), "--gap-open", "14", "--gap-extend", "4", "--end-gaps",
                                    "penalized", "--scores", self.path("b.tsv")])
         self.assertEqual(r1.returncode, 0)
-        with open(self.path("a.tsv")) as f1, open(self.path("b.tsv")) as f2:
+        with open(self.path("a.tsv"), encoding="utf-8") as f1, open(self.path("b.tsv"), encoding="utf-8") as f2:
             self.assertEqual(f1.read(), f2.read())
 
     def test_pairing_modes(self):
-        with open(self.path("A.fa"), "w") as fh:
+        with open(self.path("A.fa"), "w", encoding="utf-8") as fh:
             fh.write(">x1 desc\nMKVL\nAAG\n>x2\nWWWW\n")
-        with open(self.path("B.fa"), "w") as fh:
+        with open(self.path("B.fa"), "w", encoding="utf-8") as fh:
             fh.write(">y1\r\nMKVLAG\r\n>y2\r\nWW\r\n")
         r = run_cpp(self.binary, [self.path("A.fa"), self.path("B.fa")])
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(r.stdout.splitlines()[0::2], [">x1", ">y1", ">x2", ">y2"])
-        with open(self.path("p.tsv"), "w") as fh:
+        with open(self.path("p.tsv"), "w", encoding="utf-8") as fh:
             fh.write("# a comment\nx2\ty1\nx1\ty2\n")
         r = run_cpp(self.binary, [self.path("A.fa"), self.path("B.fa"), "--pairs", self.path("p.tsv")])
         self.assertEqual(r.stdout.splitlines()[0::2], [">x2", ">y1", ">x1", ">y2"])
         r = run_cpp(self.binary, [self.path("A.fa"), "--pairs", self.path("p.tsv")])
         self.assertEqual(r.returncode, 1)
         self.assertIn("ID 'y1' is not in", r.stderr)
-        with open(self.path("C.fa"), "w") as fh:
+        with open(self.path("C.fa"), "w", encoding="utf-8") as fh:
             fh.write(">c1\nMK\n")
         r = run_cpp(self.binary, [self.path("A.fa"), self.path("C.fa")])
         self.assertEqual(r.returncode, 1)
@@ -382,7 +396,7 @@ class LocalHits(unittest.TestCase, FullLength):
         with tempfile.TemporaryDirectory() as tmp:
             qa, sb, tsv = (os.path.join(tmp, n) for n in ("q.fa", "s.fa", "hits.tsv"))
             hits, seqs = [], []
-            with open(qa, "w") as fq, open(sb, "w") as fs, open(tsv, "w") as ft:
+            with open(qa, "w", encoding="utf-8") as fq, open(sb, "w", encoding="utf-8") as fs, open(tsv, "w", encoding="utf-8") as ft:
                 for k in range(40):
                     a = "".join(rng.choice(AA) for _ in range(rng.randint(30, 150)))
                     b = "".join(rng.choice(AA) for _ in range(rng.randint(0, 30))) + mutate(a, rng)
@@ -413,6 +427,8 @@ class LocalHits(unittest.TestCase, FullLength):
         diamond = os.environ.get("COAL_TEST_DIAMOND") or shutil.which("diamond")
         binary = align_binary()
         if not diamond or binary is None:
+            if os.environ.get("COAL_REQUIRE_DIAMOND"):   # CI's C++ job, after it installed DIAMOND
+                self.fail("diamond or coal-cpp-align not available (COAL_REQUIRE_DIAMOND is set)")
             self.skipTest("diamond or coal-cpp-align not available")
         rng = random.Random(1)
         with tempfile.TemporaryDirectory() as tmp:
@@ -423,7 +439,7 @@ class LocalHits(unittest.TestCase, FullLength):
                 qs[f"q{k}"] = "M" + a
                 ss[f"s{k}"] = "MSTE" + mutate(a, rng, sub=0.15, indel=0.02) + "GGKK"
             for path, recs in ((q, qs), (s, ss)):
-                with open(path, "w") as fh:
+                with open(path, "w", encoding="utf-8") as fh:
                     fh.writelines(f">{i}\n{x}\n" for i, x in recs.items())
             subprocess.run([diamond, "makedb", "--in", s, "-d", db, "--quiet"], check=True, timeout=TIMEOUT)
             subprocess.run([diamond, "blastp", "-q", q, "-d", db, "-o", out, "--outfmt", "6", *A.DIAMOND_COLUMNS,
@@ -448,7 +464,7 @@ class ParamsAndHelpers(unittest.TestCase):
             A.align_pair("MK-V", "MKV")
 
     def test_matrices_match_cpp_source(self):
-        src = (ROOT / "cpp" / "src" / "align.cpp").read_text()
+        src = (ROOT / "cpp" / "src" / "align.cpp").read_text(encoding="utf-8")
         for name, mat in A.MATRICES.items():
             block = src[src.index(f'{{"{name}", {{'):]
             nums = [int(x) for x in block[block.index("{", 3):block.index("}},")].replace("{", " ").replace(

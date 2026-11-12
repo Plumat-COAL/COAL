@@ -48,7 +48,7 @@ from test_report_schema import validate  # noqa: E402
 FIX = ROOT / "tests" / "fixtures" / "pipeline"
 Q, S = FIX / "query_cds.fasta", FIX / "subject_cds.fasta"
 FAM, FAM_CLUSTERS = FIX / "family_cds.fasta", FIX / "family_clusters.tsv"
-SCHEMA = json.loads((ROOT / "docs" / "pipeline.schema.json").read_text())
+SCHEMA = json.loads((ROOT / "docs" / "pipeline.schema.json").read_text(encoding="utf-8"))
 PLAIN = [(f"g{k:02d}", f"h{k:02d}") for k in range(1, 13)]
 EDGE = [("stop_q", "stop_s"), ("frame_q", "frame_s"), ("amb_q", "amb_s"), ("same_q", "same_s"), ("rna_q", "rna_s")]
 
@@ -67,15 +67,37 @@ CPP = cpp_bin()
 DIAMOND = P.find_diamond()
 CLUSTALO = msa.find_clustalo()
 MAFFT = msa.find_mafft()
-needs_cpp = unittest.skipUnless(CPP, "build/coal-cpp (COAL_CPP_BIN) is not built")
-needs_diamond = unittest.skipUnless(CPP and DIAMOND, "needs coal-cpp and DIAMOND")
+
+
+def needs(have, why: str, *require_env: str):
+    """Skip the test or class without `have`; fail it instead when one of the environment variables is set (CI's
+    C++ job sets COAL_REQUIRE_CPP, and COAL_REQUIRE_DIAMOND after installing DIAMOND: there a missing tool must
+    not turn the tests of the default route into skips)."""
+    if have:
+        return lambda obj: obj
+    required = [e for e in require_env if os.environ.get(e)]
+    if not required:
+        return unittest.skip(why)
+
+    def deco(obj):
+        def fail(self, *a, **k):
+            self.fail(f"{why} ({' / '.join(required)} is set)")
+        if isinstance(obj, type):
+            obj.setUp = fail
+            return obj
+        return fail
+    return deco
+
+
+needs_cpp = needs(CPP, "build/coal-cpp (COAL_CPP_BIN) is not built", "COAL_REQUIRE_CPP")
+needs_diamond = needs(CPP and DIAMOND, "needs coal-cpp and DIAMOND", "COAL_REQUIRE_CPP", "COAL_REQUIRE_DIAMOND")
 needs_clustalo = unittest.skipUnless(CPP and CLUSTALO, "needs coal-cpp and Clustal Omega")
 
 
 def read_fasta(path) -> dict[str, str]:
     """{id: sequence}; of a repeated ID the first record."""
     recs, cur = {}, None
-    for line in Path(path).read_text().splitlines():
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
         if line.startswith(">"):
             name = (line[1:].split() or [""])[0]
             cur = None if name in recs else recs.setdefault(name, [])
@@ -85,7 +107,7 @@ def read_fasta(path) -> dict[str, str]:
 
 
 def read_tsv(path) -> list[dict]:
-    lines = Path(path).read_text().splitlines()
+    lines = Path(path).read_text(encoding="utf-8").splitlines()
     head = lines[0].split("\t")
     return [dict(zip(head, ln.split("\t"))) for ln in lines[1:]]
 
@@ -121,12 +143,12 @@ def by_hand(pairs, q: dict, s: dict, methods=("YN",)) -> dict:
     alns = A.align_pairs([(tr(q[x]), tr(s[y])) for x, y in pairs])
     with tempfile.TemporaryDirectory() as td:
         stacked = os.path.join(td, "stacked.fasta")
-        with open(stacked, "w") as fs:
+        with open(stacked, "w", encoding="utf-8") as fs:
             for (x, y), al in zip(pairs, alns):
                 pep, nuc = os.path.join(td, "pep.fa"), os.path.join(td, "nuc.fa")
-                Path(pep).write_text(f">a\n{al.a}\n>b\n{al.b}\n")
-                Path(nuc).write_text(f">a\n{q[x]}\n>b\n{s[y]}\n")
-                r = subprocess.run([str(CPP), pep, nuc, "-q"], capture_output=True, text=True, check=True)
+                Path(pep).write_text(f">a\n{al.a}\n>b\n{al.b}\n", encoding="utf-8")
+                Path(nuc).write_text(f">a\n{q[x]}\n>b\n{s[y]}\n", encoding="utf-8")
+                r = subprocess.run([str(CPP), pep, nuc, "-q"], capture_output=True, text=True, check=True, encoding="utf-8")
                 r1, r2 = ("".join(p.splitlines()[1:]) for p in r.stdout.split(">")[1:])
                 fs.write(f">{x}\n{r1}\n>{y}\n{r2}\n")
         out = os.path.join(td, "o.tsv")
@@ -154,12 +176,12 @@ class PipelineCase(unittest.TestCase):
 
     def pairs_file(self, pairs) -> Path:
         p = self.tmp / "pairs.tsv"
-        p.write_text("".join(f"{a}\t{b}\n" for a, b in pairs))
+        p.write_text("".join(f"{a}\t{b}\n" for a, b in pairs), encoding="utf-8")
         return p
 
     def check_report(self, res: P.PipelineResult):
         validate(res.report, SCHEMA)
-        on_disk = json.loads(Path(res.outputs["report"]).read_text())
+        on_disk = json.loads(Path(res.outputs["report"]).read_text(encoding="utf-8"))
         self.assertEqual(on_disk, json.loads(json.dumps(res.report)))
         self.assertEqual(res.report["exit_code"], res.exit_code)
 
@@ -190,11 +212,11 @@ class Units(unittest.TestCase):
     def test_read_clusters(self):
         with tempfile.TemporaryDirectory() as td:
             p = Path(td) / "c.tsv"
-            p.write_text("centroid\tmember\n# a comment\nr1\tr1\nr1\ta\nr2\tb\n\nr1\tc\nr2\ta\nr3\tr3\r\n")
+            p.write_text("centroid\tmember\n# a comment\nr1\tr1\nr1\ta\nr2\tb\n\nr1\tc\nr2\ta\nr3\tr3\r\n", encoding="utf-8")
             clusters, dup = P.read_clusters(str(p))
             self.assertEqual(clusters, {"r1": ["r1", "a", "c"], "r2": ["r2", "b"], "r3": ["r3"]})
             self.assertEqual(dup, 1)
-            p.write_text("only_one_column\n")
+            p.write_text("only_one_column\n", encoding="utf-8")
             with self.assertRaises(P.PipelineError):
                 P.read_clusters(str(p))
         with self.assertRaises(P.PipelineError):
@@ -357,11 +379,11 @@ class Translate(PipelineCase):
 
     def test_translate_other_code_and_errors(self):
         f = self.tmp / "c.fa"
-        f.write_text(">a\nATGTGAAAATAA\n")                                    # TGA: stop (1), Trp (4)
+        f.write_text(">a\nATGTGAAAATAA\n", encoding="utf-8")                                    # TGA: stop (1), Trp (4)
         self.assertIn(b"M*K", run_cpp("translate", f, "-q").stdout)
         self.assertIn(b"MWK", run_cpp("translate", f, "-q", "-c", "4").stdout)
         self.assertEqual(run_cpp("translate", self.tmp / "missing.fa").returncode, 1)
-        f.write_text("ATGAAA\n")
+        f.write_text("ATGAAA\n", encoding="utf-8")
         r = run_cpp("translate", f)
         self.assertEqual(r.returncode, 1)
         self.assertIn(b"before the first '>'", r.stderr)
@@ -406,7 +428,7 @@ class CodonDnds(PipelineCase):
                           st[("same_q", "YN")]["prot_identity"]), ("0", "0", "NA", "100.00"))
         self.assertEqual(st[("amb_q", "YN")]["status"], "ok")
         self.assertEqual(st[("rna_q", "YN")]["status"], "ok")
-        kept = (self.tmp / "c.fa").read_text().splitlines()
+        kept = (self.tmp / "c.fa").read_text(encoding="utf-8").splitlines()
         self.assertEqual(len(kept), 4 * len(pairs))
         k = kept.index(">rna_q")
         self.assertTrue(kept[k + 1].startswith("aug"))                        # the DNA is copied as written
@@ -443,10 +465,10 @@ class CodonDnds(PipelineCase):
         fails = read_tsv(self.tmp / "f.tsv")
         self.assertEqual([(f["group"], f["seq"], f["code"]) for f in fails],
                          [("p2", "bad", "cds_invalid_character"), ("c1", "", "alignment_missing")])
-        kaks = (self.tmp / "k.kaks").read_text().splitlines()
+        kaks = (self.tmp / "k.kaks").read_text(encoding="utf-8").splitlines()
         self.assertTrue(kaks[0].startswith("Sequence\tMethod\tKa\tKs\tKa/Ks\tP-Value(Fisher)"))
         self.assertEqual([ln.split("\t")[0] for ln in kaks[1:]], ["g05&h05", "h06&g06", "g06&h06"])
-        self.assertEqual((self.tmp / "c.fa").read_text().count(">"), 4)       # only the two whole pairs
+        self.assertEqual((self.tmp / "c.fa").read_text(encoding="utf-8").count(">"), 4)       # only the two whole pairs
 
     def test_rows_and_hits(self):
         # rows given (an MSA): equal to `coal-cpp dnds` on the codon MSA written for the same group
@@ -554,9 +576,9 @@ class PairsGiven(PipelineCase):
         genes = read_tsv(res.outputs["genes"])
         self.assertEqual({g["set"] for g in genes}, {"query", "subject"})
         self.assertEqual(len(genes), 40)
-        kept = Path(res.outputs["codon_alignments"]).read_text().splitlines()
+        kept = Path(res.outputs["codon_alignments"]).read_text(encoding="utf-8").splitlines()
         self.assertEqual([ln[1:] for ln in kept[0::4]], [a for a, _ in pairs])
-        kaks = Path(res.outputs["kaks"]).read_text().splitlines()
+        kaks = Path(res.outputs["kaks"]).read_text(encoding="utf-8").splitlines()
         self.assertEqual(len(kaks), 1 + 2 * len(pairs))
         self.assertEqual([s["name"] for s in res.report["stages"]],
                          ["translate_query", "translate_subject", "orthologs", "align_codon_kaks"])
@@ -578,8 +600,8 @@ class PairsGiven(PipelineCase):
     def test_exit_0_jobs_and_resume(self):
         q, s = self.tmp / "q.fa", self.tmp / "s.fa"
         allq, alls = read_fasta(Q), read_fasta(S)
-        q.write_text("".join(f">{a}\n{allq[a]}\n" for a, _ in PLAIN))
-        s.write_text("".join(f">{b}\n{alls[b]}\n" for _, b in PLAIN))
+        q.write_text("".join(f">{a}\n{allq[a]}\n" for a, _ in PLAIN), encoding="utf-8")
+        s.write_text("".join(f">{b}\n{alls[b]}\n" for _, b in PLAIN), encoding="utf-8")
         pf = self.pairs_file(PLAIN)
         outs = []
         for j in (1, 3):
@@ -592,7 +614,7 @@ class PairsGiven(PipelineCase):
         self.assertEqual([st["cached"] for st in again.report["stages"]], [True, True, False, False])
         self.assertEqual(Path(again.outputs["dnds"]).read_bytes(), outs[0])
         # a changed input is translated again
-        q.write_text(q.read_text() + f">extra\n{allq['same_q']}\n")
+        q.write_text(q.read_text(encoding="utf-8") + f">extra\n{allq['same_q']}\n", encoding="utf-8")
         again = P.run_pairs(q, s, self.tmp / "o1", pairs=pf, jobs=1, quiet=True, resume=True)
         self.assertEqual([st["cached"] for st in again.report["stages"]][:2], [False, True])
         self.assertEqual(again.report["counts"]["genes"]["total"], 25)
@@ -606,9 +628,9 @@ class PairsGiven(PipelineCase):
             res = P.run_pairs(self.tmp / "missing.fa", S, self.tmp / "out", pairs=self.pairs_file(PLAIN))
         self.assertEqual(res.exit_code, 1)
         self.assertIn("missing.fa", err.getvalue())
-        self.assertEqual(json.loads((self.tmp / "out" / "report.json").read_text())["exit_code"], 1)
+        self.assertEqual(json.loads((self.tmp / "out" / "report.json").read_text(encoding="utf-8"))["exit_code"], 1)
         blocker = self.tmp / "file"
-        blocker.write_text("x")
+        blocker.write_text("x", encoding="utf-8")
         with redirect_stderr(io.StringIO()):
             res = P.run_pairs(Q, S, blocker / "out", pairs=self.pairs_file(PLAIN))
         self.assertEqual(res.exit_code, 1)
@@ -621,7 +643,7 @@ class PairsGiven(PipelineCase):
         r = subprocess.run([sys.executable, "-m", "coal", "pipeline", "pairs", "--query", str(Q), "--subject",
                             str(S), "--pairs", str(self.pairs_file(PLAIN[1:3])), "-o", str(self.tmp / "out"),
                             "-m", "ng"], capture_output=True, text=True,
-                           env={**os.environ, "PYTHONPATH": str(ROOT / "src")})
+                           env={**os.environ, "PYTHONPATH": str(ROOT / "src")}, encoding="utf-8")
         self.assertEqual(r.returncode, 2, r.stderr)   # finished; the unusable genes of the query file are failures
         self.assertEqual(r.stdout, "")
         self.assertIn("coal pipeline: summary: 40 genes (4 not usable); 2 pairs: 2 ok", r.stderr)
@@ -636,8 +658,8 @@ class Robustness(PipelineCase):
     def small(self):
         q, s = self.tmp / "q.fa", self.tmp / "s.fa"
         allq, alls = read_fasta(Q), read_fasta(S)
-        q.write_text("".join(f">{a}\n{allq[a]}\n" for a, _ in PLAIN))
-        s.write_text("".join(f">{b}\n{alls[b]}\n" for _, b in PLAIN))
+        q.write_text("".join(f">{a}\n{allq[a]}\n" for a, _ in PLAIN), encoding="utf-8")
+        s.write_text("".join(f">{b}\n{alls[b]}\n" for _, b in PLAIN), encoding="utf-8")
         return q, s, self.pairs_file(PLAIN)
 
     def test_outputs_of_an_earlier_run_are_removed(self):
@@ -647,12 +669,12 @@ class Robustness(PipelineCase):
         self.assertEqual(first.exit_code, 0)
         for name in ("dnds.kaks", "codon_alignments.fasta", "dnds.tsv"):
             self.assertTrue((out / name).is_file(), name)
-        (out / "dnds.tsv.tmp").write_text("half a table of a killed run\n")
-        (out / "cluster_summary.tsv").write_text("from a cluster run into the same folder\n")
+        (out / "dnds.tsv.tmp").write_text("half a table of a killed run\n", encoding="utf-8")
+        (out / "cluster_summary.tsv").write_text("from a cluster run into the same folder\n", encoding="utf-8")
         (out / "codon_alignments").mkdir()
-        (out / "codon_alignments" / "old_cluster.fasta").write_text(">x\nATG\n")
-        (out / "codon_alignments" / "notes.txt").write_text("the user's own file\n")
-        (out / "my_notes.txt").write_text("the user's own file\n")
+        (out / "codon_alignments" / "old_cluster.fasta").write_text(">x\nATG\n", encoding="utf-8")
+        (out / "codon_alignments" / "notes.txt").write_text("the user's own file\n", encoding="utf-8")
+        (out / "my_notes.txt").write_text("the user's own file\n", encoding="utf-8")
         second = P.run_pairs(q, s, out, pairs=pf, quiet=True)   # the same folder, without the optional outputs
         self.assertEqual(second.exit_code, 0)
         left = sorted(p.name for p in out.iterdir())
@@ -675,8 +697,8 @@ class Robustness(PipelineCase):
         other = subprocess.Popen(["sleep", "60"])   # a live process that "owns" the folder
         try:
             out.mkdir()
-            (out / "report.json").write_text("the other run's report\n")
-            lock.write_text(f"{other.pid}\n")
+            (out / "report.json").write_text("the other run's report\n", encoding="utf-8")
+            lock.write_text(f"{other.pid}\n", encoding="utf-8")
             with redirect_stderr(io.StringIO()) as err:
                 res = P.run_pairs(q, s, out, pairs=pf, quiet=True)
             self.assertEqual(res.exit_code, 1)
@@ -685,8 +707,8 @@ class Robustness(PipelineCase):
             self.assertEqual(res.report["status"], "failed")
             # nothing of the folder was touched, and the other run's lock is still there
             self.assertEqual(sorted(p.name for p in out.iterdir()), ["report.json"])
-            self.assertEqual((out / "report.json").read_text(), "the other run's report\n")
-            self.assertEqual(lock.read_text(), f"{other.pid}\n")
+            self.assertEqual((out / "report.json").read_text(encoding="utf-8"), "the other run's report\n")
+            self.assertEqual(lock.read_text(encoding="utf-8"), f"{other.pid}\n")
         finally:
             other.kill()
             other.wait()
@@ -713,21 +735,21 @@ class Robustness(PipelineCase):
                 engine = self.tmp / f"coal-cpp-{name}"
                 engine.write_text(f'#!/bin/sh\ncase "$1" in\n  codon-dnds) echo $$ > "{pidfile}"; '
                                   f'echo partial > "{out}/dnds.tsv.tmp"; exec sleep 120;;\n'
-                                  f'  *) exec "{CPP}" "$@";;\nesac\n')
+                                  f'  *) exec "{CPP}" "$@";;\nesac\n', encoding="utf-8")
                 engine.chmod(0o755)
                 proc = subprocess.Popen([sys.executable, "-m", "coal", "pipeline", "pairs", "--query", str(q),
                                          "--subject", str(s), "--pairs", str(pf), "-o", str(out)],
                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                                         env={**os.environ, "PYTHONPATH": str(ROOT / "src"), "COAL_CPP": str(engine)},
-                                        start_new_session=True)   # nothing else can deliver the signal to the child
+                                        encoding="utf-8", start_new_session=True)   # only the test can signal the child
                 try:
                     for _ in range(600):
-                        if pidfile.is_file() and pidfile.read_text().strip() and (out / "dnds.tsv.tmp").exists():
+                        if pidfile.is_file() and pidfile.read_text(encoding="utf-8").strip() and (out / "dnds.tsv.tmp").exists():
                             break
                         time.sleep(0.05)
                     else:
                         self.fail("the engine step did not start")
-                    engine_pid = int(pidfile.read_text())
+                    engine_pid = int(pidfile.read_text(encoding="utf-8"))
                     os.kill(engine_pid, 0)            # it is running
                     time.sleep(0.2)
                     os.kill(proc.pid, signum)         # the Python process only
@@ -747,7 +769,7 @@ class Robustness(PipelineCase):
                 else:
                     os.kill(engine_pid, signal.SIGKILL)
                     self.fail("the engine process was left running")
-                report = json.loads((out / "report.json").read_text())
+                report = json.loads((out / "report.json").read_text(encoding="utf-8"))
                 validate(report, SCHEMA)
                 self.assertEqual((report["status"], report["exit_code"]), ("interrupted", code))
                 self.assertIn(f"interrupted by {name}", report["error"])
@@ -763,7 +785,7 @@ class Robustness(PipelineCase):
         started = self.tmp / "started"
         started.mkdir()
         tool = self.tmp / "clustalo"
-        tool.write_text(f'#!/bin/sh\ntouch "{started}/$$"\nexec sleep 120\n')
+        tool.write_text(f'#!/bin/sh\ntouch "{started}/$$"\nexec sleep 120\n', encoding="utf-8")
         tool.chmod(0o755)
         clusters = {k: [("a", "MKV"), ("b", "MKL"), ("c", "MRV")] for k in range(40)}
 
@@ -790,7 +812,7 @@ class Robustness(PipelineCase):
         q, s, _ = self.small()
         marker = self.tmp / "diamond_was_started"
         fake = self.tmp / "diamond"
-        fake.write_text(f'#!/bin/sh\ntouch "{marker}"\necho "diamond version 2.2.8"\n')
+        fake.write_text(f'#!/bin/sh\ntouch "{marker}"\necho "diamond version 2.2.8"\n', encoding="utf-8")
         fake.chmod(0o755)
         prot = self.tmp / "proteins.fa"
         r = run_cpp("translate", q, "-o", prot, "-q")
@@ -808,7 +830,7 @@ class Robustness(PipelineCase):
         self.assertEqual(len(read_tsv(self.tmp / "o_prot" / "failed.tsv")), 12)   # every gene with its reason
         # all genes unusable for other reasons: the subject file this time; and cluster mode
         empty = self.tmp / "empty.fa"
-        empty.write_text(">a\n\n>b\nAT\n>c\n\n")
+        empty.write_text(">a\n\n>b\nAT\n>c\n\n", encoding="utf-8")
         with redirect_stderr(io.StringIO()) as err:
             res = P.run_pairs(q, empty, self.tmp / "o_empty", diamond=str(fake), quiet=True)
         self.assertEqual(res.exit_code, 1)
@@ -822,9 +844,9 @@ class Robustness(PipelineCase):
 
     def test_a_non_ascii_id_is_that_genes_failure(self):
         q, s, pf = self.small()
-        text = q.read_text()
+        text = q.read_text(encoding="utf-8")
         for label, raw, shown in (("utf8", "gène_αβ".encode("utf-8"), "gène_αβ"),
-                                  ("latin1", "gène".encode("latin-1"), "g?ne")):
+                                  ("latin1", "gène".encode("latin-1"), "g\\xe8ne")):
             with self.subTest(encoding=label):
                 bad = self.tmp / f"q_{label}.fa"
                 bad.write_bytes(text.encode().replace(b">g03\n", b">" + raw + b"\n"))
@@ -841,6 +863,150 @@ class Robustness(PipelineCase):
                 rows = read_tsv(res.outputs["dnds"])
                 self.assertEqual(sum(r["status"] == "ok" for r in rows), 11)   # the other genes are computed
                 self.assertEqual([r["status"] for r in rows if r["seq1"] == "g03"], ["error"])
+
+
+@needs_cpp
+class Encoding(PipelineCase):
+    """IDs are bytes that are never re-encoded, and every table is UTF-8 with \\n line ends whatever the system's
+    default encoding and line ends are (cp1252 and \\r\\n on Windows). The Windows condition is made here on every
+    system: the pipeline runs in its own interpreter with UTF-8 mode off and the C locale (default encoding ASCII
+    on POSIX, the ANSI code page on Windows), and with -X warn_default_encoding as an error, which fails any open()
+    or text-mode pipe that does not name its encoding."""
+
+    LATIN1 = "gène".encode("latin-1")            # not valid UTF-8: shown as g\xe8ne
+    UTF8 = "gène_αβ".encode("utf-8")             # valid UTF-8: shown as it is
+    SHOWN = {"g03": "gène_αβ", "g05": "g\\xe8ne", "g07": "g\\xe2ne"}
+
+    small = Robustness.small
+
+    def inputs(self):
+        q, s, _ = self.small()
+        raw = q.read_text(encoding="utf-8").encode()   # (\n line ends, whatever write_text made of them)
+        for old, new in ((b"g03", self.UTF8), (b"g05", self.LATIN1), (b"g07", "gâne".encode("latin-1"))):
+            self.assertIn(b">" + old + b"\n", raw)
+            raw = raw.replace(b">" + old + b"\n", b">" + new + b"\n")
+        bad = self.tmp / "q_ids.fa"
+        bad.write_bytes(raw)
+        # the pairs file as a Windows editor saves it (\r\n), naming the genes by the bytes of the FASTA file, and
+        # one ID (Latin-1) that is in no file
+        pf = self.tmp / "pairs_ids.tsv"
+        names = {b"g03": self.UTF8, b"g05": self.LATIN1, b"g07": "gâne".encode("latin-1")}
+        lines = [names.get(a.encode(), a.encode()) + b"\t" + b.encode() for a, b in PLAIN]
+        lines.append("señor".encode("latin-1") + b"\th01")
+        pf.write_bytes(b"query\tsubject\r\n" + b"\r\n".join(lines) + b"\r\n")
+        return bad, s, pf
+
+    def run_cli(self, out, bad, s, pf, env, *python_opts):
+        return subprocess.run([sys.executable, *python_opts, "-m", "coal", "pipeline", "pairs", "--query", str(bad),
+                               "--subject", str(s), "--pairs", str(pf), "-o", str(out), "--kaks-format",
+                               "--keep-alignments"], capture_output=True, env=env)
+
+    def tables(self, out: Path) -> dict[str, bytes]:
+        return {p.name: p.read_bytes() for p in sorted(out.iterdir()) if p.is_file() and p.name != "report.json"}
+
+    def test_the_same_bytes_whatever_the_default_encoding(self):
+        bad, s, pf = self.inputs()
+        base = {k: v for k, v in os.environ.items()
+                if k not in ("PYTHONUTF8", "PYTHONIOENCODING", "LC_ALL", "LC_CTYPE", "LANG", "PYTHONWARNINGS",
+                             "PYTHONWARNDEFAULTENCODING")}
+        base.update(PYTHONPATH=str(ROOT / "src"), COAL_CPP=str(CPP))
+        legacy = dict(base, PYTHONUTF8="0", PYTHONCOERCECLOCALE="0", LC_ALL="C", LANG="C")
+        runs = {
+            "utf8": (dict(base, PYTHONUTF8="1"), ()),
+            "legacy": (legacy, ()),                     # ASCII (POSIX) or the ANSI code page (Windows) by default
+            "legacy_strict": (legacy, ("-X", "warn_default_encoding", "-W", "error::EncodingWarning")),
+            "cp1252_stdio": (dict(legacy, PYTHONIOENCODING="cp1252"), ()),   # a Windows console's streams
+        }
+        got = {}
+        for name, (env, opts) in runs.items():
+            with self.subTest(run=name):
+                out = self.tmp / f"o_{name}"
+                r = self.run_cli(out, bad, s, pf, env, *opts)
+                self.assertEqual(r.returncode, 2, r.stderr.decode("utf-8", "backslashreplace"))
+                self.assertNotIn(b"Traceback", r.stderr)
+                self.assertNotIn(b"EncodingWarning", r.stderr)
+                got[name] = self.tables(out)
+                report = json.loads((out / "report.json").read_bytes().decode("utf-8"))
+                self.assertEqual(report["status"], "completed_with_failures")
+                seq1 = {f.get("seq1") for f in report["failures"]}
+                self.assertLessEqual(set(self.SHOWN.values()) | {"se\\xf1or"}, seq1)
+        ref = got["utf8"]
+        self.assertLessEqual({"dnds.tsv", "genes.tsv", "failed.tsv", "orthologs.tsv", "dnds.kaks",
+                              "codon_alignments.fasta"}, set(ref))
+        for name, files in got.items():
+            self.assertEqual(sorted(files), sorted(ref), name)
+            for fn, data in files.items():
+                self.assertEqual(data, ref[fn], f"{fn} of the {name} run differs from the UTF-8 run")
+        for fn, data in ref.items():
+            with self.subTest(file=fn):
+                self.assertNotIn(b"\r", data)              # \n line ends on every system
+                data.decode("utf-8")                       # valid UTF-8, always (strict)
+                self.assertNotIn("\ufffd".encode(), data)  # and nothing replaced by a look-alike
+
+        # the IDs: valid UTF-8 unchanged, other bytes as \xhh; two Latin-1 IDs that differ stay two IDs
+        failed = [ln.split(b"\t") for ln in ref["failed.tsv"].split(b"\n")[1:] if ln]
+        genes = {f[2]: f[4] for f in failed if f[0] == b"gene"}
+        for shown in self.SHOWN.values():
+            self.assertEqual(genes.get(shown.encode("utf-8")), b"id_not_ascii", shown)
+        self.assertIn(self.UTF8, ref["genes.tsv"])
+        self.assertIn(b"g\\xe8ne\t", ref["genes.tsv"])
+        self.assertIn(b"g\\xe2ne\t", ref["genes.tsv"])
+        self.assertIn(b"se\\xf1or\th01\n", ref["orthologs.tsv"])   # the pairs file's ID, by the same rule
+        pair_rows = [f for f in failed if f[0] == b"pair"]
+        self.assertEqual(sorted(f[2] for f in pair_rows),
+                         sorted(x.encode("utf-8") for x in (*self.SHOWN.values(), "se\\xf1or")))
+        rows = [ln.split(b"\t") for ln in ref["dnds.tsv"].split(b"\n")[1:] if ln]
+        self.assertEqual(sum(f[-2] == b"ok" for f in rows), 9)      # the nine other genes are computed
+
+    def test_messages_with_such_ids_reach_any_console(self):
+        # every gene unusable, the first with a non-ASCII ID: the message names it; an ASCII or cp1252 stderr
+        # shows what it cannot encode as an escape and the run ends with its own error, not a UnicodeEncodeError
+        _, s, _ = self.small()
+        q = self.tmp / "q_bad.fa"
+        q.write_bytes(b">" + self.UTF8 + b"\nAT\n>b\n\n")
+        pf = self.tmp / "p.tsv"
+        pf.write_bytes(self.UTF8 + b"\th01\n")
+        base = {k: v for k, v in os.environ.items() if k not in ("PYTHONUTF8", "PYTHONIOENCODING", "LC_ALL", "LANG")}
+        base.update(PYTHONPATH=str(ROOT / "src"), COAL_CPP=str(CPP), PYTHONUTF8="0", PYTHONCOERCECLOCALE="0",
+                    LC_ALL="C", LANG="C")
+        for name, env in (("default", base), ("cp1252", dict(base, PYTHONIOENCODING="cp1252")),
+                          ("ascii", dict(base, PYTHONIOENCODING="ascii"))):
+            with self.subTest(stderr=name):
+                r = self.run_cli(self.tmp / f"o_{name}", q, s, pf, env)
+                self.assertEqual(r.returncode, 1, r.stderr)
+                self.assertNotIn(b"Traceback", r.stderr)
+                self.assertIn(b"none of the 2 sequences of", r.stderr)
+                self.assertIn(b"the first: g", r.stderr)
+
+    def test_no_text_file_is_opened_with_the_default_encoding(self):
+        # the modules of the alignment layer, the pipeline and the dispatcher name the encoding of every text file
+        # and text-mode pipe they open (what -X warn_default_encoding checks at run time, checked here in the source)
+        import ast
+        for mod in ("dnds_pipeline.py", "align.py", "msa.py", "dispatch.py"):
+            tree = ast.parse((ROOT / "src" / "coal" / mod).read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                kw = {k.arg: k.value for k in node.keywords}
+                name = getattr(node.func, "attr", getattr(node.func, "id", ""))
+                where = f"src/coal/{mod}:{node.lineno}"
+                if name == "open" and isinstance(node.func, ast.Name):
+                    mode = node.args[1].value if len(node.args) > 1 else "r"
+                    if "b" in mode:
+                        continue
+                    self.assertIn("encoding", kw, where)
+                    self.assertEqual(kw["encoding"].value, "utf-8", where)
+                    self.assertEqual(getattr(kw.get("errors"), "value", None), "backslashreplace", where)
+                    if "w" in mode or "a" in mode:
+                        self.assertEqual(getattr(kw.get("newline"), "value", None), "\n", where)
+                elif name in ("read_text", "write_text"):
+                    self.assertIn("encoding", kw, where)
+                elif getattr(kw.get("text"), "value", False) or "universal_newlines" in kw:
+                    self.assertEqual(getattr(kw.get("encoding"), "value", None), "utf-8", where)
+                    self.assertEqual(getattr(kw.get("errors"), "value", None), "backslashreplace", where)
+                elif name == "decode":
+                    self.assertEqual([getattr(a, "value", None) for a in node.args] if node.args else ["utf-8", "strict"],
+                                     ["utf-8", "backslashreplace"] if node.args else ["utf-8", "strict"], where)
 
 
 @needs_diamond
@@ -1017,21 +1183,21 @@ class ClustersGiven(PipelineCase):
         fam = read_fasta(FAM)
         one, two = self.tmp / "one.fa", self.tmp / "two.fa"
         names = [n for n in fam if not n.startswith("famB")]
-        one.write_text("".join(f">{n}\n{fam[n]}\n" for n in names[:4]))
-        two.write_text("".join(f">{n}\n{fam[n]}\n" for n in names[4:]))
+        one.write_text("".join(f">{n}\n{fam[n]}\n" for n in names[:4]), encoding="utf-8")
+        two.write_text("".join(f">{n}\n{fam[n]}\n" for n in names[4:]), encoding="utf-8")
         cl = self.tmp / "cl.tsv"
-        cl.write_text("".join(ln + "\n" for ln in FAM_CLUSTERS.read_text().splitlines() if not ln.startswith("famB")))
+        cl.write_text("".join(ln + "\n" for ln in FAM_CLUSTERS.read_text(encoding="utf-8").splitlines() if not ln.startswith("famB")), encoding="utf-8")
         res = P.run_clusters([one, two], self.tmp / "out", clusters=cl, max_cluster_size=2, keep_alignments=True,
                              kaks_format=True, quiet=True)
         self.assertEqual(res.exit_code, 0)
         self.assertEqual(res.report["counts"]["genes"]["total"], 9)
         self.assertEqual(sorted(os.listdir(res.outputs["codon_alignments"])), ["famC_001.fasta"])
-        self.assertEqual(len(Path(res.outputs["kaks"]).read_text().splitlines()), 1 + 5 + 1)
+        self.assertEqual(len(Path(res.outputs["kaks"]).read_text(encoding="utf-8").splitlines()), 1 + 5 + 1)
 
     @unittest.skipIf(os.name == "nt", "the stand-in tool is a POSIX shell script")
     def test_a_failing_msa_falls_back_to_pairwise(self):
         tool = self.tmp / "clustalo"
-        tool.write_text("#!/bin/sh\necho 'cannot align' >&2\nexit 1\n")
+        tool.write_text("#!/bin/sh\necho 'cannot align' >&2\nexit 1\n", encoding="utf-8")
         tool.chmod(tool.stat().st_mode | stat.S_IXUSR)
         with mock.patch.dict(os.environ, {"COAL_CLUSTALO": str(tool)}):
             res = self.run_it(max_cluster_size=8)
@@ -1099,7 +1265,7 @@ class ClustersDeepClust(PipelineCase):
         summ = read_tsv(res.outputs["cluster_summary"])
         self.assertEqual(len(summ), 4)
         self.assertEqual(sum(int(s["n_pairs"]) for s in summ), 5 + 10 + 1)
-        realign = Path(res.outputs["realign"]).read_text().splitlines()
+        realign = Path(res.outputs["realign"]).read_text(encoding="utf-8").splitlines()
         self.assertEqual(realign[0].split("\t")[:3], ["member", "representative", "approx_pident"])
         self.assertGreaterEqual(len(realign), 1 + 16)
         again = P.run_clusters(FAM, self.tmp / "out", max_cluster_size=2, realign=True, jobs=1, quiet=True,

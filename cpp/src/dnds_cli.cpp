@@ -160,21 +160,39 @@ void binary_stdio(bool in, bool out) {
 }
 
 // A sequence ID with non-ASCII bytes, for the genes table: unchanged when it is valid UTF-8 (so that it can be
-// found again in the input), otherwise each byte above 127 as '?'.
+// found again in the input), otherwise every byte that is not part of a valid UTF-8 sequence as \xhh (two lower-case
+// hexadecimal digits). The tables are therefore always valid UTF-8, two different IDs never look the same, and the
+// text is what Python's "backslashreplace" error handler gives for the same bytes (the pipeline reads the IDs of
+// the pairs and clusters files with it, so both name a gene the same way). "Valid" is the Unicode definition:
+// no overlong forms, no surrogates (ED A0..BF), nothing above U+10FFFF.
 std::string printable_id(const std::string& id) {
-    bool utf8 = true;
-    for (size_t i = 0; i < id.size() && utf8;) {
+    static const char* hex = "0123456789abcdef";
+    std::string o;
+    o.reserve(id.size());
+    for (size_t i = 0; i < id.size();) {
         const unsigned char c = (unsigned char)id[i];
-        const size_t n = c < 0x80 ? 1 : (c >= 0xC2 && c <= 0xDF) ? 2 : (c >= 0xE0 && c <= 0xEF) ? 3
-                         : (c >= 0xF0 && c <= 0xF4) ? 4 : 0;
-        if (n == 0 || i + n > id.size()) utf8 = false;
-        for (size_t k = 1; k < n && utf8; ++k) utf8 = ((unsigned char)id[i + k] & 0xC0) == 0x80;
-        i += n ? n : 1;
+        size_t n = c < 0x80 ? 1 : (c >= 0xC2 && c <= 0xDF) ? 2 : (c >= 0xE0 && c <= 0xEF) ? 3
+                   : (c >= 0xF0 && c <= 0xF4) ? 4 : 0;
+        if (n > 1) {
+            if (i + n > id.size()) n = 0;
+            for (size_t k = 1; k < n; ++k)
+                if (((unsigned char)id[i + k] & 0xC0) != 0x80) n = 0;
+        }
+        if (n > 1) {
+            const unsigned char d = (unsigned char)id[i + 1];
+            if ((c == 0xE0 && d < 0xA0) || (c == 0xED && d > 0x9F) || (c == 0xF0 && d < 0x90) || (c == 0xF4 && d > 0x8F))
+                n = 0;
+        }
+        if (n == 0) {
+            o += "\\x";
+            o += hex[c >> 4];
+            o += hex[c & 15];
+            ++i;
+        } else {
+            o.append(id, i, n);
+            i += n;
+        }
     }
-    if (utf8) return id;
-    std::string o = id;
-    for (char& ch : o)
-        if ((unsigned char)ch > 127) ch = '?';
     return o;
 }
 

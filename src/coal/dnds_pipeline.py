@@ -122,7 +122,7 @@ def _diamond_version(exe: str) -> str:
     """'2.2.8' ('' if it does not run)."""
     try:
         r = subprocess.run([exe, "version"], capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL,
-                           encoding="utf-8", errors="replace")
+                           encoding="utf-8", errors="backslashreplace")
     except (OSError, subprocess.SubprocessError):
         return ""
     words = (r.stdout or r.stderr).split()
@@ -245,6 +245,16 @@ def _find_cpp() -> str:
 
 # ------------------------------------------------------------------------------------------------ small helpers
 
+# Text and bytes (the same on every system; docs/pipeline.md "Text encoding"). Sequence IDs are bytes that COAL never
+# re-encodes: the FASTA files are read as bytes, the engine is fed bytes through its pipe and writes its tables in
+# binary mode. Every table and log this module reads or writes is opened as UTF-8 with the "backslashreplace" error
+# handler and (when written) "\n" line ends, never with the system's default encoding (cp1252 on Windows, ASCII in
+# the C locale) and never with its line ends. Bytes that are not valid UTF-8 (an ID in Latin-1, say) are therefore
+# shown as \xhh, exactly as `coal-cpp translate` writes them into its genes table: nothing is dropped or replaced
+# by a look-alike, two different IDs never become the same text, and every output file is valid UTF-8.
+# tests/test_dnds_pipeline.py (Encoding) runs the pipeline under an ASCII locale and with Python's
+# warn_default_encoding switched on.
+
 class FastaIndex:
     """IDs and byte offsets of the records of FASTA files (the first record of a repeated ID); sequences are read
     from disk when asked for. Memory: the IDs."""
@@ -269,7 +279,7 @@ class FastaIndex:
                     if cur is not None:
                         pos.setdefault(cur, (fno, start, off))
                     words = line[1:].split()
-                    cur = words[0].decode("utf-8", "replace") if words else ""
+                    cur = words[0].decode("utf-8", "backslashreplace") if words else ""
                     start = off + len(line)
                 off += len(line)
             if cur is not None:
@@ -341,7 +351,7 @@ def _tail(path: str, n: int = 800) -> str:
             fh.seek(0, os.SEEK_END)
             size = fh.tell()
             fh.seek(max(0, size - n))
-            return fh.read().decode("utf-8", "replace").strip()
+            return fh.read().decode("utf-8", "backslashreplace").strip()
     except OSError:
         return ""
 
@@ -399,12 +409,12 @@ class _Run:
         sp = os.path.join(self.work, "state.json")
         if self.a.resume and os.path.isfile(sp):
             try:
-                with open(sp, encoding="utf-8") as fh:
+                with open(sp, encoding="utf-8", errors="backslashreplace") as fh:
                     self.state = json.load(fh)
             except (OSError, ValueError):
                 self.state = {}
         self.outputs["failed"] = os.path.join(self.out, "failed.tsv")
-        self._failed_fh = open(self.outputs["failed"], "w", encoding="utf-8", newline="\n")
+        self._failed_fh = open(self.outputs["failed"], "w", encoding="utf-8", errors="backslashreplace", newline="\n")
         self._failed_fh.write("\t".join(FAILED_COLUMNS) + "\n")
 
     def _clear_earlier_outputs(self) -> None:
@@ -492,7 +502,7 @@ class _Run:
 
     def _save_state(self) -> None:
         tmp = self.wpath("state.json.tmp")
-        with open(tmp, "w", encoding="utf-8") as fh:
+        with open(tmp, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as fh:
             json.dump(self.state, fh)
         os.replace(tmp, self.wpath("state.json"))
 
@@ -563,7 +573,7 @@ class _Run:
         failed: dict[str, str] = {}
         c = self.counts.setdefault("genes", {"total": 0, "ok": 0, "warning": 0, "failed": 0})
         codes = self.gene_failures.setdefault(set_name, {"usable": 0, "codes": {}, "first": None})
-        with open(genes_path, encoding="utf-8", errors="replace") as fh:
+        with open(genes_path, encoding="utf-8", errors="backslashreplace") as fh:
             next(fh)
             for line in fh:
                 f = line.rstrip("\n").split("\t")
@@ -673,7 +683,7 @@ class _Run:
             raise PipelineError(f"coal-cpp codon-dnds failed (exit {rc}); the end of {logp}:\n{_tail(logp)}")
         os.replace(out + ".tmp", out)
         self.outputs["dnds"] = out
-        with open(fail, encoding="utf-8", errors="replace") as fh:
+        with open(fail, encoding="utf-8", errors="backslashreplace") as fh:
             next(fh, None)
             for line in fh:
                 f = line.rstrip("\n").split("\t")
@@ -718,7 +728,7 @@ class _Run:
         rp = a.report or self.path("report.json")
         try:
             os.makedirs(os.path.dirname(os.path.abspath(rp)), exist_ok=True)
-            with open(rp, "w", encoding="utf-8", newline="\n") as fh:
+            with open(rp, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as fh:
                 json.dump(report, fh, indent=1, default=str)
                 fh.write("\n")
             self.outputs["report"] = rp
@@ -732,7 +742,7 @@ def _count_pairs(run: _Run, dnds_path: str, group_col: bool) -> None:
     c = {"total": 0, "ok": 0, "warning": 0, "saturated": 0, "no_data": 0, "error": 0}
     k = 1 if group_col else 0
     first = None
-    with open(dnds_path, encoding="utf-8", errors="replace") as fh:
+    with open(dnds_path, encoding="utf-8", errors="backslashreplace") as fh:
         next(fh)
         for line in fh:
             f = line.rstrip("\n").split("\t")
@@ -755,7 +765,7 @@ _HIT_COLS = ["qseqid", "sseqid", "pident", "length", "evalue", "bitscore", "qsta
 def _best_hits(path: str, keep: int) -> dict[str, list[str]]:
     """{query: the fields after qseqid of its first line} (DIAMOND writes a query's best hit first)."""
     best: dict[str, list[str]] = {}
-    with open(path, encoding="utf-8", errors="replace") as fh:
+    with open(path, encoding="utf-8", errors="backslashreplace") as fh:
         for line in fh:
             f = line.rstrip("\r\n").split("\t")
             if len(f) >= 2 and f[0] not in best:
@@ -773,8 +783,8 @@ def _pairs_mode(run: _Run) -> None:
     run.outputs["genes"] = run.path("genes.tsv")
     q_order: dict[str, int] = {}
     s_order: dict[str, int] = {}
-    with open(run.outputs["genes"], "w", encoding="utf-8", newline="\n") as gf:
-        with open(q_genes, encoding="utf-8") as fh:
+    with open(run.outputs["genes"], "w", encoding="utf-8", errors="backslashreplace", newline="\n") as gf:
+        with open(q_genes, encoding="utf-8", errors="backslashreplace") as fh:
             gf.write("set\t" + fh.readline())
         q_failed = run.read_genes(q_genes, "query", gf, q_order)
         s_failed = run.read_genes(s_genes, "subject", gf, s_order)
@@ -792,7 +802,7 @@ def _pairs_mode(run: _Run) -> None:
         pairs = _read_pairs_file(a.pairs)
         run.stages.append({"name": "orthologs", "seconds": 0.0, "cached": False, "source": "given",
                            "pairs": len(pairs)})
-        with open(orth, "w", encoding="utf-8", newline="\n") as fh:
+        with open(orth, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as fh:
             fh.write("query\tsubject\n")
             for q, s in pairs:
                 fh.write(f"{q}\t{s}\n")
@@ -862,7 +872,7 @@ def _pairs_mode(run: _Run) -> None:
 def _read_pairs_file(path: str) -> list[tuple[str, str]]:
     pairs = []
     try:
-        fh = open(path, encoding="utf-8", errors="replace")
+        fh = open(path, encoding="utf-8", errors="backslashreplace")
     except OSError as e:
         raise PipelineError(f"cannot open {path!r}: {e.strerror or e}") from None
     with fh:
@@ -914,7 +924,7 @@ def _search(run: _Run, q_faa: str, s_faa: str, q_order: dict, s_order: dict, ort
     back = _best_hits(rev, 2) if both else {}
     pairs = [(q, h[0]) for q, h in hits.items() if not both or back.get(h[0], [None])[0] == q]
     pairs.sort(key=lambda p: (q_order.get(p[0], len(q_order)), p[0]))
-    with open(orth, "w", encoding="utf-8", newline="\n") as fh:
+    with open(orth, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as fh:
         fh.write("query\tsubject\tpident\tlength\tevalue\tbitscore\n")
         for q, s in pairs:
             fh.write("\t".join([q, s, *hits[q][1:5]]) + "\n")
@@ -923,7 +933,7 @@ def _search(run: _Run, q_faa: str, s_faa: str, q_order: dict, s_order: dict, ort
     paired_q = {q for q, _ in pairs}
     paired_s = {s for _, s in pairs}
     n = {"no_hit": 0, "not_reciprocal": 0}
-    with open(unp, "w", encoding="utf-8", newline="\n") as fh:
+    with open(unp, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as fh:
         fh.write("set\tid\treason\n")
         for q in q_order:
             if q not in paired_q:
@@ -954,7 +964,7 @@ def read_clusters(path: str) -> tuple[dict[str, list[str]], int]:
     seen: set[str] = set()
     dup = 0
     try:
-        fh = open(path, encoding="utf-8", errors="replace")
+        fh = open(path, encoding="utf-8", errors="backslashreplace")
     except OSError as e:
         raise PipelineError(f"cannot open {path!r}: {e.strerror or e}") from None
     with fh:
@@ -1008,8 +1018,8 @@ def _clusters_mode(run: _Run) -> None:
     faa, genes, _ = run.translate("proteins", list(a.cds))
     run.outputs["genes"] = run.path("genes.tsv")
     order: dict[str, int] = {}
-    with open(run.outputs["genes"], "w", encoding="utf-8", newline="\n") as gf:
-        with open(genes, encoding="utf-8") as fh:
+    with open(run.outputs["genes"], "w", encoding="utf-8", errors="backslashreplace", newline="\n") as gf:
+        with open(genes, encoding="utf-8", errors="backslashreplace") as fh:
             gf.write("set\t" + fh.readline())
         failed = run.read_genes(genes, "cds", gf, order)
     run.say(f"translated {len(order) + len(failed):,} CDS ({len(failed):,} not usable)")
@@ -1041,8 +1051,8 @@ def _clusters_mode(run: _Run) -> None:
                 run.run_tool([dmd, "realign", "--db", faa, "--clusters", cfile, "--out", rfile + ".body", "--threads",
                               str(run.jobs), "--quiet", "--outfmt", "6", "qseqid", "sseqid", "approx_pident",
                               "evalue", "bitscore", "qcovhsp", "scovhsp", *rextra], "diamond", "diamond realign")
-                with open(rfile, "w", encoding="utf-8", newline="\n") as out, \
-                        open(rfile + ".body", encoding="utf-8", errors="replace") as body:
+                with open(rfile, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as out, \
+                        open(rfile + ".body", encoding="utf-8", errors="backslashreplace") as body:
                     if not rextra:
                         out.write("member\trepresentative\tapprox_pident\tevalue\tbitscore\tqcovhsp\tscovhsp\n")
                     shutil.copyfileobj(body, out)
@@ -1193,8 +1203,8 @@ def summarise(dnds_path: str, plans: list[dict], out_path: str) -> None:
     pair_selection, aligner, note. n_ok counts the pairs with status ok or warning (both have estimates); the
     statistics are over those pairs' values that are numbers (dN/dS is NA when dS is 0: n_dNdS says how many
     values the dN/dS statistics are over)."""
-    with open(dnds_path, encoding="utf-8", errors="replace") as fh, \
-            open(out_path, "w", encoding="utf-8", newline="\n") as out:
+    with open(dnds_path, encoding="utf-8", errors="backslashreplace") as fh, \
+            open(out_path, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as out:
         header = fh.readline().rstrip("\n").split("\t")
         col = {name: k for k, name in enumerate(header)}
         ci, mi, si = col["cluster_id"], col["method"], col["status"]
@@ -1289,7 +1299,7 @@ def codon_dnds(groups, out_tsv: str, method=("YN",), codontable: int = 1, jobs: 
     proc.stderr.close()
     if rc != 0:
         raise PipelineError(f"coal-cpp codon-dnds failed (exit {rc}): "
-                            f"{b''.join(err).decode('utf-8', 'replace').strip()[-800:]}")
+                            f"{b''.join(err).decode('utf-8', 'backslashreplace').strip()[-800:]}")
     return n
 
 

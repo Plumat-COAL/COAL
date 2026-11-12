@@ -38,7 +38,7 @@ RECS = [("a", "MKVLAAGIVALLLW*"), ("b", "MKVLGIVAL*LLW"), ("c", "MKVAAGIVLLLW")]
 def fake_tool(folder: str, name: str, script: str) -> str:
     """A POSIX shell stand-in for a tool."""
     p = os.path.join(folder, name)
-    with open(p, "w", newline="\n") as fh:
+    with open(p, "w", newline="\n", encoding="utf-8") as fh:
         fh.write("#!/bin/sh\n" + script + "\n")
     os.chmod(p, os.stat(p).st_mode | stat.S_IXUSR)
     return p

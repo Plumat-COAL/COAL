@@ -138,7 +138,7 @@ def tool_version(exe: str, timeout: float = 60) -> str:
     """The first line `exe --version` prints ('' if it does not run)."""
     try:
         r = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=timeout,
-                           encoding="utf-8", errors="replace")
+                           encoding="utf-8", errors="backslashreplace")
     except (OSError, subprocess.SubprocessError):
         return ""
     out = (r.stdout or r.stderr).strip().splitlines()
@@ -254,7 +254,7 @@ def _conda_install(tool: str, spec: str, conda: str, quiet: bool, timeout: float
     if not quiet:
         print("coal: " + " ".join(cmd), file=sys.stderr)
     r = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=timeout, encoding="utf-8",
-                       errors="replace")
+                       errors="backslashreplace")
     exe = _cached(tool)[1]
     if r.returncode != 0 or not os.path.isfile(exe):
         raise MsaError(f"installing {spec} with {conda} failed: {(r.stderr or r.stdout).strip()[-800:]}")
@@ -403,7 +403,7 @@ def _restore(rows: list[str], seqs, tails, internal) -> list[str]:
 
 def _read_fasta(path: str) -> dict[str, str]:
     recs, name, buf = {}, None, []
-    with open(path, encoding="utf-8", errors="replace") as fh:
+    with open(path, encoding="utf-8", errors="backslashreplace") as fh:
         for line in fh:
             line = line.strip()
             if line.startswith(">"):
@@ -477,20 +477,20 @@ def run_msa(records: Sequence[tuple[str, str]], tool: str = "clustalo", threads:
         raise MsaError(f"{tool} was not found: run coal.msa.install_{tool}() or put it on PATH")
     with tempfile.TemporaryDirectory(prefix="coal_msa_") as tmp:
         inp, outp = os.path.join(tmp, "in.fasta"), os.path.join(tmp, "out.fasta")
-        with open(inp, "w", encoding="utf-8", newline="\n") as fh:
+        with open(inp, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as fh:
             for k, s in enumerate(seqs):  # positional names: any ID works, duplicates included
                 fh.write(f">s{k}\n{s}\n")
         if tool == "clustalo":
             cmd = [exe, "-i", inp, "-o", outp, "--outfmt=fa", "--seqtype=Protein", "--output-order=input-order",
                    f"--threads={max(1, threads)}", "--force", *extra_args]
             r = _run_tracked(cmd, timeout, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-                             encoding="utf-8", errors="replace")
+                             encoding="utf-8", errors="backslashreplace")
         else:
             cmd = [exe, "--auto", "--amino", "--anysymbol", "--quiet", "--thread", str(max(1, threads)), *extra_args,
                    inp]
-            with open(outp, "w", encoding="utf-8") as fh:
+            with open(outp, "wb") as fh:
                 r = _run_tracked(cmd, timeout, stdout=fh, stderr=subprocess.PIPE, text=True, encoding="utf-8",
-                                 errors="replace")
+                                 errors="backslashreplace")
         if r.returncode != 0:
             raise MsaError(f"{tool} failed (exit {r.returncode}): {(r.stderr or '').strip()[-800:]}")
         got = _read_fasta(outp)

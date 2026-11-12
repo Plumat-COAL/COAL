@@ -22,6 +22,11 @@
 #include <utility>
 #include <vector>
 
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#endif
+
 #include "align.hpp"
 #include "core.hpp"
 #include "pool.hpp"
@@ -300,6 +305,11 @@ int main(int argc, char** argv) {
         if (!fout) die("cannot write '" + out_path + "': " + std::strerror(errno));
         out = &fout;
     }
+#ifdef _WIN32
+    // The alignment on standard output has \n line ends on every system, as the files do (text mode would write
+    // \r\n, and a program reading the pipe would see other bytes than on Linux and macOS)
+    else _setmode(_fileno(stdout), _O_BINARY);
+#endif
     std::ofstream sout;
     if (!scores_path.empty()) {
         sout.open(scores_path, std::ios::binary);

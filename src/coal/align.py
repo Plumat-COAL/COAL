@@ -419,7 +419,7 @@ def read_diamond_hits(path: str, first_only: bool = True) -> Iterator[LocalHit]:
     """Hits from DIAMOND --outfmt 6 whose first columns are DIAMOND_COLUMNS (later columns go to .extra).
     first_only: only the first line of each query-subject pair (DIAMOND writes the best HSP first)."""
     seen = set()
-    with open(path, encoding="utf-8", errors="replace") as fh:
+    with open(path, encoding="utf-8", errors="backslashreplace") as fh:
         for ln, line in enumerate(fh, 1):
             line = line.rstrip("\r\n")
             if not line or line.startswith("#"):
@@ -468,7 +468,7 @@ def find_align_binary() -> str | None:
 
 
 def _write_fasta(path: str, recs: Iterable[tuple[str, str]]) -> None:
-    with open(path, "w", encoding="utf-8", newline="\n") as fh:
+    with open(path, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as fh:
         for name, seq in recs:
             fh.write(f">{name}\n{seq}\n")
 
@@ -509,11 +509,11 @@ def align_pairs(pairs: Sequence[tuple[str, str]] | Sequence[tuple[str, str, str,
         _write_fasta(inp, ((f"{2 * i}" if k == 0 else f"{2 * i + 1}", s)
                            for i, (_, sa, _, sb) in enumerate(norm) for k, s in ((0, sa), (1, sb))))
         cmd = [exe, inp, "-o", outp, "--scores", sc, "-j", str(jobs), *params.args()]
-        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="backslashreplace", timeout=timeout)
         if r.returncode not in (0, 2):
             raise RuntimeError(f"coal-cpp-align failed (exit {r.returncode}): {r.stderr.strip()[-1000:]}")
         rows = {}
-        with open(outp, encoding="utf-8") as fh:
+        with open(outp, encoding="utf-8", errors="backslashreplace") as fh:
             name = None
             for line in fh:
                 line = line.rstrip("\n")
@@ -522,7 +522,7 @@ def align_pairs(pairs: Sequence[tuple[str, str]] | Sequence[tuple[str, str, str,
                 else:
                     rows[name] = line
         res = []
-        with open(sc, encoding="utf-8") as fh:
+        with open(sc, encoding="utf-8", errors="backslashreplace") as fh:
             next(fh)
             for i, line in enumerate(fh):
                 f = line.rstrip("\n").split("\t")

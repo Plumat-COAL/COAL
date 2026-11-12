@@ -8,6 +8,11 @@ folder. This script makes the copy; the copies are committed.
     python scripts/sync_r_sources.py           # copy, write the manifest and coal_version.h
     python scripts/sync_r_sources.py --check   # exit 1 when a copy differs from cpp/src (CI, tests)
 
+The copies have LF line ends on every system (.gitattributes: packaging/r/** eol=lf; an R source package has LF line
+ends, and VENDORED.txt holds the sha256 of exactly those bytes). cpp/src is read with either line end, so a Windows
+checkout with core.autocrlf compares equal. A copy that differs from what is wanted only by its line ends is
+reported as that (--check), not as "out of date".
+
 Only the in-memory core is vendored: tables, core, kaks, align, dnds and pool.hpp. The file readers (seqio) and
 the command-line front ends are not: the R package takes sequences from R objects and writes nothing.
 """
@@ -54,22 +59,32 @@ def main(argv: list[str]) -> int:
     check = "--check" in argv
     files = wanted()
     stale = []
+    crlf = []
     for name, data in files.items():
         path = DST / name
-        if not path.exists() or path.read_bytes() != data:
-            stale.append(name)
+        have = path.read_bytes() if path.exists() else None
+        if have != data:
+            (crlf if have is not None and have.replace(b"\r\n", b"\n") == data else stale).append(name)
             if not check:
                 DST.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(data)
     extra = sorted(p.name for p in DST.glob("*") if p.is_file() and p.name not in files and p.suffix in
                    (".cpp", ".hpp", ".h", ".txt")) if DST.exists() else []
     if check:
+        if crlf and not (stale or extra):
+            print("packaging/r/coalr/src/coal: the content is in sync with cpp/src, but these files have CRLF line "
+                  "ends: " + ", ".join(crlf) + "\nAn R source package has LF line ends (.gitattributes: "
+                  "packaging/r/** eol=lf; this checkout was made without that rule).\n"
+                  "run: python scripts/sync_r_sources.py   (writes them with LF)", file=sys.stderr)
+            return 1
+        stale += crlf
         if stale or extra:
             print("packaging/r/coalr/src/coal is out of date: " + ", ".join(stale + [f"{e} (not vendored)" for e in extra])
                   + "\nrun: python scripts/sync_r_sources.py", file=sys.stderr)
             return 1
         print(f"packaging/r/coalr/src/coal: {len(files)} files in sync with cpp/src")
         return 0
+    stale += crlf
     for e in extra:
         (DST / e).unlink()
     print(f"packaging/r/coalr/src/coal: {len(stale)} file(s) written, {len(files) - len(stale)} unchanged"

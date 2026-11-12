@@ -301,13 +301,24 @@ jobs:
           if grep -iE "\.\.\. skipped" cpp_tests.txt | grep -viqE "live comparison needs Python|peak memory read with getrusage|POSIX"; then
             echo "::error::C++ tests were skipped, so the C++ engine was not fully exercised"; exit 1
           fi
-      - name: Alignment layer tests (coal-cpp-align required)
-        # Biopython, EMBOSS needle, DIAMOND, Clustal Omega and MAFFT are optional here (their live checks skip; the
-        # stored Biopython / needle optima in tests/fixtures/align are always checked); coal-cpp-align is not.
+      # DIAMOND for the pipeline's default route (reciprocal best hits, the DIAMOND alignment, DeepClust), with COAL's
+      # own installer: the pinned release from DIAMOND's GitHub releases, unpacked only after its SHA-256 matched the
+      # one in src/coal/dnds_pipeline.py. Linux and Windows (a pre-compiled binary for each); on macOS those tests
+      # skip. Written to GITHUB_ENV by Python with \n line ends (a path through bash on Windows would carry a \r).
+      - name: Install DIAMOND (pinned release, SHA-256 verified by coal)
+        if: runner.os != 'macOS'
+        run: python -c "import os; from coal import dnds_pipeline as P; p = P.install_diamond(method='official'); open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8', newline='\n').write('COAL_DIAMOND=' + p + '\nCOAL_TEST_DIAMOND=' + p + '\nCOAL_REQUIRE_DIAMOND=1\n')"
+      - name: Ka/Ks engine, alignment layer and pipeline tests (coal-cpp and coal-cpp-align required)
+        # Biopython, EMBOSS needle, Clustal Omega and MAFFT are optional here (their live checks skip; the stored
+        # Biopython / needle optima in tests/fixtures/align are always checked); coal-cpp and coal-cpp-align are
+        # not (COAL_REQUIRE_CPP, COAL_REQUIRE_ALIGN: a missing binary fails), nor is DIAMOND where the step above
+        # installed it (COAL_REQUIRE_DIAMOND). tests.test_kaks: the Ka/Ks engine against the KaKs_Calculator and
+        # PAML goldens, which needs the binary and so skips in the Python jobs.
         shell: bash
         env:
           COAL_REQUIRE_ALIGN: "1"
-        run: python -m unittest -v tests.test_align tests.test_msa tests.test_dnds_pipeline
+          COAL_REQUIRE_CPP: "1"
+        run: python -m unittest -v tests.test_kaks tests.test_align tests.test_msa tests.test_dnds_pipeline
       # The release's Linux wheels are built inside the manylinux_2_28 container (GCC 14, -Werror): build there on
       # every change too, so a warning that only that compiler raises fails CI, not the release (v0.5.0rc1 did).
       - name: Build inside the manylinux_2_28 container, as the release does (Linux)

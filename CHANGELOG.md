@@ -50,6 +50,31 @@ not yet released):
   sequence ID is that gene's failure** (`id_not_ascii`), not the end of the run (docs/pipeline.md).
 - **coalr: a path-like string that names no file is the error "file not found"**, not a sequence (docs/r.md).
 
+Found by the first CI runs on Windows and macOS of the code above (not yet released):
+
+- **`coal pipeline`: one rule for text, on every system** (docs/pipeline.md, "Text encoding"). Every table is
+  read and written as UTF-8 with `\n` line ends, never with the system's default encoding or line ends; sequence
+  IDs are bytes that are not re-encoded. Bytes that are not valid UTF-8 are shown as `\xhh` (an ID in Latin-1:
+  `g\xe8ne`) by `coal-cpp translate` and by the Python layer alike: before, `coal-cpp` wrote `?` for each such
+  byte and Python U+FFFD, so two different IDs could look the same. `coal-cpp-align` writes its alignment to
+  standard output in binary mode (`\n` on Windows, as its `-o` file). The Windows CI failure itself was the
+  test reading `failed.tsv` with the default encoding (cp1252); the tests now run the pipeline under an ASCII
+  locale, with a cp1252 console and with Python's `-X warn_default_encoding` as an error, and compare every
+  output byte with the UTF-8 run.
+- **Line ends in a Windows checkout** (`.gitattributes`): the R package (an R source package has LF line ends;
+  its vendored C++ sources are compared byte for byte), the Ka/Ks goldens, the real-data cases, the stored
+  benchmark results and shell scripts are LF in every checkout, as the fixtures and goldens already were.
+  `scripts/sync_r_sources.py --check` reads `cpp/src` with either line end and names a copy that differs only by
+  its line ends as that. (With `core.autocrlf`, as on the Windows CI machines, it called all 13 vendored files
+  "out of date".)
+- **Python engine: a worker killed while it sends a result no longer hangs the run.** The pool's management
+  thread then waits inside a read that never completes and never reports the dead worker, so `coal -j N` waited
+  for ever (seen as an intermittent CI failure on macOS with Python 3.10; reproduced on Linux with the spawn
+  start method, about 1 run in 16). The main process now also watches the workers itself while it waits and ends
+  with "a worker process died" (exit 1). Ending the broken pool no longer closes the call queue under the
+  management thread, which on Python 3.10 / 3.11 printed a `ValueError: Queue ... is closed` traceback before
+  that message (about 1 run in 5 there).
+
 - **R package `coalr` (packaging/r/coalr, docs/r.md).** COAL's C++ core compiled into an R package with Rcpp:
   `coal_dnds_pairs()` (CDS of ortholog pairs to dN, dS, dN/dS: the columns of `dnds.tsv`), `coal_dnds_clusters()`
   (every pair of each cluster and the per-cluster summary of `cluster_summary.tsv`; protein alignments from given

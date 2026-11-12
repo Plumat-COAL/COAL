@@ -230,9 +230,22 @@ this: the engine then ends when its input pipe closes, and the next run replaces
 run stops after translation, before DIAMOND or an aligner is started, and says why: "does not hold coding DNA ...
 Is this a protein file?" when most sequences have letters that are no nucleotide codes, otherwise the count of each
 reason (`cds_empty`, `cds_too_short`, ...). `genes.tsv` and `failed.tsv` list every gene. A sequence ID with a
-non-ASCII character is that gene's failure (`id_not_ascii`), not the end of the run; in the tables the ID is shown
-as it is when it is valid UTF-8, otherwise with `?` for each byte above 127. Non-ASCII text elsewhere in a
-sequence file (in the sequence lines) still stops the run: such a file is not a FASTA file of nucleotides.
+non-ASCII character is that gene's failure (`id_not_ascii`), not the end of the run; the next paragraph says how
+the ID is shown. Non-ASCII text elsewhere in a sequence file (in the sequence lines) still stops the run: such a
+file is not a FASTA file of nucleotides.
+
+**Text encoding: the same bytes on every system.** Sequence IDs are bytes that the pipeline never re-encodes.
+Every file it writes (`dnds.tsv`, `genes.tsv`, `failed.tsv`, `orthologs.tsv`, `cluster_summary.tsv`, `report.json`,
+the alignments) is UTF-8 with `\n` line ends, on Windows too: neither the system's default encoding (cp1252 on
+Windows, ASCII in the C locale) nor its line ends are ever used, for reading or for writing, and `coal-cpp` writes
+its tables and its standard output in binary mode. An ID, in a sequence file or in a `--pairs` / `--clusters`
+file (which may have `\r\n` line ends), that is valid UTF-8 is written as it is (`gène_αβ` stays `gène_αβ`). Bytes
+that are not valid UTF-8 (an ID saved as Latin-1, say) are written as `\xhh`, two lower-case hexadecimal digits
+per byte: `gène` in Latin-1 is shown as `g\xe8ne`. Nothing is dropped or replaced by `?`, two different IDs never
+become the same text, and every output file is valid UTF-8 whatever the input was. The same rule is used by
+`coal-cpp translate` (the genes table) and by the Python layer (Python's `backslashreplace` error handler), so a
+gene has one name in all tables. Messages on the console follow the console: what it cannot show is escaped.
+Read the tables as UTF-8 (`encoding="utf-8"` in Python on Windows; `fileEncoding = "UTF-8"` in R).
 
 ## Defaults, and why
 

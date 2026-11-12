@@ -6,6 +6,20 @@ tests/fixtures/** text eol=lf
 tests/golden/** text eol=lf
 tests/golden_memory/** text eol=lf
 tests/cases.json text eol=lf
+# The same for the Ka/Ks goldens (KaKs_Calculator's own files, compared value by value), the real-data cases and
+# the stored benchmark results: a CRLF checkout must not change a byte of them. (eol=lf without `text`: a file git
+# detects as binary stays untouched.)
+tests/kaks/** eol=lf
+tests/realdata/** eol=lf
+benchmarks/results/** eol=lf
+benchmarks/kaks/** eol=lf
+benchmarks/pipeline/** eol=lf
+# The R package: an R source package has LF line ends (R CMD check warns about CRLF in sources and Makevars), its
+# vendored C++ sources are compared byte for byte with cpp/src (scripts/sync_r_sources.py --check; VENDORED.txt
+# holds their sha256), and its test fixtures are expected outputs.
+packaging/r/** eol=lf
+# Shell scripts run on Linux and macOS (and in the manylinux container, also from a Windows checkout)
+*.sh eol=lf
 # Examples are LF everywhere so their sha256 matches src/coal_app/sample_report.json on every OS.
 examples/** text eol=lf
 # Windows batch files need CRLF (cmd mis-reads labels in LF-only files)
