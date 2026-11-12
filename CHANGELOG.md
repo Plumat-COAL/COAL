@@ -38,10 +38,8 @@ not yet released):
   cut in half and compared with itself.
 - **Installers verify before they run anything.** Downloads are kept only if their SHA-256 is the pinned one:
   micromamba is one fixed release (2.10.0-0) with pinned hashes, not `latest`; the DIAMOND 2.2.8 archives are
-  pinned. The official Clustal Omega binary of clustal.org (plain HTTP, no published checksum, host unreachable
-  when the hashes were collected) has no pinned hash and is refused unless `--sha256 HEX` (`sha256=`) or
-  `--allow-unverified` (`allow_unverified=True`) is given; on Windows that means `--install-tools` no longer
-  installs Clustal Omega by itself (docs/alignment.md).
+  pinned. Clustal Omega is installed from Bioconda only; see the entry on the Clustal site below
+  (docs/alignment.md).
 - **`coal pipeline`: one run per output folder** (`<out_dir>.coal-lock`; a second run is refused), **an earlier
   run's files are removed when a run starts** (no `dnds.kaks` or `codon_alignments.fasta` of another run next to
   a new `dnds.tsv`), **an interrupt ends the engine and is reported** (SIGINT/SIGTERM to the Python process kill
@@ -67,6 +65,17 @@ Found by the first CI runs on Windows and macOS of the code above (not yet relea
   `scripts/sync_r_sources.py --check` reads `cpp/src` with either line end and names a copy that differs only by
   its line ends as that. (With `core.autocrlf`, as on the Windows CI machines, it called all 13 vendored files
   "out of date".)
+- **The download of Clustal Omega from the Clustal site is removed.** That site's address now serves an
+  unrelated "people search" site and its three pre-compiled binaries (Linux, macOS, Windows) answer "not found"
+  (checked from a browser on 2026-11-12). There is nothing to pin, and anything that appears there later would not
+  be from the Clustal authors, so COAL no longer holds an address of that site: `install_clustalo(method=
+  "official")` is refused with this explanation, and `sha256=` / `allow_unverified=True` (`--sha256`,
+  `--allow-unverified`) cannot bring it back (with Clustal Omega they are an error). Linux and macOS install it
+  from Bioconda (conda / mamba / the pinned micromamba) as before. **On Windows there is now no automatic Clustal
+  Omega install**: the message names what works (WSL; a `clustalo.exe` of your own on `PATH` or in
+  `COAL_CLUSTALO`; `--aligner mafft` with a MAFFT you installed, for which COAL has no verified Windows download
+  either). Bundling a self-built `clustalo.exe` is the realistic way to support Windows and is not done yet
+  (docs/alignment.md, "Licences").
 - **Python engine: a worker killed while it sends a result no longer hangs the run.** The pool's management
   thread then waits inside a read that never completes and never reports the dead worker, so `coal -j N` waited
   for ever (seen as an intermittent CI failure on macOS with Python 3.10; reproduced on Linux with the spawn

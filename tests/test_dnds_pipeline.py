@@ -312,14 +312,23 @@ class Units(unittest.TestCase):
     def test_install_command_takes_a_hash_or_explicit_permission(self):
         seen = {}
 
-        def fake_clustalo(**kw):
+        def fake_diamond(**kw):
             seen.update(kw)
-            return "/cache/clustalo"
-        with mock.patch.object(msa, "install_clustalo", fake_clustalo), redirect_stdout(io.StringIO()):
-            self.assertEqual(P.main(["install", "clustalo", "--sha256", "A" * 64, "-q"]), 0)
+            return "/cache/diamond"
+        with mock.patch.object(P, "install_diamond", fake_diamond), redirect_stdout(io.StringIO()):
+            self.assertEqual(P.main(["install", "diamond", "--sha256", "A" * 64, "-q"]), 0)
             self.assertEqual((seen["sha256"], seen["allow_unverified"]), ("A" * 64, False))
-            self.assertEqual(P.main(["install", "clustalo", "--allow-unverified", "-q"]), 0)
+            self.assertEqual(P.main(["install", "diamond", "--allow-unverified", "-q"]), 0)
             self.assertEqual((seen["sha256"], seen["allow_unverified"]), (None, True))
+        # Clustal Omega: Bioconda only. The options of the former download of the Clustal site (gone) are refused
+        # with the explanation, before anything is installed or fetched
+        for extra in (["--sha256", "a" * 64], ["--allow-unverified"]):
+            with mock.patch.object(msa, "_conda_install", side_effect=AssertionError("installed")), \
+                    mock.patch.object(msa.urllib.request, "urlopen", side_effect=AssertionError("fetched")), \
+                    redirect_stderr(io.StringIO()) as err, redirect_stdout(io.StringIO()):
+                self.assertEqual(P.main(["install", "clustalo", *extra, "-q"]), 1)
+            self.assertIn("do not apply to Clustal Omega", err.getvalue())
+            self.assertIn("binaries are gone", err.getvalue())
         for argv in (["install", "clustalo", "--sha256", "abc"],
                      ["install", "clustalo", "diamond", "--sha256", "a" * 64]):
             with self.assertRaises(SystemExit) as cm, redirect_stderr(io.StringIO()):

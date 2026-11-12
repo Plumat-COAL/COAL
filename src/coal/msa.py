@@ -9,9 +9,9 @@ Neither tool is bundled with COAL (docs/alignment.md "Licences": COAL is GPL-3.0
 GPL-2.0-or-later, so bundling would be licence-compatible, but it is not done).
 install_clustalo() puts one into COAL's cache folder (cache_dir()), like orthologr's diamond_install(): through
 conda / mamba / micromamba from Bioconda (micromamba itself is one pinned release fetched from GitHub and kept only
-if its SHA-256 is the pinned one, if no conda is installed), or the official static binary from clustal.org
-(method="official"; the only way on Windows), which has no published checksum: that route needs sha256=... or
-allow_unverified=True. No downloaded file is run before its SHA-256 was checked.
+if its SHA-256 is the pinned one, if no conda is installed). That is the only route, on Linux and macOS: the
+pre-compiled binaries that the Clustal site used to serve are gone (CLUSTAL_ORG_GONE), so there is no automatic install
+on Windows (NO_WINDOWS_CLUSTALO names what works there). No downloaded file is run before its SHA-256 was checked.
 
 Stop codons: '*' at the end of a sequence is removed before aligning and given back as a last column of its own
 ('*' in the rows that had one, '-' in the others); an internal '*' is aligned as X and put back afterwards. (Clustal
@@ -31,13 +31,13 @@ import sys
 import tempfile
 import threading
 import urllib.request
-import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Iterable, Mapping, Sequence
 
 __all__ = ["cache_dir", "find_clustalo", "find_mafft", "install_clustalo", "install_mafft", "tool_version",
-           "run_msa", "align_clusters", "MsaResult", "MsaError", "CLUSTALO_VERSION", "MICROMAMBA_VERSION"]
+           "run_msa", "align_clusters", "MsaResult", "MsaError", "CLUSTALO_VERSION", "MICROMAMBA_VERSION",
+           "CLUSTAL_ORG_GONE", "NO_WINDOWS_CLUSTALO"]
 
 CLUSTALO_VERSION = "1.2.4"
 _EXE = ".exe" if os.name == "nt" else ""
@@ -46,20 +46,24 @@ _EXE = ".exe" if os.name == "nt" else ""
 # A downloaded file is moved into the cache only after its SHA-256 matched the pinned value (or the one the caller
 # gave); a file with no known hash is refused unless the caller passes allow_unverified=True. Nothing fetched is
 # ever executed before this check.
-#
-# Official Clustal Omega binaries (www.clustal.org/omega/). clustal.org publishes no checksums and serves plain
-# HTTP (https is tried first, in case the host offers it), and the host could not be reached from the machine
-# these tables were made on (2026-11-12), so no hash is pinned for these files yet: this route refuses to run
-# unless the caller gives a hash (sha256=...) or accepts an unverified download (allow_unverified=True). To pin
-# one: download the file from a network you trust, check it, and put its `sha256sum` here.
-# (system, machine) -> (path under www.clustal.org, member of the zip or None, SHA-256 or None)
-_OFFICIAL_HOST = "www.clustal.org"
-_OFFICIAL = {
-    ("Linux", "x86_64"): ("/omega/clustalo-1.2.4-Ubuntu-x86_64", None, None),
-    ("Darwin", "x86_64"): ("/omega/clustal-omega-1.2.3-macosx", None, None),
-    ("Darwin", "arm64"): ("/omega/clustal-omega-1.2.3-macosx", None, None),  # x86_64, Rosetta 2
-    ("Windows", "AMD64"): ("/omega/clustal-omega-1.2.2-win64.zip", "clustalo.exe", None),
-}
+
+# Clustal Omega has no download of its own here. Its authors' site hosted pre-compiled binaries (1.2.4 for Linux,
+# 1.2.3 for macOS, 1.2.2 for Windows) without checksums; checked from a browser on 2026-11-12, that address serves
+# an unrelated "people search" site and each of the three binary paths answers with an HTML "not found" page. There
+# is nothing left to pin, and whatever appears at those addresses later would not come from the Clustal authors, so
+# COAL holds no address of that site and never downloads from it: method="official" is refused with this
+# explanation, and neither sha256= nor allow_unverified=True brings it back.
+CLUSTAL_ORG_GONE = ("the pre-compiled Clustal Omega binaries are gone: the site that hosted them now serves an "
+                    "unrelated site and the files no longer exist (checked 2026-11-12), so COAL does not download "
+                    "from it, with or without a hash. Clustal Omega is installed from Bioconda (method='conda' or "
+                    "'micromamba'; Linux and macOS)")
+NO_WINDOWS_CLUSTALO = (
+    "there is no automatic Clustal Omega install on Windows: Bioconda has no Windows package, and the site that "
+    "hosted the only pre-compiled Windows build no longer serves it. What works: (1) run COAL under WSL, where "
+    "`coal pipeline install clustalo` installs it from Bioconda; (2) point COAL at a clustalo.exe you obtained "
+    "and trust: put it on PATH or set COAL_CLUSTALO; (3) use MAFFT instead (`--aligner mafft`) with a MAFFT you "
+    "installed yourself (set COAL_MAFFT): COAL has no verified MAFFT download for Windows either, and that "
+    "combination is not tested")
 # micromamba (static, BSD-3-Clause) from https://github.com/mamba-org/micromamba-releases: one fixed release, not
 # "latest", with the SHA-256 of each asset (computed from the downloads on 2026-11-12; each equals the
 # <asset>.sha256 file the release publishes).
@@ -234,7 +238,7 @@ def _get_micromamba(quiet: bool) -> str:
     """micromamba MICROMAMBA_VERSION into the cache, kept only if its SHA-256 is the pinned one."""
     entry = _MICROMAMBA.get(_platform())
     if entry is None:
-        raise MsaError(f"no micromamba binary for {_platform()}; install conda, or use method='official'")
+        raise MsaError(f"no micromamba binary for {_platform()}; install conda (or mamba / micromamba) first")
     asset, pinned = entry
     d = os.path.join(cache_dir(), "tools", "micromamba")
     os.makedirs(d, exist_ok=True)
@@ -265,37 +269,38 @@ def install_clustalo(method: str = "auto", force: bool = False, quiet: bool = Fa
                      timeout: float = 1800, sha256: str | None = None, allow_unverified: bool = False) -> str:
     """Install Clustal Omega into cache_dir() and return its path (an existing one when force is False).
 
-    method: "auto" (conda/mamba/micromamba if one is installed, else micromamba fetched into the cache, else the
-    official binary; Windows: the official binary), "conda", "micromamba", "official".
+    method: "auto" (conda / mamba / micromamba if one is installed, else micromamba fetched into the cache),
+    "conda" or "micromamba". Linux and macOS only: on Windows there is nothing to install it from, and MsaError
+    says what works there (NO_WINDOWS_CLUSTALO: WSL, a clustalo.exe of your own, or MAFFT).
 
     Verification: conda fetches from conda-forge / Bioconda over HTTPS and checks each package against the
-    channel's index; micromamba itself is one pinned release with a pinned SHA-256. The official binary of
-    clustal.org has no published checksum and no hash is pinned for it here, so that route needs `sha256` (the
-    SHA-256 of the file you expect: the download is deleted if it differs) or allow_unverified=True (keep and run
-    whatever arrives; the hash is printed). Without either it refuses before downloading."""
+    channel's index; micromamba itself is one pinned release with a pinned SHA-256.
+
+    method="official" (the pre-compiled binary of the Clustal site) is refused: those files no longer exist
+    (CLUSTAL_ORG_GONE). `sha256` and `allow_unverified` were that route's options; they are still accepted so that
+    old calls fail with the explanation, and giving either is an MsaError: no download here takes them."""
     _check_hash_argument(sha256)
+    if method == "official":
+        raise MsaError("method='official': " + CLUSTAL_ORG_GONE)
+    if method not in ("auto", "conda", "micromamba"):
+        raise ValueError("method: 'auto', 'conda' or 'micromamba'")
+    if sha256 is not None or allow_unverified:
+        raise MsaError("sha256 / allow_unverified (--sha256, --allow-unverified) do not apply to Clustal Omega: "
+                       + CLUSTAL_ORG_GONE)
     if not force:
         for c in _cached("clustalo"):
             if os.path.isfile(c) and tool_version(c).startswith("1.2"):
                 return c
-    sysname, machine = _platform()
-    if method == "auto":
-        order = ["official"] if sysname == "Windows" else (["conda", "official"] if _conda_exe() else
-                                                           ["micromamba", "official"])
-    elif method in ("conda", "micromamba", "official"):
-        order = [method]
-    else:
-        raise ValueError("method: 'auto', 'conda', 'micromamba' or 'official'")
+    if _platform()[0] == "Windows":
+        raise MsaError(NO_WINDOWS_CLUSTALO)
+    order = [method] if method != "auto" else ["conda" if _conda_exe() else "micromamba"]
     errors = []
     for m in order:
         try:
-            if m in ("conda", "micromamba"):
-                conda = _conda_exe() if m == "conda" else _get_micromamba(quiet)
-                if conda is None:
-                    raise MsaError("no conda, mamba or micromamba found")
-                exe = _conda_install("clustalo", f"clustalo={CLUSTALO_VERSION}", conda, quiet, timeout)
-            else:
-                exe = _install_official(sysname, machine, quiet, sha256=sha256, allow_unverified=allow_unverified)
+            conda = _conda_exe() if m == "conda" else _get_micromamba(quiet)
+            if conda is None:
+                raise MsaError("no conda, mamba or micromamba found")
+            exe = _conda_install("clustalo", f"clustalo={CLUSTALO_VERSION}", conda, quiet, timeout)
             v = tool_version(exe)
             if not v.startswith("1.2"):
                 raise MsaError(f"{exe} does not run or is not Clustal Omega 1.2 ({v or 'no output'})")
@@ -308,52 +313,19 @@ def install_clustalo(method: str = "auto", force: bool = False, quiet: bool = Fa
                    "-c bioconda clustalo`, `apt install clustalo`, `brew install clustal-omega`) or set COAL_CLUSTALO.")
 
 
-def _install_official(sysname: str, machine: str, quiet: bool, sha256: str | None = None,
-                      allow_unverified: bool = False) -> str:
-    entry = _OFFICIAL.get((sysname, machine))
-    if entry is None:
-        raise MsaError(f"no official Clustal Omega binary for {sysname} {machine}")
-    path, member, pinned = entry
-    urls = [f"https://{_OFFICIAL_HOST}{path}", f"http://{_OFFICIAL_HOST}{path}"]
-    hint = ""  # (install_clustalo's own message names the other ways to install it)
-    d = os.path.join(cache_dir(), "tools", "clustalo")
-    os.makedirs(d, exist_ok=True)
-    exe = os.path.join(d, "clustalo" + _EXE)
-    what = "the official Clustal Omega binary"
-    if member is None:
-        _fetch_verified(urls, exe, quiet, pinned, sha256, allow_unverified, what, hint)
-    else:
-        z = exe + ".zip"
-        _fetch_verified(urls, z, quiet, pinned, sha256, allow_unverified, what, hint)
-        with zipfile.ZipFile(z) as zf:
-            names = [n for n in zf.namelist() if n.replace("\\", "/").rsplit("/", 1)[-1].lower() == member]
-            if not names:
-                raise MsaError(f"{urls[-1]} has no {member}")
-            top = names[0].rsplit("/", 1)[0] + "/" if "/" in names[0] else ""
-            # the Windows build needs the DLLs next to it: extract the whole folder, flattened
-            for n in zf.namelist():
-                if n.startswith(top) and not n.endswith("/"):
-                    target = os.path.join(d, n[len(top):].replace("/", os.sep))
-                    if os.path.commonpath([os.path.abspath(target), os.path.abspath(d)]) != os.path.abspath(d):
-                        continue  # no path escapes
-                    os.makedirs(os.path.dirname(target), exist_ok=True)
-                    with zf.open(n) as src, open(target, "wb") as dst:
-                        shutil.copyfileobj(src, dst)
-        os.remove(z)
-    if os.name != "nt":
-        os.chmod(exe, os.stat(exe).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-    return exe
-
-
 def install_mafft(method: str = "auto", force: bool = False, quiet: bool = False, timeout: float = 1800) -> str:
-    """Install MAFFT (BSD licence) into cache_dir() through conda / mamba / micromamba (Bioconda). Not on Windows
-    (use the official Windows package from https://mafft.cbrc.jp and set COAL_MAFFT)."""
+    """Install MAFFT (BSD licence) into cache_dir() through conda / mamba / micromamba (Bioconda). Not on Windows:
+    Bioconda has no Windows package, and COAL pins no hash for the Windows package of https://mafft.cbrc.jp, so it
+    does not download it (install that yourself and set COAL_MAFFT; untested with COAL)."""
     if not force:
         c = _cached("mafft")[1]
         if os.path.isfile(c):
             return c
     if platform.system() == "Windows":
-        raise MsaError("install MAFFT from https://mafft.cbrc.jp/alignment/software/windows.html and set COAL_MAFFT")
+        raise MsaError("there is no automatic MAFFT install on Windows (no Bioconda package, and COAL has no "
+                       "verified download for it): install MAFFT yourself from "
+                       "https://mafft.cbrc.jp/alignment/software/windows.html and set COAL_MAFFT (untested with "
+                       "COAL), or run COAL under WSL, where `coal pipeline install mafft` works")
     conda = _conda_exe() if method in ("auto", "conda") else None
     if conda is None:
         if method == "conda":

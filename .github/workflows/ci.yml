@@ -308,6 +308,18 @@ jobs:
       - name: Install DIAMOND (pinned release, SHA-256 verified by coal)
         if: runner.os != 'macOS'
         run: python -c "import os; from coal import dnds_pipeline as P; p = P.install_diamond(method='official'); open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8', newline='\n').write('COAL_DIAMOND=' + p + '\nCOAL_TEST_DIAMOND=' + p + '\nCOAL_REQUIRE_DIAMOND=1\n')"
+      # Clustal Omega and MAFFT for cluster mode's MSA route, with COAL's own installer (Bioconda through the pinned
+      # micromamba, into COAL's cache, where the tests find them). Linux only: one system is enough to run those
+      # tests, and there is no install for Windows (docs/alignment.md). Best effort: if the channel cannot be
+      # reached the step says so and the MSA tests skip, as they do on Windows and macOS.
+      - name: Install Clustal Omega and MAFFT (Bioconda, by coal; Linux)
+        if: runner.os == 'Linux'
+        timeout-minutes: 10
+        continue-on-error: true
+        shell: bash
+        run: |
+          python -m coal pipeline install clustalo mafft \
+            || { echo "::warning::Clustal Omega / MAFFT were not installed: the MSA tests of this job will skip"; exit 1; }
       - name: Ka/Ks engine, alignment layer and pipeline tests (coal-cpp and coal-cpp-align required)
         # Biopython, EMBOSS needle, Clustal Omega and MAFFT are optional here (their live checks skip; the stored
         # Biopython / needle optima in tests/fixtures/align are always checked); coal-cpp and coal-cpp-align are

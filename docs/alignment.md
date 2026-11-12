@@ -174,7 +174,7 @@ full-length pairwise alignment that COAL's codon step accepts:
 ```python
 from coal import msa
 msa.find_clustalo()          # $COAL_CLUSTALO, `clustalo` on PATH, else COAL's cache
-msa.install_clustalo(method="auto")   # -> path; "conda" | "micromamba" | "official" (sha256=..., allow_unverified=)
+msa.install_clustalo(method="auto")   # -> path; "conda" | "micromamba" (Bioconda; Linux and macOS)
 msa.run_msa(records, tool="clustalo", threads=1, exe=None, extra_args=(), timeout=None)  # -> [(id, row)], input order
 msa.align_clusters(clusters, tool="clustalo", jobs=0, threads=1, pairs_with="nw")         # -> {name: MsaResult}
 msa.find_mafft(); msa.install_mafft(); msa.cache_dir(); msa.tool_version(exe)
@@ -185,9 +185,23 @@ msa.find_mafft(); msa.install_mafft(); msa.cache_dir(); msa.tool_version(exe)
 
 - On Linux and macOS it uses the conda, mamba or micromamba already installed, or else micromamba fetched from its
   GitHub releases. It creates `envs/clustalo` with `clustalo=1.2.4` from Bioconda.
-- If that fails, and always on Windows, it goes to the official binary of clustal.org: 1.2.4 static for
-  Linux x86_64, 1.2.3 for macOS (x86_64, Rosetta on Apple Silicon), 1.2.2 for win64 (a zip extracted with its
-  DLLs).
+- That is the only route. The pre-compiled binaries of the Clustal site, which earlier versions of this code
+  could fetch (`method="official"`), no longer exist: checked from a browser on 2026-11-12, the site's address
+  serves an unrelated "people search" site and the three binary paths (1.2.4 for Linux, 1.2.3 for macOS, 1.2.2
+  for Windows) answer with "not found" pages. There is nothing to pin, and whatever appears there later would not
+  come from the Clustal authors, so COAL holds no address of that site. `method="official"` is refused with this
+  explanation, and `sha256=` / `allow_unverified=True` (`--sha256`, `--allow-unverified`) do not bring it back:
+  with Clustal Omega they are an error.
+- **Windows: there is no automatic Clustal Omega install.** Bioconda has no Windows package and the only
+  pre-compiled Windows build was the one of that site. `install_clustalo()`, `coal pipeline install clustalo` and
+  `--install-tools` say so and name what works:
+  1. run COAL under WSL, where `coal pipeline install clustalo` installs it from Bioconda;
+  2. use a `clustalo.exe` you obtained and trust: put it on `PATH` or set `COAL_CLUSTALO`;
+  3. use MAFFT (`--aligner mafft`) with a MAFFT you installed yourself (`COAL_MAFFT`). COAL has no verified
+     MAFFT download for Windows either (Bioconda has no Windows package; no hash is pinned for the Windows
+     package of mafft.cbrc.jp, so it is not fetched), and MAFFT on Windows is not tested with COAL.
+
+  Pair mode needs neither tool (COAL's own aligner), and clusters of two members do not either.
 
 **Verification: nothing that was downloaded runs before its SHA-256 was checked.**
 
@@ -196,18 +210,15 @@ msa.find_mafft(); msa.install_mafft(); msa.cache_dir(); msa.tool_version(exe)
 | micromamba | one fixed release (`msa.MICROMAMBA_VERSION`, 2.10.0-0; not "latest") over HTTPS, kept only if its SHA-256 is the one pinned in `src/coal/msa.py` (four assets; each equals the `.sha256` file of that release) |
 | Clustal Omega, MAFFT, DIAMOND through conda / mamba / micromamba | conda's own: HTTPS, each package checked against the channel index |
 | DIAMOND release archive (`coal pipeline install diamond`) | HTTPS, kept and unpacked only if its SHA-256 is the one pinned in `src/coal/dnds_pipeline.py` for DIAMOND 2.2.8 (Linux, macOS, Windows). DIAMOND publishes no checksums: the pinned values are those of the files downloaded on 2026-11-12. Another version needs `sha256=` or `allow_unverified=True` |
-| Official Clustal Omega binary (clustal.org) | **refused by default.** clustal.org publishes no checksums and serves plain HTTP, and it could not be reached from the machine where the hashes were collected, so no hash is pinned. Give the hash of the file you expect, `install_clustalo(method="official", sha256="...")` / `coal pipeline install clustalo --sha256 HEX` (a file with another hash is deleted, not run), or accept an unverified download with `allow_unverified=True` / `--allow-unverified` (the file is kept as it arrives and its SHA-256 is printed, so it can be pinned next time). HTTPS is tried before HTTP |
+| Clustal Omega from the Clustal site ("official") | **removed.** The files no longer exist and the address serves an unrelated site (2026-11-12), so COAL never downloads from it, with or without a hash |
 
-On Windows this means `install_clustalo()` and `--install-tools` do not install Clustal Omega on their own any
-more: use one of the two options above, or install it yourself and set `COAL_CLUSTALO`. A hash that does not match
-never falls back to "run it anyway".
+A hash that does not match never falls back to "run it anyway".
 
 - Tested here: the micromamba route end to end with the pinned release (Clustal Omega 1.2.4 installed in 30 s),
-  and the pinned DIAMOND 2.2.8 archive for Linux. The official clustal.org route was tested only with a faked
-  download (clustal.org was unreachable from this machine).
+  and the pinned DIAMOND 2.2.8 archive for Linux.
 
-`install_mafft()` installs MAFFT from Bioconda the same way. On Windows, use the official package and set
-`COAL_MAFFT`.
+`install_mafft()` installs MAFFT from Bioconda the same way (Linux and macOS). On Windows it installs nothing
+(see above): install MAFFT's own Windows package yourself and set `COAL_MAFFT`.
 
 **Running.**
 
@@ -248,9 +259,13 @@ It is still **not bundled**, for practical reasons:
 
 - distributing the binary means shipping its licence text and offering the exact corresponding source (Clustal
   Omega, argtable2, and the statically linked libstdc++/libgomp) and keeping that offer for three years;
-- no official build exists for Apple Silicon or Linux aarch64, so we would have to build and maintain those
-  binaries, with the same obligations;
-- the official binaries are published over plain HTTP without checksums (see "Install" above).
+- no pre-compiled build by its authors can be downloaded any more, for any system (see "Install" above), so we
+  would have to build and maintain the binaries ourselves, with the same obligations.
+
+**Windows is where this matters.** With the Clustal site gone there is no Clustal Omega for Windows that COAL
+could fetch and verify, so bundling a `clustalo.exe` that we build from the Clustal Omega source (with the
+licence text and the source offer above) is now the realistic way to make cluster mode work on Windows without
+WSL. That is not done here.
 
 Instead:
 
@@ -342,9 +357,9 @@ r dN/dS for DIAMOND split by hit coverage:
   copies one binary). Without it, `coal.align.align_pairs` falls back to pure Python.
 - There is no alignment-only subcommand in `coal`/`coal-cpp`. `coal pipeline` ([pipeline.md](pipeline.md)) runs
   the aligner as one of its steps; alone, it is the `coal-cpp-align` tool and the library and Python APIs.
-- The official clustal.org download route is untested against the real server (unreachable here). Those binaries
-  have no published checksums and no SHA-256 is pinned for them, so the route needs `--sha256` or
-  `--allow-unverified` (see "Install"). The macOS binary is x86_64 only.
+- **No Clustal Omega (or MAFFT) install on Windows** (see "Install"): cluster mode with clusters of three or more
+  needs WSL or a tool the user provides. On Linux and macOS the install is Bioconda's, through conda / mamba /
+  micromamba.
 - The AVX2 path is x86 only. ARM (Apple Silicon, Linux aarch64) gets the compiler-vectorised baseline and the scalar
   scan, and was not measured.
 - No linear-space (Hirschberg) fallback: memory is `n·m/2` bytes per pair in flight, times `-j`.

@@ -547,6 +547,12 @@ class _Run:
                 raise PipelineError(str(e)) from None
         if exe is None:
             name = "Clustal Omega" if tool == "clustalo" else "MAFFT"
+            if platform.system() == "Windows":   # nothing to install it from there: say what works instead
+                raise PipelineError(
+                    f"{name} was not found (PATH, $COAL_{tool.upper()}), and " + (_msa.NO_WINDOWS_CLUSTALO
+                    if tool == "clustalo" else
+                    "there is no automatic MAFFT install on Windows: install MAFFT yourself and set COAL_MAFFT "
+                    "(untested with COAL), or run COAL under WSL, where `coal pipeline install mafft` works"))
             raise PipelineError(f"{name} was not found (PATH, $COAL_{tool.upper()}, COAL's cache). Run again with "
                                 f"--install-tools, or run `coal pipeline install {tool}`")
         self.tools[tool] = {"path": exe, "version": _msa.tool_version(exe)}
@@ -1419,12 +1425,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("tools", nargs="+", choices=("diamond", "clustalo", "mafft"))
     p.add_argument("--force", action="store_true", help="install again even if one is there")
     p.add_argument("--sha256", metavar="HEX",
-                   help="the SHA-256 the downloaded file must have (one tool at a time): for a download COAL has "
-                        "no pinned hash for, which is the official Clustal Omega binary of clustal.org. The file "
-                        "is deleted, not run, if it differs")
+                   help="the SHA-256 the downloaded file must have (one tool at a time), for a download COAL has "
+                        "no pinned hash for; the file is deleted, not run, if it differs. No download needs it "
+                        "at present (DIAMOND and micromamba are pinned); it does not apply to clustalo or mafft")
     p.add_argument("--allow-unverified", action="store_true",
                    help="accept a download that nobody can verify (no pinned hash, no --sha256): it is kept and "
-                        "run as it arrives, and its SHA-256 is printed. Without this such a download is refused")
+                        "run as it arrives, and its SHA-256 is printed. Without this such a download is refused. "
+                        "It does not apply to clustalo or mafft (Bioconda only)")
     p.add_argument("-q", "--quiet", action="store_true")
     return ap
 

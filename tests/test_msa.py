@@ -6,10 +6,11 @@
     align_clusters on real tools (skipped otherwise).
   * align_clusters isolates a failing cluster, aligns single sequences without a tool and 2-sequence clusters with
     the pairwise aligner (pairs_with="nw").
-  * install_clustalo: the cached copy is reused; the official-binary route (download faked, nothing fetched)
-    extracts the Windows zip layout safely and checks the version; a binary that does not run is refused.
-    No downloaded file is run before its SHA-256 was checked: the official binary (no published checksum, none
-    pinned) is refused without sha256= or allow_unverified=True, a wrong hash deletes the download, and
+  * install_clustalo: the cached copy is reused; Bioconda (conda / mamba / micromamba) is the only route, the
+    former "official" download of the Clustal site is refused whatever is passed and Windows is told what works
+    (ClustalSiteGone); a clustalo that does not run is refused.
+    No downloaded file is run before its SHA-256 was checked: a download with no known hash is refused without
+    sha256= or allow_unverified=True, a wrong hash deletes the download (faked downloads, nothing fetched), and
     micromamba is one pinned release with pinned hashes. The real download is not run here (network);
     docs/alignment.md records a manual run.
 """
@@ -24,7 +25,6 @@ import sys
 import tempfile
 import unittest
 import urllib.error
-import zipfile
 from contextlib import redirect_stderr
 from pathlib import Path
 from unittest import mock
@@ -138,30 +138,6 @@ class Install(unittest.TestCase):
             self.assertEqual(msa.find_clustalo(), exe)
             self.assertEqual(msa.install_clustalo(quiet=True), exe)  # cached: nothing installed
 
-    def test_official_zip_route(self):
-        payload = io.BytesIO()
-        with zipfile.ZipFile(payload, "w") as zf:
-            zf.writestr("clustal-omega-1.2.2-win64/clustalo.exe", "#!/bin/sh\necho 1.2.2\n")
-            zf.writestr("clustal-omega-1.2.2-win64/libargtable2-0.dll", "dll")
-            zf.writestr("clustal-omega-1.2.2-win64/../../evil.txt", "no")
-        digest = hashlib.sha256(payload.getvalue()).hexdigest()
-        seen = []
-
-        def fake_download(url, dest, quiet):
-            seen.append(url)
-            self.assertTrue(url.endswith(".zip"))
-            with open(dest + ".part", "wb") as fh:
-                fh.write(payload.getvalue())
-            return digest
-        with mock.patch.object(msa, "_download", fake_download), mock.patch.object(msa, "_EXE", ".exe"):
-            exe = msa._install_official("Windows", "AMD64", True, sha256=digest)
-        self.assertTrue(seen[0].startswith("https://"), "https is tried before http")
-        d = os.path.join(self.tmp, "cache", "tools", "clustalo")
-        self.assertEqual(exe, os.path.join(d, "clustalo.exe"))
-        self.assertTrue(os.path.isfile(os.path.join(d, "libargtable2-0.dll")))
-        self.assertFalse(os.path.exists(os.path.join(self.tmp, "evil.txt")))
-        self.assertEqual(msa.tool_version(exe), "1.2.2")
-
     def _serve(self, body: bytes, fail_https: bool = False):
         """A stand-in for urllib.request.urlopen that serves `body` and records the URLs asked for."""
         calls = []
@@ -173,62 +149,56 @@ class Install(unittest.TestCase):
             return io.BytesIO(body)
         return calls, mock.patch.object(msa.urllib.request, "urlopen", urlopen)
 
-    def test_official_binary_is_refused_without_a_hash(self):
-        """clustal.org publishes no checksums and none is pinned: nothing is downloaded, nothing is run."""
-        marker = os.path.join(self.tmp, "ran")
-        calls, served = self._serve(f"#!/bin/sh\ntouch {marker}\necho 1.2.4\n".encode())
-        with served, mock.patch.object(msa, "_platform", return_value=("Linux", "x86_64")):
-            with self.assertRaises(msa.MsaError) as cm:
-                msa.install_clustalo(method="official", quiet=True)
+    def test_a_download_without_a_known_hash_is_refused_before_it_is_fetched(self):
+        calls, served = self._serve(b"anything")
+        dest = os.path.join(self.tmp, "tool")
+        with served, self.assertRaises(msa.MsaError) as cm:
+            msa._fetch_verified(["https://example.org/tool"], dest, True, None, what="the tool")
         text = str(cm.exception)
-        self.assertIn("refusing to download and run the official Clustal Omega binary", text)
+        self.assertIn("refusing to download and run the tool", text)
         self.assertIn("no SHA-256 is known", text)
-        self.assertIn("plain HTTP", text)
         self.assertIn("--sha256 HEX", text)
         self.assertIn("--allow-unverified", text)
-        self.assertIn("conda install -c bioconda clustalo", text)
         self.assertEqual(calls, [], "refused before any download")
-        self.assertFalse(os.path.exists(marker))
-        self.assertFalse(os.path.exists(os.path.join(self.tmp, "cache", "tools", "clustalo", "clustalo")))
-        for (key, (path, member, pinned)) in msa._OFFICIAL.items():   # no hash was guessed for these files
-            self.assertIsNone(pinned, key)
+        self.assertFalse(os.path.exists(dest) or os.path.exists(dest + ".part"))
 
-    def test_official_binary_with_the_wrong_hash_is_deleted_not_run(self):
-        marker = os.path.join(self.tmp, "ran")
-        body = f"#!/bin/sh\ntouch {marker}\necho 1.2.4\n".encode()
+    def test_a_download_with_the_wrong_hash_is_deleted(self):
+        body = b"#!/bin/sh\necho 1.2.4\n"
         calls, served = self._serve(body)
-        with served, mock.patch.object(msa, "_platform", return_value=("Linux", "x86_64")):
-            with self.assertRaises(msa.MsaError) as cm:
-                msa.install_clustalo(method="official", quiet=True, sha256="0" * 64)
+        dest = os.path.join(self.tmp, "tool")
+        with served, self.assertRaises(msa.MsaError) as cm:
+            msa._fetch_verified(["https://example.org/tool"], dest, True, None, sha256="0" * 64, what="the tool")
         self.assertIn("failed its SHA-256 check and was deleted", str(cm.exception))
         self.assertIn(hashlib.sha256(body).hexdigest(), str(cm.exception))
-        d = os.path.join(self.tmp, "cache", "tools", "clustalo")
-        self.assertEqual(os.listdir(d), [], "nothing is left in the cache")
-        self.assertFalse(os.path.exists(marker), "the file was never run")
+        self.assertEqual(os.listdir(self.tmp), [], "nothing is left")
         with self.assertRaises(ValueError):
-            msa.install_clustalo(method="official", quiet=True, sha256="abc")
+            msa._fetch_verified(["https://example.org/tool"], dest, True, None, sha256="abc")
 
-    def test_official_binary_with_the_right_hash_or_explicit_permission(self):
+    def test_a_download_with_the_right_hash_or_explicit_permission(self):
         body = b"#!/bin/sh\necho 1.2.4\n"
         digest = hashlib.sha256(body).hexdigest()
+        dest = os.path.join(self.tmp, "tool")
         calls, served = self._serve(body, fail_https=True)
-        with served, mock.patch.object(msa, "_platform", return_value=("Linux", "x86_64")):
-            exe = msa.install_clustalo(method="official", quiet=True, sha256=digest.upper())
-            self.assertEqual(msa.tool_version(exe), "1.2.4")
-            self.assertEqual([u.split(":")[0] for u in calls], ["https", "http"])   # https first, then http
+        with served:
+            got = msa._fetch_verified(["https://example.org/t", "http://example.org/t"], dest, True, None,
+                                      sha256=digest.upper())
+            self.assertEqual(got, digest)
+            self.assertEqual([u.split(":")[0] for u in calls], ["https", "http"])   # the URLs in the order given
             err = io.StringIO()
             with redirect_stderr(err):
-                exe2 = msa.install_clustalo(method="official", quiet=True, force=True, allow_unverified=True)
-            self.assertEqual(exe2, exe)
+                msa._fetch_verified(["https://example.org/t", "http://example.org/t"], dest, True, None,
+                                    allow_unverified=True)
             self.assertIn("was NOT verified", err.getvalue())
             self.assertIn(digest, err.getvalue())   # the hash to pin next time
 
-    def test_official_binary_that_does_not_run_is_refused(self):
-        body = b"#!/bin/sh\nexit 1\n"
-        calls, served = self._serve(body)
-        with served, mock.patch.object(msa, "_platform", return_value=("Linux", "x86_64")):
+    def test_a_clustalo_that_does_not_run_is_refused(self):
+        def fake_conda_install(tool, spec, conda, quiet, timeout):
+            return fake_tool(self.tmp, "clustalo", "exit 1")
+        with mock.patch.object(msa, "_conda_install", fake_conda_install), \
+                mock.patch.object(msa, "_conda_exe", return_value="/opt/conda/bin/mamba"), \
+                mock.patch.object(msa, "_platform", return_value=("Linux", "x86_64")):
             with self.assertRaises(msa.MsaError) as cm:
-                msa.install_clustalo(method="official", quiet=True, sha256=hashlib.sha256(body).hexdigest())
+                msa.install_clustalo(quiet=True)
         self.assertIn("is not Clustal Omega 1.2", str(cm.exception))
         self.assertIn("conda install -c bioconda clustalo", str(cm.exception))
 
@@ -267,28 +237,111 @@ class Install(unittest.TestCase):
             self.assertFalse(os.path.exists(dest) or os.path.exists(dest + ".part"))
 
     def test_auto_order(self):
+        # Bioconda only: an installed conda / mamba / micromamba, else the pinned micromamba; nothing after it
         tried = []
 
         def fake_conda_install(tool, spec, conda, quiet, timeout):
-            tried.append(("conda", conda, spec))
-            raise msa.MsaError("offline")
-
-        def fake_official(sysname, machine, quiet, sha256=None, allow_unverified=False):
-            tried.append(("official", sysname))
+            tried.append((conda, spec))
             raise msa.MsaError("offline")
         with mock.patch.object(msa, "_conda_install", fake_conda_install), \
-                mock.patch.object(msa, "_install_official", fake_official), \
-                mock.patch.object(msa, "_conda_exe", return_value="/opt/conda/bin/mamba"), \
+                mock.patch.object(msa, "_get_micromamba", return_value="/cache/micromamba"), \
                 mock.patch.object(msa, "_platform", return_value=("Linux", "x86_64")):
-            with self.assertRaises(msa.MsaError):
-                msa.install_clustalo(quiet=True)
-        self.assertEqual(tried, [("conda", "/opt/conda/bin/mamba", "clustalo=1.2.4"), ("official", "Linux")])
-        tried.clear()
-        with mock.patch.object(msa, "_install_official", fake_official), \
-                mock.patch.object(msa, "_platform", return_value=("Windows", "AMD64")):
-            with self.assertRaises(msa.MsaError):
-                msa.install_clustalo(quiet=True)
-        self.assertEqual(tried, [("official", "Windows")])
+            with mock.patch.object(msa, "_conda_exe", return_value="/opt/conda/bin/mamba"):
+                with self.assertRaises(msa.MsaError) as cm:
+                    msa.install_clustalo(quiet=True)
+                self.assertIn("conda: offline", str(cm.exception))
+            with mock.patch.object(msa, "_conda_exe", return_value=None):
+                with self.assertRaises(msa.MsaError):
+                    msa.install_clustalo(quiet=True)
+                with self.assertRaises(msa.MsaError):
+                    msa.install_clustalo(method="micromamba", quiet=True)
+        self.assertEqual(tried, [("/opt/conda/bin/mamba", "clustalo=1.2.4"), ("/cache/micromamba", "clustalo=1.2.4"),
+                                 ("/cache/micromamba", "clustalo=1.2.4")])
+
+
+class ClustalSiteGone(unittest.TestCase):
+    """The pre-compiled Clustal Omega binaries of the Clustal site no longer exist (2026-11-12: the address serves
+    an unrelated site, the files are "not found" pages). COAL holds no address of that site, the "official" route
+    is refused whatever is passed, and Windows, which had no other route, is told what works. Nothing here needs
+    a shell, so it runs on Windows too."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        p = mock.patch.dict(os.environ, {"COAL_CACHE_DIR": os.path.join(self.tmp, "cache")})
+        p.start()
+        self.addCleanup(p.stop)
+        self.calls = []
+
+        def urlopen(url, timeout=None):
+            self.calls.append(url)
+            raise AssertionError(f"a download was attempted: {url}")
+        p = mock.patch.object(msa.urllib.request, "urlopen", urlopen)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_the_official_route_cannot_be_brought_back(self):
+        for system in (("Linux", "x86_64"), ("Darwin", "arm64"), ("Windows", "AMD64")):
+            for kw in ({}, {"sha256": "a" * 64}, {"allow_unverified": True},
+                       {"sha256": "a" * 64, "allow_unverified": True, "force": True}):
+                with self.subTest(system=system, kw=kw), mock.patch.object(msa, "_platform", return_value=system):
+                    with self.assertRaises(msa.MsaError) as cm:
+                        msa.install_clustalo(method="official", quiet=True, **kw)
+                    self.assertIn("binaries are gone", str(cm.exception))
+                    self.assertIn("Bioconda", str(cm.exception))
+        # the options of that route apply to nothing else: they are an error, not a way round
+        for method in ("auto", "conda", "micromamba"):
+            for kw in ({"sha256": "a" * 64}, {"allow_unverified": True}):
+                with self.subTest(method=method, kw=kw), \
+                        mock.patch.object(msa, "_platform", return_value=("Linux", "x86_64")), \
+                        mock.patch.object(msa, "_conda_install", side_effect=AssertionError("installed")):
+                    with self.assertRaises(msa.MsaError) as cm:
+                        msa.install_clustalo(method=method, quiet=True, **kw)
+                    self.assertIn("do not apply to Clustal Omega", str(cm.exception))
+        with self.assertRaises(ValueError):
+            msa.install_clustalo(method="official", sha256="abc")     # (a malformed hash is still a ValueError)
+        with self.assertRaises(ValueError):
+            msa.install_clustalo(method="ftp")
+        self.assertEqual(self.calls, [])
+        self.assertFalse(hasattr(msa, "_OFFICIAL") or hasattr(msa, "_OFFICIAL_HOST") or hasattr(msa, "_install_official"))
+
+    def test_windows_is_told_what_works(self):
+        with mock.patch.object(msa, "_platform", return_value=("Windows", "AMD64")), \
+                mock.patch.object(msa, "_conda_install", side_effect=AssertionError("installed")), \
+                mock.patch.object(msa, "_get_micromamba", side_effect=AssertionError("fetched")):
+            for method in ("auto", "conda", "micromamba"):
+                with self.subTest(method=method), self.assertRaises(msa.MsaError) as cm:
+                    msa.install_clustalo(method=method, quiet=True)
+                text = str(cm.exception)
+                self.assertIn("no automatic Clustal Omega install on Windows", text)
+                for option in ("WSL", "COAL_CLUSTALO", "--aligner mafft", "COAL_MAFFT", "not tested"):
+                    self.assertIn(option, text)
+        with mock.patch.object(msa.platform, "system", return_value="Windows"):
+            with self.assertRaises(msa.MsaError) as cm:
+                msa.install_mafft(quiet=True)
+        self.assertIn("no automatic MAFFT install on Windows", str(cm.exception))
+        self.assertIn("COAL_MAFFT", str(cm.exception))
+        self.assertEqual(self.calls, [])
+
+    def test_no_address_of_that_site_is_left_in_the_repository(self):
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        site = "clustal" + ".org"
+        hits = []
+        for top in ("src", "apps", "cpp", "packaging", "docs", "site", "scripts", "tests", "benchmarks", "examples",
+                    ".github", "README.md", "CHANGELOG.md", "NOTICE", "CONTRIBUTING.md"):
+            path = os.path.join(root, top)
+            files = [path] if os.path.isfile(path) else [os.path.join(d, f) for d, _, fs in os.walk(path) for f in fs]
+            for f in files:
+                if not f.endswith((".py", ".md", ".html", ".R", ".Rd", ".cpp", ".hpp", ".yml", ".yaml", ".toml", ".txt",
+                                   ".json", ".cff", ".js", ".css", ".sh", ".ps1", ".bat")) and os.path.basename(f) != "NOTICE":
+                    continue
+                with open(f, encoding="utf-8", errors="backslashreplace") as fh:
+                    text = fh.read().lower()
+                for prefix in ("http://", "https://", "www.", "//"):
+                    if prefix + site in text or prefix + "www." + site in text:
+                        hits.append(os.path.relpath(f, root))
+                        break
+        self.assertEqual(hits, [], "a link to the former Clustal site (it now serves an unrelated site)")
 
 
 if __name__ == "__main__":

@@ -417,7 +417,12 @@ machine is still to be done.
 - **Installers verify what they download** ([alignment.md](alignment.md#clusters-clustal-omega-and-mafft-coalmsa),
   "Verification"). The DIAMOND 2.2.8 release archives (Linux x86_64, macOS, Windows x64) and micromamba are pinned
   by SHA-256 in COAL's source; DIAMOND publishes no checksums, so those hashes are the ones of the files as
-  downloaded on 2026-11-12. The official Clustal Omega binary has no known hash and is refused unless
-  `coal pipeline install clustalo` gets `--sha256 HEX` or `--allow-unverified`; `--install-tools` during a run
-  never installs an unverified file. Elsewhere Bioconda is used.
+  downloaded on 2026-11-12. Clustal Omega and MAFFT come from Bioconda (conda / mamba / micromamba; Linux and
+  macOS); `--install-tools` during a run never installs an unverified file.
+- **Windows: no automatic Clustal Omega or MAFFT install.** The pre-compiled Clustal Omega binaries of the
+  Clustal site are gone (the address serves an unrelated site since 2026-11) and Bioconda has no Windows packages,
+  so `--install-tools` and `coal pipeline install clustalo` cannot install one there and say what works: run COAL
+  under WSL; or put a `clustalo.exe` you trust on `PATH` (or set `COAL_CLUSTALO`); or `--aligner mafft` with a
+  MAFFT you installed yourself (`COAL_MAFFT`; not tested on Windows). Pair mode and DIAMOND are not affected
+  (DIAMOND's Windows release is pinned). [alignment.md](alignment.md#clusters-clustal-omega-and-mafft-coalmsa).
 - Thread scaling beyond 2 cores and whole-proteome wall times are to be measured on the 16-thread desktop.
