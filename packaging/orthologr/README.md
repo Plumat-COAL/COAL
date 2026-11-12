@@ -9,7 +9,8 @@ perl <orthologr>/pal2nal/pal2nal.v14/pal2nal.pl <pair>_AA.aln <pair>.fasta -outp
 
 `codon_aln()` accepts only `tool = "pal2nal"` and has no argument, option or environment variable for another
 program (orthologr `codon_aln.R`, checked October 2026), so COAL's `pal2nal` command on `PATH` is not picked up.
-Two ways in:
+Two ways in. (Licences: COAL is GPL-3.0-only from the release after 0.5.0, orthologr is GPL-2. The stand-in below
+starts COAL as a separate program, so the two are not combined; it is a local change to your own installation.)
 
 ## 1. Replace orthologr's bundled script with the stand-in (works today)
 

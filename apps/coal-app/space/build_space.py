@@ -31,7 +31,8 @@ def build(dest: str) -> list[str]:
         if os.path.exists(target):
             shutil.rmtree(target)
         shutil.copytree(source, target, ignore=IGNORE)
-    shutil.copy2(os.path.join(ROOT, "LICENSE"), os.path.join(dest, "LICENSE"))
+    for f in ("LICENSE", "NOTICE"):  # GPL-3.0-only: the licence and the copyright notice travel with the Space
+        shutil.copy2(os.path.join(ROOT, f), os.path.join(dest, f))
     return sorted(os.listdir(dest))
 
 

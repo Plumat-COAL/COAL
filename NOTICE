@@ -1,0 +1,21 @@
+COAL: codon alignments from protein alignments
+Copyright (C) 2026 Chloe Newton and Keanu Murati
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General
+Public License as published by the Free Software Foundation, version 3 of the License only (SPDX: GPL-3.0-only).
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the
+implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License
+(the file LICENSE) for more details.
+
+COAL 0.5.0 and earlier releases were published under the MIT License and remain available under it.
+
+Third-party material in this repository (not part of the COAL programs)
+------------------------------------------------------------------------
+
+- site/assets/fonts/ (the website's font, Literata): SIL Open Font License 1.1, site/assets/fonts/OFL.txt.
+- tests/realdata/ (real-data test sets from HyPhy and Biopython): MIT and the Biopython License / BSD 3-Clause;
+  tests/realdata/LICENSE-hyphy.txt, tests/realdata/LICENSE-biopython.rst and the SOURCE.md next to each set.
+
+PAL2NAL (GPL-2.0) is not included: COAL contains none of its code, and scripts/fetch_pal2nal.py downloads it
+for the comparison tests only.

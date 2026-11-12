@@ -1,6 +1,6 @@
 # coal-align-app: the COAL web GUI and MCP server
 
-The app for [COAL](https://github.com/plumat-coal/COAL), a fast, MIT-licensed codon aligner (a PAL2NAL alternative):
+The app for [COAL](https://github.com/plumat-coal/COAL), a fast codon aligner, free software under GPL-3.0-only (a PAL2NAL alternative):
 
 - a web GUI on this computer (`coal-gui`, or `python -m coal_app`): a per-gene health check, an alignment view that
   marks where a gene breaks, genetic-code suggestions and a ready-to-paste methods sentence;

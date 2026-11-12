@@ -343,7 +343,7 @@ Small, because every setting is a support question. Stored in
 
 ```
 +---------------------------- About COAL ---------------------------------+
-| COAL 0.4.0 (engine: Python 0.4.0)          MIT licence                   |
+| COAL 0.4.0 (engine: Python 0.4.0)          GPL-3.0-only                  |
 | A fast, open reimplementation of PAL2NAL. Works offline. Nothing you     |
 | open in COAL leaves this computer.                                       |
 | How to cite: ... [Copy]                                                  |

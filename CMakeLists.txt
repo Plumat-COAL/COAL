@@ -106,6 +106,8 @@ if(COAL_INSTALL)
   if(COAL_BUILD_CLI)
     install(TARGETS coal-cpp RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
   endif()
+  # the licence travels with every install (GPL-3.0-only; NOTICE has the copyright and third-party notices)
+  install(FILES LICENSE NOTICE DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/coal")
   install(EXPORT coalTargets NAMESPACE coal:: FILE coalTargets.cmake DESTINATION "${COAL_CMAKE_DIR}")
   configure_package_config_file(cmake/coalConfig.cmake.in "${CMAKE_CURRENT_BINARY_DIR}/coalConfig.cmake"
                                 INSTALL_DESTINATION "${COAL_CMAKE_DIR}")

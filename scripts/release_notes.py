@@ -38,7 +38,7 @@ def fixed_part(version):
     app_wheel = f"coal_align_app-{version}-py3-none-any.whl"
     platform_wheels = ", ".join(f"`coal_align-{version}-py3-none-{t}.whl`" for t in PLATFORM_TAGS)
     return f"""COAL {version}: turns a protein alignment plus the matching coding DNA into a codon alignment
-(for dN/dS and DNA phylogenies). A fast, MIT-licensed replacement for PAL2NAL.
+(for dN/dS and DNA phylogenies). A fast, free (GPL-3.0-only) replacement for PAL2NAL.
 
 Website and install steps: https://plumat-coal.github.io/COAL/
 

@@ -125,8 +125,13 @@ If you use COAL, please cite it (`CITATION.cff`) and PAL2NAL:
 Suyama M, Torrents D, Bork P (2006) PAL2NAL: robust conversion of protein sequence alignments into the
 corresponding codon alignments. *Nucleic Acids Res.* 34:W609–W612.
 
-COAL is released under the MIT License (`LICENSE`). It contains no PAL2NAL code; PAL2NAL (GPL-2.0) is used only as an
-external reference for testing and is not redistributed here.
+COAL is free software under the GNU General Public License, version 3 only (SPDX `GPL-3.0-only`; the text is in
+`LICENSE`, the copyright notice in `NOTICE`). This applies from the release after 0.5.0: **0.5.0 and earlier were
+released under the MIT License and stay MIT.** In practice: running COAL puts no condition on your data, results,
+scripts or pipelines; if you copy COAL's code into your own program or link its library (`coal::core`,
+`import coal`), what you distribute has to be under a GPL-3-compatible licence. The reason for the change is in
+[CHANGELOG.md](CHANGELOG.md). COAL contains no PAL2NAL code; PAL2NAL (GPL-2.0) is used only as an external reference
+for testing and is not redistributed here.
 
 COAL was started by Chloe Newton and Keanu Murati at the Reinvent the Wheel AI × Science Tool-building Hackathon,
 London, October 2026.
