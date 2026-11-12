@@ -403,9 +403,9 @@ def _results(batches, jobs: int, init_args):
         for b in batches:
             pending.append(ex.submit(_work, b))
             if len(pending) >= 2 * jobs:
-                yield pending.popleft().result()
+                yield _pool_result(ex, pending.popleft())
         while pending:
-            yield pending.popleft().result()
+            yield _pool_result(ex, pending.popleft())
         ok = True
     except BrokenProcessPool:
         # A worker was killed (the OOM killer, most likely): the run cannot finish, and waiting for the pool
@@ -425,6 +425,34 @@ def _results(batches, jobs: int, init_args):
 
 
 WORKER_DIED = "a worker process died (out of memory?)"
+
+
+def _pool_result(ex, fut):
+    """fut.result(), without trusting the pool alone to notice a dead worker. A worker killed in the middle of
+    sending a result leaves the pool's management thread inside recv() on a message that never completes (the
+    other workers and this process still hold the pipe's write end, so there is no EOF): it never looks at the
+    workers' sentinels, no future is ever failed with BrokenProcessPool, and a plain fut.result() waits for ever
+    (seen on macOS with Python 3.10, reproduced on Linux with the spawn start method). So the wait is in slices,
+    and between them the workers' sentinels are read here: a worker that has exited while work is pending is a
+    dead worker (the pool never retires an idle one before shutdown)."""
+    from concurrent.futures import TimeoutError as FutureTimeout  # (the builtin TimeoutError only from 3.11)
+    from concurrent.futures.process import BrokenProcessPool
+    from multiprocessing.connection import wait as wait_any
+    while True:
+        try:
+            return fut.result(timeout=0.5)
+        except FutureTimeout:
+            pass
+        try:
+            sentinels = [p.sentinel for p in list((getattr(ex, "_processes", None) or {}).values())]
+            dead = bool(sentinels) and bool(wait_any(sentinels, timeout=0))
+        except (OSError, ValueError, RuntimeError, AttributeError):
+            continue  # the pool is changing its workers right now: look again after the next slice
+        if dead:
+            try:
+                return fut.result(timeout=1.0)  # the pool's own report, if it is on its way (or the result itself)
+            except FutureTimeout:
+                raise BrokenProcessPool("a worker process exited while work was pending") from None
 
 
 def _abandon_pool(ex) -> None:
@@ -449,39 +477,44 @@ def _abandon_pool(ex) -> None:
                 p.join(1.0)
         except (OSError, ValueError, AttributeError, AssertionError):
             pass
-    # The call queue's feeder thread may be blocked writing a batch into the pipe (a 2 MB batch does not fit the
-    # pipe buffer): with the workers gone nothing reads it, but this process still holds the read end, so the write
-    # never fails, and the pool's management thread joins that feeder forever (Python 3.10: terminate_broken ->
-    # join_executor_internals -> call_queue.join_thread()). Draining the read end lets the feeder finish.
+    # A worker killed in the middle of sending a result leaves the pool's management thread reading a message that
+    # never completes (_pool_result), and the interpreter joins that thread at exit: closing this process's write
+    # end of the result pipe gives it EOF (the workers' ends are gone with them) so it ends as for a broken pool.
+    try:
+        result_queue._writer.close()
+    except Exception:  # noqa: BLE001 - best effort on a private attribute
+        pass
+    # The management thread now tears the pool down itself (it has seen the dead workers, or the EOF). On Python
+    # 3.10 / 3.11 that includes joining the call queue's feeder thread, which may be blocked writing a batch into
+    # the pipe (a 2 MB batch does not fit the pipe buffer): with the workers gone nothing reads it, but this process
+    # still holds the read end, so the write never fails (terminate_broken -> join_executor_internals ->
+    # call_queue.join_thread()). Draining the read end lets the feeder finish, and with it the management thread.
+    # The queue is not closed from here while that thread is at work: it still puts its wake-up items into it, and
+    # a queue closed under it is a "ValueError: Queue ... is closed" traceback on stderr before coal's own message.
     call_queue = getattr(ex, "_call_queue", None)
     reader = getattr(call_queue, "_reader", None)
-    feeder = getattr(call_queue, "_thread", None)
-    # Best effort on private attributes, and racing the pool's manager thread, which may be tearing the same
-    # queue down at the same moment (it noticed the dead workers too): on 3.10 / 3.11 it can `put` into the queue
-    # after this close() (ValueError / AssertionError in the feeder), on 3.12+ it closes the reader this loop
-    # polls (OSError / ValueError). Whatever either side meets, the workers are gone and nothing is left to send,
-    # so any exception here is ignored.
-    try:
-        call_queue.close()  # the feeder stops once its buffer is sent
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        deadline = time.monotonic() + 5.0
-        while feeder is not None and feeder.is_alive() and time.monotonic() < deadline:
+    manager = getattr(ex, "_executor_manager_thread", None)
+
+    def drain(thread, seconds: float) -> None:
+        # Private attributes, raced by the management thread (3.12+ closes the reader this loop polls: OSError /
+        # ValueError). Whatever either side meets, the workers are gone and nothing is left to send.
+        deadline = time.monotonic() + seconds
+        while thread is not None and thread.is_alive() and time.monotonic() < deadline:
             try:
                 while reader is not None and reader.poll(0.02):
                     reader.recv_bytes()
             except (OSError, EOFError, ValueError):
-                break
-            feeder.join(0.02)
-    except Exception:  # noqa: BLE001
-        pass
-    # A worker killed in the middle of sending a result leaves the pool's management thread reading a message that
-    # never completes, and the interpreter joins that thread at exit: closing this process's write end of the result
-    # pipe gives it EOF (the workers' ends are gone with them) so it ends as for a broken pool.
+                thread.join(0.02)
+                continue
+            thread.join(0.02)
+
     try:
-        result_queue._writer.close()
-    except Exception:  # noqa: BLE001 - best effort on a private attribute
+        drain(manager, 5.0)
+        if manager is None or manager.is_alive():
+            # Last resort (never seen): the management thread is still not done, so stop the feeder from here
+            call_queue.close()  # the feeder stops once its buffer is sent
+            drain(getattr(call_queue, "_thread", None), 2.0)
+    except Exception:  # noqa: BLE001
         pass
     try:
         ex.shutdown(wait=False, cancel_futures=True)
@@ -761,7 +794,7 @@ def take_output_lock(real_out: str, name: str) -> str:
         except OSError as e:  # e.g. a folder that cannot be written: the usual output error
             raise _output_error(name, e) from None
         try:
-            with os.fdopen(fd, "w") as fh:
+            with os.fdopen(fd, "w", encoding="ascii", newline="\n") as fh:  # the same bytes on every system
                 fh.write(f"{os.getpid()}\n")
         except BaseException:  # a signal between creating the lock and writing the id into it: leave nothing behind
             try:
