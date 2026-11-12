@@ -12,8 +12,8 @@ every difference in Ka, Ks, Ka/Ks, S-Sites and N-Sites:
   nan -> NA            KaKs_Calculator prints nan, COAL NA
   nan -> number        KaKs_Calculator loses a defined value to NaN arithmetic (differences 8 to 10)
 
-With a KaKs_Calculator built with the two corrections of docs/kaks.md difference 10, the `nan -> number` class
-is empty for MYN apart from sites of one kind.
+With a KaKs_Calculator built with the two corrections named in docs/kaks.md (after difference 10), the
+`nan -> number` class is empty for MYN (run with --methods MYN and that build as --kaks-hp).
 """
 from __future__ import annotations
 
