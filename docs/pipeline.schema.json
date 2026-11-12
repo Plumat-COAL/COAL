@@ -4,14 +4,15 @@
   "title": "COAL pipeline run report (coal.pipeline/1)",
   "description": "What `coal pipeline pairs|clusters` writes to <out_dir>/report.json (or --report). The tables it refers to (dnds.tsv, cluster_summary.tsv, genes.tsv, failed.tsv) are described in docs/pipeline.md.",
   "type": "object",
-  "required": ["schema", "coal_version", "mode", "out_dir", "exit_code", "parameters", "tools", "stages", "seconds", "counts", "failures_total", "failures", "failures_truncated", "outputs"],
+  "required": ["schema", "coal_version", "mode", "out_dir", "exit_code", "status", "parameters", "tools", "stages", "seconds", "counts", "failures_total", "failures", "failures_truncated", "outputs"],
   "properties": {
     "schema": {"const": "coal.pipeline/1"},
     "coal_version": {"type": "string"},
     "mode": {"enum": ["pairs", "clusters"]},
     "command": {"type": ["array", "null"], "items": {"type": "string"}},
     "out_dir": {"type": "string"},
-    "exit_code": {"enum": [0, 1, 2]},
+    "exit_code": {"type": "integer", "minimum": 0, "maximum": 255, "description": "0 completed; 2 completed, with failures listed in failed.tsv; 1 the run could not be done; 130 interrupted by Ctrl-C (SIGINT); 128 + signal number when a termination signal ended it (143 for SIGTERM, 129 for SIGHUP)"},
+    "status": {"enum": ["completed", "completed_with_failures", "failed", "interrupted"], "description": "interrupted: a signal or Ctrl-C ended the run; the tables in the folder are incomplete or missing, and nothing the run started is left running"},
     "error": {"type": "string"},
     "parameters": {"type": "object"},
     "tools": {

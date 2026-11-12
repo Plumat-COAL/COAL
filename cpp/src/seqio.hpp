@@ -43,7 +43,9 @@ bool py_space(unsigned char c);
 // Reads lines with Python "universal newlines" (\n, \r\n or \r end a line).
 class LineReader {
 public:
-    explicit LineReader(const std::string& path);
+    // keep_bad_ids: a FASTA header whose ID holds a non-ASCII character is returned unchanged (the caller reports
+    // that record) where the default is an InputError for the file. Non-ASCII text elsewhere is always an error.
+    explicit LineReader(const std::string& path, bool keep_bad_ids = false);
     bool next(std::string& line);  // line without its terminator
     long long lineno() const { return lineno_; }
 
@@ -55,6 +57,7 @@ private:
     size_t pos_ = 0, len_ = 0;
     long long lineno_ = 0;
     bool eof_ = false;
+    bool keep_bad_ids_ = false;
 };
 
 // Streaming protein alignment reader: FASTA (one record at a time) or CLUSTAL

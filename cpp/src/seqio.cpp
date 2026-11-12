@@ -98,8 +98,8 @@ static size_t uni_space(const std::string& s, size_t i) {
 
 // Text inputs must be ASCII (a UTF-8 BOM is skipped): "<file>:<line>: non-ASCII character", as the reference
 // engine. A header's description (after the ID) may hold any text: the line becomes ">ID"; a non-ASCII ID is
-// "<file>:<line>: non-ASCII character in the sequence ID".
-static void check_ascii(std::string& s, const std::string& path, long long lineno) {
+// "<file>:<line>: non-ASCII character in the sequence ID" (keep_bad_ids: such a header line is returned as it is).
+static void check_ascii(std::string& s, const std::string& path, long long lineno, bool keep_bad_ids = false) {
     bool ascii = true;
     for (unsigned char c : s) {
         if (control_byte(c)) throw InputError(path + ":" + std::to_string(lineno) + ": " + CONTROL_CHAR);
@@ -117,6 +117,7 @@ static void check_ascii(std::string& s, const std::string& path, long long linen
             s = ">" + s.substr(i, j - i);
             return;
         }
+        if (keep_bad_ids) return;  // the caller reports this record (coal translate: a failed gene, not an abort)
         throw InputError(path + ":" + std::to_string(lineno) + ": " + NON_ASCII_ID);
     }
     throw InputError(path + ":" + std::to_string(lineno) + ": " + NON_ASCII);
@@ -124,7 +125,8 @@ static void check_ascii(std::string& s, const std::string& path, long long linen
 
 // ------------------------------------------------------------------ LineReader
 
-LineReader::LineReader(const std::string& path) : path_(path), in_(path, std::ios::binary), buf_(1 << 16) {
+LineReader::LineReader(const std::string& path, bool keep_bad_ids)
+    : path_(path), in_(path, std::ios::binary), buf_(1 << 16), keep_bad_ids_(keep_bad_ids) {
     if (!in_) throw InputError(open_error(path), "file_error");
     if (fill() && len_ >= 3 && (unsigned char)buf_[0] == 0xEF && (unsigned char)buf_[1] == 0xBB &&
         (unsigned char)buf_[2] == 0xBF)
@@ -147,7 +149,7 @@ bool LineReader::next(std::string& line) {
         if (pos_ >= len_ && !fill()) {
             if (got) {
                 ++lineno_;
-                check_ascii(line, path_, lineno_);
+                check_ascii(line, path_, lineno_, keep_bad_ids_);
             }
             return got;
         }
@@ -166,7 +168,7 @@ bool LineReader::next(std::string& line) {
                 if (pos_ < len_ && buf_[pos_] == '\n') ++pos_;
             }
             ++lineno_;
-            check_ascii(line, path_, lineno_);
+            check_ascii(line, path_, lineno_, keep_bad_ids_);
             return true;
         }
     }

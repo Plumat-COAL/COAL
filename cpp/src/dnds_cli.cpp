@@ -51,8 +51,8 @@ const char* TRANSLATE_HELP =
     "Translate coding sequences from their first base (a step of `coal pipeline`, docs/pipeline.md).\n"
     "A stop codon at the end is left out; an internal stop is written as '*'; a codon with an ambiguous base is X\n"
     "unless every reading gives the same residue; bases after the last complete codon are ignored. Genes that\n"
-    "cannot be translated (empty, a character that is no nucleotide code, a repeated ID) are left out of the\n"
-    "protein file and listed as failed in GENES.tsv.\n"
+    "cannot be translated (empty, a character that is no nucleotide code, a repeated ID, an ID with a\n"
+    "non-ASCII character) are left out of the protein file and listed as failed in GENES.tsv.\n"
     "\n"
     "  -o FILE        protein FASTA, one line per sequence (default: standard output)\n"
     "  --genes FILE   per-gene table: id nt_length aa_length terminal_stop internal_stops ambiguous_codons\n"
@@ -159,6 +159,25 @@ void binary_stdio(bool in, bool out) {
 #endif
 }
 
+// A sequence ID with non-ASCII bytes, for the genes table: unchanged when it is valid UTF-8 (so that it can be
+// found again in the input), otherwise each byte above 127 as '?'.
+std::string printable_id(const std::string& id) {
+    bool utf8 = true;
+    for (size_t i = 0; i < id.size() && utf8;) {
+        const unsigned char c = (unsigned char)id[i];
+        const size_t n = c < 0x80 ? 1 : (c >= 0xC2 && c <= 0xDF) ? 2 : (c >= 0xE0 && c <= 0xEF) ? 3
+                         : (c >= 0xF0 && c <= 0xF4) ? 4 : 0;
+        if (n == 0 || i + n > id.size()) utf8 = false;
+        for (size_t k = 1; k < n && utf8; ++k) utf8 = ((unsigned char)id[i + k] & 0xC0) == 0x80;
+        i += n ? n : 1;
+    }
+    if (utf8) return id;
+    std::string o = id;
+    for (char& ch : o)
+        if ((unsigned char)ch > 127) ch = '?';
+    return o;
+}
+
 // ------------------------------------------------------------------------------------------------ translate
 int translate_main_(const std::vector<std::string>& argv) {
     const char* prog = "translate";
@@ -215,15 +234,24 @@ int translate_main_(const std::vector<std::string>& argv) {
         std::unordered_set<std::string> seen;
         long n = 0, n_ok = 0, n_warn = 0, n_fail = 0;
         std::string id, seq, line, obuf, gbuf;
+        long long id_line = 0;
         bool have = false;
         auto flush_rec = [&]() {
             if (!have) return;
             ++n;
             dnds::Translation t;
             std::string status = "ok", codestr, note;
+            bool ascii_id = true;
+            for (unsigned char ch : id) ascii_id = ascii_id && ch < 128;
             if (id.empty()) {
                 t.error_code = "empty_id";
                 t.error = "the FASTA header has no ID";
+            } else if (!ascii_id) {
+                // one gene's failure, not the end of the run: the other genes of the file are translated
+                t.error_code = "id_not_ascii";
+                t.error = "non-ASCII character in the sequence ID (line " + std::to_string(id_line) +
+                          "): use only ASCII letters, digits and punctuation in IDs";
+                id = printable_id(id);
             } else if (!seen.insert(id).second) {
                 t.error_code = "duplicate_id";
                 t.error = "the ID occurs more than once in the file (the first record is used)";
@@ -268,7 +296,7 @@ int translate_main_(const std::vector<std::string>& argv) {
             }
         };
         for (const std::string& in : ins) {
-            LineReader lr(in);
+            LineReader lr(in, true);
             have = false;
             const long before = n;
             while (lr.next(line)) {
@@ -279,6 +307,7 @@ int translate_main_(const std::vector<std::string>& argv) {
                     size_t b = a;
                     while (b < line.size() && !py_space((unsigned char)line[b])) ++b;
                     id = line.substr(a, b - a);
+                    id_line = lr.lineno();
                     seq.clear();
                     have = true;
                 } else if (have) {

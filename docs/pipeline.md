@@ -120,6 +120,13 @@ line ends. Rows are in input order (pairs: the query file's order; clusters: the
 | `codon_alignments/<cluster>.fasta` | clusters | `--keep-alignments`: one codon MSA per cluster (not for clusters aligned pairwise); characters other than letters, digits, `.`, `_`, `-` in the cluster ID become `_` |
 | `work/` | both | proteins, DIAMOND tables, logs of every external command (`work/logs/`), the `--resume` state |
 
+**One run per folder, and one run's files only.** A run takes the lock `<out_dir>.coal-lock` (next to the folder,
+holding its process id: COAL's convention for `-o` files) and a second run into the same folder is refused with
+exit 1 while the first one is alive; the lock of a process that is gone is replaced. When a run starts, every file
+of the table above that an earlier run left in the folder is removed (a `dnds.kaks` or `codon_alignments.fasta` of
+a run with other options, the `.fasta` files of `codon_alignments/`, a half-written `dnds.tsv.tmp`), so the folder
+never mixes two runs. Files with other names are not touched, and `work/` is kept for `--resume`.
+
 ### `dnds.tsv`
 
 | Column | Meaning |
@@ -191,7 +198,8 @@ Schema `coal.pipeline/1`: [pipeline.schema.json](pipeline.schema.json). It is wr
   members_dropped).
 - `failures`: the first 1,000 entries of `failed.tsv` (`failures_total`, `failures_truncated`), each with `level`
   (`gene`, `pair`, `cluster`), `code` and `message`.
-- `exit_code`, and `error` when the run could not be done.
+- `exit_code`, `status` (`completed`, `completed_with_failures`, `failed`, `interrupted`), and `error` when the
+  run could not be done or was interrupted.
 
 ### Failures and exit codes
 
@@ -208,7 +216,23 @@ One bad gene, pair or cluster never stops a run.
 | 0 | finished, nothing failed |
 | 2 | finished, but `failed.tsv` has entries (as `coal --keep-going` and `coal-cpp-align`); also a command-line error |
 | 1 | the run could not be done: an input cannot be read, a tool is missing or failed, the folder cannot be written |
-| 130 | interrupted |
+| 130 | interrupted by Ctrl-C (SIGINT); 143 for SIGTERM, 129 for SIGHUP (128 + the signal's number) |
+
+**Interrupts.** When Ctrl-C or a termination signal reaches the `coal pipeline` process (also when only that
+process gets it and not its children, as from `kill`, a scheduler or a notebook), the programs it started are
+ended: the `coal-cpp codon-dnds` engine is killed and not left to finish as an orphan, and so are DIAMOND and the
+running Clustal Omega / MAFFT processes. `dnds.tsv.tmp` is removed, `report.json` is written with
+`"status": "interrupted"` and the lock is released; `dnds.tsv` is absent, so an interrupted folder cannot be taken
+for a finished one. `--resume` then reuses the finished stages. A process killed with SIGKILL cannot do any of
+this: the engine then ends when its input pipe closes, and the next run replaces the stale lock.
+
+**Inputs that cannot work are reported before the long steps.** When a CDS file has no usable gene at all, the
+run stops after translation, before DIAMOND or an aligner is started, and says why: "does not hold coding DNA ...
+Is this a protein file?" when most sequences have letters that are no nucleotide codes, otherwise the count of each
+reason (`cds_empty`, `cds_too_short`, ...). `genes.tsv` and `failed.tsv` list every gene. A sequence ID with a
+non-ASCII character is that gene's failure (`id_not_ascii`), not the end of the run; in the tables the ID is shown
+as it is when it is valid UTF-8, otherwise with `?` for each byte above 127. Non-ASCII text elsewhere in a
+sequence file (in the sequence lines) still stops the run: such a file is not a FASTA file of nucleotides.
 
 ## Defaults, and why
 
@@ -358,6 +382,11 @@ machine is still to be done.
 
 - **`--resume` does not cover the engine step or the cluster MSAs.** A cluster run that is interrupted during the
   MSAs repeats them.
+- **The lock is per process, not per thread and not across machines.** Two `run_pairs()` calls into one folder
+  from two threads of the same Python process are not kept apart (the lock holds a process id), and on a shared
+  file system a run on another host is seen as "gone" when its process id is not alive here.
+- **SIGKILL (and a power cut) leave an interrupted folder without `"status": "interrupted"`**: `report.json` is
+  then absent (it is removed when a run starts and written when it ends), and so is `dnds.tsv`.
 - **One MSA per cluster is held in memory**, and Clustal Omega's time grows faster than linearly with the cluster
   size. Lower `--max-cluster-size`, or use `--aligner mafft`, for inputs with many clusters of hundreds of members.
 - **Large clusters are aligned pairwise**, so their values come from pairwise alignments and those of smaller
@@ -367,7 +396,9 @@ machine is still to be done.
 - **`--aligner diamond` uses one HSP** and DIAMOND's heuristic alignment ([alignment.md](alignment.md)); a hit that
   does not fit the translated sequences is that pair's error.
 - **Best hits are DIAMOND's first target per query** (`--max-target-seqs 1`). Ties are broken by DIAMOND.
-- **Protein input is not accepted**: the pipeline starts from CDS, so that protein and CDS always match.
+- **Protein input is not accepted**: the pipeline starts from CDS, so that protein and CDS always match. A protein
+  file is recognised only when it leaves no usable gene (see "Inputs that cannot work"); a file that mixes CDS and
+  protein records runs, with the protein records listed as failed genes.
 - **Python holds every ID** (and a byte offset per record), so memory grows with the number of sequences, not
   with their length.
 - **Installers verify what they download** ([alignment.md](alignment.md#clusters-clustal-omega-and-mafft-coalmsa),

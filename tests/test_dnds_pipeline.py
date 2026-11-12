@@ -23,12 +23,15 @@ import io
 import json
 import math
 import os
+import signal
 import stat
 import statistics
 import subprocess
 import sys
 import tarfile
 import tempfile
+import threading
+import time
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
@@ -624,6 +627,220 @@ class PairsGiven(PipelineCase):
         self.assertIn("coal pipeline: summary: 40 genes (4 not usable); 2 pairs: 2 ok", r.stderr)
         rows = read_tsv(self.tmp / "out" / "dnds.tsv")
         self.assertEqual([x["method"] for x in rows], ["NG", "NG"])
+
+
+@needs_cpp
+class Robustness(PipelineCase):
+    """Review findings of 2026-11-12 (e): stale outputs, one run per folder, interrupts, inputs that cannot work."""
+
+    def small(self):
+        q, s = self.tmp / "q.fa", self.tmp / "s.fa"
+        allq, alls = read_fasta(Q), read_fasta(S)
+        q.write_text("".join(f">{a}\n{allq[a]}\n" for a, _ in PLAIN))
+        s.write_text("".join(f">{b}\n{alls[b]}\n" for _, b in PLAIN))
+        return q, s, self.pairs_file(PLAIN)
+
+    def test_outputs_of_an_earlier_run_are_removed(self):
+        q, s, pf = self.small()
+        out = self.tmp / "out"
+        first = P.run_pairs(q, s, out, pairs=pf, quiet=True, kaks_format=True, keep_alignments=True)
+        self.assertEqual(first.exit_code, 0)
+        for name in ("dnds.kaks", "codon_alignments.fasta", "dnds.tsv"):
+            self.assertTrue((out / name).is_file(), name)
+        (out / "dnds.tsv.tmp").write_text("half a table of a killed run\n")
+        (out / "cluster_summary.tsv").write_text("from a cluster run into the same folder\n")
+        (out / "codon_alignments").mkdir()
+        (out / "codon_alignments" / "old_cluster.fasta").write_text(">x\nATG\n")
+        (out / "codon_alignments" / "notes.txt").write_text("the user's own file\n")
+        (out / "my_notes.txt").write_text("the user's own file\n")
+        second = P.run_pairs(q, s, out, pairs=pf, quiet=True)   # the same folder, without the optional outputs
+        self.assertEqual(second.exit_code, 0)
+        left = sorted(p.name for p in out.iterdir())
+        self.assertEqual(left, ["codon_alignments", "dnds.tsv", "failed.tsv", "genes.tsv", "my_notes.txt",
+                                "orthologs.tsv", "report.json", "work"])
+        self.assertEqual(sorted(p.name for p in (out / "codon_alignments").iterdir()), ["notes.txt"])
+        self.assertEqual(sorted(second.report["outputs"]), ["dnds", "failed", "genes", "orthologs"])
+        self.assertEqual((out / "dnds.tsv").read_bytes(), Path(first.outputs["dnds"]).read_bytes())
+        # --resume reuses work/ and still leaves no optional output of the earlier run
+        third = P.run_pairs(q, s, out, pairs=pf, quiet=True, kaks_format=True)
+        fourth = P.run_pairs(q, s, out, pairs=pf, quiet=True, resume=True)
+        self.assertTrue(Path(third.outputs["kaks"]).name == "dnds.kaks" and not (out / "dnds.kaks").exists())
+        self.assertEqual([st["cached"] for st in fourth.report["stages"]][:2], [True, True])
+
+    @unittest.skipIf(os.name == "nt", "uses a POSIX sleep as the other process")
+    def test_one_run_per_output_folder(self):
+        q, s, pf = self.small()
+        out = self.tmp / "out"
+        lock = Path(str(out) + ".coal-lock")
+        other = subprocess.Popen(["sleep", "60"])   # a live process that "owns" the folder
+        try:
+            out.mkdir()
+            (out / "report.json").write_text("the other run's report\n")
+            lock.write_text(f"{other.pid}\n")
+            with redirect_stderr(io.StringIO()) as err:
+                res = P.run_pairs(q, s, out, pairs=pf, quiet=True)
+            self.assertEqual(res.exit_code, 1)
+            self.assertIn(f"another COAL run (process {other.pid}) is writing", err.getvalue())
+            self.assertIn("use another output folder", err.getvalue())
+            self.assertEqual(res.report["status"], "failed")
+            # nothing of the folder was touched, and the other run's lock is still there
+            self.assertEqual(sorted(p.name for p in out.iterdir()), ["report.json"])
+            self.assertEqual((out / "report.json").read_text(), "the other run's report\n")
+            self.assertEqual(lock.read_text(), f"{other.pid}\n")
+        finally:
+            other.kill()
+            other.wait()
+        # the lock of a process that is gone is replaced, and a finished run leaves none
+        res = P.run_pairs(q, s, out, pairs=pf, quiet=True)
+        self.assertEqual(res.exit_code, 0)
+        self.assertFalse(lock.exists())
+        self.assertEqual(res.report["status"], "completed")
+        with redirect_stderr(io.StringIO()):
+            bad = P.run_pairs(self.tmp / "missing.fa", s, out, pairs=pf, quiet=True)
+        self.assertEqual((bad.exit_code, bad.report["status"]), (1, "failed"))
+        self.assertFalse(lock.exists(), "a failed run releases the folder too")
+
+    @unittest.skipIf(os.name == "nt", "POSIX signals and a shell stand-in for the engine")
+    def test_interrupt_ends_the_engine_and_is_reported(self):
+        """SIGINT or SIGTERM sent to the Python process only (not its process group): the engine it started is
+        killed (no orphan that goes on writing), report.json says `interrupted`, the lock is released."""
+        q, s, pf = self.small()
+        for signum, code, name in ((signal.SIGINT, 130, "SIGINT"), (signal.SIGTERM, 143, "SIGTERM")):
+            with self.subTest(signal=name):
+                out = self.tmp / f"out_{name}"
+                pidfile = self.tmp / f"engine_{name}.pid"
+                # the real coal-cpp for everything but the engine step, which stands still (as on a huge input)
+                engine = self.tmp / f"coal-cpp-{name}"
+                engine.write_text(f'#!/bin/sh\ncase "$1" in\n  codon-dnds) echo $$ > "{pidfile}"; '
+                                  f'echo partial > "{out}/dnds.tsv.tmp"; exec sleep 120;;\n'
+                                  f'  *) exec "{CPP}" "$@";;\nesac\n')
+                engine.chmod(0o755)
+                proc = subprocess.Popen([sys.executable, "-m", "coal", "pipeline", "pairs", "--query", str(q),
+                                         "--subject", str(s), "--pairs", str(pf), "-o", str(out)],
+                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                        env={**os.environ, "PYTHONPATH": str(ROOT / "src"), "COAL_CPP": str(engine)},
+                                        start_new_session=True)   # nothing else can deliver the signal to the child
+                try:
+                    for _ in range(600):
+                        if pidfile.is_file() and pidfile.read_text().strip() and (out / "dnds.tsv.tmp").exists():
+                            break
+                        time.sleep(0.05)
+                    else:
+                        self.fail("the engine step did not start")
+                    engine_pid = int(pidfile.read_text())
+                    os.kill(engine_pid, 0)            # it is running
+                    time.sleep(0.2)
+                    os.kill(proc.pid, signum)         # the Python process only
+                    _, err = proc.communicate(timeout=60)
+                finally:
+                    if proc.poll() is None:
+                        proc.kill()
+                        proc.wait()
+                self.assertEqual(proc.returncode, code, err)
+                self.assertIn("interrupted", err)
+                for _ in range(100):                  # the engine is gone (reaped by the pipeline before it exits)
+                    try:
+                        os.kill(engine_pid, 0)
+                    except ProcessLookupError:
+                        break
+                    time.sleep(0.05)
+                else:
+                    os.kill(engine_pid, signal.SIGKILL)
+                    self.fail("the engine process was left running")
+                report = json.loads((out / "report.json").read_text())
+                validate(report, SCHEMA)
+                self.assertEqual((report["status"], report["exit_code"]), ("interrupted", code))
+                self.assertIn(f"interrupted by {name}", report["error"])
+                self.assertFalse((out / "dnds.tsv.tmp").exists())
+                self.assertFalse((out / "dnds.tsv").exists())
+                self.assertFalse(Path(str(out) + ".coal-lock").exists())
+
+    def test_interrupted_msa_batch_ends_its_aligners(self):
+        """coal.msa: an interrupt while a batch of clusters is aligned ends the running aligner processes and
+        drops the clusters not started yet (the executor used to align all of them first)."""
+        if os.name == "nt":
+            self.skipTest("POSIX shell stand-in")
+        started = self.tmp / "started"
+        started.mkdir()
+        tool = self.tmp / "clustalo"
+        tool.write_text(f'#!/bin/sh\ntouch "{started}/$$"\nexec sleep 120\n')
+        tool.chmod(0o755)
+        clusters = {k: [("a", "MKV"), ("b", "MKL"), ("c", "MRV")] for k in range(40)}
+
+        def interrupt():
+            while len(list(started.iterdir())) < 2:
+                time.sleep(0.02)
+            os.kill(os.getpid(), signal.SIGINT)   # a real Ctrl-C: wakes the main thread where it waits
+        threading.Thread(target=interrupt, daemon=True).start()
+        t0 = time.time()
+        with self.assertRaises(KeyboardInterrupt):
+            msa.align_clusters(clusters, tool="clustalo", jobs=2, exe=str(tool), pairs_with="msa")
+            time.sleep(30)   # (the interrupt arrives here at the latest)
+        self.assertLess(time.time() - t0, 20)
+        pids = [int(p.name) for p in started.iterdir()]
+        self.assertLess(len(pids), 10, "the clusters not started yet were dropped")
+        time.sleep(0.3)
+        for pid in pids:
+            with self.assertRaises(ProcessLookupError, msg=f"aligner {pid} was left running"):
+                os.kill(pid, 0)
+                os.kill(pid, signal.SIGKILL)
+
+    @unittest.skipIf(os.name == "nt", "the stand-in DIAMOND is a POSIX shell script")
+    def test_a_file_without_coding_dna_is_explained_before_diamond(self):
+        q, s, _ = self.small()
+        marker = self.tmp / "diamond_was_started"
+        fake = self.tmp / "diamond"
+        fake.write_text(f'#!/bin/sh\ntouch "{marker}"\necho "diamond version 2.2.8"\n')
+        fake.chmod(0o755)
+        prot = self.tmp / "proteins.fa"
+        r = run_cpp("translate", q, "-o", prot, "-q")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        with redirect_stderr(io.StringIO()) as err:
+            res = P.run_pairs(prot, s, self.tmp / "o_prot", diamond=str(fake), quiet=True)
+        self.assertEqual(res.exit_code, 1)
+        msg = err.getvalue()
+        self.assertIn("proteins.fa does not hold coding DNA: 12 of its 12 sequences", msg)
+        self.assertIn("Is this a protein file?", msg)
+        self.assertNotIn("Error detecting input file format", msg)
+        self.assertFalse(marker.exists(), "DIAMOND was started")
+        self.assertEqual([st["name"] for st in res.report["stages"]], ["translate_query", "translate_subject"])
+        self.assertEqual(res.report["counts"]["genes"]["failed"], 12)
+        self.assertEqual(len(read_tsv(self.tmp / "o_prot" / "failed.tsv")), 12)   # every gene with its reason
+        # all genes unusable for other reasons: the subject file this time; and cluster mode
+        empty = self.tmp / "empty.fa"
+        empty.write_text(">a\n\n>b\nAT\n>c\n\n")
+        with redirect_stderr(io.StringIO()) as err:
+            res = P.run_pairs(q, empty, self.tmp / "o_empty", diamond=str(fake), quiet=True)
+        self.assertEqual(res.exit_code, 1)
+        self.assertIn("none of the 3 sequences of", err.getvalue())
+        self.assertIn("2 cds_empty, 1 cds_too_short", err.getvalue())
+        with redirect_stderr(io.StringIO()) as err:
+            res = P.run_clusters(prot, self.tmp / "o_cl", diamond=str(fake), quiet=True)
+        self.assertEqual(res.exit_code, 1)
+        self.assertIn("does not hold coding DNA", err.getvalue())
+        self.assertFalse(marker.exists(), "DIAMOND was started")
+
+    def test_a_non_ascii_id_is_that_genes_failure(self):
+        q, s, pf = self.small()
+        text = q.read_text()
+        for label, raw, shown in (("utf8", "gène_αβ".encode("utf-8"), "gène_αβ"),
+                                  ("latin1", "gène".encode("latin-1"), "g?ne")):
+            with self.subTest(encoding=label):
+                bad = self.tmp / f"q_{label}.fa"
+                bad.write_bytes(text.encode().replace(b">g03\n", b">" + raw + b"\n"))
+                r = run_cpp("translate", bad, "--genes", self.tmp / "genes.tsv", "-o", self.tmp / "p.fa")
+                self.assertEqual(r.returncode, 0, r.stderr)
+                self.assertIn(b"12 gene(s): 11 ok, 0 warning, 1 failed", r.stderr)
+                res = P.run_pairs(bad, s, self.tmp / f"o_{label}", pairs=pf, quiet=True)
+                self.assertEqual(res.exit_code, 2)               # finished, with failures
+                self.assertEqual(res.report["status"], "completed_with_failures")
+                failed = read_tsv(self.tmp / f"o_{label}" / "failed.tsv")
+                gene = [f for f in failed if f["level"] == "gene"]
+                self.assertEqual([(f["seq1"], f["code"]) for f in gene], [(shown, "id_not_ascii")])
+                self.assertIn("non-ASCII character in the sequence ID (line 5)", gene[0]["message"])
+                rows = read_tsv(res.outputs["dnds"])
+                self.assertEqual(sum(r["status"] == "ok" for r in rows), 11)   # the other genes are computed
+                self.assertEqual([r["status"] for r in rows if r["seq1"] == "g03"], ["error"])
 
 
 @needs_diamond

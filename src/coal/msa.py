@@ -29,6 +29,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import urllib.request
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
@@ -416,6 +417,46 @@ def _read_fasta(path: str) -> dict[str, str]:
     return recs
 
 
+# Aligner processes that are running now (run_msa starts them from align_clusters' worker threads): kept so that an
+# interrupted batch can end them (kill_running) and not leave them to finish on their own.
+_running: set = set()
+_running_lock = threading.Lock()
+
+
+def _run_tracked(cmd, timeout, **kw) -> subprocess.CompletedProcess:
+    """subprocess.run(cmd, timeout=..., **kw) with the process registered in _running while it runs."""
+    proc = subprocess.Popen(cmd, **kw)
+    with _running_lock:
+        _running.add(proc)
+    try:
+        try:
+            out, err = proc.communicate(timeout=timeout)
+        except BaseException:   # the timeout, or an interrupt: never leave the aligner behind
+            proc.kill()
+            proc.communicate()
+            raise
+    finally:
+        with _running_lock:
+            _running.discard(proc)
+    return subprocess.CompletedProcess(cmd, proc.returncode, out, err)
+
+
+def kill_running() -> int:
+    """End every Clustal Omega / MAFFT process this module started that is still running (an interrupted run).
+    Returns how many were ended."""
+    with _running_lock:
+        procs = list(_running)
+    n = 0
+    for proc in procs:
+        if proc.poll() is None:
+            try:
+                proc.kill()
+                n += 1
+            except OSError:
+                pass
+    return n
+
+
 def run_msa(records: Sequence[tuple[str, str]], tool: str = "clustalo", threads: int = 1, exe: str | None = None,
             extra_args: Sequence[str] = (), timeout: float | None = None) -> list[tuple[str, str]]:
     """Align the protein records [(id, sequence)] with Clustal Omega ("clustalo") or MAFFT ("mafft"); returns
@@ -442,14 +483,14 @@ def run_msa(records: Sequence[tuple[str, str]], tool: str = "clustalo", threads:
         if tool == "clustalo":
             cmd = [exe, "-i", inp, "-o", outp, "--outfmt=fa", "--seqtype=Protein", "--output-order=input-order",
                    f"--threads={max(1, threads)}", "--force", *extra_args]
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, encoding="utf-8",
-                               errors="replace")
+            r = _run_tracked(cmd, timeout, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                             encoding="utf-8", errors="replace")
         else:
             cmd = [exe, "--auto", "--amino", "--anysymbol", "--quiet", "--thread", str(max(1, threads)), *extra_args,
                    inp]
             with open(outp, "w", encoding="utf-8") as fh:
-                r = subprocess.run(cmd, stdout=fh, stderr=subprocess.PIPE, text=True, timeout=timeout,
-                                   encoding="utf-8", errors="replace")
+                r = _run_tracked(cmd, timeout, stdout=fh, stderr=subprocess.PIPE, text=True, encoding="utf-8",
+                                 errors="replace")
         if r.returncode != 0:
             raise MsaError(f"{tool} failed (exit {r.returncode}): {(r.stderr or '').strip()[-800:]}")
         got = _read_fasta(outp)
@@ -509,7 +550,15 @@ def align_clusters(clusters: Mapping[str, Sequence[tuple[str, str]]] | Iterable[
             return k, MsaResult(run_msa(recs, tool, threads, exe, timeout=timeout))
         except (MsaError, OSError, subprocess.SubprocessError, ValueError) as e:
             return k, MsaResult(None, str(e))
-    with ThreadPoolExecutor(max_workers=max(1, workers)) as ex:
+    ex = ThreadPoolExecutor(max_workers=max(1, workers))
+    try:
         for k, res in ex.map(one, rest):
             results[k] = res
+    except BaseException:
+        # an interrupt in the calling thread: drop the clusters not started yet and end the running aligners,
+        # where the executor would otherwise align every remaining cluster before the interrupt is seen
+        ex.shutdown(wait=False, cancel_futures=True)
+        kill_running()
+        raise
+    ex.shutdown(wait=True)
     return {k: results[k] for k, _ in items}

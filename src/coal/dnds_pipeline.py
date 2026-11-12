@@ -40,6 +40,7 @@ import platform
 import random
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
 import tarfile
@@ -49,6 +50,8 @@ from dataclasses import dataclass, field
 
 from . import __version__
 from . import msa as _msa
+from .core import CoalError
+from .pipeline import release_output_lock, take_output_lock
 from .tables import SUPPORTED
 
 __all__ = ["run_pairs", "run_clusters", "main", "PipelineResult", "PipelineError", "find_diamond",
@@ -72,6 +75,28 @@ REPORT_MAX_FAILURES = 1000   # the JSON report lists this many failures; failed.
 _CLUSTER_HEADERS = {("centroid", "member"), ("representative", "member"), ("representative_id", "member_id"),
                     ("cluster", "member"), ("cluster_id", "member_id"), ("rep", "member")}
 _EXE = ".exe" if os.name == "nt" else ""
+
+
+# Files and folders a run writes into the output folder (besides work/): whatever an earlier run left of them is
+# removed when a run starts, so that the folder never mixes two runs (a dnds.kaks or codon_alignments.fasta of a
+# run with other options, the dnds.tsv.tmp of a killed run).
+_RUN_OUTPUTS = ("dnds.tsv", "dnds.tsv.tmp", "dnds.kaks", "codon_alignments.fasta", "cluster_summary.tsv",
+                "cluster_summary.tsv.tmp", "genes.tsv", "orthologs.tsv", "unpaired.tsv", "clusters.tsv",
+                "realign.tsv", "realign.tsv.body", "failed.tsv", "report.json")
+
+
+class _Terminated(SystemExit):
+    """A termination signal (SIGTERM, SIGHUP, Ctrl-Break) reached the Python process during a run: raised in the
+    main thread so that the run ends as an interrupted one (children killed, report written, lock released). A
+    SystemExit with the shell's code for the signal (128 + number), so an uncaught one ends the process quietly."""
+
+    def __init__(self, signum: int):
+        super().__init__(128 + signum)
+        self.signum = signum
+        try:
+            self.name = signal.Signals(signum).name
+        except ValueError:
+            self.name = f"signal {signum}"
 
 
 class PipelineError(RuntimeError):
@@ -347,9 +372,24 @@ class _Run:
         self._failed_fh = None
         self.state: dict = {}
         self.cpp = None
+        self.gene_failures: dict = {}
+        self.lock = None        # <out_dir>.coal-lock while this run owns the output folder
+        self._engine = None     # the running coal-cpp codon-dnds (killed if the run is interrupted)
 
     # -- set-up
     def start(self) -> None:
+        try:
+            os.makedirs(self.out, exist_ok=True)
+        except OSError as e:
+            raise PipelineError(f"cannot create the output folder {self.out!r}: {e.strerror or e}") from None
+        # One run per output folder: COAL's lock convention (<out>.coal-lock next to the output, holding the
+        # process id; a lock whose process is gone is replaced). Two runs into one folder shared work/ and
+        # dnds.tsv.tmp and one of them failed or, worse, finished with the other's files.
+        try:
+            self.lock = take_output_lock(self.out, self.out)
+        except CoalError as e:
+            raise PipelineError(str(e).replace("write to another file", "use another output folder")) from None
+        self._clear_earlier_outputs()
         try:
             os.makedirs(os.path.join(self.work, "logs"), exist_ok=True)
         except OSError as e:
@@ -366,6 +406,47 @@ class _Run:
         self.outputs["failed"] = os.path.join(self.out, "failed.tsv")
         self._failed_fh = open(self.outputs["failed"], "w", encoding="utf-8", newline="\n")
         self._failed_fh.write("\t".join(FAILED_COLUMNS) + "\n")
+
+    def _clear_earlier_outputs(self) -> None:
+        """Remove what an earlier run into this folder left of the files a run writes (_RUN_OUTPUTS and the
+        .fasta files of codon_alignments/), so the folder holds this run's results only. --resume keeps the
+        stage outputs it can reuse (clusters.tsv, realign.tsv; everything under work/ is kept anyway)."""
+        a = self.a
+        keep = set()
+        if a.resume and self.mode == "clusters" and not a.clusters:
+            keep.add("clusters.tsv")
+            if a.realign:
+                keep.add("realign.tsv")
+        try:
+            for name in _RUN_OUTPUTS:
+                p = self.path(name)
+                if name not in keep and (os.path.isfile(p) or os.path.islink(p)):
+                    os.remove(p)
+            d = self.path("codon_alignments")
+            if os.path.isdir(d):
+                for n in os.listdir(d):
+                    if n.endswith(".fasta"):
+                        os.remove(os.path.join(d, n))
+                if not os.listdir(d):
+                    os.rmdir(d)
+        except OSError as e:
+            raise PipelineError(f"cannot remove the earlier run's {e.filename or 'outputs'} in {self.out!r}: "
+                                f"{e.strerror or e}") from None
+
+    def release(self) -> None:
+        release_output_lock(self.lock)
+        self.lock = None
+
+    def kill_children(self) -> None:
+        """End the programs this run started (interrupt): the engine, and any aligner process of coal.msa."""
+        proc = self._engine
+        if proc is not None and proc.poll() is None:
+            try:
+                proc.kill()
+                proc.wait(timeout=30)
+            except (OSError, subprocess.SubprocessError):
+                pass
+        _msa.kill_running()
 
     def say(self, text: str) -> None:
         if not self.quiet:
@@ -481,6 +562,7 @@ class _Run:
         {id: reason} of the failed ones. order: filled with {id: rank} of the usable genes (file order)."""
         failed: dict[str, str] = {}
         c = self.counts.setdefault("genes", {"total": 0, "ok": 0, "warning": 0, "failed": 0})
+        codes = self.gene_failures.setdefault(set_name, {"usable": 0, "codes": {}, "first": None})
         with open(genes_path, encoding="utf-8", errors="replace") as fh:
             next(fh)
             for line in fh:
@@ -492,9 +574,34 @@ class _Run:
                     if f[8] != "duplicate_id":   # a repeated ID: its first record stands
                         failed.setdefault(f[0], f[9])
                     self.fail("gene", f[8], f"{set_name}: {f[9]}", seq1=f[0])
-                elif order is not None:
-                    order[f[0]] = len(order)
+                    codes["codes"][f[8]] = codes["codes"].get(f[8], 0) + 1
+                    if codes["first"] is None:
+                        codes["first"] = (f[0], f[9])
+                else:
+                    codes["usable"] += 1
+                    if order is not None:
+                        order[f[0]] = len(order)
         return failed
+
+    def require_usable_genes(self, set_name: str, paths: list[str]) -> None:
+        """Stop here, before DIAMOND or an aligner is started, when a CDS file has no usable gene at all: the
+        usual cause is a protein file given where coding DNA is expected. (DIAMOND would otherwise fail on the
+        empty protein file with "Error detecting input file format".) Every gene is in genes.tsv and failed.tsv."""
+        g = self.gene_failures.get(set_name)
+        if g is None or g["usable"] > 0:
+            return
+        total = sum(g["codes"].values())
+        files = ", ".join(paths)
+        first = f"; the first: {g['first'][0]}: {g['first'][1]}" if g["first"] else ""
+        bad_letters = g["codes"].get("cds_invalid_character", 0)
+        if total and bad_letters * 2 >= total:
+            raise PipelineError(
+                f"{files} does not hold coding DNA: {bad_letters:,} of its {total:,} sequences have letters that "
+                f"are no nucleotide codes{first}. Is this a protein file? The pipeline needs the coding sequences "
+                "(CDS, nucleotides) of the genes and translates them itself")
+        what = ", ".join(f"{n:,} {code}" for code, n in sorted(g["codes"].items(), key=lambda kv: (-kv[1], kv[0])))
+        raise PipelineError(f"none of the {total:,} sequences of {files} can be used as a coding sequence "
+                            f"({what}){first}. Every gene and its reason is in {self.path('failed.tsv')}")
 
     # -- the engine step
     def engine_cmd(self, group_column: str | None) -> tuple[list[str], str, str]:
@@ -518,11 +625,7 @@ class _Run:
                 cmd += ["--codon-out", self.outputs["codon_alignments"]]
             else:
                 d = self.outputs["codon_alignments"] = self.path("codon_alignments")
-                if os.path.isdir(d):
-                    for n in os.listdir(d):
-                        if n.endswith(".fasta"):
-                            os.remove(os.path.join(d, n))
-                os.makedirs(d, exist_ok=True)
+                os.makedirs(d, exist_ok=True)   # (an earlier run's files were removed when this run started)
                 cmd += ["--codon-dir", d]
         return cmd, out, fail
 
@@ -536,6 +639,7 @@ class _Run:
                 proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=log)
             except OSError as e:
                 raise PipelineError(f"could not start {cmd[0]} ({e.strerror or e})") from None
+            self._engine = proc
             detail, broken = {}, False
             try:
                 try:
@@ -546,13 +650,25 @@ class _Run:
                         broken = True   # coal-cpp ended early: its message is in the log
                     else:
                         raise
-            finally:
                 if proc.poll() is None and not broken:
                     try:
                         proc.stdin.close()
                     except OSError:
                         pass
                 rc = proc.wait()
+            except BaseException:
+                # An interrupt (Ctrl-C, SIGTERM) or an error while feeding: the engine must not be left running.
+                # Closing its input would only make it finish the pairs it has and write its files, as an orphan
+                # of a run that no longer exists; it is killed, and what it wrote so far is removed.
+                self.kill_children()
+                for tmp in (out + ".tmp",):
+                    try:
+                        os.remove(tmp)
+                    except OSError:
+                        pass
+                raise
+            finally:
+                self._engine = None
         if rc != 0 or broken:
             raise PipelineError(f"coal-cpp codon-dnds failed (exit {rc}); the end of {logp}:\n{_tail(logp)}")
         os.replace(out + ".tmp", out)
@@ -576,15 +692,20 @@ class _Run:
         return detail
 
     # -- the end
-    def finish(self, exit_code: int, error: str | None = None) -> dict:
+    def finish(self, exit_code: int, error: str | None = None, status: str | None = None) -> dict:
+        """Close failed.tsv and write the report. status: "completed" (exit 0), "completed_with_failures" (2),
+        "failed" (1: the run could not be done) or "interrupted" (a signal or Ctrl-C ended it: the tables in the
+        folder are incomplete or missing)."""
         if self._failed_fh:
             self._failed_fh.close()
             self._failed_fh = None
         a = self.a
         skip = {"out_dir", "quiet", "report", "resume", "install_tools"}
+        if status is None:
+            status = {0: "completed", 2: "completed_with_failures"}.get(exit_code, "failed")
         report = {
             "schema": SCHEMA, "coal_version": __version__, "mode": self.mode, "command": self.argv,
-            "out_dir": self.out, "exit_code": exit_code,
+            "out_dir": self.out, "exit_code": exit_code, "status": status,
             "parameters": {k: v for k, v in sorted(vars(a).items()) if k not in skip},
             "tools": self.tools, "stages": self.stages,
             "seconds": round(time.time() - self.t0, 3), "counts": self.counts,
@@ -659,6 +780,8 @@ def _pairs_mode(run: _Run) -> None:
         s_failed = run.read_genes(s_genes, "subject", gf, s_order)
     run.say(f"translated {len(q_order) + len(q_failed):,} query and {len(s_order) + len(s_failed):,} subject CDS "
             f"({len(q_failed) + len(s_failed):,} not usable)")
+    run.require_usable_genes("query", [a.query])
+    run.require_usable_genes("subject", [a.subject])
 
     orth = run.outputs["orthologs"] = run.path("orthologs.tsv")
     hits: dict[str, list[str]] = {}
@@ -890,6 +1013,7 @@ def _clusters_mode(run: _Run) -> None:
             gf.write("set\t" + fh.readline())
         failed = run.read_genes(genes, "cds", gf, order)
     run.say(f"translated {len(order) + len(failed):,} CDS ({len(failed):,} not usable)")
+    run.require_usable_genes("cds", list(a.cds))
 
     if a.clusters:
         cfile = a.clusters
@@ -1307,39 +1431,88 @@ def _finish_args(a: argparse.Namespace) -> None:
         a.flanks = "align"
 
 
+def _on_signals(handler):
+    """Install handler for the termination signals of this platform (main thread only: elsewhere, and where a
+    signal cannot be set, nothing changes). Returns {signal: previous handler} for _restore_signals."""
+    old = {}
+    for name in ("SIGTERM", "SIGHUP", "SIGBREAK"):
+        sig = getattr(signal, name, None)
+        if sig is None:
+            continue
+        try:
+            old[sig] = signal.signal(sig, handler)
+        except (ValueError, OSError):   # not the main thread, or not settable here
+            pass
+    return old
+
+
+def _restore_signals(old) -> None:
+    for sig, h in old.items():
+        try:
+            signal.signal(sig, h)
+        except (ValueError, OSError):
+            pass
+
+
 def _execute(mode: str, a: argparse.Namespace, argv) -> PipelineResult:
     _finish_args(a)
     run = _Run(mode, a, argv)
+
+    def terminated(signum, frame):
+        raise _Terminated(signum)
+    old_handlers = _on_signals(terminated)
     try:
-        run.start()
-        (_pairs_mode if mode == "pairs" else _clusters_mode)(run)
-    except (PipelineError, OSError) as e:
-        if isinstance(e, OSError):
-            e = PipelineError(f"{e.strerror or e}" + (f": {e.filename}" if e.filename else ""))
-        print(f"coal pipeline: error: {e}", file=sys.stderr)
-        if os.path.isdir(run.out):
-            report = run.finish(1, str(e))
-        else:
-            report = {"schema": SCHEMA, "exit_code": 1, "error": str(e)}
-        return PipelineResult(1, report, run.outputs)
-    pairs = run.counts.get("pairs", {})
-    code = 2 if run.n_failures else 0
-    report = run.finish(code)
-    genes = run.counts.get("genes", {})
-    run.say(f"summary: {genes.get('total', 0):,} genes ({genes.get('failed', 0):,} not usable); "
-            f"{pairs.get('total', 0):,} pairs: {pairs.get('ok', 0):,} ok, {pairs.get('warning', 0):,} warning, "
-            f"{pairs.get('saturated', 0):,} saturated, {pairs.get('no_data', 0):,} no_data, "
-            f"{pairs.get('error', 0):,} error")
-    if mode == "clusters":
-        c = run.counts["clusters"]
-        run.say(f"summary: {c['total']:,} clusters: {c['all_pairs']:,} with every pair, {c['singletons']:,} without "
-                f"a pair, {c['above_max_size']:,} above --max-cluster-size ({c['skipped']:,} skipped)")
-    run.say("summary: " + ", ".join(f"{s['name']} {s['seconds']:.1f} s" + (" (reused)" if s.get("cached") else "")
-                                    for s in run.stages))
-    if run.n_failures:
-        run.say(f"summary: {run.n_failures:,} failure(s) listed in {run.outputs['failed']}")
-    run.say(f"summary: results in {run.outputs.get('dnds', run.out)}")
-    return PipelineResult(code, report, run.outputs)
+        try:
+            run.start()
+            (_pairs_mode if mode == "pairs" else _clusters_mode)(run)
+        except (PipelineError, OSError) as e:
+            if isinstance(e, OSError):
+                e = PipelineError(f"{e.strerror or e}" + (f": {e.filename}" if e.filename else ""))
+            print(f"coal pipeline: error: {e}", file=sys.stderr)
+            if run.lock is not None and os.path.isdir(run.out):
+                report = run.finish(1, str(e))
+            else:   # the folder could not be made, or it belongs to another run: nothing is written into it
+                report = {"schema": SCHEMA, "exit_code": 1, "status": "failed", "error": str(e)}
+            return PipelineResult(1, report, run.outputs)
+        except (KeyboardInterrupt, _Terminated) as e:
+            # Ctrl-C or a termination signal that reached this process (also when only the Python process got it,
+            # not its process group): end the programs the run started, say in the report that the run is not
+            # complete, release the folder, then let the interrupt go on (the command exits 130 or 128 + signal).
+            _restore_signals(old_handlers)
+            old_handlers = {}
+            name = "SIGINT" if isinstance(e, KeyboardInterrupt) else e.name
+            code = 130 if isinstance(e, KeyboardInterrupt) else int(e.code)
+            run.kill_children()
+            if run.lock is not None and os.path.isdir(run.out):
+                for tmp in ("dnds.tsv.tmp", "cluster_summary.tsv.tmp", "realign.tsv.body"):
+                    try:
+                        os.remove(run.path(tmp))
+                    except OSError:
+                        pass
+                run.finish(code, f"interrupted by {name}: the run did not finish and the tables in this folder are "
+                                 "incomplete; run it again (--resume reuses the finished stages)", "interrupted")
+            raise
+        pairs = run.counts.get("pairs", {})
+        code = 2 if run.n_failures else 0
+        report = run.finish(code)
+        genes = run.counts.get("genes", {})
+        run.say(f"summary: {genes.get('total', 0):,} genes ({genes.get('failed', 0):,} not usable); "
+                f"{pairs.get('total', 0):,} pairs: {pairs.get('ok', 0):,} ok, {pairs.get('warning', 0):,} warning, "
+                f"{pairs.get('saturated', 0):,} saturated, {pairs.get('no_data', 0):,} no_data, "
+                f"{pairs.get('error', 0):,} error")
+        if mode == "clusters":
+            c = run.counts["clusters"]
+            run.say(f"summary: {c['total']:,} clusters: {c['all_pairs']:,} with every pair, {c['singletons']:,} without "
+                    f"a pair, {c['above_max_size']:,} above --max-cluster-size ({c['skipped']:,} skipped)")
+        run.say("summary: " + ", ".join(f"{s['name']} {s['seconds']:.1f} s" + (" (reused)" if s.get("cached") else "")
+                                        for s in run.stages))
+        if run.n_failures:
+            run.say(f"summary: {run.n_failures:,} failure(s) listed in {run.outputs['failed']}")
+        run.say(f"summary: results in {run.outputs.get('dnds', run.out)}")
+        return PipelineResult(code, report, run.outputs)
+    finally:
+        _restore_signals(old_handlers)
+        run.release()
 
 
 def _namespace(mode: str, required: list[str], options: dict) -> argparse.Namespace:
@@ -1417,5 +1590,9 @@ def main(argv=None) -> int:
     try:
         return _execute(a.mode, a, ["pipeline", *argv]).exit_code
     except KeyboardInterrupt:
-        print("coal pipeline: interrupted", file=sys.stderr)
+        print("coal pipeline: interrupted (the report says so; nothing is left running)", file=sys.stderr)
         return 130
+    except _Terminated as e:
+        print(f"coal pipeline: interrupted by {e.name} (the report says so; nothing is left running)",
+              file=sys.stderr)
+        return int(e.code)
