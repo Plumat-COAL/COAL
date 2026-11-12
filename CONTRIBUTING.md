@@ -4,6 +4,13 @@ COAL is two engines that must behave identically (Python in `src/coal`, C++ in `
 app in `apps/coal-app`. This page is the short version of how to work on it; the details are in
 [docs/development.md](docs/development.md) and [tests/README.md](tests/README.md).
 
+## Licence
+
+COAL is under GPL-3.0-only ([LICENSE](LICENSE), [NOTICE](NOTICE); 0.5.0 and earlier were MIT). By contributing you
+agree that your contribution is distributed under GPL-3.0-only. Code copied or adapted from elsewhere must be under
+a licence compatible with GPL version 3 and must keep its copyright notice; say where it comes from in the file and
+add it to `NOTICE`. PAL2NAL's code (GPL-2.0) must not be copied in.
+
 ## Set up
 
 ```

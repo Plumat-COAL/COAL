@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **Licence: GPL-3.0-only from the next release.** COAL (the Python and C++ engines, the `pal2nal` drop-in, the app
+  and everything else in this repository) is now under the GNU General Public License, version 3 only (`LICENSE`,
+  `NOTICE`; package metadata, `CITATION.cff`, the Bioconda recipe, the website and the Windows app say so). **0.5.0
+  and every earlier release remain under the MIT License**: nothing already published changes. Why: the Ka/Ks
+  (dN/dS) engine that the next release adds is derived from KaKs_Calculator 2.0 and from PAML's yn00, which are
+  both GPL version 3 (without an "or later" clause), so COAL as a whole has to be distributed under GPL-3. All
+  contributors agreed to the change. What it means for users: running COAL (the commands, the app, a pipeline step)
+  does not affect the licence of your data, results, scripts or workflows. A program that includes COAL's code or
+  links its library (the C++ `coal::core`, `import coal` in Python) and is distributed must be under a
+  GPL-3-compatible licence; programs that only start `coal` / `coal-cpp` as a separate process are not affected.
+  The third-party notices already in the repository (the website's font, the real-data test sets) are unchanged.
 - **R package `coalr` (packaging/r/coalr, docs/r.md).** COAL's C++ core compiled into an R package with Rcpp:
   `coal_dnds_pairs()` (CDS of ortholog pairs to dN, dS, dN/dS: the columns of `dnds.tsv`), `coal_dnds_clusters()`
   (every pair of each cluster and the per-cluster summary of `cluster_summary.tsv`; protein alignments from given
@@ -200,7 +211,7 @@ Found by the stress test of 2026-10-23 (`docs/stress-test-2026-10-23.md`), both 
   message for a missing `mcp` package no longer claims that version 2 is required (1.x works too).
 - **Packaging:** the source distributions of `coal-align` and `coal-align-app` no longer ship `tests/` (the tests
   need the repository: helpers, fixtures, examples, coal-cpp), and the `coal-align-app` wheel and sdist now carry
-  the MIT `LICENSE` (the app had none).
+  the `LICENSE` (MIT at the time; the app had none).
 - **App: a settings file that is not text no longer stops COAL from starting.** `settings.json` in another encoding
   (or binary garbage) gave a traceback at start-up; it now counts as a damaged file: the defaults are used and the
   Settings tab says so, as for a half-written file.

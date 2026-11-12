@@ -9,7 +9,9 @@ perl <orthologr>/pal2nal/pal2nal.v14/pal2nal.pl <pair>_AA.aln <pair>.fasta -outp
 
 `codon_aln()` accepts only `tool = "pal2nal"` and has no argument, option or environment variable for another
 program (orthologr `codon_aln.R`, checked October 2026), so COAL's `pal2nal` command on `PATH` is not picked up.
-Three ways in:
+Three ways in. (Licences: COAL is GPL-3.0-only from the release after 0.5.0; orthologr's DESCRIPTION says GPL-2.
+Way 1 and the `coal-cpp` program start COAL as a separate program, so the two are not combined. Way 2 loads `coalr`
+(GPL-3) into the same R process as orthologr: see the licence note there.)
 
 ## 1. Replace orthologr's bundled script with the stand-in (works today)
 
@@ -61,6 +63,13 @@ dNdS_clusters(c(q, s), aa_aln_tool = "clustalo")                            # ev
 The fork's `NEWS.md` also lists its fixes to orthologr's own path (BLOSUM62 scoring and full-length alignments in
 `pairwise_aln()`, exit-status checks, one failing pair no longer ends a run, hyphens in gene IDs, input files of
 the same name).
+
+**Licence note (open question for the maintainers).** `coalr` is GPL-3 (it contains COAL's Ka/Ks engine, derived
+from KaKs_Calculator 2.0 and PAML) and orthologr's DESCRIPTION says `GPL-2`. The fork contains no COAL code and
+loads `coalr` only when it is installed, but a GPL-2-only package calling a GPL-3-only one in the same R process is
+a combination the two licences do not clearly allow. Before the fork is merged upstream or distributed with `coalr`
+as a dependency, orthologr's authors should decide (for instance by licensing orthologr as `GPL (>= 2)` or
+`GPL-3`). Using the `coal-cpp` program instead (a separate process) does not raise the question.
 
 ## 3. Add `tool = "coal"` to upstream orthologr yourself
 

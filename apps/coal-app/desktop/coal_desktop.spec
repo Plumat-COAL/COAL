@@ -15,7 +15,7 @@
 #   - pywebview (+ pythonnet / WebView2 interop DLLs, via pywebview's hooks)
 #   - examples/ (the four "Try an example" datasets) -> <bundle>\_internal\examples
 #   - coal-cpp.exe if it has been built (cpp\build\**\coal-cpp.exe) -> <bundle>\_internal\bin
-#   - LICENSE
+#   - LICENSE, NOTICE
 import glob
 import os
 import re
@@ -51,6 +51,7 @@ hiddenimports += collect_submodules("coal") + collect_submodules("coal_app")
 
 datas.append((os.path.join(APP_SRC, "coal_app", "sample_report.json"), "coal_app"))
 datas.append((os.path.join(REPO, "LICENSE"), "."))
+datas.append((os.path.join(REPO, "NOTICE"), "."))
 
 # Example datasets, keeping their folder names (core.example_paths expects <dir>/<name>/...).
 for f in glob.glob(os.path.join(REPO, "examples", "*", "*")):
@@ -87,7 +88,7 @@ try:
                 StringStruct("FileDescription", "COAL codon alignment"),
                 StringStruct("FileVersion", VERSION),
                 StringStruct("InternalName", "COAL"),
-                StringStruct("LegalCopyright", "MIT licence"),
+                StringStruct("LegalCopyright", "Copyright (C) 2026 Chloe Newton and Keanu Murati. GPL-3.0-only"),
                 StringStruct("OriginalFilename", "COAL.exe"),
                 StringStruct("ProductName", "COAL"),
                 StringStruct("ProductVersion", VERSION),

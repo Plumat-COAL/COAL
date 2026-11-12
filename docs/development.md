@@ -30,7 +30,8 @@ internals. Build both: `python -m build .` and `python -m build apps/coal-app`.
 
 ## Reference implementation (PAL2NAL)
 
-COAL is an independent implementation. PAL2NAL v14 is used only as a black-box reference for differential testing
+COAL's codon-alignment engine is an independent implementation (COAL itself is GPL-3.0-only: `LICENSE`, `NOTICE`).
+PAL2NAL v14 is used only as a black-box reference for differential testing
 and benchmarking. PAL2NAL is distributed under the GNU General Public License v2.0 (GPL-2.0). COAL contains no
 PAL2NAL code, so **PAL2NAL is not included or redistributed in this repository**, and its code and test data must
 not be copied here.

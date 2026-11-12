@@ -63,9 +63,11 @@ test:
 
 about:
   home: https://github.com/plumat-coal/COAL
-  license: MIT
-  license_family: MIT
-  license_file: LICENSE
+  license: GPL-3.0-only
+  license_family: GPL3
+  license_file:
+    - LICENSE
+    - NOTICE
   summary: Fast codon alignment from a protein alignment and coding DNA (PAL2NAL alternative), with a C++ engine for large inputs
   description: |
     COAL builds a codon (nucleotide) alignment from a protein multiple sequence alignment and the unaligned coding

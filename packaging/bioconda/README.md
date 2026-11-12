@@ -37,6 +37,10 @@ copies `build-conda/coal-cpp` by hand). **The `v0.4.2` tag predates both**: its 
 app inside. The sha256 in `meta.yaml` is v0.4.2's, so the recipe is syntactically complete, but submit it for the first
 release that contains the split layout (bump `version` and recompute the sha256, below).
 
+**Licence.** `about: license:` is `GPL-3.0-only` (`license_family: GPL3`, `LICENSE` and `NOTICE` as licence files),
+which is right for the releases after 0.5.0. COAL 0.5.0 and earlier are MIT: do not submit the recipe with these
+fields for one of those tags (use `license: MIT`, `license_family: MIT`, `license_file: LICENSE` there).
+
 ## Testing the recipe locally
 
 Without conda at all, the build steps can be run by hand against a virtual environment, which is what `find_cpp`

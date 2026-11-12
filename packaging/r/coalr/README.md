@@ -15,4 +15,4 @@ coal_codon_align(protein_rows, cds)                  # PAL2NAL's job
 
 Documentation: [docs/r.md](https://github.com/Plumat-COAL/COAL/blob/main/docs/r.md) and the help pages
 (`?coal_dnds_pairs`). `src/coal/` is a copy of COAL's `cpp/src`, made by `scripts/sync_r_sources.py`; do not edit
-it here. MIT licence.
+it here. Licence: GPL-3 (version 3 only), like COAL; copyright and third-party notices are in `inst/COPYRIGHTS`.

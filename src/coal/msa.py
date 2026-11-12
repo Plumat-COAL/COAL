@@ -5,7 +5,8 @@
     rows = msa.run_msa([("g1", "MKV..."), ("g2", "MRV...")])   # [(id, gapped row)], input order
     results = msa.align_clusters({"c1": [...], "c2": [...]}, jobs=8)   # many clusters, one process each
 
-Neither tool is bundled with COAL: Clustal Omega is GPL-2.0 and COAL is MIT (docs/alignment.md "Licences").
+Neither tool is bundled with COAL (docs/alignment.md "Licences": COAL is GPL-3.0-only and Clustal Omega
+GPL-2.0-or-later, so bundling would be licence-compatible, but it is not done).
 install_clustalo() puts one into COAL's cache folder (cache_dir()), like orthologr's diamond_install(): through
 conda / mamba / micromamba from Bioconda (micromamba itself is fetched from its GitHub releases, SHA-256 checked, if no
 conda is installed), or the official static binary from clustal.org (method="official"; the only way on Windows).
@@ -46,7 +47,7 @@ _OFFICIAL = {
     ("Darwin", "arm64"): ("http://www.clustal.org/omega/clustal-omega-1.2.3-macosx", None),  # x86_64, Rosetta 2
     ("Windows", "AMD64"): ("http://www.clustal.org/omega/clustal-omega-1.2.2-win64.zip", "clustalo.exe"),
 }
-# micromamba (static, MIT-licensed) from https://github.com/mamba-org/micromamba-releases; the release publishes a
+# micromamba (static, BSD-3-Clause) from https://github.com/mamba-org/micromamba-releases; the release publishes a
 # <asset>.sha256 next to every asset, which is checked.
 _MICROMAMBA = {
     ("Linux", "x86_64"): "micromamba-linux-64",

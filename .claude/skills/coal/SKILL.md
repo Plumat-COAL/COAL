@@ -1,6 +1,6 @@
 ---
 name: coal
-description: Build codon alignments with COAL (a fast, MIT-licensed PAL2NAL replacement) from a protein multiple sequence alignment plus the unaligned coding DNA of the same genes. Use when someone needs a codon alignment, back-translated alignment, "pal2nal", input for dN/dS (PAML codeml, HyPhy), or asks why protein and DNA "don't match".
+description: Build codon alignments with COAL (a fast PAL2NAL replacement, free software under GPL-3.0-only) from a protein multiple sequence alignment plus the unaligned coding DNA of the same genes. Use when someone needs a codon alignment, back-translated alignment, "pal2nal", input for dN/dS (PAML codeml, HyPhy), or asks why protein and DNA "don't match".
 ---
 
 # COAL: codon alignment from a protein alignment + coding DNA

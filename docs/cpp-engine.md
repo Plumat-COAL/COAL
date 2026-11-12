@@ -1,6 +1,6 @@
 # C++ engine (coal-cpp)
 
-`coal-cpp` is a C++17 implementation of the same engine (standard library only, MIT). It takes the same options as
+`coal-cpp` is a C++17 implementation of the same engine (standard library only; GPL-3.0-only like the rest of COAL). It takes the same options as
 `coal` and writes the same output, warnings, report and exit codes, so it can replace `coal` in any command line
 (the run report's `engine` field says which one wrote it: `coal-cpp` or `coal-python`).
 `coal` itself hands inputs of 1 MB or more to `coal-cpp` when it finds the same version (`COAL_ENGINE=python|cpp`

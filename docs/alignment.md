@@ -55,7 +55,7 @@ neighbouring cells:
   Pairs above `max_cells` (default 4·10⁹ cells, ~2 GB) are refused for that pair only.
 - **Threads.** `align_pairs` runs on the repository's thread pool (`pool.hpp`) and starts the biggest pairs first.
 
-**parasail** (BSD-style licence, compatible with MIT) was measured, not vendored. Its 16-bit `sg_trace_scan`
+**parasail** (BSD-style licence, compatible with COAL's GPL-3.0-only) was measured, not vendored. Its 16-bit `sg_trace_scan`
 kernel is about 1.5–2× faster per pair. Using it would mean dropping a large generated-code dependency into a
 standard-library-only project, plus 16-bit overflow fallbacks and integer-only gap costs. COAL's kernel aligns
 about 1,500 pairs a second on one thread, so alignment is no longer the slow step.
@@ -222,29 +222,32 @@ msa.find_mafft(); msa.install_mafft(); msa.cache_dir(); msa.tool_version(exe)
 
 ### Licences: why Clustal Omega is not bundled
 
-COAL is MIT. **Clustal Omega is GPL-2.0-or-later** (Bioconda's metadata; its `COPYING` is the GPL v2), linked to
-argtable2 (LGPL-2.0). DIAMOND is GPL-3.0-or-later. **MAFFT is BSD-3-Clause.**
+COAL is GPL-3.0-only (from the release after 0.5.0; `LICENSE`). **Clustal Omega is GPL-2.0-or-later** (Bioconda's
+metadata and the notice in its source files; its `COPYING` is the GPL v2), linked to argtable2 (LGPL-2.0). DIAMOND
+is GPL-3.0-or-later. **MAFFT is BSD-3-Clause.**
 
-COAL only *runs* Clustal Omega as a separate program and exchanges files with it, so COAL's code does not become
-GPL. Putting the binary inside COAL's wheels would still *distribute* it. Under the GPL that means shipping the
-licence text, offering the exact corresponding source (Clustal Omega, argtable2, and the statically linked
-libstdc++/libgomp) and keeping that offer for three years. It would also mean declaring the wheel
-`MIT AND GPL-2.0-or-later`, which licence scanners in companies and institutes flag.
+**Bundling Clustal Omega would now be licence-compatible.** "Version 2 or later" code can be distributed under
+version 3, so a COAL wheel or app with the Clustal Omega binary inside would be GPL-3.0-only as a whole, with no
+second licence to declare (COAL 0.5.0 and earlier are MIT: there such a wheel would have been `MIT AND GPL-2.0-or-later`). COAL only
+*runs* Clustal Omega as a separate program and exchanges files with it, so nothing else changes.
 
-The "mere aggregation" clause probably makes the bundle itself permissible. However, no official build exists for
-Apple Silicon or Linux aarch64, so we would also have to build and maintain those binaries, with the same
-obligations.
+It is still **not bundled**, for practical reasons:
 
-**Conclusion: do not bundle it in the wheels.** Instead:
+- distributing the binary means shipping its licence text and offering the exact corresponding source (Clustal
+  Omega, argtable2, and the statically linked libstdc++/libgomp) and keeping that offer for three years;
+- no official build exists for Apple Silicon or Linux aarch64, so we would have to build and maintain those
+  binaries, with the same obligations;
+- the official binaries are published over plain HTTP without checksums (see "Installing" above).
+
+Instead:
 
 - auto-install into the user's cache (above), so that Clustal Omega is available after one call;
 - in the Bioconda recipe for COAL, list `clustalo` as a run dependency, which "always there" can rely on and which
   is not distributing it inside COAL;
 - in the R package, call `install_clustalo()` from R in the same way as `diamond_install()`.
 
-MAFFT could legally be bundled under its BSD licence. It is a set of shell scripts and binaries (a Cygwin bundle on
-Windows) and is slow per small cluster (below), so it stays optional. This is a technical reading, not legal advice;
-the stakeholder question in the master prompt is still open.
+MAFFT could also be bundled under its BSD licence. It is a set of shell scripts and binaries (a Cygwin bundle on
+Windows) and is slow per small cluster (below), so it stays optional. This is a technical reading, not legal advice.
 
 ## Benchmark
 

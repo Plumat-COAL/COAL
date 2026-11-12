@@ -46,7 +46,8 @@ class RBindings(unittest.TestCase):
                     self.assertNotIn(bad, text, f"{f}: {bad}")
 
     def test_licence_and_exports(self):
-        self.assertIn("License: MIT + file LICENSE", read(PKG, "DESCRIPTION"))
+        self.assertRegex(read(PKG, "DESCRIPTION"), r"(?m)^License: GPL-3$")  # version 3 only, as COAL
+        self.assertFalse(os.path.exists(os.path.join(PKG, "LICENSE")), "GPL-3 needs no LICENSE file in an R package")
         ns = read(PKG, "NAMESPACE")
         for fn in ("coal_dnds_pairs", "coal_dnds_clusters", "coal_kaks", "coal_codon_align", "coal_align_pairs",
                    "coal_translate", "coal_pipeline_pairs", "coal_pipeline_clusters"):

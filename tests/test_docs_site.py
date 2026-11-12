@@ -420,7 +420,7 @@ class TestSiteFiles(unittest.TestCase):
 
     def test_unsigned_and_smart_app_control_explained(self):
         for must in ("Windows protected your PC", "More info", "Run anyway", "Unknown publisher", "Smart App Control",
-                     "Get-FileHash", "sha256sum", "coal-gui", "SKILL.md", "/issues", "MIT",
+                     "Get-FileHash", "sha256sum", "coal-gui", "SKILL.md", "/issues", "GPL-3.0-only",
                      # the owner asked for no DOI and named authors, so the page cites Newton and Murati and points
                      # to CITATION.cff
                      "Newton C, Murati K (2026)", "CITATION.cff"):
