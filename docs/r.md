@@ -51,6 +51,13 @@ res <- coal_dnds_pairs("thaliana_cds.fasta", "lyrata_cds.fasta",
 
 - `query_cds`, `subject_cds`: a named character vector, a `DNAStringSet`, a `seqinr` list, a two-column data frame
   (ID, sequence: `orthologr::read.cds()`'s table works) or a FASTA path.
+- **When one string is a file name** (every function that takes sequences; `?coalr` "Sequence inputs"): one
+  unnamed string is read as a FASTA file when a file of that name exists, or when it looks like a path: it
+  contains `/` or `\`, starts with `~`, or ends in a sequence-file extension (`.fa`, `.fasta`, `.fas`, `.fna`,
+  `.ffn`, `.faa`, `.frn`, `.cds`, `.pep`, `.aa`, `.nt`, `.aln`, `.afa`, `.mfa`, `.seq`, `.txt`, optionally with
+  `.gz`, `.bz2`, `.xz`). A path-like string that names no file is the error "file not found" (a mistyped path
+  used to be taken for a sequence). Any other single string is one sequence; name it (`c(id = "...")`) if its
+  text could be mistaken for a file name.
 - `pairs`: two columns, query ID and subject ID (for example `orthologr::diamond_rec()`'s first two columns).
   Without it, the i-th query goes with the i-th subject.
 - Result: a data frame with the columns of [`dnds.tsv`](pipeline.md#dndstsv): `seq1 seq2 method dN dS dNdS SE_dN

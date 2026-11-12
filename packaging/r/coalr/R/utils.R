@@ -37,8 +37,19 @@ coal_read_fasta <- function(path) {
   seqs
 }
 
+# Whether one unnamed string is meant as a file name although no such file exists: it has a path separator, starts
+# with "~", or ends in an extension that sequence files carry (optionally compressed). A sequence has none of
+# these ("/", "\\" and "~" are no sequence characters, and no sequence ends in ".fasta").
+looks_like_path <- function(x) {
+  grepl("[/\\\\]", x) || startsWith(x, "~") ||
+    grepl("\\.(fa|fasta|fas|fna|ffn|faa|frn|cds|pep|aa|nt|aln|afa|mfa|seq|txt)(\\.(gz|bz2|xz))?$", x, ignore.case = TRUE)
+}
+
 # Sequences from what the user gave: a named character vector, a FASTA path, an XStringSet (Biostrings), a list
 # (seqinr: one vector of characters per record) or a two-column data.frame (id, sequence).
+# One unnamed string is a FASTA file name when that file exists or when it looks like a path (looks_like_path):
+# then a missing file is an error, and the string is never taken for a sequence. Any other single string is one
+# sequence.
 as_seqs <- function(x, arg, need_names = TRUE) {
   if (inherits(x, "XStringSet") || inherits(x, "XString") || inherits(x, "BStringSet")) {
     x <- as.character(x)
@@ -48,7 +59,13 @@ as_seqs <- function(x, arg, need_names = TRUE) {
   } else if (is.list(x)) {
     x <- vapply(x, function(s) if (length(s) == 1L) as.character(s) else paste0(as.character(s), collapse = ""), "")
   } else if (is.character(x) && length(x) == 1L && is.null(names(x)) && !is.na(x) && nchar(x) < 4096L &&
-             file.exists(x) && !dir.exists(x)) {
+             (file.exists(x) || looks_like_path(x))) {
+    if (dir.exists(x)) stop("`", arg, "`: '", x, "' is a folder, not a FASTA file", call. = FALSE)
+    if (!file.exists(x)) {
+      stop("`", arg, "`: file not found: '", x, "' (one string with a path separator or a sequence-file extension ",
+           "is read as a FASTA file name; for a single sequence give a named vector, c(id = \"ATG...\"))",
+           call. = FALSE)
+    }
     x <- coal_read_fasta(x)
   } else if (is.factor(x)) {
     x <- structure(as.character(x), names = names(x))

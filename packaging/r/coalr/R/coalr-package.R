@@ -14,6 +14,18 @@
 #' * [coal_pipeline_pairs()], [coal_pipeline_clusters()]: the complete COAL pipeline (DIAMOND, Clustal Omega)
 #'   through Python and \pkg{reticulate}; optional.
 #'
+#' @section Sequence inputs:
+#' Where a function takes sequences (`cds`, `query_cds`, `protein_rows`, ...) it accepts a named character vector,
+#' a `DNAStringSet` / `AAStringSet`, a list as `seqinr::read.fasta()` returns it, a two-column data frame (ID,
+#' sequence), or **one string naming a FASTA file**. One unnamed string is taken as a file name when a file of
+#' that name exists, or when it looks like a path: it contains `/` or `\`, starts with `~`, or ends in a
+#' sequence-file extension (`.fa`, `.fasta`, `.fas`, `.fna`, `.ffn`, `.faa`, `.frn`, `.cds`, `.pep`, `.aa`, `.nt`,
+#' `.aln`, `.afa`, `.mfa`, `.seq`, `.txt`, each optionally followed by `.gz`, `.bz2` or `.xz`). A string that
+#' looks like a path but names no file is an error ("file not found"); it is never used as a sequence. Any other
+#' single string is one sequence, where a function accepts sequences without names (for example
+#' `coal_translate("ATGAAA")`). To pass one sequence whose text could be mistaken for a file name, name it:
+#' `c(id = "...")`.
+#'
 #' @section Threads and interrupts:
 #' `threads` sets the number of worker threads (default: `getOption("coalr.threads", 1L)`; `0` = one per hardware
 #' thread). Results do not depend on it. Worker threads never call into R; a user interrupt (Ctrl-C, Esc) is

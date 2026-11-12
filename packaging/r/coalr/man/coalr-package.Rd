@@ -23,6 +23,20 @@ dN/dS, one row per pair and method (the columns of \verb{coal pipeline pairs}' \
 through Python and \pkg{reticulate}; optional.
 }
 }
+\section{Sequence inputs}{
+
+Where a function takes sequences (\code{cds}, \code{query_cds}, \code{protein_rows}, ...) it accepts a named character vector,
+a \code{DNAStringSet} / \code{AAStringSet}, a list as \code{seqinr::read.fasta()} returns it, a two-column data frame (ID,
+sequence), or \strong{one string naming a FASTA file}. One unnamed string is taken as a file name when a file of
+that name exists, or when it looks like a path: it contains \code{/} or \verb{\\}, starts with \code{~}, or ends in a
+sequence-file extension (\code{.fa}, \code{.fasta}, \code{.fas}, \code{.fna}, \code{.ffn}, \code{.faa}, \code{.frn}, \code{.cds}, \code{.pep}, \code{.aa}, \code{.nt},
+\code{.aln}, \code{.afa}, \code{.mfa}, \code{.seq}, \code{.txt}, each optionally followed by \code{.gz}, \code{.bz2} or \code{.xz}). A string that
+looks like a path but names no file is an error ("file not found"); it is never used as a sequence. Any other
+single string is one sequence, where a function accepts sequences without names (for example
+\code{coal_translate("ATGAAA")}). To pass one sequence whose text could be mistaken for a file name, name it:
+\code{c(id = "...")}.
+}
+
 \section{Threads and interrupts}{
 
 \code{threads} sets the number of worker threads (default: \code{getOption("coalr.threads", 1L)}; \code{0} = one per hardware
@@ -39,12 +53,22 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: Chloe Newton \email{chloenewton2323@gmail.com}
+\strong{Maintainer}: Chloe Newton \email{chloenewton2323@gmail.com} [copyright holder]
 
 Authors:
 \itemize{
-  \item Chloe Newton \email{chloenewton2323@gmail.com}
-  \item Keanu Murati
+  \item Chloe Newton \email{chloenewton2323@gmail.com} [copyright holder]
+  \item Keanu Murati [copyright holder]
+}
+
+Other contributors:
+\itemize{
+  \item Da-Peng Wang (KaKs_Calculator 2.0, from which src/coal/kaks.cpp is derived) [contributor]
+  \item Yu-Bin Zhang (KaKs_Calculator 2.0) [contributor]
+  \item Zhang Zhang (KaKs_Calculator 1.0) [contributor]
+  \item Kristian K Ullrich (kakscalculator2 2.0.1) [contributor]
+  \item Beijing Institute of Genomics of CAS (KaKs_Calculator 2.0) [copyright holder]
+  \item Ziheng Yang (PAML yn00.c, from which src/coal/kaks.cpp is derived) [contributor, copyright holder]
 }
 
 }

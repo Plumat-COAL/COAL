@@ -104,3 +104,29 @@ test_that("coal_read_fasta reads what it should", {
   expect_error(coal_read_fasta(f), "not a FASTA file")
   expect_identical(coal_info()$coal_version, as.character(utils::packageVersion("coalr")))
 })
+
+test_that("one string that looks like a path but names no file is 'file not found', never a sequence", {
+  missing <- file.path(tempdir(), "no_such_folder", "cds.fasta")
+  expect_error(coal_translate(missing), "`cds`: file not found: '.*cds\\.fasta'")
+  expect_error(coal_translate("cds.fasta"), "file not found")             # an extension is enough
+  expect_error(coal_translate("genes.fa.gz"), "file not found")
+  expect_error(coal_translate("~/no/such/file"), "file not found")
+  expect_error(coal_translate("C:\\data\\cds"), "file not found")           # a Windows path
+  expect_error(coal_dnds_pairs("query_cds.fasta", c(a = "ATGAAA")), "`query_cds`: file not found")
+  expect_error(coal_codon_align("aln.fasta", c(a = "ATGAAA")), "`protein_rows`: file not found")
+  expect_error(coal_align_pairs("a.faa", "MKV"), "`a`: file not found")
+  expect_error(coal_translate(tempdir()), "is a folder, not a FASTA file")
+  # the message says how the string was read and what to do for a single sequence
+  expect_error(coal_translate("x/y"), "read as a FASTA file name; for a single sequence give a named vector")
+  # a plain single string is still one sequence, and a named one always is
+  expect_identical(unname(coal_translate("ATGAAATAA")), "MK")
+  expect_identical(unname(coal_translate(c(x = "ATGAAATAA"))), "MK")
+  expect_no_error(coal_align_pairs("MKVL", "MKL"))
+  # an existing file is read, whatever its name
+  f <- tempfile("noext")
+  writeLines(c(">g", "ATGAAATAA"), f)
+  expect_identical(coal_translate(f), c(g = "MK"))
+  expect_true(coalr:::looks_like_path("data/cds"))
+  expect_false(coalr:::looks_like_path("ATGAAA"))
+  expect_false(coalr:::looks_like_path("MKV-L.A*"))
+})
