@@ -816,6 +816,35 @@ void count_sites(const std::vector<uint8_t>& z, const GeneticCode& g, const doub
     }
 }
 
+// Sites of the pair: the mean of the two sequences (YN00 DistanceYN00). The base frequencies at the synonymous
+// (nonsynonymous) sites are the mean over the sequences that have such sites: a sequence with none has no
+// frequencies (0/0), and the references average that NaN in, which loses the estimate whenever the F84 or TN93
+// formula then needs the frequencies.
+void pair_sites(const Prepared& p, const GeneticCode& g, const double pi[64], double ktc, double kag, double& S,
+                double& N, double fbS[4], double fbN[4]) {
+    S = N = 0;
+    int withS = 0, withN = 0;
+    for (int j = 0; j < 4; ++j) fbS[j] = fbN[j] = 0;
+    for (int s = 0; s < 2; ++s) {
+        double St, Nt, a[4], b[4];
+        count_sites(s == 0 ? p.c1 : p.c2, g, pi, ktc, kag, St, Nt, a, b);
+        S += St / 2;
+        N += Nt / 2;
+        if (St > 0) {
+            ++withS;
+            for (int j = 0; j < 4; ++j) fbS[j] += a[j] / 2;
+        }
+        if (Nt > 0) {
+            ++withN;
+            for (int j = 0; j < 4; ++j) fbN[j] += b[j] / 2;
+        }
+    }
+    for (int j = 0; j < 4; ++j) {
+        if (withS == 1) fbS[j] *= 2;
+        if (withN == 1) fbN[j] *= 2;
+    }
+}
+
 // Synonymous / nonsynonymous differences split into transitions (ts1: A<->G, ts2: T<->C) and transversions,
 // pathways weighted by P (nullptr: equal weights), pathways through stop codons excluded (YN00 CountDiffs).
 struct Diffs {
@@ -947,24 +976,20 @@ Result run_yn(const Prepared& p, const GeneticCode& g, const Options& opt, Resul
     r.kappa = kappa;
     r.rates[0] = r.rates[1] = kappa;
 
-    double S = 0, N = 0, fbS[4] = {0, 0, 0, 0}, fbN[4] = {0, 0, 0, 0};
-    for (int s = 0; s < 2; ++s) {
-        double St, Nt, a[4], b[4];
-        count_sites(s == 0 ? p.c1 : p.c2, g, pi, kappa, kappa, St, Nt, a, b);
-        S += St / 2;
-        N += Nt / 2;
-        for (int j = 0; j < 4; ++j) {
-            fbS[j] += a[j] / 2;
-            fbN[j] += b[j] / 2;
-        }
-    }
+    double S = 0, N = 0, fbS[4], fbN[4];
+    pair_sites(p, g, pi, kappa, kappa, S, N, fbS, fbN);
     r.S = S;
     r.N = N;
-    if (!(S > 0) || !(N > 0)) {
-        no_sites(r, !(S > 0) ? "no synonymous sites" : "no nonsynonymous sites");
-        return r;
-    }
+    // No site of one kind (S = 0: e.g. Met/Trp codons only; N = 0: e.g. GCT against GCA, where F3x4 gives weight
+    // to synonymous neighbours only): that estimate is NA, and the other one is still estimated, from its own
+    // sites alone. No site of either kind: nothing to estimate.
+    const bool hasS = S > 0, hasN = N > 0;
+    if (!hasS) no_sites(r, "no synonymous sites");
+    if (!hasN) no_sites(r, "no nonsynonymous sites");
+    if (!hasS && !hasN) return r;
     double omega = 1, dS = 0.1, dN = 0.1, w0 = 0, dS0 = 0, dN0 = 0;
+    if (!hasS) dS = 0;
+    if (!hasN) dN = 0;
     const double accu = 5e-4, minomega = 1e-5, maxomega = 99;
     const int nround = opt.yn_weighting ? 10 : 1;
     if (t == 0) t = 0.5;
@@ -982,11 +1007,18 @@ Result run_yn(const Prepared& p, const GeneticCode& g, const Options& opt, Resul
         if (P) pmat_codon(g, pi, kappa, kappa, omega, t, *P);
         D = count_diffs(p, g, P, false);
         const double Sdts = D.sts1 + D.sts2, Sdtv = D.stv, Ndts = D.nts1 + D.nts2, Ndtv = D.ntv;
-        os = distance_f84(S, Sdts / S, Sdtv / S, fbS, cap, capset);
-        on = distance_f84(N, Ndts / N, Ndtv / N, fbN, cap, capset);
-        if (os.fails != 3 || os.saturated) dS = os.t;
-        if (on.fails != 3 || on.saturated) dN = on.t;
-        omega = dS < 1e-9 ? maxomega : std::max(minomega, dN / dS);
+        if (hasS) os = distance_f84(S, Sdts / S, Sdtv / S, fbS, cap, capset);
+        if (hasN) on = distance_f84(N, Ndts / N, Ndtv / N, fbN, cap, capset);
+        if (hasS && (os.fails != 3 || os.saturated)) dS = os.t;
+        if (hasN && (on.fails != 3 || on.saturated)) dN = on.t;
+        // With one kind of site missing, omega has no meaning; the references' own arithmetic then leaves it at
+        // minomega (max(minomega, NaN)), and it has no effect: every change between codons of non-zero frequency
+        // is of the one kind, so omega cancels in the scaled rate matrix. t comes from the kind that exists
+        // (the references add NaN here and lose the pair when a codon differs at two or three positions).
+        if (!hasS || !hasN)
+            omega = minomega;
+        else
+            omega = dS < 1e-9 ? maxomega : std::max(minomega, dN / dS);
         t = dS * 3 * S / (S + N) + dN * 3 * N / (S + N);
         if (std::fabs(dS - dS0) < accu && std::fabs(dN - dN0) < accu && std::fabs(omega - w0) < accu) break;
         dS0 = dS;
@@ -998,15 +1030,15 @@ Result run_yn(const Prepared& p, const GeneticCode& g, const Options& opt, Resul
     r.Sd = D.sts1 + D.sts2 + D.stv;
     r.Nd = D.nts1 + D.nts2 + D.ntv;
     r.substitutions = D.snp;
-    r.ks = dS;
-    r.ka = dN;
-    r.se_ks = os.se;
-    r.se_ka = on.se;
-    if (os.saturated) {
+    r.ks = hasS ? dS : NA;
+    r.ka = hasN ? dN : NA;
+    r.se_ks = hasS ? os.se : NA;
+    r.se_ka = hasN ? on.se : NA;
+    if (hasS && os.saturated) {
         mark_saturated(r, "Ks");
         r.ks = r.se_ks = NA;
     }
-    if (on.saturated) {
+    if (hasN && on.saturated) {
         mark_saturated(r, "Ka");
         r.ka = r.se_ka = NA;
     }
@@ -1049,7 +1081,11 @@ F84Out distance_tn93(double n, double P1, double P2, double Q, const double pi4[
     const double Y = pi4[0] + pi4[1], R = pi4[2] + pi4[3], tc = pi4[0] * pi4[1], ag = pi4[2] * pi4[3];
     bool fail = false;
     F84Out o;
-    if (P1 + P2 + Q > 1 || std::fabs(Y + R - 1) > 1e-10 || Y <= 0 || R <= 0 || (tc <= 0 && ag <= 0)) {
+    // tc <= 0 or ag <= 0 (the sites have no T and C together, or no A and G together): that kind of transition
+    // cannot occur, its term 2*tc*log(a2)/Y (2*ag*log(a1)/R) is zero, and TN93 reduces exactly to F84, which the
+    // fallback below computes. The reference tests only "tc <= 0 && ag <= 0", then divides P by zero: 0/0 = NaN
+    // when there is no such difference (and its Ka or Ks is nan), -inf < 0 = "TN93 fails" when there is one.
+    if (P1 + P2 + Q > 1 || std::fabs(Y + R - 1) > 1e-10 || Y <= 0 || R <= 0 || tc <= 0 || ag <= 0) {
         fail = true;
     } else {
         const double C = Y * R;
@@ -1114,23 +1150,14 @@ Result run_myn(const Prepared& p, const GeneticCode& g, Result r) {
     r.kappa = kappa;
     r.rates[0] = ktc;
     r.rates[1] = kag;
-    double S = 0, N = 0, fbS[4] = {0, 0, 0, 0}, fbN[4] = {0, 0, 0, 0};
-    for (int s = 0; s < 2; ++s) {
-        double St, Nt, a[4], b[4];
-        count_sites(s == 0 ? p.c1 : p.c2, g, pi, ktc, kag, St, Nt, a, b);
-        S += St / 2;
-        N += Nt / 2;
-        for (int j = 0; j < 4; ++j) {
-            fbS[j] += a[j] / 2;
-            fbN[j] += b[j] / 2;
-        }
-    }
+    double S = 0, N = 0, fbS[4], fbN[4];
+    pair_sites(p, g, pi, ktc, kag, S, N, fbS, fbN);
     r.S = S;
     r.N = N;
-    if (!(S > 0) || !(N > 0)) {
-        no_sites(r, !(S > 0) ? "no synonymous sites" : "no nonsynonymous sites");
-        return r;
-    }
+    const bool hasS = S > 0, hasN = N > 0;  // as in run_yn: the estimate that has sites is still made
+    if (!hasS) no_sites(r, "no synonymous sites");
+    if (!hasN) no_sites(r, "no nonsynonymous sites");
+    if (!hasS && !hasN) return r;
     double t = 0.09, omega = 0.5, dS = 0, dN = 0, dS0 = 0, dN0 = 0, w0 = 0;
     const double accu = 5e-8, minomega = 1e-5, maxomega = 99;
     const int nround = 100;
@@ -1143,21 +1170,24 @@ Result run_myn(const Prepared& p, const GeneticCode& g, Result r) {
         D = count_diffs(p, g, &P, true);
         double Sd = D.sts1 + D.sts2 + D.stv, Nd = D.nts1 + D.nts2 + D.ntv;
         double s1 = D.sts1, s2 = D.sts2, sv = D.stv, n1 = D.nts1, n2 = D.nts2, nv = D.ntv;
-        if (Sd > S) {
+        if (hasS && Sd > S) {
             s1 *= S / Sd;
             s2 *= S / Sd;
             sv *= S / Sd;
         }
-        if (Nd > N) {
+        if (hasN && Nd > N) {
             n1 *= N / Nd;
             n2 *= N / Nd;
             nv *= N / Nd;
         }
-        os = distance_tn93(S, s1 / S, s2 / S, sv / S, fbS);
-        on = distance_tn93(N, n1 / N, n2 / N, nv / N, fbN);
-        dS = os.t;
-        dN = on.t;
-        omega = dS < 1e-9 ? maxomega : std::max(minomega, dN / dS);
+        if (hasS) os = distance_tn93(S, s1 / S, s2 / S, sv / S, fbS);
+        if (hasN) on = distance_tn93(N, n1 / N, n2 / N, nv / N, fbN);
+        dS = hasS ? os.t : 0;
+        dN = hasN ? on.t : 0;
+        if (!hasS || !hasN)
+            omega = minomega;  // see run_yn
+        else
+            omega = dS < 1e-9 ? maxomega : std::max(minomega, dN / dS);
         t = dS * 3 * S / (S + N) + dN * 3 * N / (S + N);
         if (std::fabs(dS - dS0) < accu && std::fabs(dN - dN0) < accu && std::fabs(omega - w0) < accu) break;
         dS0 = dS;
@@ -1169,15 +1199,15 @@ Result run_myn(const Prepared& p, const GeneticCode& g, Result r) {
     r.Sd = D.sts1 + D.sts2 + D.stv;
     r.Nd = D.nts1 + D.nts2 + D.ntv;
     r.substitutions = D.snp;
-    r.ks = dS;
-    r.ka = dN;
-    r.se_ks = os.se;
-    r.se_ka = on.se;
-    if (os.saturated || !std::isfinite(dS)) {
+    r.ks = hasS ? dS : NA;
+    r.ka = hasN ? dN : NA;
+    r.se_ks = hasS ? os.se : NA;
+    r.se_ka = hasN ? on.se : NA;
+    if (hasS && (os.saturated || !std::isfinite(dS))) {
         mark_saturated(r, "Ks");
         r.ks = r.se_ks = NA;
     }
-    if (on.saturated || !std::isfinite(dN)) {
+    if (hasN && (on.saturated || !std::isfinite(dN))) {
         mark_saturated(r, "Ka");
         r.ka = r.se_ka = NA;
     }

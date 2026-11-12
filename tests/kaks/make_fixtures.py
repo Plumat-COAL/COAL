@@ -85,6 +85,25 @@ def edge_cases() -> list[tuple[str, str, str]]:
             b.append(c2)
     out.append(("multi_hit_codons", base + "".join(a), base + "".join(b)))
     out.append(("short_one_codon", "ATGAAA", "ATGAAG"))
+    # Sites of one kind only (docs/kaks.md, differences 8 and 9). YN/MYN still estimate the kind that has sites.
+    # N = 0: F3x4 from these codons gives weight to synonymous neighbours only. KaKs_Calculator and PAML give Ks.
+    out.append(("no_nonsyn_sites_one_codon", "GCT", "GCA"))
+    out.append(("no_nonsyn_sites", "AAA" * 200, "AAG" * 200))
+    # S = 0 with one difference per codon: KaKs_Calculator's YN gives Ka (its MYN prints nan).
+    out.append(("no_syn_sites_single_step", "TTGTCG", "GTGTTG"))
+    # S = 0 with two differences per codon: KaKs_Calculator's t is NaN, the pathway weights are lost and it
+    # prints Ka = NA; PAML yn00 with weighting = 0 gives dN = 0.513345885278, as COAL does.
+    out.append(("no_syn_sites_multi_step", "ATGTGGATGTGG", "ATGTGGTGGATG"))
+    # MYN, no nonsynonymous difference and no A (or no G) at the nonsynonymous sites: KaKs_Calculator's TN93
+    # divides 0 by 0 and prints Ka = nan; the distance is 0.
+    out.append(("myn_tn93_zero_division", "GCTGCTGCTAAAAAA", "GCAGCCGCGAAGAAG"))
+    # MYN, kappa cannot be estimated from one class of sites: KaKs_Calculator gives that class weight 0 but still
+    # adds 0 x NaN to the mean, so kappa and the whole row are nan.
+    out.append(("myn_nan_kappa", "CGGGGCGAAGAAACCACAGCGCAG", "CGGGGGGGAGAGACGACAGCGGAG"))
+    out.append(("identical_short", "GCTAAAGGT", "GCTAAAGGT"))
+    # One of the two sequences has no synonymous site: its base frequencies at such sites are 0/0, which
+    # KaKs_Calculator averages in, and its MYN Ks is nan (no synonymous difference: Ks is 0, as its YN says).
+    out.append(("myn_sites_in_one_sequence", "CAGACC", "CAGAGC"))
     return out
 
 

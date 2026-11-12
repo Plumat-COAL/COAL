@@ -32,6 +32,19 @@ HEADER = ("Sequence\tMethod\tKa\tKs\tKa/Ks\tP-Value(Fisher)\tLength\tS-Sites\tN-
 # KaKs_Calculator's NG/LWL family compares the letters of codons, so U in one sequence and T in the other count
 # as a difference there (its YN/MYN read U as T); COAL reads U as T everywhere.
 RNA_PAIRS = {"lowercase_rna"}
+# Pairs where KaKs_Calculator loses a defined estimate to its own NaN arithmetic and COAL gives the number
+# (docs/kaks.md, differences 8-10). Only these (pair, method) may have a number where KaKs_Calculator prints nan
+# (or, for no_syn_sites_multi_step, the 0 its lost pathway weights leave). Their values are checked in
+# TestOneKindOfSite and TestMynNan.
+KK_LOSES = {
+    ("met_trp_only", "YN"), ("met_trp_only", "MYN"),                        # S = 0, two differences per codon
+    ("no_syn_sites_multi_step", "YN"), ("no_syn_sites_multi_step", "MYN"),
+    ("no_syn_sites_single_step", "MYN"), ("no_nonsyn_sites_one_codon", "MYN"), ("no_nonsyn_sites", "MYN"),
+    ("short_one_codon", "MYN"), ("myn_tn93_zero_division", "MYN"), ("identical_short", "MYN"),   # TN93 0/0
+    ("myn_nan_kappa", "MYN"),                                               # 0 x NaN in the mean kappa
+    ("myn_sites_in_one_sequence", "MYN"),                                   # 0/0 site base frequencies
+}
+KK_NAN = ("nan", "-nan", "inf", "-inf")
 
 
 def cpp_bin() -> Path | None:
@@ -126,8 +139,11 @@ class TestAgainstKaKsCalculator(KaKsBase):
                         why = "lowercase GC"  # KaKs_Calculator counts upper-case G and C only
                     elif x == "-0" and y == "0":
                         why = "negative zero"
-                    elif x in ("nan", "-nan") and y == "NA":
+                    elif x in KK_NAN and y == "NA":
                         why = "nan"
+                    elif (pair, m) in KK_LOSES:  # the row is lost to NaN there; COAL's values are tested below
+                        self.assertTrue(any(v in KK_NAN or "nan" in v for v in rf) or rf[2] == "NA", rf)
+                        why = "KaKs_Calculator loses the value"
                     elif ":" in x or "(" in x:  # composite fields: compare part by part
                         xs = x.replace("(", ":").replace(")", "").split(":")
                         ys = y.replace("(", ":").replace(")", "").split(":")
@@ -148,7 +164,9 @@ class TestAgainstKaKsCalculator(KaKsBase):
                             why = "p-neg"
                     if why is None and y == "NA" and st == "saturated":
                         why = st
-                    if why is None and st == "no_data":  # nothing to estimate: KaKs_Calculator prints nan/defaults
+                    # nothing to estimate: KaKs_Calculator prints nan or a default there. A number that
+                    # KaKs_Calculator gives and COAL does not is never excused by the status.
+                    if why is None and st == "no_data" and not (y == "NA" and num(x) is not None and num(x) != 0):
                         why = st
                     self.assertIsNotNone(why, f"{name} {key} field {i} ({HEADER.split(chr(9))[i]}): "
                                               f"KaKs_Calculator {x!r}, COAL {y!r} (status {st})")
@@ -161,6 +179,77 @@ class TestAgainstKaKsCalculator(KaKsBase):
 
     def test_simulated(self):
         self.check_set("sim_small")
+
+
+class TestOneKindOfSite(KaKsBase):
+    """YN and MYN when there are no nonsynonymous (or no synonymous) sites: the estimate that has sites is still
+    made, the other is NA and the status is no_data. KaKs_Calculator's YN gives the same numbers when every codon
+    differs at one position at most (checked field by field in TestAgainstKaKsCalculator: these pairs are not in
+    KK_LOSES for YN); the expected values here are PAML yn00's (4.10.10, 12 digits; weighting = 0 for the pair
+    with two differences per codon, where the weighted run of both references is lost to a NaN t)."""
+
+    def setUp(self):
+        self.rows = self.dnds(KDIR / "edge_cases.axt", "-m", "YN", "-m", "MYN")
+
+    def check(self, pair, dn, se_dn, ds, se_ds, note):
+        for m in ("YN", "MYN"):
+            f = self.rows[(pair, m)]
+            for got, want, what in ((f[3], dn, "dN"), (f[6], se_dn, "SE_dN"), (f[4], ds, "dS"), (f[7], se_ds, "SE_dS")):
+                if want is None:
+                    self.assertEqual(got, "NA", f"{pair} {m} {what}")
+                else:
+                    self.assertTrue(close(float(got), want, 1e-9), f"{pair} {m} {what}: {got} != {want}")
+            self.assertEqual(f[5], "NA", f"{pair} {m} dN/dS")
+            self.assertEqual((f[13], f[14]), ("no_data", note), f"{pair} {m}")
+
+    def test_no_nonsynonymous_sites(self):
+        self.check("no_nonsyn_sites_one_codon", None, None, 0.477385626221, 0.612372435696, "no nonsynonymous sites")
+        self.check("no_nonsyn_sites", None, None, 0.440839998677, 0.0346410161514, "no nonsynonymous sites")
+
+    def test_no_synonymous_sites(self):
+        self.check("no_syn_sites_multi_step", 0.513345885278, 0.357217254156, None, None, "no synonymous sites")
+        # one difference per codon: KaKs_Calculator's YN gives this Ka (golden file), and MYN equals YN
+        kk = read_rows((GOLD / "edge_cases.KaKs_Calculator.YN.kaks").read_text())[("no_syn_sites_single_step", "YN")]
+        self.check("no_syn_sites_single_step", float(kk[2]), 0.40654667384577, None, None, "no synonymous sites")
+
+    def test_no_sites_at_all(self):
+        for m in ("YN", "MYN"):
+            f = self.rows[("all_gap", m)]
+            self.assertEqual((f[3], f[4], f[13]), ("NA", "NA", "no_data"))
+
+    def test_kaks_format(self):
+        r = self.run_cpp("kaks", "-i", KDIR / "edge_cases.axt", "-q", "-m", "YN")
+        f = read_rows(r.stdout)[("no_nonsyn_sites", "YN")]
+        self.assertEqual(f[2:5], ["NA", "0.44084", "NA"])   # KaKs_Calculator: -nan  0.44084  -nan
+
+
+class TestMynNan(KaKsBase):
+    """MYN rows that KaKs_Calculator prints as nan although the estimate is defined (docs/kaks.md, difference
+    10). A KaKs_Calculator built with the two one-line corrections named there agrees with COAL on these pairs
+    and on 4,000 random short pairs (benchmarks/kaks/random_short_pairs.py)."""
+
+    def setUp(self):
+        self.rows = self.dnds(KDIR / "edge_cases.axt", "-m", "YN", "-m", "MYN")
+
+    def test_tn93_zero_division_is_the_f84_distance(self):
+        # no estimable kappa (both 2) and no pathway to weight: MYN must equal YN exactly
+        for pair in ("myn_tn93_zero_division", "short_one_codon", "identical_short", "myn_sites_in_one_sequence"):
+            y, m = self.rows[(pair, "YN")], self.rows[(pair, "MYN")]
+            self.assertEqual(m[13], "ok", (pair, m))
+            self.assertEqual(m[14], "")
+            for col in (3, 4, 6, 7, 8, 9, 10, 11):
+                self.assertTrue(close(float(y[col]), float(m[col]), 1e-9), f"{pair} col {col}: {y[col]} vs {m[col]}")
+        self.assertEqual(float(self.rows[("myn_tn93_zero_division", "MYN")][3]), 0.0)
+        self.assertEqual(float(self.rows[("myn_sites_in_one_sequence", "MYN")][4]), 0.0)
+
+    def test_nan_kappa(self):
+        # kappa comes from the class of sites that has one: the corrected KaKs_Calculator prints these values
+        m = self.rows[("myn_nan_kappa", "MYN")]
+        self.assertEqual(m[13], "ok")
+        for col, want in ((3, 0.136556085877548), (4, 0.97117192633034), (8, 16.2479079015356), (9, 7.75209209846442)):
+            self.assertTrue(close(float(m[col]), want, 1e-9), f"col {col}: {m[col]} != {want}")
+        kk = read_rows((GOLD / "edge_cases.KaKs_Calculator.MYN.kaks").read_text())[("myn_nan_kappa", "MYN")]
+        self.assertIn("nan", kk[2])  # the unmodified reference: the whole row is nan
 
 
 class TestAgainstPAML(KaKsBase):
