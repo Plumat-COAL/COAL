@@ -371,10 +371,13 @@ class Units(unittest.TestCase):
             tf.addfile(info, io.BytesIO(script))
         data = buf.getvalue()
         calls = []
+        entered = []   # the installs that have begun: the download is held until all five have
 
         def urlopen(url, timeout=None):
             calls.append(url)
-            time.sleep(0.3)
+            deadline = time.time() + 20
+            while len(entered) < 5 and time.time() < deadline:
+                time.sleep(0.005)
             return io.BytesIO(data)
         with tempfile.TemporaryDirectory() as td, mock.patch.dict(os.environ, {"COAL_CACHE_DIR": td}), \
                 mock.patch.object(msa, "_platform", return_value=("Linux", "x86_64")), \
@@ -383,6 +386,7 @@ class Units(unittest.TestCase):
             got, errors = [], []
 
             def one():
+                entered.append(1)
                 try:
                     got.append(P.install_diamond(method="official", quiet=True))
                 except Exception as e:   # noqa: BLE001
@@ -772,7 +776,7 @@ class PairsGiven(PipelineCase):
                            env={**os.environ, "PYTHONPATH": str(ROOT / "src")}, encoding="utf-8")
         self.assertEqual(r.returncode, 2, r.stderr)   # finished; the unusable genes of the query file are failures
         self.assertEqual(r.stdout, "")
-        self.assertIn("coal pipeline: summary: 40 genes (4 not usable); 2 pairs: 2 ok", r.stderr)
+        self.assertIn("coal pipeline: summary: 40 records (4 not usable); 2 pairs: 2 ok", r.stderr)
         rows = read_tsv(self.tmp / "out" / "dnds.tsv")
         self.assertEqual([x["method"] for x in rows], ["NG", "NG"])
 
@@ -1047,7 +1051,18 @@ class Robustness(PipelineCase):
         self.assertLess(time.time() - t0, 20)
         pids = [int(p.name) for p in started.iterdir()]
         self.assertLess(len(pids), 10, "the clusters not started yet were dropped")
-        time.sleep(0.3)
+
+        def gone(pid):
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                return True
+            except PermissionError:
+                return False
+            return False
+        deadline = time.time() + 20          # until they are gone, not for a fixed time
+        while time.time() < deadline and not all(gone(p) for p in pids):
+            time.sleep(0.01)
         for pid in pids:
             with self.assertRaises(ProcessLookupError, msg=f"aligner {pid} was left running"):
                 os.kill(pid, 0)

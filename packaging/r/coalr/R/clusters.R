@@ -64,7 +64,10 @@ coal_dnds_clusters <- function(cds, clusters, msa = NULL, aligner = NULL, method
                                end_gaps = c("free", "penalized"), preset = NULL, max_cells = 4e9,
                                yn_flavour = c("kaks", "paml"), yn_weighting = TRUE, keep_alignments = FALSE,
                                comeron_flavour = c("coal", "gestimator"), li_flavour = c("coal", "seqinr"),
-                               terminal_stops = c("drop", "compare")) {
+                               terminal_stops = c("drop", "compare"), min_codons = 0L, max_ds = NULL,
+                               min_identity = NULL, method = NULL) {
+  methods <- pick_methods(methods, method, !missing(methods), "methods", "method")
+  flags <- check_flags(min_codons, max_ds, min_identity)
   cds <- as_seqs(cds, "cds")
   cl <- as_clusters(clusters)
   methods <- check_methods(methods)
@@ -237,7 +240,7 @@ coal_dnds_clusters <- function(cds, clusters, msa = NULL, aligner = NULL, method
                     terminal_stops == "compare", keep_alignments)
 
   row_cluster <- unit_cluster[raw$pairs$unit + 1L]
-  pairs <- pair_table(raw, member_ids, cluster_id = cids[row_cluster])
+  pairs <- flag_pairs(pair_table(raw, member_ids, cluster_id = cids[row_cluster]), flags)
   # ---- summary
   sm <- coalr_summary(as.integer(row_cluster - 1L), raw$pairs$method, raw$pairs$status, raw$pairs$dN, raw$pairs$dS,
                       raw$pairs$dNdS, length(raw$method_names))

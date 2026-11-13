@@ -1,14 +1,17 @@
 [build-system]
-requires = ["setuptools>=69.3"]  # 69.3+: normalised sdist name (coal_align-<v>.tar.gz)
+# 77.0.3+: the SPDX licence expression and license-files of PEP 639 (project.license as a table and the licence
+# classifier are deprecated: setuptools removes them in 2027); also 69.3+: normalised sdist name (coal_align-<v>.tar.gz).
+# setuptools 77 needs Python 3.9, below this project's floor of 3.10.
+requires = ["setuptools>=77.0.3"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "coal-align"
-version = "0.5.0"
-description = "Fast codon alignment from a protein alignment and coding DNA (PAL2NAL alternative)"
+version = "0.6.0.dev0"
+description = "Fast codon alignments (PAL2NAL alternative), Ka/Ks (dN/dS) for pairs, and a one-step pipeline from coding sequences to dN/dS"
 readme = "README.md"
-license = {text = "GPL-3.0-only"}  # from the release after 0.5.0; 0.5.0 and earlier are MIT (CHANGELOG.md)
-classifiers = ["License :: OSI Approved :: GNU General Public License v3 (GPLv3)"]
+license = "GPL-3.0-only"  # from the release after 0.5.0; 0.5.0 and earlier are MIT (CHANGELOG.md)
+license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.10"
 dependencies = []
 
@@ -24,6 +27,10 @@ pal2nal = "coal_compat.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# PEP 561: the package has inline type hints (docs/python-api.md names the typed public functions)
+[tool.setuptools.package-data]
+coal = ["py.typed"]
+
 # Example inputs (also used by the engine tests and shown in the docs as `coal examples/...`), installed under
 # <prefix>/share/coal/examples. The app (coal-align-app, which depends on this package) looks there after
 # COAL_EXAMPLES_DIR and a repo checkout.
@@ -32,3 +39,4 @@ where = ["src"]
 "share/coal/examples/mito" = ["examples/mito/README.md", "examples/mito/dna.fasta", "examples/mito/protein.aln.fasta"]
 "share/coal/examples/messy_ids" = ["examples/messy_ids/README.md", "examples/messy_ids/dna.fasta", "examples/messy_ids/protein.aln.fasta"]
 "share/coal/examples/one_broken_gene" = ["examples/one_broken_gene/README.md", "examples/one_broken_gene/dna.fasta", "examples/one_broken_gene/protein.aln.fasta"]
+"share/coal/examples/dnds" = ["examples/dnds/README.md", "examples/dnds/species_a_cds.fasta", "examples/dnds/species_b_cds.fasta", "examples/dnds/orthologs.tsv", "examples/dnds/codon.fasta"]

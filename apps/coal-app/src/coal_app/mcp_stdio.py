@@ -11,12 +11,20 @@ import inspect
 
 from . import tools
 
+# What the app and this server cover, said in the instructions, the GUI's About and the README: COAL's command
+# line does more (Ka/Ks, the pipeline), and neither the GUI nor an agent using these tools can reach that.
+SCOPE = ("This server covers codon alignment only. COAL also estimates Ka/Ks (dN/dS) and runs a one-step pipeline "
+         "from coding sequences to dN/dS, but those are not tools of this server: they are in the `coal` command "
+         "line (`coal dnds`, `coal kaks`, `coal pipeline`; `coal help`). Do not use codon_align for them; tell the "
+         "person to run the command, or run it yourself if you have a shell.")
+
 INSTRUCTIONS = (
     "COAL turns a protein multiple sequence alignment plus the unaligned coding DNA of the same genes "
     "into a codon alignment (a fast PAL2NAL replacement). Call codon_align with absolute file paths. "
     "Use the alignment only if all_ok is true; otherwise call explain_report on the returned report_path. "
     "If suggested_codontable is set, re-run codon_align with it. "
-    "When the person names a folder, pass save_as with that folder so they find the alignment there."
+    "When the person names a folder, pass save_as with that folder so they find the alignment there. "
+    + SCOPE
 )
 
 

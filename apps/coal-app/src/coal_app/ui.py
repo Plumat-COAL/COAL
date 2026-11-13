@@ -508,6 +508,11 @@ def show_sample():
 SETTING_ORDER = ["codontable", "output_format", "nogap", "nomismatch", "strict", "preview", "residue_colours"]
 
 
+ABOUT_SCOPE = ("This app makes codon alignments. Ka/Ks (dN/dS) and the one-step pipeline from coding sequences to "
+               "dN/dS are in COAL's command line, not in this app: `coal dnds`, `coal kaks`, `coal pipeline` "
+               "(`coal help` lists the commands).")
+
+
 def _settings_where() -> str:
     if settings.stored_in_browser():
         return "Settings are kept in this web browser only."
@@ -690,7 +695,7 @@ def build(demo_mode: bool = False) -> gr.Blocks:
                                                  "marks stay", elem_id="coal-set-colours")
                     gr.HTML(_sec("About"), padding=False)
                     gr.Markdown(
-                        _settings_where() + f"\n\nResults are deleted after {core.RUNS_MAX_AGE_HOURS} hours"
+                        ABOUT_SCOPE + "\n\n" + _settings_where() + f"\n\nResults are deleted after {core.RUNS_MAX_AGE_HOURS} hours"
                         + (f" (`{core.RUNS_DIR}`)." if local else "."), elem_classes=["coal-small"])
                     s_status = gr.Markdown(_note, elem_id="coal-settings-status")
                     s_reset = gr.Button("Reset to defaults", variant="secondary", size="sm", elem_id="coal-set-reset")

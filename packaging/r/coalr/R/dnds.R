@@ -46,6 +46,18 @@
 #'   get another dN by it.
 #' @param keep_alignments `TRUE`: also return the protein and codon alignment of every pair, as attribute
 #'   `"alignments"` (a data frame: `seq1`, `seq2`, `protein1`, `protein2`, `codon1`, `codon2`).
+#' @param min_codons,max_ds Flags for estimates that need care, as `coal dnds --min-codons N --max-ds X`; both
+#'   off by default (`0`, `NULL`). A row that has an estimate (status `ok` or `warning`) and fewer than
+#'   `min_codons` compared codons gets the note `"fewer than N codons compared"`; one with a dS above `max_ds`
+#'   (a saturated synonymous distance) gets `"dS above X"`; its status becomes `warning` if it was `ok`. No row is
+#'   dropped and no number changes, so the cluster summary is unaffected. Attribute `"flagged"` counts the rows
+#'   each flag marked. See "Filtering before interpretation" in COAL's `docs/kaks.md`.
+#' @param min_identity A third flag of the same kind, as `coal pipeline --min-identity P`: a row whose protein
+#'   identity (`prot_identity`, percent of the alignment's columns) is below `min_identity` gets the note
+#'   `"protein identity below P%"`. `NULL` (default): off. Pairs of a cluster need not be related at all, and an
+#'   alignment of two unrelated proteins still gives numbers with status `ok`.
+#' @param method The same as `methods` (the name [coal_kaks()] and the command line's `--method` use); give one
+#'   of the two.
 #'
 #' @return A data frame with one row per pair and method: `seq1`, `seq2`, `method`, `dN`, `dS`, `dNdS`, `SE_dN`,
 #'   `SE_dS`, `N_sites`, `S_sites`, `Nd`, `Sd`, `codons_compared`, `prot_aln_length`, `prot_identity`, `status`
@@ -69,7 +81,10 @@ coal_dnds_pairs <- function(query_cds, subject_cds, pairs = NULL, methods = "YN"
                             preset = NULL, max_cells = 4e9, yn_flavour = c("kaks", "paml"), yn_weighting = TRUE,
                             comeron_flavour = c("coal", "gestimator"), li_flavour = c("coal", "seqinr"),
                             terminal_stops = c("drop", "compare"),
-                            keep_alignments = FALSE) {
+                            keep_alignments = FALSE, min_codons = 0L, max_ds = NULL, min_identity = NULL,
+                            method = NULL) {
+  methods <- pick_methods(methods, method, !missing(methods), "methods", "method")
+  flags <- check_flags(min_codons, max_ds, min_identity)
   q <- as_seqs(query_cds, "query_cds", need_names = !is.null(pairs))
   s <- as_seqs(subject_cds, "subject_cds", need_names = !is.null(pairs))
   methods <- check_methods(methods)
@@ -112,7 +127,7 @@ coal_dnds_pairs <- function(query_cds, subject_cds, pairs = NULL, methods = "YN"
                     as.integer(2L * (0:n)), rep.int(0L, n), integer(n + 1L), integer(0), integer(0),
                     methods, code, threads, ap, yn_flavour, yn_weighting, comeron_flavour, li_flavour,
                     terminal_stops == "compare", keep_alignments)
-  out <- pair_table(raw, member_ids)
+  out <- flag_pairs(pair_table(raw, member_ids), flags)
   attr(out, "seconds") <- raw$seconds
   if (keep_alignments) {
     odd <- seq.int(1L, by = 2L, length.out = n)

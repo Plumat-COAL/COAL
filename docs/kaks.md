@@ -139,6 +139,21 @@ last round there: difference 12); the summary on stderr says how many such rows 
 them.
 `--digits N` sets the number of significant digits.
 
+**What `P-Value(Fisher)` tests, and what has a standard error.** The p-value is Fisher's exact test on the
+2 x 2 table of substitutions against sites that did not change, synonymous in one row and nonsynonymous in the
+other: `[[Sd, S - Sd], [Nd, N - Nd]]`. It asks whether the proportion of changed sites differs between
+synonymous and nonsynonymous sites, that is whether dN/dS differs from 1 for this pair; a small p with dN/dS
+below 1 is evidence of purifying selection on the pair, not of anything about single sites, and with thousands
+of pairs the p-values need a correction for multiple testing. The counts are estimates and not whole numbers
+(KaKs_Calculator's convention, kept; "Differences" below says how the tails are summed), so read it as
+KaKs_Calculator's statistic, comparable with its output, more than as an exact test. It is in the `coal kaks`
+format only; `coal dnds` does not print it. **Standard errors** are given by the methods that have a variance
+formula: `NG`, `YN`, `MYN` and `Li` (`SE_dN`, `SE_dS` in `coal dnds`; `NA` for LWL, MLWL, LPB, MLPB and Comeron).
+They are the standard errors **of dN and of dS, each on its own**. No method here gives a standard error or a
+confidence interval for dN/dS itself: the ratio of two estimates has no simple variance, and dividing the two
+SEs is not one. For an interval on the ratio use a likelihood method (PAML's codeml, HyPhy) on the codon
+alignment, or bootstrap the codon columns.
+
 **`coal dnds`** (`--digits` default 8):
 
 | Column | Meaning |
@@ -146,7 +161,7 @@ them.
 | `seq1`, `seq2` | the two IDs. For FASTA input, the record IDs. For AXT, the name line split at the first `&`; when there is no `&`, seq1 is the whole name line and seq2 is `NA` |
 | `method` | NG, LWL, MLWL, LPB, MLPB, YN, MYN, Comeron or Li |
 | `dN`, `dS`, `dNdS` | Ka, Ks, Ka/Ks. `NA` when not available; dNdS is `NA` when dS < 1e-6. Zeros print as 0 |
-| `SE_dN`, `SE_dS` | standard errors (YN, MYN, NG, Li); `NA` elsewhere |
+| `SE_dN`, `SE_dS` | standard errors of dN and of dS (YN, MYN, NG, Li); `NA` elsewhere. There is none for the ratio (below) |
 | `N_sites`, `S_sites` | nonsynonymous and synonymous sites (`NA` for Comeron and Li, which count sites by degeneracy class, not as S and N) |
 | `Nd`, `Sd` | nonsynonymous and synonymous differences (`NA` for Comeron and Li) |
 | `codons_compared` | codon columns used after the policy |
@@ -168,9 +183,23 @@ with `--format`.
   link) is refused with exit status 2 before anything is written; the output is opened while the input is still
   being read, so the input would be destroyed. The same holds for `coal translate` and `coal codon-dnds`.
 
-**Exit status.** 0 when the run finished, even if some pairs have a status other than `ok`. 1 when the input
-cannot be read or the output cannot be written. 2 for a command-line error, including a method that is not
-implemented. `-j N` sets the number of threads (default: all hardware threads). A one-letter option takes its
+**Exit status.** 0 when the run finished and at least one result is an estimate or a statement about the pair
+(`ok`, `warning`, `saturated`, `not_converged`), even if other pairs have a status other than `ok`. 1 when the
+input cannot be read or the output cannot be written; the message names the file and the cause (`write error on
+'out.tsv': No space left on device`). 2 for a command-line error, including a method that is not implemented,
+**and when no pair has an estimate because of the input**: every result is `error` or `no_data`. The table is
+still written with every row (`coal dnds`; `coal kaks` leaves `error` pairs out, as KaKs_Calculator does), and one
+line on stderr, printed also with `-q`, names the usual cause: the input looks like protein sequences, or the two
+sequences of the pairs differ in length (the input is not aligned), with the way to a codon alignment. When only
+some pairs differ in length the exit status stays 0 and a warning says how many. (KaKs_Calculator returns 0
+in these cases too, so this is a difference for a script that reads its exit status; the numbers and the file
+format are KaKs_Calculator's as before.)
+
+**Compressed input.** `coal kaks`, `coal dnds` and `coal translate` read a gzip-compressed input (recognised by
+its first two bytes, whatever the file is called): the `coal` command decompresses it into a temporary folder,
+runs the engine on the copy and removes the folder. `coal-cpp` itself has no decompressor (it uses the C++
+standard library only): called directly on such a file it stops with "is gzip-compressed: decompress it first
+(gunzip -k FILE)". `-j N` sets the number of threads (default: all hardware threads). A one-letter option takes its
 value attached as well (`-j4`, `-j=4`, `-mYN`, `-ofile`; flags chain: `-qj4`), and a long one after `=`
 (`--jobs=4`), in `coal kaks`, `coal dnds`, `coal translate`, `coal codon-dnds` and `coal-cpp-align`, as in the
 main `coal` command. Pairs are computed in parallel
@@ -182,6 +211,112 @@ reference programs do ("Comeron and Li" below); the default for both is `coal`, 
 `--yn-flavour paml` and `--yn-weighting 0|1` choose which reference YN00 follows where the two differ (below).
 `--yn-weighting 0` gives equal pathway weights in one round, which is the default control file of PAML's yn00
 (`weighting = 0`). KaKs_Calculator always weights pathways.
+
+## What to cite
+
+The numbers of `coal kaks`, `coal dnds` and `coal pipeline` come from published estimators, implemented in code
+derived from KaKs_Calculator 2.0, PAML's yn00, libsequence and seqinr; the pipeline also runs DIAMOND and an
+aligner. A paper should cite the methods and programs its numbers come from, with COAL (and the version
+`coal --version` prints):
+
+| What you ran | Cite |
+|---|---|
+| Anything | COAL |
+| A codon alignment (`coal PEP NUC`, `pal2nal`, every Ka/Ks route of the pipeline) | Suyama et al. 2006 (PAL2NAL) |
+| Ka/Ks, method NG | Nei & Gojobori 1986; Wang et al. 2010 (KaKs_Calculator 2.0) |
+| Ka/Ks, method LWL | Li, Wu & Luo 1985; Wang et al. 2010 (KaKs_Calculator 2.0) |
+| Ka/Ks, method MLWL | Li, Wu & Luo 1985; Tzeng, Pan & Li 2004; Wang et al. 2010 (KaKs_Calculator 2.0) |
+| Ka/Ks, method LPB | Li 1993; Pamilo & Bianchi 1993; Wang et al. 2010 (KaKs_Calculator 2.0) |
+| Ka/Ks, method MLPB | Li 1993; Pamilo & Bianchi 1993; Tzeng, Pan & Li 2004; Wang et al. 2010 (KaKs_Calculator 2.0) |
+| Ka/Ks, method YN (the default) | Yang & Nielsen 2000; Wang et al. 2010 (KaKs_Calculator 2.0); Yang 2007 (PAML 4) |
+| Ka/Ks, method MYN | Zhang, Li & Yu 2006; Yang & Nielsen 2000; Wang et al. 2010 (KaKs_Calculator 2.0); Yang 2007 (PAML 4) |
+| Ka/Ks, method Comeron | Comeron 1995; Thornton 2003 (libsequence) |
+| Ka/Ks, method Li | Li 1993; Charif & Lobry 2007 (seqinr) |
+| `coal pipeline pairs` with DIAMOND (orthologs) | Buchfink et al. 2021 (DIAMOND) |
+| `coal pipeline clusters` with DIAMOND DeepClust | Buchfink et al. 2021 (DIAMOND); Buchfink et al. 2026 (DIAMOND DeepClust) |
+| Protein alignments by Clustal Omega (`--aligner clustalo`, the cluster default) | Sievers et al. 2011 (Clustal Omega) |
+| Protein alignments by MAFFT (`--aligner mafft`) | Katoh & Standley 2013 (MAFFT) |
+| Through the R package orthologr | Drost et al. 2015 (orthologr) |
+
+`coal cite` prints this table and the references; `coal cite YN` those of one method; `coal cite out/report.json`
+those of one pipeline run, whose report lists the keys as `cite`.
+
+- Suyama M, Torrents D, Bork P (2006). PAL2NAL: robust conversion of protein sequence alignments into the corresponding codon alignments. Nucleic Acids Research 34:W609-W612. <https://doi.org/10.1093/nar/gkl315>
+- Nei M, Gojobori T (1986). Simple methods for estimating the numbers of synonymous and nonsynonymous nucleotide substitutions. Molecular Biology and Evolution 3:418-426. <https://doi.org/10.1093/oxfordjournals.molbev.a040410>
+- Li W-H, Wu C-I, Luo C-C (1985). A new method for estimating synonymous and nonsynonymous rates of nucleotide substitution considering the relative likelihood of nucleotide and codon changes. Molecular Biology and Evolution 2:150-174. <https://doi.org/10.1093/oxfordjournals.molbev.a040343>
+- Li W-H (1993). Unbiased estimation of the rates of synonymous and nonsynonymous substitution. Journal of Molecular Evolution 36:96-99. <https://doi.org/10.1007/BF02407308>
+- Pamilo P, Bianchi NO (1993). Evolution of the Zfx and Zfy genes: rates and interdependence between the genes. Molecular Biology and Evolution 10:271-281. <https://doi.org/10.1093/oxfordjournals.molbev.a040003>
+- Tzeng Y-H, Pan R, Li W-H (2004). Comparison of three methods for estimating rates of synonymous and nonsynonymous nucleotide substitutions. Molecular Biology and Evolution 21:2290-2298. <https://doi.org/10.1093/molbev/msh242>
+- Yang Z, Nielsen R (2000). Estimating synonymous and nonsynonymous substitution rates under realistic evolutionary models. Molecular Biology and Evolution 17:32-43. <https://doi.org/10.1093/oxfordjournals.molbev.a026236>
+- Zhang Z, Li J, Yu J (2006). Computing Ka and Ks with a consideration of unequal transitional substitutions. BMC Evolutionary Biology 6:44. <https://doi.org/10.1186/1471-2148-6-44>
+- Comeron JM (1995). A method for estimating the numbers of synonymous and nonsynonymous substitutions per site. Journal of Molecular Evolution 41:1152-1159. <https://doi.org/10.1007/BF00173196>
+- Wang D, Zhang Y, Zhang Z, Zhu J, Yu J (2010). KaKs_Calculator 2.0: a toolkit incorporating gamma-series methods and sliding window strategies. Genomics, Proteomics & Bioinformatics 8:77-80. <https://doi.org/10.1016/S1672-0229(10)60008-3>
+- Yang Z (2007). PAML 4: phylogenetic analysis by maximum likelihood. Molecular Biology and Evolution 24:1586-1591. <https://doi.org/10.1093/molbev/msm088>
+- Thornton K (2003). libsequence: a C++ class library for evolutionary genetic analysis. Bioinformatics 19:2325-2327. <https://doi.org/10.1093/bioinformatics/btg316>
+- Charif D, Lobry JR (2007). SeqinR 1.0-2: a contributed package to the R project for statistical computing devoted to biological sequences retrieval and analysis. In: Bastolla U, Porto M, Roman HE, Vendruscolo M (eds), Structural Approaches to Sequence Evolution: Molecules, Networks, Populations. Springer, pp. 207-232. <https://doi.org/10.1007/978-3-540-35306-5_10>
+- Buchfink B, Reuter K, Drost H-G (2021). Sensitive protein alignments at tree-of-life scale using DIAMOND. Nature Methods 18:366-368. <https://doi.org/10.1038/s41592-021-01101-x>
+- Buchfink B, Barbé É, Ashkenazy H, Reuter K, Kennedy JA, Drost H-G (2026). Clustering the protein universe of life using DIAMOND DeepClust. Nature Methods 23:724-727. <https://doi.org/10.1038/s41592-026-03030-z>
+- Sievers F, Wilm A, Dineen D, Gibson TJ, Karplus K, Li W, Lopez R, McWilliam H, Remmert M, Soding J, Thompson JD, Higgins DG (2011). Fast, scalable generation of high-quality protein multiple sequence alignments using Clustal Omega. Molecular Systems Biology 7:539. <https://doi.org/10.1038/msb.2011.75>
+- Katoh K, Standley DM (2013). MAFFT multiple sequence alignment software version 7: improvements in performance and usability. Molecular Biology and Evolution 30:772-780. <https://doi.org/10.1093/molbev/mst010>
+- Drost H-G, Gabel A, Grosse I, Quint M (2015). Evidence for active maintenance of phylotranscriptomic hourglass patterns in animal and plant embryogenesis. Molecular Biology and Evolution 32:1221-1231. (the R package orthologr) <https://doi.org/10.1093/molbev/msv012>
+
+Each DOI is that of the cited work, checked against the publisher's or the institution's page of the paper. COAL
+itself has no DOI: cite its version and repository (`CITATION.cff`). The DeepClust preprint (bioRxiv 2023,
+<https://doi.org/10.1101/2023.01.24.525373>, key `buchfink2023` in reports written by earlier versions) is
+superseded by the paper above; `coal cite` still resolves the old key and prints the paper after it.
+
+## Filtering before interpretation
+
+A row with status `ok` says that the method produced numbers, not that the numbers mean much. Before dN/dS values
+are read, compared or averaged, four things are worth checking for every pair. They are the usual reasons for
+impossible-looking values in a pairwise table.
+
+| What | Why it matters | Where to look |
+|---|---|---|
+| **Few compared codons** | With a few dozen codons a single substitution moves dN/dS a long way, and the standard errors are of the size of the estimates. In orthologr's *Arabidopsis* example one pair is compared over 46 codons and has dN/dS 1.84 with status `ok`: that is noise, not positive selection | `codons_compared` |
+| **Low coverage or identity** | When only a small part of the two proteins aligns, or they align at 30% identity, the pair may not be orthologous over its length and the alignment itself is uncertain; misaligned codons count as substitutions and inflate dN and dS | `codons_compared` against `prot_aln_length`; `prot_identity` (pipeline and coalr tables) |
+| **Saturated dS** | Above a dS of about 1 to 2 most synonymous sites have changed more than once, the correction for multiple hits dominates the estimate, and dS (so dN/dS) is no longer reliable; dN/dS is then usually too low or erratic. `saturated` marks only the pairs where the correction formula has no value at all: a pair with dS 3 or 5 and status `ok` is not better (268 such pairs with dS above 2 stood next to 3,748 `saturated` ones in a yeast *S. cerevisiae* / *C. glabrata* run) | `dS` |
+| **Very small dS** | dN/dS is a ratio: between very close sequences dS rests on one or two synonymous differences, and dividing by it gives values that are large, variable and often above 1 for no biological reason. `dNdS` is `NA` only when dS is below 1e-6 | `dS`, `Sd`, `SE_dS` |
+
+**Suggested starting thresholds.** These are conventions in common use, not properties of your data: state the
+ones you used, and check that your conclusion does not depend on their exact values.
+
+- at least 50 compared codons (100 for anything read gene by gene);
+- compared codons covering at least half of the protein alignment, and protein identity of at least 30 to 40%;
+- dS at most 2 (1 if synonymous rates are compared between genes), and for the ratio dS at least about 0.01;
+- status `ok` or `warning` only (`saturated`, `not_converged`, `no_data` and `error` have no estimate), and for
+  `warning` a look at the note (an internal stop codon or a CDS that is not a multiple of 3 often means a
+  pseudogene or an annotation error).
+
+A whole-gene pairwise dN/dS averages over all sites and the whole time since divergence. A value above 1 is rare
+and, from one pair, weak evidence; site and branch models (PAML codeml, HyPhy) test for positive selection, and
+COAL's codon alignments are their input.
+
+**The flags.** `--min-codons N` and `--max-ds X` (`coal dnds`, `coal pipeline`; `min_codons`, `max_ds` in coalr)
+mark the rows concerned without removing anything. Where a protein alignment exists (`coal pipeline`,
+`coal codon-dnds`; `min_identity` in coalr's `coal_dnds_pairs()` and `coal_dnds_clusters()`) there is a third,
+`--min-identity P`: a pair whose protein identity (`prot_identity`, percent) is below P gets the note
+`protein identity below P%`. `coal dnds` reads codon alignments and refuses it.
+
+```
+coal dnds codon.fasta --min-codons 50 --max-ds 2 -o dnds.tsv
+coal pipeline pairs --query q_cds.fa --subject s_cds.fa -o out --min-codons 50 --max-ds 2
+```
+
+A row that has an estimate (status `ok` or `warning`) and fewer than N compared codons gets the note
+`fewer than N codons compared`; one whose dS is above X gets `dS above X`; the notes are appended to what the
+row already says (`; ` between them), and its status becomes `warning` if it was `ok`. **No row is dropped and no
+number changes**: the table is the one without the options but for `status` and `note` of the flagged rows, and
+the per-cluster summary, which counts `ok` and `warning` together, is the same. Rows without an estimate are left
+as they are. Both options are off by default. stderr and, for the pipeline, `report.json`
+(`counts.flagged`) say how many rows each flag marked. Filtering is then one line in whatever reads the table:
+
+```r
+d <- read.delim("out/dnds.tsv")
+keep <- d$status == "ok" & d$dS >= 0.01 & d$codons_compared / d$prot_aln_length >= 0.5 & d$prot_identity >= 40
+```
+
+`coal kaks` has no such options: KaKs_Calculator's format has no status column.
 
 ## C++ API
 
@@ -814,7 +949,21 @@ counts of Kimura's distance) is part of preparing every pair and adds about 0.01
 other methods.
 
 YN00 and MYN spend about 90 % of their time on P(t) (a 61 × 61 symmetric eigendecomposition per iteration, as in
-both reference tools), so their single-thread gain is modest. The gain comes from threads (`-j`): pairs are
+both reference tools), so their single-thread gain is modest. P(t) is only read to weight the pathways between
+two codons that differ at two or three positions, so **for a pair of sequences in which no codon differs at more
+than one position it is not computed** (from 0.6). The result is the same bits: nothing that is computed depends
+on the matrix then, and this was checked at 17 significant digits, before against after, on the 999 orthologr
+pairs, the 600 simulated pairs, 4,000 + 3,000 random short pairs, 1,500 random pairs of 30 to 400 codons at
+divergences from 0 to 0.3 per site and the three test sets of `tests/kaks`, for YN and MYN in both flavours and
+both weightings and in both output formats (80 output files per build, byte-identical), with GCC 13 `-O3`,
+Clang 18 `-O3` and, for four of the sets, GCC `-O2 -march=native` (2026-11-13); `tests/test_kaks_yn_shortcut.py`
+repeats the comparison on every platform CI builds, against `--yn-always-pmat` (a testing option that computes
+the matrix regardless). How much it saves depends on how close the sequences are: 141 of the 999 orthologr pairs
+(*A. thaliana* / *A. lyrata*) have no such codon and none of the 600 simulated ones; on the 999 pairs YN took
+about 10 to 20% less CPU time and MYN no measurable amount less (the machine's run-to-run noise was about 10%;
+the pairs concerned are the short and nearly identical ones, which were cheap already), and on the 1,500 random
+pairs, 913 of which have no such codon, YN took 46% and MYN 34% less (best of 9 runs each, `-j 1`). Closely
+related genomes (strains, populations, recent duplicates) are where it pays. The gain comes from threads (`-j`): pairs are
 independent and computed on the thread pool. In a pipeline, Ka/Ks takes a small share of the time (in the orthologr 0.4.3
 profile of 2026-10-29, about 0.5 %); alignment dominates.
 

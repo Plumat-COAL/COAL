@@ -853,6 +853,60 @@ std::string g_lock_raw;   // what this process wrote into the lock it holds (one
 
 }  // namespace
 
+int open_new_file(const std::string& path) {
+    errno = 0;
+    if (COAL_UNLINK(path.c_str()) != 0 && errno != ENOENT) return -1;   // (a symbolic link itself, not its target)
+#ifdef _WIN32
+    return ::_open(path.c_str(), _O_WRONLY | _O_CREAT | _O_EXCL | _O_BINARY, _S_IREAD | _S_IWRITE);
+#else
+    int flags = O_WRONLY | O_CREAT | O_EXCL;
+#ifdef O_NOFOLLOW
+    flags |= O_NOFOLLOW;
+#endif
+#ifdef O_CLOEXEC
+    flags |= O_CLOEXEC;
+#endif
+    return ::open(path.c_str(), flags, 0666);
+#endif
+}
+
+bool write_fd(int fd, const char* data, size_t n) {
+    size_t done = 0;
+    while (done < n) {
+        const size_t chunk = n - done > (1u << 30) ? (1u << 30) : n - done;
+        errno = 0;
+        auto w = COAL_WRITE(fd, data + done, (unsigned)chunk);
+        if (w < 0 && errno == EINTR) continue;
+        if (w <= 0) {
+            if (errno == 0) errno = ENOSPC;
+            return false;
+        }
+        done += (size_t)w;
+    }
+    return true;
+}
+
+bool close_fd_checked(int fd) {
+    errno = 0;
+#ifdef _WIN32
+    return ::_close(fd) == 0;
+#else
+    return ::close(fd) == 0;
+#endif
+}
+
+bool replace_file(const std::string& tmp, const std::string& path) {
+    errno = 0;
+#ifdef _WIN32
+    if (::MoveFileExA(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING) != 0) return true;
+    errno = EACCES;
+    return false;
+#else
+    return ::rename(tmp.c_str(), path.c_str()) == 0;   // (rename(2) replaces a symbolic link, it does not follow it)
+#endif
+}
+
+
 std::string take_output_lock(const std::string& real, const std::string& name) {
     const std::string path = real + ".coal-lock";
     const std::string raw = std::to_string(own_pid()) + " " + host_name() + " " + proc_start(own_pid()) + " " +
@@ -919,6 +973,14 @@ std::string take_output_lock(const std::string& real, const std::string& name) {
         // Test hook: wait between judging the lock stale and replacing it (the window of the race)
         if (const char* ms = test_hook_env("COAL_TEST_LOCK_BEFORE_TAKEOVER_MS"))
             std::this_thread::sleep_for(std::chrono::milliseconds(std::min(std::atoll(ms), 60000LL)));
+        // ... or, without a fixed time: say that this run is in the window (the file <name>.waiting appears) and
+        // stay there until the file <name> exists (at most 60 s)
+        if (const char* go = test_hook_env("COAL_TEST_LOCK_BEFORE_TAKEOVER_UNTIL")) {
+            { std::ofstream mark(std::string(go) + ".waiting"); }
+            std::error_code ec;
+            for (int k = 0; k < 12000 && !fs::exists(go, ec); ++k)
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
 #endif
         const int err = replace_stale_lock(path, cur.raw);   // a lock whose process is gone (or one empty for 2 s)
         if (err) throw CoalError(output_error(name, err), "file_error");

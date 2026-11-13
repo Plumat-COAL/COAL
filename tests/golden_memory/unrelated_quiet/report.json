@@ -1,6 +1,6 @@
 {
  "schema": "coal.report/1",
- "coal_version": "0.5.0",
+ "coal_version": "0.6.0.dev0",
  "source": "coal",
  "engine": "coal-python",
  "command": "coal pep.fasta nuc.fasta -o out.fa",
@@ -8868,5 +8868,5 @@
  "summary_text": [
   "40 sequences of 40 were written to the output but are probably wrong (first: g0: 30 of the 30 codons COAL could check do not match this protein, so this is almost certainly the wrong DNA for it (or the wrong genetic code). COAL still wrote its row, codon by position, as PAL2NAL does: do not trust it. Run COAL with --strict (in the app: 'Refuse probably-wrong genes') to refuse such genes.) Remove them before analysis, or use --strict to refuse such genes."
  ],
- "methods_text": "Fix the warnings first: only 0 of 40 sequences matched their protein exactly, so this alignment is probably not ready to use (see the hints and the messages for each sequence). Methods text for this run as it stands: Codon alignments were built with COAL v0.5.0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 40 sequences, 0 matched their protein exactly; 40 were written to the output but flagged as probably wrong (most likely the wrong DNA, a shifted position or the wrong genetic code); remove them before analysis. Command: coal pep.fasta nuc.fasta -o out.fa"
+ "methods_text": "Fix the warnings first: only 0 of 40 sequences matched their protein exactly, so this alignment is probably not ready to use (see the hints and the messages for each sequence). Methods text for this run as it stands: Codon alignments were built with COAL v0.6.0.dev0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 40 sequences, 0 matched their protein exactly; 40 were written to the output but flagged as probably wrong (most likely the wrong DNA, a shifted position or the wrong genetic code); remove them before analysis. Command: coal pep.fasta nuc.fasta -o out.fa"
 }

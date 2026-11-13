@@ -46,6 +46,10 @@ def engine_binary(cmd, env) -> str | None:
     Python command hands the run to (coal.dispatch: unless COAL_ENGINE=python); None for the Python engine."""
     if Path(str(cmd[0])).name.lower().startswith("coal-cpp"):
         return str(cmd[0])
+    if env.get("COAL_TEST_SHIM_CPP"):
+        # tests/test_cpp_vs_reference.py runs these tests with a `coal` package whose command line is coal-cpp
+        # itself, whatever COAL_ENGINE says (a build without hooks made its resume test fail, not skip)
+        return env["COAL_TEST_SHIM_CPP"]
     if (env.get("COAL_ENGINE") or "auto").strip().lower() == "python":
         return None
     if env.get("COAL_CPP"):

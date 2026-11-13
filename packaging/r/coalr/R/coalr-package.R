@@ -37,9 +37,31 @@
 #' `c(id = "...")`.
 #'
 #' @section Threads and interrupts:
-#' `threads` sets the number of worker threads (default: `getOption("coalr.threads", 1L)`; `0` = one per hardware
-#' thread). Results do not depend on it. Worker threads never call into R; a user interrupt (Ctrl-C, Esc) is
+#' `threads` sets the number of worker threads (default: `getOption("coalr.threads", 1L)`, that is one thread
+#' unless the option is set; `0` = one per hardware thread). The command line's default is the other way round
+#' (`-j 0`, every usable CPU), and so is that of [coal_pipeline_pairs()] / [coal_pipeline_clusters()]
+#' (`threads = 0`), which run the command line's code. Results do not depend on it. Worker threads never call into R; a user interrupt (Ctrl-C, Esc) is
 #' noticed within about 0.1 s plus the time of the pair each thread is working on.
+#'
+#' @section Command line and R arguments:
+#' The R functions take the options of the `coal` command line under these names:
+#'
+#' | `coal` command line | In-process (`coal_dnds_pairs()`, `coal_dnds_clusters()`, `coal_kaks()`) | Through Python (`coal_pipeline_pairs()`, `coal_pipeline_clusters()`) |
+#' |---|---|---|
+#' | `-m`, `--method YN` (repeatable) | `methods = c("YN", "NG")`; `method =` is accepted as well (and is the name in `coal_kaks()`, which also accepts `methods =`) | `methods =` or `method =` |
+#' | `-c`, `--codontable N` | `code = N` | `codontable = N` |
+#' | `-j N` (default 0: one per usable CPU) | `threads = N` (default `getOption("coalr.threads", 1L)`: one thread; `0` = one per hardware thread) | `threads = N` (default `0`, as the command line) |
+#' | `--min-codons N`, `--max-ds X` | `min_codons = N`, `max_ds = X` | `min_codons = N`, `max_ds = X` |
+#' | `--min-identity P` | `min_identity = P` (not in `coal_kaks()`: it has no protein alignment) | `min_identity = P` |
+#' | `--matrix`, `--gap-open`, `--gap-extend`, `--end-gaps`, `--preset`, `--max-cells` | `matrix`, `gap_open`, `gap_extend`, `end_gaps`, `preset`, `max_cells` | the same names |
+#' | `--yn-flavour`, `--yn-weighting 0\|1`, `--comeron-flavour`, `--li-flavour`, `--terminal-stops` | `yn_flavour`, `yn_weighting = FALSE\|TRUE`, `comeron_flavour`, `li_flavour`, `terminal_stops` | the same names (`yn_weighting = 0L` or `1L`) |
+#' | `--keep-alignments` | `keep_alignments = TRUE` (returned as an attribute) | `keep_alignments = TRUE` (files in `out_dir`) |
+#' | `--pairs TSV`, `--clusters TSV` | `pairs =` / `clusters =` (a data frame, or what the function documents) | `pairs = "file"`, `clusters = "file"` |
+#' | `--max-cluster-size`, `--large-clusters`, `--pair-sample`, `--seed` | `max_cluster_size`, `large_clusters`, `pair_sample`, `seed` | the same names |
+#' | `--longest-isoform`, `--gene-map`, `--ortho`, `--aligner`, `--sensitivity`, `--resume`, ... | (no search or isoform handling in process: the pairs or clusters are given) | the option with underscores: `longest_isoform = TRUE`, `gene_map = "file"`, ... |
+#'
+#' The in-process functions return data frames with the columns of the command line's tables; the functions
+#' through Python read the tables `coal pipeline` wrote.
 #'
 #' @keywords internal
 #' @useDynLib coalr, .registration = TRUE

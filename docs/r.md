@@ -28,7 +28,11 @@ Xcode command-line tools on macOS) and `Rcpp`. `reticulate`, `Biostrings` and `t
 For the Python route also:
 
 ```
-pip install coal-align          # the platform wheels include coal-cpp; then DIAMOND: coal pipeline install diamond
+# the platform wheel of a release (it includes coal-cpp; the source package does not, and coal-align is not on
+# PyPI yet): download coal_align-<version>-py3-none-<platform>.whl from
+# https://github.com/plumat-coal/COAL/releases/latest, then
+python -m pip install coal_align-<version>-py3-none-<platform>.whl
+coal pipeline install diamond clustalo          # DIAMOND, and Clustal Omega for clusters, into COAL's cache
 ```
 
 ```r
@@ -141,9 +145,34 @@ raised; a run that could not be done (exit code 1: an unreadable input, a missin
 pipeline's message. Without reticulate or a Python that has `coal-align`, both functions stop with a message that
 says what to install; nothing else in the package needs Python.
 
+## Command line and R arguments
+
+The R functions take the options of the `coal` command line under these names (the same table is in `?coalr`):
+
+| `coal` command line | In process (`coal_dnds_pairs()`, `coal_dnds_clusters()`, `coal_kaks()`) | Through Python (`coal_pipeline_pairs()`, `coal_pipeline_clusters()`) |
+|---|---|---|
+| `-m`, `--method YN` (repeatable) | `methods = c("YN", "NG")`; `method =` is accepted as well (it is the name in `coal_kaks()`, which also accepts `methods =`). Giving both with different values is an error | `methods =` or `method =` |
+| `-c`, `--codontable N` | `code = N` | `codontable = N` |
+| `-j N` (default 0: one per usable CPU) | `threads = N` (default `getOption("coalr.threads", 1L)`: one thread; `0` = one per hardware thread) | `threads = N` (default `0`, as the command line) |
+| `--min-codons N`, `--max-ds X` | `min_codons = N`, `max_ds = X` | `min_codons = N`, `max_ds = X` |
+| `--min-identity P` | `min_identity = P` (not in `coal_kaks()`: it has no protein alignment) | `min_identity = P` |
+| `--matrix`, `--gap-open`, `--gap-extend`, `--end-gaps`, `--preset`, `--max-cells` | `matrix`, `gap_open`, `gap_extend`, `end_gaps`, `preset`, `max_cells` | the same names |
+| `--yn-flavour`, `--yn-weighting 0\|1`, `--comeron-flavour`, `--li-flavour`, `--terminal-stops` | `yn_flavour`, `yn_weighting = FALSE\|TRUE`, `comeron_flavour`, `li_flavour`, `terminal_stops` | the same names (`yn_weighting = 0L` or `1L`) |
+| `--keep-alignments` | `keep_alignments = TRUE` (returned as an attribute) | `keep_alignments = TRUE` (files in `out_dir`) |
+| `--pairs TSV`, `--clusters TSV` | `pairs =` / `clusters =` (a data frame) | `pairs = "file"`, `clusters = "file"` |
+| `--max-cluster-size`, `--large-clusters`, `--pair-sample`, `--seed` | `max_cluster_size`, `large_clusters`, `pair_sample`, `seed` | the same names |
+| `--longest-isoform`, `--gene-map`, `--ortho`, `--aligner`, `--sensitivity`, `--resume`, ... | none: there is no search and no isoform handling in process, the pairs or clusters are given | the option with underscores: `longest_isoform = TRUE`, `gene_map = "file"`, ... |
+
+**The vignette** `vignette("from-two-cds-files-to-dnds", package = "coalr")` walks through a small example that
+ships with the package (`inst/extdata`, the files of `examples/dnds`): reading two CDS files, the pairs,
+`coal_dnds_pairs()`, the three flags and filtering, the alignments behind a pair, one record per gene, other
+genetic codes, and what to cite. It runs in seconds, in process, without network or external programs, and is
+built by `R CMD check`.
+
 ## Threads, interrupts, errors
 
-- `threads` (default `getOption("coalr.threads", 1L)`; `0` = one per hardware thread). Results are identical for
+- `threads` (default `getOption("coalr.threads", 1L)`, one thread unless the option is set; `0` = one per
+  hardware thread; the Python route's default is `0`, as `coal pipeline -j 0`). Results are identical for
   every value.
 - Worker threads only see C++ copies of the inputs. R's API is used on the calling thread only; R objects are
   built after the workers have been joined.
@@ -177,7 +206,10 @@ stored values of orthologr 0.4.3's gestimator code and of `seqinr::kaks()` for 1
 1e-12), `seqinr::kaks()` itself when seqinr is installed, the default flavours, names and arguments, and the
 three entry points. With them the package has 38 tests and 1,005 expectations (41 tests and 1,047 expectations on
 2026-11-13, after the status `not_converged` and its tests; `R CMD check --as-cran --no-manual` again without
-ERROR or WARNING in a UTF-8 locale).
+ERROR or WARNING in a UTF-8 locale). After the second review of 2026-11-13 (`min_identity`, `method` /
+`methods`, the shipped example, the vignette): 46 tests and 1,096 expectations, and `R CMD check --as-cran
+--no-manual` builds the vignette, with 0 errors and no warning but the checking machine's missing `en_US.UTF-8`
+locale.
 
 Not tested by hand: Windows and macOS (the R package was built and checked on Linux only; from 2026-11-13 the
 workflow `.github/workflows/r-package.yml` runs `R CMD check --as-cran --no-manual` on Linux (R release and the

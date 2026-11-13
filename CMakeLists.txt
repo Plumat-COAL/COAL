@@ -6,7 +6,11 @@ cmake_minimum_required(VERSION 3.16)
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND (NOT DEFINED CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL ""))
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type (Release, Debug, RelWithDebInfo, MinSizeRel)")
 endif()
-project(coal_cpp VERSION 0.5.0 LANGUAGES CXX)
+project(coal_cpp VERSION 0.6.0 LANGUAGES CXX)
+# The version the programs and <coal/version.hpp> report: the one of src/coal/__init__.py. project(VERSION) takes
+# digits only, so a development tree (0.6.0.dev0) or a release candidate has the full string here
+# (tests/test_feature_combinations.py checks both; scripts/release_version.py).
+set(COAL_VERSION_FULL "0.6.0.dev0")
 
 # coal-cpp: C++17, standard library only. Builds with MSVC, Clang and GCC (Windows, macOS, Linux).
 #   cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release

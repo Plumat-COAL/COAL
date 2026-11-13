@@ -1,6 +1,15 @@
-# coalr 0.5.0
+# coalr 0.6.0 (in development: 0.6.0.9000)
 
-First version. In-process bindings (Rcpp) to COAL 0.5's C++ core:
+First version. In-process bindings (Rcpp) to the C++ core of COAL 0.6:
+
+- A vignette, "From two CDS files to dN/dS" (`vignette("from-two-cds-files-to-dnds")`), on the example that
+  ships in `inst/extdata`; it runs in process, in seconds.
+- `min_identity` in `coal_dnds_pairs()` and `coal_dnds_clusters()`: the third flag next to `min_codons` and
+  `max_ds` (`coal pipeline --min-identity`), for pairs whose protein identity is below a percentage.
+- `method` and `methods` name the same argument and both are accepted by `coal_dnds_pairs()`,
+  `coal_dnds_clusters()`, `coal_kaks()`, `coal_pipeline_pairs()` and `coal_pipeline_clusters()` (a `method =`
+  given to the pipeline functions used to be ignored). `?coalr` has a table of the command line's options and
+  the R arguments; it also states the thread defaults (one thread in process, all CPUs through Python).
 
 - `coal_dnds_pairs()`: CDS of ortholog pairs -> protein alignment -> codon alignment -> dN, dS, dN/dS; the columns
   of `coal pipeline pairs`' `dnds.tsv`.

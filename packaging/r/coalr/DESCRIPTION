@@ -1,7 +1,7 @@
 Package: coalr
 Type: Package
 Title: Fast Codon Alignment and dN/dS (Ka/Ks) with the 'COAL' C++ Engine
-Version: 0.5.0
+Version: 0.6.0.9000
 Authors@R: c(
     person("Chloe", "Newton", email = "chloenewton2323@gmail.com", role = c("aut", "cre", "cph")),
     person("Keanu", "Murati", role = c("aut", "cph")),
@@ -39,7 +39,8 @@ Encoding: UTF-8
 Depends: R (>= 4.0.0)
 Imports: Rcpp (>= 1.0.7), utils
 LinkingTo: Rcpp
-Suggests: testthat (>= 3.0.0), reticulate, Biostrings, seqinr
+Suggests: testthat (>= 3.0.0), reticulate, Biostrings, seqinr, knitr, rmarkdown
+VignetteBuilder: knitr
 SystemRequirements: C++17
 NeedsCompilation: yes
 Config/testthat/edition: 3

@@ -8,6 +8,13 @@ coal-align), apps/coal-app/pyproject.toml (the app, coal-align-app) together wit
 pins (coal-align==<version>), and the C++ engine's VERSION in cpp/src/main.cpp and cpp/src/report.cpp (`coal`
 hands work to a `coal-cpp` of its own version only, so a stale one would silently never be used). So a release can
 never ship files whose names, metadata, dependency, `coal --version` and `coal-cpp --version` disagree. Prints `prerelease=true|false` too with --github-output.
+
+Between releases the source carries a development version, X.Y.Z.devN (PEP 440: 0.6.0.dev0 is the tree that becomes
+0.6.0), in those six places, so that no build of the development tree reports the version of a published release.
+A development version cannot be tagged (TAG_RE has no .dev): the release commit sets X.Y.Z everywhere first. The
+places that take digits only or describe the release carry the base version X.Y.Z (base_version): CMake's
+project(VERSION), CITATION.cff, the website's version spans; coalr's DESCRIPTION has R's form of it
+(r_version: 0.6.0.dev0 -> 0.6.0.9000). tests/test_feature_combinations.py checks every place.
 """
 import os
 import re
@@ -18,6 +25,20 @@ TAG_RE = re.compile(r"^v(\d+(?:\.\d+){1,2}(?:(?:a|b|rc)\d+)?)$")
 
 
 APP_PYPROJECT = os.path.join("apps", "coal-app", "pyproject.toml")
+DEV_RE = re.compile(r"^(\d+(?:\.\d+){1,2})\.dev(\d+)$")
+
+
+def base_version(version):
+    """The release a version belongs to, digits only: 0.6.0.dev0 -> 0.6.0, 0.5.0rc1 -> 0.5.0, 0.5.0 -> 0.5.0."""
+    m = DEV_RE.match(version)
+    return m.group(1) if m else re.sub(r"(a|b|rc)\d+$", "", version)
+
+
+def r_version(version):
+    """The version of the R package coalr for a COAL version: the same, or for a development version R's
+    convention for one (a fourth component from 9000): 0.6.0.dev0 -> 0.6.0.9000, 0.6.0.dev3 -> 0.6.0.9003."""
+    m = DEV_RE.match(version)
+    return f"{m.group(1)}.{9000 + int(m.group(2))}" if m else version
 
 
 def source_versions(root=ROOT):
@@ -61,6 +82,11 @@ def check(tag, root=ROOT):
     app, pin = app_versions(root)
     cpp = cpp_versions(root)
     if not (version == init == proj == app == pin) or any(c != version for c in cpp):
+        if DEV_RE.match(init or ""):
+            raise ValueError(f"the source is the development version {init}: a release is tagged from a commit that "
+                             f"sets {base_version(init)} (tag {tag} says {version}) in all six places (bump all six: "
+                             f"src/coal/__init__.py, pyproject.toml, {APP_PYPROJECT.replace(os.sep, '/')} twice, "
+                             + ", ".join(rel.replace(os.sep, "/") for rel in CPP_SOURCES) + ")")
         cpp_says = ", ".join(f"{rel.replace(os.sep, '/')} says {c}" for rel, c in zip(CPP_SOURCES, cpp))
         raise ValueError(f"tag {tag} says {version}, but src/coal/__init__.py says {init}, pyproject.toml says "
                          f"{proj}, {APP_PYPROJECT.replace(os.sep, '/')} says {app} and pins coal-align=={pin}, "

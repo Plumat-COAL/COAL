@@ -935,6 +935,25 @@ struct Diffs {
     double sts1 = 0, sts2 = 0, stv = 0, nts1 = 0, nts2 = 0, ntv = 0, snp = 0;
 };
 
+// True when some compared codon pair differs at two or three positions: only those pairs have several pathways,
+// and only the pathway weights read P(t) (count_diffs below). For a pair of sequences without such a codon the
+// transition-probability matrix is never read, so run_yn and run_myn do not compute it: its 61 x 61
+// eigendecomposition per round is most of the time of YN and MYN. The results are the same bits (nothing that is
+// computed depends on the matrix then); tests/test_kaks.py compares them, on every platform, with the matrix
+// computed all the same (Options::yn_always_pmat, `--yn-always-pmat`).
+bool needs_pathway_weights(const Prepared& p) {
+    const size_t n = p.c1.size();
+    for (size_t h = 0; h < n; ++h) {
+        const int c0 = p.c1[h], c1 = p.c2[h];
+        if (c0 == c1) continue;
+        int nd = 0;
+        for (int k = 0; k < 3; ++k)
+            if (base_at(c0, k) != base_at(c1, k)) ++nd;
+        if (nd >= 2) return true;
+    }
+    return false;
+}
+
 Diffs count_diffs(const Prepared& p, const GeneticCode& g, const PMat* P, bool myn) {
     Diffs D;
     const size_t n = p.c1.size();
@@ -1087,9 +1106,10 @@ Result run_yn(const Prepared& p, const GeneticCode& g, const Options& opt, Resul
     F84Out os, on;
     Diffs D;
     int ir;
+    const bool weights = P && (opt.yn_always_pmat || needs_pathway_weights(p));   // (else P(t) is never read)
     for (ir = 0; ir < nround; ++ir) {
-        if (P) pmat_codon(g, pi, kappa, kappa, omega, t, *P);
-        D = count_diffs(p, g, P, false);
+        if (weights) pmat_codon(g, pi, kappa, kappa, omega, t, *P);
+        D = count_diffs(p, g, weights ? P : nullptr, false);
         const double Sdts = D.sts1 + D.sts2, Sdtv = D.stv, Ndts = D.nts1 + D.nts2, Ndtv = D.ntv;
         if (hasS) os = distance_f84(S, Sdts / S, Sdtv / S, fbS, cap, capset);
         if (hasN) on = distance_f84(N, Ndts / N, Ndtv / N, fbN, cap, capset);
@@ -1200,7 +1220,7 @@ F84Out distance_tn93(double n, double P1, double P2, double Q, const double pi4[
     return o;
 }
 
-Result run_myn(const Prepared& p, const GeneticCode& g, Result r) {
+Result run_myn(const Prepared& p, const GeneticCode& g, const Options& opt, Result r) {
     double pi[64];
     f3x4(p, g, pi);
     double F[2][16];
@@ -1252,9 +1272,10 @@ Result run_myn(const Prepared& p, const GeneticCode& g, Result r) {
     F84Out os, on;
     Diffs D;
     int ir;
+    const bool weights = opt.yn_always_pmat || needs_pathway_weights(p);   // (else P(t) is never read)
     for (ir = 0; ir < nround; ++ir) {
-        pmat_codon(g, pi, ktc, kag, omega, t, P);
-        D = count_diffs(p, g, &P, true);
+        if (weights) pmat_codon(g, pi, ktc, kag, omega, t, P);
+        D = count_diffs(p, g, weights ? &P : nullptr, true);   // (without weights no codon has several pathways)
         double Sd = D.sts1 + D.sts2 + D.stv, Nd = D.nts1 + D.nts2 + D.ntv;
         double s1 = D.sts1, s2 = D.sts2, sv = D.stv, n1 = D.nts1, n2 = D.nts2, nv = D.ntv;
         if (hasS && Sd > S) {
@@ -1554,7 +1575,7 @@ Result compute(const Prepared& p, Method m, const GeneticCode& code, const Optio
         case Method::LPB:
         case Method::MLPB: r = run_lwl(p, code, m, r); break;
         case Method::YN: r = run_yn(p, code, opt, r); break;
-        case Method::MYN: r = run_myn(p, code, r); break;
+        case Method::MYN: r = run_myn(p, code, opt, r); break;
         case Method::Comeron:
         case Method::Li: break;  // handled above
     }

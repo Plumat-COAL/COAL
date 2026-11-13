@@ -79,6 +79,10 @@ struct Options {
     // YN00 pathway weighting (iteration with P(t)). KaKs_Calculator always weights; PAML yn00's weighting = 1.
     // false = equal weighting of pathways in one round (PAML yn00's default control file, weighting = 0).
     bool yn_weighting = true;
+    // Testing only: compute the transition-probability matrix P(t) of YN / MYN in every round, also for a pair in
+    // which no codon differs at two or three positions, where nothing reads it (kaks.cpp needs_pathway_weights).
+    // The results are the same bits either way; the tests compare the two (`--yn-always-pmat`).
+    bool yn_always_pmat = false;
     ComeronFlavour comeron_flavour = ComeronFlavour::coal;
     LiFlavour li_flavour = LiFlavour::coal;
 };

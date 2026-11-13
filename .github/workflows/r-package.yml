@@ -81,8 +81,12 @@ jobs:
         with:
           r-version: ${{ matrix.r }}
           use-public-rspm: true
-      # Imports, LinkingTo and Suggests of packaging/r/coalr/DESCRIPTION (Rcpp, testthat, reticulate, seqinr,
-      # Biostrings from Bioconductor) and rcmdcheck, installed by pak; cached by the action per system and R version.
+      # The vignette (vignettes/from-two-cds-files-to-dnds.Rmd) is built by R CMD build and again by the check:
+      # rmarkdown needs pandoc, which the runners do not all have.
+      - uses: r-lib/actions/setup-pandoc@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05  # v2.14.0
+      # Imports, LinkingTo and Suggests of packaging/r/coalr/DESCRIPTION (Rcpp, testthat, reticulate, seqinr, knitr,
+      # rmarkdown, Biostrings from Bioconductor) and rcmdcheck, installed by pak; cached by the action per system and
+      # R version.
       - uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05  # v2.14.0
         timeout-minutes: 20
         with:
