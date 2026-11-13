@@ -491,8 +491,9 @@ about it, what was measured, and what is not guaranteed.
 **Guaranteed by the source.**
 
 - No fused multiply-add and no fast-math: the engine is compiled without floating-point contraction on every
-  compiler (a `#pragma` in `kaks.cpp` for Clang, GCC and MSVC, and `-ffp-contract=off` / `/fp:precise` in
-  `CMakeLists.txt`). Clang contracts `a * b + c` by default, and arm64 always has the instruction, so without
+  compiler (a `#pragma` in `kaks.cpp`, `kaks_comeron.cpp` and `kaks_li.cpp` for Clang, GCC and MSVC, and
+  `-ffp-contract=off` / `/fp:precise` in `CMakeLists.txt`; coalr's copies of the three files carry the pragma,
+  and so does its `coalr.cpp`, which computes the quartiles of the cluster summary). Clang contracts `a * b + c` by default, and arm64 always has the instruction, so without
   this a macOS build and a Linux build would differ in the last digits of nearly every YN / MYN value.
 - No dependence on the number of threads, on the order of the pairs, or on the locale.
 - An iteration that did not converge prints no value (difference 12).
@@ -503,6 +504,19 @@ builds without any build-system flag (the pragma alone, on FMA-capable targets):
 byte-identical on the 999 orthologr pairs (and on a second, independent alignment of the same genes), the 600
 simulated pairs, the edge cases and both random sets (about 67,000 rows; `coal kaks` at 6 and 15 digits, `coal
 dnds` at 8 digits, and for all but the first set also at 15 digits and with `--yn-flavour paml`).
+
+**Comeron and Li** were measured apart (2026-11-13, x86-64 Linux, glibc 2.39): GCC 13.3 `-O3`, `-O3
+-march=x86-64-v3` and `-O0`, Clang 18.1 `-O3` and `-O3 -march=x86-64-v3`, and two builds without any build-system
+flag on an FMA target (GCC `-O2 -march=x86-64-v3 -ffp-contract=fast`, Clang `-O2 -march=x86-64-v3`: the pragma
+alone, as R compiles coalr). On the 14,153 pairs of "Validation of Comeron and Li", both methods, both flavours,
+`coal dnds` at 17 and at 8 digits and `coal kaks` at 15 digits (54 outputs, 169,828 rows per build), the seven
+builds print the same bytes: 0 rows differ. So the statement of that section (every number is the same double as
+gestimator's and `seqinr::kaks`'s) holds for builds that target FMA as well, on this C library. It did not before
+the pragma: the same two FMA builds with the pragma removed differ from the default build in 3,045 of the 28,306
+rows of the reference flavours at 17 digits (534 Comeron, 2,511 Li; in the last one or two digits) and in none at
+8 digits. Both methods call `log` and `sqrt`, so the next paragraph applies to them too: with another C library
+the last bit of a value can differ from the reference's, which is why the tests compare to a relative 1e-12 and
+not bit for bit.
 
 **Not guaranteed: the C library.** `exp`, `log` and `hypot` are not correctly rounded in every C library, and
 glibc (which changed them between 2.39 and 2.43), Apple's libm and Microsoft's UCRT return a different last bit
@@ -685,7 +699,9 @@ Every number that a reference returns is the same double in COAL (no value diffe
 tolerance of the tests is not used on this platform), dN/dS and the standard errors (against the square roots of
 seqinr's variances) included; every 999 and 9.999999 is `NA`; the two pairs that both references refuse (a
 length that is not a multiple of 3) have status `error`. gestimator's Kimura rule (Ba = 0) decided 248 of the
-random and hand-made rows. A platform that contracts floating-point operations (FMA) can differ in the last bit.
+random and hand-made rows. The two files are compiled without floating-point contraction, so a build for a
+target with FMA (`-march=x86-64-v3`, arm64) gives the same bytes; a C library with another `log` can differ in
+the last bit ("Platform reproducibility" has the counts for both).
 
 **What the default flavours change** (default against reference flavour, same input):
 

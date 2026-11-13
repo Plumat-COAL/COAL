@@ -7,6 +7,17 @@
 //   * The main thread polls for a user interrupt (Ctrl-C / Esc) about every 100 ms while workers run, stops them
 //     after the item each is working on, and only then signals the interrupt.
 //   * Nothing is written to files, stdout or stderr, and no process is started.
+
+// No floating-point contraction here either (as in coal/kaks.cpp, which says why): the quartiles of the cluster
+// summary are interpolated with a * b + c, and R's Makeconf decides the flags of this file.
+#if defined(__clang__)
+#pragma STDC FP_CONTRACT OFF
+#elif defined(__GNUC__)
+#pragma GCC optimize("fp-contract=off")
+#elif defined(_MSC_VER)
+#pragma fp_contract(off)
+#endif
+
 #include <Rcpp.h>
 
 #include <algorithm>

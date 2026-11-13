@@ -151,7 +151,7 @@ says what to install; nothing else in the package needs Python.
   stopped and joined before the interrupt is signalled.
 - No C++ exception reaches R as a crash: bad data is a row's `status`/`note`; a bad argument is an R error.
 - Reproducibility: the package compiles the engine without floating-point contraction (a pragma in the vendored
-  `kaks.cpp`), whatever flags R's `Makeconf` has, so results do not depend on whether the CPU has FMA. The last
+  `kaks.cpp`, `kaks_comeron.cpp` and `kaks_li.cpp`, and in `coalr.cpp`), whatever flags R's `Makeconf` has, so results do not depend on whether the CPU has FMA. The last
   digits of 15 can still differ between C libraries; [kaks.md](kaks.md#platform-reproducibility).
 - Memory: the inputs stay in R; the engine copies one batch (at most 1,024 groups, 16 Mb of CDS or 32,768 pairs)
   at a time, plus one alignment table per thread (`max_cells`).

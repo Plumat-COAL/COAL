@@ -35,6 +35,13 @@
   (other site classes and pathway weights; the numbers differ). libsequence's count for codons that differ at
   two positions (it passes its arguments in another order than its function takes them) is kept in both
   flavours and documented.
+  With the merge of the review fixes of 2026-11-13: `kaks_comeron.cpp` and `kaks_li.cpp` are compiled without
+  floating-point contraction like `kaks.cpp` (pragma and build flags; the vendored copies in coalr too), so the
+  two methods print the same bytes whether or not the target has FMA: GCC 13 and Clang 18, default and
+  `-march=x86-64-v3`, with and without the build-system flag, `-O0`: 0 of 169,828 rows differ on the 14,153
+  validation pairs, where 3,045 of 28,306 reference-flavour rows differed at 17 digits with contraction
+  (docs/kaks.md, "Platform reproducibility"). The status `not_converged` (YN and MYN only) is in every status
+  list, count and summary that Comeron and Li rows go through; they never have it.
 
 Found by the independent review of 2026-11-12 of the Ka/Ks engine, the pipeline and the R package (all in code
 not yet released):

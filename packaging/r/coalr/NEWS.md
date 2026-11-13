@@ -27,6 +27,8 @@ First version. In-process bindings (Rcpp) to COAL 0.5's C++ core:
   `dNdS`, the SEs, `Nd`, `Sd` are `NA`; `note` keeps the last round). The values of such a last round differ
   between platforms in the third digit (compiler, C library), so they are not a result. `coal_dnds_clusters()`'s
   summary counts these pairs in the new column `n_not_converged`, not in `n_ok`.
-- The engine is compiled without floating-point contraction (no fused multiply-add) on every compiler.
+- The engine is compiled without floating-point contraction (no fused multiply-add) on every compiler: `Comeron`
+  and `Li` included, and the quartiles of `coal_dnds_clusters()`'s summary. A build for a CPU with FMA (arm64,
+  `-march=x86-64-v3`) gives the same bytes as one without (COAL's docs/kaks.md, "Platform reproducibility").
 - Ka/Ks: YN and MYN estimate dS (dN) when there are no nonsynonymous (synonymous) sites; MYN no longer returns
   `saturated` for pairs whose TN93 term is 0/0 (COAL's docs/kaks.md, differences 8 to 10).
