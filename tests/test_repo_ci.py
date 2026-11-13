@@ -391,7 +391,11 @@ class TestCiJobs(unittest.TestCase):
         self.assertIn('COAL_REQUIRE_CPP: "1"', step)
         self.assertIn('COAL_REQUIRE_ALIGN: "1"', step)
         for mod in ("tests.test_kaks", "tests.test_kaks_comeron_li", "tests.test_align", "tests.test_msa",
-                    "tests.test_dnds_pipeline", "tests.test_short_options", "tests.test_output_lock"):
+                    "tests.test_dnds_pipeline", "tests.test_short_options", "tests.test_output_lock",
+                    "tests.test_pair_table", "tests.test_kaks_cli_inputs", "tests.test_kaks_yn_shortcut",
+                    "tests.test_dnds_flags", "tests.test_pipeline_order", "tests.test_pipeline_robustness",
+                    "tests.test_pipeline_provenance", "tests.test_pipeline_isoforms", "tests.test_citations",
+                    "tests.test_cli_commands", "tests.test_examples"):
             self.assertRegex(step, rf"{re.escape(mod)}(\s|$)", mod)
             self.assertTrue(os.path.isfile(os.path.join(ROOT, "tests", mod.split(".")[1] + ".py")), mod)
         diamond = re.search(r"      - name: Install DIAMOND \(pinned release.*?\n(.*?)(?=\n      (- name:|#))", cpp, re.S)

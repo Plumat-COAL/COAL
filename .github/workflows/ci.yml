@@ -333,14 +333,20 @@ jobs:
         # PAML goldens, which needs the binary and so skips in the Python jobs. tests.test_kaks_comeron_li: the
         # methods Comeron and Li against the stored references of gestimator and seqinr::kaks.
         # tests.test_short_options: attached option values in the small command lines. tests.test_output_lock:
-        # the C++ engine's -o lock (race loop, Python and C++ honouring each other's locks).
+        # the C++ engine's -o lock (race loop, Python and C++ honouring each other's locks). The modules of the
+        # second and third line (the pair-table header, inputs that cannot work, the YN shortcut against the full
+        # computation, the flags, order invariance, robustness, provenance, isoforms, citations, the command list
+        # and the dnds example) need the binary for most of their tests too.
         shell: bash
         env:
           COAL_REQUIRE_ALIGN: "1"
           COAL_REQUIRE_CPP: "1"
         run: |
           python -m unittest -v tests.test_kaks tests.test_kaks_comeron_li tests.test_align tests.test_msa \
-            tests.test_dnds_pipeline tests.test_short_options tests.test_output_lock
+            tests.test_dnds_pipeline tests.test_short_options tests.test_output_lock \
+            tests.test_pair_table tests.test_kaks_cli_inputs tests.test_kaks_yn_shortcut tests.test_dnds_flags \
+            tests.test_pipeline_order tests.test_pipeline_robustness tests.test_pipeline_provenance \
+            tests.test_pipeline_isoforms tests.test_citations tests.test_cli_commands tests.test_examples
       # The release's Linux wheels are built inside the manylinux_2_28 container (GCC 14, -Werror): build there on
       # every change too, so a warning that only that compiler raises fails CI, not the release (v0.5.0rc1 did).
       - name: Build inside the manylinux_2_28 container, as the release does (Linux)
