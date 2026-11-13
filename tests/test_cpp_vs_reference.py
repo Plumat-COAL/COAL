@@ -219,7 +219,7 @@ def build_shim(tmp: Path) -> Path:
                  "CHANGELOG.md", "apps"):
         if (ref_root / name).exists():
             _link(ref_root / name, tmp / name)
-    for m in REF_TEST_MODULES + ("report_vs_app",):
+    for m in REF_TEST_MODULES + ("report_vs_app", "cpp_hooks"):   # (cpp_hooks: imported by the modules that pause runs)
         (tmp / "tests" / f"{m}.py").write_bytes((ref_root / "tests" / f"{m}.py").read_bytes())
     return tmp / "tests"
 
