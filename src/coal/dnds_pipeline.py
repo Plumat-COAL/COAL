@@ -60,7 +60,11 @@ __all__ = ["run_pairs", "run_clusters", "main", "PipelineResult", "PipelineError
            "install_diamond", "codon_dnds", "summarise", "PAIR_COLUMNS", "SUMMARY_COLUMNS", "SCHEMA"]
 
 SCHEMA = "coal.pipeline/1"
-DIAMOND_VERSION = "2.2.8"   # the version install_diamond() fetches; any DIAMOND >= 2.1 on PATH is used as it is
+DIAMOND_VERSION = "2.2.8"   # the version install_diamond() fetches and the one COAL is tested with
+# The oldest DIAMOND the pipeline runs: 2.1.0 is the first release with `diamond deepclust` (cluster mode without
+# --clusters stops with an older one; pair mode only warns: its blastp options are older than that, but no older
+# version has been tested). Ubuntu 22.04's package is 2.0.14.
+DIAMOND_MIN_VERSION = (2, 1, 0)
 # KaKs_Calculator's order, then the two methods it does not have (docs/kaks.md): the order of the rows
 METHODS = ("NG", "LWL", "MLWL", "LPB", "MLPB", "YN", "MYN", "Comeron", "Li")
 _METHOD_NAMES = {**{m.upper(): m for m in METHODS}, "C95": "Comeron"}
@@ -93,7 +97,7 @@ _EXE = ".exe" if os.name == "nt" else ""
 _RUN_OUTPUTS = ("dnds.tsv", "dnds.tsv.tmp", "dnds.kaks", "codon_alignments.fasta", "protein_alignments.fasta",
                 "cluster_summary.tsv",
                 "cluster_summary.tsv.tmp", "genes.tsv", "orthologs.tsv", "unpaired.tsv", "clusters.tsv",
-                "realign.tsv", "realign.tsv.body", "failed.tsv", "report.json")
+                "realign.tsv", "realign.tsv.body", "failed.tsv", "report.json", "report.json.tmp")
 
 
 class _Terminated(SystemExit):
@@ -138,6 +142,21 @@ def _diamond_version(exe: str) -> str:
         return ""
     words = (r.stdout or r.stderr).split()
     return words[-1] if r.returncode == 0 and "diamond" in (r.stdout or r.stderr).lower() and words else ""
+
+
+def _version_tuple(text: str) -> tuple[int, ...] | None:
+    """'2.1.0' -> (2, 1, 0); 'v2.0.14' -> (2, 0, 14); None when the text does not start with numbers."""
+    nums = []
+    for part in text.strip().lstrip("vV").split("."):
+        digits = ""
+        for ch in part:
+            if not ch.isdigit():
+                break
+            digits += ch
+        if not digits:
+            break
+        nums.append(int(digits))
+    return tuple(nums) if nums else None
 
 
 _DIAMOND_ASSETS = {("Linux", "x86_64"): "diamond-linux64.tar.gz", ("Darwin", "x86_64"): "diamond-macos.tar.gz",
@@ -462,6 +481,10 @@ class _Run:
         self.t0 = time.time()
         self.quiet = a.quiet
         self.jobs = a.jobs if a.jobs and a.jobs > 0 else (os.cpu_count() or 1)
+        # What DIAMOND and the aligners are given: never more than the CPUs of this machine (`-j 5000` made
+        # DIAMOND reserve memory for 5,000 threads and be killed). The engine takes -j as it is.
+        self.threads = max(1, min(self.jobs, os.cpu_count() or self.jobs))
+        self.jobs_clamped = self.threads != self.jobs
         self.stages: list[dict] = []
         self.failures: list[dict] = []
         self.n_failures = 0
@@ -478,6 +501,8 @@ class _Run:
         self._earlier: tuple[set, set] = (set(), set())
         self.pairs_in_place = False   # --pairs is DIR/orthologs.tsv itself: read, not written again
         self._engine = None     # the running coal-cpp codon-dnds (killed if the run is interrupted)
+        self._plain: dict[str, str] = {}   # a gzip-compressed input -> its decompressed copy in work/inputs
+        self.notes: list[str] = []         # warnings of the run, also in the report
 
     # -- set-up
     def start(self) -> None:
@@ -517,6 +542,76 @@ class _Run:
         self.outputs["failed"] = os.path.join(self.out, "failed.tsv")
         self._failed_fh = open(self.outputs["failed"], "w", encoding="utf-8", errors="backslashreplace", newline="\n")
         self._failed_fh.write("\t".join(FAILED_COLUMNS) + "\n")
+        if self.jobs_clamped:
+            self.warn(f"-j {self.jobs} is more than the {self.threads} CPU(s) of this machine: DIAMOND and the "
+                      f"aligners are run with {self.threads} thread(s)")
+        self._same_file_warning()
+        self._gunzip_inputs()
+
+    def warn(self, text: str) -> None:
+        """One warning line on stderr (not with -q), kept for the report's `warnings`."""
+        self.notes.append(text)
+        self.say(f"warning: {text}")
+
+    def _same_file_warning(self) -> None:
+        a = self.a
+        if self.mode != "pairs":
+            return
+        same = False
+        try:
+            same = os.path.samefile(a.query, a.subject)
+        except OSError:
+            pass
+        if same:
+            self.warn(f"--query and --subject are the same file ({a.query}): every gene's best hit is itself, so "
+                      "the pairs are self-pairs with dN = dS = 0. For paralogs within one genome use `coal pipeline "
+                      "clusters`")
+
+    def _gunzip_inputs(self) -> None:
+        """A gzip-compressed input (found by its first two bytes, whatever its name) is decompressed into
+        work/inputs/ and read from there: coal-cpp, DIAMOND's makedb aside, reads plain text. The copy of an
+        earlier run is reused when the compressed file has not changed (so --resume can reuse the stages)."""
+        from .cli import gunzip_to, is_gzip
+        todo = [(opt, p) for opt, p in self._inputs if opt != "--diamond" and os.path.isfile(p) and is_gzip(p)]
+        if not todo:
+            return
+        d = self.wpath("inputs")
+        os.makedirs(d, exist_ok=True)
+        record_path = os.path.join(d, "sources.json")
+        try:
+            with open(record_path, encoding="utf-8", errors="backslashreplace") as fh:
+                record = json.load(fh)
+        except (OSError, ValueError):
+            record = {}
+        t = time.perf_counter()
+        n_bytes = 0
+        for k, (opt, p) in enumerate(todo):
+            name = os.path.basename(p)
+            name = name[:-3] if name.lower().endswith(".gz") and len(name) > 3 else name + ".txt"
+            dst = os.path.join(d, f"{k}_{name}")
+            st = os.stat(p)
+            sig = [os.path.abspath(p), st.st_size, st.st_mtime_ns]
+            if not (record.get(dst) == sig and os.path.isfile(dst)):
+                try:
+                    gunzip_to(p, dst)
+                except ValueError as e:
+                    raise PipelineError(f"{opt}: {e}") from None
+                record[dst] = sig
+                # the copy keeps the source's times, so an unchanged input gives the same --resume signature
+                os.utime(dst, ns=(st.st_atime_ns, st.st_mtime_ns))
+            self._plain[os.path.abspath(p)] = dst
+            n_bytes += os.path.getsize(dst)
+        tmp = record_path + ".tmp"
+        with open(tmp, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as fh:
+            json.dump(record, fh)
+        os.replace(tmp, record_path)
+        self.stages.append({"name": "decompress_inputs", "seconds": round(time.perf_counter() - t, 3),
+                            "cached": False, "files": len(todo), "bytes": n_bytes})
+        self.say(f"{len(todo)} gzip-compressed input file(s) decompressed into {d}")
+
+    def plain(self, path):
+        """The file to read for an input path: itself, or its decompressed copy."""
+        return self._plain.get(os.path.abspath(os.fspath(path)), os.fspath(path))
 
     # -- the folder: this run's inputs, what it will write, what an earlier run wrote
     def _input_paths(self) -> list[tuple[str, str]]:
@@ -548,7 +643,7 @@ class _Run:
         a = self.a
         names = ["failed.tsv", "genes.tsv", "dnds.tsv", "dnds.tsv.tmp"]
         if not a.report:
-            names.append("report.json")
+            names += ["report.json", "report.json.tmp"]
         if a.kaks_format:
             names.append("dnds.kaks")
         if self.mode == "pairs":
@@ -755,7 +850,7 @@ class _Run:
             except OSError as e:
                 raise PipelineError(f"{what}: could not start {cmd[0]} ({e.strerror or e})") from None
         if r.returncode != 0:
-            raise PipelineError(f"{what} failed ({f'exit {r.returncode}'}); the end of {logp}:\n{_tail(logp)}")
+            raise PipelineError(f"{what} failed ({_msa.exit_text(r.returncode)}); the end of {logp}:\n{_tail(logp)}")
 
     def diamond(self) -> str:
         if "diamond" in self.tools:
@@ -770,6 +865,18 @@ class _Run:
         v = _diamond_version(exe)
         if not v:
             raise PipelineError(f"{exe} does not run as DIAMOND (`{exe} version` failed)")
+        vt = _version_tuple(v)
+        need = ".".join(map(str, DIAMOND_MIN_VERSION))
+        if vt is not None and vt < DIAMOND_MIN_VERSION:
+            newer = ("Install a newer one (`coal pipeline install diamond` puts DIAMOND " + DIAMOND_VERSION +
+                     " into COAL's cache; `conda install -c bioconda diamond`) and give it with --diamond PATH or "
+                     "COAL_DIAMOND, since an older `diamond` on PATH is found first")
+            if self.mode == "clusters":
+                raise PipelineError(f"DIAMOND {v} ({exe}) is too old: `diamond deepclust` needs DIAMOND {need} or "
+                                    f"later (COAL is tested with {DIAMOND_VERSION}). {newer}; or give the clusters "
+                                    "with --clusters TSV")
+            self.warn(f"DIAMOND {v} ({exe}) is older than {need}, the oldest version COAL supports (it is tested "
+                      f"with {DIAMOND_VERSION}): the search may fail or differ. {newer}")
         self.tools["diamond"] = {"path": exe, "version": v}
         return exe
 
@@ -804,10 +911,12 @@ class _Run:
                 raise PipelineError(f"cannot open {p!r}: no such file")
         faa, genes = self.wpath(f"{name}.faa"), self.wpath(f"{name}.genes.tsv")
 
+        plain = [self.plain(p) for p in paths]
+
         def go():
-            self.run_tool([self.cpp, "translate", *paths, "-o", faa, "--genes", genes, "-c",
+            self.run_tool([self.cpp, "translate", *plain, "-o", faa, "--genes", genes, "-c",
                            str(self.a.codontable)], "translate", f"translating {paths[0]}")
-        self.stage(f"translate_{name}", _sig("translate", _file_sig(paths), self.a.codontable, __version__),
+        self.stage(f"translate_{name}", _sig("translate", _file_sig(plain), self.a.codontable, __version__),
                    [faa, genes], go)
         return faa, genes, {}
 
@@ -934,7 +1043,7 @@ class _Run:
             finally:
                 self._engine = None
         if rc != 0 or broken:
-            raise PipelineError(f"coal-cpp codon-dnds failed ({f'exit {rc}'}); the end of {logp}:\n"
+            raise PipelineError(f"coal-cpp codon-dnds failed ({_msa.exit_text(rc)}); the end of {logp}:\n"
                                 f"{_tail(logp)}")
         os.replace(out + ".tmp", out)
         self.outputs["dnds"] = out
@@ -962,8 +1071,14 @@ class _Run:
         "failed" (1: the run could not be done) or "interrupted" (a signal or Ctrl-C ended it: the tables in the
         folder are incomplete or missing)."""
         if self._failed_fh:
-            self._failed_fh.close()
-            self._failed_fh = None
+            fh, self._failed_fh = self._failed_fh, None
+            try:
+                fh.close()
+            except OSError as e:   # a full disk shows when the buffer is written out
+                why = f"cannot write {self.outputs.get('failed', 'failed.tsv')}: {e.strerror or e}"
+                if exit_code in (0, 2):   # the run would have looked complete with an incomplete failures table
+                    print(f"coal pipeline: error: {why}", file=sys.stderr)
+                    exit_code, error, status = 1, why, "failed"
         a = self.a
         skip = {"out_dir", "quiet", "report", "resume", "install_tools"}
         if status is None:
@@ -980,15 +1095,40 @@ class _Run:
         }
         if error:
             report["error"] = error
+        if self.notes:
+            report["warnings"] = self.notes
         rp = a.report or self.path("report.json")
+
+        def write(obj) -> None:
+            # through a temporary file: a report is complete or absent, never cut short (a full disk)
+            tmp = rp + ".tmp"
+            try:
+                with open(tmp, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as fh:
+                    json.dump(obj, fh, indent=1, default=str)
+                    fh.write("\n")
+                os.replace(tmp, rp)
+            except OSError:
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
+                raise
         try:
             os.makedirs(os.path.dirname(os.path.abspath(rp)), exist_ok=True)
-            with open(rp, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as fh:
-                json.dump(report, fh, indent=1, default=str)
-                fh.write("\n")
+            write(report)
             self.outputs["report"] = rp
         except OSError as e:
             print(f"coal pipeline: error: could not write the report {rp}: {e.strerror or e}", file=sys.stderr)
+            if report["exit_code"] == 0:   # (as `coal --report`: a run whose report is missing is not a clean run)
+                report["exit_code"] = 1
+                report["status"] = "failed"
+                report["error"] = f"could not write the report {rp}: {e.strerror or e}"
+            try:   # the few lines that say what happened may still fit where the whole report did not
+                write({k: report[k] for k in ("schema", "coal_version", "mode", "out_dir", "exit_code", "status",
+                                               "error") if k in report} | {"report_truncated": True})
+                self.outputs["report"] = rp
+            except OSError:
+                pass
         return report
 
 
@@ -1054,7 +1194,7 @@ def _pairs_mode(run: _Run) -> None:
         if a.aligner == "diamond":
             raise PipelineError("--aligner diamond uses the alignments of the DIAMOND search, so it cannot be "
                                 "combined with --pairs")
-        pairs = _read_pairs_file(a.pairs)
+        pairs = _read_pairs_file(run.plain(a.pairs), a.pairs)
         run.stages.append({"name": "orthologs", "seconds": 0.0, "cached": False, "source": "given",
                            "pairs": len(pairs)})
         if not run.pairs_in_place:   # (--pairs DIR/orthologs.tsv: the input is the table; it is not rewritten)
@@ -1067,7 +1207,11 @@ def _pairs_mode(run: _Run) -> None:
     run.say(f"{len(pairs):,} pairs ({'given' if a.pairs else a.ortho})")
     run.counts["orthologs"] = len(pairs)
 
-    q_idx, s_idx = FastaIndex(a.query), FastaIndex(a.subject)
+    q_idx, s_idx = FastaIndex(run.plain(a.query)), FastaIndex(run.plain(a.subject))
+    if a.pairs:
+        _unmatched_ids_warning(run, "--pairs", a.pairs,
+                               [("query", [q for q, _ in pairs], q_idx, q_failed),
+                                ("subject", [s for _, s in pairs], s_idx, s_failed)])
     need_prot = a.aligner in ("clustalo", "mafft")
     exe = run.msa_tool(a.aligner) if need_prot else None
     qp_idx = FastaIndex(q_faa) if need_prot else None
@@ -1101,7 +1245,7 @@ def _pairs_mode(run: _Run) -> None:
                     continue
                 todo[k] = [(q, qp_idx.get(q).decode()), (s, sp_idx.get(s).decode())]
             t = time.perf_counter()
-            res = _msa.align_clusters(todo, tool=a.aligner, jobs=run.jobs, threads=1, pairs_with="msa", exe=exe,
+            res = _msa.align_clusters(todo, tool=a.aligner, jobs=run.threads, threads=1, pairs_with="msa", exe=exe,
                                       timeout=a.msa_timeout)
             t_msa += time.perf_counter() - t
             for k, (q, s) in enumerate(chunk):
@@ -1125,12 +1269,42 @@ def _pairs_mode(run: _Run) -> None:
     _count_pairs(run, run.outputs["dnds"], False)
 
 
-def _read_pairs_file(path: str) -> list[tuple[str, str]]:
+def _unmatched_ids_warning(run: _Run, option: str, path: str, sides) -> None:
+    """One line when (almost) none of the IDs of a --pairs / --clusters file is a record of the sequence files:
+    the usual causes are a version suffix on one side (AT1G01010 against AT1G01010.1), another ID type (gene
+    against transcript IDs), or swapped columns. Every pair still gets its own row and its failure; this line
+    says what is going on. sides: [(name, the IDs asked for, the index of the file, the failed genes)]."""
+    for name, ids, idx, failed in sides:
+        if not ids:
+            continue
+        missing = [i for i in ids if i not in idx and i not in failed]
+        if len(missing) * 10 < len(ids) * 9:   # under 90 %: single missing genes are reported one by one
+            continue
+        have = next(iter(idx.pos), None)
+        ex = missing[0]
+        hint = ""
+        if have is not None:
+            stem = ex.split(".")[0]
+            if any(h == stem or h.startswith(ex + ".") or h.split(".")[0] == stem for h in list(idx.pos)[:5000]):
+                hint = (" The IDs differ by a version or transcript suffix (.1, .2): use the IDs exactly as "
+                        "they are after '>' in the sequence file (the first word of the header)")
+            else:
+                hint = (" Check that the IDs are the first word of the FASTA headers, that the columns are in "
+                        "the right order, and whether one side has a version suffix (.1) the other lacks")
+        run.warn(f"{len(missing):,} of the {len(ids):,} {name} IDs of {option} {path} are not in the {name} "
+                 f"sequence file(s): e.g. {ex!r} in {os.path.basename(path)}"
+                 + (f", while the sequences are named like {have!r}." if have is not None else ".") + hint)
+
+
+def _read_pairs_file(path: str, shown: str | None = None) -> list[tuple[str, str]]:
+    """The pairs of a --pairs file. shown: the name for messages (the file as given, when path is its
+    decompressed copy)."""
     pairs = []
     try:
         fh = open(path, encoding="utf-8", errors="backslashreplace")
     except OSError as e:
-        raise PipelineError(f"cannot open {path!r}: {e.strerror or e}") from None
+        raise PipelineError(f"cannot open {shown or path!r}: {e.strerror or e}") from None
+    path = shown or path
     with fh:
         for n, line in enumerate(fh):
             line = line.rstrip("\r\n")
@@ -1151,7 +1325,7 @@ def _search(run: _Run, q_faa: str, s_faa: str, q_order: dict, s_order: dict, ort
     dmd = run.diamond()
     gapped = a.aligner == "diamond"
     extra = shlex.split(a.diamond_args) if a.diamond_args else []
-    common = ["--max-target-seqs", "1", "--evalue", str(a.evalue), "--threads", str(run.jobs), "--quiet"]
+    common = ["--max-target-seqs", "1", "--evalue", str(a.evalue), "--threads", str(run.threads), "--quiet"]
     if a.sensitivity != "default":
         common.append("--" + a.sensitivity)
     if gapped:
@@ -1160,13 +1334,13 @@ def _search(run: _Run, q_faa: str, s_faa: str, q_order: dict, s_order: dict, ort
     both = a.ortho == "rbh"
 
     def go():
-        run.run_tool([dmd, "makedb", "--in", s_faa, "-d", run.wpath("subject"), "--threads", str(run.jobs),
+        run.run_tool([dmd, "makedb", "--in", s_faa, "-d", run.wpath("subject"), "--threads", str(run.threads),
                       "--quiet"], "diamond", "diamond makedb")
         cols = _HIT_COLS + (["qseq_gapped", "sseq_gapped"] if gapped else [])
         run.run_tool([dmd, "blastp", "-q", q_faa, "-d", run.wpath("subject"), "-o", fwd, "--outfmt", "6", *cols,
                       *common, *extra], "diamond", "diamond blastp (query against subject)")
         if both:
-            run.run_tool([dmd, "makedb", "--in", q_faa, "-d", run.wpath("query"), "--threads", str(run.jobs),
+            run.run_tool([dmd, "makedb", "--in", q_faa, "-d", run.wpath("query"), "--threads", str(run.threads),
                           "--quiet"], "diamond", "diamond makedb")
             run.run_tool([dmd, "blastp", "-q", s_faa, "-d", run.wpath("query"), "-o", rev, "--outfmt", "6",
                           *_HIT_COLS, *common, *extra], "diamond", "diamond blastp (subject against query)")
@@ -1282,7 +1456,7 @@ def _clusters_mode(run: _Run) -> None:
     run.require_usable_genes("cds", list(a.cds))
 
     if a.clusters:
-        cfile = a.clusters
+        cfile = run.plain(a.clusters)
         run.stages.append({"name": "clusters", "seconds": 0.0, "cached": False, "source": "given"})
     else:
         cfile = run.outputs["clusters"] = run.path("clusters.tsv")
@@ -1301,7 +1475,7 @@ def _clusters_mode(run: _Run) -> None:
 
         def go():
             n = sort_fasta_by_id(faa, sfaa)
-            run.run_tool([dmd, "deepclust", "--db", sfaa, "--out", cfile, "--threads", str(run.jobs), "--quiet",
+            run.run_tool([dmd, "deepclust", "--db", sfaa, "--out", cfile, "--threads", str(run.threads), "--quiet",
                           *opts, *extra], "diamond", "diamond deepclust")
             return {"input_order": "sorted by ID", "sequences": n}
         run.stage("deepclust", _sig("deepclust", "sorted-by-id", _file_sig([faa]), run.tools["diamond"]["version"],
@@ -1312,7 +1486,7 @@ def _clusters_mode(run: _Run) -> None:
 
             def go2():
                 run.run_tool([dmd, "realign", "--db", sfaa, "--clusters", cfile, "--out", rfile + ".body", "--threads",
-                              str(run.jobs), "--quiet", "--outfmt", "6", "qseqid", "sseqid", "approx_pident",
+                              str(run.threads), "--quiet", "--outfmt", "6", "qseqid", "sseqid", "approx_pident",
                               "evalue", "bitscore", "qcovhsp", "scovhsp", *rextra], "diamond", "diamond realign")
                 with open(rfile, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as out, \
                         open(rfile + ".body", encoding="utf-8", errors="backslashreplace") as body:
@@ -1329,7 +1503,10 @@ def _clusters_mode(run: _Run) -> None:
                 "first one is used")
     run.say(f"{len(clusters):,} clusters, {sum(len(m) for m in clusters.values()):,} sequences")
 
-    cds_idx, prot_idx = FastaIndex(list(a.cds)), FastaIndex(faa)
+    cds_idx, prot_idx = FastaIndex([run.plain(p) for p in a.cds]), FastaIndex(faa)
+    if a.clusters:
+        _unmatched_ids_warning(run, "--clusters", a.clusters,
+                               [("CDS", [m for mem in clusters.values() for m in mem], cds_idx, failed)])
     tool = a.aligner
     cap = a.max_cluster_size
     plans: list[dict] = []
@@ -1377,7 +1554,7 @@ def _clusters_mode(run: _Run) -> None:
                 if msa_exe[0] is None:
                     msa_exe[0] = run.msa_tool(tool)
                 t = time.perf_counter()
-                res = _msa.align_clusters(todo, tool=tool, jobs=run.jobs, threads=a.msa_threads, pairs_with="msa",
+                res = _msa.align_clusters(todo, tool=tool, jobs=run.threads, threads=a.msa_threads, pairs_with="msa",
                                           exe=msa_exe[0], timeout=a.msa_timeout)
                 t_msa[0] += time.perf_counter() - t
             for k, (p, ids) in enumerate(pending):
@@ -1564,7 +1741,7 @@ def codon_dnds(groups, out_tsv: str, method=("YN",), codontable: int = 1, jobs: 
     reader.join()
     proc.stderr.close()
     if rc != 0:
-        raise PipelineError(f"coal-cpp codon-dnds failed ({f'exit {rc}'}): "
+        raise PipelineError(f"coal-cpp codon-dnds failed ({_msa.exit_text(rc)}): "
                             f"{b''.join(err).decode('utf-8', 'backslashreplace').strip()[-800:]}")
     return n
 
@@ -1766,7 +1943,8 @@ def _execute(mode: str, a: argparse.Namespace, argv) -> PipelineResult:
             (_pairs_mode if mode == "pairs" else _clusters_mode)(run)
         except (PipelineError, OSError) as e:
             if isinstance(e, OSError):
-                e = PipelineError(f"{e.strerror or e}" + (f": {e.filename}" if e.filename else ""))
+                # a full disk, a folder that went away, a quota: one line with the file and the system's reason
+                e = PipelineError(_os_error_text(e, run.out))
             print(f"coal pipeline: error: {e}", file=sys.stderr)
             if run.lock is not None and os.path.isdir(run.out):
                 report = run.finish(1, str(e))
@@ -1793,7 +1971,15 @@ def _execute(mode: str, a: argparse.Namespace, argv) -> PipelineResult:
             raise
         pairs = run.counts.get("pairs", {})
         code = 2 if run.n_failures else 0
-        report = run.finish(code)
+        try:
+            report = run.finish(code)
+        except OSError as e:
+            text = _os_error_text(e, run.out)
+            print(f"coal pipeline: error: {text}", file=sys.stderr)
+            return PipelineResult(1, {"schema": SCHEMA, "exit_code": 1, "status": "failed", "error": text},
+                                  run.outputs)
+        if report["exit_code"] != code:   # failed.tsv or the report could not be written
+            return PipelineResult(report["exit_code"], report, run.outputs)
         genes = run.counts.get("genes", {})
         run.say(f"summary: {genes.get('total', 0):,} genes ({genes.get('failed', 0):,} not usable); "
                 f"{pairs.get('total', 0):,} pairs: {pairs.get('ok', 0):,} ok, {pairs.get('warning', 0):,} warning, "
@@ -1813,6 +1999,23 @@ def _execute(mode: str, a: argparse.Namespace, argv) -> PipelineResult:
     finally:
         _restore_signals(old_handlers)
         run.release()
+
+
+def _os_error_text(e: OSError, out_dir: str) -> str:
+    """An operating-system error anywhere in a run as one line: what could not be done, to which file, and why."""
+    import errno
+    name = e.filename if isinstance(e.filename, (str, bytes)) else None
+    if isinstance(name, bytes):
+        name = name.decode("utf-8", "backslashreplace")
+    why = e.strerror or str(e)
+    what = f"cannot write {name}" if name else f"cannot write into the output folder {out_dir}"
+    if e.errno in (errno.ENOENT, errno.EACCES, errno.EPERM, errno.EISDIR, errno.ENOTDIR) and name:
+        what = f"cannot read or write {name}"
+    text = f"{what}: {why}"
+    if e.errno in (errno.ENOSPC, getattr(errno, "EDQUOT", -1)):
+        text += (". The disk (or quota) of the output folder is full: free space or use another -o folder; "
+                 "--resume reuses the finished stages")
+    return text
 
 
 def _namespace(mode: str, required: list[str], options: dict) -> argparse.Namespace:

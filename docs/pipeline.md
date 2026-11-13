@@ -251,7 +251,7 @@ One bad gene, pair or cluster never stops a run.
 |---|---|
 | 0 | finished, nothing failed |
 | 2 | finished, but `failed.tsv` has entries (as `coal --keep-going` and `coal-cpp-align`); also a command-line error |
-| 1 | the run could not be done: an input cannot be read, a tool is missing or failed, the folder cannot be written |
+| 1 | the run could not be done: an input cannot be read, a tool is missing or failed, the folder cannot be written (a full disk included) |
 | 130 | interrupted by Ctrl-C (SIGINT); 143 for SIGTERM, 129 for SIGHUP (128 + the signal's number) |
 
 **Interrupts.** When Ctrl-C or a termination signal reaches the `coal pipeline` process (also when only that
@@ -261,6 +261,27 @@ running Clustal Omega / MAFFT processes. `dnds.tsv.tmp` is removed, `report.json
 `"status": "interrupted"` and the lock is released; `dnds.tsv` is absent, so an interrupted folder cannot be taken
 for a finished one. `--resume` then reuses the finished stages. A process killed with SIGKILL cannot do any of
 this: the engine then ends when its input pipe closes, and the next run replaces the stale lock.
+
+**A full disk, or any other error of the operating system, ends the run with one line.** The message names the
+file and the system's reason (`cannot write out/work/state.json.tmp: No space left on device. The disk (or quota)
+of the output folder is full: ...`), the exit code is 1 and the lock is released. `report.json` then says
+`"status": "failed"` with that error; it is written through a temporary file, so it is complete or absent, never
+cut short. When the whole report does not fit, a short one is tried (`schema`, `exit_code`, `status`, `error`,
+`"report_truncated": true`). A run that finished its tables but could not write `failed.tsv` or its report does
+not end with exit 0. A tool that was ended by a signal is reported as that: `diamond blastp failed (killed by
+signal 9 (SIGKILL; out of memory?))`.
+
+**Warnings of the run** (the lines `coal pipeline: warning: ...` on stderr) are also in `report.json` as
+`warnings`: the same file given as `--query` and `--subject` (every gene's best hit is then itself: dN = dS = 0),
+a `-j` above the number of CPUs, an old DIAMOND, a `--pairs` / `--clusters` file whose IDs are not those of the
+sequences, input that looks like several transcripts per gene, and the counts of the `--min-codons` / `--max-ds`
+flags.
+
+**IDs that match nothing.** When 90% or more of the IDs of a `--pairs` or `--clusters` file are not records of
+the sequence files, one line says so with an example from each side (`12 of the 12 query IDs of --pairs p.tsv are
+not in the query sequence file(s): e.g. 'AT1G01010' in p.tsv, while the sequences are named like 'AT1G01010.1'`)
+and, when that is what it looks like, that the IDs differ by a version or transcript suffix. Every pair still gets
+its row with status `error` (pair mode) and its line in `failed.tsv`, and the exit code is 2 as before.
 
 **Inputs that cannot work are reported before the long steps.** When a CDS file has no usable gene at all, the
 run stops after translation, before DIAMOND or an aligner is started, and says why: "does not hold coding DNA ...
@@ -514,7 +535,20 @@ machine is still to be done.
   needs about 600 MB. Above the limit that pair gets status `error`.
 - **`--aligner diamond` uses one HSP** and DIAMOND's heuristic alignment ([alignment.md](alignment.md)); a hit that
   does not fit the translated sequences is that pair's error.
-- **Best hits are DIAMOND's first target per query** (`--max-target-seqs 1`). Ties are broken by DIAMOND.
+- **Best hits are DIAMOND's first target per query** (`--max-target-seqs 1`). Ties are broken by DIAMOND
+  ([what the defaults do](#pair-mode-the-best-hit-and-diamonds-sensitivity)).
+- **DIAMOND 2.1.0 or later.** 2.1.0 is the first release with `diamond deepclust`; every test and benchmark here
+  ran with 2.2.8, the version `coal pipeline install diamond` installs. The version is checked when a run starts:
+  with an older DIAMOND (Ubuntu 22.04's package is 2.0.14) cluster mode without `--clusters` stops and says how to
+  get a newer one, and pair mode goes on with a warning, because no version older than 2.1.0 has been tested.
+- **`-j` above the number of CPUs** is passed to the engine as it is, but DIAMOND and the aligner processes get
+  at most one thread or process per CPU of the machine (`-j 5000` made DIAMOND reserve memory for 5,000 threads
+  and be killed); a warning says so.
+- **Compressed input.** A gzip-compressed `--query`, `--subject`, `--cds`, `--pairs` or `--clusters` file
+  (recognised by its first two bytes, whatever its name) is decompressed into `DIR/work/inputs/` and read from
+  there, so the folder needs room for the plain copies; they are kept for `--resume` and reused while the
+  compressed file is unchanged. Messages of the translation step name the copy. Other compression formats
+  (bzip2, xz, zstd) are not read: decompress them first.
 - **Protein input is not accepted**: the pipeline starts from CDS, so that protein and CDS always match. A protein
   file is recognised only when it leaves no usable gene (see "Inputs that cannot work"); a file that mixes CDS and
   protein records runs, with the protein records listed as failed genes.

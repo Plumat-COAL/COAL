@@ -30,6 +30,7 @@ import platform
 import shutil
 import stat
 import subprocess
+import signal
 import sys
 import tempfile
 import threading
@@ -618,7 +619,7 @@ def run_msa(records: Sequence[tuple[str, str]], tool: str = "clustalo", threads:
                 r = _run_tracked(cmd, timeout, begun, stdout=fh, stderr=subprocess.PIPE, text=True, encoding="utf-8",
                                  errors="backslashreplace")
         if r.returncode != 0:
-            raise MsaError(f"{tool} failed (exit {r.returncode}): {(r.stderr or '').strip()[-800:]}")
+            raise MsaError(f"{tool} failed ({exit_text(r.returncode)}): {(r.stderr or '').strip()[-800:]}")
         got = _read_fasta(outp)
     rows = []
     for k, s in enumerate(seqs):
@@ -631,6 +632,23 @@ def run_msa(records: Sequence[tuple[str, str]], tool: str = "clustalo", threads:
     if len({len(r) for r in rows}) != 1:
         raise MsaError(f"{tool} returned rows of different lengths")
     return list(zip([rid for rid, _ in records], _restore(rows, seqs, tails, internal)))
+
+
+def exit_text(returncode: int) -> str:
+    """How a program ended, for a message: "exit 3", or for a program ended by a signal (a negative return code
+    of subprocess) "killed by signal 9 (SIGKILL; out of memory?)": the kernel's out-of-memory killer and a
+    cluster's memory limit both end a process that way, and "exit -9" says that to nobody."""
+    if returncode is None or returncode >= 0:
+        return f"exit {returncode}"
+    num = -returncode
+    try:
+        name = signal.Signals(num).name
+    except (ValueError, AttributeError):
+        name = ""
+    hint = {"SIGKILL": "out of memory?", "SIGSEGV": "the program crashed", "SIGABRT": "the program aborted",
+            "SIGBUS": "the program crashed", "SIGXCPU": "CPU time limit", "SIGTERM": "terminated"}.get(name, "")
+    inside = "; ".join(x for x in (name, hint) if x)
+    return f"killed by signal {num}" + (f" ({inside})" if inside else "")
 
 
 def align_clusters(clusters: Mapping[str, Sequence[tuple[str, str]]] | Iterable[Sequence[tuple[str, str]]],
