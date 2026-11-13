@@ -69,6 +69,18 @@ Packaging, command line and continuous integration (2026-11-13, not yet released
   Tests: the race step by step (the unguarded code fails it), 200 trials of six simultaneous starts onto a stale
   lock (one holder each time), Python and C++ starts mixed, each engine refused by the other's lock. The
   Windows code path (process handle, `CreateHardLink`) is compiled by CI and not exercised by these tests there.
+  **On Windows** the first CI run of these tests found the guard `<lock>.takeover` left behind after simultaneous
+  starts (one holder each time, as required): Windows does not remove a file that another process has open, the
+  runs that lost the race were reading the guard at that instant, and the removal was tried once. Both engines
+  now try every removal of a lock, guard or temporary file again for about 2 s, remove the guard on every path,
+  and clear a guard that is left all the same when its process is gone or it is older than 15 s (before: 30 s,
+  the time a run waits). The host name in the lock has one documented source and spelling in both engines and is
+  compared without regard to case on Windows (`docs/pipeline.md`). Tests on every system: a hook makes removals
+  fail as they do on Windows.
+- **`coal-cpp`: test hooks only in test builds.** The `COAL_TEST_*` environment variables with which the tests
+  pause a run or line up several runs are compiled into `coal-cpp` only with the CMake option
+  `-DCOAL_TEST_HOOKS=ON` (default `OFF`): release builds, wheels and packages do not contain them
+  (`docs/development.md` "Test hooks").
 
 - **`coal pipeline ... --keep-protein-alignments`** writes the protein alignments the codon alignments are made
   from: `protein_alignments.fasta` in pair mode (records 1+2, 3+4, ...), one file per cluster in
