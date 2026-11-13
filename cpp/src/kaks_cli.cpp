@@ -43,26 +43,36 @@ using kaks::Status;
 const char* KAKS_HELP =
     "usage: coal kaks -i IN -o OUT [-m METHOD ...] [-c TABLE] [-j N] [--pairs all|consecutive]\n"
     "                 [--digits N] [--yn-flavour kaks|paml] [--yn-weighting 0|1]\n"
+    "                 [--comeron-flavour coal|gestimator] [--li-flavour coal|seqinr]\n"
     "\n"
     "Ka/Ks for pairs of aligned coding sequences, written in KaKs_Calculator 2.0's tab-separated format.\n"
-    "Takes KaKs_Calculator's -i -o -m -c for the seven methods below (the default is YN; KaKs_Calculator's is\n"
-    "MA). The engine is derived from KaKs_Calculator 2.0 and PAML yn00 (GPL v3); see docs/kaks.md.\n"
+    "Takes KaKs_Calculator's -i -o -m -c for the seven KaKs_Calculator methods below (the default is YN;\n"
+    "KaKs_Calculator's is MA), and has Comeron (1995) and Li (1993) as the R package orthologr computes them.\n"
+    "The engine is derived from KaKs_Calculator 2.0, PAML yn00, libsequence and seqinr (GPL); see docs/kaks.md.\n"
     "\n"
     "  -i IN          AXT (name line, two aligned sequences, blank line) or aligned FASTA\n"
     "  -o OUT         output file ('-' or none: standard output)\n"
     "  -m METHOD      NG, LWL, MLWL, LPB, MLPB, YN (default), MYN; repeat for several. KaKs_Calculator's\n"
-    "                 GY, MS, MA, NONE and gamma (G*) methods are not implemented natively and are refused\n"
+    "                 GY, MS, MA, NONE and gamma (G*) methods are not implemented natively and are refused.\n"
+    "                 Comeron (alias C95): Comeron 1995 as libsequence's gestimator; Li: Li 1993 as\n"
+    "                 seqinr::kaks (both: standard genetic code only; rows come after KaKs_Calculator's)\n"
     "  -c TABLE       NCBI genetic code (default 1), the tables COAL's --codontable accepts\n"
     "  -j, --jobs N   threads (default: all hardware threads)\n"
     "  --pairs P      FASTA input: all (every pair, default) or consecutive (records 1+2, 3+4, ...)\n"
     "  --digits N     significant digits of numbers (default 6, as KaKs_Calculator)\n"
     "  --yn-flavour F YN00 iteration as KaKs_Calculator (kaks, default) or PAML yn00 (paml)\n"
     "  --yn-weighting W  1: weight pathways (default); 0: equal weights (PAML yn00 weighting = 0)\n"
+    "  --comeron-flavour F  Comeron: coal (default: COAL's stop-codon policy, NA when the correction is\n"
+    "                 undefined) or gestimator (the numbers of orthologr 0.4.3's gestimator: stop codons\n"
+    "                 compared, undefined logarithms set to 0)\n"
+    "  --li-flavour F Li: coal (default: COAL's stop-codon policy) or seqinr (stop codons compared, as\n"
+    "                 seqinr::kaks); seqinr's sentinel 9.999999 is NA in both\n"
     "  -q, --quiet    no summary on stderr\n";
 
 const char* DNDS_HELP =
     "usage: coal dnds IN [-o OUT] [-m METHOD ...] [-c TABLE] [-j N] [--pairs all|consecutive]\n"
     "                 [--format auto|axt|fasta] [--digits N] [--yn-flavour kaks|paml] [--yn-weighting 0|1]\n"
+    "                 [--comeron-flavour coal|gestimator] [--li-flavour coal|seqinr]\n"
     "\n"
     "dN/dS for pairs of aligned coding sequences as a tidy TSV, one row per pair and method:\n"
     "seq1 seq2 method dN dS dNdS SE_dN SE_dS N_sites S_sites Nd Sd codons_compared status note\n"
@@ -71,7 +81,8 @@ const char* DNDS_HELP =
     "\n"
     "  IN             aligned FASTA or AXT file (or -i IN)\n"
     "  -o OUT         output file (default: standard output)\n"
-    "  -m METHOD      YN (default), NG, LWL, MLWL, LPB, MLPB, MYN; repeat for several\n"
+    "  -m METHOD      YN (default), NG, LWL, MLWL, LPB, MLPB, MYN, Comeron (alias C95), Li; repeat for\n"
+    "                 several (Comeron and Li: standard genetic code only; SE for YN, MYN, NG and Li)\n"
     "  -c, --codontable TABLE  NCBI genetic code (default 1)\n"
     "  -j, --jobs N   threads (default: all hardware threads)\n"
     "  --pairs P      FASTA input: all (every pair, default) or consecutive (records 1+2, 3+4, ...)\n"
@@ -79,6 +90,11 @@ const char* DNDS_HELP =
     "  --digits N     significant digits of numbers (default 8)\n"
     "  --yn-flavour F YN00 iteration as KaKs_Calculator (kaks, default) or PAML yn00 (paml)\n"
     "  --yn-weighting W  1: weight pathways (default); 0: equal weights (PAML yn00 weighting = 0)\n"
+    "  --comeron-flavour F  Comeron: coal (default: COAL's stop-codon policy, NA when the correction is\n"
+    "                 undefined) or gestimator (the numbers of orthologr 0.4.3's gestimator: stop codons\n"
+    "                 compared, undefined logarithms set to 0)\n"
+    "  --li-flavour F Li: coal (default: COAL's stop-codon policy) or seqinr (stop codons compared, as\n"
+    "                 seqinr::kaks); seqinr's sentinel 9.999999 is NA in both\n"
     "  -q, --quiet    no summary on stderr\n";
 
 struct Cli {
@@ -408,6 +424,12 @@ int parse(const std::vector<std::string>& a, Cli& c) {
         } else if (u == "--yn-weighting") {
             if (!need(v) || (v != "0" && v != "1")) return usage(c, "--yn-weighting: expected 0 or 1");
             c.opt.yn_weighting = v == "1";
+        } else if (u == "--comeron-flavour" || u == "--comeron-flavor") {
+            if (!need(v) || (v != "coal" && v != "gestimator")) return usage(c, s + ": expected coal or gestimator");
+            c.opt.comeron_flavour = v == "coal" ? kaks::ComeronFlavour::coal : kaks::ComeronFlavour::gestimator;
+        } else if (u == "--li-flavour" || u == "--li-flavor") {
+            if (!need(v) || (v != "coal" && v != "seqinr")) return usage(c, s + ": expected coal or seqinr");
+            c.opt.li_flavour = v == "coal" ? kaks::LiFlavour::coal : kaks::LiFlavour::seqinr;
         } else if (u == "-q" || u == "--quiet") {
             c.quiet = true;
         } else if (u == "-D" && c.compat) {
@@ -428,6 +450,10 @@ int parse(const std::vector<std::string>& a, Cli& c) {
     }
     if (c.in.empty()) return usage(c, c.compat ? "-i IN is required" : "the input file is required");
     if (c.methods.empty()) c.methods.push_back(Method::YN);
+    for (Method m : c.methods)
+        if ((m == Method::Comeron || m == Method::Li) && c.table != 1)
+            return usage(c, std::string("method ") + kaks::method_name(m) +
+                                " is implemented for the standard genetic code only (-c 1), as its reference");
     if (c.digits < 0) c.digits = c.compat ? 6 : 8;
     if (c.out == "-") c.out.clear();
     if (c.in == "-") return usage(c, "reading standard input ('-') is not supported: give a file");

@@ -53,7 +53,7 @@ endforeach()
 configure_file(cpp/src/version.hpp.in "${COAL_GEN_INCLUDE}/coal/version.hpp" @ONLY)
 
 add_library(coal_core STATIC cpp/src/tables.cpp cpp/src/core.cpp cpp/src/seqio.cpp cpp/src/json.cpp cpp/src/report.cpp
-            cpp/src/kaks.cpp cpp/src/align.cpp cpp/src/dnds.cpp)
+            cpp/src/kaks.cpp cpp/src/kaks_comeron.cpp cpp/src/kaks_li.cpp cpp/src/align.cpp cpp/src/dnds.cpp)
 add_library(coal::core ALIAS coal_core)
 set_target_properties(coal_core PROPERTIES EXPORT_NAME core OUTPUT_NAME coal_core)
 target_compile_features(coal_core PUBLIC cxx_std_17)

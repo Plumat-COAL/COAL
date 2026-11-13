@@ -64,7 +64,8 @@ const char* CODON_DNDS_HELP =
     "usage: coal codon-dnds [-i GROUPS] -o PAIRS.tsv [-m METHOD ...] [-c TABLE] [-j N] [--group-column NAME]\n"
     "                 [--codon-out FILE] [--codon-dir DIR] [--kaks-out FILE] [--failures FILE] [--digits N]\n"
     "                 [--matrix NAME] [--gap-open X] [--gap-extend X] [--end-gaps free|penalized] [--max-cells N]\n"
-    "                 [--flanks gap|align] [--yn-flavour kaks|paml] [--yn-weighting 0|1] [-q]\n"
+    "                 [--flanks gap|align] [--yn-flavour kaks|paml] [--yn-weighting 0|1]\n"
+    "                 [--comeron-flavour coal|gestimator] [--li-flavour coal|seqinr] [-q]\n"
     "\n"
     "Protein alignment -> codon alignment -> Ka/Ks for groups of coding sequences (the engine of\n"
     "`coal pipeline`, docs/pipeline.md). GROUPS (a file, or standard input when -i is - or absent) is\n"
@@ -560,6 +561,13 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
         } else if (s == "--yn-weighting") {
             if (!it.value(v) || (v != "0" && v != "1")) return usage(prog, "--yn-weighting: expected 0 or 1");
             c.opt.kaks.yn_weighting = v == "1";
+        } else if (s == "--comeron-flavour" || s == "--comeron-flavor") {
+            if (!it.value(v) || (v != "coal" && v != "gestimator"))
+                return usage(prog, s + ": expected coal or gestimator");
+            c.opt.kaks.comeron_flavour = v == "coal" ? kaks::ComeronFlavour::coal : kaks::ComeronFlavour::gestimator;
+        } else if (s == "--li-flavour" || s == "--li-flavor") {
+            if (!it.value(v) || (v != "coal" && v != "seqinr")) return usage(prog, s + ": expected coal or seqinr");
+            c.opt.kaks.li_flavour = v == "coal" ? kaks::LiFlavour::coal : kaks::LiFlavour::seqinr;
         } else if (s == "-q" || s == "--quiet") {
             c.quiet = true;
         } else {
@@ -569,6 +577,10 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
     if (c.out.empty()) return usage(prog, "-o PAIRS.tsv is required");
     if (!methods.empty()) c.opt.methods = methods;
     c.opt.methods = dnds::ordered_methods(c.opt.methods);
+    for (Method m : c.opt.methods)
+        if ((m == Method::Comeron || m == Method::Li) && c.opt.table != 1)
+            return usage(prog, std::string("method ") + kaks::method_name(m) +
+                                   " is implemented for the standard genetic code only (-c 1), as its reference");
     try {
         check_align_params(c.opt.align);
     } catch (const CoalError& e) {
