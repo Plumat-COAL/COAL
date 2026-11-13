@@ -225,6 +225,12 @@ entry under "Added", not under "Fixed".
     below P percent gets status `warning` and the note `protein identity below P%`; no row is dropped, no number
     changes. docs/pipeline.md says why: a cluster can hold pairs that are not related at all, and they get
     status `ok`.
+  - **Documentation from the second review:** docs/pipeline.md "How much the aligner matters" (150 *Arabidopsis*
+    pairs: 120, 90 and 75 of them have the same values as the default aligner with MAFFT, DIAMOND's alignment and
+    Clustal Omega; up to 0.43 in dN/dS for single pairs); docs/kaks.md says what `P-Value(Fisher)` tests and
+    that `SE_dN` / `SE_dS` are standard errors of dN and of dS (NG, YN, MYN, Li), with none for the ratio; README
+    example 5 (the orthologr fork) passes `sensitivity_mode = "default"`, so that it finds the 12 pairs of
+    example 3 (orthologr's default, DIAMOND `--fast`, finds 8 on the example files).
   - **Cluster mode does not depend on the order of the input.** DIAMOND DeepClust is order-dependent, so it is
     given the proteins sorted by ID: the same sequences give the same `clusters.tsv` whatever the order of the
     `--cds` files and records. (Development builds before 2026-11-13 clustered in input order; their clusters can

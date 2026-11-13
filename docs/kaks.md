@@ -139,6 +139,21 @@ last round there: difference 12); the summary on stderr says how many such rows 
 them.
 `--digits N` sets the number of significant digits.
 
+**What `P-Value(Fisher)` tests, and what has a standard error.** The p-value is Fisher's exact test on the
+2 x 2 table of substitutions against sites that did not change, synonymous in one row and nonsynonymous in the
+other: `[[Sd, S - Sd], [Nd, N - Nd]]`. It asks whether the proportion of changed sites differs between
+synonymous and nonsynonymous sites, that is whether dN/dS differs from 1 for this pair; a small p with dN/dS
+below 1 is evidence of purifying selection on the pair, not of anything about single sites, and with thousands
+of pairs the p-values need a correction for multiple testing. The counts are estimates and not whole numbers
+(KaKs_Calculator's convention, kept; "Differences" below says how the tails are summed), so read it as
+KaKs_Calculator's statistic, comparable with its output, more than as an exact test. It is in the `coal kaks`
+format only; `coal dnds` does not print it. **Standard errors** are given by the methods that have a variance
+formula: `NG`, `YN`, `MYN` and `Li` (`SE_dN`, `SE_dS` in `coal dnds`; `NA` for LWL, MLWL, LPB, MLPB and Comeron).
+They are the standard errors **of dN and of dS, each on its own**. No method here gives a standard error or a
+confidence interval for dN/dS itself: the ratio of two estimates has no simple variance, and dividing the two
+SEs is not one. For an interval on the ratio use a likelihood method (PAML's codeml, HyPhy) on the codon
+alignment, or bootstrap the codon columns.
+
 **`coal dnds`** (`--digits` default 8):
 
 | Column | Meaning |
@@ -146,7 +161,7 @@ them.
 | `seq1`, `seq2` | the two IDs. For FASTA input, the record IDs. For AXT, the name line split at the first `&`; when there is no `&`, seq1 is the whole name line and seq2 is `NA` |
 | `method` | NG, LWL, MLWL, LPB, MLPB, YN, MYN, Comeron or Li |
 | `dN`, `dS`, `dNdS` | Ka, Ks, Ka/Ks. `NA` when not available; dNdS is `NA` when dS < 1e-6. Zeros print as 0 |
-| `SE_dN`, `SE_dS` | standard errors (YN, MYN, NG, Li); `NA` elsewhere |
+| `SE_dN`, `SE_dS` | standard errors of dN and of dS (YN, MYN, NG, Li); `NA` elsewhere. There is none for the ratio (below) |
 | `N_sites`, `S_sites` | nonsynonymous and synonymous sites (`NA` for Comeron and Li, which count sites by degeneracy class, not as S and N) |
 | `Nd`, `Sd` | nonsynonymous and synonymous differences (`NA` for Comeron and Li) |
 | `codons_compared` | codon columns used after the policy |

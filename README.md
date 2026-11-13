@@ -116,8 +116,10 @@ s <- coal_read_fasta("examples/dnds/species_b_cds.fasta")
 coal_dnds_pairs(q, s, pairs = read.delim("examples/dnds/orthologs.tsv")[, 1:2])
 
 # 5. inside orthologr (the fork with COAL built in; packaging/orthologr/README.md)
+#    sensitivity_mode = "default": DIAMOND's own default, as `coal pipeline` uses, gives the same 12 pairs as
+#    example 3. orthologr's default is "fast" (DIAMOND --fast, for hits above 90% identity), which finds 8 here.
 orthologr::dNdS("examples/dnds/species_a_cds.fasta", "examples/dnds/species_b_cds.fasta",
-                dnds_est.method = "YN", engine = "coal")
+                dnds_est.method = "YN", engine = "coal", sensitivity_mode = "default")
 ```
 
 **In the pipeline every FASTA record is a gene.** A CDS file with several transcripts per gene (Ensembl, NCBI,

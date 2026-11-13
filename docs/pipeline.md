@@ -525,6 +525,25 @@ in a 3,000-member cluster of the second review, 306 of 1,000 sampled pairs had s
 below 15% (dN around 1, dS around 1.7). Status `ok` says that the method ran. Use `--min-identity` (30 to 40 is
 a common floor), or filter on `prot_identity` yourself, before reading such rows.
 
+## How much the aligner matters
+
+The protein alignment decides which codons are compared, so `--aligner` moves dN/dS. On 150 reciprocal best hits
+of *Arabidopsis thaliana* and *A. lyrata* (the first 150 genes of orthologr's example files, method YN, DIAMOND
+2.2.8; second review, 2026-11-13), against the default `nw`:
+
+| `--aligner` | pairs with exactly the same dN, dS and dN/dS as `nw` | dN/dS differs by more than 0.01 | by more than 0.05 | largest difference in dN/dS |
+|---|---|---|---|---|
+| `mafft` | 120 of 150 | 20 | 5 | 0.18 |
+| `diamond` (DIAMOND's alignment, completed to full length) | 90 of 150 | 33 | 8 | 0.43 |
+| `clustalo` | 75 of 150 | 53 | 20 | 0.30 |
+
+The pairs themselves do not depend on the aligner, and `--ortho bh` gave the same 150 pairs and values as `rbh`
+on this set. Half to four fifths of the pairs are untouched (alignments without a gap have one answer); the rest
+are the pairs with gaps, where the programs place them differently. None of the four is "the" alignment: **say
+in your methods which aligner was used** (`report.json` has it: `parameters.aligner`, the tool's version and
+command line, and `cite` lists its paper), and when a conclusion rests on single pairs, look at them with a second
+aligner (`--keep-protein-alignments` writes the alignments that were used).
+
 ## What the search and clustering defaults do
 
 The numbers in this section come from an independent review of the pipeline (November 2026, DIAMOND 2.2.8); they
