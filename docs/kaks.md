@@ -218,7 +218,7 @@ aligner. A paper should cite the methods and programs its numbers come from, wit
 | Ka/Ks, method Comeron | Comeron 1995; Thornton 2003 (libsequence) |
 | Ka/Ks, method Li | Li 1993; Charif & Lobry 2007 (seqinr) |
 | `coal pipeline pairs` with DIAMOND (orthologs) | Buchfink et al. 2021 (DIAMOND) |
-| `coal pipeline clusters` with DIAMOND DeepClust | Buchfink et al. 2021 (DIAMOND); Buchfink et al. 2023 (DIAMOND DeepClust, preprint) |
+| `coal pipeline clusters` with DIAMOND DeepClust | Buchfink et al. 2021 (DIAMOND); Buchfink et al. 2026 (DIAMOND DeepClust) |
 | Protein alignments by Clustal Omega (`--aligner clustalo`, the cluster default) | Sievers et al. 2011 (Clustal Omega) |
 | Protein alignments by MAFFT (`--aligner mafft`) | Katoh & Standley 2013 (MAFFT) |
 | Through the R package orthologr | Drost et al. 2015 (orthologr) |
@@ -226,26 +226,29 @@ aligner. A paper should cite the methods and programs its numbers come from, wit
 `coal cite` prints this table and the references; `coal cite YN` those of one method; `coal cite out/report.json`
 those of one pipeline run, whose report lists the keys as `cite`.
 
-- Suyama M, Torrents D, Bork P (2006). PAL2NAL: robust conversion of protein sequence alignments into the corresponding codon alignments. Nucleic Acids Research 34:W609-W612.
-- Nei M, Gojobori T (1986). Simple methods for estimating the numbers of synonymous and nonsynonymous nucleotide substitutions. Molecular Biology and Evolution 3:418-426.
-- Li W-H, Wu C-I, Luo C-C (1985). A new method for estimating synonymous and nonsynonymous rates of nucleotide substitution considering the relative likelihood of nucleotide and codon changes. Molecular Biology and Evolution 2:150-174.
-- Li W-H (1993). Unbiased estimation of the rates of synonymous and nonsynonymous substitution. Journal of Molecular Evolution 36:96-99.
-- Pamilo P, Bianchi NO (1993). Evolution of the Zfx and Zfy genes: rates and interdependence between the genes. Molecular Biology and Evolution 10:271-281.
-- Tzeng Y-H, Pan R, Li W-H (2004). Comparison of three methods for estimating rates of synonymous and nonsynonymous nucleotide substitutions. Molecular Biology and Evolution 21:2290-2298.
-- Yang Z, Nielsen R (2000). Estimating synonymous and nonsynonymous substitution rates under realistic evolutionary models. Molecular Biology and Evolution 17:32-43.
-- Zhang Z, Li J, Yu J (2006). Computing Ka and Ks with a consideration of unequal transitional substitutions. BMC Evolutionary Biology 6:44.
-- Comeron JM (1995). A method for estimating the numbers of synonymous and nonsynonymous substitutions per site. Journal of Molecular Evolution 41:1152-1159.
-- Wang D, Zhang Y, Zhang Z, Zhu J, Yu J (2010). KaKs_Calculator 2.0: a toolkit incorporating gamma-series methods and sliding window strategies. Genomics, Proteomics & Bioinformatics 8:77-80.
-- Yang Z (2007). PAML 4: phylogenetic analysis by maximum likelihood. Molecular Biology and Evolution 24:1586-1591.
-- Thornton K (2003). libsequence: a C++ class library for evolutionary genetic analysis. Bioinformatics 19:2325-2327.
-- Charif D, Lobry JR (2007). SeqinR 1.0-2: a contributed package to the R project for statistical computing devoted to biological sequences retrieval and analysis. In: Bastolla U, Porto M, Roman HE, Vendruscolo M (eds), Structural Approaches to Sequence Evolution. Springer, pp. 207-232.
-- Buchfink B, Reuter K, Drost H-G (2021). Sensitive protein alignments at tree-of-life scale using DIAMOND. Nature Methods 18:366-368.
-- Buchfink B, Ashkenazy H, Reuter K, Kennedy JA, Drost H-G (2023). Sensitive clustering of protein sequences at tree-of-life scale using DIAMOND DeepClust. bioRxiv (preprint).
-- Sievers F, Wilm A, Dineen D, Gibson TJ, Karplus K, Li W, Lopez R, McWilliam H, Remmert M, Soding J, Thompson JD, Higgins DG (2011). Fast, scalable generation of high-quality protein multiple sequence alignments using Clustal Omega. Molecular Systems Biology 7:539.
-- Katoh K, Standley DM (2013). MAFFT multiple sequence alignment software version 7: improvements in performance and usability. Molecular Biology and Evolution 30:772-780.
-- Drost H-G, Gabel A, Grosse I, Quint M (2015). Evidence for active maintenance of phylotranscriptomic hourglass patterns in animal and plant embryogenesis. Molecular Biology and Evolution 32:1221-1231. (the R package orthologr)
+- Suyama M, Torrents D, Bork P (2006). PAL2NAL: robust conversion of protein sequence alignments into the corresponding codon alignments. Nucleic Acids Research 34:W609-W612. <https://doi.org/10.1093/nar/gkl315>
+- Nei M, Gojobori T (1986). Simple methods for estimating the numbers of synonymous and nonsynonymous nucleotide substitutions. Molecular Biology and Evolution 3:418-426. <https://doi.org/10.1093/oxfordjournals.molbev.a040410>
+- Li W-H, Wu C-I, Luo C-C (1985). A new method for estimating synonymous and nonsynonymous rates of nucleotide substitution considering the relative likelihood of nucleotide and codon changes. Molecular Biology and Evolution 2:150-174. <https://doi.org/10.1093/oxfordjournals.molbev.a040343>
+- Li W-H (1993). Unbiased estimation of the rates of synonymous and nonsynonymous substitution. Journal of Molecular Evolution 36:96-99. <https://doi.org/10.1007/BF02407308>
+- Pamilo P, Bianchi NO (1993). Evolution of the Zfx and Zfy genes: rates and interdependence between the genes. Molecular Biology and Evolution 10:271-281. <https://doi.org/10.1093/oxfordjournals.molbev.a040003>
+- Tzeng Y-H, Pan R, Li W-H (2004). Comparison of three methods for estimating rates of synonymous and nonsynonymous nucleotide substitutions. Molecular Biology and Evolution 21:2290-2298. <https://doi.org/10.1093/molbev/msh242>
+- Yang Z, Nielsen R (2000). Estimating synonymous and nonsynonymous substitution rates under realistic evolutionary models. Molecular Biology and Evolution 17:32-43. <https://doi.org/10.1093/oxfordjournals.molbev.a026236>
+- Zhang Z, Li J, Yu J (2006). Computing Ka and Ks with a consideration of unequal transitional substitutions. BMC Evolutionary Biology 6:44. <https://doi.org/10.1186/1471-2148-6-44>
+- Comeron JM (1995). A method for estimating the numbers of synonymous and nonsynonymous substitutions per site. Journal of Molecular Evolution 41:1152-1159. <https://doi.org/10.1007/BF00173196>
+- Wang D, Zhang Y, Zhang Z, Zhu J, Yu J (2010). KaKs_Calculator 2.0: a toolkit incorporating gamma-series methods and sliding window strategies. Genomics, Proteomics & Bioinformatics 8:77-80. <https://doi.org/10.1016/S1672-0229(10)60008-3>
+- Yang Z (2007). PAML 4: phylogenetic analysis by maximum likelihood. Molecular Biology and Evolution 24:1586-1591. <https://doi.org/10.1093/molbev/msm088>
+- Thornton K (2003). libsequence: a C++ class library for evolutionary genetic analysis. Bioinformatics 19:2325-2327. <https://doi.org/10.1093/bioinformatics/btg316>
+- Charif D, Lobry JR (2007). SeqinR 1.0-2: a contributed package to the R project for statistical computing devoted to biological sequences retrieval and analysis. In: Bastolla U, Porto M, Roman HE, Vendruscolo M (eds), Structural Approaches to Sequence Evolution: Molecules, Networks, Populations. Springer, pp. 207-232. <https://doi.org/10.1007/978-3-540-35306-5_10>
+- Buchfink B, Reuter K, Drost H-G (2021). Sensitive protein alignments at tree-of-life scale using DIAMOND. Nature Methods 18:366-368. <https://doi.org/10.1038/s41592-021-01101-x>
+- Buchfink B, Barbé É, Ashkenazy H, Reuter K, Kennedy JA, Drost H-G (2026). Clustering the protein universe of life using DIAMOND DeepClust. Nature Methods 23:724-727. <https://doi.org/10.1038/s41592-026-03030-z>
+- Sievers F, Wilm A, Dineen D, Gibson TJ, Karplus K, Li W, Lopez R, McWilliam H, Remmert M, Soding J, Thompson JD, Higgins DG (2011). Fast, scalable generation of high-quality protein multiple sequence alignments using Clustal Omega. Molecular Systems Biology 7:539. <https://doi.org/10.1038/msb.2011.75>
+- Katoh K, Standley DM (2013). MAFFT multiple sequence alignment software version 7: improvements in performance and usability. Molecular Biology and Evolution 30:772-780. <https://doi.org/10.1093/molbev/mst010>
+- Drost H-G, Gabel A, Grosse I, Quint M (2015). Evidence for active maintenance of phylotranscriptomic hourglass patterns in animal and plant embryogenesis. Molecular Biology and Evolution 32:1221-1231. (the R package orthologr) <https://doi.org/10.1093/molbev/msv012>
 
-No DOIs are given here on purpose (none was verified for this list): find the papers by their titles.
+Each DOI is that of the cited work, checked against the publisher's or the institution's page of the paper. COAL
+itself has no DOI: cite its version and repository (`CITATION.cff`). The DeepClust preprint (bioRxiv 2023,
+<https://doi.org/10.1101/2023.01.24.525373>, key `buchfink2023` in reports written by earlier versions) is
+superseded by the paper above; `coal cite` still resolves the old key and prints the paper after it.
 
 ## Filtering before interpretation
 

@@ -29,9 +29,10 @@ references:
     start: W609
     end: W612
     year: 2006
+    doi: "10.1093/nar/gkl315"
   # The Ka/Ks estimators, the programs COAL's Ka/Ks code is derived from, and the programs `coal pipeline` runs
-  # (keys as in src/coal/citations.py; cite the ones your numbers come from: `coal cite`). No DOIs are given: none
-  # was verified for this list.
+  # (keys as in src/coal/citations.py; cite the ones your numbers come from: `coal cite`). Each doi is that of the cited
+  # work, checked against the publisher's or the institution's page; COAL itself has none.
   # nei1986: Nei & Gojobori 1986
   - type: article
     authors:
@@ -45,6 +46,7 @@ references:
     start: 418
     end: 426
     year: 1986
+    doi: "10.1093/oxfordjournals.molbev.a040410"
   # li1985: Li, Wu & Luo 1985
   - type: article
     authors:
@@ -60,6 +62,7 @@ references:
     start: 150
     end: 174
     year: 1985
+    doi: "10.1093/oxfordjournals.molbev.a040343"
   # li1993: Li 1993
   - type: article
     authors:
@@ -71,6 +74,7 @@ references:
     start: 96
     end: 99
     year: 1993
+    doi: "10.1007/BF02407308"
   # pamilo1993: Pamilo & Bianchi 1993
   - type: article
     authors:
@@ -84,6 +88,7 @@ references:
     start: 271
     end: 281
     year: 1993
+    doi: "10.1093/oxfordjournals.molbev.a040003"
   # tzeng2004: Tzeng, Pan & Li 2004
   - type: article
     authors:
@@ -99,6 +104,7 @@ references:
     start: 2290
     end: 2298
     year: 2004
+    doi: "10.1093/molbev/msh242"
   # yang2000: Yang & Nielsen 2000
   - type: article
     authors:
@@ -112,6 +118,7 @@ references:
     start: 32
     end: 43
     year: 2000
+    doi: "10.1093/oxfordjournals.molbev.a026236"
   # zhang2006: Zhang, Li & Yu 2006
   - type: article
     authors:
@@ -126,6 +133,7 @@ references:
     volume: 6
     start: 44
     year: 2006
+    doi: "10.1186/1471-2148-6-44"
   # comeron1995: Comeron 1995
   - type: article
     authors:
@@ -137,6 +145,7 @@ references:
     start: 1152
     end: 1159
     year: 1995
+    doi: "10.1007/BF00173196"
   # wang2010: Wang et al. 2010 (KaKs_Calculator 2.0)
   - type: article
     authors:
@@ -156,6 +165,7 @@ references:
     start: 77
     end: 80
     year: 2010
+    doi: "10.1016/S1672-0229(10)60008-3"
   # yang2007: Yang 2007 (PAML 4)
   - type: article
     authors:
@@ -167,6 +177,7 @@ references:
     start: 1586
     end: 1591
     year: 2007
+    doi: "10.1093/molbev/msm088"
   # thornton2003: Thornton 2003 (libsequence)
   - type: article
     authors:
@@ -178,6 +189,7 @@ references:
     start: 2325
     end: 2327
     year: 2003
+    doi: "10.1093/bioinformatics/btg316"
   # buchfink2021: Buchfink et al. 2021 (DIAMOND)
   - type: article
     authors:
@@ -193,6 +205,7 @@ references:
     start: 366
     end: 368
     year: 2021
+    doi: "10.1038/s41592-021-01101-x"
   # sievers2011: Sievers et al. 2011 (Clustal Omega)
   - type: article
     authors:
@@ -225,6 +238,7 @@ references:
     volume: 7
     start: 539
     year: 2011
+    doi: "10.1038/msb.2011.75"
   # katoh2013: Katoh & Standley 2013 (MAFFT)
   - type: article
     authors:
@@ -238,6 +252,7 @@ references:
     start: 772
     end: 780
     year: 2013
+    doi: "10.1093/molbev/mst010"
   # drost2015: Drost et al. 2015 (orthologr)
   - type: article
     authors:
@@ -255,6 +270,7 @@ references:
     start: 1221
     end: 1231
     year: 2015
+    doi: "10.1093/molbev/msv012"
   # charif2007: Charif & Lobry 2007 (seqinr)
   - type: generic
     authors:
@@ -263,17 +279,29 @@ references:
       - family-names: Lobry
         given-names: "J. R."
     title: "SeqinR 1.0-2: a contributed package to the R project for statistical computing devoted to biological sequences retrieval and analysis"
-    collection-title: "Structural Approaches to Sequence Evolution"
+    collection-title: "Structural Approaches to Sequence Evolution: Molecules, Networks, Populations"
+    editors:
+      - family-names: Bastolla
+        given-names: "U."
+      - family-names: Porto
+        given-names: "M."
+      - family-names: Roman
+        given-names: "H. E."
+      - family-names: Vendruscolo
+        given-names: "M."
     publisher:
       name: Springer
     start: 207
     end: 232
     year: 2007
-  # buchfink2023: Buchfink et al. 2023 (DIAMOND DeepClust, preprint)
-  - type: generic
+    doi: "10.1007/978-3-540-35306-5_10"
+  # buchfink2026: Buchfink et al. 2026 (DIAMOND DeepClust); its bioRxiv preprint of 2023 is superseded
+  - type: article
     authors:
       - family-names: Buchfink
         given-names: "B."
+      - family-names: Barbé
+        given-names: "É."
       - family-names: Ashkenazy
         given-names: "H."
       - family-names: Reuter
@@ -282,6 +310,11 @@ references:
         given-names: "J. A."
       - family-names: Drost
         given-names: "H.-G."
-    title: "Sensitive clustering of protein sequences at tree-of-life scale using DIAMOND DeepClust"
-    notes: "bioRxiv preprint"
-    year: 2023
+    title: "Clustering the protein universe of life using DIAMOND DeepClust"
+    journal: "Nature Methods"
+    volume: 23
+    issue: 4
+    start: 724
+    end: 727
+    year: 2026
+    doi: "10.1038/s41592-026-03030-z"

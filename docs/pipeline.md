@@ -282,7 +282,10 @@ Schema `coal.pipeline/1`: [pipeline.schema.json](pipeline.schema.json). It is wr
   `--resume` state, so a reused stage still shows how its files were made), and for Clustal Omega / MAFFT,
   which run once per cluster, `command_template` (one run's command with `IN.fasta` / `OUT.fasta`). `cite`: the
   citation keys for what this run used; `coal cite DIR/report.json` prints the references
-  ([kaks.md](kaks.md#what-to-cite)). `warnings`: the warning lines of the run, when there were any. None of
+  ([kaks.md](kaks.md#what-to-cite)). A `clusters` run that used DeepClust lists DIAMOND
+  (`buchfink2021`) and the DeepClust paper (`buchfink2026`: Buchfink et al. 2026, Nature Methods 23:724-727,
+  <https://doi.org/10.1038/s41592-026-03030-z>; reports written before it appeared name its preprint,
+  `buchfink2023`, which `coal cite` still resolves). `warnings`: the warning lines of the run, when there were any. None of
   this changes a table: `dnds.tsv` and the others are byte-identical whatever `--hash-inputs` is.
 - `stages`: name, wall `seconds`, `cached` (reused by `--resume`). The stage `align_codon_kaks` also has
   `align_codon_seconds` and `kaks_seconds` (inside the engine) and, when an MSA program ran, `msa_seconds`.

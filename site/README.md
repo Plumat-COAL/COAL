@@ -9,7 +9,7 @@ step, nothing loaded from other sites (no CDNs, font services, trackers or analy
 | `install.html` | install steps for Windows (SmartScreen, Smart App Control), macOS, Linux, the command line; files and checksums |
 | `guide.html` | the explainer animation inline (an iframe of `explainer.html`), an example run, warnings and errors, the C++ engine, what it does not do, help |
 | `differences.html` | "Why use it" in the menu: the reasons, the differences from PAL2NAL v14 (the test counts) and the speed table |
-| `cite.html` | how to cite COAL and PAL2NAL (the version is in a `data-version-ref` span) |
+| `cite.html` | how to cite COAL and PAL2NAL (the version is in a `data-version-ref` span); what to cite for what was run, each cited paper's title a link to its DOI (the table and list follow `src/coal/citations.py`; `tests/test_citations.py` compares them). COAL itself has no DOI |
 | `style.css` | styles for every page; dark only, light when printed |
 | `assets/fonts/` | Literata (regular, semibold, italic), Latin subsets as WOFF2 (about 21 KB each), with its licence `OFL.txt` (SIL Open Font License 1.1) |
 | `main.js` | copy buttons, registers `sw.js`; old one-page links (`#windows`, `#speed`, ...) are sent to the page that now holds that section |

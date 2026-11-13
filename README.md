@@ -188,7 +188,7 @@ very small dS give numbers that mean little.
 If you use COAL, please cite it (`CITATION.cff`, with the version `coal --version` prints) and PAL2NAL:
 
 Suyama M, Torrents D, Bork P (2006) PAL2NAL: robust conversion of protein sequence alignments into the
-corresponding codon alignments. *Nucleic Acids Res.* 34:W609–W612.
+corresponding codon alignments. *Nucleic Acids Res.* 34:W609–W612. <https://doi.org/10.1093/nar/gkl315>
 
 COAL's Ka/Ks numbers come from published estimators, in code derived from KaKs_Calculator 2.0, PAML, libsequence
 and seqinr, and `coal pipeline` runs DIAMOND and an aligner. Please cite what your numbers come from:
@@ -207,7 +207,7 @@ and seqinr, and `coal pipeline` runs DIAMOND and an aligner. Please cite what yo
 | Ka/Ks, method Comeron | Comeron 1995; Thornton 2003 (libsequence) |
 | Ka/Ks, method Li | Li 1993; Charif & Lobry 2007 (seqinr) |
 | `coal pipeline pairs` with DIAMOND (orthologs) | Buchfink et al. 2021 (DIAMOND) |
-| `coal pipeline clusters` with DIAMOND DeepClust | Buchfink et al. 2021 (DIAMOND); Buchfink et al. 2023 (DIAMOND DeepClust, preprint) |
+| `coal pipeline clusters` with DIAMOND DeepClust | Buchfink et al. 2021 (DIAMOND); Buchfink et al. 2026 (DIAMOND DeepClust) |
 | Protein alignments by Clustal Omega (`--aligner clustalo`, the cluster default) | Sievers et al. 2011 (Clustal Omega) |
 | Protein alignments by MAFFT (`--aligner mafft`) | Katoh & Standley 2013 (MAFFT) |
 | Through the R package orthologr | Drost et al. 2015 (orthologr) |

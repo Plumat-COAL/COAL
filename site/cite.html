@@ -1,6 +1,4 @@
 <!doctype html>
-<!-- One of five short pages (index, install, guide, differences, cite) that share this header and footer;
-     tests/test_docs_site.py checks they stay the same on every page. Plain HTML, nothing loaded from other sites. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -45,8 +43,8 @@
   <blockquote class="cite"><p>Newton C, Murati K (2026). COAL: codon alignments from protein alignments, version
     <span data-version-ref>0.6.0</span>. https://github.com/plumat-coal/COAL</p></blockquote>
   <p class="also-cite">COAL follows PAL2NAL's method, so please cite PAL2NAL too:</p>
-  <blockquote class="cite"><p>Suyama M, Torrents D, Bork P (2006). PAL2NAL: robust conversion of protein sequence
-    alignments into the corresponding codon alignments. <i>Nucleic Acids Research</i> 34:W609–W612.</p></blockquote>
+  <blockquote class="cite"><p>Suyama M, Torrents D, Bork P (2006). <a href="https://doi.org/10.1093/nar/gkl315">PAL2NAL: robust conversion of protein
+    sequence alignments into the corresponding codon alignments</a>. <i>Nucleic Acids Research</i> 34:W609–W612.</p></blockquote>
   <p class="finer"><a href="https://github.com/plumat-coal/COAL/blob/main/CITATION.cff">CITATION.cff</a></p>
 </section>
 
@@ -61,43 +59,43 @@
       <caption id="what-cap" class="visually-hidden">What was run, and the references to cite for it</caption>
       <thead><tr><th scope="col">What you ran</th><th scope="col">Cite</th></tr></thead>
       <tbody>
-        <tr><td>Anything</td><td>COAL</td></tr>
-        <tr><td>A codon alignment (<code>coal PEP NUC</code>, <code>pal2nal</code>, every Ka/Ks route of the pipeline)</td><td>Suyama et al. 2006 (PAL2NAL)</td></tr>
-        <tr><td>Ka/Ks, method NG</td><td>Nei &amp; Gojobori 1986; Wang et al. 2010 (KaKs_Calculator 2.0)</td></tr>
-        <tr><td>Ka/Ks, method LWL</td><td>Li, Wu &amp; Luo 1985; Wang et al. 2010 (KaKs_Calculator 2.0)</td></tr>
-        <tr><td>Ka/Ks, method MLWL</td><td>Li, Wu &amp; Luo 1985; Tzeng, Pan &amp; Li 2004; Wang et al. 2010 (KaKs_Calculator 2.0)</td></tr>
-        <tr><td>Ka/Ks, method LPB</td><td>Li 1993; Pamilo &amp; Bianchi 1993; Wang et al. 2010 (KaKs_Calculator 2.0)</td></tr>
-        <tr><td>Ka/Ks, method MLPB</td><td>Li 1993; Pamilo &amp; Bianchi 1993; Tzeng, Pan &amp; Li 2004; Wang et al. 2010 (KaKs_Calculator 2.0)</td></tr>
-        <tr><td>Ka/Ks, method YN (the default)</td><td>Yang &amp; Nielsen 2000; Wang et al. 2010 (KaKs_Calculator 2.0); Yang 2007 (PAML 4)</td></tr>
-        <tr><td>Ka/Ks, method MYN</td><td>Zhang, Li &amp; Yu 2006; Yang &amp; Nielsen 2000; Wang et al. 2010 (KaKs_Calculator 2.0); Yang 2007 (PAML 4)</td></tr>
-        <tr><td>Ka/Ks, method Comeron</td><td>Comeron 1995; Thornton 2003 (libsequence)</td></tr>
-        <tr><td>Ka/Ks, method Li</td><td>Li 1993; Charif &amp; Lobry 2007 (seqinr)</td></tr>
-        <tr><td><code>coal pipeline pairs</code> with DIAMOND (orthologs)</td><td>Buchfink et al. 2021 (DIAMOND)</td></tr>
-        <tr><td><code>coal pipeline clusters</code> with DIAMOND DeepClust</td><td>Buchfink et al. 2021 (DIAMOND); Buchfink et al. 2023 (DIAMOND DeepClust, preprint)</td></tr>
-        <tr><td>Protein alignments by Clustal Omega (<code>--aligner clustalo</code>, the cluster default)</td><td>Sievers et al. 2011 (Clustal Omega)</td></tr>
-        <tr><td>Protein alignments by MAFFT (<code>--aligner mafft</code>)</td><td>Katoh &amp; Standley 2013 (MAFFT)</td></tr>
-        <tr><td>Through the R package orthologr</td><td>Drost et al. 2015 (orthologr)</td></tr>
+<tr><td>Anything</td><td>COAL</td></tr>
+<tr><td>A codon alignment (<code>coal PEP NUC</code>, <code>pal2nal</code>, every Ka/Ks route of the pipeline)</td><td>Suyama et al. 2006 (PAL2NAL)</td></tr>
+<tr><td>Ka/Ks, method NG</td><td>Nei &amp; Gojobori 1986; Wang et al. 2010 (KaKs_Calculator 2.0)</td></tr>
+<tr><td>Ka/Ks, method LWL</td><td>Li, Wu &amp; Luo 1985; Wang et al. 2010 (KaKs_Calculator 2.0)</td></tr>
+<tr><td>Ka/Ks, method MLWL</td><td>Li, Wu &amp; Luo 1985; Tzeng, Pan &amp; Li 2004; Wang et al. 2010 (KaKs_Calculator 2.0)</td></tr>
+<tr><td>Ka/Ks, method LPB</td><td>Li 1993; Pamilo &amp; Bianchi 1993; Wang et al. 2010 (KaKs_Calculator 2.0)</td></tr>
+<tr><td>Ka/Ks, method MLPB</td><td>Li 1993; Pamilo &amp; Bianchi 1993; Tzeng, Pan &amp; Li 2004; Wang et al. 2010 (KaKs_Calculator 2.0)</td></tr>
+<tr><td>Ka/Ks, method YN (the default)</td><td>Yang &amp; Nielsen 2000; Wang et al. 2010 (KaKs_Calculator 2.0); Yang 2007 (PAML 4)</td></tr>
+<tr><td>Ka/Ks, method MYN</td><td>Zhang, Li &amp; Yu 2006; Yang &amp; Nielsen 2000; Wang et al. 2010 (KaKs_Calculator 2.0); Yang 2007 (PAML 4)</td></tr>
+<tr><td>Ka/Ks, method Comeron</td><td>Comeron 1995; Thornton 2003 (libsequence)</td></tr>
+<tr><td>Ka/Ks, method Li</td><td>Li 1993; Charif &amp; Lobry 2007 (seqinr)</td></tr>
+<tr><td><code>coal pipeline pairs</code> with DIAMOND (orthologs)</td><td>Buchfink et al. 2021 (DIAMOND)</td></tr>
+<tr><td><code>coal pipeline clusters</code> with DIAMOND DeepClust</td><td>Buchfink et al. 2021 (DIAMOND); Buchfink et al. 2026 (DIAMOND DeepClust)</td></tr>
+<tr><td>Protein alignments by Clustal Omega (<code>--aligner clustalo</code>, the cluster default)</td><td>Sievers et al. 2011 (Clustal Omega)</td></tr>
+<tr><td>Protein alignments by MAFFT (<code>--aligner mafft</code>)</td><td>Katoh &amp; Standley 2013 (MAFFT)</td></tr>
+<tr><td>Through the R package orthologr</td><td>Drost et al. 2015 (orthologr)</td></tr>
       </tbody>
     </table>
   </div>
   <ul class="finer">
-    <li>Nei M, Gojobori T (1986). Simple methods for estimating the numbers of synonymous and nonsynonymous nucleotide substitutions. Molecular Biology and Evolution 3:418-426.</li>
-    <li>Li W-H, Wu C-I, Luo C-C (1985). A new method for estimating synonymous and nonsynonymous rates of nucleotide substitution considering the relative likelihood of nucleotide and codon changes. Molecular Biology and Evolution 2:150-174.</li>
-    <li>Li W-H (1993). Unbiased estimation of the rates of synonymous and nonsynonymous substitution. Journal of Molecular Evolution 36:96-99.</li>
-    <li>Pamilo P, Bianchi NO (1993). Evolution of the Zfx and Zfy genes: rates and interdependence between the genes. Molecular Biology and Evolution 10:271-281.</li>
-    <li>Tzeng Y-H, Pan R, Li W-H (2004). Comparison of three methods for estimating rates of synonymous and nonsynonymous nucleotide substitutions. Molecular Biology and Evolution 21:2290-2298.</li>
-    <li>Yang Z, Nielsen R (2000). Estimating synonymous and nonsynonymous substitution rates under realistic evolutionary models. Molecular Biology and Evolution 17:32-43.</li>
-    <li>Zhang Z, Li J, Yu J (2006). Computing Ka and Ks with a consideration of unequal transitional substitutions. BMC Evolutionary Biology 6:44.</li>
-    <li>Comeron JM (1995). A method for estimating the numbers of synonymous and nonsynonymous substitutions per site. Journal of Molecular Evolution 41:1152-1159.</li>
-    <li>Wang D, Zhang Y, Zhang Z, Zhu J, Yu J (2010). KaKs_Calculator 2.0: a toolkit incorporating gamma-series methods and sliding window strategies. Genomics, Proteomics &amp; Bioinformatics 8:77-80.</li>
-    <li>Yang Z (2007). PAML 4: phylogenetic analysis by maximum likelihood. Molecular Biology and Evolution 24:1586-1591.</li>
-    <li>Thornton K (2003). libsequence: a C++ class library for evolutionary genetic analysis. Bioinformatics 19:2325-2327.</li>
-    <li>Charif D, Lobry JR (2007). SeqinR 1.0-2: a contributed package to the R project for statistical computing devoted to biological sequences retrieval and analysis. In: Bastolla U, Porto M, Roman HE, Vendruscolo M (eds), Structural Approaches to Sequence Evolution. Springer, pp. 207-232.</li>
-    <li>Buchfink B, Reuter K, Drost H-G (2021). Sensitive protein alignments at tree-of-life scale using DIAMOND. Nature Methods 18:366-368.</li>
-    <li>Buchfink B, Ashkenazy H, Reuter K, Kennedy JA, Drost H-G (2023). Sensitive clustering of protein sequences at tree-of-life scale using DIAMOND DeepClust. bioRxiv (preprint).</li>
-    <li>Sievers F, Wilm A, Dineen D, Gibson TJ, Karplus K, Li W, Lopez R, McWilliam H, Remmert M, Soding J, Thompson JD, Higgins DG (2011). Fast, scalable generation of high-quality protein multiple sequence alignments using Clustal Omega. Molecular Systems Biology 7:539.</li>
-    <li>Katoh K, Standley DM (2013). MAFFT multiple sequence alignment software version 7: improvements in performance and usability. Molecular Biology and Evolution 30:772-780.</li>
-    <li>Drost H-G, Gabel A, Grosse I, Quint M (2015). Evidence for active maintenance of phylotranscriptomic hourglass patterns in animal and plant embryogenesis. Molecular Biology and Evolution 32:1221-1231. (the R package orthologr)</li>
+<li>Nei M, Gojobori T (1986). <a href="https://doi.org/10.1093/oxfordjournals.molbev.a040410">Simple methods for estimating the numbers of synonymous and nonsynonymous nucleotide substitutions</a>. Molecular Biology and Evolution 3:418-426.</li>
+<li>Li W-H, Wu C-I, Luo C-C (1985). <a href="https://doi.org/10.1093/oxfordjournals.molbev.a040343">A new method for estimating synonymous and nonsynonymous rates of nucleotide substitution considering the relative likelihood of nucleotide and codon changes</a>. Molecular Biology and Evolution 2:150-174.</li>
+<li>Li W-H (1993). <a href="https://doi.org/10.1007/BF02407308">Unbiased estimation of the rates of synonymous and nonsynonymous substitution</a>. Journal of Molecular Evolution 36:96-99.</li>
+<li>Pamilo P, Bianchi NO (1993). <a href="https://doi.org/10.1093/oxfordjournals.molbev.a040003">Evolution of the Zfx and Zfy genes: rates and interdependence between the genes</a>. Molecular Biology and Evolution 10:271-281.</li>
+<li>Tzeng Y-H, Pan R, Li W-H (2004). <a href="https://doi.org/10.1093/molbev/msh242">Comparison of three methods for estimating rates of synonymous and nonsynonymous nucleotide substitutions</a>. Molecular Biology and Evolution 21:2290-2298.</li>
+<li>Yang Z, Nielsen R (2000). <a href="https://doi.org/10.1093/oxfordjournals.molbev.a026236">Estimating synonymous and nonsynonymous substitution rates under realistic evolutionary models</a>. Molecular Biology and Evolution 17:32-43.</li>
+<li>Zhang Z, Li J, Yu J (2006). <a href="https://doi.org/10.1186/1471-2148-6-44">Computing Ka and Ks with a consideration of unequal transitional substitutions</a>. BMC Evolutionary Biology 6:44.</li>
+<li>Comeron JM (1995). <a href="https://doi.org/10.1007/BF00173196">A method for estimating the numbers of synonymous and nonsynonymous substitutions per site</a>. Journal of Molecular Evolution 41:1152-1159.</li>
+<li>Wang D, Zhang Y, Zhang Z, Zhu J, Yu J (2010). <a href="https://doi.org/10.1016/S1672-0229(10)60008-3">KaKs_Calculator 2.0: a toolkit incorporating gamma-series methods and sliding window strategies</a>. Genomics, Proteomics &amp; Bioinformatics 8:77-80.</li>
+<li>Yang Z (2007). <a href="https://doi.org/10.1093/molbev/msm088">PAML 4: phylogenetic analysis by maximum likelihood</a>. Molecular Biology and Evolution 24:1586-1591.</li>
+<li>Thornton K (2003). <a href="https://doi.org/10.1093/bioinformatics/btg316">libsequence: a C++ class library for evolutionary genetic analysis</a>. Bioinformatics 19:2325-2327.</li>
+<li>Charif D, Lobry JR (2007). <a href="https://doi.org/10.1007/978-3-540-35306-5_10">SeqinR 1.0-2: a contributed package to the R project for statistical computing devoted to biological sequences retrieval and analysis</a>. In: Bastolla U, Porto M, Roman HE, Vendruscolo M (eds), Structural Approaches to Sequence Evolution: Molecules, Networks, Populations. Springer, pp. 207-232.</li>
+<li>Buchfink B, Reuter K, Drost H-G (2021). <a href="https://doi.org/10.1038/s41592-021-01101-x">Sensitive protein alignments at tree-of-life scale using DIAMOND</a>. Nature Methods 18:366-368.</li>
+<li>Buchfink B, Barbé É, Ashkenazy H, Reuter K, Kennedy JA, Drost H-G (2026). <a href="https://doi.org/10.1038/s41592-026-03030-z">Clustering the protein universe of life using DIAMOND DeepClust</a>. Nature Methods 23:724-727.</li>
+<li>Sievers F, Wilm A, Dineen D, Gibson TJ, Karplus K, Li W, Lopez R, McWilliam H, Remmert M, Soding J, Thompson JD, Higgins DG (2011). <a href="https://doi.org/10.1038/msb.2011.75">Fast, scalable generation of high-quality protein multiple sequence alignments using Clustal Omega</a>. Molecular Systems Biology 7:539.</li>
+<li>Katoh K, Standley DM (2013). <a href="https://doi.org/10.1093/molbev/mst010">MAFFT multiple sequence alignment software version 7: improvements in performance and usability</a>. Molecular Biology and Evolution 30:772-780.</li>
+<li>Drost H-G, Gabel A, Grosse I, Quint M (2015). <a href="https://doi.org/10.1093/molbev/msv012">Evidence for active maintenance of phylotranscriptomic hourglass patterns in animal and plant embryogenesis</a>. Molecular Biology and Evolution 32:1221-1231. (the R package orthologr)</li>
   </ul>
 </section>
 </main>

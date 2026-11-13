@@ -290,7 +290,13 @@ entry under "Added", not under "Fixed".
   estimator and the program COAL's code is derived from, KaKs_Calculator 2.0, PAML, libsequence or seqinr; the
   pipeline: DIAMOND, DeepClust, Clustal Omega, MAFFT) and the references; `coal cite YN` those of a method;
   `coal cite out/report.json` those of one pipeline run. The same table is in README.md, docs/kaks.md,
-  `CITATION.cff` (references) and on the website. No DOIs are given (none was verified).
+  `CITATION.cff` (references) and on the website. Every cited work has its DOI (second review, 2026-11-13: each
+  reference was checked against the publisher's or the institution's page): `coal cite` prints it as a
+  `https://doi.org/` link, `CITATION.cff` has `doi:` fields, the documents and the website link it. COAL itself
+  still has no DOI. **DIAMOND DeepClust is cited by its paper**, Buchfink, Barbé, Ashkenazy, Reuter, Kennedy &
+  Drost (2026), Nature Methods 23:724-727 (key `buchfink2026`); the key of its preprint, `buchfink2023`, is no
+  longer listed but still resolves (`coal cite buchfink2023`, and a report that names it), followed by the paper.
+  The seqinr reference has the book's full title.
 - **`coal --help` lists every command, and `coal help [COMMAND]` works.** The help of `coal` (and of `coal-cpp`)
   ends with one line per command: `kaks`, `dnds`, `pipeline`, `translate`, `codon-dnds`, `cite`, `help`,
   `--cpp-path`. `coal kaks --help`, `coal dnds --help`, `coal translate --help` and `coal codon-dnds --help` print

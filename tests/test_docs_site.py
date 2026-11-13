@@ -286,8 +286,10 @@ SITE_FILES = PAGES + FONTS + ("assets/fonts/OFL.txt",) + ("index.html", "style.c
               "assets/coal-logo-dark@2x.png", "assets/favicon-32.png", "assets/apple-touch-icon.png",
               "assets/icon-512.png", "assets/coal-train.svg")
 TEXT_EXT = (".html", ".css", ".js", ".svg", ".txt", ".json", ".webmanifest")
-# Not requests: the SVG namespace, and the local app's address shown as text for people to open.
-ALLOWED_NON_REPO_URLS = ("http://www.w3.org/2000/svg", "http://127.0.0.1:7860")
+# Not requests: the SVG namespace, the local app's address shown as text for people to open, and the DOI links of
+# the cited papers on cite.html (links a reader may follow; the page loads nothing from them. They are the DOIs of
+# other people's papers: the rule "no DOI for COAL itself" below is unaffected).
+ALLOWED_NON_REPO_URLS = ("http://www.w3.org/2000/svg", "http://127.0.0.1:7860", "https://doi.org/10.")
 
 
 # The font's licence names its project and licence sites; no page loads or links them.
