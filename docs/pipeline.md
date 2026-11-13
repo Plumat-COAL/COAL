@@ -437,6 +437,11 @@ machine is still to be done.
   protein records runs, with the protein records listed as failed genes.
 - **Python holds every ID** (and a byte offset per record), so memory grows with the number of sequences, not
   with their length.
+- **Tools in COAL's cache are used only with their checksum record.** A DIAMOND, Clustal Omega or MAFFT that an
+  earlier COAL (0.5.0 or before) installed into the cache has no `<binary>.coal-manifest.json` and is not used:
+  the run says so once and asks for `coal pipeline install <tool> --force` (or `--install-tools`). The record
+  lies next to the binary, so it guards against old, incomplete or altered installs, not against someone who can
+  write to the cache folder ([alignment.md](alignment.md), "What is in the cache is checked").
 - **Installers verify what they download** ([alignment.md](alignment.md#clusters-clustal-omega-and-mafft-coalmsa),
   "Verification"). The DIAMOND 2.2.8 release archives (Linux x86_64, macOS, Windows x64) and micromamba are pinned
   by SHA-256 in COAL's source; DIAMOND publishes no checksums, so those hashes are the ones of the files as
