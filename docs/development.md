@@ -42,6 +42,7 @@ Even in such a build a hook acts only while `COAL_TEST_HOOKS=1` is set in the en
 | `COAL_TEST_PAUSE_IN_REPORT=1` | sleeps while the report's temporary file exists | the same variable (`report.py`) |
 | `COAL_TEST_LOCK_START_AT=<ms since the epoch>` | waits until then before it takes the output lock | none (the tests pass the time to their own starter) |
 | `COAL_TEST_HOLD_LOCK_UNTIL=<path>` | holds the output lock until that file exists, then checks the lock is still its own | none |
+| `COAL_TEST_LOCK_BEFORE_TAKEOVER_UNTIL=<file>` | between judging a lock stale and replacing it: creates `<file>.waiting`, then waits until `<file>` exists (at most 60 s), so a test can act inside the window without a fixed sleep | |
 | `COAL_TEST_LOCK_BEFORE_TAKEOVER_MS=<ms>` | waits between judging a lock stale and replacing it | `pipeline._before_takeover`, `pipeline._in_takeover` (attributes a test sets) |
 | `COAL_TEST_UNLINK_FAILS=N` | the first N removals of lock, guard and temporary files fail as on Windows while another process has the file open | `pipeline._unlink_fails` (an attribute a test sets) |
 

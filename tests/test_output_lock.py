@@ -36,15 +36,23 @@ from coal import pipeline as P  # noqa: E402
 from coal.core import CoalError  # noqa: E402
 
 
-def _starter(out, start_at, q):
+def _starter(out, start_at, q, tried, n):
     while time.time() < start_at:
         pass
     try:
         lock = P.take_output_lock(out, out)
     except CoalError:
+        with tried.get_lock():
+            tried.value += 1
         q.put(("refused", os.getpid(), ""))
         return
-    time.sleep(0.4)
+    with tried.get_lock():
+        tried.value += 1
+    # hold the output until every other start has made its attempt (each of them must meet this lock), not for
+    # a fixed time; a second holder would be waiting here too, so the wait ends after a short while in that case
+    deadline = time.time() + 20
+    while tried.value < n and time.time() < deadline:
+        time.sleep(0.005)
     try:
         with open(lock, encoding="ascii") as fh:
             owner = fh.read().split()[0]
@@ -324,7 +332,8 @@ class Lock(unittest.TestCase):
             prepare()
             q = ctx.Queue()
             at = time.time() + (0.3 if ctx.get_start_method() == "fork" else 3.0)
-            ps = [ctx.Process(target=_starter, args=(self.out, at, q)) for _ in range(n)]
+            tried = ctx.Value("i", 0)   # starts that have made their attempt
+            ps = [ctx.Process(target=_starter, args=(self.out, at, q, tried, n)) for _ in range(n)]
             for p in ps:
                 p.start()
             ev = [q.get(timeout=60) for _ in ps]
@@ -525,15 +534,23 @@ class CppLock(unittest.TestCase):
         is and be refused. (With an unguarded takeover B removed A's lock and both ran.)"""
         need_test_hooks(self, self.cpp)
         self.lock.write_text(f"{dead_pid()}\n", encoding="ascii")
+        b_go = self.go.with_name(self.go.name + ".b")
         b = subprocess.Popen([str(self.cpp), *self.EXAMPLE, "-o", str(self.out)], stdout=subprocess.DEVNULL,
                              stderr=subprocess.PIPE, text=True,
-                             env={**self.env, "COAL_TEST_HOOKS": "1", "COAL_TEST_LOCK_BEFORE_TAKEOVER_MS": "1500",
+                             env={**self.env, "COAL_TEST_HOOKS": "1",
+                                  "COAL_TEST_LOCK_BEFORE_TAKEOVER_UNTIL": str(b_go),
                                   "COAL_TEST_HOLD_LOCK_UNTIL": str(self.go)})
         self.procs.append(b)
-        time.sleep(0.4)                       # B has read the stale lock and waits
+        waiting = Path(str(b_go) + ".waiting")   # B says when it has read the stale lock and waits
+        t0 = time.time()
+        while not waiting.exists():
+            self.assertIsNone(b.poll(), "B ended before it reached the takeover")
+            self.assertLess(time.time() - t0, 60, "B did not reach the takeover")
+            time.sleep(0.005)
         a = self.start_cpp()
         self.wait_for_lock(a.pid)
         mine = self.lock.read_bytes()
+        b_go.write_text("")                    # A holds the output: B goes on with what it read
         self.assertEqual(b.wait(timeout=60), 1, "the second run also took the output")
         self.assertIn(f"another COAL run (process {a.pid})", b.stderr.read())
         self.assertEqual(self.lock.read_bytes(), mine)

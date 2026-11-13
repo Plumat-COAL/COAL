@@ -153,12 +153,13 @@ class Interrupts(unittest.TestCase):
             return True
 
     def test_interrupt_between_start_and_registration(self):
-        in_window, procs, errors = threading.Event(), [], []
+        in_window, interrupted, procs, errors = threading.Event(), threading.Event(), [], []
 
         def hook(proc):
             procs.append(proc)
             in_window.set()
-            time.sleep(0.5)   # the aligner runs; the old code had not registered it yet
+            interrupted.wait(20)   # the aligner runs, and the interrupt arrives while the start is still here
+                                   # (the old code had not registered the process yet)
 
         def work():
             try:
@@ -170,6 +171,7 @@ class Interrupts(unittest.TestCase):
         t.start()
         self.assertTrue(in_window.wait(20))
         killed = msa.kill_running()        # the interrupt arrives inside the window
+        interrupted.set()
         t.join(20)
         self.assertFalse(t.is_alive(), "run_msa did not return: its aligner was not ended")
         self.assertEqual(killed, 1, "kill_running() did not see the aligner that had just been started")

@@ -919,6 +919,14 @@ std::string take_output_lock(const std::string& real, const std::string& name) {
         // Test hook: wait between judging the lock stale and replacing it (the window of the race)
         if (const char* ms = test_hook_env("COAL_TEST_LOCK_BEFORE_TAKEOVER_MS"))
             std::this_thread::sleep_for(std::chrono::milliseconds(std::min(std::atoll(ms), 60000LL)));
+        // ... or, without a fixed time: say that this run is in the window (the file <name>.waiting appears) and
+        // stay there until the file <name> exists (at most 60 s)
+        if (const char* go = test_hook_env("COAL_TEST_LOCK_BEFORE_TAKEOVER_UNTIL")) {
+            { std::ofstream mark(std::string(go) + ".waiting"); }
+            std::error_code ec;
+            for (int k = 0; k < 12000 && !fs::exists(go, ec); ++k)
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
 #endif
         const int err = replace_stale_lock(path, cur.raw);   // a lock whose process is gone (or one empty for 2 s)
         if (err) throw CoalError(output_error(name, err), "file_error");
