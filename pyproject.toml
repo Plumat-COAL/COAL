@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "coal-align"
 version = "0.6.0.dev0"
-description = "Fast codon alignment from a protein alignment and coding DNA (PAL2NAL alternative)"
+description = "Fast codon alignments (PAL2NAL alternative), Ka/Ks (dN/dS) for pairs, and a one-step pipeline from coding sequences to dN/dS"
 readme = "README.md"
 license = {text = "GPL-3.0-only"}  # from the release after 0.5.0; 0.5.0 and earlier are MIT (CHANGELOG.md)
 classifiers = ["License :: OSI Approved :: GNU General Public License v3 (GPLv3)"]

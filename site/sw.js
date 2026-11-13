@@ -3,7 +3,7 @@
 // from github.com are never touched.
 "use strict";
 // Bump the cache name whenever FILES or their content changes.
-var CACHE = "coal-site-v8";
+var CACHE = "coal-site-v9";
 var FILES = ["./", "index.html", "install.html", "guide.html", "differences.html", "cite.html", "style.css", "main.js",
   "favicon.svg", "explainer.html", "img/broken-gene.webp", "assets/fonts/Literata-Regular.woff2", "assets/fonts/Literata-Semibold.woff2",
   "assets/fonts/Literata-Italic.woff2",

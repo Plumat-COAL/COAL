@@ -59,8 +59,9 @@ they write. Use them when COAL should also do the ortholog search or the cluster
 pairs or clusters, \code{\link[=coal_dnds_pairs]{coal_dnds_pairs()}} and \code{\link[=coal_dnds_clusters]{coal_dnds_clusters()}} need neither Python nor files.
 }
 \details{
-Needs: the R package \pkg{reticulate}; a Python with \code{coal-align} (\verb{pip install coal-align}) including its
-\code{coal-cpp} program; DIAMOND, and for clusters Clustal Omega (on the \code{PATH}, or \code{install_tools = TRUE}).
+Needs: the R package \pkg{reticulate}; a Python with \code{coal-align} 0.6 or later installed from a platform wheel
+(\verb{coal_align-<version>-py3-none-<platform>.whl} of a COAL release: it includes the \code{coal-cpp} program; the
+package is not on PyPI yet); DIAMOND, and for clusters Clustal Omega (on the \code{PATH}, or \code{install_tools = TRUE}).
 \code{\link[=coal_python_available]{coal_python_available()}} tells whether Python is ready.
 }
 \examples{

@@ -1,8 +1,17 @@
 # COAL
 
-**Codon alignments from a protein alignment and its coding DNA.** COAL is a fast, open-source alternative to
+**Codon alignments from a protein alignment and its coding DNA, Ka/Ks (dN/dS) for pairs, and one step from coding
+sequences to a dN/dS table.** COAL is a fast, open-source alternative to
 [PAL2NAL](https://www.bork.embl.de/pal2nal/): it maps unaligned coding DNA onto an existing protein multiple sequence
-alignment to produce a codon alignment, ready for dN/dS (PAML codeml, HyPhy) or DNA phylogenies.
+alignment to produce a codon alignment, ready for dN/dS (PAML codeml, HyPhy) or DNA phylogenies. From 0.6 it also
+estimates Ka/Ks itself and runs the whole route from two CDS files to dN/dS.
+
+| What | Command | Needs |
+|---|---|---|
+| Codon alignment from a protein alignment + coding DNA | `coal pep.aln nuc.fasta` (or `pal2nal ...`) | any install |
+| Ka/Ks (dN/dS) for pairs of aligned coding sequences | `coal dnds` (tidy table), `coal kaks` (KaKs_Calculator's format) | the platform wheel (`coal-cpp`) |
+| Coding sequences in, dN/dS table out, in one step | `coal pipeline pairs` (orthologs of two species), `coal pipeline clusters` (gene families) | the platform wheel, DIAMOND (and Clustal Omega for clusters) |
+| The same from R | the `coalr` package; orthologr's `dNdS(engine = "coal")` | R ([docs/r.md](docs/r.md)) |
 
 - **Compatible:** COAL's output is identical to PAL2NAL v14's except for a short list of documented, deliberate
   differences ([docs/differences.md](docs/differences.md)). Every stored PAL2NAL v14 reference check passes, and
@@ -19,22 +28,38 @@ alignment to produce a codon alignment, ready for dN/dS (PAML codeml, HyPhy) or 
   probably-wrong genes, a JSON run report, and a `pal2nal` command that accepts an unchanged PAL2NAL v14 command
   line.
 - **Tells you what went wrong:** warnings name the gene and position, with genetic-code suggestions.
+- **Ka/Ks without a second program:** `coal kaks` reads and writes KaKs_Calculator 2.0's formats (its methods NG,
+  LWL, MLWL, LPB, MLPB, YN, MYN), `coal dnds` writes a tidy table with standard errors and a status per pair, and
+  both have Comeron (1995) and Li (1993) as the R package orthologr computes them
+  ([docs/kaks.md](docs/kaks.md): what was validated against what).
+- **CDS to dN/dS in one step:** `coal pipeline` translates, finds orthologs (DIAMOND reciprocal best hits) or
+  clusters (DIAMOND DeepClust), aligns the proteins, threads the codons and estimates Ka/Ks, with a report that
+  records versions, command lines and input checksums ([docs/pipeline.md](docs/pipeline.md)).
 
 ## Install
 
 Needs Python 3.10+. The package is called `coal-align` (the name `coal` on PyPI belongs to another project); the
-command and the Python module are both `coal`. Until it is on PyPI, install from a release or from source:
+command and the Python module are both `coal`. **Publication on PyPI is pending**, so install from a release. There
+are two routes, and they do not give the same thing:
+
+| Route | What you get |
+|---|---|
+| **The platform wheel** (Linux x86_64 / aarch64 with glibc 2.28+, macOS 11+ on Apple silicon and Intel, Windows x64): download `coal_align-<version>-py3-none-<platform>.whl` from the [Releases page](https://github.com/plumat-coal/COAL/releases/latest), then `python -m pip install` that file | **Everything**: codon alignment with both engines, Ka/Ks (`coal kaks`, `coal dnds`) and `coal pipeline`. The C++ engine `coal-cpp` is inside the wheel |
+| **The source package** (the command below), the `py3-none-any` wheel, a checkout without a build | **The Python engine only: codon alignment** (`coal`, `pal2nal`, `import coal`). `coal kaks`, `coal dnds` and `coal pipeline` say that they need `coal-cpp` and how to get it |
 
 ```
 python -m pip install "coal-align @ https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz"
 ```
 
-Once it is on PyPI, `python -m pip install coal-align` also brings the C++ engine `coal-cpp` on Linux (x86_64 and
-aarch64, glibc 2.28+), macOS 11+ (Apple silicon and Intel) and Windows x64: each release has a wheel per platform
-with the binary inside (`coal_align-<version>-py3-none-<platform>.whl` on the
-[Releases page](https://github.com/plumat-coal/COAL/releases/latest); `pip install` that file to get it from a
-release), and `coal` hands large inputs to it with no settings. `coal --cpp-path` prints where it is. Other
-platforms get the pure-Python wheel or the sdist: the same `coal`, without the C++ engine.
+`coal --cpp-path` prints where `coal-cpp` is (exit 1 when this install has none); `coal` hands large inputs to it
+with no settings. `coal pipeline` also runs **DIAMOND** (2.1.0 or later) and, for clusters, **Clustal Omega** or
+MAFFT; they are separate programs, found on `PATH` or installed into COAL's cache, checksum-verified, with
+
+```
+coal pipeline install diamond clustalo
+```
+
+Once it is on PyPI, `python -m pip install coal-align` will pick the platform wheel by itself.
 
 From source, with the C++ engine (needs a C++17 compiler and CMake 3.16+; optional but recommended for large inputs
 and for many small runs):
@@ -66,8 +91,41 @@ coal pep.aln nuc.fasta -output paml -o out.paml           # fasta (default), clu
 coal pep.aln nuc.fasta -o out.fasta --report run.json --keep-going   # per-gene report; skip genes that fail
 ```
 
-Example inputs are in `examples/` (`clean`, `mito`, `messy_ids`, `one_broken_gene`). Every option:
-`coal --help` and [docs/usage.md](docs/usage.md).
+Example inputs are in `examples/` (`clean`, `mito`, `messy_ids`, `one_broken_gene`, and `dnds` for Ka/Ks and the
+pipeline). Every option: `coal --help` (it lists every command; `coal help COMMAND`) and
+[docs/usage.md](docs/usage.md). One runnable example of each thing COAL does, from a checkout:
+
+```
+# 1. codon alignment: a protein alignment + the coding DNA of its genes
+coal examples/clean/protein.aln.fasta examples/clean/dna.fasta -o codon.fasta
+
+# 2. Ka/Ks (dN/dS) for pairs of a codon alignment (needs coal-cpp: the platform wheel)
+coal dnds examples/dnds/codon.fasta --pairs consecutive -o dnds.tsv           # tidy table
+coal kaks -i examples/dnds/codon.fasta -o out.kaks --pairs consecutive -m YN   # KaKs_Calculator's format
+
+# 3. one step: the coding sequences of two species in, dN/dS of their orthologs out (needs DIAMOND too)
+coal pipeline pairs --query examples/dnds/species_a_cds.fasta --subject examples/dnds/species_b_cds.fasta -o out
+#    -> out/dnds.tsv (12 pairs), out/orthologs.tsv, out/genes.tsv, out/report.json; `coal cite out/report.json`
+```
+
+```r
+# 4. from R: the coalr package, in process (no Python, no DIAMOND; the pairs are given)
+library(coalr)
+q <- coal_read_fasta("examples/dnds/species_a_cds.fasta")
+s <- coal_read_fasta("examples/dnds/species_b_cds.fasta")
+coal_dnds_pairs(q, s, pairs = read.delim("examples/dnds/orthologs.tsv")[, 1:2])
+
+# 5. inside orthologr (the fork with COAL built in; packaging/orthologr/README.md)
+orthologr::dNdS("examples/dnds/species_a_cds.fasta", "examples/dnds/species_b_cds.fasta",
+                dnds_est.method = "YN", engine = "coal")
+```
+
+**In the pipeline every FASTA record is a gene.** A CDS file with several transcripts per gene (Ensembl, NCBI,
+TAIR) gives several rows per gene and splits the reciprocal best hits; the run warns about it, and
+`--longest-isoform` (with `--gene-map TSV` if the headers do not name the gene) keeps the longest CDS of each gene
+([docs/pipeline.md](docs/pipeline.md#one-record-is-one-gene)). Before reading the values, see
+[Filtering before interpretation](docs/kaks.md#filtering-before-interpretation): short alignments, saturated dS and
+very small dS give numbers that mean little.
 
 ## Using COAL in a pipeline
 

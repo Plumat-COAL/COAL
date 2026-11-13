@@ -142,6 +142,50 @@ coal: summary: The run stopped at OG0001_sp14: 6 sequences were not checked and 
   </figure>
 </section>
 
+<section class="sec" id="pipeline" aria-labelledby="pipeline-title" data-since="0.6.0">
+  <h2 id="pipeline-title">From coding sequences to dN/dS</h2>
+  <p><code>coal pipeline pairs</code> takes the coding sequences (CDS) of two species and writes dN, dS and dN/dS
+    for their orthologs. It translates the genes, finds reciprocal best hits with DIAMOND, aligns each pair of
+    proteins, makes the codon alignment and estimates Ka/Ks (YN by default). The <code>dnds</code> example has
+    two small made-up species with 12 orthologs:</p>
+<pre class="code"><code>coal pipeline pairs --query examples/dnds/species_a_cds.fasta --subject examples/dnds/species_b_cds.fasta -o out</code></pre>
+  <p>The folder <code>out</code> then has <code>dnds.tsv</code> with one row per pair, and next to it the pairs
+    (<code>orthologs.tsv</code>), the genes without a partner (<code>unpaired.tsv</code>), what was found in every
+    gene (<code>genes.tsv</code>), anything that failed (<code>failed.tsv</code>) and a report of the run
+    (<code>report.json</code>: versions, command lines, checksums of the inputs).</p>
+  <div class="table-scroll" tabindex="0" role="group" aria-labelledby="cols-cap">
+    <table class="files">
+      <caption id="cols-cap" class="visually-hidden">The columns of dnds.tsv</caption>
+      <thead><tr><th scope="col">Column</th><th scope="col">Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>seq1</code>, <code>seq2</code></td><td>the two genes: query, subject</td></tr>
+        <tr><td><code>method</code></td><td>the Ka/Ks method (YN, NG, LWL, MLWL, LPB, MLPB, MYN, Comeron, Li)</td></tr>
+        <tr><td><code>dN</code>, <code>dS</code>, <code>dNdS</code></td><td>Ka, Ks and their ratio; <code>NA</code> when there is no value</td></tr>
+        <tr><td><code>SE_dN</code>, <code>SE_dS</code></td><td>standard errors, for the methods that have them</td></tr>
+        <tr><td><code>N_sites</code>, <code>S_sites</code>, <code>Nd</code>, <code>Sd</code></td><td>nonsynonymous and synonymous sites and differences</td></tr>
+        <tr><td><code>codons_compared</code></td><td>codon columns used</td></tr>
+        <tr><td><code>prot_aln_length</code>, <code>prot_identity</code></td><td>length of the protein alignment, and percent identical residues</td></tr>
+        <tr><td><code>status</code>, <code>note</code></td><td><code>ok</code>, <code>warning</code>, <code>not_converged</code>, <code>saturated</code>, <code>no_data</code> or <code>error</code>, and why</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <ul>
+    <li><strong>One record is one gene.</strong> If a CDS file has several transcripts per gene, as files from
+      Ensembl, NCBI or TAIR do, COAL warns; add <code>--longest-isoform</code> to keep the longest of each gene.</li>
+    <li><strong>Check before you read the values.</strong> Few compared codons, a dS above about 2, or a dS near 0
+      give ratios that mean little. <code>--min-codons 50 --max-ds 2</code> marks such rows as
+      <code>warning</code> without removing any.</li>
+    <li><strong>Gene families.</strong> <code>coal pipeline clusters --cds all_cds.fasta -o out</code> clusters the
+      proteins with DIAMOND DeepClust and compares every pair within a cluster.</li>
+    <li><strong>Already have a codon alignment?</strong> <code>coal dnds codon.fasta</code> writes the same
+      table, and <code>coal kaks -i codon.fasta -o out.kaks</code> writes KaKs_Calculator's format.</li>
+  </ul>
+  <p>This needs the C++ engine and DIAMOND (<a href="install.html#cli">install</a>). Everything else is in
+    <a href="https://github.com/plumat-coal/COAL/blob/main/docs/pipeline.md">docs/pipeline.md</a> and
+    <a href="https://github.com/plumat-coal/COAL/blob/main/docs/kaks.md">docs/kaks.md</a>; what to cite is on the
+    <a href="cite.html#what">cite page</a>.</p>
+</section>
+
 <section class="sec" id="cpp" aria-labelledby="cpp-title">
   <h2 id="cpp-title">The C++ engine</h2>
   <p>COAL has two engines with byte-identical output. The Python engine comes with the pip install and runs
@@ -185,7 +229,7 @@ export COAL_CPP=$PWD/build/coal-cpp</code></pre>
 <footer class="foot" id="credits">
   <div class="foot-text">
     <p>Developed by Chloe Newton and Keanu Murati.</p>
-    <p>Last updated <time datetime="2026-11-12">12 November 2026</time>.</p>
+    <p>Last updated <time datetime="2026-11-13">13 November 2026</time>.</p>
   </div>
   <div class="rail"><svg class="train" viewBox="140 204 1120 582" aria-hidden="true" focusable="false"><g class="ts" fill="#CFC8BE"><circle cx="304" cy="328" r="32"/><circle cx="368" cy="272" r="44"/><circle cx="456" cy="236" r="28"/></g><g class="tb" fill="#1E1E1E"><rect x="264" y="368" width="72" height="124" rx="12.4"/></g><g class="tbo" fill="#2A2A2A"><rect x="216" y="480" width="376" height="216" rx="40"/></g><g class="tb" fill="#1E1E1E"><path d="M216 600V696H144Z"/><rect x="568" y="316" width="200" height="380" rx="20"/><rect x="552" y="296" width="232" height="36" rx="12.4"/><rect x="792" y="496" width="464" height="200" rx="21"/><rect x="760" y="622" width="40" height="20" rx="0"/><circle cx="320" cy="720" r="52"/><circle cx="480" cy="720" r="52"/><circle cx="672" cy="712" r="64"/><circle cx="880" cy="732" r="40"/><circle cx="1024" cy="732" r="40"/><circle cx="1168" cy="732" r="40"/></g><g class="ta" fill="#FFC24B"><rect x="616" y="368" width="104" height="88" rx="12"/></g><g class="th" fill="#4A4744"><circle cx="320" cy="719.5" r="15.5"/><circle cx="480" cy="719.5" r="15.5"/><circle cx="672" cy="711.5" r="19.5"/><circle cx="880" cy="732" r="11"/><circle cx="1024" cy="732" r="11"/><circle cx="1168" cy="732" r="11"/></g><g class="tc" fill="#2A2A2A"><rect x="848" y="448" width="40" height="40" rx="8"/><rect x="878" y="400" width="40" height="40" rx="8"/><rect x="974" y="400" width="40" height="40" rx="8"/><rect x="1004" y="352" width="40" height="40" rx="8"/><rect x="1052" y="352" width="40" height="40" rx="8"/><rect x="1052" y="448" width="40" height="40" rx="8"/><rect x="1082" y="400" width="40" height="40" rx="8"/></g><g class="tsl" fill="#4A4744"><rect x="926" y="400" width="40" height="40" rx="8"/><rect x="956" y="352" width="40" height="40" rx="8"/></g><g class="te" fill="#FF6A13"><rect x="800" y="448" width="40" height="40" rx="8"/><rect x="896" y="448" width="40" height="40" rx="8"/><rect x="1004" y="448" width="40" height="40" rx="8"/><rect x="1034" y="400" width="40" height="40" rx="8"/><rect x="1112" y="448" width="40" height="40" rx="8"/><rect x="1208" y="448" width="40" height="40" rx="8"/></g><g class="ta" fill="#FFC24B"><rect x="956" y="448" width="40" height="40" rx="8"/><rect x="1130" y="400" width="40" height="40" rx="8"/><rect x="1160" y="448" width="40" height="40" rx="8"/></g></svg></div>
 </footer>

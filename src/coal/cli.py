@@ -26,6 +26,31 @@ from .report import IdShortener, RunReport, report_folder_missing, report_path_c
 from .tables import SUPPORTED
 
 
+# The epilog of `coal --help` (and of `coal-cpp --help`, which prints the same text): everything else `coal` does.
+# One line per command; tests/test_cli_commands.py checks that every command main() dispatches is listed.
+COMMANDS = (
+    ("kaks", "Ka/Ks for pairs of aligned coding sequences, in KaKs_Calculator's format"),
+    ("dnds", "dN/dS for pairs of aligned coding sequences, as a tidy table"),
+    ("pipeline", "coding sequences in, dN/dS table out (pairs | clusters | install)"),
+    ("translate", "coding sequences to proteins (a step of the pipeline)"),
+    ("codon-dnds", "protein alignment, codon alignment and Ka/Ks for groups (the pipeline's engine)"),
+    ("cite", "what to cite for what you ran"),
+    ("help", "this help; `coal help COMMAND` is `coal COMMAND --help`"),
+)
+COMMANDS_EPILOG = (
+    "Other commands (`coal COMMAND --help`):\n"
+    + "".join(f"  coal {name:<11} {text}\n" for name, text in COMMANDS)
+    + "  coal --cpp-path  where the C++ engine coal-cpp is (Ka/Ks and the pipeline need it)\n"
+    "pipeline, cite and help are commands of `coal` (Python), not of coal-cpp.\n"
+    "\n"
+    "Every option in detail: README.md (https://github.com/plumat-coal/COAL).")
+# What an install without coal-cpp is, and how to get one with it (the same words in `coal pipeline`)
+NEEDS_CPP = ("this install has the Python engine only, which makes codon alignments (`coal PEP_ALN NUC_FASTA`); "
+             "Ka/Ks (`coal kaks`, `coal dnds`) and `coal pipeline` need the C++ engine coal-cpp. It is inside the "
+             "platform wheels (Linux, macOS, Windows): download coal_align-<version>-py3-none-<platform>.whl from "
+             "https://github.com/plumat-coal/COAL/releases/latest and `python -m pip install` that file (the "
+             "source package coal_src.tar.gz and the py3-none-any wheel do not have it); or build it from a "
+             "checkout (docs/cpp-engine.md) and set COAL_CPP. Details: docs/install.md")
 MAX_WARNINGS = 20  # default --max-warnings
 # The same words in coal-cpp (main.cpp, std::bad_alloc)
 OUT_OF_MEMORY = ("out of memory: this run needs more memory than is free on this machine; run with -j 1 (fewer worker processes), split the input, or use a machine with more memory")
@@ -69,7 +94,8 @@ def build_parser(batch: bool = False) -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="coal",
         description="Convert a protein alignment + unaligned coding DNA into a codon alignment.",
-        epilog="Every option in detail: README.md (https://github.com/plumat-coal/COAL).",
+        epilog=COMMANDS_EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,   # (the epilog's list keeps its lines)
     )
     core = ap.add_argument_group("Core")
     pal = ap.add_argument_group("PAL2NAL options")
@@ -285,11 +311,25 @@ def kaks_main(argv) -> int:
     command line is handed to the coal-cpp of this version (the lookup of `coal --cpp-path`)."""
     from . import dispatch
     path = dispatch.find_cpp()
+    ok, why = dispatch._version_ok(path) if path is not None else (False, "")
+    wants_help = any(a in ("-h", "--help") or (a == "-H" and argv[0] == "kaks") for a in argv[1:])
+    if wants_help and not ok:
+        # the help does not need the engine: the copy of coal-cpp's text that ships with the package
+        # (coal/_cpp_help.py, compared with the binary's by tests/test_cli_commands.py)
+        from ._cpp_help import HELP
+        try:
+            sys.stdout.write(HELP[argv[0]])
+            sys.stdout.flush()
+        except BrokenPipeError:
+            return closed_stdout_exit()
+        print(f"coal {argv[0]}: note: this command cannot run here: "
+              + (why if path is not None else f"coal-cpp was not found (looked at {dispatch.LOOKUP_ORDER}); "
+                 + NEEDS_CPP), file=sys.stderr)
+        return 0
     if path is None:
-        print(f"coal {argv[0]}: needs coal-cpp, which was not found (looked at {dispatch.LOOKUP_ORDER}); "
-              "install a platform wheel of coal-align or build it (docs/cpp-engine.md)", file=sys.stderr)
+        print(f"coal {argv[0]}: needs coal-cpp, which was not found (looked at {dispatch.LOOKUP_ORDER}): "
+              + NEEDS_CPP, file=sys.stderr)
         return 1
-    ok, why = dispatch._version_ok(path)
     if not ok:
         print(f"coal {argv[0]}: {why}", file=sys.stderr)
         return 1
@@ -426,6 +466,13 @@ def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else list(argv)
     if argv == ["--cpp-path"]:
         return cpp_path_main()
+    if argv and argv[0] == "help":   # `coal help` = `coal --help`; `coal help pipeline pairs` = `... --help`
+        known = [name for name, _ in COMMANDS if name != "help"]
+        if len(argv) > 1 and argv[1] not in known:
+            print(f"coal help: {argv[1]!r} is not a command of coal: " + ", ".join(known)
+                  + " (`coal help` alone: the codon-alignment command and the list)", file=sys.stderr)
+            return 2
+        argv = [*argv[1:], "--help"]
     if argv and argv[0] in ("kaks", "dnds", "translate", "codon-dnds"):
         return kaks_main(argv)
     if argv and argv[0] == "cite":   # what to cite for what was run (coal/citations.py)

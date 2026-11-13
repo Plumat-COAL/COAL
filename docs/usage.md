@@ -1,5 +1,38 @@
 # Using COAL
 
+## Commands
+
+`coal --help` lists them; `coal COMMAND --help` (or `coal help COMMAND`) has each one's options.
+
+| Command | What it does | Details |
+|---|---|---|
+| `coal PEP_ALN NUC_FASTA ...` | codon alignment from a protein alignment and the coding DNA of its genes; `pal2nal ...` is the same engine with PAL2NAL v14's command line and defaults | this page |
+| `coal --batch JOBS` | many small codon alignments in one process | [Batch mode](#batch-mode) |
+| `coal kaks -i IN -o OUT` | Ka/Ks for pairs of aligned coding sequences, in KaKs_Calculator 2.0's format (methods NG, LWL, MLWL, LPB, MLPB, YN, MYN; also Comeron and Li) | [kaks.md](kaks.md) |
+| `coal dnds IN` | the same estimates as a tidy table with standard errors and a status per pair; `--min-codons`, `--max-ds` flag estimates that need care | [kaks.md](kaks.md) |
+| `coal pipeline pairs --query Q --subject S -o DIR` | coding sequences of two species in, dN/dS of their orthologs out: translation, DIAMOND reciprocal best hits, protein alignment, codon alignment, Ka/Ks | [pipeline.md](pipeline.md) |
+| `coal pipeline clusters --cds FILE ... -o DIR` | gene families: DIAMOND DeepClust (or given clusters), one protein MSA per cluster, Ka/Ks for every pair, a per-cluster summary | [pipeline.md](pipeline.md) |
+| `coal pipeline install diamond clustalo mafft` | install the external programs of the pipeline into COAL's cache (checksum-verified) | [pipeline.md](pipeline.md), [alignment.md](alignment.md) |
+| `coal translate CDS.fasta`, `coal codon-dnds` | the pipeline's native steps on their own: CDS to proteins; protein alignment, codon alignment and Ka/Ks for groups read from a stream | [pipeline.md](pipeline.md#from-c) |
+| `coal cite [REPORT.json \| METHOD ...]` | what to cite for what you ran | [kaks.md](kaks.md#what-to-cite) |
+| `coal help [COMMAND]` | the help of `coal`, or of one command | |
+| `coal --cpp-path` | the path of the C++ engine `coal-cpp` this install uses (exit 1: none) | [cpp-engine.md](cpp-engine.md) |
+| `coal --version` | the version | |
+
+`coal kaks`, `coal dnds`, `coal translate`, `coal codon-dnds` and `coal pipeline` are run by the C++ engine
+`coal-cpp`, which the platform wheels contain and the source package does not ([install.md](install.md)); their
+`--help` works in every install. The pipeline also needs DIAMOND, and Clustal Omega or MAFFT for clusters
+(`coal pipeline install diamond clustalo`). A small example of each, with the files in `examples/dnds`:
+
+```
+coal dnds examples/dnds/codon.fasta --pairs consecutive -o dnds.tsv
+coal kaks -i examples/dnds/codon.fasta -o out.kaks --pairs consecutive -m YN
+coal pipeline pairs --query examples/dnds/species_a_cds.fasta --subject examples/dnds/species_b_cds.fasta -o out
+coal cite out/report.json
+```
+
+The rest of this page is about the codon-alignment command.
+
 - **Input:** a protein alignment (FASTA or CLUSTAL) and the unaligned coding DNA (FASTA, one or more files; an
   empty file among several is fine). Non-letters in the DNA (gaps, digits, spaces) are ignored, as in PAL2NAL.
   Files must be plain ASCII text: a non-ASCII byte, or a control byte such as NUL (a binary file, UTF-16 text),

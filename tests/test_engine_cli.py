@@ -280,7 +280,7 @@ class TestHelpGroups(unittest.TestCase):
         h = build_parser().format_help()
         for g in ("Core:", "PAL2NAL options:", "Large runs:", "Reporting:", "Batch:"):
             self.assertIn("\n" + g + "\n", h)
-        self.assertLess(len(h.splitlines()), 70)
+        self.assertLess(len(h.splitlines()), 85)   # (the options, and the list of the other commands: 13 lines)
         self.assertTrue(h.rstrip().endswith("Every option in detail: README.md (https://github.com/plumat-coal/COAL)."))
         self.assertLess(h.index("Reporting:"), h.index("Batch:"))  # the Batch group comes last
         # the app reads the formats here (coal_app.core.detect_features). Python <= 3.12 prints

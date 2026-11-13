@@ -1,7 +1,7 @@
 # Python API
 
-The engine package `coal-align` (`pip install coal-align`, no dependencies) can be used from Python as well as from
-the command line. Its public API is what `import coal` exports:
+The engine package `coal-align` (no dependencies; installed from a release, [install.md](install.md): it is not
+on PyPI yet) can be used from Python as well as from the command line. Its public API is what `import coal` exports:
 
 | Name | What | Stable for 1.0 |
 |---|---|---|

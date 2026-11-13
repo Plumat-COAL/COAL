@@ -20,9 +20,9 @@ Core:
                         input)
   nuc_fasta             coding DNA (FASTA; one or more files; - reads standard
                         input)
-  -codontable, --codontable N
+  -codontable N, --codontable N
                         NCBI genetic code (default 1): 1-6, 9-16, 21-23
-  -o, --out FILE        output file (default: standard output)
+  -o FILE, --out FILE   output file (default: standard output)
   -q, --quiet           do not print warnings or notices (errors are always
                         printed)
   -strict, --strict     refuse probably-wrong genes (exit 1) instead of
@@ -36,14 +36,14 @@ PAL2NAL options:
   -nomismatch, --nomismatch
                         remove columns where a codon does not match its amino
                         acid
-  -output, --output-format {fasta,clustal,paml,codon}
+  -output {fasta,clustal,paml,codon}, --output-format {fasta,clustal,paml,codon}
                         output format (default fasta; PAL2NAL's default is
                         clustal)
   -blockonly, --blockonly
                         keep only the columns marked '#' in a CLUSTAL input
 
 Large runs:
-  -j, --jobs N          worker threads (default 0 = all hardware threads)
+  -j N, --jobs N        worker threads (default 0 = all hardware threads)
   --keep-going, -keep-going
                         leave out sequences that cannot be converted, write
                         the rest; exit 2 if any was left out
@@ -68,6 +68,17 @@ Batch:
   --batch-parallel N    with --batch: N jobs at a time in worker processes (0
                         = one per CPU core; default: one after the other),
                         each job's messages printed together when it ends
+
+Other commands (`coal COMMAND --help`):
+  coal kaks        Ka/Ks for pairs of aligned coding sequences, in KaKs_Calculator's format
+  coal dnds        dN/dS for pairs of aligned coding sequences, as a tidy table
+  coal pipeline    coding sequences in, dN/dS table out (pairs | clusters | install)
+  coal translate   coding sequences to proteins (a step of the pipeline)
+  coal codon-dnds  protein alignment, codon alignment and Ka/Ks for groups (the pipeline's engine)
+  coal cite        what to cite for what you ran
+  coal help        this help; `coal help COMMAND` is `coal COMMAND --help`
+  coal --cpp-path  where the C++ engine coal-cpp is (Ka/Ks and the pipeline need it)
+pipeline, cite and help are commands of `coal` (Python), not of coal-cpp.
 
 Every option in detail: README.md (https://github.com/plumat-coal/COAL).
 )COALHELP";

@@ -4,7 +4,7 @@
 #' Is the Python route available?
 #'
 #' `TRUE` when \pkg{reticulate} is installed and its Python can import `coal.dnds_pipeline` (the Python package
-#' `coal-align`, 0.5 or later). Never errors.
+#' `coal-align`, 0.6 or later). Never errors.
 #'
 #' Which Python: the one \pkg{reticulate} already runs; else `python`; else the one reticulate finds
 #' (`RETICULATE_PYTHON`, an active virtual environment, `reticulate::use_virtualenv()`, the `PATH`). coalr does not
@@ -57,7 +57,9 @@ py_pipeline <- function(python = NULL) {
   if (!ok) {
     stop("COAL's Python pipeline is not available: ", attr(ok, "reason"),
          "\nUse coal_dnds_pairs() / coal_dnds_clusters() (no Python needed), or install it: ",
-         "pip install coal-align, then reticulate::use_python() / use_virtualenv().", call. = FALSE)
+         "python -m pip install <the platform wheel coal_align-<version>-py3-none-<platform>.whl from ",
+         "https://github.com/plumat-coal/COAL/releases/latest> (the source package has no coal-cpp), then ",
+         "reticulate::use_python() / use_virtualenv().", call. = FALSE)
   }
   reticulate::import("coal.dnds_pipeline", convert = TRUE, delay_load = FALSE)
 }
@@ -94,8 +96,9 @@ pipeline_result <- function(res, out_dir, keep) {
 #' they write. Use them when COAL should also do the ortholog search or the clustering; when you already have
 #' pairs or clusters, [coal_dnds_pairs()] and [coal_dnds_clusters()] need neither Python nor files.
 #'
-#' Needs: the R package \pkg{reticulate}; a Python with `coal-align` (`pip install coal-align`) including its
-#' `coal-cpp` program; DIAMOND, and for clusters Clustal Omega (on the `PATH`, or `install_tools = TRUE`).
+#' Needs: the R package \pkg{reticulate}; a Python with `coal-align` 0.6 or later installed from a platform wheel
+#' (`coal_align-<version>-py3-none-<platform>.whl` of a COAL release: it includes the `coal-cpp` program; the
+#' package is not on PyPI yet); DIAMOND, and for clusters Clustal Omega (on the `PATH`, or `install_tools = TRUE`).
 #' [coal_python_available()] tells whether Python is ready.
 #'
 #' @param query,subject FASTA files of coding sequences.

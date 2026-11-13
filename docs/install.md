@@ -1,5 +1,33 @@
 # Installing COAL
 
+**What each install gives.** COAL does three things (codon alignments; Ka/Ks for pairs: `coal kaks`, `coal dnds`;
+the one-step `coal pipeline` from coding sequences to dN/dS), and not every install has all three:
+
+| Install | Codon alignment | Ka/Ks (`coal kaks`, `coal dnds`) | `coal pipeline` |
+|---|---|---|---|
+| **Platform wheel** (`coal_align-<version>-py3-none-<platform>.whl`; [below](#the-c-engine-comes-with-the-wheel)) | yes, both engines | yes | yes, with DIAMOND (and Clustal Omega or MAFFT for clusters) |
+| Source package (`coal_src.tar.gz`, the pip commands on this page), the `py3-none-any` wheel | yes, the Python engine | no | no |
+| A checkout with `coal-cpp` built (`cmake`; README) and `COAL_CPP` set | yes, both engines | yes | yes, with DIAMOND |
+| The Windows app, the web GUI | yes | no (the command line of the same install has what its wheel has) | no |
+| R package `coalr` | yes | yes, in process | pairs and clusters you give, in process; the search and clustering through Python (reticulate) |
+
+An install without `coal-cpp` has the Python engine only: it makes codon alignments, and `coal kaks`, `coal dnds`
+and `coal pipeline` stop with a message that says so and names the platform wheel. `coal --cpp-path` tells which
+kind an install is (it prints the path of `coal-cpp`, or exits 1). `coal-align` is **not on PyPI yet**
+(publication is pending): every command on this page installs from a GitHub release.
+
+**DIAMOND and the aligners** are separate programs that only `coal pipeline` uses: DIAMOND 2.1.0 or later for the
+ortholog search and the clustering (tested with 2.2.8), and Clustal Omega (or MAFFT) for clusters of three or more.
+COAL looks for them on `PATH`, in `$COAL_DIAMOND` / `$COAL_CLUSTALO` / `$COAL_MAFFT` and in its own cache, and
+installs them into the cache, checksum-verified, with
+
+```
+coal pipeline install diamond clustalo
+```
+
+(or `--install-tools` on a run; `conda install -c bioconda diamond clustalo` works as well). On Windows there is no
+automatic Clustal Omega or MAFFT install ([alignment.md](alignment.md)); pair mode needs DIAMOND only.
+
 ## Option 1: download the app from the website (recommended)
 
 **https://plumat-coal.github.io/COAL/** has the Windows installer and step-by-step install instructions for
@@ -48,9 +76,11 @@ wheel and the sdist:
 | `coal_align-<version>-py3-none-win_amd64.whl` | Windows 10/11, 64-bit |
 | `coal_align-<version>-py3-none-any.whl`, `coal_align-<version>.tar.gz` | everything else: the same `coal`, Python engine only |
 
-Once `coal-align` is on PyPI, `python -m pip install coal-align` picks the right one by itself. From a release,
-download the wheel for your platform and `python -m pip install coal_align-<version>-py3-none-<platform>.whl`
-(the `.tar.gz` command above installs the Python engine only). Either way nothing else is needed: `coal` hands
+From a release, download the wheel for your platform and
+`python -m pip install coal_align-<version>-py3-none-<platform>.whl`; the `.tar.gz` command above installs the
+Python engine only, which makes codon alignments but has no Ka/Ks and no pipeline. (Once `coal-align` is on PyPI,
+`python -m pip install coal-align` will pick the right wheel by itself; publication is pending.) With the wheel
+nothing else is needed for codon alignment and Ka/Ks: `coal` hands
 inputs of 1 MB or more to the bundled `coal-cpp` ([cpp-engine.md](cpp-engine.md) "Where coal looks for
 coal-cpp"), and `coal --cpp-path` prints its path (exit 1 if there is none), e.g. to call it directly from a
 pipeline. A `coal-cpp` you built yourself still wins when `COAL_CPP` points at it.

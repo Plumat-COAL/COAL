@@ -319,8 +319,9 @@ def _find_cpp() -> str:
     from . import dispatch
     path = dispatch.find_cpp()
     if path is None:
-        raise PipelineError(f"coal pipeline needs coal-cpp, which was not found (looked at {dispatch.LOOKUP_ORDER}); "
-                            "install a platform wheel of coal-align or build it (docs/cpp-engine.md)")
+        from .cli import NEEDS_CPP
+        raise PipelineError(f"coal pipeline needs coal-cpp, which was not found (looked at {dispatch.LOOKUP_ORDER}): "
+                            + NEEDS_CPP)
     ok, why = dispatch._version_ok(path)
     if not ok:
         raise PipelineError(why)

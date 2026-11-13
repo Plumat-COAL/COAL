@@ -28,7 +28,11 @@ Xcode command-line tools on macOS) and `Rcpp`. `reticulate`, `Biostrings` and `t
 For the Python route also:
 
 ```
-pip install coal-align          # the platform wheels include coal-cpp; then DIAMOND: coal pipeline install diamond
+# the platform wheel of a release (it includes coal-cpp; the source package does not, and coal-align is not on
+# PyPI yet): download coal_align-<version>-py3-none-<platform>.whl from
+# https://github.com/plumat-coal/COAL/releases/latest, then
+python -m pip install coal_align-<version>-py3-none-<platform>.whl
+coal pipeline install diamond clustalo          # DIAMOND, and Clustal Omega for clusters, into COAL's cache
 ```
 
 ```r
