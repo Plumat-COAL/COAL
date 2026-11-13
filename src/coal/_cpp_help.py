@@ -91,7 +91,8 @@ HELP = {
         '                 [--matrix NAME] [--gap-open X] [--gap-extend X] [--end-gaps free|penalized] [--max-cells N]\n'
         '                 [--flanks gap|align] [--yn-flavour kaks|paml] [--yn-weighting 0|1]\n'
         '                 [--comeron-flavour coal|gestimator] [--li-flavour coal|seqinr]\n'
-        '                 [--terminal-stops drop|compare] [--min-codons N] [--max-ds X] [-q]\n'
+        '                 [--terminal-stops drop|compare] [--min-codons N] [--max-ds X] [--min-identity P]\n'
+        '                 [--new-files] [-q]\n'
         '\n'
         'Protein alignment -> codon alignment -> Ka/Ks for groups of coding sequences (the engine of\n'
         '`coal pipeline`, docs/pipeline.md). GROUPS (a file, or standard input when -i is - or absent) is\n'
@@ -123,9 +124,13 @@ HELP = {
         '                   the same layout: the same groups, records and order (a codon row is 3 x its protein row)\n'
         "  --kaks-out FILE  the same results in KaKs_Calculator's format (pairs named seq1&seq2)\n"
         '  --failures FILE  genes and groups that could not be used: group seq code message\n'
+        '  --new-files      create every output file anew: a file or symbolic link of that name is removed first,\n'
+        '                   never written through (`coal pipeline` writes NAME.tmp this way and renames it)\n'
         '  --digits N       significant digits (default 8)\n'
         '  --min-codons N, --max-ds X  as in `coal dnds`: flag estimates from fewer than N compared codons or with\n'
         '                   dS above X (status warning and a note; no row dropped, no number changed; default off)\n'
+        '  --min-identity P the same kind of flag for a pair whose protein identity (the column prot_identity,\n'
+        "                   percent of the alignment's columns) is below P: note `protein identity below P%`\n"
         '  -q, --quiet      no summary on stderr\n'
     ),
 }

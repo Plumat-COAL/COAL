@@ -179,6 +179,58 @@ entry under "Added", not under "Fixed".
     such as `AT1G01010.1` / `.2`) gets one warning with counts. `--longest-isoform` keeps the longest CDS per gene
     before the search (`--gene-map TSV` when the headers do not name the gene); dropped records are in `genes.tsv`
     with status `dropped`, and `report.json` records the choice (docs/pipeline.md "One record is one gene").
+    Second review (2026-11-13): stable gene identifiers are read before gene symbols (`locus_tag`, `GeneID:`,
+    Ensembl `gene:`, FlyBase `parent=FBgn`, Phytozome `locus=`, then `[gene=` / `gene_symbol:`), and records that
+    share a symbol but are clearly different loci (other contig, locus tag or GeneID: several strains in one
+    file, two copies of `tuf`) are not merged, with a warning. More ID styles: TransDecoder `_i1.p1`, MAKER
+    `-RA` / `-mRNA-1`, maize `_T001`, RAP-DB `-01`, Phytozome proteins `.1.p`; RefSeq `NM_` / `XM_` accessions get
+    a warning that the ID holds no gene. `--gene-map` wins for the records it names and the others fall back to
+    the headers and IDs (it used to switch detection off for every file); a map that names no record of the
+    input, or gives a record two genes, is an error (exit 1). **`--longest-isoform` never drops more than half
+    of a file's records on the evidence of ID suffixes alone**: it stops with exit 1 and asks for `--gene-map`
+    or the new `--isoform-rule suffix` (`map`: use the map only). docs/pipeline.md has the table of header
+    styles (one test file each) and how the heuristics fail (`HSP70.1 / HSP70.2`, `scaffold7.1`). The progress
+    and summary lines count "records" until `--longest-isoform` has made genes of them, and a repeated ID is
+    counted as not usable in both.
+  - **A file is complete or absent** (second review, 2026-11-13). Every table and alignment file of the pipeline
+    is written as `NAME.tmp`, created anew, and renamed when it is complete; before, only `dnds.tsv` was, and a
+    stage that failed on a full disk left a cut-off `codon_alignments.fasta`, `protein_alignments.fasta` and
+    `dnds.kaks` under their final names. After a failed or interrupted stage none of them is there, the report
+    lists only the files that exist, and the `.tmp` files are removed (the next run removes what a killed run
+    left). A symbolic link in the output folder under an output's name is replaced, never written through
+    (`dnds.kaks -> another file` used to overwrite that file). `coal-cpp codon-dnds` has `--new-files` for this
+    and writes each per-cluster file through `NAME.fasta.tmp`. docs/pipeline.md "Output".
+  - **A hint for genes of another genetic code** (second review, 2026-11-13). Mitochondrial genes in a nuclear
+    CDS set got `internal_stop` warnings and estimates from mistranslated codons, and nothing said why. When at
+    least two genes of a set have two or more internal stop codons under `-c` and none under another table COAL
+    supports, the run prints one warning per set (how many genes, which table, three examples, the two-run
+    recipe); `report.json` has it as `genetic_code_hints`. docs/pipeline.md "Genes of another genetic code":
+    mitochondrial and plastid genes, the recipe, and that `Comeron` / `Li` are standard-code only. A per-gene
+    code option (`--code-map`) was evaluated and not built: the engine has one code per run; the design is in
+    docs/development.md.
+  - **Smaller things from the second review** (2026-11-13). `--diamond-args`, `--deepclust-args` and
+    `--realign-args` refuse the DIAMOND options COAL sets itself (`--out`, `--db`, `--query`, `--outfmt`,
+    `--threads`, ...; exit 2 before anything runs: `--diamond-args '--out x.tsv'` used to send the hits elsewhere
+    and end with an unrelated error), all three are documented (`--realign-args` was not), and `realign.tsv`
+    always has its header line. The hint about IDs of `--pairs` / `--clusters` that match no record comes when
+    half of one side is unknown or no pair can be made (it needed 90% of one side). Messages name the file the
+    user gave, not its decompressed copy (`coal pipeline`, `coal kaks`, `coal dnds`). The default `-j` is one
+    thread per CPU the process may use (its affinity: `taskset`, SLURM, cgroups), and `coal-cpp` is never given
+    more threads than that either (`report.json` `threads`: `requested`, `usable_cpus`, `engine`, `tools`).
+    DIAMOND's version is read as the first dotted number of `diamond version` (`2.1` is 2.1.0, not "too old"),
+    and a version that cannot be read gives one warning. A gzip input has `sha256_uncompressed` next to `sha256`
+    in the report.
+  - **`--min-identity P`**, the third flag next to `--min-codons` and `--max-ds` (`coal pipeline`,
+    `coal codon-dnds`; `min_identity` in coalr): a pair whose protein identity (the column `prot_identity`) is
+    below P percent gets status `warning` and the note `protein identity below P%`; no row is dropped, no number
+    changes. docs/pipeline.md says why: a cluster can hold pairs that are not related at all, and they get
+    status `ok`.
+  - **Documentation from the second review:** docs/pipeline.md "How much the aligner matters" (150 *Arabidopsis*
+    pairs: 120, 90 and 75 of them have the same values as the default aligner with MAFFT, DIAMOND's alignment and
+    Clustal Omega; up to 0.43 in dN/dS for single pairs); docs/kaks.md says what `P-Value(Fisher)` tests and
+    that `SE_dN` / `SE_dS` are standard errors of dN and of dS (NG, YN, MYN, Li), with none for the ratio; README
+    example 5 (the orthologr fork) passes `sensitivity_mode = "default"`, so that it finds the 12 pairs of
+    example 3 (orthologr's default, DIAMOND `--fast`, finds 8 on the example files).
   - **Cluster mode does not depend on the order of the input.** DIAMOND DeepClust is order-dependent, so it is
     given the proteins sorted by ID: the same sequences give the same `clusters.tsv` whatever the order of the
     `--cds` files and records. (Development builds before 2026-11-13 clustered in input order; their clusters can
@@ -290,7 +342,29 @@ entry under "Added", not under "Fixed".
   estimator and the program COAL's code is derived from, KaKs_Calculator 2.0, PAML, libsequence or seqinr; the
   pipeline: DIAMOND, DeepClust, Clustal Omega, MAFFT) and the references; `coal cite YN` those of a method;
   `coal cite out/report.json` those of one pipeline run. The same table is in README.md, docs/kaks.md,
-  `CITATION.cff` (references) and on the website. No DOIs are given (none was verified).
+  `CITATION.cff` (references) and on the website. Every cited work has its DOI (second review, 2026-11-13: each
+  reference was checked against the publisher's or the institution's page): `coal cite` prints it as a
+  `https://doi.org/` link, `CITATION.cff` has `doi:` fields, the documents and the website link it. COAL itself
+  still has no DOI. **DIAMOND DeepClust is cited by its paper**, Buchfink, Barbé, Ashkenazy, Reuter, Kennedy &
+  Drost (2026), Nature Methods 23:724-727 (key `buchfink2026`); the key of its preprint, `buchfink2023`, is no
+  longer listed but still resolves (`coal cite buchfink2023`, and a report that names it), followed by the paper.
+  The seqinr reference has the book's full title.
+  On the website's Cite page the table wraps and, on a phone, stacks the two cells of each row (it showed only
+  its first column at 390 px).
+- **A documented Python API for Ka/Ks and the pipeline.** docs/python-api.md has a new section "dN/dS and the
+  pipeline": `coal.dnds_pipeline.run_pairs` / `run_clusters` (signatures, `PipelineResult`, the exit codes, and
+  that a failed run returns exit code 1 with `report["error"]` instead of raising; `TypeError` / `ValueError` for
+  a wrong call), `codon_dnds`, the column constants `PAIR_COLUMNS` / `SUMMARY_COLUMNS` / `FAILED_COLUMNS`,
+  `METHODS`, `SCHEMA`, `find_diamond` / `install_diamond`, `coal.citations`, and the entry points of `coal.align`
+  and `coal.msa`, with an example on `examples/dnds` that the tests run. The package ships `py.typed` and the
+  public functions have accurate type hints. The versioning promise now covers the column names and order of
+  `dnds.tsv`, `cluster_summary.tsv` and `failed.tsv` and the report schema id `coal.pipeline/1`. `import coal`
+  exports what it did (no facade); its docstring no longer calls the rest of the package internal.
+- **coalr: a vignette, and one name for the methods.** `vignette("from-two-cds-files-to-dnds")` goes from two
+  CDS files to a filtered dN/dS table on an example shipped with the package (in process, in seconds, no
+  network; built by `R CMD check`). `method` and `methods` are accepted by every function (a `method =` given
+  to `coal_pipeline_pairs()` used to be ignored), `min_identity` is the R form of `--min-identity`, and `?coalr`
+  and docs/r.md have one table of the command line's options and the R arguments, with the thread defaults.
 - **`coal --help` lists every command, and `coal help [COMMAND]` works.** The help of `coal` (and of `coal-cpp`)
   ends with one line per command: `kaks`, `dnds`, `pipeline`, `translate`, `codon-dnds`, `cite`, `help`,
   `--cpp-path`. `coal kaks --help`, `coal dnds --help`, `coal translate --help` and `coal codon-dnds --help` print
@@ -305,6 +379,12 @@ entry under "Added", not under "Fixed".
   readers who prefer no tints, and for printing. On by default; saved with the other settings.
 
 ### Changed
+
+- **The app and its MCP server say that they cover codon alignment only.** The app's README, the GUI's About
+  section and the MCP server's instructions now state that Ka/Ks (dN/dS) and the pipeline are in the `coal` command
+  line (`coal dnds`, `coal kaks`, `coal pipeline`), so that neither a person nor an AI agent looks for them in
+  the app. No tool changed. docs/mcp.md has the proposal for the MCP tools `dnds_pairs` and `pipeline_pairs`
+  (planned, not built).
 
 - **Licence: GPL-3.0-only from the next release.** COAL (the Python and C++ engines, the `pal2nal` drop-in, the app
   and everything else in this repository) is now under the GNU General Public License, version 3 only (`LICENSE`,
@@ -473,6 +553,22 @@ In commands that 0.5.0 has (both engines unless said):
   duplicate tab bar no longer holds focusable buttons (axe `aria-hidden-focus`).
 
 ### Internal
+
+- **Bioconda recipe (packaging/bioconda), second review.** The test line for `pal2nal` without arguments expected
+  exit 0 and the usage on stdout and would have failed the first build: it now tests what the command does (exit
+  1, usage on stderr, nothing on stdout). `python` is unpinned in `host:` / `run:` and Pythons below 3.10 are
+  skipped by a selector (the form for a compiled, non-noarch package); `linux-aarch64` and `osx-arm64` are
+  additional platforms; the package is the command line and the Python package only (`build.sh` no longer
+  installs the static library, the headers and the CMake package); the two test commands with tab characters are
+  quoted YAML strings. Rendered with `conda-render`, `build.sh` and all 23 test commands run against a virtual
+  environment; a real `conda build` and `bioconda-utils lint` are still to do (packaging/bioconda/README.md).
+  `tests/test_bioconda_recipe.py`.
+
+- **Package metadata follows PEP 639:** `license = "GPL-3.0-only"` (an SPDX expression) with
+  `license-files = ["LICENSE", "NOTICE"]` in both `pyproject.toml` files, no licence classifier; the build needs
+  setuptools 77.0.3 or later (Python 3.9+, below the floor of 3.10; the Bioconda recipe asks for it too). The
+  wheels' metadata says `License-Expression: GPL-3.0-only` and carries both files under `licenses/`; the
+  deprecation warnings of every build are gone.
 
 Documentation, tests, continuous integration and packaging:
 

@@ -33,8 +33,13 @@ class TestLicence(unittest.TestCase):
     def test_every_declaration_says_gpl3_only(self):
         for rel in (("pyproject.toml",), ("apps", "coal-app", "pyproject.toml")):
             text = _read(*rel)
-            self.assertRegex(text, r'(?m)^license = \{text = "GPL-3\.0-only"\}', rel)
-            self.assertIn("License :: OSI Approved :: GNU General Public License v3 (GPLv3)", text, rel)
+            # PEP 639: an SPDX expression and the licence files; no licence classifier, no table (both deprecated)
+            self.assertRegex(text, r'(?m)^license = "GPL-3\.0-only"', rel)
+            self.assertRegex(text, r'(?m)^license-files = \["LICENSE", "NOTICE"\]$', rel)
+            self.assertNotIn("License ::", text, rel)
+            self.assertNotIn("license = {", text, rel)
+            need = re.search(r'(?m)^requires = \["setuptools>=(\d+)\.', text)
+            self.assertGreaterEqual(int(need.group(1)), 77, rel)   # the first setuptools that reads them
         self.assertRegex(_read("CITATION.cff"), r"(?m)^license: GPL-3\.0-only$")
         meta = _read("packaging", "bioconda", "meta.yaml")
         self.assertRegex(meta, r"(?m)^  license: GPL-3\.0-only$")

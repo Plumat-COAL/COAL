@@ -28,7 +28,7 @@ the cache. They are not bundled (licences: [alignment.md](alignment.md#licences-
 ## One record is one gene
 
 **The pipeline treats every FASTA record as a gene.** It does not know about transcripts. CDS files from genome
-annotations (Ensembl, NCBI, TAIR, Phytozome, a Trinity assembly) usually hold every transcript of every gene, and
+annotations (Ensembl, NCBI, TAIR, Phytozome, FlyBase, a MAKER or Trinity assembly) usually hold every transcript of every gene, and
 with such a file a gene with five isoforms is five "genes": it is compared once per transcript, the reciprocal
 best hits are split between the isoforms of a gene (most transcripts end up in `unpaired.tsv` as
 `not_reciprocal`), and the same gene pair appears several times with different values. On an Ensembl human / mouse
@@ -45,26 +45,109 @@ coal pipeline pairs --query q_cds.fa --subject s_cds.fa -o out --longest-isoform
   one warning with the counts (`query: 36,827 records of 3,734 genes, ...`), an example and where the genes were
   read from, and goes on as before: nothing else changes without the options below.
 - **Where the gene of a record comes from.** (1) `--gene-map TSV`: record ID and gene ID, tab-separated (a header
-  line and `#` lines are skipped; one map serves all input files; a record it does not name is a gene of its
-  own). Without a map, (2) a field of the FASTA header that at least 90% of a file's records have, the first of:
-  `gene:ENSG...` (Ensembl), `[gene=...]` or `gene=...` (NCBI `cds_from_genomic`, GFF-derived files),
-  `[locus_tag=...]` or `locus_tag=...`, `gene_symbol:...`; else (3) the ID itself, when IDs share a stem and
-  differ in a transcript suffix: `AT1G01010.1` / `AT1G01010.2` (TAIR, Ensembl Plants, Phytozome), `g12.t1` /
-  `g12.t2` (AUGUSTUS, BRAKER), `..._g1_i1` / `..._g1_i2` (Trinity). The detection is conservative: an ID that is
-  alone with its stem is its own gene (the `.8` of `ENST00000380152.8` is a version, not an isoform), and a
-  suffix rule is not applied when a stem has more than four records on average (`scaffold7.1` ...
-  `scaffold7.340` numbers genes). When a file's annotation follows none of these conventions, give a gene map.
+  line and `#` lines are skipped; one map serves all input files). The map wins for every record it names. A
+  record it does not name falls back to (2) and (3), read for its file as without a map, so a map for one
+  species, or for part of a file, does not switch the detection off for the rest (`--isoform-rule map` does: then
+  a record the map does not name is a gene of its own). A map that names no record of any input file is an error
+  (exit 1; the message shows IDs of the map and of the files), and so is a map that gives one record two
+  different genes (the records are listed); the same line twice is fine. (2) A field of the FASTA header that at
+  least 90% of a file's records have, stable gene identifiers before gene symbols: `[locus_tag=...]` or
+  `locus_tag=...`, `GeneID:...` (also inside `[db_xref=...]`), `gene:...` (Ensembl), `parent=FBgn...` (FlyBase),
+  `locus=...` (Phytozome), then `[gene=...]` or `gene=...` (NCBI `cds_from_genomic`, GFF-derived files) and
+  `gene_symbol:...`. (3) The ID itself, when IDs share a stem and differ in a transcript suffix (the table
+  below). When a file's annotation follows none of these conventions, give a gene map.
+- **Header styles.** What `coal pipeline` recognises, with two records of one gene each (one small test file per
+  row: `tests/fixtures/isoforms/styles/`):
+
+  | Annotation | Two records of one gene | Read from |
+  |---|---|---|
+  | NCBI, with locus tags | `lcl\|NC_1_cds_NP_1.1_1`, `lcl\|NC_1_cds_NP_2.1_2` with `[locus_tag=...` | header field [locus_tag= |
+  | NCBI, with GeneIDs | `lcl\|NC_1_cds_NP_1.2_1`, `lcl\|NC_1_cds_XP_2.1_2` with `GeneID:...` | header field GeneID: |
+  | Ensembl | `ENST00000380152.8`, `ENST00000544455.6` with `gene:...` | header field gene: |
+  | FlyBase | `FBpp0070000`, `FBpp0070001` with `parent=FBgn...` | header field parent=FBgn |
+  | Phytozome | `Potri.001G000100.1`, `Potri.001G000100.2` with `locus=...` | header field locus= |
+  | NCBI, gene symbols only | `lcl\|NC_1_cds_NP_1.1_1`, `lcl\|NC_1_cds_XP_2.1_2` with `[gene=...` | header field [gene= |
+  | GFF-derived (gffread, WormBase) | `mRNA1`, `mRNA2` with `gene=...` | header field gene= |
+  | TransDecoder on Trinity | `TRINITY_DN1000_c0_g1_i1.p1`, `TRINITY_DN1000_c0_g1_i2.p1` | ID suffix _iN.pN (TransDecoder on Trinity) |
+  | Trinity | `TRINITY_DN1000_c0_g1_i1`, `TRINITY_DN1000_c0_g1_i2` | ID suffix _iN (Trinity) |
+  | AUGUSTUS, BRAKER | `g1.t1`, `g1.t2` | ID suffix .tN |
+  | MAKER | `maker-scaf1-gene-0.5-mRNA-1`, `maker-scaf1-gene-0.5-mRNA-2` | ID suffix -mRNA-N (MAKER) |
+  | MAKER (-RA, -RB) | `Gene0001-RA`, `Gene0001-RB` | ID suffix -RA (MAKER) |
+  | maize (B73 v4) | `Zm00001d027230_T001`, `Zm00001d027230_T002` | ID suffix _TNNN (maize) |
+  | Phytozome protein IDs | `Potri.001G000100.1.p`, `Potri.001G000100.2.p` | ID suffix .N.p (Phytozome) |
+  | TAIR, Ensembl Plants, Phytozome | `AT1G01020.1`, `AT1G01020.2` | ID suffix .N |
+  | RAP-DB (rice) | `Os01t0100200-01`, `Os01t0100200-02` | ID suffix -NN (RAP-DB) |
+
+  Not recognised: UniProt headers (`GN=`; protein files anyway), IDs without a common stem (`rna-XM_...`), and
+  **RefSeq transcript accessions** (`NM_000059.4`, `XM_011535000.3`): the accession holds no gene, so without a
+  gene field in the header several transcripts of one gene cannot be seen; a warning says so. Use NCBI's
+  `cds_from_genomic` file (its headers name the gene) or a gene map.
+- **These are heuristics, and this is how they fail.**
+  - *An ID suffix is a guess.* An ID that is alone with its stem is its own gene (the `.8` of
+    `ENST00000380152.8` is a version, not an isoform), and a suffix rule is not applied when a stem has more than
+    four records on average (`scaffold7.1` ... `scaffold7.340` numbers genes). But a numbering of paralogs
+    (**`HSP70.1 / HSP70.2`**) or of a few genes per scaffold (**`scaffold7.1`, `scaffold7.2`, `scaffold7.3`**)
+    looks exactly like transcripts, and `--longest-isoform` would merge different genes and keep one. Two
+    guards: the summary line names the rule and the counts (`query: 6 of 26 records dropped, 20 genes (from ID
+    suffix .N)`), and **when a suffix rule alone (no header field, no gene map) would drop more than half of a
+    file's records, the run stops** (exit 1, nothing dropped) and asks for `--gene-map`, or for
+    `--isoform-rule suffix` if the suffixes really are transcripts. Below that share a family such as
+    `HSP70.1 / HSP70.2` among otherwise plain IDs is merged without a refusal: look at the `dropped` rows of
+    `genes.tsv` when your IDs end in numbers and you have not checked what the numbers mean.
+  - *A gene symbol is not a locus.* In a file of several strains or genomes every `[gene=dnaA]` is another gene,
+    and one genome can hold two copies of `tuf`. Locus tags and GeneIDs are therefore preferred to symbols, and
+    when only symbols are there, records that share a symbol but sit on different contigs (`lcl|CONTIG_cds_...`)
+    or carry different locus tags or GeneIDs are **not merged**: each stays a gene of its own and a warning
+    names the symbols and an example. Two copies of a gene on one contig, with nothing but the symbol in their
+    headers, cannot be told from two transcripts: give a gene map.
+  - *The 90% rule.* A field that fewer than 90% of a file's records have is not used (a gene map is the remedy).
 - **`--longest-isoform`** keeps, for every gene, the record with the longest CDS (in nucleotides; of equally long
   ones the ID that sorts first) among the records that can be used, in both modes, before DIAMOND runs. The other
   records are listed in `genes.tsv` with status `dropped`, code `not_longest_isoform` and a note naming the gene
   and the record kept; they are not failures (the exit code is not affected). A `--pairs` or `--clusters` file
   that names a dropped record gets that pair's `error` row, or that member left out, with the reason.
-  `report.json` records the choice (`isoforms`: the option, the gene map, and per input set the records, genes,
-  genes with several records, where the genes were read from and how many records were dropped), and
+  `report.json` records the choice (`isoforms`: the option, the gene map, `isoform_rule`, and per input set the
+  records, genes, genes with several records, where the genes were read from, how many records the map names, how
+  many were dropped and how many of those on the evidence of an ID suffix), and
   `counts.genes.dropped` the number. With `--longest-isoform` and no gene information in a file, every record
   of it is kept and a warning says so.
 - The longest CDS is a convention, not the biologically "main" transcript. For a curated choice (Ensembl
   canonical, MANE Select, APPRIS) filter the FASTA file yourself and run without the option.
+
+## Genes of another genetic code
+
+**One run has one genetic code** (`-c N`, default 1, the standard code): it is used for the translation, the
+codon alignment and Ka/Ks of every gene of the run. A CDS file of a whole genome usually also holds the
+**mitochondrial** genes (13 in a vertebrate) and, in plants and algae, the **plastid** genes, and those are read
+with another table: vertebrate mitochondria use code 2 (TGA is Trp, AGA / AGG are stops, ATA is Met), invertebrate
+mitochondria code 5, yeast mitochondria code 3, mold and protozoan mitochondria and Mycoplasma code 4. Translated
+with the standard code such a gene has internal stop codons: its row in `genes.tsv` has status `warning` and
+code `internal_stop`, the codon columns with a stop are skipped in Ka/Ks, and what is left is estimated from
+codons that mean something else (a pair is often `saturated`). Plastid and bacterial genes use code 11, whose
+codons and stops are those of the standard code (only start codons differ), so they need nothing special.
+
+- **The hint.** When at least two genes of an input set have two or more internal stop codons under the chosen
+  code and none under another code COAL supports, the run prints one warning per set: how many of the genes with
+  internal stops are clean under which table (the first of 2, 4, 5, 11, ... that explains the most genes, and
+  which others do as well), three examples, and the recipe below. Only the flagged genes are read again, so a
+  set without them costs nothing. `report.json` has the same as `genetic_code_hints`. A gene with a single
+  internal TGA does not count: a selenoprotein gene would look "clean" under every code where TGA is Trp. The
+  hint is a hint: it does not change a row, and a set whose every gene is flagged simply needs another `-c`.
+- **The two-run recipe.** Take the organelle genes out of both CDS files and run them on their own:
+
+  ```
+  coal pipeline pairs --query q_nuclear.fa --subject s_nuclear.fa -o out_nuclear
+  coal pipeline pairs --query q_mito.fa    --subject s_mito.fa    -o out_mito -c 2
+  ```
+
+  The two `dnds.tsv` have the same columns and can be concatenated (the second without its header line). Ensembl
+  headers name the chromosome (`chromosome:GRCh38:MT:...`), NCBI's `cds_from_genomic` IDs the molecule
+  (`lcl|NC_012920.1_cds_...`), so the genes are one `grep` or `seqkit grep` away.
+- **`Comeron` and `Li` are for the standard code only** (`-c 1`): the two reference programs they are checked
+  against have no other, and COAL refuses the combination (exit 2) instead of guessing. The other seven methods
+  take every table (`coal --help` lists them).
+- There is no per-gene code option (`--code-map`); [development.md](development.md#a-genetic-code-per-gene-design-note)
+  has the design and why it was not built in this release.
 
 ## Pair mode
 
@@ -78,7 +161,13 @@ coal pipeline pairs --query q.fa --subject s.fa -o out --pairs my_orthologs.tsv 
   query. A pair is kept when each is the other's best hit (`--ortho rbh`, the default). `--ortho bh` keeps every
   query's best hit, so a subject can appear in several pairs. `--evalue`, `--sensitivity` (DIAMOND's modes, from
   `faster` to `ultra-sensitive`) and `--diamond-args '...'` are passed on. Pairs are written in the order of the
-  query file.
+  query file. `--diamond-args` is one string of further `diamond blastp` options (`--diamond-args '--block-size 4
+  --tmpdir /scratch'`); it is split like a command line and never goes through a shell. The options COAL sets
+  itself are refused in it (exit 2, before anything runs): `--query` / `-q`, `--db` / `-d`, `--in`, `--out` /
+  `-o`, `--outfmt` / `-f`, `--threads` / `-p` (use `-j`), `--max-target-seqs` / `-k` (1: the best hit is the
+  rule), `--evalue` / `-e` (use `--evalue`), `--quiet`, a sensitivity such as `--very-sensitive` (use
+  `--sensitivity`), and with `--aligner diamond` also `--masking`. Before, `--diamond-args '--out x.tsv'` sent
+  the hits elsewhere and the run ended with an unrelated error.
 - **`--pairs TSV`** takes the pairs from a file (query ID, subject ID; a header line `query subject` is skipped)
   and DIAMOND is not run. `out/orthologs.tsv` of an earlier run can be given, also with the same `-o out`: the
   file is then read and left exactly as it is (not written again).
@@ -106,7 +195,13 @@ coal pipeline clusters --cds all_cds.fa --clusters deepclust.tsv -o out --max-cl
   (member coverage 80%); `--approx-id`, `--member-cover`, `--mutual-cover`, `--cluster-evalue` and
   `--deepclust-args '...'` are passed on, and the result is kept as `out/clusters.tsv`. `--realign` also runs
   `diamond realign` (members against their representatives, the columns orthologr's `deepclust_realign()` asks
-  for) into `out/realign.tsv`.
+  for) into `out/realign.tsv`: `member representative approx_pident evalue bitscore qcovhsp scovhsp`, with a
+  header line. `--deepclust-args '...'` and `--realign-args '...'` are each one string of further options for
+  that DIAMOND command (`--deepclust-args '--memory-limit 12G'`), split like a command line, no shell. The
+  options COAL sets itself are refused (exit 2): in `--deepclust-args` `--db` / `-d`, `--out` / `-o`,
+  `--threads` / `-p`, `--quiet`, and `--approx-id`, `--member-cover`, `--mutual-cover`, `--evalue` when COAL's
+  own option for it is given as well; in `--realign-args` `--db`, `--clusters`, `--out`, `--outfmt` / `-f` (the
+  columns of `realign.tsv` are fixed), `--threads`, `--quiet`.
 - **`--clusters TSV`** is DIAMOND's two-column table: representative, member, tab-separated, one line per member.
   A header line (`centroid member`, `representative member`, ...) and `#` lines are skipped. The cluster ID is the
   representative's ID. A member named in two clusters stays in its first one.
@@ -133,7 +228,7 @@ coal pipeline clusters --cds all_cds.fa --clusters deepclust.tsv -o out --max-cl
 | `-o DIR` | output folder | required |
 | `-m METHOD` | Ka/Ks method, repeatable: YN, NG, LWL, MLWL, LPB, MLPB, MYN, Comeron (alias C95), Li ([kaks.md](kaks.md)); names are read in any case; Comeron and Li need `-c 1` | YN |
 | `-c N` | NCBI genetic code, used for translation, the codon alignment and Ka/Ks | 1 |
-| `-j N` | threads of DIAMOND and of the engine, and MSA processes at a time | one per CPU |
+| `-j N` | threads of DIAMOND and of the engine, and MSA processes at a time. The default is one per CPU the process may use (its affinity: `taskset`, a SLURM or cgroup allocation), not one per CPU of the machine; a larger `-j` is cut to that number for every program, with a warning, and `report.json` `threads` has what was asked and used | one per usable CPU |
 | `--kaks-format` | also write `dnds.kaks` in KaKs_Calculator's 22-column format | off |
 | `--keep-alignments` | also write the codon alignments | off |
 | `--keep-protein-alignments` | also write the protein alignments the codon alignments are made from | off |
@@ -143,8 +238,9 @@ coal pipeline clusters --cds all_cds.fa --clusters deepclust.tsv -o out --max-cl
 | `--report FILE` | the JSON report | `DIR/report.json` |
 | `--hash-inputs auto\|always\|never` | SHA-256 of the input files in the report: files up to 2 GiB, every file, or none | `auto` |
 | `--msa-timeout S` | give up on one Clustal Omega / MAFFT run after S seconds | none |
-| `--longest-isoform`, `--gene-map TSV` | keep the longest CDS per gene; the genes from a map instead of the headers ([One record is one gene](#one-record-is-one-gene)) | off |
-| `--min-codons N`, `--max-ds X` | flag estimates from fewer than N compared codons / with dS above X: status `warning` and a note; no row dropped, no number changed ([Filtering before interpretation](#filtering-before-interpretation)) | off |
+| `--longest-isoform`, `--gene-map TSV` | keep the longest CDS per gene; the genes from a map where it names the record, else from the headers and IDs ([One record is one gene](#one-record-is-one-gene)) | off |
+| `--isoform-rule auto\|suffix\|map` | `auto`: header fields, else ID suffixes, and `--longest-isoform` stops when a suffix rule alone would drop more than half of a file's records; `suffix`: the ID suffixes are transcripts, whatever their share; `map`: only `--gene-map`, nothing is read from headers or IDs | `auto` |
+| `--min-codons N`, `--max-ds X`, `--min-identity P` | flag estimates from fewer than N compared codons / with dS above X / from a pair whose protein identity is below P percent: status `warning` and a note; no row dropped, no number changed ([Filtering before interpretation](#filtering-before-interpretation)) | off |
 | `--yn-flavour`, `--yn-weighting`, `--digits`, `--max-cells` | as in `coal dnds` and `coal-cpp-align` | |
 | `--comeron-flavour coal\|gestimator`, `--li-flavour coal\|seqinr` | how `Comeron` and `Li` read a pair: COAL's policy, or as their reference programs (stop codons compared; [kaks.md](kaks.md), "Comeron and Li") | `coal` |
 | `--terminal-stops drop\|compare` | only with the reference flavours: `compare` takes the two terminal stop codons of a pair as the last compared codon column when both genes end in one, as orthologr 0.4.3's pipeline does; `drop` ends the pair before them | `drop` |
@@ -171,6 +267,20 @@ line ends. Rows are in input order (pairs: the query file's order; clusters: the
 | `protein_alignments.fasta` | pairs | `--keep-protein-alignments`: the pairwise protein alignments (COAL's aligner, the MSA tool's, or DIAMOND's completed to full length, as `--aligner` says), records 1+2, 3+4, ...: the same records in the same order as `codon_alignments.fasta`, and each codon row is three times its protein row, column for column |
 | `protein_alignments/<cluster>.fasta` | clusters | `--keep-protein-alignments`: the protein MSA of each cluster as it was used (the rows of Clustal Omega / MAFFT for the members that could be used; the engine's pairwise alignment for a cluster of two), under the same file names as `codon_alignments/`; not for clusters aligned pairwise |
 | `work/` | both | proteins, DIAMOND tables, logs of every external command (`work/logs/`), the `--resume` state |
+
+**A file is complete or absent.** Every table and alignment file is written as `NAME.tmp` and renamed when it is
+complete: the engine's files (`dnds.tsv`, `dnds.kaks`, `codon_alignments.fasta`, `protein_alignments.fasta`) when
+the Ka/Ks stage has ended with success, each per-cluster alignment file when it is written, `clusters.tsv` when
+DIAMOND has ended, and the tables COAL writes itself (`genes.tsv`, `orthologs.tsv`, `unpaired.tsv`,
+`cluster_summary.tsv`, `report.json`) with their last line; `failed.tsv` is `failed.tsv.tmp` while the run goes on
+and gets its name when the run ends, also when it ends with an error. So after a stage that failed (a full disk,
+an engine error) or was interrupted there is **no cut-off table or alignment under a final name**: the file is not
+there, the report lists only the files that are, and the `.tmp` files are removed (what a `kill -9` leaves is
+removed by the next run into the folder, which knows the names from `work/outputs.json`). The temporary files are
+created anew (`O_EXCL`, and `O_NOFOLLOW` where the system has it), and the rename replaces whatever has the final
+name: **a symbolic link in the output folder is replaced, never written through** (an output name that is a link
+to another file leaves that file untouched). `report.json` shows the engine's command line with the `.tmp` names
+and `--new-files`, as it ran.
 
 **One run per folder, and one run's files only.** A run takes the lock `<out_dir>.coal-lock` (next to the real
 folder: a symbolic link to the folder and the folder are one output; COAL's convention for `-o` files) and a
@@ -273,16 +383,21 @@ Schema `coal.pipeline/1`: [pipeline.schema.json](pipeline.schema.json). It is wr
   DIAMOND, Clustal Omega, MAFFT).
 - **Provenance, for a methods section.** `started` and `finished` (UTC, ISO 8601: `2026-11-13T09:15:46Z`);
   `platform` (`system`, `release`, `machine`, `python`, `cpus`); `coal_version`; `threads` (`requested`: `-j` as
-  given; `engine`: the threads of coal-cpp; `tools`: what DIAMOND and the aligners were given); `inputs`: every
+  given, 0 for the default; `usable_cpus`: the CPUs this process may run on; `engine`: the threads coal-cpp was
+  given; `tools`: what DIAMOND and the aligners were given; neither is ever more than `usable_cpus`); `inputs`: every
   file the run read, with `option`, absolute `path`, `bytes`, `modified` and `sha256` (of the file as given: a
-  `.gz` input is hashed compressed and has `"compression": "gzip"`). Hashing reads each input once more; with
+  `.gz` input is hashed compressed and has `"compression": "gzip"`, and also `sha256_uncompressed`, the hash of
+  its content: the same FASTA compressed twice has two `sha256` and one `sha256_uncompressed`). Hashing reads each input once more; with
   the default `--hash-inputs auto` a file above 2 GiB is not hashed (`"sha256": null`, and `sha256_skipped` says
   why); `--hash-inputs always` hashes every file, `never` none. `tools.<name>.commands`: the exact command
   lines, as argv arrays, of every DIAMOND and coal-cpp run (the same lines as in `work/logs/`; kept in the
   `--resume` state, so a reused stage still shows how its files were made), and for Clustal Omega / MAFFT,
   which run once per cluster, `command_template` (one run's command with `IN.fasta` / `OUT.fasta`). `cite`: the
   citation keys for what this run used; `coal cite DIR/report.json` prints the references
-  ([kaks.md](kaks.md#what-to-cite)). `warnings`: the warning lines of the run, when there were any. None of
+  ([kaks.md](kaks.md#what-to-cite)). A `clusters` run that used DeepClust lists DIAMOND
+  (`buchfink2021`) and the DeepClust paper (`buchfink2026`: Buchfink et al. 2026, Nature Methods 23:724-727,
+  <https://doi.org/10.1038/s41592-026-03030-z>; reports written before it appeared name its preprint,
+  `buchfink2023`, which `coal cite` still resolves). `warnings`: the warning lines of the run, when there were any. None of
   this changes a table: `dnds.tsv` and the others are byte-identical whatever `--hash-inputs` is.
 - `stages`: name, wall `seconds`, `cached` (reused by `--resume`). The stage `align_codon_kaks` also has
   `align_codon_seconds` and `kaks_seconds` (inside the engine) and, when an MSA program ran, `msa_seconds`.
@@ -393,13 +508,41 @@ short, for a pipeline table:
   biological reason; `dNdS` is `NA` only when dS is below 1e-6.
 
 These thresholds are conventions, with the usual caveat: report the ones you use, and check that the result does
-not hinge on them. `--min-codons N` and `--max-ds X` flag such rows (status `warning`, notes `fewer than N codons
-compared` and `dS above X`) **without dropping a row or changing a number**; the counts are in the summary on
-stderr and in `report.json` (`counts.flagged`). They are off by default.
+not hinge on them. `--min-codons N`, `--max-ds X` and `--min-identity P` flag such rows (status `warning`, notes
+`fewer than N codons compared`, `dS above X` and `protein identity below P%`) **without dropping a row or
+changing a number**; the counts are in the summary on stderr and in `report.json` (`counts.flagged`). They are
+off by default. `--min-identity` compares the column `prot_identity` (identical residues as a percentage of the
+protein alignment's columns, gap columns included) with P.
 
 ```
-coal pipeline pairs --query q_cds.fa --subject s_cds.fa -o out --min-codons 50 --max-ds 2
+coal pipeline pairs --query q_cds.fa --subject s_cds.fa -o out --min-codons 50 --max-ds 2 --min-identity 30
 ```
+
+**A cluster can hold pairs that are not related.** Clustering puts a sequence with a representative it matches;
+two members of one cluster need not match each other, and with DeepClust's defaults many do not. Every pair of a
+cluster is still aligned and estimated, and an alignment of two unrelated proteins gives numbers like any other:
+in a 3,000-member cluster of the second review, 306 of 1,000 sampled pairs had status `ok` at a protein identity
+below 15% (dN around 1, dS around 1.7). Status `ok` says that the method ran. Use `--min-identity` (30 to 40 is
+a common floor), or filter on `prot_identity` yourself, before reading such rows.
+
+## How much the aligner matters
+
+The protein alignment decides which codons are compared, so `--aligner` moves dN/dS. On 150 reciprocal best hits
+of *Arabidopsis thaliana* and *A. lyrata* (the first 150 genes of orthologr's example files, method YN, DIAMOND
+2.2.8; second review, 2026-11-13), against the default `nw`:
+
+| `--aligner` | pairs with exactly the same dN, dS and dN/dS as `nw` | dN/dS differs by more than 0.01 | by more than 0.05 | largest difference in dN/dS |
+|---|---|---|---|---|
+| `mafft` | 120 of 150 | 20 | 5 | 0.18 |
+| `diamond` (DIAMOND's alignment, completed to full length) | 90 of 150 | 33 | 8 | 0.43 |
+| `clustalo` | 75 of 150 | 53 | 20 | 0.30 |
+
+The pairs themselves do not depend on the aligner, and `--ortho bh` gave the same 150 pairs and values as `rbh`
+on this set. Half to four fifths of the pairs are untouched (alignments without a gap have one answer); the rest
+are the pairs with gaps, where the programs place them differently. None of the four is "the" alignment: **say
+in your methods which aligner was used** (`report.json` has it: `parameters.aligner`, the tool's version and
+command line, and `cite` lists its paper), and when a conclusion rests on single pairs, look at them with a second
+aligner (`--keep-protein-alignments` writes the alignments that were used).
 
 ## What the search and clustering defaults do
 

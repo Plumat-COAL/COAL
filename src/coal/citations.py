@@ -4,13 +4,18 @@ COAL's codon alignment follows PAL2NAL's method; its Ka/Ks engine is derived fro
 libsequence and seqinr and implements published estimators; `coal pipeline` runs DIAMOND and Clustal Omega / MAFFT.
 A paper that reports numbers from them should cite the methods and programs those numbers come from, not only COAL.
 
-REFERENCES: key -> the reference as text (authors, year, title, journal, volume and pages where known; no DOIs are
-given here: look them up from the title). keys_for(...) gives the keys for a run; the keys are stable (they are
-written into reports).
+REFERENCES: key -> the reference as text (authors, year, title, journal, volume and pages). DOIS: key -> the DOI of
+that work (each checked against the publisher's or the institution's page of the paper; COAL itself has none).
+keys_for(...) gives the keys for a run; the keys are stable (they are written into reports): a key that is replaced
+by a later publication stays in REFERENCES and is named in SUPERSEDED (buchfink2023, the DeepClust preprint ->
+buchfink2026, the paper), so a report written earlier still resolves.
 """
 from __future__ import annotations
 
-__all__ = ["REFERENCES", "METHOD_KEYS", "keys_for", "format_references", "table", "main"]
+from typing import Iterable, Sequence
+
+__all__ = ["REFERENCES", "DOIS", "SUPERSEDED", "LABELS", "METHOD_KEYS", "TABLE", "keys_for", "reference", "doi_url",
+           "format_references", "table", "main"]
 
 COAL_KEY = "coal"
 REFERENCES: dict[str, str] = {
@@ -44,12 +49,16 @@ REFERENCES: dict[str, str] = {
                     "Bioinformatics 19:2325-2327.",
     "charif2007": "Charif D, Lobry JR (2007). SeqinR 1.0-2: a contributed package to the R project for "
                   "statistical computing devoted to biological sequences retrieval and analysis. In: Bastolla U, "
-                  "Porto M, Roman HE, Vendruscolo M (eds), Structural Approaches to Sequence Evolution. Springer, "
-                  "pp. 207-232.",
+                  "Porto M, Roman HE, Vendruscolo M (eds), Structural Approaches to Sequence Evolution: Molecules, "
+                  "Networks, Populations. Springer, pp. 207-232.",
     "buchfink2021": "Buchfink B, Reuter K, Drost H-G (2021). Sensitive protein alignments at tree-of-life scale "
                     "using DIAMOND. Nature Methods 18:366-368.",
+    "buchfink2026": "Buchfink B, Barb\u00e9 \u00c9, Ashkenazy H, Reuter K, Kennedy JA, Drost H-G (2026). Clustering the "
+                    "protein universe of life using DIAMOND DeepClust. Nature Methods 23:724-727.",
+    # the preprint of buchfink2026: not in TABLE; kept so that reports written before the paper still resolve
     "buchfink2023": "Buchfink B, Ashkenazy H, Reuter K, Kennedy JA, Drost H-G (2023). Sensitive clustering of "
-                    "protein sequences at tree-of-life scale using DIAMOND DeepClust. bioRxiv (preprint).",
+                    "protein sequences at tree-of-life scale using DIAMOND DeepClust. bioRxiv (the preprint of "
+                    "buchfink2026).",
     "sievers2011": "Sievers F, Wilm A, Dineen D, Gibson TJ, Karplus K, Li W, Lopez R, McWilliam H, Remmert M, "
                    "Soding J, Thompson JD, Higgins DG (2011). Fast, scalable generation of high-quality protein "
                    "multiple sequence alignments using Clustal Omega. Molecular Systems Biology 7:539.",
@@ -60,6 +69,59 @@ REFERENCES: dict[str, str] = {
                  "and Evolution 32:1221-1231. (the R package orthologr)",
 }
 
+# The DOI of each cited work (none for COAL itself). Printed as https://doi.org/ links.
+DOIS: dict[str, str] = {
+    "suyama2006": "10.1093/nar/gkl315",
+    "nei1986": "10.1093/oxfordjournals.molbev.a040410",
+    "li1985": "10.1093/oxfordjournals.molbev.a040343",
+    "li1993": "10.1007/BF02407308",
+    "pamilo1993": "10.1093/oxfordjournals.molbev.a040003",
+    "tzeng2004": "10.1093/molbev/msh242",
+    "yang2000": "10.1093/oxfordjournals.molbev.a026236",
+    "zhang2006": "10.1186/1471-2148-6-44",
+    "comeron1995": "10.1007/BF00173196",
+    "wang2010": "10.1016/S1672-0229(10)60008-3",
+    "yang2007": "10.1093/molbev/msm088",
+    "thornton2003": "10.1093/bioinformatics/btg316",
+    "charif2007": "10.1007/978-3-540-35306-5_10",
+    "buchfink2021": "10.1038/s41592-021-01101-x",
+    "buchfink2026": "10.1038/s41592-026-03030-z",
+    "buchfink2023": "10.1101/2023.01.24.525373",
+    "sievers2011": "10.1038/msb.2011.75",
+    "katoh2013": "10.1093/molbev/mst010",
+    "drost2015": "10.1093/molbev/msv012",
+}
+
+# A key that a later publication replaces -> the key to cite now
+SUPERSEDED: dict[str, str] = {"buchfink2023": "buchfink2026"}
+
+
+def doi_url(key: str) -> str | None:
+    """https://doi.org/<DOI> of a reference, None for COAL itself."""
+    return "https://doi.org/" + DOIS[key] if key in DOIS else None
+
+
+def reference(key: str, version: str | None = None) -> str:
+    """The reference as one line of text, with its DOI link. KeyError for an unknown key."""
+    text = REFERENCES[key]
+    if "{version}" in text:
+        if version is None:
+            from . import __version__ as version
+        text = text.replace("{version}", str(version))
+    url = doi_url(key)
+    return f"{text} {url}" if url else text
+
+
+def current(keys: Iterable[str]) -> list[str]:
+    """The keys with each superseded one followed by the key that replaces it; each key once."""
+    out: list[str] = []
+    for k in keys:
+        for one in (k, SUPERSEDED.get(k)):
+            if one and one not in out:
+                out.append(one)
+    return out
+
+
 # How a reference is named in running text and in the tables of the documentation
 LABELS: dict[str, str] = {
     "coal": "COAL", "suyama2006": "Suyama et al. 2006 (PAL2NAL)", "nei1986": "Nei & Gojobori 1986",
@@ -68,6 +130,7 @@ LABELS: dict[str, str] = {
     "comeron1995": "Comeron 1995", "wang2010": "Wang et al. 2010 (KaKs_Calculator 2.0)",
     "yang2007": "Yang 2007 (PAML 4)", "thornton2003": "Thornton 2003 (libsequence)",
     "charif2007": "Charif & Lobry 2007 (seqinr)", "buchfink2021": "Buchfink et al. 2021 (DIAMOND)",
+    "buchfink2026": "Buchfink et al. 2026 (DIAMOND DeepClust)",
     "buchfink2023": "Buchfink et al. 2023 (DIAMOND DeepClust, preprint)",
     "sievers2011": "Sievers et al. 2011 (Clustal Omega)", "katoh2013": "Katoh & Standley 2013 (MAFFT)",
     "drost2015": "Drost et al. 2015 (orthologr)",
@@ -81,8 +144,13 @@ def markdown_table() -> str:
     return "\n".join(rows)
 
 
+def listed_keys() -> list[str]:
+    """The cited works shown in the documents: every reference but COAL's own and the superseded ones."""
+    return [k for k in REFERENCES if k != COAL_KEY and k not in SUPERSEDED]
+
+
 def markdown_references() -> str:
-    return "\n".join(f"- {REFERENCES[k].replace(', version {version}', '')}" for k in REFERENCES if k != "coal")
+    return "\n".join(f"- {REFERENCES[k]} <{doi_url(k)}>" for k in listed_keys())
 
 
 # The estimator of each Ka/Ks method (docs/kaks.md "Methods"), then the program whose code COAL's implementation
@@ -113,14 +181,14 @@ TABLE: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Ka/Ks, method Comeron", METHOD_KEYS["Comeron"]),
     ("Ka/Ks, method Li", METHOD_KEYS["Li"]),
     ("`coal pipeline pairs` with DIAMOND (orthologs)", ("buchfink2021",)),
-    ("`coal pipeline clusters` with DIAMOND DeepClust", ("buchfink2021", "buchfink2023")),
+    ("`coal pipeline clusters` with DIAMOND DeepClust", ("buchfink2021", "buchfink2026")),
     ("Protein alignments by Clustal Omega (`--aligner clustalo`, the cluster default)", ("sievers2011",)),
     ("Protein alignments by MAFFT (`--aligner mafft`)", ("katoh2013",)),
     ("Through the R package orthologr", ("drost2015",)),
 )
 
 
-def keys_for(methods=(), codon_alignment: bool = True, diamond: bool = False, deepclust: bool = False,
+def keys_for(methods: Iterable[str] = (), codon_alignment: bool = True, diamond: bool = False, deepclust: bool = False,
              clustalo: bool = False, mafft: bool = False) -> list[str]:
     """The citation keys of a run, COAL first, each once, in a fixed order."""
     keys = [COAL_KEY]
@@ -132,7 +200,7 @@ def keys_for(methods=(), codon_alignment: bool = True, diamond: bool = False, de
     if diamond or deepclust:
         keys.append("buchfink2021")
     if deepclust:
-        keys.append("buchfink2023")
+        keys.append("buchfink2026")
     if clustalo:
         keys.append("sievers2011")
     if mafft:
@@ -141,11 +209,9 @@ def keys_for(methods=(), codon_alignment: bool = True, diamond: bool = False, de
     return [k for k in keys if not (k in seen or seen.add(k))]
 
 
-def format_references(keys, version: str | None = None) -> str:
-    """One reference per line, `[key] text`."""
-    if version is None:
-        from . import __version__ as version
-    return "\n".join(f"[{k}] " + REFERENCES[k].replace("{version}", version) for k in keys)
+def format_references(keys: Iterable[str], version: str | None = None) -> str:
+    """One reference per line, `[key] text https://doi.org/...`."""
+    return "\n".join(f"[{k}] " + reference(k, version) for k in keys)
 
 
 def table() -> str:
@@ -161,10 +227,12 @@ USAGE = """usage: coal cite [REPORT.json | KEY ... | METHOD ...]
 What to cite for what you ran. Without arguments: the table of what was run -> references, and every reference.
 With the report.json of a `coal pipeline` run: the references of that run (its "cite" list).
 With citation keys (suyama2006, yang2000, ...) or Ka/Ks method names (YN, NG, ...): those references.
+Each cited work is printed with its DOI as a https://doi.org/ link. A report written before the DeepClust paper
+appeared names its preprint (buchfink2023): the paper (buchfink2026) is printed after it.
 """
 
 
-def main(argv) -> int:
+def main(argv: Sequence[str]) -> int:
     """`coal cite ...`."""
     import json
     import os
@@ -176,7 +244,7 @@ def main(argv) -> int:
     if not args:
         print(table())
         print()
-        print(format_references(REFERENCES))
+        _print(format_references([COAL_KEY, *listed_keys()]))
         return 0
     keys: list[str] = []
     by_upper = {m.upper(): m for m in METHOD_KEYS} | {"C95": "Comeron"}
@@ -201,6 +269,15 @@ def main(argv) -> int:
             print(f"coal cite: error: {a!r} is not a citation key, a Ka/Ks method or a report file. Keys: "
                   + ", ".join(REFERENCES) + ". Methods: " + ", ".join(METHOD_KEYS), file=sys.stderr)
             return 2
-    seen: set[str] = set()
-    print(format_references([k for k in keys if not (k in seen or seen.add(k))]))
+    _print(format_references(current(keys)))
     return 0
+
+
+def _print(text: str) -> None:
+    """print, on a terminal whose encoding lacks a letter of an author's name too."""
+    import sys
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        enc = getattr(sys.stdout, "encoding", None) or "ascii"
+        print(text.encode(enc, "replace").decode(enc))

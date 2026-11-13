@@ -286,8 +286,10 @@ SITE_FILES = PAGES + FONTS + ("assets/fonts/OFL.txt",) + ("index.html", "style.c
               "assets/coal-logo-dark@2x.png", "assets/favicon-32.png", "assets/apple-touch-icon.png",
               "assets/icon-512.png", "assets/coal-train.svg")
 TEXT_EXT = (".html", ".css", ".js", ".svg", ".txt", ".json", ".webmanifest")
-# Not requests: the SVG namespace, and the local app's address shown as text for people to open.
-ALLOWED_NON_REPO_URLS = ("http://www.w3.org/2000/svg", "http://127.0.0.1:7860")
+# Not requests: the SVG namespace, the local app's address shown as text for people to open, and the DOI links of
+# the cited papers on cite.html (links a reader may follow; the page loads nothing from them. They are the DOIs of
+# other people's papers: the rule "no DOI for COAL itself" below is unaffected).
+ALLOWED_NON_REPO_URLS = ("http://www.w3.org/2000/svg", "http://127.0.0.1:7860", "https://doi.org/10.")
 
 
 # The font's licence names its project and licence sites; no page loads or links them.
@@ -426,6 +428,22 @@ class TestSiteFiles(unittest.TestCase):
                     if f != "README.md")
         # the results screenshot is sharp on high-resolution screens (1600 px wide, ~175 KB), so 400 KB
         self.assertLess(total, 400 * 1024, f"site is {total} bytes (budget 400 KB)")
+
+    def test_cite_table_wraps_and_stacks_on_a_phone(self):
+        """The "what to cite" table has prose in both columns: its own class, not the file table's nowrap first
+        column (on a 390 px screen only the first column was visible), and stacked cells below 30rem."""
+        cite = self.pages["cite.html"]
+        self.assertEqual(re.findall(r'<table class="([^"]+)"', cite), ["files refs"])
+        for page, html in self.pages.items():
+            if page != "cite.html":
+                self.assertNotIn("refs", re.findall(r'<table class="([^"]+)"', html), page)
+        css = re.sub(r"\s+", " ", _read("site", "style.css"))
+        self.assertIn(".refs td:first-child { font: inherit; white-space: normal; }", css)
+        self.assertLess(css.index(".files td:first-child {"), css.index(".refs td:first-child {"))   # the override wins
+        phone = re.search(r"@media \(max-width: 30rem\) \{ \.refs \{ min-width: 0; \}.*?\} \}", css)
+        self.assertIsNotNone(phone, "no phone rule for .refs")
+        self.assertIn(".refs td { display: block;", phone.group(0))
+        self.assertNotIn("display: none", phone.group(0))   # the header row stays for screen readers
 
     def test_unsigned_and_smart_app_control_explained(self):
         for must in ("Windows protected your PC", "More info", "Run anyway", "Unknown publisher", "Smart App Control",

@@ -1,0 +1,164 @@
+---
+title: "From two CDS files to dN/dS"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{From two CDS files to dN/dS}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+options(width = 100)
+```
+
+This vignette goes from the coding sequences (CDS) of two species to a table of dN, dS and dN/dS for their
+ortholog pairs, and to what should be checked before the numbers are read. Everything runs inside R: no program
+is started, nothing is downloaded, no file is written. It takes a few seconds.
+
+```{r}
+library(coalr)
+```
+
+## The data
+
+The package ships a small synthetic example (the files of `examples/dnds` in COAL's repository): two "species"
+with 13 coding sequences each, of which 12 are orthologs of each other, and the table that says which gene goes
+with which. In real work the two FASTA files are the CDS files of two genomes, **one sequence per gene** (see
+"One record is one gene" below), and the pairs come from an ortholog search.
+
+```{r}
+dir <- system.file("extdata", package = "coalr")
+a <- coal_read_fasta(file.path(dir, "species_a_cds.fasta"))
+b <- coal_read_fasta(file.path(dir, "species_b_cds.fasta"))
+length(a); length(b)
+substr(a[1:2], 1, 60)
+pairs <- read.delim(file.path(dir, "orthologs.tsv"))[, 1:2]
+head(pairs, 3)
+```
+
+`coal_read_fasta()` returns a named character vector. The functions also take a `DNAStringSet`, the list
+`seqinr::read.fasta()` returns, a two-column data frame, or the file name itself.
+
+## dN/dS for the pairs
+
+For every pair, `coal_dnds_pairs()` translates both sequences, aligns the two proteins globally
+(Needleman-Wunsch, BLOSUM62), threads the codons onto that alignment and estimates dN and dS. The default method
+is `"YN"` (Yang and Nielsen 2000).
+
+```{r}
+res <- coal_dnds_pairs(a, b, pairs = pairs)
+res[, c("seq1", "seq2", "method", "dN", "dS", "dNdS", "codons_compared", "prot_identity", "status")]
+```
+
+One row per pair and method. `dN` and `dS` are substitutions per nonsynonymous and per synonymous site, `dNdS`
+their ratio; `SE_dN` and `SE_dS` are standard errors of dN and of dS (there is none for the ratio).
+`codons_compared` is the number of codon columns the estimate rests on, `prot_identity` the identity of the
+protein alignment in percent. A pair that cannot be computed does not stop the call: its row has
+`status = "error"` and the reason in `note`.
+
+Several methods at once (the rows of a pair then follow each other). `method =` is accepted for `methods =`:
+
+```{r}
+both <- coal_dnds_pairs(a, b, pairs = pairs[1:3, ], methods = c("YN", "NG"))
+both[, c("seq1", "method", "dN", "dS", "dNdS")]
+```
+
+The example was simulated with a known dN/dS per gene (`simulated_omega` in `orthologs.tsv`), so the estimates
+can be compared with the truth:
+
+```{r}
+truth <- read.delim(file.path(dir, "orthologs.tsv"))
+data.frame(gene = res$seq1, simulated = truth$simulated_omega, estimated = round(res$dNdS, 3))
+```
+
+With 200 to 400 codons per gene the estimates scatter around the simulated values; that scatter is what a
+single pair can tell you.
+
+## Before reading the numbers
+
+Status `ok` means that the method produced numbers, not that they are informative. Three things are worth a
+flag: few compared codons, a saturated synonymous distance, and a pair of proteins that are hardly alike.
+`min_codons`, `max_ds` and `min_identity` mark such rows. They never drop a row and never change a number: the
+status becomes `warning` and `note` says why.
+
+```{r}
+flagged <- coal_dnds_pairs(a, b, pairs = pairs, min_codons = 250, max_ds = 0.6, min_identity = 80)
+flagged[, c("seq1", "dS", "codons_compared", "prot_identity", "status", "note")]
+attr(flagged, "flagged")
+```
+
+(The thresholds here are chosen so that this small example shows each flag; common starting points for real
+data are `min_codons = 50`, `max_ds = 2` and `min_identity = 30`.) Filter afterwards, in the open:
+
+```{r}
+keep <- subset(flagged, status == "ok")
+nrow(keep)
+summary(keep$dNdS)
+```
+
+`dNdS` is `NA` when dS is below 1e-6 (two sequences without a synonymous difference have no ratio), and very
+small dS values give unstable ratios for no biological reason: look at `dS` before interpreting a large `dNdS`.
+
+## The alignments behind the numbers
+
+`keep_alignments = TRUE` returns the protein and codon alignment of every pair, for a look at a pair that
+surprises you:
+
+```{r}
+one <- coal_dnds_pairs(a, b, pairs = pairs[2, ], keep_alignments = TRUE)
+aln <- attr(one, "alignments")
+substr(c(aln$protein1, aln$protein2), 1, 70)
+substr(c(aln$codon1, aln$codon2), 1, 70)
+```
+
+## One record is one gene
+
+Every sequence is treated as a gene. CDS files from genome annotations (Ensembl, NCBI, TAIR) usually hold every
+transcript of every gene; with such a file one gene gives several rows with different values, and an ortholog
+search splits its best hits between the transcripts. Give one sequence per gene. A simple and common choice is
+the longest CDS of each gene; here for IDs of the form `gene.1`, `gene.2`:
+
+```{r}
+tx <- c(G1.1 = "ATGGCTAAAGGTCTGGAACGTTAA", G1.2 = "ATGGCTAAAGGTCTGGAACGTGGTCTGTAA", G2.1 = "ATGAAACCCGGGTTTTAG")
+gene <- sub("\\.[0-9]+$", "", names(tx))
+longest <- tx[unlist(lapply(split(seq_along(tx), gene), function(i) i[which.max(nchar(tx[i]))]))]
+names(longest)
+```
+
+`coal pipeline --longest-isoform` (below) does this for the usual header styles and says what it did.
+
+## Genes of another genetic code
+
+`code` is the NCBI genetic code, one per call (default 1, the standard code). Mitochondrial genes need their
+own call with their own code, for example `code = 2` for vertebrate mitochondria; translated with the standard
+code they have internal stop codons (`coal_translate(x, details = TRUE)$internal_stops`) and their estimates
+mean nothing. The methods `"Comeron"` and `"Li"` are implemented for the standard code only.
+
+## When COAL should also find the orthologs
+
+`coal_dnds_pairs()` needs the pairs. The complete pipeline (translation, DIAMOND reciprocal best hits, alignment,
+dN/dS, a run report) is the `coal pipeline` command, which `coal_pipeline_pairs()` runs through Python; it needs
+the Python package `coal-align` and DIAMOND, so it is not run here:
+
+```{r, eval = FALSE}
+out <- coal_pipeline_pairs(file.path(dir, "species_a_cds.fasta"), file.path(dir, "species_b_cds.fasta"),
+                           threads = 4, longest_isoform = TRUE, min_codons = 50, max_ds = 2)
+head(out$pairs)        # the same columns as above
+out$report$cite        # what to cite for this run
+```
+
+For gene families there is `coal_dnds_clusters()` (every pair within each cluster, with a per-cluster summary).
+`?coalr` has a table of the command line's options and the R arguments that correspond to them.
+
+## What to cite
+
+COAL's numbers come from published methods, in code derived from KaKs_Calculator 2.0 and PAML. For a result
+obtained as above cite COAL (with its version, `coal_info()$coal_version`), PAL2NAL for the codon alignment
+method (Suyama, Torrents and Bork 2006), the estimator (for `"YN"`: Yang and Nielsen 2000) and the program the
+code is derived from (Wang et al. 2010, KaKs_Calculator 2.0; Yang 2007, PAML 4). The command `coal cite` lists
+the references for every method, with their DOIs.
+
+```{r}
+coal_info()$coal_version
+```

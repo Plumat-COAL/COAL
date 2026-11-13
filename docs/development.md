@@ -45,6 +45,7 @@ Even in such a build a hook acts only while `COAL_TEST_HOOKS=1` is set in the en
 | `COAL_TEST_LOCK_BEFORE_TAKEOVER_UNTIL=<file>` | between judging a lock stale and replacing it: creates `<file>.waiting`, then waits until `<file>` exists (at most 60 s), so a test can act inside the window without a fixed sleep | |
 | `COAL_TEST_LOCK_BEFORE_TAKEOVER_MS=<ms>` | waits between judging a lock stale and replacing it | `pipeline._before_takeover`, `pipeline._in_takeover` (attributes a test sets) |
 | `COAL_TEST_UNLINK_FAILS=N` | the first N removals of lock, guard and temporary files fail as on Windows while another process has the file open | `pipeline._unlink_fails` (an attribute a test sets) |
+| `COAL_TEST_DNDS_FAIL_AFTER_GROUPS=k` | `coal-cpp codon-dnds` fails with a write error when k groups have been written (what it wrote so far is flushed first): a stage that dies in the middle, for `tests/test_pipeline_atomic.py` | none |
 
 **Python engine.** Python has no build step to leave the hooks out of, so the three it reads from the environment
 (`COAL_TEST_PAUSE_AFTER_CHECKPOINT` in `pipeline.py`, `COAL_TEST_PAUSE_IN_REPORT` in `report.py`, both only with
@@ -58,6 +59,29 @@ notice. The other Python hooks are module attributes that only a test in the sam
 `coal-cpp` that has none it is skipped with that reason; when `COAL_REQUIRE_CPP` is set (CI) it fails instead, so
 a test build without the option cannot pass unnoticed. `COAL_ALLOW_NO_TEST_HOOKS=1` turns that failure back into
 a skip, for running the suite against a release binary on purpose.
+
+## A genetic code per gene (design note)
+
+`coal pipeline` has one genetic code per run (`-c`). A per-gene code (`--code-map TSV`: record ID, NCBI table)
+was evaluated on 2026-11-13 and **not built**, because the engine has no cheap and correct place for it yet:
+
+- `coal-cpp translate` takes one `-c` for the file, and `coal-cpp codon-dnds` one `dnds::Options::table` for the
+  run: it is used for the protein rows of two-member groups, for threading the codons onto the protein rows
+  (`codon_align` checks every codon against its residue under that table) and by every Ka/Ks method (the
+  site-counting tables of `kaks.cpp` are built per code). The group stream (`G` / `M` / `E` lines) has no field
+  for a code.
+- What a correct implementation needs, end to end: (1) `translate --code-map` (a code per record; the genes table
+  gains a `genetic_code` column); (2) a code on the `G` line of the group stream, with one set of Ka/Ks tables per
+  code in the worker threads (they are built once per run today); (3) the rule for mixed groups: a pair whose two
+  genes have different codes is that pair's `error` (code `mixed_genetic_code`), a cluster with mixed codes is
+  aligned as proteins but only its same-code pairs are estimated; (4) DIAMOND and the MSA tools see proteins, so
+  nothing changes there; (5) `Comeron` / `Li` stay code 1: a pair of another code gets `error` for those methods
+  only; (6) the report records the map as an input and counts pairs per code; (7) the same in coalr
+  (`coal_dnds_pairs(code = )` already takes one code per call) and in the pair table's validation tests, which
+  compare with KaKs_Calculator per code.
+- Until then: the hint of `_Run.code_hint` (genes with internal stops under `-c` that are clean under another
+  table) and the two-run recipe of docs/pipeline.md "Genes of another genetic code". Two runs give exactly what a
+  code map would, for the cost of splitting two files.
 
 ## Two packages
 

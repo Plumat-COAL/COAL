@@ -144,7 +144,7 @@ class OsErrors(PipelineCase):
                     raise OSError(errno.ENOSPC, os.strerror(errno.ENOSPC), self_inner.name)
 
         def fake_open(path, *a, **k):
-            if str(path).endswith("failed.tsv") and a and "w" in a[0]:
+            if str(path).endswith("failed.tsv.tmp") and a and "w" in a[0]:   # (written as .tmp, named at the end)
                 return Full(io.FileIO(path, "w"), encoding="utf-8", newline="\n")
             return real_open(path, *a, **k)
         with mock.patch("builtins.open", fake_open):
@@ -154,6 +154,9 @@ class OsErrors(PipelineCase):
         self.assertRegex(err, r"coal pipeline: error: cannot write .*failed\.tsv: (?i:no space left)")
         rep = json.loads((self.tmp / "o" / "report.json").read_text(encoding="utf-8"))
         self.assertEqual((rep["exit_code"], rep["status"]), (1, "failed"))
+        # a failures table that could not be completed is not there under its name (nor as .tmp)
+        self.assertFalse((self.tmp / "o" / "failed.tsv").exists())
+        self.assertFalse((self.tmp / "o" / "failed.tsv.tmp").exists())
 
     def test_when_the_report_cannot_be_written(self):
         real_dump = json.dump
@@ -277,7 +280,7 @@ class Tools(PipelineCase):
 
     def test_old_diamond_warns_in_pair_mode(self):
         res, err = run(P.run_pairs, Q, S, self.tmp / "o", diamond=self.fake("exit 3", "v2.0.9"))
-        self.assertIn("warning: DIAMOND v2.0.9", err)
+        self.assertIn("warning: DIAMOND 2.0.9", err)   # (said as "v2.0.9")
         self.assertIn("older than 2.1.0", err)
         self.assertEqual(res.exit_code, 1)   # (the stand-in fails; a real 2.0 would go on)
         self.assertIn("diamond makedb failed (exit 3)", err)
@@ -286,12 +289,33 @@ class Tools(PipelineCase):
         self.assertEqual([P._version_tuple(v) for v in ("2.1.0", "v2.0.14", "2.1.10.160", "2.1.9-beta", "x")],
                          [(2, 1, 0), (2, 0, 14), (2, 1, 10, 160), (2, 1, 9), None])
         self.assertLess(P._version_tuple("2.0.15"), P.DIAMOND_MIN_VERSION)
-        self.assertGreaterEqual(P._version_tuple("2.1"), (2, 1))
+        # two numbers are padded: 2.1 is 2.1.0, not older than it
+        self.assertEqual(P._version_tuple("2.1"), (2, 1, 0))
+        self.assertGreaterEqual(P._version_tuple("2.1"), P.DIAMOND_MIN_VERSION)
+        self.assertEqual(P._version_tuple("3"), (3, 0, 0))
+
+    def test_version_as_diamond_prints_it(self):
+        for said, want in (("diamond version 2.1", "2.1"), ("DIAMOND 2.2.8 (C) Max Planck Society", "2.2.8"),
+                           ("diamond v2.1.9.163 build", "2.1.9.163"), ("diamond version unknown", "unknown")):
+            f = self.tmp / "diamond"
+            f.write_text(f'#!/bin/sh\necho "{said}"\n', encoding="utf-8")
+            f.chmod(0o755)
+            self.assertEqual(P._diamond_version(str(f)), want, said)
+        # "2.1" runs cluster mode (it was refused as older than 2.1.0)
+        res, err = run(P.run_clusters, FAM, self.tmp / "o", diamond=self.fake("exit 3", "2.1"))
+        self.assertNotIn("too old", err)
+        self.assertIn("diamond deepclust failed (exit 3)", err)
+        # a version that cannot be read: one warning, and the run goes on
+        res, err = run(P.run_clusters, FAM, self.tmp / "o2", diamond=self.fake("exit 3", "unknown"))
+        self.assertEqual(err.count("the version of DIAMOND could not be read"), 1, err)
+        self.assertIn("it says 'unknown'", err)
+        self.assertIn("diamond deepclust failed (exit 3)", err)
 
     def test_jobs_above_the_cpu_count_are_clamped_for_the_tools(self):
-        cpus = os.cpu_count() or 1
+        cpus = P.usable_cpus()
         res, err = run(P.run_pairs, Q, S, self.tmp / "o", diamond=self.fake("exit 3"), jobs=cpus + 4999)
-        self.assertIn(f"-j {cpus + 4999} is more than the {cpus} CPU(s) of this machine", err)
+        self.assertIn(f"-j {cpus + 4999} is more than the {cpus} CPU(s) this process may use: coal-cpp, DIAMOND and "
+                      f"the aligners are run with {cpus} thread(s)", err)
         calls = (self.tmp / "calls.txt").read_text(encoding="utf-8")
         self.assertIn(f"--threads {cpus} ", calls)
         self.assertNotIn(str(cpus + 4999), calls)
@@ -344,3 +368,286 @@ class RealDiamond(PipelineCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _fasta(path: Path) -> dict:
+    out, cur = {}, None
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith(">"):
+            cur = line[1:].split()[0]
+            out[cur] = ""
+        elif cur is not None:
+            out[cur] += line.strip()
+    return out
+
+
+@needs_cpp
+class GeneticCodeHint(PipelineCase):
+    """Mitochondrial genes (examples/mito, genetic code 2) inside a nuclear set (examples/dnds): one warning per
+    set that names the table and the two-run recipe (docs/pipeline.md "Genes of another genetic code")."""
+
+    def files(self):
+        mito = _fasta(ROOT / "examples" / "mito" / "dna.fasta")
+        a = _fasta(ROOT / "examples" / "dnds" / "species_a_cds.fasta")
+        b = _fasta(ROOT / "examples" / "dnds" / "species_b_cds.fasta")
+        homo = [k for k in mito if k.startswith("Homo_")]
+        pan = [k for k in mito if k.startswith("Pan_")]
+        q, s = self.tmp / "q.fa", self.tmp / "s.fa"
+        q.write_text("".join(f">{k}\n{v}\n" for k, v in [*a.items(), *((k, mito[k]) for k in homo)]),
+                     encoding="utf-8", newline="\n")
+        s.write_text("".join(f">{k}\n{v}\n" for k, v in [*b.items(), *((k, mito[k]) for k in pan)]),
+                     encoding="utf-8", newline="\n")
+        pairs = [(h, "Pan_" + h.split("_")[1]) for h in homo] + [("spA_g01", "spB_g01")]
+        return q, s, pairs, mito
+
+    def test_mito_genes_in_a_nuclear_set_get_the_hint(self):
+        q, s, pairs, _ = self.files()
+        res, err = run(P.run_pairs, q, s, self.tmp / "o", pairs=self.pairs_file(pairs))
+        self.assertEqual(res.exit_code, 0, err)
+        lines = [ln for ln in err.splitlines() if "have none under NCBI genetic code" in ln]
+        self.assertEqual(len(lines), 2, err)                       # one line per set, not one per gene
+        self.assertRegex(lines[0], r"warning: query: \d of the 4 genes with internal stop codons under genetic code 1 "
+                                   r"have none under NCBI genetic code 2 \(vertebrate mitochondrial")
+        self.assertIn("run `coal pipeline` twice, the rest with -c 1 and these with -c 2", lines[0])
+        self.assertIn("Homo_", lines[0])
+        hints = {h["set"]: h for h in res.report["genetic_code_hints"]}
+        self.assertEqual(sorted(hints), ["query", "subject"])
+        self.assertEqual((hints["query"]["genetic_code"], hints["query"]["clean_under"]), (1, 2))
+        self.assertGreaterEqual(hints["query"]["genes"], 2)
+        self.assertEqual(hints["query"]["genes_with_internal_stops"], 4)
+        self.check_report(res)
+        # a hint only: the rows are what they were without it (statuses from the mistranslated codons)
+        rows = {r["seq1"]: r for r in __import__("test_dnds_pipeline").read_tsv(res.outputs["dnds"])}
+        self.assertEqual(rows["spA_g01"]["status"], "ok")
+
+    def test_the_two_run_recipe_gives_clean_genes(self):
+        q, s, pairs, mito = self.files()
+        mq, ms = self.tmp / "mq.fa", self.tmp / "ms.fa"
+        mq.write_text("".join(f">{k}\n{v}\n" for k, v in mito.items() if k.startswith("Homo_")), encoding="utf-8")
+        ms.write_text("".join(f">{k}\n{v}\n" for k, v in mito.items() if k.startswith("Pan_")), encoding="utf-8")
+        res, err = run(P.run_pairs, mq, ms, self.tmp / "m", pairs=self.pairs_file(pairs[:-1]), codontable=2)
+        self.assertEqual(res.exit_code, 0, err)
+        self.assertNotIn("genetic code", err)
+        self.assertNotIn("genetic_code_hints", res.report)
+        genes = __import__("test_dnds_pipeline").read_tsv(res.outputs["genes"])
+        self.assertEqual({g["status"] for g in genes}, {"ok"})
+
+    def test_no_hint_without_such_genes_or_for_single_stops(self):
+        res, err = run(P.run_pairs, Q, S, self.tmp / "o", pairs=self.pairs_file(PLAIN))
+        self.assertNotIn("NCBI genetic code", err)
+        self.assertNotIn("genetic_code_hints", res.report)
+        # genes with ONE internal TGA each (selenoprotein-like): clean under code 2 / 4, but not counted
+        a = _fasta(ROOT / "examples" / "dnds" / "species_a_cds.fasta")
+        recs = []
+        for k, (name, seq) in enumerate(list(a.items())[:6]):
+            codons = [seq[i:i + 3] for i in range(0, len(seq), 3)]
+            if k < 4:
+                codons[10] = "TGA"
+            recs.append((name, "".join(codons)))
+        q = self.tmp / "sel.fa"
+        q.write_text("".join(f">{n}\n{s}\n" for n, s in recs), encoding="utf-8")
+        res, err = run(P.run_pairs, q, ROOT / "examples" / "dnds" / "species_b_cds.fasta", self.tmp / "sel",
+                       pairs=self.pairs_file([("spA_g01", "spB_g01")]))
+        self.assertNotIn("NCBI genetic code", err)
+        # two internal TGA each: counted
+        recs2 = []
+        for k, (name, seq) in enumerate(recs):
+            codons = [seq[i:i + 3] for i in range(0, len(seq), 3)]
+            if k < 4:
+                codons[20] = "TGA"
+            recs2.append((name, "".join(codons)))
+        q.write_text("".join(f">{n}\n{s}\n" for n, s in recs2), encoding="utf-8")
+        res, err = run(P.run_clusters, q, self.tmp / "sel2", clusters=self.tmp / "none.tsv")
+        # (nuclear genes hold AGA / AGG, which are stops in code 2: the first table that fits is 4)
+        self.assertIn("cds: 4 of the 4 genes with internal stop codons under genetic code 1 have none under NCBI "
+                      "genetic code 4", err)
+        self.assertIn(f"take them out of {q} into a file of their own", err)
+
+    def test_docs(self):
+        doc = (ROOT / "docs" / "pipeline.md").read_text(encoding="utf-8")
+        for must in ("## Genes of another genetic code", "-o out_mito -c 2", "`Comeron` and `Li` are for the standard "
+                     "code only", "genetic_code_hints", "selenoprotein"):
+            self.assertIn(must, doc)
+        dev = (ROOT / "docs" / "development.md").read_text(encoding="utf-8")
+        self.assertIn("## A genetic code per gene (design note)", dev)
+        self.assertIn("mixed_genetic_code", dev)
+        self.assertFalse(any("code-map" in a.option_strings[0] for a in P.build_parser()._actions if a.option_strings))
+
+
+class Threads(unittest.TestCase):
+    def test_usable_cpus_follow_the_affinity(self):
+        n = P.usable_cpus()
+        self.assertGreaterEqual(n, 1)
+        self.assertLessEqual(n, os.cpu_count() or n)
+        if hasattr(os, "sched_getaffinity"):
+            self.assertEqual(n, len(os.sched_getaffinity(0)))
+            with mock.patch.object(os, "sched_getaffinity", return_value={0}):
+                self.assertEqual(P.usable_cpus(), 1)
+            with mock.patch.object(os, "sched_getaffinity", side_effect=OSError):
+                self.assertGreaterEqual(P.usable_cpus(), 1)
+
+
+@needs_cpp
+class ThreadsInARun(PipelineCase):
+    def test_the_engine_is_clamped_too_and_the_report_says_what_was_used(self):
+        cpus = P.usable_cpus()
+        res, err = run(P.run_pairs, Q, S, self.tmp / "o", pairs=self.pairs_file(PLAIN), jobs=cpus + 62)
+        th = res.report["threads"]
+        self.assertEqual(th, {"requested": cpus + 62, "engine": cpus, "tools": cpus, "usable_cpus": cpus})
+        cmd = next(c for c in res.report["tools"]["coal-cpp"]["commands"] if "codon-dnds" in c)
+        self.assertEqual(cmd[cmd.index("-j") + 1], str(cpus))
+        self.assertIn("is more than", err)
+        # the default: one per usable CPU (the affinity of the process), not one per CPU of the machine
+        with mock.patch.object(P, "usable_cpus", return_value=1):
+            res, err = run(P.run_pairs, Q, S, self.tmp / "d", pairs=self.pairs_file(PLAIN))
+        self.assertEqual(res.report["threads"], {"requested": 0, "engine": 1, "tools": 1, "usable_cpus": 1})
+        self.assertNotIn("is more than", err)
+        self.check_report(res)
+
+
+class OwnDiamondOptions(unittest.TestCase):
+    """--diamond-args / --deepclust-args / --realign-args: the options COAL sets itself are refused."""
+
+    def error(self, mode="pairs", **kw):
+        base = {"pairs": ("a.fa", "b.fa", "out"), "clusters": ("a.fa", "out")}[mode]
+        try:
+            (P.run_pairs if mode == "pairs" else P.run_clusters)(*base, **kw)
+        except ValueError as e:
+            return str(e)
+        self.fail("accepted")
+
+    def test_refused(self):
+        for text, flag in (("--out /tmp/elsewhere.tsv", "--out"), ("-o x", "-o"), ("--outfmt 6 qseqid", "--outfmt"),
+                           ("-f 6", "-f"), ("--db other", "--db"), ("-d other", "-d"), ("--query q.faa", "--query"),
+                           ("-q q.faa", "-q"), ("--threads 64", "--threads"), ("-p 64", "-p"),
+                           ("--max-target-seqs 5", "--max-target-seqs"), ("-k 5", "-k"), ("--evalue 1", "--evalue"),
+                           ("--block-size 4 --out=x.tsv", "--out=x.tsv"), ("--in x", "--in"), ("--quiet", "--quiet")):
+            why = self.error(diamond_args=text)
+            self.assertIn(f"--diamond-args: {flag} is an option COAL sets itself", why, text)
+            self.assertIn("remove it from the string", why)
+        self.assertIn("use --sensitivity very-sensitive", self.error(diamond_args="--very-sensitive"))
+        self.assertIn("--masking", self.error(diamond_args="--masking 1", aligner="diamond"))
+        for text, flag in (("--out c.tsv", "--out"), ("-d x", "-d"), ("--threads 3", "--threads")):
+            self.assertIn(f"--deepclust-args: {flag} is an option COAL sets itself",
+                          self.error("clusters", deepclust_args=text))
+        self.assertIn("--deepclust-args: --approx-id", self.error("clusters", deepclust_args="--approx-id 50",
+                                                                   approx_id=30.0))
+        for text, flag in (("--outfmt 6", "--outfmt"), ("--clusters c", "--clusters"), ("-o r", "-o")):
+            self.assertIn(f"--realign-args: {flag} is an option COAL sets itself",
+                          self.error("clusters", realign=True, realign_args=text))
+        self.assertIn("--diamond-args: No closing quotation", self.error(diamond_args="--comp 'x"))
+
+    def test_command_line_is_a_usage_error(self):
+        import subprocess
+        r = subprocess.run([sys.executable, "-m", "coal", "pipeline", "pairs", "--query", "a", "--subject", "b",
+                            "-o", str(Path(os.devnull).parent / "never"), "--diamond-args=--out x.tsv"],
+                           capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL,
+                           env={**os.environ, "PYTHONPATH": str(ROOT / "src")})
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("--diamond-args: --out is an option COAL sets itself", r.stderr.replace("\r\n", "\n"))
+
+    def test_other_options_pass(self):
+        ns = P._namespace("pairs", ["--query", "a", "--subject", "b", "-o", "o"],
+                          {"diamond_args": "--block-size 4 --tmpdir /scratch --comp-based-stats 0 --masking 0"})
+        self.assertIsNone(P._args_error(ns))
+        ns = P._namespace("clusters", ["--cds", "a", "-o", "o"],
+                          {"deepclust_args": "--memory-limit 12G --approx-id 40", "realign": True,
+                           "realign_args": "--block-size 2"})
+        self.assertIsNone(P._args_error(ns))
+
+    def test_docs_and_help_name_all_three(self):
+        doc = (ROOT / "docs" / "pipeline.md").read_text(encoding="utf-8")
+        for opt in ("--diamond-args", "--deepclust-args", "--realign-args"):
+            self.assertIn(f"`{opt} '...'`", doc)
+        self.assertIn("are refused", doc)
+
+
+@needs_cpp
+@unittest.skipUnless(POSIX, "the stand-in DIAMOND is a POSIX shell script")
+class OwnOptionsAgainstTheArgv(PipelineCase):
+    def test_the_lists_cover_what_coal_passes(self):
+        """Every option of the DIAMOND command lines a run records is in the list for its ARGS option."""
+        f = self.tmp / "diamond"
+        f.write_text('#!/bin/sh\nif [ "$1" = version ]; then echo "diamond version 2.2.8"; exit 0; fi\n'
+                     'out=""; prev=""; for a in "$@"; do case "$prev" in -o|--out) out="$a";; esac; prev="$a"; done\n'
+                     '[ -n "$out" ] && : > "$out"\nexit 0\n', encoding="utf-8")
+        f.chmod(0o755)
+        res, err = run(P.run_pairs, Q, S, self.tmp / "p", diamond=str(f), aligner="diamond", sensitivity="sensitive")
+        cl, err2 = run(P.run_clusters, FAM, self.tmp / "c", diamond=str(f), realign=True, approx_id=30.0,
+                       member_cover=70.0, mutual_cover=50.0, cluster_evalue=1e-3)
+        seen = {"diamond_args": set(), "deepclust_args": set(), "realign_args": set()}
+        for rep_ in (res.report, cl.report):
+            for cmd in rep_["tools"].get("diamond", {}).get("commands", []):
+                dest = {"blastp": "diamond_args", "makedb": "diamond_args", "deepclust": "deepclust_args",
+                        "realign": "realign_args"}[cmd[1]]
+                seen[dest] |= {P._own_option(w) for w in cmd[2:] if w.startswith("-") and not w[1:2].isdigit()}
+        self.assertTrue(seen["diamond_args"] and seen["deepclust_args"] and seen["realign_args"], err + err2)
+        for dest, flags in seen.items():
+            own = set(P._OWN_DIAMOND_OPTIONS[dest])
+            sens = {"--" + x for x in P.SENSITIVITIES}
+            self.assertEqual(flags - own - sens, set(), f"{dest}: COAL passes options its list does not name")
+
+
+@needs_cpp
+class MessagesAndProvenance(PipelineCase):
+    def test_hint_when_half_of_a_side_or_every_pair_is_unknown(self):
+        # 2 of 3 query IDs and 1 of 3 subject IDs unknown: every pair fails (the hint needed 90% of one side)
+        pairs = [(PLAIN[0][0] + ".1", PLAIN[0][1]), (PLAIN[1][0] + ".1", PLAIN[1][1]), (PLAIN[2][0], PLAIN[2][1] + ".x")]
+        res, err = run(P.run_pairs, Q, S, self.tmp / "o", pairs=self.pairs_file(pairs))
+        lines = [ln for ln in err.splitlines() if "are not in the" in ln]
+        self.assertEqual(len(lines), 2, err)
+        self.assertIn("2 of the 3 query IDs of --pairs", lines[0])
+        self.assertIn("1 of the 3 subject IDs of --pairs", lines[1])     # under half, but no pair can be made
+        self.assertIn("version or transcript suffix", lines[0])
+        # one unknown ID among many, other pairs fine: no line (it is in failed.tsv)
+        res, err = run(P.run_pairs, Q, S, self.tmp / "o2", pairs=self.pairs_file(PLAIN[:5] + [("nobody", PLAIN[0][1])]))
+        self.assertNotIn("are not in the", err)
+        # half of one side
+        half = PLAIN[:2] + [(q + ".1", s) for q, s in PLAIN[2:4]]
+        res, err = run(P.run_pairs, Q, S, self.tmp / "o3", pairs=self.pairs_file(half))
+        self.assertIn("2 of the 4 query IDs of --pairs", err)
+
+    def test_gzip_inputs_have_both_hashes_and_messages_name_the_users_file(self):
+        import hashlib
+        q, s = gz(Q, self.tmp / "q.fa.gz"), gz(S, self.tmp / "s.fa.gz")
+        res, err = run(P.run_pairs, q, s, self.tmp / "o", pairs=self.pairs_file(PLAIN))
+        recs = {i["option"]: i for i in res.report["inputs"]}
+        self.assertEqual(recs["--query"]["sha256"], hashlib.sha256(q.read_bytes()).hexdigest())
+        self.assertEqual(recs["--query"]["sha256_uncompressed"], hashlib.sha256(Q.read_bytes()).hexdigest())
+        self.assertEqual(recs["--subject"]["sha256_uncompressed"], hashlib.sha256(S.read_bytes()).hexdigest())
+        self.assertNotIn("sha256_uncompressed", recs["--pairs"])          # not compressed
+        self.check_report(res)
+        # compressed again (other bytes): the content hash is the same
+        q2 = self.tmp / "q2.fa.gz"
+        q2.write_bytes(gzip.compress(Q.read_bytes(), compresslevel=1, mtime=12345))
+        res2, _ = run(P.run_pairs, q2, s, self.tmp / "o2", pairs=self.pairs_file(PLAIN))
+        r2 = {i["option"]: i for i in res2.report["inputs"]}
+        self.assertEqual(r2["--query"]["sha256_uncompressed"], recs["--query"]["sha256_uncompressed"])
+        self.assertNotEqual(r2["--query"]["sha256"], recs["--query"]["sha256"])
+        # --resume reuses the copy and still reports the hash; --hash-inputs never reports none
+        res3, _ = run(P.run_pairs, q, s, self.tmp / "o", pairs=self.pairs_file(PLAIN), resume=True)
+        self.assertEqual({i["option"]: i for i in res3.report["inputs"]}["--query"]["sha256_uncompressed"],
+                         recs["--query"]["sha256_uncompressed"])
+        res4, _ = run(P.run_pairs, q, s, self.tmp / "o4", pairs=self.pairs_file(PLAIN), hash_inputs="never")
+        self.assertNotIn("sha256_uncompressed", {i["option"]: i for i in res4.report["inputs"]}["--query"])
+        # an empty .gz: the message names the file the user gave, not work/inputs/0_...
+        empty = self.tmp / "empty.fa.gz"
+        empty.write_bytes(gzip.compress(b""))
+        res, err = run(P.run_pairs, empty, s, self.tmp / "e", pairs=self.pairs_file(PLAIN))
+        self.assertEqual(res.exit_code, 1)
+        line = next(ln for ln in err.splitlines() if "no FASTA record found" in ln)
+        self.assertIn(str(empty), line)
+        self.assertNotIn("0_empty.fa", line)
+        self.assertIn(str(empty), res.report["error"])
+
+    def test_coal_kaks_names_the_gzip_file_in_its_messages(self):
+        import subprocess
+        from test_dnds_pipeline import CPP
+        z = self.tmp / "codon.fa.gz"
+        z.write_bytes(gzip.compress(b">a\nATGAAA\n>b\nATGAAG\n"))
+        r = subprocess.run([sys.executable, "-m", "coal", "kaks", str(z), "-o", str(self.tmp / "k")],
+                           capture_output=True, text=True, timeout=120, stdin=subprocess.DEVNULL,
+                           env={**os.environ, "PYTHONPATH": str(ROOT / "src"), "COAL_CPP": str(CPP)})
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn(f"unrecognized argument: {z}", r.stderr)
+        self.assertNotIn("coal_gunzip_", r.stderr)

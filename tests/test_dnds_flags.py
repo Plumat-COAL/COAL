@@ -136,6 +136,58 @@ class PipelineFlags(PipelineCase):
         self.assertNotIn("flagged", perr)
         self.assertEqual((plain.report["parameters"]["min_codons"], plain.report["parameters"]["max_ds"]), (0, None))
 
+    def test_min_identity(self):
+        """The third flag: protein identity (the prot_identity column) below P. Flag only, as the other two."""
+        base, _ = self.run_pairs("base", method=["YN", "NG"])
+        a = read_tsv(base.outputs["dnds"])
+        ident = sorted(float(r["prot_identity"]) for r in a if r["status"] in ("ok", "warning"))
+        cut = (ident[len(ident) // 2] + ident[len(ident) // 2 - 1]) / 2 + 0.005     # about half the rows below it
+        res, err = self.run_pairs("flag", min_identity=cut, method=["YN", "NG"])
+        b = read_tsv(res.outputs["dnds"])
+        changed = differing(a, b)                      # nothing but status and note differs
+        want = [k for k, r in enumerate(a) if r["status"] in ("ok", "warning") and float(r["prot_identity"]) < cut]
+        self.assertEqual(changed, want)
+        self.assertTrue(0 < len(changed) < len(a))
+        note = f"protein identity below {cut:.6g}%"
+        for k in changed:
+            self.assertEqual(b[k]["status"], "warning")
+            self.assertIn(note, b[k]["note"].split("; "))
+        n = sum(1 for k in changed if b[k]["method"] == b[0]["method"])
+        self.assertEqual(res.report["counts"]["flagged"], {"min_identity": n})
+        self.assertIn(f"summary: flagged (status warning, numbers unchanged): {n} with protein identity below "
+                      f"{cut:.6g}%", err)
+        self.assertEqual(res.report["parameters"]["min_identity"], cut)
+        self.assertEqual(res.exit_code, base.exit_code)
+        self.check_report(res)
+        # with the other two, and 100 flags every pair that is not identical
+        res, err = self.run_pairs("all", min_identity=100, min_codons=100, max_ds=0.5)
+        self.assertEqual(sorted(res.report["counts"]["flagged"]), ["max_ds", "min_codons", "min_identity"])
+        # off by default; bad values
+        self.assertIsNone(base.report["parameters"]["min_identity"])
+        for bad in (0, -5, 100.5, float("nan"), "30", True):
+            with self.assertRaises(ValueError, msg=repr(bad)):
+                P.run_pairs(Q, S, self.tmp / "x", min_identity=bad)
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as cm:
+            P.main(["pairs", "--query", str(Q), "--subject", str(S), "-o", str(self.tmp / "x"), "--min-identity", "0"])
+        self.assertEqual(cm.exception.code, 2)
+
+    def test_min_identity_needs_a_protein_alignment(self):
+        """`coal dnds` / `coal kaks` read codon alignments: the option is refused there, with the place it works."""
+        r = run_cpp("dnds", AXT, "-o", self.tmp / "o", "--min-identity", "30")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn(b"--min-identity needs a protein alignment", r.stderr)
+        self.assertIn(b"coal pipeline", r.stderr)
+        # (`coal kaks` is KaKs_Calculator's command line and has none of the three flags)
+        self.assertEqual(run_cpp("kaks", "-i", AXT, "-o", self.tmp / "o", "--min-identity", "30").returncode, 2)
+        for args in (["--min-identity", "0"], ["--min-identity", "101"], ["--min-identity", "x"]):
+            r = run_cpp("codon-dnds", "-i", os.devnull, "-o", self.tmp / "o", *args)
+            self.assertEqual(r.returncode, 2, args)
+            self.assertIn(b"--min-identity: expected a percentage", r.stderr)
+        self.assertIn(b"--min-identity P", run_cpp("codon-dnds", "--help").stdout)
+        docs = (ROOT / "docs" / "pipeline.md").read_text(encoding="utf-8")
+        self.assertIn("--min-identity P", docs)
+        self.assertIn("A cluster can hold pairs that are not related", docs)
+
     def test_clusters_mode_summary_is_unchanged(self):
         with redirect_stderr(io.StringIO()):
             plain = P.run_clusters(FAM, self.tmp / "plain", clusters=FAM_CLUSTERS, max_cluster_size=2, jobs=1)

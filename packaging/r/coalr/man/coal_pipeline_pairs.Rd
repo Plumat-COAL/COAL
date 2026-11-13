@@ -12,7 +12,8 @@ coal_pipeline_pairs(
   methods = "YN",
   threads = 0L,
   ...,
-  python = NULL
+  python = NULL,
+  method = NULL
 )
 
 coal_pipeline_clusters(
@@ -22,7 +23,8 @@ coal_pipeline_clusters(
   methods = "YN",
   threads = 0L,
   ...,
-  python = NULL
+  python = NULL,
+  method = NULL
 )
 }
 \arguments{
@@ -32,13 +34,18 @@ coal_pipeline_clusters(
 
 \item{methods}{Ka/Ks methods (see \code{\link[=coal_dnds_pairs]{coal_dnds_pairs()}}).}
 
-\item{threads}{Threads (\code{0} = all).}
+\item{threads}{Threads; \code{0} (the default here, as \verb{coal pipeline -j 0}) = one per CPU the process may use. The
+in-process functions default to \code{getOption("coalr.threads", 1L)} instead.}
 
 \item{...}{Further options of \verb{coal pipeline pairs} / \code{clusters}, with underscores: for example
 \code{ortho = "bh"}, \code{aligner = "diamond"}, \code{pairs = "pairs.tsv"}, \code{codontable = 2L}, \code{max_cluster_size = 100L},
-\code{large_clusters = "sample"}, \code{install_tools = TRUE}, \code{resume = TRUE}.}
+\code{large_clusters = "sample"}, \code{install_tools = TRUE}, \code{resume = TRUE}, \code{longest_isoform = TRUE},
+\code{min_codons = 50L}, \code{max_ds = 2}, \code{min_identity = 30}. The section "Command line and R arguments" of
+\link[=coalr-package]{coalr} has the names side by side.}
 
 \item{python}{Optional Python to use (see \code{\link[=coal_python_available]{coal_python_available()}}).}
+
+\item{method}{The same as \code{methods}; give one of the two.}
 
 \item{cds}{One or more FASTA files of coding sequences.}
 

@@ -330,7 +330,8 @@ class TestNightlySteps(unittest.TestCase):
                     "test_kaks", "test_kaks_comeron_li", "test_align", "test_msa", "test_dnds_pipeline",
                     "test_short_options", "test_output_lock", "test_pair_table", "test_kaks_cli_inputs",
                     "test_kaks_yn_shortcut", "test_dnds_flags", "test_pipeline_order", "test_pipeline_robustness",
-                    "test_pipeline_provenance", "test_pipeline_isoforms", "test_citations", "test_cli_commands",
+                    "test_pipeline_provenance", "test_pipeline_isoforms", "test_pipeline_atomic", "test_citations",
+                    "test_cli_commands",
                     "test_examples"):
             files[f"tests/{mod}.py"] = "import unittest\nclass T(unittest.TestCase):\n    def test_x(self):\n        pass\n"
         r, _ = self._run("sanitizers", step, files)
@@ -397,7 +398,8 @@ class TestCiJobs(unittest.TestCase):
                     "tests.test_dnds_pipeline", "tests.test_short_options", "tests.test_output_lock",
                     "tests.test_pair_table", "tests.test_kaks_cli_inputs", "tests.test_kaks_yn_shortcut",
                     "tests.test_dnds_flags", "tests.test_pipeline_order", "tests.test_pipeline_robustness",
-                    "tests.test_pipeline_provenance", "tests.test_pipeline_isoforms", "tests.test_citations",
+                    "tests.test_pipeline_provenance", "tests.test_pipeline_isoforms", "tests.test_pipeline_atomic",
+                    "tests.test_citations",
                     "tests.test_cli_commands", "tests.test_examples"):
             self.assertRegex(step, rf"{re.escape(mod)}(\s|$)", mod)
             self.assertTrue(os.path.isfile(os.path.join(ROOT, "tests", mod.split(".")[1] + ".py")), mod)
@@ -522,7 +524,8 @@ class TestRPackageWorkflow(unittest.TestCase):
         self.assertIn("r-version: ${{ matrix.r }}", job)
         # r-lib/actions v2.14.0: v2.9.0 failed on ubuntu-latest (pak installed through a sudo that ignores -E) and
         # hung on windows-latest (in the Rtools45 installer, which v2.9.0 predates), PR #55
-        self.assertEqual(job.count("@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05  # v2.14.0"), 3)
+        self.assertEqual(job.count("@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05  # v2.14.0"), 4)   # with setup-pandoc
+        self.assertIn("r-lib/actions/setup-pandoc@", job)                          # (the vignette needs pandoc)
         self.assertIn("    needs: vendored-sources\n", job)
         setup = job.split("r-lib/actions/setup-r@", 1)[1].split("- uses:", 1)[0]
         self.assertRegex(setup, r"timeout-minutes: \d+\n")       # an installer that waits for a click: minutes

@@ -116,8 +116,10 @@ s <- coal_read_fasta("examples/dnds/species_b_cds.fasta")
 coal_dnds_pairs(q, s, pairs = read.delim("examples/dnds/orthologs.tsv")[, 1:2])
 
 # 5. inside orthologr (the fork with COAL built in; packaging/orthologr/README.md)
+#    sensitivity_mode = "default": DIAMOND's own default, as `coal pipeline` uses, gives the same 12 pairs as
+#    example 3. orthologr's default is "fast" (DIAMOND --fast, for hits above 90% identity), which finds 8 here.
 orthologr::dNdS("examples/dnds/species_a_cds.fasta", "examples/dnds/species_b_cds.fasta",
-                dnds_est.method = "YN", engine = "coal")
+                dnds_est.method = "YN", engine = "coal", sensitivity_mode = "default")
 ```
 
 **In the pipeline every FASTA record is a gene.** A CDS file with several transcripts per gene (Ensembl, NCBI,
@@ -188,7 +190,7 @@ very small dS give numbers that mean little.
 If you use COAL, please cite it (`CITATION.cff`, with the version `coal --version` prints) and PAL2NAL:
 
 Suyama M, Torrents D, Bork P (2006) PAL2NAL: robust conversion of protein sequence alignments into the
-corresponding codon alignments. *Nucleic Acids Res.* 34:W609–W612.
+corresponding codon alignments. *Nucleic Acids Res.* 34:W609–W612. <https://doi.org/10.1093/nar/gkl315>
 
 COAL's Ka/Ks numbers come from published estimators, in code derived from KaKs_Calculator 2.0, PAML, libsequence
 and seqinr, and `coal pipeline` runs DIAMOND and an aligner. Please cite what your numbers come from:
@@ -207,7 +209,7 @@ and seqinr, and `coal pipeline` runs DIAMOND and an aligner. Please cite what yo
 | Ka/Ks, method Comeron | Comeron 1995; Thornton 2003 (libsequence) |
 | Ka/Ks, method Li | Li 1993; Charif & Lobry 2007 (seqinr) |
 | `coal pipeline pairs` with DIAMOND (orthologs) | Buchfink et al. 2021 (DIAMOND) |
-| `coal pipeline clusters` with DIAMOND DeepClust | Buchfink et al. 2021 (DIAMOND); Buchfink et al. 2023 (DIAMOND DeepClust, preprint) |
+| `coal pipeline clusters` with DIAMOND DeepClust | Buchfink et al. 2021 (DIAMOND); Buchfink et al. 2026 (DIAMOND DeepClust) |
 | Protein alignments by Clustal Omega (`--aligner clustalo`, the cluster default) | Sievers et al. 2011 (Clustal Omega) |
 | Protein alignments by MAFFT (`--aligner mafft`) | Katoh & Standley 2013 (MAFFT) |
 | Through the R package orthologr | Drost et al. 2015 (orthologr) |

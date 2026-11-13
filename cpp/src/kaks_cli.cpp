@@ -463,6 +463,10 @@ int parse(const std::vector<std::string>& args, Cli& c) {
         } else if (u == "--li-flavour" || u == "--li-flavor") {
             if (!need(v) || (v != "coal" && v != "seqinr")) return usage(c, s + ": expected coal or seqinr");
             c.opt.li_flavour = v == "coal" ? kaks::LiFlavour::coal : kaks::LiFlavour::seqinr;
+        } else if (u == "--min-identity" && !c.compat) {
+            return usage(c, "--min-identity needs a protein alignment, which this command does not have (it reads "
+                            "codon alignments): it is an option of `coal pipeline` and `coal codon-dnds`, whose "
+                            "tables have the column prot_identity");
         } else if ((u == "--min-codons" || u == "--max-ds") && !c.compat) {
             std::string why;
             if (!need(v) || !c.flags.parse(u, v, why)) return usage(c, why.empty() ? u + ": expected a number" : why);
@@ -514,6 +518,14 @@ bool PairFlags::parse(const std::string& option, const std::string& value, std::
         return true;
     }
     const double x = value.empty() ? -1 : std::strtod(value.c_str(), &end);
+    if (option == "--min-identity") {
+        if (value.empty() || *end != '\0' || !std::isfinite(x) || x <= 0 || x > 100) {
+            why = "--min-identity: expected a percentage, above 0 and at most 100";
+            return false;
+        }
+        min_identity = x;
+        return true;
+    }
     if (value.empty() || *end != '\0' || !std::isfinite(x) || x <= 0) {
         why = "--max-ds: expected a number greater than 0";
         return false;
@@ -522,7 +534,7 @@ bool PairFlags::parse(const std::string& option, const std::string& value, std::
     return true;
 }
 
-void PairFlags::apply(kaks::Status& status, std::string& note, long codons_compared, double ks) {
+void PairFlags::apply(kaks::Status& status, std::string& note, long codons_compared, double ks, double identity) {
     if (status != kaks::Status::ok && status != kaks::Status::warning) return;
     auto add = [&](const std::string& text) {
         note += (note.empty() ? "" : "; ") + text;
@@ -536,17 +548,25 @@ void PairFlags::apply(kaks::Status& status, std::string& note, long codons_compa
         add("dS above " + num(max_ds, 6));
         ++n_high_ds;
     }
+    if (min_identity >= 0 && identity >= 0 && identity < min_identity) {
+        add("protein identity below " + num(min_identity, 6) + "%");
+        ++n_low_identity;
+    }
 }
 
 std::string PairFlags::summary() const {
     if (!on()) return "";
-    std::string o = std::to_string(n_short + n_high_ds) + " flag(s) set (status warning, numbers unchanged):";
+    std::string o = std::to_string(n_short + n_high_ds + n_low_identity) +
+                    " flag(s) set (status warning, numbers unchanged):";
     if (min_codons > 0)
         o += " " + std::to_string(n_short) + " result(s) with fewer than " + std::to_string(min_codons) +
              " codons compared";
     if (max_ds >= 0)
         o += std::string(min_codons > 0 ? "," : "") + " " + std::to_string(n_high_ds) + " with dS above " +
              num(max_ds, 6);
+    if (min_identity >= 0)
+        o += std::string(min_codons > 0 || max_ds >= 0 ? "," : "") + " " + std::to_string(n_low_identity) +
+             " with protein identity below " + num(min_identity, 6) + "%";
     return o;
 }
 

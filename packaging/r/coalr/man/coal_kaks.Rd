@@ -16,7 +16,8 @@ coal_kaks(
   comeron_flavour = c("coal", "gestimator"),
   li_flavour = c("coal", "seqinr"),
   min_codons = 0L,
-  max_ds = NULL
+  max_ds = NULL,
+  methods = NULL
 )
 }
 \arguments{
@@ -47,6 +48,8 @@ off by default (\code{0}, \code{NULL}). A row that has an estimate (status \code
 (a saturated synonymous distance) gets \code{"dS above X"}; its status becomes \code{warning} if it was \code{ok}. No row is
 dropped and no number changes, so the cluster summary is unaffected. Attribute \code{"flagged"} counts the rows
 each flag marked. See "Filtering before interpretation" in COAL's \code{docs/kaks.md}.}
+
+\item{methods}{The same as \code{method} (the name \code{\link[=coal_dnds_pairs]{coal_dnds_pairs()}} uses); give one of the two.}
 }
 \value{
 A data frame, one row per pair and method: \code{seq1}, \code{seq2} (the names, or the positions), \code{method},

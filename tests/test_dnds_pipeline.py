@@ -776,7 +776,7 @@ class PairsGiven(PipelineCase):
                            env={**os.environ, "PYTHONPATH": str(ROOT / "src")}, encoding="utf-8")
         self.assertEqual(r.returncode, 2, r.stderr)   # finished; the unusable genes of the query file are failures
         self.assertEqual(r.stdout, "")
-        self.assertIn("coal pipeline: summary: 40 genes (4 not usable); 2 pairs: 2 ok", r.stderr)
+        self.assertIn("coal pipeline: summary: 40 records (4 not usable); 2 pairs: 2 ok", r.stderr)
         rows = read_tsv(self.tmp / "out" / "dnds.tsv")
         self.assertEqual([x["method"] for x in rows], ["NG", "NG"])
 
