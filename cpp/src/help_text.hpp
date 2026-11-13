@@ -20,9 +20,9 @@ Core:
                         input)
   nuc_fasta             coding DNA (FASTA; one or more files; - reads standard
                         input)
-  -codontable N, --codontable N
+  -codontable, --codontable N
                         NCBI genetic code (default 1): 1-6, 9-16, 21-23
-  -o FILE, --out FILE   output file (default: standard output)
+  -o, --out FILE        output file (default: standard output)
   -q, --quiet           do not print warnings or notices (errors are always
                         printed)
   -strict, --strict     refuse probably-wrong genes (exit 1) instead of
@@ -36,14 +36,14 @@ PAL2NAL options:
   -nomismatch, --nomismatch
                         remove columns where a codon does not match its amino
                         acid
-  -output {fasta,clustal,paml,codon}, --output-format {fasta,clustal,paml,codon}
+  -output, --output-format {fasta,clustal,paml,codon}
                         output format (default fasta; PAL2NAL's default is
                         clustal)
   -blockonly, --blockonly
                         keep only the columns marked '#' in a CLUSTAL input
 
 Large runs:
-  -j N, --jobs N        worker threads (default 0 = all hardware threads)
+  -j, --jobs N          worker threads (default 0 = all hardware threads)
   --keep-going, -keep-going
                         leave out sequences that cannot be converted, write
                         the rest; exit 2 if any was left out
