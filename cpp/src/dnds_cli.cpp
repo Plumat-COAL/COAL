@@ -67,7 +67,7 @@ const char* CODON_DNDS_HELP =
     "                 [--matrix NAME] [--gap-open X] [--gap-extend X] [--end-gaps free|penalized] [--max-cells N]\n"
     "                 [--flanks gap|align] [--yn-flavour kaks|paml] [--yn-weighting 0|1]\n"
     "                 [--comeron-flavour coal|gestimator] [--li-flavour coal|seqinr]\n"
-    "                 [--terminal-stops drop|compare] [-q]\n"
+    "                 [--terminal-stops drop|compare] [--min-codons N] [--max-ds X] [-q]\n"
     "\n"
     "Protein alignment -> codon alignment -> Ka/Ks for groups of coding sequences (the engine of\n"
     "`coal pipeline`, docs/pipeline.md). GROUPS (a file, or standard input when -i is - or absent) is\n"
@@ -100,6 +100,8 @@ const char* CODON_DNDS_HELP =
     "  --kaks-out FILE  the same results in KaKs_Calculator's format (pairs named seq1&seq2)\n"
     "  --failures FILE  genes and groups that could not be used: group seq code message\n"
     "  --digits N       significant digits (default 8)\n"
+    "  --min-codons N, --max-ds X  as in `coal dnds`: flag estimates from fewer than N compared codons or with\n"
+    "                   dS above X (status warning and a note; no row dropped, no number changed; default off)\n"
     "  -q, --quiet      no summary on stderr\n";
 
 int usage(const char* prog, const std::string& msg) {
@@ -378,6 +380,7 @@ struct Cli {
     dnds::Options opt;
     int jobs = 0;
     int digits = 8;
+    PairFlags flags;
     bool quiet = false;
 };
 
@@ -588,6 +591,9 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
         } else if (s == "--terminal-stops") {
             if (!it.value(v) || (v != "drop" && v != "compare")) return usage(prog, s + ": expected drop or compare");
             c.opt.compare_terminal_stops = v == "compare";
+        } else if (s == "--min-codons" || s == "--max-ds") {
+            std::string why;
+            if (!it.value(v) || !c.flags.parse(s, v, why)) return usage(prog, why.empty() ? s + ": expected a number" : why);
         } else if (s == "-q" || s == "--quiet") {
             c.quiet = true;
         } else {
@@ -698,6 +704,7 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
                         note += (note.empty() ? "" : "; ") + t.res.note;
                         if (st == Status::ok) st = Status::warning;
                     }
+                    if (c.flags.on()) c.flags.apply(st, note, (long)r.codons_compared, r.ks);
                     ++n_status[(int)st];
                     lead(r.method);
                     const int dg = c.digits;
@@ -860,6 +867,7 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
                       << " gene(s) and " << n_group_fail << " group(s) failed\n"
                       << "coal codon-dnds: timing: align+codon " << t_align << " s, kaks " << t_kaks << " s, "
                       << nthreads << " thread(s)\n";
+        if (!c.quiet && c.flags.on()) std::cerr << "coal codon-dnds: " << c.flags.summary() << "\n";
         return 0;
     } catch (const std::bad_alloc&) {
         std::cerr << "coal codon-dnds: error: out of memory (use fewer threads with -j, or smaller groups)\n";

@@ -74,6 +74,7 @@ const char* DNDS_HELP =
     "usage: coal dnds IN [-o OUT] [-m METHOD ...] [-c TABLE] [-j N] [--pairs all|consecutive]\n"
     "                 [--format auto|axt|fasta] [--digits N] [--yn-flavour kaks|paml] [--yn-weighting 0|1]\n"
     "                 [--comeron-flavour coal|gestimator] [--li-flavour coal|seqinr]\n"
+    "                 [--min-codons N] [--max-ds X]\n"
     "\n"
     "dN/dS for pairs of aligned coding sequences as a tidy TSV, one row per pair and method:\n"
     "seq1 seq2 method dN dS dNdS SE_dN SE_dS N_sites S_sites Nd Sd codons_compared status note\n"
@@ -96,7 +97,15 @@ const char* DNDS_HELP =
     "                 compared, undefined logarithms set to 0)\n"
     "  --li-flavour F Li: coal (default: COAL's stop-codon policy) or seqinr (stop codons compared, as\n"
     "                 seqinr::kaks); seqinr's sentinel 9.999999 is NA in both\n"
-    "  -q, --quiet    no summary on stderr\n";
+    "  --min-codons N flag estimates from fewer than N compared codons: status warning and the note\n"
+    "                 \"fewer than N codons compared\" (default 0: off). No row is dropped, no number changes\n"
+    "  --max-ds X     flag estimates with dS above X (saturation): status warning and the note \"dS above X\"\n"
+    "                 (default: off). See docs/kaks.md, \"Filtering before interpretation\"\n"
+    "  -q, --quiet    no summary on stderr\n"
+    "\n"
+    "Exit status: 0 done; 1 the input cannot be read or the output cannot be written; 2 command-line error,\n"
+    "or no pair has an estimate because of the input (every result error or no_data: a protein file,\n"
+    "sequences that are not aligned).\n";
 
 struct Cli {
     bool compat = false;
@@ -108,6 +117,7 @@ struct Cli {
     bool all_pairs = true;
     std::string format = "auto";
     kaks::Options opt;
+    PairFlags flags;
     bool quiet = false;
 };
 
@@ -451,6 +461,9 @@ int parse(const std::vector<std::string>& args, Cli& c) {
         } else if (u == "--li-flavour" || u == "--li-flavor") {
             if (!need(v) || (v != "coal" && v != "seqinr")) return usage(c, s + ": expected coal or seqinr");
             c.opt.li_flavour = v == "coal" ? kaks::LiFlavour::coal : kaks::LiFlavour::seqinr;
+        } else if ((u == "--min-codons" || u == "--max-ds") && !c.compat) {
+            std::string why;
+            if (!need(v) || !c.flags.parse(u, v, why)) return usage(c, why.empty() ? u + ": expected a number" : why);
         } else if (u == "-q" || u == "--quiet") {
             c.quiet = true;
         } else if (u == "-D" && c.compat) {
@@ -486,6 +499,54 @@ int parse(const std::vector<std::string>& args, Cli& c) {
 }
 
 }  // namespace
+
+bool PairFlags::parse(const std::string& option, const std::string& value, std::string& why) {
+    char* end = nullptr;
+    if (option == "--min-codons") {
+        const long long n = value.empty() ? -1 : std::strtoll(value.c_str(), &end, 10);
+        if (value.empty() || *end != '\0' || n < 0 || n > 1000000000) {
+            why = "--min-codons: expected a whole number of codons, 0 or more (0 = off)";
+            return false;
+        }
+        min_codons = (long)n;
+        return true;
+    }
+    const double x = value.empty() ? -1 : std::strtod(value.c_str(), &end);
+    if (value.empty() || *end != '\0' || !std::isfinite(x) || x <= 0) {
+        why = "--max-ds: expected a number greater than 0";
+        return false;
+    }
+    max_ds = x;
+    return true;
+}
+
+void PairFlags::apply(kaks::Status& status, std::string& note, long codons_compared, double ks) {
+    if (status != kaks::Status::ok && status != kaks::Status::warning) return;
+    auto add = [&](const std::string& text) {
+        note += (note.empty() ? "" : "; ") + text;
+        if (status == kaks::Status::ok) status = kaks::Status::warning;
+    };
+    if (min_codons > 0 && codons_compared < min_codons) {
+        add("fewer than " + std::to_string(min_codons) + " codons compared");
+        ++n_short;
+    }
+    if (max_ds >= 0 && !std::isnan(ks) && ks > max_ds) {
+        add("dS above " + num(max_ds, 6));
+        ++n_high_ds;
+    }
+}
+
+std::string PairFlags::summary() const {
+    if (!on()) return "";
+    std::string o = std::to_string(n_short + n_high_ds) + " flag(s) set (status warning, numbers unchanged):";
+    if (min_codons > 0)
+        o += " " + std::to_string(n_short) + " result(s) with fewer than " + std::to_string(min_codons) +
+             " codons compared";
+    if (max_ds >= 0)
+        o += std::string(min_codons > 0 ? "," : "") + " " + std::to_string(n_high_ds) + " with dS above " +
+             num(max_ds, 6);
+    return o;
+}
 
 const char* kaks_compat_header() { return COMPAT_HEADER; }
 std::string kaks_compat_row(const std::string& name, const kaks::Result& r, int digits) {
@@ -595,7 +656,8 @@ int kaks_main(const std::string& sub, const std::vector<std::string>& argv) {
                 ++n_pairs;
                 if (p.unequal) ++n_unequal;
                 if (p.protein_like) ++n_protein_like;
-                for (const Result& r : p.res) {
+                for (Result& r : p.res) {
+                    if (c.flags.on()) c.flags.apply(r.status, r.note, (long)r.codons_compared, r.ks);
                     ++n_status[(int)r.status];
                     if (!r.converged) ++n_unconverged;
                     if (r.status == Status::error) {
@@ -619,6 +681,7 @@ int kaks_main(const std::string& sub, const std::vector<std::string>& argv) {
             std::cerr << prog << ": " << n_pairs << " pair(s), " << methods.size() << " method(s): " << n_status[0]
                       << " ok, " << n_status[1] << " warning, " << n_status[2] << " not_converged, " << n_status[3]
                       << " saturated, " << n_status[4] << " no_data, " << n_status[5] << " error\n";
+            if (c.flags.on()) std::cerr << prog << ": " << c.flags.summary() << "\n";
             if (n_unconverged > 0)
                 std::cerr << prog << ": warning: " << n_unconverged << " result(s): the YN/MYN iteration did not "
                           << "converge, so there is no estimate: Ka and Ks are NA"

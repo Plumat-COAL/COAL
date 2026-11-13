@@ -197,6 +197,56 @@ reference programs do ("Comeron and Li" below); the default for both is `coal`, 
 `--yn-weighting 0` gives equal pathway weights in one round, which is the default control file of PAML's yn00
 (`weighting = 0`). KaKs_Calculator always weights pathways.
 
+## Filtering before interpretation
+
+A row with status `ok` says that the method produced numbers, not that the numbers mean much. Before dN/dS values
+are read, compared or averaged, four things are worth checking for every pair. They are the usual reasons for
+impossible-looking values in a pairwise table.
+
+| What | Why it matters | Where to look |
+|---|---|---|
+| **Few compared codons** | With a few dozen codons a single substitution moves dN/dS a long way, and the standard errors are of the size of the estimates. In orthologr's *Arabidopsis* example one pair is compared over 46 codons and has dN/dS 1.84 with status `ok`: that is noise, not positive selection | `codons_compared` |
+| **Low coverage or identity** | When only a small part of the two proteins aligns, or they align at 30% identity, the pair may not be orthologous over its length and the alignment itself is uncertain; misaligned codons count as substitutions and inflate dN and dS | `codons_compared` against `prot_aln_length`; `prot_identity` (pipeline and coalr tables) |
+| **Saturated dS** | Above a dS of about 1 to 2 most synonymous sites have changed more than once, the correction for multiple hits dominates the estimate, and dS (so dN/dS) is no longer reliable; dN/dS is then usually too low or erratic. `saturated` marks only the pairs where the correction formula has no value at all: a pair with dS 3 or 5 and status `ok` is not better (268 such pairs with dS above 2 stood next to 3,748 `saturated` ones in a yeast *S. cerevisiae* / *C. glabrata* run) | `dS` |
+| **Very small dS** | dN/dS is a ratio: between very close sequences dS rests on one or two synonymous differences, and dividing by it gives values that are large, variable and often above 1 for no biological reason. `dNdS` is `NA` only when dS is below 1e-6 | `dS`, `Sd`, `SE_dS` |
+
+**Suggested starting thresholds.** These are conventions in common use, not properties of your data: state the
+ones you used, and check that your conclusion does not depend on their exact values.
+
+- at least 50 compared codons (100 for anything read gene by gene);
+- compared codons covering at least half of the protein alignment, and protein identity of at least 30 to 40%;
+- dS at most 2 (1 if synonymous rates are compared between genes), and for the ratio dS at least about 0.01;
+- status `ok` or `warning` only (`saturated`, `not_converged`, `no_data` and `error` have no estimate), and for
+  `warning` a look at the note (an internal stop codon or a CDS that is not a multiple of 3 often means a
+  pseudogene or an annotation error).
+
+A whole-gene pairwise dN/dS averages over all sites and the whole time since divergence. A value above 1 is rare
+and, from one pair, weak evidence; site and branch models (PAML codeml, HyPhy) test for positive selection, and
+COAL's codon alignments are their input.
+
+**The flags.** `--min-codons N` and `--max-ds X` (`coal dnds`, `coal pipeline`; `min_codons`, `max_ds` in coalr)
+mark the rows concerned without removing anything:
+
+```
+coal dnds codon.fasta --min-codons 50 --max-ds 2 -o dnds.tsv
+coal pipeline pairs --query q_cds.fa --subject s_cds.fa -o out --min-codons 50 --max-ds 2
+```
+
+A row that has an estimate (status `ok` or `warning`) and fewer than N compared codons gets the note
+`fewer than N codons compared`; one whose dS is above X gets `dS above X`; the notes are appended to what the
+row already says (`; ` between them), and its status becomes `warning` if it was `ok`. **No row is dropped and no
+number changes**: the table is the one without the options but for `status` and `note` of the flagged rows, and
+the per-cluster summary, which counts `ok` and `warning` together, is the same. Rows without an estimate are left
+as they are. Both options are off by default. stderr and, for the pipeline, `report.json`
+(`counts.flagged`) say how many rows each flag marked. Filtering is then one line in whatever reads the table:
+
+```r
+d <- read.delim("out/dnds.tsv")
+keep <- d$status == "ok" & d$dS >= 0.01 & d$codons_compared / d$prot_aln_length >= 0.5 & d$prot_identity >= 40
+```
+
+`coal kaks` has no such options: KaKs_Calculator's format has no status column.
+
 ## C++ API
 
 `#include <coal/kaks.hpp>` (installed with `coal::core`, docs/cpp-engine.md). The library writes nothing to

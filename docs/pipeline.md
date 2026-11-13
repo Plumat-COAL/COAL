@@ -101,6 +101,7 @@ coal pipeline clusters --cds all_cds.fa --clusters deepclust.tsv -o out --max-cl
 | `--diamond PATH` | the DIAMOND to run | found automatically |
 | `--report FILE` | the JSON report | `DIR/report.json` |
 | `--msa-timeout S` | give up on one Clustal Omega / MAFFT run after S seconds | none |
+| `--min-codons N`, `--max-ds X` | flag estimates from fewer than N compared codons / with dS above X: status `warning` and a note; no row dropped, no number changed ([Filtering before interpretation](#filtering-before-interpretation)) | off |
 | `--yn-flavour`, `--yn-weighting`, `--digits`, `--max-cells` | as in `coal dnds` and `coal-cpp-align` | |
 | `--comeron-flavour coal\|gestimator`, `--li-flavour coal\|seqinr` | how `Comeron` and `Li` read a pair: COAL's policy, or as their reference programs (stop codons compared; [kaks.md](kaks.md), "Comeron and Li") | `coal` |
 | `--terminal-stops drop\|compare` | only with the reference flavours: `compare` takes the two terminal stop codons of a pair as the last compared codon column when both genes end in one, as orthologr 0.4.3's pipeline does; `drop` ends the pair before them | `drop` |
@@ -228,7 +229,8 @@ Schema `coal.pipeline/1`: [pipeline.schema.json](pipeline.schema.json). It is wr
   DIAMOND, Clustal Omega, MAFFT).
 - `stages`: name, wall `seconds`, `cached` (reused by `--resume`). The stage `align_codon_kaks` also has
   `align_codon_seconds` and `kaks_seconds` (inside the engine) and, when an MSA program ran, `msa_seconds`.
-- `counts`: `genes` (total, ok, warning, failed), `pairs` (total and one count per status), `orthologs` and
+- `counts`: `genes` (total, ok, warning, failed), `pairs` (total and one count per status), `flagged`
+  (with `--min-codons` / `--max-ds`: `min_codons`, `max_ds`, the pairs each flag marked), `orthologs` and
   `unpaired` (pair mode), `clusters` (total, singletons, all_pairs, above_max_size, skipped, msa_fallback,
   members_dropped).
 - `failures`: the first 1,000 entries of `failed.tsv` (`failures_total`, `failures_truncated`), each with `level`
@@ -316,6 +318,31 @@ Read the tables as UTF-8 (`encoding="utf-8"` in Python on Windows; `fileEncoding
   `representative` because it needs no MSA and no random draw, and its cost is linear in the cluster size.
 - **Full length.** Overhanging ends of the longer protein stay in the alignment as gaps. The final stop codon is
   dropped. (orthologr truncates the overhang and scores the stop-codon column.)
+
+## Filtering before interpretation
+
+`dnds.tsv` holds every pair that could be computed, and status `ok` means that the method produced numbers, not
+that they are informative. [kaks.md](kaks.md#filtering-before-interpretation) explains what to check and why; in
+short, for a pipeline table:
+
+- **Short alignments**: `codons_compared` below about 50. A handful of substitutions decides the ratio.
+- **Low coverage or identity**: `codons_compared` well below `prot_aln_length` (under half), or `prot_identity`
+  below 30 to 40%. Reciprocal best hits are not always orthologs over their whole length, and cluster members
+  need not be alignable at all.
+- **Saturation**: dS above about 2 (1 to be strict). `saturated` marks only the pairs without any value; a pair
+  with dS 4 and status `ok` is no better. Default DeepClust clusters hold many such pairs
+  ([above](#cluster-mode-input-order-and-what-a-default-cluster-is)).
+- **Tiny dS**: dN/dS is a ratio, and with dS near 0 (very close sequences) it is unstable and often large for no
+  biological reason; `dNdS` is `NA` only when dS is below 1e-6.
+
+These thresholds are conventions, with the usual caveat: report the ones you use, and check that the result does
+not hinge on them. `--min-codons N` and `--max-ds X` flag such rows (status `warning`, notes `fewer than N codons
+compared` and `dS above X`) **without dropping a row or changing a number**; the counts are in the summary on
+stderr and in `report.json` (`counts.flagged`). They are off by default.
+
+```
+coal pipeline pairs --query q_cds.fa --subject s_cds.fa -o out --min-codons 50 --max-ds 2
+```
 
 ## What the search and clustering defaults do
 

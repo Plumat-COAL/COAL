@@ -113,3 +113,47 @@ test_that("other genetic codes are used", {
   expect_identical(two$status, "ok")
   expect_identical(two$codons_compared, 9L)
 })
+
+test_that("min_codons and max_ds flag rows without dropping them or changing a number", {
+  q <- c(g1 = "ATGGCTAAAGGTCTGGAACGTTAA", g2 = "ATGAAACCCGGGTTTTAG", g3 = "ATGAAAGTTCTGGCAGGTCCGTTA")
+  s <- c(h1 = "ATGGCGAAAGGCCTGGATCGTTAA", h2 = "ATGAAGCCAGGGTTCTAG", h3 = "ATGAAGGTTTTGGCAGGACCGCTA")
+  plain <- coal_dnds_pairs(q, s, methods = c("YN", "NG"))
+  expect_null(attr(plain, "flagged"))
+  f <- coal_dnds_pairs(q, s, methods = c("YN", "NG"), min_codons = 7, max_ds = 0.5)
+  num <- setdiff(names(plain), c("status", "note"))
+  expect_identical(f[num], plain[num])
+  expect_identical(nrow(f), nrow(plain))
+  has <- plain$status %in% c("ok", "warning")
+  short <- has & plain$codons_compared < 7
+  high <- has & !is.na(plain$dS) & plain$dS > 0.5
+  expect_true(any(short) && any(high) && any(!short))
+  expect_identical(grepl("fewer than 7 codons compared", f$note, fixed = TRUE), short)
+  expect_identical(grepl("dS above 0.5", f$note, fixed = TRUE), high)
+  expect_true(all(f$status[short | high] == "warning"))
+  expect_identical(f$status[!(short | high)], plain$status[!(short | high)])
+  expect_identical(f$note[!(short | high)], plain$note[!(short | high)])
+  both <- short & high
+  if (any(both)) expect_true(all(endsWith(f$note[both], "fewer than 7 codons compared; dS above 0.5")))
+  expect_identical(attr(f, "flagged"), c(min_codons = sum(short), max_ds = sum(high)))
+  # rows without an estimate are left alone; the notes are appended to an existing one
+  sat <- coal_kaks(strrep("AAACCCGGGTTT", 5), strrep("CCCGGGTTTAAA", 5), method = "NG", min_codons = 1000, max_ds = 0.01)
+  if (!sat$status %in% c("ok", "warning")) expect_false(grepl("fewer than", sat$note))
+  k <- coal_kaks(c(a = "ATGAAAGTTCTGGCAGGTCCGTTA"), c(b = "ATGAAGGTTTTGGCAGGACCGCTA"), min_codons = 50)
+  expect_identical(k$status, "warning")
+  expect_identical(k$note, "fewer than 50 codons compared")
+  expect_error(coal_dnds_pairs(q, s, min_codons = -1), "min_codons")
+  expect_error(coal_dnds_pairs(q, s, max_ds = 0), "max_ds")
+  expect_error(coal_kaks("ATGAAA", "ATGAAG", max_ds = "2"), "max_ds")
+})
+
+test_that("the cluster summary does not change with the flags", {
+  cds <- c(a = "ATGAAAGTTCTGGCAGGTCCGTTA", b = "ATGAAGGTTTTGGCAGGACCGCTA", c = "ATGAAAGTTCTTGCAGGTCCGCTA")
+  cl <- data.frame(rep = c("a", "a", "a"), member = c("a", "b", "c"))
+  rows <- c(a = "MKVLAGPL", b = "MKVLAGPL", c = "MKVLAGPL")
+  plain <- coal_dnds_clusters(cds, cl, msa = list(a = rows))
+  f <- coal_dnds_clusters(cds, cl, msa = list(a = rows), min_codons = 100)
+  expect_identical(f$summary, plain$summary)
+  expect_true(all(grepl("fewer than 100 codons compared", f$pairs$note[f$pairs$status == "warning"])))
+  expect_identical(f$pairs$dN, plain$pairs$dN)
+  expect_identical(unname(attr(f$pairs, "flagged")), sum(plain$pairs$status %in% c("ok", "warning")))
+})

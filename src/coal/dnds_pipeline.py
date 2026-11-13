@@ -979,6 +979,10 @@ class _Run:
                "--terminal-stops", a.terminal_stops]
         for m in a.method:
             cmd += ["-m", m]
+        if a.min_codons:
+            cmd += ["--min-codons", str(a.min_codons)]
+        if a.max_ds is not None:
+            cmd += ["--max-ds", repr(float(a.max_ds))]
         if group_column:
             cmd += ["--group-column", group_column]
         if a.kaks_format:
@@ -1137,6 +1141,12 @@ def _count_pairs(run: _Run, dnds_path: str, group_col: bool) -> None:
     c = {"total": 0, "ok": 0, "warning": 0, "not_converged": 0, "saturated": 0, "no_data": 0, "error": 0}
     k = 1 if group_col else 0
     first = None
+    # the notes of --min-codons / --max-ds as the engine writes them (cpp/src/kaks_cli.cpp PairFlags)
+    a = getattr(run, "a", None)
+    min_codons, max_ds = getattr(a, "min_codons", 0), getattr(a, "max_ds", None)
+    short = f"fewer than {min_codons} codons compared" if min_codons else None
+    high = f"dS above {float(max_ds):.6g}" if max_ds is not None else None
+    flagged = {"min_codons": 0, "max_ds": 0}
     with open(dnds_path, encoding="utf-8", errors="backslashreplace") as fh:
         next(fh)
         for line in fh:
@@ -1147,9 +1157,16 @@ def _count_pairs(run: _Run, dnds_path: str, group_col: bool) -> None:
                 continue
             c["total"] += 1
             c[f[-2]] = c.get(f[-2], 0) + 1
+            if short or high:
+                notes = f[-1].split("; ")
+                flagged["min_codons"] += short in notes
+                flagged["max_ds"] += high in notes
             if f[-2] == "error":
                 run.fail("pair", "pair_failed", f[-1], cluster=f[0] if group_col else "", seq1=f[k], seq2=f[k + 1])
     run.counts["pairs"] = c
+    if short or high:
+        run.counts["flagged"] = {key: n for key, n, on in (("min_codons", flagged["min_codons"], short),
+                                                           ("max_ds", flagged["max_ds"], high)) if on}
 
 
 # ------------------------------------------------------------------------------------------------ pair mode
@@ -1797,6 +1814,12 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--terminal-stops", default="drop", choices=("drop", "compare"),
                    help="with --comeron-flavour gestimator / --li-flavour seqinr: compare takes the two terminal "
                         "stop codons of a pair as the last compared column (as orthologr 0.4.3); default: drop")
+    g.add_argument("--min-codons", type=int, default=0, metavar="N",
+                   help="flag estimates from fewer than N compared codons: status warning and the note \"fewer than "
+                        "N codons compared\"; no row is dropped and no number changes (default 0: off)")
+    g.add_argument("--max-ds", type=float, default=None, metavar="X",
+                   help="flag estimates with dS above X (saturation): status warning and the note \"dS above X\" "
+                        "(default: off; docs/pipeline.md \"Filtering before interpretation\")")
     g = common.add_argument_group("Pairwise protein alignment (COAL's global aligner)")
     g.add_argument("--preset", choices=("needle", "pwalign"),
                    help="needle: BLOSUM62, open 10, extend 0.5, end gaps free (the default); pwalign: open 14, "
@@ -1892,6 +1915,16 @@ def _method_code_error(a: argparse.Namespace) -> str | None:
     for m in ("Comeron", "Li"):
         if m in ms and a.codontable != 1:
             return f"method {m} is implemented for the standard genetic code only (codontable 1)"
+    return None
+
+
+def _flag_error(a: argparse.Namespace) -> str | None:
+    if a.min_codons is None or isinstance(a.min_codons, bool) or not isinstance(a.min_codons, int) \
+            or a.min_codons < 0:
+        return "--min-codons: expected a whole number of codons, 0 or more (0 = off)"
+    if a.max_ds is not None and not (isinstance(a.max_ds, (int, float)) and not isinstance(a.max_ds, bool)
+                                     and math.isfinite(a.max_ds) and a.max_ds > 0):
+        return "--max-ds: expected a number greater than 0"
     return None
 
 
@@ -1992,6 +2025,12 @@ def _execute(mode: str, a: argparse.Namespace, argv) -> PipelineResult:
                     f"a pair, {c['above_max_size']:,} above --max-cluster-size ({c['skipped']:,} skipped)")
         run.say("summary: " + ", ".join(f"{s['name']} {s['seconds']:.1f} s" + (" (reused)" if s.get("cached") else "")
                                         for s in run.stages))
+        fl = run.counts.get("flagged")
+        if fl is not None:
+            parts = ([f"{fl['min_codons']:,} pair(s) with fewer than {a.min_codons} codons compared"]
+                     if "min_codons" in fl else []) + \
+                    ([f"{fl['max_ds']:,} with dS above {float(a.max_ds):.6g}"] if "max_ds" in fl else [])
+            run.say("summary: flagged (status warning, numbers unchanged): " + ", ".join(parts))
         if run.n_failures:
             run.say(f"summary: {run.n_failures:,} failure(s) listed in {run.outputs['failed']}")
         run.say(f"summary: results in {run.outputs.get('dnds', run.out)}")
@@ -2032,7 +2071,7 @@ def _namespace(mode: str, required: list[str], options: dict) -> argparse.Namesp
         bad = [m for m in a.method if m not in METHODS]
         if bad:
             raise ValueError(f"method {bad[0]!r}: choose from {', '.join(METHODS)}")
-    why = _method_code_error(a)
+    why = _method_code_error(a) or _flag_error(a)
     if why:
         raise ValueError(why)
     for opt, allowed in (("comeron_flavour", ("coal", "gestimator")), ("li_flavour", ("coal", "seqinr")),
@@ -2097,6 +2136,9 @@ def main(argv=None) -> int:
         ap.error("--digits: expected 1 to 17")
     if a.jobs < 0:
         ap.error("-j: expected 0 (one per CPU) or more")
+    why = _flag_error(a)
+    if why:
+        ap.error(why)
     if _method_code_error(a):
         ap.error(_method_code_error(a))
     try:

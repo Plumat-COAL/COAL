@@ -171,6 +171,43 @@ align_params <- function(matrix, gap_open, gap_extend, end_gaps, max_cells, pres
 
 default_threads <- function() getOption("coalr.threads", 1L)
 
+# min_codons / max_ds of coal_dnds_pairs(), coal_dnds_clusters() and coal_kaks(): the flags of
+# `coal dnds --min-codons N --max-ds X` (cpp/src/kaks_cli.cpp PairFlags), with the same notes. A row that has an
+# estimate (status ok or warning) and fewer than min_codons compared codons, or a dS above max_ds, gets the note
+# appended and status "warning" when it was "ok". No row is dropped and no number changes. Attribute "flagged":
+# how many rows each flag marked.
+check_flags <- function(min_codons, max_ds) {
+  min_codons <- check_count(min_codons, "min_codons", 0L)
+  if (!is.null(max_ds) && (!is.numeric(max_ds) || length(max_ds) != 1L || is.na(max_ds) || !is.finite(max_ds) ||
+                           max_ds <= 0)) {
+    stop("`max_ds` must be NULL (off) or one number greater than 0", call. = FALSE)
+  }
+  list(min_codons = min_codons, max_ds = max_ds)
+}
+
+flag_pairs <- function(out, flags) {
+  if (flags$min_codons == 0L && is.null(flags$max_ds)) return(out)
+  has <- out$status %in% c("ok", "warning")
+  add <- function(rows, text) {
+    if (!any(rows)) return(invisible())
+    out$note[rows] <<- ifelse(nzchar(out$note[rows]), paste0(out$note[rows], "; ", text), text)
+    out$status[rows & out$status == "ok"] <<- "warning"
+  }
+  flagged <- integer(0)
+  if (flags$min_codons > 0L) {
+    rows <- has & !is.na(out$codons_compared) & out$codons_compared < flags$min_codons
+    add(rows, sprintf("fewer than %d codons compared", flags$min_codons))
+    flagged <- c(flagged, min_codons = sum(rows))
+  }
+  if (!is.null(flags$max_ds)) {
+    rows <- has & !is.na(out$dS) & out$dS > flags$max_ds
+    add(rows, paste0("dS above ", sprintf("%.6g", flags$max_ds)))
+    flagged <- c(flagged, max_ds = sum(rows))
+  }
+  attr(out, "flagged") <- flagged
+  out
+}
+
 PAIR_COLUMNS <- c("seq1", "seq2", "method", "dN", "dS", "dNdS", "SE_dN", "SE_dS", "N_sites", "S_sites", "Nd", "Sd",
                   "codons_compared", "prot_aln_length", "prot_identity", "status", "note")
 STATS <- c("median", "mean", "q25", "q75", "min", "max")
