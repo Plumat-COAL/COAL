@@ -132,7 +132,13 @@ second run into the same folder is refused with exit 1 while the first one is al
 `<process id> <host name> <process start> <token>`. The lock of a process that is gone (or whose id now belongs
 to a process that started at another time; Linux) is replaced, by exactly one of the runs that find it. A lock
 written on another machine cannot be checked and is never replaced: the message names the machine and the file
-to remove if that run is gone. When a run starts, the files
+to remove if that run is gone. The host name is the same text in both engines: the computer's DNS host name
+(Windows: `GetComputerNameExW(ComputerNamePhysicalDnsHostname)`; elsewhere `gethostname`), printable ASCII as it
+is, any other ASCII character as `_`, every character outside ASCII as `?`, at most 255 characters, `-` when there
+is none; two names are the same machine when they are equal (on Windows without regard to case). While a stale
+lock is replaced, the file `<lock>.takeover` (the same four fields) exists for an instant; the run that created it
+removes it. Should one stay behind (a run killed in that instant), the next run clears it when its process is gone
+or when it is older than 15 s. When a run starts, the files
 of the table above that an earlier COAL run wrote into the folder are removed (a `dnds.kaks` or
 `codon_alignments.fasta` or `protein_alignments.fasta` of a run with other options, the `.fasta` files of a
 `codon_alignments/` or `protein_alignments/` that a cluster run with `--keep-alignments` /

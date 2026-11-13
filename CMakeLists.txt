@@ -25,6 +25,10 @@ endif()
 option(COAL_WARNINGS_AS_ERRORS "Treat compiler warnings as errors (for CI)" OFF)
 option(COAL_BUILD_CLI "Build the coal-cpp command-line tool" ${COAL_TOP_LEVEL})
 option(COAL_BUILD_TOOLS "Build coal-cpp-dump (test helper used by tests/test_cpp_*.py)" ${COAL_TOP_LEVEL})
+# Test hooks (docs/development.md "Test hooks"): COAL_TEST_* environment variables with which the tests stop
+# coal-cpp at a chosen point or line up several runs. OFF, they are not in the binary at all: release builds,
+# wheels and packages are built without. The test builds of CI and a local build for the test suite switch it ON.
+option(COAL_TEST_HOOKS "Compile the COAL_TEST_* test hooks into coal-cpp (test builds only)" OFF)
 option(COAL_INSTALL "Generate the install rules (coal-cpp, coal_core, headers, CMake package)" ${COAL_TOP_LEVEL})
 
 if(COAL_TOP_LEVEL)
@@ -71,6 +75,10 @@ if(COAL_BUILD_CLI)
                  cpp/src/dnds_cli.cpp)
   target_include_directories(coal-cpp PRIVATE cpp/src)
   target_link_libraries(coal-cpp PRIVATE coal_core Threads::Threads)
+  if(COAL_TEST_HOOKS)
+    target_compile_definitions(coal-cpp PRIVATE COAL_TEST_HOOKS)
+    message(STATUS "coal-cpp: test hooks compiled in (COAL_TEST_HOOKS=ON): not a build to release")
+  endif()
   # pairwise protein alignment for the codon step (cpp/src/align.hpp, docs/alignment.md)
   add_executable(coal-cpp-align cpp/src/align_main.cpp)
   target_include_directories(coal-cpp-align PRIVATE cpp/src)

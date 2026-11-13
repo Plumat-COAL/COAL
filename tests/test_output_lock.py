@@ -7,7 +7,15 @@ was "stale" because its process id is not alive here. Nothing but Python is need
 CppLock: the same lock in the C++ engine (cpp/src/sysio.cpp take_output_lock), which writes and reads the Python
 format: the content, the refusals, the replacement of a stale lock, a race loop of simultaneous `coal-cpp -o`
 starts onto a stale lock (200 trials, never two holders), and Python and C++ runs honouring each other's locks.
-Needs build/coal-cpp (COAL_CPP_BIN); skipped without it, failed instead when COAL_REQUIRE_CPP is set.
+Needs build/coal-cpp (COAL_CPP_BIN) built with -DCOAL_TEST_HOOKS=ON (tests/cpp_hooks.py); skipped without it,
+failed instead when COAL_REQUIRE_CPP is set.
+
+CI, PR #55 (Windows): after simultaneous starts onto a stale lock the guard `<lock>.takeover` stayed behind.
+Windows does not remove a file that another process has open, and the runs that lost the race were reading the
+guard at that instant; the removal was tried once and its failure ignored. Every removal is now retried
+(pipeline._remove, sysio.cpp remove_file), which the tests here drive on every system through a hook that makes
+the first removals fail as they do there; a guard that is left all the same is cleared by the next run (its
+process is gone, or its age).
 """
 from __future__ import annotations
 
@@ -22,6 +30,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "tests"))
+from cpp_hooks import need_test_hooks  # noqa: E402
 from coal import pipeline as P  # noqa: E402
 from coal.core import CoalError  # noqa: E402
 
@@ -154,6 +164,7 @@ class Lock(unittest.TestCase):
         self.lock.write_text(a_lock, encoding="ascii")
         P._replace_stale_lock(str(self.lock), stale)
         self.assertEqual(self.lock.read_text(encoding="ascii"), a_lock)
+        self.assertEqual(self.names(), ["out.coal-lock"], "the guard of a takeover that found the lock replaced")
         # and while another run is replacing the lock (its guard file exists), nobody else removes anything
         self.lock.write_text(f"{dead_pid()}\n", encoding="ascii")
         stale = P._read_lock(str(self.lock))[0]
@@ -165,6 +176,139 @@ class Lock(unittest.TestCase):
         P._replace_stale_lock(str(self.lock), stale)
         self.assertFalse(guard.exists())
         self.take()
+
+    def names(self):
+        return sorted(p.name for p in self.tmp.iterdir())
+
+    def patch(self, name, value):
+        old = getattr(P, name)
+        setattr(P, name, value)
+        self.addCleanup(setattr, P, name, old)
+
+    def test_removals_are_tried_again(self):
+        """Windows refuses to remove a file that another process has open (a run reading the lock or the guard at
+        that instant). The hook makes the next removals fail in that way: lock, guard and temporary files are gone
+        all the same."""
+        self.lock.write_text(f"{dead_pid()}\n", encoding="ascii")
+        self.patch("_unlink_fails", 9)
+        lock = P.take_output_lock(self.out, "out")
+        self.assertEqual(P._unlink_fails, 0, "the removals did not go through the hook")
+        self.assertEqual(self.names(), ["out.coal-lock"])
+        self.assertEqual(int(self.lock.read_text(encoding="ascii").split()[0]), os.getpid())
+        P._unlink_fails = 5
+        P.release_output_lock(lock)
+        self.assertEqual(self.names(), [])
+        self.assertEqual(P._leftovers, set())
+
+    def test_a_guard_that_cannot_be_removed_is_cleared_later(self):
+        """The removal fails for as long as it is tried: the guard stays, is remembered, and is removed when the
+        lock is released; and a run that finds such a guard of this process (not in a takeover) clears it."""
+        self.patch("_REMOVE_TRIES", 3)
+        self.addCleanup(P._leftovers.clear)
+        guard = Path(str(self.lock) + ".takeover")
+        self.lock.write_text(f"{dead_pid()}\n", encoding="ascii")
+        stale = self.lock.read_bytes()
+        self.patch("_in_takeover", lambda path: setattr(P, "_unlink_fails", 10 ** 6))
+        P._replace_stale_lock(str(self.lock), stale)
+        self.assertEqual(self.names(), ["out.coal-lock", "out.coal-lock.takeover"])
+        self.assertEqual(P._leftovers, {str(self.lock), str(guard)})
+        f = guard.read_text(encoding="ascii").split()
+        self.assertEqual((int(f[0]), f[1], f[2], len(f)), (os.getpid(), P._hostname(), P._proc_start(os.getpid()), 4))
+        P._unlink_fails = 0
+        self.patch("_in_takeover", None)
+        P._leftovers.clear()                      # (as a process that was killed: nothing remembered)
+        lock = P.take_output_lock(self.out, "out")   # the guard names this process, which is in no takeover
+        self.assertEqual(self.names(), ["out.coal-lock"])
+        # remembered files are removed at the release
+        guard.write_text("x\n", encoding="ascii")
+        P._leftovers.add(str(guard))
+        P.release_output_lock(lock)
+        self.assertEqual(self.names(), [])
+        self.assertEqual(P._leftovers, set())
+
+    def test_the_guard_is_removed_when_the_takeover_fails(self):
+        def boom(path):
+            raise OSError(5, "input/output error")
+        self.lock.write_text(f"{dead_pid()}\n", encoding="ascii")
+        self.patch("_in_takeover", boom)
+        with self.assertRaisesRegex(CoalError, "cannot write out"):
+            P.take_output_lock(self.out, "out")
+        self.assertEqual(self.names(), ["out.coal-lock"], "the guard was left by the failed takeover")
+        with self.assertRaises(KeyboardInterrupt):     # and when the run is interrupted in that instant
+            self.patch("_in_takeover", lambda path: (_ for _ in ()).throw(KeyboardInterrupt()))
+            P.take_output_lock(self.out, "out")
+        self.assertEqual(self.names(), ["out.coal-lock"])
+        self.patch("_in_takeover", None)
+        self.take()
+
+    def test_leftover_guards_are_judged_like_locks(self):
+        """A guard is cleared when its process is gone, or when it is older than the limit (whatever it holds:
+        a live process, another machine, nothing); otherwise it is another run's takeover and nothing is touched."""
+        guard = Path(str(self.lock) + ".takeover")
+        self.lock.write_text(f"{dead_pid()}\n", encoding="ascii")
+        stale = self.lock.read_bytes()
+        long_ago = time.time() - P._GUARD_MAX_AGE - 5
+        live = self.live_pid()
+        for what, text, cleared_when_new in (
+                ("its process is gone", f"{dead_pid()} {P._hostname()} - aa\n", True),
+                ("a reused process id", f"{live} {P._hostname()} 1 aa\n", os.path.exists("/proc/self/stat")),
+                ("a live process", f"{live} {P._hostname()} - aa\n", False),
+                ("another machine", f"{dead_pid()} node17.cluster.example - aa\n", False),
+                ("empty", "", False)):
+            guard.write_text(text, encoding="ascii")
+            P._replace_stale_lock(str(self.lock), stale)
+            self.assertEqual(guard.exists(), not cleared_when_new, what)
+            self.assertEqual(self.lock.read_bytes(), stale, what)     # this call only cleared (or waited)
+            guard.write_text(text, encoding="ascii")
+            os.utime(guard, (long_ago, long_ago))
+            P._replace_stale_lock(str(self.lock), stale)
+            self.assertFalse(guard.exists(), f"{what}: an old guard was not cleared")
+            self.assertEqual(self.names(), ["out.coal-lock"], what)
+        guard.write_text(f"{live} {P._hostname()} - aa\n", encoding="ascii")     # a run that waits gets through
+        os.utime(guard, (long_ago, long_ago))
+        self.take()
+        self.assertEqual(self.names(), ["out.coal-lock"])
+
+    def test_a_guard_replaced_while_it_was_judged_is_put_back(self):
+        """Run C judges a leftover guard; before C moves it aside, run D clears it and starts its own takeover.
+        What C then moves is D's guard: C puts it back."""
+        guard = Path(str(self.lock) + ".takeover")
+        self.lock.write_text(f"{dead_pid()}\n", encoding="ascii")
+        guard.write_text(f"{dead_pid()} {P._hostname()} - aa\n", encoding="ascii")
+        theirs = f"{self.live_pid()} {P._hostname()} - d4\n"
+        judge = P._lock_holder
+
+        def judged(pid, host, start):
+            who = judge(pid, host, start)
+            guard.write_text(theirs, encoding="ascii")      # D, in the meantime
+            return who
+        self.patch("_lock_holder", judged)
+        P._replace_stale_lock(str(self.lock), self.lock.read_bytes())
+        self.assertEqual(guard.read_text(encoding="ascii"), theirs)
+        self.assertEqual(self.names(), ["out.coal-lock", "out.coal-lock.takeover"])
+
+    def test_host_name(self):
+        """One spelling for both engines: printable ASCII as it is, other ASCII "_", anything else "?" per
+        character; compared exactly, on Windows without regard to case."""
+        self.assertRegex(P._hostname(), r"^[!-~]{1,255}$")
+        if os.name != "nt":
+            import socket
+            real = socket.gethostname
+            self.addCleanup(setattr, socket, "gethostname", real)
+            for name, want in (("node 7\t.example", "node_7_.example"), ("r\u00e9seau-\u6771\u4eac", "r?seau-??"),
+                               ("", "-"), ("x" * 300, "x" * 255), (os.fsdecode(b"a\xffb\x80"), "a?b")):
+                socket.gethostname = lambda name=name: name
+                self.assertEqual(P._hostname(), want)
+            socket.gethostname = real
+        self.assertTrue(P._same_host("node7", "node7"))
+        self.assertFalse(P._same_host("node7", "node8"))
+        self.assertEqual(P._same_host("Node7", "node7"), os.name == "nt")
+        other_case = P._hostname().swapcase()
+        if other_case != P._hostname():
+            self.lock.write_text(f"{self.live_pid()} {other_case} - aa\n", encoding="ascii")
+            want = r"another COAL run \(process \d+\) is" if os.name == "nt" else "on the machine"
+            with self.assertRaisesRegex(CoalError, want):
+                P.take_output_lock(self.out, "out")
 
     def test_release_leaves_a_lock_that_is_not_ours(self):
         lock = P.take_output_lock(self.out, "out")
@@ -189,7 +333,7 @@ class Lock(unittest.TestCase):
             got = [e for e in ev if e[0] == "got"]
             self.assertEqual(len(got), 1, f"trial {trial}: {len(got)} runs held the output at once: {ev}")
             self.assertEqual(got[0][2], str(got[0][1]), f"trial {trial}: the holder's lock was replaced under it")
-            self.assertFalse(self.lock.exists())
+            self.assertEqual(self.names(), [], f"trial {trial}: lock, guard or temporary files were left")
 
     def test_simultaneous_starts_on_a_stale_lock_have_one_holder(self):
         self.simultaneous(lambda: self.lock.write_text(f"{dead_pid()}\n", encoding="ascii"), 12)
@@ -249,13 +393,22 @@ class CppLock(unittest.TestCase):
                     fh.close()
         self._td.cleanup()
 
-    def run_cpp(self, out=None):
+    def run_cpp(self, out=None, **hooks):
+        if hooks:
+            need_test_hooks(self, self.cpp)
         return subprocess.run([str(self.cpp), *self.EXAMPLE, "-o", str(out or self.out)], capture_output=True,
-                              text=True, env=self.env, timeout=120)
+                              text=True, env={**self.env, **({"COAL_TEST_HOOKS": "1", **hooks} if hooks else {})},
+                              timeout=120)
+
+    def names(self):
+        return sorted(x.name for x in self.tmp.iterdir() if ".coal-lock" in x.name)
 
     def start_cpp(self, out=None, hold=True):
         """A coal-cpp run that, once it holds the lock, waits for the file self.go (the engine's test hook)."""
-        env = {**self.env, "COAL_TEST_HOLD_LOCK_UNTIL": str(self.go)} if hold else dict(self.env)
+        need_test_hooks(self, self.cpp)
+        env = {**self.env, "COAL_TEST_HOOKS": "1"}
+        if hold:
+            env["COAL_TEST_HOLD_LOCK_UNTIL"] = str(self.go)
         if self.start_at is not None:     # the race loop: every run reaches the lock at the same instant
             env["COAL_TEST_LOCK_START_AT"] = str(int(self.start_at * 1000))
         p = subprocess.Popen([str(self.cpp), *self.EXAMPLE, "-o", str(out or self.out)], env=env,
@@ -370,10 +523,11 @@ class CppLock(unittest.TestCase):
         """The race, step by step: run B judges the lock stale and is held up (the engine's test hook); run A
         replaces the stale lock and holds the output; B goes on with what it read. B must leave A's lock where it
         is and be refused. (With an unguarded takeover B removed A's lock and both ran.)"""
+        need_test_hooks(self, self.cpp)
         self.lock.write_text(f"{dead_pid()}\n", encoding="ascii")
         b = subprocess.Popen([str(self.cpp), *self.EXAMPLE, "-o", str(self.out)], stdout=subprocess.DEVNULL,
                              stderr=subprocess.PIPE, text=True,
-                             env={**self.env, "COAL_TEST_LOCK_BEFORE_TAKEOVER_MS": "1500",
+                             env={**self.env, "COAL_TEST_HOOKS": "1", "COAL_TEST_LOCK_BEFORE_TAKEOVER_MS": "1500",
                                   "COAL_TEST_HOLD_LOCK_UNTIL": str(self.go)})
         self.procs.append(b)
         time.sleep(0.4)                       # B has read the stale lock and waits
@@ -406,6 +560,54 @@ class CppLock(unittest.TestCase):
         self.assertEqual(self.lock.read_text(encoding="ascii"), stale)
         guard.unlink()                                  # the other run's takeover ends
         self.assertEqual(p.wait(timeout=60), 0, p.stderr.read())
+        self.assertEqual(self.names(), [])
+
+    def test_leftover_guards_are_judged_like_locks(self):
+        """A guard whose process is gone is cleared at once; one that names a live process, another machine or
+        nothing is another run's takeover until it is older than the limit, then it is cleared too."""
+        guard = Path(str(self.lock) + ".takeover")
+        long_ago = time.time() - P._GUARD_MAX_AGE - 5
+        live = self.live_pid()
+        for what, text in (("a live process", f"{live} {P._hostname()} - aa\n"),
+                           ("another machine", f"{dead_pid()} node17.cluster.example - aa\n"), ("empty", "")):
+            self.lock.write_text(f"{dead_pid()}\n", encoding="ascii")
+            guard.write_text(text, encoding="ascii")
+            os.utime(guard, (long_ago, long_ago))
+            t = time.time()
+            r = self.run_cpp()
+            self.assertEqual(r.returncode, 0, (what, r.stderr))
+            self.assertLess(time.time() - t, 10, what)
+            self.assertEqual(self.names(), [], what)
+            self.assertEqual(self.out.read_text(), self.want, what)
+
+    def test_removals_are_tried_again(self):
+        """Windows refuses to remove a file that another process has open. The engine's hook makes its first
+        removals fail in that way (the temporary name, the stale lock, the guard, its own lock): all are gone."""
+        self.lock.write_text(f"{dead_pid()}\n", encoding="ascii")
+        r = self.run_cpp(COAL_TEST_UNLINK_FAILS="60")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.names(), [])
+        self.assertEqual(self.out.read_text(), self.want)
+        # and a removal that fails for as long as it is tried (2 s): tried a last time when the run ends
+        self.lock.write_text(f"{dead_pid()}\n", encoding="ascii")
+        r = self.run_cpp(COAL_TEST_UNLINK_FAILS="225")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.names(), [])
+
+    def test_host_name_is_the_python_engines(self):
+        """The same name in another case: this machine on Windows (computer names are not case sensitive there),
+        another machine elsewhere; both engines agree."""
+        other_case = P._hostname().swapcase()
+        if other_case == P._hostname():
+            self.skipTest("this machine's name has no letters")
+        live = self.live_pid()
+        self.lock.write_text(f"{live} {other_case} - aa\n", encoding="ascii")
+        r = self.run_cpp()
+        self.assertEqual(r.returncode, 1)
+        same = os.name == "nt"
+        self.assertEqual(f"another COAL run (process {live}) is writing" in r.stderr, same, r.stderr)
+        self.assertEqual("on the machine" in r.stderr, not same, r.stderr)
+        self.assertEqual(P._lock_holder(live, other_case, "-"), "process" if same else "host")
 
     @unittest.skipIf(os.name == "nt", "symbolic links need a privilege on Windows")
     def test_a_link_to_the_folder_is_the_same_output(self):
@@ -456,7 +658,7 @@ class CppLock(unittest.TestCase):
             for c, e in zip(codes, errs):
                 if c == 1:
                     self.assertIn("another COAL run (process", e, f"trial {trial}")
-            self.assertEqual([x.name for x in self.tmp.iterdir() if ".coal-lock" in x.name], [], f"trial {trial}")
+            self.assertEqual(self.names(), [], f"trial {trial}: lock, guard or temporary files were left")
         return seen
 
     def test_simultaneous_cpp_starts_on_a_stale_lock_have_one_holder(self):
@@ -471,6 +673,20 @@ class CppLock(unittest.TestCase):
         seen = self.race(15, [self.start_py, self.start_py, self.start_cpp, self.start_cpp],
                          lambda: self.lock.write_text(stale, encoding="ascii"), lead=0.5)
         self.assertEqual((seen["holders"], seen["double"]), (15, 0))
+
+    def test_simultaneous_starts_while_removals_are_refused_leave_nothing(self):
+        """The Windows failure of PR #55 on every system: runs of both engines start together onto a stale lock
+        while each run's first removals fail as they do when another run has the file open."""
+        stale = f"{dead_pid()} {P._hostname()} - aa\n"
+
+        def cpp():
+            self.env["COAL_TEST_UNLINK_FAILS"] = "12"
+            try:
+                return self.start_cpp()
+            finally:
+                del self.env["COAL_TEST_UNLINK_FAILS"]
+        seen = self.race(10, [cpp] * 5, lambda: self.lock.write_text(stale, encoding="ascii"))
+        self.assertEqual((seen["holders"], seen["double"]), (10, 0))
 
     def test_simultaneous_cpp_starts_without_a_lock_have_one_holder(self):
         seen = self.race(20, [self.start_cpp] * 6, lambda: None)

@@ -16,6 +16,13 @@ namespace coal {
 // Thrown when stdout is a closed pipe: the caller exits 141 without a message.
 struct BrokenPipe {};
 
+// Test hooks (docs/development.md "Test hooks"): compiled only into builds configured with -DCOAL_TEST_HOOKS=ON
+// (CI and local test builds; never release builds, wheels or packages), and then acting only while COAL_TEST_HOOKS=1
+// is in the environment as well. The value of the hook variable `name`, or nullptr.
+#ifdef COAL_TEST_HOOKS
+const char* test_hook_env(const char* name);
+#endif
+
 // Signal handlers (SIGTERM, SIGHUP, SIGINT; SIGPIPE ignored so writes fail with EPIPE instead).
 void install_signal_handlers();
 // Temp files removed by the signal handlers (and by unregister_temp's caller as usual).
