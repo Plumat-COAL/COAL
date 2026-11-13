@@ -2,7 +2,10 @@
 # End to end: orthologr's dNdS(dnds_est.method = "Comeron") against coalr on the same gene pairs
 # (docs/kaks.md, "Comeron and Li": "With orthologr").
 #
-#   Rscript benchmarks/kaks/orthologr_e2e.R <orthologr-lib> <coalr-lib> <query.fasta> <subject.fasta> <outdir>
+#   Rscript benchmarks/kaks/orthologr_e2e.R <orthologr-lib> <coalr-lib> <query.fasta> <subject.fasta> <outdir> \
+#       [store_locally]
+# (store_locally: call dNdS(store_locally = TRUE), for a build of orthologr that removes its temporary files when
+# dNdS() returns: the protein alignments are then kept in <outdir>/orthologr_alignment_files.)
 #
 # 1. orthologr::dNdS() with its default path (reciprocal best hits, pairwise protein alignment, PAL2NAL,
 #    gestimator); timed. Its per-pair protein and codon alignment files are copied from the session's temporary
@@ -18,9 +21,12 @@
 #    the same pairs and the same protein alignments, so every value must be orthologr's.
 # Writes <outdir>/orthologr.tsv, pairs.tsv (one row per pair with both results) and summary.txt.
 a <- commandArgs(TRUE)
-stopifnot(length(a) == 5)
+stopifnot(length(a) %in% 5:6)
 olib <- a[1]; clib <- a[2]; q <- a[3]; s <- a[4]; out <- a[5]
+store <- length(a) == 6 && a[6] == "store_locally"
 dir.create(out, recursive = TRUE, showWarnings = FALSE)
+out <- normalizePath(out)
+setwd(out)
 .libPaths(c(olib, clib, .libPaths()))
 suppressMessages(library(orthologr))
 options(orthologr.legacy_comeron_saturation = TRUE)
@@ -29,17 +35,28 @@ unlink(file.path(out, "summary.txt"))
 say("orthologr %s (%s); coalr %s (%s)", as.character(packageVersion("orthologr")), olib,
     as.character(packageVersion("coalr", lib.loc = clib)), clib)
 
+reuse <- all(file.exists(file.path(out, c("orthologr.tsv", "orthologr_alignments.rds", "orthologr_seconds.txt"))))
+if (reuse) {
+  # step 1 was done by an earlier run of this script into the same folder: its table, alignments and time are used
+  res <- utils::read.delim(file.path(out, "orthologr.tsv"), stringsAsFactors = FALSE, quote = "")
+  t_orth <- as.numeric(readLines(file.path(out, "orthologr_seconds.txt"))[1])
+  x <- readRDS(file.path(out, "orthologr_alignments.rds")); aa <- x$aa; co <- x$co
+  say("orthologr dNdS(dnds_est.method = \"Comeron\"), default path, 1 core: %.1f s, %d pairs (from the earlier run in this folder)",
+      t_orth, nrow(res))
+} else {
 t0 <- proc.time()[["elapsed"]]
 res <- suppressWarnings(suppressMessages(dNdS(query_file = q, subject_file = s, dnds_est.method = "Comeron", comp_cores = 1,
-                             quiet = TRUE, print_citation = FALSE)))
+                             quiet = TRUE, print_citation = FALSE, store_locally = store)))
 t_orth <- proc.time()[["elapsed"]] - t0
 res <- as.data.frame(res)
 res <- res[, c("query_id", "subject_id", "dN", "dS", "dNdS")]
 write.table(res, file.path(out, "orthologr.tsv"), sep = "\t", quote = FALSE, row.names = FALSE)
+writeLines(sprintf("%.1f", t_orth), file.path(out, "orthologr_seconds.txt"))
 say("orthologr dNdS(dnds_est.method = \"Comeron\"), default path, 1 core: %.1f s, %d pairs", t_orth, nrow(res))
 
 # orthologr's alignment files of this session
-files <- list.files(tempdir(), recursive = TRUE, full.names = TRUE)
+files <- c(list.files(tempdir(), recursive = TRUE, full.names = TRUE),
+           list.files(file.path(out, "orthologr_alignment_files"), recursive = TRUE, full.names = TRUE))
 aa_files <- grep("pairwise_aln/.*_AA\\.aln$", files, value = TRUE)
 co_files <- grep("codon_aln/.*\\.aln$", files, value = TRUE)
 read_fa <- function(f) {
@@ -54,8 +71,9 @@ aa <- Filter(Negate(is.null), lapply(aa_files, read_fa))
 co <- Filter(Negate(is.null), lapply(co_files, read_fa))
 key <- function(x) vapply(x, function(z) paste(z$names, collapse = "\t"), "")
 names(aa) <- key(aa); names(co) <- key(co)
-say("alignment files kept by orthologr: %d protein, %d codon", length(aa), length(co))
 saveRDS(list(aa = aa, co = co), file.path(out, "orthologr_alignments.rds"))
+}
+say("alignment files kept by orthologr: %d protein, %d codon", length(aa), length(co))
 
 pk <- paste(res$query_id, res$subject_id, sep = "\t")
 fmt4 <- function(x) suppressWarnings(as.numeric(sprintf("%.4g", x)))   # gestimator prints 4 significant digits
@@ -64,6 +82,7 @@ same <- function(x, y) (is.na(x) & is.na(y)) | (!is.na(x) & !is.na(y) & x == y)
 # 2. the engine on orthologr's own codon alignments
 library(coalr, lib.loc = clib)
 have <- pk %in% names(co)
+if (!any(have)) say("(no codon alignment file of orthologr: step 2 has nothing to compare)")
 c1 <- vapply(co[pk[have]], function(z) z$seq[1], ""); c2 <- vapply(co[pk[have]], function(z) z$seq[2], "")
 k <- coal_kaks(unname(c1), unname(c2), method = "Comeron", comeron_flavour = "gestimator")
 eng <- data.frame(dN = rep(NA_real_, nrow(res)), dS = NA_real_, dNdS = NA_real_, status = NA_character_)
@@ -86,13 +105,20 @@ say("  pairs whose codon alignment holds a stop codon column that both sequences
 
 # 3. coalr from the coding sequences
 qs <- coal_read_fasta(q); ss <- coal_read_fasta(s)
+# does this orthologr align the stop codon ('*' as the last column of its protein alignments)? Then its codon
+# alignments end in the two stop codons, and coalr is asked to compare them too
+stops_aligned <- length(aa) > 0 && mean(vapply(aa, function(z) all(grepl("\\*$", z$seq)), NA)) > 0.5
+tstops <- if (stops_aligned) "compare" else "drop"
+say("")
+say("orthologr's protein alignments end in '*' (the stop codons are aligned and compared): %s -> terminal_stops = \"%s\"",
+    stops_aligned, tstops)
 t0 <- proc.time()[["elapsed"]]
 cp <- coal_dnds_pairs(qs, ss, pairs = res[, c("query_id", "subject_id")], methods = "Comeron",
-                      comeron_flavour = "gestimator", preset = "pwalign", threads = 1L, keep_alignments = TRUE)
+                      comeron_flavour = "gestimator", preset = "pwalign", terminal_stops = tstops, threads = 1L, keep_alignments = TRUE)
 t_coal <- proc.time()[["elapsed"]] - t0
 t0 <- proc.time()[["elapsed"]]
 invisible(coal_dnds_pairs(qs, ss, pairs = res[, c("query_id", "subject_id")], methods = "Comeron",
-                          comeron_flavour = "gestimator", preset = "pwalign", threads = 1L))
+                          comeron_flavour = "gestimator", preset = "pwalign", terminal_stops = tstops, threads = 1L))
 t_coal2 <- proc.time()[["elapsed"]] - t0
 al <- attr(cp, "alignments")
 stopifnot(identical(paste(cp$seq1, cp$seq2, sep = "\t"), pk))
@@ -106,7 +132,7 @@ same_aln[has_aa] <- vapply(which(has_aa), function(i) {
 }, NA)
 e_dn <- same(fmt4(cp$dN), res$dN); e_ds <- same(fmt4(cp$dS), res$dS); e_w <- same(fmt4(cp$dNdS), res$dNdS)
 say("")
-say("coal_dnds_pairs(methods = \"Comeron\", comeron_flavour = \"gestimator\", preset = \"pwalign\") from the coding sequences, 1 thread: %.2f s with the alignments returned, %.2f s without (orthologr: %.1f s; %.0f times)",
+say("coal_dnds_pairs(methods = \"Comeron\", comeron_flavour = \"gestimator\", preset = \"pwalign\", terminal_stops) from the coding sequences, 1 thread: %.2f s with the alignments returned, %.2f s without (orthologr: %.1f s; %.0f times)",
     t_coal, t_coal2, t_orth, t_orth / t_coal2)
 for (grp in list(list("COAL's protein alignment is orthologr's", which(same_aln %in% TRUE)),
                  list("the protein alignments differ", which(same_aln %in% FALSE)),

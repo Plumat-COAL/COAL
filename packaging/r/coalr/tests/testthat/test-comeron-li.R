@@ -131,10 +131,27 @@ test_that("coal_dnds_pairs and coal_dnds_clusters compute Comeron and Li", {
   sub <- got[got$method %in% c("Comeron", "Li") & paste(got$seq1, got$seq2) %in% paste(aln$seq1, aln$seq2)[ok], ]
   expect_identical(sub$dN, direct$dN)
   expect_identical(sub$dS, direct$dS)
-  # the flavour reaches the engine: the CDS of the fixtures end in stop codons
-  leg <- coal_dnds_pairs(q, s, pairs = orthologs(), methods = "Comeron", comeron_flavour = "gestimator")
-  dfl <- got[got$method == "Comeron", ]
-  expect_identical(nrow(leg), nrow(dfl))
+  # terminal stop codons: dropped also by the reference flavour, unless terminal_stops = "compare" (orthologr
+  # 0.4.3's pipeline): the pair is then compared with its two stop codons as the last column
+  ends <- function(x) toupper(substr(x, nchar(x) - 2L, nchar(x)))
+  o <- orthologs()
+  stop1 <- ends(q[o[[1]]]); stop2 <- ends(s[o[[2]]])
+  both <- stop1 %in% c("TAA", "TAG", "TGA") & stop2 %in% c("TAA", "TAG", "TGA") & ok
+  expect_gt(sum(both), 5)
+  leg <- coal_dnds_pairs(q, s, pairs = o, methods = "Comeron", comeron_flavour = "gestimator")
+  cmp <- coal_dnds_pairs(q, s, pairs = o, methods = "Comeron", comeron_flavour = "gestimator",
+                         terminal_stops = "compare")
+  k0 <- coal_kaks(aln$codon1[both], aln$codon2[both], method = "Comeron", comeron_flavour = "gestimator")
+  k1 <- coal_kaks(paste0(aln$codon1[both], stop1[both]), paste0(aln$codon2[both], stop2[both]), method = "Comeron",
+                  comeron_flavour = "gestimator")
+  expect_identical(leg$dN[both], k0$dN)
+  expect_identical(cmp$dN[both], k1$dN)
+  expect_identical(cmp$dS[both], k1$dS)
+  expect_identical(cmp$codons_compared[both], leg$codons_compared[both] + 1L)
+  # the option has no effect on the default flavours
+  expect_identical(coal_dnds_pairs(q, s, pairs = o, methods = c("Comeron", "YN"), terminal_stops = "compare")$dN,
+                   coal_dnds_pairs(q, s, pairs = o, methods = c("Comeron", "YN"))$dN)
+  expect_error(coal_dnds_pairs(q, s, pairs = o, methods = "Comeron", terminal_stops = "x"), "should be one of")
   expect_error(coal_dnds_pairs(q, s, pairs = orthologs(), methods = "Comeron", code = 11L),
                "standard genetic code only")
   # threads do not change the result
@@ -145,6 +162,9 @@ test_that("coal_dnds_pairs and coal_dnds_clusters compute Comeron and Li", {
   msa_tbl <- utils::read.delim(fx("clusters_msa.tsv"), stringsAsFactors = FALSE)
   rows <- lapply(split(msa_tbl, msa_tbl$cluster_id), function(d) structure(d$protein_row, names = d$id))
   res <- coal_dnds_clusters(cds, fx("family_clusters.tsv"), msa = rows, methods = c("Comeron", "Li"))
+  res2 <- coal_dnds_clusters(cds, fx("family_clusters.tsv"), msa = rows, methods = "Comeron",
+                             comeron_flavour = "gestimator", terminal_stops = "compare")
+  expect_identical(nrow(res2$pairs), sum(res$pairs$method == "Comeron"))
   expect_true(all(res$pairs$method %in% c("Comeron", "Li")))
   expect_true(all(c("Comeron", "Li") %in% res$summary$method))
   expect_gt(sum(!is.na(res$pairs$dN)), 10)

@@ -26,7 +26,8 @@ coal_dnds_clusters(
   yn_weighting = TRUE,
   keep_alignments = FALSE,
   comeron_flavour = c("coal", "gestimator"),
-  li_flavour = c("coal", "seqinr")
+  li_flavour = c("coal", "seqinr"),
+  terminal_stops = c("drop", "compare")
 )
 }
 \arguments{
@@ -83,6 +84,13 @@ reproducing published orthologr results.}
 
 \item{li_flavour}{For \code{"Li"}: \code{"coal"} (default) applies COAL's policy; \code{"seqinr"} compares stop codons as
 \code{seqinr::kaks()} does. In both, seqinr's sentinel 9.999999 is \code{NA}.}
+
+\item{terminal_stops}{Only with \code{comeron_flavour = "gestimator"} or \code{li_flavour = "seqinr"}: \code{"drop"} (default)
+ends every pair before the terminal stop codons, as everywhere else in COAL; \code{"compare"} takes the two
+terminal stop codons as the last compared codon column when both genes end in a stop codon. That is what
+orthologr 0.4.3 does (it translates the stop codon to \code{*}, aligns it and lets PAL2NAL thread it), so
+\code{"compare"} is needed to reproduce its numbers; pairs whose two stop codons differ (\code{TAA} against \code{TGA})
+get another dN by it.}
 }
 \value{
 A list:

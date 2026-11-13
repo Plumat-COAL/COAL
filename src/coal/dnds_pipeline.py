@@ -823,7 +823,8 @@ class _Run:
                "-j", str(self.jobs), "--digits", str(a.digits), "--matrix", a.matrix, "--gap-open", str(a.gap_open),
                "--gap-extend", str(a.gap_extend), "--end-gaps", a.end_gaps, "--max-cells", str(a.max_cells),
                "--flanks", a.flanks, "--yn-flavour", a.yn_flavour, "--yn-weighting", str(a.yn_weighting),
-               "--comeron-flavour", a.comeron_flavour, "--li-flavour", a.li_flavour]
+               "--comeron-flavour", a.comeron_flavour, "--li-flavour", a.li_flavour,
+               "--terminal-stops", a.terminal_stops]
         for m in a.method:
             cmd += ["-m", m]
         if group_column:
@@ -1550,6 +1551,9 @@ def build_parser() -> argparse.ArgumentParser:
                         "orthologr's gestimator")
     g.add_argument("--li-flavour", "--li-flavor", default="coal", choices=("coal", "seqinr"),
                    help="Li with COAL's stop-codon policy (default) or reading stop codons as seqinr::kaks does")
+    g.add_argument("--terminal-stops", default="drop", choices=("drop", "compare"),
+                   help="with --comeron-flavour gestimator / --li-flavour seqinr: compare takes the two terminal "
+                        "stop codons of a pair as the last compared column (as orthologr 0.4.3); default: drop")
     g = common.add_argument_group("Pairwise protein alignment (COAL's global aligner)")
     g.add_argument("--preset", choices=("needle", "pwalign"),
                    help="needle: BLOSUM62, open 10, extend 0.5, end gaps free (the default); pwalign: open 14, "
@@ -1761,7 +1765,8 @@ def _namespace(mode: str, required: list[str], options: dict) -> argparse.Namesp
     why = _method_code_error(a)
     if why:
         raise ValueError(why)
-    for opt, allowed in (("comeron_flavour", ("coal", "gestimator")), ("li_flavour", ("coal", "seqinr"))):
+    for opt, allowed in (("comeron_flavour", ("coal", "gestimator")), ("li_flavour", ("coal", "seqinr")),
+                         ("terminal_stops", ("drop", "compare"))):
         if getattr(a, opt) not in allowed:
             raise ValueError(f"{opt} {getattr(a, opt)!r}: choose from {', '.join(allowed)}")
     return a

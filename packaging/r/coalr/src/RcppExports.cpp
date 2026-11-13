@@ -11,8 +11,8 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
 // coalr_dnds
-Rcpp::List coalr_dnds(SEXP cds, SEXP member_ids, Rcpp::IntegerVector members, SEXP rows, Rcpp::IntegerVector unit_start, Rcpp::IntegerVector unit_pairs, Rcpp::IntegerVector pl_start, Rcpp::IntegerVector pl_i, Rcpp::IntegerVector pl_j, Rcpp::CharacterVector methods, int table, int threads, Rcpp::List align, std::string yn_flavour, bool yn_weighting, std::string comeron_flavour, std::string li_flavour, bool keep_alignments);
-RcppExport SEXP _coalr_coalr_dnds(SEXP cdsSEXP, SEXP member_idsSEXP, SEXP membersSEXP, SEXP rowsSEXP, SEXP unit_startSEXP, SEXP unit_pairsSEXP, SEXP pl_startSEXP, SEXP pl_iSEXP, SEXP pl_jSEXP, SEXP methodsSEXP, SEXP tableSEXP, SEXP threadsSEXP, SEXP alignSEXP, SEXP yn_flavourSEXP, SEXP yn_weightingSEXP, SEXP comeron_flavourSEXP, SEXP li_flavourSEXP, SEXP keep_alignmentsSEXP) {
+Rcpp::List coalr_dnds(SEXP cds, SEXP member_ids, Rcpp::IntegerVector members, SEXP rows, Rcpp::IntegerVector unit_start, Rcpp::IntegerVector unit_pairs, Rcpp::IntegerVector pl_start, Rcpp::IntegerVector pl_i, Rcpp::IntegerVector pl_j, Rcpp::CharacterVector methods, int table, int threads, Rcpp::List align, std::string yn_flavour, bool yn_weighting, std::string comeron_flavour, std::string li_flavour, bool compare_terminal_stops, bool keep_alignments);
+RcppExport SEXP _coalr_coalr_dnds(SEXP cdsSEXP, SEXP member_idsSEXP, SEXP membersSEXP, SEXP rowsSEXP, SEXP unit_startSEXP, SEXP unit_pairsSEXP, SEXP pl_startSEXP, SEXP pl_iSEXP, SEXP pl_jSEXP, SEXP methodsSEXP, SEXP tableSEXP, SEXP threadsSEXP, SEXP alignSEXP, SEXP yn_flavourSEXP, SEXP yn_weightingSEXP, SEXP comeron_flavourSEXP, SEXP li_flavourSEXP, SEXP compare_terminal_stopsSEXP, SEXP keep_alignmentsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::traits::input_parameter< SEXP >::type cds(cdsSEXP);
@@ -32,8 +32,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool >::type yn_weighting(yn_weightingSEXP);
     Rcpp::traits::input_parameter< std::string >::type comeron_flavour(comeron_flavourSEXP);
     Rcpp::traits::input_parameter< std::string >::type li_flavour(li_flavourSEXP);
+    Rcpp::traits::input_parameter< bool >::type compare_terminal_stops(compare_terminal_stopsSEXP);
     Rcpp::traits::input_parameter< bool >::type keep_alignments(keep_alignmentsSEXP);
-    rcpp_result_gen = Rcpp::wrap(coalr_dnds(cds, member_ids, members, rows, unit_start, unit_pairs, pl_start, pl_i, pl_j, methods, table, threads, align, yn_flavour, yn_weighting, comeron_flavour, li_flavour, keep_alignments));
+    rcpp_result_gen = Rcpp::wrap(coalr_dnds(cds, member_ids, members, rows, unit_start, unit_pairs, pl_start, pl_i, pl_j, methods, table, threads, align, yn_flavour, yn_weighting, comeron_flavour, li_flavour, compare_terminal_stops, keep_alignments));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -122,7 +123,7 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_coalr_coalr_dnds", (DL_FUNC) &_coalr_coalr_dnds, 18},
+    {"_coalr_coalr_dnds", (DL_FUNC) &_coalr_coalr_dnds, 19},
     {"_coalr_coalr_summary", (DL_FUNC) &_coalr_coalr_summary, 7},
     {"_coalr_coalr_kaks", (DL_FUNC) &_coalr_coalr_kaks, 9},
     {"_coalr_coalr_align", (DL_FUNC) &_coalr_coalr_align, 4},

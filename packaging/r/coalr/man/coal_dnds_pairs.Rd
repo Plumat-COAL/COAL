@@ -21,6 +21,7 @@ coal_dnds_pairs(
   yn_weighting = TRUE,
   comeron_flavour = c("coal", "gestimator"),
   li_flavour = c("coal", "seqinr"),
+  terminal_stops = c("drop", "compare"),
   keep_alignments = FALSE
 )
 }
@@ -68,6 +69,13 @@ reproducing published orthologr results.}
 
 \item{li_flavour}{For \code{"Li"}: \code{"coal"} (default) applies COAL's policy; \code{"seqinr"} compares stop codons as
 \code{seqinr::kaks()} does. In both, seqinr's sentinel 9.999999 is \code{NA}.}
+
+\item{terminal_stops}{Only with \code{comeron_flavour = "gestimator"} or \code{li_flavour = "seqinr"}: \code{"drop"} (default)
+ends every pair before the terminal stop codons, as everywhere else in COAL; \code{"compare"} takes the two
+terminal stop codons as the last compared codon column when both genes end in a stop codon. That is what
+orthologr 0.4.3 does (it translates the stop codon to \code{*}, aligns it and lets PAL2NAL thread it), so
+\code{"compare"} is needed to reproduce its numbers; pairs whose two stop codons differ (\code{TAA} against \code{TGA})
+get another dN by it.}
 
 \item{keep_alignments}{\code{TRUE}: also return the protein and codon alignment of every pair, as attribute
 \code{"alignments"} (a data frame: \code{seq1}, \code{seq2}, \code{protein1}, \code{protein2}, \code{codon1}, \code{codon2}).}

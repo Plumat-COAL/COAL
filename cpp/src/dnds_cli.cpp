@@ -65,7 +65,8 @@ const char* CODON_DNDS_HELP =
     "                 [--codon-out FILE] [--codon-dir DIR] [--kaks-out FILE] [--failures FILE] [--digits N]\n"
     "                 [--matrix NAME] [--gap-open X] [--gap-extend X] [--end-gaps free|penalized] [--max-cells N]\n"
     "                 [--flanks gap|align] [--yn-flavour kaks|paml] [--yn-weighting 0|1]\n"
-    "                 [--comeron-flavour coal|gestimator] [--li-flavour coal|seqinr] [-q]\n"
+    "                 [--comeron-flavour coal|gestimator] [--li-flavour coal|seqinr]\n"
+    "                 [--terminal-stops drop|compare] [-q]\n"
     "\n"
     "Protein alignment -> codon alignment -> Ka/Ks for groups of coding sequences (the engine of\n"
     "`coal pipeline`, docs/pipeline.md). GROUPS (a file, or standard input when -i is - or absent) is\n"
@@ -83,7 +84,12 @@ const char* CODON_DNDS_HELP =
     "  -o FILE          the pair table: [NAME] seq1 seq2 method dN dS dNdS SE_dN SE_dS N_sites S_sites Nd Sd\n"
     "                   codons_compared prot_aln_length prot_identity status note\n"
     "  --group-column NAME  write the group id as a first column called NAME\n"
-    "  -m METHOD        YN (default), NG, LWL, MLWL, LPB, MLPB, MYN; repeat for several\n"
+    "  -m METHOD        YN (default), NG, LWL, MLWL, LPB, MLPB, MYN, Comeron (alias C95), Li; repeat for\n"
+    "                   several (Comeron and Li: genetic code 1 only)\n"
+    "  --comeron-flavour F, --li-flavour F  as in `coal dnds` (coal, the default; gestimator; seqinr)\n"
+    "  --terminal-stops S  with the flavours gestimator / seqinr: drop (default) ends a pair before the\n"
+    "                   terminal stop codons; compare takes the two stop codons as the last compared column\n"
+    "                   when both genes end in one (as orthologr 0.4.3 does)\n"
     "  -c, --codontable TABLE  NCBI genetic code (default 1)\n"
     "  -j, --jobs N     threads (default: all hardware threads)\n"
     "  --codon-out FILE the codon alignments, one after the other (pairs: records 1+2, 3+4, ...)\n"
@@ -568,6 +574,9 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
         } else if (s == "--li-flavour" || s == "--li-flavor") {
             if (!it.value(v) || (v != "coal" && v != "seqinr")) return usage(prog, s + ": expected coal or seqinr");
             c.opt.kaks.li_flavour = v == "coal" ? kaks::LiFlavour::coal : kaks::LiFlavour::seqinr;
+        } else if (s == "--terminal-stops") {
+            if (!it.value(v) || (v != "drop" && v != "compare")) return usage(prog, s + ": expected drop or compare");
+            c.opt.compare_terminal_stops = v == "compare";
         } else if (s == "-q" || s == "--quiet") {
             c.quiet = true;
         } else {

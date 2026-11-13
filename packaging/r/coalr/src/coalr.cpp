@@ -232,7 +232,8 @@ Rcpp::List coalr_dnds(SEXP cds, SEXP member_ids, Rcpp::IntegerVector members, SE
                       Rcpp::IntegerVector unit_start, Rcpp::IntegerVector unit_pairs, Rcpp::IntegerVector pl_start,
                       Rcpp::IntegerVector pl_i, Rcpp::IntegerVector pl_j, Rcpp::CharacterVector methods, int table,
                       int threads, Rcpp::List align, std::string yn_flavour, bool yn_weighting,
-                      std::string comeron_flavour, std::string li_flavour, bool keep_alignments) {
+                      std::string comeron_flavour, std::string li_flavour, bool compare_terminal_stops,
+                      bool keep_alignments) {
     if (TYPEOF(cds) != STRSXP || TYPEOF(member_ids) != STRSXP) Rcpp::stop("internal: cds and ids must be character");
     const bool have_rows = !Rf_isNull(rows);
     if (have_rows && (TYPEOF(rows) != STRSXP || XLENGTH(rows) != members.size()))
@@ -249,6 +250,7 @@ Rcpp::List coalr_dnds(SEXP cds, SEXP member_ids, Rcpp::IntegerVector members, SE
     need_code(table);
     opt.align = need_align(align);
     opt.kaks = need_kaks(yn_flavour, yn_weighting, comeron_flavour, li_flavour);
+    opt.compare_terminal_stops = compare_terminal_stops;
     const std::vector<kaks::Method> ms = opt.methods;
     const size_t nm = ms.size();
     const int nthreads = resolve_threads(threads);

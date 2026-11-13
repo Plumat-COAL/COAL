@@ -330,30 +330,48 @@ class TestComeronLiPipeline(ComeronLiBase):
             rows = [l.split("\t") for l in out.read_text(encoding="utf-8").splitlines()]
             self.assertEqual([r[2] for r in rows[1:]], ["Comeron", "Li"])
             default = rows[1][3:5]
-            dp.codon_dnds([("g1", [("x", a), ("y", b)])], str(out), method=["Comeron"], cpp=str(self.bin),
-                          extra_args=["--comeron-flavour", "gestimator"])
-            rows = [l.split("\t") for l in out.read_text(encoding="utf-8").splitlines()]
-            self.assertEqual(rows[1][2], "Comeron")
-            self.assertNotEqual(rows[1][3:5], default)   # the stop codons TAA / TGA are compared there
-            # ... as the last codon column, which is what `coal dnds` gives for the rows with their stop codons
             axt = Path(tmp) / "p.axt"
-            axt.write_text(f"x&y\n{a}\n{b}\n\n", encoding="utf-8")
-            direct = self.run_cpp("dnds", axt, "-q", "-m", "Comeron", "-m", "Li", "--comeron-flavour",
-                                  "gestimator", "--li-flavour", "seqinr").stdout.splitlines()
-            self.assertEqual(rows[1][3:5], direct[1].split("\t")[3:5])
-            dp.codon_dnds([("g1", [("x", a), ("y", b)])], str(out), method=["Li"], cpp=str(self.bin),
-                          extra_args=["--li-flavour", "seqinr"])
-            rows = [l.split("\t") for l in out.read_text(encoding="utf-8").splitlines()]
-            self.assertEqual(rows[1][3:5], direct[2].split("\t")[3:5])
-            # one gene without a terminal stop: no column to restore, the pair is compared up to the stop
-            dp.codon_dnds([("g1", [("x", a[:-3]), ("y", b)])], str(out), method=["Comeron"], cpp=str(self.bin),
-                          extra_args=["--comeron-flavour", "gestimator"])
-            rows = [l.split("\t") for l in out.read_text(encoding="utf-8").splitlines()]
-            axt.write_text(f"x&y\n{a[:-3]}\n{b[:-3]}\n\n", encoding="utf-8")
-            direct = self.run_cpp("dnds", axt, "-q", "-m", "Comeron", "--comeron-flavour",
-                                  "gestimator").stdout.splitlines()
-            self.assertEqual(rows[1][3:5], direct[1].split("\t")[3:5])
 
+            def direct(x, y, *flags):
+                axt.write_text(f"x&y\n{x}\n{y}\n\n", encoding="utf-8")
+                lines = self.run_cpp("dnds", axt, "-q", *flags).stdout.splitlines()
+                return [l.split("\t")[3:5] for l in lines[1:]]
+
+            def piped(x, y, method, *flags):
+                dp.codon_dnds([("g1", [("x", x), ("y", y)])], str(out), method=[method], cpp=str(self.bin),
+                              extra_args=list(flags))
+                rows = [l.split("\t") for l in out.read_text(encoding="utf-8").splitlines()]
+                self.assertEqual(rows[1][2], method)
+                return rows[1][3:5]
+
+            gest = ("--comeron-flavour", "gestimator")
+            seqi = ("--li-flavour", "seqinr")
+            # the reference flavours end the pair before the terminal stop codons, like everything in COAL ...
+            self.assertEqual(piped(a, b, "Comeron", *gest), direct(a[:-3], b[:-3], "-m", "Comeron", *gest)[0])
+            self.assertEqual(piped(a, b, "Li", *seqi), direct(a[:-3], b[:-3], "-m", "Li", *seqi)[0])
+            # ... unless --terminal-stops compare: TAA against TGA is then the last compared column, which is
+            # what `coal dnds` gives for the rows with their stop codons (and what orthologr 0.4.3 computes)
+            with_stops = piped(a, b, "Comeron", *gest, "--terminal-stops", "compare")
+            self.assertEqual(with_stops, direct(a, b, "-m", "Comeron", *gest)[0])
+            self.assertNotEqual(with_stops, piped(a, b, "Comeron", *gest))
+            self.assertEqual(piped(a, b, "Li", *seqi, "--terminal-stops", "compare"),
+                             direct(a, b, "-m", "Li", *seqi)[0])
+            # one gene without a terminal stop: no column to restore
+            self.assertEqual(piped(a[:-3], b, "Comeron", *gest, "--terminal-stops", "compare"),
+                             direct(a[:-3], b[:-3], "-m", "Comeron", *gest)[0])
+            # the default flavours never compare stop codons, whatever the option says
+            self.assertEqual(piped(a, b, "Comeron", "--terminal-stops", "compare"), default)
+            self.assertEqual(piped(a, b, "YN", "--terminal-stops", "compare"), piped(a, b, "YN"))
+
+    def test_terminal_stops_option(self):
+        from coal import dnds_pipeline as dp
+        a = dp._namespace("pairs", ["--query", "q", "--subject", "s", "-o", "o"], {"terminal_stops": "compare"})
+        self.assertEqual(a.terminal_stops, "compare")
+        with self.assertRaises(ValueError):
+            dp._namespace("pairs", ["--query", "q", "--subject", "s", "-o", "o"], {"terminal_stops": "x"})
+        r = self.run_cpp("codon-dnds", "-o", "x.tsv", "--terminal-stops", "maybe", check=False)
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("--terminal-stops", self.run_cpp("codon-dnds", "-h").stdout)
 
 if __name__ == "__main__":
     unittest.main()
