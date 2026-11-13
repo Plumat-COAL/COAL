@@ -19,6 +19,8 @@ coal_dnds_pairs(
   max_cells = 4e+09,
   yn_flavour = c("kaks", "paml"),
   yn_weighting = TRUE,
+  comeron_flavour = c("coal", "gestimator"),
+  li_flavour = c("coal", "seqinr"),
   keep_alignments = FALSE
 )
 }
@@ -31,8 +33,11 @@ When an ID occurs twice the first record is used.}
 and subject ID. \code{NULL}: the i-th query with the i-th subject.}
 
 \item{methods}{Ka/Ks methods: any of \code{"YN"} (Yang & Nielsen 2000, the default), \code{"NG"}, \code{"LWL"}, \code{"MLWL"},
-\code{"LPB"}, \code{"MLPB"}, \code{"MYN"}; \code{"ALL"} for all seven. With several methods a pair's rows come in KaKs_Calculator's
-order (NG, LWL, MLWL, LPB, MLPB, YN, MYN).}
+\code{"LPB"}, \code{"MLPB"}, \code{"MYN"} (KaKs_Calculator's methods; \code{"ALL"} for these seven), \code{"Comeron"} (Comeron 1995
+as libsequence's gestimator computes it, the default method of the R package orthologr; alias \code{"C95"}) and
+\code{"Li"} (Li 1993 as \code{seqinr::kaks()} computes it). Names are read in any case. With several methods a pair's
+rows come in the order NG, LWL, MLWL, LPB, MLPB, YN, MYN, Comeron, Li. Comeron and Li are implemented for
+the standard genetic code only (\code{code = 1}).}
 
 \item{code}{NCBI genetic code number (1 = standard), used for translation, codon threading and Ka/Ks.}
 
@@ -54,6 +59,15 @@ limit. The table takes half a byte per cell and thread.}
 
 \item{yn_flavour, yn_weighting}{Where KaKs_Calculator and PAML's yn00 differ for YN/MYN: \code{"kaks"} (default) or
 \code{"paml"}; \code{yn_weighting = FALSE} gives equal pathway weights (yn00's default control file).}
+
+\item{comeron_flavour}{For \code{"Comeron"}: \code{"coal"} (default) applies COAL's policy (a terminal stop codon is
+dropped, columns with an internal stop are skipped) and gives \code{NA} with status \code{saturated} where the
+correction is undefined; \code{"gestimator"} gives the numbers of orthologr 0.4.3's \code{gestimator()} (stop codons
+are compared like other codons, an undefined logarithm is replaced by 0; status \code{warning} then), for
+reproducing published orthologr results.}
+
+\item{li_flavour}{For \code{"Li"}: \code{"coal"} (default) applies COAL's policy; \code{"seqinr"} compares stop codons as
+\code{seqinr::kaks()} does. In both, seqinr's sentinel 9.999999 is \code{NA}.}
 
 \item{keep_alignments}{\code{TRUE}: also return the protein and codon alignment of every pair, as attribute
 \code{"alignments"} (a data frame: \code{seq1}, \code{seq2}, \code{protein1}, \code{protein2}, \code{codon1}, \code{codon2}).}

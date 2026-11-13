@@ -12,7 +12,9 @@ coal_kaks(
   threads = getOption("coalr.threads", 1L),
   yn_flavour = c("kaks", "paml"),
   yn_weighting = TRUE,
-  details = FALSE
+  details = FALSE,
+  comeron_flavour = c("coal", "gestimator"),
+  li_flavour = c("coal", "seqinr")
 )
 }
 \arguments{
@@ -21,7 +23,8 @@ pair. Each pair's two rows must have the same length, a multiple of 3; \code{-} 
 Alternatively give one alignment in \code{aligned1} (two or more rows) and leave \code{aligned2} out: every pair of its
 rows is computed (1-2, 1-3, ..., 2-3, ...).}
 
-\item{method}{One or more of \code{"YN"}, \code{"NG"}, \code{"LWL"}, \code{"MLWL"}, \code{"LPB"}, \code{"MLPB"}, \code{"MYN"}, or \code{"ALL"}.}
+\item{method}{One or more of \code{"YN"}, \code{"NG"}, \code{"LWL"}, \code{"MLWL"}, \code{"LPB"}, \code{"MLPB"}, \code{"MYN"} (or \code{"ALL"} for
+these seven), \code{"Comeron"} (alias \code{"C95"}) and \code{"Li"}; see \code{\link[=coal_dnds_pairs]{coal_dnds_pairs()}}.}
 
 \item{code}{NCBI genetic code number (1 = standard), used for translation, codon threading and Ka/Ks.}
 
@@ -32,6 +35,9 @@ rows is computed (1-2, 1-3, ..., 2-3, ...).}
 
 \item{details}{\code{TRUE}: add KaKs_Calculator's further columns (\code{p_fisher}, \code{length}, \code{substitutions}, \code{kappa},
 \code{divergence}, \code{gc}) and the counts of skipped columns.}
+
+\item{comeron_flavour, li_flavour}{Which reading of the pair \code{"Comeron"} and \code{"Li"} follow: COAL's policy
+(\code{"coal"}, the default) or the reference program's (\code{"gestimator"}, \code{"seqinr"}); see \code{\link[=coal_dnds_pairs]{coal_dnds_pairs()}}.}
 }
 \value{
 A data frame, one row per pair and method: \code{seq1}, \code{seq2} (the names, or the positions), \code{method},

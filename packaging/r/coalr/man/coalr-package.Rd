@@ -79,6 +79,12 @@ Other contributors:
   \item Kristian K Ullrich (kakscalculator2 2.0.1) [contributor]
   \item Beijing Institute of Genomics of CAS (KaKs_Calculator 2.0) [copyright holder]
   \item Ziheng Yang (PAML yn00.c, from which src/coal/kaks.cpp is derived) [contributor, copyright holder]
+  \item Kevin Thornton (libsequence, from which src/coal/kaks_comeron.cpp is derived) [contributor, copyright holder]
+  \item Sarah Scharfenberg (the copy of libsequence in the R package orthologr (gestimator)) [contributor]
+  \item Hajk-Georg Drost (the copy of libsequence in the R package orthologr (gestimator)) [contributor]
+  \item Manolo Gouy (src/kaks.c of the R package seqinr, from which src/coal/kaks_li.cpp is derived) [contributor]
+  \item Jean R. Lobry (R package seqinr) [contributor, copyright holder]
+  \item Delphine Charif (R package seqinr) [contributor]
 }
 
 }

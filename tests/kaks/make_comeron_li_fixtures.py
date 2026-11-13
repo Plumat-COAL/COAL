@@ -12,6 +12,9 @@ sets comeron_li_cases, edge_cases and sim_small:
                                     column names are in that script)
   golden/<set>.coal.comeron_li.tsv  `coal dnds -m Comeron -m Li`, the default flavours (regression)
   golden/<set>.coal.comeron_li.kaks `coal kaks -m Comeron -m Li` (regression of the 22-column format)
+and, from the references of comeron_li_cases, the fixture of the R package's tests:
+  packaging/r/coalr/tests/testthat/fixtures/comeron_li_refs.tsv   (139 pairs: the rows, gestimator's dN, dS and
+                                    ratio, seqinr's ka, ks, vka and vks)
 """
 from __future__ import annotations
 
@@ -136,6 +139,24 @@ def main() -> int:
                             "--digits", "15", "-o", str(gold / f"{s}.coal.comeron_li.tsv")], check=True)
             subprocess.run([a.coal_cpp, "kaks", "-i", str(src), "-m", "Comeron", "-m", "Li", "-q",
                             "-o", str(gold / f"{s}.coal.comeron_li.kaks")], check=True)
+    ref_g, ref_s = gold / "comeron_li_cases.gestimator_ref.tsv", gold / "comeron_li_cases.seqinr_ref.tsv"
+    if ref_g.exists() and ref_s.exists():
+        g = {l.split("\t")[0]: l.rstrip("\n").split("\t") for l in open(ref_g)}
+        q = {l.split("\t")[0]: [x.strip() for x in l.rstrip("\n").split("\t")] for l in open(ref_s)}
+        keep, seen = [], {}
+        for name, s1, s2 in cases():
+            kind = name.split("_")[0] if name.split("_")[0] in ("stops", "multi") else (
+                "gene" if name.startswith("gene") else "hand")
+            seen[kind] = seen.get(kind, 0) + 1
+            if seen[kind] <= {"hand": 1000, "stops": 60, "multi": 30, "gene": 10}[kind]:
+                keep.append((name, s1, s2))
+        fx = ROOT / "packaging" / "r" / "coalr" / "tests" / "testthat" / "fixtures" / "comeron_li_refs.tsv"
+        with open(fx, "w", newline="\n") as f:
+            f.write("name\tseq1\tseq2\tg_dN\tg_dS\tg_dNdS\ts_ka\ts_ks\ts_vka\ts_vks\n")
+            for name, s1, s2 in keep:
+                gv = g[name][1:4] if g[name][1] != "ERR" else ["ERR"] * 3
+                sv = q[name][1:5] if q[name][1] != "ERR" else ["ERR"] * 4
+                f.write("\t".join([name, s1, s2] + gv + sv) + "\n")
     return 0
 
 
