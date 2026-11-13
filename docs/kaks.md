@@ -709,6 +709,12 @@ taken on a 16-thread desktop. KaKs_Calculator is single-threaded. Each figure is
 | LPB | 0.67 | 0.09 | 1,484 | 11,654 | 7.9x |
 | MLPB | 0.81 | 0.09 | 1,236 | 11,435 | 9.2x |
 
+`Comeron` and `Li` are table look-ups per codon column: 0.08 CPU s each for the 999 pairs on the same machine
+(2026-11-13; about 13,000 pairs per CPU-second, the same as NG and the LWL family; gestimator's code compiled
+on its own takes 0.09 s). Reading the pair for the two reference flavours (the columns with stop codons, the
+counts of Kimura's distance) is part of preparing every pair and adds about 0.01 s per 1,000 pairs to the
+other methods.
+
 YN00 and MYN spend about 90 % of their time on P(t) (a 61 × 61 symmetric eigendecomposition per iteration, as in
 both reference tools), so their single-thread gain is modest. The gain comes from threads (`-j`): pairs are
 independent and computed on the thread pool. In a pipeline, Ka/Ks takes a small share of the time (in the orthologr 0.4.3
