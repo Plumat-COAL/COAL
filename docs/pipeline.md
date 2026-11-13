@@ -221,6 +221,20 @@ line ends. Rows are in input order (pairs: the query file's order; clusters: the
 | `protein_alignments/<cluster>.fasta` | clusters | `--keep-protein-alignments`: the protein MSA of each cluster as it was used (the rows of Clustal Omega / MAFFT for the members that could be used; the engine's pairwise alignment for a cluster of two), under the same file names as `codon_alignments/`; not for clusters aligned pairwise |
 | `work/` | both | proteins, DIAMOND tables, logs of every external command (`work/logs/`), the `--resume` state |
 
+**A file is complete or absent.** Every table and alignment file is written as `NAME.tmp` and renamed when it is
+complete: the engine's files (`dnds.tsv`, `dnds.kaks`, `codon_alignments.fasta`, `protein_alignments.fasta`) when
+the Ka/Ks stage has ended with success, each per-cluster alignment file when it is written, `clusters.tsv` when
+DIAMOND has ended, and the tables COAL writes itself (`genes.tsv`, `orthologs.tsv`, `unpaired.tsv`,
+`cluster_summary.tsv`, `report.json`) with their last line; `failed.tsv` is `failed.tsv.tmp` while the run goes on
+and gets its name when the run ends, also when it ends with an error. So after a stage that failed (a full disk,
+an engine error) or was interrupted there is **no cut-off table or alignment under a final name**: the file is not
+there, the report lists only the files that are, and the `.tmp` files are removed (what a `kill -9` leaves is
+removed by the next run into the folder, which knows the names from `work/outputs.json`). The temporary files are
+created anew (`O_EXCL`, and `O_NOFOLLOW` where the system has it), and the rename replaces whatever has the final
+name: **a symbolic link in the output folder is replaced, never written through** (an output name that is a link
+to another file leaves that file untouched). `report.json` shows the engine's command line with the `.tmp` names
+and `--new-files`, as it ran.
+
 **One run per folder, and one run's files only.** A run takes the lock `<out_dir>.coal-lock` (next to the real
 folder: a symbolic link to the folder and the folder are one output; COAL's convention for `-o` files) and a
 second run into the same folder is refused with exit 1 while the first one is alive. The lock is one line,

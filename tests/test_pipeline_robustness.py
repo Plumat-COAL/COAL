@@ -144,7 +144,7 @@ class OsErrors(PipelineCase):
                     raise OSError(errno.ENOSPC, os.strerror(errno.ENOSPC), self_inner.name)
 
         def fake_open(path, *a, **k):
-            if str(path).endswith("failed.tsv") and a and "w" in a[0]:
+            if str(path).endswith("failed.tsv.tmp") and a and "w" in a[0]:   # (written as .tmp, named at the end)
                 return Full(io.FileIO(path, "w"), encoding="utf-8", newline="\n")
             return real_open(path, *a, **k)
         with mock.patch("builtins.open", fake_open):
@@ -154,6 +154,9 @@ class OsErrors(PipelineCase):
         self.assertRegex(err, r"coal pipeline: error: cannot write .*failed\.tsv: (?i:no space left)")
         rep = json.loads((self.tmp / "o" / "report.json").read_text(encoding="utf-8"))
         self.assertEqual((rep["exit_code"], rep["status"]), (1, "failed"))
+        # a failures table that could not be completed is not there under its name (nor as .tmp)
+        self.assertFalse((self.tmp / "o" / "failed.tsv").exists())
+        self.assertFalse((self.tmp / "o" / "failed.tsv.tmp").exists())
 
     def test_when_the_report_cannot_be_written(self):
         real_dump = json.dump

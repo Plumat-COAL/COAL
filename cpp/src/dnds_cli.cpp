@@ -15,9 +15,12 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <ostream>
+#include <streambuf>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -67,7 +70,7 @@ const char* CODON_DNDS_HELP =
     "                 [--matrix NAME] [--gap-open X] [--gap-extend X] [--end-gaps free|penalized] [--max-cells N]\n"
     "                 [--flanks gap|align] [--yn-flavour kaks|paml] [--yn-weighting 0|1]\n"
     "                 [--comeron-flavour coal|gestimator] [--li-flavour coal|seqinr]\n"
-    "                 [--terminal-stops drop|compare] [--min-codons N] [--max-ds X] [-q]\n"
+    "                 [--terminal-stops drop|compare] [--min-codons N] [--max-ds X] [--new-files] [-q]\n"
     "\n"
     "Protein alignment -> codon alignment -> Ka/Ks for groups of coding sequences (the engine of\n"
     "`coal pipeline`, docs/pipeline.md). GROUPS (a file, or standard input when -i is - or absent) is\n"
@@ -99,6 +102,8 @@ const char* CODON_DNDS_HELP =
     "                   the same layout: the same groups, records and order (a codon row is 3 x its protein row)\n"
     "  --kaks-out FILE  the same results in KaKs_Calculator's format (pairs named seq1&seq2)\n"
     "  --failures FILE  genes and groups that could not be used: group seq code message\n"
+    "  --new-files      create every output file anew: a file or symbolic link of that name is removed first,\n"
+    "                   never written through (`coal pipeline` writes NAME.tmp this way and renames it)\n"
     "  --digits N       significant digits (default 8)\n"
     "  --min-codons N, --max-ds X  as in `coal dnds`: flag estimates from fewer than N compared codons or with\n"
     "                   dS above X (status warning and a note; no row dropped, no number changed; default off)\n"
@@ -375,8 +380,86 @@ int translate_main_(const std::vector<std::string>& argv) {
 }
 
 // ------------------------------------------------------------------------------------------------ codon-dnds
+// An output file of codon-dnds. Plain: an ordinary file stream. With --new-files (what `coal pipeline` passes):
+// the file is created anew through open_new_file(): a leftover or a symbolic link of that name is removed, never
+// written through, and the file is made with O_EXCL | O_NOFOLLOW. The pipeline gives names ending in .tmp and
+// renames each file when the stage has succeeded, so no truncated table or alignment is ever under a final name.
+class NewFileBuf : public std::streambuf {
+public:
+    NewFileBuf() : buf_(1 << 16) { setp(buf_.data(), buf_.data() + buf_.size()); }
+    ~NewFileBuf() override { close(); }
+    bool open(const std::string& path) {
+        fd_ = open_new_file(path);
+        return fd_ >= 0;
+    }
+    bool is_open() const { return fd_ >= 0; }
+    bool close() {
+        if (fd_ < 0) return true;
+        bool ok = flush_buffer();
+        ok = close_fd_checked(fd_) && ok;
+        fd_ = -1;
+        return ok;
+    }
+
+protected:
+    int_type overflow(int_type ch) override {
+        if (!flush_buffer()) return traits_type::eof();
+        if (!traits_type::eq_int_type(ch, traits_type::eof())) {
+            *pptr() = traits_type::to_char_type(ch);
+            pbump(1);
+        }
+        return traits_type::not_eof(ch);
+    }
+    std::streamsize xsputn(const char* data, std::streamsize n) override {
+        if (n < epptr() - pptr()) {
+            std::memcpy(pptr(), data, (size_t)n);
+            pbump((int)n);
+            return n;
+        }
+        if (!flush_buffer() || !write_fd(fd_, data, (size_t)n)) return 0;
+        return n;
+    }
+    int sync() override { return flush_buffer() ? 0 : -1; }
+
+private:
+    bool flush_buffer() {
+        const size_t n = (size_t)(pptr() - pbase());
+        if (n == 0) return true;
+        if (fd_ < 0 || !write_fd(fd_, pbase(), n)) return false;
+        setp(buf_.data(), buf_.data() + buf_.size());
+        return true;
+    }
+    int fd_ = -1;
+    std::vector<char> buf_;
+};
+
+class OutFile : public std::ostream {
+public:
+    OutFile() : std::ostream(nullptr) {}
+    void open(const std::string& path, bool anew) {
+        anew_ = anew;
+        open_ = anew ? nbuf_.open(path) : fbuf_.open(path, std::ios::out | std::ios::binary) != nullptr;
+        rdbuf(anew ? static_cast<std::streambuf*>(&nbuf_) : &fbuf_);
+        if (!open_) setstate(std::ios::failbit);
+    }
+    bool is_open() const { return open_; }
+    void close() {
+        if (!open_) return;
+        flush();
+        const bool ok = anew_ ? nbuf_.close() : fbuf_.close() != nullptr;
+        open_ = false;
+        if (!ok) setstate(std::ios::failbit);
+    }
+
+private:
+    std::filebuf fbuf_;
+    NewFileBuf nbuf_;
+    bool anew_ = false, open_ = false;
+};
+
 struct Cli {
     std::string in, out, group_column, codon_out, codon_dir, protein_out, protein_dir, kaks_out, failures;
+    bool new_files = false;
     dnds::Options opt;
     int jobs = 0;
     int digits = 8;
@@ -541,6 +624,8 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
             if (!it.value(c.kaks_out)) return usage(prog, s + ": expected one argument");
         } else if (s == "--failures") {
             if (!it.value(c.failures)) return usage(prog, s + ": expected one argument");
+        } else if (s == "--new-files") {
+            c.new_files = true;
         } else if (s == "-m" || s == "--method") {
             if (!it.value(v)) return usage(prog, s + ": expected one argument");
             Method m;
@@ -628,12 +713,19 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
             if (!fin) throw InputError(open_error(c.in), "file_error");
         }
         GroupReader reader(from_stdin ? std::cin : fin, from_stdin ? "<stdin>" : c.in);
-        auto open_out = [](std::ofstream& f, const std::string& path) {
+        auto open_out = [&c](OutFile& f, const std::string& path) {
             if (path.empty()) return;
-            f.open(path, std::ios::binary);
+            f.open(path, c.new_files);
             if (!f) throw InputError(cannot_write(path), "file_error");
         };
-        std::ofstream fout, fcodon, fprot, fkaks, ffail;
+        OutFile fout, fcodon, fprot, fkaks, ffail;
+#ifdef COAL_TEST_HOOKS
+        // Test hook (tests/test_pipeline_atomic.py): COAL_TEST_DNDS_FAIL_AFTER_GROUPS=k makes the run fail, as a
+        // full disk does, when k groups have been written (everything written so far is flushed first).
+        const char* fail_after_v = test_hook_env("COAL_TEST_DNDS_FAIL_AFTER_GROUPS");
+        const long long fail_after = fail_after_v ? std::atoll(fail_after_v) : -1;
+        long long groups_written = 0;
+#endif
         open_out(fout, c.out);
         open_out(fcodon, c.codon_out);
         open_out(fprot, c.protein_out);
@@ -833,8 +925,12 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
                     for (int what = 0; what < 2; ++what) {   // 0: codon, 1: protein (the same file name in both)
                         const std::string& dir = what == 0 ? c.codon_dir : c.protein_dir;
                         if (dir.empty() || (what == 1 && !prot)) continue;
+                        // Each file is written as NAME.fasta.tmp and renamed when it is complete: a run
+                        // that fails or is killed leaves no cut-off alignment under a final name.
                         const std::string path = dir + "/" + name + ".fasta";
-                        std::ofstream f(path, std::ios::binary);
+                        const std::string tmp = path + ".tmp";
+                        OutFile f;
+                        f.open(tmp, c.new_files);
                         if (!f) throw InputError(cannot_write(path), "file_error");
                         for (size_t k = 0; k < g.members.size(); ++k) {
                             if (item.r.members[k].codon_row.empty()) continue;
@@ -842,15 +938,27 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
                               << (what == 0 ? item.r.members[k].codon_row : item.r.protein_rows[k]) << '\n';
                         }
                         f.flush();
-                        if (!f) throw InputError(write_error(path), "file_error");
+                        if (f) f.close();
+                        if (!f || !replace_file(tmp, path)) {
+                            f.close();
+                            std::remove(tmp.c_str());
+                            throw InputError(write_error(path), "file_error");
+                        }
                     }
                 }
+#ifdef COAL_TEST_HOOKS
+                if (fail_after >= 0 && ++groups_written >= fail_after) {
+                    for (OutFile* f : {&fout, &fcodon, &fprot, &fkaks, &ffail}) f->flush();
+                    throw InputError(write_error(c.out) + " (test hook COAL_TEST_DNDS_FAIL_AFTER_GROUPS)",
+                                     "file_error");
+                }
+#endif
             }
         }
         {
             const std::string* names[] = {&c.out, &c.codon_out, &c.protein_out, &c.kaks_out, &c.failures};
             int k = 0;
-            for (std::ofstream* f : {&fout, &fcodon, &fprot, &fkaks, &ffail}) {
+            for (OutFile* f : {&fout, &fcodon, &fprot, &fkaks, &ffail}) {
                 const std::string& name = *names[k++];
                 if (!f->is_open()) continue;
                 f->flush();

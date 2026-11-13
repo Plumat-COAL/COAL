@@ -59,6 +59,16 @@ struct OutTarget {
     bool existing = false;  // a regular file exists there
     bool direct = false;    // write in place (FIFO, device, a file with other hard links)
 };
+// A file created anew for writing, never written through: whatever has this name (a leftover of an earlier run,
+// or a symbolic link, which is removed and not followed) goes first, then the file is created with
+// O_CREAT | O_EXCL | O_NOFOLLOW (Windows: _O_EXCL; it has no O_NOFOLLOW). The descriptor, or -1 with errno set.
+int open_new_file(const std::string& path);
+// write(2) until all is written; false with errno set.
+bool write_fd(int fd, const char* data, size_t n);
+// close(2); false with errno set when the system reports an error only now (a full disk on some file systems).
+bool close_fd_checked(int fd);
+// rename(tmp, path), replacing a file or symbolic link at path (never following it). False with errno set.
+bool replace_file(const std::string& tmp, const std::string& path);
 // Checks -o PATH before any work: throws CoalError for a symlink loop or an unusable folder.
 OutTarget resolve_output(const std::string& out);
 // "cannot write <out>: <reason in plain words>" (pipeline.py _output_error); out "" = stdout's temp file.

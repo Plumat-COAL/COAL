@@ -192,6 +192,14 @@ entry under "Added", not under "Fixed".
     styles (one test file each) and how the heuristics fail (`HSP70.1 / HSP70.2`, `scaffold7.1`). The progress
     and summary lines count "records" until `--longest-isoform` has made genes of them, and a repeated ID is
     counted as not usable in both.
+  - **A file is complete or absent** (second review, 2026-11-13). Every table and alignment file of the pipeline
+    is written as `NAME.tmp`, created anew, and renamed when it is complete; before, only `dnds.tsv` was, and a
+    stage that failed on a full disk left a cut-off `codon_alignments.fasta`, `protein_alignments.fasta` and
+    `dnds.kaks` under their final names. After a failed or interrupted stage none of them is there, the report
+    lists only the files that exist, and the `.tmp` files are removed (the next run removes what a killed run
+    left). A symbolic link in the output folder under an output's name is replaced, never written through
+    (`dnds.kaks -> another file` used to overwrite that file). `coal-cpp codon-dnds` has `--new-files` for this
+    and writes each per-cluster file through `NAME.fasta.tmp`. docs/pipeline.md "Output".
   - **Cluster mode does not depend on the order of the input.** DIAMOND DeepClust is order-dependent, so it is
     given the proteins sorted by ID: the same sequences give the same `clusters.tsv` whatever the order of the
     `--cds` files and records. (Development builds before 2026-11-13 clustered in input order; their clusters can

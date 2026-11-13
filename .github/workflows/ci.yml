@@ -346,7 +346,7 @@ jobs:
             tests.test_dnds_pipeline tests.test_short_options tests.test_output_lock \
             tests.test_pair_table tests.test_kaks_cli_inputs tests.test_kaks_yn_shortcut tests.test_dnds_flags \
             tests.test_pipeline_order tests.test_pipeline_robustness tests.test_pipeline_provenance \
-            tests.test_pipeline_isoforms tests.test_citations tests.test_cli_commands tests.test_examples
+            tests.test_pipeline_isoforms tests.test_pipeline_atomic tests.test_citations tests.test_cli_commands tests.test_examples
       # The release's Linux wheels are built inside the manylinux_2_28 container (GCC 14, -Werror): build there on
       # every change too, so a warning that only that compiler raises fails CI, not the release (v0.5.0rc1 did).
       - name: Build inside the manylinux_2_28 container, as the release does (Linux)

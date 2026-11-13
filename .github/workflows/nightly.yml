@@ -208,7 +208,7 @@ jobs:
             tests.test_short_options tests.test_output_lock \
             tests.test_pair_table tests.test_kaks_cli_inputs tests.test_kaks_yn_shortcut tests.test_dnds_flags \
             tests.test_pipeline_order tests.test_pipeline_robustness tests.test_pipeline_provenance \
-            tests.test_pipeline_isoforms tests.test_citations tests.test_cli_commands tests.test_examples \
+            tests.test_pipeline_isoforms tests.test_pipeline_atomic tests.test_citations tests.test_cli_commands tests.test_examples \
             2>&1 | tee san-tests.txt
           status=${PIPESTATUS[0]}
           if grep -qE "AddressSanitizer|LeakSanitizer|runtime error" san-tests.txt; then

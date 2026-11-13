@@ -32,6 +32,7 @@ Not part of the stable `import coal` API yet (python-api.md): it may change befo
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import math
@@ -95,10 +96,47 @@ _EXE = ".exe" if os.name == "nt" else ""
 # Files and folders a run writes into the output folder (besides work/): whatever an earlier run left of them is
 # removed when a run starts, so that the folder never mixes two runs (a dnds.kaks or codon_alignments.fasta of a
 # run with other options, the dnds.tsv.tmp of a killed run).
-_RUN_OUTPUTS = ("dnds.tsv", "dnds.tsv.tmp", "dnds.kaks", "codon_alignments.fasta", "protein_alignments.fasta",
-                "cluster_summary.tsv",
-                "cluster_summary.tsv.tmp", "genes.tsv", "orthologs.tsv", "unpaired.tsv", "clusters.tsv",
-                "realign.tsv", "realign.tsv.body", "failed.tsv", "report.json", "report.json.tmp")
+# Every table and alignment file is written as NAME.tmp and renamed when it is complete (_atomic, and the engine's
+# --new-files), so the .tmp names are a run's files too: a run that was killed leaves them, the next one removes them.
+_RUN_TABLES = ("dnds.tsv", "dnds.kaks", "codon_alignments.fasta", "protein_alignments.fasta", "cluster_summary.tsv",
+               "genes.tsv", "orthologs.tsv", "unpaired.tsv", "clusters.tsv", "realign.tsv", "failed.tsv",
+               "report.json")
+_RUN_OUTPUTS = _RUN_TABLES + tuple(n + ".tmp" for n in _RUN_TABLES) + ("realign.tsv.body",)
+
+
+def _open_new(path: str):
+    """A text file created anew for writing: whatever has this name (a leftover, or a symbolic link, which is
+    removed and never followed) goes first, then the file is created with O_CREAT | O_EXCL | O_NOFOLLOW (where
+    the system has it). COAL writes its tables to NAME.tmp this way and renames them when they are complete."""
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        pass
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+    return open(path, "w", encoding="utf-8", errors="backslashreplace", newline="\n",
+                opener=lambda p, _flags: os.open(p, flags, 0o666))
+
+
+@contextlib.contextmanager
+def _atomic(path: str):
+    """Write the table `path` through `path`.tmp: it appears under its name when it is complete (os.replace: a
+    symbolic link at `path` is replaced, not followed), and nothing is left under either name when writing fails."""
+    tmp = path + ".tmp"
+    fh = _open_new(tmp)
+    try:
+        yield fh
+        fh.close()
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            fh.close()
+        except OSError:
+            pass
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
 
 
 class _Terminated(SystemExit):
@@ -520,6 +558,7 @@ class _Run:
         self.isoforms: dict = {}           # the report's `isoforms`: per set what was found and done
         self._gene_map: dict | None = None
         self._first_ids: dict = {}
+        self._engine_files: list = []
         self.set_counts: dict = {}         # per input set: records, not usable, dropped (as genes.tsv lists them)
 
     # -- set-up
@@ -558,7 +597,8 @@ class _Run:
             except (OSError, ValueError):
                 self.state = {}
         self.outputs["failed"] = os.path.join(self.out, "failed.tsv")
-        self._failed_fh = open(self.outputs["failed"], "w", encoding="utf-8", errors="backslashreplace", newline="\n")
+        # failed.tsv.tmp while the run goes on; finish() gives it its name, for a failed run too (it is complete)
+        self._failed_fh = _open_new(self.outputs["failed"] + ".tmp")
         self._failed_fh.write("\t".join(FAILED_COLUMNS) + "\n")
         if self.jobs_clamped:
             self.warn(f"-j {self.jobs} is more than the {self.threads} CPU(s) of this machine: DIAMOND and the "
@@ -696,9 +736,9 @@ class _Run:
     def _planned_outputs(self) -> list[str]:
         """Names (in the output folder) of the files this run may write, temporary ones included."""
         a = self.a
-        names = ["failed.tsv", "genes.tsv", "dnds.tsv", "dnds.tsv.tmp"]
+        names = ["failed.tsv", "genes.tsv", "dnds.tsv"]
         if not a.report:
-            names += ["report.json", "report.json.tmp"]
+            names += ["report.json"]
         if a.kaks_format:
             names.append("dnds.kaks")
         if self.mode == "pairs":
@@ -710,12 +750,12 @@ class _Run:
             if a.keep_protein_alignments:
                 names.append("protein_alignments.fasta")
         else:
-            names += ["cluster_summary.tsv", "cluster_summary.tsv.tmp"]
+            names += ["cluster_summary.tsv"]
             if not a.clusters:
                 names.append("clusters.tsv")
                 if a.realign:
                     names += ["realign.tsv", "realign.tsv.body"]
-        return names
+        return names + [n + ".tmp" for n in names if not n.endswith(".body")]
 
     def _check_inputs(self) -> None:
         """Refuse, before anything in the folder is removed or written, a run that would write onto one of its
@@ -770,7 +810,7 @@ class _Run:
                     names = {v for v in rep["outputs"].values() if isinstance(v, str)}
                     names |= {"report.json", "failed.tsv"}
                     codon_dir = rep.get("mode") == "clusters" and "codon_alignments" in names
-                    names |= {n + ".tmp" for n in ("dnds.tsv", "cluster_summary.tsv") if n in names}
+                    names |= {n + ".tmp" for n in list(names)}
             except (OSError, ValueError):
                 pass
         if codon_dir:
@@ -810,7 +850,7 @@ class _Run:
                     continue
                 for n in os.listdir(d):
                     p = os.path.join(d, n)
-                    if n.endswith(".fasta") and self._is_input(p) is None:
+                    if n.endswith((".fasta", ".fasta.tmp")) and self._is_input(p) is None:
                         os.remove(p)
                 if not os.listdir(d):
                     os.rmdir(d)
@@ -830,6 +870,29 @@ class _Run:
                       fh)
             fh.write("\n")
         os.replace(tmp, self.wpath("outputs.json"))
+
+    def remove_temporaries(self) -> None:
+        """Remove what is left of this run's NAME.tmp files (a stage that failed or was interrupted while it was
+        writing): no cut-off table or alignment stays in the folder, under a final name or any other. The names
+        are also in work/outputs.json, so the next run removes what a killed run could not."""
+        names = [n for n in self._planned_outputs() if n.endswith((".tmp", ".body"))]
+        if self._failed_fh is not None:
+            names.remove("failed.tsv.tmp")     # still being written: finish() gives it its name
+        for n in names:
+            try:
+                os.remove(self.path(n))
+            except OSError:
+                pass
+        if self.mode == "clusters":
+            for name, opt in self._ALIGNMENT_DIRS.items():
+                d = self.path(name)
+                if getattr(self.a, opt) and os.path.isdir(d) and not os.path.islink(d):
+                    try:
+                        for n in os.listdir(d):
+                            if n.endswith(".fasta.tmp"):
+                                os.remove(os.path.join(d, n))
+                    except OSError:
+                        pass
 
     def release(self) -> None:
         release_output_lock(self.lock)
@@ -1241,7 +1304,12 @@ class _Run:
         a = self.a
         out = self.path("dnds.tsv")
         fail = self.wpath("engine_failures.tsv")
-        cmd = [self.cpp, "codon-dnds", "-i", "-", "-o", out + ".tmp", "--failures", fail, "-c", str(a.codontable),
+        # Every file the engine writes into the output folder is NAME.tmp, created anew (--new-files: a leftover or
+        # a symbolic link of that name is removed, never written through), and gets its name when the engine has
+        # ended with success (run_engine): a failed or interrupted stage leaves no cut-off file under a final name.
+        self._engine_files = [("dnds", out)]
+        cmd = [self.cpp, "codon-dnds", "-i", "-", "-o", out + ".tmp", "--new-files", "--failures", fail,
+               "-c", str(a.codontable),
                "-j", str(self.jobs), "--digits", str(a.digits), "--matrix", a.matrix, "--gap-open", str(a.gap_open),
                "--gap-extend", str(a.gap_extend), "--end-gaps", a.end_gaps, "--max-cells", str(a.max_cells),
                "--flanks", a.flanks, "--yn-flavour", a.yn_flavour, "--yn-weighting", str(a.yn_weighting),
@@ -1256,20 +1324,20 @@ class _Run:
         if group_column:
             cmd += ["--group-column", group_column]
         if a.kaks_format:
-            self.outputs["kaks"] = self.path("dnds.kaks")
-            cmd += ["--kaks-out", self.outputs["kaks"]]
+            self._engine_files.append(("kaks", self.path("dnds.kaks")))
+            cmd += ["--kaks-out", self.path("dnds.kaks") + ".tmp"]
         if a.keep_alignments:
             if self.mode == "pairs":
-                self.outputs["codon_alignments"] = self.path("codon_alignments.fasta")
-                cmd += ["--codon-out", self.outputs["codon_alignments"]]
+                self._engine_files.append(("codon_alignments", self.path("codon_alignments.fasta")))
+                cmd += ["--codon-out", self.path("codon_alignments.fasta") + ".tmp"]
             else:
                 d = self.outputs["codon_alignments"] = self.path("codon_alignments")
                 os.makedirs(d, exist_ok=True)   # (an earlier run's files were removed when this run started)
                 cmd += ["--codon-dir", d]
         if a.keep_protein_alignments:   # the protein alignments the codons were threaded on, in the same layout
             if self.mode == "pairs":
-                self.outputs["protein_alignments"] = self.path("protein_alignments.fasta")
-                cmd += ["--protein-out", self.outputs["protein_alignments"]]
+                self._engine_files.append(("protein_alignments", self.path("protein_alignments.fasta")))
+                cmd += ["--protein-out", self.path("protein_alignments.fasta") + ".tmp"]
             else:
                 d = self.outputs["protein_alignments"] = self.path("protein_alignments")
                 os.makedirs(d, exist_ok=True)
@@ -1308,19 +1376,17 @@ class _Run:
                 # Closing its input would only make it finish the pairs it has and write its files, as an orphan
                 # of a run that no longer exists; it is killed, and what it wrote so far is removed.
                 self.kill_children()
-                for tmp in (out + ".tmp",):
-                    try:
-                        os.remove(tmp)
-                    except OSError:
-                        pass
+                self.remove_temporaries()
                 raise
             finally:
                 self._engine = None
         if rc != 0 or broken:
+            self.remove_temporaries()
             raise PipelineError(f"coal-cpp codon-dnds failed ({_msa.exit_text(rc)}); the end of {logp}:\n"
                                 f"{_tail(logp)}")
-        os.replace(out + ".tmp", out)
-        self.outputs["dnds"] = out
+        for key, final in reversed(self._engine_files):   # dnds.tsv last: with it the stage's files are all there
+            os.replace(final + ".tmp", final)
+            self.outputs[key] = final
         with open(fail, encoding="utf-8", errors="backslashreplace") as fh:
             next(fh, None)
             for line in fh:
@@ -1349,11 +1415,14 @@ class _Run:
             fh, self._failed_fh = self._failed_fh, None
             try:
                 fh.close()
+                os.replace(self.outputs["failed"] + ".tmp", self.outputs["failed"])
             except OSError as e:   # a full disk shows when the buffer is written out
                 why = f"cannot write {self.outputs.get('failed', 'failed.tsv')}: {e.strerror or e}"
+                self.outputs.pop("failed", None)   # not complete: it does not get its name (removed below)
                 if exit_code in (0, 2):   # the run would have looked complete with an incomplete failures table
                     print(f"coal pipeline: error: {why}", file=sys.stderr)
                     exit_code, error, status = 1, why, "failed"
+        self.remove_temporaries()
         a = self.a
         skip = {"out_dir", "quiet", "report", "resume", "install_tools"}
         if status is None:
@@ -1403,18 +1472,9 @@ class _Run:
 
         def write(obj) -> None:
             # through a temporary file: a report is complete or absent, never cut short (a full disk)
-            tmp = rp + ".tmp"
-            try:
-                with open(tmp, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as fh:
-                    json.dump(obj, fh, indent=1, default=str)
-                    fh.write("\n")
-                os.replace(tmp, rp)
-            except OSError:
-                try:
-                    os.remove(tmp)
-                except OSError:
-                    pass
-                raise
+            with _atomic(rp) as fh:
+                json.dump(obj, fh, indent=1, default=str)
+                fh.write("\n")
         try:
             os.makedirs(os.path.dirname(os.path.abspath(rp)), exist_ok=True)
             write(report)
@@ -1495,7 +1555,7 @@ def _pairs_mode(run: _Run) -> None:
     s_order: dict[str, int] = {}
     q_drop = run.find_isoforms("query", [a.query], q_genes)
     s_drop = run.find_isoforms("subject", [a.subject], s_genes)
-    with open(run.outputs["genes"], "w", encoding="utf-8", errors="backslashreplace", newline="\n") as gf:
+    with _atomic(run.outputs["genes"]) as gf:
         with open(q_genes, encoding="utf-8", errors="backslashreplace") as fh:
             gf.write("set\t" + fh.readline())
         q_failed = run.read_genes(q_genes, "query", gf, q_order, q_drop)
@@ -1521,7 +1581,7 @@ def _pairs_mode(run: _Run) -> None:
         run.stages.append({"name": "orthologs", "seconds": 0.0, "cached": False, "source": "given",
                            "pairs": len(pairs)})
         if not run.pairs_in_place:   # (--pairs DIR/orthologs.tsv: the input is the table; it is not rewritten)
-            with open(orth, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as fh:
+            with _atomic(orth) as fh:
                 fh.write("query\tsubject\n")
                 for q, s in pairs:
                     fh.write(f"{q}\t{s}\n")
@@ -1677,7 +1737,7 @@ def _search(run: _Run, q_faa: str, s_faa: str, q_order: dict, s_order: dict, ort
     back = _best_hits(rev, 2) if both else {}
     pairs = [(q, h[0]) for q, h in hits.items() if not both or back.get(h[0], [None])[0] == q]
     pairs.sort(key=lambda p: (q_order.get(p[0], len(q_order)), p[0]))
-    with open(orth, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as fh:
+    with _atomic(orth) as fh:
         fh.write("query\tsubject\tpident\tlength\tevalue\tbitscore\n")
         for q, s in pairs:
             fh.write("\t".join([q, s, *hits[q][1:5]]) + "\n")
@@ -1686,7 +1746,7 @@ def _search(run: _Run, q_faa: str, s_faa: str, q_order: dict, s_order: dict, ort
     paired_q = {q for q, _ in pairs}
     paired_s = {s for _, s in pairs}
     n = {"no_hit": 0, "not_reciprocal": 0}
-    with open(unp, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as fh:
+    with _atomic(unp) as fh:
         fh.write("set\tid\treason\n")
         for q in q_order:
             if q not in paired_q:
@@ -1772,7 +1832,7 @@ def _clusters_mode(run: _Run) -> None:
     run.outputs["genes"] = run.path("genes.tsv")
     order: dict[str, int] = {}
     drop = run.find_isoforms("cds", list(a.cds), genes)
-    with open(run.outputs["genes"], "w", encoding="utf-8", errors="backslashreplace", newline="\n") as gf:
+    with _atomic(run.outputs["genes"]) as gf:
         with open(genes, encoding="utf-8", errors="backslashreplace") as fh:
             gf.write("set\t" + fh.readline())
         failed = run.read_genes(genes, "cds", gf, order, drop)
@@ -1805,8 +1865,13 @@ def _clusters_mode(run: _Run) -> None:
 
         def go():
             n = sort_fasta_by_id(faa, sfaa)
-            run.run_tool([dmd, "deepclust", "--db", sfaa, "--out", cfile, "--threads", str(run.threads), "--quiet",
-                          *opts, *extra], "diamond", "diamond deepclust")
+            try:   # (a leftover or a symbolic link of that name is not written through)
+                os.remove(cfile + ".tmp")
+            except OSError:
+                pass
+            run.run_tool([dmd, "deepclust", "--db", sfaa, "--out", cfile + ".tmp", "--threads", str(run.threads),
+                          "--quiet", *opts, *extra], "diamond", "diamond deepclust")
+            os.replace(cfile + ".tmp", cfile)
             return {"input_order": "sorted by ID", "sequences": n}
         run.stage("deepclust", _sig("deepclust", "sorted-by-id", _file_sig([faa]), run.tools["diamond"]["version"],
                                     opts, extra), [cfile, sfaa], go)
@@ -1815,10 +1880,14 @@ def _clusters_mode(run: _Run) -> None:
             rextra = shlex.split(a.realign_args) if a.realign_args else []
 
             def go2():
+                try:
+                    os.remove(rfile + ".body")
+                except OSError:
+                    pass
                 run.run_tool([dmd, "realign", "--db", sfaa, "--clusters", cfile, "--out", rfile + ".body", "--threads",
                               str(run.threads), "--quiet", "--outfmt", "6", "qseqid", "sseqid", "approx_pident",
                               "evalue", "bitscore", "qcovhsp", "scovhsp", *rextra], "diamond", "diamond realign")
-                with open(rfile, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as out, \
+                with _atomic(rfile) as out, \
                         open(rfile + ".body", encoding="utf-8", errors="backslashreplace") as body:
                     if not rextra:
                         out.write("member\trepresentative\tapprox_pident\tevalue\tbitscore\tqcovhsp\tscovhsp\n")
@@ -1974,8 +2043,7 @@ def summarise(dnds_path: str, plans: list[dict], out_path: str) -> None:
     whose YN / MYN iteration did not converge has none and is counted in n_not_converged, not in n_ok; the
     statistics are over those pairs' values that are numbers (dN/dS is NA when dS is 0: n_dNdS says how many
     values the dN/dS statistics are over)."""
-    with open(dnds_path, encoding="utf-8", errors="backslashreplace") as fh, \
-            open(out_path, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as out:
+    with open(dnds_path, encoding="utf-8", errors="backslashreplace") as fh, _atomic(out_path) as out:
         header = fh.readline().rstrip("\n").split("\t")
         col = {name: k for k, name in enumerate(header)}
         ci, mi, si = col["cluster_id"], col["method"], col["status"]
@@ -2327,11 +2395,6 @@ def _execute(mode: str, a: argparse.Namespace, argv) -> PipelineResult:
             code = 130 if isinstance(e, KeyboardInterrupt) else int(e.code)
             run.kill_children()
             if run.lock is not None and os.path.isdir(run.out):
-                for tmp in ("dnds.tsv.tmp", "cluster_summary.tsv.tmp", "realign.tsv.body"):
-                    try:
-                        os.remove(run.path(tmp))
-                    except OSError:
-                        pass
                 run.finish(code, f"interrupted by {name}: the run did not finish and the tables in this folder are "
                                  "incomplete; run it again (--resume reuses the finished stages)", "interrupted")
             raise
