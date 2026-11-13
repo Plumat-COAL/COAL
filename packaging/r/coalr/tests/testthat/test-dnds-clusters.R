@@ -134,3 +134,25 @@ test_that("Clustal Omega through coal_msa_aligner() reproduces the command line"
 test_that("a missing MSA program is explained", {
   expect_error(coal_msa_aligner("clustalo", path = "/no/such/clustalo"), "was not found")
 })
+
+test_that("pairs without an estimate are counted apart in the summary", {
+  # AAA against ATG: the YN iteration does not converge (rows are given: three members, so they are used). Such a
+  # pair is not in n_ok nor in the statistics. Nothing of the last round is tested: it differs between platforms.
+  seqs <- c(k1 = "AAA", m1 = "ATG", k2 = "AAA", cds[c("famA_001", "famA_002")])
+  got <- coal_dnds_clusters(seqs, list(nc = c("k1", "m1", "k2"), fam = c("famA_001", "famA_002")),
+                            msa = list(nc = c(k1 = "K", m1 = "M", k2 = "K")))
+  expect_identical(names(got$summary), coalr:::SUMMARY_COLUMNS)
+  expect_true("n_not_converged" %in% names(got$summary))
+  expect_identical(got$pairs$status, c("not_converged", "no_data", "not_converged", "ok"))
+  nc <- got$pairs[got$pairs$status == "not_converged", ]
+  expect_true(all(is.na(nc[, c("dN", "dS", "dNdS", "SE_dN", "SE_dS", "Nd", "Sd")])))
+  expect_true(all(grepl("did not converge", nc$note)))
+  sm <- got$summary
+  expect_identical(sm$n_pairs, c(3L, 1L))
+  expect_identical(sm$n_ok, c(0L, 1L))
+  expect_identical(sm$n_not_converged, c(2L, 0L))
+  expect_identical(sm$n_no_data, c(1L, 0L))
+  expect_identical(sm$n_saturated + sm$n_failed, c(0L, 0L))
+  expect_true(is.na(sm$dN_median[1]))
+  expect_identical(sm$status, c("failed", "ok"))
+})

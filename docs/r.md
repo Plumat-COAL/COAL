@@ -71,6 +71,12 @@ res <- coal_dnds_pairs("thaliana_cds.fasta", "lyrata_cds.fasta",
   SE_dS N_sites S_sites Nd Sd codons_compared prot_aln_length prot_identity status note`, rows in the order of
   `pairs`, `NA` for a value that is not available. A gene that cannot be used, an unknown ID or a pair that cannot
   be aligned is a row with status `error` and the reason, never an R error.
+- `status` is `ok`, `warning`, `not_converged`, `saturated`, `no_data` or `error`, as in
+  [kaks.md](kaks.md#policy). `not_converged`: the YN / MYN iteration did not settle within its round limit (very
+  short or nearly saturated pairs), so there is no estimate: `dN`, `dS`, `dNdS`, the SEs, `Nd` and `Sd` are `NA`,
+  and `note` quotes the last round, whose values differ between platforms
+  ([kaks.md](kaks.md#platform-reproducibility)). `coal_kaks()` reports the same; `coal_dnds_clusters()` counts
+  such pairs in `summary$n_not_converged`, not in `n_ok`.
 - Alignment options are those of the command line: `matrix`, `gap_open`, `gap_extend`, `end_gaps`, `max_cells`,
   `preset = "pwalign"`; `code` is the NCBI genetic code; `yn_flavour`, `yn_weighting` as in [kaks.md](kaks.md).
 - `keep_alignments = TRUE` adds the protein and codon alignment of each pair as `attr(res, "alignments")`.
@@ -135,6 +141,9 @@ says what to install; nothing else in the package needs Python.
 - A user interrupt (Ctrl-C, Esc) is noticed within about 0.1 s plus the pair each thread is on; the workers are
   stopped and joined before the interrupt is signalled.
 - No C++ exception reaches R as a crash: bad data is a row's `status`/`note`; a bad argument is an R error.
+- Reproducibility: the package compiles the engine without floating-point contraction (a pragma in the vendored
+  `kaks.cpp`), whatever flags R's `Makeconf` has, so results do not depend on whether the CPU has FMA. The last
+  digits of 15 can still differ between C libraries; [kaks.md](kaks.md#platform-reproducibility).
 - Memory: the inputs stay in R; the engine copies one batch (at most 1,024 groups, 16 Mb of CDS or 32,768 pairs)
   at a time, plus one alignment table per thread (`max_cells`).
 

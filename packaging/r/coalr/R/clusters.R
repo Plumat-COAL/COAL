@@ -39,9 +39,10 @@
 #'   Clusters in the order of `clusters`, pairs 1-2, 1-3, ..., 2-3, ...
 #' * `summary`: data frame, one row per cluster and method: `cluster_id`, `representative`, `n_members`, `n_used`,
 #'   `method`, `pair_selection` (`all`, `representative`, `sample:K`, `skipped`, `singleton`, `none`), `aligner`,
-#'   `n_pairs`, `n_ok`, `n_saturated`, `n_no_data`, `n_failed`, then median, mean, q25, q75, min and max of dN, dS
-#'   and dN/dS over the pairs with an estimate (quartiles of R's type 7), `n_dNdS`, `status`, `note`. A cluster
-#'   without pairs has one row with `method` `NA`.
+#'   `n_pairs`, `n_ok` (pairs with status `ok` or `warning`: the ones with an estimate), `n_not_converged`,
+#'   `n_saturated`, `n_no_data`, `n_failed`, then median, mean, q25, q75, min and max of dN, dS and dN/dS over the
+#'   `n_ok` pairs (quartiles of R's type 7), `n_dNdS`, `status`, `note`. A cluster without pairs has one row with
+#'   `method` `NA`.
 #' * `failed`: data frame of what could not be used (`level`, `cluster_id`, `seq1`, `seq2`, `code`, `message`).
 #' * `alignments` (with `keep_alignments = TRUE`): data frame `cluster_id`, `id`, `protein`, `codon` for clusters
 #'   aligned as a whole.
@@ -244,7 +245,8 @@ coal_dnds_clusters <- function(cds, clusters, msa = NULL, aligner = NULL, method
   summary <- data.frame(
     cluster_id = cids[k_ord], representative = cids[k_ord], n_members = unname(sizes)[k_ord], n_used = n_used[k_ord],
     method = pad(raw$method_names[sm$method + 1L], NA_character_), pair_selection = selection[k_ord],
-    aligner = aligner_col[k_ord], n_pairs = n_pairs, n_ok = n_ok, n_saturated = pad(sm$n_saturated, 0L),
+    aligner = aligner_col[k_ord], n_pairs = n_pairs, n_ok = n_ok, n_not_converged = pad(sm$n_not_converged, 0L),
+    n_saturated = pad(sm$n_saturated, 0L),
     n_no_data = pad(sm$n_no_data, 0L), n_failed = pad(sm$n_failed, 0L), stringsAsFactors = FALSE)
   for (v in paste0(rep(c("dN", "dS", "dNdS"), each = 6L), "_", STATS)) summary[[v]] <- pad(sm[[v]], NA_real_)
   summary$n_dNdS <- pad(sm$n_dNdS, 0L)

@@ -150,3 +150,22 @@ test_that("an aligned row is a sequence whatever it ends in or contains (never '
   expect_false(coalr:::looks_like_path("CDS.FASTA"))     # a mistyped upper-case file name: taken as a sequence
   expect_true(coalr:::looks_like_path("acgtn.nt"))       # a lower-case row with one dot before "nt": a file name
 })
+
+test_that("an iteration that does not converge gives no estimate", {
+  # AAA against ATG: the YN (10 rounds) and MYN (100 rounds) iterations wander. The last round's values differ
+  # between platforms (Ka 3.169, 3.174 or saturated), so nothing of them is tested: only the status and the NAs.
+  r <- coal_kaks("AAA", "ATG", method = c("NG", "YN", "MYN"), details = TRUE)
+  expect_identical(r$method, c("NG", "YN", "MYN"))
+  nc <- r[r$method != "NG", ]
+  expect_identical(nc$status, c("not_converged", "not_converged"))
+  for (v in c("dN", "dS", "dNdS", "SE_dN", "SE_dS", "Nd", "Sd", "p_fisher", "divergence")) {
+    expect_true(all(is.na(nc[[v]])), info = v)
+  }
+  expect_identical(nc$N_sites, c(2, 2))
+  expect_identical(nc$S_sites, c(1, 1))
+  expect_match(nc$note[1], "^YN00 iteration did not converge in 10 rounds: no estimate \\(last round: ")
+  expect_match(nc$note[2], "^MYN iteration did not converge in 100 rounds: no estimate \\(last round: ")
+  expect_false(r$status[1] == "not_converged")
+  # without pathway weighting there is no iteration
+  expect_false(coal_kaks("AAA", "ATG", yn_flavour = "paml", yn_weighting = FALSE)$status == "not_converged")
+})

@@ -36,6 +36,10 @@ rows is computed (1-2, 1-3, ..., 2-3, ...).}
 \value{
 A data frame, one row per pair and method: \code{seq1}, \code{seq2} (the names, or the positions), \code{method},
 \code{dN}, \code{dS}, \code{dNdS}, \code{SE_dN}, \code{SE_dS}, \code{N_sites}, \code{S_sites}, \code{Nd}, \code{Sd}, \code{codons_compared}, \code{status}, \code{note}.
+\code{status} is \code{ok}, \code{warning} (estimated; see \code{note}), \code{not_converged} (YN / MYN: the iteration did not
+converge, so there is no estimate: \code{dN}, \code{dS}, \code{dNdS}, the SEs, \code{Nd} and \code{Sd} are \code{NA}, and \code{note} has the
+last round's values, which can differ between platforms), \code{saturated} (\code{dN} or \code{dS} is \code{NA}), \code{no_data} or
+\code{error}.
 }
 \description{
 Estimates dN (Ka), dS (Ks) and dN/dS for pairs of sequences that are already aligned codon by codon (for

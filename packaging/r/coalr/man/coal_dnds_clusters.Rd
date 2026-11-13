@@ -77,9 +77,10 @@ A list:
 Clusters in the order of \code{clusters}, pairs 1-2, 1-3, ..., 2-3, ...
 \item \code{summary}: data frame, one row per cluster and method: \code{cluster_id}, \code{representative}, \code{n_members}, \code{n_used},
 \code{method}, \code{pair_selection} (\code{all}, \code{representative}, \code{sample:K}, \code{skipped}, \code{singleton}, \code{none}), \code{aligner},
-\code{n_pairs}, \code{n_ok}, \code{n_saturated}, \code{n_no_data}, \code{n_failed}, then median, mean, q25, q75, min and max of dN, dS
-and dN/dS over the pairs with an estimate (quartiles of R's type 7), \code{n_dNdS}, \code{status}, \code{note}. A cluster
-without pairs has one row with \code{method} \code{NA}.
+\code{n_pairs}, \code{n_ok} (pairs with status \code{ok} or \code{warning}: the ones with an estimate), \code{n_not_converged},
+\code{n_saturated}, \code{n_no_data}, \code{n_failed}, then median, mean, q25, q75, min and max of dN, dS and dN/dS over the
+\code{n_ok} pairs (quartiles of R's type 7), \code{n_dNdS}, \code{status}, \code{note}. A cluster without pairs has one row with
+\code{method} \code{NA}.
 \item \code{failed}: data frame of what could not be used (\code{level}, \code{cluster_id}, \code{seq1}, \code{seq2}, \code{code}, \code{message}).
 \item \code{alignments} (with \code{keep_alignments = TRUE}): data frame \code{cluster_id}, \code{id}, \code{protein}, \code{codon} for clusters
 aligned as a whole.
