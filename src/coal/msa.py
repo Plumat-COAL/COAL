@@ -392,14 +392,43 @@ def _read_fasta(path: str) -> dict[str, str]:
 # Aligner processes that are running now (run_msa starts them from align_clusters' worker threads): kept so that an
 # interrupted batch can end them (kill_running) and not leave them to finish on their own.
 _running: set = set()
-_running_lock = threading.Lock()
+_running_lock = threading.RLock()   # re-entrant: kill_running() from a signal handler must not deadlock
+# Counts the calls of kill_running(). A batch (align_clusters) or a single run_msa() notes the value when it
+# begins; an aligner is started only while the value is still the same, so an interrupt also stops the aligners
+# that were about to start. Read and written under _running_lock.
+_interrupts = 0
+# Test hook: called with the Popen object right after an aligner process was started (tests put a delay here to
+# widen the window between "started" and "registered"). Not for use outside the tests.
+_after_start = None
 
 
-def _run_tracked(cmd, timeout, **kw) -> subprocess.CompletedProcess:
-    """subprocess.run(cmd, timeout=..., **kw) with the process registered in _running while it runs."""
-    proc = subprocess.Popen(cmd, **kw)
+def _interrupt_count() -> int:
     with _running_lock:
-        _running.add(proc)
+        return _interrupts
+
+
+def _run_tracked(cmd, timeout, begun: int | None = None, **kw) -> subprocess.CompletedProcess:
+    """subprocess.run(cmd, timeout=..., **kw) with the process registered in _running while it runs.
+
+    Starting and registering happen under _running_lock, the lock kill_running() takes: an aligner is either not
+    started yet (and then never is: MsaError("interrupted") when kill_running() was called since `begun`, the
+    value of _interrupt_count() when the caller's work began) or it is in _running where kill_running() finds it.
+    Before, the process was started first and registered afterwards, and an interrupt in between left an aligner
+    running that nothing knew about."""
+    proc = None
+    with _running_lock:
+        if begun is not None and begun != _interrupts:
+            raise MsaError("interrupted")
+        try:
+            proc = subprocess.Popen(cmd, **kw)
+            if _after_start is not None:
+                _after_start(proc)
+            _running.add(proc)
+        except BaseException:   # (an interrupt delivered to this very thread while it starts the process)
+            if proc is not None:
+                proc.kill()
+                proc.wait()
+            raise
     try:
         try:
             out, err = proc.communicate(timeout=timeout)
@@ -414,25 +443,31 @@ def _run_tracked(cmd, timeout, **kw) -> subprocess.CompletedProcess:
 
 
 def kill_running() -> int:
-    """End every Clustal Omega / MAFFT process this module started that is still running (an interrupted run).
-    Returns how many were ended."""
-    with _running_lock:
-        procs = list(_running)
+    """End every Clustal Omega / MAFFT process this module started that is still running (an interrupted run),
+    and stop the batches and run_msa() calls that are under way from starting another one (they end with
+    MsaError("interrupted")). Work that begins after this call (the next align_clusters / run_msa) runs
+    normally. Returns how many processes were ended."""
+    global _interrupts
     n = 0
-    for proc in procs:
-        if proc.poll() is None:
-            try:
-                proc.kill()
-                n += 1
-            except OSError:
-                pass
+    with _running_lock:
+        _interrupts += 1
+        for proc in list(_running):
+            if proc.poll() is None:
+                try:
+                    proc.kill()
+                    n += 1
+                except OSError:
+                    pass
     return n
 
 
 def run_msa(records: Sequence[tuple[str, str]], tool: str = "clustalo", threads: int = 1, exe: str | None = None,
-            extra_args: Sequence[str] = (), timeout: float | None = None) -> list[tuple[str, str]]:
+            extra_args: Sequence[str] = (), timeout: float | None = None,
+            _begun: int | None = None) -> list[tuple[str, str]]:
     """Align the protein records [(id, sequence)] with Clustal Omega ("clustalo") or MAFFT ("mafft"); returns
-    [(id, gapped row)] in input order. One record comes back as it is (no alignment needed). Raises MsaError."""
+    [(id, gapped row)] in input order. One record comes back as it is (no alignment needed). Raises MsaError
+    (also "interrupted" when kill_running() was called before the aligner could start)."""
+    begun = _interrupt_count() if _begun is None else _begun
     if tool not in ("clustalo", "mafft"):
         raise ValueError("tool: 'clustalo' or 'mafft'")
     records = list(records)
@@ -455,13 +490,13 @@ def run_msa(records: Sequence[tuple[str, str]], tool: str = "clustalo", threads:
         if tool == "clustalo":
             cmd = [exe, "-i", inp, "-o", outp, "--outfmt=fa", "--seqtype=Protein", "--output-order=input-order",
                    f"--threads={max(1, threads)}", "--force", *extra_args]
-            r = _run_tracked(cmd, timeout, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            r = _run_tracked(cmd, timeout, begun, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                              encoding="utf-8", errors="backslashreplace")
         else:
             cmd = [exe, "--auto", "--amino", "--anysymbol", "--quiet", "--thread", str(max(1, threads)), *extra_args,
                    inp]
             with open(outp, "wb") as fh:
-                r = _run_tracked(cmd, timeout, stdout=fh, stderr=subprocess.PIPE, text=True, encoding="utf-8",
+                r = _run_tracked(cmd, timeout, begun, stdout=fh, stderr=subprocess.PIPE, text=True, encoding="utf-8",
                                  errors="backslashreplace")
         if r.returncode != 0:
             raise MsaError(f"{tool} failed (exit {r.returncode}): {(r.stderr or '').strip()[-800:]}")
@@ -515,11 +550,12 @@ def align_clusters(clusters: Mapping[str, Sequence[tuple[str, str]]] | Iterable[
         exe = exe or (find_clustalo() if tool == "clustalo" else find_mafft())
     rest.sort(key=lambda kr: -sum(len(s) for _, s in kr[1]))
     workers = jobs if jobs > 0 else (os.cpu_count() or 1)
+    begun = _interrupt_count()   # this batch starts aligners until the next kill_running(), not after it
 
     def one(kr):
         k, recs = kr
         try:
-            return k, MsaResult(run_msa(recs, tool, threads, exe, timeout=timeout))
+            return k, MsaResult(run_msa(recs, tool, threads, exe, timeout=timeout, _begun=begun))
         except (MsaError, OSError, subprocess.SubprocessError, ValueError) as e:
             return k, MsaResult(None, str(e))
     ex = ThreadPoolExecutor(max_workers=max(1, workers))

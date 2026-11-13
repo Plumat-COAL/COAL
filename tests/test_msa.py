@@ -23,6 +23,8 @@ import shutil
 import stat
 import sys
 import tempfile
+import threading
+import time
 import unittest
 import urllib.error
 from contextlib import redirect_stderr
@@ -119,6 +121,102 @@ class Clusters(unittest.TestCase):
 
 
 @unittest.skipIf(os.name == "nt", "POSIX shell stand-ins")
+@unittest.skipIf(os.name == "nt", "POSIX shell stand-ins for the aligner")
+class Interrupts(unittest.TestCase):
+    """Independent review 2026-11-13, finding 2: the aligner was started first and registered afterwards, so an
+    interrupt in between left it running while kill_running() reported nothing left. The window is widened here
+    with the module's test hook (_after_start), not with luck."""
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        self.tmp = self._td.name
+        self.started = os.path.join(self.tmp, "started")
+        os.mkdir(self.started)
+        self.tool = fake_tool(self.tmp, "clustalo", f'touch "{self.started}/$$"\nexec sleep 120')
+        self.recs = [("a", "MKV"), ("b", "MKL"), ("c", "MRV")]
+
+    def tearDown(self):
+        msa._after_start = None
+        msa.kill_running()
+        self._td.cleanup()
+
+    def alive(self, pid: int) -> bool:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        # (a killed child that was not yet waited for still answers: read its state)
+        try:
+            with open(f"/proc/{pid}/stat", encoding="ascii", errors="replace") as fh:
+                return fh.read().rsplit(")", 1)[1].split()[0] != "Z"
+        except OSError:
+            return True
+
+    def test_interrupt_between_start_and_registration(self):
+        in_window, procs, errors = threading.Event(), [], []
+
+        def hook(proc):
+            procs.append(proc)
+            in_window.set()
+            time.sleep(0.5)   # the aligner runs; the old code had not registered it yet
+
+        def work():
+            try:
+                msa.run_msa(self.recs, "clustalo", exe=self.tool)
+            except msa.MsaError as e:
+                errors.append(str(e))
+        msa._after_start = hook
+        t = threading.Thread(target=work)
+        t.start()
+        self.assertTrue(in_window.wait(20))
+        killed = msa.kill_running()        # the interrupt arrives inside the window
+        t.join(20)
+        self.assertFalse(t.is_alive(), "run_msa did not return: its aligner was not ended")
+        self.assertEqual(killed, 1, "kill_running() did not see the aligner that had just been started")
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn("clustalo failed", errors[0])
+        self.assertFalse(self.alive(procs[0].pid), "the aligner was left running")
+
+    def test_nothing_is_started_after_the_interrupt(self):
+        """A batch that was interrupted starts no further aligner (its worker threads may be about to); the next
+        batch and the next run_msa() run normally."""
+        begun = msa._interrupt_count()
+        self.assertEqual(msa.kill_running(), 0)
+        with self.assertRaisesRegex(msa.MsaError, "^interrupted$"):
+            msa.run_msa(self.recs, "clustalo", exe=self.tool, _begun=begun)
+        self.assertEqual(os.listdir(self.started), [], "an aligner was started after kill_running()")
+        ok = fake_tool(self.tmp, "clustalo_ok", 'while [ $# -gt 0 ]; do case "$1" in -i) in="$2"; shift;; '
+                                               '-o) out="$2"; shift;; esac; shift; done\ncp "$in" "$out"')
+        self.assertEqual(msa.run_msa(self.recs, "clustalo", exe=ok), self.recs)
+        res = msa.align_clusters({"x": self.recs}, exe=ok, jobs=1)
+        self.assertEqual((res["x"].error, res["x"].rows), (None, self.recs))
+
+    def test_batch_interrupted_while_aligners_start(self):
+        """Many clusters, two workers, a delay in every start, and kill_running() from outside while the batch
+        runs: every aligner that was started is dead afterwards and every cluster has a result or an error."""
+        started_procs = []
+
+        def hook(proc):
+            started_procs.append(proc)
+            time.sleep(0.05)
+        msa._after_start = hook
+        out = {}
+        t = threading.Thread(target=lambda: out.update(
+            msa.align_clusters({k: self.recs for k in range(30)}, exe=self.tool, jobs=2, pairs_with="msa")))
+        t.start()
+        while len(started_procs) < 2:
+            time.sleep(0.01)
+        msa.kill_running()
+        t.join(30)
+        self.assertFalse(t.is_alive())
+        self.assertEqual(len(out), 30)
+        self.assertLessEqual(len(started_procs), 4, "aligners were started after the interrupt")
+        self.assertTrue(all(r.rows is None for r in out.values()))
+        self.assertGreaterEqual(sum(r.error == "interrupted" for r in out.values()), 26)
+        time.sleep(0.2)
+        self.assertEqual([p.pid for p in started_procs if self.alive(p.pid)], [])
+
+
 class Install(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()

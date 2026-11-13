@@ -59,6 +59,11 @@ Found by the second independent review (2026-11-13) of the fixes above (not yet 
   inputs, and it never writes onto an input: `--pairs out/orthologs.tsv` is read and left as it is, any other
   input under a name the run writes is refused before anything changes, and so is `--keep-alignments` into a
   `codon_alignments/` folder that holds files COAL did not write (docs/pipeline.md).
+- **An interrupt can no longer leave a Clustal Omega / MAFFT process behind.** `coal.msa` started an aligner
+  and registered it a moment later; an interrupt in between left it running while the run reported that nothing
+  was. Starting and registering now happen under the lock that `kill_running()` takes, and after
+  `kill_running()` the interrupted batch starts no further aligner (its clusters get the error `interrupted`);
+  the next batch runs normally.
 
 Found by the first CI runs on Windows and macOS of the code above (not yet released):
 
