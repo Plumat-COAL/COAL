@@ -59,7 +59,9 @@ coal pipeline clusters --cds all_cds.fa --clusters deepclust.tsv -o out --max-cl
      --large-clusters sample --pair-sample 500 --seed 1
 ```
 
-- **Clusters.** Without `--clusters`, `diamond deepclust` runs on the translated proteins with DIAMOND's defaults
+- **Clusters.** Without `--clusters`, `diamond deepclust` runs on the translated proteins, sorted by ID so that
+  the result does not depend on the order of the input
+  ([what the defaults do](#cluster-mode-input-order-and-what-a-default-cluster-is)), with DIAMOND's defaults
   (member coverage 80%); `--approx-id`, `--member-cover`, `--mutual-cover`, `--cluster-evalue` and
   `--deepclust-args '...'` are passed on, and the result is kept as `out/clusters.tsv`. `--realign` also runs
   `diamond realign` (members against their representatives, the columns orthologr's `deepclust_realign()` asks
@@ -293,6 +295,66 @@ Read the tables as UTF-8 (`encoding="utf-8"` in Python on Windows; `fileEncoding
   `representative` because it needs no MSA and no random draw, and its cost is linear in the cluster size.
 - **Full length.** Overhanging ends of the longer protein stay in the alignment as gaps. The final stop codon is
   dropped. (orthologr truncates the overhang and scores the stop-codon column.)
+
+## What the search and clustering defaults do
+
+The numbers in this section come from an independent review of the pipeline (November 2026, DIAMOND 2.2.8); they
+describe the examples named and are not guarantees for other data.
+
+### Pair mode: the best hit, and DIAMOND's sensitivity
+
+- **The best hit is DIAMOND's first target.** Each search runs with `--max-target-seqs 1`, and COAL takes the one
+  target DIAMOND reports for a query. DIAMOND orders a query's targets by e-value and then by score, so this is
+  the hit with the lowest e-value, not always the one with the highest bit score: a shorter, cleaner hit can have
+  a slightly lower bit score and a lower e-value than a longer one. On yeast (*S. cerevisiae* against
+  *C. glabrata*, 4,387 reciprocal best hits) `--max-target-seqs 1` gave exactly the first row of a 25-target
+  search for every query; 15 queries had a later target with a higher bit score, and a reciprocal-best-hit set
+  built with a pure bit-score rule (as orthologr's COAL fork chooses) differed from COAL's in 20 and 17 pairs
+  (pairs only in one set and only in the other), about 0.4% of the pairs. On orthologr's 1,000-gene
+  *Arabidopsis* example the two rules gave the same pairs. To use another rule, make the pairs yourself and give
+  them with `--pairs`.
+- **DIAMOND's default sensitivity** is used unless `--sensitivity` says otherwise. It is slower than `--fast`
+  and finds more of the short proteins. `--sensitivity fast` is a reasonable choice for closely related
+  species, where almost every ortholog is a strong hit.
+- **A worked comparison with orthologr's COAL fork** (`ortho_thal_cds_1000.fasta` against
+  `ortho_lyra_cds_1000.fasta`): COAL finds 999 reciprocal best hits; the fork's DIAMOND route finds 995, or 983
+  with `delete_corrupt_cds = TRUE`. The whole difference is explained:
+
+  | Pairs | In COAL, not in the fork | Why |
+  |---|---|---|
+  | 2 | AT1G02074.1, AT1G10747.1 | the fork searches with `--fast`, which gives these 48 to 83 residue proteins no hit or another one |
+  | 2 | AT1G04150.1, AT1G08230.2 | the fork drops a CDS that has an `N`; COAL keeps it (the codon with the `N` is skipped in Ka/Ks) |
+  | 12 | (only with `delete_corrupt_cds = TRUE`) | the fork deletes a CDS whose length is not a multiple of 3; COAL ignores the last 1 or 2 bases and gives the pair status `warning` |
+
+  The best-hit rule changes nothing in this example. COAL's choices keep more genes; the rows they add are marked
+  (`warning`, and the note says why), so they can be filtered out
+  ([Filtering before interpretation](#filtering-before-interpretation)).
+
+### Cluster mode: input order, and what a default cluster is
+
+- **The clusters do not depend on the order of the input.** DIAMOND DeepClust is order-dependent: which sequence
+  becomes a representative, and with that which sequences end up together, changes with the order of the
+  sequences it is given. COAL therefore gives DeepClust the proteins **sorted by ID** (the bytes of the ID;
+  `work/proteins.sorted.faa`), so the same set of sequences gives the same `clusters.tsv`, `dnds.tsv` and
+  `cluster_summary.tsv` whatever the order of the `--cds` files and of the records in them (tested by shuffling:
+  `tests/test_pipeline_order.py`). Up to this change the proteins were clustered in input order: on
+  orthologr's two 1,000-gene files, giving the files in the other order changed 838 clusters into 836 and moved
+  about 45 clusters' members. Renaming sequences still changes the order, and so can the clusters; a clustering
+  you want to keep is best saved (`clusters.tsv`) and given back with `--clusters`. `genes.tsv` keeps the input
+  order.
+- **Two things still differ from orthologr's DeepClust route** on the same input: it drops the two genes with
+  an `N` and leaves the terminal `*` on the proteins it clusters (three clusters differ for that reason in the
+  example above).
+- **DeepClust's defaults make loose clusters.** Without `--approx-id` DeepClust has no identity threshold beyond
+  what its e-value and the 80% member coverage imply, so a default cluster holds distant paralogs as well as
+  close ones. On the 2,000 *Arabidopsis* CDS of the example the default clusters gave 2,427 pairs, of which 574
+  (24%) were `saturated`, 63 `not_converged` and 8 `no_data`: 27% of the pairs have no estimate, because the
+  sequences are too far apart for dS to be estimated. That is the expected result of comparing distant family
+  members, not a fault of the run. For dN/dS within families of recent duplicates or orthologs, tighten the
+  clustering: `--approx-id 50` to `--approx-id 70` (percent identity to the representative) and
+  `--mutual-cover 70` to `--mutual-cover 80` (both sequences covered, instead of only the member) are values
+  to start from; look at `n_saturated` in `cluster_summary.tsv` and at the dS distribution, and tighten until
+  most pairs have dS below about 2 ([Filtering before interpretation](#filtering-before-interpretation)).
 
 ## How it runs
 

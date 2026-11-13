@@ -372,6 +372,32 @@ class FastaIndex:
         self._fh.clear()
 
 
+def sort_fasta_by_id(src: str, dst: str) -> int:
+    """Write the records of the FASTA file src to dst in the order of their IDs (the first word of the header,
+    compared as bytes; records with the same ID keep their order). Returns the number of records. Memory: the
+    IDs and offsets, not the sequences."""
+    recs: list[tuple[bytes, int, int, int]] = []
+    with open(src, "rb") as fh:
+        off, cur = 0, None
+        for line in fh:
+            if line[:1] == b">":
+                if cur is not None:
+                    recs.append((*cur, off))
+                words = line[1:].split()
+                cur = (words[0] if words else b"", len(recs), off)
+            off += len(line)
+        if cur is not None:
+            recs.append((*cur, off))
+        recs.sort(key=lambda r: (r[0], r[1]))
+        with open(dst + ".tmp", "wb") as out:
+            for _rid, _k, a, b in recs:
+                fh.seek(a)
+                block = fh.read(b - a)
+                out.write(block if block.endswith(b"\n") else block + b"\n")
+    os.replace(dst + ".tmp", dst)
+    return len(recs)
+
+
 def _file_sig(paths) -> list:
     out = []
     for p in paths:
@@ -729,7 +755,7 @@ class _Run:
             except OSError as e:
                 raise PipelineError(f"{what}: could not start {cmd[0]} ({e.strerror or e})") from None
         if r.returncode != 0:
-            raise PipelineError(f"{what} failed (exit {r.returncode}); the end of {logp}:\n{_tail(logp)}")
+            raise PipelineError(f"{what} failed ({f'exit {r.returncode}'}); the end of {logp}:\n{_tail(logp)}")
 
     def diamond(self) -> str:
         if "diamond" in self.tools:
@@ -908,7 +934,8 @@ class _Run:
             finally:
                 self._engine = None
         if rc != 0 or broken:
-            raise PipelineError(f"coal-cpp codon-dnds failed (exit {rc}); the end of {logp}:\n{_tail(logp)}")
+            raise PipelineError(f"coal-cpp codon-dnds failed ({f'exit {rc}'}); the end of {logp}:\n"
+                                f"{_tail(logp)}")
         os.replace(out + ".tmp", out)
         self.outputs["dnds"] = out
         with open(fail, encoding="utf-8", errors="backslashreplace") as fh:
@@ -1267,17 +1294,24 @@ def _clusters_mode(run: _Run) -> None:
             if v is not None:
                 opts += [flag, str(v)]
 
+        # DeepClust's result depends on the order of its input (which sequence becomes a representative, and
+        # with that the clusters): it is given the proteins sorted by ID (bytes), so the clusters are the same
+        # whatever the order of the --cds files and of the records in them (docs/pipeline.md "Reproducibility").
+        sfaa = run.wpath("proteins.sorted.faa")
+
         def go():
-            run.run_tool([dmd, "deepclust", "--db", faa, "--out", cfile, "--threads", str(run.jobs), "--quiet",
+            n = sort_fasta_by_id(faa, sfaa)
+            run.run_tool([dmd, "deepclust", "--db", sfaa, "--out", cfile, "--threads", str(run.jobs), "--quiet",
                           *opts, *extra], "diamond", "diamond deepclust")
-        run.stage("deepclust", _sig("deepclust", _file_sig([faa]), run.tools["diamond"]["version"], opts, extra),
-                  [cfile], go)
+            return {"input_order": "sorted by ID", "sequences": n}
+        run.stage("deepclust", _sig("deepclust", "sorted-by-id", _file_sig([faa]), run.tools["diamond"]["version"],
+                                    opts, extra), [cfile, sfaa], go)
         if a.realign:
             rfile = run.outputs["realign"] = run.path("realign.tsv")
             rextra = shlex.split(a.realign_args) if a.realign_args else []
 
             def go2():
-                run.run_tool([dmd, "realign", "--db", faa, "--clusters", cfile, "--out", rfile + ".body", "--threads",
+                run.run_tool([dmd, "realign", "--db", sfaa, "--clusters", cfile, "--out", rfile + ".body", "--threads",
                               str(run.jobs), "--quiet", "--outfmt", "6", "qseqid", "sseqid", "approx_pident",
                               "evalue", "bitscore", "qcovhsp", "scovhsp", *rextra], "diamond", "diamond realign")
                 with open(rfile, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as out, \
@@ -1530,7 +1564,7 @@ def codon_dnds(groups, out_tsv: str, method=("YN",), codontable: int = 1, jobs: 
     reader.join()
     proc.stderr.close()
     if rc != 0:
-        raise PipelineError(f"coal-cpp codon-dnds failed (exit {rc}): "
+        raise PipelineError(f"coal-cpp codon-dnds failed ({f'exit {rc}'}): "
                             f"{b''.join(err).decode('utf-8', 'backslashreplace').strip()[-800:]}")
     return n
 
