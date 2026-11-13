@@ -80,8 +80,10 @@ bioconda-utils build recipes config.yml --packages coal-align
 # or in Bioconda's Docker image: bioconda-utils build --docker --mulled-test recipes config.yml --packages coal-align
 ```
 
-Status of the current recipe (2026-11-13): not built with conda yet; the commands of its `test:` section were run by
-hand against a virtual environment made as above. An earlier version of the recipe (the PAL2NAL scope only):
+Status of the current recipe (2026-11-13): not built with conda yet. The commands of its `test:` section were run by
+hand against the development tree (a virtual environment with `coal` and the built `coal-cpp` / `coal-cpp-align`
+on `PATH`), except the two that compare with `{{ version }}` (the tree is 0.6.0.dev0) and `test_dispatch.sh`
+(unchanged); all passed. An earlier version of the recipe (the PAL2NAL scope only):
 on 2026-10-22 it (with `source:` pointed at a tarball of the `packaging/bioconda` branch, i.e. the split
 layout) built and passed all of its tests with `conda build -c conda-forge` on linux-64 (python 3.15 variant); the
 package held `bin/coal`, `bin/coal-cpp`, `bin/pal2nal`, the `coal` and `coal_compat` modules and
