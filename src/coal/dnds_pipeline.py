@@ -519,6 +519,8 @@ class _Run:
         self.notes: list[str] = []         # warnings of the run, also in the report
         self.isoforms: dict = {}           # the report's `isoforms`: per set what was found and done
         self._gene_map: dict | None = None
+        self._first_ids: dict = {}
+        self.set_counts: dict = {}         # per input set: records, not usable, dropped (as genes.tsv lists them)
 
     # -- set-up
     def start(self) -> None:
@@ -990,6 +992,7 @@ class _Run:
         if dropped:
             c.setdefault("dropped", 0)
         codes = self.gene_failures.setdefault(set_name, {"usable": 0, "codes": {}, "first": None})
+        mine = self.set_counts.setdefault(set_name, {"total": 0, "failed": 0, "dropped": 0})
         with open(genes_path, encoding="utf-8", errors="backslashreplace") as fh:
             next(fh)
             for line in fh:
@@ -1001,11 +1004,15 @@ class _Run:
                     out_fh.write(set_name + "\t" + "\t".join(f) + "\n")
                     c["total"] += 1
                     c["dropped"] += 1
+                    mine["total"] += 1
+                    mine["dropped"] += 1
                     continue
                 out_fh.write(set_name + "\t" + line)
                 c["total"] += 1
+                mine["total"] += 1
                 c[f[7]] = c.get(f[7], 0) + 1
                 if f[7] == "failed":
+                    mine["failed"] += 1
                     if f[8] != "duplicate_id":   # a repeated ID: its first record stands
                         failed.setdefault(f[0], f[9])
                     self.fail("gene", f[8], f"{set_name}: {f[9]}", seq1=f[0])
@@ -1017,6 +1024,11 @@ class _Run:
                     if order is not None:
                         order[f[0]] = len(order)
         return failed
+
+    def n_records(self, set_name: str, what: str = "total") -> int:
+        """The records of a set as genes.tsv lists them (a repeated ID is a record, and not usable): the same
+        counts as the summary line."""
+        return self.set_counts.get(set_name, {}).get(what, 0)
 
     # -- several transcripts per gene (coal/isoforms.py)
     def find_isoforms(self, set_name: str, paths: list[str], genes_path: str) -> dict:
@@ -1035,6 +1047,8 @@ class _Run:
                 ids.append(f[0])
                 if f[7] != "failed":
                     lengths[f[0]] = int(f[1])
+        headers = I.read_headers([self.plain(p) for p in paths])
+        rule = getattr(a, "isoform_rule", "auto") or "auto"
         if a.gene_map:
             if self._gene_map is None:
                 try:
@@ -1043,44 +1057,129 @@ class _Run:
                     raise PipelineError(str(e)) from None
                 except OSError as e:
                     raise PipelineError(f"cannot open {a.gene_map!r}: {e.strerror or e}") from None
-            det = I.from_gene_map(self._gene_map, ids)
-            unknown = sum(1 for r in ids if r not in self._gene_map)
+                if not self._gene_map:
+                    raise PipelineError(f"--gene-map {a.gene_map} names no record (it has no line with a record ID "
+                                        "and a gene ID)")
+            # the map wins for the records it names; the others fall back to what the headers and IDs say
+            det = I.from_gene_map(self._gene_map, headers, detection=rule != "map")
+            unknown = det.records - (det.in_map or 0)
         else:
-            det = I.detect([(rid, rest) for rid, rest in I.read_headers([self.plain(p) for p in paths])])
+            det = I.detect(headers) if rule != "map" else I.from_gene_map({}, headers, detection=False)
             unknown = None
         dropped = I.choose_longest(det, lengths) if a.longest_isoform else {}
+        by_suffix = sum(1 for r in dropped if r in det.by_suffix)
+        if by_suffix * 2 > det.records and rule != "suffix":
+            # a suffix alone is a guess: gene families (HSP70.1, HSP70.2) and genes numbered per scaffold
+            # (scaffold7.1, scaffold7.2) look the same as transcripts. Never drop most of a file on a guess.
+            ex = det.example
+            suffix = det.fallback if det.kind == "map" else det.source
+            raise PipelineError(
+                f"--longest-isoform would drop {by_suffix:,} of the {det.records:,} {set_name} records on the "
+                f"evidence of their IDs alone ({suffix}"
+                + (f"; e.g. {', '.join(ex[1])} would be one gene, {ex[0]}" if ex else "") + "): more than half. "
+                "IDs that differ in a number are transcripts in some annotations and different genes in others "
+                "(paralogs HSP70.1 / HSP70.2, genes numbered per scaffold), and nothing in the headers names a "
+                "gene. Nothing was dropped. If these are transcripts of one gene, run again with --isoform-rule "
+                "suffix; otherwise give the gene of each record with --gene-map TSV (record ID, gene ID)")
         rec = {"records": det.records, "genes": det.genes, "genes_with_several_records": det.multi,
                "records_beyond_one_per_gene": det.extra, "gene_source": det.source, "dropped": len(dropped)}
         if unknown is not None:
             rec["records_not_in_gene_map"] = unknown
+            rec["records_in_gene_map"] = det.in_map or 0
+            if det.kind == "map" and det.fallback:
+                rec["gene_source_of_records_not_in_gene_map"] = det.fallback
+        if by_suffix:
+            rec["dropped_by_id_suffix"] = by_suffix
+        if det.conflicts:
+            rec["gene_symbols_at_different_loci"] = det.conflicts
+            sym, members, why = det.conflict_example
+            rec["gene_symbol_example"] = {"symbol": sym, "records": members, "evidence": why}
+        if det.refseq_ids:
+            rec["refseq_transcript_ids"] = det.refseq_ids
         if det.example:
             rec["example"] = {"gene": det.example[0], "records": det.example[1]}
+        self._first_ids[set_name] = [rid for rid, _ in headers[:3]]
         self.isoforms[set_name] = rec
         return dropped
+
+    def check_gene_map(self) -> None:
+        """--gene-map that names no record of any input set is an error (the usual cause: IDs of another release,
+        or protein IDs for a file of transcripts). Called when every set has been read."""
+        a = self.a
+        sets = self.isoforms
+        ids = self._first_ids
+        if not a.gene_map or not sets or any(r.get("records_in_gene_map", 0) for r in sets.values()):
+            return
+        mapped = list(self._gene_map or {})[:3]
+        raise PipelineError(
+            f"--gene-map {a.gene_map} names none of the records of the input: its record IDs (first column) are "
+            f"e.g. {', '.join(mapped)}; the input's are e.g. "
+            + "; ".join(f"{', '.join(v)} ({n})" for n, v in ids.items() if v)
+            + ". The first column must hold the IDs of the FASTA records (the header up to the first blank)")
+
+    @staticmethod
+    def _source_text(r: dict) -> str:
+        if r["gene_source"] != "gene map":
+            return str(r["gene_source"])
+        fb = r.get("gene_source_of_records_not_in_gene_map")
+        return "--gene-map" + (f", and {fb} for the records it does not name" if fb else "")
 
     def isoform_warning(self) -> None:
         """One line for the run: input that looks like several transcripts per gene (and nothing done about it),
         or what --longest-isoform did."""
         a = self.a
+        self.check_gene_map()
         sets = self.isoforms
+        if a.gene_map:
+            for n, r in sets.items():
+                if not r.get("records_in_gene_map") and not (a.longest_isoform and r["gene_source"] is None):
+                    self.warn(f"--gene-map {a.gene_map} names no record of the {n} file(s): "
+                              + (f"their genes are read from the {r['gene_source']}" if r["gene_source"]
+                                 else "nothing else names their genes, so every record there is a gene of its own"))
+        for n, r in sets.items():
+            if r.get("gene_symbols_at_different_loci"):
+                ex = r["gene_symbol_example"]
+                self.warn(f"{n}: {r['gene_symbols_at_different_loci']:,} gene symbol(s) are shared by records at "
+                          f"different loci (e.g. {ex['symbol']}: {', '.join(ex['records'])}; {ex['evidence']}): "
+                          "these are different genes with one name (copies of a gene, several strains or genomes "
+                          "in one file), so they are not merged; each record is a gene of its own. Give the genes "
+                          "with --gene-map TSV if some of them are transcripts of one gene")
+        refseq = [n for n, r in sets.items() if r["gene_source"] is None and r.get("refseq_transcript_ids", 0) * 2
+                  >= max(1, r["records"])]
+        refseq_text = ("RefSeq transcript accessions (NM_, XM_) hold no gene in the ID, and the headers of the "
+                       f"{' and '.join(refseq)} file(s) have no gene field: several transcripts of one gene cannot "
+                       "be seen. Give the genes with --gene-map TSV (record ID, gene ID; e.g. from the GFF or "
+                       "gene2refseq), or use NCBI's CDS file (cds_from_genomic), whose headers name the gene")
         if a.longest_isoform:
             total = sum(r["dropped"] for r in sets.values())
             none = [n for n, r in sets.items() if r["gene_source"] is None]
             parts = [f"{n}: {r['dropped']:,} of {r['records']:,} records dropped, {r['genes']:,} genes "
-                     f"(from {'--gene-map' if r['gene_source'] == 'gene map' else r['gene_source']})"
+                     f"(from {self._source_text(r)})"
                      for n, r in sets.items() if r["gene_source"] is not None]
             self.say("--longest-isoform: " + ("; ".join(parts) if parts else "no record dropped")
                      + (f"; {total:,} in all, listed in genes.tsv with status dropped" if total else ""))
-            if none:
-                self.warn(f"--longest-isoform: the headers of the {' and '.join(none)} file(s) name no gene (no "
-                          "gene: / [gene= / locus_tag= field, no shared ID stem with a transcript suffix), so "
-                          "every record was kept there; give the genes with --gene-map TSV (record ID, gene ID)")
+            plain = [n for n in none if n not in refseq]
+            if plain:
+                self.warn(f"--longest-isoform: the headers of the {' and '.join(plain)} file(s) name no gene (no "
+                          "locus_tag= / GeneID: / gene: / [gene= field, no shared ID stem with a transcript "
+                          "suffix)" + (f", and --gene-map {a.gene_map} names none of their records" if a.gene_map
+                                       else "") + ", so every record was kept there; give the genes with "
+                          "--gene-map TSV (record ID, gene ID)")
+            if refseq:
+                self.warn("--longest-isoform: " + refseq_text + ". Every record was kept there")
             if a.gene_map:
-                missing = sum(r.get("records_not_in_gene_map", 0) for r in sets.values())
+                missing = sum(r.get("records_not_in_gene_map", 0) for r in sets.values()
+                              if r.get("records_in_gene_map"))
+                named = sum(1 for r in sets.values() if r.get("records_in_gene_map")
+                            and r.get("gene_source_of_records_not_in_gene_map"))
                 if missing:
-                    self.warn(f"{missing:,} record(s) are not in --gene-map {a.gene_map}: each is kept as a gene "
-                              "of its own")
+                    self.warn(f"{missing:,} record(s) are not in --gene-map {a.gene_map}: "
+                              + ("their genes are read from the headers or IDs where those name one, and each "
+                                 "other record is kept as a gene of its own" if named
+                                 else "each is kept as a gene of its own"))
             return
+        if refseq:
+            self.warn(refseq_text)
         multi = {n: r for n, r in sets.items() if r["genes_with_several_records"]}
         if not multi:
             return
@@ -1090,7 +1189,7 @@ class _Run:
             parts.append(f"{n}: {r['records']:,} records of {r['genes']:,} genes, "
                          f"{r['genes_with_several_records']:,} genes with several records"
                          + (f" (e.g. {ex['gene']}: {', '.join(ex['records'])})" if ex else "")
-                         + f", read from the {'--gene-map' if r['gene_source'] == 'gene map' else r['gene_source']}")
+                         + f", read from the {self._source_text(r)}")
         self.warn("the input looks like several transcripts per gene (" + "; ".join(parts) + "). The pipeline "
                   "treats each record as a gene: such a gene is compared once per transcript, and reciprocal best "
                   "hits are split between its transcripts. Use --longest-isoform to keep the longest CDS of each "
@@ -1296,6 +1395,7 @@ class _Run:
             report["error"] = error
         if self.isoforms:
             report["isoforms"] = {"longest_isoform": bool(a.longest_isoform), "gene_map": a.gene_map or None,
+                                  "isoform_rule": getattr(a, "isoform_rule", "auto"),
                                   "sets": self.isoforms}
         if self.notes:
             report["warnings"] = self.notes
@@ -1400,9 +1500,8 @@ def _pairs_mode(run: _Run) -> None:
             gf.write("set\t" + fh.readline())
         q_failed = run.read_genes(q_genes, "query", gf, q_order, q_drop)
         s_failed = run.read_genes(s_genes, "subject", gf, s_order, s_drop)
-    run.say(f"translated {len(q_order) + len(q_failed) + len(q_drop):,} query and "
-            f"{len(s_order) + len(s_failed) + len(s_drop):,} subject CDS "
-            f"({len(q_failed) + len(s_failed):,} not usable)")
+    run.say(f"translated {run.n_records('query'):,} query and {run.n_records('subject'):,} subject records "
+            f"({run.n_records('query', 'failed') + run.n_records('subject', 'failed'):,} not usable)")
     run.require_usable_genes("query", [a.query])
     run.require_usable_genes("subject", [a.subject])
     run.isoform_warning()
@@ -1677,7 +1776,7 @@ def _clusters_mode(run: _Run) -> None:
         with open(genes, encoding="utf-8", errors="backslashreplace") as fh:
             gf.write("set\t" + fh.readline())
         failed = run.read_genes(genes, "cds", gf, order, drop)
-    run.say(f"translated {len(order) + len(failed) + len(drop):,} CDS ({len(failed):,} not usable)")
+    run.say(f"translated {run.n_records('cds'):,} records ({run.n_records('cds', 'failed'):,} not usable)")
     run.require_usable_genes("cds", list(a.cds))
     run.isoform_warning()
     all_faa = faa
@@ -2018,11 +2117,19 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--longest-isoform", action="store_true",
                    help="keep one record per gene, the longest CDS (ties: the ID that sorts first); the others are "
                         "listed in DIR/genes.tsv with status dropped. The gene of a record comes from --gene-map, "
-                        "else from its header (gene:, [gene=, locus_tag=, gene_symbol:) or a shared ID stem with a "
-                        "transcript suffix (AT1G01010.1 / .2)")
+                        "else from its header (locus_tag=, GeneID:, gene:, parent=FBgn, locus=, then [gene= / gene= "
+                        "/ gene_symbol:) or a shared ID stem with a transcript suffix (AT1G01010.1 / .2, g1.t1, "
+                        "_i1, -RA, -mRNA-1, _T001; docs/pipeline.md lists the styles)")
     g.add_argument("--gene-map", metavar="TSV",
                    help="record ID and gene ID, tab-separated, for --longest-isoform (and for the warning about "
-                        "several transcripts per gene); records it does not name are genes of their own")
+                        "several transcripts per gene). It wins for the records it names; the genes of the others "
+                        "are read from their headers or IDs as without it. A map that names no record of the "
+                        "input, or gives a record two genes, is an error")
+    g.add_argument("--isoform-rule", choices=("auto", "suffix", "map"), default="auto",
+                   help="auto (default): header fields, else ID suffixes, and --longest-isoform refuses to drop "
+                        "more than half of a file's records on the evidence of ID suffixes alone (HSP70.1 / "
+                        "HSP70.2 may be paralogs, not transcripts); suffix: the ID suffixes are transcripts, drop "
+                        "them whatever their share; map: use --gene-map only, read nothing from headers or IDs")
     g = common.add_argument_group("Ka/Ks")
     g.add_argument("-m", "--method", action="append", metavar="METHOD", type=_method_name, choices=METHODS,
                    help="YN (default), NG, LWL, MLWL, LPB, MLPB, MYN, Comeron (alias C95), Li; repeat for several "
@@ -2240,7 +2347,10 @@ def _execute(mode: str, a: argparse.Namespace, argv) -> PipelineResult:
         if report["exit_code"] != code:   # failed.tsv or the report could not be written
             return PipelineResult(report["exit_code"], report, run.outputs)
         genes = run.counts.get("genes", {})
-        run.say(f"summary: {genes.get('total', 0):,} genes ({genes.get('failed', 0):,} not usable); "
+        n_drop = genes.get("dropped", 0)
+        kept = genes.get("total", 0) - genes.get("failed", 0) - n_drop
+        run.say(f"summary: {genes.get('total', 0):,} records ({genes.get('failed', 0):,} not usable"
+                + (f", {n_drop:,} dropped by --longest-isoform: {kept:,} genes" if n_drop else "") + "); "
                 f"{pairs.get('total', 0):,} pairs: {pairs.get('ok', 0):,} ok, {pairs.get('warning', 0):,} warning, "
                 f"{pairs.get('not_converged', 0):,} not_converged, {pairs.get('saturated', 0):,} saturated, "
                 f"{pairs.get('no_data', 0):,} no_data, "

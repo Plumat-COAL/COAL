@@ -28,7 +28,7 @@ the cache. They are not bundled (licences: [alignment.md](alignment.md#licences-
 ## One record is one gene
 
 **The pipeline treats every FASTA record as a gene.** It does not know about transcripts. CDS files from genome
-annotations (Ensembl, NCBI, TAIR, Phytozome, a Trinity assembly) usually hold every transcript of every gene, and
+annotations (Ensembl, NCBI, TAIR, Phytozome, FlyBase, a MAKER or Trinity assembly) usually hold every transcript of every gene, and
 with such a file a gene with five isoforms is five "genes": it is compared once per transcript, the reciprocal
 best hits are split between the isoforms of a gene (most transcripts end up in `unpaired.tsv` as
 `not_reciprocal`), and the same gene pair appears several times with different values. On an Ensembl human / mouse
@@ -45,22 +45,70 @@ coal pipeline pairs --query q_cds.fa --subject s_cds.fa -o out --longest-isoform
   one warning with the counts (`query: 36,827 records of 3,734 genes, ...`), an example and where the genes were
   read from, and goes on as before: nothing else changes without the options below.
 - **Where the gene of a record comes from.** (1) `--gene-map TSV`: record ID and gene ID, tab-separated (a header
-  line and `#` lines are skipped; one map serves all input files; a record it does not name is a gene of its
-  own). Without a map, (2) a field of the FASTA header that at least 90% of a file's records have, the first of:
-  `gene:ENSG...` (Ensembl), `[gene=...]` or `gene=...` (NCBI `cds_from_genomic`, GFF-derived files),
-  `[locus_tag=...]` or `locus_tag=...`, `gene_symbol:...`; else (3) the ID itself, when IDs share a stem and
-  differ in a transcript suffix: `AT1G01010.1` / `AT1G01010.2` (TAIR, Ensembl Plants, Phytozome), `g12.t1` /
-  `g12.t2` (AUGUSTUS, BRAKER), `..._g1_i1` / `..._g1_i2` (Trinity). The detection is conservative: an ID that is
-  alone with its stem is its own gene (the `.8` of `ENST00000380152.8` is a version, not an isoform), and a
-  suffix rule is not applied when a stem has more than four records on average (`scaffold7.1` ...
-  `scaffold7.340` numbers genes). When a file's annotation follows none of these conventions, give a gene map.
+  line and `#` lines are skipped; one map serves all input files). The map wins for every record it names. A
+  record it does not name falls back to (2) and (3), read for its file as without a map, so a map for one
+  species, or for part of a file, does not switch the detection off for the rest (`--isoform-rule map` does: then
+  a record the map does not name is a gene of its own). A map that names no record of any input file is an error
+  (exit 1; the message shows IDs of the map and of the files), and so is a map that gives one record two
+  different genes (the records are listed); the same line twice is fine. (2) A field of the FASTA header that at
+  least 90% of a file's records have, stable gene identifiers before gene symbols: `[locus_tag=...]` or
+  `locus_tag=...`, `GeneID:...` (also inside `[db_xref=...]`), `gene:...` (Ensembl), `parent=FBgn...` (FlyBase),
+  `locus=...` (Phytozome), then `[gene=...]` or `gene=...` (NCBI `cds_from_genomic`, GFF-derived files) and
+  `gene_symbol:...`. (3) The ID itself, when IDs share a stem and differ in a transcript suffix (the table
+  below). When a file's annotation follows none of these conventions, give a gene map.
+- **Header styles.** What `coal pipeline` recognises, with two records of one gene each (one small test file per
+  row: `tests/fixtures/isoforms/styles/`):
+
+  | Annotation | Two records of one gene | Read from |
+  |---|---|---|
+  | NCBI, with locus tags | `lcl\|NC_1_cds_NP_1.1_1`, `lcl\|NC_1_cds_NP_2.1_2` with `[locus_tag=...` | header field [locus_tag= |
+  | NCBI, with GeneIDs | `lcl\|NC_1_cds_NP_1.2_1`, `lcl\|NC_1_cds_XP_2.1_2` with `GeneID:...` | header field GeneID: |
+  | Ensembl | `ENST00000380152.8`, `ENST00000544455.6` with `gene:...` | header field gene: |
+  | FlyBase | `FBpp0070000`, `FBpp0070001` with `parent=FBgn...` | header field parent=FBgn |
+  | Phytozome | `Potri.001G000100.1`, `Potri.001G000100.2` with `locus=...` | header field locus= |
+  | NCBI, gene symbols only | `lcl\|NC_1_cds_NP_1.1_1`, `lcl\|NC_1_cds_XP_2.1_2` with `[gene=...` | header field [gene= |
+  | GFF-derived (gffread, WormBase) | `mRNA1`, `mRNA2` with `gene=...` | header field gene= |
+  | TransDecoder on Trinity | `TRINITY_DN1000_c0_g1_i1.p1`, `TRINITY_DN1000_c0_g1_i2.p1` | ID suffix _iN.pN (TransDecoder on Trinity) |
+  | Trinity | `TRINITY_DN1000_c0_g1_i1`, `TRINITY_DN1000_c0_g1_i2` | ID suffix _iN (Trinity) |
+  | AUGUSTUS, BRAKER | `g1.t1`, `g1.t2` | ID suffix .tN |
+  | MAKER | `maker-scaf1-gene-0.5-mRNA-1`, `maker-scaf1-gene-0.5-mRNA-2` | ID suffix -mRNA-N (MAKER) |
+  | MAKER (-RA, -RB) | `Gene0001-RA`, `Gene0001-RB` | ID suffix -RA (MAKER) |
+  | maize (B73 v4) | `Zm00001d027230_T001`, `Zm00001d027230_T002` | ID suffix _TNNN (maize) |
+  | Phytozome protein IDs | `Potri.001G000100.1.p`, `Potri.001G000100.2.p` | ID suffix .N.p (Phytozome) |
+  | TAIR, Ensembl Plants, Phytozome | `AT1G01020.1`, `AT1G01020.2` | ID suffix .N |
+  | RAP-DB (rice) | `Os01t0100200-01`, `Os01t0100200-02` | ID suffix -NN (RAP-DB) |
+
+  Not recognised: UniProt headers (`GN=`; protein files anyway), IDs without a common stem (`rna-XM_...`), and
+  **RefSeq transcript accessions** (`NM_000059.4`, `XM_011535000.3`): the accession holds no gene, so without a
+  gene field in the header several transcripts of one gene cannot be seen; a warning says so. Use NCBI's
+  `cds_from_genomic` file (its headers name the gene) or a gene map.
+- **These are heuristics, and this is how they fail.**
+  - *An ID suffix is a guess.* An ID that is alone with its stem is its own gene (the `.8` of
+    `ENST00000380152.8` is a version, not an isoform), and a suffix rule is not applied when a stem has more than
+    four records on average (`scaffold7.1` ... `scaffold7.340` numbers genes). But a numbering of paralogs
+    (**`HSP70.1 / HSP70.2`**) or of a few genes per scaffold (**`scaffold7.1`, `scaffold7.2`, `scaffold7.3`**)
+    looks exactly like transcripts, and `--longest-isoform` would merge different genes and keep one. Two
+    guards: the summary line names the rule and the counts (`query: 6 of 26 records dropped, 20 genes (from ID
+    suffix .N)`), and **when a suffix rule alone (no header field, no gene map) would drop more than half of a
+    file's records, the run stops** (exit 1, nothing dropped) and asks for `--gene-map`, or for
+    `--isoform-rule suffix` if the suffixes really are transcripts. Below that share a family such as
+    `HSP70.1 / HSP70.2` among otherwise plain IDs is merged without a refusal: look at the `dropped` rows of
+    `genes.tsv` when your IDs end in numbers and you have not checked what the numbers mean.
+  - *A gene symbol is not a locus.* In a file of several strains or genomes every `[gene=dnaA]` is another gene,
+    and one genome can hold two copies of `tuf`. Locus tags and GeneIDs are therefore preferred to symbols, and
+    when only symbols are there, records that share a symbol but sit on different contigs (`lcl|CONTIG_cds_...`)
+    or carry different locus tags or GeneIDs are **not merged**: each stays a gene of its own and a warning
+    names the symbols and an example. Two copies of a gene on one contig, with nothing but the symbol in their
+    headers, cannot be told from two transcripts: give a gene map.
+  - *The 90% rule.* A field that fewer than 90% of a file's records have is not used (a gene map is the remedy).
 - **`--longest-isoform`** keeps, for every gene, the record with the longest CDS (in nucleotides; of equally long
   ones the ID that sorts first) among the records that can be used, in both modes, before DIAMOND runs. The other
   records are listed in `genes.tsv` with status `dropped`, code `not_longest_isoform` and a note naming the gene
   and the record kept; they are not failures (the exit code is not affected). A `--pairs` or `--clusters` file
   that names a dropped record gets that pair's `error` row, or that member left out, with the reason.
-  `report.json` records the choice (`isoforms`: the option, the gene map, and per input set the records, genes,
-  genes with several records, where the genes were read from and how many records were dropped), and
+  `report.json` records the choice (`isoforms`: the option, the gene map, `isoform_rule`, and per input set the
+  records, genes, genes with several records, where the genes were read from, how many records the map names, how
+  many were dropped and how many of those on the evidence of an ID suffix), and
   `counts.genes.dropped` the number. With `--longest-isoform` and no gene information in a file, every record
   of it is kept and a warning says so.
 - The longest CDS is a convention, not the biologically "main" transcript. For a curated choice (Ensembl
@@ -143,7 +191,8 @@ coal pipeline clusters --cds all_cds.fa --clusters deepclust.tsv -o out --max-cl
 | `--report FILE` | the JSON report | `DIR/report.json` |
 | `--hash-inputs auto\|always\|never` | SHA-256 of the input files in the report: files up to 2 GiB, every file, or none | `auto` |
 | `--msa-timeout S` | give up on one Clustal Omega / MAFFT run after S seconds | none |
-| `--longest-isoform`, `--gene-map TSV` | keep the longest CDS per gene; the genes from a map instead of the headers ([One record is one gene](#one-record-is-one-gene)) | off |
+| `--longest-isoform`, `--gene-map TSV` | keep the longest CDS per gene; the genes from a map where it names the record, else from the headers and IDs ([One record is one gene](#one-record-is-one-gene)) | off |
+| `--isoform-rule auto\|suffix\|map` | `auto`: header fields, else ID suffixes, and `--longest-isoform` stops when a suffix rule alone would drop more than half of a file's records; `suffix`: the ID suffixes are transcripts, whatever their share; `map`: only `--gene-map`, nothing is read from headers or IDs | `auto` |
 | `--min-codons N`, `--max-ds X` | flag estimates from fewer than N compared codons / with dS above X: status `warning` and a note; no row dropped, no number changed ([Filtering before interpretation](#filtering-before-interpretation)) | off |
 | `--yn-flavour`, `--yn-weighting`, `--digits`, `--max-cells` | as in `coal dnds` and `coal-cpp-align` | |
 | `--comeron-flavour coal\|gestimator`, `--li-flavour coal\|seqinr` | how `Comeron` and `Li` read a pair: COAL's policy, or as their reference programs (stop codons compared; [kaks.md](kaks.md), "Comeron and Li") | `coal` |

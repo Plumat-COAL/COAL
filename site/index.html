@@ -99,9 +99,9 @@ coal: summary: The run stopped at OG0001_sp14: 6 sequences were not checked and 
     sequences of two species to a table of dN, dS and dN/dS in one command: it translates the genes, finds the
     orthologs with DIAMOND, aligns the proteins, makes the codon alignments and estimates Ka/Ks.</p>
 <pre class="term" tabindex="0" aria-label="Terminal: coal pipeline on the dnds example finds 12 ortholog pairs"><code><span class="ps">$</span> coal pipeline pairs --query examples/dnds/species_a_cds.fasta --subject examples/dnds/species_b_cds.fasta -o out
-coal pipeline: translated 13 query and 13 subject CDS (0 not usable)
+coal pipeline: translated 13 query and 13 subject records (0 not usable)
 coal pipeline: 12 pairs (rbh)
-coal pipeline: summary: 26 genes (0 not usable); 12 pairs: 12 ok, 0 warning, 0 not_converged, 0 saturated, 0 no_data, 0 error
+coal pipeline: summary: 26 records (0 not usable); 12 pairs: 12 ok, 0 warning, 0 not_converged, 0 saturated, 0 no_data, 0 error
 <span class="ps">$</span> cut -f 1,2,4-6 out/dnds.tsv | head -3
 seq1     seq2     dN           dS          dNdS
 spA_g01  spB_g01  0.010176579  0.39934548  0.025483147

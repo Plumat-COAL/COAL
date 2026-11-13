@@ -179,6 +179,19 @@ entry under "Added", not under "Fixed".
     such as `AT1G01010.1` / `.2`) gets one warning with counts. `--longest-isoform` keeps the longest CDS per gene
     before the search (`--gene-map TSV` when the headers do not name the gene); dropped records are in `genes.tsv`
     with status `dropped`, and `report.json` records the choice (docs/pipeline.md "One record is one gene").
+    Second review (2026-11-13): stable gene identifiers are read before gene symbols (`locus_tag`, `GeneID:`,
+    Ensembl `gene:`, FlyBase `parent=FBgn`, Phytozome `locus=`, then `[gene=` / `gene_symbol:`), and records that
+    share a symbol but are clearly different loci (other contig, locus tag or GeneID: several strains in one
+    file, two copies of `tuf`) are not merged, with a warning. More ID styles: TransDecoder `_i1.p1`, MAKER
+    `-RA` / `-mRNA-1`, maize `_T001`, RAP-DB `-01`, Phytozome proteins `.1.p`; RefSeq `NM_` / `XM_` accessions get
+    a warning that the ID holds no gene. `--gene-map` wins for the records it names and the others fall back to
+    the headers and IDs (it used to switch detection off for every file); a map that names no record of the
+    input, or gives a record two genes, is an error (exit 1). **`--longest-isoform` never drops more than half
+    of a file's records on the evidence of ID suffixes alone**: it stops with exit 1 and asks for `--gene-map`
+    or the new `--isoform-rule suffix` (`map`: use the map only). docs/pipeline.md has the table of header
+    styles (one test file each) and how the heuristics fail (`HSP70.1 / HSP70.2`, `scaffold7.1`). The progress
+    and summary lines count "records" until `--longest-isoform` has made genes of them, and a repeated ID is
+    counted as not usable in both.
   - **Cluster mode does not depend on the order of the input.** DIAMOND DeepClust is order-dependent, so it is
     given the proteins sorted by ID: the same sequences give the same `clusters.tsv` whatever the order of the
     `--cds` files and records. (Development builds before 2026-11-13 clustered in input order; their clusters can
