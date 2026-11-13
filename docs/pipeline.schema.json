@@ -64,11 +64,12 @@
         },
         "pairs": {
           "type": "object",
-          "required": ["total", "ok", "warning", "saturated", "no_data", "error"],
+          "required": ["total", "ok", "warning", "not_converged", "saturated", "no_data", "error"],
           "properties": {
             "total": {"type": "integer", "minimum": 0},
             "ok": {"type": "integer", "minimum": 0},
             "warning": {"type": "integer", "minimum": 0},
+            "not_converged": {"type": "integer", "minimum": 0},
             "saturated": {"type": "integer", "minimum": 0},
             "no_data": {"type": "integer", "minimum": 0},
             "error": {"type": "integer", "minimum": 0}

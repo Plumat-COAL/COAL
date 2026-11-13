@@ -537,6 +537,28 @@ class CodonDnds(PipelineCase):
         self.assertTrue(kept[k + 1].startswith("aug"))                        # the DNA is copied as written
         self.assertEqual(len(kept[k + 1]), len(kept[k + 3]))
 
+    def test_iteration_that_does_not_converge_is_not_an_estimate(self):
+        """AAA against ATG, YN: the iteration does not converge (tests/test_kaks.py). The pair has status
+        not_converged and no dN, dS; the KaKs_Calculator-format file has NA there as well. Nothing platform
+        dependent is asserted (the last round, kept in the note, differs between platforms)."""
+        x, y = PLAIN[1]
+        # (protein rows given: the pairwise aligner would not put K against M)
+        data = stream([("nc", "all", [("M", "a", "AAA", "K"), ("M", "b", "ATG", "M")]),
+                       ("ok", "all", [("M", x, self.q[x]), ("M", y, self.s[y])])])
+        r, rows = self.run_stream(data, "-m", "YN", "-m", "NG", "--kaks-out", self.tmp / "k.kaks")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        st = {(x["seq1"], x["method"]): x for x in rows}
+        nc = st[("a", "YN")]
+        self.assertEqual(nc["status"], "not_converged")
+        self.assertEqual([nc[c] for c in ("dN", "dS", "dNdS", "SE_dN", "SE_dS", "Nd", "Sd")], ["NA"] * 7)
+        self.assertIn("did not converge", nc["note"])
+        self.assertNotEqual(st[("a", "NG")]["status"], "not_converged")     # no iteration there
+        self.assertEqual(st[(x, "YN")]["status"], "ok")
+        k = {(f[0], f[1]): f for f in (line.split("\t") for line in
+                                       (self.tmp / "k.kaks").read_text(encoding="utf-8").splitlines()[1:])}
+        self.assertEqual(k[("a&b", "YN")][2:6], ["NA"] * 4)
+        self.assertNotEqual(k[(f"{x}&{y}", "YN")][3], "NA")
+
     def test_failed_members_groups_and_pair_lists(self):
         q, s = self.q, self.s
         fam = read_fasta(FAM)
@@ -669,7 +691,8 @@ class PairsGiven(PipelineCase):
             self.assertEqual([r[c] for c in VALUES], [h[c] for c in VALUES], r["seq1"])
         c = res.report["counts"]
         self.assertEqual(c["genes"], {"total": 40, "ok": 34, "warning": 2, "failed": 4})
-        self.assertEqual(c["pairs"], {"total": 17, "ok": 15, "warning": 2, "saturated": 0, "no_data": 0, "error": 0})
+        self.assertEqual(c["pairs"], {"total": 17, "ok": 15, "warning": 2, "not_converged": 0, "saturated": 0,
+                                      "no_data": 0, "error": 0})
         failed = read_tsv(res.outputs["failed"])
         self.assertEqual(list(failed[0]), list(P.FAILED_COLUMNS))
         self.assertEqual(sorted((f["level"], f["seq1"], f["code"]) for f in failed),
@@ -1297,6 +1320,7 @@ def recompute_summary(rows: list[dict]) -> dict:
     for key, g in groups.items():
         ok = [r for r in g if r["status"] in ("ok", "warning")]
         e = {"n_pairs": len(g), "n_ok": len(ok), "n_saturated": sum(r["status"] == "saturated" for r in g),
+             "n_not_converged": sum(r["status"] == "not_converged" for r in g),
              "n_no_data": sum(r["status"] == "no_data" for r in g), "n_failed": sum(r["status"] == "error" for r in g)}
         for c in ("dN", "dS", "dNdS"):
             v = sorted(float(r[c]) for r in ok if r[c] != "NA")
@@ -1309,6 +1333,52 @@ def recompute_summary(rows: list[dict]) -> dict:
                       f"{c}_q75": q[2], f"{c}_min": v[0], f"{c}_max": v[-1]})
         out[key] = e
     return out
+
+
+class SummaryCounts(unittest.TestCase):
+    """cluster_summary.tsv and the report's pair counts with a pair whose iteration did not converge: it has no
+    estimate, so it is not in n_ok and not in the statistics; it has a column and a count of its own."""
+
+    HEAD = ("cluster_id",) + tuple(P.PAIR_COLUMNS)
+
+    def row(self, cid, a, b, status, dn="NA", ds="NA"):
+        w = "NA" if "NA" in (dn, ds) else repr(float(dn) / float(ds))
+        return [cid, a, b, "YN", dn, ds, w, "NA", "NA", "2", "1", "NA", "NA", "1", "1", "0.00", status, ""]
+
+    def test_not_converged_is_counted_apart(self):
+        with tempfile.TemporaryDirectory() as td:
+            d = os.path.join(td, "dnds.tsv")
+            rows = [self.row("c1", "a", "b", "ok", "0.1", "0.5"), self.row("c1", "a", "c", "not_converged"),
+                    self.row("c1", "b", "c", "warning", "0.2", "0.5"), self.row("c1", "a", "d", "saturated", "0.3"),
+                    self.row("c2", "x", "y", "not_converged")]
+            with open(d, "w", encoding="utf-8", newline="\n") as fh:
+                fh.write("\t".join(self.HEAD) + "\n" + "".join("\t".join(r) + "\n" for r in rows))
+            plans = [{"cluster_id": c, "representative": r, "n_members": n, "n_used": n, "pair_selection": "all",
+                      "aligner": "pairwise", "note": ""} for c, r, n in (("c1", "a", 4), ("c2", "x", 2), ("c3", "z", 1))]
+            out = os.path.join(td, "s.tsv")
+            P.summarise(d, plans, out)
+            summ = read_tsv(out)
+            self.assertEqual(list(summ[0]), list(P.SUMMARY_COLUMNS))
+            self.assertIn("n_not_converged", P.SUMMARY_COLUMNS)
+            c1, c2, c3 = summ
+            self.assertEqual([c1[k] for k in ("n_pairs", "n_ok", "n_not_converged", "n_saturated", "n_no_data",
+                                              "n_failed", "n_dNdS", "status")], ["4", "2", "1", "1", "0", "0", "2", "ok"])
+            self.assertAlmostEqual(float(c1["dN_mean"]), 0.15)
+            # a cluster whose only pair did not converge has no pair with an estimate
+            self.assertEqual([c2[k] for k in ("n_pairs", "n_ok", "n_not_converged", "dN_median", "status")],
+                             ["1", "0", "1", "NA", "failed"])
+            self.assertEqual([c3[k] for k in ("n_pairs", "n_ok", "n_not_converged", "n_saturated", "status")],
+                             ["0", "0", "0", "0", "ok"])
+            self.assertTrue(all(len(x) == len(P.SUMMARY_COLUMNS) for x in summ))
+
+            class Run:
+                counts: dict = {}
+                def fail(self, *a, **k):
+                    raise AssertionError("no pair failed")
+            run = Run()
+            P._count_pairs(run, d, True)
+            self.assertEqual(run.counts["pairs"], {"total": 5, "ok": 1, "warning": 1, "not_converged": 2,
+                                                   "saturated": 1, "no_data": 0, "error": 0})
 
 
 @needs_cpp

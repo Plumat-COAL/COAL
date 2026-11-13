@@ -70,7 +70,7 @@ PAIR_COLUMNS = ("seq1", "seq2", "method", "dN", "dS", "dNdS", "SE_dN", "SE_dS", 
 _STATS = ("median", "mean", "q25", "q75", "min", "max")
 # out_dir/cluster_summary.tsv
 SUMMARY_COLUMNS = ("cluster_id", "representative", "n_members", "n_used", "method", "pair_selection", "aligner",
-                   "n_pairs", "n_ok", "n_saturated", "n_no_data", "n_failed",
+                   "n_pairs", "n_ok", "n_not_converged", "n_saturated", "n_no_data", "n_failed",
                    *(f"{v}_{s}" for v in ("dN", "dS", "dNdS") for s in _STATS), "n_dNdS", "status", "note")
 FAILED_COLUMNS = ("level", "cluster_id", "seq1", "seq2", "code", "message")
 REPORT_MAX_FAILURES = 1000   # the JSON report lists this many failures; failed.tsv has all of them
@@ -932,7 +932,7 @@ class _Run:
 
 def _count_pairs(run: _Run, dnds_path: str, group_col: bool) -> None:
     """Pair counts by status from dnds.tsv (the first method's rows), and the error pairs into failed.tsv."""
-    c = {"total": 0, "ok": 0, "warning": 0, "saturated": 0, "no_data": 0, "error": 0}
+    c = {"total": 0, "ok": 0, "warning": 0, "not_converged": 0, "saturated": 0, "no_data": 0, "error": 0}
     k = 1 if group_col else 0
     first = None
     with open(dnds_path, encoding="utf-8", errors="backslashreplace") as fh:
@@ -1394,7 +1394,8 @@ def summarise(dnds_path: str, plans: list[dict], out_path: str) -> None:
     """out_dir/cluster_summary.tsv from out_dir/dnds.tsv: one row per cluster and method (SUMMARY_COLUMNS).
 
     plans: one dict per cluster, in the order of dnds.tsv: cluster_id, representative, n_members, n_used,
-    pair_selection, aligner, note. n_ok counts the pairs with status ok or warning (both have estimates); the
+    pair_selection, aligner, note. n_ok counts the pairs with status ok or warning (both have estimates); a pair
+    whose YN / MYN iteration did not converge has none and is counted in n_not_converged, not in n_ok; the
     statistics are over those pairs' values that are numbers (dN/dS is NA when dS is 0: n_dNdS says how many
     values the dN/dS statistics are over)."""
     with open(dnds_path, encoding="utf-8", errors="backslashreplace") as fh, \
@@ -1415,7 +1416,8 @@ def summarise(dnds_path: str, plans: list[dict], out_path: str) -> None:
                     break
                 d = acc.get(f[mi])
                 if d is None:
-                    d = acc[f[mi]] = {"n": 0, "ok": 0, "saturated": 0, "no_data": 0, "error": 0, "v": ([], [], [])}
+                    d = acc[f[mi]] = {"n": 0, "ok": 0, "not_converged": 0, "saturated": 0, "no_data": 0, "error": 0,
+                                     "v": ([], [], [])}
                     if f[mi] not in methods:
                         methods.append(f[mi])
                 d["n"] += 1
@@ -1432,14 +1434,15 @@ def summarise(dnds_path: str, plans: list[dict], out_path: str) -> None:
             lead = [cid, p["representative"], str(p["n_members"]), str(p["n_used"])]
             if not acc:
                 status = "skipped" if p["pair_selection"] == "skipped" else "ok"
-                out.write("\t".join(lead + ["NA", p["pair_selection"], p["aligner"], "0", "0", "0", "0", "0"]
+                out.write("\t".join(lead + ["NA", p["pair_selection"], p["aligner"], "0", "0", "0", "0", "0", "0"]
                                     + ["NA"] * 18 + ["0", status, p.get("note", "")]) + "\n")
                 continue
             for m in (x for x in METHODS if x in acc):
                 d = acc[m]
                 status = "ok" if d["ok"] else "failed"
                 out.write("\t".join(lead + [m, p["pair_selection"], p["aligner"], str(d["n"]), str(d["ok"]),
-                                            str(d["saturated"]), str(d["no_data"]), str(d["error"])]
+                                            str(d["not_converged"]), str(d["saturated"]), str(d["no_data"]),
+                                            str(d["error"])]
                                     + _stats(d["v"][0]) + _stats(d["v"][1]) + _stats(d["v"][2])
                                     + [str(len(d["v"][2])), status, p.get("note", "")]) + "\n")
 
@@ -1703,7 +1706,7 @@ def _execute(mode: str, a: argparse.Namespace, argv) -> PipelineResult:
         genes = run.counts.get("genes", {})
         run.say(f"summary: {genes.get('total', 0):,} genes ({genes.get('failed', 0):,} not usable); "
                 f"{pairs.get('total', 0):,} pairs: {pairs.get('ok', 0):,} ok, {pairs.get('warning', 0):,} warning, "
-                f"{pairs.get('saturated', 0):,} saturated, {pairs.get('no_data', 0):,} no_data, "
+                f"{pairs.get('not_converged', 0):,} not_converged, {pairs.get('saturated', 0):,} saturated, {pairs.get('no_data', 0):,} no_data, "
                 f"{pairs.get('error', 0):,} error")
         if mode == "clusters":
             c = run.counts["clusters"]

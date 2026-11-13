@@ -144,6 +144,7 @@ def main() -> int:
         else:
             ok = g[g["status"].isin(["ok", "warning"])]
             want = {"n_pairs": len(g), "n_ok": len(ok), "n_saturated": int((g["status"] == "saturated").sum()),
+                    "n_not_converged": int((g["status"] == "not_converged").sum()),
                     "n_no_data": int((g["status"] == "no_data").sum()), "n_failed": int((g["status"] == "error").sum()),
                     "n_dNdS": int(ok["dNdS"].notna().sum())}
             for k, v in want.items():
