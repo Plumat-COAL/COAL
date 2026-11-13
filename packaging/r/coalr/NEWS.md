@@ -13,6 +13,13 @@ First version. In-process bindings (Rcpp) to COAL 0.5's C++ core:
   Python (reticulate); optional.
 - Licence: GPL-3, as COAL from this release (the Ka/Ks engine in `src/coal/kaks.cpp` is derived from
   KaKs_Calculator 2.0 and PAML's yn00; `inst/COPYRIGHTS`, `Authors@R`).
+- Ka/Ks methods `"Comeron"` (alias `"C95"`; Comeron 1995 as libsequence's gestimator, the default method of the
+  R package orthologr) and `"Li"` (Li 1993 as `seqinr::kaks()`), in `coal_kaks()`, `coal_dnds_pairs()` and
+  `coal_dnds_clusters()`, for the standard genetic code. Arguments `comeron_flavour` and `li_flavour`: COAL's
+  policy (default), or the reference program's reading of the pair (`"gestimator"`: the numbers of orthologr
+  0.4.3; `"seqinr"`). `src/coal/kaks_comeron.cpp` is derived from libsequence (GPL >= 3; orthologr's copy) and
+  `src/coal/kaks_li.cpp` from seqinr's `kaks.c` (GPL >= 2): `inst/COPYRIGHTS`, `Authors@R`. `"ALL"` still
+  means KaKs_Calculator's seven methods.
 - One string that is written like a file name but names no file is the error "file not found", not a sequence.
   An aligned row is never taken for a file name because of what it ends in or contains (`"MKV..LFA.FA"`,
   `"MK/VL"`, `"~~MKV"`); `?coalr`, "Sequence inputs", has the rule and what it cannot tell apart.

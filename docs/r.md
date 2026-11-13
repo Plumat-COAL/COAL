@@ -73,6 +73,15 @@ res <- coal_dnds_pairs("thaliana_cds.fasta", "lyrata_cds.fasta",
   be aligned is a row with status `error` and the reason, never an R error.
 - Alignment options are those of the command line: `matrix`, `gap_open`, `gap_extend`, `end_gaps`, `max_cells`,
   `preset = "pwalign"`; `code` is the NCBI genetic code; `yn_flavour`, `yn_weighting` as in [kaks.md](kaks.md).
+- `methods` takes KaKs_Calculator's seven names (`"ALL"` for these seven) and `"Comeron"` (alias `"C95"`) and
+  `"Li"`, the two methods of the R package orthologr that need no KaKs_Calculator, in any case. Comeron and Li
+  need `code = 1`. `comeron_flavour = "gestimator"` gives the numbers of orthologr 0.4.3's `gestimator()`
+  (stop codons compared like other codons, undefined logarithms replaced by 0), `li_flavour = "seqinr"` reads
+  stop codons as `seqinr::kaks()` does; the defaults (`"coal"`) apply COAL's policy. With the reference
+  flavours, `coal_dnds_pairs()` and `coal_dnds_clusters()` compare the two terminal stop codons of a pair as
+  the last codon column when both genes have one, which is what orthologr's own pipeline does
+  ([kaks.md](kaks.md), "Comeron and Li"). `coal_kaks()` has the same two arguments and compares the rows it is
+  given.
 - `keep_alignments = TRUE` adds the protein and codon alignment of each pair as `attr(res, "alignments")`.
 
 ## Clusters

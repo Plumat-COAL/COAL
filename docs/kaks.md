@@ -1,14 +1,16 @@
 # Ka/Ks (dN/dS): `coal kaks` and `coal dnds`
 
 COAL estimates Ka (dN) and Ks (dS) for pairs of aligned coding sequences in process, with a C++ engine
-(`cpp/src/kaks.cpp`) derived from KaKs_Calculator 2.0 and PAML's yn00 (see "Where the code comes from" below). No
-external program runs. It has two commands:
+(`cpp/src/kaks.cpp`, `kaks_comeron.cpp`, `kaks_li.cpp`) derived from KaKs_Calculator 2.0, PAML's yn00,
+libsequence and seqinr (see "Where the code comes from" below). No external program runs. It has two commands:
 
 - **`coal kaks`** does the job of `KaKs_Calculator -i IN.axt -o OUT.kaks -m METHOD` for seven of KaKs_Calculator's
   methods (NG, LWL, MLWL, LPB, MLPB, YN, MYN). It takes KaKs_Calculator's `-i`, `-o`, `-m` and `-c` and writes its
   tab-separated format: the same 22 columns, the same NA rules and 6 significant digits. It is not a drop-in for
   every KaKs_Calculator command line: the other methods are refused, and without `-m` it computes YN, where
-  KaKs_Calculator computes MA (model averaging).
+  KaKs_Calculator computes MA (model averaging). It also has two methods that KaKs_Calculator does not have,
+  `Comeron` and `Li`, the two that the R package orthologr computes without KaKs_Calculator (see
+  "Comeron and Li" below).
 - **`coal dnds`** writes a tidy TSV from the same engine, with one row per pair and method, plus standard errors,
   a status and a note.
 
@@ -17,6 +19,8 @@ coal kaks -i pairs.axt -o pairs.kaks                     # YN00 (the default)
 coal kaks -i pairs.axt -o pairs.kaks -m NG -m YN -m MYN  # several methods; rows come in KaKs_Calculator's order
 coal dnds codon_aln.fasta -o dnds.tsv                    # every pair of an aligned FASTA (MSA), YN00
 coal dnds pairs.fasta --pairs consecutive -m YN -m NG -j 8 -c 2
+coal dnds codon_aln.fasta -m Comeron -m Li               # Comeron (1995) and Li (1993), COAL's policy
+coal dnds codon_aln.fasta -m Comeron --comeron-flavour gestimator   # the numbers of orthologr's gestimator
 ```
 
 Both commands are subcommands of `coal-cpp`, and `coal` (Python) hands them to the `coal-cpp` of its own version
@@ -34,6 +38,8 @@ install has no Ka/Ks engine; `coal kaks` then says so and exits 1.
 | `LPB` | Li (1993); Pamilo & Bianchi (1993) | J Mol Evol 36:96-99; Mol Biol Evol 10:271-281 | NA |
 | `MLPB` | LPB with Tzeng et al.'s (2004) Ile/Arg rules | Mol Biol Evol 21:2290-2298 | NA |
 | `MYN` | Zhang, Li & Yu (2006): YN00 with separate transition rates for purines and pyrimidines (TN93) | BMC Evol Biol 6:44 | yes (TN93 variance; F84 fallback) |
+| `Comeron` (alias `C95`) | Comeron (1995) as libsequence's `gestimator` computes it (the default method of the R package orthologr): non-degenerate, transitional and transversional 2-fold and 4-fold sites, Kimura's two-parameter correction per class, pathways weighted by Grantham's distance | J Mol Evol 41:1152-1159 | NA |
+| `Li` | Li (1993) as `seqinr::kaks()` computes it (orthologr's `"Li"`): 0-, 2- and 4-fold sites, pathways weighted by an amino-acid similarity table | J Mol Evol 36:96-99 | yes (seqinr's variance formulas) |
 
 **`NG` is KaKs_Calculator's NG, not the textbook Nei-Gojobori count.** KaKs_Calculator takes a codon's synonymous
 sites from its first and third positions only, leaves the changes that lead to a stop codon out of the
@@ -48,6 +54,12 @@ natively". These are `GY` (maximum likelihood), `MS` and `MA` (model selection a
 variants `GNG GLWL GLPB GMLWL GMLPB GYN GMYN`, and `ALL`. KaKs_Calculator's default method is MA. COAL's default is
 YN, so `coal kaks` without `-m` gives YN rows.
 
+`Comeron` and `Li` are not KaKs_Calculator methods. Their names are orthologr's, they are read in any case
+(`-m comeron`), their rows come after KaKs_Calculator's seven, and they are implemented for the standard genetic
+code only, as their references are (`-c` other than 1 with them is refused with exit status 2). `Li` is not
+`LPB`: the two implement the same formulas of Li (1993) with different site and pathway counting, and give
+different numbers (see "Comeron and Li").
+
 **Where the code comes from.** The engine is not an independent implementation: `cpp/src/kaks.cpp` is derived
 from the source code of KaKs_Calculator 2.0 (Copyright (C) 2009 Beijing Institute of Genomics of CAS; Da-Peng Wang,
 Yu-Bin Zhang, Zhang Zhang, Kristian K Ullrich) and of PAML's `yn00.c` (Copyright 1998 Ziheng Yang), both under the
@@ -56,6 +68,15 @@ numbers are the same; they were rewritten without classes and global state, for 
 for threads, and changed where listed under "Differences from KaKs_Calculator". The header of `kaks.cpp` and the
 `NOTICE` file give the details. This is the reason COAL is distributed under GPL-3.0-only from this release on.
 Neither program is included as such, and `coal kaks` / `coal dnds` do not run them.
+
+In the same way, `cpp/src/kaks_comeron.cpp` is derived from libsequence (Copyright (C) 2003-2009 Kevin Thornton;
+GNU GPL version 3 or later) in the form the R package orthologr compiles into its `gestimator()` (modified by
+Sarah Scharfenberg and Hajk-Georg Drost, 2014; their changes under GPL version 2 or later), and
+`cpp/src/kaks_li.cpp` from `src/kaks.c` of the R package seqinr 4.2-44 (licence `GPL (>= 2)`; the file has no
+notice of its own, and seqinr's help says the C program "was provided by Manolo Gouy"). Both are modified
+versions of that code, with the same structure, constants and order of floating-point operations, which is why
+their numbers are the references' to the last bit. The headers of the two files and `NOTICE` give the exact
+licence statements and what was changed. All three licences allow distribution under GPL version 3.
 
 ## Policy
 
@@ -101,7 +122,14 @@ allows academic use only, and it has no public repository). Values follow KaKs_C
 - `GC` is computed over both rows as given, with gaps included in the length.
 - ML-Score, AICc, Akaike-Weight and Model are `NA`; they belong to the GY, MS and MA methods.
 
-Rows come per pair in KaKs_Calculator's method order (NG, LWL, MLWL, LPB, MLPB, YN, MYN). Pairs with status
+For `Comeron` and `Li` the same 22 columns are written with what the method defines: Ka, Ks, Ka/Ks, Length,
+Substitutions (nucleotide differences in the compared codons) and GC; for `Li` also `Fold-Sites(0:2:4)` (its
+L0:L2:L4) and the two `Fold-*-Substitutions` columns (its transitional and transversional differences per
+class). The other columns are `NA` (there are no S / N counts, so no Fisher test), and the rate-ratio column is
+`1:1:1:1:1:1`, as for NG. The Method column says `Comeron` or `Li`.
+
+Rows come per pair in KaKs_Calculator's method order (NG, LWL, MLWL, LPB, MLPB, YN, MYN), then Comeron, then
+Li. Pairs with status
 `error` are left out, as KaKs_Calculator leaves out pairs it cannot read, and the summary on stderr counts them.
 `--digits N` sets the number of significant digits.
 
@@ -110,11 +138,11 @@ Rows come per pair in KaKs_Calculator's method order (NG, LWL, MLWL, LPB, MLPB, 
 | Column | Meaning |
 |---|---|
 | `seq1`, `seq2` | the two IDs. For FASTA input, the record IDs. For AXT, the name line split at the first `&`; when there is no `&`, seq1 is the whole name line and seq2 is `NA` |
-| `method` | NG, LWL, MLWL, LPB, MLPB, YN or MYN |
+| `method` | NG, LWL, MLWL, LPB, MLPB, YN, MYN, Comeron or Li |
 | `dN`, `dS`, `dNdS` | Ka, Ks, Ka/Ks. `NA` when not available; dNdS is `NA` when dS < 1e-6. Zeros print as 0 |
-| `SE_dN`, `SE_dS` | standard errors (YN, MYN, NG); `NA` elsewhere |
-| `N_sites`, `S_sites` | nonsynonymous and synonymous sites |
-| `Nd`, `Sd` | nonsynonymous and synonymous differences |
+| `SE_dN`, `SE_dS` | standard errors (YN, MYN, NG, Li); `NA` elsewhere |
+| `N_sites`, `S_sites` | nonsynonymous and synonymous sites (`NA` for Comeron and Li, which count sites by degeneracy class, not as S and N) |
+| `Nd`, `Sd` | nonsynonymous and synonymous differences (`NA` for Comeron and Li) |
 | `codons_compared` | codon columns used after the policy |
 | `status`, `note` | see Policy |
 
@@ -138,6 +166,9 @@ with `--format`.
 cannot be read or the output cannot be written. 2 for a command-line error, including a method that is not
 implemented. `-j N` sets the number of threads (default: all hardware threads). Pairs are computed in parallel
 and written in input order, and the output does not depend on `-j`.
+
+`--comeron-flavour gestimator` and `--li-flavour seqinr` make `Comeron` and `Li` read the pair as their
+reference programs do ("Comeron and Li" below); the default for both is `coal`, the policy above.
 
 `--yn-flavour paml` and `--yn-weighting 0|1` choose which reference YN00 follows where the two differ (below).
 `--yn-weighting 0` gives equal pathway weights in one round, which is the default control file of PAML's yn00
@@ -167,7 +198,12 @@ coal::kaks::Method m; std::string why;
 if (!coal::kaks::parse_method("GY", m, why)) { /* why: "... does not implement natively ..." */ }
 ```
 
-`Options{yn_flavour, yn_weighting}` is the fourth argument (the defaults follow KaKs_Calculator).
+`Options{yn_flavour, yn_weighting, comeron_flavour, li_flavour}` is the fourth argument (the defaults follow
+KaKs_Calculator, and COAL's policy for Comeron and Li: `ComeronFlavour::coal`, `LiFlavour::coal`; the reference
+flavours are `ComeronFlavour::gestimator` and `LiFlavour::seqinr`). `Method::Comeron` and `Method::Li` are the
+two further methods; `parse_method()` reads `"Comeron"`, `"C95"` and `"Li"` in any case; with a genetic code
+other than the standard one they return status `error`. Their degeneracy tables are built once, into immutable
+function-local statics (thread-safe initialisation), so the statement about global state holds for them too.
 `Result` also carries the fields KaKs_Calculator prints: `p_fisher`, `divergence`, `rates[6]`, `fold_*`, `gc[4]`,
 `substitutions` and `length`. It also has the policy counts (`gap_codons`, `ambiguous_codons`, `internal_stops`,
 `terminal_stop_dropped`) and, for YN/MYN, `iterations` and `converged`.
@@ -486,6 +522,11 @@ profile of 2026-10-29, about 0.5 %); alignment dominates.
 ## Not done (yet)
 
 - GY94 maximum likelihood, model selection and averaging (MS, MA), and the gamma variants.
+- Comeron and Li for genetic codes other than the standard one (their references have no other; Comeron's
+  tables could be built for any code, seqinr's site classes are written out for the standard code).
+- Comeron with `maxHits` 1 or 2 (libsequence's option to leave out codons that differ at several positions;
+  orthologr always uses 3).
+- A corrected two-substitution count for Comeron (see "Comeron and Li": both flavours keep libsequence's).
 - Standard input.
 - A Python API: the commands are reachable from `coal`, and an in-process binding is planned with the R/Python
   bindings work.

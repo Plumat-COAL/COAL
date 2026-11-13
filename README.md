@@ -114,7 +114,7 @@ Example inputs are in `examples/` (`clean`, `mito`, `messy_ids`, `one_broken_gen
 | The run report's fields (`--report` / `--json`, schema `coal.report/1`) and its JSON Schema | [docs/report-schema.md](docs/report-schema.md), [docs/report.schema.json](docs/report.schema.json) |
 | How and why COAL's output differs from PAL2NAL v14 | [docs/differences.md](docs/differences.md) |
 | The C++ engine | [docs/cpp-engine.md](docs/cpp-engine.md) |
-| Ka/Ks (dN/dS): `coal kaks` (KaKs_Calculator's format, seven of its methods), `coal dnds`, policy, validation, where the code comes from | [docs/kaks.md](docs/kaks.md) |
+| Ka/Ks (dN/dS): `coal kaks` (KaKs_Calculator's format, seven of its methods; Comeron 1995 and Li 1993 as the R package orthologr computes them), `coal dnds`, policy, validation, where the code comes from | [docs/kaks.md](docs/kaks.md) |
 | One step from CDS to dN/dS: `coal pipeline pairs` (DIAMOND reciprocal best hits) and `coal pipeline clusters` (DeepClust, per-cluster summary), output tables, validation, timings | [docs/pipeline.md](docs/pipeline.md), [docs/pipeline.schema.json](docs/pipeline.schema.json) |
 | R: the `coalr` package (in-process `coal_dnds_pairs()`, `coal_dnds_clusters()`, `coal_kaks()`, `coal_codon_align()`; the whole pipeline through reticulate), install, examples, when to use which | [docs/r.md](docs/r.md), [packaging/r/coalr](packaging/r/coalr) |
 | Protein alignment before the codon step: pairwise (BLOSUM62 NW), Clustal Omega / MAFFT for clusters, DIAMOND hits | [docs/alignment.md](docs/alignment.md) |

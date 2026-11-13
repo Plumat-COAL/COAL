@@ -88,7 +88,7 @@ coal pipeline clusters --cds all_cds.fa --clusters deepclust.tsv -o out --max-cl
 | Option | Meaning | Default |
 |---|---|---|
 | `-o DIR` | output folder | required |
-| `-m METHOD` | Ka/Ks method, repeatable: YN, NG, LWL, MLWL, LPB, MLPB, MYN ([kaks.md](kaks.md)) | YN |
+| `-m METHOD` | Ka/Ks method, repeatable: YN, NG, LWL, MLWL, LPB, MLPB, MYN, Comeron (alias C95), Li ([kaks.md](kaks.md)); names are read in any case; Comeron and Li need `-c 1` | YN |
 | `-c N` | NCBI genetic code, used for translation, the codon alignment and Ka/Ks | 1 |
 | `-j N` | threads of DIAMOND and of the engine, and MSA processes at a time | one per CPU |
 | `--kaks-format` | also write `dnds.kaks` in KaKs_Calculator's 22-column format | off |
@@ -99,6 +99,7 @@ coal pipeline clusters --cds all_cds.fa --clusters deepclust.tsv -o out --max-cl
 | `--report FILE` | the JSON report | `DIR/report.json` |
 | `--msa-timeout S` | give up on one Clustal Omega / MAFFT run after S seconds | none |
 | `--yn-flavour`, `--yn-weighting`, `--digits`, `--max-cells` | as in `coal dnds` and `coal-cpp-align` | |
+| `--comeron-flavour coal\|gestimator`, `--li-flavour coal\|seqinr` | how `Comeron` and `Li` read a pair: COAL's policy, or as their reference programs (stop codons compared; [kaks.md](kaks.md), "Comeron and Li"). With the reference flavours the pipeline compares the two terminal stop codons of a pair as the last codon column when both genes have one, as orthologr's pipeline does | `coal` |
 
 ## Output
 
@@ -149,9 +150,9 @@ the same way when `codon_alignments/` exists, is not empty and was not written b
 |---|---|
 | `cluster_id` | cluster mode only (first column): the cluster's representative |
 | `seq1`, `seq2` | the two genes. Pair mode: query, subject |
-| `method` | NG, LWL, MLWL, LPB, MLPB, YN or MYN; with several methods a pair's rows come in this order |
+| `method` | NG, LWL, MLWL, LPB, MLPB, YN, MYN, Comeron or Li; with several methods a pair's rows come in this order |
 | `dN`, `dS`, `dNdS` | Ka, Ks, Ka/Ks. `NA` when not available; `dNdS` is `NA` when dS < 1e-6 |
-| `SE_dN`, `SE_dS` | standard errors (YN, MYN, NG); `NA` for the other methods |
+| `SE_dN`, `SE_dS` | standard errors (YN, MYN, NG, Li); `NA` for the other methods |
 | `N_sites`, `S_sites` | nonsynonymous and synonymous sites |
 | `Nd`, `Sd` | nonsynonymous and synonymous differences |
 | `codons_compared` | codon columns used (no gap, ambiguous base or stop in either sequence) |

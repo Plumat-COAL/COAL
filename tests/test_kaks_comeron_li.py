@@ -335,6 +335,24 @@ class TestComeronLiPipeline(ComeronLiBase):
             rows = [l.split("\t") for l in out.read_text(encoding="utf-8").splitlines()]
             self.assertEqual(rows[1][2], "Comeron")
             self.assertNotEqual(rows[1][3:5], default)   # the stop codons TAA / TGA are compared there
+            # ... as the last codon column, which is what `coal dnds` gives for the rows with their stop codons
+            axt = Path(tmp) / "p.axt"
+            axt.write_text(f"x&y\n{a}\n{b}\n\n", encoding="utf-8")
+            direct = self.run_cpp("dnds", axt, "-q", "-m", "Comeron", "-m", "Li", "--comeron-flavour",
+                                  "gestimator", "--li-flavour", "seqinr").stdout.splitlines()
+            self.assertEqual(rows[1][3:5], direct[1].split("\t")[3:5])
+            dp.codon_dnds([("g1", [("x", a), ("y", b)])], str(out), method=["Li"], cpp=str(self.bin),
+                          extra_args=["--li-flavour", "seqinr"])
+            rows = [l.split("\t") for l in out.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual(rows[1][3:5], direct[2].split("\t")[3:5])
+            # one gene without a terminal stop: no column to restore, the pair is compared up to the stop
+            dp.codon_dnds([("g1", [("x", a[:-3]), ("y", b)])], str(out), method=["Comeron"], cpp=str(self.bin),
+                          extra_args=["--comeron-flavour", "gestimator"])
+            rows = [l.split("\t") for l in out.read_text(encoding="utf-8").splitlines()]
+            axt.write_text(f"x&y\n{a[:-3]}\n{b[:-3]}\n\n", encoding="utf-8")
+            direct = self.run_cpp("dnds", axt, "-q", "-m", "Comeron", "--comeron-flavour",
+                                  "gestimator").stdout.splitlines()
+            self.assertEqual(rows[1][3:5], direct[1].split("\t")[3:5])
 
 
 if __name__ == "__main__":
