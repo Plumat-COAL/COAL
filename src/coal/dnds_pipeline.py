@@ -188,7 +188,10 @@ def usable_cpus() -> int:
     except (AttributeError, OSError):
         n = 0
     if n <= 0:
-        n = getattr(os, "process_cpu_count", os.cpu_count)() or 0
+        try:    # (process_cpu_count asks for the affinity itself, and can fail the same way)
+            n = getattr(os, "process_cpu_count", os.cpu_count)() or 0
+        except OSError:
+            n = 0
     return max(1, n or os.cpu_count() or 1)
 
 
