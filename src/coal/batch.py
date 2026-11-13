@@ -338,6 +338,15 @@ def _run_parallel(jobs: list[Job], workers: int, reporting: bool, progress: bool
             proc = ctx.Process(target=_worker, args=(child, n, reporting), daemon=False)
             try:
                 proc.start()
+            except (BrokenPipeError, ConnectionError, EOFError):
+                # a helper process of the start method (resource tracker, fork server) was killed: this worker
+                # could not be started (not a closed standard output, which is what a BrokenPipeError would
+                # otherwise be taken for: exit 141 without a message)
+                sys.stderr.write("coal: error: a worker process could not be started (its helper process "
+                                 "died)\n")
+                parent.close()
+                _parent_ends.remove(parent)
+                continue
             finally:
                 child.close()
             slot = _Slot(proc, parent)

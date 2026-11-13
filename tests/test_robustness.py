@@ -355,6 +355,38 @@ class TestWorkerProcesses(unittest.TestCase):
         time.sleep(0.3)
         return p, kids
 
+    def test_a_helper_process_killed_before_it_started_is_the_same_error(self):
+        """Independent review 2026-11-13, finding 9: with the spawn / forkserver start methods the first child is
+        multiprocessing's resource tracker; killed before it had started, the pool's first write to it was a
+        BrokenPipeError, which coal took for a closed standard output: exit 141 and no message. The stand-in
+        makes the pool's constructor and its first submit fail the same way."""
+        wrapper = self.d / "broken_pool.py"
+        wrapper.write_text(
+            "import errno, sys\n"
+            "from concurrent.futures import process\n"
+            "which = sys.argv.pop(1)\n"
+            "def broken(*a, **k):\n"
+            "    raise BrokenPipeError(errno.EPIPE, 'Broken pipe')\n"
+            "if which == 'init':\n"
+            "    process.ProcessPoolExecutor.__init__ = broken\n"
+            "else:\n"
+            "    process.ProcessPoolExecutor.submit = broken\n"
+            "if __name__ == '__main__':\n"
+            "    from coal.cli import main\n"
+            "    sys.exit(main())\n", encoding="utf-8")
+        env = dict(os.environ, PYTHONPATH=str(SRC), COAL_ENGINE="python", COAL_MIN_NT_PER_JOB="0")
+        for which in ("init", "submit"):
+            with self.subTest(broken=which):
+                out = self.d / f"out_{which}.fa"
+                r = subprocess.run([sys.executable, str(wrapper), which, str(self.pep), str(self.nuc), "-j", "2",
+                                    "-o", str(out)], cwd=self.d, env=env, stdin=subprocess.DEVNULL,
+                                   capture_output=True, text=True, timeout=120)
+                self.assertEqual(r.returncode, 1, r.stderr)
+                self.assertEqual(r.stderr.splitlines()[:1], ["coal: error: a worker process died (out of memory?)"])
+                self.assertNotIn("Traceback", r.stderr)
+                self.assertFalse(out.exists())
+                self.assertEqual([x.name for x in self.d.iterdir() if x.name.startswith((out.name, ".coal_"))], [])
+
     def test_a_killed_worker_ends_the_run_with_an_error(self):
         out = self.d / "out.fa"
         p, kids = self.start(["-o", str(out)])

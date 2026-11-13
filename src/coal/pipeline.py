@@ -397,19 +397,32 @@ def _results(batches, jobs: int, init_args):
     # The read end goes to every worker (see _watch_parent); the write end stays here, so its EOF means coal is gone
     alive_r, alive_w = multiprocessing.Pipe(duplex=False)
     _ALIVE_W["conn"] = alive_w  # so a forked worker can close its inherited copy (_watch_parent)
-    ex = ProcessPoolExecutor(max_workers=jobs, initializer=_init_pool_worker,
-                             initargs=(os.getpid(), alive_r, *init_args))
+    try:
+        ex = ProcessPoolExecutor(max_workers=jobs, initializer=_init_pool_worker,
+                                 initargs=(os.getpid(), alive_r, *init_args))
+    except (BrokenPipeError, ConnectionError, EOFError):
+        # Creating the pool's queues registers their locks with multiprocessing's resource tracker, the first
+        # helper process of the spawn and forkserver start methods. If that process was killed (seen: the very
+        # first child, killed before it had started), the write to it is a BrokenPipeError, which further up
+        # means "standard output was closed" (exit 141, no message). It is a dead helper process: say so.
+        _ALIVE_W.pop("conn", None)
+        for c in (alive_r, alive_w):
+            try:
+                c.close()
+            except OSError:
+                pass
+        raise CoalError(WORKER_DIED, code="worker_died") from None
     ok = False
     try:
         pending: deque = deque()
         for b in batches:
-            pending.append(ex.submit(_work, b))
+            pending.append(_pool_submit(ex, b))
             if len(pending) >= 2 * jobs:
                 yield _pool_result(ex, pending.popleft())
         while pending:
             yield _pool_result(ex, pending.popleft())
         ok = True
-    except BrokenProcessPool:
+    except (BrokenProcessPool, _PoolPipeBroken):
         # A worker was killed (the OOM killer, most likely): the run cannot finish, and waiting for the pool
         # would hang, so the workers are killed and the run ends with a clear error (exit 1, no partial output)
         raise CoalError(WORKER_DIED, code="worker_died") from None
@@ -427,6 +440,23 @@ def _results(batches, jobs: int, init_args):
 
 
 WORKER_DIED = "a worker process died (out of memory?)"
+
+
+class _PoolPipeBroken(Exception):
+    """A pipe of the process pool itself broke while work was handed to it."""
+
+
+def _pool_submit(ex, batch):
+    """ex.submit(_work, batch). The first submit starts the pool's helper processes (with the spawn and
+    forkserver start methods: the resource tracker and the fork server) and the workers, and talks to them
+    through pipes. If one of those processes is killed before it has started properly, the write fails with a
+    BrokenPipeError (or the connection is refused or reset). Left alone, that exception looks to the caller like
+    a closed standard output (`coal ... | head`) and the run ended with exit 141 and no message; it is a dead
+    worker process, and is reported as one."""
+    try:
+        return ex.submit(_work, batch)
+    except (BrokenPipeError, ConnectionError, EOFError) as e:
+        raise _PoolPipeBroken(str(e)) from None
 
 
 def _pool_result(ex, fut):

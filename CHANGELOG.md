@@ -107,6 +107,12 @@ Found by the second independent review (2026-11-13) of the fixes above (not yet 
 - **Ka/Ks: a YN or MYN iteration that does not converge is status `warning`** (it was `ok` with a note), the
   note adds that the values are those of the last round, and `coal kaks` / `coal dnds` count such results in
   their summary. The numbers are unchanged. Among the real-gene sets this is one simulated pair (MYN).
+- **A helper process killed before it had started no longer ends the run with exit 141 and no message.** With
+  the spawn and forkserver start methods (macOS, Windows, Python 3.14 on Linux) the first child of a run with
+  `-j` is Python's resource tracker; if it was killed at once, the pool's first write to it failed with a broken
+  pipe, which COAL took for a closed standard output. It is now the usual
+  `coal: error: a worker process died (out of memory?)` (exit 1). (This was so before the review; `--batch-parallel`
+  reports a worker that cannot be started the same way.)
 
 Found by the first CI runs on Windows and macOS of the code above (not yet released):
 
