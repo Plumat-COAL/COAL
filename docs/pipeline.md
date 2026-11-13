@@ -354,6 +354,7 @@ with exit code 2 and reports each one.
 |---|---|
 | a 23,000-codon gene pair | `ok`, 22,982 codons compared, about 1.3 s for the alignment; equal to the by-hand route and to KaKs_Calculator |
 | an internal stop codon | `warning`; the note names the gene and the skipped column |
+| YN / MYN: the iteration does not converge (short or nearly saturated pairs; [kaks.md](kaks.md), difference 12) | `warning`; the values are those of the last round, and the note says so |
 | a CDS that is not a multiple of 3 | `warning`; the note gives the length |
 | ambiguous bases (N, R, Y) | `ok`; the codons that hold them are skipped |
 | identical sequences | `ok`, dN = dS = 0, dN/dS `NA`, identity 100 |

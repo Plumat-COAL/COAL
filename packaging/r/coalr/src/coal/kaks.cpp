@@ -137,6 +137,16 @@ void mark_saturated(Result& r, const char* which) {
 
 void add_note(Result& r, const std::string& msg) { r.note = r.note.empty() ? msg : r.note + "; " + msg; }
 
+// The YN00 / MYN iteration (pathway weights from the current estimates, estimates from the weighted counts)
+// ended at its round limit without settling: the numbers are those of the last round, not a fixed point. This
+// happens with very short or nearly saturated pairs, where the estimates jump between rounds; the last round
+// then depends on rounding in the 16th digit, so two programs that agree everywhere else can print different
+// numbers here. The row gets status `warning` (unless something more serious applies) and the note says so.
+void not_converged(Result& r, const char* msg) {
+    if (r.status == Status::ok) r.status = Status::warning;
+    add_note(r, std::string(msg) + " (the values are those of the last round)");
+}
+
 // Ka or Ks cannot be estimated because there is no site of that kind (e.g. a gene of Met and Trp codons only).
 void no_sites(Result& r, const char* msg) {
     if (r.status != Status::error) r.status = Status::no_data;
@@ -1080,7 +1090,7 @@ Result run_yn(const Prepared& p, const GeneticCode& g, const Options& opt, Resul
         r.ka = r.se_ka = NA;
     }
     if (std::isfinite(r.ks) && std::isfinite(r.ka)) r.divergence = (S * r.ks + N * r.ka) / (S + N);
-    if (!r.converged) add_note(r, "YN00 iteration did not converge in 10 rounds");
+    if (!r.converged) not_converged(r, "YN00 iteration did not converge in 10 rounds");
     return r;
 }
 
@@ -1249,7 +1259,7 @@ Result run_myn(const Prepared& p, const GeneticCode& g, Result r) {
         r.ka = r.se_ka = NA;
     }
     if (std::isfinite(r.ks) && std::isfinite(r.ka)) r.divergence = (S * r.ks + N * r.ka) / (S + N);
-    if (!r.converged) add_note(r, "MYN iteration did not converge in 100 rounds");
+    if (!r.converged) not_converged(r, "MYN iteration did not converge in 100 rounds");
     return r;
 }
 

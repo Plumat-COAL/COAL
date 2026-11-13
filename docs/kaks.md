@@ -68,6 +68,7 @@ COAL applies the same rules to every pair and every method. When a pair cannot b
 | Gap (`-` or `.`) anywhere in a codon of either sequence | that column is skipped (pairwise deletion) | `ok` |
 | A letter other than A/C/G/T/U in a codon of either sequence (N, IUPAC, X) | that column is skipped | `ok` |
 | Stop codon anywhere else (internal) in either sequence | that column is skipped; the note gives the number | `warning` |
+| YN or MYN: the iteration reaches its round limit (10 or 100) without converging (short or nearly saturated pairs; "Differences", 12) | the values of the last round are printed; the note says so | `warning` |
 | Multiple-hit correction undefined (log of a non-positive number; for YN00/MYN, F84, K80 and JC69 all fail, or P + Q > 1) | that estimate is NA; the note says which (Ka, Ks) | `saturated` |
 | No codon column left | nothing is estimated | `no_data` |
 | No synonymous site (e.g. Met/Trp codons only), or no nonsynonymous site (e.g. `GCT` against `GCA`; 200 × `AAA` against `AAG`) | that estimate (Ks, or Ka) and Ka/Ks are NA; **the other one is still estimated**. The note says which sites are missing | `no_data` |
@@ -193,7 +194,15 @@ The scripts are in `benchmarks/kaks/`:
 
 Results of 2026-11-11 (branch `feat/kaks-engine`), run again on 2026-11-12 after the changes of the branch
 `fix/review-findings` (thread-safe log-gamma, differences 8 to 10): every count and every maximum difference in the
-tables below is unchanged; only the Fisher p-values moved, in their 12th digit.
+tables below is unchanged; only the Fisher p-values moved, in their 12th digit. **On these real genes the review
+fixes changed nothing else:** the `.kaks` output for the 999 orthologr and 600 simulated pairs is byte-identical
+before and after them (checked again by the independent review of 2026-11-13), and after the change of
+2026-11-13 too, which only gives one simulated pair's MYN row the status `warning` (its iteration does not
+converge; the numbers are the same).
+
+**Scope of each statement.** The tables below are about real genes of normal length (999 pairs) and simulated
+genes of 500 codons (600 pairs). They say nothing about sequences of a few codons. Those are covered by two sets
+of random short pairs, and there the picture is different: see "Short and saturated pairs" below.
 
 **What was compared, and how.** "KaKs_Calculator" is always the program run on the same AXT file as COAL, method by
 method. "PAML" is `yn00` run on one pair at a time, on a PHYLIP file from which the columns with a gap, an
@@ -213,9 +222,14 @@ largest absolute difference in dN or dS over these pairs, with numbers that PAML
   1 and 2, crossed with t = 0.3, 1 and 2 substitutions per codon, 50 replicates each.
 - **Test fixtures** in `tests/kaks/`: 23 hand-made edge cases and 48 simulated pairs, with the reference outputs
   stored in `tests/kaks/golden/`.
-- **Random short pairs.** 4,000 pairs of 2 to 8 codons over full and reduced alphabets
-  (`benchmarks/kaks/random_short_pairs.py`, seed 5): the cases that real genes rarely reach (sites of one kind
-  only, base frequencies of zero, a kappa that cannot be estimated). See differences 8 to 10.
+- **Random short pairs, one changed position per codon** (`benchmarks/kaks/random_short_pairs.py --mode single`,
+  seed 5): 4,000 pairs of 2 to 8 codons over full and reduced alphabets. They reach sites of one kind only, base
+  frequencies of zero and a kappa that cannot be estimated (differences 8 to 10), but no codon differs at more
+  than one position, so no pathway is ever weighted.
+- **Random short pairs, codons drawn independently** (`--mode multi`, seed 20261112; the generator of the
+  independent review of 2026-11-13): 3,000 pairs of 1 to 12 codons from ten codon pools. Codons differ at two and
+  three positions, one kind of site is often saturated, and the YN / MYN iteration often does not converge
+  (differences 11 to 13).
 
 **COAL compared with KaKs_Calculator 2.0, 15 significant digits.** "Max |diff|" is over pairs where both tools
 give a number.
@@ -230,8 +244,11 @@ give a number.
 | MYN | simulated 600 | 1.0e-15 | 2.9e-14 | 1.0e-14 | 1 | 0 |
 
 Fisher's p-values agree to 7e-12 (2.4e-12 on the orthologr pairs, 6.7e-12 on the simulated ones) apart from the
-two documented cases below (`p-obs`, `p-neg`). On the 4,000 random short pairs, no value that both tools print
-differs by more than 1e-9 (Ka, Ks, Ka/Ks and the site counts, all seven methods).
+two documented cases below (`p-obs`, `p-neg`). On the 4,000 random short pairs with one changed position per
+codon, no value that both tools print differs by more than 1e-9 (Ka, Ks, Ka/Ks and the site counts, all seven
+methods). **That is not true for short pairs in general:** on the 3,000 pairs with codons drawn independently,
+YN and MYN print different numbers in 33 fields (Ka, Ks or Ka/Ks; NG and the LWL / LPB family in none). Every one
+belongs to differences 11 to 13 below.
 
 **COAL `--yn-flavour paml` compared with PAML yn00, 12 significant digits.** The result is the same for
 weighting 1 and 0.
@@ -257,7 +274,11 @@ the categories are explained in the next section.
 | simulated | LWL / MLWL / LPB / MLPB | 480 / 495 / 528 / 515 of 600 | 0 | 0 | 0 | 118 / 103 / 70 / 83 | 2 | 0 |
 | simulated | YN / MYN | 599 / 600 | 0 | 0 | 0 | 0 | 1 | 0 |
 
-### Differences from KaKs_Calculator, all deliberate and checked
+### Differences from KaKs_Calculator
+
+Differences 1 to 10 are deliberate and were each checked against the references. Differences 11 to 13 are about
+short or saturated pairs on which the two programs print different numbers; for each, the text says which
+program is right, or that neither number is an estimate.
 
 1. **`saturated`.** KaKs_Calculator replaces an undefined correction with a number. YN and MYN (when TN93 fails)
    report JC69's capped distance: when P >= 0.75, P is set to 0.75(n-1)/n, or t to 99 when P + Q > 1. The LWL
@@ -288,14 +309,15 @@ the categories are explained in the next section.
 8. **YN and MYN with sites of one kind only.** With no nonsynonymous sites (N = 0: `GCT` against `GCA`, where F3x4
    gives weight to synonymous neighbours only; 200 × `AAA` against `AAG`) Ks is still defined, and with no
    synonymous sites (S = 0: Met and Trp codons) Ka is. COAL estimates the one that has sites; the other is NA and
-   the status is `no_data`. (Until the review of 2026-11-12 COAL gave NA for both.) KaKs_Calculator's YN and PAML's
-   yn00 give the same number wherever they give one: Ks = 0.477386 for `GCT`/`GCA` and 0.44084 for the Lys pair in
-   all three programs. They lose the pair when a codon differs at two or three positions, because they add the
-   NaN of the missing kind into t, and the pathway weights P(t) become NaN: KaKs_Calculator then prints Ka = `NA`
-   (YN) or `nan` (MYN), yn00 `nan` with `weighting = 1`. COAL takes t from the kind that exists; omega has no
-   effect there, since every change between codons of non-zero frequency is of that one kind. Example
-   `ATGTGGATGTGG` against `ATGTGGTGGATG`: COAL's YN gives Ka = 0.513346, which is what yn00 prints with
-   `weighting = 0` (0.513345885278); KaKs_Calculator prints `NA`.
+   the status is `no_data`. (Until the review of 2026-11-12 COAL gave NA for both.) When no codon differs at more
+   than one position, KaKs_Calculator's YN and PAML's yn00 give the same number: Ks = 0.477386 for `GCT`/`GCA` and
+   0.44084 for the Lys pair in all three programs. When a codon differs at two or three positions the references
+   go wrong, because they add the NaN of the missing kind into t and the pathway weights P(t) become NaN: yn00
+   prints `nan` with `weighting = 1`; KaKs_Calculator prints `NA` or `nan`, **or a number that is too small**
+   (difference 11). COAL takes t from the kind that exists; omega has no effect there, since every change between
+   codons of non-zero frequency is of that one kind. Example `ATGTGGATGTGG` against `ATGTGGTGGATG`: COAL's YN
+   gives Ka = 0.513346, which is what yn00 prints with `weighting = 0` (0.513345885278); KaKs_Calculator prints
+   `NA`.
 9. **MYN: `nan` rows from the mean kappa.** KaKs_Calculator estimates kappa(TC) and kappa(AG) from two classes of
    sites (non-degenerate and four-fold) and gives a class weight 0 when its kappa cannot be estimated, but still
    adds `0 × NaN` to the weighted mean (and reads an uninitialised value when the class has no site at all). The
@@ -314,16 +336,94 @@ the categories are explained in the next section.
     `myn_sites_in_one_sequence`: Ks = 0, as KaKs_Calculator's own YN says).
 
 Differences 9 and 10 do not occur in the 999 orthologr and 600 simulated pairs (genes of normal length have every
-base at their sites), which is why the tables above have no `nan` for YN and MYN; in the 4,000 random pairs of 2
-to 8 codons KaKs_Calculator's MYN prints `nan` for the sites of about a quarter of the pairs. A KaKs_Calculator
-built with two lines changed (the mean over the classes of non-zero weight; "TN93 fails" when either product is 0)
-gives COAL's numbers for every one of those 4,000 pairs where it prints a number (0 differences above 1e-9).
-`tests/test_kaks.py` holds the cases (`TestOneKindOfSite`, `TestMynNan`), and its comparison with
-KaKs_Calculator's stored output does not accept a difference because of the status alone: a number that
-KaKs_Calculator prints and COAL does not is a failure unless the status is `saturated` (difference 1).
+base at their sites), which is why the tables above have no `nan` for YN and MYN; in the 4,000 random pairs with
+one changed position per codon KaKs_Calculator's MYN prints `nan` for the sites of about a quarter of the pairs.
+A KaKs_Calculator built with two lines changed (the mean over the classes of non-zero weight; "TN93 fails" when
+either product is 0), called "the corrected reference" below, gives COAL's numbers for every one of those 4,000
+pairs where it prints a number (0 differences above 1e-9). On the 3,000 pairs with codons drawn independently it
+does not: see the table under difference 13.
 
-The categories, tolerances and checks are those of `tests/test_kaks.py` and `benchmarks/kaks/validate_kaks.py`.
-Apart from the cases above, all fields agree to 1e-9.
+#### Short and saturated pairs: where the two programs print different numbers
+
+These three differences need a codon that differs at two or three positions, so that pathways are weighted by
+P(t). None occurs in the 999 orthologr and 600 simulated pairs. The examples are in `tests/test_kaks.py`
+(`TestMultiPositionCodons`) with the reference values.
+
+11. **KaKs_Calculator drops the differences of codons that differ at several positions once a NaN is in its
+    iteration, and prints the rest as if it were the estimate. COAL is right here.** The pathway weights of such
+    a codon come from P(t). When t is NaN (no site of one kind, difference 8; or 0/0 in TN93 in some round,
+    difference 10; or the logarithm of a negative number when one kind is saturated), every weight is NaN, the
+    test `sum of weights > 1e-20` is false, and the codon's differences are silently left out. YN and MYN then
+    print a Ka from the remaining codons, with Ks `nan` or `NA` beside it. Two examples:
+    - `CCTCTTTCT` against `TTTCCTTTT` (no synonymous site; 4 differences at 9 sites, one codon differs at two
+      positions): KaKs_Calculator's YN and MYN print Ka = 0.263548, which is JC69 of 2 differences. COAL prints
+      0.673456, JC69 of all 4, and so does yn00 with `weighting = 0` (0.673456194904). In all 6 such fields of
+      the 3,000 pairs COAL's value is yn00's.
+    - `TGCATGATATCTTTTAATAACCGAGAAGTTTCCGAC` against `TCCATGATATCTTTTAATTCTCGAGAATTTTCCGAC`: KaKs_Calculator's
+      MYN prints Ka = 0.0781 and Ks = `nan`. COAL prints Ka = 0.1673 and Ks = 0.1231, as the corrected reference
+      does; YN gives 0.1672 and 0.1231 in both programs.
+
+    **COAL printed the wrong numbers too until 2026-11-12** (0.0781 for the pair above): it followed the
+    reference into the 0/0. The fix for difference 10 removed the NaN and with it the lost codons, so some MYN
+    values that COAL used to print changed (13 Ka and 3 Ks among the 3,000 pairs, all upwards to the value of
+    the corrected reference or, where the iteration does not converge, to a flagged value; none in the real
+    genes).
+12. **An iteration that does not converge. Neither program's numbers are estimates; COAL says so.** YN00 repeats
+    "weights from the current estimates, estimates from the weighted counts" at most 10 times, MYN at most 100
+    times. On short or nearly saturated pairs the estimates can jump between rounds for ever, for instance when
+    the proportion of differences crosses the 0.75 at which JC69 stops being defined (`AAA` against `ATG`: Ka
+    alternates between 0.52 and 3.17). Both programs then print the state of the last round. That state depends
+    on rounding in the 16th digit, so COAL and KaKs_Calculator can print different numbers (the last digits, or,
+    when a round sits exactly on such a boundary, the other phase of the jump). COAL follows the published
+    procedure and KaKs_Calculator's code round for round (traced on the examples); it does not try to repair the
+    iteration. It reports it: the row has status `warning` (unless `saturated` or `no_data` applies), the note
+    says `YN00 iteration did not converge in 10 rounds` or `MYN iteration did not converge in 100 rounds (the
+    values are those of the last round)`, and the summary on stderr of `coal kaks` and `coal dnds` counts such
+    results. KaKs_Calculator prints the numbers without a sign. Among the 3,000 pairs: 123 YN and 87 MYN rows.
+    Among the real genes: one simulated pair (MYN), none of the orthologr pairs. `--yn-weighting 0` needs no
+    iteration.
+13. **A saturated kind of site changes the path of the iteration.** When every site of one kind differs (Sd = S
+    or Nd = N; MYN scales the counts down to exactly that), the proportion of differences is 1 up to rounding,
+    and rounding decides whether a round takes "P + Q > 1" (t = 99) or JC69's cap. In both cases that kind is
+    saturated: COAL prints NA (difference 1), KaKs_Calculator the cap. The other kind's estimate goes through t
+    and converges to the same value by another path, so it agrees to the tolerance of the iteration (5e-8 for
+    MYN) and not to 1e-9: 5 fields among the 3,000 pairs, the largest difference 4.4e-9.
+
+What the comparison of the 3,000 pairs with codons drawn independently gives, per field (Ka, Ks, Ka/Ks) in which
+both programs print a number and the numbers differ by more than 1e-9 (relative); KaKs_Calculator run one pair
+per process:
+
+| Class | COAL against KaKs_Calculator 2.0 | COAL against the corrected reference | Who is right |
+|---|---:|---:|---|
+| 11, no site of one kind (COAL status `no_data`) | 6 | 6 | COAL (= yn00, `weighting = 0`) |
+| 11, a NaN in the reference's row (its Ka or Ks is `nan` / `NA`) | 12 | 0 | COAL (= the corrected reference) |
+| 12, iteration not converged | 10 | 15 | neither: not an estimate; COAL flags it |
+| 13, saturated kind, other path | 5 | 5 | the same value within the iteration's tolerance |
+| unexplained | 0 | 0 | |
+
+So "the corrected reference gives COAL's numbers" holds for the 4,000 pairs with one changed position per codon
+and for the second row of the 3,000; it does not hold where the iteration does not converge (the
+corrected reference then has more number-against-number rows than the unpatched one, because it prints numbers
+where the unpatched one prints `nan`), nor for pairs without a site of one kind, which the corrected lines do not
+touch. NG, LWL, MLWL, LPB and MLPB have no difference between two numbers on either random set.
+
+**KaKs_Calculator's MYN depends on the order of the pairs in a file.** It carries state from one pair to the
+next: run once over the 3,000 pairs, 49 MYN rows differ (Ka, Ks or Ka/Ks) from the same pairs run one per process
+(the other six methods: none; the corrected reference: none). The comparisons of this section therefore run
+KaKs_Calculator once per pair (`random_short_pairs.py` does; `--one-file` reports the count). The tables for the
+real genes above were made with one run per file; there the stock and the 15-digit outputs agree with COAL to
+the stated tolerances, so no such row occurs in them. COAL has no state between pairs: every pair gives the same
+row alone, in any order and with any number of threads (`tests/test_kaks.py`, `test_threads_same_output`).
+
+`tests/test_kaks.py` holds the cases (`TestOneKindOfSite`, `TestMynNan`, `TestMultiPositionCodons`), and its
+comparison with KaKs_Calculator's stored output does not accept a difference because of the status alone: a
+number that KaKs_Calculator prints and COAL does not is a failure unless the status is `saturated`
+(difference 1).
+
+The categories, tolerances and checks are those of `tests/test_kaks.py`, `benchmarks/kaks/validate_kaks.py` and
+`benchmarks/kaks/random_short_pairs.py`. On the real-gene sets (999 + 600 pairs) and on the 4,000 random pairs
+with one changed position per codon, all fields agree to 1e-9 apart from differences 1 to 10. On short pairs
+whose codons differ at several positions they do not: differences 11 to 13.
 
 ### Where KaKs_Calculator and PAML differ (YN00)
 

@@ -228,7 +228,8 @@ class TestOneKindOfSite(KaKsBase):
 class TestMynNan(KaKsBase):
     """MYN rows that KaKs_Calculator prints as nan although the estimate is defined (docs/kaks.md, difference
     10). A KaKs_Calculator built with the two one-line corrections named there agrees with COAL on these pairs
-    and on 4,000 random short pairs (benchmarks/kaks/random_short_pairs.py)."""
+    and on 4,000 random short pairs with one changed position per codon (benchmarks/kaks/random_short_pairs.py
+    --mode single; for codons that differ at several positions see TestMultiPositionCodons)."""
 
     def setUp(self):
         self.rows = self.dnds(KDIR / "edge_cases.axt", "-m", "YN", "-m", "MYN")

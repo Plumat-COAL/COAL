@@ -90,6 +90,23 @@ Found by the second independent review (2026-11-13) of the fixes above (not yet 
   archive that was cut short (possible with `--allow-unverified`) is a clear error instead of an `EOFError`,
   and a zip member name with `:`, an absolute path, `..` or a reserved device name is refused
   (docs/alignment.md).
+- **Ka/Ks: what the comparison with KaKs_Calculator does and does not show** (docs/kaks.md, "Differences",
+  rewritten; nothing changes on real genes: the output for the 999 orthologr and 600 simulated pairs is
+  byte-identical). The statements "no value that both tools print differs by more than 1e-9" and "the corrected
+  reference gives COAL's numbers" were made from 4,000 random pairs in which no codon differs at more than one
+  position, and are now scoped to them. On 3,000 short pairs with codons drawn independently YN and MYN print
+  different numbers in 33 fields, each now explained and tested (differences 11 to 13): KaKs_Calculator drops
+  the differences of codons that differ at several positions once a NaN is in its iteration and prints a Ka
+  that is too small (COAL is right: it gives yn00's unweighted value, or the corrected reference's); an
+  iteration that does not converge is not an estimate in either program; a saturated kind of site changes the
+  path of the iteration within its tolerance. KaKs_Calculator's MYN also depends on the order of the pairs in a
+  file (49 of 3,000 rows), so the comparison now runs it one pair per process.
+  **Not said before: the MYN fix above ("gives the defined value where KaKs_Calculator prints `nan`") also
+  changed MYN numbers that COAL used to print** on such short pairs (13 Ka and 3 Ks among the 3,000; for
+  example Ka 0.0781 became 0.1673, where YN gives 0.1672): COAL had followed the reference into the lost codons.
+- **Ka/Ks: a YN or MYN iteration that does not converge is status `warning`** (it was `ok` with a note), the
+  note adds that the values are those of the last round, and `coal kaks` / `coal dnds` count such results in
+  their summary. The numbers are unchanged. Among the real-gene sets this is one simulated pair (MYN).
 
 Found by the first CI runs on Windows and macOS of the code above (not yet released):
 
