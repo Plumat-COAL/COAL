@@ -496,6 +496,201 @@ low. The methods that ignore the transition/transversion bias (NG, LWL) underest
 high divergence and high omega. This is the bias Yang & Nielsen (2000) describe. NG's 27 NA are Ks saturations
 (Jukes-Cantor) at omega = 0.1, t = 2.
 
+## Comeron and Li
+
+`-m Comeron` and `-m Li` are the two dN/dS methods that the R package
+[orthologr](https://github.com/drostlab/orthologr) computes without KaKs_Calculator: `"Comeron"`, its default,
+with libsequence's `gestimator` (compiled into the package), and `"Li"` with `seqinr::kaks()`. COAL has both so
+that an orthologr run can be reproduced, or continued, with COAL's engine. They are ports of those two
+programs (see "Where the code comes from"), not new implementations of the papers.
+
+**Comeron (1995).** Every codon position is put in one of four classes: non-degenerate (L0), 2-fold degenerate
+where the synonymous change is the transition (L2S) or the transversion (L2V), and 4-fold degenerate (L4).
+Transitions (P) and transversions (Q) are counted per class; for codons that differ at two or three positions
+the two or six pathways are weighted by the inverse of their length in Grantham's (1974) amino-acid distance. With
+Kimura's two-parameter correction per class, A = -1/2 ln(1 - 2P - Q) + 1/4 ln(1 - 2Q) and B = -1/2 ln(1 - 2Q):
+
+    Ks = (L2S A2S + L4 A4) / (L2S + L4) + Bs,   Bs from Qs = (Q2V + Q4) / (L2V + L4)
+    Ka = (L2V A2V + L0 A0) / (L2V + L0) + Ba,   Ba from Qa = (Q0 + Q2S) / (L0 + L2S)
+
+There is no variance, so `SE_dN` and `SE_dS` are `NA`.
+
+**Li (1993).** Positions are non-degenerate (L0), 2-fold (L2) or 4-fold (L4); transitional (A) and
+transversional (B) distances per class, again Kimura's; Ks = (L2 A2 + L4 A4) / (L2 + L4) + B4 and
+Ka = A0 + (L0 B0 + L2 B2) / (L0 + L2). seqinr's counting has rules of its own: the three isoleucine codons and
+the arginine codons are 2-fold with corrections for which changes are synonymous, and the pathways between
+codons that differ at several positions are weighted with a table of amino-acid similarities (a stop codon gets
+the smallest value of the table). The standard errors are the square roots of seqinr's variances `vka` and `vks`.
+
+**`Li` is not `LPB`.** Both are "Li (1993)", and KaKs_Calculator's LPB / MLPB use the same two formulas, but the
+site classes and the pathway weights differ. On the 999 orthologr pairs Li and LPB agree to 1e-6 in 105 (dN)
+and 102 (dS) pairs, Li and MLPB in 273 and 263; the largest differences are 0.034 (dN) and 0.069 (dS) against
+LPB, 0.018 and 0.053 against MLPB, with correlations of 0.999 and 0.995 or better. So `Li` is a method of its
+own, not an alias (`tests/test_kaks_comeron_li.py`, `test_li_is_not_lpb`).
+
+### Two flavours
+
+Each method can read a pair in two ways. The default (`coal`) applies the policy of this page, as for every
+other method. The other (`--comeron-flavour gestimator`, `--li-flavour seqinr`) reads the pair as the reference
+program does, to reproduce numbers that were made with orthologr. The counting and the formulas are the same
+in both; on a pair without stop codons, without `U`, and with every correction defined, the two flavours give
+the same doubles.
+
+| | `Comeron`, default (`coal`) | `--comeron-flavour gestimator` (orthologr 0.4.3's gestimator) |
+|---|---|---|
+| Stop codon at the end of both rows | the column is dropped | compared like any codon: a stop codon has no sites (the column counts half the sites of the other codon), `TAA` against `TGA` or against a sense codon is counted as a change, and a pathway through a stop codon is kept, with Grantham distance 999 |
+| Stop codon elsewhere | the column is skipped; status `warning` | compared, as above; no warning |
+| `U` | read as `T` | the codon is not A/C/G/T: the column is skipped |
+| Gap or ambiguous letter in a codon | column skipped | column skipped (the same) |
+| A logarithm of the correction has an argument <= 0, in a class that has sites | the estimate is `NA`; status `saturated` | gestimator sets that logarithm to 0 and prints the finite number that results (too small). COAL gives that number, with status `warning` and the note `Ka: correction undefined, gestimator's value (...)` (or `Ks:`) |
+| 1 - 2Qa <= 0 (Ba undefined) | Ka is `NA`; `saturated` | gestimator's rule: Ba = 0 when Kimura's distance over the whole rows is below 1 (a number comes out, flagged as above); otherwise it prints 999: `NA`, `saturated` |
+| 1 - 2Qs <= 0 (Bs undefined) | Ks is `NA`; `saturated` | gestimator prints 999: `NA`, `saturated` |
+| No synonymous (nonsynonymous) sites | `NA`; `no_data` | gestimator prints 999: `NA`, `no_data` |
+| dN/dS | `NA` when dS < 1e-6, as for the other methods | gestimator's: 999 (`NA`) only when dS is 0, or dN or dS is 999 |
+| Rows of different length, or not a multiple of 3 | status `error` | status `error` (gestimator 0.4.3 reads beyond the rows) |
+
+gestimator's "cannot be calculated" value 999 is never a number in COAL; orthologr turns it into `NA` too. One
+refinement of the default flavour: an undefined logarithm in a class that has **no** sites (weight 0 in the
+formula) is not a saturation.
+
+| | `Li`, default (`coal`) | `--li-flavour seqinr` (`seqinr::kaks`) |
+|---|---|---|
+| Stop codons (at the end, or elsewhere) | dropped; skipped with status `warning` | compared like any codon: a stop is an "amino acid" with the smallest similarity, and its positions count as sites (so even two identical stop codons change L0, L2 and with them Ka and Ks a little) |
+| `U` | read as `T` | the codon is removed with its column |
+| Gap or ambiguous letter | column skipped | column removed (the same for two sequences; for an alignment of several sequences `seqinr::kaks` removes a column when **any** sequence has a gap, COAL only when one of the two has) |
+| Correction undefined | `NA`; `saturated` | seqinr returns 9.999999 for the value and its variance. COAL: `NA`, `saturated`, in both flavours |
+| A class of sites is empty (Ks needs L2 and L4, Ka needs L0 and L2) | `NA`; `no_data` | seqinr returns 9.999999 here too ("saturated"); COAL: `NA`, `no_data`, in both flavours |
+| Negative Ka or Ks (the formulas give one for some short pairs) | the number, status `warning` | the number, status `warning` (seqinr returns it; orthologr turns it into `NA`) |
+
+`coal dnds` and `coal kaks` compare the rows they are given, so with a reference flavour a terminal stop codon
+is compared when the rows contain it. `coal pipeline`, `coal codon-dnds` and coalr's `coal_dnds_pairs()` /
+`coal_dnds_clusters()` make the codon alignment themselves, and it ends before a terminal stop codon. Their
+option `--terminal-stops compare` (`terminal_stops = "compare"`) adds the two stop codons as the last compared
+column for the reference flavours when both genes end in one. orthologr 0.4.3 needs it: it translates the stop
+codon to `*`, aligns it, and PAL2NAL threads it, so its gestimator compares the two stop codons (the fork of
+orthologr with COAL built in translates without the stop codon; for its numbers the option stays `drop`).
+
+**A property of libsequence that both flavours keep.** For codons that differ at two positions, libsequence's
+`TwoSubs` passes (codon 1, intermediate 1, codon 2, intermediate 2) to a function whose parameters are
+(codon 1, intermediate 1, intermediate 2, codon 2). The four branches counted are therefore codon 1 to
+intermediate 1, intermediate 1 to intermediate 2, codon 1 to codon 2, and codon 2 to intermediate 2, where
+the two pathways are codon 1 to intermediate 1 to codon 2 and codon 1 to intermediate 2 to codon 2; and
+`SingleSub`, given two codons that differ at two positions, classifies the change at the last of them. The
+same nucleotide changes are counted, but the degeneracy class of some is taken from another codon than the
+pathway's. The current libsequence (1.9.8) makes the same call, so this is how "Comeron as gestimator" has
+always been computed, and COAL reproduces it in both flavours because the purpose of the method is to give
+those numbers. It is one reason why Comeron and the other methods differ by a few percent (cross-checks below).
+Use `YN` when the estimate itself matters more than comparability with orthologr.
+
+### Validation of Comeron and Li
+
+References (`benchmarks/kaks/ref/`): **gestimator** is orthologr 0.4.3's own copy of the libsequence headers,
+compiled unmodified with a driver that calls them as `gestimator()` does (`maxHits = 3`) and prints 17
+significant digits (`gestimator_ref.cpp`; the package function prints 4). **seqinr** is `seqinr::kaks()` 4.2-44
+called per pair from R, 17 digits (`seqinr_ref.R`). `benchmarks/kaks/validate_comeron_li.py` runs the
+comparisons; a value is "identical" when the 17-digit texts give the same double. Results of 2026-11-13,
+Linux x86-64, gcc 13.3:
+
+| Set | Pairs | Comeron `gestimator`: dN, dS identical to gestimator | 999 in gestimator = NA in COAL (dN, dS) | Li `seqinr`: Ka, Ks identical to seqinr | 9.999999 in seqinr = NA in COAL (Ka, Ks) | Mismatches |
+|---|---:|---:|---:|---:|---:|---:|
+| orthologr 999 (COAL's alignments, no stop codons) | 999 | 999, 998 | 0, 1 | 999, 998 | 0, 1 | 0 |
+| orthologr 0.4.3's own 984 codon alignments (terminal stop codons in 968) | 984 | 984, 981 | 0, 3 | 984, 981 | 0, 3 | 0 |
+| simulated 600 | 600 | 600, 600 | 0, 0 | 600, 599 | 0, 1 | 0 |
+| `tests/kaks/comeron_li_cases.axt` (hand-made edge cases, stops, gaps, IUPAC, case, U, 1 to 3 codons, saturated) | 499 | 471, 408 | 27, 90 | 376, 254 | 122, 244 | 0 |
+| `edge_cases.axt`, `sim_small.axt` | 71 | 69, 64 | 1, 6 | 65, 62 | 5, 8 | 0 |
+| random short pairs, one changed position per codon | 4,000 | 4,000, 3,810 | 0, 190 | 3,512, 2,725 | 488, 1,275 | 0 |
+| random short pairs, codons drawn independently | 3,000 | 2,866, 2,232 | 134, 768 | 1,773, 1,005 | 1,227, 1,995 | 0 |
+| random short pairs from all 64 codons, with stops, gaps, N / IUPAC, lower case, U | 4,000 | 3,724, 3,179 | 276, 821 | 3,118, 2,055 | 882, 1,945 | 0 |
+
+Every number that a reference returns is the same double in COAL (no value differs at all, so the 1e-12
+tolerance of the tests is not used on this platform), dN/dS and the standard errors (against the square roots of
+seqinr's variances) included; every 999 and 9.999999 is `NA`; the two pairs that both references refuse (a
+length that is not a multiple of 3) have status `error`. gestimator's Kimura rule (Ba = 0) decided 248 of the
+random and hand-made rows. A platform that contracts floating-point operations (FMA) can differ in the last bit.
+
+**What the default flavours change** (default against reference flavour, same input):
+
+| Set | Method | Pairs the policy reads differently | dN changes | by > 1% | by > 20% | number to `NA` | dS changes | by > 1% | by > 20% | number to `NA` |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| orthologr 999 (no stop codons) | Comeron | 0 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | 0 |
+| orthologr 999 | Li | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| orthologr 0.4.3's own 984 alignments | Comeron | 968 | 111 | 105 | 8 | 3 | 1 | 1 | 0 | 0 |
+| orthologr 0.4.3's own 984 alignments | Li | 968 | 957 | 124 | 5 | 0 | 572 | 39 | 0 | 0 |
+| simulated 600 | Comeron | 0 | 0 | 0 | 0 | 0 | 2 | 0 | 0 | 2 |
+| simulated 600 | Li | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+So on real genes as orthologr 0.4.3 aligns them, dropping the terminal stop codons changes Comeron's dN in the
+108 pairs whose two stop codons differ (gestimator counts `TAA` against `TGA` as a substitution), by more than
+1% in 105 and by more than 20% in 8 (0.8% of the pairs); 3 further values are `NA` where gestimator computes a
+number from an undefined correction; dS changes in one pair. Li's values change a little in nearly all pairs, because seqinr
+counts the positions of stop codons as sites. In the three tables, every change is explained by the policy
+(a stop codon or `U` in a compared column) or by the saturation rule; the script fails otherwise ("unexplained":
+0 in all sets, the random ones included).
+
+**Cross-checks** (default flavours; COAL's MLPB, LPB and YN are KaKs_Calculator's numbers):
+
+| Set | Comeron vs MLPB: r (dN, dS), median ratio (dN, dS) | Comeron vs YN | Comeron vs Li | Li vs MLPB | Li vs YN |
+|---|---|---|---|---|---|
+| orthologr 999 | 0.9997, 0.9920; 0.988, 1.027 | 0.9989, 0.9304; 0.992, 1.006 | 0.9998, 0.9931; 0.994, 1.016 | 0.9997, 0.9973; 1.000, 1.001 | 0.9991, 0.9226; 0.998, 0.988 |
+| orthologr 0.4.3's 984 | 0.9997, 0.9924; 0.988, 1.027 | 0.9990, 0.9410; 0.992, 1.003 | 0.9998, 0.9930; 0.994, 1.016 | 0.9995, 0.9974; 1.000, 1.001 | 0.9991, 0.9402; 0.999, 0.988 |
+| simulated 600 | 0.9999, 0.9974; 0.980, 1.064 | 0.9994, 0.9550; 0.966, 1.087 | 0.9999, 0.9968; 0.988, 1.025 | 0.9999, 0.9993; 0.993, 1.030 | 0.9995, 0.9478; 0.979, 1.046 |
+
+(The audit of orthologr of 2026-11-11 measured Comeron against KaKs_Calculator's MLPB on its 984 pairs:
+r = 0.9998 for dN and 0.9926 for dS.)
+
+### With orthologr
+
+`benchmarks/kaks/orthologr_e2e.R` runs `orthologr::dNdS(dnds_est.method = "Comeron")` with its default path
+(reciprocal best hits, pairwise protein alignment, PAL2NAL, gestimator), keeps orthologr's protein and codon
+alignment of every pair, and gives the same pairs to coalr. gestimator prints 4 significant digits, so "equal"
+means: COAL's value printed with `%.4g` is orthologr's. orthologr 0.4.3 (CRAN / GitHub master), its examples of
+20 and of 1,000 genes per species (*A. thaliana*, *A. lyrata*), one core, 2026-11-13:
+
+| What coalr is given | 20 genes: pairs equal to orthologr (dN, dS, dN/dS) | 1,000 genes |
+|---|---:|---:|
+| orthologr's codon alignments: `coal_kaks(method = "Comeron", comeron_flavour = "gestimator")` | 20, 20, 20 of 20 | 984, 984, 984 of 984 |
+| orthologr's protein alignments and the CDS: `coal_codon_align()`, then `coal_kaks()` as above (the codon alignments are PAL2NAL's in all pairs) | 20, 20, 20 of 20 | 984, 984, 984 of 984 |
+| the CDS only: `coal_dnds_pairs(methods = "Comeron", comeron_flavour = "gestimator", terminal_stops = "compare", preset = "pwalign")`, pairs where COAL's protein alignment is orthologr's | 7, 7, 7 of 7 | 444, 444, 444 of 444 |
+| the same call, pairs where the protein alignments differ | 4, 2, 3 of 13 | 204, 144, 135 of 540 |
+
+So the engine gives orthologr's numbers for every pair when the alignment is the same, and the protein
+alignment is the only source of difference. **It differs in more than half of the pairs, and not because of
+ties:** orthologr 0.4.3 calls `pwalign::pairwiseAlignment(type = "global")` without a substitution matrix, which
+scores identities and mismatches only; COAL aligns with BLOSUM62 (or BLOSUM45 / 80, PAM250). Among the 540 pairs,
+409 have another dN or dS at 4 digits: the median difference is 2.7% (dN) and 3.3% (dS), above 1% in 267 (dN) and
+331 (dS) pairs. Over all 981 pairs with values, r = 0.960 (dN) and 0.925 (dS). To reproduce a published orthologr
+0.4.3 table exactly, give COAL orthologr's protein alignments (second row of the table).
+
+The fork of orthologr with COAL built in (`integration/all`, 0.5.0) aligns with BLOSUM62 and translates without
+the stop codon. Against its default path (995 pairs; `options(orthologr.legacy_comeron_saturation = TRUE)` for
+the 0.4.3 treatment of saturation; `terminal_stops = "drop"`): from its protein alignments, 995 of 995 pairs
+equal in dN, dS and dN/dS; from the CDS, COAL's protein alignment is the fork's in 505 pairs, all 505 equal;
+in the other 490 pairs, 291 (dN) and 185 (dS) are equal, the median difference of the rest is 0.07% (dN) and
+2.8% (dS), and r over all pairs is 0.9994 (dN) and 0.9943 (dS). (Why these 490 alignments differ, co-optimal
+alignments or the scoring of end gaps, was not examined here.)
+
+**Time**, 1,000 genes, one core, on a 2-core cloud VM that other jobs were using: orthologr 0.4.3's default path
+1,176 s in this run (745 s in a quieter run of 2026-11-11, one file and several processes per pair);
+`coal_dnds_pairs()` with Comeron 0.57 s for the same 984 pairs from the coding sequences (alignment, codon
+threading and Ka/Ks); `coal_codon_align()` + `coal_kaks()` on orthologr's protein alignments 0.25 s. The
+reciprocal-best-hit search is not in COAL's figure.
+
+**What an orthologr build with `engine = "coal"` has to do to offer Comeron and Li** (the fork's
+`dNdS_coal()` calls `coalr::coal_dnds_pairs()`; nothing in orthologr was changed for this work):
+
+1. accept `dnds_est.method = "Comeron"` and `"Li"` for the COAL engine when
+   `all(c("Comeron", "Li") %in% coalr::coal_info()$methods)` (its `coal_methods()` lists KaKs_Calculator's seven);
+2. pass `comeron_flavour = "gestimator"` and `li_flavour = "seqinr"` to `coalr::coal_dnds_pairs()` (and to
+   `coal_dnds_clusters()`, `coal_kaks()`) for orthologr's numbers, with `terminal_stops = "compare"` only to
+   reproduce 0.4.3, whose alignments include the stop codons; or leave the defaults for COAL's policy and say so;
+3. saturation: with `comeron_flavour = "gestimator"` a row whose note contains `Ka: correction undefined` (or
+   `Ks:`) holds the finite value of orthologr 0.4.3. The fork returns `NA` for these unless
+   `options(orthologr.legacy_comeron_saturation = TRUE)`: set dN (dS) and dN/dS to `NA` for such rows otherwise;
+4. Li: coalr already returns `NA` where seqinr returns 9.999999, and flags a negative value with status
+   `warning` (orthologr turns it into `NA`);
+5. values are doubles, where gestimator's file has 4 significant digits: `signif(x, 4)` gives orthologr's
+   printed values.
+
 ## Benchmark
 
 The benchmark used the 999 orthologr pairs on the cloud workspace, a 2-core Xeon VM at 2.1 GHz that other jobs

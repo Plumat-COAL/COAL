@@ -90,7 +90,7 @@ class RBindings(unittest.TestCase):
 
     def test_makevars_compile_every_vendored_source(self):
         cpps = sorted(f[:-4] for f in os.listdir(os.path.join(PKG, "src", "coal")) if f.endswith(".cpp"))
-        self.assertEqual(cpps, ["align", "core", "dnds", "kaks", "tables"])
+        self.assertEqual(cpps, ["align", "core", "dnds", "kaks", "kaks_comeron", "kaks_li", "tables"])
         for name in ("Makevars", "Makevars.win"):
             text = read(PKG, "src", name)
             for c in cpps:

@@ -59,6 +59,11 @@ dNdS_clusters(c(q, s), aa_aln_tool = "clustalo")                            # ev
 - `engine = "coal"` (`dNdS_coal()`) keeps orthologr's DIAMOND/BLAST reciprocal-best-hit search and hands every
   pair to `coalr::coal_dnds_pairs()`: no file and no process per pair. It returns `dNdS()`'s table.
 - `dNdS_clusters()` uses `deepclust()` / `deepclust_realign()` tables with `coalr::coal_dnds_clusters()`.
+- orthologr's own two methods, `"Comeron"` (its default) and `"Li"`, are in COAL's engine too (`methods =
+  "Comeron"`, `"Li"` in coalr, with `comeron_flavour = "gestimator"` / `li_flavour = "seqinr"` for orthologr's
+  numbers). The fork does not use them yet: its `engine = "coal"` and `kaks_tool = "coal"` accept
+  KaKs_Calculator's seven methods. [docs/kaks.md](../../docs/kaks.md), "Comeron and Li", has the validation
+  against orthologr and the five things an orthologr build has to do to offer them.
 
 The fork's `NEWS.md` also lists its fixes to orthologr's own path (BLOSUM62 scoring and full-length alignments in
 `pairwise_aln()`, exit-status checks, one failing pair no longer ends a run, hyphens in gene IDs, input files of

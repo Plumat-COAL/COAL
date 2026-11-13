@@ -14,6 +14,28 @@
   GPL-3-compatible licence; programs that only start `coal` / `coal-cpp` as a separate process are not affected.
   The third-party notices already in the repository (the website's font, the real-data test sets) are unchanged.
 
+- **Ka/Ks: the methods `Comeron` and `Li`**, the two dN/dS methods of the R package orthologr that do not need
+  KaKs_Calculator (`Comeron`, alias `C95`: Comeron 1995 as libsequence's gestimator computes it, orthologr's
+  default; `Li`: Li 1993 as `seqinr::kaks()` computes it). In `coal kaks` (22 columns, what the method defines),
+  `coal dnds` (Li with standard errors), `coal pipeline` (`-m Comeron`), `<coal/kaks.hpp>` (`Method::Comeron`,
+  `Method::Li`) and coalr (`coal_kaks()`, `coal_dnds_pairs()`, `coal_dnds_clusters()`); standard genetic code
+  only. Both are ports: `cpp/src/kaks_comeron.cpp` is derived from libsequence (Copyright (C) 2003-2009 Kevin
+  Thornton, GPL version 3 or later; orthologr's copy, modified by Sarah Scharfenberg and Hajk-Georg Drost under
+  GPL version 2 or later) and `cpp/src/kaks_li.cpp` from `kaks.c` of seqinr 4.2-44 (`GPL (>= 2)`); the file
+  headers, `NOTICE`, coalr's `inst/COPYRIGHTS` and `Authors@R` say so. Two flavours each: COAL's policy by
+  default (terminal stop dropped, internal stops skipped, `NA` with status `saturated` where the correction is
+  undefined), and the reference's own reading of the pair (`--comeron-flavour gestimator`, `--li-flavour
+  seqinr`; in the pipeline and coalr with `--terminal-stops compare` for orthologr 0.4.3, which compares the two
+  stop codons). Validation (docs/kaks.md, "Comeron and Li"): on 14,153 pairs (999 + 984 real, 600 simulated,
+  570 fixtures, 11,000 random short ones) every number that gestimator's code or `seqinr::kaks` returns is the
+  same double in the reference flavours, and every 999 / 9.999999 is `NA`; with orthologr 0.4.3's own
+  alignments of its 1,000-gene example coalr gives orthologr's table for all 984 pairs (at the 4 digits
+  gestimator prints). From the coding sequences alone it does not: orthologr 0.4.3 aligns proteins without a
+  substitution matrix, COAL with BLOSUM62, and 540 of the 984 protein alignments differ. `Li` is not `LPB`
+  (other site classes and pathway weights; the numbers differ). libsequence's count for codons that differ at
+  two positions (it passes its arguments in another order than its function takes them) is kept in both
+  flavours and documented.
+
 Found by the independent review of 2026-11-12 of the Ka/Ks engine, the pipeline and the R package (all in code
 not yet released):
 

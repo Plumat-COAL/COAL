@@ -163,6 +163,11 @@ says what to install; nothing else in the package needs Python.
 - Time for the 999 pairs, YN, sequences read from FASTA: 1.5 s on one thread (0.3 s alignment + codon threading,
   1.1 s Ka/Ks); all seven methods 3.0 s.
 
+2026-11-13, for the methods Comeron and Li (`tests/testthat/test-comeron-li.R`): the reference flavours against
+stored values of orthologr 0.4.3's gestimator code and of `seqinr::kaks()` for 139 pairs (17 digits; equal to
+1e-12), `seqinr::kaks()` itself when seqinr is installed, the default flavours, names and arguments, and the
+three entry points. With them the package has 38 tests and 1,005 expectations.
+
 Not tested: Windows and macOS (the C++ core builds there in COAL's CI, the R package was built on Linux only);
 R older than 4.5; clusters or pair sets large enough to matter for memory.
 
