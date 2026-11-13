@@ -12,6 +12,8 @@ buchfink2026, the paper), so a report written earlier still resolves.
 """
 from __future__ import annotations
 
+from typing import Iterable, Sequence
+
 __all__ = ["REFERENCES", "DOIS", "SUPERSEDED", "LABELS", "METHOD_KEYS", "TABLE", "keys_for", "reference", "doi_url",
            "format_references", "table", "main"]
 
@@ -110,7 +112,7 @@ def reference(key: str, version: str | None = None) -> str:
     return f"{text} {url}" if url else text
 
 
-def current(keys) -> list[str]:
+def current(keys: Iterable[str]) -> list[str]:
     """The keys with each superseded one followed by the key that replaces it; each key once."""
     out: list[str] = []
     for k in keys:
@@ -186,7 +188,7 @@ TABLE: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
-def keys_for(methods=(), codon_alignment: bool = True, diamond: bool = False, deepclust: bool = False,
+def keys_for(methods: Iterable[str] = (), codon_alignment: bool = True, diamond: bool = False, deepclust: bool = False,
              clustalo: bool = False, mafft: bool = False) -> list[str]:
     """The citation keys of a run, COAL first, each once, in a fixed order."""
     keys = [COAL_KEY]
@@ -207,7 +209,7 @@ def keys_for(methods=(), codon_alignment: bool = True, diamond: bool = False, de
     return [k for k in keys if not (k in seen or seen.add(k))]
 
 
-def format_references(keys, version: str | None = None) -> str:
+def format_references(keys: Iterable[str], version: str | None = None) -> str:
     """One reference per line, `[key] text https://doi.org/...`."""
     return "\n".join(f"[{k}] " + reference(k, version) for k in keys)
 
@@ -230,7 +232,7 @@ appeared names its preprint (buchfink2023): the paper (buchfink2026) is printed 
 """
 
 
-def main(argv) -> int:
+def main(argv: Sequence[str]) -> int:
     """`coal cite ...`."""
     import json
     import os

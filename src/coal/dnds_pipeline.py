@@ -27,7 +27,9 @@ From Python:
     res.exit_code, res.report["counts"], res.outputs["dnds"]
 
 Needs coal-cpp (the platform wheels have it; `coal --cpp-path`). Imports nothing outside the engine package.
-Not part of the stable `import coal` API yet (python-api.md): it may change before 1.0.
+The supported programmatic surface is what __all__ names, documented in docs/python-api.md ("dN/dS and the
+pipeline") with its versioning promise; everything with a leading underscore, and the classes and helpers not in
+__all__, are internal.
 """
 from __future__ import annotations
 
@@ -50,6 +52,7 @@ import time
 import zipfile
 import zlib
 from dataclasses import dataclass, field
+from typing import Any, Iterable, Sequence, Union
 
 from . import __version__
 from . import msa as _msa
@@ -58,8 +61,10 @@ from .pipeline import release_output_lock, take_output_lock
 from .tables import SUPPORTED
 
 __all__ = ["run_pairs", "run_clusters", "main", "PipelineResult", "PipelineError", "find_diamond",
-           "install_diamond", "codon_dnds", "summarise", "PAIR_COLUMNS", "SUMMARY_COLUMNS", "SCHEMA"]
+           "install_diamond", "codon_dnds", "summarise", "PAIR_COLUMNS", "SUMMARY_COLUMNS", "FAILED_COLUMNS",
+           "METHODS", "SCHEMA"]
 
+_Path = Union[str, "os.PathLike[str]"]
 SCHEMA = "coal.pipeline/1"
 DIAMOND_VERSION = "2.2.8"   # the version install_diamond() fetches and the one COAL is tested with
 # The oldest DIAMOND the pipeline runs: 2.1.0 is the first release with `diamond deepclust` (cluster mode without
@@ -159,9 +164,18 @@ class PipelineError(RuntimeError):
 
 @dataclass
 class PipelineResult:
-    exit_code: int                 # 0 nothing failed; 2 finished, some genes / pairs / clusters failed
-    report: dict                   # what out_dir/report.json holds
-    outputs: dict = field(default_factory=dict)   # name -> path (dnds, cluster_summary, genes, failed, report, ...)
+    """What run_pairs() / run_clusters() return, for a failed run too (they do not raise for one).
+
+    exit_code: 0 nothing failed; 2 the run finished and some genes, pairs or clusters failed (they are in
+    outputs["failed"]); 1 the run could not be done (report["error"] says why).
+    report: what out_dir/report.json holds (schema "coal.pipeline/1", docs/pipeline.schema.json); for a run that
+    could not write into its folder, the few fields schema / exit_code / status / error.
+    outputs: name -> path of the files that were written: "dnds", "genes", "failed", "report", and by mode and
+    options "orthologs", "unpaired", "clusters", "realign", "cluster_summary", "kaks", "codon_alignments",
+    "protein_alignments"."""
+    exit_code: int
+    report: dict[str, Any]
+    outputs: dict[str, str] = field(default_factory=dict)
 
 
 # ------------------------------------------------------------------------------------------------ tools
@@ -2093,23 +2107,26 @@ def summarise(dnds_path: str, plans: list[dict], out_path: str) -> None:
 
 # ------------------------------------------------------------------------------------------------ low level
 
-def codon_dnds(groups, out_tsv: str, method=("YN",), codontable: int = 1, jobs: int = 0,
-               group_column: str | None = None, codon_out: str | None = None, kaks_out: str | None = None,
-               failures: str | None = None, extra_args=(), cpp: str | None = None) -> int:
+def codon_dnds(groups: Iterable[Sequence[Any]], out_tsv: _Path, method: Sequence[str] = ("YN",),
+               codontable: int = 1, jobs: int = 0, group_column: str | None = None,
+               codon_out: _Path | None = None, kaks_out: _Path | None = None, failures: _Path | None = None,
+               extra_args: Sequence[str] = (), cpp: str | None = None) -> int:
     """Protein alignment -> codon alignment -> Ka/Ks for groups held in Python, through one `coal-cpp codon-dnds`
     process. groups: an iterable of (group_id, members[, pairs]) with members = [(id, cds)] or [(id, cds,
     protein_row)]: two members without rows are aligned here; three or more need rows. pairs: "all" (default),
     "rep" or a list of (i, j). Writes out_tsv (PAIR_COLUMNS, with group_column first when given); returns the
     number of groups sent. Raises PipelineError when coal-cpp is missing or fails."""
     cpp = cpp or _find_cpp()
-    cmd = [cpp, "codon-dnds", "-i", "-", "-o", out_tsv, "-c", str(codontable), "-j", str(jobs), "-q"]
+    if isinstance(method, str):
+        method = [method]
+    cmd = [cpp, "codon-dnds", "-i", "-", "-o", os.fspath(out_tsv), "-c", str(codontable), "-j", str(jobs), "-q"]
     for m in method:
         cmd += ["-m", m]
     for flag, v in (("--group-column", group_column), ("--codon-out", codon_out), ("--kaks-out", kaks_out),
                     ("--failures", failures)):
         if v:
-            cmd += [flag, v]
-    cmd += list(extra_args)
+            cmd += [flag, os.fspath(v)]
+    cmd += [str(x) for x in extra_args]
     try:
         proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     except OSError as e:
@@ -2481,19 +2498,26 @@ def _namespace(mode: str, required: list[str], options: dict) -> argparse.Namesp
     return a
 
 
-def run_pairs(query, subject, out_dir, **options) -> PipelineResult:
+def run_pairs(query: _Path, subject: _Path, out_dir: _Path, **options: Any) -> PipelineResult:
     """Pair mode from Python: the options of `coal pipeline pairs` as keyword arguments (method=["YN", "NG"],
     ortho="rbh", aligner="nw", pairs=None, jobs=0, codontable=1, kaks_format=False, keep_alignments=False,
-    keep_protein_alignments=False, resume=False, quiet=False, ...). Never raises for a failed run: see PipelineResult.exit_code and .report."""
+    keep_protein_alignments=False, resume=False, quiet=False, ...).
+
+    Never raises for a failed run: an unreadable input, a missing tool or a full disk give exit_code 1 and
+    report["error"] (the message is also printed on stderr). Raises TypeError for an option that does not exist
+    and ValueError for a value that is not allowed (an unknown method, Comeron with another genetic code), before
+    anything is written. KeyboardInterrupt and a termination signal pass through, after the run has ended its
+    programs and written an "interrupted" report."""
     a = _namespace("pairs", ["--query", os.fspath(query), "--subject", os.fspath(subject), "-o", os.fspath(out_dir)],
                    options)
     return _execute("pairs", a, None)
 
 
-def run_clusters(cds, out_dir, clusters=None, **options) -> PipelineResult:
+def run_clusters(cds: _Path | Iterable[_Path], out_dir: _Path, clusters: _Path | None = None,
+                 **options: Any) -> PipelineResult:
     """Cluster mode from Python: the options of `coal pipeline clusters` as keyword arguments (clusters=None runs
     DIAMOND DeepClust; aligner="clustalo", max_cluster_size=200, large_clusters="representative", pair_sample=1000,
-    seed=1, method=["YN"], jobs=0, ...). cds: one path or a list."""
+    seed=1, method=["YN"], jobs=0, ...). cds: one path or a list. Returns and raises as run_pairs()."""
     files = [os.fspath(cds)] if isinstance(cds, (str, os.PathLike)) else [os.fspath(c) for c in cds]
     if clusters is not None:
         options = {**options, "clusters": os.fspath(clusters)}
@@ -2501,7 +2525,7 @@ def run_clusters(cds, out_dir, clusters=None, **options) -> PipelineResult:
     return _execute("clusters", a, None)
 
 
-def main(argv=None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     """`coal pipeline ...`. Exit codes: 0 done and nothing failed; 2 done, but some genes, pairs or clusters failed
     (failed.tsv, report.json), or a command-line error; 1 the run could not be done."""
     argv = sys.argv[1:] if argv is None else list(argv)

@@ -58,7 +58,7 @@ Without conda at all, the build steps can be run by hand against a virtual envir
 sees in a conda environment too (binary next to the interpreter):
 
 ```
-python3 -m venv .venv-conda && .venv-conda/bin/pip install 'setuptools>=69.3'
+python3 -m venv .venv-conda && .venv-conda/bin/pip install 'setuptools>=77.0.3'
 PREFIX=$PWD/.venv-conda PYTHON=$PWD/.venv-conda/bin/python bash packaging/bioconda/build.sh
 cd packaging/bioconda && PATH=$OLDPWD/.venv-conda/bin:$PATH bash test_dispatch.sh
 ```

@@ -320,6 +320,15 @@ entry under "Added", not under "Fixed".
   The seqinr reference has the book's full title.
   On the website's Cite page the table wraps and, on a phone, stacks the two cells of each row (it showed only
   its first column at 390 px).
+- **A documented Python API for Ka/Ks and the pipeline.** docs/python-api.md has a new section "dN/dS and the
+  pipeline": `coal.dnds_pipeline.run_pairs` / `run_clusters` (signatures, `PipelineResult`, the exit codes, and
+  that a failed run returns exit code 1 with `report["error"]` instead of raising; `TypeError` / `ValueError` for
+  a wrong call), `codon_dnds`, the column constants `PAIR_COLUMNS` / `SUMMARY_COLUMNS` / `FAILED_COLUMNS`,
+  `METHODS`, `SCHEMA`, `find_diamond` / `install_diamond`, `coal.citations`, and the entry points of `coal.align`
+  and `coal.msa`, with an example on `examples/dnds` that the tests run. The package ships `py.typed` and the
+  public functions have accurate type hints. The versioning promise now covers the column names and order of
+  `dnds.tsv`, `cluster_summary.tsv` and `failed.tsv` and the report schema id `coal.pipeline/1`. `import coal`
+  exports what it did (no facade); its docstring no longer calls the rest of the package internal.
 - **`coal --help` lists every command, and `coal help [COMMAND]` works.** The help of `coal` (and of `coal-cpp`)
   ends with one line per command: `kaks`, `dnds`, `pipeline`, `translate`, `codon-dnds`, `cite`, `help`,
   `--cpp-path`. `coal kaks --help`, `coal dnds --help`, `coal translate --help` and `coal codon-dnds --help` print
@@ -502,6 +511,12 @@ In commands that 0.5.0 has (both engines unless said):
   duplicate tab bar no longer holds focusable buttons (axe `aria-hidden-focus`).
 
 ### Internal
+
+- **Package metadata follows PEP 639:** `license = "GPL-3.0-only"` (an SPDX expression) with
+  `license-files = ["LICENSE", "NOTICE"]` in both `pyproject.toml` files, no licence classifier; the build needs
+  setuptools 77.0.3 or later (Python 3.9+, below the floor of 3.10; the Bioconda recipe asks for it too). The
+  wheels' metadata says `License-Expression: GPL-3.0-only` and carries both files under `licenses/`; the
+  deprecation warnings of every build are gone.
 
 Documentation, tests, continuous integration and packaging:
 

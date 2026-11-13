@@ -32,7 +32,7 @@ requirements:
   host:
     - python >=3.10
     - pip
-    - setuptools >=69.3
+    - setuptools >=77.0.3
   run:
     - python >=3.10
   # Optional programs of `coal pipeline` (not needed for codon alignment, `coal kaks` or `coal dnds`): when they are

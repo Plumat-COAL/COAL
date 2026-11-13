@@ -13,6 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "tests"))
 import coal  # noqa: E402
 from coal import CoalError, align_files, codon_align  # noqa: E402
 
@@ -257,6 +258,104 @@ class TestAlignFilesExample(unittest.TestCase):
         # 13 genes checked before OG0001_sp14 failed, 6 never reached (as the summary line counts them)
         self.assertEqual(report["summary"], {"total": 20, "ok": 13, "warning": 0, "failed": 1, "pairing": "id",
                                              "not_checked": 6})
+
+
+class TestPipelineSection(unittest.TestCase):
+    """docs/python-api.md "dN/dS and the pipeline": the names it documents exist with the documented signatures,
+    and its examples run with the documented output (they need coal-cpp, not DIAMOND)."""
+
+    def section(self) -> str:
+        text = DOC.read_text(encoding="utf-8")
+        return text[text.index("## dN/dS and the pipeline"):text.index("## Versioning promise")]
+
+    def test_documented_names_and_signatures(self):
+        import inspect
+        from coal import align, citations, dnds_pipeline as P, msa
+        sec = self.section()
+        for name in P.__all__:
+            self.assertIn(name, sec, f"docs/python-api.md does not document coal.dnds_pipeline.{name}")
+        for mod, names in ((citations, ("keys_for", "reference", "format_references", "doi_url", "REFERENCES", "DOIS",
+                                        "LABELS", "METHOD_KEYS", "TABLE", "SUPERSEDED")),
+                           (align, ("align_pair", "align_pairs", "AlignParams", "score_alignment", "find_align_binary")),
+                           (msa, ("run_msa", "align_clusters", "find_clustalo", "find_mafft", "install_clustalo",
+                                  "install_mafft", "tool_version", "cache_dir"))):
+            for name in names:
+                self.assertIn(name, mod.__all__, f"{mod.__name__}.{name}")
+                self.assertIn(name, sec)
+        # the signatures as the page prints them
+        for fn, shown in ((P.run_pairs, "run_pairs(query, subject, out_dir, **options)"),
+                          (P.run_clusters, "run_clusters(cds, out_dir, clusters=None, **options)")):
+            sig = inspect.signature(fn)
+            plain = fn.__name__ + "(" + ", ".join(
+                ("**" + n if p.kind is p.VAR_KEYWORD else n + ("=None" if p.default is None else ""))
+                for n, p in sig.parameters.items()) + ")"
+            self.assertEqual(plain, shown)
+            self.assertIn(shown + " -> PipelineResult", sec)
+        self.assertEqual(list(inspect.signature(P.codon_dnds).parameters),
+                         ["groups", "out_tsv", "method", "codontable", "jobs", "group_column", "codon_out", "kaks_out",
+                          "failures", "extra_args", "cpp"])
+        self.assertEqual(list(inspect.signature(P.install_diamond).parameters),
+                         ["method", "version", "force", "quiet", "timeout", "sha256", "allow_unverified"])
+        import dataclasses
+        self.assertEqual([f.name for f in dataclasses.fields(P.PipelineResult)], ["exit_code", "report", "outputs"])
+        self.assertTrue(issubclass(P.PipelineError, RuntimeError))
+        self.assertIn(repr(P.METHODS).replace("'", '"'), sec)
+        self.assertIn(f'`"{P.SCHEMA}"`', sec)
+        # the promise names the tables' columns and the report schema
+        promise = DOC.read_text(encoding="utf-8").split("## Versioning promise")[1]
+        for must in ("PAIR_COLUMNS", "SUMMARY_COLUMNS", "FAILED_COLUMNS", "coal.pipeline/1", "coal.pipeline/2",
+                     "a failed run returns instead of raising"):
+            self.assertIn(must, promise)
+        # no facade: `import coal` exports what it always did, and the page says so
+        self.assertFalse(hasattr(coal, "run_pairs"))
+        self.assertIn("`coal.run_pairs` does not exist", sec)
+
+    def test_typed_package(self):
+        self.assertTrue((ROOT / "src" / "coal" / "py.typed").is_file())
+        self.assertIn('coal = ["py.typed"]', (ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+        import typing
+        from coal import dnds_pipeline as P
+        hints = typing.get_type_hints(P.run_pairs)
+        self.assertIs(hints["return"], P.PipelineResult)
+        self.assertEqual(typing.get_type_hints(P.PipelineResult)["exit_code"], int)
+        self.assertEqual(typing.get_type_hints(P.codon_dnds)["return"], int)
+        doc = (coal.__doc__ or "")
+        self.assertIn("coal.dnds_pipeline", doc)
+        self.assertNotIn("Everything else in the package is internal", doc)   # (it named two functions only)
+
+    def test_examples_run_as_documented(self):
+        import doctest
+        import io
+        from contextlib import redirect_stderr
+        from test_dnds_pipeline import CPP
+        if CPP is None:
+            if os.environ.get("COAL_REQUIRE_CPP"):
+                self.fail("coal-cpp is required (COAL_REQUIRE_CPP) and was not found")
+            self.skipTest("build/coal-cpp (COAL_CPP_BIN) is not built")
+        blocks = [b.split("```")[0] for b in self.section().split("```python\n")[1:]]
+        self.assertEqual(len(blocks), 2)
+        old_cwd, old_cpp = os.getcwd(), os.environ.get("COAL_CPP")
+        with tempfile.TemporaryDirectory() as tmp:
+            shutil.copytree(ROOT / "examples" / "dnds", Path(tmp) / "examples" / "dnds")
+            os.chdir(tmp)
+            os.environ["COAL_CPP"] = str(CPP)
+            try:
+                globs: dict = {}
+                for k, block in enumerate(blocks):
+                    test = doctest.DocTestParser().get_doctest(block, globs, f"python-api.md block {k + 1}", str(DOC), 0)
+                    out = io.StringIO()
+                    runner = doctest.DocTestRunner(verbose=False, optionflags=doctest.ELLIPSIS)
+                    with redirect_stderr(io.StringIO()):
+                        runner.run(test, out=out.write, clear_globs=False)
+                    self.assertEqual(runner.failures, 0, out.getvalue())
+                    self.assertGreater(runner.tries, 3)
+                    globs = test.globs
+            finally:
+                os.chdir(old_cwd)
+                if old_cpp is None:
+                    os.environ.pop("COAL_CPP", None)
+                else:
+                    os.environ["COAL_CPP"] = old_cpp
 
 
 if __name__ == "__main__":
