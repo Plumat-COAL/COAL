@@ -46,9 +46,23 @@
 //   MYN   Zhang Z, Li J, Yu J (2006) BMC Evol Biol 6:44
 #include "kaks.hpp"
 
+// No floating-point contraction in this file: a * b + c is computed as written, never fused into one FMA
+// instruction. With contraction the last digits of every estimate depend on whether the compiler and the target
+// have FMA (Clang contracts by default; arm64 always has the instruction, x86-64 only with -march). Said here as
+// well as in CMakeLists.txt so that it also holds where this file is compiled by something else (R's build of
+// coalr, an embedding project). docs/kaks.md "Platform reproducibility" says what is and is not guaranteed.
+#if defined(__clang__)
+#pragma STDC FP_CONTRACT OFF
+#elif defined(__GNUC__)
+#pragma GCC optimize("fp-contract=off")
+#elif defined(_MSC_VER)
+#pragma fp_contract(off)
+#endif
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <initializer_list>
 
@@ -123,8 +137,11 @@ void finish(Result& r) {
     if (std::isfinite(r.ka) && std::isfinite(r.ks) && r.ks >= SMALL) r.ka_ks = r.ka / r.ks;
     // (no test when a cell would be negative: LPB93's S = Sd/Ks is below Sd once Ks > 1; KaKs_Calculator then
     // feeds the negative cell to its log-factorial, which returns 1 for it)
-    if (r.Sd >= SMALL && r.Nd >= SMALL && r.S >= SMALL && r.N >= SMALL && r.S >= r.Sd && r.N >= r.Nd)
-        r.p_fisher = fisher(r.Sd, r.Nd, r.S - r.Sd, r.N - r.Nd);
+    // A cell that is zero up to rounding (weighted counts that add up to the number of sites: 2 against
+    // 2.0000000000000004) is zero, not negative: otherwise the test is made or not depending on the last bit.
+    const double restS = r.S - r.Sd, restN = r.N - r.Nd, tie = 1e-9;
+    if (r.Sd >= SMALL && r.Nd >= SMALL && r.S >= SMALL && r.N >= SMALL && restS > -tie && restN > -tie)
+        r.p_fisher = fisher(r.Sd, r.Nd, std::max(restS, 0.0), std::max(restN, 0.0));
 }
 
 void mark_saturated(Result& r, const char* which) {
@@ -136,13 +153,31 @@ void mark_saturated(Result& r, const char* which) {
 void add_note(Result& r, const std::string& msg) { r.note = r.note.empty() ? msg : r.note + "; " + msg; }
 
 // The YN00 / MYN iteration (pathway weights from the current estimates, estimates from the weighted counts)
-// ended at its round limit without settling: the numbers are those of the last round, not a fixed point. This
-// happens with very short or nearly saturated pairs, where the estimates jump between rounds; the last round
-// then depends on rounding in the 16th digit, so two programs that agree everywhere else can print different
-// numbers here. The row gets status `warning` (unless something more serious applies) and the note says so.
-void not_converged(Result& r, const char* msg) {
-    if (r.status == Status::ok) r.status = Status::warning;
-    add_note(r, std::string(msg) + " (the values are those of the last round)");
+// ended at its round limit without settling. This happens with very short or nearly saturated pairs, where the
+// estimates jump between rounds. The numbers of the last round are then not a fixed point of anything, and they
+// are not reproducible either: the jumps amplify a difference in the 16th digit (another C library's exp or log,
+// a fused multiply-add) into the third digit, and can move a value across the saturation limit. Measured for the
+// pair AAA / ATG with YN: Ka is 3.169, 3.174 or "saturated" depending on the platform. So there is no estimate:
+// Ka, Ks, their standard errors and the weighted difference counts Sd and Nd are NA, the status is
+// `not_converged` (whatever the last round looked like, saturated or not; only no_data and error, which are
+// decided before the iteration, stay), and the last round's values are kept in Result::last_ka / last_ks and, with
+// six digits, in the note. S, N and kappa do not depend on the iteration and are kept.
+void not_converged(Result& r, const char* what, int rounds, bool hasN, double dN, bool satN, bool hasS, double dS,
+                   bool satS) {
+    if (r.status == Status::ok || r.status == Status::warning) r.status = Status::not_converged;
+    auto last = [](bool has, double v, bool sat) -> std::string {
+        if (!has) return "NA";
+        if (sat || !std::isfinite(v)) return "saturated";
+        char buf[40];
+        std::snprintf(buf, sizeof buf, "%.6g", v);
+        return buf;
+    };
+    r.last_ka = (hasN && !satN && std::isfinite(dN)) ? dN : NA;
+    r.last_ks = (hasS && !satS && std::isfinite(dS)) ? dS : NA;
+    r.ka = r.ks = r.se_ka = r.se_ks = r.divergence = r.Sd = r.Nd = NA;
+    add_note(r, std::string(what) + " iteration did not converge in " + std::to_string(rounds) +
+                    " rounds: no estimate (last round: Ka " + last(hasN, dN, satN) + ", Ks " + last(hasS, dS, satS) +
+                    "; such values can differ between platforms)");
 }
 
 // Ka or Ks cannot be estimated because there is no site of that kind (e.g. a gene of Met and Trp codons only).
@@ -1075,6 +1110,10 @@ Result run_yn(const Prepared& p, const GeneticCode& g, const Options& opt, Resul
     r.Sd = D.sts1 + D.sts2 + D.stv;
     r.Nd = D.nts1 + D.nts2 + D.ntv;
     r.substitutions = D.snp;
+    if (!r.converged) {
+        not_converged(r, "YN00", nround, hasN, dN, hasN && on.saturated, hasS, dS, hasS && os.saturated);
+        return r;
+    }
     r.ks = hasS ? dS : NA;
     r.ka = hasN ? dN : NA;
     r.se_ks = hasS ? os.se : NA;
@@ -1088,7 +1127,6 @@ Result run_yn(const Prepared& p, const GeneticCode& g, const Options& opt, Resul
         r.ka = r.se_ka = NA;
     }
     if (std::isfinite(r.ks) && std::isfinite(r.ka)) r.divergence = (S * r.ks + N * r.ka) / (S + N);
-    if (!r.converged) not_converged(r, "YN00 iteration did not converge in 10 rounds");
     return r;
 }
 
@@ -1244,6 +1282,10 @@ Result run_myn(const Prepared& p, const GeneticCode& g, Result r) {
     r.Sd = D.sts1 + D.sts2 + D.stv;
     r.Nd = D.nts1 + D.nts2 + D.ntv;
     r.substitutions = D.snp;
+    if (!r.converged) {
+        not_converged(r, "MYN", nround, hasN, dN, hasN && on.saturated, hasS, dS, hasS && os.saturated);
+        return r;
+    }
     r.ks = hasS ? dS : NA;
     r.ka = hasN ? dN : NA;
     r.se_ks = hasS ? os.se : NA;
@@ -1257,7 +1299,6 @@ Result run_myn(const Prepared& p, const GeneticCode& g, Result r) {
         r.ka = r.se_ka = NA;
     }
     if (std::isfinite(r.ks) && std::isfinite(r.ka)) r.divergence = (S * r.ks + N * r.ka) / (S + N);
-    if (!r.converged) not_converged(r, "MYN iteration did not converge in 100 rounds");
     return r;
 }
 
@@ -1306,6 +1347,7 @@ const char* status_name(Status s) {
     switch (s) {
         case Status::ok: return "ok";
         case Status::warning: return "warning";
+        case Status::not_converged: return "not_converged";
         case Status::saturated: return "saturated";
         case Status::no_data: return "no_data";
         case Status::error: return "error";

@@ -45,6 +45,9 @@ KK_LOSES = {
     ("myn_sites_in_one_sequence", "MYN"),                                   # 0/0 site base frequencies
 }
 KK_NAN = ("nan", "-nan", "inf", "-inf")
+# KaKs_Calculator-format columns that are NA when the YN / MYN iteration did not converge: Ka, Ks, Ka/Ks, the
+# Fisher p, S- and N-Substitutions, Divergence-Time. Everything else in the row does not depend on the iteration.
+NOT_CONVERGED_NA = (2, 3, 4, 5, 11, 12, 15)
 
 
 def cpp_bin() -> Path | None:
@@ -137,7 +140,11 @@ class TestAgainstKaKsCalculator(KaKsBase):
                     if x == y or i in (0, 1):
                         continue
                     why = None
-                    if i == 17 and pair in RNA_PAIRS:
+                    # the iteration did not converge: no estimate, where KaKs_Calculator prints its last round
+                    # (docs/kaks.md, difference 12). Only the fields that come out of the iteration
+                    if y == "NA" and st == "not_converged" and i in NOT_CONVERGED_NA:
+                        why = st
+                    elif i == 17 and pair in RNA_PAIRS:
                         why = "lowercase GC"  # KaKs_Calculator counts upper-case G and C only
                     elif x == "-0" and y == "0":
                         why = "negative zero"
@@ -180,7 +187,9 @@ class TestAgainstKaKsCalculator(KaKsBase):
         self.assertGreater(c.get("saturated", 0), 0)
 
     def test_simulated(self):
-        self.check_set("sim_small")
+        c = self.check_set("sim_small")
+        # at most one pair (YN, sim_w0.1_t2_k2_3: dS above 4, ten rounds are not enough) has no estimate; its 7 fields
+        self.assertLessEqual(c.get("not_converged", 0), len(NOT_CONVERGED_NA))
 
 
 class TestOneKindOfSite(KaKsBase):
@@ -320,31 +329,66 @@ class TestMultiPositionCodons(KaKsBase):
         self.assertNotIn("did not converge", m[14])
         self.assertTrue(close(float(m[3]), 2.36633343882711, 1e-6), m)
 
-    def test_iteration_that_does_not_converge_is_a_warning(self):
-        m = self.rows[("myn_not_converged", "MYN")]
-        self.assertEqual(m[13], "warning")
-        self.assertEqual(m[14], "MYN iteration did not converge in 100 rounds (the values are those of the last round)")
-        # KK and KKFIX: Ka 1.74822892588737, Ks 2.17994969816181 after the same 100 rounds: the same wandering
-        # sequence, apart in the 6th digit by then. Neither is an estimate
-        self.assertTrue(close(float(m[3]), 1.74822892588737, 1e-4) and close(float(m[4]), 2.17994969816181, 1e-4), m)
+    # tidy columns: dN dS dNdS SE_dN SE_dS (3..7), Nd Sd (10, 11); N_sites, S_sites (8, 9) do not come out of the
+    # iteration and stay
+    def assert_no_estimate(self, row, method_name):
+        self.assertEqual(row[13], "not_converged", row)
+        self.assertEqual([row[i] for i in (3, 4, 5, 6, 7, 10, 11)], ["NA"] * 7, row)
+        self.assertTrue(float(row[8]) > 0 and float(row[9]) > 0, row)
+        rounds = {"YN": "YN00 iteration did not converge in 10 rounds", "MYN": "MYN iteration did not converge in 100 rounds"}
+        self.assertRegex(row[14], "^" + rounds[method_name] + r": no estimate \(last round: Ka \S+, Ks \S+; "
+                                  r"such values can differ between platforms\)$")
+
+    def test_iteration_that_does_not_converge_gives_no_estimate(self):
+        """An iteration that ends at its round limit has no fixed point to report. The values of its last round
+        depend on the platform: for yn_not_converged (one codon, Nd/N on the 0.75 limit of JC69) Ka of the last
+        round was 3.16884648849903 on Linux (GCC 15, glibc 2.43), 3.17357163988094 on Windows (MSVC),
+        3.1735716240756 on macOS (Apple Clang, arm64) and "saturated" with GCC 13 and glibc 2.39 (CI, 2026-11-13).
+        So this test asserts what holds everywhere: the status, the NA fields and the form of the note. No digit of
+        a last round is asserted. (KaKs_Calculator prints its last round: for myn_not_converged Ka
+        1.74822892588737, Ks 2.17994969816181.)"""
+        self.assert_no_estimate(self.rows[("myn_not_converged", "MYN")], "MYN")
         self.assertEqual(self.rows[("myn_not_converged", "YN")][13], "ok")
-        y = self.rows[("yn_not_converged", "YN")]     # one codon, Nd/N on the 0.75 boundary of JC69
-        self.assertEqual((y[3], y[13]), ("NA", "saturated"))
-        self.assertIn("Ka saturated", y[14])
-        self.assertIn("YN00 iteration did not converge in 10 rounds (the values are those of the last round)", y[14])
-        s = self.rows[("sat_not_converged", "MYN")]   # KK and KKFIX: Ka 0.125248977242036 (3 of 4 differences dropped)
-        self.assertEqual(s[13], "saturated")
-        self.assertIn("did not converge", s[14])
-        self.assertGreater(float(s[3]), 0.5)
+        self.assert_no_estimate(self.rows[("yn_not_converged", "YN")], "YN")
+        # not_converged also where the last round was saturated: whether it was differs by platform as well
+        # (sat_not_converged: Ka 0.938 and Ks 1.570 with one C library, Ka 0.574 and Ks saturated with another)
+        self.assert_no_estimate(self.rows[("sat_not_converged", "MYN")], "MYN")
+        for key, r in self.rows.items():
+            if "did not converge" in r[14]:
+                self.assertEqual(r[13], "not_converged", key)
+            else:
+                self.assertNotEqual(r[13], "not_converged", key)
         # the unweighted estimate needs no iteration: it is yn00's (weighting 0: dN 0.636574320355)
         self.assertTrue(close(float(self.paml0[("sat_not_converged", "YN")][3]), 0.636574320355, 1e-11))
         for key, r in self.paml0.items():
             self.assertNotIn("did not converge", r[14], key)
+            self.assertNotEqual(r[13], "not_converged", key)
 
-    def test_kaks_format_names_the_pairs_that_did_not_converge(self):
+    def test_kaks_format_has_no_last_round_values(self):
+        """`coal kaks` has no status column: the row of an iteration that did not converge has NA in the columns
+        that come out of the iteration (KaKs_Calculator prints its last round there), the rest of the row is as
+        for any pair, and the summary says how many."""
         r = self.run_cpp("kaks", "-i", self.axt, "-m", "MYN")
         self.assertIn("did not converge", r.stderr)
         self.assertIn("3 ", r.stderr.split("did not converge")[0].splitlines()[-1])
+        self.assertIn("3 not_converged", r.stderr)
+        rows = read_rows(r.stdout)
+        for pair in ("myn_not_converged", "yn_not_converged", "sat_not_converged"):
+            f = rows[(pair, "MYN")]
+            self.assertEqual([f[i] for i in NOT_CONVERGED_NA], ["NA"] * len(NOT_CONVERGED_NA), f)
+            self.assertTrue(float(f[7]) > 0 and float(f[8]) > 0 and int(f[6]) > 0 and float(f[10]) > 0, f)
+        self.assertNotEqual(rows[("myn_nan_round", "MYN")][2], "NA")
+
+    def test_fisher_test_with_a_cell_that_is_zero_up_to_rounding(self):
+        """Weighted counts that add up to the number of sites (Sd = S = 2 here, or 2.0000000000000004): the cell
+        S - Sd is zero, and the test is made (p = 0 in KaKs_Calculator's version, which skips tables with an empty
+        cell) whatever the last bit says. It used to be made or left out by platform (0 or NA)."""
+        with tempfile.TemporaryDirectory() as td:
+            axt = Path(td) / "t.axt"
+            axt.write_text("p682\nGCATGGAAG\nTGGGCAAAG\n\n", encoding="utf-8")
+            f = read_rows(self.run_cpp("kaks", "-i", axt, "-q", "-m", "MYN", "--digits", "15").stdout)[("p682", "MYN")]
+        self.assertEqual((f[3], f[5]), ("NA", "0"), f)                  # Ks saturated; p of the degenerate table
+        self.assertTrue(close(float(f[11]), float(f[7]), 1e-12), f)     # Sd = S
 
 
 class TestAgainstPAML(KaKsBase):
@@ -356,6 +400,9 @@ class TestAgainstPAML(KaKsBase):
             for line in lines:
                 pair, dN, dS, S, N, SEdN, SEdS = line.split("\t")
                 o = ours[(pair, "YN")]
+                if o[13] == "not_converged":       # no estimate where yn00 prints its tenth round
+                    self.assertEqual((w, pair, o[3], o[4]), (1, "sim_w0.1_t2_k2_3&b", "NA", "NA"), o)
+                    continue
                 for ref, col, tol in ((dN, 3, 1e-9), (dS, 4, 1e-9), (SEdN, 6, 1e-9), (SEdS, 7, 1e-9),
                                       (N, 8, 1e-8), (S, 9, 1e-8)):
                     self.assertTrue(close(float(ref), float(o[col]), tol), f"w={w} {pair} col {col}: {ref} vs {o[col]}")

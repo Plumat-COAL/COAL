@@ -84,16 +84,20 @@ if(COAL_BUILD_TOOLS)
   list(APPEND COAL_TARGETS coal-cpp-dump)
 endif()
 
+# Floating point as written: no contraction of a * b + c into a fused multiply-add (Clang's default; GCC's outside
+# ISO mode), no fast-math. With it the last digits of Ka/Ks depend on whether the target has FMA (arm64: always;
+# x86-64: with -march). kaks.cpp says the same with a pragma, for builds that do not come through here (coalr).
+# docs/kaks.md "Platform reproducibility".
 foreach(t IN LISTS COAL_TARGETS)
   if(MSVC)
     # /utf-8: sources are UTF-8; _CRT_SECURE_NO_WARNINGS: std::getenv/strerror are used on purpose
-    target_compile_options(${t} PRIVATE /W4 /permissive- /utf-8 /EHsc)
+    target_compile_options(${t} PRIVATE /W4 /permissive- /utf-8 /EHsc /fp:precise)
     target_compile_definitions(${t} PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
     if(COAL_WARNINGS_AS_ERRORS)
       target_compile_options(${t} PRIVATE /WX)
     endif()
   else()
-    target_compile_options(${t} PRIVATE -Wall -Wextra -Wpedantic -Wshadow)
+    target_compile_options(${t} PRIVATE -Wall -Wextra -Wpedantic -Wshadow -ffp-contract=off)
     if(COAL_WARNINGS_AS_ERRORS)
       target_compile_options(${t} PRIVATE -Werror)
     endif()
