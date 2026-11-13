@@ -3,7 +3,7 @@ saturated pairs").
 
   python benchmarks/kaks/random_short_pairs.py --coal-cpp build/coal-cpp --kaks-hp KaKs_Calculator_15digits \
       [--mode single|multi] [--n 4000] [--seed 5] [--methods YN,MYN] [--kaks-fixed KaKs_Calculator_corrected] \
-      [--yn00 yn00_12digits] [--one-file] --out work/
+      [--yn00 yn00_12digits] [--one-file] [--reuse-references] --out work/
 
 Two generators:
 
@@ -24,14 +24,16 @@ Every field (Ka, Ks, Ka/Ks, S-Sites, N-Sites) where the two outputs differ is pu
   nan -> NA               KaKs_Calculator prints nan, COAL NA
   nan -> number           KaKs_Calculator loses a defined value to NaN arithmetic (differences 8 to 10)
   NA -> number            KaKs_Calculator prints NA, COAL a number (difference 8)
-  number -> NA            allowed only with COAL's status `saturated` (difference 1)
+  number -> NA            allowed only with COAL's status `saturated` (difference 1) or `not_converged`
+                          (difference 12: the iteration did not converge, COAL gives no estimate where
+                          KaKs_Calculator prints its last round; the script checks that COAL's row then has NA in
+                          Ka, Ks and Ka/Ks and that no row with a number has that status)
   number != number        two numbers that differ by more than 1e-9 (relative). Each must be explained:
       one kind of site      COAL status no_data (S = 0 or N = 0): KaKs_Calculator drops the differences of codons
                             that differ at several positions (difference 11); with --yn00, COAL's Ka (Ks) must be
                             yn00's with weighting = 0
       reference nan row     the KaKs_Calculator row has nan / NA in Ka or Ks: a NaN got into its iteration and
                             the number it still prints lacks the same codons (difference 11)
-      not converged         COAL's note says the iteration did not converge (difference 12)
       saturated, other path COAL status saturated and the difference is below 1e-6 (difference 13)
       unexplained           anything else: the script exits 1
 
@@ -160,8 +162,8 @@ def classify(ref: dict, ours: dict, status: dict, seqs: dict, yn00: str | None):
                 rel = abs(nx - ny) / max(1.0, abs(nx), abs(ny))
                 if rel <= 1e-9:
                     continue
-                if "did not converge" in note:
-                    kind = "number != number: not converged"
+                if "did not converge" in note:      # cannot happen: such a row has no numbers in these fields
+                    kind = "number != number: unexplained (not converged, but COAL prints a number)"
                 elif st == "no_data":
                     kind = "number != number: one kind of site"
                     if yn00 and name in ("Ka", "Ks"):
@@ -177,7 +179,9 @@ def classify(ref: dict, ours: dict, status: dict, seqs: dict, yn00: str | None):
                     kind = "number != number: unexplained"
             elif nx is not None:
                 kind = "number -> NA"
-                if st != "saturated" and nx != 0:
+                if "did not converge" in note and name in ("Ka", "Ks", "Ka/Ks"):
+                    kind = "number -> NA: not converged"
+                elif st != "saturated" and nx != 0:
                     kind = "number -> NA: unexplained"
             elif ny is not None:
                 kind = "nan -> number" if "nan" in x or "inf" in x else f"{x} -> number"
@@ -202,6 +206,9 @@ def main() -> int:
     ap.add_argument("--methods", default="NG,LWL,MLWL,LPB,MLPB,YN,MYN")
     ap.add_argument("--one-file", action="store_true",
                     help="also run KaKs_Calculator once over the whole file and count the rows that differ")
+    ap.add_argument("--reuse-references", action="store_true",
+                    help="read <reference>.<METHOD>.kaks from --out when it is there (written by an earlier run "
+                         "on the same pairs) and do not run KaKs_Calculator again: one process per pair takes long")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     out = Path(a.out)
@@ -213,7 +220,10 @@ def main() -> int:
         pairs = make_pairs_multi(a.n or 3000, 20261112 if a.seed is None else a.seed)
     seqs = {n: (s1, s2) for n, s1, s2 in pairs}
     axt = out / "random_short.axt"
-    axt.write_text("".join(f"{n}\n{s1}\n{s2}\n\n" for n, s1, s2 in pairs))
+    text_axt = "".join(f"{n}\n{s1}\n{s2}\n\n" for n, s1, s2 in pairs)
+    if a.reuse_references and axt.exists() and axt.read_text() != text_axt:
+        raise SystemExit(f"--reuse-references: {axt} holds other pairs than this run would make")
+    axt.write_text(text_axt)
     mflags = sum((["-m", m] for m in methods), [])
     subprocess.run([a.coal_cpp, "kaks", "-i", str(axt), "-o", str(out / "coal.kaks"), "--digits", "15", "-q",
                     *mflags], check=True)
@@ -223,6 +233,16 @@ def main() -> int:
     for line in (out / "coal.dnds.tsv").read_text().splitlines()[1:]:
         f = line.split("\t")
         status[(f[0], f[2])] = (f[13], f[14] if len(f) > 14 else "")
+        # an iteration that did not converge: status not_converged (or no_data when a kind of site is missing),
+        # no dN, no dS; and the other way round
+        nc = "did not converge" in status[(f[0], f[2])][1]
+        if nc != (f[13] == "not_converged") and not (nc and f[13] == "no_data"):
+            raise SystemExit(f"status and note disagree: {line}")
+        if nc and (f[3], f[4], f[5]) != ("NA", "NA", "NA"):
+            raise SystemExit(f"not converged, but a value is printed: {line}")
+    n_nc = Counter(k[1] for k, v in status.items() if "did not converge" in v[1])
+    print("COAL: iteration not converged (no estimate): "
+          + (", ".join(f"{c} {m}" for m, c in sorted(n_nc.items())) or "none"))
     ours = rows((out / "coal.kaks").read_text())
     total_bad = 0
     builds = [("KaKs_Calculator", a.kaks_hp)] + ([("KaKs_Calculator_corrected", a.kaks_fixed)] if a.kaks_fixed else [])
@@ -230,8 +250,12 @@ def main() -> int:
         for label, exe in builds:
             ref = {}
             for m in methods:
-                text = run_reference(exe, pairs, m, False, Path(td))
-                (out / f"{label}.{m}.kaks").write_text(text + "\n")
+                stored = out / f"{label}.{m}.kaks"
+                if a.reuse_references and stored.exists():
+                    text = stored.read_text().rstrip("\n")
+                else:
+                    text = run_reference(exe, pairs, m, False, Path(td))
+                    stored.write_text(text + "\n")
                 ref.update(rows(text))
                 if a.one_file:
                     whole = rows(run_reference(exe, pairs, m, True, Path(td)))
@@ -246,11 +270,15 @@ def main() -> int:
                 for k in sorted(counts):
                     fh.write("\t".join(k) + f"\t{counts[k]}\t{example[k]}\n")
             nn = Counter()
+            lost = 0
             for (m, name, kind, st), c in counts.items():
                 if kind.startswith("number != number"):
                     nn[kind.split(": ", 1)[1]] += c
+                if kind == "number -> NA: not converged":
+                    lost += c
             print(f"{label}: {len(pairs)} pairs ({a.mode}), methods {','.join(methods)}: {sum(counts.values())} "
-                  f"differing fields in {len(counts)} classes; number != number: "
+                  f"differing fields in {len(counts)} classes; number -> NA because not converged: {lost}; "
+                  "number != number: "
                   + (", ".join(f"{c} {k}" for k, c in sorted(nn.items())) or "none")
                   + f"; {len(bad)} unexplained -> {table}")
             for b in bad[:10]:

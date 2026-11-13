@@ -102,6 +102,21 @@ test_that("the default flavours apply COAL's policy", {
   expect_true(is.na(z$dS) || is.na(z$dN))
 })
 
+test_that("not_converged is a status of the iterating methods only", {
+  # AAA against ATG: YN's iteration does not converge (no estimate); Comeron and Li do not iterate. The status
+  # names come from the engine's enum, so a status added there cannot shift the names of the others here.
+  r <- coal_kaks("AAA", "ATG", method = c("YN", "Comeron", "Li"))
+  expect_identical(r$method, c("YN", "Comeron", "Li"))
+  expect_identical(r$status[1], "not_converged")
+  expect_true(all(r$status[2:3] %in% c("ok", "warning", "saturated", "no_data")))
+  rf <- refs()
+  row <- function(n) rf[rf$name == n, ]
+  u <- row("unrelated_saturated")
+  expect_identical(coal_kaks(u$seq1, u$seq2, method = "Li")$status, "saturated")
+  g <- row("all_gap")
+  expect_identical(coal_kaks(g$seq1, g$seq2, method = c("Comeron", "Li"))$status, c("no_data", "no_data"))
+})
+
 test_that("names, aliases and arguments", {
   a <- "ATGGCTAAAGGTCTGTTTGATCCGGAATGG"
   b <- "ATGGCAAAGGGTTTGTTCGACCCGGAGTGG"

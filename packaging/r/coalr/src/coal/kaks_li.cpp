@@ -39,6 +39,19 @@
 // References: Li W-H (1993) Unbiased estimation of the rates of synonymous and nonsynonymous substitution. J Mol
 // Evol 36:96-99. Charif D, Lobry JR (2007) SeqinR 1.0-2, in: Structural approaches to sequence evolution,
 // Springer, pp 207-232.
+
+// No floating-point contraction in this file (as in kaks.cpp, which says why): a * b + c is computed as written,
+// never fused into one FMA instruction, so the estimates do not depend on whether the compiler and the target have
+// FMA. Said here as well as in CMakeLists.txt so that it also holds where this file is compiled by something else
+// (R's build of coalr). docs/kaks.md "Platform reproducibility".
+#if defined(__clang__)
+#pragma STDC FP_CONTRACT OFF
+#elif defined(__GNUC__)
+#pragma GCC optimize("fp-contract=off")
+#elif defined(_MSC_VER)
+#pragma fp_contract(off)
+#endif
+
 #include <cmath>
 #include <cstring>
 #include <string>

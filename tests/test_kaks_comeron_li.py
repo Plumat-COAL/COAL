@@ -15,9 +15,13 @@ Skipped if build/coal-cpp (COAL_CPP_BIN) is not built.
 from __future__ import annotations
 
 import math
+import os
+import sys
 import unittest
 
-import test_kaks as tk   # (the module, not its classes: imported test classes would run again here)
+# (importable both as `discover -s tests` / `test_kaks_comeron_li` and as `tests.test_kaks_comeron_li`)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import test_kaks as tk   # noqa: E402  (the module, not its classes: imported test classes would run again here)
 
 GOLD, HEADER, KDIR = tk.GOLD, tk.HEADER, tk.KDIR
 
@@ -284,6 +288,29 @@ class TestComeronLiCli(ComeronLiBase):
         self.assertEqual(d[("met_trp_only", "Comeron")]["dS"], "NA")
         self.assertEqual(st("one_codon_identical", "Li"), "no_data")    # Li needs 0-, 2- and 4-fold sites
         self.assertEqual(st("unrelated_saturated", "Li"), "saturated")
+
+    def test_not_converged_is_a_status_of_the_iterating_methods_only(self):
+        """Status `not_converged` (YN, MYN: no estimate) next to Comeron and Li, which do not iterate: the summary
+        line names all six statuses in the engine's order whatever the methods, and no Comeron or Li row has it."""
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "p.axt"
+            p.write_text("nc\nAAA\nATG\n\n", encoding="utf-8")
+            r = self.run_cpp("dnds", p, "--format", "axt", "-m", "YN", "-m", "Comeron", "-m", "Li")
+            rows = {f.split("\t")[2]: f.split("\t") for f in r.stdout.splitlines()[1:]}
+            self.assertEqual(rows["YN"][13], "not_converged")
+            for m in ("Comeron", "Li"):
+                self.assertNotEqual(rows[m][13], "not_converged", m)
+                self.assertIn(rows[m][13], ("ok", "warning", "saturated", "no_data"), m)
+            counts = r.stderr.splitlines()[0]
+            self.assertRegex(counts, r"3 method\(s\): \d+ ok, \d+ warning, 1 not_converged, \d+ saturated, "
+                                     r"\d+ no_data, 0 error$")
+        for flav in ((), ("--comeron-flavour", "gestimator", "--li-flavour", "seqinr")):
+            for name in SETS:
+                for (_, m), d in self.tidy(KDIR / (name + ".axt"), "-m", "Comeron", "-m", "Li", *flav).items():
+                    self.assertNotEqual(d["status"], "not_converged", (name, m))
+                    self.assertIn(d["status"], ("ok", "warning", "saturated", "no_data", "error"), (name, m))
 
     def test_threads_same_output(self):
         for flav in ((), ("--comeron-flavour", "gestimator", "--li-flavour", "seqinr")):

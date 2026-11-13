@@ -185,23 +185,27 @@ def main() -> int:
                       "`nan` (it prints nan where COAL prints NA), `p-obs` (Fisher p: KaKs_Calculator lost the observed "
                       "table to rounding; COAL - KaKs_Calculator = P(observed table)), `p-neg` (Fisher p: COAL gives NA because the "
                       "table has a negative cell, S < Sd or N < Nd, as LPB93's S = Sd/Ks once Ks > 1), `saturated` (COAL: NA with status "
-                      "saturated; KaKs_Calculator prints a capped or truncated value), `other` (unexplained).\n")
-        report.append("| Method | rows | identical | different | -0 | nan | p-obs | p-neg | saturated | other |")
-        report.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
+                      "saturated; KaKs_Calculator prints a capped or truncated value), `not converged` (COAL: NA with status "
+                      "not_converged, the YN / MYN iteration did not converge; KaKs_Calculator prints its last round), "
+                      "`other` (unexplained).\n")
+        report.append("| Method | rows | identical | different | -0 | nan | p-obs | p-neg | saturated | not converged | other |")
+        report.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
         for m in methods:
             run([a.kaks, "-i", str(axt), "-o", str(out / f"kc_{m}.kaks"), "-m", m])
             ref = {k: v for k, v in read_kaks(out / f"kc_{m}.kaks").items()}
             mine = {k: v for k, v in ours.items() if k[1] == m}
             same = sum(1 for k in ref if k in mine and ref[k] == mine[k])
             diff = [k for k in ref if k in mine and ref[k] != mine[k]]
-            cls = {"-0": 0, "nan": 0, "p-obs": 0, "p-neg": 0, "saturated": 0, "other": 0}
+            cls = {"-0": 0, "nan": 0, "p-obs": 0, "p-neg": 0, "saturated": 0, "not converged": 0, "other": 0}
             with open(out / f"diff6_{m}.txt", "w") as f:
                 for k in diff:
                     kinds = set()
                     for i, (x, y) in enumerate(zip(ref[k], mine[k])):
                         if x == y:
                             continue
-                        if x == "-0" and y == "0":
+                        if y == "NA" and status.get(k) == "not_converged" and i in (2, 3, 4, 5, 11, 12, 15):
+                            kinds.add("not converged")
+                        elif x == "-0" and y == "0":
                             kinds.add("-0")
                         elif x in ("nan", "-nan") and y == "NA":
                             kinds.add("nan")
@@ -218,7 +222,7 @@ def main() -> int:
                     f.write(f"[{','.join(sorted(kinds))}]\nKC  " + "\t".join(ref[k]) + "\nCOAL" + "\t".join(mine[k]) + "\n")
             only = len(set(ref) ^ set(mine))
             report.append(f"| {m} | {len(ref)} | {same} | {len(diff)} | {cls['-0']} | {cls['nan']} | {cls['p-obs']} | {cls['p-neg']} | "
-                          f"{cls['saturated']} | {cls['other']} |" + (f" ({only} rows in one tool only)" if only else ""))
+                          f"{cls['saturated']} | {cls['not converged']} | {cls['other']} |" + (f" ({only} rows in one tool only)" if only else ""))
         report.append("")
 
     if a.kaks_hp:

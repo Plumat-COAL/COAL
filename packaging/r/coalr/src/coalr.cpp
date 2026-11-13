@@ -432,9 +432,8 @@ Rcpp::List coalr_dnds(SEXP cds, SEXP member_ids, Rcpp::IntegerVector members, SE
 
     std::vector<std::string> method_names, status_names;
     for (kaks::Method m : kaks::output_order()) method_names.push_back(kaks::method_name(m));
-    for (kaks::Status s : {kaks::Status::ok, kaks::Status::warning, kaks::Status::saturated, kaks::Status::no_data,
-                           kaks::Status::error})
-        status_names.push_back(kaks::status_name(s));
+    for (int s = 0; s < kaks::STATUS_COUNT; ++s)   // the codes index status_names
+        status_names.push_back(kaks::status_name((kaks::Status)s));
     // Method's enumerators are in output order (NG, LWL, MLWL, LPB, MLPB, YN, MYN, Comeron, Li): the codes index
     // method_names.
     std::vector<std::string> enum_names(method_names.size());
@@ -478,16 +477,16 @@ double quantile7(const std::vector<double>& v, double q) {
 }  // namespace
 
 // Per cluster and method: counts by status and median / mean / quartiles / min / max of dN, dS, dN/dS over the
-// pairs with status ok or warning. `cluster` (0-based, non-decreasing) and the other vectors are the pair table's
+// pairs with status ok or warning (the ones with an estimate). `cluster` (0-based, non-decreasing) and the other vectors are the pair table's
 // columns; n_methods is the number of method codes. One row per (cluster, method) that has pairs, in order.
 // [[Rcpp::export(rng = false)]]
 Rcpp::List coalr_summary(Rcpp::IntegerVector cluster, Rcpp::IntegerVector method, Rcpp::IntegerVector status,
                          Rcpp::NumericVector dn, Rcpp::NumericVector ds, Rcpp::NumericVector w, int n_methods) {
     const R_xlen_t n = cluster.size();
-    std::vector<int> o_cluster, o_method, o_n, o_ok, o_sat, o_nodata, o_failed, o_nw;
+    std::vector<int> o_cluster, o_method, o_n, o_ok, o_nc, o_sat, o_nodata, o_failed, o_nw;
     std::vector<std::vector<double>> stats(18);
     struct Acc {
-        int n = 0, st[5] = {0, 0, 0, 0, 0};
+        int n = 0, st[kaks::STATUS_COUNT] = {};
         std::vector<double> v[3];
     };
     R_xlen_t i = 0;
@@ -497,11 +496,11 @@ Rcpp::List coalr_summary(Rcpp::IntegerVector cluster, Rcpp::IntegerVector method
         R_xlen_t j = i;
         for (; j < n && cluster[j] == c; ++j) {
             const int m = method[j], s = status[j];
-            if (m < 0 || m >= n_methods || s < 0 || s > 4) Rcpp::stop("internal: bad method or status code");
+            if (m < 0 || m >= n_methods || s < 0 || s >= kaks::STATUS_COUNT) Rcpp::stop("internal: bad method or status code");
             Acc& a = acc[(size_t)m];
             ++a.n;
             ++a.st[s];
-            if (s <= 1) {
+            if (s == (int)kaks::Status::ok || s == (int)kaks::Status::warning) {
                 if (!ISNAN(dn[j])) a.v[0].push_back(dn[j]);
                 if (!ISNAN(ds[j])) a.v[1].push_back(ds[j]);
                 if (!ISNAN(w[j])) a.v[2].push_back(w[j]);
@@ -513,10 +512,11 @@ Rcpp::List coalr_summary(Rcpp::IntegerVector cluster, Rcpp::IntegerVector method
             o_cluster.push_back(c);
             o_method.push_back(m);
             o_n.push_back(a.n);
-            o_ok.push_back(a.st[0] + a.st[1]);
-            o_sat.push_back(a.st[2]);
-            o_nodata.push_back(a.st[3]);
-            o_failed.push_back(a.st[4]);
+            o_ok.push_back(a.st[(int)kaks::Status::ok] + a.st[(int)kaks::Status::warning]);
+            o_nc.push_back(a.st[(int)kaks::Status::not_converged]);
+            o_sat.push_back(a.st[(int)kaks::Status::saturated]);
+            o_nodata.push_back(a.st[(int)kaks::Status::no_data]);
+            o_failed.push_back(a.st[(int)kaks::Status::error]);
             o_nw.push_back((int)a.v[2].size());
             for (int k = 0; k < 3; ++k) {
                 std::vector<double>& v = a.v[k];
@@ -540,8 +540,8 @@ Rcpp::List coalr_summary(Rcpp::IntegerVector cluster, Rcpp::IntegerVector method
     }
     Rcpp::List out = Rcpp::List::create(
         Rcpp::_["cluster"] = to_r(o_cluster), Rcpp::_["method"] = to_r(o_method), Rcpp::_["n_pairs"] = to_r(o_n),
-        Rcpp::_["n_ok"] = to_r(o_ok), Rcpp::_["n_saturated"] = to_r(o_sat), Rcpp::_["n_no_data"] = to_r(o_nodata),
-        Rcpp::_["n_failed"] = to_r(o_failed));
+        Rcpp::_["n_ok"] = to_r(o_ok), Rcpp::_["n_not_converged"] = to_r(o_nc), Rcpp::_["n_saturated"] = to_r(o_sat),
+        Rcpp::_["n_no_data"] = to_r(o_nodata), Rcpp::_["n_failed"] = to_r(o_failed));
     const char* vars[3] = {"dN", "dS", "dNdS"};
     const char* names[6] = {"median", "mean", "q25", "q75", "min", "max"};
     for (int k = 0; k < 3; ++k)
@@ -642,9 +642,8 @@ Rcpp::List coalr_kaks(SEXP a, SEXP b, Rcpp::CharacterVector methods, int table, 
     }
     std::vector<std::string> enum_names(kaks::output_order().size()), status_names;
     for (kaks::Method m : kaks::output_order()) enum_names[(size_t)(int)m] = kaks::method_name(m);
-    for (kaks::Status s : {kaks::Status::ok, kaks::Status::warning, kaks::Status::saturated, kaks::Status::no_data,
-                           kaks::Status::error})
-        status_names.push_back(kaks::status_name(s));
+    for (int s = 0; s < kaks::STATUS_COUNT; ++s)   // the codes index status_names
+        status_names.push_back(kaks::status_name((kaks::Status)s));
     return Rcpp::List::create(
         Rcpp::_["pair"] = to_r(pair), Rcpp::_["method"] = to_r(method), Rcpp::_["dN"] = to_r(dn),
         Rcpp::_["dS"] = to_r(ds), Rcpp::_["dNdS"] = to_r(w), Rcpp::_["SE_dN"] = to_r(se_dn),

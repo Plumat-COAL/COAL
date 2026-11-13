@@ -159,8 +159,8 @@ the same way when `codon_alignments/` exists, is not empty and was not written b
 | `codons_compared` | codon columns used (no gap, ambiguous base or stop in either sequence) |
 | `prot_aln_length` | columns of the protein alignment with a residue in at least one of the two sequences |
 | `prot_identity` | percent of those columns with the same residue in both (two decimals) |
-| `status` | `ok`; `warning` (estimated, see note); `saturated` (dN or dS could not be corrected: `NA`); `no_data` (nothing to compare); `error` (the pair could not be computed: every value `NA`) |
-| `note` | why the status is not `ok`: internal stop codons, a CDS length that is not a multiple of 3 (with `seq1:` / `seq2:`), the saturated estimate, or the error |
+| `status` | `ok`; `warning` (estimated, see note); `not_converged` (YN / MYN: the iteration did not converge, so there is no estimate: dN, dS, their SEs, Nd and Sd are `NA`; [kaks.md](kaks.md#platform-reproducibility)); `saturated` (dN or dS could not be corrected: `NA`); `no_data` (nothing to compare); `error` (the pair could not be computed: every value `NA`) |
+| `note` | why the status is not `ok`: internal stop codons, a CDS length that is not a multiple of 3 (with `seq1:` / `seq2:`), the saturated estimate, the iteration that did not converge (with the values of its last round, which are not estimates and can differ between platforms), or the error |
 
 The numeric columns, statuses and notes are those of `coal dnds` ([kaks.md](kaks.md#output)); the pipeline adds
 the two protein-alignment columns and what it knows about each CDS.
@@ -177,7 +177,7 @@ the two protein-alignment columns and what it knows about each CDS.
 | `aligner` | `clustalo` or `mafft` (MSA), `nw` (two members), `nw_pairwise` (above the size cap, or the MSA failed), `none` |
 | `n_pairs` | rows in `dnds.tsv` for this cluster and method |
 | `n_ok` | pairs with status `ok` or `warning` (both have estimates) |
-| `n_saturated`, `n_no_data`, `n_failed` | pairs with status `saturated`, `no_data`, `error` |
+| `n_not_converged`, `n_saturated`, `n_no_data`, `n_failed` | pairs with status `not_converged`, `saturated`, `no_data`, `error`. None of them is in `n_ok` or in the statistics |
 | `dN_median`, `dN_mean`, `dN_q25`, `dN_q75`, `dN_min`, `dN_max` | over the `n_ok` pairs |
 | `dS_...`, `dNdS_...` | the same six for dS and dN/dS |
 | `n_dNdS` | how many dN/dS values the `dNdS_` columns are over (dN/dS is `NA` when dS is 0) |
@@ -227,7 +227,8 @@ One bad gene, pair or cluster never stops a run.
   it (`--pairs`) gets a row with status `error`; in cluster mode it is dropped from its cluster.
 - A pair that cannot be computed (alignment too large for `--max-cells`, the codon engine refused a sequence)
   gets a row with status `error` and the reason.
-- `saturated`, `no_data` and `warning` are results, not failures.
+- `saturated`, `no_data`, `not_converged` and `warning` are results, not failures (the exit code stays 0). Only
+  `ok` and `warning` have estimates.
 
 | Exit code | Meaning |
 |---|---|
@@ -356,7 +357,7 @@ with exit code 2 and reports each one.
 |---|---|
 | a 23,000-codon gene pair | `ok`, 22,982 codons compared, about 1.3 s for the alignment; equal to the by-hand route and to KaKs_Calculator |
 | an internal stop codon | `warning`; the note names the gene and the skipped column |
-| YN / MYN: the iteration does not converge (short or nearly saturated pairs; [kaks.md](kaks.md), difference 12) | `warning`; the values are those of the last round, and the note says so |
+| YN / MYN: the iteration does not converge (short or nearly saturated pairs; [kaks.md](kaks.md), difference 12) | `not_converged`; dN and dS are `NA`, the note has the last round. Counted in `n_not_converged`, and in the report under `counts.pairs.not_converged` |
 | a CDS that is not a multiple of 3 | `warning`; the note gives the length |
 | ambiguous bases (N, R, Y) | `ok`; the codons that hold them are skipped |
 | identical sequences | `ok`, dN = dS = 0, dN/dS `NA`, identity 100 |

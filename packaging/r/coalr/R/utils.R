@@ -175,5 +175,5 @@ PAIR_COLUMNS <- c("seq1", "seq2", "method", "dN", "dS", "dNdS", "SE_dN", "SE_dS"
                   "codons_compared", "prot_aln_length", "prot_identity", "status", "note")
 STATS <- c("median", "mean", "q25", "q75", "min", "max")
 SUMMARY_COLUMNS <- c("cluster_id", "representative", "n_members", "n_used", "method", "pair_selection", "aligner",
-                     "n_pairs", "n_ok", "n_saturated", "n_no_data", "n_failed",
+                     "n_pairs", "n_ok", "n_not_converged", "n_saturated", "n_no_data", "n_failed",
                      paste0(rep(c("dN", "dS", "dNdS"), each = 6L), "_", STATS), "n_dNdS", "status", "note")

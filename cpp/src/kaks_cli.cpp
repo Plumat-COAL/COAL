@@ -76,8 +76,8 @@ const char* DNDS_HELP =
     "\n"
     "dN/dS for pairs of aligned coding sequences as a tidy TSV, one row per pair and method:\n"
     "seq1 seq2 method dN dS dNdS SE_dN SE_dS N_sites S_sites Nd Sd codons_compared status note\n"
-    "status: ok, warning (internal stop codons skipped; YN/MYN iteration not converged),\n"
-    "saturated (dN or dS NA), no_data, error.\n"
+    "status: ok, warning (internal stop codons skipped), not_converged (YN/MYN iteration: no estimate,\n"
+    "dN and dS NA), saturated (dN or dS NA), no_data, error.\n"
     "\n"
     "  IN             aligned FASTA or AXT file (or -i IN)\n"
     "  -o OUT         output file (default: standard output)\n"
@@ -511,7 +511,7 @@ int kaks_main(const std::string& sub, const std::vector<std::string>& argv) {
 #endif
         std::ostream& os = c.out.empty() ? std::cout : fout;
         os << (c.compat ? COMPAT_HEADER : TIDY_HEADER);
-        long n_pairs = 0, n_status[5] = {0, 0, 0, 0, 0}, n_unconverged = 0;
+        long n_pairs = 0, n_status[kaks::STATUS_COUNT] = {}, n_unconverged = 0;
         std::string first_error;
         auto read_batch = [&](std::vector<Pair>& b) {
             size_t nt = 0;
@@ -580,15 +580,17 @@ int kaks_main(const std::string& sub, const std::vector<std::string>& argv) {
         if (!os) throw InputError("write error", "file_error");
         if (!c.quiet) {
             std::cerr << prog << ": " << n_pairs << " pair(s), " << methods.size() << " method(s): " << n_status[0]
-                      << " ok, " << n_status[1] << " warning, " << n_status[2] << " saturated, " << n_status[3]
-                      << " no_data, " << n_status[4] << " error\n";
+                      << " ok, " << n_status[1] << " warning, " << n_status[2] << " not_converged, " << n_status[3]
+                      << " saturated, " << n_status[4] << " no_data, " << n_status[5] << " error\n";
             if (n_unconverged > 0)
                 std::cerr << prog << ": warning: " << n_unconverged << " result(s): the YN/MYN iteration did not "
-                          << "converge, so the values are those of its last round"
-                          << (c.compat ? " (`coal dnds` names the pairs: status and note)" : " (see the note column)")
+                          << "converge, so there is no estimate: Ka and Ks are NA"
+                          << (c.compat ? " (`coal dnds` names the pairs: status not_converged, and the note has "
+                                         "the last round)"
+                                       : " (status not_converged; the note has the last round)")
                           << "\n";
-            if (n_status[4] > 0)
-                std::cerr << prog << ": warning: " << n_status[4] << " result(s) could not be computed"
+            if (n_status[5] > 0)
+                std::cerr << prog << ": warning: " << n_status[5] << " result(s) could not be computed"
                           << (c.compat ? " and were left out" : " (status error)") << "; first: " << first_error
                           << "\n";
         }

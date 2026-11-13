@@ -83,8 +83,11 @@ get another dN by it.}
 \value{
 A data frame with one row per pair and method: \code{seq1}, \code{seq2}, \code{method}, \code{dN}, \code{dS}, \code{dNdS}, \code{SE_dN},
 \code{SE_dS}, \code{N_sites}, \code{S_sites}, \code{Nd}, \code{Sd}, \code{codons_compared}, \code{prot_aln_length}, \code{prot_identity}, \code{status}
-(\code{ok}, \code{warning}, \code{saturated}, \code{no_data}, \code{error}) and \code{note}. Values that are not available are \code{NA}
-(\code{dNdS} is \code{NA} when dS is below 1e-6). Rows are in the order of \code{pairs}. Attribute \code{"seconds"}: time spent in
+(\code{ok}, \code{warning}, \code{not_converged}, \code{saturated}, \code{no_data}, \code{error}) and \code{note}. Values that are not available
+are \code{NA} (\code{dNdS} is \code{NA} when dS is below 1e-6). \code{not_converged}: the YN / MYN iteration ended at its round
+limit without settling, which happens with very short or nearly saturated pairs; there is no estimate (\code{dN},
+\code{dS}, \code{dNdS}, the SEs, \code{Nd} and \code{Sd} are \code{NA}), and \code{note} has the values of the last round, which are not
+estimates and can differ between platforms. Rows are in the order of \code{pairs}. Attribute \code{"seconds"}: time spent in
 alignment + codon threading and in Ka/Ks.
 }
 \description{

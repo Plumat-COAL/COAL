@@ -49,8 +49,11 @@
 #'
 #' @return A data frame with one row per pair and method: `seq1`, `seq2`, `method`, `dN`, `dS`, `dNdS`, `SE_dN`,
 #'   `SE_dS`, `N_sites`, `S_sites`, `Nd`, `Sd`, `codons_compared`, `prot_aln_length`, `prot_identity`, `status`
-#'   (`ok`, `warning`, `saturated`, `no_data`, `error`) and `note`. Values that are not available are `NA`
-#'   (`dNdS` is `NA` when dS is below 1e-6). Rows are in the order of `pairs`. Attribute `"seconds"`: time spent in
+#'   (`ok`, `warning`, `not_converged`, `saturated`, `no_data`, `error`) and `note`. Values that are not available
+#'   are `NA` (`dNdS` is `NA` when dS is below 1e-6). `not_converged`: the YN / MYN iteration ended at its round
+#'   limit without settling, which happens with very short or nearly saturated pairs; there is no estimate (`dN`,
+#'   `dS`, `dNdS`, the SEs, `Nd` and `Sd` are `NA`), and `note` has the values of the last round, which are not
+#'   estimates and can differ between platforms. Rows are in the order of `pairs`. Attribute `"seconds"`: time spent in
 #'   alignment + codon threading and in Ka/Ks.
 #'
 #' @examples

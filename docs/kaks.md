@@ -89,7 +89,7 @@ COAL applies the same rules to every pair and every method. When a pair cannot b
 | Gap (`-` or `.`) anywhere in a codon of either sequence | that column is skipped (pairwise deletion) | `ok` |
 | A letter other than A/C/G/T/U in a codon of either sequence (N, IUPAC, X) | that column is skipped | `ok` |
 | Stop codon anywhere else (internal) in either sequence | that column is skipped; the note gives the number | `warning` |
-| YN or MYN: the iteration reaches its round limit (10 or 100) without converging (short or nearly saturated pairs; "Differences", 12) | the values of the last round are printed; the note says so | `warning` |
+| YN or MYN: the iteration reaches its round limit (10 or 100) without converging (short or nearly saturated pairs; "Differences", 12) | no estimate: Ka, Ks, Ka/Ks, the standard errors and the weighted difference counts (Sd, Nd) are NA. The site counts stay. The note gives the last round's Ka and Ks, which are not estimates ("Platform reproducibility") | `not_converged` |
 | Multiple-hit correction undefined (log of a non-positive number; for YN00/MYN, F84, K80 and JC69 all fail, or P + Q > 1) | that estimate is NA; the note says which (Ka, Ks) | `saturated` |
 | No codon column left | nothing is estimated | `no_data` |
 | No synonymous site (e.g. Met/Trp codons only), or no nonsynonymous site (e.g. `GCT` against `GCA`; 200 × `AAA` against `AAG`) | that estimate (Ks, or Ka) and Ka/Ks are NA; **the other one is still estimated**. The note says which sites are missing | `no_data` |
@@ -97,7 +97,9 @@ COAL applies the same rules to every pair and every method. When a pair cannot b
 
 Lower case and RNA (`U`) are read as upper-case DNA. Codon columns are counted on the alignment, so a codon that a
 gap splits (`A-G`) counts as a gap. When several statuses apply, the most serious one wins
-(error > no_data > saturated > warning > ok), and the note lists all of them. The genetic code is set with `-c` /
+(error > no_data > saturated > not_converged > warning > ok), and the note lists all of them. One exception: an
+iteration that did not converge is `not_converged` whether or not its last round was saturated, because that
+differs between platforms too (its note says what the last round was). The genetic code is set with `-c` /
 `--codontable` and takes the NCBI table numbers that COAL's `--codontable` accepts (1-6, 9-16, 21-23).
 
 ## Output
@@ -131,6 +133,10 @@ class). The other columns are `NA` (there are no S / N counts, so no Fisher test
 Rows come per pair in KaKs_Calculator's method order (NG, LWL, MLWL, LPB, MLPB, YN, MYN), then Comeron, then
 Li. Pairs with status
 `error` are left out, as KaKs_Calculator leaves out pairs it cannot read, and the summary on stderr counts them.
+This format has no status column. A YN or MYN row whose iteration did not converge has `NA` in Ka, Ks, Ka/Ks,
+P-Value(Fisher), S-Substitutions, N-Substitutions and Divergence-Time (KaKs_Calculator prints the values of its
+last round there: difference 12); the summary on stderr says how many such rows there are, and `coal dnds` names
+them.
 `--digits N` sets the number of significant digits.
 
 **`coal dnds`** (`--digits` default 8):
@@ -144,7 +150,7 @@ Li. Pairs with status
 | `N_sites`, `S_sites` | nonsynonymous and synonymous sites (`NA` for Comeron and Li, which count sites by degeneracy class, not as S and N) |
 | `Nd`, `Sd` | nonsynonymous and synonymous differences (`NA` for Comeron and Li) |
 | `codons_compared` | codon columns used after the policy |
-| `status`, `note` | see Policy |
+| `status`, `note` | see Policy: `ok`, `warning`, `not_converged`, `saturated`, `no_data`, `error` |
 
 **Input.** The format is detected from the first non-blank character (`>` means FASTA, anything else AXT), or set
 with `--format`.
@@ -188,7 +194,7 @@ changed; it reports none now). It never throws for bad data: problems are report
 const coal::GeneticCode* code = coal::get_code(1);            // NCBI table; nullptr if not supported
 coal::kaks::Result r = coal::kaks::compute(row1, row2, coal::kaks::Method::YN, *code);
 // r.ka, r.ks, r.ka_ks, r.se_ka, r.se_ks (NaN = NA), r.S, r.N, r.Sd, r.Nd, r.codons_compared,
-// r.status (ok / warning / saturated / no_data / error), r.note
+// r.status (ok / warning / not_converged / saturated / no_data / error), r.note
 
 // several methods for one pair: apply the policy once
 coal::kaks::Prepared p = coal::kaks::prepare(row1, row2, *code);
@@ -206,7 +212,8 @@ other than the standard one they return status `error`. Their degeneracy tables 
 function-local statics (thread-safe initialisation), so the statement about global state holds for them too.
 `Result` also carries the fields KaKs_Calculator prints: `p_fisher`, `divergence`, `rates[6]`, `fold_*`, `gc[4]`,
 `substitutions` and `length`. It also has the policy counts (`gap_codons`, `ambiguous_codons`, `internal_stops`,
-`terminal_stop_dropped`) and, for YN/MYN, `iterations` and `converged`.
+`terminal_stop_dropped`) and, for YN/MYN, `iterations`, `converged` and, when the iteration did not converge
+(`ka` and `ks` are then NaN), `last_ka` and `last_ks`: the last round's values, for inspection only.
 
 ## Validation
 
@@ -232,9 +239,12 @@ Results of 2026-11-11 (branch `feat/kaks-engine`), run again on 2026-11-12 after
 `fix/review-findings` (thread-safe log-gamma, differences 8 to 10): every count and every maximum difference in the
 tables below is unchanged; only the Fisher p-values moved, in their 12th digit. **On these real genes the review
 fixes changed nothing else:** the `.kaks` output for the 999 orthologr and 600 simulated pairs is byte-identical
-before and after them (checked again by the independent review of 2026-11-13), and after the change of
-2026-11-13 too, which only gives one simulated pair's MYN row the status `warning` (its iteration does not
-converge; the numbers are the same).
+before and after them (checked again by the independent review of 2026-11-13). The change of 2026-11-13 (an
+iteration that did not converge gives no estimate, difference 12) changed one row of these 11,193: the MYN row of
+the simulated pair `sim_w0.5_t2_k2_31`, whose iteration does not converge in 100 rounds. KaKs_Calculator prints
+its last round there (Ka 0.58117, Ks 1.43957, as COAL did), COAL now prints NA. The orthologr file is
+byte-identical, and so is every other row of the simulated one. `validate_kaks.py` was run again on both sets
+after that change: every count and maximum in the tables below is as before, apart from that row.
 
 **Scope of each statement.** The tables below are about real genes of normal length (999 pairs) and simulated
 genes of 500 codons (600 pairs). They say nothing about sequences of a few codons. Those are covered by two sets
@@ -283,8 +293,9 @@ Fisher's p-values agree to 7e-12 (2.4e-12 on the orthologr pairs, 6.7e-12 on the
 two documented cases below (`p-obs`, `p-neg`). On the 4,000 random short pairs with one changed position per
 codon, no value that both tools print differs by more than 1e-9 (Ka, Ks, Ka/Ks and the site counts, all seven
 methods). **That is not true for short pairs in general:** on the 3,000 pairs with codons drawn independently,
-YN and MYN print different numbers in 33 fields (Ka, Ks or Ka/Ks; NG and the LWL / LPB family in none). Every one
-belongs to differences 11 to 13 below.
+YN and MYN print different numbers in 23 fields (Ka, Ks or Ka/Ks; NG and the LWL / LPB family in none), which
+belong to differences 11 and 13 below, and in 210 rows (123 YN, 87 MYN) COAL prints no estimate at all because
+the iteration did not converge (difference 12), where KaKs_Calculator prints its last round.
 
 **COAL `--yn-flavour paml` compared with PAML yn00, 12 significant digits.** The result is the same for
 weighting 1 and 0.
@@ -299,16 +310,17 @@ These differences are the 12-digit printing of yn00.
 **Text of every row compared with the stock KaKs_Calculator, 6 digits.** Every differing field is classified;
 the categories are explained in the next section.
 
-| Set | Method | Rows identical | -0 | nan | p-obs | p-neg | saturated | Unexplained |
-|---|---|---:|---:|---:|---:|---:|---:|---:|
-| orthologr | NG | 965 / 999 | 11 | 0 | 22 | 0 | 1 | 0 |
-| orthologr | LWL / MLWL | 998 / 999 | 0 | 0 | 0 | 1 | 1 | 0 |
-| orthologr | LPB / MLPB | 992 / 987 of 999 | 0 | 6 / 11 | 0 | 0 | 1 | 0 |
-| orthologr | YN | 970 / 999 | 11 | 0 | 17 | 0 | 1 | 0 |
-| orthologr | MYN | 975 / 999 | 11 | 0 | 13 | 0 | 0 | 0 |
-| simulated | NG | 596 / 600 | 0 | 0 | 4 | 0 | 0 | 0 |
-| simulated | LWL / MLWL / LPB / MLPB | 480 / 495 / 528 / 515 of 600 | 0 | 0 | 0 | 118 / 103 / 70 / 83 | 2 | 0 |
-| simulated | YN / MYN | 599 / 600 | 0 | 0 | 0 | 0 | 1 | 0 |
+| Set | Method | Rows identical | -0 | nan | p-obs | p-neg | saturated | not converged | Unexplained |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| orthologr | NG | 965 / 999 | 11 | 0 | 22 | 0 | 1 | 0 | 0 |
+| orthologr | LWL / MLWL | 998 / 999 | 0 | 0 | 0 | 1 | 1 | 0 | 0 |
+| orthologr | LPB / MLPB | 992 / 987 of 999 | 0 | 6 / 11 | 0 | 0 | 1 | 0 | 0 |
+| orthologr | YN | 970 / 999 | 11 | 0 | 17 | 0 | 1 | 0 | 0 |
+| orthologr | MYN | 975 / 999 | 11 | 0 | 13 | 0 | 0 | 0 | 0 |
+| simulated | NG | 596 / 600 | 0 | 0 | 4 | 0 | 0 | 0 | 0 |
+| simulated | LWL / MLWL / LPB / MLPB | 480 / 495 / 528 / 515 of 600 | 0 | 0 | 0 | 118 / 103 / 70 / 83 | 2 | 0 | 0 |
+| simulated | YN | 599 / 600 | 0 | 0 | 0 | 0 | 1 | 0 | 0 |
+| simulated | MYN | 598 / 600 | 0 | 0 | 0 | 0 | 1 | 1 | 0 |
 
 ### Differences from KaKs_Calculator
 
@@ -402,22 +414,32 @@ P(t). None occurs in the 999 orthologr and 600 simulated pairs. The examples are
     **COAL printed the wrong numbers too until 2026-11-12** (0.0781 for the pair above): it followed the
     reference into the 0/0. The fix for difference 10 removed the NaN and with it the lost codons, so some MYN
     values that COAL used to print changed (13 Ka and 3 Ks among the 3,000 pairs, all upwards to the value of
-    the corrected reference or, where the iteration does not converge, to a flagged value; none in the real
-    genes).
-12. **An iteration that does not converge. Neither program's numbers are estimates; COAL says so.** YN00 repeats
-    "weights from the current estimates, estimates from the weighted counts" at most 10 times, MYN at most 100
-    times. On short or nearly saturated pairs the estimates can jump between rounds for ever, for instance when
-    the proportion of differences crosses the 0.75 at which JC69 stops being defined (`AAA` against `ATG`: Ka
-    alternates between 0.52 and 3.17). Both programs then print the state of the last round. That state depends
-    on rounding in the 16th digit, so COAL and KaKs_Calculator can print different numbers (the last digits, or,
-    when a round sits exactly on such a boundary, the other phase of the jump). COAL follows the published
-    procedure and KaKs_Calculator's code round for round (traced on the examples); it does not try to repair the
-    iteration. It reports it: the row has status `warning` (unless `saturated` or `no_data` applies), the note
-    says `YN00 iteration did not converge in 10 rounds` or `MYN iteration did not converge in 100 rounds (the
-    values are those of the last round)`, and the summary on stderr of `coal kaks` and `coal dnds` counts such
-    results. KaKs_Calculator prints the numbers without a sign. Among the 3,000 pairs: 123 YN and 87 MYN rows.
-    Among the real genes: one simulated pair (MYN), none of the orthologr pairs. `--yn-weighting 0` needs no
-    iteration.
+    the corrected reference or, where the iteration does not converge, to no value at all (difference 12); none
+    in the real genes).
+12. **An iteration that does not converge: KaKs_Calculator prints its last round, COAL prints NA.** YN00
+    repeats "weights from the current estimates, estimates from the weighted counts" at most 10 times, MYN at
+    most 100 times. On short or nearly saturated pairs the estimates can jump between rounds for ever, for
+    instance when the proportion of differences crosses the 0.75 at which JC69 stops being defined (`AAA` against
+    `ATG`: Ka alternates between about 0.52 and 3.17). KaKs_Calculator and PAML yn00 then print the state of the
+    last round, without a sign. That state is not a fixed point of anything, and it is not reproducible: the
+    jumps amplify a difference in the 16th digit into the third digit, or across the saturation limit. For
+    `AAA` / `ATG` with YN, the same COAL source printed Ka = 3.16884648849903 on Linux (GCC 15), 3.17357163988094
+    on Windows (MSVC), 3.1735716240756 on macOS (Apple Clang, arm64) and "saturated" with GCC 13 and an older C
+    library (2026-11-13; "Platform reproducibility" below has the counts). A value that changes in the third
+    digit with the compiler is not a result, so COAL gives none: Ka, Ks, Ka/Ks, the standard errors, the
+    weighted difference counts and what is derived from them (Fisher's p, Divergence-Time) are NA, in `coal
+    kaks` and in `coal dnds`; the status is `not_converged`; the note says `YN00 iteration did not converge in
+    10 rounds: no estimate (last round: Ka ..., Ks ...; such values can differ between platforms)` (or `MYN ...
+    100 rounds`), and the summary on stderr counts such results. The site counts and kappa do not come out of the
+    iteration and are printed. COAL follows the published procedure and KaKs_Calculator's code round for round
+    (traced on the examples); it does not try to repair the iteration. Among the 3,000 pairs: 123 YN and 87 MYN
+    rows. Among the real genes: one simulated pair (MYN; KaKs_Calculator's last round is Ka 0.58117, Ks 1.43957,
+    which COAL printed until 2026-11-13), none of the orthologr pairs. Not every such iteration wanders: that
+    simulated pair's and the test fixture `sim_w0.1_t2_k2_3`'s (YN, dS above 4) creep towards a value more slowly
+    than the round limit allows, and their last rounds agree between platforms and with KaKs_Calculator to many
+    digits. COAL does not try to tell the two kinds apart, because no test of one round's values can: the rule
+    is the round limit of the references. `--yn-weighting 0` needs no iteration, and neither do the other five
+    methods.
 13. **A saturated kind of site changes the path of the iteration.** When every site of one kind differs (Sd = S
     or Nd = N; MYN scales the counts down to exactly that), the proportion of differences is 1 up to rounding,
     and rounding decides whether a round takes "P + Q > 1" (t = 99) or JC69's cap. In both cases that kind is
@@ -433,15 +455,15 @@ per process:
 |---|---:|---:|---|
 | 11, no site of one kind (COAL status `no_data`) | 6 | 6 | COAL (= yn00, `weighting = 0`) |
 | 11, a NaN in the reference's row (its Ka or Ks is `nan` / `NA`) | 12 | 0 | COAL (= the corrected reference) |
-| 12, iteration not converged | 10 | 15 | neither: not an estimate; COAL flags it |
+| 12, iteration not converged | 0 | 0 | nothing to compare: COAL prints NA. The reference prints its last round in 493 (corrected: 578) of these fields |
 | 13, saturated kind, other path | 5 | 5 | the same value within the iteration's tolerance |
 | unexplained | 0 | 0 | |
 
 So "the corrected reference gives COAL's numbers" holds for the 4,000 pairs with one changed position per codon
-and for the second row of the 3,000; it does not hold where the iteration does not converge (the
-corrected reference then has more number-against-number rows than the unpatched one, because it prints numbers
-where the unpatched one prints `nan`), nor for pairs without a site of one kind, which the corrected lines do not
-touch. NG, LWL, MLWL, LPB and MLPB have no difference between two numbers on either random set.
+and for the second row of the 3,000; it says nothing where the iteration does not converge (COAL has no number
+there; the corrected reference prints more last rounds than the unpatched one, because it prints numbers where
+the unpatched one prints `nan`), and it does not hold for pairs without a site of one kind, which the corrected
+lines do not touch. NG, LWL, MLWL, LPB and MLPB have no difference between two numbers on either random set.
 
 **KaKs_Calculator's MYN depends on the order of the pairs in a file.** It carries state from one pair to the
 next: run once over the 3,000 pairs, 49 MYN rows differ (Ka, Ks or Ka/Ks) from the same pairs run one per process
@@ -454,12 +476,69 @@ row alone, in any order and with any number of threads (`tests/test_kaks.py`, `t
 `tests/test_kaks.py` holds the cases (`TestOneKindOfSite`, `TestMynNan`, `TestMultiPositionCodons`), and its
 comparison with KaKs_Calculator's stored output does not accept a difference because of the status alone: a
 number that KaKs_Calculator prints and COAL does not is a failure unless the status is `saturated`
-(difference 1).
+(difference 1) or `not_converged` (difference 12; only in the columns that come out of the iteration).
 
 The categories, tolerances and checks are those of `tests/test_kaks.py`, `benchmarks/kaks/validate_kaks.py` and
 `benchmarks/kaks/random_short_pairs.py`. On the real-gene sets (999 + 600 pairs) and on the 4,000 random pairs
 with one changed position per codon, all fields agree to 1e-9 apart from differences 1 to 10. On short pairs
 whose codons differ at several positions they do not: differences 11 to 13.
+
+### Platform reproducibility
+
+What COAL prints for a pair should not depend on the compiler or the operating system. This is what is done
+about it, what was measured, and what is not guaranteed.
+
+**Guaranteed by the source.**
+
+- No fused multiply-add and no fast-math: the engine is compiled without floating-point contraction on every
+  compiler (a `#pragma` in `kaks.cpp` for Clang, GCC and MSVC, and `-ffp-contract=off` / `/fp:precise` in
+  `CMakeLists.txt`). Clang contracts `a * b + c` by default, and arm64 always has the instruction, so without
+  this a macOS build and a Linux build would differ in the last digits of nearly every YN / MYN value.
+- No dependence on the number of threads, on the order of the pairs, or on the locale.
+- An iteration that did not converge prints no value (difference 12).
+
+With that, builds that use the same math library print the same bytes. Measured on 2026-11-13 on x86-64 Linux
+with GCC 13 (`-O2`, `-O3`, `-O3 -march=x86-64-v3`), GCC 16, Clang 18 (`-O3`, `-O3 -march=x86-64-v3`) and two
+builds without any build-system flag (the pragma alone, on FMA-capable targets): the output of all eight is
+byte-identical on the 999 orthologr pairs (and on a second, independent alignment of the same genes), the 600
+simulated pairs, the edge cases and both random sets (about 67,000 rows; `coal kaks` at 6 and 15 digits, `coal
+dnds` at 8 digits, and for all but the first set also at 15 digits and with `--yn-flavour paml`).
+
+**Not guaranteed: the C library.** `exp`, `log` and `hypot` are not correctly rounded in every C library, and
+glibc (which changed them between 2.39 and 2.43), Apple's libm and Microsoft's UCRT return a different last bit
+now and then. COAL uses the platform's functions. The effect was measured by running the same binary with these
+three functions replaced by ones that compute in `long double` and round:
+
+| Rows | Differ at the default digits (6 / 8) | Differ at 15 digits |
+|---|---:|---:|
+| 999 orthologr pairs, 7 methods (6,993 rows) | 0 | 528 (the last one to three digits) |
+| 600 simulated pairs (4,200 rows) | 0 | 483 |
+| 4,000 random short pairs, one change per codon (28,000 rows) | 0 | 7 |
+| 3,000 random short pairs, codons drawn independently (21,000 rows), converged | 1 (MYN: SE and Sd in the 8th digit) | 744 |
+| the same set, not converged (210 rows) | 2 (and the last round quoted in the note of 6 more) | 2 |
+
+So on real genes two platforms agree in every printed digit at the default precision, and from about the 13th
+digit on they need not (`--digits 15` shows that). This is an observation on these 11,193 rows and not a proof:
+a value can sit on the rounding boundary of the sixth digit. MYN stops at a tolerance of 5e-8 on dS and dN, so
+its eighth digit depends on the path (the one row above). The two rows of the last line are pairs of two
+codons (`CGGGCC` / `GCAAAG` and `GCATGG` / `ATGGCT`, MYN) where the C library decides whether the iteration
+settles within 100 rounds: one platform prints `not_converged`, the other `saturated`. No such row was found
+among the real genes.
+
+**Before 2026-11-13** the last round of an iteration that did not converge was printed. The same measurement
+then: with FMA contraction 11 to 15 of the 210 such rows differed at the default digits and 197 to 203 at 15
+digits (in 4 or 5 the convergence itself); with the other math library 8 to 10 and 156 to 161. And 2 to 4 of the
+20,790 converged rows of that random set differed at the default digits with FMA: Fisher's p of a table with a
+cell that is zero up to rounding (0 or NA; such a cell now counts as zero), the difference counts of a one-codon
+pair that is saturated in both kinds, and eighth digits of MYN. Without FMA and with the same C library every
+build was identical then too (GCC `-O0`, `-O2`, `-O3`, with AVX2; GCC 16; Clang `-O0`, `-O3`).
+
+**Speed.** Giving up FMA costs nothing measurable: on the 999 orthologr pairs (YN + MYN, one thread, best of 5)
+a GCC 13 `-march=x86-64-v3` build took 2.41 s with contraction and 2.44 s without, a Clang 18 build 3.54 s and
+3.52 s. Default x86-64 builds never had the instruction, and their code is unchanged.
+
+**Tests.** `tests/test_kaks.py` asserts for the pairs that do not converge only what holds on every platform
+(status, NA fields, the form of the note), never a digit of a last round.
 
 ### Where KaKs_Calculator and PAML differ (YN00)
 

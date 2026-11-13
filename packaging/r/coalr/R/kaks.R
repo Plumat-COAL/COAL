@@ -20,6 +20,10 @@
 #' @inheritParams coal_dnds_pairs
 #' @return A data frame, one row per pair and method: `seq1`, `seq2` (the names, or the positions), `method`,
 #'   `dN`, `dS`, `dNdS`, `SE_dN`, `SE_dS`, `N_sites`, `S_sites`, `Nd`, `Sd`, `codons_compared`, `status`, `note`.
+#'   `status` is `ok`, `warning` (estimated; see `note`), `not_converged` (YN / MYN: the iteration did not
+#'   converge, so there is no estimate: `dN`, `dS`, `dNdS`, the SEs, `Nd` and `Sd` are `NA`, and `note` has the
+#'   last round's values, which can differ between platforms), `saturated` (`dN` or `dS` is `NA`), `no_data` or
+#'   `error`.
 #' @examples
 #' coal_kaks("ATGGCTAAAGGTCTGGAACGT", "ATGGCGAAAGGCCTGGATCGT")
 #' coal_kaks(c(a = "ATGGCTAAAGGTCTGGAACGT", b = "ATGGCGAAAGGCCTGGATCGT", c = "ATGGCTAAGGGT---GAACGA"),

@@ -48,10 +48,16 @@ bool parse_method(const std::string& name, Method& out, std::string& why);
 const std::vector<Method>& output_order();
 
 // ok: estimated. warning: estimated, but see note (internal stop codons were skipped).
+// not_converged: the YN00 / MYN iteration ended at its round limit without settling; there is no estimate (Ka, Ks,
+// their standard errors, Sd and Nd are NaN; S, N and kappa are set), because the values of the last round are
+// not reproducible between platforms (docs/kaks.md "Platform reproducibility"). They are in last_ka / last_ks.
 // saturated: Ka and/or Ks could not be corrected for multiple hits (log of a non-positive number): that value is
 // NaN. no_data: nothing to compare (no codon left after the policy, or no synonymous / nonsynonymous sites).
 // error: the pair itself is malformed (rows of different lengths, length not a multiple of 3).
-enum class Status { ok, warning, saturated, no_data, error };
+// The order is the order of severity (a later one replaces an earlier one), with one exception: an iteration
+// that did not converge is not_converged even if its last round was saturated, since that too differs by platform.
+enum class Status { ok, warning, not_converged, saturated, no_data, error };
+constexpr int STATUS_COUNT = 6;
 const char* status_name(Status s);
 
 // Which reference the YN00 iteration follows where KaKs_Calculator and PAML's yn00 differ (docs/kaks.md):
@@ -107,6 +113,8 @@ struct Result {
     bool terminal_stop_dropped = false;   // a final stop codon was left out
     int iterations = 0;                   // YN00 / MYN rounds
     bool converged = true;                // YN00 / MYN: the iteration met its tolerance
+    double last_ka = NA, last_ks = NA;    // not converged: Ka and Ks of the last round (NaN: saturated there or
+                                          // no such sites). Not estimates, and not the same on every platform
 };
 
 // A pair after the policy (docs/kaks.md "Policy"): the codon columns to compare, as codon indices 0..63

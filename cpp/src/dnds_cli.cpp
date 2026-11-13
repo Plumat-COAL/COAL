@@ -627,7 +627,7 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
         if (ffail.is_open()) ffail << "group\tseq\tcode\tmessage\n";
         std::unordered_map<std::string, int> used_names;  // --codon-dir file names
 
-        long long n_groups = 0, n_pairs = 0, n_status[5] = {0, 0, 0, 0, 0}, n_member_fail = 0, n_group_fail = 0;
+        long long n_groups = 0, n_pairs = 0, n_status[kaks::STATUS_COUNT] = {}, n_member_fail = 0, n_group_fail = 0;
         const int nthreads = resolve_jobs(c.jobs);
         const size_t BATCH_GROUPS = 1024, BATCH_NT = 16u << 20, BATCH_PAIRS = 32768, CHUNK = 8192;
 
@@ -818,7 +818,8 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
         if (!c.quiet)
             std::cerr << "coal codon-dnds: " << n_groups << " group(s), " << n_pairs << " pair(s), " << ms.size()
                       << " method(s): " << n_status[0] << " ok, " << n_status[1] << " warning, " << n_status[2]
-                      << " saturated, " << n_status[3] << " no_data, " << n_status[4] << " error; " << n_member_fail
+                      << " not_converged, " << n_status[3] << " saturated, " << n_status[4] << " no_data, "
+                      << n_status[5] << " error; " << n_member_fail
                       << " gene(s) and " << n_group_fail << " group(s) failed\n"
                       << "coal codon-dnds: timing: align+codon " << t_align << " s, kaks " << t_kaks << " s, "
                       << nthreads << " thread(s)\n";

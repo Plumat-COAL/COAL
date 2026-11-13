@@ -51,6 +51,19 @@
 //
 // Reference: Comeron JM (1995) A method for estimating the numbers of synonymous and nonsynonymous substitutions
 // per site. J Mol Evol 41:1152-1159.
+
+// No floating-point contraction in this file (as in kaks.cpp, which says why): a * b + c is computed as written,
+// never fused into one FMA instruction, so the estimates do not depend on whether the compiler and the target have
+// FMA. Said here as well as in CMakeLists.txt so that it also holds where this file is compiled by something else
+// (R's build of coalr). docs/kaks.md "Platform reproducibility".
+#if defined(__clang__)
+#pragma STDC FP_CONTRACT OFF
+#elif defined(__GNUC__)
+#pragma GCC optimize("fp-contract=off")
+#elif defined(_MSC_VER)
+#pragma fp_contract(off)
+#endif
+
 #include <cfloat>
 #include <cmath>
 #include <string>
