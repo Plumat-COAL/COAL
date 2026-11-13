@@ -360,6 +360,11 @@ entry under "Added", not under "Fixed".
   public functions have accurate type hints. The versioning promise now covers the column names and order of
   `dnds.tsv`, `cluster_summary.tsv` and `failed.tsv` and the report schema id `coal.pipeline/1`. `import coal`
   exports what it did (no facade); its docstring no longer calls the rest of the package internal.
+- **coalr: a vignette, and one name for the methods.** `vignette("from-two-cds-files-to-dnds")` goes from two
+  CDS files to a filtered dN/dS table on an example shipped with the package (in process, in seconds, no
+  network; built by `R CMD check`). `method` and `methods` are accepted by every function (a `method =` given
+  to `coal_pipeline_pairs()` used to be ignored), `min_identity` is the R form of `--min-identity`, and `?coalr`
+  and docs/r.md have one table of the command line's options and the R arguments, with the thread defaults.
 - **`coal --help` lists every command, and `coal help [COMMAND]` works.** The help of `coal` (and of `coal-cpp`)
   ends with one line per command: `kaks`, `dnds`, `pipeline`, `translate`, `codon-dnds`, `cite`, `help`,
   `--cpp-path`. `coal kaks --help`, `coal dnds --help`, `coal translate --help` and `coal codon-dnds --help` print
