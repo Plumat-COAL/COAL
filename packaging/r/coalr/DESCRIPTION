@@ -1,7 +1,7 @@
 Package: coalr
 Type: Package
 Title: Fast Codon Alignment and dN/dS (Ka/Ks) with the 'COAL' C++ Engine
-Version: 0.5.0
+Version: 0.6.0.9000
 Authors@R: c(
     person("Chloe", "Newton", email = "chloenewton2323@gmail.com", role = c("aut", "cre", "cph")),
     person("Keanu", "Murati", role = c("aut", "cph")),

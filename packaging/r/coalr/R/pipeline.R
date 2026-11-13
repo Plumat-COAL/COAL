@@ -39,7 +39,7 @@ coal_python_available <- function(python = NULL) {
         if (grepl("py_require", conditionMessage(w), fixed = TRUE)) invokeRestart("muffleWarning")
       })
     if (!found) {
-      stop("this Python has no coal.dnds_pipeline: pip install coal-align (0.5 or later)")
+      stop("this Python has no coal.dnds_pipeline: install COAL 0.6 or later (a platform wheel from https://github.com/plumat-coal/COAL/releases; docs/install.md)")
     }
     TRUE
   }, error = function(e) no(conditionMessage(e)))

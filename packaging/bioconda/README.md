@@ -31,15 +31,26 @@ Windows app and `coal-cpp.exe` come from [GitHub Releases](https://github.com/pl
 
 ## Which release the recipe fits
 
-The recipe installs the root `pyproject.toml` as the `coal-align` package (engine only, no dependencies) and runs
-`cmake --install` when `CMakeLists.txt` has install rules (branch `feat/stdin-and-cpp-lib`; without them `build.sh`
-copies `build-conda/coal-cpp` by hand). **The `v0.4.2` tag predates both**: its root package is still `coal` with the
-app inside. The sha256 in `meta.yaml` is v0.4.2's, so the recipe is syntactically complete, but submit it for the first
-release that contains the split layout (bump `version` and recompute the sha256, below).
+The recipe is written for the **next release, 0.6.0**: the first under GPL-3.0-only and the first that has Ka/Ks
+(`coal kaks`, `coal dnds`), `coal pipeline` and the second binary `coal-cpp-align`, all of which the recipe's tests
+run. That tag does not exist yet, so `meta.yaml` carries two **placeholders, marked `PLACEHOLDER`**: `version`
+(`0.6.0`) and `sha256` (64 zeros, which is not a checksum; `conda build` fails on it by design). At release time set
+both (below, "The sha256 step") and nothing else needs to change.
+
+`build.sh` runs `cmake --install`, which installs `coal-cpp` **and** `coal-cpp-align` into `$PREFIX/bin` (and, for
+C++ users, `lib/libcoal_core.a`, `include/coal/`, `lib/cmake/coal/`, and `LICENSE` + `NOTICE` under
+`share/licenses/coal`), then `pip install .` for the Python package.
+
+**Dependencies.** `run:` is Python only: codon alignment, `coal kaks` and `coal dnds` need nothing else.
+`coal pipeline` runs DIAMOND, and Clustal Omega or MAFFT in cluster mode; conda has no optional dependencies, so they
+are listed under `run_constrained:` (Bioconda's convention for optional companions: not installed by this package,
+but held to versions COAL works with when the user installs them: `diamond >=2.1.0`, the first with DeepClust;
+COAL is tested with 2.2.8). The description and `extra: notes:` say `conda install -c bioconda diamond clustalo`.
+If the Bioconda reviewers prefer hard dependencies, move `diamond` and `clustalo` to `run:` (both are small).
 
 **Licence.** `about: license:` is `GPL-3.0-only` (`license_family: GPL3`, `LICENSE` and `NOTICE` as licence files),
-which is right for the releases after 0.5.0. COAL 0.5.0 and earlier are MIT: do not submit the recipe with these
-fields for one of those tags (use `license: MIT`, `license_family: MIT`, `license_file: LICENSE` there).
+which is right for the releases after 0.5.0. COAL 0.5.0 and earlier are MIT and have no Ka/Ks: do not submit this
+recipe for one of those tags.
 
 ## Testing the recipe locally
 
@@ -69,7 +80,9 @@ bioconda-utils build recipes config.yml --packages coal-align
 # or in Bioconda's Docker image: bioconda-utils build --docker --mulled-test recipes config.yml --packages coal-align
 ```
 
-Status: on 2026-10-22 this recipe (with `source:` pointed at a tarball of the `packaging/bioconda` branch, i.e. the split
+Status of the current recipe (2026-11-13): not built with conda yet; the commands of its `test:` section were run by
+hand against a virtual environment made as above. An earlier version of the recipe (the PAL2NAL scope only):
+on 2026-10-22 it (with `source:` pointed at a tarball of the `packaging/bioconda` branch, i.e. the split
 layout) built and passed all of its tests with `conda build -c conda-forge` on linux-64 (python 3.15 variant); the
 package held `bin/coal`, `bin/coal-cpp`, `bin/pal2nal`, the `coal` and `coal_compat` modules and
 `share/coal/examples/`.
@@ -83,7 +96,7 @@ To test a not-yet-tagged checkout, point `source:` at a local tarball:
 Every version bump needs the checksum of the GitHub tag tarball (the one in `source: url:`):
 
 ```
-v=0.4.3   # the new tag, without the v in meta.yaml
+v=0.6.0   # the new tag, without the v in meta.yaml
 curl -sL https://github.com/plumat-coal/COAL/archive/refs/tags/v$v.tar.gz | sha256sum
 ```
 

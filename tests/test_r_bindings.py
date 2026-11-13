@@ -85,7 +85,10 @@ class RBindings(unittest.TestCase):
 
     def test_version_is_coals(self):
         version = re.search(r'^version\s*=\s*"([^"]+)"', read(ROOT, "pyproject.toml"), re.M).group(1)
-        self.assertRegex(read(PKG, "DESCRIPTION"), rf"(?m)^Version: {re.escape(version)}$")
+        # a development version in R's form (scripts/release_version.py r_version): 0.6.0.dev0 -> 0.6.0.9000
+        dev = re.match(r"^(\d+(?:\.\d+)+)\.dev(\d+)$", version)
+        r_version = f"{dev.group(1)}.{9000 + int(dev.group(2))}" if dev else version
+        self.assertRegex(read(PKG, "DESCRIPTION"), rf"(?m)^Version: {re.escape(r_version)}$")
         self.assertIn(f'"{version}"', read(PKG, "src", "coal", "coal_version.h"))
 
     def test_makevars_compile_every_vendored_source(self):

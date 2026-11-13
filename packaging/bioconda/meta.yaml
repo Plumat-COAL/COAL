@@ -1,10 +1,11 @@
 {% set name = "coal-align" %}
-{% set version = "0.4.2" %}
-# sha256 of https://github.com/Plumat-COAL/COAL/archive/refs/tags/v0.4.2.tar.gz (computed 2026-10-22).
-# NOTE: the v0.4.2 tag still has the old repository layout (root package `coal`, app included, no CMake install
-# rules). This recipe is written for the first release AFTER 0.4.2 (root package `coal-align`, engine only, app in
-# apps/coal-app). Before submitting, bump `version` to that release and recompute the sha256 (packaging/bioconda/README.md).
-{% set sha256 = "cea4dea5455f0305a88447612eea414d18084965d00ec8b90d606504d7a62755" %}
+# RELEASE-TIME PLACEHOLDERS (two lines): this recipe is written for the next release, 0.6.0, the first under
+# GPL-3.0-only and the first with Ka/Ks (`coal kaks`, `coal dnds`), `coal pipeline` and coal-cpp-align. The v0.6.0 tag
+# does not exist yet, so the sha256 below is a marker, not a checksum: when the release is tagged, set `version` to
+# the tag (without the v) and `sha256` to the checksum of its tarball (packaging/bioconda/README.md, "The sha256
+# step"). Do not submit the recipe with the marker, and do not submit it for 0.5.0 or earlier (MIT, no Ka/Ks).
+{% set version = "0.6.0" %}                                                             # PLACEHOLDER until v0.6.0 is tagged
+{% set sha256 = "0000000000000000000000000000000000000000000000000000000000000000" %}  # PLACEHOLDER: not a checksum
 
 package:
   name: {{ name }}
@@ -17,7 +18,7 @@ source:
 
 build:
   number: 0
-  # Not noarch: the package ships the compiled coal-cpp binary next to the pure-Python package.
+  # Not noarch: the package ships the compiled coal-cpp and coal-cpp-align binaries next to the pure-Python package.
   # Linux and macOS only; Bioconda does not build Windows (the Windows app is distributed from GitHub Releases).
   skip: True  # [win]
   run_exports:
@@ -34,6 +35,13 @@ requirements:
     - setuptools >=69.3
   run:
     - python >=3.10
+  # Optional programs of `coal pipeline` (not needed for codon alignment, `coal kaks` or `coal dnds`): when they are
+  # in the environment they must be versions COAL works with. `conda install diamond clustalo` adds them; without
+  # them `coal pipeline` says which one is missing. DIAMOND: 2.1.0 is the first with DeepClust (tested: 2.2.8).
+  run_constrained:
+    - diamond >=2.1.0   # tested: 2.2.8
+    - clustalo >=1.2    # tested: 1.2.4
+    - mafft >=7         # tested: 7.526
 
 test:
   files:
@@ -44,7 +52,8 @@ test:
     # coal hands large inputs to coal-cpp only when both are the same version
     - coal --version | grep -qx "coal {{ version }}"
     - coal-cpp --version | grep -qx "coal {{ version }} (C++)"
-    - coal --help
+    - coal --help > coal_help.txt && grep -q "coal pipeline" coal_help.txt && grep -q "coal kaks" coal_help.txt
+    - coal-cpp-align --version | grep -qx "coal-cpp-align {{ version }}"
     # (to a file, not a pipe: `grep -q` closing the pipe early makes the usage print a BrokenPipeError traceback)
     - pal2nal > usage.txt && grep -q "pal2nal pep.aln nuc.fasta" usage.txt
     - pal2nal -h > help.txt && grep -q "PAL2NAL" help.txt
@@ -60,6 +69,15 @@ test:
     # PATH; no COAL_CPP needed).
     # test_dispatch.sh builds such an input by repeating the fixture under new IDs.
     - bash test_dispatch.sh
+    # Ka/Ks (the native engine in coal-cpp): the tidy table and KaKs_Calculator's format from the codon alignment
+    - coal dnds py.fasta -o dnds.tsv --pairs consecutive && head -1 dnds.tsv | grep -q "^seq1	seq2	method	dN	dS	dNdS"
+    - test "$(wc -l < dnds.tsv)" -eq 5
+    - coal kaks -i py.fasta -o out.kaks -m NG --pairs consecutive && head -1 out.kaks | grep -q "^Sequence	Method	Ka	Ks"
+    - coal kaks --help > kaks_help.txt && grep -q "KaKs_Calculator" kaks_help.txt
+    # The pipeline's command line (a run needs DIAMOND, which is optional: run_constrained above)
+    - coal pipeline --help > pipeline_help.txt && grep -q "pairs" pipeline_help.txt
+    - coal pipeline pairs --help > pairs_help.txt && grep -q -- "--query" pairs_help.txt
+    - coal cite > cite.txt && grep -q "Suyama" cite.txt
 
 about:
   home: https://github.com/plumat-coal/COAL
@@ -68,13 +86,19 @@ about:
   license_file:
     - LICENSE
     - NOTICE
-  summary: Fast codon alignment from a protein alignment and coding DNA (PAL2NAL alternative), with a C++ engine for large inputs
+  summary: Fast codon alignments (PAL2NAL alternative), Ka/Ks (dN/dS) for pairs, and a one-step CDS-to-dN/dS pipeline
   description: |
     COAL builds a codon (nucleotide) alignment from a protein multiple sequence alignment and the unaligned coding
     DNA of the same genes, for dN/dS analyses (PAML codeml, HyPhy) and ortholog pipelines (OrthologR, DIAMOND
     workflows). It reproduces PAL2NAL v14's output byte for byte (documented differences aside) and is much faster.
+    It also estimates Ka/Ks (dN/dS) for pairs of aligned coding sequences (`coal kaks` in KaKs_Calculator's format,
+    `coal dnds` as a tidy table; methods NG, LWL, MLWL, LPB, MLPB, YN, MYN, Comeron, Li) and runs the whole way from
+    coding sequences to a dN/dS table in one step (`coal pipeline pairs` / `coal pipeline clusters`: translation,
+    DIAMOND orthologs or DeepClust clusters, protein alignment, codon alignment, Ka/Ks).
     This package installs the Python engine (`coal`, `import coal`), the PAL2NAL drop-in command `pal2nal`, and the
-    C++ engine `coal-cpp`; `coal` hands inputs of 1 MB or more to `coal-cpp` automatically.
+    C++ programs `coal-cpp` (large inputs, Ka/Ks, the pipeline's native steps) and `coal-cpp-align`; `coal` hands
+    inputs of 1 MB or more to `coal-cpp` automatically. `coal pipeline` also needs DIAMOND, and for clusters
+    Clustal Omega or MAFFT: they are optional here (`conda install -c bioconda diamond clustalo`).
   dev_url: https://github.com/plumat-coal/COAL
   doc_url: https://plumat-coal.github.io/COAL/
 
@@ -84,6 +108,9 @@ extra:
   recipe-maintainers:
     - TODO-github-handle  # the GitHub user(s) who will answer BiocondaBot and review bumps
   notes: |
+    `coal pipeline` needs DIAMOND (2.1.0 or later) and, in cluster mode, Clustal Omega or MAFFT; they are not
+    dependencies of this package (codon alignment, `coal kaks` and `coal dnds` do not use them): install them into
+    the same environment with `conda install -c bioconda diamond clustalo`.
     Both engines are installed. `coal` uses the Python engine for small inputs and `coal-cpp` (same output) for
     inputs of 1 MB or more; `COAL_ENGINE=python|cpp` forces one. `pal2nal` here is COAL's drop-in replacement
     for PAL2NAL's command line; the original Perl script is `pal2nal.pl` from the separate `pal2nal` package, so the

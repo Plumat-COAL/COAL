@@ -66,7 +66,15 @@ class TestReleaseScripts(unittest.TestCase):
         self.assertEqual(app, init, "apps/coal-app/pyproject.toml has another version than the engine")
         self.assertEqual(pin, init, "apps/coal-app/pyproject.toml must depend on coal-align==<the same version>")
         self.assertEqual(rv.cpp_versions(), (init, init), "cpp/src/main.cpp and report.cpp VERSION must be the engine's")
-        self.assertEqual(rv.check("v" + init), (init, bool(re.search(r"(a|b|rc)\d+$", init))))
+        if rv.DEV_RE.match(init):   # a development tree (0.6.0.dev0) has no tag: the release commit sets 0.6.0 first
+            for tag in ("v" + init, "v" + rv.base_version(init)):
+                with self.assertRaisesRegex(ValueError, "development version|is not v<major>", msg=tag):
+                    rv.check(tag)
+        else:
+            self.assertEqual(rv.check("v" + init), (init, bool(re.search(r"(a|b|rc)\d+$", init))))
+        self.assertEqual([rv.base_version(v) for v in ("0.6.0.dev0", "0.5.0rc1", "0.5.0")], ["0.6.0", "0.5.0", "0.5.0"])
+        self.assertEqual([rv.r_version(v) for v in ("0.6.0.dev0", "0.6.0.dev3", "0.6.0")],
+                         ["0.6.0.9000", "0.6.0.9003", "0.6.0"])
         for bad in ("v9.9.9", init, "v" + init + "x", "", "release-" + init):
             with self.assertRaises(ValueError, msg=bad):
                 rv.check(bad)
@@ -395,6 +403,7 @@ class TestSiteFiles(unittest.TestCase):
     def test_version_is_current(self):
         """The page names the current version; it must match the package."""
         init = re.search(r'__version__ = "([^"]+)"', _read("src", "coal", "__init__.py")).group(1)
+        init = _load("release_version").base_version(init)   # a development tree shows the release it becomes
         shown = re.search(r'<span id="version" data-version="([^"]+)">([^<]+)</span>', self.index)
         self.assertIsNotNone(shown, "version span missing")
         self.assertEqual(shown.group(1), shown.group(2))

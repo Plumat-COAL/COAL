@@ -1,6 +1,6 @@
-# coalr 0.5.0
+# coalr 0.6.0 (in development: 0.6.0.9000)
 
-First version. In-process bindings (Rcpp) to COAL 0.5's C++ core:
+First version. In-process bindings (Rcpp) to the C++ core of COAL 0.6:
 
 - `coal_dnds_pairs()`: CDS of ortholog pairs -> protein alignment -> codon alignment -> dN, dS, dN/dS; the columns
   of `coal pipeline pairs`' `dnds.tsv`.

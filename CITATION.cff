@@ -7,7 +7,9 @@ authors:
     family-names: Newton
   - given-names: Keanu
     family-names: Murati
-version: 0.5.0
+# The development tree (0.6.0.devN, GPL-3.0-only) names the release it becomes; cite the version `coal --version`
+# prints. COAL 0.5.0 and earlier were released under the MIT License.
+version: 0.6.0
 license: GPL-3.0-only
 repository-code: "https://github.com/plumat-coal/COAL"
 url: "https://plumat-coal.github.io/COAL/"
