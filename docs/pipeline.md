@@ -39,7 +39,8 @@ coal pipeline pairs --query q.fa --subject s.fa -o out --pairs my_orthologs.tsv 
   `faster` to `ultra-sensitive`) and `--diamond-args '...'` are passed on. Pairs are written in the order of the
   query file.
 - **`--pairs TSV`** takes the pairs from a file (query ID, subject ID; a header line `query subject` is skipped)
-  and DIAMOND is not run. `out/orthologs.tsv` of an earlier run can be given.
+  and DIAMOND is not run. `out/orthologs.tsv` of an earlier run can be given, also with the same `-o out`: the
+  file is then read and left exactly as it is (not written again).
 - **Alignment (`--aligner`).**
   - `nw` (default): COAL's global aligner, BLOSUM62, gap open 10, extend 0.5, end gaps free, full length. Change
     it with `--matrix`, `--gap-open`, `--gap-extend`, `--end-gaps`, or `--preset pwalign`.
@@ -122,10 +123,21 @@ line ends. Rows are in input order (pairs: the query file's order; clusters: the
 
 **One run per folder, and one run's files only.** A run takes the lock `<out_dir>.coal-lock` (next to the folder,
 holding its process id: COAL's convention for `-o` files) and a second run into the same folder is refused with
-exit 1 while the first one is alive; the lock of a process that is gone is replaced. When a run starts, every file
-of the table above that an earlier run left in the folder is removed (a `dnds.kaks` or `codon_alignments.fasta` of
-a run with other options, the `.fasta` files of `codon_alignments/`, a half-written `dnds.tsv.tmp`), so the folder
-never mixes two runs. Files with other names are not touched, and `work/` is kept for `--resume`.
+exit 1 while the first one is alive; the lock of a process that is gone is replaced. When a run starts, the files
+of the table above that an earlier COAL run wrote into the folder are removed (a `dnds.kaks` or
+`codon_alignments.fasta` of a run with other options, the `.fasta` files of a `codon_alignments/` that a cluster
+run with `--keep-alignments` wrote, a half-written `dnds.tsv.tmp`), so the folder never mixes two runs. COAL
+removes only what a run is known to have written: each run lists the files it may write in `work/outputs.json`
+before it writes the first one (for a folder of a version without that list, the outputs named in its
+`report.json`). A file with one of those names that no run wrote (your own `clusters.tsv`, your own files in
+`codon_alignments/`) stays, files with other names are not touched, and `work/` is kept for `--resume`.
+
+**Inputs are never removed or written.** A file given as `--query`, `--subject`, `--pairs`, `--cds`, `--clusters`
+or `--diamond` is recognised under any name (a link, another spelling of the path). If the run would write a file
+of that name (`--pairs out/dnds.tsv -o out`, `--report` onto an input, an input inside `work/` or
+`codon_alignments/`) it ends with exit 1 before anything in the folder changes; the one exception is
+`--pairs out/orthologs.tsv`, which is read and kept as it is. `--keep-alignments` in cluster mode is refused in
+the same way when `codon_alignments/` exists, is not empty and was not written by a COAL run.
 
 ### `dnds.tsv`
 
@@ -398,6 +410,9 @@ machine is still to be done.
 - **The lock is per process, not per thread and not across machines.** Two `run_pairs()` calls into one folder
   from two threads of the same Python process are not kept apart (the lock holds a process id), and on a shared
   file system a run on another host is seen as "gone" when its process id is not alive here.
+- **A file the run writes replaces a file of that name that was already in the folder**, as with any `-o`: a
+  `dnds.tsv` or `genes.tsv` of your own in the output folder is overwritten (unless it is one of this run's
+  inputs, which is refused). Only the removal at the start is limited to what an earlier run wrote.
 - **SIGKILL (and a power cut) leave an interrupted folder without `"status": "interrupted"`**: `report.json` is
   then absent (it is removed when a run starts and written when it ends), and so is `dnds.tsv`.
 - **One MSA per cluster is held in memory**, and Clustal Omega's time grows faster than linearly with the cluster

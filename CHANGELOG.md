@@ -48,6 +48,18 @@ not yet released):
   sequence ID is that gene's failure** (`id_not_ascii`), not the end of the run (docs/pipeline.md).
 - **coalr: a path-like string that names no file is the error "file not found"**, not a sequence (docs/r.md).
 
+Found by the second independent review (2026-11-13) of the fixes above (not yet released):
+
+- **`coal pipeline` no longer deletes its inputs or files it did not write.** The clean-up at the start of a run
+  (previous entry) removed every file with an output's name, also when it was this run's input or the user's own:
+  `--pairs out/orthologs.tsv -o out` failed with "cannot open" after deleting the pairs and the earlier
+  `dnds.tsv`, and `clusters --clusters proj/clusters.tsv -o proj` deleted the clusters file and every
+  `proj/codon_alignments/*.fasta`. Now a run removes only what an earlier run is known to have written (the
+  list each run keeps in `work/outputs.json`, or the outputs named in an older `report.json`), never one of its
+  inputs, and it never writes onto an input: `--pairs out/orthologs.tsv` is read and left as it is, any other
+  input under a name the run writes is refused before anything changes, and so is `--keep-alignments` into a
+  `codon_alignments/` folder that holds files COAL did not write (docs/pipeline.md).
+
 Found by the first CI runs on Windows and macOS of the code above (not yet released):
 
 - **`coal pipeline`: one rule for text, on every system** (docs/pipeline.md, "Text encoding"). Every table is

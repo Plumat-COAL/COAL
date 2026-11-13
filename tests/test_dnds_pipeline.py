@@ -682,17 +682,18 @@ class Robustness(PipelineCase):
         for name in ("dnds.kaks", "codon_alignments.fasta", "dnds.tsv"):
             self.assertTrue((out / name).is_file(), name)
         (out / "dnds.tsv.tmp").write_text("half a table of a killed run\n", encoding="utf-8")
-        (out / "cluster_summary.tsv").write_text("from a cluster run into the same folder\n", encoding="utf-8")
+        # files with a run's names that no run wrote (the user's): they stay
+        (out / "cluster_summary.tsv").write_text("the user's own table\n", encoding="utf-8")
         (out / "codon_alignments").mkdir()
-        (out / "codon_alignments" / "old_cluster.fasta").write_text(">x\nATG\n", encoding="utf-8")
-        (out / "codon_alignments" / "notes.txt").write_text("the user's own file\n", encoding="utf-8")
+        (out / "codon_alignments" / "mine.fasta").write_text(">x\nATG\n", encoding="utf-8")
         (out / "my_notes.txt").write_text("the user's own file\n", encoding="utf-8")
         second = P.run_pairs(q, s, out, pairs=pf, quiet=True)   # the same folder, without the optional outputs
         self.assertEqual(second.exit_code, 0)
         left = sorted(p.name for p in out.iterdir())
-        self.assertEqual(left, ["codon_alignments", "dnds.tsv", "failed.tsv", "genes.tsv", "my_notes.txt",
-                                "orthologs.tsv", "report.json", "work"])
-        self.assertEqual(sorted(p.name for p in (out / "codon_alignments").iterdir()), ["notes.txt"])
+        self.assertEqual(left, ["cluster_summary.tsv", "codon_alignments", "dnds.tsv", "failed.tsv", "genes.tsv",
+                                "my_notes.txt", "orthologs.tsv", "report.json", "work"])
+        self.assertEqual(sorted(p.name for p in (out / "codon_alignments").iterdir()), ["mine.fasta"])
+        self.assertEqual((out / "cluster_summary.tsv").read_text(encoding="utf-8"), "the user's own table\n")
         self.assertEqual(sorted(second.report["outputs"]), ["dnds", "failed", "genes", "orthologs"])
         self.assertEqual((out / "dnds.tsv").read_bytes(), Path(first.outputs["dnds"]).read_bytes())
         # --resume reuses work/ and still leaves no optional output of the earlier run
@@ -700,6 +701,125 @@ class Robustness(PipelineCase):
         fourth = P.run_pairs(q, s, out, pairs=pf, quiet=True, resume=True)
         self.assertTrue(Path(third.outputs["kaks"]).name == "dnds.kaks" and not (out / "dnds.kaks").exists())
         self.assertEqual([st["cached"] for st in fourth.report["stages"]][:2], [True, True])
+
+    def test_outputs_of_a_run_without_the_record_are_known_from_its_report(self):
+        """A folder written before work/outputs.json existed: the outputs its report.json lists are that run's."""
+        q, s, pf = self.small()
+        out = self.tmp / "out"
+        self.assertEqual(P.run_pairs(q, s, out, pairs=pf, quiet=True, kaks_format=True).exit_code, 0)
+        (out / "work" / "outputs.json").unlink()
+        (out / "unpaired.tsv").write_text("not listed in the report: the user's\n", encoding="utf-8")
+        self.assertEqual(P.run_pairs(q, s, out, pairs=pf, quiet=True).exit_code, 0)
+        self.assertFalse((out / "dnds.kaks").exists())
+        self.assertTrue((out / "unpaired.tsv").is_file())
+        # a report that cannot be read names nothing: nothing is removed
+        (out / "work" / "outputs.json").unlink()
+        (out / "dnds.kaks").write_text("whose?\n", encoding="utf-8")
+        (out / "report.json").write_text("{not json", encoding="utf-8")
+        self.assertEqual(P.run_pairs(q, s, out, pairs=pf, quiet=True).exit_code, 0)
+        self.assertEqual((out / "dnds.kaks").read_text(encoding="utf-8"), "whose?\n")
+
+    def test_the_pairs_of_an_earlier_run_can_be_the_input(self):
+        """Independent review 2026-11-13, finding 1: `--pairs out/orthologs.tsv -o out` deleted its own input
+        (and the earlier dnds.tsv) and failed with "cannot open"."""
+        q, s, pf = self.small()
+        out = self.tmp / "out"
+        first = P.run_pairs(q, s, out, pairs=pf, quiet=True)
+        self.assertEqual(first.exit_code, 0)
+        orth = out / "orthologs.tsv"
+        orth_bytes, dnds_bytes = orth.read_bytes(), (out / "dnds.tsv").read_bytes()
+        r = subprocess.run([sys.executable, "-m", "coal", "pipeline", "pairs", "--query", str(q), "--subject", str(s),
+                            "--pairs", str(orth), "-o", str(out), "-q"], capture_output=True, text=True,
+                           encoding="utf-8", env={**os.environ, "PYTHONPATH": str(ROOT / "src")})
+        self.assertEqual((r.returncode, r.stderr), (0, ""))
+        self.assertEqual(orth.read_bytes(), orth_bytes, "the input is left exactly as it was")
+        self.assertEqual((out / "dnds.tsv").read_bytes(), dnds_bytes)
+        rep = json.loads((out / "report.json").read_text(encoding="utf-8"))
+        self.assertEqual(rep["outputs"]["orthologs"], "orthologs.tsv")
+        # the user's own pairs file under that name (no header, a third column) is not rewritten either
+        mine = "".join(f"{a}\t{b}\tnote\n" for a, b in PLAIN[:5])
+        orth.write_text(mine, encoding="utf-8")
+        third = P.run_pairs(q, s, out, pairs=orth, quiet=True)
+        self.assertEqual((third.exit_code, third.report["counts"]["orthologs"]), (0, 5))
+        self.assertEqual(orth.read_text(encoding="utf-8"), mine)
+        # by another name (a link) it is the same file
+        if hasattr(os, "symlink") and os.name != "nt":
+            link = self.tmp / "link.tsv"
+            link.symlink_to(orth)
+            self.assertEqual(P.run_pairs(q, s, out, pairs=link, quiet=True).exit_code, 0)
+            self.assertEqual(orth.read_text(encoding="utf-8"), mine)
+        # and a later run that searches or is given other pairs writes orthologs.tsv again
+        self.assertEqual(P.run_pairs(q, s, out, pairs=pf, quiet=True).exit_code, 0)
+        self.assertEqual(orth.read_bytes(), orth_bytes)
+
+    def test_a_run_never_removes_or_writes_its_inputs(self):
+        """An input under a name the run writes is refused before anything in the folder changes."""
+        q, s, pf = self.small()
+        out = self.tmp / "out"
+        self.assertEqual(P.run_pairs(q, s, out, pairs=pf, quiet=True, kaks_format=True).exit_code, 0)
+
+        def snapshot():
+            return {str(p.relative_to(out)): p.read_bytes() for p in sorted(out.rglob("*")) if p.is_file()}
+        before = snapshot()
+        cases = [dict(query=q, subject=s, pairs=out / "dnds.tsv"),                 # seq1/seq2 are its first columns
+                 dict(query=q, subject=s, pairs=pf, report=q),                     # --report onto the query
+                 dict(query=out / "genes.tsv", subject=s, pairs=pf),
+                 dict(query=q, subject=s, pairs=out / "work" / "state.json")]
+        if os.name != "nt":
+            (self.tmp / "alias.tsv").symlink_to(out / "dnds.tsv")
+            cases.append(dict(query=q, subject=s, pairs=self.tmp / "alias.tsv"))
+        for kw in cases:
+            with self.subTest(**{k: str(v) for k, v in kw.items()}):
+                qq, ss = kw.pop("query"), kw.pop("subject")
+                with redirect_stderr(io.StringIO()) as err:
+                    res = P.run_pairs(qq, ss, out, quiet=True, **kw)
+                self.assertEqual(res.exit_code, 1)
+                self.assertRegex(err.getvalue(), r"error: --(pairs|query) \S+ is (a file|inside \S+, a folder) this "
+                                                 r"run writes")
+                self.assertEqual(snapshot(), before, "nothing in the folder changed")
+                self.assertFalse(Path(str(out) + ".coal-lock").exists())
+                self.assertEqual(q.read_bytes()[:1], b">")
+
+    def test_cluster_run_into_the_users_project_folder(self):
+        """Finding 1, second command: `clusters --cds proj/cds.fasta --clusters proj/clusters.tsv -o proj` deleted
+        proj/clusters.tsv and every proj/codon_alignments/*.fasta the user had."""
+        proj = self.tmp / "proj"
+        (proj / "codon_alignments").mkdir(parents=True)
+        cds, clu = proj / "family_cds.fasta", proj / "clusters.tsv"
+        cds.write_bytes(FAM.read_bytes())
+        clu.write_bytes(FAM_CLUSTERS.read_bytes())
+        mine = proj / "codon_alignments" / "famA_001.fasta"
+        mine.write_text(">my own alignment\nATG\n", encoding="utf-8")
+        (proj / "orthologs.tsv").write_text("mine too\n", encoding="utf-8")
+
+        def run(**kw):
+            return P.run_clusters(cds, proj, clusters=clu, quiet=True, max_cluster_size=2, **kw)
+        res = run()
+        self.assertEqual(res.exit_code, 2)
+        self.assertEqual(clu.read_bytes(), FAM_CLUSTERS.read_bytes())
+        self.assertEqual(cds.read_bytes(), FAM.read_bytes())
+        self.assertEqual(mine.read_text(encoding="utf-8"), ">my own alignment\nATG\n")
+        self.assertEqual((proj / "orthologs.tsv").read_text(encoding="utf-8"), "mine too\n")
+        self.assertTrue((proj / "dnds.tsv").is_file())
+        # --keep-alignments would write one file per cluster into the user's folder: refused, nothing changed
+        dnds = (proj / "dnds.tsv").read_bytes()
+        with redirect_stderr(io.StringIO()) as err:
+            res = run(keep_alignments=True)
+        self.assertEqual(res.exit_code, 1)
+        self.assertIn("was not written by a COAL run", err.getvalue())
+        self.assertEqual(mine.read_text(encoding="utf-8"), ">my own alignment\nATG\n")
+        self.assertEqual((proj / "dnds.tsv").read_bytes(), dnds)
+        # in a folder of its own COAL writes them, knows them as its own, and removes them with the next run
+        (proj / "codon_alignments").rename(proj / "my_alignments")
+        res = run(keep_alignments=True)
+        self.assertEqual(res.exit_code, 2)
+        written = sorted(p.name for p in (proj / "codon_alignments").iterdir())
+        self.assertTrue(written and all(n.endswith(".fasta") for n in written), written)
+        (proj / "codon_alignments" / "notes.txt").write_text("kept\n", encoding="utf-8")
+        self.assertEqual(run().exit_code, 2)
+        self.assertEqual(sorted(p.name for p in (proj / "codon_alignments").iterdir()), ["notes.txt"])
+        self.assertEqual(clu.read_bytes(), FAM_CLUSTERS.read_bytes())
+        self.assertTrue((proj / "my_alignments" / "famA_001.fasta").is_file())
 
     @unittest.skipIf(os.name == "nt", "uses a POSIX sleep as the other process")
     def test_one_run_per_output_folder(self):
