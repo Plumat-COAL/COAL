@@ -168,9 +168,23 @@ with `--format`.
   link) is refused with exit status 2 before anything is written; the output is opened while the input is still
   being read, so the input would be destroyed. The same holds for `coal translate` and `coal codon-dnds`.
 
-**Exit status.** 0 when the run finished, even if some pairs have a status other than `ok`. 1 when the input
-cannot be read or the output cannot be written. 2 for a command-line error, including a method that is not
-implemented. `-j N` sets the number of threads (default: all hardware threads). A one-letter option takes its
+**Exit status.** 0 when the run finished and at least one result is an estimate or a statement about the pair
+(`ok`, `warning`, `saturated`, `not_converged`), even if other pairs have a status other than `ok`. 1 when the
+input cannot be read or the output cannot be written; the message names the file and the cause (`write error on
+'out.tsv': No space left on device`). 2 for a command-line error, including a method that is not implemented,
+**and when no pair has an estimate because of the input**: every result is `error` or `no_data`. The table is
+still written with every row (`coal dnds`; `coal kaks` leaves `error` pairs out, as KaKs_Calculator does), and one
+line on stderr, printed also with `-q`, names the usual cause: the input looks like protein sequences, or the two
+sequences of the pairs differ in length (the input is not aligned), with the way to a codon alignment. When only
+some pairs differ in length the exit status stays 0 and a warning says how many. (KaKs_Calculator returns 0
+in these cases too, so this is a difference for a script that reads its exit status; the numbers and the file
+format are KaKs_Calculator's as before.)
+
+**Compressed input.** `coal kaks`, `coal dnds` and `coal translate` read a gzip-compressed input (recognised by
+its first two bytes, whatever the file is called): the `coal` command decompresses it into a temporary folder,
+runs the engine on the copy and removes the folder. `coal-cpp` itself has no decompressor (it uses the C++
+standard library only): called directly on such a file it stops with "is gzip-compressed: decompress it first
+(gunzip -k FILE)". `-j N` sets the number of threads (default: all hardware threads). A one-letter option takes its
 value attached as well (`-j4`, `-j=4`, `-mYN`, `-ofile`; flags chain: `-qj4`), and a long one after `=`
 (`--jobs=4`), in `coal kaks`, `coal dnds`, `coal translate`, `coal codon-dnds` and `coal-cpp-align`, as in the
 main `coal` command. Pairs are computed in parallel

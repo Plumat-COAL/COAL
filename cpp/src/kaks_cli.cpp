@@ -139,6 +139,8 @@ struct Pair {
     const std::string* r1 = nullptr;              // FASTA: rows in the record table
     const std::string* r2 = nullptr;
     std::string read_error;                       // malformed record (status error)
+    bool unequal = false;                         // the two rows differ in length (not an alignment)
+    bool protein_like = false;                    // no estimate, and letters that only amino acids have
     std::vector<Result> res;
     const std::string& row1() const { return r1 ? *r1 : own1; }
     const std::string& row2() const { return r2 ? *r2 : own2; }
@@ -252,6 +254,20 @@ std::string sniff(const std::string& path) {
         return t[0] == '>' ? "fasta" : "axt";
     }
     return "axt";
+}
+
+// True when a row holds a letter that is an amino acid code and no nucleotide code (IUPAC: ACGTU RYSWKMBDHVN):
+// E, F, I, L, P, Q, and the rarer Z, J, O. (X is left out: some files use it for an unknown base.)
+bool looks_like_protein(const std::string& row) {
+    for (char ch : row) {
+        switch (ch) {
+            case 'E': case 'F': case 'I': case 'L': case 'P': case 'Q': case 'Z': case 'J': case 'O':
+            case 'e': case 'f': case 'i': case 'l': case 'p': case 'q': case 'z': case 'j': case 'o':
+                return true;
+            default: break;
+        }
+    }
+    return false;
 }
 
 // ------------------------------------------------------------------------------------------------ output
@@ -492,6 +508,7 @@ int kaks_main(const std::string& sub, const std::vector<std::string>& argv) {
             if (x == m) methods.push_back(m);
     const char* prog = c.compat ? "coal kaks" : "coal dnds";
     try {
+        refuse_gzip(c.in);
         std::string fmt = c.format == "auto" ? sniff(c.in) : c.format;
         std::unique_ptr<AxtReader> axt;
         std::vector<FastaRec> recs;
@@ -509,14 +526,14 @@ int kaks_main(const std::string& sub, const std::vector<std::string>& argv) {
         if (!c.out.empty()) {
             // (checked in parse() too, before anything is read; opening the output truncates it)
             fout.open(c.out, std::ios::binary);
-            if (!fout) throw InputError("cannot write '" + c.out + "'", "file_error");
+            if (!fout) throw InputError(cannot_write(c.out), "file_error");
         }
 #ifdef _WIN32
         if (c.out.empty()) _setmode(_fileno(stdout), _O_BINARY);  // \n line ends, as KaKs_Calculator's files
 #endif
         std::ostream& os = c.out.empty() ? std::cout : fout;
         os << (c.compat ? COMPAT_HEADER : TIDY_HEADER);
-        long n_pairs = 0, n_status[kaks::STATUS_COUNT] = {}, n_unconverged = 0;
+        long n_pairs = 0, n_status[kaks::STATUS_COUNT] = {}, n_unconverged = 0, n_unequal = 0, n_protein_like = 0;
         std::string first_error;
         auto read_batch = [&](std::vector<Pair>& b) {
             size_t nt = 0;
@@ -561,12 +578,23 @@ int kaks_main(const std::string& sub, const std::vector<std::string>& argv) {
                 return;
             }
             kaks::Prepared prep = kaks::prepare(p.row1(), p.row2(), *code);
-            for (Method m : methods) p.res.push_back(kaks::compute(prep, m, *code, c.opt));
+            bool estimate = false;
+            for (Method m : methods) {
+                p.res.push_back(kaks::compute(prep, m, *code, c.opt));
+                const Status st = p.res.back().status;
+                estimate = estimate || (st != Status::error && st != Status::no_data);
+            }
+            if (!estimate) {   // for the hint at the end of a run without any estimate
+                p.unequal = p.row1().size() != p.row2().size();
+                p.protein_like = looks_like_protein(p.row1()) || looks_like_protein(p.row2());
+            }
         };
         auto emit = [&](std::vector<Pair>& b) {
             std::string buf;
             for (Pair& p : b) {
                 ++n_pairs;
+                if (p.unequal) ++n_unequal;
+                if (p.protein_like) ++n_protein_like;
                 for (const Result& r : p.res) {
                     ++n_status[(int)r.status];
                     if (!r.converged) ++n_unconverged;
@@ -578,11 +606,15 @@ int kaks_main(const std::string& sub, const std::vector<std::string>& argv) {
                 }
             }
             os << buf;
-            if (!os) throw InputError("write error on " + (c.out.empty() ? std::string("stdout") : c.out), "file_error");
+            if (!os) throw InputError(write_error(c.out), "file_error");
         };
         run_ordered<Pair>(read_batch, work, emit, c.jobs);
         os.flush();
-        if (!os) throw InputError("write error", "file_error");
+        if (!os) throw InputError(write_error(c.out), "file_error");
+        if (fout.is_open()) {
+            fout.close();   // (a full disk can show only here)
+            if (!fout) throw InputError(write_error(c.out), "file_error");
+        }
         if (!c.quiet) {
             std::cerr << prog << ": " << n_pairs << " pair(s), " << methods.size() << " method(s): " << n_status[0]
                       << " ok, " << n_status[1] << " warning, " << n_status[2] << " not_converged, " << n_status[3]
@@ -599,6 +631,33 @@ int kaks_main(const std::string& sub, const std::vector<std::string>& argv) {
                           << (c.compat ? " and were left out" : " (status error)") << "; first: " << first_error
                           << "\n";
         }
+        // No estimate at all, for reasons that lie in the input (every result is error or no_data): the usual
+        // causes are a protein file or sequences that are not aligned. Exit status 2 and one line that says so
+        // (also with -q: it is the reason for the exit status), so a script does not take the table for a result.
+        long n_results = 0;
+        for (int k = 0; k < kaks::STATUS_COUNT; ++k) n_results += n_status[k];
+        const bool nothing = n_results > 0 && n_status[4] + n_status[5] == n_results;
+        const char* codon_hint =
+            "Ka/Ks needs a codon alignment (aligned coding DNA): make one from a protein alignment and the coding "
+            "sequences with `coal PROTEIN_ALN CDS.fasta -o codon.fasta`, or start from the coding sequences with "
+            "`coal pipeline`";
+        if (nothing) {
+            std::cerr << prog << ": error: none of the " << n_pairs << " pair(s) has an estimate (" << n_status[5]
+                      << " result(s) error, " << n_status[4] << " no_data). ";
+            if (n_protein_like * 2 >= n_pairs)
+                std::cerr << "The input looks like protein sequences (letters that no nucleotide code has). "
+                          << codon_hint;
+            else if (n_unequal * 2 >= n_pairs)
+                std::cerr << "The two sequences of " << n_unequal << " pair(s) differ in length, so the input is "
+                          << "not an alignment. " << codon_hint;
+            else
+                std::cerr << "Check that the input is a codon alignment of the pairs (docs/kaks.md, \"Input\")";
+            std::cerr << "\n";
+            return 2;
+        }
+        if (!c.quiet && n_unequal > 0)
+            std::cerr << prog << ": warning: the two sequences of " << n_unequal << " pair(s) differ in length: "
+                      << "is the input aligned? " << codon_hint << "\n";
         return 0;
     } catch (const InputError& e) {
         std::cerr << prog << ": error: " << e.what() << "\n";

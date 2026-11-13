@@ -251,13 +251,13 @@ int translate_main_(const std::vector<std::string>& argv) {
         std::ofstream fout, fgenes;
         if (!out.empty()) {
             fout.open(out, std::ios::binary);
-            if (!fout) throw InputError("cannot write '" + out + "'", "file_error");
+            if (!fout) throw InputError(cannot_write(out), "file_error");
         } else {
             binary_stdio(false, true);
         }
         if (!genes.empty()) {
             fgenes.open(genes, std::ios::binary);
-            if (!fgenes) throw InputError("cannot write '" + genes + "'", "file_error");
+            if (!fgenes) throw InputError(cannot_write(genes), "file_error");
             fgenes << "id\tnt_length\taa_length\tterminal_stop\tinternal_stops\tambiguous_codons\ttrailing_nt\t"
                       "status\tcode\tnote\n";
         }
@@ -327,6 +327,7 @@ int translate_main_(const std::vector<std::string>& argv) {
             }
         };
         for (const std::string& in : ins) {
+            refuse_gzip(in);
             LineReader lr(in, true);
             have = false;
             const long before = n;
@@ -355,11 +356,11 @@ int translate_main_(const std::vector<std::string>& argv) {
         }
         os << obuf;
         os.flush();
-        if (!os) throw InputError("write error on " + (out.empty() ? std::string("stdout") : out), "file_error");
+        if (!os) throw InputError(write_error(out), "file_error");
         if (fgenes.is_open()) {
             fgenes << gbuf;
             fgenes.flush();
-            if (!fgenes) throw InputError("write error on " + genes, "file_error");
+            if (!fgenes) throw InputError(write_error(genes), "file_error");
         }
         if (!quiet)
             std::cerr << "coal translate: " << n << " gene(s): " << n_ok << " ok, " << n_warn << " warning, "
@@ -616,6 +617,7 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
         if (from_stdin) {
             binary_stdio(true, false);
         } else {
+            refuse_gzip(c.in);
             fin.open(c.in, std::ios::binary);
             if (!fin) throw InputError(open_error(c.in), "file_error");
         }
@@ -623,7 +625,7 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
         auto open_out = [](std::ofstream& f, const std::string& path) {
             if (path.empty()) return;
             f.open(path, std::ios::binary);
-            if (!f) throw InputError("cannot write '" + path + "'", "file_error");
+            if (!f) throw InputError(cannot_write(path), "file_error");
         };
         std::ofstream fout, fcodon, fprot, fkaks, ffail;
         open_out(fout, c.out);
@@ -708,10 +710,10 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
                 }
             }
             fout << buf;
-            if (!fout) throw InputError("write error on " + c.out, "file_error");
+            if (!fout) throw InputError(write_error(c.out), "file_error");
             if (fkaks.is_open()) {
                 fkaks << kbuf;
-                if (!fkaks) throw InputError("write error on " + c.kaks_out, "file_error");
+                if (!fkaks) throw InputError(write_error(c.kaks_out), "file_error");
             }
         };
 
@@ -803,7 +805,7 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
                         buf += '>' + g.members[k].id + '\n' + item.r.members[k].codon_row + '\n';
                     }
                     fcodon << buf;
-                    if (!fcodon) throw InputError("write error on " + c.codon_out, "file_error");
+                    if (!fcodon) throw InputError(write_error(c.codon_out), "file_error");
                 }
                 // The protein alignment the codon alignment was threaded on: the same members (those with a
                 // codon row), in the same order, so record k of one file is record k of the other.
@@ -815,7 +817,7 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
                         buf += '>' + g.members[k].id + '\n' + item.r.protein_rows[k] + '\n';
                     }
                     fprot << buf;
-                    if (!fprot) throw InputError("write error on " + c.protein_out, "file_error");
+                    if (!fprot) throw InputError(write_error(c.protein_out), "file_error");
                 }
                 if ((!c.codon_dir.empty() || !c.protein_dir.empty()) && whole) {
                     std::string name = safe_name(g.id);
@@ -826,22 +828,29 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
                         if (dir.empty() || (what == 1 && !prot)) continue;
                         const std::string path = dir + "/" + name + ".fasta";
                         std::ofstream f(path, std::ios::binary);
-                        if (!f) throw InputError("cannot write '" + path + "'", "file_error");
+                        if (!f) throw InputError(cannot_write(path), "file_error");
                         for (size_t k = 0; k < g.members.size(); ++k) {
                             if (item.r.members[k].codon_row.empty()) continue;
                             f << '>' << g.members[k].id << '\n'
                               << (what == 0 ? item.r.members[k].codon_row : item.r.protein_rows[k]) << '\n';
                         }
                         f.flush();
-                        if (!f) throw InputError("write error on " + path, "file_error");
+                        if (!f) throw InputError(write_error(path), "file_error");
                     }
                 }
             }
         }
-        for (std::ofstream* f : {&fout, &fcodon, &fprot, &fkaks, &ffail}) {
-            if (!f->is_open()) continue;
-            f->flush();
-            if (!*f) throw InputError("write error", "file_error");
+        {
+            const std::string* names[] = {&c.out, &c.codon_out, &c.protein_out, &c.kaks_out, &c.failures};
+            int k = 0;
+            for (std::ofstream* f : {&fout, &fcodon, &fprot, &fkaks, &ffail}) {
+                const std::string& name = *names[k++];
+                if (!f->is_open()) continue;
+                f->flush();
+                if (!*f) throw InputError(write_error(name), "file_error");
+                f->close();   // (a full disk can show only here)
+                if (!*f) throw InputError(write_error(name), "file_error");
+            }
         }
         if (!c.quiet)
             std::cerr << "coal codon-dnds: " << n_groups << " group(s), " << n_pairs << " pair(s), " << ms.size()

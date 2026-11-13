@@ -293,11 +293,132 @@ def kaks_main(argv) -> int:
     if not ok:
         print(f"coal {argv[0]}: {why}", file=sys.stderr)
         return 1
+    try:
+        argv, tmp = _gunzip_inputs(argv)
+    except (OSError, EOFError, ValueError) as e:
+        print(f"coal {argv[0]}: error: {e}", file=sys.stderr)
+        return 1
+    if tmp is not None:   # coal-cpp as a child, so that the decompressed copies can be removed when it ends
+        return _run_cpp_child(path, argv, tmp)
     rc = dispatch.run_cpp(path, argv)
     if isinstance(rc, str):
         print(f"coal {argv[0]}: {rc}", file=sys.stderr)
         return 1
     return rc
+
+
+GZIP_MAGIC = b"\x1f\x8b"
+# options of kaks / dnds / translate / codon-dnds whose value is a file the command writes (never decompressed)
+_CPP_OUTPUT_OPTIONS = ("-o", "-O", "--out", "--genes", "--failures", "--codon-out", "--codon-dir", "--protein-out",
+                       "--protein-dir", "--kaks-out")
+
+
+def is_gzip(path) -> bool:
+    """True when the file starts with the gzip magic bytes (whatever its name is)."""
+    try:
+        with open(path, "rb") as fh:
+            return fh.read(2) == GZIP_MAGIC
+    except OSError:
+        return False
+
+
+def gunzip_to(src: str, dst: str) -> None:
+    """Decompress the gzip file src into dst (streamed). ValueError with a readable reason when src is not a
+    complete gzip file; OSError when dst cannot be written."""
+    import gzip
+    import shutil
+    import zlib
+    try:
+        with gzip.open(src, "rb") as fin, open(dst, "wb") as fout:
+            shutil.copyfileobj(fin, fout, 1 << 20)
+    except (EOFError, zlib.error, gzip.BadGzipFile) as e:
+        try:
+            os.remove(dst)
+        except OSError:
+            pass
+        raise ValueError(f"cannot decompress {src!r}: it starts like a gzip file but is damaged or cut short "
+                         f"({e})") from None
+
+
+def _gunzip_inputs(argv) -> tuple[list[str], str | None]:
+    """`coal kaks|dnds|translate|codon-dnds ...`: every input file that is gzip-compressed (by its first bytes) is
+    decompressed into a temporary folder and the argument replaced by that copy, because coal-cpp reads plain text
+    only. Returns (the command line to run, the temporary folder or None). Arguments after an output option
+    (-o, --genes, ...) are never touched."""
+    import tempfile
+    out, tmp = [argv[0]], None
+
+    def plain(path: str) -> str:
+        nonlocal tmp
+        if tmp is None:
+            tmp = tempfile.mkdtemp(prefix="coal_gunzip_")
+        d = os.path.join(tmp, str(len(os.listdir(tmp))))
+        os.mkdir(d)
+        name = os.path.basename(path)
+        dst = os.path.join(d, name[:-3] if name.lower().endswith(".gz") and len(name) > 3 else name + ".txt")
+        gunzip_to(path, dst)
+        return dst
+    try:
+        for k, arg in enumerate(argv[1:], 1):
+            prev = argv[k - 1]
+            if prev in _CPP_OUTPUT_OPTIONS or arg == "-":
+                out.append(arg)
+            elif arg.startswith("--") and "=" in arg:
+                opt, val = arg.split("=", 1)
+                out.append(f"{opt}={plain(val)}" if opt not in _CPP_OUTPUT_OPTIONS and is_gzip(val) else arg)
+            elif arg[:2] in ("-i", "-I") and len(arg) > 2 and is_gzip(arg[2:].lstrip("=")):
+                out.append(arg[:2] + plain(arg[2:].lstrip("=")))
+            elif not arg.startswith("-") and is_gzip(arg):
+                out.append(plain(arg))
+            else:
+                out.append(arg)
+    except BaseException:
+        if tmp is not None:
+            import shutil
+            shutil.rmtree(tmp, ignore_errors=True)
+        raise
+    return out, tmp
+
+
+def _run_cpp_child(path: str, argv, tmp: str) -> int:
+    """Run coal-cpp as a child process (the same standard streams), remove the folder tmp when it has ended, and
+    return its exit status (128 + signal number when a signal ended it)."""
+    import shutil
+    import subprocess
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.flush()
+        except (OSError, ValueError, AttributeError):
+            pass
+    proc = None
+    old = None
+    try:
+        try:
+            proc = subprocess.Popen([path, *argv])
+        except OSError as e:
+            print(f"coal {argv[0]}: could not start {path} ({e.strerror or e})", file=sys.stderr)
+            return 1
+
+        def forward(signum, frame):
+            proc.terminate()
+        try:
+            old = signal.signal(signal.SIGTERM, forward)
+        except (ValueError, OSError):
+            old = None
+        while True:
+            try:
+                rc = proc.wait()
+                break
+            except KeyboardInterrupt:   # Ctrl-C reaches coal-cpp too; it cleans up and exits 130
+                continue
+        return rc if rc >= 0 else 128 - rc
+    finally:
+        if old is not None:
+            try:
+                signal.signal(signal.SIGTERM, old)
+            except (ValueError, OSError):
+                pass
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def main(argv=None) -> int:
