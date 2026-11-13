@@ -128,7 +128,10 @@ class TestLicence(unittest.TestCase):
     def test_nothing_still_calls_coal_mit(self):
         """'MIT' is left only where it is true: the earlier releases, and third-party test data."""
         allowed = re.compile(r"0\.5\.0|earlier|MIT at the time|HyPhy|hyphy|license_family: MIT|license: MIT")
-        skip_dirs = {".git", "build", "node_modules", "__pycache__", "realdata", "PAL2NAL"}
+        # .venv / venv / site-packages: third-party code installed by a build (the Windows app build makes
+        # apps/coal-app/desktop/.venv before it runs these tests), not COAL's own files.
+        skip_dirs = {".git", "build", "node_modules", "__pycache__", "realdata", "PAL2NAL", ".venv", "venv",
+                     "site-packages", ".tox", ".nox"}
         left = []
         for d, dirs, files in os.walk(ROOT):
             dirs[:] = [x for x in dirs if x not in skip_dirs and not x.endswith(".egg-info")

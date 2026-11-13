@@ -27,3 +27,5 @@ examples/** text eol=lf
 # The website is deployed byte for byte and has a size budget (tests/test_docs_site.py): LF on every system.
 # `eol=lf` without `text` leaves the text/binary decision to text=auto, so images and fonts are untouched.
 site/** eol=lf
+# The Bioconda recipe's test files are copied into the conda test environment byte for byte (tests/test_bioconda_recipe.py).
+packaging/bioconda/** eol=lf
