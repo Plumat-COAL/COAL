@@ -66,7 +66,8 @@ const char* DNDS_HELP =
     "\n"
     "dN/dS for pairs of aligned coding sequences as a tidy TSV, one row per pair and method:\n"
     "seq1 seq2 method dN dS dNdS SE_dN SE_dS N_sites S_sites Nd Sd codons_compared status note\n"
-    "status: ok, warning (internal stop codons skipped), saturated (dN or dS NA), no_data, error.\n"
+    "status: ok, warning (internal stop codons skipped; YN/MYN iteration not converged),\n"
+    "saturated (dN or dS NA), no_data, error.\n"
     "\n"
     "  IN             aligned FASTA or AXT file (or -i IN)\n"
     "  -o OUT         output file (default: standard output)\n"
@@ -484,7 +485,7 @@ int kaks_main(const std::string& sub, const std::vector<std::string>& argv) {
 #endif
         std::ostream& os = c.out.empty() ? std::cout : fout;
         os << (c.compat ? COMPAT_HEADER : TIDY_HEADER);
-        long n_pairs = 0, n_status[5] = {0, 0, 0, 0, 0};
+        long n_pairs = 0, n_status[5] = {0, 0, 0, 0, 0}, n_unconverged = 0;
         std::string first_error;
         auto read_batch = [&](std::vector<Pair>& b) {
             size_t nt = 0;
@@ -537,6 +538,7 @@ int kaks_main(const std::string& sub, const std::vector<std::string>& argv) {
                 ++n_pairs;
                 for (const Result& r : p.res) {
                     ++n_status[(int)r.status];
+                    if (!r.converged) ++n_unconverged;
                     if (r.status == Status::error) {
                         if (first_error.empty()) first_error = p.name + ": " + r.note;
                         if (c.compat) continue;  // KaKs_Calculator leaves invalid pairs out
@@ -554,6 +556,11 @@ int kaks_main(const std::string& sub, const std::vector<std::string>& argv) {
             std::cerr << prog << ": " << n_pairs << " pair(s), " << methods.size() << " method(s): " << n_status[0]
                       << " ok, " << n_status[1] << " warning, " << n_status[2] << " saturated, " << n_status[3]
                       << " no_data, " << n_status[4] << " error\n";
+            if (n_unconverged > 0)
+                std::cerr << prog << ": warning: " << n_unconverged << " result(s): the YN/MYN iteration did not "
+                          << "converge, so the values are those of its last round"
+                          << (c.compat ? " (`coal dnds` names the pairs: status and note)" : " (see the note column)")
+                          << "\n";
             if (n_status[4] > 0)
                 std::cerr << prog << ": warning: " << n_status[4] << " result(s) could not be computed"
                           << (c.compat ? " and were left out" : " (status error)") << "; first: " << first_error

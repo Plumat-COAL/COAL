@@ -254,6 +254,98 @@ class TestMynNan(KaKsBase):
         self.assertIn("nan", kk[2])  # the unmodified reference: the whole row is nan
 
 
+class TestMultiPositionCodons(KaKsBase):
+    """Pairs whose codons differ at two or three positions, as random short pairs do (independent review
+    2026-11-13, finding 6; docs/kaks.md "Short and saturated pairs"). The reference values are recorded here:
+    KaKs_Calculator 2.0 at 15 digits, one pair per process (unpatched: KK; with the two corrected lines: KKFIX)
+    and PAML yn00 at 12 digits with weighting 0."""
+
+    PAIRS = {
+        # no synonymous site, one codon differs at two positions
+        "one_kind_multi": ("CCTCTTTCT", "TTTCCTTTT"),
+        # 12 codons: KaKs_Calculator's MYN meets 0/0 in TN93 in a round and from then on drops the codons that
+        # differ at more than one position
+        "myn_nan_round": ("TGCATGATATCTTTTAATAACCGAGAAGTTTCCGAC", "TCCATGATATCTTTTAATTCTCGAGAATTTTCCGAC"),
+        # every synonymous site differs (Sd = S): saturated, and the iteration takes another path than the reference
+        "all_syn_sites_differ": ("ATGAAAAAGAAGTGGTGGGCA", "TGGTGGGCTGCTGCTTGGATG"),
+        # the iteration does not settle
+        "myn_not_converged": ("GGTGTTAGGCTTATAACGACAGCTGGAGTGGGC", "ATCACTCCCCTACTCATCACACAAGGCATAAAA"),
+        "yn_not_converged": ("AAA", "ATG"),
+        "sat_not_converged": ("TGGATGGCT", "TGGAAGTGG"),
+    }
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        axt = Path(self._td.name) / "multi.axt"
+        axt.write_text("".join(f"{n}\n{a}\n{b}\n\n" for n, (a, b) in self.PAIRS.items()), encoding="utf-8")
+        self.rows = self.dnds(axt, "-m", "YN", "-m", "MYN")
+        self.paml0 = self.dnds(axt, "-m", "YN", "--yn-flavour", "paml", "--yn-weighting", "0")
+        self.axt = axt
+
+    def tearDown(self):
+        self._td.cleanup()
+
+    def test_one_kind_of_site_counts_every_difference(self):
+        """Ka is JC69 of all 4 differences at the 9 sites, as yn00 (weighting 0) gives it. KaKs_Calculator prints
+        0.263548415128416 for YN and MYN: the two differences of the codon that differs at one position only
+        (its pathway weights are NaN, and the codon with two differences is dropped without a word)."""
+        want = -0.75 * math.log(1 - (4 / 3) * (4 / 9))
+        self.assertTrue(close(want, 0.673456194904, 1e-11))            # yn00, weighting = 0
+        kk_wrong = -0.75 * math.log(1 - (4 / 3) * (2 / 9))
+        self.assertTrue(close(kk_wrong, 0.263548415128416, 1e-12))     # KaKs_Calculator, YN and MYN
+        for m in ("YN", "MYN"):
+            r = self.rows[("one_kind_multi", m)]
+            self.assertTrue(close(float(r[3]), want, 1e-11), r)
+            self.assertEqual((r[4], r[13], r[14]), ("NA", "no_data", "no synonymous sites"))
+        self.assertTrue(close(float(self.paml0[("one_kind_multi", "YN")][3]), want, 1e-11))
+
+    def test_myn_keeps_the_codons_with_several_differences(self):
+        """KK MYN: Ka 0.0781105978289474, Ks -nan (and COAL before the review fixes: 0.0781, NA). KKFIX MYN:
+        Ka 0.167317060572902, Ks 0.123094343743785. KK YN: 0.167188448579, 0.123094343744."""
+        m, y = self.rows[("myn_nan_round", "MYN")], self.rows[("myn_nan_round", "YN")]
+        self.assertEqual((m[13], m[14]), ("ok", ""))
+        self.assertTrue(close(float(m[3]), 0.167317060572902, 1e-9), m)
+        self.assertTrue(close(float(m[4]), 0.123094343743785, 1e-9), m)
+        self.assertTrue(close(float(y[3]), 0.167188448579, 1e-9), y)
+        self.assertGreater(float(m[3]), 2 * 0.0781105978289474)
+
+    def test_saturated_kind_and_the_other_estimate(self):
+        """Sd = S: the proportion of differences is 1 up to rounding, and rounding decides whether a round sees
+        "P + Q > 1" (t = 99) or JC69's cap. Either way Ks is NA / saturated in COAL (KK and KKFIX print the cap,
+        0.688156925315808). Ka is the same fixed point, reached by another path: KK 2.36633343882711, COAL
+        within the iteration's tolerance of it, not to 1e-9."""
+        m = self.rows[("all_syn_sites_differ", "MYN")]
+        self.assertEqual((m[4], m[13]), ("NA", "saturated"))
+        self.assertNotIn("did not converge", m[14])
+        self.assertTrue(close(float(m[3]), 2.36633343882711, 1e-6), m)
+
+    def test_iteration_that_does_not_converge_is_a_warning(self):
+        m = self.rows[("myn_not_converged", "MYN")]
+        self.assertEqual(m[13], "warning")
+        self.assertEqual(m[14], "MYN iteration did not converge in 100 rounds (the values are those of the last round)")
+        # KK and KKFIX: Ka 1.74822892588737, Ks 2.17994969816181 after the same 100 rounds: the same wandering
+        # sequence, apart in the 6th digit by then. Neither is an estimate
+        self.assertTrue(close(float(m[3]), 1.74822892588737, 1e-4) and close(float(m[4]), 2.17994969816181, 1e-4), m)
+        self.assertEqual(self.rows[("myn_not_converged", "YN")][13], "ok")
+        y = self.rows[("yn_not_converged", "YN")]     # one codon, Nd/N on the 0.75 boundary of JC69
+        self.assertEqual((y[3], y[13]), ("NA", "saturated"))
+        self.assertIn("Ka saturated", y[14])
+        self.assertIn("YN00 iteration did not converge in 10 rounds (the values are those of the last round)", y[14])
+        s = self.rows[("sat_not_converged", "MYN")]   # KK and KKFIX: Ka 0.125248977242036 (3 of 4 differences dropped)
+        self.assertEqual(s[13], "saturated")
+        self.assertIn("did not converge", s[14])
+        self.assertGreater(float(s[3]), 0.5)
+        # the unweighted estimate needs no iteration: it is yn00's (weighting 0: dN 0.636574320355)
+        self.assertTrue(close(float(self.paml0[("sat_not_converged", "YN")][3]), 0.636574320355, 1e-11))
+        for key, r in self.paml0.items():
+            self.assertNotIn("did not converge", r[14], key)
+
+    def test_kaks_format_names_the_pairs_that_did_not_converge(self):
+        r = self.run_cpp("kaks", "-i", self.axt, "-m", "MYN")
+        self.assertIn("did not converge", r.stderr)
+        self.assertIn("3 ", r.stderr.split("did not converge")[0].splitlines()[-1])
+
+
 class TestAgainstPAML(KaKsBase):
     def test_yn00(self):
         for w in (1, 0):
