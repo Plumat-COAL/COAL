@@ -434,19 +434,21 @@ Result run_comeron(const Prepared& p, const GeneticCode& code, const Options& op
     const double P4_site = p4 / L4;
     const double Q4_site = q4 / L4;
 
-    log1 = checked_log(1.0 - (2.0 * P2S_site) - Qa, saturated_s);
-    log2 = checked_log(1.0 - (2.0 * Qa), saturated_s);
+    // (a class without sites has weight 0 in As / Aa: an undefined logarithm there is no saturation)
+    bool none = false;
+    log1 = checked_log(1.0 - (2.0 * P2S_site) - Qa, L2S > 0 ? saturated_s : none);
+    log2 = checked_log(1.0 - (2.0 * Qa), L2S > 0 ? saturated_s : none);
     const double A2S = (-0.5) * log1 + (0.25) * log2;
-    log1 = checked_log(1.0 - (2.0 * P4_site) - Q4_site, saturated_s);
-    log2 = checked_log(1.0 - (2.0 * Q4_site), saturated_s);
+    log1 = checked_log(1.0 - (2.0 * P4_site) - Q4_site, L4 > 0 ? saturated_s : none);
+    log2 = checked_log(1.0 - (2.0 * Q4_site), L4 > 0 ? saturated_s : none);
     const double A4 = (-0.5) * log1 + (0.25) * log2;
     double As = (L2S * A2S + L4 * A4) / (L2S + L4);
 
-    log1 = checked_log(1.0 - (2.0 * P2V_site) - Qs, saturated_a);
-    log2 = checked_log(1.0 - (2.0 * Qs), saturated_a);
+    log1 = checked_log(1.0 - (2.0 * P2V_site) - Qs, L2V > 0 ? saturated_a : none);
+    log2 = checked_log(1.0 - (2.0 * Qs), L2V > 0 ? saturated_a : none);
     const double A2V = (-0.5) * log1 + (0.25) * log2;
-    log1 = checked_log(1.0 - (2.0 * P0_site) - Q0_site, saturated_a);
-    log2 = checked_log(1.0 - (2.0 * Q0_site), saturated_a);
+    log1 = checked_log(1.0 - (2.0 * P0_site) - Q0_site, L0 > 0 ? saturated_a : none);
+    log2 = checked_log(1.0 - (2.0 * Q0_site), L0 > 0 ? saturated_a : none);
     const double A0 = (-0.5) * log1 + (0.25) * log2;
     double Aa = (L2V * A2V + L0 * A0) / (L2V + L0);
 
