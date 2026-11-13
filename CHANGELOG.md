@@ -200,6 +200,14 @@ entry under "Added", not under "Fixed".
     left). A symbolic link in the output folder under an output's name is replaced, never written through
     (`dnds.kaks -> another file` used to overwrite that file). `coal-cpp codon-dnds` has `--new-files` for this
     and writes each per-cluster file through `NAME.fasta.tmp`. docs/pipeline.md "Output".
+  - **A hint for genes of another genetic code** (second review, 2026-11-13). Mitochondrial genes in a nuclear
+    CDS set got `internal_stop` warnings and estimates from mistranslated codons, and nothing said why. When at
+    least two genes of a set have two or more internal stop codons under `-c` and none under another table COAL
+    supports, the run prints one warning per set (how many genes, which table, three examples, the two-run
+    recipe); `report.json` has it as `genetic_code_hints`. docs/pipeline.md "Genes of another genetic code":
+    mitochondrial and plastid genes, the recipe, and that `Comeron` / `Li` are standard-code only. A per-gene
+    code option (`--code-map`) was evaluated and not built: the engine has one code per run; the design is in
+    docs/development.md.
   - **Cluster mode does not depend on the order of the input.** DIAMOND DeepClust is order-dependent, so it is
     given the proteins sorted by ID: the same sequences give the same `clusters.tsv` whatever the order of the
     `--cds` files and records. (Development builds before 2026-11-13 clustered in input order; their clusters can

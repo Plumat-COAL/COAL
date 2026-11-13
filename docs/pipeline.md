@@ -114,6 +114,41 @@ coal pipeline pairs --query q_cds.fa --subject s_cds.fa -o out --longest-isoform
 - The longest CDS is a convention, not the biologically "main" transcript. For a curated choice (Ensembl
   canonical, MANE Select, APPRIS) filter the FASTA file yourself and run without the option.
 
+## Genes of another genetic code
+
+**One run has one genetic code** (`-c N`, default 1, the standard code): it is used for the translation, the
+codon alignment and Ka/Ks of every gene of the run. A CDS file of a whole genome usually also holds the
+**mitochondrial** genes (13 in a vertebrate) and, in plants and algae, the **plastid** genes, and those are read
+with another table: vertebrate mitochondria use code 2 (TGA is Trp, AGA / AGG are stops, ATA is Met), invertebrate
+mitochondria code 5, yeast mitochondria code 3, mold and protozoan mitochondria and Mycoplasma code 4. Translated
+with the standard code such a gene has internal stop codons: its row in `genes.tsv` has status `warning` and
+code `internal_stop`, the codon columns with a stop are skipped in Ka/Ks, and what is left is estimated from
+codons that mean something else (a pair is often `saturated`). Plastid and bacterial genes use code 11, whose
+codons and stops are those of the standard code (only start codons differ), so they need nothing special.
+
+- **The hint.** When at least two genes of an input set have two or more internal stop codons under the chosen
+  code and none under another code COAL supports, the run prints one warning per set: how many of the genes with
+  internal stops are clean under which table (the first of 2, 4, 5, 11, ... that explains the most genes, and
+  which others do as well), three examples, and the recipe below. Only the flagged genes are read again, so a
+  set without them costs nothing. `report.json` has the same as `genetic_code_hints`. A gene with a single
+  internal TGA does not count: a selenoprotein gene would look "clean" under every code where TGA is Trp. The
+  hint is a hint: it does not change a row, and a set whose every gene is flagged simply needs another `-c`.
+- **The two-run recipe.** Take the organelle genes out of both CDS files and run them on their own:
+
+  ```
+  coal pipeline pairs --query q_nuclear.fa --subject s_nuclear.fa -o out_nuclear
+  coal pipeline pairs --query q_mito.fa    --subject s_mito.fa    -o out_mito -c 2
+  ```
+
+  The two `dnds.tsv` have the same columns and can be concatenated (the second without its header line). Ensembl
+  headers name the chromosome (`chromosome:GRCh38:MT:...`), NCBI's `cds_from_genomic` IDs the molecule
+  (`lcl|NC_012920.1_cds_...`), so the genes are one `grep` or `seqkit grep` away.
+- **`Comeron` and `Li` are for the standard code only** (`-c 1`): the two reference programs they are checked
+  against have no other, and COAL refuses the combination (exit 2) instead of guessing. The other seven methods
+  take every table (`coal --help` lists them).
+- There is no per-gene code option (`--code-map`); [development.md](development.md#a-genetic-code-per-gene-design-note)
+  has the design and why it was not built in this release.
+
 ## Pair mode
 
 ```

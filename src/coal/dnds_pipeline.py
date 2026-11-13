@@ -572,6 +572,7 @@ class _Run:
         self.isoforms: dict = {}           # the report's `isoforms`: per set what was found and done
         self._gene_map: dict | None = None
         self._first_ids: dict = {}
+        self.code_hints: list = []         # sets whose genes with internal stops are clean under another code
         self._engine_files: list = []
         self.set_counts: dict = {}         # per input set: records, not usable, dropped (as genes.tsv lists them)
 
@@ -1102,6 +1103,85 @@ class _Run:
                         order[f[0]] = len(order)
         return failed
 
+    # -- a set that looks like another genetic code
+    _CODE_NAMES = {1: "standard", 2: "vertebrate mitochondrial", 3: "yeast mitochondrial",
+                   4: "mold / protozoan mitochondrial, Mycoplasma", 5: "invertebrate mitochondrial",
+                   6: "ciliate nuclear", 9: "echinoderm / flatworm mitochondrial", 10: "euplotid nuclear",
+                   11: "bacterial, archaeal and plant plastid", 12: "alternative yeast nuclear",
+                   13: "ascidian mitochondrial", 14: "alternative flatworm mitochondrial",
+                   15: "Blepharisma nuclear", 16: "chlorophycean mitochondrial", 21: "trematode mitochondrial",
+                   22: "Scenedesmus obliquus mitochondrial", 23: "Thraustochytrium mitochondrial"}
+    _CODE_ORDER = (2, 4, 5, 11, 3, 9, 13, 14, 21, 6, 10, 12, 15, 16, 22, 23, 1)   # which table is named first
+    CODE_HINT_MIN_STOPS = 2      # a gene counts with this many internal stops under the chosen code ...
+    CODE_HINT_MIN_GENES = 2      # ... and the hint needs this many such genes that are clean under another code
+    CODE_HINT_MAX_GENES = 5000   # genes looked at per set (the first ones)
+
+    def code_hint(self, set_name: str, paths: list[str], genes_path: str, shown: list[str] | None = None) -> None:
+        """One warning when genes of this set have internal stop codons under the chosen genetic code (-c) and
+        none under another code COAL supports: mitochondrial or plastid genes in a nuclear set, or the wrong -c
+        for the whole set. Only the flagged genes are read again, and only their stop codons are counted, so a set
+        without such genes costs nothing. (A gene with one internal TGA is not counted: a selenoprotein reads
+        "clean" under every code where TGA is Trp.)"""
+        from .tables import SUPPORTED as tables, get_code
+        chosen = int(self.a.codontable)
+        flagged: list[str] = []
+        with_stops = 0
+        with open(genes_path, encoding="utf-8", errors="backslashreplace") as fh:
+            col = {n: k for k, n in enumerate(fh.readline().rstrip("\n").split("\t"))}
+            ki, si, ci = col.get("internal_stops"), col.get("status"), col.get("code")
+            if ki is None or si is None:
+                return
+            for line in fh:
+                f = line.rstrip("\n").split("\t")
+                try:
+                    n = int(f[ki])
+                except (ValueError, IndexError):
+                    continue
+                if n < 1 or (ci is not None and f[ci] == "duplicate_id"):
+                    continue
+                with_stops += 1
+                if n >= self.CODE_HINT_MIN_STOPS and len(flagged) < self.CODE_HINT_MAX_GENES:
+                    flagged.append(f[0])
+        if len(flagged) < self.CODE_HINT_MIN_GENES:
+            return
+        stops = {t: frozenset(c.encode() for c in get_code(t).codons.get("*", ())) for t in tables if t != chosen}
+        clean = {t: 0 for t in stops}
+        examples: dict[int, list[str]] = {t: [] for t in stops}
+        idx = FastaIndex(paths)
+        try:
+            for rid in flagged:
+                try:
+                    seq = idx.get(rid).upper().replace(b"U", b"T")
+                except KeyError:
+                    continue
+                codons = {seq[k:k + 3] for k in range(0, len(seq) - len(seq) % 3 - 3, 3)}   # the last one may stop
+                for t, st in stops.items():
+                    if not (codons & st):
+                        clean[t] += 1
+                        if len(examples[t]) < 3:
+                            examples[t].append(rid)
+        finally:
+            idx.close()
+        best = max(clean.values(), default=0)
+        if best < self.CODE_HINT_MIN_GENES:
+            return
+        ranked = [t for t in self._CODE_ORDER if clean.get(t, 0) == best]
+        table, also = ranked[0], ranked[1:]
+        self.code_hints.append({"set": set_name, "genetic_code": chosen, "genes_with_internal_stops": with_stops,
+                                "genes_looked_at": len(flagged), "clean_under": table, "genes": best,
+                                "also_clean_under": also, "examples": examples[table]})
+        shown = [str(p) for p in (shown or paths)]      # the files as the user named them (not work/ copies)
+        files = " ".join(shown[:2]) + (" ..." if len(shown) > 2 else "")
+        self.warn(f"{set_name}: {best:,} of the {with_stops:,} genes with internal stop codons under genetic code "
+                  f"{chosen} have none under NCBI genetic code {table} ({self._CODE_NAMES.get(table, 'NCBI')}"
+                  + (f"; also under {', '.join(map(str, also[:3]))}{' and others' if len(also) > 3 else ''}"
+                     if also else "")
+                  + f"), e.g. {', '.join(examples[table])}. They look like genes of another genetic code "
+                  "(mitochondrial or plastid genes in a nuclear set?): their rows are estimates from mistranslated "
+                  f"codons. Run them on their own: take them out of {files} into a file of their own and run "
+                  f"`coal pipeline` twice, the rest with -c {chosen} and these with -c {table} "
+                  "(docs/pipeline.md \"Genes of another genetic code\")")
+
     def n_records(self, set_name: str, what: str = "total") -> int:
         """The records of a set as genes.tsv lists them (a repeated ID is a record, and not usable): the same
         counts as the summary line."""
@@ -1480,6 +1560,8 @@ class _Run:
             report["isoforms"] = {"longest_isoform": bool(a.longest_isoform), "gene_map": a.gene_map or None,
                                   "isoform_rule": getattr(a, "isoform_rule", "auto"),
                                   "sets": self.isoforms}
+        if self.code_hints:
+            report["genetic_code_hints"] = self.code_hints
         if self.notes:
             report["warnings"] = self.notes
         rp = a.report or self.path("report.json")
@@ -1578,6 +1660,8 @@ def _pairs_mode(run: _Run) -> None:
             f"({run.n_records('query', 'failed') + run.n_records('subject', 'failed'):,} not usable)")
     run.require_usable_genes("query", [a.query])
     run.require_usable_genes("subject", [a.subject])
+    run.code_hint("query", [run.plain(a.query)], q_genes, [a.query])
+    run.code_hint("subject", [run.plain(a.subject)], s_genes, [a.subject])
     run.isoform_warning()
     if q_drop or s_drop:   # DIAMOND searches the kept records only; a pair that names a dropped one says why
         q_faa, s_faa = run.kept_proteins(q_faa, q_drop, "query"), run.kept_proteins(s_faa, s_drop, "subject")
@@ -1852,6 +1936,7 @@ def _clusters_mode(run: _Run) -> None:
         failed = run.read_genes(genes, "cds", gf, order, drop)
     run.say(f"translated {run.n_records('cds'):,} records ({run.n_records('cds', 'failed'):,} not usable)")
     run.require_usable_genes("cds", list(a.cds))
+    run.code_hint("cds", [run.plain(p) for p in a.cds], genes, list(a.cds))
     run.isoform_warning()
     all_faa = faa
     if drop:   # DeepClust clusters the kept records only; a given cluster that names a dropped one says why

@@ -347,3 +347,107 @@ class RealDiamond(PipelineCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _fasta(path: Path) -> dict:
+    out, cur = {}, None
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith(">"):
+            cur = line[1:].split()[0]
+            out[cur] = ""
+        elif cur is not None:
+            out[cur] += line.strip()
+    return out
+
+
+@needs_cpp
+class GeneticCodeHint(PipelineCase):
+    """Mitochondrial genes (examples/mito, genetic code 2) inside a nuclear set (examples/dnds): one warning per
+    set that names the table and the two-run recipe (docs/pipeline.md "Genes of another genetic code")."""
+
+    def files(self):
+        mito = _fasta(ROOT / "examples" / "mito" / "dna.fasta")
+        a = _fasta(ROOT / "examples" / "dnds" / "species_a_cds.fasta")
+        b = _fasta(ROOT / "examples" / "dnds" / "species_b_cds.fasta")
+        homo = [k for k in mito if k.startswith("Homo_")]
+        pan = [k for k in mito if k.startswith("Pan_")]
+        q, s = self.tmp / "q.fa", self.tmp / "s.fa"
+        q.write_text("".join(f">{k}\n{v}\n" for k, v in [*a.items(), *((k, mito[k]) for k in homo)]),
+                     encoding="utf-8", newline="\n")
+        s.write_text("".join(f">{k}\n{v}\n" for k, v in [*b.items(), *((k, mito[k]) for k in pan)]),
+                     encoding="utf-8", newline="\n")
+        pairs = [(h, "Pan_" + h.split("_")[1]) for h in homo] + [("spA_g01", "spB_g01")]
+        return q, s, pairs, mito
+
+    def test_mito_genes_in_a_nuclear_set_get_the_hint(self):
+        q, s, pairs, _ = self.files()
+        res, err = run(P.run_pairs, q, s, self.tmp / "o", pairs=self.pairs_file(pairs))
+        self.assertEqual(res.exit_code, 0, err)
+        lines = [ln for ln in err.splitlines() if "have none under NCBI genetic code" in ln]
+        self.assertEqual(len(lines), 2, err)                       # one line per set, not one per gene
+        self.assertRegex(lines[0], r"warning: query: \d of the 4 genes with internal stop codons under genetic code 1 "
+                                   r"have none under NCBI genetic code 2 \(vertebrate mitochondrial")
+        self.assertIn("run `coal pipeline` twice, the rest with -c 1 and these with -c 2", lines[0])
+        self.assertIn("Homo_", lines[0])
+        hints = {h["set"]: h for h in res.report["genetic_code_hints"]}
+        self.assertEqual(sorted(hints), ["query", "subject"])
+        self.assertEqual((hints["query"]["genetic_code"], hints["query"]["clean_under"]), (1, 2))
+        self.assertGreaterEqual(hints["query"]["genes"], 2)
+        self.assertEqual(hints["query"]["genes_with_internal_stops"], 4)
+        self.check_report(res)
+        # a hint only: the rows are what they were without it (statuses from the mistranslated codons)
+        rows = {r["seq1"]: r for r in __import__("test_dnds_pipeline").read_tsv(res.outputs["dnds"])}
+        self.assertEqual(rows["spA_g01"]["status"], "ok")
+
+    def test_the_two_run_recipe_gives_clean_genes(self):
+        q, s, pairs, mito = self.files()
+        mq, ms = self.tmp / "mq.fa", self.tmp / "ms.fa"
+        mq.write_text("".join(f">{k}\n{v}\n" for k, v in mito.items() if k.startswith("Homo_")), encoding="utf-8")
+        ms.write_text("".join(f">{k}\n{v}\n" for k, v in mito.items() if k.startswith("Pan_")), encoding="utf-8")
+        res, err = run(P.run_pairs, mq, ms, self.tmp / "m", pairs=self.pairs_file(pairs[:-1]), codontable=2)
+        self.assertEqual(res.exit_code, 0, err)
+        self.assertNotIn("genetic code", err)
+        self.assertNotIn("genetic_code_hints", res.report)
+        genes = __import__("test_dnds_pipeline").read_tsv(res.outputs["genes"])
+        self.assertEqual({g["status"] for g in genes}, {"ok"})
+
+    def test_no_hint_without_such_genes_or_for_single_stops(self):
+        res, err = run(P.run_pairs, Q, S, self.tmp / "o", pairs=self.pairs_file(PLAIN))
+        self.assertNotIn("NCBI genetic code", err)
+        self.assertNotIn("genetic_code_hints", res.report)
+        # genes with ONE internal TGA each (selenoprotein-like): clean under code 2 / 4, but not counted
+        a = _fasta(ROOT / "examples" / "dnds" / "species_a_cds.fasta")
+        recs = []
+        for k, (name, seq) in enumerate(list(a.items())[:6]):
+            codons = [seq[i:i + 3] for i in range(0, len(seq), 3)]
+            if k < 4:
+                codons[10] = "TGA"
+            recs.append((name, "".join(codons)))
+        q = self.tmp / "sel.fa"
+        q.write_text("".join(f">{n}\n{s}\n" for n, s in recs), encoding="utf-8")
+        res, err = run(P.run_pairs, q, ROOT / "examples" / "dnds" / "species_b_cds.fasta", self.tmp / "sel",
+                       pairs=self.pairs_file([("spA_g01", "spB_g01")]))
+        self.assertNotIn("NCBI genetic code", err)
+        # two internal TGA each: counted
+        recs2 = []
+        for k, (name, seq) in enumerate(recs):
+            codons = [seq[i:i + 3] for i in range(0, len(seq), 3)]
+            if k < 4:
+                codons[20] = "TGA"
+            recs2.append((name, "".join(codons)))
+        q.write_text("".join(f">{n}\n{s}\n" for n, s in recs2), encoding="utf-8")
+        res, err = run(P.run_clusters, q, self.tmp / "sel2", clusters=self.tmp / "none.tsv")
+        # (nuclear genes hold AGA / AGG, which are stops in code 2: the first table that fits is 4)
+        self.assertIn("cds: 4 of the 4 genes with internal stop codons under genetic code 1 have none under NCBI "
+                      "genetic code 4", err)
+        self.assertIn(f"take them out of {q} into a file of their own", err)
+
+    def test_docs(self):
+        doc = (ROOT / "docs" / "pipeline.md").read_text(encoding="utf-8")
+        for must in ("## Genes of another genetic code", "-o out_mito -c 2", "`Comeron` and `Li` are for the standard "
+                     "code only", "genetic_code_hints", "selenoprotein"):
+            self.assertIn(must, doc)
+        dev = (ROOT / "docs" / "development.md").read_text(encoding="utf-8")
+        self.assertIn("## A genetic code per gene (design note)", dev)
+        self.assertIn("mixed_genetic_code", dev)
+        self.assertFalse(any("code-map" in a.option_strings[0] for a in P.build_parser()._actions if a.option_strings))
