@@ -152,7 +152,7 @@ class TestReleaseWorkflow(unittest.TestCase):
 
     def test_actions_pinned_to_commits(self):
         # ci.yml too (it uses actions/cache), and the nightly fuzz workflow
-        for fname in ("release.yml", "ci.yml", "nightly.yml") + (("pages.yml",) if os.path.exists(os.path.join(WORKFLOWS, "pages.yml"))
+        for fname in ("release.yml", "ci.yml", "nightly.yml", "r-package.yml") + (("pages.yml",) if os.path.exists(os.path.join(WORKFLOWS, "pages.yml"))
                                           else ()):
             text = _read(".github", "workflows", fname)
             uses = re.findall(r"uses:\s*(\S+)", text)
@@ -169,7 +169,7 @@ class TestReleaseWorkflow(unittest.TestCase):
         self.assertEqual(wf["permissions"], {"contents": "read"})
         self.assertIn("group", wf["concurrency"])
         self.assertEqual(wf["env"]["FUZZ_SEED"], "${{ inputs.seed || github.run_number }}")
-        self.assertEqual(set(wf["jobs"]), {"pal2nal-fuzz", "engine-fuzz", "sanitizers"})
+        self.assertEqual(set(wf["jobs"]), {"pal2nal-fuzz", "engine-fuzz", "sanitizers", "tsan"})
         for name, job in wf["jobs"].items():
             self.assertIsInstance(job.get("timeout-minutes"), int, name)
             self.assertNotIn("permissions", job, name)
