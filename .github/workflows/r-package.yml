@@ -32,7 +32,8 @@ concurrency:
 jobs:
   vendored-sources:
     # packaging/r/coalr/src/coal must be cpp/src byte for byte (with the header scripts/sync_r_sources.py writes):
-    # a change to the engine that was not synced fails here, before three systems compile a stale copy.
+    # a change to the engine that was not synced fails here, before three systems compile a stale copy (the check
+    # job needs this one).
     name: Vendored C++ sources are in sync with cpp/src
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -48,7 +49,19 @@ jobs:
     # R CMD check --as-cran --no-manual; a WARNING fails. R release on the three systems, and the previous release
     # on Linux. The tests that need the coal command line, DIAMOND or orthologr's example skip here (they compare
     # with programs this job does not install); the stored references of gestimator and seqinr::kaks are checked.
+    #
+    # r-lib/actions v2.14.0, not older (the first run of this workflow, with v2.9.0, failed on two systems):
+    #   * Linux: ubuntu-latest is an Ubuntu whose sudo (sudo-rs) ignores `-E`, so setup-r-dependencies' "Install pak"
+    #     ran R without R_LIB_FOR_PAK ("dir.create(...): zero-length 'path' argument"). Since v2.13.0 the action
+    #     switches back to the classic sudo of the image (/usr/bin/sudo.ws) first.
+    #   * Windows: setup-r started the Rtools45 installer, which never returned; the job was cancelled at its
+    #     time limit. v2.9.0 is older than Rtools45: to decide whether Rtools is there it looks for C:\Rtools44,
+    #     and the installer stops at a message box when Rtools is installed already (the action's own comment).
+    #     Since v2.11.3 an installed Rtools45 is recognised and the installer is not run. (The cause is read from
+    #     the log and the action's source, not reproduced.)
+    # The setup step has a time limit of its own, so an installer that waits for a click costs minutes, not the job's.
     name: R CMD check, R ${{ matrix.r }} on ${{ matrix.os }}
+    needs: vendored-sources
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     strategy:
@@ -63,16 +76,20 @@ jobs:
       R_KEEP_PKG_SOURCE: "yes"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-      - uses: r-lib/actions/setup-r@929c772977a3a13c8733b363bf5a2f685c25dd91  # v2.9.0
+      - uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05  # v2.14.0
+        timeout-minutes: 15
         with:
           r-version: ${{ matrix.r }}
           use-public-rspm: true
-      - uses: r-lib/actions/setup-r-dependencies@929c772977a3a13c8733b363bf5a2f685c25dd91  # v2.9.0
+      # Imports, LinkingTo and Suggests of packaging/r/coalr/DESCRIPTION (Rcpp, testthat, reticulate, seqinr,
+      # Biostrings from Bioconductor) and rcmdcheck, installed by pak; cached by the action per system and R version.
+      - uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05  # v2.14.0
+        timeout-minutes: 20
         with:
           working-directory: packaging/r/coalr
           extra-packages: any::rcmdcheck
           needs: check
-      - uses: r-lib/actions/check-r-package@929c772977a3a13c8733b363bf5a2f685c25dd91  # v2.9.0
+      - uses: r-lib/actions/check-r-package@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05  # v2.14.0
         with:
           working-directory: packaging/r/coalr
           args: 'c("--no-manual", "--as-cran")'

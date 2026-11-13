@@ -513,6 +513,12 @@ class TestRPackageWorkflow(unittest.TestCase):
         self.assertEqual(sorted(rows), [("macos-latest", "release"), ("ubuntu-latest", "oldrel-1"),
                                         ("ubuntu-latest", "release"), ("windows-latest", "release")])
         self.assertIn("r-version: ${{ matrix.r }}", job)
+        # r-lib/actions v2.14.0: v2.9.0 failed on ubuntu-latest (pak installed through a sudo that ignores -E) and
+        # hung on windows-latest (in the Rtools45 installer, which v2.9.0 predates), PR #55
+        self.assertEqual(job.count("@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05  # v2.14.0"), 3)
+        self.assertIn("    needs: vendored-sources\n", job)
+        setup = job.split("r-lib/actions/setup-r@", 1)[1].split("- uses:", 1)[0]
+        self.assertRegex(setup, r"timeout-minutes: \d+\n")       # an installer that waits for a click: minutes
         self.assertIn('"--as-cran"', job)
         self.assertIn('"--no-manual"', job)
         self.assertIn("""error-on: '"warning"'""", job)
