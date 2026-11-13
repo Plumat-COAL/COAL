@@ -33,3 +33,27 @@ Give the tools **absolute paths**. `codon_align` returns `completed` (COAL finis
 (`python -m coal_app`) also serves the tools at `http://127.0.0.1:7860/gradio_api/mcp/sse`; the Windows app does
 not by default (`COAL.exe --mcp`). Agent instructions: `.claude/skills/coal/SKILL.md`; a stage demo:
 `demo/mcp_demo.md`.
+
+## Scope: codon alignment only
+
+The MCP server (and the GUI it belongs to) has two tools, `codon_align` and `explain_report`. **Ka/Ks (dN/dS) and
+`coal pipeline` are not MCP tools**: an agent that is asked for dN/dS should run the `coal` command line
+(`coal dnds`, `coal kaks`, `coal pipeline pairs` / `clusters`; [kaks.md](kaks.md), [pipeline.md](pipeline.md)) if
+it has a shell, or tell the person the command. The server's instructions say so, so that an agent does not try
+to get dN/dS out of `codon_align`.
+
+## Planned: tools for Ka/Ks and the pipeline
+
+Not built yet (a proposal, written down so that the names and shapes are settled before the code):
+
+| Tool | Arguments | Returns |
+|---|---|---|
+| `dnds_pairs` | `codon_alignment` (path; pairs `all` or `consecutive`), or `cds_a`, `cds_b` and `pairs` (paths: two CDS files and a two-column table of IDs); `methods` (default `["YN"]`), `codontable`, `min_codons`, `max_ds`, `save_as` | `completed`, `output_path` (the pair table, `coal.dnds_pipeline.PAIR_COLUMNS`), `counts` by status, `flagged`, `cite` (keys and references), `next_step` |
+| `pipeline_pairs` | `query`, `subject` (CDS files), `out_dir`, `longest_isoform`, `gene_map`, `methods`, `aligner`, `threads` | the summary of `report.json`: `status`, `exit_code`, `counts`, `warnings`, `outputs` (paths), `cite`, `report_path` |
+
+Both would wrap `coal.dnds_pipeline` ([python-api.md](python-api.md#dnds-and-the-pipeline)): `codon_dnds` /
+`run_pairs`, which return instead of raising for a failed run, so the tool result can carry the report's `error`.
+Open points: `pipeline_pairs` needs DIAMOND on the machine (the tool would report `find_diamond()` and offer
+`install_diamond()` only when asked), a run can take minutes (progress notifications, or a job handle), and the
+tools write into a folder the person names (`out_dir` / `save_as`), never elsewhere. A cluster-mode tool would
+follow the same shape.

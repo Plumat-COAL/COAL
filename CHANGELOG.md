@@ -375,6 +375,12 @@ entry under "Added", not under "Fixed".
 
 ### Changed
 
+- **The app and its MCP server say that they cover codon alignment only.** The app's README, the GUI's About
+  section and the MCP server's instructions now state that Ka/Ks (dN/dS) and the pipeline are in the `coal` command
+  line (`coal dnds`, `coal kaks`, `coal pipeline`), so that neither a person nor an AI agent looks for them in
+  the app. No tool changed. docs/mcp.md has the proposal for the MCP tools `dnds_pairs` and `pipeline_pairs`
+  (planned, not built).
+
 - **Licence: GPL-3.0-only from the next release.** COAL (the Python and C++ engines, the `pal2nal` drop-in, the app
   and everything else in this repository) is now under the GNU General Public License, version 3 only (`LICENSE`,
   `NOTICE`; package metadata, `CITATION.cff`, the Bioconda recipe, the website and the Windows app say so). **0.5.0
