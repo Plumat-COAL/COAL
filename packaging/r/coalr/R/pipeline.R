@@ -75,7 +75,7 @@ read_tsv <- function(path) {
 
 pipeline_result <- function(res, out_dir, keep) {
   outputs <- res$outputs
-  tables <- lapply(outputs[setdiff(names(outputs), c("report", "dnds_kaks", "codon_alignments"))], read_tsv)
+  tables <- lapply(outputs[setdiff(names(outputs), c("report", "dnds_kaks", "codon_alignments", "protein_alignments"))], read_tsv)
   for (v in intersect(c("dnds", "cluster_summary", "failed", "unpaired"), names(tables))) {
     if (!is.null(tables[[v]]) && "note" %in% names(tables[[v]])) tables[[v]]$note[is.na(tables[[v]]$note)] <- ""
   }

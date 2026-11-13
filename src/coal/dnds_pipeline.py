@@ -90,7 +90,8 @@ _EXE = ".exe" if os.name == "nt" else ""
 # Files and folders a run writes into the output folder (besides work/): whatever an earlier run left of them is
 # removed when a run starts, so that the folder never mixes two runs (a dnds.kaks or codon_alignments.fasta of a
 # run with other options, the dnds.tsv.tmp of a killed run).
-_RUN_OUTPUTS = ("dnds.tsv", "dnds.tsv.tmp", "dnds.kaks", "codon_alignments.fasta", "cluster_summary.tsv",
+_RUN_OUTPUTS = ("dnds.tsv", "dnds.tsv.tmp", "dnds.kaks", "codon_alignments.fasta", "protein_alignments.fasta",
+                "cluster_summary.tsv",
                 "cluster_summary.tsv.tmp", "genes.tsv", "orthologs.tsv", "unpaired.tsv", "clusters.tsv",
                 "realign.tsv", "realign.tsv.body", "failed.tsv", "report.json")
 
@@ -448,7 +449,7 @@ class _Run:
         self.gene_failures: dict = {}
         self.lock = None        # <out_dir>.coal-lock while this run owns the output folder
         self._inputs: list[tuple[str, str]] = []
-        self._earlier: tuple[set, bool] = (set(), False)
+        self._earlier: tuple[set, set] = (set(), set())
         self.pairs_in_place = False   # --pairs is DIR/orthologs.tsv itself: read, not written again
         self._engine = None     # the running coal-cpp codon-dnds (killed if the run is interrupted)
 
@@ -530,6 +531,8 @@ class _Run:
                 names.append("unpaired.tsv")
             if a.keep_alignments:
                 names.append("codon_alignments.fasta")
+            if a.keep_protein_alignments:
+                names.append("protein_alignments.fasta")
         else:
             names += ["cluster_summary.tsv", "cluster_summary.tsv.tmp"]
             if not a.clusters:
@@ -556,7 +559,8 @@ class _Run:
                 continue
             raise PipelineError(f"{opt} {p} is a file this run writes: nothing was changed. Use another output "
                                 "folder, or move the input out of this one")
-        inside = (os.path.realpath(self.work), os.path.realpath(self.path("codon_alignments")))
+        inside = (os.path.realpath(self.work), os.path.realpath(self.path("codon_alignments")),
+                  os.path.realpath(self.path("protein_alignments")))
         for opt, inp in self._inputs:
             real = os.path.realpath(inp)
             for d in inside:
@@ -564,18 +568,24 @@ class _Run:
                     raise PipelineError(f"{opt} {inp} is inside {d}, a folder this run writes: nothing was "
                                         "changed. Use another output folder, or move the input out of it")
 
-    def _earlier_outputs(self) -> tuple[set, bool]:
+    # the folders of per-cluster alignment files (cluster mode): name -> the option that writes it
+    _ALIGNMENT_DIRS = {"codon_alignments": "keep_alignments", "protein_alignments": "keep_protein_alignments"}
+
+    def _earlier_outputs(self) -> tuple[set, set]:
         """What an earlier run is known to have written here: the names in work/outputs.json (written when a
         run starts, so a killed run counts), or, for a run of a version without that file, the outputs its
-        report.json lists. Second value: the .fasta files of codon_alignments/ are that run's (a cluster run with
-        --keep-alignments)."""
+        report.json lists. Second value: the folders (codon_alignments, protein_alignments) whose .fasta files
+        are that run's (a cluster run with --keep-alignments / --keep-protein-alignments)."""
         names: set = set()
+        dirs: set = set()
         codon_dir = False
         try:
             with open(self.wpath("outputs.json"), encoding="utf-8", errors="backslashreplace") as fh:
                 rec = json.load(fh)
             names = {n for n in rec["files"] if isinstance(n, str)}
             codon_dir = rec.get("codon_alignments_dir") is True
+            if rec.get("protein_alignments_dir") is True:
+                dirs.add("protein_alignments")
         except (OSError, ValueError, KeyError, TypeError):
             try:
                 with open(self.path("report.json"), encoding="utf-8", errors="backslashreplace") as fh:
@@ -587,21 +597,25 @@ class _Run:
                     names |= {n + ".tmp" for n in ("dnds.tsv", "cluster_summary.tsv") if n in names}
             except (OSError, ValueError):
                 pass
-        d = self.path("codon_alignments")
-        codon_dir = codon_dir and os.path.isdir(d) and not os.path.islink(d)
-        if self.a.keep_alignments and self.mode == "clusters" and os.path.lexists(d) and not codon_dir:
-            # not COAL's: the engine would write its files among (or over) what the folder holds
-            if not os.path.isdir(d) or os.path.islink(d) or os.listdir(d):
-                raise PipelineError(f"{d} exists and was not written by a COAL run: --keep-alignments writes one "
-                                    "file per cluster there and would mix with (or replace) what it holds. "
-                                    "Nothing was changed: move it away or use another output folder")
-        return {n for n in names if n in _RUN_OUTPUTS}, codon_dir
+        if codon_dir:
+            dirs.add("codon_alignments")
+        for name, opt in self._ALIGNMENT_DIRS.items():
+            d = self.path(name)
+            if not (os.path.isdir(d) and not os.path.islink(d)):
+                dirs.discard(name)
+            if getattr(self.a, opt) and self.mode == "clusters" and os.path.lexists(d) and name not in dirs:
+                # not COAL's: the engine would write its files among (or over) what the folder holds
+                if not os.path.isdir(d) or os.path.islink(d) or os.listdir(d):
+                    raise PipelineError(f"{d} exists and was not written by a COAL run: --{opt.replace('_', '-')} "
+                                        "writes one file per cluster there and would mix with (or replace) what "
+                                        "it holds. Nothing was changed: move it away or use another output folder")
+        return {n for n in names if n in _RUN_OUTPUTS}, dirs
 
     def _clear_earlier_outputs(self) -> None:
         """Remove the files an earlier COAL run wrote into this folder, so the folder holds this run's results
         only. Only files a run is known to have written are removed (_earlier_outputs), never one of this run's
-        inputs, and never a file COAL has no record of: a `clusters.tsv` or a codon_alignments/ folder that was
-        the user's stays. --resume keeps the stage outputs it can reuse (clusters.tsv, realign.tsv; everything
+        inputs, and never a file COAL has no record of: a `clusters.tsv` or a codon_alignments/ (or
+        protein_alignments/) folder that was the user's stays. --resume keeps the stage outputs it can reuse (clusters.tsv, realign.tsv; everything
         under work/ is kept anyway)."""
         a = self.a
         keep = set()
@@ -609,14 +623,15 @@ class _Run:
             keep.add("clusters.tsv")
             if a.realign:
                 keep.add("realign.tsv")
-        known, codon_dir = self._earlier
-        d = self.path("codon_alignments")
+        known, dirs = self._earlier
         try:
             for name in sorted(known):
                 p = self.path(name)
                 if name not in keep and (os.path.isfile(p) or os.path.islink(p)) and self._is_input(p) is None:
                     os.remove(p)
-            if codon_dir and os.path.isdir(d) and not os.path.islink(d):
+            for d in (self.path(name) for name in sorted(dirs)):
+                if not os.path.isdir(d) or os.path.islink(d):
+                    continue
                 for n in os.listdir(d):
                     p = os.path.join(d, n)
                     if n.endswith(".fasta") and self._is_input(p) is None:
@@ -634,7 +649,9 @@ class _Run:
         tmp = self.wpath("outputs.json.tmp")
         with open(tmp, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as fh:
             json.dump({"coal_version": __version__, "files": sorted(planned),
-                       "codon_alignments_dir": bool(self.a.keep_alignments and self.mode == "clusters")}, fh)
+                       "codon_alignments_dir": bool(self.a.keep_alignments and self.mode == "clusters"),
+                       "protein_alignments_dir": bool(self.a.keep_protein_alignments and self.mode == "clusters")},
+                      fh)
             fh.write("\n")
         os.replace(tmp, self.wpath("outputs.json"))
 
@@ -840,6 +857,14 @@ class _Run:
                 d = self.outputs["codon_alignments"] = self.path("codon_alignments")
                 os.makedirs(d, exist_ok=True)   # (an earlier run's files were removed when this run started)
                 cmd += ["--codon-dir", d]
+        if a.keep_protein_alignments:   # the protein alignments the codons were threaded on, in the same layout
+            if self.mode == "pairs":
+                self.outputs["protein_alignments"] = self.path("protein_alignments.fasta")
+                cmd += ["--protein-out", self.outputs["protein_alignments"]]
+            else:
+                d = self.outputs["protein_alignments"] = self.path("protein_alignments")
+                os.makedirs(d, exist_ok=True)
+                cmd += ["--protein-dir", d]
         return cmd, out, fail
 
     def run_engine(self, group_column: str | None, feed) -> dict:
@@ -1537,6 +1562,10 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--keep-alignments", action="store_true",
                    help="also write the codon alignments (pairs: DIR/codon_alignments.fasta; clusters: one file per "
                         "cluster in DIR/codon_alignments/)")
+    g.add_argument("--keep-protein-alignments", action="store_true",
+                   help="also write the protein alignments the codon alignments are made from (pairs: "
+                        "DIR/protein_alignments.fasta; clusters: one file per cluster in DIR/protein_alignments/), "
+                        "with the same records in the same order as --keep-alignments writes")
     g.add_argument("--report", metavar="FILE.json", help="the JSON run report (default: DIR/report.json)")
     g.add_argument("--digits", type=int, default=8, metavar="N", help="significant digits (default 8)")
     g.add_argument("-q", "--quiet", action="store_true", help="no progress or summary on stderr")
@@ -1779,7 +1808,7 @@ def _namespace(mode: str, required: list[str], options: dict) -> argparse.Namesp
 def run_pairs(query, subject, out_dir, **options) -> PipelineResult:
     """Pair mode from Python: the options of `coal pipeline pairs` as keyword arguments (method=["YN", "NG"],
     ortho="rbh", aligner="nw", pairs=None, jobs=0, codontable=1, kaks_format=False, keep_alignments=False,
-    resume=False, quiet=False, ...). Never raises for a failed run: see PipelineResult.exit_code and .report."""
+    keep_protein_alignments=False, resume=False, quiet=False, ...). Never raises for a failed run: see PipelineResult.exit_code and .report."""
     a = _namespace("pairs", ["--query", os.fspath(query), "--subject", os.fspath(subject), "-o", os.fspath(out_dir)],
                    options)
     return _execute("pairs", a, None)

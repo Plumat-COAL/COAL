@@ -107,7 +107,14 @@
         }
       }
     },
-    "outputs": {"type": "object"}
+    "outputs": {
+      "type": "object",
+      "description": "The files and folders this run wrote, as paths relative to out_dir. Keys: dnds, genes, failed, and when they apply orthologs, unpaired, clusters, realign, cluster_summary, kaks (--kaks-format), codon_alignments (--keep-alignments: codon_alignments.fasta in pair mode, the folder codon_alignments in cluster mode), protein_alignments (--keep-protein-alignments: protein_alignments.fasta, or the folder protein_alignments, with the same records in the same order as codon_alignments)",
+      "properties": {
+        "codon_alignments": {"type": "string"},
+        "protein_alignments": {"type": "string"}
+      }
+    }
   },
   "$defs": {
     "tool": {

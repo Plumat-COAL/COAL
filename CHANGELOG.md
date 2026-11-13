@@ -70,6 +70,15 @@ Packaging, command line and continuous integration (2026-11-13, not yet released
   lock (one holder each time), Python and C++ starts mixed, each engine refused by the other's lock. The
   Windows code path (process handle, `CreateHardLink`) is compiled by CI and not exercised by these tests there.
 
+- **`coal pipeline ... --keep-protein-alignments`** writes the protein alignments the codon alignments are made
+  from: `protein_alignments.fasta` in pair mode (records 1+2, 3+4, ...), one file per cluster in
+  `protein_alignments/` in cluster mode, with the same records, order and file names as `--keep-alignments`
+  writes, so a codon row is three times its protein row, column for column. Until now the protein alignments
+  could not be obtained from the pipeline (review of 2026-11-12). The folder is recorded in `work/outputs.json`
+  (`protein_alignments_dir`), so the next run removes that run's files and nothing else; a `protein_alignments/`
+  that no COAL run wrote is never written into. The engine step has `coal codon-dnds --protein-out FILE` and
+  `--protein-dir DIR`; the report's `outputs` has `protein_alignments` (docs/pipeline.md, the schema).
+
 Found by the independent review of 2026-11-12 of the Ka/Ks engine, the pipeline and the R package (all in code
 not yet released):
 

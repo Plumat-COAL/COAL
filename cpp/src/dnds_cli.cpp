@@ -73,7 +73,7 @@ const char* CODON_DNDS_HELP =
     "`coal pipeline`, docs/pipeline.md). GROUPS (a file, or standard input when -i is - or absent) is\n"
     "tab-separated, one group after the other:\n"
     "  G <group id> <all|rep|list> [nocodon]  start of a group; which pairs: all, member 1 against the others,\n"
-    "                                  P lines; nocodon: do not write this group's codon alignment\n"
+    "                                  P lines; nocodon: do not write this group's codon (or protein) alignment\n"
     "  M <id> <CDS> [<protein row>]    a member; rows (when given, for every member) are the protein alignment\n"
     "  F <id> <reason>                 a member already known to be unusable (its pairs get status error)\n"
     "  H <qstart> <qend> <sstart> <send> <qseq_gapped> <sseq_gapped>   2 members: use this DIAMOND hit\n"
@@ -95,6 +95,8 @@ const char* CODON_DNDS_HELP =
     "  -j, --jobs N     threads (default: all hardware threads)\n"
     "  --codon-out FILE the codon alignments, one after the other (pairs: records 1+2, 3+4, ...)\n"
     "  --codon-dir DIR  one codon alignment file per group in DIR\n"
+    "  --protein-out FILE, --protein-dir DIR  the protein alignments the codon alignments were made from, in\n"
+    "                   the same layout: the same groups, records and order (a codon row is 3 x its protein row)\n"
     "  --kaks-out FILE  the same results in KaKs_Calculator's format (pairs named seq1&seq2)\n"
     "  --failures FILE  genes and groups that could not be used: group seq code message\n"
     "  --digits N       significant digits (default 8)\n"
@@ -371,7 +373,7 @@ int translate_main_(const std::vector<std::string>& argv) {
 
 // ------------------------------------------------------------------------------------------------ codon-dnds
 struct Cli {
-    std::string in, out, group_column, codon_out, codon_dir, kaks_out, failures;
+    std::string in, out, group_column, codon_out, codon_dir, protein_out, protein_dir, kaks_out, failures;
     dnds::Options opt;
     int jobs = 0;
     int digits = 8;
@@ -527,6 +529,10 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
             if (!it.value(c.codon_out)) return usage(prog, s + ": expected one argument");
         } else if (s == "--codon-dir") {
             if (!it.value(c.codon_dir)) return usage(prog, s + ": expected one argument");
+        } else if (s == "--protein-out") {
+            if (!it.value(c.protein_out)) return usage(prog, s + ": expected one argument");
+        } else if (s == "--protein-dir") {
+            if (!it.value(c.protein_dir)) return usage(prog, s + ": expected one argument");
         } else if (s == "--kaks-out") {
             if (!it.value(c.kaks_out)) return usage(prog, s + ": expected one argument");
         } else if (s == "--failures") {
@@ -602,7 +608,7 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
     const std::vector<Method>& ms = c.opt.methods;
     const bool from_stdin = c.in.empty() || c.in == "-";
     if (!from_stdin)
-        for (const std::string* o : {&c.out, &c.codon_out, &c.kaks_out, &c.failures})
+        for (const std::string* o : {&c.out, &c.codon_out, &c.protein_out, &c.kaks_out, &c.failures})
             if (!o->empty() && same_file(c.in, *o))
                 return usage(prog, "the output file " + *o + " is the input file: choose another name");
     try {
@@ -619,9 +625,10 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
             f.open(path, std::ios::binary);
             if (!f) throw InputError("cannot write '" + path + "'", "file_error");
         };
-        std::ofstream fout, fcodon, fkaks, ffail;
+        std::ofstream fout, fcodon, fprot, fkaks, ffail;
         open_out(fout, c.out);
         open_out(fcodon, c.codon_out);
+        open_out(fprot, c.protein_out);
         open_out(fkaks, c.kaks_out);
         open_out(ffail, c.failures);
         if (!c.group_column.empty()) fout << clean(c.group_column) << '\t';
@@ -629,7 +636,7 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
                 "prot_aln_length\tprot_identity\tstatus\tnote\n";
         if (fkaks.is_open()) fkaks << kaks_compat_header();
         if (ffail.is_open()) ffail << "group\tseq\tcode\tmessage\n";
-        std::unordered_map<std::string, int> used_names;  // --codon-dir file names
+        std::unordered_map<std::string, int> used_names;  // --codon-dir / --protein-dir file names
 
         long long n_groups = 0, n_pairs = 0, n_status[kaks::STATUS_COUNT] = {}, n_member_fail = 0, n_group_fail = 0;
         const int nthreads = resolve_jobs(c.jobs);
@@ -798,23 +805,40 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
                     fcodon << buf;
                     if (!fcodon) throw InputError("write error on " + c.codon_out, "file_error");
                 }
-                if (!c.codon_dir.empty() && whole) {
+                // The protein alignment the codon alignment was threaded on: the same members (those with a
+                // codon row), in the same order, so record k of one file is record k of the other.
+                const bool prot = whole && item.r.protein_rows.size() == g.members.size();
+                if (fprot.is_open() && prot) {
+                    std::string buf;
+                    for (size_t k = 0; k < g.members.size(); ++k) {
+                        if (item.r.members[k].codon_row.empty()) continue;
+                        buf += '>' + g.members[k].id + '\n' + item.r.protein_rows[k] + '\n';
+                    }
+                    fprot << buf;
+                    if (!fprot) throw InputError("write error on " + c.protein_out, "file_error");
+                }
+                if ((!c.codon_dir.empty() || !c.protein_dir.empty()) && whole) {
                     std::string name = safe_name(g.id);
                     int& seen = used_names[name];
                     if (seen++ > 0) name += "~" + std::to_string(seen);
-                    const std::string path = c.codon_dir + "/" + name + ".fasta";
-                    std::ofstream f(path, std::ios::binary);
-                    if (!f) throw InputError("cannot write '" + path + "'", "file_error");
-                    for (size_t k = 0; k < g.members.size(); ++k) {
-                        if (item.r.members[k].codon_row.empty()) continue;
-                        f << '>' << g.members[k].id << '\n' << item.r.members[k].codon_row << '\n';
+                    for (int what = 0; what < 2; ++what) {   // 0: codon, 1: protein (the same file name in both)
+                        const std::string& dir = what == 0 ? c.codon_dir : c.protein_dir;
+                        if (dir.empty() || (what == 1 && !prot)) continue;
+                        const std::string path = dir + "/" + name + ".fasta";
+                        std::ofstream f(path, std::ios::binary);
+                        if (!f) throw InputError("cannot write '" + path + "'", "file_error");
+                        for (size_t k = 0; k < g.members.size(); ++k) {
+                            if (item.r.members[k].codon_row.empty()) continue;
+                            f << '>' << g.members[k].id << '\n'
+                              << (what == 0 ? item.r.members[k].codon_row : item.r.protein_rows[k]) << '\n';
+                        }
+                        f.flush();
+                        if (!f) throw InputError("write error on " + path, "file_error");
                     }
-                    f.flush();
-                    if (!f) throw InputError("write error on " + path, "file_error");
                 }
             }
         }
-        for (std::ofstream* f : {&fout, &fcodon, &fkaks, &ffail}) {
+        for (std::ofstream* f : {&fout, &fcodon, &fprot, &fkaks, &ffail}) {
             if (!f->is_open()) continue;
             f->flush();
             if (!*f) throw InputError("write error", "file_error");

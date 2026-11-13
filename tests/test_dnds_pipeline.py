@@ -1311,6 +1311,154 @@ class PairsMsaTool(PipelineCase):
 
 
 # ---------------------------------------------------------------------------------------------- cluster mode
+_STANDARD = dict(zip((a + b + c for a in "TCAG" for b in "TCAG" for c in "TCAG"),
+                     "FFLLSSSSYY**CC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG"))
+
+
+@needs_cpp
+class ProteinAlignments(PipelineCase):
+    """--keep-protein-alignments: the protein alignments the codon alignments were threaded on, in the layout of
+    --keep-alignments (pairs: protein_alignments.fasta; clusters: protein_alignments/<cluster>.fasta)."""
+
+    def inputs(self):
+        q, s = self.tmp / "q.fa", self.tmp / "s.fa"
+        allq, alls = read_fasta(Q), read_fasta(S)
+        q.write_text("".join(f">{a}\n{allq[a]}\n" for a, _ in PLAIN), encoding="utf-8")
+        s.write_text("".join(f">{b}\n{alls[b]}\n" for _, b in PLAIN), encoding="utf-8")
+        return q, s, self.pairs_file(PLAIN)
+
+    def assert_threaded(self, protein: Path, codon: Path) -> int:
+        """Record k of the protein file is record k of the codon file, column for column: a gap against `---`,
+        a residue against the codon that codes for it. Returns the number of records."""
+        prot = Path(protein).read_text(encoding="utf-8").splitlines()
+        cod = Path(codon).read_text(encoding="utf-8").splitlines()
+        self.assertEqual(prot[0::2], cod[0::2])
+        self.assertTrue(prot and all(h.startswith(">") for h in prot[0::2]))
+        for name, p, c in zip(prot[0::2], prot[1::2], cod[1::2]):
+            self.assertEqual(len(c), 3 * len(p), name)
+            for k, aa in enumerate(p):
+                codon_ = c[3 * k:3 * k + 3]
+                self.assertEqual(aa == "-", codon_ == "---", (name, k))
+                if aa != "-":
+                    self.assertEqual(_STANDARD.get(codon_.upper().replace("U", "T"), "X"), aa, (name, k))
+        return len(prot) // 2
+
+    def test_pairs(self):
+        q, s, pf = self.inputs()
+        out = self.tmp / "out"
+        res = P.run_pairs(q, s, out, pairs=pf, quiet=True, keep_alignments=True, keep_protein_alignments=True)
+        self.assertEqual(res.exit_code, 0)
+        self.check_report(res)
+        self.assertEqual(res.outputs["protein_alignments"], str(out / "protein_alignments.fasta"))
+        self.assertEqual(res.report["outputs"]["protein_alignments"], "protein_alignments.fasta")
+        self.assertIs(res.report["parameters"]["keep_protein_alignments"], True)
+        n = self.assert_threaded(out / "protein_alignments.fasta", out / "codon_alignments.fasta")
+        self.assertEqual(n, 2 * len(PLAIN))
+        names = (out / "protein_alignments.fasta").read_text(encoding="utf-8").splitlines()[0::2]
+        self.assertEqual([x[1:] for x in names], [g for pair in PLAIN for g in pair])
+        # the rows are the alignment the table's prot_aln_length counts
+        rows = read_tsv(res.outputs["dnds"])
+        lens = [len(x) for x in (out / "protein_alignments.fasta").read_text(encoding="utf-8").splitlines()[1::4]]
+        self.assertEqual([int(r["prot_aln_length"]) for r in rows], lens)
+        rec = json.loads((out / "work" / "outputs.json").read_text(encoding="utf-8"))
+        self.assertIn("protein_alignments.fasta", rec["files"])
+        self.assertIs(rec["protein_alignments_dir"], False)
+        # alone (no codon alignments), from the command line; then a run without it removes the file
+        first = (out / "protein_alignments.fasta").read_bytes()
+        with redirect_stderr(io.StringIO()):
+            rc = P.main(["pairs", "--query", str(q), "--subject", str(s), "--pairs", str(pf), "-o", str(out), "-q",
+                         "--keep-protein-alignments"])
+        self.assertEqual(rc, 0)
+        self.assertEqual((out / "protein_alignments.fasta").read_bytes(), first)
+        self.assertFalse((out / "codon_alignments.fasta").exists())
+        res = P.run_pairs(q, s, out, pairs=pf, quiet=True)
+        self.assertEqual(res.exit_code, 0)
+        self.assertFalse((out / "protein_alignments.fasta").exists())
+        self.assertNotIn("protein_alignments", res.report["outputs"])
+
+    def test_pairs_with_compared_terminal_stops(self):
+        """--terminal-stops compare (orthologr's reading) changes what Ka/Ks compares, not the alignment files:
+        they end before the terminal stop codons either way."""
+        q, s = self.tmp / "q.fa", self.tmp / "s.fa"
+        q.write_text(">a\nATGGCTAAAGGTCTGTTTGATCCGGAATGGTAA\n", encoding="utf-8")
+        s.write_text(">b\nATGGCAAAGGGTTTGTTCCCGGAGTGGTGA\n", encoding="utf-8")
+        for stops, last in (("drop", "W"), ("compare", "W")):
+            out = self.tmp / stops
+            res = P.run_pairs(q, s, out, pairs=self.pairs_file([("a", "b")]), quiet=True, method=["Comeron"],
+                              comeron_flavour="gestimator", terminal_stops=stops, keep_alignments=True,
+                              keep_protein_alignments=True)
+            self.assertEqual(res.exit_code, 0, stops)
+            self.assertEqual(self.assert_threaded(out / "protein_alignments.fasta", out / "codon_alignments.fasta"), 2)
+            rows = (out / "protein_alignments.fasta").read_text(encoding="utf-8").splitlines()
+            self.assertEqual((rows[1][-1], rows[3][-1]), (last, last), stops)
+            self.assertIn("-", rows[3])
+
+    def test_clusters(self):
+        """Clusters aligned as a whole get one file each (here: clusters of two members, aligned by the engine);
+        the folder is recorded in work/outputs.json, so the next run removes its files; a folder of that name
+        that no COAL run wrote is not written into."""
+        out = self.tmp / "out"
+        clu = self.tmp / "clusters.tsv"
+        ids = list(read_fasta(FAM))
+        clu.write_text(f"{ids[0]}\t{ids[0]}\n{ids[0]}\t{ids[1]}\n{ids[2]}\t{ids[2]}\n{ids[2]}\t{ids[3]}\n",
+                       encoding="utf-8")
+
+        def run(**kw):
+            return P.run_clusters(FAM, out, clusters=clu, quiet=True, **kw)
+        res = run(keep_alignments=True, keep_protein_alignments=True)
+        self.assertIn(res.exit_code, (0, 2))
+        self.check_report(res)
+        self.assertEqual(res.outputs["protein_alignments"], str(out / "protein_alignments"))
+        files = sorted(os.listdir(out / "protein_alignments"))
+        self.assertEqual(files, sorted(os.listdir(out / "codon_alignments")))
+        self.assertEqual(len(files), 2)
+        for f in files:
+            self.assertEqual(self.assert_threaded(out / "protein_alignments" / f, out / "codon_alignments" / f), 2)
+        rec = json.loads((out / "work" / "outputs.json").read_text(encoding="utf-8"))
+        self.assertIs(rec["protein_alignments_dir"], True)
+        (out / "protein_alignments" / "notes.txt").write_text("kept\n", encoding="utf-8")
+        res = run()
+        self.assertIn(res.exit_code, (0, 2))
+        self.assertEqual(os.listdir(out / "protein_alignments"), ["notes.txt"])    # COAL's files gone, the user's kept
+        self.assertFalse((out / "codon_alignments").exists())
+        dnds = (out / "dnds.tsv").read_bytes()
+        with redirect_stderr(io.StringIO()) as err:
+            res = run(keep_protein_alignments=True)                                 # not COAL's folder any more
+        self.assertEqual(res.exit_code, 1)
+        self.assertIn("protein_alignments exists and was not written by a COAL run: --keep-protein-alignments",
+                      err.getvalue())
+        self.assertEqual((out / "dnds.tsv").read_bytes(), dnds)
+        self.assertEqual(os.listdir(out / "protein_alignments"), ["notes.txt"])
+        # an input inside the folder the run writes is refused before anything changes
+        (out / "protein_alignments" / "cds.fasta").write_bytes(FAM.read_bytes())
+        with redirect_stderr(io.StringIO()) as err:
+            res = P.run_clusters(out / "protein_alignments" / "cds.fasta", out, clusters=clu, quiet=True)
+        self.assertEqual(res.exit_code, 1)
+        self.assertIn("a folder this run writes", err.getvalue())
+
+    def test_engine_options(self):
+        """`coal-cpp codon-dnds --protein-out / --protein-dir`: the same groups as --codon-out / --codon-dir; a
+        group marked nocodon and a group that failed have no protein alignment either."""
+        groups = (b"G\tg1\tall\nM\ta\tATGGCTAAAGGTCTGTTTGATCCGGAATGG\nM\tb\tATGGCAAAGGGTTTGTTCCCGGAGTGG\nE\n"
+                  b"G\tg2\tall\tnocodon\nM\tc\tATGGCTAAAGGTCTG\nM\td\tATGGCAAAGGGTTTG\nE\n"
+                  b"G\tg3\tall\nM\te\tATGGCTAAAGGTCTG\tMAKGL\nM\tf\tATGGCAAAGGGT\tMAKG-\n"
+                  b"M\tg\tATGGCAAAGGGTTTG\tMAKGL\nE\n")
+        cd, pd = self.tmp / "cd", self.tmp / "pd"
+        cd.mkdir()
+        pd.mkdir()
+        r = run_cpp("codon-dnds", "-o", self.tmp / "o.tsv", "--codon-out", self.tmp / "c.fa", "--protein-out",
+                    self.tmp / "p.fa", "--codon-dir", cd, "--protein-dir", pd, "-q", stdin=groups)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.assert_threaded(self.tmp / "p.fa", self.tmp / "c.fa"), 5)
+        self.assertEqual(sorted(os.listdir(pd)), ["g1.fasta", "g3.fasta"])
+        self.assertEqual(sorted(os.listdir(cd)), ["g1.fasta", "g3.fasta"])
+        self.assertEqual((pd / "g3.fasta").read_text(encoding="utf-8"), ">e\nMAKGL\n>f\nMAKG-\n>g\nMAKGL\n")
+        self.assertEqual(self.assert_threaded(pd / "g1.fasta", cd / "g1.fasta"), 2)
+        r = run_cpp("codon-dnds", "-o", self.tmp / "o2.tsv", "--protein-out", self.tmp / "p2.fa", "-q", stdin=groups)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual((self.tmp / "p2.fa").read_bytes(), (self.tmp / "p.fa").read_bytes())
+
+
 def recompute_summary(rows: list[dict]) -> dict:
     """{(cluster, method): expected summary cells} from dnds.tsv rows, with the statistics module."""
     out = {}

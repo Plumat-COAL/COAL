@@ -93,6 +93,7 @@ coal pipeline clusters --cds all_cds.fa --clusters deepclust.tsv -o out --max-cl
 | `-j N` | threads of DIAMOND and of the engine, and MSA processes at a time | one per CPU |
 | `--kaks-format` | also write `dnds.kaks` in KaKs_Calculator's 22-column format | off |
 | `--keep-alignments` | also write the codon alignments | off |
+| `--keep-protein-alignments` | also write the protein alignments the codon alignments are made from | off |
 | `--resume` | reuse the translation, search and clustering results in `DIR/work` when the inputs (path, size, modification time), the options and the DIAMOND version are the same | off |
 | `--install-tools` | install a missing DIAMOND / Clustal Omega / MAFFT into COAL's cache | off |
 | `--diamond PATH` | the DIAMOND to run | found automatically |
@@ -121,6 +122,8 @@ line ends. Rows are in input order (pairs: the query file's order; clusters: the
 | `dnds.kaks` | both | `--kaks-format`: the same results as KaKs_Calculator writes them, pairs named `seq1&seq2` |
 | `codon_alignments.fasta` | pairs | `--keep-alignments`: the codon alignments, records 1+2, 3+4, ... (`coal dnds --pairs consecutive` reads it) |
 | `codon_alignments/<cluster>.fasta` | clusters | `--keep-alignments`: one codon MSA per cluster (not for clusters aligned pairwise); characters other than letters, digits, `.`, `_`, `-` in the cluster ID become `_` |
+| `protein_alignments.fasta` | pairs | `--keep-protein-alignments`: the pairwise protein alignments (COAL's aligner, the MSA tool's, or DIAMOND's completed to full length, as `--aligner` says), records 1+2, 3+4, ...: the same records in the same order as `codon_alignments.fasta`, and each codon row is three times its protein row, column for column |
+| `protein_alignments/<cluster>.fasta` | clusters | `--keep-protein-alignments`: the protein MSA of each cluster as it was used (the rows of Clustal Omega / MAFFT for the members that could be used; the engine's pairwise alignment for a cluster of two), under the same file names as `codon_alignments/`; not for clusters aligned pairwise |
 | `work/` | both | proteins, DIAMOND tables, logs of every external command (`work/logs/`), the `--resume` state |
 
 **One run per folder, and one run's files only.** A run takes the lock `<out_dir>.coal-lock` (next to the real
@@ -131,19 +134,25 @@ to a process that started at another time; Linux) is replaced, by exactly one of
 written on another machine cannot be checked and is never replaced: the message names the machine and the file
 to remove if that run is gone. When a run starts, the files
 of the table above that an earlier COAL run wrote into the folder are removed (a `dnds.kaks` or
-`codon_alignments.fasta` of a run with other options, the `.fasta` files of a `codon_alignments/` that a cluster
-run with `--keep-alignments` wrote, a half-written `dnds.tsv.tmp`), so the folder never mixes two runs. COAL
+`codon_alignments.fasta` or `protein_alignments.fasta` of a run with other options, the `.fasta` files of a
+`codon_alignments/` or `protein_alignments/` that a cluster run with `--keep-alignments` /
+`--keep-protein-alignments` wrote (`work/outputs.json` records both folders), a half-written `dnds.tsv.tmp`), so the folder never mixes two runs. COAL
 removes only what a run is known to have written: each run lists the files it may write in `work/outputs.json`
 before it writes the first one (for a folder of a version without that list, the outputs named in its
 `report.json`). A file with one of those names that no run wrote (your own `clusters.tsv`, your own files in
-`codon_alignments/`) stays, files with other names are not touched, and `work/` is kept for `--resume`.
+`codon_alignments/` or `protein_alignments/`) stays, files with other names are not touched, and `work/` is kept for `--resume`.
 
 **Inputs are never removed or written.** A file given as `--query`, `--subject`, `--pairs`, `--cds`, `--clusters`
 or `--diamond` is recognised under any name (a link, another spelling of the path). If the run would write a file
-of that name (`--pairs out/dnds.tsv -o out`, `--report` onto an input, an input inside `work/` or
-`codon_alignments/`) it ends with exit 1 before anything in the folder changes; the one exception is
+of that name (`--pairs out/dnds.tsv -o out`, `--report` onto an input, an input inside `work/`,
+`codon_alignments/` or `protein_alignments/`) it ends with exit 1 before anything in the folder changes; the one exception is
 `--pairs out/orthologs.tsv`, which is read and kept as it is. `--keep-alignments` in cluster mode is refused in
-the same way when `codon_alignments/` exists, is not empty and was not written by a COAL run.
+the same way when `codon_alignments/` exists, is not empty and was not written by a COAL run, and
+`--keep-protein-alignments` when `protein_alignments/` is such a folder.
+
+The alignment files end before a terminal stop codon (also with `--terminal-stops compare`, which changes what
+Ka/Ks compares and not the files), and hold the members that could be used: a gene that failed is in
+`failed.tsv` and in neither file.
 
 ### `dnds.tsv`
 
