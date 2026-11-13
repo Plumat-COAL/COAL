@@ -7,7 +7,8 @@
 //
 //   KaKs_Calculator 2.0 (the kakscalculator2 2.0.1 sources, https://github.com/kullrich/kakscalculator2;
 //   original project https://sourceforge.net/projects/kakscalculator2/): base.cpp (Fisher's exact test, the
-//   derived output values), NG86.cpp, LWL85.cpp, LPB93.cpp, YN00.cpp and MYN.cpp.
+//   derived output values), NG86.cpp, LWL85.cpp, LPB93.cpp, YN00.cpp and MYN.cpp. (KaKs.cpp, the seventh upstream
+//   file named in NOTICE, is not used here: its header line and column order are reproduced in kaks_cli.cpp.)
 //     Copyright (C) 2009, Beijing Institute of Genomics of CAS. All rights reserved.
 //     Version 2.0: Da-Peng Wang, Yu-Bin Zhang. Version 1.0: Zhang Zhang.
 //     Modified versions 2.0.1 and 2.0.2: Kristian K Ullrich.

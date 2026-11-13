@@ -7,8 +7,9 @@ src/coal/ is a copy of COAL's cpp/src (scripts/sync_r_sources.py in the COAL rep
 src/coal/kaks.cpp and src/coal/kaks.hpp (the Ka/Ks engine) are derived from:
 
 - KaKs_Calculator 2.0 (kakscalculator2 2.0.1, https://github.com/kullrich/kakscalculator2; original project
-  https://sourceforge.net/projects/kakscalculator2/): base.cpp, KaKs.cpp, NG86.cpp, LWL85.cpp, LPB93.cpp,
-  YN00.cpp, MYN.cpp.
+  https://sourceforge.net/projects/kakscalculator2/): base.cpp (Fisher's exact test, the derived output
+  values), NG86.cpp, LWL85.cpp, LPB93.cpp, YN00.cpp, MYN.cpp. (COAL's command-line program also reproduces the
+  output header of KaKs.cpp, in kaks_cli.cpp; that file is not part of this package.)
   Copyright (C) 2009, Beijing Institute of Genomics of CAS. All rights reserved.
   Authors: Da-Peng Wang and Yu-Bin Zhang (version 2.0), Zhang Zhang (version 1.0), Kristian K Ullrich
   (modified versions 2.0.1, 2.0.2).

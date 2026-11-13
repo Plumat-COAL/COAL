@@ -19,8 +19,9 @@ the GNU General Public License, version 3. It is a modified version of their cod
 implementation; the header of cpp/src/kaks.cpp says what was changed (Chloe Newton and Keanu Murati, 2026).
 
 - KaKs_Calculator 2.0 (kakscalculator2 2.0.1, https://github.com/kullrich/kakscalculator2; original project
-  https://sourceforge.net/projects/kakscalculator2/): base.cpp, KaKs.cpp, NG86.cpp, LWL85.cpp, LPB93.cpp,
-  YN00.cpp, MYN.cpp.
+  https://sourceforge.net/projects/kakscalculator2/). In cpp/src/kaks.cpp: base.cpp (Fisher's exact test, the
+  derived output values), NG86.cpp, LWL85.cpp, LPB93.cpp, YN00.cpp, MYN.cpp. In cpp/src/kaks_cli.cpp: KaKs.cpp
+  and base.cpp (the header line, the order of the columns and the composite fields of the .kaks output).
   Copyright (C) 2009, Beijing Institute of Genomics of CAS. All rights reserved.
   Authors: Da-Peng Wang and Yu-Bin Zhang (version 2.0), Zhang Zhang (version 1.0), Kristian K Ullrich
   (modified versions 2.0.1, 2.0.2).
