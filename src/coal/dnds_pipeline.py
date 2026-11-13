@@ -180,25 +180,51 @@ class PipelineResult:
 
 # ------------------------------------------------------------------------------------------------ tools
 
+def usable_cpus() -> int:
+    """The CPUs this process may run on: its affinity mask where the system has one (Linux: taskset, SLURM,
+    cgroup cpusets), else os.process_cpu_count() (Python 3.13+), else the CPUs of the machine. At least 1."""
+    try:
+        n = len(os.sched_getaffinity(0))    # type: ignore[attr-defined]
+    except (AttributeError, OSError):
+        n = 0
+    if n <= 0:
+        n = getattr(os, "process_cpu_count", os.cpu_count)() or 0
+    return max(1, n or os.cpu_count() or 1)
+
+
 def find_diamond() -> str | None:
     """DIAMOND: $COAL_DIAMOND, else `diamond` on PATH, else the one install_diamond() put in COAL's cache
     (coal.msa.cache_dir())."""
     return _msa._find("diamond", "COAL_DIAMOND")
 
 
+_VERSION_RE = None
+
+
 def _diamond_version(exe: str) -> str:
-    """'2.2.8' ('' if it does not run)."""
+    """'2.2.8' from `diamond version` ("diamond version 2.2.8"): the first dotted number of the output, whatever
+    follows it; when there is none, the last word (reported as it is; _version_tuple() then gives None and the
+    caller warns). '' if the program does not run as DIAMOND."""
+    global _VERSION_RE
+    import re
+    if _VERSION_RE is None:
+        _VERSION_RE = re.compile(r"(?<![\w.])v?(\d+(?:\.\d+)+)")
     try:
         r = subprocess.run([exe, "version"], capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL,
                            encoding="utf-8", errors="backslashreplace")
     except (OSError, subprocess.SubprocessError):
         return ""
-    words = (r.stdout or r.stderr).split()
-    return words[-1] if r.returncode == 0 and "diamond" in (r.stdout or r.stderr).lower() and words else ""
+    text = r.stdout or r.stderr
+    words = text.split()
+    if r.returncode != 0 or "diamond" not in text.lower() or not words:
+        return ""
+    m = _VERSION_RE.search(text)
+    return m.group(1) if m else words[-1]
 
 
 def _version_tuple(text: str) -> tuple[int, ...] | None:
-    """'2.1.0' -> (2, 1, 0); 'v2.0.14' -> (2, 0, 14); None when the text does not start with numbers."""
+    """'2.1.0' -> (2, 1, 0); 'v2.0.14' -> (2, 0, 14); '2.1' -> (2, 1, 0) (padded to three numbers, so that 2.1
+    is not older than 2.1.0); None when the text does not start with numbers."""
     nums = []
     for part in text.strip().lstrip("vV").split("."):
         digits = ""
@@ -209,7 +235,11 @@ def _version_tuple(text: str) -> tuple[int, ...] | None:
         if not digits:
             break
         nums.append(int(digits))
-    return tuple(nums) if nums else None
+        if len(digits) != len(part):
+            break       # "9-beta": the number ends here
+    if not nums:
+        return None
+    return tuple(nums + [0] * (3 - len(nums)))
 
 
 _DIAMOND_ASSETS = {("Linux", "x86_64"): "diamond-linux64.tar.gz", ("Darwin", "x86_64"): "diamond-macos.tar.gz",
@@ -543,11 +573,15 @@ class _Run:
         self.work = os.path.join(self.out, "work")
         self.t0 = time.time()
         self.quiet = a.quiet
-        self.jobs = a.jobs if a.jobs and a.jobs > 0 else (os.cpu_count() or 1)
-        # What DIAMOND and the aligners are given: never more than the CPUs of this machine (`-j 5000` made
-        # DIAMOND reserve memory for 5,000 threads and be killed). The engine takes -j as it is.
-        self.threads = max(1, min(self.jobs, os.cpu_count() or self.jobs))
-        self.jobs_clamped = self.threads != self.jobs
+        # Threads: -j 0 (the default) is one per CPU this process may use (its affinity: taskset, a SLURM or
+        # cgroup allocation), not one per CPU of the machine; and no program is given more than that, coal-cpp
+        # included (`-j 5000` made DIAMOND reserve memory for 5,000 threads and be killed, and each of the
+        # engine's alignment threads may hold --max-cells of memory). The report has what was asked and used.
+        self.cpus = usable_cpus()
+        self.jobs_requested = a.jobs if a.jobs and a.jobs > 0 else 0
+        self.threads = max(1, min(self.jobs_requested or self.cpus, self.cpus))
+        self.jobs = self.threads           # coal-cpp's -j, and the size of the batches fed to it
+        self.jobs_clamped = bool(self.jobs_requested) and self.threads != self.jobs_requested
         self.stages: list[dict] = []
         self.failures: list[dict] = []
         self.n_failures = 0
@@ -572,6 +606,7 @@ class _Run:
         self.isoforms: dict = {}           # the report's `isoforms`: per set what was found and done
         self._gene_map: dict | None = None
         self._first_ids: dict = {}
+        self._plain_sha256: dict = {}
         self.code_hints: list = []         # sets whose genes with internal stops are clean under another code
         self._engine_files: list = []
         self.set_counts: dict = {}         # per input set: records, not usable, dropped (as genes.tsv lists them)
@@ -616,8 +651,8 @@ class _Run:
         self._failed_fh = _open_new(self.outputs["failed"] + ".tmp")
         self._failed_fh.write("\t".join(FAILED_COLUMNS) + "\n")
         if self.jobs_clamped:
-            self.warn(f"-j {self.jobs} is more than the {self.threads} CPU(s) of this machine: DIAMOND and the "
-                      f"aligners are run with {self.threads} thread(s)")
+            self.warn(f"-j {self.jobs_requested} is more than the {self.cpus} CPU(s) this process may use: "
+                      f"coal-cpp, DIAMOND and the aligners are run with {self.threads} thread(s)")
         self._same_file_warning()
         self._gunzip_inputs()
         self._describe_inputs()
@@ -641,7 +676,18 @@ class _Run:
             rec["bytes"] = st.st_size
             rec["modified"] = _utc_iso(st.st_mtime)
             if os.path.abspath(p) in self._plain:
+                # sha256 below is of the file as given (the compressed bytes: the same FASTA compressed twice has
+                # two of them); sha256_uncompressed is of its content, computed while it was decompressed
                 rec["compression"] = "gzip"
+                if mode != "never":
+                    digest = self._plain_sha256.get(os.path.abspath(p))
+                    if digest is None:     # the copy of a run made before this field existed: hash it now
+                        h = hashlib.sha256()
+                        with open(self._plain[os.path.abspath(p)], "rb") as fh:
+                            for block in iter(lambda: fh.read(1 << 20), b""):
+                                h.update(block)
+                        digest = h.hexdigest()
+                    rec["sha256_uncompressed"] = digest
             if mode == "never":
                 rec["sha256"] = None
                 rec["sha256_skipped"] = "--hash-inputs never"
@@ -660,6 +706,7 @@ class _Run:
 
     def warn(self, text: str) -> None:
         """One warning line on stderr (not with -q), kept for the report's `warnings`."""
+        text = self.shown(text)
         self.notes.append(text)
         self.say(f"warning: {text}")
 
@@ -701,15 +748,19 @@ class _Run:
             dst = os.path.join(d, f"{k}_{name}")
             st = os.stat(p)
             sig = [os.path.abspath(p), st.st_size, st.st_mtime_ns]
-            if not (record.get(dst) == sig and os.path.isfile(dst)):
+            old = record.get(dst)
+            if isinstance(old, list) and old[:3] == sig and os.path.isfile(dst):
+                digest = old[3] if len(old) > 3 else None    # (a copy made by an earlier version has none)
+            else:
                 try:
-                    gunzip_to(p, dst)
+                    digest = gunzip_to(p, dst)
                 except ValueError as e:
                     raise PipelineError(f"{opt}: {e}") from None
-                record[dst] = sig
+                record[dst] = [*sig, digest]
                 # the copy keeps the source's times, so an unchanged input gives the same --resume signature
                 os.utime(dst, ns=(st.st_atime_ns, st.st_mtime_ns))
             self._plain[os.path.abspath(p)] = dst
+            self._plain_sha256[os.path.abspath(p)] = digest
             n_bytes += os.path.getsize(dst)
         tmp = record_path + ".tmp"
         with open(tmp, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as fh:
@@ -924,7 +975,22 @@ class _Run:
                 pass
         _msa.kill_running()
 
+    def shown(self, text: str) -> str:
+        """text with the paths of decompressed copies (work/inputs/...) replaced by the files as the user named
+        them; lines that quote a command line (`$ ...`, from a log) are left as they ran."""
+        if not self._plain or not any(copy in text for copy in self._plain.values()):
+            return text
+        lines = text.split("\n")
+        for k, line in enumerate(lines):
+            if line.startswith("$ "):
+                continue
+            for orig, copy in self._plain.items():
+                line = line.replace(copy, orig)
+            lines[k] = line
+        return "\n".join(lines)
+
     def say(self, text: str) -> None:
+        text = self.shown(text)
         if not self.quiet:
             print(f"coal pipeline: {text}", file=sys.stderr, flush=True)
 
@@ -1015,6 +1081,9 @@ class _Run:
                                     "with --clusters TSV")
             self.warn(f"DIAMOND {v} ({exe}) is older than {need}, the oldest version COAL supports (it is tested "
                       f"with {DIAMOND_VERSION}): the search may fail or differ. {newer}")
+        if vt is None:
+            self.warn(f"the version of DIAMOND could not be read from `{exe} version` (it says {v!r}): COAL "
+                      f"supports DIAMOND {need} and later and is tested with {DIAMOND_VERSION}; the check is skipped")
         self.tools["diamond"] = {"path": exe, "version": v}
         return exe
 
@@ -1540,7 +1609,7 @@ class _Run:
             "platform": {"system": platform.system(), "release": platform.release(), "machine": platform.machine(),
                          "python": platform.python_version(), "python_implementation": platform.python_implementation(),
                          "cpus": os.cpu_count()},
-            "threads": {"requested": a.jobs, "engine": self.jobs, "tools": self.threads},
+            "threads": {"requested": a.jobs, "engine": self.jobs, "tools": self.threads, "usable_cpus": self.cpus},
             "inputs": self.input_records,
             "parameters": {k: v for k, v in sorted(vars(a).items()) if k not in skip},
             "tools": tools, "stages": self.stages,
@@ -1690,9 +1759,11 @@ def _pairs_mode(run: _Run) -> None:
 
     q_idx, s_idx = FastaIndex(run.plain(a.query)), FastaIndex(run.plain(a.subject))
     if a.pairs:
+        every = bool(pairs) and all((q not in q_idx and q not in q_failed) or (s not in s_idx and s not in s_failed)
+                                    for q, s in pairs)
         _unmatched_ids_warning(run, "--pairs", a.pairs,
                                [("query", [q for q, _ in pairs], q_idx, q_failed),
-                                ("subject", [s for _, s in pairs], s_idx, s_failed)])
+                                ("subject", [s for _, s in pairs], s_idx, s_failed)], every)
     need_prot = a.aligner in ("clustalo", "mafft")
     exe = run.msa_tool(a.aligner) if need_prot else None
     qp_idx = FastaIndex(q_faa) if need_prot else None
@@ -1750,8 +1821,9 @@ def _pairs_mode(run: _Run) -> None:
     _count_pairs(run, run.outputs["dnds"], False)
 
 
-def _unmatched_ids_warning(run: _Run, option: str, path: str, sides) -> None:
-    """One line when (almost) none of the IDs of a --pairs / --clusters file is a record of the sequence files:
+def _unmatched_ids_warning(run: _Run, option: str, path: str, sides, every_group_fails: bool = False) -> None:
+    """One line when half or more of the IDs of a --pairs / --clusters file on one side are no records of the
+    sequence files, or when every pair names at least one unknown ID (every_group_fails):
     the usual causes are a version suffix on one side (AT1G01010 against AT1G01010.1), another ID type (gene
     against transcript IDs), or swapped columns. Every pair still gets its own row and its failure; this line
     says what is going on. sides: [(name, the IDs asked for, the index of the file, the failed genes)]."""
@@ -1759,7 +1831,9 @@ def _unmatched_ids_warning(run: _Run, option: str, path: str, sides) -> None:
         if not ids:
             continue
         missing = [i for i in ids if i not in idx and i not in failed]
-        if len(missing) * 10 < len(ids) * 9:   # under 90 %: single missing genes are reported one by one
+        # half of a side unknown, or no pair at all that can be made: something systematic, worth one line
+        # (below that, single missing genes are reported one by one in failed.tsv)
+        if not missing or (len(missing) * 2 < len(ids) and not every_group_fails):
             continue
         have = next(iter(idx.pos), None)
         ex = missing[0]
@@ -1988,8 +2062,8 @@ def _clusters_mode(run: _Run) -> None:
                               "evalue", "bitscore", "qcovhsp", "scovhsp", *rextra], "diamond", "diamond realign")
                 with _atomic(rfile) as out, \
                         open(rfile + ".body", encoding="utf-8", errors="backslashreplace") as body:
-                    if not rextra:
-                        out.write("member\trepresentative\tapprox_pident\tevalue\tbitscore\tqcovhsp\tscovhsp\n")
+                    # (the columns are fixed: --realign-args cannot change --outfmt)
+                    out.write("member\trepresentative\tapprox_pident\tevalue\tbitscore\tqcovhsp\tscovhsp\n")
                     shutil.copyfileobj(body, out)
                 os.remove(rfile + ".body")
             run.stage("realign", _sig("realign", _file_sig([cfile]), run.tools["diamond"]["version"], rextra),
@@ -1997,7 +2071,7 @@ def _clusters_mode(run: _Run) -> None:
     t0 = time.perf_counter()
     clusters, dup = read_clusters(cfile)
     if dup:
-        run.say(f"warning: {dup:,} member line(s) of {cfile} name a sequence that is already in a cluster; the "
+        run.say(f"warning: {dup:,} member line(s) of {a.clusters or cfile} name a sequence that is already in a cluster; the "
                 "first one is used")
     run.say(f"{len(clusters):,} clusters, {sum(len(m) for m in clusters.values()):,} sequences")
 
@@ -2335,7 +2409,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="refuse a pair whose alignment table has more cells (default 4e9, about 2 GB)")
     g = common.add_argument_group("Running")
     g.add_argument("-j", "--jobs", type=int, default=0, metavar="N",
-                   help="threads, and aligner processes at a time (default 0 = one per CPU)")
+                   help="threads, and aligner processes at a time (default 0 = one per CPU this process may use; "
+                        "never more than that)")
     g.add_argument("--resume", action="store_true",
                    help="reuse the translation and DIAMOND results of an earlier run in DIR when the inputs and "
                         "options are the same")
@@ -2363,7 +2438,10 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--evalue", type=float, default=1e-5, help="DIAMOND e-value cutoff (default 1e-5)")
     g.add_argument("--sensitivity", choices=SENSITIVITIES, default="default",
                    help="DIAMOND sensitivity mode (default: DIAMOND's default)")
-    g.add_argument("--diamond-args", metavar="'ARGS'", help="further arguments for `diamond blastp`, in one string")
+    g.add_argument("--diamond-args", metavar="'ARGS'",
+                   help="further arguments for `diamond blastp`, in one string (e.g. '--block-size 4 --tmpdir /scratch'); "
+                        "the options COAL sets itself (--query, --db, --out, --outfmt, --threads, --max-target-seqs, "
+                        "--evalue, a sensitivity) are refused")
 
     p = sub.add_parser("clusters", parents=[common], help="gene families: every pair within each cluster",
                        description="Clusters of coding sequences: translate, DIAMOND DeepClust (or a given clusters "
@@ -2390,10 +2468,14 @@ def build_parser() -> argparse.ArgumentParser:
                    help="DeepClust --member-cover (DIAMOND's default: 80)")
     g.add_argument("--mutual-cover", type=float, default=None, metavar="PCT", help="DeepClust --mutual-cover")
     g.add_argument("--cluster-evalue", type=float, default=None, metavar="E", help="DeepClust --evalue")
-    g.add_argument("--deepclust-args", metavar="'ARGS'", help="further arguments for `diamond deepclust`")
+    g.add_argument("--deepclust-args", metavar="'ARGS'",
+                   help="further arguments for `diamond deepclust`, in one string (e.g. '--memory-limit 12G'); the "
+                        "options COAL sets itself (--db, --out, --threads) are refused")
     g.add_argument("--realign", action="store_true",
                    help="also run `diamond realign` (members against their representatives) into DIR/realign.tsv")
-    g.add_argument("--realign-args", metavar="'ARGS'", help="further arguments for `diamond realign`")
+    g.add_argument("--realign-args", metavar="'ARGS'",
+                   help="with --realign: further arguments for `diamond realign`, in one string; the options COAL "
+                        "sets itself (--db, --clusters, --out, --outfmt, --threads) are refused")
 
     p = sub.add_parser("install", help="install DIAMOND, Clustal Omega or MAFFT into COAL's cache",
                        description="Install the external tools into COAL's cache folder (they are not bundled: "
@@ -2428,6 +2510,77 @@ def _flag_error(a: argparse.Namespace) -> str | None:
     if a.max_ds is not None and not (isinstance(a.max_ds, (int, float)) and not isinstance(a.max_ds, bool)
                                      and math.isfinite(a.max_ds) and a.max_ds > 0):
         return "--max-ds: expected a number greater than 0"
+    return None
+
+
+# --diamond-args / --deepclust-args / --realign-args: the DIAMOND options COAL sets itself. A string that
+# repeats one of them is refused before anything runs: DIAMOND would take the user's value (its output would land
+# elsewhere, or in another format, and the run would end with an unrelated error) or the report would describe a
+# search that was not the one run. The lists follow the command lines of _search() and _clusters_mode();
+# tests/test_pipeline_robustness.py compares them with the argv a run records in its report.
+_DIAMOND_ALIASES = {"-d": "--db", "-o": "--out", "-q": "--query", "-p": "--threads", "-f": "--outfmt",
+                    "-k": "--max-target-seqs", "-e": "--evalue", "-v": "--verbose"}
+_OWN_DIAMOND_OPTIONS: dict[str, dict[str, str]] = {
+    "diamond_args": {      # diamond blastp (and makedb)
+        "--query": "the translated query set", "--db": "the database COAL builds from the other set",
+        "--in": "the proteins COAL translated", "--out": "COAL reads the hits from its work folder",
+        "--outfmt": "COAL reads fixed columns", "--threads": "use -j", "--quiet": "",
+        "--max-target-seqs": "1: the best hit of each query is the rule of --ortho rbh / bh",
+        "--evalue": "use --evalue", "--masking": "set by --aligner diamond",
+    },
+    "deepclust_args": {    # diamond deepclust
+        "--db": "the translated proteins, sorted by ID", "--out": "DIR/clusters.tsv", "--threads": "use -j",
+        "--quiet": "", "--approx-id": "use --approx-id", "--member-cover": "use --member-cover",
+        "--mutual-cover": "use --mutual-cover", "--evalue": "use --cluster-evalue",
+    },
+    "realign_args": {      # diamond realign
+        "--db": "the translated proteins", "--clusters": "the clusters of this run", "--out": "DIR/realign.tsv",
+        "--outfmt": "the columns of DIR/realign.tsv are fixed", "--threads": "use -j", "--quiet": "",
+    },
+}
+# options COAL sets only when its own option is given: the same one in the string is then a second value
+_OWN_ONLY_IF = {"--approx-id": "approx_id", "--member-cover": "member_cover", "--mutual-cover": "mutual_cover",
+                ("deepclust_args", "--evalue"): "cluster_evalue", ("diamond_args", "--masking"): "aligner"}
+
+
+def _own_option(flag: str) -> str:
+    """The long form of a DIAMOND option as written in an ARGS string (-o, --out, --out=FILE -> --out)."""
+    flag = flag.split("=", 1)[0]
+    return _DIAMOND_ALIASES.get(flag, flag)
+
+
+def _args_error(a: argparse.Namespace) -> str | None:
+    """Why --diamond-args / --deepclust-args / --realign-args cannot be used as given, or None."""
+    for dest, own in _OWN_DIAMOND_OPTIONS.items():
+        text = getattr(a, dest, None)
+        if not text:
+            continue
+        opt = "--" + dest.replace("_", "-")
+        if not isinstance(text, str):
+            return f"{opt}: expected one string of DIAMOND options"
+        try:
+            words = shlex.split(text)
+        except ValueError as e:
+            return f"{opt}: {e} (in {text!r})"
+        for w in words:
+            if not w.startswith("-") or len(w) < 2 or w[1:2].isdigit() or w[1:2] == ".":
+                continue   # a value (also a negative number)
+            flag = _own_option(w)
+            if dest == "diamond_args" and flag[2:] in SENSITIVITIES:
+                return (f"{opt}: {w} is DIAMOND's sensitivity, which COAL sets itself: use --sensitivity "
+                        f"{flag[2:]} (the report and --resume then know it)")
+            if flag not in own:
+                continue
+            cond = _OWN_ONLY_IF.get((dest, flag), _OWN_ONLY_IF.get(flag) if dest == "deepclust_args" else None)
+            if cond == "aligner":
+                if getattr(a, "aligner", None) != "diamond":
+                    continue
+            elif cond is not None and getattr(a, cond, None) is None:
+                continue
+            why = own[flag]
+            return (f"{opt}: {w} is an option COAL sets itself for this DIAMOND run"
+                    + (f" ({why})" if why else "") + ": remove it from the string. COAL sets "
+                    + ", ".join(sorted(own)) + f"; everything else in {opt} is passed on")
     return None
 
 
@@ -2481,6 +2634,7 @@ def _execute(mode: str, a: argparse.Namespace, argv) -> PipelineResult:
             if isinstance(e, OSError):
                 # a full disk, a folder that went away, a quota: one line with the file and the system's reason
                 e = PipelineError(_os_error_text(e, run.out))
+            e = PipelineError(run.shown(str(e)))   # the user's file names, not those of decompressed copies
             print(f"coal pipeline: error: {e}", file=sys.stderr)
             if run.lock is not None and os.path.isdir(run.out):
                 report = run.finish(1, str(e))
@@ -2573,7 +2727,7 @@ def _namespace(mode: str, required: list[str], options: dict) -> argparse.Namesp
         bad = [m for m in a.method if m not in METHODS]
         if bad:
             raise ValueError(f"method {bad[0]!r}: choose from {', '.join(METHODS)}")
-    why = _method_code_error(a) or _flag_error(a)
+    why = _method_code_error(a) or _flag_error(a) or _args_error(a)
     if why:
         raise ValueError(why)
     for opt, allowed in (("hash_inputs", ("auto", "always", "never")), ("comeron_flavour", ("coal", "gestimator")), ("li_flavour", ("coal", "seqinr")),
@@ -2645,7 +2799,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ap.error("--digits: expected 1 to 17")
     if a.jobs < 0:
         ap.error("-j: expected 0 (one per CPU) or more")
-    why = _flag_error(a)
+    why = _flag_error(a) or _args_error(a)
     if why:
         ap.error(why)
     if _method_code_error(a):

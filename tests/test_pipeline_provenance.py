@@ -53,7 +53,7 @@ class Provenance(PipelineCase):
         self.assertEqual(rep["platform"]["python"], platform.python_version())
         self.assertEqual(rep["platform"]["machine"], platform.machine())
         self.assertEqual(rep["coal_version"], coal.__version__)
-        self.assertEqual(rep["threads"], {"requested": 1, "engine": 1, "tools": 1})
+        self.assertEqual(rep["threads"], {"requested": 1, "engine": 1, "tools": 1, "usable_cpus": P.usable_cpus()})
         self.assertEqual([i["option"] for i in rep["inputs"]], ["--query", "--subject", "--pairs"])
         for rec, path in zip(rep["inputs"], (Q, S, pairs)):
             self.assertEqual(rec["path"], os.path.abspath(path))
@@ -72,7 +72,7 @@ class Provenance(PipelineCase):
     def test_default_jobs_are_resolved(self):
         res = quiet(P.run_pairs, Q, S, self.tmp / "o", pairs=self.pairs_file(PLAIN))
         cpus = os.cpu_count() or 1
-        self.assertEqual(res.report["threads"], {"requested": 0, "engine": cpus, "tools": cpus})
+        self.assertEqual(res.report["threads"], {"requested": 0, "engine": cpus, "tools": cpus, "usable_cpus": cpus})
         self.assertEqual(res.report["platform"]["cpus"], os.cpu_count())
 
     def test_hash_limit_and_option(self):

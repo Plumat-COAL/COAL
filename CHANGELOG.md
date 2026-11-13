@@ -208,6 +208,18 @@ entry under "Added", not under "Fixed".
     mitochondrial and plastid genes, the recipe, and that `Comeron` / `Li` are standard-code only. A per-gene
     code option (`--code-map`) was evaluated and not built: the engine has one code per run; the design is in
     docs/development.md.
+  - **Smaller things from the second review** (2026-11-13). `--diamond-args`, `--deepclust-args` and
+    `--realign-args` refuse the DIAMOND options COAL sets itself (`--out`, `--db`, `--query`, `--outfmt`,
+    `--threads`, ...; exit 2 before anything runs: `--diamond-args '--out x.tsv'` used to send the hits elsewhere
+    and end with an unrelated error), all three are documented (`--realign-args` was not), and `realign.tsv`
+    always has its header line. The hint about IDs of `--pairs` / `--clusters` that match no record comes when
+    half of one side is unknown or no pair can be made (it needed 90% of one side). Messages name the file the
+    user gave, not its decompressed copy (`coal pipeline`, `coal kaks`, `coal dnds`). The default `-j` is one
+    thread per CPU the process may use (its affinity: `taskset`, SLURM, cgroups), and `coal-cpp` is never given
+    more threads than that either (`report.json` `threads`: `requested`, `usable_cpus`, `engine`, `tools`).
+    DIAMOND's version is read as the first dotted number of `diamond version` (`2.1` is 2.1.0, not "too old"),
+    and a version that cannot be read gives one warning. A gzip input has `sha256_uncompressed` next to `sha256`
+    in the report.
   - **Cluster mode does not depend on the order of the input.** DIAMOND DeepClust is order-dependent, so it is
     given the proteins sorted by ID: the same sequences give the same `clusters.tsv` whatever the order of the
     `--cds` files and records. (Development builds before 2026-11-13 clustered in input order; their clusters can

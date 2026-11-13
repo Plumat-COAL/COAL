@@ -161,7 +161,13 @@ coal pipeline pairs --query q.fa --subject s.fa -o out --pairs my_orthologs.tsv 
   query. A pair is kept when each is the other's best hit (`--ortho rbh`, the default). `--ortho bh` keeps every
   query's best hit, so a subject can appear in several pairs. `--evalue`, `--sensitivity` (DIAMOND's modes, from
   `faster` to `ultra-sensitive`) and `--diamond-args '...'` are passed on. Pairs are written in the order of the
-  query file.
+  query file. `--diamond-args` is one string of further `diamond blastp` options (`--diamond-args '--block-size 4
+  --tmpdir /scratch'`); it is split like a command line and never goes through a shell. The options COAL sets
+  itself are refused in it (exit 2, before anything runs): `--query` / `-q`, `--db` / `-d`, `--in`, `--out` /
+  `-o`, `--outfmt` / `-f`, `--threads` / `-p` (use `-j`), `--max-target-seqs` / `-k` (1: the best hit is the
+  rule), `--evalue` / `-e` (use `--evalue`), `--quiet`, a sensitivity such as `--very-sensitive` (use
+  `--sensitivity`), and with `--aligner diamond` also `--masking`. Before, `--diamond-args '--out x.tsv'` sent
+  the hits elsewhere and the run ended with an unrelated error.
 - **`--pairs TSV`** takes the pairs from a file (query ID, subject ID; a header line `query subject` is skipped)
   and DIAMOND is not run. `out/orthologs.tsv` of an earlier run can be given, also with the same `-o out`: the
   file is then read and left exactly as it is (not written again).
@@ -189,7 +195,13 @@ coal pipeline clusters --cds all_cds.fa --clusters deepclust.tsv -o out --max-cl
   (member coverage 80%); `--approx-id`, `--member-cover`, `--mutual-cover`, `--cluster-evalue` and
   `--deepclust-args '...'` are passed on, and the result is kept as `out/clusters.tsv`. `--realign` also runs
   `diamond realign` (members against their representatives, the columns orthologr's `deepclust_realign()` asks
-  for) into `out/realign.tsv`.
+  for) into `out/realign.tsv`: `member representative approx_pident evalue bitscore qcovhsp scovhsp`, with a
+  header line. `--deepclust-args '...'` and `--realign-args '...'` are each one string of further options for
+  that DIAMOND command (`--deepclust-args '--memory-limit 12G'`), split like a command line, no shell. The
+  options COAL sets itself are refused (exit 2): in `--deepclust-args` `--db` / `-d`, `--out` / `-o`,
+  `--threads` / `-p`, `--quiet`, and `--approx-id`, `--member-cover`, `--mutual-cover`, `--evalue` when COAL's
+  own option for it is given as well; in `--realign-args` `--db`, `--clusters`, `--out`, `--outfmt` / `-f` (the
+  columns of `realign.tsv` are fixed), `--threads`, `--quiet`.
 - **`--clusters TSV`** is DIAMOND's two-column table: representative, member, tab-separated, one line per member.
   A header line (`centroid member`, `representative member`, ...) and `#` lines are skipped. The cluster ID is the
   representative's ID. A member named in two clusters stays in its first one.
@@ -216,7 +228,7 @@ coal pipeline clusters --cds all_cds.fa --clusters deepclust.tsv -o out --max-cl
 | `-o DIR` | output folder | required |
 | `-m METHOD` | Ka/Ks method, repeatable: YN, NG, LWL, MLWL, LPB, MLPB, MYN, Comeron (alias C95), Li ([kaks.md](kaks.md)); names are read in any case; Comeron and Li need `-c 1` | YN |
 | `-c N` | NCBI genetic code, used for translation, the codon alignment and Ka/Ks | 1 |
-| `-j N` | threads of DIAMOND and of the engine, and MSA processes at a time | one per CPU |
+| `-j N` | threads of DIAMOND and of the engine, and MSA processes at a time. The default is one per CPU the process may use (its affinity: `taskset`, a SLURM or cgroup allocation), not one per CPU of the machine; a larger `-j` is cut to that number for every program, with a warning, and `report.json` `threads` has what was asked and used | one per usable CPU |
 | `--kaks-format` | also write `dnds.kaks` in KaKs_Calculator's 22-column format | off |
 | `--keep-alignments` | also write the codon alignments | off |
 | `--keep-protein-alignments` | also write the protein alignments the codon alignments are made from | off |
@@ -371,9 +383,11 @@ Schema `coal.pipeline/1`: [pipeline.schema.json](pipeline.schema.json). It is wr
   DIAMOND, Clustal Omega, MAFFT).
 - **Provenance, for a methods section.** `started` and `finished` (UTC, ISO 8601: `2026-11-13T09:15:46Z`);
   `platform` (`system`, `release`, `machine`, `python`, `cpus`); `coal_version`; `threads` (`requested`: `-j` as
-  given; `engine`: the threads of coal-cpp; `tools`: what DIAMOND and the aligners were given); `inputs`: every
+  given, 0 for the default; `usable_cpus`: the CPUs this process may run on; `engine`: the threads coal-cpp was
+  given; `tools`: what DIAMOND and the aligners were given; neither is ever more than `usable_cpus`); `inputs`: every
   file the run read, with `option`, absolute `path`, `bytes`, `modified` and `sha256` (of the file as given: a
-  `.gz` input is hashed compressed and has `"compression": "gzip"`). Hashing reads each input once more; with
+  `.gz` input is hashed compressed and has `"compression": "gzip"`, and also `sha256_uncompressed`, the hash of
+  its content: the same FASTA compressed twice has two `sha256` and one `sha256_uncompressed`). Hashing reads each input once more; with
   the default `--hash-inputs auto` a file above 2 GiB is not hashed (`"sha256": null`, and `sha256_skipped` says
   why); `--hash-inputs always` hashes every file, `never` none. `tools.<name>.commands`: the exact command
   lines, as argv arrays, of every DIAMOND and coal-cpp run (the same lines as in `work/logs/`; kept in the

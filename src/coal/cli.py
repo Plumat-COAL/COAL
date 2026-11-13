@@ -362,15 +362,19 @@ def is_gzip(path) -> bool:
         return False
 
 
-def gunzip_to(src: str, dst: str) -> None:
-    """Decompress the gzip file src into dst (streamed). ValueError with a readable reason when src is not a
-    complete gzip file; OSError when dst cannot be written."""
+def gunzip_to(src: str, dst: str) -> str:
+    """Decompress the gzip file src into dst (streamed) and return the SHA-256 of the decompressed bytes (hex).
+    ValueError with a readable reason when src is not a complete gzip file; OSError when dst cannot be written."""
     import gzip
-    import shutil
+    import hashlib
     import zlib
+    h = hashlib.sha256()
     try:
         with gzip.open(src, "rb") as fin, open(dst, "wb") as fout:
-            shutil.copyfileobj(fin, fout, 1 << 20)
+            for block in iter(lambda: fin.read(1 << 20), b""):
+                h.update(block)
+                fout.write(block)
+        return h.hexdigest()
     except (EOFError, zlib.error, gzip.BadGzipFile) as e:
         try:
             os.remove(dst)
@@ -378,6 +382,9 @@ def gunzip_to(src: str, dst: str) -> None:
             pass
         raise ValueError(f"cannot decompress {src!r}: it starts like a gzip file but is damaged or cut short "
                          f"({e})") from None
+
+
+_GUNZIPPED: dict[str, str] = {}   # decompressed copy -> the file as the user named it (for messages)
 
 
 def _gunzip_inputs(argv) -> tuple[list[str], str | None]:
@@ -397,6 +404,7 @@ def _gunzip_inputs(argv) -> tuple[list[str], str | None]:
         name = os.path.basename(path)
         dst = os.path.join(d, name[:-3] if name.lower().endswith(".gz") and len(name) > 3 else name + ".txt")
         gunzip_to(path, dst)
+        _GUNZIPPED[dst] = path
         return dst
     try:
         for k, arg in enumerate(argv[1:], 1):
@@ -432,9 +440,14 @@ def _run_cpp_child(path: str, argv, tmp: str) -> int:
             pass
     proc = None
     old = None
+    # coal-cpp was given decompressed copies in a temporary folder: its messages name those. They are passed on
+    # line by line with the copies' paths replaced by the files the user named.
+    names = {os.fsencode(copy): os.fsencode(orig) for copy, orig in _GUNZIPPED.items()
+             if tmp and copy.startswith(tmp)}
+    relay = None
     try:
         try:
-            proc = subprocess.Popen([path, *argv])
+            proc = subprocess.Popen([path, *argv], stderr=subprocess.PIPE if names else None)
         except OSError as e:
             print(f"coal {argv[0]}: could not start {path} ({e.strerror or e})", file=sys.stderr)
             return 1
@@ -445,12 +458,32 @@ def _run_cpp_child(path: str, argv, tmp: str) -> int:
             old = signal.signal(signal.SIGTERM, forward)
         except (ValueError, OSError):
             old = None
+        if names:
+            import threading
+
+            def pump():
+                out = getattr(sys.stderr, "buffer", None)
+                for line in proc.stderr:
+                    for copy, orig in names.items():
+                        line = line.replace(copy, orig)
+                    try:
+                        if out is not None:
+                            out.write(line)
+                            out.flush()
+                        else:
+                            sys.stderr.write(line.decode("utf-8", "backslashreplace"))
+                    except (OSError, ValueError):
+                        pass
+            relay = threading.Thread(target=pump, daemon=True)
+            relay.start()
         while True:
             try:
                 rc = proc.wait()
                 break
             except KeyboardInterrupt:   # Ctrl-C reaches coal-cpp too; it cleans up and exits 130
                 continue
+        if relay is not None:
+            relay.join(timeout=30)
         return rc if rc >= 0 else 128 - rc
     finally:
         if old is not None:
