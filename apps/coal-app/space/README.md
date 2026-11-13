@@ -6,7 +6,7 @@ sdk: gradio
 sdk_version: 5.49.1
 app_file: app.py
 pinned: false
-license: mit
+license: gpl-3.0
 short_description: Protein alignment + coding DNA -> codon alignment (PAL2NAL)
 ---
 
@@ -14,7 +14,7 @@ short_description: Protein alignment + coding DNA -> codon alignment (PAL2NAL)
 
 Upload a protein alignment and the coding DNA of the same genes; COAL lines the DNA up codon by
 codon, shows a plain-English health check per gene and an alignment view that marks exactly where
-a gene breaks. A fast, MIT-licensed alternative to PAL2NAL.
+a gene breaks. A fast alternative to PAL2NAL; free software (GPL-3.0-only).
 
 Files you upload are processed on this shared Hugging Face server and deleted within 24 hours (or when
 the Space restarts). For unpublished or sensitive data, install COAL on your own computer instead.

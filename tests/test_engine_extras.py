@@ -15,6 +15,8 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "tests"))
+from cpp_hooks import check_command  # noqa: E402  (coal-cpp without test hooks: the test is skipped)
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "tests"))
 from coal import pipeline  # noqa: E402
@@ -292,6 +294,7 @@ def interrupt(cmd, cwd, after_checkpoint=3, extra_env=None, on_pause=None):
            "COAL_CHECKPOINT_EVERY": "0", "COAL_TEST_PAUSE_AFTER_CHECKPOINT": str(after_checkpoint),
            "COAL_TEST_HOOKS": "1",  # the hooks need this too
            **(extra_env or {})}
+    check_command(cmd, env)
     p = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
     dog = threading.Timer(60, p.kill)
     dog.start()

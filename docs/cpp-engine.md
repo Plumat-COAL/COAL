@@ -1,6 +1,6 @@
 # C++ engine (coal-cpp)
 
-`coal-cpp` is a C++17 implementation of the same engine (standard library only, MIT). It takes the same options as
+`coal-cpp` is a C++17 implementation of the same engine (standard library only; GPL-3.0-only like the rest of COAL). It takes the same options as
 `coal` and writes the same output, warnings, report and exit codes, so it can replace `coal` in any command line
 (the run report's `engine` field says which one wrote it: `coal-cpp` or `coal-python`).
 `coal` itself hands inputs of 1 MB or more to `coal-cpp` when it finds the same version (`COAL_ENGINE=python|cpp`
@@ -50,15 +50,24 @@ when there is none or it is another version), so a pipeline can call the binary 
    environment's `bin`/`Scripts` (where Bioconda installs it).
 4. **`PATH`.**
 
+The pairwise aligner `coal-cpp-align` (used by `coal.align.align_pairs`; [alignment.md](alignment.md)) is in the
+same places: the platform wheels put it in `coal/bin` next to `coal-cpp`, and `coal.align.find_align_binary()`
+looks at `COAL_CPP_ALIGN`, `coal/bin`, the folders of point 3, the folder of the `coal-cpp` found here, then `PATH`.
+
 A found `coal-cpp` is used only when its `--version` is this package's version; otherwise `coal` says so once
 (`coal: notice: ... using the Python engine`) and goes on in Python, unless `COAL_ENGINE=cpp` demands it (exit 1).
 
 ### How the platform wheels are made
 
-`release.yml` (job `cpp-wheels`) builds `coal-cpp` per platform and `packaging/wheels/build_platform_wheel.py` copies
-it into the pure wheel as `coal/bin/coal-cpp` with the executable bit set in the zip, rewrites `RECORD`, and retags the
+`release.yml` (job `cpp-wheels`) builds `coal-cpp` and `coal-cpp-align` per platform and
+`packaging/wheels/build_platform_wheel.py` copies them into the pure wheel as `coal/bin/coal-cpp` and
+`coal/bin/coal-cpp-align` with the executable bit set in the zip, rewrites `RECORD`, and retags the
 wheel (`py3-none-manylinux_2_28_x86_64`, `..._aarch64`, `py3-none-macosx_11_0_universal2`, `py3-none-win_amd64`).
-No compiled Python extension is involved: the wheel is the pure package plus one data file that `coal` execs. Linux
+No compiled Python extension is involved: the wheel is the pure package plus two data files that `coal` execs
+(nothing changes in `pyproject.toml` or `MANIFEST.in`: the binaries are never in the source tree or the sdist).
+After installing the wheel into a fresh environment the job runs `packaging/wheels/check_wheel_binaries.py`
+there: both lookups return the wheel's binaries, `coal.align.align_pairs` gives the Python kernel's alignments
+through `coal-cpp-align`, and `coal pipeline pairs --pairs` runs with nothing else on `PATH`. Linux
 binaries are built in the `manylinux_2_28` containers with `libstdc++`/`libgcc` linked statically
 (`packaging/wheels/build_linux_binary.sh`), so glibc 2.28 is the only requirement, and `auditwheel show` confirms
 the tag; the macOS binary is a universal2 build (`CMAKE_OSX_ARCHITECTURES="arm64;x86_64"`, deployment target 11.0,
@@ -103,7 +112,12 @@ target_link_libraries(myapp PRIVATE coal::core)
 ```
 
 **Headers:** `<coal/core.hpp>` (the algorithm), `<coal/tables.hpp>` (genetic codes), `<coal/seqio.hpp>` (the FASTA /
-CLUSTAL readers coal-cpp uses, if you read files) and `<coal/version.hpp>` (`COAL_VERSION_STRING`). The run report
+CLUSTAL readers coal-cpp uses, if you read files), `<coal/kaks.hpp>` (the Ka/Ks engine: YN00, NG86, LWL85, LPB93,
+MYN and the M variants; [kaks.md](kaks.md#c-api)), `<coal/align.hpp>` (pairwise protein alignment and DIAMOND-hit
+expansion for the step before: [alignment.md](alignment.md); the `coal-cpp-align` tool is built and installed with
+coal-cpp), `<coal/dnds.hpp>` (the one-step core of `coal pipeline`: the CDS of a pair or a cluster in; translation,
+alignment, codon rows and Ka/Ks out; [pipeline.md](pipeline.md#from-c)) and `<coal/version.hpp>`
+(`COAL_VERSION_STRING`). `coal::core` links the thread library (`Threads::Threads`, found by the CMake package) because `coal::align_pairs` runs on threads. The run report
 (`report.hpp`, `json.hpp`) is compiled into the library for coal-cpp but is not a public header: its output is tied
 to coal-cpp's command line and messages. The API follows the engine and is not frozen before 1.0.
 

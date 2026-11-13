@@ -1,0 +1,17 @@
+file	style	source	gene	kept
+01_ncbi_with_locus_tags.fasta	NCBI, with locus tags	header field [locus_tag=	b0002	lcl|NC_1_cds_NP_2.1_2
+02_ncbi_with_geneids.fasta	NCBI, with GeneIDs	header field GeneID:	GeneID:79501	lcl|NC_1_cds_XP_2.1_2
+03_ensembl.fasta	Ensembl	header field gene:	ENSG00000139618.17	ENST00000544455.6
+04_flybase.fasta	FlyBase	header field parent=FBgn	FBgn0031081	FBpp0070001
+05_phytozome.fasta	Phytozome	header field locus=	Potri.001G000100	Potri.001G000100.2
+06_ncbi_gene_symbols_only.fasta	NCBI, gene symbols only	header field [gene=	LOC1	lcl|NC_1_cds_XP_2.1_2
+07_gff_derived_gffread_wormbase.fasta	GFF-derived (gffread, WormBase)	header field gene=	g1	mRNA2
+08_transdecoder_on_trinity.fasta	TransDecoder on Trinity	ID suffix _iN.pN (TransDecoder on Trinity)	TRINITY_DN1000_c0_g1	TRINITY_DN1000_c0_g1_i2.p1
+09_trinity.fasta	Trinity	ID suffix _iN (Trinity)	TRINITY_DN1000_c0_g1	TRINITY_DN1000_c0_g1_i2
+10_augustus_braker.fasta	AUGUSTUS, BRAKER	ID suffix .tN	g1	g1.t2
+11_maker.fasta	MAKER	ID suffix -mRNA-N (MAKER)	maker-scaf1-gene-0.5	maker-scaf1-gene-0.5-mRNA-2
+12_maker_ra_rb.fasta	MAKER (-RA, -RB)	ID suffix -RA (MAKER)	Gene0001	Gene0001-RB
+13_maize_b73_v4.fasta	maize (B73 v4)	ID suffix _TNNN (maize)	Zm00001d027230	Zm00001d027230_T002
+14_phytozome_protein_ids.fasta	Phytozome protein IDs	ID suffix .N.p (Phytozome)	Potri.001G000100	Potri.001G000100.2.p
+15_tair_ensembl_plants_phytozome.fasta	TAIR, Ensembl Plants, Phytozome	ID suffix .N	AT1G01020	AT1G01020.2
+16_rap_db_rice.fasta	RAP-DB (rice)	ID suffix -NN (RAP-DB)	Os01t0100200	Os01t0100200-02

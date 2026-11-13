@@ -1,0 +1,78 @@
+COAL: codon alignments from protein alignments
+Copyright (C) 2026 Chloe Newton and Keanu Murati
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General
+Public License as published by the Free Software Foundation, version 3 of the License only (SPDX: GPL-3.0-only).
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the
+implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License
+(the file LICENSE) for more details.
+
+COAL 0.5.0 and earlier releases were published under the MIT License and remain available under it.
+
+Third-party code in COAL
+-----------------------
+
+The Ka/Ks (dN/dS) engine, cpp/src/kaks.cpp and kaks.hpp (and the output format in cpp/src/kaks_cli.cpp; the
+copies of kaks.cpp and kaks.hpp in packaging/r/coalr/src/coal/), is derived from two programs distributed under
+the GNU General Public License, version 3. It is a modified version of their code, not an independent
+implementation; the header of cpp/src/kaks.cpp says what was changed (Chloe Newton and Keanu Murati, 2026).
+
+- KaKs_Calculator 2.0 (kakscalculator2 2.0.1, https://github.com/kullrich/kakscalculator2; original project
+  https://sourceforge.net/projects/kakscalculator2/). In cpp/src/kaks.cpp: base.cpp (Fisher's exact test, the
+  derived output values), NG86.cpp, LWL85.cpp, LPB93.cpp, YN00.cpp, MYN.cpp. In cpp/src/kaks_cli.cpp: KaKs.cpp
+  and base.cpp (the header line, the order of the columns and the composite fields of the .kaks output).
+  Copyright (C) 2009, Beijing Institute of Genomics of CAS. All rights reserved.
+  Authors: Da-Peng Wang and Yu-Bin Zhang (version 2.0), Zhang Zhang (version 1.0), Kristian K Ullrich
+  (modified versions 2.0.1, 2.0.2).
+  Licence: GNU General Public License, version 3 (the LICENSE file of that project; the same text as COAL's).
+  Wang D, Zhang Y, Zhang Z, Zhu J, Yu J (2010) Genomics Proteomics Bioinformatics 8:77-80.
+
+- PAML 4.10 (https://github.com/abacus-gene/paml): yn00.c, "Pairwise estimation of dS and dN by the method of
+  Yang & Nielsen (2000 Mol. Biol. Evol. 17:32-43)", and the routines of tools.c it uses.
+  Copyright, 1998, Ziheng Yang.
+  Licence: GNU General Public License, version 3 (PAML's LICENSE and README).
+  Yang Z (2007) Mol Biol Evol 24:1586-1591.
+
+Two further methods of the Ka/Ks engine have files of their own, each a modified version of the code named (the
+header of the file says what was changed; Chloe Newton and Keanu Murati, 2026), with copies in
+packaging/r/coalr/src/coal/:
+
+- libsequence, as the R package orthologr compiles it into its function gestimator() (orthologr 0.4.3,
+  https://github.com/drostlab/orthologr, src/: Comeron95.h, Sites.h, RedundancyCom95.h, SingleSub.h, TwoSubs.h,
+  ThreeSubs.h, GranthamWeights.h, Grantham.h, Kimura80.h, Comparisons.h, Sequence.h, gestimator.cpp; libsequence
+  itself: https://github.com/molpopgen/libsequence). In cpp/src/kaks_comeron.cpp (the method Comeron).
+  Copyright (C) 2003-2009 Kevin Thornton.
+  Licence, as each of those files says: "libsequence is free software: you can redistribute it and/or modify it
+  under the terms of the GNU General Public License as published by the Free Software Foundation, either
+  version 3 of the License, or (at your option) any later version."
+  Each file also says: "Modified by Sarah Scharfenberg and Hajk-Georg Drost 2014 to work in orthologr without
+  using external libraries from libsequence. All changes are also free under the terms of GNU General Public
+  License version 2 of the License, or any later version."
+  Comeron JM (1995) J Mol Evol 41:1152-1159.
+
+- seqinr 4.2-44 (R package, https://cran.r-project.org/package=seqinr, https://github.com/lbbe-software/seqinr):
+  src/kaks.c (the functions kaks, num, fastlwl, catsite, transf, titv1, titv2, titv3, prefastlwl). In cpp/src/kaks_li.cpp (the method Li).
+  kaks.c has no copyright notice of its own. Authors of seqinr (its DESCRIPTION): Delphine Charif [aut], Olivier
+  Clerc [ctb], Carolin Frank [ctb], Jean R. Lobry [aut, cph], Anamaria Necsulea [ctb], Leonor Palmeira [ctb],
+  Simon Penel [cre], Guy Perriere [ctb]; seqinr's help page of kaks() says: "The C programm implementing this
+  method was provided by Manolo Gouy."
+  Licence (seqinr's DESCRIPTION): "GPL (>= 2)", the GNU General Public License, version 2 or later.
+  Li W-H (1993) J Mol Evol 36:96-99.
+
+GPL version 3 or later, GPL version 2 or later and "GPL (>= 2)" all allow distribution under GPL version 3, which
+is COAL's licence (GPL-3.0-only).
+
+None of these programs is included as such; `coal kaks` and `coal dnds` do not run them. The reference outputs
+under tests/kaks/golden/ were written by KaKs_Calculator 2.0.1, PAML 4.10.10 yn00, orthologr 0.4.3's gestimator
+code (compiled unmodified with the driver benchmarks/kaks/ref/gestimator_ref.cpp) and seqinr 4.2-44's kaks().
+
+Third-party material in this repository (not part of the COAL programs)
+------------------------------------------------------------------------
+
+- site/assets/fonts/ (the website's font, Literata): SIL Open Font License 1.1, site/assets/fonts/OFL.txt.
+- tests/realdata/ (real-data test sets from HyPhy and Biopython): MIT and the Biopython License / BSD 3-Clause;
+  tests/realdata/LICENSE-hyphy.txt, tests/realdata/LICENSE-biopython.rst and the SOURCE.md next to each set.
+
+PAL2NAL (GPL-2.0) is not included: COAL contains none of its code, and scripts/fetch_pal2nal.py downloads it
+for the comparison tests only.

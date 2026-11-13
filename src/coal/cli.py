@@ -2,6 +2,10 @@
 
     coal PEP_ALN NUC_FASTA [NUC_FASTA ...] [-codontable N] [-nogap] [-nomismatch] [-o OUT]
     coal --batch JOBS [defaults for every job]          (coal/batch.py: many small runs in one process)
+    coal kaks -i IN.axt -o OUT.kaks [-m YN ...]         (Ka/Ks, KaKs_Calculator format; run by coal-cpp)
+    coal dnds IN [-o OUT.tsv] [-m YN ...]               (dN/dS, tidy TSV; run by coal-cpp)
+    coal pipeline pairs|clusters ... -o DIR             (CDS in, dN/dS table out: coal/dnds_pipeline.py)
+    coal translate / coal codon-dnds                    (the pipeline's native steps; run by coal-cpp)
 
 `-` as one input path (the protein alignment or one DNA file) reads standard input.
 
@@ -22,6 +26,31 @@ from .report import IdShortener, RunReport, report_folder_missing, report_path_c
 from .tables import SUPPORTED
 
 
+# The epilog of `coal --help` (and of `coal-cpp --help`, which prints the same text): everything else `coal` does.
+# One line per command; tests/test_cli_commands.py checks that every command main() dispatches is listed.
+COMMANDS = (
+    ("kaks", "Ka/Ks for pairs of aligned coding sequences, in KaKs_Calculator's format"),
+    ("dnds", "dN/dS for pairs of aligned coding sequences, as a tidy table"),
+    ("pipeline", "coding sequences in, dN/dS table out (pairs | clusters | install)"),
+    ("translate", "coding sequences to proteins (a step of the pipeline)"),
+    ("codon-dnds", "protein alignment, codon alignment and Ka/Ks for groups (the pipeline's engine)"),
+    ("cite", "what to cite for what you ran"),
+    ("help", "this help; `coal help COMMAND` is `coal COMMAND --help`"),
+)
+COMMANDS_EPILOG = (
+    "Other commands (`coal COMMAND --help`):\n"
+    + "".join(f"  coal {name:<11} {text}\n" for name, text in COMMANDS)
+    + "  coal --cpp-path  where the C++ engine coal-cpp is (Ka/Ks and the pipeline need it)\n"
+    "pipeline, cite and help are commands of `coal` (Python), not of coal-cpp.\n"
+    "\n"
+    "Every option in detail: README.md (https://github.com/plumat-coal/COAL).")
+# What an install without coal-cpp is, and how to get one with it (the same words in `coal pipeline`)
+NEEDS_CPP = ("this install has the Python engine only, which makes codon alignments (`coal PEP_ALN NUC_FASTA`); "
+             "Ka/Ks (`coal kaks`, `coal dnds`) and `coal pipeline` need the C++ engine coal-cpp. It is inside the "
+             "platform wheels (Linux, macOS, Windows): download coal_align-<version>-py3-none-<platform>.whl from "
+             "https://github.com/plumat-coal/COAL/releases/latest and `python -m pip install` that file (the "
+             "source package coal_src.tar.gz and the py3-none-any wheel do not have it); or build it from a "
+             "checkout (docs/cpp-engine.md) and set COAL_CPP. Details: docs/install.md")
 MAX_WARNINGS = 20  # default --max-warnings
 # The same words in coal-cpp (main.cpp, std::bad_alloc)
 OUT_OF_MEMORY = ("out of memory: this run needs more memory than is free on this machine; run with -j 1 (fewer worker processes), split the input, or use a machine with more memory")
@@ -65,7 +94,8 @@ def build_parser(batch: bool = False) -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="coal",
         description="Convert a protein alignment + unaligned coding DNA into a codon alignment.",
-        epilog="Every option in detail: README.md (https://github.com/plumat-coal/COAL).",
+        epilog=COMMANDS_EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,   # (the epilog's list keeps its lines)
     )
     core = ap.add_argument_group("Core")
     pal = ap.add_argument_group("PAL2NAL options")
@@ -275,11 +305,220 @@ def cpp_path_main() -> int:
     return 0
 
 
+def kaks_main(argv) -> int:
+    """`coal kaks ...` / `coal dnds ...` (and `coal translate`, `coal codon-dnds`, the native steps of
+    `coal pipeline`): the Ka/Ks engine is native code only (coal-cpp, docs/kaks.md), so the
+    command line is handed to the coal-cpp of this version (the lookup of `coal --cpp-path`)."""
+    from . import dispatch
+    path = dispatch.find_cpp()
+    ok, why = dispatch._version_ok(path) if path is not None else (False, "")
+    wants_help = any(a in ("-h", "--help") or (a == "-H" and argv[0] == "kaks") for a in argv[1:])
+    if wants_help and not ok:
+        # the help does not need the engine: the copy of coal-cpp's text that ships with the package
+        # (coal/_cpp_help.py, compared with the binary's by tests/test_cli_commands.py)
+        from ._cpp_help import HELP
+        try:
+            sys.stdout.write(HELP[argv[0]])
+            sys.stdout.flush()
+        except BrokenPipeError:
+            return closed_stdout_exit()
+        print(f"coal {argv[0]}: note: this command cannot run here: "
+              + (why if path is not None else f"coal-cpp was not found (looked at {dispatch.LOOKUP_ORDER}); "
+                 + NEEDS_CPP), file=sys.stderr)
+        return 0
+    if path is None:
+        print(f"coal {argv[0]}: needs coal-cpp, which was not found (looked at {dispatch.LOOKUP_ORDER}): "
+              + NEEDS_CPP, file=sys.stderr)
+        return 1
+    if not ok:
+        print(f"coal {argv[0]}: {why}", file=sys.stderr)
+        return 1
+    try:
+        argv, tmp = _gunzip_inputs(argv)
+    except (OSError, EOFError, ValueError) as e:
+        print(f"coal {argv[0]}: error: {e}", file=sys.stderr)
+        return 1
+    if tmp is not None:   # coal-cpp as a child, so that the decompressed copies can be removed when it ends
+        return _run_cpp_child(path, argv, tmp)
+    rc = dispatch.run_cpp(path, argv)
+    if isinstance(rc, str):
+        print(f"coal {argv[0]}: {rc}", file=sys.stderr)
+        return 1
+    return rc
+
+
+GZIP_MAGIC = b"\x1f\x8b"
+# options of kaks / dnds / translate / codon-dnds whose value is a file the command writes (never decompressed)
+_CPP_OUTPUT_OPTIONS = ("-o", "-O", "--out", "--genes", "--failures", "--codon-out", "--codon-dir", "--protein-out",
+                       "--protein-dir", "--kaks-out")
+
+
+def is_gzip(path) -> bool:
+    """True when the file starts with the gzip magic bytes (whatever its name is)."""
+    try:
+        with open(path, "rb") as fh:
+            return fh.read(2) == GZIP_MAGIC
+    except OSError:
+        return False
+
+
+def gunzip_to(src: str, dst: str) -> str:
+    """Decompress the gzip file src into dst (streamed) and return the SHA-256 of the decompressed bytes (hex).
+    ValueError with a readable reason when src is not a complete gzip file; OSError when dst cannot be written."""
+    import gzip
+    import hashlib
+    import zlib
+    h = hashlib.sha256()
+    try:
+        with gzip.open(src, "rb") as fin, open(dst, "wb") as fout:
+            for block in iter(lambda: fin.read(1 << 20), b""):
+                h.update(block)
+                fout.write(block)
+        return h.hexdigest()
+    except (EOFError, zlib.error, gzip.BadGzipFile) as e:
+        try:
+            os.remove(dst)
+        except OSError:
+            pass
+        raise ValueError(f"cannot decompress {src!r}: it starts like a gzip file but is damaged or cut short "
+                         f"({e})") from None
+
+
+_GUNZIPPED: dict[str, str] = {}   # decompressed copy -> the file as the user named it (for messages)
+
+
+def _gunzip_inputs(argv) -> tuple[list[str], str | None]:
+    """`coal kaks|dnds|translate|codon-dnds ...`: every input file that is gzip-compressed (by its first bytes) is
+    decompressed into a temporary folder and the argument replaced by that copy, because coal-cpp reads plain text
+    only. Returns (the command line to run, the temporary folder or None). Arguments after an output option
+    (-o, --genes, ...) are never touched."""
+    import tempfile
+    out, tmp = [argv[0]], None
+
+    def plain(path: str) -> str:
+        nonlocal tmp
+        if tmp is None:
+            tmp = tempfile.mkdtemp(prefix="coal_gunzip_")
+        d = os.path.join(tmp, str(len(os.listdir(tmp))))
+        os.mkdir(d)
+        name = os.path.basename(path)
+        dst = os.path.join(d, name[:-3] if name.lower().endswith(".gz") and len(name) > 3 else name + ".txt")
+        gunzip_to(path, dst)
+        _GUNZIPPED[dst] = path
+        return dst
+    try:
+        for k, arg in enumerate(argv[1:], 1):
+            prev = argv[k - 1]
+            if prev in _CPP_OUTPUT_OPTIONS or arg == "-":
+                out.append(arg)
+            elif arg.startswith("--") and "=" in arg:
+                opt, val = arg.split("=", 1)
+                out.append(f"{opt}={plain(val)}" if opt not in _CPP_OUTPUT_OPTIONS and is_gzip(val) else arg)
+            elif arg[:2] in ("-i", "-I") and len(arg) > 2 and is_gzip(arg[2:].lstrip("=")):
+                out.append(arg[:2] + plain(arg[2:].lstrip("=")))
+            elif not arg.startswith("-") and is_gzip(arg):
+                out.append(plain(arg))
+            else:
+                out.append(arg)
+    except BaseException:
+        if tmp is not None:
+            import shutil
+            shutil.rmtree(tmp, ignore_errors=True)
+        raise
+    return out, tmp
+
+
+def _run_cpp_child(path: str, argv, tmp: str) -> int:
+    """Run coal-cpp as a child process (the same standard streams), remove the folder tmp when it has ended, and
+    return its exit status (128 + signal number when a signal ended it)."""
+    import shutil
+    import subprocess
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.flush()
+        except (OSError, ValueError, AttributeError):
+            pass
+    proc = None
+    old = None
+    # coal-cpp was given decompressed copies in a temporary folder: its messages name those. They are passed on
+    # line by line with the copies' paths replaced by the files the user named.
+    names = {os.fsencode(copy): os.fsencode(orig) for copy, orig in _GUNZIPPED.items()
+             if tmp and copy.startswith(tmp)}
+    relay = None
+    try:
+        try:
+            proc = subprocess.Popen([path, *argv], stderr=subprocess.PIPE if names else None)
+        except OSError as e:
+            print(f"coal {argv[0]}: could not start {path} ({e.strerror or e})", file=sys.stderr)
+            return 1
+
+        def forward(signum, frame):
+            proc.terminate()
+        try:
+            old = signal.signal(signal.SIGTERM, forward)
+        except (ValueError, OSError):
+            old = None
+        if names:
+            import threading
+
+            def pump():
+                out = getattr(sys.stderr, "buffer", None)
+                for line in proc.stderr:
+                    for copy, orig in names.items():
+                        line = line.replace(copy, orig)
+                    try:
+                        if out is not None:
+                            out.write(line)
+                            out.flush()
+                        else:
+                            sys.stderr.write(line.decode("utf-8", "backslashreplace"))
+                    except (OSError, ValueError):
+                        pass
+            relay = threading.Thread(target=pump, daemon=True)
+            relay.start()
+        while True:
+            try:
+                rc = proc.wait()
+                break
+            except KeyboardInterrupt:   # Ctrl-C reaches coal-cpp too; it cleans up and exits 130
+                continue
+        if relay is not None:
+            relay.join(timeout=30)
+        return rc if rc >= 0 else 128 - rc
+    finally:
+        if old is not None:
+            try:
+                signal.signal(signal.SIGTERM, old)
+            except (ValueError, OSError):
+                pass
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main(argv=None) -> int:
     command_line = argv is None  # only the command line may hand the run to coal-cpp
     argv = sys.argv[1:] if argv is None else list(argv)
     if argv == ["--cpp-path"]:
         return cpp_path_main()
+    if argv and argv[0] == "help":   # `coal help` = `coal --help`; `coal help pipeline pairs` = `... --help`
+        known = [name for name, _ in COMMANDS if name != "help"]
+        if len(argv) > 1 and argv[1] not in known:
+            print(f"coal help: {argv[1]!r} is not a command of coal: " + ", ".join(known)
+                  + " (`coal help` alone: the codon-alignment command and the list)", file=sys.stderr)
+            return 2
+        argv = [*argv[1:], "--help"]
+    if argv and argv[0] in ("kaks", "dnds", "translate", "codon-dnds"):
+        return kaks_main(argv)
+    if argv and argv[0] == "cite":   # what to cite for what was run (coal/citations.py)
+        from .citations import main as cite_main
+        try:
+            rc = cite_main(argv[1:])
+            sys.stdout.flush()
+            return rc
+        except BrokenPipeError:   # `coal cite | head`
+            return closed_stdout_exit()
+    if argv and argv[0] == "pipeline":  # CDS -> orthologs / clusters -> alignment -> codon alignment -> Ka/Ks
+        from .dnds_pipeline import main as pipeline_main
+        return pipeline_main(argv[1:])
     batch = wants_batch(argv)
     ap = build_parser(batch=batch)
     args = ap.parse_args(argv)

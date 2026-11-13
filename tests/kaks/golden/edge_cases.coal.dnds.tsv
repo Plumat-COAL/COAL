@@ -1,0 +1,162 @@
+seq1	seq2	method	dN	dS	dNdS	SE_dN	SE_dS	N_sites	S_sites	Nd	Sd	codons_compared	status	note
+identical	NA	NG	0	0	NA	0	0	275.27378	84.726225	0	0	120	ok	
+identical	NA	LWL	0	0	NA	NA	NA	282	78	0	0	120	ok	
+identical	NA	MLWL	0	0	NA	NA	NA	292.8	67.2	0	0	120	ok	
+identical	NA	LPB	0	0	NA	NA	NA	NA	NA	0	0	120	ok	
+identical	NA	MLPB	0	0	NA	NA	NA	NA	NA	0	0	120	ok	
+identical	NA	YN	0	0	NA	0	0	267.38481	92.615191	0	0	120	ok	
+identical	NA	MYN	0	0	NA	0	0	267.38481	92.615191	0	0	120	ok	
+all_synonymous	NA	NG	0	0.59097274	0	0	0.11685237	274.40922	85.590778	0	35	120	ok	
+all_synonymous	NA	LWL	0.023108335	0.47918251	0.048224496	NA	NA	281.16667	78.833333	6.4972934	37.775554	120	ok	
+all_synonymous	NA	MLWL	0	0.44086516	0	NA	NA	254.33333	105.66667	0	46.584752	120	ok	
+all_synonymous	NA	LPB	0.021095109	0.43258297	0.048765462	NA	NA	308	87.325569	6.4972934	37.775554	120	ok	
+all_synonymous	NA	MLPB	0	0.49906748	0	NA	NA	NA	93.343593	0	46.584752	120	ok	
+all_synonymous	NA	YN	0	0.6046091	0	0	0.12722958	273.85386	86.146138	0	35	120	ok	
+all_synonymous	NA	MYN	0	0.52889779	0	0	0.10754703	265.92663	94.073366	0	35	120	ok	
+typical	NA	NG	0.084464598	0.011915328	7.0887347	0.018283933	0.011939281	275.40605	84.593945	22	1	120	ok	
+typical	NA	LWL	0.082320055	0.013100023	6.2839627	NA	NA	282.33333	77.666667	23.241695	1.0174351	120	ok	
+typical	NA	MLWL	0.079729597	0.014854475	5.3673789	NA	NA	291.50649	68.493506	23.241695	1.0174351	120	ok	
+typical	NA	LPB	0.083710147	0.0077078417	10.860387	NA	NA	277.6449	132	23.241695	1.0174351	120	ok	
+typical	NA	MLPB	0.083710147	0.0077078417	10.860387	NA	NA	277.6449	132	23.241695	1.0174351	120	ok	
+typical	NA	YN	0.085291479	0.011569657	7.3719974	0.018467023	0.011592232	272.89863	87.10137	22	1	120	ok	
+typical	NA	MYN	0.087913603	0.010729	8.1940164	0.019056533	0.010837275	265.36009	94.639907	22	1	120	ok	
+saturated_unrelated	NA	NG	NA	NA	NA	NA	NA	269.01099	90.989011	206.25	68.75	120	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+saturated_unrelated	NA	LWL	NA	NA	NA	NA	NA	274.5	85.5	0	0	120	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+saturated_unrelated	NA	MLWL	NA	NA	NA	NA	NA	282.16299	77.83701	93.696829	57.204969	120	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+saturated_unrelated	NA	LPB	NA	NA	NA	NA	NA	NA	NA	0	0	120	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+saturated_unrelated	NA	MLPB	NA	NA	NA	NA	NA	298.5	133.5	93.696829	57.204969	120	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+saturated_unrelated	NA	YN	NA	2.4067151	NA	NA	2.3648929	258.15033	101.84967	205.61308	69.386917	120	saturated	Ka saturated (multiple-hit correction undefined)
+saturated_unrelated	NA	MYN	NA	2.406702	NA	NA	2.3648353	258.15033	101.84967	205.61312	69.386879	120	saturated	Ka saturated (multiple-hit correction undefined)
+gaps	NA	NG	0.052673067	0.025289047	2.0828411	0.014744171	0.017959399	255.57355	80.426448	13	2	112	ok	
+gaps	NA	LWL	0.047334214	0.041981524	1.1275011	NA	NA	261.66667	74.333333	12.385786	3.1206266	112	ok	
+gaps	NA	MLWL	0.048035566	0.039929278	1.2030161	NA	NA	257.84615	78.153846	12.385786	3.1206266	112	ok	
+gaps	NA	LPB	0.048326071	0.025166344	1.9202659	NA	NA	256.29615	124	12.385786	3.1206266	112	ok	
+gaps	NA	MLPB	0.048326071	0.025166344	1.9202659	NA	NA	256.29615	124	12.385786	3.1206266	112	ok	
+gaps	NA	YN	0.05365159	0.023936444	2.2414186	0.015022832	0.016994817	251.10497	84.895025	13	2	112	ok	
+gaps	NA	MYN	0.054792307	0.024001523	2.2828679	0.015377009	0.018054671	246.50305	89.496952	13	2	112	ok	
+ambiguous	NA	NG	0.058989519	0.10648639	0.55396297	0.015389997	0.038392075	264.41353	80.586466	15	8	115	ok	
+ambiguous	NA	LWL	0.061771842	0.099727123	0.61940865	NA	NA	270.33333	74.666667	16.698988	7.4462918	115	ok	
+ambiguous	NA	MLWL	0.055068439	0.14020796	0.39276256	NA	NA	284.10526	60.894737	15.645233	8.5379271	115	ok	
+ambiguous	NA	LPB	0.058704146	0.099445952	0.59031208	NA	NA	284.46011	74.877777	16.698988	7.4462918	115	ok	
+ambiguous	NA	MLPB	0.055150168	0.10804151	0.51045353	NA	NA	283.68424	79.024511	15.645233	8.5379271	115	ok	
+ambiguous	NA	YN	0.056546341	0.12618146	0.4481351	0.014776165	0.045859266	275.89774	69.102256	15	8	115	ok	
+ambiguous	NA	MYN	0.060871431	0.097618253	0.62356608	0.015931672	0.035329809	257.21014	87.789864	15	8	115	ok	
+internal_stop	NA	NG	0.077627456	0.049937802	1.5544828	0.0176009	0.025187526	271.2041	82.795898	20	4	118	warning	2 codon column(s) with an internal stop codon skipped
+internal_stop	NA	LWL	0.076247927	0.053617208	1.4220794	NA	NA	277.66667	76.333333	21.171508	4.0927802	118	warning	2 codon column(s) with an internal stop codon skipped
+internal_stop	NA	MLWL	0.070972047	0.073489147	0.96574869	NA	NA	298.30769	55.692308	21.171508	4.0927802	118	warning	2 codon column(s) with an internal stop codon skipped
+internal_stop	NA	LPB	0.073136678	0.044252379	1.6527174	NA	NA	289.47866	92.487235	21.171508	4.0927802	118	warning	2 codon column(s) with an internal stop codon skipped
+internal_stop	NA	MLPB	0.073136678	0.044252379	1.6527174	NA	NA	289.47866	92.487235	21.171508	4.0927802	118	warning	2 codon column(s) with an internal stop codon skipped
+internal_stop	NA	YN	0.077867982	0.050160213	1.5523854	0.017701737	0.02548613	271.00308	82.996925	20	4	118	warning	2 codon column(s) with an internal stop codon skipped
+internal_stop	NA	MYN	0.080393076	0.045716233	1.7585236	0.018306143	0.023208023	263.20821	90.791788	20	4	118	warning	2 codon column(s) with an internal stop codon skipped
+terminal_stop	NA	NG	0.068396146	0.12855472	0.53203918	0.016318055	0.041642771	275.35509	84.644914	18	10	120	ok	
+terminal_stop	NA	LWL	0.071218656	0.12655473	0.56274984	NA	NA	282	78	20.083661	9.8712693	120	ok	
+terminal_stop	NA	MLWL	0.061262546	0.1743099	0.35145765	NA	NA	290.04255	69.957447	17.768745	12.194275	120	ok	
+terminal_stop	NA	LPB	0.067275644	0.11318467	0.5943883	NA	NA	298.52797	87.213836	20.083661	9.8712693	120	ok	
+terminal_stop	NA	MLPB	0.059784007	0.1307832	0.45712298	NA	NA	297.2157	93.240379	17.768745	12.194275	120	ok	
+terminal_stop	NA	YN	0.066692081	0.14172256	0.47058197	0.015933755	0.046084354	282.49743	77.502565	18	10	120	ok	
+terminal_stop	NA	MYN	0.07155196	0.11269277	0.63492944	0.017123726	0.036435031	264.32818	95.671816	18	10	120	ok	
+terminal_stop_one_side	NA	NG	0.064587443	0.061037822	1.0581545	0.01584477	0.027592344	274.70504	85.294964	17	5	120	ok	
+terminal_stop_one_side	NA	LWL	0.066920494	0.053787633	1.2441613	NA	NA	281.5	78.5	18.838119	4.2223292	120	ok	
+terminal_stop_one_side	NA	MLWL	0.059251783	0.0861402	0.68785286	NA	NA	299.16667	60.833333	17.726158	5.2401955	120	ok	
+terminal_stop_one_side	NA	LPB	0.065843912	0.069169365	0.95192303	NA	NA	286.10267	61.043342	18.838119	4.2223292	120	ok	
+terminal_stop_one_side	NA	MLPB	0.06223365	0.076909793	0.80917718	NA	NA	284.83238	68.134307	17.726158	5.2401955	120	ok	
+terminal_stop_one_side	NA	YN	0.063840308	0.063648638	1.0030114	0.015668717	0.028838798	277.9303	82.069704	17	5	120	ok	
+terminal_stop_one_side	NA	MYN	0.066051441	0.057497541	1.1487698	0.016226016	0.026142535	269.1364	90.8636	17	5	120	ok	
+lowercase_rna	NA	NG	0.044998585	0.036045156	1.2483948	0.013091955	0.020940377	274.75504	85.244957	12	3	120	ok	
+lowercase_rna	NA	LWL	0.045779815	0.033637914	1.3609588	NA	NA	281.5	78.5	12.887018	2.6405762	120	ok	
+lowercase_rna	NA	MLWL	0.042691735	0.045015852	0.94837113	NA	NA	277.5	82.5	11.846956	3.7138078	120	ok	
+lowercase_rna	NA	LPB	0.045900453	0.020234301	2.2684477	NA	NA	280.76015	130.5	12.887018	2.6405762	120	ok	
+lowercase_rna	NA	MLPB	0.042518139	0.028458297	1.4940507	NA	NA	278.63299	130.5	11.846956	3.7138078	120	ok	
+lowercase_rna	NA	YN	0.04452437	0.037443888	1.1890958	0.012952998	0.021833887	277.59702	82.402983	12	3	120	ok	
+lowercase_rna	NA	MYN	0.044671323	0.037907868	1.1784183	0.01300558	0.022613335	276.89336	83.106641	12	3	120	ok	
+length_not_multiple_of_3	NA	NG	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	error	alignment length 299 is not a multiple of 3
+length_not_multiple_of_3	NA	LWL	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	error	alignment length 299 is not a multiple of 3
+length_not_multiple_of_3	NA	MLWL	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	error	alignment length 299 is not a multiple of 3
+length_not_multiple_of_3	NA	LPB	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	error	alignment length 299 is not a multiple of 3
+length_not_multiple_of_3	NA	MLPB	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	error	alignment length 299 is not a multiple of 3
+length_not_multiple_of_3	NA	YN	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	error	alignment length 299 is not a multiple of 3
+length_not_multiple_of_3	NA	MYN	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	error	alignment length 299 is not a multiple of 3
+all_gap	NA	NG	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	no_data	no codon column left to compare (gaps, ambiguous bases or stop codons)
+all_gap	NA	LWL	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	no_data	no codon column left to compare (gaps, ambiguous bases or stop codons)
+all_gap	NA	MLWL	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	no_data	no codon column left to compare (gaps, ambiguous bases or stop codons)
+all_gap	NA	LPB	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	no_data	no codon column left to compare (gaps, ambiguous bases or stop codons)
+all_gap	NA	MLPB	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	no_data	no codon column left to compare (gaps, ambiguous bases or stop codons)
+all_gap	NA	YN	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	no_data	no codon column left to compare (gaps, ambiguous bases or stop codons)
+all_gap	NA	MYN	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	no_data	no codon column left to compare (gaps, ambiguous bases or stop codons)
+met_trp_only	NA	NG	0.47145649	NA	NA	0.08163969	NA	120	0	42	0	40	no_data	no synonymous sites
+met_trp_only	NA	LWL	0.37222024	NA	NA	NA	NA	120	0	44.666428	0	40	no_data	no synonymous sites
+met_trp_only	NA	MLWL	0.37222024	NA	NA	NA	NA	120	0	44.666428	0	40	no_data	no synonymous sites
+met_trp_only	NA	LPB	0.37222024	NA	NA	NA	NA	120	NA	44.666428	0	40	no_data	no synonymous sites
+met_trp_only	NA	MLPB	0.37222024	NA	NA	NA	NA	120	NA	44.666428	0	40	no_data	no synonymous sites
+met_trp_only	NA	YN	0.55942629	NA	NA	0.12570942	NA	120	0	42	0	40	no_data	no synonymous sites
+met_trp_only	NA	MYN	0.55942629	NA	NA	0.12570942	NA	120	0	42	0	40	no_data	no synonymous sites
+multi_hit_codons	NA	NG	0.028356994	0.20682682	0.13710501	0.0094983165	0.050808252	323.41983	99.580171	9	18	141	ok	
+multi_hit_codons	NA	LWL	0.028342413	0.23923345	0.11847178	NA	NA	331.5	91.5	9.3955101	21.889861	141	ok	
+multi_hit_codons	NA	MLWL	0.031039016	0.18196061	0.17058096	NA	NA	302.7	120.3	9.3955101	21.889861	141	ok	
+multi_hit_codons	NA	LPB	0.029003335	0.13388294	0.21663204	NA	NA	323.94585	163.5	9.3955101	21.889861	141	ok	
+multi_hit_codons	NA	MLPB	0.025566014	0.13388294	0.19095796	NA	NA	367.5	163.5	9.3955101	21.889861	141	ok	
+multi_hit_codons	NA	YN	0.029765915	0.18109984	0.1643619	0.0099998494	0.045266576	309.19404	113.80596	9	18	141	ok	
+multi_hit_codons	NA	MYN	0.030079489	0.18690044	0.16093856	0.0102184	0.049204468	309.19404	113.80596	9	18	141	ok	
+short_one_codon	NA	NG	0	NA	NA	0	NA	5.6470588	0.35294118	0	1	2	saturated	Ks saturated (multiple-hit correction undefined)
+short_one_codon	NA	LWL	NA	NA	NA	NA	NA	5.6666667	0.33333333	0	0	2	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+short_one_codon	NA	MLWL	NA	NA	NA	NA	NA	5.8	0.2	0	0	2	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+short_one_codon	NA	LPB	NA	NA	NA	NA	NA	NA	NA	0	0	2	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+short_one_codon	NA	MLPB	NA	NA	NA	NA	NA	NA	NA	0	0	2	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+short_one_codon	NA	YN	0	0.75573038	0	0	0.94401765	3.9	2.1	0	1	2	ok	
+short_one_codon	NA	MYN	0	0.75573038	0	0	0.94401765	3.9	2.1	0	1	2	ok	
+no_nonsyn_sites_one_codon	NA	NG	0	NA	NA	0	NA	2	1	0	1	1	saturated	Ks saturated (multiple-hit correction undefined)
+no_nonsyn_sites_one_codon	NA	LWL	0	NA	NA	NA	NA	2	1	0	0	1	saturated	Ks saturated (multiple-hit correction undefined)
+no_nonsyn_sites_one_codon	NA	MLWL	0	NA	NA	NA	NA	2	1	0	0	1	saturated	Ks saturated (multiple-hit correction undefined)
+no_nonsyn_sites_one_codon	NA	LPB	0	NA	NA	NA	NA	NA	NA	0	0	1	saturated	Ks saturated (multiple-hit correction undefined)
+no_nonsyn_sites_one_codon	NA	MLPB	0	NA	NA	NA	NA	NA	NA	0	0	1	saturated	Ks saturated (multiple-hit correction undefined)
+no_nonsyn_sites_one_codon	NA	YN	NA	0.47738563	NA	NA	0.61237244	0	3	0	1	1	no_data	no nonsynonymous sites
+no_nonsyn_sites_one_codon	NA	MYN	NA	0.47738563	NA	NA	0.61237244	0	3	0	1	1	no_data	no nonsynonymous sites
+no_nonsyn_sites	NA	NG	0	NA	NA	0	NA	525	75	0	200	200	saturated	Ks saturated (multiple-hit correction undefined)
+no_nonsyn_sites	NA	LWL	NA	NA	NA	NA	NA	533.33333	66.666667	0	0	200	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+no_nonsyn_sites	NA	MLWL	NA	NA	NA	NA	NA	560	40	0	0	200	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+no_nonsyn_sites	NA	LPB	NA	NA	NA	NA	NA	NA	NA	0	0	200	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+no_nonsyn_sites	NA	MLPB	NA	NA	NA	NA	NA	NA	NA	0	0	200	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+no_nonsyn_sites	NA	YN	NA	0.44084	NA	NA	0.034641016	0	600	0	200	200	no_data	no nonsynonymous sites
+no_nonsyn_sites	NA	MYN	NA	0.44084	NA	NA	0.034641016	0	600	0	200	200	no_data	no nonsynonymous sites
+no_syn_sites_single_step	NA	NG	0.71663358	0	NA	0.62264943	0	4.3333333	1.6666667	2	0	2	ok	
+no_syn_sites_single_step	NA	LWL	0.85035813	0	NA	NA	NA	4.3333333	1.6666667	3.6848852	0	2	ok	
+no_syn_sites_single_step	NA	MLWL	0.88945505	0	NA	NA	NA	4.1428571	1.8571429	3.6848852	0	2	ok	
+no_syn_sites_single_step	NA	LPB	1.0547824	0	NA	NA	NA	3.4935027	NA	3.6848852	0	2	ok	
+no_syn_sites_single_step	NA	MLPB	1.0547824	0	NA	NA	NA	3.4935027	NA	3.6848852	0	2	ok	
+no_syn_sites_single_step	NA	YN	0.47248974	NA	NA	0.40654667	NA	6	0	2	0	2	no_data	no synonymous sites
+no_syn_sites_single_step	NA	MYN	0.47248974	NA	NA	0.40654667	NA	6	0	2	0	2	no_data	no synonymous sites
+no_syn_sites_multi_step	NA	NG	0.44084	NA	NA	0.24494897	NA	12	0	4	0	4	no_data	no synonymous sites
+no_syn_sites_multi_step	NA	LWL	0.34657359	NA	NA	NA	NA	12	0	4.1588831	0	4	no_data	no synonymous sites
+no_syn_sites_multi_step	NA	MLWL	0.34657359	NA	NA	NA	NA	12	0	4.1588831	0	4	no_data	no synonymous sites
+no_syn_sites_multi_step	NA	LPB	0.34657359	NA	NA	NA	NA	12	NA	4.1588831	0	4	no_data	no synonymous sites
+no_syn_sites_multi_step	NA	MLPB	0.34657359	NA	NA	NA	NA	12	NA	4.1588831	0	4	no_data	no synonymous sites
+no_syn_sites_multi_step	NA	YN	0.51334589	NA	NA	0.35721725	NA	12	0	4	0	4	no_data	no synonymous sites
+no_syn_sites_multi_step	NA	MYN	0.51334589	NA	NA	0.35721725	NA	12	0	4	0	4	no_data	no synonymous sites
+myn_tn93_zero_division	NA	NG	0	NA	NA	0	NA	11.162791	3.8372093	0	5	5	saturated	Ks saturated (multiple-hit correction undefined)
+myn_tn93_zero_division	NA	LWL	NA	NA	NA	NA	NA	11.333333	3.6666667	0	0	5	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+myn_tn93_zero_division	NA	MLWL	NA	NA	NA	NA	NA	11	4	0	0	5	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+myn_tn93_zero_division	NA	LPB	NA	NA	NA	NA	NA	NA	NA	0	0	5	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+myn_tn93_zero_division	NA	MLPB	NA	NA	NA	NA	NA	NA	NA	0	0	5	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+myn_tn93_zero_division	NA	YN	0	1.5162877	0	0	1.2987173	7.3157203	7.6842797	0	5	5	ok	
+myn_tn93_zero_division	NA	MYN	0	1.5162877	0	0	1.2987173	7.3157203	7.6842797	0	5	5	ok	
+myn_nan_kappa	NA	NG	0.12761327	0.64174958	0.19885212	0.092416056	0.4418148	17.043478	6.9565217	2	3	8	ok	
+myn_nan_kappa	NA	LWL	0.12751182	0.75836992	0.16813934	NA	NA	17.333333	6.6666667	2.2102048	5.0557995	8	ok	
+myn_nan_kappa	NA	MLWL	0.12651004	0.77431163	0.16338388	NA	NA	17.470588	6.5294118	2.2102048	5.0557995	8	ok	
+myn_nan_kappa	NA	LPB	0.13381042	0.81439385	0.16430677	NA	NA	16.517434	6.2080521	2.2102048	5.0557995	8	ok	
+myn_nan_kappa	NA	MLPB	0.13381042	0.81439385	0.16430677	NA	NA	16.517434	6.2080521	2.2102048	5.0557995	8	ok	
+myn_nan_kappa	NA	YN	0.13166584	0.75296482	0.1748632	0.097042275	0.8580899	16.797486	7.2025136	2	3	8	ok	
+myn_nan_kappa	NA	MYN	0.13655609	0.97117193	0.14060959	0.10070064	4.2442061	16.247908	7.7520921	2	3	8	ok	
+identical_short	NA	NG	0	0	NA	0	0	6.5769231	2.4230769	0	0	3	ok	
+identical_short	NA	LWL	0	0	NA	NA	NA	6.6666667	2.3333333	0	0	3	ok	
+identical_short	NA	MLWL	0	0	NA	NA	NA	6.8	2.2	0	0	3	ok	
+identical_short	NA	LPB	0	0	NA	NA	NA	NA	NA	0	0	3	ok	
+identical_short	NA	MLPB	0	0	NA	NA	NA	NA	NA	0	0	3	ok	
+identical_short	NA	YN	0	0	NA	0	0	8.1219512	0.87804878	0	0	3	ok	
+identical_short	NA	MYN	0	0	NA	0	0	8.1219512	0.87804878	0	0	3	ok	
+myn_sites_in_one_sequence	NA	NG	0.23587	0	NA	0.24754269	0	4.9411765	1.0588235	1	0	2	ok	
+myn_sites_in_one_sequence	NA	LWL	0.27725887	0	NA	NA	NA	5	1	1.3862944	0	2	ok	
+myn_sites_in_one_sequence	NA	MLWL	0.26659507	0	NA	NA	NA	5.2	0.8	1.3862944	0	2	ok	
+myn_sites_in_one_sequence	NA	LPB	0.25205352	0	NA	NA	NA	5.5	NA	1.3862944	0	2	ok	
+myn_sites_in_one_sequence	NA	MLPB	0.25205352	0	NA	NA	NA	5.5	NA	1.3862944	0	2	ok	
+myn_sites_in_one_sequence	NA	YN	0.21199811	0	NA	0.24002807	0	5.75	0.25	1	0	2	ok	
+myn_sites_in_one_sequence	NA	MYN	0.21199811	0	NA	0.24002807	0	5.75	0.25	1	0	2	ok	

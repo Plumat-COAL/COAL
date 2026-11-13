@@ -1,6 +1,6 @@
 {
  "schema": "coal.report/1",
- "coal_version": "0.5.0",
+ "coal_version": "0.6.0.dev0",
  "source": "coal",
  "engine": "coal-python",
  "command": "coal pep.fasta nuc.fasta -o out.fa",
@@ -123,5 +123,5 @@
  "summary_text": [
   "1 sequence of 6 was written to the output but is probably wrong (first: g2: Paired with DNA 'other2' only by its position in the files: check that this is the right DNA.) Remove it before analysis, or use --strict to refuse such genes."
  ],
- "methods_text": "Codon alignments were built with COAL v0.5.0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 6 sequences, 4 matched their protein exactly; 1 were paired with their DNA only by their order in the files; and 1 was written to the output but flagged as probably wrong (most likely the wrong DNA, a shifted position or the wrong genetic code); remove it before analysis. Command: coal pep.fasta nuc.fasta -o out.fa"
+ "methods_text": "Codon alignments were built with COAL v0.6.0.dev0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 6 sequences, 4 matched their protein exactly; 1 were paired with their DNA only by their order in the files; and 1 was written to the output but flagged as probably wrong (most likely the wrong DNA, a shifted position or the wrong genetic code); remove it before analysis. Command: coal pep.fasta nuc.fasta -o out.fa"
 }

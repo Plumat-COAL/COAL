@@ -1,0 +1,228 @@
+# COAL from R: the `coalr` package
+
+`coalr` (in `packaging/r/coalr`) gives R two ways to COAL's dN/dS pipeline ([pipeline.md](pipeline.md)):
+
+| Route | Functions | What runs | Needs |
+|---|---|---|---|
+| **In process** (Rcpp) | `coal_dnds_pairs()`, `coal_dnds_clusters()`, `coal_kaks()`, `coal_codon_align()`, `coal_align_pairs()`, `coal_translate()` | COAL's C++ core compiled into the package: translation, protein alignment (NW, BLOSUM62), codon threading, Ka/Ks. No process is started and no file is written | a C++17 compiler at install time; `Rcpp` |
+| **Through Python** (reticulate) | `coal_pipeline_pairs()`, `coal_pipeline_clusters()` | `coal.dnds_pipeline.run_pairs()` / `run_clusters()`: the whole `coal pipeline`, with the DIAMOND search or DeepClust and Clustal Omega; the tables it writes are read back as data frames | `reticulate`, a Python with `coal-align` (and its `coal-cpp`), DIAMOND, Clustal Omega for clusters |
+
+**Which one.** When you already have the ortholog pairs or the clusters (from orthologr's `diamond_rec()`,
+`deepclust()`, OrthoFinder, your own table), use the in-process functions: they take R objects, return data
+frames, and need nothing outside R. When COAL should also find the orthologs or cluster the proteins, or you want
+its report, `--resume`, or the files on disk, use the Python route (or the command line). Both give the same
+numbers: the in-process functions compile the same C++ sources as `coal-cpp`.
+
+## Install
+
+```r
+# install.packages("remotes")
+remotes::install_github("Plumat-COAL/COAL", subdir = "packaging/r/coalr")
+```
+
+or from a clone: `R CMD INSTALL packaging/r/coalr`. The package is self-contained: `src/coal/` holds a copy of
+`cpp/src` (tables, core, kaks, align, dnds, pool), made by `python scripts/sync_r_sources.py` and committed
+(`--check` verifies it; `tests/test_r_bindings.py` runs that check). It needs a C++17 compiler (Rtools on Windows,
+Xcode command-line tools on macOS) and `Rcpp`. `reticulate`, `Biostrings` and `testthat` are optional.
+
+For the Python route also:
+
+```
+# the platform wheel of a release (it includes coal-cpp; the source package does not, and coal-align is not on
+# PyPI yet): download coal_align-<version>-py3-none-<platform>.whl from
+# https://github.com/plumat-coal/COAL/releases/latest, then
+python -m pip install coal_align-<version>-py3-none-<platform>.whl
+coal pipeline install diamond clustalo          # DIAMOND, and Clustal Omega for clusters, into COAL's cache
+```
+
+```r
+reticulate::use_virtualenv("~/venvs/coal")     # or use_python(), RETICULATE_PYTHON, an active virtualenv
+coalr::coal_python_available()                 # TRUE, or FALSE with attr(, "reason")
+```
+
+`coal_python_available()` does not let reticulate download a Python of its own to answer; call
+`reticulate::py_require("coal-align")` first if you want reticulate to manage one.
+
+## Pairs
+
+```r
+library(coalr)
+res <- coal_dnds_pairs("thaliana_cds.fasta", "lyrata_cds.fasta",
+                       pairs = data.frame(query = c("AT1G01010.1", "AT1G01020.1"),
+                                          subject = c("333554|PACid:16033839", "470181|PACid:16064328")),
+                       methods = c("YN", "NG"), threads = 4)
+```
+
+- `query_cds`, `subject_cds`: a named character vector, a `DNAStringSet`, a `seqinr` list, a two-column data frame
+  (ID, sequence: `orthologr::read.cds()`'s table works) or a FASTA path.
+- **When one string is a file name** (every function that takes sequences; `?coalr` "Sequence inputs"): one
+  unnamed string is read as a FASTA file when a file of that name exists. When none exists, it is the error
+  "file not found" (a mistyped path used to be taken for a sequence) only if it is written like a file name and
+  not like a sequence row: (1) it has `/` or `\`, a leading `~` or a sequence-file extension (`.fa`, `.fasta`,
+  `.fas`, `.fna`, `.ffn`, `.faa`, `.frn`, `.cds`, `.pep`, `.aa`, `.nt`, `.aln`, `.afa`, `.mfa`, `.seq`, `.txt`,
+  optionally with `.gz`, `.bz2`, `.xz`) together with a character no sequence row has (a digit, `_`, `:`, a
+  space: `"run2/cds"`, `"query_cds.fasta"`, `"C:\data\cds"`); or (2) it has a lower-case letter, none of `-`,
+  `*`, `?`, and a path separator (`"data/cds"`) or a lower-case extension after a name without a dot
+  (`"cds.fasta"`, `"genes.fa.gz"`). Any other single string is one sequence. An aligned row is therefore never
+  "file not found" because of what it ends in or contains: `"MKV..LFA.FA"`, `"ACGT.NT"`, `"MK/VL"`, `"~~MKV"`
+  are sequences (the first rule of 2026-11-12 called them missing files). The rule cannot tell everything apart:
+  a mistyped file name in upper case (`"CDS.FASTA"`) is taken as a sequence, and a lower-case row whose only gap
+  is one dot just before `fa`, `aa`, `nt`, ... or that uses `/` is taken as a file name. Name a single sequence
+  (`c(id = "...")`) and it is always a sequence.
+- `pairs`: two columns, query ID and subject ID (for example `orthologr::diamond_rec()`'s first two columns).
+  Without it, the i-th query goes with the i-th subject.
+- Result: a data frame with the columns of [`dnds.tsv`](pipeline.md#dndstsv): `seq1 seq2 method dN dS dNdS SE_dN
+  SE_dS N_sites S_sites Nd Sd codons_compared prot_aln_length prot_identity status note`, rows in the order of
+  `pairs`, `NA` for a value that is not available. A gene that cannot be used, an unknown ID or a pair that cannot
+  be aligned is a row with status `error` and the reason, never an R error.
+- `status` is `ok`, `warning`, `not_converged`, `saturated`, `no_data` or `error`, as in
+  [kaks.md](kaks.md#policy). `not_converged`: the YN / MYN iteration did not settle within its round limit (very
+  short or nearly saturated pairs), so there is no estimate: `dN`, `dS`, `dNdS`, the SEs, `Nd` and `Sd` are `NA`,
+  and `note` quotes the last round, whose values differ between platforms
+  ([kaks.md](kaks.md#platform-reproducibility)). `coal_kaks()` reports the same; `coal_dnds_clusters()` counts
+  such pairs in `summary$n_not_converged`, not in `n_ok`.
+- Alignment options are those of the command line: `matrix`, `gap_open`, `gap_extend`, `end_gaps`, `max_cells`,
+  `preset = "pwalign"`; `code` is the NCBI genetic code; `yn_flavour`, `yn_weighting` as in [kaks.md](kaks.md).
+- `methods` takes KaKs_Calculator's seven names (`"ALL"` for these seven) and `"Comeron"` (alias `"C95"`) and
+  `"Li"`, the two methods of the R package orthologr that need no KaKs_Calculator, in any case. Comeron and Li
+  need `code = 1`. `comeron_flavour = "gestimator"` gives the numbers of orthologr 0.4.3's `gestimator()`
+  (stop codons compared like other codons, undefined logarithms replaced by 0), `li_flavour = "seqinr"` reads
+  stop codons as `seqinr::kaks()` does; the defaults (`"coal"`) apply COAL's policy. With the reference
+  flavours, `terminal_stops = "compare"` makes `coal_dnds_pairs()` and `coal_dnds_clusters()` compare the two
+  terminal stop codons of a pair as the last codon column when both genes have one, which is what orthologr
+  0.4.3's own pipeline does ([kaks.md](kaks.md), "Comeron and Li"). `coal_kaks()` has the two flavour arguments
+  and compares the rows it is given.
+- `keep_alignments = TRUE` adds the protein and codon alignment of each pair as `attr(res, "alignments")`.
+
+## Clusters
+
+```r
+cl <- orthologr::deepclust(...)             # or any table: representative, member
+res <- coal_dnds_clusters(cds, cl[, 1:2], aligner = coal_msa_aligner("clustalo"), threads = 4)
+res$pairs      # cluster_id + the pair columns, every pair of each cluster
+res$summary    # one row per cluster and method: the columns of cluster_summary.tsv
+res$failed     # members and clusters that could not be used
+```
+
+- `clusters`: a two-column table (representative, member) as `diamond deepclust` writes it, its file, or a named
+  list of member IDs.
+- Protein alignment of clusters of three or more: `msa =` rows you already have (a named list, cluster ID -> rows
+  named by member), or `aligner =` a function that aligns one cluster's proteins. `coal_msa_aligner("clustalo")`
+  and `coal_msa_aligner("mafft")` make such a function; they start the program once per cluster, the only place
+  where the package starts a process. With neither, every pair is aligned on its own by the built-in aligner
+  (`aligner` column `nw_pairwise`): no external program, but the values come from pairwise alignments.
+- `max_cluster_size` (200), `large_clusters` (`"representative"`, `"sample"`, `"skip"`), `pair_sample`, `seed` as on
+  the command line. The sample is reproducible and leaves R's random number stream alone, but it is not the draw
+  the command line makes for the same seed (another generator).
+
+## The building blocks
+
+```r
+coal_translate(cds)                                  # proteins (terminal stop dropped); details = TRUE: genes.tsv
+coal_align_pairs(prot_a, prot_b)                     # global NW, BLOSUM62, full length; data frame of rows + score
+coal_codon_align(protein_rows, cds)                  # PAL2NAL's job: protein alignment + DNA -> codon alignment
+coal_kaks(codon_row_1, codon_row_2, method = "YN")   # Ka/Ks of aligned codon sequences (KaKs_Calculator's numbers)
+coal_kaks(codon_msa, method = c("NG", "YN"))         # every pair of one alignment
+coal_info()                                          # versions, methods, genetic codes, matrices
+```
+
+`coal_codon_align()` takes `nogap`, `nomismatch` and `strict` (PAL2NAL's `-nogap`, `-nomismatch`; COAL's
+`--strict`) and matches DNA to protein rows by name when both are named.
+
+## The Python route
+
+```r
+res <- coal_pipeline_pairs("q_cds.fa", "s_cds.fa", methods = "YN", threads = 8)       # DIAMOND RBH + everything
+res$pairs; res$orthologs; res$unpaired; res$genes; res$failed; res$report$counts; res$exit_code
+cl <- coal_pipeline_clusters("all_cds.fa", threads = 8, max_cluster_size = 100L, out_dir = "run1")
+cl$summary
+```
+
+Further arguments are the options of `coal pipeline` with underscores (`ortho = "bh"`, `aligner = "diamond"`,
+`pairs = "pairs.tsv"`, `codontable = 2L`, `install_tools = TRUE`, `resume = TRUE`, ...). Without `out_dir` the
+run's folder is temporary and removed. Exit code 2 (finished, something is listed in `failed`) is returned, not
+raised; a run that could not be done (exit code 1: an unreadable input, a missing tool) is an R error with the
+pipeline's message. Without reticulate or a Python that has `coal-align`, both functions stop with a message that
+says what to install; nothing else in the package needs Python.
+
+## Command line and R arguments
+
+The R functions take the options of the `coal` command line under these names (the same table is in `?coalr`):
+
+| `coal` command line | In process (`coal_dnds_pairs()`, `coal_dnds_clusters()`, `coal_kaks()`) | Through Python (`coal_pipeline_pairs()`, `coal_pipeline_clusters()`) |
+|---|---|---|
+| `-m`, `--method YN` (repeatable) | `methods = c("YN", "NG")`; `method =` is accepted as well (it is the name in `coal_kaks()`, which also accepts `methods =`). Giving both with different values is an error | `methods =` or `method =` |
+| `-c`, `--codontable N` | `code = N` | `codontable = N` |
+| `-j N` (default 0: one per usable CPU) | `threads = N` (default `getOption("coalr.threads", 1L)`: one thread; `0` = one per hardware thread) | `threads = N` (default `0`, as the command line) |
+| `--min-codons N`, `--max-ds X` | `min_codons = N`, `max_ds = X` | `min_codons = N`, `max_ds = X` |
+| `--min-identity P` | `min_identity = P` (not in `coal_kaks()`: it has no protein alignment) | `min_identity = P` |
+| `--matrix`, `--gap-open`, `--gap-extend`, `--end-gaps`, `--preset`, `--max-cells` | `matrix`, `gap_open`, `gap_extend`, `end_gaps`, `preset`, `max_cells` | the same names |
+| `--yn-flavour`, `--yn-weighting 0\|1`, `--comeron-flavour`, `--li-flavour`, `--terminal-stops` | `yn_flavour`, `yn_weighting = FALSE\|TRUE`, `comeron_flavour`, `li_flavour`, `terminal_stops` | the same names (`yn_weighting = 0L` or `1L`) |
+| `--keep-alignments` | `keep_alignments = TRUE` (returned as an attribute) | `keep_alignments = TRUE` (files in `out_dir`) |
+| `--pairs TSV`, `--clusters TSV` | `pairs =` / `clusters =` (a data frame) | `pairs = "file"`, `clusters = "file"` |
+| `--max-cluster-size`, `--large-clusters`, `--pair-sample`, `--seed` | `max_cluster_size`, `large_clusters`, `pair_sample`, `seed` | the same names |
+| `--longest-isoform`, `--gene-map`, `--ortho`, `--aligner`, `--sensitivity`, `--resume`, ... | none: there is no search and no isoform handling in process, the pairs or clusters are given | the option with underscores: `longest_isoform = TRUE`, `gene_map = "file"`, ... |
+
+**The vignette** `vignette("from-two-cds-files-to-dnds", package = "coalr")` walks through a small example that
+ships with the package (`inst/extdata`, the files of `examples/dnds`): reading two CDS files, the pairs,
+`coal_dnds_pairs()`, the three flags and filtering, the alignments behind a pair, one record per gene, other
+genetic codes, and what to cite. It runs in seconds, in process, without network or external programs, and is
+built by `R CMD check`.
+
+## Threads, interrupts, errors
+
+- `threads` (default `getOption("coalr.threads", 1L)`, one thread unless the option is set; `0` = one per
+  hardware thread; the Python route's default is `0`, as `coal pipeline -j 0`). Results are identical for
+  every value.
+- Worker threads only see C++ copies of the inputs. R's API is used on the calling thread only; R objects are
+  built after the workers have been joined.
+- A user interrupt (Ctrl-C, Esc) is noticed within about 0.1 s plus the pair each thread is on; the workers are
+  stopped and joined before the interrupt is signalled.
+- No C++ exception reaches R as a crash: bad data is a row's `status`/`note`; a bad argument is an R error.
+- Reproducibility: the package compiles the engine without floating-point contraction (a pragma in the vendored
+  `kaks.cpp`, `kaks_comeron.cpp` and `kaks_li.cpp`, and in `coalr.cpp`), whatever flags R's `Makeconf` has, so results do not depend on whether the CPU has FMA. The last
+  digits of 15 can still differ between C libraries; [kaks.md](kaks.md#platform-reproducibility).
+- Memory: the inputs stay in R; the engine copies one batch (at most 1,024 groups, 16 Mb of CDS or 32,768 pairs)
+  at a time, plus one alignment table per thread (`max_cells`).
+
+## Validation
+
+2026-11-11, R 4.5.3, Linux x86-64 (2-core cloud VM), gcc 16.2:
+
+- `testthat`: 30 tests, 759 expectations. The package's fixtures are tables written by the command line
+  (`packaging/r/coalr/tools/make_test_fixtures.py`, from `tests/fixtures/pipeline`): pair mode with all seven
+  methods, the `pwalign` preset, cluster mode with Clustal Omega rows, clusters above the size cap (representative,
+  skip), the summary, translation, the kept codon alignments. Every numeric column agrees to the 8 digits the
+  command line prints; every text column is identical.
+- Run against a live command line (`COALR_TEST_COAL=path/to/coal`): orthologr's 1,000-gene example, 999 reciprocal
+  best hits, YN and NG: all 1,998 rows equal `coal pipeline pairs`. The reticulate route gives the same tables.
+- `R CMD check --as-cran --no-manual`: no ERROR, no WARNING. NOTEs: the compile flag `-march=nocona` (conda's R
+  adds it; not from the package) and "unable to verify current time" (no network).
+- Time for the 999 pairs, YN, sequences read from FASTA: 1.5 s on one thread (0.3 s alignment + codon threading,
+  1.1 s Ka/Ks); all seven methods 3.0 s.
+
+2026-11-13, for the methods Comeron and Li (`tests/testthat/test-comeron-li.R`): the reference flavours against
+stored values of orthologr 0.4.3's gestimator code and of `seqinr::kaks()` for 139 pairs (17 digits; equal to
+1e-12), `seqinr::kaks()` itself when seqinr is installed, the default flavours, names and arguments, and the
+three entry points. With them the package has 38 tests and 1,005 expectations (41 tests and 1,047 expectations on
+2026-11-13, after the status `not_converged` and its tests; `R CMD check --as-cran --no-manual` again without
+ERROR or WARNING in a UTF-8 locale). After the second review of 2026-11-13 (`min_identity`, `method` /
+`methods`, the shipped example, the vignette): 46 tests and 1,096 expectations, and `R CMD check --as-cran
+--no-manual` builds the vignette, with 0 errors and no warning but the checking machine's missing `en_US.UTF-8`
+locale.
+
+Not tested by hand: Windows and macOS (the R package was built and checked on Linux only; from 2026-11-13 the
+workflow `.github/workflows/r-package.yml` runs `R CMD check --as-cran --no-manual` on Linux (R release and the
+previous release), macOS and Windows whenever the package, `cpp/src` or the sync script change, and its first
+runs are the first builds of coalr on those two systems); R older than 4.5; clusters or pair sets large enough
+to matter for memory.
+
+## Maintenance
+
+- After changing `cpp/src`: `python scripts/sync_r_sources.py`, commit the copies.
+- The package version follows COAL's (`DESCRIPTION` = `pyproject.toml`; `tests/test_r_bindings.py` checks it).
+- After changing the pipeline's output: `python packaging/r/coalr/tools/make_test_fixtures.py` (needs `coal` with
+  `coal-cpp`, DIAMOND and Clustal Omega), then the R tests.
+- `Rscript -e 'Rcpp::compileAttributes("packaging/r/coalr"); roxygen2::roxygenise("packaging/r/coalr")'` after
+  changing exported C++ functions or the roxygen comments. Delete `src/*.o` afterwards: roxygen builds them
+  without optimisation, and `R CMD INSTALL` would reuse them (ten times slower).

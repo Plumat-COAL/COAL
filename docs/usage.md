@@ -1,5 +1,38 @@
 # Using COAL
 
+## Commands
+
+`coal --help` lists them; `coal COMMAND --help` (or `coal help COMMAND`) has each one's options.
+
+| Command | What it does | Details |
+|---|---|---|
+| `coal PEP_ALN NUC_FASTA ...` | codon alignment from a protein alignment and the coding DNA of its genes; `pal2nal ...` is the same engine with PAL2NAL v14's command line and defaults | this page |
+| `coal --batch JOBS` | many small codon alignments in one process | [Batch mode](#batch-mode) |
+| `coal kaks -i IN -o OUT` | Ka/Ks for pairs of aligned coding sequences, in KaKs_Calculator 2.0's format (methods NG, LWL, MLWL, LPB, MLPB, YN, MYN; also Comeron and Li) | [kaks.md](kaks.md) |
+| `coal dnds IN` | the same estimates as a tidy table with standard errors and a status per pair; `--min-codons`, `--max-ds` flag estimates that need care | [kaks.md](kaks.md) |
+| `coal pipeline pairs --query Q --subject S -o DIR` | coding sequences of two species in, dN/dS of their orthologs out: translation, DIAMOND reciprocal best hits, protein alignment, codon alignment, Ka/Ks | [pipeline.md](pipeline.md) |
+| `coal pipeline clusters --cds FILE ... -o DIR` | gene families: DIAMOND DeepClust (or given clusters), one protein MSA per cluster, Ka/Ks for every pair, a per-cluster summary | [pipeline.md](pipeline.md) |
+| `coal pipeline install diamond clustalo mafft` | install the external programs of the pipeline into COAL's cache (checksum-verified) | [pipeline.md](pipeline.md), [alignment.md](alignment.md) |
+| `coal translate CDS.fasta`, `coal codon-dnds` | the pipeline's native steps on their own: CDS to proteins; protein alignment, codon alignment and Ka/Ks for groups read from a stream | [pipeline.md](pipeline.md#from-c) |
+| `coal cite [REPORT.json \| METHOD ...]` | what to cite for what you ran | [kaks.md](kaks.md#what-to-cite) |
+| `coal help [COMMAND]` | the help of `coal`, or of one command | |
+| `coal --cpp-path` | the path of the C++ engine `coal-cpp` this install uses (exit 1: none) | [cpp-engine.md](cpp-engine.md) |
+| `coal --version` | the version | |
+
+`coal kaks`, `coal dnds`, `coal translate`, `coal codon-dnds` and `coal pipeline` are run by the C++ engine
+`coal-cpp`, which the platform wheels contain and the source package does not ([install.md](install.md)); their
+`--help` works in every install. The pipeline also needs DIAMOND, and Clustal Omega or MAFFT for clusters
+(`coal pipeline install diamond clustalo`). A small example of each, with the files in `examples/dnds`:
+
+```
+coal dnds examples/dnds/codon.fasta --pairs consecutive -o dnds.tsv
+coal kaks -i examples/dnds/codon.fasta -o out.kaks --pairs consecutive -m YN
+coal pipeline pairs --query examples/dnds/species_a_cds.fasta --subject examples/dnds/species_b_cds.fasta -o out
+coal cite out/report.json
+```
+
+The rest of this page is about the codon-alignment command.
+
 - **Input:** a protein alignment (FASTA or CLUSTAL) and the unaligned coding DNA (FASTA, one or more files; an
   empty file among several is fine). Non-letters in the DNA (gaps, digits, spaces) are ignored, as in PAL2NAL.
   Files must be plain ASCII text: a non-ASCII byte, or a control byte such as NUL (a binary file, UTF-16 text),
@@ -114,7 +147,7 @@ killed, so a pipeline reading COAL's output never waits on an orphaned worker.
   such a run is large while it runs (about 55 KB per 400-codon gene of unrelated DNA: a million of them write
   55 GB next to the output, removed at the end).
 - `-q --progress` still prints the progress lines (`-q` silences warnings, notices and the summary, not progress).
-- One run at a time per output file: a run with `-o` keeps `<out>.coal-lock` (holding its process number) next to
+- One run at a time per output file: a run with `-o` keeps `<out>.coal-lock` (one line: its process number, the host name, the process start time on Linux, and a random token; both engines write and honour it) next to
   the output while it runs, because the partial output and checkpoint files it writes there have fixed names. A
   second run writing the same file at the same time is refused before it starts (`coal: error: another COAL run
   (process 12345) is writing out.fa: wait for it to finish, or write to another file ...`, exit 1); a lock left
@@ -207,13 +240,15 @@ fam002/pep.aln fam002/nuc.fa -o fam002/codon.fa -codontable 2
   single run, and a job's half-written output is removed as it is for a single run (each job writes a temporary file
   and renames it at the end).
 - **Parallel jobs:** `--batch-parallel N` runs up to N jobs at a time in worker processes (`0` = one per CPU core;
-  the default is one after the other). Each worker imports COAL once and takes jobs from a queue, so the start-up
+  the default is one after the other). Each worker imports COAL once and is handed one job after another, so the start-up
   saving stays; every job's output is still byte-identical to running it alone. A job's messages are kept until it
   ends and then printed together (prefixed as above), so the lines of two jobs never interleave; jobs finish, and
   print, in whatever order they end, while the batch report lists them in job order. `-j N` keeps its meaning
   inside each job, so `--batch-parallel 8 -j 2` can use 16 processes. Ctrl-C or SIGTERM stops every worker and
   removes half-written outputs as above; a worker killed from outside (out of memory) fails its job with
-  `error: the job's worker process died (out of memory?)` and the batch goes on. Measured (16-core WSL 2,
+  `error: the job's worker process died (out of memory?)` and the batch goes on with the remaining workers (at
+  whatever moment the worker is killed; if no worker is left, the jobs not yet run fail with
+  `no worker process left to run the job`). Measured (16-core WSL 2,
   Python engine): 64 jobs of 2,000 sequences × 300 codons (0.15 s each alone) take 4.15 s one after the other,
   1.20 s with `--batch-parallel 4` and 0.71 s with `--batch-parallel 0`; on 200 jobs of `examples/clean` (8 genes
   each) 0.12 s against 0.09 s, since a job that takes less than a millisecond has nothing to gain. Batches always run in the Python engine (never handed to `coal-cpp`, which has no

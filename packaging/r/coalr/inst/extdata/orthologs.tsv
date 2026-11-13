@@ -1,0 +1,13 @@
+query	subject	codons	simulated_omega	simulated_dS	indel_codons
+spA_g01	spB_g01	320	0.04	0.35	0
+spA_g02	spB_g02	210	0.08	0.6	-3
+spA_g03	spB_g03	480	0.12	0.25	0
+spA_g04	spB_g04	150	0.18	0.45	2
+spA_g05	spB_g05	260	0.25	0.9	0
+spA_g06	spB_g06	390	0.33	0.3	-6
+spA_g07	spB_g07	180	0.45	0.2	0
+spA_g08	spB_g08	300	0.6	0.5	4
+spA_g09	spB_g09	120	0.8	0.15	0
+spA_g10	spB_g10	240	1.0	0.4	0
+spA_g11	spB_g11	200	1.2	0.08	0
+spA_g12	spB_g12	45	0.3	0.3	0

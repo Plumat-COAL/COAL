@@ -4,6 +4,13 @@ COAL is two engines that must behave identically (Python in `src/coal`, C++ in `
 app in `apps/coal-app`. This page is the short version of how to work on it; the details are in
 [docs/development.md](docs/development.md) and [tests/README.md](tests/README.md).
 
+## Licence
+
+COAL is under GPL-3.0-only ([LICENSE](LICENSE), [NOTICE](NOTICE); 0.5.0 and earlier were MIT). By contributing you
+agree that your contribution is distributed under GPL-3.0-only. Code copied or adapted from elsewhere must be under
+a licence compatible with GPL version 3 and must keep its copyright notice; say where it comes from in the file and
+add it to `NOTICE`. PAL2NAL's code (GPL-2.0) must not be copied in.
+
 ## Set up
 
 ```
@@ -11,7 +18,7 @@ git clone https://github.com/Plumat-COAL/COAL && cd COAL
 python -m venv .venv && . .venv/bin/activate          # Windows: .venv\Scripts\activate
 python -m pip install -e . -e "apps/coal-app[gui]"      # the engine (coal-align) and the app (coal-align-app)
 python -m pip install psutil                            # tests only (the worker-process tests)
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release -j 4   # coal-cpp
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCOAL_TEST_HOOKS=ON && cmake --build build --config Release -j 4   # coal-cpp, a test build (docs/development.md "Test hooks")
 export COAL_CPP_BIN=$PWD/build/coal-cpp                 # Windows: build\Release\coal-cpp.exe
 ```
 
@@ -69,7 +76,7 @@ python tests/test_cpp_cli.py --write-help          # rewrites cpp/src/help_text.
 
 `.github/workflows/nightly.yml` runs every night at 03:17 UTC (and from Actions > Nightly > Run workflow, with an
 optional `seed`) the random campaign that found real bugs, with a new seed each night (the run number; the seed is
-in the run's title). Three jobs, each one of the commands below, so a failing night can be replayed on a laptop with
+in the run's title). Four jobs, each one of the commands below, so a failing night can be replayed on a laptop with
 the same seed:
 
 | Job | What | Locally (after `python scripts/fetch_pal2nal.py` and `cmake -S . -B build && cmake --build build`) |
@@ -77,13 +84,14 @@ the same seed:
 | `pal2nal-fuzz` | 3,000 random cases x 4 formats against the real PAL2NAL v14, once with the Python engine and once with `coal-cpp` | `PAL2NAL=PAL2NAL/pal2nal.v14/pal2nal.pl FUZZ_N=3000 FUZZ_SEED=<seed> FUZZ_KEEP=fuzz-keep python tests/fuzz_vs_pal2nal.py -v`, then the same with `COAL_FUZZ_ENGINE=cpp COAL_CPP_BIN=build/coal-cpp` |
 | `engine-fuzz` (Linux, macOS) | `coal-cpp` vs the Python engine on 1,500 cases of `tests/tools/engine_fuzz.py`'s wider input space (malformed files, every option, reports, `-o`, `--json`), bytes compared | `COAL_CPP_BIN=build/coal-cpp python tests/tools/engine_fuzz.py --n 1500 --seed <seed> --keep engine-fuzz-keep` |
 | `sanitizers` | `coal-cpp` built with ASan (leaks included) and UBSan, warnings as errors: the C++ test set plus `test_stdin`, `test_robustness`, `test_cpp_error_precedence`, `test_batch`, then 300 generator cases; any sanitizer report fails | `cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug -DCOAL_WARNINGS_AS_ERRORS=ON -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -O1 -g" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined" && cmake --build build-asan`, then `ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 COAL_SKIP_MEMORY_TESTS=1 COAL_IMPL=cpp COAL_CPP_BIN=$PWD/build-asan/coal-cpp python -m unittest tests.test_differential tests.test_cpp_vs_python tests.test_cpp_cli tests.test_cpp_readers tests.test_cpp_tables tests.test_cpp_pool tests.test_stdin tests.test_robustness tests.test_cpp_error_precedence tests.test_batch` and `python tests/tools/engine_fuzz.py --n 300 --seed <seed> --sanitizer` with the same `COAL_CPP_BIN` |
+| `tsan` | `coal-cpp` and `coal-cpp-align` built with ThreadSanitizer: `coal-cpp kaks`, `dnds` and `codon-dnds -j 4` with all nine methods (Comeron and Li included) in the default and the reference flavours, and the aligner with `-j 4`; a ThreadSanitizer report fails, and so does an output that differs from the same command's with `-j 1` | `cmake -S . -B build-tsan -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCOAL_WARNINGS_AS_ERRORS=ON -DCMAKE_CXX_FLAGS="-fsanitize=thread -g -O1" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread" && cmake --build build-tsan`, then `python tests/tools/tsan_threads.py --build build-tsan --seed <seed>` (about 15 minutes on two cores; if ThreadSanitizer stops with "unexpected memory mapping", `sudo sysctl vm.mmap_rnd_bits=28`) |
 
 `COAL_SKIP_MEMORY_TESTS=1` skips the peak-memory test (`tests/test_cpp_vs_python.py` `TestCppMemory`), which is
 meaningless under ASan's shadow memory. The engine generator has its own quick test, `tests/test_engine_fuzz.py`
 (20 cases; skips without `coal-cpp`), so the tool cannot rot between nights.
 
 **Reading a failure.** A failed fuzz job uploads an artifact (`pal2nal-fuzz-seed-<seed>`,
-`engine-fuzz-<os>-seed-<seed>`, `sanitizers-seed-<seed>`; kept 30 days) with the step's full log (`fuzz-*.txt`,
+`engine-fuzz-<os>-seed-<seed>`, `sanitizers-seed-<seed>`, `tsan-seed-<seed>`; kept 30 days) with the step's full log (`fuzz-*.txt`,
 `engine-fuzz.txt`, `san-*.txt`: the `DIFF #n` / `SANITIZER #n` lines say what differed and show both outputs) and
 one folder per differing case: `fuzz-keep/python/c<n>/` or `fuzz-keep/cpp/c<n>/` (PAL2NAL fuzz; `ref*/` inside are
 the neutralised reference copies), `engine-fuzz-keep/c<n>/` (generator), `san-keep/san<n>/` (sanitizer hit). Each

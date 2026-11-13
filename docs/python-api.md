@@ -1,7 +1,7 @@
 # Python API
 
-The engine package `coal-align` (`pip install coal-align`, no dependencies) can be used from Python as well as from
-the command line. Its public API is what `import coal` exports:
+The engine package `coal-align` (no dependencies; installed from a release, [install.md](install.md): it is not
+on PyPI yet) can be used from Python as well as from the command line. Its public API is what `import coal` exports:
 
 | Name | What | Stable for 1.0 |
 |---|---|---|
@@ -10,11 +10,17 @@ the command line. Its public API is what `import coal` exports:
 | `coal.CoalError` | the exception both raise for bad input, with `.code` and `.seq_id` | yes |
 | `coal.__version__` | the version string, e.g. `"0.4.2"` | yes |
 
-Everything else in the package (`coal.core`, `coal.pipeline`, `coal.report`, `coal.seqio`, ...) is internal and may
-change in any release. The `coal.report.RunReport` class is documented below because `align_files` takes one to
+Ka/Ks and the pipeline are used through their own module, `coal.dnds_pipeline`, and what to cite through
+`coal.citations`; protein alignments through `coal.align` and `coal.msa`. Their supported names are listed under
+[dN/dS and the pipeline](#dnds-and-the-pipeline) (each module's `__all__`); `import coal` itself exports the four
+names above and nothing else.
+
+Everything else in the package (`coal.core`, `coal.pipeline`, `coal.report`, `coal.seqio`, names with a leading
+underscore, ...) is internal and may change in any release. The package is typed (it ships `py.typed`; the public
+functions below have type hints that mypy accepts for the calls shown here). The `coal.report.RunReport` class is documented below because `align_files` takes one to
 produce the run report; only the parts named there are covered by the promise.
 
-The examples on this page were run with COAL 0.5.0; `tests/test_python_api.py` runs them on every change.
+The examples on this page were run with COAL 0.6.0.dev0; `tests/test_python_api.py` runs them on every change.
 
 ## `codon_align`
 
@@ -229,6 +235,116 @@ inconsistent OG0001_sp14 13
   run with a million warnings does not keep them in memory; `to_dict()` and `write()` read it back, and `close()`
   removes it (it is also removed when the `RunReport` is garbage-collected).
 
+## dN/dS and the pipeline
+
+`coal.dnds_pipeline` is the programmatic form of [`coal pipeline`](pipeline.md): the same code, the same files,
+the same report. It runs `coal-cpp` (the platform wheels have it; a source install has not: `PipelineError` /
+exit code 1 says so), DIAMOND for the search or clustering and Clustal Omega or MAFFT for clusters of three or
+more. The R package's `coal_pipeline_pairs()` / `coal_pipeline_clusters()` call these functions through reticulate.
+
+| Name | What |
+|---|---|
+| `run_pairs(query, subject, out_dir, **options) -> PipelineResult` | pair mode: two CDS files in, `out_dir/dnds.tsv` out |
+| `run_clusters(cds, out_dir, clusters=None, **options) -> PipelineResult` | cluster mode: `cds` is one path or a list; `clusters=None` runs DIAMOND DeepClust |
+| `PipelineResult` | dataclass: `exit_code: int`, `report: dict[str, Any]`, `outputs: dict[str, str]` |
+| `PipelineError` | `RuntimeError`: raised by `codon_dnds`, `install_diamond`; a failed `run_pairs` / `run_clusters` does **not** raise it (below) |
+| `codon_dnds(groups, out_tsv, method=("YN",), codontable=1, jobs=0, group_column=None, codon_out=None, kaks_out=None, failures=None, extra_args=(), cpp=None) -> int` | the engine step alone, for groups held in Python: protein alignment, codon alignment and Ka/Ks in one `coal-cpp codon-dnds` process; returns the number of groups sent |
+| `PAIR_COLUMNS`, `SUMMARY_COLUMNS`, `FAILED_COLUMNS` | tuples: the columns of `dnds.tsv`, `cluster_summary.tsv` and `failed.tsv`, in order |
+| `METHODS` | the Ka/Ks method names: `("NG", "LWL", "MLWL", "LPB", "MLPB", "YN", "MYN", "Comeron", "Li")` |
+| `SCHEMA` | `"coal.pipeline/1"`, the `schema` of the report ([pipeline.schema.json](pipeline.schema.json)) |
+| `find_diamond() -> str \| None` | the DIAMOND the pipeline would use: `$COAL_DIAMOND`, `PATH`, COAL's cache |
+| `install_diamond(method="auto", version=DIAMOND_VERSION, force=False, quiet=False, timeout=1800, sha256=None, allow_unverified=False) -> str` | fetch DIAMOND into COAL's cache (checksum verified); returns its path; `PipelineError` when it cannot |
+| `summarise(dnds_path, plans, out_path)`, `main(argv=None) -> int` | the cluster summary from a `dnds.tsv`; the `coal pipeline` command line |
+
+**Arguments.** `query`, `subject`, `out_dir`, `cds`, `clusters` and every path option take a `str` or an
+`os.PathLike`. `**options` are the options of `coal pipeline pairs --help` / `clusters --help` with underscores:
+`method=["YN", "NG"]` (or one name), `pairs="orthologs.tsv"`, `jobs=8`, `codontable=1`, `aligner="nw"`,
+`ortho="rbh"`, `longest_isoform=True`, `gene_map=...`, `min_codons=50`, `max_ds=3`, `kaks_format=True`,
+`keep_alignments=True`, `resume=True`, `quiet=True`, ... The table in [pipeline.md](pipeline.md#options-common-to-both-modes) is the
+reference; the R package's arguments are the same names ([r.md](r.md)).
+
+**What is returned, and what is raised.**
+
+- A run that **fails returns**, it does not raise: an unreadable input, a missing tool, a full disk, an output
+  folder another run holds give `PipelineResult(exit_code=1, ...)` with `report["status"] == "failed"` and the
+  reason in `report["error"]` (the same line is printed on stderr, as the command prints it). `exit_code` 2: the
+  run finished and some genes, pairs or clusters could not be used; they are in `outputs["failed"]` and
+  `report["failures"]`. `exit_code` 0: nothing failed. Check `exit_code`, not an exception.
+- `TypeError` for an option that does not exist (`metod=`), `ValueError` for a value that is not allowed (an
+  unknown method, `Comeron` or `Li` with a genetic code other than 1, a negative `min_codons`): both before
+  anything is read or written.
+- `KeyboardInterrupt`, and `SystemExit` for a termination signal, pass through after the run has ended the
+  programs it started and written a report with status `interrupted`.
+- `codon_dnds` and `install_diamond` raise `PipelineError`; `coal.msa` raises `MsaError`, `coal.align`
+  `AlignError` (a `ValueError`).
+
+`outputs` maps a name to the path of a file that was written: always `dnds`, `genes`, `failed`, `report` for a
+run that got that far, and by mode and options `orthologs`, `unpaired`, `clusters`, `realign`,
+`cluster_summary`, `kaks`, `codon_alignments`, `protein_alignments`. Every file is complete or absent
+([pipeline.md](pipeline.md#output)).
+
+### Example
+
+`examples/dnds` holds two synthetic species with 12 known ortholog pairs. With `pairs=` the pairs are given, so
+this runs without DIAMOND:
+
+```python
+>>> import csv
+>>> from coal import dnds_pipeline as P
+>>> d = "examples/dnds"
+>>> res = P.run_pairs(f"{d}/species_a_cds.fasta", f"{d}/species_b_cds.fasta", "out",
+...                   pairs=f"{d}/orthologs.tsv", method=["YN", "NG"], quiet=True)
+>>> res.exit_code, res.report["status"], res.report["schema"]
+(0, 'completed', 'coal.pipeline/1')
+>>> res.report["counts"]["pairs"]["total"], res.report["counts"]["pairs"]["ok"]
+(12, 12)
+>>> sorted(res.outputs)
+['dnds', 'failed', 'genes', 'orthologs', 'report']
+>>> with open(res.outputs["dnds"], newline="") as fh:
+...     rows = list(csv.DictReader(fh, delimiter="\t"))
+>>> len(rows), tuple(rows[0]) == P.PAIR_COLUMNS
+(24, True)
+>>> [(r["seq1"], r["seq2"], r["method"], r["dN"], r["dS"], r["dNdS"], r["status"]) for r in rows[:1]]
+[('spA_g01', 'spB_g01', 'NG', '0.0096066871', '0.46871109', '0.020495967', 'ok')]
+>>> res.report["cite"]
+['coal', 'suyama2006', 'nei1986', 'wang2010', 'yang2000', 'yang2007']
+```
+
+A failed run, and a call that is wrong:
+
+```python
+>>> bad = P.run_pairs("nope.fa", f"{d}/species_b_cds.fasta", "out2", quiet=True)
+>>> bad.exit_code, bad.report["status"], bad.report["error"]
+(1, 'failed', "cannot open 'nope.fa': no such file")
+>>> P.run_pairs("a.fa", "b.fa", "out3", metod=["YN"])
+Traceback (most recent call last):
+  ...
+TypeError: unknown option 'metod' (the options are those of `coal pipeline pairs --help`, with underscores)
+>>> P.run_pairs("a.fa", "b.fa", "out3", method=["XX"])
+Traceback (most recent call last):
+  ...
+ValueError: method 'XX': choose from NG, LWL, MLWL, LPB, MLPB, YN, MYN, Comeron, Li
+```
+
+### What to cite, and the aligners
+
+- `coal.citations`: `keys_for(methods=(), codon_alignment=True, diamond=False, deepclust=False, clustalo=False,
+  mafft=False) -> list[str]` (the keys a run's report lists as `cite`), `reference(key, version=None) -> str` and
+  `format_references(keys, version=None) -> str` (the text, with the DOI link), `doi_url(key) -> str | None`,
+  and the tables `REFERENCES`, `DOIS`, `LABELS`, `METHOD_KEYS`, `TABLE`, `SUPERSEDED`. `KeyError` for an unknown
+  key. The keys are stable: reports hold them.
+- `coal.align`: `align_pair(a, b, params=AlignParams()) -> PairAlignment` (pure Python),
+  `align_pairs(pairs, params=AlignParams(), jobs=0, binary=None, python_fallback=True, timeout=None) ->
+  list[PairAlignment]` (through `coal-cpp-align`), `AlignParams` (`.needle()`, `.pwalign()`), `score_alignment`,
+  `find_align_binary() -> str | None` ([alignment.md](alignment.md)).
+- `coal.msa`: `run_msa(records, tool="clustalo", threads=1, exe=None, extra_args=(), timeout=None) ->
+  list[tuple[str, str]]`, `align_clusters(clusters, tool="clustalo", jobs=0, threads=1, pairs_with="nw", ...) ->
+  dict` of `MsaResult` (`rows`, `error`), `find_clustalo()`, `find_mafft()`, `install_clustalo()`,
+  `install_mafft()`, `tool_version(exe)`, `cache_dir()`.
+
+No facade is exported from `import coal` for these (`coal.run_pairs` does not exist): the pipeline module starts
+programs and needs `coal-cpp`, and `import coal` stays the dependency-free codon aligner.
+
 ## Versioning promise
 
 From 1.0 on COAL follows [semantic versioning](https://semver.org/). Within a major version:
@@ -241,10 +357,22 @@ From 1.0 on COAL follows [semantic versioning](https://semver.org/). Within a ma
 - **Exit codes:** 0 success; 1 bad input or a gene that cannot be converted; 2 usage error of `coal`, or sequences
   left out with `--keep-going`; 141 closed output pipe; 130 / 143 / 129 interrupted.
 - **Report schema:** `coal.report/1` only gains fields; a removed or renamed field, or a changed meaning, bumps the
-  schema id to `coal.report/2` (policy in [docs/report-schema.md](report-schema.md)).
+  schema id to `coal.report/2` (policy in [docs/report-schema.md](report-schema.md)). The same for the pipeline's
+  report: `coal.pipeline/1` ([pipeline.schema.json](pipeline.schema.json)) only gains fields, and the id changes
+  to `coal.pipeline/2` when one is removed, renamed or changes its meaning.
+- **Tables:** the column names and their order in `dnds.tsv` (`coal.dnds_pipeline.PAIR_COLUMNS`; in cluster mode
+  after a first column `cluster_id`), `cluster_summary.tsv` (`SUMMARY_COLUMNS`) and `failed.tsv`
+  (`FAILED_COLUMNS`) are fixed, and so is the same pair table written by `coal dnds`, `coal codon-dnds` and the R
+  package: read them by name or by position. New columns, if any, are added at the end in a minor release and
+  named in the changelog; the `status` values (`ok`, `warning`, `not_converged`, `saturated`, `no_data`, `error`)
+  can gain a member. The `note` and `message` columns are text for people.
 - **Python:** `codon_align`, `align_files` (the stable arguments above), `CoalError` and its `code`/`seq_id`/`index`
   attributes, the `code` values listed above, the warning formats, and the parts of `RunReport` named above. New
-  keyword arguments and new `code` values can be added in minor releases.
+  keyword arguments and new `code` values can be added in minor releases. Of `coal.dnds_pipeline`: `run_pairs`,
+  `run_clusters` (their positional arguments; the options follow the command line's promise), `PipelineResult`
+  and its three fields, the exit codes 0 / 1 / 2, that a failed run returns instead of raising, `codon_dnds`,
+  the column constants, `METHODS`, `SCHEMA`, `find_diamond` and `install_diamond`; of `coal.citations`: the keys,
+  `keys_for`, `reference`, `format_references`, `doi_url`.
 - **Messages on stderr** (warning and notice wording, the summary lines) and the text fields of the report are
   **not** frozen: parse the codes, not the text.
 

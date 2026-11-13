@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-message: "If you use COAL in published work, please cite the version you used, and please cite PAL2NAL too."
+message: "If you use COAL in published work, please cite the version you used and PAL2NAL; for Ka/Ks and pipeline results also the methods and programs they come from (the references below; `coal cite` lists what to cite for what you ran)."
 title: "COAL: codon alignments from protein alignments"
 type: software
 authors:
@@ -7,11 +7,14 @@ authors:
     family-names: Newton
   - given-names: Keanu
     family-names: Murati
-version: 0.5.0
-license: MIT
+# The development tree (0.6.0.devN, GPL-3.0-only) names the release it becomes; cite the version `coal --version`
+# prints. COAL 0.5.0 and earlier were released under the MIT License.
+version: 0.6.0
+license: GPL-3.0-only
 repository-code: "https://github.com/plumat-coal/COAL"
 url: "https://plumat-coal.github.io/COAL/"
 references:
+  # suyama2006: the codon-alignment method (cite for every codon alignment)
   - type: article
     authors:
       - family-names: Suyama
@@ -26,3 +29,292 @@ references:
     start: W609
     end: W612
     year: 2006
+    doi: "10.1093/nar/gkl315"
+  # The Ka/Ks estimators, the programs COAL's Ka/Ks code is derived from, and the programs `coal pipeline` runs
+  # (keys as in src/coal/citations.py; cite the ones your numbers come from: `coal cite`). Each doi is that of the cited
+  # work, checked against the publisher's or the institution's page; COAL itself has none.
+  # nei1986: Nei & Gojobori 1986
+  - type: article
+    authors:
+      - family-names: Nei
+        given-names: "M."
+      - family-names: Gojobori
+        given-names: "T."
+    title: "Simple methods for estimating the numbers of synonymous and nonsynonymous nucleotide substitutions"
+    journal: "Molecular Biology and Evolution"
+    volume: 3
+    start: 418
+    end: 426
+    year: 1986
+    doi: "10.1093/oxfordjournals.molbev.a040410"
+  # li1985: Li, Wu & Luo 1985
+  - type: article
+    authors:
+      - family-names: Li
+        given-names: "W.-H."
+      - family-names: Wu
+        given-names: "C.-I."
+      - family-names: Luo
+        given-names: "C.-C."
+    title: "A new method for estimating synonymous and nonsynonymous rates of nucleotide substitution considering the relative likelihood of nucleotide and codon changes"
+    journal: "Molecular Biology and Evolution"
+    volume: 2
+    start: 150
+    end: 174
+    year: 1985
+    doi: "10.1093/oxfordjournals.molbev.a040343"
+  # li1993: Li 1993
+  - type: article
+    authors:
+      - family-names: Li
+        given-names: "W.-H."
+    title: "Unbiased estimation of the rates of synonymous and nonsynonymous substitution"
+    journal: "Journal of Molecular Evolution"
+    volume: 36
+    start: 96
+    end: 99
+    year: 1993
+    doi: "10.1007/BF02407308"
+  # pamilo1993: Pamilo & Bianchi 1993
+  - type: article
+    authors:
+      - family-names: Pamilo
+        given-names: "P."
+      - family-names: Bianchi
+        given-names: "N. O."
+    title: "Evolution of the Zfx and Zfy genes: rates and interdependence between the genes"
+    journal: "Molecular Biology and Evolution"
+    volume: 10
+    start: 271
+    end: 281
+    year: 1993
+    doi: "10.1093/oxfordjournals.molbev.a040003"
+  # tzeng2004: Tzeng, Pan & Li 2004
+  - type: article
+    authors:
+      - family-names: Tzeng
+        given-names: "Y.-H."
+      - family-names: Pan
+        given-names: "R."
+      - family-names: Li
+        given-names: "W.-H."
+    title: "Comparison of three methods for estimating rates of synonymous and nonsynonymous nucleotide substitutions"
+    journal: "Molecular Biology and Evolution"
+    volume: 21
+    start: 2290
+    end: 2298
+    year: 2004
+    doi: "10.1093/molbev/msh242"
+  # yang2000: Yang & Nielsen 2000
+  - type: article
+    authors:
+      - family-names: Yang
+        given-names: "Z."
+      - family-names: Nielsen
+        given-names: "R."
+    title: "Estimating synonymous and nonsynonymous substitution rates under realistic evolutionary models"
+    journal: "Molecular Biology and Evolution"
+    volume: 17
+    start: 32
+    end: 43
+    year: 2000
+    doi: "10.1093/oxfordjournals.molbev.a026236"
+  # zhang2006: Zhang, Li & Yu 2006
+  - type: article
+    authors:
+      - family-names: Zhang
+        given-names: "Z."
+      - family-names: Li
+        given-names: "J."
+      - family-names: Yu
+        given-names: "J."
+    title: "Computing Ka and Ks with a consideration of unequal transitional substitutions"
+    journal: "BMC Evolutionary Biology"
+    volume: 6
+    start: 44
+    year: 2006
+    doi: "10.1186/1471-2148-6-44"
+  # comeron1995: Comeron 1995
+  - type: article
+    authors:
+      - family-names: Comeron
+        given-names: "J. M."
+    title: "A method for estimating the numbers of synonymous and nonsynonymous substitutions per site"
+    journal: "Journal of Molecular Evolution"
+    volume: 41
+    start: 1152
+    end: 1159
+    year: 1995
+    doi: "10.1007/BF00173196"
+  # wang2010: Wang et al. 2010 (KaKs_Calculator 2.0)
+  - type: article
+    authors:
+      - family-names: Wang
+        given-names: "D."
+      - family-names: Zhang
+        given-names: "Y."
+      - family-names: Zhang
+        given-names: "Z."
+      - family-names: Zhu
+        given-names: "J."
+      - family-names: Yu
+        given-names: "J."
+    title: "KaKs_Calculator 2.0: a toolkit incorporating gamma-series methods and sliding window strategies"
+    journal: "Genomics, Proteomics & Bioinformatics"
+    volume: 8
+    start: 77
+    end: 80
+    year: 2010
+    doi: "10.1016/S1672-0229(10)60008-3"
+  # yang2007: Yang 2007 (PAML 4)
+  - type: article
+    authors:
+      - family-names: Yang
+        given-names: "Z."
+    title: "PAML 4: phylogenetic analysis by maximum likelihood"
+    journal: "Molecular Biology and Evolution"
+    volume: 24
+    start: 1586
+    end: 1591
+    year: 2007
+    doi: "10.1093/molbev/msm088"
+  # thornton2003: Thornton 2003 (libsequence)
+  - type: article
+    authors:
+      - family-names: Thornton
+        given-names: "K."
+    title: "libsequence: a C++ class library for evolutionary genetic analysis"
+    journal: "Bioinformatics"
+    volume: 19
+    start: 2325
+    end: 2327
+    year: 2003
+    doi: "10.1093/bioinformatics/btg316"
+  # buchfink2021: Buchfink et al. 2021 (DIAMOND)
+  - type: article
+    authors:
+      - family-names: Buchfink
+        given-names: "B."
+      - family-names: Reuter
+        given-names: "K."
+      - family-names: Drost
+        given-names: "H.-G."
+    title: "Sensitive protein alignments at tree-of-life scale using DIAMOND"
+    journal: "Nature Methods"
+    volume: 18
+    start: 366
+    end: 368
+    year: 2021
+    doi: "10.1038/s41592-021-01101-x"
+  # sievers2011: Sievers et al. 2011 (Clustal Omega)
+  - type: article
+    authors:
+      - family-names: Sievers
+        given-names: "F."
+      - family-names: Wilm
+        given-names: "A."
+      - family-names: Dineen
+        given-names: "D."
+      - family-names: Gibson
+        given-names: "T. J."
+      - family-names: Karplus
+        given-names: "K."
+      - family-names: Li
+        given-names: "W."
+      - family-names: Lopez
+        given-names: "R."
+      - family-names: McWilliam
+        given-names: "H."
+      - family-names: Remmert
+        given-names: "M."
+      - family-names: Soding
+        given-names: "J."
+      - family-names: Thompson
+        given-names: "J. D."
+      - family-names: Higgins
+        given-names: "D. G."
+    title: "Fast, scalable generation of high-quality protein multiple sequence alignments using Clustal Omega"
+    journal: "Molecular Systems Biology"
+    volume: 7
+    start: 539
+    year: 2011
+    doi: "10.1038/msb.2011.75"
+  # katoh2013: Katoh & Standley 2013 (MAFFT)
+  - type: article
+    authors:
+      - family-names: Katoh
+        given-names: "K."
+      - family-names: Standley
+        given-names: "D. M."
+    title: "MAFFT multiple sequence alignment software version 7: improvements in performance and usability"
+    journal: "Molecular Biology and Evolution"
+    volume: 30
+    start: 772
+    end: 780
+    year: 2013
+    doi: "10.1093/molbev/mst010"
+  # drost2015: Drost et al. 2015 (orthologr)
+  - type: article
+    authors:
+      - family-names: Drost
+        given-names: "H.-G."
+      - family-names: Gabel
+        given-names: "A."
+      - family-names: Grosse
+        given-names: "I."
+      - family-names: Quint
+        given-names: "M."
+    title: "Evidence for active maintenance of phylotranscriptomic hourglass patterns in animal and plant embryogenesis"
+    journal: "Molecular Biology and Evolution"
+    volume: 32
+    start: 1221
+    end: 1231
+    year: 2015
+    doi: "10.1093/molbev/msv012"
+  # charif2007: Charif & Lobry 2007 (seqinr)
+  - type: generic
+    authors:
+      - family-names: Charif
+        given-names: "D."
+      - family-names: Lobry
+        given-names: "J. R."
+    title: "SeqinR 1.0-2: a contributed package to the R project for statistical computing devoted to biological sequences retrieval and analysis"
+    collection-title: "Structural Approaches to Sequence Evolution: Molecules, Networks, Populations"
+    editors:
+      - family-names: Bastolla
+        given-names: "U."
+      - family-names: Porto
+        given-names: "M."
+      - family-names: Roman
+        given-names: "H. E."
+      - family-names: Vendruscolo
+        given-names: "M."
+    publisher:
+      name: Springer
+    start: 207
+    end: 232
+    year: 2007
+    doi: "10.1007/978-3-540-35306-5_10"
+  # buchfink2026: Buchfink et al. 2026 (DIAMOND DeepClust); its bioRxiv preprint of 2023 is superseded
+  - type: article
+    authors:
+      - family-names: Buchfink
+        given-names: "B."
+      - family-names: Barbé
+        given-names: "É."
+      - family-names: Ashkenazy
+        given-names: "H."
+      - family-names: Reuter
+        given-names: "K."
+      - family-names: Kennedy
+        given-names: "J. A."
+      - family-names: Drost
+        given-names: "H.-G."
+    title: "Clustering the protein universe of life using DIAMOND DeepClust"
+    journal: "Nature Methods"
+    volume: 23
+    issue: 4
+    start: 724
+    end: 727
+    year: 2026
+    doi: "10.1038/s41592-026-03030-z"

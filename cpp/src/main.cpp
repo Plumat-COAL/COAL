@@ -37,6 +37,8 @@
 #include "help_text.hpp"
 #include "pool.hpp"
 #include "json.hpp"
+#include "dnds_cli.hpp"
+#include "kaks_cli.hpp"
 #include "report.hpp"
 #include "seqio.hpp"
 #include "sysio.hpp"
@@ -53,7 +55,7 @@
 namespace fs = std::filesystem;
 using namespace coal;
 
-static const char* VERSION = "0.5.0";
+static const char* VERSION = "0.6.0.dev0";
 static long long env_ll(const char* name, long long dflt) {
     const char* v = std::getenv(name);
     if (!v || !*v) return dflt;
@@ -807,19 +809,18 @@ struct Checkpoint {
     }
 };
 
-// Test hooks act only with COAL_TEST_HOOKS=1 as well (pipeline.py _test_hooks)
-static bool test_hooks() {
-    const char* v = std::getenv("COAL_TEST_HOOKS");
-    return v && std::string(v) == "1";
-}
-
+// Test hooks (sysio.hpp test_hook_env; pipeline.py _test_hooks): only in builds with -DCOAL_TEST_HOOKS=ON, and
+// then only with COAL_TEST_HOOKS=1 in the environment
 static void test_pause(int count) {
-    if (!test_hooks()) return;
-    const char* v = std::getenv("COAL_TEST_PAUSE_AFTER_CHECKPOINT");
+#ifdef COAL_TEST_HOOKS
+    const char* v = test_hook_env("COAL_TEST_PAUSE_AFTER_CHECKPOINT");
     if (v && std::to_string(count) == v) {
         std::cerr << "coal: test: paused after checkpoint " << count << std::endl;
         std::this_thread::sleep_for(std::chrono::seconds(3600));
     }
+#else
+    (void)count;
+#endif
 }
 
 // A write that failed (disk full, quota, I/O error): "cannot write <out>: no space left on device" (out "" =
@@ -1259,11 +1260,13 @@ static long long run(const Options& o, RunReport& rec, RunState& rs, const WarnF
             }
             std::cerr.flush();
             if (prog) prog->update(done);
-            if (ck && ck->count == 0 && done < nseq && test_hooks() && std::getenv("COAL_TEST_PAUSE_BEFORE_CHECKPOINT")) {
+#ifdef COAL_TEST_HOOKS
+            if (ck && ck->count == 0 && done < nseq && test_hook_env("COAL_TEST_PAUSE_BEFORE_CHECKPOINT")) {
                 sink.f.flush();  // tests: partial files exist, no checkpoint describes them yet
                 std::cerr << "coal: test: paused before any checkpoint" << std::endl;
                 std::this_thread::sleep_for(std::chrono::seconds(3600));
             }
+#endif
             if (ck && ck_saves && done < nseq &&
                 std::chrono::duration<double>(std::chrono::steady_clock::now() - last_ck).count() >= CHECKPOINT_EVERY) {
                 Json st = Json::object();
@@ -1466,6 +1469,25 @@ static int to_int(const std::string& norm) {
 
 int main(int argc, char** argv) {
     std::ios::sync_with_stdio(false);
+#ifdef COAL_TEST_HOOKS
+    // How the tests ask whether this binary has the test hooks (tests/cpp_hooks.py): COAL_TEST_HOOKS=probe. A
+    // build without them does not look at the variable and goes on as usual.
+    if (const char* probe = std::getenv("COAL_TEST_HOOKS"); probe && std::strcmp(probe, "probe") == 0) {
+        std::cout << "coal-cpp: test hooks compiled in" << std::endl;
+        return 0;
+    }
+#endif
+    // Subcommands (docs/kaks.md): `coal-cpp kaks ...` and `coal-cpp dnds ...` (a protein alignment file named
+    // exactly "kaks" or "dnds" can still be given as ./kaks).
+    if (argc >= 2 && (std::strcmp(argv[1], "kaks") == 0 || std::strcmp(argv[1], "dnds") == 0)) {
+        std::vector<std::string> rest(argv + 2, argv + argc);
+        return coal::kaks_main(argv[1], rest);
+    }
+    // `coal-cpp translate ...` and `coal-cpp codon-dnds ...`: the native steps of `coal pipeline` (docs/pipeline.md)
+    if (argc >= 2 && (std::strcmp(argv[1], "translate") == 0 || std::strcmp(argv[1], "codon-dnds") == 0)) {
+        std::vector<std::string> rest(argv + 2, argv + argc);
+        return std::strcmp(argv[1], "translate") == 0 ? coal::translate_main(rest) : coal::codon_dnds_main(rest);
+    }
     Options o;
     for (int i = 1; i < argc; ++i) o.argv.push_back(argv[i]);
 

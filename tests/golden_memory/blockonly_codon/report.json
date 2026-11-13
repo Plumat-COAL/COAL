@@ -1,6 +1,6 @@
 {
  "schema": "coal.report/1",
- "coal_version": "0.5.0",
+ "coal_version": "0.6.0.dev0",
  "source": "coal",
  "engine": "coal-python",
  "command": "coal pep.aln nuc.fasta -output codon -o out.codon",
@@ -104,5 +104,5 @@
  "summary_text": [
   "1 of 3 sequences has codons that do not match their amino acid (kept in the alignment)."
  ],
- "methods_text": "Codon alignments were built with COAL v0.5.0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 3 sequences, 2 matched their protein exactly, and 1 contained codons that did not match the aligned amino acid (kept in the alignment). Command: coal pep.aln nuc.fasta -output codon -o out.codon"
+ "methods_text": "Codon alignments were built with COAL v0.6.0.dev0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 3 sequences, 2 matched their protein exactly, and 1 contained codons that did not match the aligned amino acid (kept in the alignment). Command: coal pep.aln nuc.fasta -output codon -o out.codon"
 }

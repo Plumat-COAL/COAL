@@ -56,6 +56,36 @@ std::string open_error(const std::string& path) {
     return "cannot open '" + path + "': " + why;
 }
 
+static std::string errno_text(int e, const std::string& path) {
+    std::error_code ec;
+    if (!path.empty() && std::filesystem::is_directory(path, ec)) return "it is a folder, not a file";
+    return e ? std::strerror(e) : "the system gave no reason";
+}
+
+std::string cannot_write(const std::string& path) {
+    const int e = errno;
+    return "cannot write '" + path + "': " + errno_text(e, path);
+}
+
+std::string write_error(const std::string& path) {
+    const int e = errno;
+    return "write error on " + (path.empty() ? std::string("standard output") : "'" + path + "'") + ": " +
+           errno_text(e, path);
+}
+
+void refuse_gzip(const std::string& path) {
+    std::FILE* f = std::fopen(path.c_str(), "rb");
+    if (!f) return;  // (the reader reports a file that cannot be opened)
+    unsigned char magic[2] = {0, 0};
+    const size_t n = std::fread(magic, 1, 2, f);
+    std::fclose(f);
+    if (n == 2 && magic[0] == 0x1f && magic[1] == 0x8b)
+        throw InputError("'" + path + "' is gzip-compressed: decompress it first (gunzip -k '" + path +
+                             "'). coal-cpp reads plain text only; the `coal` command and `coal pipeline` "
+                             "decompress .gz inputs themselves",
+                         "input_format");
+}
+
 bool py_space(unsigned char c) {
     return c == ' ' || (c >= 9 && c <= 13) || (c >= 0x1c && c <= 0x1f);
 }
@@ -98,8 +128,8 @@ static size_t uni_space(const std::string& s, size_t i) {
 
 // Text inputs must be ASCII (a UTF-8 BOM is skipped): "<file>:<line>: non-ASCII character", as the reference
 // engine. A header's description (after the ID) may hold any text: the line becomes ">ID"; a non-ASCII ID is
-// "<file>:<line>: non-ASCII character in the sequence ID".
-static void check_ascii(std::string& s, const std::string& path, long long lineno) {
+// "<file>:<line>: non-ASCII character in the sequence ID" (keep_bad_ids: such a header line is returned as it is).
+static void check_ascii(std::string& s, const std::string& path, long long lineno, bool keep_bad_ids = false) {
     bool ascii = true;
     for (unsigned char c : s) {
         if (control_byte(c)) throw InputError(path + ":" + std::to_string(lineno) + ": " + CONTROL_CHAR);
@@ -117,6 +147,7 @@ static void check_ascii(std::string& s, const std::string& path, long long linen
             s = ">" + s.substr(i, j - i);
             return;
         }
+        if (keep_bad_ids) return;  // the caller reports this record (coal translate: a failed gene, not an abort)
         throw InputError(path + ":" + std::to_string(lineno) + ": " + NON_ASCII_ID);
     }
     throw InputError(path + ":" + std::to_string(lineno) + ": " + NON_ASCII);
@@ -124,7 +155,8 @@ static void check_ascii(std::string& s, const std::string& path, long long linen
 
 // ------------------------------------------------------------------ LineReader
 
-LineReader::LineReader(const std::string& path) : path_(path), in_(path, std::ios::binary), buf_(1 << 16) {
+LineReader::LineReader(const std::string& path, bool keep_bad_ids)
+    : path_(path), in_(path, std::ios::binary), buf_(1 << 16), keep_bad_ids_(keep_bad_ids) {
     if (!in_) throw InputError(open_error(path), "file_error");
     if (fill() && len_ >= 3 && (unsigned char)buf_[0] == 0xEF && (unsigned char)buf_[1] == 0xBB &&
         (unsigned char)buf_[2] == 0xBF)
@@ -147,7 +179,7 @@ bool LineReader::next(std::string& line) {
         if (pos_ >= len_ && !fill()) {
             if (got) {
                 ++lineno_;
-                check_ascii(line, path_, lineno_);
+                check_ascii(line, path_, lineno_, keep_bad_ids_);
             }
             return got;
         }
@@ -166,7 +198,7 @@ bool LineReader::next(std::string& line) {
                 if (pos_ < len_ && buf_[pos_] == '\n') ++pos_;
             }
             ++lineno_;
-            check_ascii(line, path_, lineno_);
+            check_ascii(line, path_, lineno_, keep_bad_ids_);
             return true;
         }
     }

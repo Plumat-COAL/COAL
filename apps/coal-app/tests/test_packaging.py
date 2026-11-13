@@ -58,7 +58,7 @@ class TestInstalledWheel(unittest.TestCase):
         whls = sorted(glob.glob(os.path.join(t, "dist", "*.whl")))
         self.assertEqual(len(whls), 2, whls)
         import zipfile
-        for w in whls:  # both wheels carry the MIT licence (the app wheel had none)
+        for w in whls:  # both wheels carry the licence (GPL-3.0-only; MIT up to 0.5.0) (the app wheel had none)
             names = zipfile.ZipFile(w).namelist()
             self.assertTrue(any(re.match(r"coal_align(_app)?-[^/]+\.dist-info/licenses/LICENSE$", n) for n in names),
                             (w, [n for n in names if "dist-info" in n]))

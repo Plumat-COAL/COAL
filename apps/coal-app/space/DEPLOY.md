@@ -6,7 +6,7 @@ Everything is prepared; nobody has deployed it. It takes about 5 minutes.
    `pyproject.toml` all say `5.49.1`. CI's `gui` job installs `gradio[mcp]==5.49.1` and passes `pip check` and
    the GUI tests (verified by CI on Linux). Still run the GUI locally once (`pip install -e . -e "apps/coal-app[gui]"`,
    `python -m coal_app`); if you change the version, change all three.
-2. **Create the Space**: https://huggingface.co/new-space -> owner + name `coal`, licence MIT,
+2. **Create the Space**: https://huggingface.co/new-space -> owner + name `coal`, licence GPL-3.0 (`gpl-3.0`),
    SDK **Gradio**, template **Blank**, hardware **CPU basic (free)**, visibility Public. Create.
 3. **Get a write token**: https://huggingface.co/settings/tokens -> New token, role *Write*.
 4. **Clone the empty Space and fill it** (from the COAL repo root):

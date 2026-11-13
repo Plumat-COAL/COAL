@@ -112,7 +112,7 @@ def _version_ok(path: str) -> tuple[bool, str]:
     import subprocess
     try:
         r = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=30,
-                           stdin=subprocess.DEVNULL)
+                           stdin=subprocess.DEVNULL, encoding="utf-8", errors="backslashreplace")
     except (OSError, subprocess.SubprocessError) as e:
         return False, f"could not start {path} ({getattr(e, 'strerror', None) or e})"
     first = (r.stdout or "").strip()

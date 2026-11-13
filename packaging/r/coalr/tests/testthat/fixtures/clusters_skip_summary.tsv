@@ -1,0 +1,5 @@
+cluster_id	representative	n_members	n_used	method	pair_selection	aligner	n_pairs	n_ok	n_not_converged	n_saturated	n_no_data	n_failed	dN_median	dN_mean	dN_q25	dN_q75	dN_min	dN_max	dS_median	dS_mean	dS_q25	dS_q75	dS_min	dS_max	dNdS_median	dNdS_mean	dNdS_q25	dNdS_q75	dNdS_min	dNdS_max	n_dNdS	status	note
+famA_001	famA_001	6	6	NA	skipped	none	0	0	0	0	0	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	skipped	6 members: above --max-cluster-size 5, not computed
+famB_001	famB_001	13	11	NA	skipped	none	0	0	0	0	0	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	skipped	2 member(s) left out (see failed.tsv); 11 members: above --max-cluster-size 5, not computed
+famC_001	famC_001	2	2	YN	all	nw	1	1	0	0	0	0	0.071333115	0.071333115	0.071333115	0.071333115	0.071333115	0.071333115	0.51545217	0.51545217	0.51545217	0.51545217	0.51545217	0.51545217	0.1383894	0.1383894	0.1383894	0.1383894	0.1383894	0.1383894	1	ok	
+famD_001	famD_001	1	1	NA	singleton	none	0	0	0	0	0	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	ok	

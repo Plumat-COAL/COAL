@@ -2,5 +2,8 @@
 # library only); #include <coal/core.hpp>. See docs/cpp-engine.md "Embedding the library".
 @PACKAGE_INIT@
 
+include(CMakeFindDependencyMacro)
+find_dependency(Threads)  # coal::core links Threads::Threads (align_pairs)
+
 include("${CMAKE_CURRENT_LIST_DIR}/coalTargets.cmake")
 check_required_components(coal)

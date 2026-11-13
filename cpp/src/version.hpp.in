@@ -4,4 +4,5 @@
 #define COAL_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
 #define COAL_VERSION_MINOR @PROJECT_VERSION_MINOR@
 #define COAL_VERSION_PATCH @PROJECT_VERSION_PATCH@
-#define COAL_VERSION_STRING "@PROJECT_VERSION@"
+// The full version, as `coal --version` prints it (a development tree: "0.6.0.dev0", whose numeric part is above)
+#define COAL_VERSION_STRING "@COAL_VERSION_FULL@"

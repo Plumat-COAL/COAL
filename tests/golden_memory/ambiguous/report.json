@@ -1,6 +1,6 @@
 {
  "schema": "coal.report/1",
- "coal_version": "0.5.0",
+ "coal_version": "0.6.0.dev0",
  "source": "coal",
  "engine": "coal-python",
  "command": "coal pep.fasta nuc.fasta -o out.fa",
@@ -137,5 +137,5 @@
   "2 of 6 sequences have codons with unknown or ambiguous bases (e.g. N) that could not be checked: missing sequence data, not a genetic-code problem.",
   "1 of 6 sequences contain non-standard amino acids (U, O, B, Z or J) whose codons were not checked."
  ],
- "methods_text": "Codon alignments were built with COAL v0.5.0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 6 sequences, 3 matched their protein exactly; 2 contained codons with unknown or ambiguous bases (e.g. N) that could not be checked (kept in the alignment); and 1 contained non-standard amino acids (such as U, B or Z) whose codons were not checked. Command: coal pep.fasta nuc.fasta -o out.fa"
+ "methods_text": "Codon alignments were built with COAL v0.6.0.dev0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 6 sequences, 3 matched their protein exactly; 2 contained codons with unknown or ambiguous bases (e.g. N) that could not be checked (kept in the alignment); and 1 contained non-standard amino acids (such as U, B or Z) whose codons were not checked. Command: coal pep.fasta nuc.fasta -o out.fa"
 }

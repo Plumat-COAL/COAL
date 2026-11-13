@@ -20,6 +20,7 @@ destination when everything succeeded, so an error never leaves partial output
 """
 from __future__ import annotations
 
+import atexit
 import errno
 import os
 import re
@@ -27,8 +28,10 @@ import time
 from array import array
 import shutil
 import signal
+import socket
 import sys
 import tempfile
+import threading
 from collections import deque
 from itertools import islice
 
@@ -395,19 +398,32 @@ def _results(batches, jobs: int, init_args):
     # The read end goes to every worker (see _watch_parent); the write end stays here, so its EOF means coal is gone
     alive_r, alive_w = multiprocessing.Pipe(duplex=False)
     _ALIVE_W["conn"] = alive_w  # so a forked worker can close its inherited copy (_watch_parent)
-    ex = ProcessPoolExecutor(max_workers=jobs, initializer=_init_pool_worker,
-                             initargs=(os.getpid(), alive_r, *init_args))
+    try:
+        ex = ProcessPoolExecutor(max_workers=jobs, initializer=_init_pool_worker,
+                                 initargs=(os.getpid(), alive_r, *init_args))
+    except (BrokenPipeError, ConnectionError, EOFError):
+        # Creating the pool's queues registers their locks with multiprocessing's resource tracker, the first
+        # helper process of the spawn and forkserver start methods. If that process was killed (seen: the very
+        # first child, killed before it had started), the write to it is a BrokenPipeError, which further up
+        # means "standard output was closed" (exit 141, no message). It is a dead helper process: say so.
+        _ALIVE_W.pop("conn", None)
+        for c in (alive_r, alive_w):
+            try:
+                c.close()
+            except OSError:
+                pass
+        raise CoalError(WORKER_DIED, code="worker_died") from None
     ok = False
     try:
         pending: deque = deque()
         for b in batches:
-            pending.append(ex.submit(_work, b))
+            pending.append(_pool_submit(ex, b))
             if len(pending) >= 2 * jobs:
-                yield pending.popleft().result()
+                yield _pool_result(ex, pending.popleft())
         while pending:
-            yield pending.popleft().result()
+            yield _pool_result(ex, pending.popleft())
         ok = True
-    except BrokenProcessPool:
+    except (BrokenProcessPool, _PoolPipeBroken):
         # A worker was killed (the OOM killer, most likely): the run cannot finish, and waiting for the pool
         # would hang, so the workers are killed and the run ends with a clear error (exit 1, no partial output)
         raise CoalError(WORKER_DIED, code="worker_died") from None
@@ -425,6 +441,51 @@ def _results(batches, jobs: int, init_args):
 
 
 WORKER_DIED = "a worker process died (out of memory?)"
+
+
+class _PoolPipeBroken(Exception):
+    """A pipe of the process pool itself broke while work was handed to it."""
+
+
+def _pool_submit(ex, batch):
+    """ex.submit(_work, batch). The first submit starts the pool's helper processes (with the spawn and
+    forkserver start methods: the resource tracker and the fork server) and the workers, and talks to them
+    through pipes. If one of those processes is killed before it has started properly, the write fails with a
+    BrokenPipeError (or the connection is refused or reset). Left alone, that exception looks to the caller like
+    a closed standard output (`coal ... | head`) and the run ended with exit 141 and no message; it is a dead
+    worker process, and is reported as one."""
+    try:
+        return ex.submit(_work, batch)
+    except (BrokenPipeError, ConnectionError, EOFError) as e:
+        raise _PoolPipeBroken(str(e)) from None
+
+
+def _pool_result(ex, fut):
+    """fut.result(), without trusting the pool alone to notice a dead worker. A worker killed in the middle of
+    sending a result leaves the pool's management thread inside recv() on a message that never completes (the
+    other workers and this process still hold the pipe's write end, so there is no EOF): it never looks at the
+    workers' sentinels, no future is ever failed with BrokenProcessPool, and a plain fut.result() waits for ever
+    (seen on macOS with Python 3.10, reproduced on Linux with the spawn start method). So the wait is in slices,
+    and between them the workers' sentinels are read here: a worker that has exited while work is pending is a
+    dead worker (the pool never retires an idle one before shutdown)."""
+    from concurrent.futures import TimeoutError as FutureTimeout  # (the builtin TimeoutError only from 3.11)
+    from concurrent.futures.process import BrokenProcessPool
+    from multiprocessing.connection import wait as wait_any
+    while True:
+        try:
+            return fut.result(timeout=0.5)
+        except FutureTimeout:
+            pass
+        try:
+            sentinels = [p.sentinel for p in list((getattr(ex, "_processes", None) or {}).values())]
+            dead = bool(sentinels) and bool(wait_any(sentinels, timeout=0))
+        except (OSError, ValueError, RuntimeError, AttributeError):
+            continue  # the pool is changing its workers right now: look again after the next slice
+        if dead:
+            try:
+                return fut.result(timeout=1.0)  # the pool's own report, if it is on its way (or the result itself)
+            except FutureTimeout:
+                raise BrokenProcessPool("a worker process exited while work was pending") from None
 
 
 def _abandon_pool(ex) -> None:
@@ -449,39 +510,44 @@ def _abandon_pool(ex) -> None:
                 p.join(1.0)
         except (OSError, ValueError, AttributeError, AssertionError):
             pass
-    # The call queue's feeder thread may be blocked writing a batch into the pipe (a 2 MB batch does not fit the
-    # pipe buffer): with the workers gone nothing reads it, but this process still holds the read end, so the write
-    # never fails, and the pool's management thread joins that feeder forever (Python 3.10: terminate_broken ->
-    # join_executor_internals -> call_queue.join_thread()). Draining the read end lets the feeder finish.
+    # A worker killed in the middle of sending a result leaves the pool's management thread reading a message that
+    # never completes (_pool_result), and the interpreter joins that thread at exit: closing this process's write
+    # end of the result pipe gives it EOF (the workers' ends are gone with them) so it ends as for a broken pool.
+    try:
+        result_queue._writer.close()
+    except Exception:  # noqa: BLE001 - best effort on a private attribute
+        pass
+    # The management thread now tears the pool down itself (it has seen the dead workers, or the EOF). On Python
+    # 3.10 / 3.11 that includes joining the call queue's feeder thread, which may be blocked writing a batch into
+    # the pipe (a 2 MB batch does not fit the pipe buffer): with the workers gone nothing reads it, but this process
+    # still holds the read end, so the write never fails (terminate_broken -> join_executor_internals ->
+    # call_queue.join_thread()). Draining the read end lets the feeder finish, and with it the management thread.
+    # The queue is not closed from here while that thread is at work: it still puts its wake-up items into it, and
+    # a queue closed under it is a "ValueError: Queue ... is closed" traceback on stderr before coal's own message.
     call_queue = getattr(ex, "_call_queue", None)
     reader = getattr(call_queue, "_reader", None)
-    feeder = getattr(call_queue, "_thread", None)
-    # Best effort on private attributes, and racing the pool's manager thread, which may be tearing the same
-    # queue down at the same moment (it noticed the dead workers too): on 3.10 / 3.11 it can `put` into the queue
-    # after this close() (ValueError / AssertionError in the feeder), on 3.12+ it closes the reader this loop
-    # polls (OSError / ValueError). Whatever either side meets, the workers are gone and nothing is left to send,
-    # so any exception here is ignored.
-    try:
-        call_queue.close()  # the feeder stops once its buffer is sent
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        deadline = time.monotonic() + 5.0
-        while feeder is not None and feeder.is_alive() and time.monotonic() < deadline:
+    manager = getattr(ex, "_executor_manager_thread", None)
+
+    def drain(thread, seconds: float) -> None:
+        # Private attributes, raced by the management thread (3.12+ closes the reader this loop polls: OSError /
+        # ValueError). Whatever either side meets, the workers are gone and nothing is left to send.
+        deadline = time.monotonic() + seconds
+        while thread is not None and thread.is_alive() and time.monotonic() < deadline:
             try:
                 while reader is not None and reader.poll(0.02):
                     reader.recv_bytes()
             except (OSError, EOFError, ValueError):
-                break
-            feeder.join(0.02)
-    except Exception:  # noqa: BLE001
-        pass
-    # A worker killed in the middle of sending a result leaves the pool's management thread reading a message that
-    # never completes, and the interpreter joins that thread at exit: closing this process's write end of the result
-    # pipe gives it EOF (the workers' ends are gone with them) so it ends as for a broken pool.
+                thread.join(0.02)
+                continue
+            thread.join(0.02)
+
     try:
-        result_queue._writer.close()
-    except Exception:  # noqa: BLE001 - best effort on a private attribute
+        drain(manager, 5.0)
+        if manager is None or manager.is_alive():
+            # Last resort (never seen): the management thread is still not done, so stop the feeder from here
+            call_queue.close()  # the feeder stops once its buffer is sent
+            drain(getattr(call_queue, "_thread", None), 2.0)
+    except Exception:  # noqa: BLE001
         pass
     try:
         ex.shutdown(wait=False, cancel_futures=True)
@@ -719,65 +785,334 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
-def _lock_pid(path: str) -> int | None:
+# ------------------------------------------------------------------------------------------------ the output lock
+#
+# `<real output>.coal-lock`, one line: "<pid> <host> <start> <token>\n".
+#   pid    the process id (the first field, and all that COAL up to 0.5.0 wrote or read);
+#   host   the machine's name (_hostname: one source and one spelling for both engines): a process id says nothing
+#          on another machine, so a lock from another host counts as held and is never replaced automatically;
+#   start  when that process started (Linux: field 22 of /proc/<pid>/stat; "-" where that is not cheap to get):
+#          a process id that is alive but started at another time is a different process (the id was reused);
+#   token  random, so that a process recognises exactly its own lock.
+# Fields that are missing (an older lock) are unknown and are judged by the pid alone, as before.
+#
+# A stale lock is replaced under the guard `<lock>.takeover` (the same four fields; _replace_stale_lock). The
+# process that created the guard removes it, on every path. One that is left all the same (the process was killed
+# in that instant, or Windows refused the removal for as long as we retried) is judged like a lock: its process is
+# gone, or it is older than _GUARD_MAX_AGE; then the next run that needs it clears it.
+#
+# Windows: a file that another process has open cannot be removed or renamed (PermissionError, WinError 32)
+# unless it was opened with FILE_SHARE_DELETE, which neither open() nor the C runtime does. The check is per file,
+# not per name: a run that is reading the lock also blocks the removal of the temporary name that is a hard link
+# to it. Runs that start together read each other's lock and guard all the time, so every removal here goes
+# through _remove, which tries again for about 2 s. The reads close their handle before anything is removed.
+# coal-cpp does the same (cpp/src/sysio.cpp, "the output lock").
+
+_held_locks: dict = {}                 # lock path -> the bytes this process wrote into it
+_held_mutex = threading.Lock()
+_GUARD_MAX_AGE = 15                    # seconds; a takeover holds its guard for microseconds (Windows: up to ~2 s)
+_REMOVE_TRIES = 220                    # 20 x 1 ms, then 200 x 10 ms: about 2 s
+_leftovers: set = set()                # files _remove could not remove: tried again at release and at exit
+_unlink_fails = 0                      # test hook (tests only): the next N removals fail as on Windows
+
+
+def _hostname() -> str:
+    """The machine's name, the `host` field of a lock. Both engines take it from the same place and spell it the
+    same way (sysio.cpp host_name; docs/pipeline.md "One run per folder"):
+      source    Windows: GetComputerNameExW(ComputerNamePhysicalDnsHostname), the DNS host name of this computer
+                (which is also what socket.gethostname() returns there); elsewhere gethostname(2);
+      spelling  one character per character of the name: printable ASCII (33..126) as it is, any other ASCII
+                character (blanks, control characters) as "_", every character outside ASCII as "?"; at most 255
+                characters; "-" when the system gives no name.
+    Compared with _same_host: exactly, and on Windows without regard to ASCII case."""
+    name = ""
+    if _WINDOWS:
+        try:
+            import ctypes
+            buf = ctypes.create_unicode_buffer(256)
+            n = ctypes.c_ulong(256)
+            if ctypes.windll.kernel32.GetComputerNameExW(5, buf, ctypes.byref(n)):  # ComputerNamePhysicalDnsHostname
+                name = buf.value
+        except (OSError, AttributeError, ValueError):
+            name = ""
+    if not name:
+        try:
+            name = socket.gethostname()
+        except OSError:
+            name = ""
+    if not _WINDOWS:
+        # the bytes gethostname(2) gave, one character per UTF-8 lead byte (as sysio.cpp counts them)
+        raw = os.fsencode(name)
+        name = "".join(chr(c) if c < 0x80 else "\u00bf" for c in raw if not 0x80 <= c < 0xC0)
+    return "".join((c if 32 < ord(c) < 127 else "_") if ord(c) < 128 else "?" for c in name)[:255] or "-"
+
+
+def _same_host(a: str, b: str) -> bool:
+    if _WINDOWS:   # computer names are not case sensitive there (ASCII: the field holds nothing else)
+        return a.encode("ascii", "replace").lower() == b.encode("ascii", "replace").lower()
+    return a == b
+
+
+def _proc_start(pid: int) -> str:
+    """The start time of a process as the system counts it, or "-" (unknown: not Linux, or no such process)."""
     try:
-        with open(path, encoding="ascii", errors="replace") as fh:
-            return int(fh.read(64).split()[0])
-    except (OSError, ValueError, IndexError):
+        with open(f"/proc/{pid}/stat", "rb") as fh:
+            return fh.read(4096).rsplit(b")", 1)[1].split()[19].decode("ascii")
+    except (OSError, IndexError, ValueError):
+        return "-"
+
+
+def _read_lock(path: str):
+    """(raw bytes, pid, host, start) of a lock file; pid None when it is empty or not a lock; None when there is
+    no such file."""
+    try:
+        with open(path, "rb") as fh:
+            raw = fh.read(4096)
+    except FileNotFoundError:
         return None
+    except OSError:
+        return b"", None, "-", "-"
+    f = raw.decode("utf-8", "replace").split()
+    try:
+        pid = int(f[0])
+    except (ValueError, IndexError):
+        return raw, None, "-", "-"
+    return raw, pid, (f[1] if len(f) > 1 else "-"), (f[2] if len(f) > 2 else "-")
+
+
+def _lock_holder(pid: int, host: str, start: str) -> str | None:
+    """Who holds a lock with these fields: None (nobody: its process is gone), "host" (a process on another
+    machine, which cannot be checked from here) or "process"."""
+    if host != "-" and not _same_host(host, _hostname()):
+        return "host"
+    if not _pid_alive(pid):
+        return None
+    if start != "-":
+        now = _proc_start(pid)
+        if now != "-" and now != start:
+            return None     # the id is in use again, by a process that started at another time
+    if pid == os.getpid():
+        return None         # this process's id, but not a lock it holds (_held_locks): left by an earlier process
+    return "process"
+
+
+def _remove(path: str) -> bool:
+    """Remove a lock, guard or temporary file of this process; True when it is gone. PermissionError is what
+    Windows answers while another process has the file open (see above): tried again for about 2 s; after that
+    the path is remembered and tried again when a lock is released and when the process ends."""
+    global _unlink_fails
+    for k in range(_REMOVE_TRIES):
+        try:
+            if _unlink_fails > 0:
+                _unlink_fails -= 1
+                raise PermissionError(13, "test hook: the file is open in another process", path)
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
+        except PermissionError:
+            if k + 1 < _REMOVE_TRIES:
+                time.sleep(0.001 if k < 20 else 0.01)
+                continue
+            break
+        except OSError:
+            break
+        _leftovers.discard(path)
+        return True
+    if not _leftovers:
+        atexit.register(_remove_leftovers)
+    _leftovers.add(path)
+    return False
+
+
+def _remove_leftovers() -> None:
+    for path in list(_leftovers):
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            continue
+        _leftovers.discard(path)
+
+
+def _create_lock(path: str, raw: bytes) -> bool:
+    """Create the lock file with its content in one step (a hard link to a finished temporary file: the lock is
+    never seen empty), or, where links are not possible, exclusively and then written. False if it exists."""
+    tmp = f"{path}.{os.getpid()}.{os.urandom(8).hex()}.tmp"
+    try:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    except FileExistsError:
+        fd = None
+    if fd is not None:
+        linked = None
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(raw)
+            try:
+                os.link(tmp, path)
+                linked = True
+            except FileExistsError:
+                linked = False
+            except (OSError, AttributeError, NotImplementedError):
+                linked = None     # no hard links here: the other way below
+        finally:
+            _remove(tmp)
+        if linked is not None:
+            return linked
+    for k in range(51):
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+            break
+        except FileExistsError:
+            return False
+        except PermissionError:
+            # Windows: a name whose file is being deleted (removed, but still open in another process) answers
+            # "access denied" for an instant, not "exists": not an error of the folder yet
+            if not _WINDOWS or k == 50:
+                raise
+            time.sleep(0.01)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(raw)
+    except BaseException:  # a signal between creating the lock and writing into it: leave nothing behind
+        _remove(path)
+        raise
+    return True
+
+
+_before_takeover = None   # test hook: called with the lock path before a stale lock is replaced
+_in_takeover = None       # test hook: called with the lock path while this process holds the guard
+
+
+def _clear_leftover_guard(guard: str, g) -> None:
+    """The guard was read as `g` (_read_lock) and is in the way. If it is a leftover (its process is gone, or it
+    is older than _GUARD_MAX_AGE), clear it: moved aside under a unique name (one mover wins), then removed. A
+    guard that was replaced by a live one between the reading and the move is put back."""
+    if g is None:
+        return
+    old = False
+    try:
+        old = time.time() - os.stat(guard).st_mtime > _GUARD_MAX_AGE
+    except OSError:
+        pass
+    if not (old or (g[1] is not None and _lock_holder(g[1], g[2], g[3]) is None)):
+        return
+    aside = f"{guard}.{os.getpid()}.{os.urandom(4).hex()}"
+    try:
+        os.rename(guard, aside)
+    except OSError:
+        return     # another run moved it first (Windows: or has it open; the next round tries again)
+    try:
+        moved = _read_lock(aside)
+        if moved is None or moved[0] != g[0]:   # not the one that was judged: back in place
+            try:
+                os.link(aside, guard)
+            except (OSError, AttributeError, NotImplementedError):
+                pass
+    finally:
+        _remove(aside)
+
+
+def _replace_stale_lock(path: str, raw: bytes) -> None:
+    """Remove the lock at `path` if it still holds `raw` (the content that was judged stale). Only one process at
+    a time does this for a path: it first creates `<lock>.takeover` exclusively, and removes it when it is done,
+    whatever happened in between. Without that guard, several runs that started together all read the stale id,
+    each removed "the stale lock" and created its own, and the later ones removed the lock an earlier one had just
+    taken: more than one run held the folder."""
+    guard = path + ".takeover"
+    mine = (f"{os.getpid()} {_hostname()} {_proc_start(os.getpid())} {os.urandom(8).hex()}\n").encode("ascii", "replace")
+    if _before_takeover is not None:
+        _before_takeover(path)
+    if not _create_lock(guard, mine):
+        # another run is replacing the lock right now (it takes microseconds), or left its guard behind
+        _clear_leftover_guard(guard, _read_lock(guard))
+        time.sleep(0.01)
+        return
+    try:   # the guard is ours from here on
+        if _in_takeover is not None:
+            _in_takeover(path)
+        now = _read_lock(path)   # (read and closed before the removal)
+        if now is not None and now[0] == raw:   # still the stale one: nobody else can have replaced it meanwhile
+            _remove(path)        # left in place, it is judged again in the caller's next round
+    finally:
+        _remove(guard)
 
 
 def take_output_lock(real_out: str, name: str) -> str:
-    """Create `<out>.coal-lock` holding this process's id, or refuse: two runs writing the same -o file at the same
-    time shared one `<out>.coal-partial` (the --resume file), so one of them could finish with the other's output
-    or an empty file. A lock left by a run that was killed (its process is gone) is replaced. The same words and
-    file in coal-cpp (sysio.cpp take_output_lock)."""
-    path = real_out + ".coal-lock"
-    removed = False
-    waited = 0.0
-    while True:
-        try:
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
-        except FileExistsError:
-            pid = _lock_pid(path)
+    """Create `<out>.coal-lock` for this process, or refuse: two runs writing the same -o file (or pipeline folder)
+    at the same time shared one `<out>.coal-partial` / work folder, so one of them could finish with the other's
+    output or an empty file. The lock is next to the real output (links resolved, so a link to a folder and the
+    folder are one output). A lock left by a run that was killed (its process is gone) is replaced, by exactly one
+    of the runs that find it; a lock written on another machine is never replaced automatically. coal-cpp uses
+    the same file (sysio.cpp take_output_lock) and reads the process id, the first field."""
+    path = os.path.realpath(real_out) + ".coal-lock"
+    raw = (f"{os.getpid()} {_hostname()} {_proc_start(os.getpid())} {os.urandom(8).hex()}\n").encode("ascii", "replace")
+    with _held_mutex:
+        if path in _held_locks:
+            raise CoalError(f"this process is already writing {name} (another call or thread): wait for it to "
+                            "finish, or write to another file", code="file_error")
+        _held_locks[path] = raw
+    ok = False
+    try:
+        waited = 0.0
+        deadline = time.monotonic() + 30
+        while True:
+            try:
+                created = _create_lock(path, raw)
+            except OSError as e:  # e.g. a folder that cannot be written: the usual output error
+                raise _output_error(name, e) from None
+            if created:
+                got = _read_lock(path)
+                if got is not None and got[0] == raw:   # (and not replaced under us by a COAL that predates this)
+                    ok = True
+                    return path
+                continue
+            cur = _read_lock(path)
+            if cur is None:
+                continue      # gone in the meantime: try again
+            old_raw, pid, host, start = cur
             if pid is None:
-                # Empty (or unreadable): another run created it an instant ago and has not written its id yet (the
-                # window between the two calls below), so it is not stale; only one that stays empty is
+                # Empty (or not a lock): a COAL up to 0.5.0 or coal-cpp created it an instant ago and has not
+                # written its id yet, so it is not stale; only one that stays empty for 2 s is
                 if waited < 2.0:
                     time.sleep(0.05)
                     waited += 0.05
                     continue
-            elif pid != os.getpid() and _pid_alive(pid):
-                raise CoalError(f"another COAL run (process {pid}) is writing {name}: wait for it to finish, or write to another file (if that process is gone, remove {path})", code="file_error") from None
-            if removed:
+            else:
+                holder = _lock_holder(pid, host, start)
+                if holder == "host":
+                    raise CoalError(f"another COAL run (process {pid} on the machine {host}) is writing {name}, or "
+                                    f"was when it last ran: a process on another machine cannot be checked from "
+                                    f"here. Wait for it to finish, or write to another file (if that run is "
+                                    f"gone, remove {path})", code="file_error")
+                if holder == "process":
+                    raise CoalError(f"another COAL run (process {pid}) is writing {name}: wait for it to finish, or write to another file (if that process is gone, remove {path})", code="file_error")
+            if time.monotonic() > deadline:
                 raise CoalError(f"cannot write {name}: {path} is in the way and cannot be removed",
-                                code="file_error") from None
+                                code="file_error")
             try:
-                os.unlink(path)  # a lock whose process is gone (or one empty for 2 s): replaced
-            except OSError:
-                pass
-            removed = True
-            continue
-        except OSError as e:  # e.g. a folder that cannot be written: the usual output error
-            raise _output_error(name, e) from None
-        try:
-            with os.fdopen(fd, "w") as fh:
-                fh.write(f"{os.getpid()}\n")
-        except BaseException:  # a signal between creating the lock and writing the id into it: leave nothing behind
-            try:
-                os.unlink(path)
-            except OSError:
-                pass
-            raise
-        return path
+                _replace_stale_lock(path, old_raw)   # a lock whose process is gone (or one empty for 2 s)
+            except OSError as e:
+                raise _output_error(name, e) from None
+    finally:
+        if not ok:
+            with _held_mutex:
+                _held_locks.pop(path, None)
 
 
 def release_output_lock(path: str | None) -> None:
-    if path:
-        try:
-            os.unlink(path)
-        except OSError:
-            pass
+    """Remove the lock this process took. A file at that path that is not ours any more (someone removed the lock
+    by hand and another run took it) is left alone."""
+    if not path:
+        return
+    with _held_mutex:
+        raw = _held_locks.pop(path, None)
+    if _leftovers:
+        _remove_leftovers()
+    cur = _read_lock(path)
+    if cur is None or (raw is not None and cur[0] != raw and cur[1] is not None):
+        return
+    _remove(path)
 
 
 def _output_error(out_path, e: OSError) -> CoalError:

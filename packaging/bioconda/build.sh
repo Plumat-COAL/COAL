@@ -3,24 +3,21 @@
 # Linux and macOS only (Bioconda does not build Windows).
 set -euxo pipefail
 
-# 1. coal-cpp: C++17, standard library only. COAL_BUILD_TOOLS=OFF skips coal-cpp-dump (a test helper).
+# 1. coal-cpp and coal-cpp-align: C++17, standard library only. COAL_BUILD_TOOLS=OFF skips coal-cpp-dump (a test
+#    helper). Only the two programs are installed: this package is the command line and the Python package. The
+#    static library libcoal_core.a, its headers and CMake package (what `cmake --install` adds for C++ projects
+#    that embed the engine) are not shipped: nothing in Bioconda links against them, and a static library in a
+#    conda package needs a reason. COAL_INSTALL=OFF: no install rules are generated.
 cmake -S . -B build-conda \
   -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_INSTALL_PREFIX="${PREFIX}" \
-  -DCMAKE_INSTALL_LIBDIR=lib \
   -DCOAL_BUILD_TOOLS=OFF \
+  -DCOAL_INSTALL=OFF \
   ${CMAKE_ARGS:-}
 cmake --build build-conda --config Release -j "${CPU_COUNT:-2}"
 
 mkdir -p "${PREFIX}/bin"
-if grep -q 'install(TARGETS coal-cpp' CMakeLists.txt; then
-  # CMakeLists.txt has install rules (COAL_INSTALL, from the feat/stdin-and-cpp-lib branch): installs bin/coal-cpp and,
-  # for C++ users embedding the engine, lib/libcoal_core.a, include/coal/ and lib/cmake/coal/.
-  cmake --install build-conda --config Release
-else
-  # Older CMakeLists.txt without install rules (0.4.2 and earlier): copy the binary by hand.
-  install -m 0755 build-conda/coal-cpp "${PREFIX}/bin/coal-cpp"
-fi
+install -m 0755 build-conda/coal-cpp "${PREFIX}/bin/coal-cpp"
+install -m 0755 build-conda/coal-cpp-align "${PREFIX}/bin/coal-cpp-align"
 rm -rf build-conda
 
 # 2. The Python engine: `coal`, `pal2nal`, `import coal`; examples under share/coal/examples. No dependencies.

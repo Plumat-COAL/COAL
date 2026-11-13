@@ -6,7 +6,11 @@ cmake_minimum_required(VERSION 3.16)
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND (NOT DEFINED CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL ""))
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type (Release, Debug, RelWithDebInfo, MinSizeRel)")
 endif()
-project(coal_cpp VERSION 0.5.0 LANGUAGES CXX)
+project(coal_cpp VERSION 0.6.0 LANGUAGES CXX)
+# The version the programs and <coal/version.hpp> report: the one of src/coal/__init__.py. project(VERSION) takes
+# digits only, so a development tree (0.6.0.dev0) or a release candidate has the full string here
+# (tests/test_feature_combinations.py checks both; scripts/release_version.py).
+set(COAL_VERSION_FULL "0.6.0.dev0")
 
 # coal-cpp: C++17, standard library only. Builds with MSVC, Clang and GCC (Windows, macOS, Linux).
 #   cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release
@@ -25,6 +29,10 @@ endif()
 option(COAL_WARNINGS_AS_ERRORS "Treat compiler warnings as errors (for CI)" OFF)
 option(COAL_BUILD_CLI "Build the coal-cpp command-line tool" ${COAL_TOP_LEVEL})
 option(COAL_BUILD_TOOLS "Build coal-cpp-dump (test helper used by tests/test_cpp_*.py)" ${COAL_TOP_LEVEL})
+# Test hooks (docs/development.md "Test hooks"): COAL_TEST_* environment variables with which the tests stop
+# coal-cpp at a chosen point or line up several runs. OFF, they are not in the binary at all: release builds,
+# wheels and packages are built without. The test builds of CI and a local build for the test suite switch it ON.
+option(COAL_TEST_HOOKS "Compile the COAL_TEST_* test hooks into coal-cpp (test builds only)" OFF)
 option(COAL_INSTALL "Generate the install rules (coal-cpp, coal_core, headers, CMake package)" ${COAL_TOP_LEVEL})
 
 if(COAL_TOP_LEVEL)
@@ -44,7 +52,7 @@ include(GNUInstallDirs)
 # Installed under <prefix>/include/coal/ and included as <coal/core.hpp>. In the build tree the same names are
 # forwarding headers generated below, so add_subdirectory users and installed users write the same #include, and
 # cpp/src (generic names such as json.hpp) is never on a consumer's include path.
-set(COAL_PUBLIC_HEADERS core.hpp tables.hpp seqio.hpp)
+set(COAL_PUBLIC_HEADERS core.hpp tables.hpp seqio.hpp kaks.hpp align.hpp dnds.hpp)
 set(COAL_GEN_INCLUDE "${CMAKE_CURRENT_BINARY_DIR}/coal_include")
 foreach(h IN LISTS COAL_PUBLIC_HEADERS)
   file(GENERATE OUTPUT "${COAL_GEN_INCLUDE}/coal/${h}"
@@ -52,7 +60,8 @@ foreach(h IN LISTS COAL_PUBLIC_HEADERS)
 endforeach()
 configure_file(cpp/src/version.hpp.in "${COAL_GEN_INCLUDE}/coal/version.hpp" @ONLY)
 
-add_library(coal_core STATIC cpp/src/tables.cpp cpp/src/core.cpp cpp/src/seqio.cpp cpp/src/json.cpp cpp/src/report.cpp)
+add_library(coal_core STATIC cpp/src/tables.cpp cpp/src/core.cpp cpp/src/seqio.cpp cpp/src/json.cpp cpp/src/report.cpp
+            cpp/src/kaks.cpp cpp/src/kaks_comeron.cpp cpp/src/kaks_li.cpp cpp/src/align.cpp cpp/src/dnds.cpp)
 add_library(coal::core ALIAS coal_core)
 set_target_properties(coal_core PROPERTIES EXPORT_NAME core OUTPUT_NAME coal_core)
 target_compile_features(coal_core PUBLIC cxx_std_17)
@@ -60,15 +69,25 @@ target_include_directories(coal_core
   PUBLIC "$<BUILD_INTERFACE:${COAL_GEN_INCLUDE}>" "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
   PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/cpp/src")
 
+# align_pairs() (align.cpp) runs pairs on std::threads, so the library itself needs the thread library.
+find_package(Threads REQUIRED)
+target_link_libraries(coal_core PUBLIC Threads::Threads)
+
 set(COAL_TARGETS coal_core)
-if(COAL_BUILD_CLI OR COAL_BUILD_TOOLS)
-  find_package(Threads REQUIRED)
-endif()
 if(COAL_BUILD_CLI)
-  add_executable(coal-cpp cpp/src/main.cpp cpp/src/args.cpp cpp/src/sysio.cpp)
+  add_executable(coal-cpp cpp/src/main.cpp cpp/src/args.cpp cpp/src/sysio.cpp cpp/src/kaks_cli.cpp
+                 cpp/src/dnds_cli.cpp)
   target_include_directories(coal-cpp PRIVATE cpp/src)
   target_link_libraries(coal-cpp PRIVATE coal_core Threads::Threads)
-  list(APPEND COAL_TARGETS coal-cpp)
+  if(COAL_TEST_HOOKS)
+    target_compile_definitions(coal-cpp PRIVATE COAL_TEST_HOOKS)
+    message(STATUS "coal-cpp: test hooks compiled in (COAL_TEST_HOOKS=ON): not a build to release")
+  endif()
+  # pairwise protein alignment for the codon step (cpp/src/align.hpp, docs/alignment.md)
+  add_executable(coal-cpp-align cpp/src/align_main.cpp)
+  target_include_directories(coal-cpp-align PRIVATE cpp/src)
+  target_link_libraries(coal-cpp-align PRIVATE coal_core Threads::Threads)
+  list(APPEND COAL_TARGETS coal-cpp coal-cpp-align)
 endif()
 if(COAL_BUILD_TOOLS)
   add_executable(coal-cpp-dump cpp/tools/dump.cpp)
@@ -77,16 +96,20 @@ if(COAL_BUILD_TOOLS)
   list(APPEND COAL_TARGETS coal-cpp-dump)
 endif()
 
+# Floating point as written: no contraction of a * b + c into a fused multiply-add (Clang's default; GCC's outside
+# ISO mode), no fast-math. With it the last digits of Ka/Ks depend on whether the target has FMA (arm64: always;
+# x86-64: with -march). kaks.cpp says the same with a pragma, for builds that do not come through here (coalr).
+# docs/kaks.md "Platform reproducibility".
 foreach(t IN LISTS COAL_TARGETS)
   if(MSVC)
     # /utf-8: sources are UTF-8; _CRT_SECURE_NO_WARNINGS: std::getenv/strerror are used on purpose
-    target_compile_options(${t} PRIVATE /W4 /permissive- /utf-8 /EHsc)
+    target_compile_options(${t} PRIVATE /W4 /permissive- /utf-8 /EHsc /fp:precise)
     target_compile_definitions(${t} PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
     if(COAL_WARNINGS_AS_ERRORS)
       target_compile_options(${t} PRIVATE /WX)
     endif()
   else()
-    target_compile_options(${t} PRIVATE -Wall -Wextra -Wpedantic -Wshadow)
+    target_compile_options(${t} PRIVATE -Wall -Wextra -Wpedantic -Wshadow -ffp-contract=off)
     if(COAL_WARNINGS_AS_ERRORS)
       target_compile_options(${t} PRIVATE -Werror)
     endif()
@@ -104,8 +127,10 @@ if(COAL_INSTALL)
   install(FILES ${COAL_HEADER_FILES} "${COAL_GEN_INCLUDE}/coal/version.hpp"
           DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/coal")
   if(COAL_BUILD_CLI)
-    install(TARGETS coal-cpp RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+    install(TARGETS coal-cpp coal-cpp-align RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
   endif()
+  # the licence travels with every install (GPL-3.0-only; NOTICE has the copyright and third-party notices)
+  install(FILES LICENSE NOTICE DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/coal")
   install(EXPORT coalTargets NAMESPACE coal:: FILE coalTargets.cmake DESTINATION "${COAL_CMAKE_DIR}")
   configure_package_config_file(cmake/coalConfig.cmake.in "${CMAKE_CURRENT_BINARY_DIR}/coalConfig.cmake"
                                 INSTALL_DESTINATION "${COAL_CMAKE_DIR}")

@@ -100,7 +100,8 @@ jobs:
           path: release/
           if-no-files-found: error
 
-  # Platform wheels of the engine: the pure wheel from the python job plus coal-cpp built for that platform, so
+  # Platform wheels of the engine: the pure wheel from the python job plus coal-cpp and coal-cpp-align (the pairwise
+  # aligner of `coal pipeline` and coal.align) built for that platform, so
   # `pip install coal-align` gives both engines on Linux x86_64 / aarch64 (glibc 2.28+), macOS 11+ (one universal2
   # wheel) and Windows x64; pip falls back to the py3-none-any wheel or the sdist elsewhere. packaging/wheels/
   # has the scripts; docs/cpp-engine.md "Where coal looks for coal-cpp" the lookup order. Linux builds in the
@@ -151,22 +152,26 @@ jobs:
           docker run --rm -v "$PWD:/io" -w /io "$IMAGE" bash packaging/wheels/build_linux_binary.sh /io /io/build-wheel
           sudo chown -R "$(id -u):$(id -g)" build-wheel
           echo "BIN=build-wheel/coal-cpp" >> "$GITHUB_ENV"
+          echo "ALIGN_BIN=build-wheel/coal-cpp-align" >> "$GITHUB_ENV"
       - name: Build coal-cpp (macOS, universal2)
         if: runner.os == 'macOS'
         run: |
           cmake -S . -B build-wheel -DCMAKE_BUILD_TYPE=Release -DCOAL_WARNINGS_AS_ERRORS=ON -DCOAL_BUILD_TOOLS=OFF \
             -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
           cmake --build build-wheel -j 3
-          archs=$(lipo -archs build-wheel/coal-cpp)
-          echo "architectures: $archs"
-          case " $archs " in *" arm64 "*) ;; *) echo "::error::no arm64 slice"; exit 1;; esac
-          case " $archs " in *" x86_64 "*) ;; *) echo "::error::no x86_64 slice"; exit 1;; esac
-          otool -L build-wheel/coal-cpp
-          # library lines are indented (the per-architecture headers are not); only system libraries are allowed
-          if otool -L build-wheel/coal-cpp | grep -E '^[[:space:]]' | grep -v "/usr/lib/"; then
-            echo "::error::coal-cpp links libraries outside /usr/lib"; exit 1
-          fi
+          for name in coal-cpp coal-cpp-align; do
+            archs=$(lipo -archs "build-wheel/$name")
+            echo "$name architectures: $archs"
+            case " $archs " in *" arm64 "*) ;; *) echo "::error::$name: no arm64 slice"; exit 1;; esac
+            case " $archs " in *" x86_64 "*) ;; *) echo "::error::$name: no x86_64 slice"; exit 1;; esac
+            otool -L "build-wheel/$name"
+            # library lines are indented (the per-architecture headers are not); only system libraries are allowed
+            if otool -L "build-wheel/$name" | grep -E '^[[:space:]]' | grep -v "/usr/lib/"; then
+              echo "::error::$name links libraries outside /usr/lib"; exit 1
+            fi
+          done
           echo "BIN=build-wheel/coal-cpp" >> "$GITHUB_ENV"
+          echo "ALIGN_BIN=build-wheel/coal-cpp-align" >> "$GITHUB_ENV"
       - name: Build coal-cpp (Windows, static CRT)
         if: runner.os == 'Windows'
         run: |
@@ -174,14 +179,17 @@ jobs:
             -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
           cmake --build build-wheel --config Release -j 2
           test -f build-wheel/Release/coal-cpp.exe
+          test -f build-wheel/Release/coal-cpp-align.exe
           echo "BIN=build-wheel/Release/coal-cpp.exe" >> "$GITHUB_ENV"
+          echo "ALIGN_BIN=build-wheel/Release/coal-cpp-align.exe" >> "$GITHUB_ENV"
       - name: Make the platform wheel
         run: |
           python -m pip install wheel==0.45.1
           audit=()
           if [ "$RUNNER_OS" = Linux ]; then python -m pip install auditwheel==6.4.2; audit=(--audit); fi
           "$BIN" --version
-          python packaging/wheels/build_platform_wheel.py --binary "$BIN" \
+          "$ALIGN_BIN" --version
+          python packaging/wheels/build_platform_wheel.py --binary "$BIN" --align-binary "$ALIGN_BIN" \
             --wheel "release/coal_align-${V}-py3-none-any.whl" --platform-tag "$TAG_NAME" --outdir wheelhouse "${audit[@]}"
           ls -l wheelhouse
           test -s "wheelhouse/coal_align-${V}-py3-none-${TAG_NAME}.whl"
@@ -200,6 +208,12 @@ jobs:
           COAL_ENGINE=python "$b/python" -m coal examples/clean/protein.aln.fasta examples/clean/dna.fasta -o pw-py.fa
           cmp pw-cpp.fa pw-py.fa
           echo "bundled coal-cpp output is byte-identical to the Python engine's"
+          # the aligner: found inside the wheel, this version, and it is what coal.align and the pipeline run
+          aln=$("$b/python" -c "import coal.align as a; print(a.find_align_binary())")
+          echo "coal-cpp-align: $aln"
+          case "$aln" in *site-packages*coal*bin*coal-cpp-align*) ;; *) echo "::error::find_align_binary() is not the bundled binary"; exit 1;; esac
+          test "$("$aln" --version)" = "coal-cpp-align ${V}"
+          "$b/python" packaging/wheels/check_wheel_binaries.py
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: dist-wheel-${{ matrix.tag }}

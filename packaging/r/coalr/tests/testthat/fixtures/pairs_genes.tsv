@@ -1,0 +1,41 @@
+set	id	nt_length	aa_length	terminal_stop	internal_stops	ambiguous_codons	trailing_nt	status	code	note
+query	g01	348	115	1	0	0	0	ok		
+query	g02	408	135	1	0	0	0	ok		
+query	g03	489	162	1	0	0	0	ok		
+query	g04	303	100	1	0	0	0	ok		
+query	g05	336	111	1	0	0	0	ok		
+query	g06	516	171	1	0	0	0	ok		
+query	g07	537	178	1	0	0	0	ok		
+query	g08	249	82	1	0	0	0	ok		
+query	g09	297	98	1	0	0	0	ok		
+query	g10	414	137	1	0	0	0	ok		
+query	g11	228	75	1	0	0	0	ok		
+query	g12	345	114	1	0	0	0	ok		
+query	stop_q	363	120	1	1	0	0	warning	internal_stop	1 internal stop codon in the CDS
+query	frame_q	303	100	1	0	0	0	ok		
+query	amb_q	333	110	1	0	2	0	ok		
+query	same_q	273	90	1	0	0	0	ok		
+query	rna_q	243	80	1	0	0	0	ok		
+query	nohit_q	303	100	1	0	0	0	ok		
+query	bad_q	0	0	0	0	0	0	failed	cds_invalid_character	the CDS holds a character that is no nucleotide code: '-' at position 7
+query	empty_q	0	0	0	0	0	0	failed	cds_empty	the CDS is empty
+query	g01	0	0	0	0	0	0	failed	duplicate_id	the ID occurs more than once in the file (the first record is used)
+subject	h01	345	114	1	0	0	0	ok		
+subject	h02	408	135	1	0	0	0	ok		
+subject	h03	489	162	1	0	0	0	ok		
+subject	h04	300	99	1	0	0	0	ok		
+subject	h05	342	113	1	0	0	0	ok		
+subject	h06	519	172	1	0	0	0	ok		
+subject	h07	546	181	1	0	0	0	ok		
+subject	h08	240	79	1	0	0	0	ok		
+subject	h09	297	98	1	0	0	0	ok		
+subject	h10	426	141	1	0	0	0	ok		
+subject	h11	228	75	1	0	0	0	ok		
+subject	h12	339	112	1	0	0	0	ok		
+subject	stop_s	363	120	1	0	0	0	ok		
+subject	frame_s	301	100	0	0	0	1	warning	cds_length	CDS length 301 is not a multiple of 3 (last 1 nt ignored)
+subject	amb_s	333	110	1	0	2	0	ok		
+subject	same_s	273	90	1	0	0	0	ok		
+subject	rna_s	243	80	1	0	0	0	ok		
+subject	nohit_s	303	100	1	0	0	0	ok		
+subject	short_s	2	0	0	0	0	0	failed	cds_too_short	the CDS is shorter than one codon (2 nt)

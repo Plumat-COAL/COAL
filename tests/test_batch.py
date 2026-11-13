@@ -190,6 +190,62 @@ class TestBatchParallel(_Tmp):
             return
         self.assertEqual([c for c in psutil.Process().children(recursive=True) if "coal" in " ".join(c.cmdline())], [])
 
+    @unittest.skipIf(os.name == "nt", "the worker kills itself with SIGKILL")
+    def test_worker_killed_while_it_sends_a_result_fails_its_job_only(self):
+        """Independent review 2026-11-13, finding 4: a worker killed in the middle of writing a result died with
+        the result queue's lock held and half a message in the pipe; the other workers waited for the lock, the
+        batch process for the rest of the message, and the batch hung. Here the worker of the job whose output
+        is DIE.fa writes the head of its result and is killed (a stand-in for the OOM killer at that instant);
+        the others are slow enough to still be at work then."""
+        import signal
+        wrapper = self.tmp / "run_with_kill.py"
+        wrapper.write_text(
+            "import multiprocessing, os, signal, sys\n"
+            "from multiprocessing import connection\n"
+            "_real = connection.Connection._send_bytes\n"
+            "def _send_bytes(self, buf):\n"
+            "    if multiprocessing.parent_process() is not None and b'DIE.fa' in bytes(buf) \\\n"
+            "            and b'exit_code' in bytes(buf):\n"
+            "        os.write(self.fileno(), (1 << 20).to_bytes(4, 'big', signed=True) + bytes(buf)[:16])\n"
+            "        os.kill(os.getpid(), signal.SIGKILL)\n"
+            "    return _real(self, buf)\n"
+            "connection.Connection._send_bytes = _send_bytes\n"
+            "if __name__ == '__main__':\n"
+            "    multiprocessing.set_start_method(sys.argv.pop(1))\n"
+            "    from coal.cli import main\n"
+            "    sys.exit(main())\n", encoding="utf-8")
+        import multiprocessing
+        env = dict(os.environ, PYTHONPATH=str(ROOT / "src"), COAL_ENGINE="python")
+        env.pop("COAL_IMPL", None)
+        for method in [m for m in ("fork", "spawn") if m in multiprocessing.get_all_start_methods()]:
+            with self.subTest(start_method=method):
+                for f in self.tmp.glob("*.fa*"):
+                    f.unlink()
+                names = ["a.fa", "DIE.fa", "b.fa", "c.fa", "d.fa"]
+                jobs = self.jobs([f"{CLEAN[0]} {CLEAN[1]} -o {o}" for o in names])
+                p = subprocess.Popen([sys.executable, str(wrapper), method, "--batch", jobs, "--batch-parallel", "2",
+                                      "--report", "batch.json"], cwd=self.tmp, env=env, stdout=subprocess.PIPE,
+                                     stderr=subprocess.PIPE, text=True, start_new_session=True)
+                try:
+                    _, err = p.communicate(timeout=60)
+                except subprocess.TimeoutExpired:
+                    os.killpg(p.pid, signal.SIGKILL)
+                    p.communicate()
+                    self.fail("the batch hung after a worker was killed while it sent its result")
+                self.assertEqual(p.returncode, 1, err)
+                died = [ln for ln in err.splitlines() if "error" in ln]
+                self.assertEqual(len(died), 1, err)
+                self.assertRegex(died[0], r"^coal: \[2/5 \S+\] error: the job's worker process died \(out of memory\?\)$")
+                self.assertNotIn("Traceback", err)
+                self.assertIn("coal: batch: 5 jobs, 4 ok, 1 failed", err)
+                for o in names:
+                    if o != "DIE.fa":
+                        self.assertEqual(self.read(o), self.read("a.fa"), o)
+                self.assertEqual([x.name for x in self.tmp.iterdir() if ".coal" in x.name], [],
+                                 "a lock or temporary file of the dead worker's job was left")
+                rep = json.loads(self.read("batch.json"))
+                self.assertEqual([j["exit_code"] for j in rep["jobs"]], [0, 1, 0, 0, 0])
+
     @unittest.skipUnless(cpp_binary(), "coal-cpp not built")
     def test_cpp_refuses_batch_parallel(self):
         r = subprocess.run([str(cpp_binary()), str(CLEAN[0]), str(CLEAN[1]), "--batch-parallel", "2"],

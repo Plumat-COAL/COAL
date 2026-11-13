@@ -1,0 +1,5 @@
+# coalr compiles COAL's C++ core from src/coal (vendored from cpp/src by scripts/sync_r_sources.py).
+CXX_STD = CXX17
+PKG_CPPFLAGS = -Icoal
+PKG_LIBS = -lpthread
+OBJECTS = RcppExports.o coalr.o coal/tables.o coal/core.o coal/kaks.o coal/kaks_comeron.o coal/kaks_li.o coal/align.o coal/dnds.o

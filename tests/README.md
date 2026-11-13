@@ -8,11 +8,36 @@
 
 | Where | What | Run (from the repo root unless noted) |
 |---|---|---|
-| `tests/` | the engine (`coal`, the `pal2nal` drop-in, `coal-cpp` with `COAL_IMPL=cpp`): stored PAL2NAL v14 outputs, options, decisions, large runs, real data; and the repository checks: `test_docs_*.py` (docs numbers, website and release workflows, skill, the explainer page in Chromium), `test_repo_ci.py` (CI workflow), `test_examples.py`, `test_wheels.py` (the platform wheel with `coal-cpp` inside: built from the local `build/coal-cpp`, installed into a fresh venv; needs `build` and `wheel`) | `python -m unittest discover -s tests` |
+| `tests/` | the engine (`coal`, the `pal2nal` drop-in, `coal-cpp` with `COAL_IMPL=cpp`): stored PAL2NAL v14 outputs, options, decisions, large runs, real data; and the repository checks: `test_docs_*.py` (docs numbers, website and release workflows, skill, the explainer page in Chromium), `test_repo_ci.py` (CI workflow), `test_licence.py` (the licence declared the same everywhere), `test_examples.py`, `test_wheels.py` (the platform wheel with `coal-cpp` inside: built from the local `build/coal-cpp`, installed into a fresh venv; needs `build` and `wheel`) | `python -m unittest discover -s tests` |
 | `apps/coal-app/tests/` | the app (`coal_app`, package `coal-align-app`): GUI form and layout, viewer, reports, MCP tools and server, settings, hosted Space, packaging, launchers; Gradio and mcp tests skip without that extra; shared helpers (the Gradio stand-in) in `helpers.py` | `python -m unittest discover -s apps/coal-app/tests` |
 | `apps/coal-app/desktop/` | the Windows wrapper (`test_wrapper.py`) and the local-app smoke test (`test_smoke.py`; the real-Gradio part runs in the Windows build) | in `apps/coal-app/desktop/`: `python -m unittest test_wrapper test_smoke` |
 | `tests/fuzz_vs_pal2nal.py` | random comparison with the real PAL2NAL v14 (not collected by `discover`) | see below |
 | `tests/tools/engine_fuzz.py` | random `coal-cpp` vs Python engine comparison (wide input space; not collected by `discover`; `test_engine_fuzz.py` runs 20 cases); nightly with a fresh seed, with the PAL2NAL fuzz for both engines and a sanitizer build: `.github/workflows/nightly.yml` | `COAL_CPP_BIN=build/coal-cpp python tests/tools/engine_fuzz.py --n 500 --seed 1` |
+
+Ka/Ks (`coal kaks` / `coal dnds`, docs/kaks.md): `tests/test_kaks.py` compares coal-cpp with the KaKs_Calculator 2.0
+and PAML yn00 outputs stored in `tests/kaks/golden/` (inputs `tests/kaks/edge_cases.axt`, `tests/kaks/sim_small.axt`;
+`python tests/kaks/make_fixtures.py --help` remakes them), allowing only the documented differences, and checks the
+policy statuses and the command line. A number that KaKs_Calculator prints and COAL does not is a failure unless
+COAL's status is `saturated`, or `not_converged` (a YN / MYN iteration that did not converge has no estimate; for
+those pairs only the status, the NA fields and the form of the note are asserted, never a digit of the last
+round, which differs between platforms: docs/kaks.md "Platform reproducibility"); a number where KaKs_Calculator prints `nan` is allowed only for the listed pairs
+(`KK_LOSES`: sites of one kind only, and MYN's NaN cases), whose values `TestOneKindOfSite` and `TestMynNan` check
+against PAML yn00 and against KaKs_Calculator's YN. `TestCli` also covers `-o` naming the input (refused) and an
+AXT record with one sequence line (that record's error). The 999-pair orthologr validation is
+`benchmarks/kaks/validate_kaks.py`; `benchmarks/kaks/random_short_pairs.py` is the random comparison on short
+pairs. The engine is checked for data races by running `coal-cpp kaks -j 4` in a ThreadSanitizer build
+(`-DCMAKE_CXX_FLAGS="-fsanitize=thread -g -O1"`; not part of the nightly jobs yet).
+
+One-step pipeline (`coal pipeline`, docs/pipeline.md): `tests/test_dnds_pipeline.py` runs pair mode and cluster mode
+on synthetic fixtures (`tests/fixtures/pipeline/`, remade by `python tests/tools/make_pipeline_fixture.py`) and
+compares them with the same steps done one by one, with statistics recomputed in the test, and with the report's
+JSON Schema; it covers the edge cases (internal stop, length not a multiple of 3, ambiguous bases, identical
+sequences, no hit, unusable records), failures and exit codes. The class `Robustness` holds the cases of the review
+of 2026-11-12: an earlier run's outputs are removed, a second run into a locked folder is refused, SIGINT / SIGTERM
+sent to the Python process alone end the engine and leave `"status": "interrupted"` in the report, a protein file
+is explained before DIAMOND starts, a non-ASCII ID is one gene's failure. `tests/test_msa.py` and the installer
+tests here fake every download and check that no file runs before its SHA-256 matched. The parts that need
+DIAMOND or Clustal Omega skip without them. The 1,000-gene validation is `benchmarks/pipeline/validate_pairs.py` and `validate_clusters.py`.
 
 ## Test numbers
 

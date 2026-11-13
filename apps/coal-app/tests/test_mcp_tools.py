@@ -472,5 +472,39 @@ class TestStrictAndBlockonlyOptions(ExampleVariantCase):
         self.assertTrue(any("strict" in pr["explanation"] for pr in r["problems"]))
 
 
+
+
+class TestScopeIsSaid(unittest.TestCase):
+    """The app and its MCP server cover codon alignment only, and say so (README, About, the server's
+    instructions): Ka/Ks and the pipeline are in the `coal` command line."""
+
+    def test_instructions_about_and_readme(self):
+        import os
+        from coal_app import mcp_stdio
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.assertIn(mcp_stdio.SCOPE, mcp_stdio.INSTRUCTIONS)
+        for text in (mcp_stdio.SCOPE,):
+            self.assertIn("codon alignment only", text)
+            for cmd in ("coal dnds", "coal kaks", "coal pipeline"):
+                self.assertIn(cmd, text)
+        with open(os.path.join(root, "src", "coal_app", "ui.py"), encoding="utf-8") as fh:
+            ui = fh.read()
+        self.assertIn("ABOUT_SCOPE + ", ui)
+        self.assertIn("not in this app: `coal dnds`, `coal kaks`, `coal pipeline`", ui)
+        with open(os.path.join(root, "README.md"), encoding="utf-8") as fh:
+            readme = fh.read()
+        self.assertIn("**The app and its MCP server cover codon alignment only.**", readme)
+        doc = os.path.join(root, "..", "..", "docs", "mcp.md")
+        if os.path.isfile(doc):   # (the app's tests also run from an unpacked sdist, which has no docs/)
+            with open(doc, encoding="utf-8") as fh:
+                text = fh.read()
+            for must in ("## Scope: codon alignment only", "## Planned: tools for Ka/Ks and the pipeline",
+                         "`dnds_pairs`", "`pipeline_pairs`", "Not built yet"):
+                self.assertIn(must, text)
+        # no such tool exists yet
+        from coal_app import tools
+        self.assertFalse(hasattr(tools, "dnds_pairs") or hasattr(tools, "pipeline_pairs"))
+
+
 if __name__ == "__main__":
     unittest.main()

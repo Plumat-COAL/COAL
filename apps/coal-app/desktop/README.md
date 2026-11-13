@@ -10,7 +10,7 @@ words when a gene doesn't fit.
   updates or collect statistics. (The page asks a public CDN for one small helper script that Gradio adds for
   embedding; it is not needed, carries nothing of yours, and the page works without it.)
 - **No administrator rights needed.** It installs just for you.
-- **Free and open source** (MIT licence).
+- **Free and open source** (GNU GPL version 3 from the release after 0.5.0; 0.5.0 and earlier are MIT).
 
 *(Screenshots to be added from the first Windows build.)*
 

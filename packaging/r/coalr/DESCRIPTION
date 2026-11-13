@@ -1,0 +1,48 @@
+Package: coalr
+Type: Package
+Title: Fast Codon Alignment and dN/dS (Ka/Ks) with the 'COAL' C++ Engine
+Version: 0.6.0.9000
+Authors@R: c(
+    person("Chloe", "Newton", email = "chloenewton2323@gmail.com", role = c("aut", "cre", "cph")),
+    person("Keanu", "Murati", role = c("aut", "cph")),
+    person("Da-Peng", "Wang", role = "ctb",
+           comment = "KaKs_Calculator 2.0, from which src/coal/kaks.cpp is derived"),
+    person("Yu-Bin", "Zhang", role = "ctb", comment = "KaKs_Calculator 2.0"),
+    person("Zhang", "Zhang", role = "ctb", comment = "KaKs_Calculator 1.0"),
+    person("Kristian K", "Ullrich", role = "ctb", comment = "kakscalculator2 2.0.1"),
+    person("Beijing Institute of Genomics of CAS", role = "cph", comment = "KaKs_Calculator 2.0"),
+    person("Ziheng", "Yang", role = c("ctb", "cph"),
+           comment = "PAML yn00.c, from which src/coal/kaks.cpp is derived"),
+    person("Kevin", "Thornton", role = c("ctb", "cph"),
+           comment = "libsequence, from which src/coal/kaks_comeron.cpp is derived"),
+    person("Sarah", "Scharfenberg", role = "ctb",
+           comment = "the copy of libsequence in the R package orthologr (gestimator)"),
+    person("Hajk-Georg", "Drost", role = "ctb",
+           comment = "the copy of libsequence in the R package orthologr (gestimator)"),
+    person("Manolo", "Gouy", role = "ctb",
+           comment = "src/kaks.c of the R package seqinr, from which src/coal/kaks_li.cpp is derived"),
+    person("Jean R.", "Lobry", role = c("ctb", "cph"), comment = "R package seqinr"),
+    person("Delphine", "Charif", role = "ctb", comment = "R package seqinr"))
+Copyright: See the file inst/COPYRIGHTS
+Description: In-process R bindings to the C++ core of 'COAL', a fast replacement for 'PAL2NAL'.
+    Translates coding sequences, aligns the proteins (global Needleman-Wunsch with 'BLOSUM62'),
+    threads the codons onto the protein alignment and estimates dN, dS and dN/dS (Ka/Ks) with the
+    methods of Yang and Nielsen (2000), Nei and Gojobori (1986), Li, Wu and Luo (1985), Li (1993),
+    Pamilo and Bianchi (1993), Comeron (1995), Tzeng, Pan and Li (2004) and Zhang, Li and Yu (2006), for pairs of
+    orthologs or for every pair of the genes in a cluster, on several threads, without external
+    programs or temporary files. An optional route through 'reticulate' runs the complete 'COAL'
+    pipeline (with 'DIAMOND' and 'Clustal Omega') from R.
+License: GPL-3
+URL: https://github.com/Plumat-COAL/COAL
+BugReports: https://github.com/Plumat-COAL/COAL/issues
+Encoding: UTF-8
+Depends: R (>= 4.0.0)
+Imports: Rcpp (>= 1.0.7), utils
+LinkingTo: Rcpp
+Suggests: testthat (>= 3.0.0), reticulate, Biostrings, seqinr, knitr, rmarkdown
+VignetteBuilder: knitr
+SystemRequirements: C++17
+NeedsCompilation: yes
+Config/testthat/edition: 3
+Roxygen: list(markdown = TRUE)
+Config/roxygen2/version: 8.1.0
