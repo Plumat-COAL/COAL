@@ -34,7 +34,7 @@ no_nonsyn_sites_one_codon	NA	Li	NA	NA	NA	NA	NA	NA	NA	NA	NA	1	no_data	Li: no 2-fo
 no_nonsyn_sites	NA	Comeron	0	NA	NA	NA	NA	NA	NA	NA	NA	200	saturated	Ks saturated (multiple-hit correction undefined)
 no_nonsyn_sites	NA	Li	0	NA	NA	0	NA	NA	NA	NA	NA	200	no_data	Li: no 2-fold or no 4-fold degenerate sites (Ks needs both; seqinr returns 9.999999)
 no_syn_sites_single_step	NA	Comeron	1.04992626946998	0	NA	NA	NA	NA	NA	NA	NA	2	ok	
-no_syn_sites_single_step	NA	Li	1.05478242613142	-0.0196305059427306	NA	1.59314939663548	0.340206908719886	NA	NA	NA	NA	2	ok	
+no_syn_sites_single_step	NA	Li	1.05478242613142	-0.0196305059427306	NA	1.59314939663548	0.340206908719886	NA	NA	NA	NA	2	warning	Ks is negative (Li's correction for these counts; not a distance)
 no_syn_sites_multi_step	NA	Comeron	0.453397266674797	NA	NA	NA	NA	NA	NA	NA	NA	4	no_data	no synonymous sites
 no_syn_sites_multi_step	NA	Li	NA	NA	NA	NA	NA	NA	NA	NA	NA	4	no_data	Li: no 2-fold or no 4-fold degenerate sites (Ks needs both; seqinr returns 9.999999); Ka saturated (multiple-hit correction undefined)
 myn_tn93_zero_division	NA	Comeron	0	NA	NA	NA	NA	NA	NA	NA	NA	5	saturated	Ks saturated (multiple-hit correction undefined)

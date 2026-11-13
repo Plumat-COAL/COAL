@@ -90,7 +90,7 @@ stops_st4	NA	Li	0	0	NA	0	0	NA	NA	NA	NA	2	ok
 stops_st5	NA	Comeron	0.216066677595163	0.15507746415192	1.39328224624241	NA	NA	NA	NA	NA	NA	6	ok	
 stops_st5	NA	Li	0.199710923477195	0.159565686068383	1.25159066712882	0.272028238673395	0.353616666374412	NA	NA	NA	NA	6	ok	
 stops_st6	NA	Comeron	0.244774112659353	0	NA	NA	NA	NA	NA	NA	NA	2	warning	1 codon column(s) with an internal stop codon skipped
-stops_st6	NA	Li	0.226043388875975	-0.0235566071312767	NA	0.418299437627968	0.408248290463863	NA	NA	NA	NA	2	warning	1 codon column(s) with an internal stop codon skipped
+stops_st6	NA	Li	0.226043388875975	-0.0235566071312767	NA	0.418299437627968	0.408248290463863	NA	NA	NA	NA	2	warning	1 codon column(s) with an internal stop codon skipped; Ks is negative (Li's correction for these counts; not a distance)
 stops_st7	NA	Comeron	0.710682635088084	0.463122767065247	1.5345448024324	NA	NA	NA	NA	NA	NA	5	warning	1 codon column(s) with an internal stop codon skipped
 stops_st7	NA	Li	0.758236678835557	0.479675318634083	1.58072898350222	0.665168608803213	0.857420904786124	NA	NA	NA	NA	5	warning	1 codon column(s) with an internal stop codon skipped
 stops_st8	NA	Comeron	0.401234504116533	0.28184450824619	1.42360234944176	NA	NA	NA	NA	NA	NA	9	warning	3 codon column(s) with an internal stop codon skipped
@@ -194,7 +194,7 @@ stops_st56	NA	Li	0.346573590279973	0	NA	0.433012701892219	0	NA	NA	NA	NA	2	ok
 stops_st57	NA	Comeron	0	0	NA	NA	NA	NA	NA	NA	NA	2	ok	
 stops_st57	NA	Li	0	NA	NA	0	NA	NA	NA	NA	NA	2	no_data	Li: no 2-fold or no 4-fold degenerate sites (Ks needs both; seqinr returns 9.999999)
 stops_st58	NA	Comeron	0.483324614506443	0.57069376079552	0.846907129022598	NA	NA	NA	NA	NA	NA	4	warning	1 codon column(s) with an internal stop codon skipped
-stops_st58	NA	Li	1.14555621551667	-0.0925489132015406	NA	125.224058141949	112.875688138934	NA	NA	NA	NA	4	warning	1 codon column(s) with an internal stop codon skipped
+stops_st58	NA	Li	1.14555621551667	-0.0925489132015406	NA	125.224058141949	112.875688138934	NA	NA	NA	NA	4	warning	1 codon column(s) with an internal stop codon skipped; Ks is negative (Li's correction for these counts; not a distance)
 stops_st59	NA	Comeron	0	0	NA	NA	NA	NA	NA	NA	NA	1	ok	
 stops_st59	NA	Li	NA	NA	NA	NA	NA	NA	NA	NA	NA	1	no_data	Li: no 2-fold or no 4-fold degenerate sites (Ks needs both; seqinr returns 9.999999); Li: no non-degenerate or no 2-fold degenerate sites (Ka needs both; seqinr returns 9.999999)
 stops_st60	NA	Comeron	0.261407494602957	0.861791478900997	0.303330331063748	NA	NA	NA	NA	NA	NA	6	warning	1 codon column(s) with an internal stop codon skipped
@@ -250,7 +250,7 @@ stops_st84	NA	Li	0.478837848509146	0.472950418317049	1.01244830317107	0.40576379
 stops_st85	NA	Comeron	0.621226662447	0	NA	NA	NA	NA	NA	NA	NA	3	ok	
 stops_st85	NA	Li	0.702601643075098	0	NA	0.840929532676354	0	NA	NA	NA	NA	3	ok	
 stops_st86	NA	Comeron	0.205344618340595	0	NA	NA	NA	NA	NA	NA	NA	5	ok	
-stops_st86	NA	Li	0.212475119384912	-0.00142034065777154	NA	0.206820375152061	0.106222981483076	NA	NA	NA	NA	5	ok	
+stops_st86	NA	Li	0.212475119384912	-0.00142034065777154	NA	0.206820375152061	0.106222981483076	NA	NA	NA	NA	5	warning	Ks is negative (Li's correction for these counts; not a distance)
 stops_st87	NA	Comeron	NA	NA	NA	NA	NA	NA	NA	NA	NA	2	saturated	Ka saturated (multiple-hit correction undefined); Ks saturated (multiple-hit correction undefined)
 stops_st87	NA	Li	NA	NA	NA	NA	NA	NA	NA	NA	NA	2	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
 stops_st88	NA	Comeron	NA	0	NA	NA	NA	NA	NA	NA	NA	1	saturated	Ka saturated (multiple-hit correction undefined)
@@ -280,7 +280,7 @@ stops_st99	NA	Li	0.270577584968323	NA	NA	0.241486517586781	NA	NA	NA	NA	NA	5	satu
 stops_st100	NA	Comeron	0.467213266093731	0.731602343008463	0.63861641581474	NA	NA	NA	NA	NA	NA	8	warning	2 codon column(s) with an internal stop codon skipped
 stops_st100	NA	Li	0.464605782587917	0.690023744447906	0.673318543493967	0.414349059343931	0.678730986364443	NA	NA	NA	NA	8	warning	2 codon column(s) with an internal stop codon skipped
 stops_st101	NA	Comeron	0.232681624844617	0	NA	NA	NA	NA	NA	NA	NA	8	warning	1 codon column(s) with an internal stop codon skipped
-stops_st101	NA	Li	0.217646670442668	-0.0060696658387056	NA	0.242928951773896	0.134211680618422	NA	NA	NA	NA	8	warning	1 codon column(s) with an internal stop codon skipped
+stops_st101	NA	Li	0.217646670442668	-0.0060696658387056	NA	0.242928951773896	0.134211680618422	NA	NA	NA	NA	8	warning	1 codon column(s) with an internal stop codon skipped; Ks is negative (Li's correction for these counts; not a distance)
 stops_st102	NA	Comeron	0	0	NA	NA	NA	NA	NA	NA	NA	1	ok	
 stops_st102	NA	Li	0	NA	NA	0	NA	NA	NA	NA	NA	1	no_data	Li: no 2-fold or no 4-fold degenerate sites (Ks needs both; seqinr returns 9.999999)
 stops_st103	NA	Comeron	NA	NA	NA	NA	NA	NA	NA	NA	NA	9	saturated	2 codon column(s) with an internal stop codon skipped; Ka saturated (multiple-hit correction undefined); Ks saturated (multiple-hit correction undefined)
@@ -288,7 +288,7 @@ stops_st103	NA	Li	0.728389118002786	NA	NA	1.18777034601497	NA	NA	NA	NA	NA	9	satu
 stops_st104	NA	Comeron	0.746212456519186	1.07356770505654	0.695077220565129	NA	NA	NA	NA	NA	NA	4	warning	1 codon column(s) with an internal stop codon skipped
 stops_st104	NA	Li	0.744456185000976	1.66399905342982	0.447389788754091	0.840058858169059	6.66599150516639	NA	NA	NA	NA	4	warning	1 codon column(s) with an internal stop codon skipped
 stops_st105	NA	Comeron	0.322230400551218	0	NA	NA	NA	NA	NA	NA	NA	5	warning	1 codon column(s) with an internal stop codon skipped
-stops_st105	NA	Li	0.331629388202916	-0.000783597598964945	NA	0.319303167227786	0.0875344377137596	NA	NA	NA	NA	5	warning	1 codon column(s) with an internal stop codon skipped
+stops_st105	NA	Li	0.331629388202916	-0.000783597598964945	NA	0.319303167227786	0.0875344377137596	NA	NA	NA	NA	5	warning	1 codon column(s) with an internal stop codon skipped; Ks is negative (Li's correction for these counts; not a distance)
 stops_st106	NA	Comeron	0.228429457211748	NA	NA	NA	NA	NA	NA	NA	NA	4	saturated	Ks saturated (multiple-hit correction undefined)
 stops_st106	NA	Li	0.125612277759232	0.631417391292116	0.198936993962397	0.305204927418554	0.944714842955655	NA	NA	NA	NA	4	ok	
 stops_st107	NA	Comeron	0.596551143042354	1.07048644436307	0.557271085667319	NA	NA	NA	NA	NA	NA	10	warning	1 codon column(s) with an internal stop codon skipped
@@ -316,7 +316,7 @@ stops_st117	NA	Li	0.298938432372652	0.619648101091344	0.482432580437433	0.252189
 stops_st118	NA	Comeron	0.346573590279973	0	NA	NA	NA	NA	NA	NA	NA	2	ok	
 stops_st118	NA	Li	NA	NA	NA	NA	NA	NA	NA	NA	NA	2	no_data	Li: no 2-fold or no 4-fold degenerate sites (Ks needs both; seqinr returns 9.999999); Li: no non-degenerate or no 2-fold degenerate sites (Ka needs both; seqinr returns 9.999999)
 stops_st119	NA	Comeron	0.511420611833908	0.0258086004604827	19.8158986814097	NA	NA	NA	NA	NA	NA	6	warning	1 codon column(s) with an internal stop codon skipped
-stops_st119	NA	Li	0.507299933550957	-0.0335389291233369	NA	0.432865526213159	0.284019387359483	NA	NA	NA	NA	6	warning	1 codon column(s) with an internal stop codon skipped
+stops_st119	NA	Li	0.507299933550957	-0.0335389291233369	NA	0.432865526213159	0.284019387359483	NA	NA	NA	NA	6	warning	1 codon column(s) with an internal stop codon skipped; Ks is negative (Li's correction for these counts; not a distance)
 stops_st120	NA	Comeron	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	no_data	no codon column left to compare (gaps, ambiguous bases or stop codons)
 stops_st120	NA	Li	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	no_data	no codon column left to compare (gaps, ambiguous bases or stop codons)
 stops_st121	NA	Comeron	0.263179870216203	0	NA	NA	NA	NA	NA	NA	NA	8	warning	2 codon column(s) with an internal stop codon skipped
@@ -352,7 +352,7 @@ stops_st135	NA	Li	NA	NA	NA	NA	NA	NA	NA	NA	NA	1	no_data	Li: no 2-fold or no 4-fol
 stops_st136	NA	Comeron	0.628819944444125	0.298797622790546	2.104501162263	NA	NA	NA	NA	NA	NA	12	ok	
 stops_st136	NA	Li	0.692533114027384	0.336339764569362	2.05902836054512	0.676933532293066	0.328817961898322	NA	NA	NA	NA	12	ok	
 stops_st137	NA	Comeron	0.0742100025591367	0	NA	NA	NA	NA	NA	NA	NA	7	warning	2 codon column(s) with an internal stop codon skipped
-stops_st137	NA	Li	0.0743615912444162	-0.00504207196387275	NA	0.113683722769047	0.115291373026972	NA	NA	NA	NA	7	warning	2 codon column(s) with an internal stop codon skipped
+stops_st137	NA	Li	0.0743615912444162	-0.00504207196387275	NA	0.113683722769047	0.115291373026972	NA	NA	NA	NA	7	warning	2 codon column(s) with an internal stop codon skipped; Ks is negative (Li's correction for these counts; not a distance)
 stops_st138	NA	Comeron	NA	0	NA	NA	NA	NA	NA	NA	NA	2	saturated	Ka saturated (multiple-hit correction undefined)
 stops_st138	NA	Li	NA	0	NA	NA	0	NA	NA	NA	NA	2	saturated	Ka saturated (multiple-hit correction undefined)
 stops_st139	NA	Comeron	0.4933864449354	NA	NA	NA	NA	NA	NA	NA	NA	9	saturated	1 codon column(s) with an internal stop codon skipped; Ks saturated (multiple-hit correction undefined)
@@ -390,7 +390,7 @@ stops_st154	NA	Li	0.634800819754486	NA	NA	0.605357296776861	NA	NA	NA	NA	NA	5	sat
 stops_st155	NA	Comeron	0.435986433187703	0.780185551886805	0.558824028634356	NA	NA	NA	NA	NA	NA	10	warning	2 codon column(s) with an internal stop codon skipped
 stops_st155	NA	Li	0.380467244274009	0.824676156125771	0.461353516101882	0.379576933711632	0.963046586999516	NA	NA	NA	NA	10	warning	2 codon column(s) with an internal stop codon skipped
 stops_st156	NA	Comeron	NA	0	NA	NA	NA	NA	NA	NA	NA	4	saturated	3 codon column(s) with an internal stop codon skipped; Ka saturated (multiple-hit correction undefined)
-stops_st156	NA	Li	0.135403624791085	-0.00896368349132933	NA	0.148850515627692	0.204962440936839	NA	NA	NA	NA	4	warning	3 codon column(s) with an internal stop codon skipped
+stops_st156	NA	Li	0.135403624791085	-0.00896368349132933	NA	0.148850515627692	0.204962440936839	NA	NA	NA	NA	4	warning	3 codon column(s) with an internal stop codon skipped; Ks is negative (Li's correction for these counts; not a distance)
 stops_st157	NA	Comeron	0	0	NA	NA	NA	NA	NA	NA	NA	1	warning	1 codon column(s) with an internal stop codon skipped
 stops_st157	NA	Li	NA	NA	NA	NA	NA	NA	NA	NA	NA	1	no_data	1 codon column(s) with an internal stop codon skipped; Li: no 2-fold or no 4-fold degenerate sites (Ks needs both; seqinr returns 9.999999); Li: no non-degenerate or no 2-fold degenerate sites (Ka needs both; seqinr returns 9.999999)
 stops_st158	NA	Comeron	0.602052533988401	0.242869103252914	2.47891776238597	NA	NA	NA	NA	NA	NA	12	ok	
@@ -514,9 +514,9 @@ stops_st216	NA	Li	1.18176921060174	0.294322709219331	4.01521586199141	1.18369139
 stops_st217	NA	Comeron	0.792048393883115	0.998114005617766	0.793545015324066	NA	NA	NA	NA	NA	NA	7	ok	
 stops_st217	NA	Li	0.838571426711312	0.728679658187172	1.1508094363407	0.597042641963416	0.639997209251864	NA	NA	NA	NA	7	ok	
 stops_st218	NA	Comeron	0.144185920720396	0	NA	NA	NA	NA	NA	NA	NA	10	ok	
-stops_st218	NA	Li	0.14999881763716	-0.00475017326507395	NA	0.119465388284284	0.105035228310069	NA	NA	NA	NA	10	ok	
+stops_st218	NA	Li	0.14999881763716	-0.00475017326507395	NA	0.119465388284284	0.105035228310069	NA	NA	NA	NA	10	warning	Ks is negative (Li's correction for these counts; not a distance)
 stops_st219	NA	Comeron	0.339770764252083	0	NA	NA	NA	NA	NA	NA	NA	5	warning	1 codon column(s) with an internal stop codon skipped
-stops_st219	NA	Li	0.339626578713017	-0.0657704668261317	NA	0.411075411495456	0.474579928517603	NA	NA	NA	NA	5	warning	1 codon column(s) with an internal stop codon skipped
+stops_st219	NA	Li	0.339626578713017	-0.0657704668261317	NA	0.411075411495456	0.474579928517603	NA	NA	NA	NA	5	warning	1 codon column(s) with an internal stop codon skipped; Ks is negative (Li's correction for these counts; not a distance)
 stops_st220	NA	Comeron	0	NA	NA	NA	NA	NA	NA	NA	NA	1	saturated	Ks saturated (multiple-hit correction undefined)
 stops_st220	NA	Li	NA	NA	NA	NA	NA	NA	NA	NA	NA	1	no_data	Li: no 2-fold or no 4-fold degenerate sites (Ks needs both; seqinr returns 9.999999); Li: no non-degenerate or no 2-fold degenerate sites (Ka needs both; seqinr returns 9.999999)
 stops_st221	NA	Comeron	0.584253909026871	0.930571867361939	0.627843941471347	NA	NA	NA	NA	NA	NA	6	ok	
@@ -584,7 +584,7 @@ stops_st251	NA	Li	0.5911054784181	0.373577186416938	1.58228473234012	0.475194134
 stops_st252	NA	Comeron	1.13867190056179	0.35119182023804	3.24230757934507	NA	NA	NA	NA	NA	NA	8	ok	
 stops_st252	NA	Li	1.18412724253872	0.304863779587199	3.88411914377656	9.71778824908744	0.580242811352728	NA	NA	NA	NA	8	ok	
 stops_st253	NA	Comeron	0.402252057545429	0.00299993009386021	134.08714368668	NA	NA	NA	NA	NA	NA	9	ok	
-stops_st253	NA	Li	0.394708061272961	-0.0111854355781483	NA	0.313758690268811	0.137321395229877	NA	NA	NA	NA	9	ok	
+stops_st253	NA	Li	0.394708061272961	-0.0111854355781483	NA	0.313758690268811	0.137321395229877	NA	NA	NA	NA	9	warning	Ks is negative (Li's correction for these counts; not a distance)
 stops_st254	NA	Comeron	0.209926922780132	0.549134171066071	0.382287123696176	NA	NA	NA	NA	NA	NA	5	warning	2 codon column(s) with an internal stop codon skipped
 stops_st254	NA	Li	0.214090026704497	0.409839558924307	0.522375212550035	0.263597351350362	0.868773043389611	NA	NA	NA	NA	5	warning	2 codon column(s) with an internal stop codon skipped
 stops_st255	NA	Comeron	0	0	NA	NA	NA	NA	NA	NA	NA	1	ok	
@@ -642,7 +642,7 @@ multi_p20	NA	Li	0.678232451564207	0.616448491679586	1.10022566478552	1.276889117
 multi_p21	NA	Comeron	0.0588915178281918	0.135155036036055	0.435733062972818	NA	NA	NA	NA	NA	NA	9	ok	
 multi_p21	NA	Li	0.0588915213004141	0.135155036036055	0.43573308866348	0.0607390859349179	0.152145154862546	NA	NA	NA	NA	9	ok	
 multi_p22	NA	Comeron	0.0904715984119167	0	NA	NA	NA	NA	NA	NA	NA	10	ok	
-multi_p22	NA	Li	0.0877574752342483	-0.00104893158272585	NA	0.11807943430379	0.0664996006180828	NA	NA	NA	NA	10	ok	
+multi_p22	NA	Li	0.0877574752342483	-0.00104893158272585	NA	0.11807943430379	0.0664996006180828	NA	NA	NA	NA	10	warning	Ks is negative (Li's correction for these counts; not a distance)
 multi_p23	NA	Comeron	0.12217974669913	NA	NA	NA	NA	NA	NA	NA	NA	11	no_data	no synonymous sites
 multi_p23	NA	Li	NA	NA	NA	NA	NA	NA	NA	NA	NA	11	no_data	Li: no 2-fold or no 4-fold degenerate sites (Ks needs both; seqinr returns 9.999999); Ka saturated (multiple-hit correction undefined)
 multi_p24	NA	Comeron	NA	NA	NA	NA	NA	NA	NA	NA	NA	5	saturated	Ka saturated (multiple-hit correction undefined); Ks saturated (multiple-hit correction undefined)

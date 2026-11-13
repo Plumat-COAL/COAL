@@ -27,7 +27,8 @@
 //     A, C, G, T is removed with its column);
 //   - seqinr's sentinel 9.999999 for Ka, Ks and their variances ("saturated", also returned when a class of
 //     sites is empty) is NA here, with status `saturated` or `no_data`;
-//   - standard errors (the square roots of seqinr's vka and vks) are returned;
+//   - standard errors (the square roots of seqinr's vka and vks) are returned; a negative Ka or Ks (which the
+//     formulas give for some short pairs, and seqinr returns) is returned with status `warning`;
 //   - gaps are removed per pair (seqinr removes every column in which any sequence of the alignment has a gap;
 //     for two sequences that is the same).
 //
@@ -407,6 +408,15 @@ Result run_li(const Prepared& pr, const GeneticCode& code, const Options& opt, R
     } else {
         undefined("Ka", !(l[0] > 0) || !(l[1] > 0),
                   "Li: no non-degenerate or no 2-fold degenerate sites (Ka needs both; seqinr returns 9.999999)");
+    }
+    // The formulas can give a negative distance (few differences of one kind in a short pair): seqinr returns
+    // it, and so does COAL, with a warning (orthologr turns a negative value into NA).
+    for (const char* which : {"Ka", "Ks"}) {
+        const double v = which[1] == 'a' ? r.ka : r.ks;
+        if (v < 0) {
+            if (r.status == Status::ok) r.status = Status::warning;
+            add_note(r, std::string(which) + " is negative (Li's correction for these counts; not a distance)");
+        }
     }
     return r;
 }
