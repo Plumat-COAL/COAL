@@ -335,7 +335,8 @@ class TestMultiPositionCodons(KaKsBase):
         self.assertEqual(row[13], "not_converged", row)
         self.assertEqual([row[i] for i in (3, 4, 5, 6, 7, 10, 11)], ["NA"] * 7, row)
         self.assertTrue(float(row[8]) > 0 and float(row[9]) > 0, row)
-        rounds = {"YN": "YN00 iteration did not converge in 10 rounds", "MYN": "MYN iteration did not converge in 100 rounds"}
+        rounds = {"YN": "YN00 iteration did not converge in 10 rounds",
+                  "MYN": "MYN iteration did not converge in 100 rounds"}
         self.assertRegex(row[14], "^" + rounds[method_name] + r": no estimate \(last round: Ka \S+, Ks \S+; "
                                   r"such values can differ between platforms\)$")
 

@@ -18,7 +18,9 @@ Ka/Ks (`coal kaks` / `coal dnds`, docs/kaks.md): `tests/test_kaks.py` compares c
 and PAML yn00 outputs stored in `tests/kaks/golden/` (inputs `tests/kaks/edge_cases.axt`, `tests/kaks/sim_small.axt`;
 `python tests/kaks/make_fixtures.py --help` remakes them), allowing only the documented differences, and checks the
 policy statuses and the command line. A number that KaKs_Calculator prints and COAL does not is a failure unless
-COAL's status is `saturated`; a number where KaKs_Calculator prints `nan` is allowed only for the listed pairs
+COAL's status is `saturated`, or `not_converged` (a YN / MYN iteration that did not converge has no estimate; for
+those pairs only the status, the NA fields and the form of the note are asserted, never a digit of the last
+round, which differs between platforms: docs/kaks.md "Platform reproducibility"); a number where KaKs_Calculator prints `nan` is allowed only for the listed pairs
 (`KK_LOSES`: sites of one kind only, and MYN's NaN cases), whose values `TestOneKindOfSite` and `TestMynNan` check
 against PAML yn00 and against KaKs_Calculator's YN. `TestCli` also covers `-o` naming the input (refused) and an
 AXT record with one sequence line (that record's error). The 999-pair orthologr validation is

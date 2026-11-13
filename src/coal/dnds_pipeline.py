@@ -1706,7 +1706,8 @@ def _execute(mode: str, a: argparse.Namespace, argv) -> PipelineResult:
         genes = run.counts.get("genes", {})
         run.say(f"summary: {genes.get('total', 0):,} genes ({genes.get('failed', 0):,} not usable); "
                 f"{pairs.get('total', 0):,} pairs: {pairs.get('ok', 0):,} ok, {pairs.get('warning', 0):,} warning, "
-                f"{pairs.get('not_converged', 0):,} not_converged, {pairs.get('saturated', 0):,} saturated, {pairs.get('no_data', 0):,} no_data, "
+                f"{pairs.get('not_converged', 0):,} not_converged, {pairs.get('saturated', 0):,} saturated, "
+                f"{pairs.get('no_data', 0):,} no_data, "
                 f"{pairs.get('error', 0):,} error")
         if mode == "clusters":
             c = run.counts["clusters"]
