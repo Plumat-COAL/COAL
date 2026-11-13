@@ -297,6 +297,8 @@ entry under "Added", not under "Fixed".
   Drost (2026), Nature Methods 23:724-727 (key `buchfink2026`); the key of its preprint, `buchfink2023`, is no
   longer listed but still resolves (`coal cite buchfink2023`, and a report that names it), followed by the paper.
   The seqinr reference has the book's full title.
+  On the website's Cite page the table wraps and, on a phone, stacks the two cells of each row (it showed only
+  its first column at 390 px).
 - **`coal --help` lists every command, and `coal help [COMMAND]` works.** The help of `coal` (and of `coal-cpp`)
   ends with one line per command: `kaks`, `dnds`, `pipeline`, `translate`, `codon-dnds`, `cite`, `help`,
   `--cpp-path`. `coal kaks --help`, `coal dnds --help`, `coal translate --help` and `coal codon-dnds --help` print

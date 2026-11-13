@@ -429,6 +429,22 @@ class TestSiteFiles(unittest.TestCase):
         # the results screenshot is sharp on high-resolution screens (1600 px wide, ~175 KB), so 400 KB
         self.assertLess(total, 400 * 1024, f"site is {total} bytes (budget 400 KB)")
 
+    def test_cite_table_wraps_and_stacks_on_a_phone(self):
+        """The "what to cite" table has prose in both columns: its own class, not the file table's nowrap first
+        column (on a 390 px screen only the first column was visible), and stacked cells below 30rem."""
+        cite = self.pages["cite.html"]
+        self.assertEqual(re.findall(r'<table class="([^"]+)"', cite), ["files refs"])
+        for page, html in self.pages.items():
+            if page != "cite.html":
+                self.assertNotIn("refs", re.findall(r'<table class="([^"]+)"', html), page)
+        css = re.sub(r"\s+", " ", _read("site", "style.css"))
+        self.assertIn(".refs td:first-child { font: inherit; white-space: normal; }", css)
+        self.assertLess(css.index(".files td:first-child {"), css.index(".refs td:first-child {"))   # the override wins
+        phone = re.search(r"@media \(max-width: 30rem\) \{ \.refs \{ min-width: 0; \}.*?\} \}", css)
+        self.assertIsNotNone(phone, "no phone rule for .refs")
+        self.assertIn(".refs td { display: block;", phone.group(0))
+        self.assertNotIn("display: none", phone.group(0))   # the header row stays for screen readers
+
     def test_unsigned_and_smart_app_control_explained(self):
         for must in ("Windows protected your PC", "More info", "Run anyway", "Unknown publisher", "Smart App Control",
                      "Get-FileHash", "sha256sum", "coal-gui", "SKILL.md", "/issues", "GPL-3.0-only",

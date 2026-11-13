@@ -239,6 +239,9 @@ details.ss[open] summary { margin-bottom: 0.75rem; }
 .files th, .files td { text-align: left; vertical-align: top; padding: 0.45rem 1rem 0.45rem 0; border-bottom: 1px solid var(--line); }
 .files thead th { font-size: var(--fs-sm); color: var(--muted); font-weight: 400; }
 .files td:first-child { font-family: var(--mono); font-size: 0.82rem; white-space: nowrap; }
+.refs td:first-child { font: inherit; white-space: normal; }
+@media (max-width: 30rem) { .refs { min-width: 0; } .refs thead { position: absolute; clip: rect(0 0 0 0); }
+  .refs td { display: block; padding-right: 0; } .refs td:first-child { font-weight: 600; border: 0; padding-bottom: 0; } }
 .verify dt { font-weight: 600; color: var(--ink); margin-top: 0.9rem; }
 .verify dd { margin: 0.3rem 0 0; }
 .verify pre { margin: 0 0 0.4rem; }
