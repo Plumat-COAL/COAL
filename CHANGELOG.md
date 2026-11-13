@@ -54,6 +54,11 @@ Packaging, command line and continuous integration (2026-11-13, not yet released
   `coal-cpp-align --version` is new. Verified on Linux x86-64 with the repository's build script outside the
   container; the macOS and Windows steps of the workflow are changed the same way and have not run yet.
 
+- **`coal kaks -j1`, `coal dnds -j1`: attached values of one-letter options are read**, as the main command
+  does (`-j4`, `-j=4`, `-mYN`, `-ofile`, chained flags `-qj4`), in `coal kaks`, `coal dnds`, `coal translate`,
+  `coal codon-dnds` and `coal-cpp-align` (which also takes `--jobs=4` now). They were "unrecognized argument"
+  while `-j 1` worked. The value of an option is never taken apart (`-o -q1` still writes a file called `-q1`).
+
 Found by the independent review of 2026-11-12 of the Ka/Ks engine, the pipeline and the R package (all in code
 not yet released):
 

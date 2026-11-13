@@ -30,6 +30,7 @@
 #include "kaks.hpp"
 #include "pool.hpp"
 #include "seqio.hpp"
+#include "shortopts.hpp"
 #include "sysio.hpp"
 #include "tables.hpp"
 
@@ -355,9 +356,13 @@ std::string tidy_row(const Pair& p, const Result& r, int dg) {
     return o;
 }
 
-int parse(const std::vector<std::string>& a, Cli& c) {
+int parse(const std::vector<std::string>& args, Cli& c) {
+    std::vector<std::string> a = args;
     std::vector<std::string> pos;
     for (size_t i = 0; i < a.size(); ++i) {
+        // -j4, -mYN, -ofile, -qj4: attached values and chained flags, as the main command line reads them
+        // (KaKs_Calculator's own letters in either case)
+        expand_short_option(a, i, c.compat ? "iomcIOMCj" : "iomcj", "q", {"-codontable"});
         std::string s = a[i];
         std::string val;
         bool has_eq = false;

@@ -170,7 +170,10 @@ with `--format`.
 
 **Exit status.** 0 when the run finished, even if some pairs have a status other than `ok`. 1 when the input
 cannot be read or the output cannot be written. 2 for a command-line error, including a method that is not
-implemented. `-j N` sets the number of threads (default: all hardware threads). Pairs are computed in parallel
+implemented. `-j N` sets the number of threads (default: all hardware threads). A one-letter option takes its
+value attached as well (`-j4`, `-j=4`, `-mYN`, `-ofile`; flags chain: `-qj4`), and a long one after `=`
+(`--jobs=4`), in `coal kaks`, `coal dnds`, `coal translate`, `coal codon-dnds` and `coal-cpp-align`, as in the
+main `coal` command. Pairs are computed in parallel
 and written in input order, and the output does not depend on `-j`.
 
 `--comeron-flavour gestimator` and `--li-flavour seqinr` make `Comeron` and `Li` read the pair as their

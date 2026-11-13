@@ -35,6 +35,7 @@
 #include "kaks_cli.hpp"
 #include "pool.hpp"
 #include "seqio.hpp"
+#include "shortopts.hpp"
 #include "sysio.hpp"
 #include "tables.hpp"
 
@@ -126,13 +127,16 @@ std::string clean(const std::string& s) {
 }
 
 struct ArgIter {
-    const std::vector<std::string>& a;
+    std::vector<std::string> a;
+    std::string value_opts, flag_opts;   // one-letter options with / without a value (-j4, -qj4: shortopts.hpp)
     size_t i = 0;
     std::string opt, val;
     bool has_eq = false;
-    explicit ArgIter(const std::vector<std::string>& args) : a(args) {}
+    ArgIter(const std::vector<std::string>& args, const char* with_value, const char* flags)
+        : a(args), value_opts(with_value), flag_opts(flags) {}
     bool next() {
         if (i >= a.size()) return false;
+        expand_short_option(a, i, value_opts, flag_opts, {"-codontable"});
         opt = a[i++];
         has_eq = false;
         if (opt.size() > 2 && opt[0] == '-' && opt[1] == '-') {
@@ -210,7 +214,7 @@ int translate_main_(const std::vector<std::string>& argv) {
     std::string out, genes;
     int table = 1;
     bool quiet = false;
-    ArgIter it(argv);
+    ArgIter it(argv, "oc", "q");
     while (it.next()) {
         const std::string& s = it.opt;
         std::string v;
@@ -504,7 +508,7 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
     const char* prog = "codon-dnds";
     Cli c;
     std::vector<Method> methods;
-    ArgIter it(argv);
+    ArgIter it(argv, "iomcj", "q");
     while (it.next()) {
         const std::string& s = it.opt;
         std::string v;

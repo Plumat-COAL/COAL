@@ -32,6 +32,7 @@
 #include "align.hpp"
 #include "core.hpp"
 #include "pool.hpp"
+#include "shortopts.hpp"
 
 using namespace coal;
 
@@ -152,11 +153,24 @@ int main(int argc, char** argv) {
     Flanks flanks = Flanks::Gap;
     int jobs = 0;
     std::vector<std::string> files;
-    for (int k = 1; k < argc; ++k) {
-        std::string a = argv[k];
+    std::vector<std::string> args(argv + 1, argv + argc);
+    for (size_t k = 0; k < args.size(); ++k) {
+        expand_short_option(args, k, "mjo", "", {});   // -j4, -mBLOSUM45, -oout.fasta, -j=4 (shortopts.hpp)
+        std::string a = args[k];
+        bool has_eq = false;
+        std::string eq_val;
+        if (a.size() > 2 && a[0] == '-' && a[1] == '-') {   // --jobs=4
+            size_t eq = a.find('=');
+            if (eq != std::string::npos) {
+                eq_val = a.substr(eq + 1);
+                a = a.substr(0, eq);
+                has_eq = true;
+            }
+        }
         auto val = [&]() -> std::string {
-            if (k + 1 >= argc) die(a + " needs a value", 1);
-            return argv[++k];
+            if (has_eq) return eq_val;
+            if (k + 1 >= args.size()) die(a + " needs a value", 1);
+            return args[++k];
         };
         if (a == "-h" || a == "--help") {
             std::cout << USAGE;
