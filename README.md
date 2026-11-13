@@ -127,10 +127,36 @@ Example inputs are in `examples/` (`clean`, `mito`, `messy_ids`, `one_broken_gen
 
 ## Citation and licence
 
-If you use COAL, please cite it (`CITATION.cff`) and PAL2NAL:
+If you use COAL, please cite it (`CITATION.cff`, with the version `coal --version` prints) and PAL2NAL:
 
 Suyama M, Torrents D, Bork P (2006) PAL2NAL: robust conversion of protein sequence alignments into the
 corresponding codon alignments. *Nucleic Acids Res.* 34:W609–W612.
+
+COAL's Ka/Ks numbers come from published estimators, in code derived from KaKs_Calculator 2.0, PAML, libsequence
+and seqinr, and `coal pipeline` runs DIAMOND and an aligner. Please cite what your numbers come from:
+
+| What you ran | Cite |
+|---|---|
+| Anything | COAL |
+| A codon alignment (`coal PEP NUC`, `pal2nal`, every Ka/Ks route of the pipeline) | Suyama et al. 2006 (PAL2NAL) |
+| Ka/Ks, method NG | Nei & Gojobori 1986; Wang et al. 2010 (KaKs_Calculator 2.0) |
+| Ka/Ks, method LWL | Li, Wu & Luo 1985; Wang et al. 2010 (KaKs_Calculator 2.0) |
+| Ka/Ks, method MLWL | Li, Wu & Luo 1985; Tzeng, Pan & Li 2004; Wang et al. 2010 (KaKs_Calculator 2.0) |
+| Ka/Ks, method LPB | Li 1993; Pamilo & Bianchi 1993; Wang et al. 2010 (KaKs_Calculator 2.0) |
+| Ka/Ks, method MLPB | Li 1993; Pamilo & Bianchi 1993; Tzeng, Pan & Li 2004; Wang et al. 2010 (KaKs_Calculator 2.0) |
+| Ka/Ks, method YN (the default) | Yang & Nielsen 2000; Wang et al. 2010 (KaKs_Calculator 2.0); Yang 2007 (PAML 4) |
+| Ka/Ks, method MYN | Zhang, Li & Yu 2006; Yang & Nielsen 2000; Wang et al. 2010 (KaKs_Calculator 2.0); Yang 2007 (PAML 4) |
+| Ka/Ks, method Comeron | Comeron 1995; Thornton 2003 (libsequence) |
+| Ka/Ks, method Li | Li 1993; Charif & Lobry 2007 (seqinr) |
+| `coal pipeline pairs` with DIAMOND (orthologs) | Buchfink et al. 2021 (DIAMOND) |
+| `coal pipeline clusters` with DIAMOND DeepClust | Buchfink et al. 2021 (DIAMOND); Buchfink et al. 2023 (DIAMOND DeepClust, preprint) |
+| Protein alignments by Clustal Omega (`--aligner clustalo`, the cluster default) | Sievers et al. 2011 (Clustal Omega) |
+| Protein alignments by MAFFT (`--aligner mafft`) | Katoh & Standley 2013 (MAFFT) |
+| Through the R package orthologr | Drost et al. 2015 (orthologr) |
+
+`coal cite` prints this table and the full references; `coal cite out/report.json` prints the references of one
+pipeline run (its report has them as `cite`). The references are in
+[docs/kaks.md](docs/kaks.md#what-to-cite).
 
 COAL is free software under the GNU General Public License, version 3 only (SPDX `GPL-3.0-only`; the text is in
 `LICENSE`, the copyright notice in `NOTICE`). This applies from the release after 0.5.0: **0.5.0 and earlier were

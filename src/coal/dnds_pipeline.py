@@ -1097,6 +1097,11 @@ class _Run:
             "failures_truncated": self.n_failures > len(self.failures),
             "outputs": {k: os.path.relpath(v, self.out) for k, v in sorted(self.outputs.items())},
         }
+        from . import citations
+        report["cite"] = citations.keys_for(
+            methods=a.method or (), diamond="diamond" in self.tools,
+            deepclust=self.mode == "clusters" and not a.clusters and "diamond" in self.tools,
+            clustalo="clustalo" in self.tools, mafft="mafft" in self.tools)
         if error:
             report["error"] = error
         if self.notes:
@@ -2034,6 +2039,7 @@ def _execute(mode: str, a: argparse.Namespace, argv) -> PipelineResult:
         if run.n_failures:
             run.say(f"summary: {run.n_failures:,} failure(s) listed in {run.outputs['failed']}")
         run.say(f"summary: results in {run.outputs.get('dnds', run.out)}")
+        run.say(f"summary: what to cite for this run: coal cite {run.outputs.get('report', '')}")
         return PipelineResult(code, report, run.outputs)
     finally:
         _restore_signals(old_handlers)

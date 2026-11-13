@@ -428,6 +428,14 @@ def main(argv=None) -> int:
         return cpp_path_main()
     if argv and argv[0] in ("kaks", "dnds", "translate", "codon-dnds"):
         return kaks_main(argv)
+    if argv and argv[0] == "cite":   # what to cite for what was run (coal/citations.py)
+        from .citations import main as cite_main
+        try:
+            rc = cite_main(argv[1:])
+            sys.stdout.flush()
+            return rc
+        except BrokenPipeError:   # `coal cite | head`
+            return closed_stdout_exit()
     if argv and argv[0] == "pipeline":  # CDS -> orthologs / clusters -> alignment -> codon alignment -> Ka/Ks
         from .dnds_pipeline import main as pipeline_main
         return pipeline_main(argv[1:])
