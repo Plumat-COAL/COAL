@@ -175,7 +175,9 @@ says what to install; nothing else in the package needs Python.
 2026-11-13, for the methods Comeron and Li (`tests/testthat/test-comeron-li.R`): the reference flavours against
 stored values of orthologr 0.4.3's gestimator code and of `seqinr::kaks()` for 139 pairs (17 digits; equal to
 1e-12), `seqinr::kaks()` itself when seqinr is installed, the default flavours, names and arguments, and the
-three entry points. With them the package has 38 tests and 1,005 expectations.
+three entry points. With them the package has 38 tests and 1,005 expectations (41 tests and 1,047 expectations on
+2026-11-13, after the status `not_converged` and its tests; `R CMD check --as-cran --no-manual` again without
+ERROR or WARNING in a UTF-8 locale).
 
 Not tested by hand: Windows and macOS (the R package was built and checked on Linux only; from 2026-11-13 the
 workflow `.github/workflows/r-package.yml` runs `R CMD check --as-cran --no-manual` on Linux (R release and the
