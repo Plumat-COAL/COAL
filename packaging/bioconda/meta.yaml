@@ -18,9 +18,13 @@ source:
 
 build:
   number: 0
-  # Not noarch: the package ships the compiled coal-cpp and coal-cpp-align binaries next to the pure-Python package.
-  # Linux and macOS only; Bioconda does not build Windows (the Windows app is distributed from GitHub Releases).
-  skip: True  # [win]
+  # Not noarch: the package ships the compiled coal-cpp and coal-cpp-align binaries next to the pure-Python package,
+  # so it is built once per platform and Python version of Bioconda's build matrix (the Python files land in that
+  # version's site-packages; `python` is therefore unpinned in host and run, and conda-build pins it per build).
+  # COAL needs Python 3.10 or later: older Pythons of the matrix are skipped, not constrained (a non-noarch recipe
+  # must not carry `python >=3.10`: that is the noarch form). Linux and macOS only; Bioconda does not build
+  # Windows (the Windows app is distributed from GitHub Releases).
+  skip: True  # [win or py<310]
   run_exports:
     - {{ pin_subpackage(name, max_pin="x.x") }}
 
@@ -30,11 +34,11 @@ requirements:
     - cmake
     - make
   host:
-    - python >=3.10
+    - python
     - pip
     - setuptools >=77.0.3
   run:
-    - python >=3.10
+    - python
   # Optional programs of `coal pipeline` (not needed for codon alignment, `coal kaks` or `coal dnds`): when they are
   # in the environment they must be versions COAL works with. `conda install diamond clustalo` adds them; without
   # them `coal pipeline` says which one is missing. DIAMOND: 2.1.0 is the first with DeepClust (tested: 2.2.8).
@@ -54,8 +58,12 @@ test:
     - coal-cpp --version | grep -qx "coal {{ version }} (C++)"
     - coal --help > coal_help.txt && grep -q "coal pipeline" coal_help.txt && grep -q "coal kaks" coal_help.txt
     - coal-cpp-align --version | grep -qx "coal-cpp-align {{ version }}"
-    # (to a file, not a pipe: `grep -q` closing the pipe early makes the usage print a BrokenPipeError traceback)
-    - pal2nal > usage.txt && grep -q "pal2nal pep.aln nuc.fasta" usage.txt
+    # `pal2nal` without arguments is a usage error, as PAL2NAL's: exit 1, the usage on stderr, nothing on stdout
+    # (`|| test $? -eq 1`: the test script runs under `set -e`).
+    - pal2nal > usage_stdout.txt 2> usage.txt || test $? -eq 1
+    - test ! -s usage_stdout.txt
+    - grep -q "pal2nal pep.aln nuc.fasta" usage.txt
+    # (to a file, not a pipe: `grep -q` closing the pipe early makes the help print a BrokenPipeError traceback)
     - pal2nal -h > help.txt && grep -q "PAL2NAL" help.txt
     - python -c "import coal, coal_compat; print(coal.__version__)"
     # The same alignment from both engines, byte for byte (COAL_ENGINE=cpp forces coal-cpp even for small inputs).
@@ -103,6 +111,10 @@ about:
   doc_url: https://plumat-coal.github.io/COAL/
 
 extra:
+  # The C++ engine is plain C++17 without architecture-specific code: also built for ARM Linux and Apple silicon.
+  additional-platforms:
+    - linux-aarch64
+    - osx-arm64
   identifiers:
     - doi:TODO  # Zenodo / paper DOI once there is one (see CITATION.cff)
   recipe-maintainers:
