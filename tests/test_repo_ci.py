@@ -194,7 +194,7 @@ class TestNightlyWorkflow(unittest.TestCase):
 
     def test_every_job_has_a_timeout_and_no_write_permission(self):
         jobs = self._jobs()
-        self.assertEqual(sorted(jobs), ["engine-fuzz", "pal2nal-fuzz", "sanitizers"])
+        self.assertEqual(sorted(jobs), ["engine-fuzz", "pal2nal-fuzz", "sanitizers", "tsan"])
         for j in jobs:
             job = self._job(j)
             self.assertRegex(job, r"(?m)^    timeout-minutes: \d+", j)
@@ -248,6 +248,23 @@ class TestNightlyWorkflow(unittest.TestCase):
             self.assertIn(mod, job, mod)
         self.assertIn('engine_fuzz.py --n 300 --seed "$FUZZ_SEED" --sanitizer', job)
         self.assertEqual(job.count('grep -qE "AddressSanitizer|LeakSanitizer|runtime error"'), 2)
+
+    def test_tsan_job(self):
+        job = self._job("tsan")
+        self.assertIn('-DCMAKE_CXX_FLAGS="-fsanitize=thread -g -O1"', job)
+        self.assertIn('-DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread"', job)
+        self.assertIn("-DCOAL_WARNINGS_AS_ERRORS=ON", job)
+        self.assertIn("test -x build-tsan/coal-cpp-align", job)
+        self.assertIn('tests/tools/tsan_threads.py --build build-tsan --seed "$FUZZ_SEED" --jobs 4', job)
+        self.assertIn('grep -q "ThreadSanitizer" tsan.txt', job)
+        self.assertIn("if: failure()", job)
+        self.assertIn("tsan-keep/", job)
+        # the tool runs kaks, dnds and codon-dnds with all nine methods and both flavours, and the aligner
+        with open(os.path.join(ROOT, "tests", "tools", "tsan_threads.py"), encoding="utf-8") as fh:
+            tool = fh.read()
+        for word in ('"Comeron", "Li"', '"kaks"', '"dnds"', '"codon-dnds"', "coal-cpp-align", '"gestimator"',
+                     '"seqinr"', '"@J"'):
+            self.assertIn(word, tool, word)
 
     def test_the_ci_cpp_test_set_is_the_nightly_one(self):
         """ci.yml's C++ job and the sanitizer job run the same core modules (the nightly adds four)."""
@@ -310,7 +327,8 @@ class TestNightlySteps(unittest.TestCase):
         files = {"tests/__init__.py": ""}
         for mod in ("test_differential", "test_cpp_vs_python", "test_cpp_cli", "test_cpp_readers", "test_cpp_tables",
                     "test_cpp_pool", "test_stdin", "test_robustness", "test_cpp_error_precedence", "test_batch",
-                    "test_kaks", "test_align", "test_msa", "test_dnds_pipeline"):
+                    "test_kaks", "test_kaks_comeron_li", "test_align", "test_msa", "test_dnds_pipeline",
+                    "test_short_options", "test_output_lock"):
             files[f"tests/{mod}.py"] = "import unittest\nclass T(unittest.TestCase):\n    def test_x(self):\n        pass\n"
         r, _ = self._run("sanitizers", step, files)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
@@ -363,6 +381,26 @@ class TestCiJobs(unittest.TestCase):
         self.assertIn("COAL_REQUIRE_EXTRAS: mcp", mcp)
         self.assertNotIn("[gui]", mcp)
 
+    def test_kaks_methods_lock_and_options_are_required_in_the_cpp_job(self):
+        """The step that runs with COAL_REQUIRE_CPP (a missing binary fails instead of skipping) names the Ka/Ks
+        tests, Comeron and Li included, the short-option tests and the C++ lock tests; DIAMOND is installed and
+        required on all three systems (no `if:` on that step)."""
+        cpp = self._job("cpp")
+        step = re.search(r"- name: Ka/Ks engine, alignment layer and pipeline tests.*?(?=\n      - name:|\n      # The release)",
+                         cpp, re.S).group(0)
+        self.assertIn('COAL_REQUIRE_CPP: "1"', step)
+        self.assertIn('COAL_REQUIRE_ALIGN: "1"', step)
+        for mod in ("tests.test_kaks", "tests.test_kaks_comeron_li", "tests.test_align", "tests.test_msa",
+                    "tests.test_dnds_pipeline", "tests.test_short_options", "tests.test_output_lock"):
+            self.assertRegex(step, rf"{re.escape(mod)}(\s|$)", mod)
+            self.assertTrue(os.path.isfile(os.path.join(ROOT, "tests", mod.split(".")[1] + ".py")), mod)
+        diamond = re.search(r"      - name: Install DIAMOND \(pinned release.*?\n(.*?)(?=\n      (- name:|#))", cpp, re.S)
+        self.assertIsNotNone(diamond)
+        self.assertNotIn("if:", diamond.group(1))
+        self.assertIn("COAL_REQUIRE_DIAMOND=1", diamond.group(1))
+        self.assertIn("--align-binary build-manylinux/coal-cpp-align", cpp)
+        self.assertIn("packaging/wheels/check_wheel_binaries.py", cpp)
+
     def test_cpp_job_cannot_go_green_without_exercising_cpp(self):
         cpp = self._job("cpp")
         # coal-cpp builds from the root CMakeLists.txt and tests/test_differential.py reads COAL_IMPL
@@ -389,6 +427,62 @@ class TestCiJobs(unittest.TestCase):
         else:
             self.assertNotEqual(r.returncode, 0)
             self.assertNotIn("skipped", r.stderr)
+
+
+class TestRPackageWorkflow(unittest.TestCase):
+    """r-package.yml: R CMD check of packaging/r/coalr on three systems and the vendored-sources check, in a
+    workflow of its own with a paths filter (the main matrix is not slowed), with ci.yml's hygiene."""
+
+    def setUp(self):
+        self.wf = _ci("r-package.yml")
+
+    def _job(self, name):
+        m = re.search(rf"^  {name}:\n(.*?)(?=^  [\w-]+:\n|\Z)", self.wf, re.S | re.M)
+        self.assertIsNotNone(m, name)
+        return m.group(1)
+
+    def test_triggers_and_hygiene(self):
+        self.assertRegex(self.wf, r"(?m)^permissions:\n  contents: read")
+        self.assertIn("workflow_dispatch:", self.wf)
+        head = self.wf.split("\njobs:\n", 1)[0]
+        for path in ("packaging/r/**", "cpp/src/**", "scripts/sync_r_sources.py", ".github/workflows/r-package.yml"):
+            self.assertEqual(head.count(f'- "{path}"'), 2, path)        # for push and for pull_request
+        self.assertNotRegex(head, r"[&*]\w+\s*$")                       # no YAML anchors
+        jobs = re.findall(r"^  ([\w-]+):\n", self.wf.split("\njobs:\n", 1)[1], re.M)
+        self.assertEqual(sorted(jobs), ["check", "vendored-sources"])
+        for j in jobs:
+            self.assertRegex(self._job(j), r"(?m)^    timeout-minutes: \d+", j)
+            self.assertNotIn("continue-on-error", self._job(j), j)
+        ci = {u.split("@")[0]: u for u in re.findall(r"uses: (\S+)", _ci())}
+        uses = re.findall(r"uses: (\S+)", self.wf)
+        r_lib = set()
+        for u in uses:
+            self.assertRegex(u, r"@[0-9a-f]{40}$", f"unpinned action {u}")
+            if u.startswith("r-lib/actions/"):
+                r_lib.add(u.split("@")[1])
+            else:
+                self.assertEqual(u, ci.get(u.split("@")[0]), f"{u}: not the SHA ci.yml uses")
+        self.assertEqual(len(r_lib), 1, "the three r-lib actions come from one commit")
+        # the R jobs are not in ci.yml: the main matrix does not wait for R
+        self.assertNotIn("r-lib/actions", _ci())
+
+    def test_check_job(self):
+        job = self._job("check")
+        for a in ("setup-r@", "setup-r-dependencies@", "check-r-package@"):
+            self.assertIn(f"r-lib/actions/{a}", job)
+        self.assertEqual(job.count("working-directory: packaging/r/coalr"), 2)
+        rows = re.findall(r"- \{os: ([\w.-]+), r: ([\w.-]+)\}", job)
+        self.assertEqual(sorted(rows), [("macos-latest", "release"), ("ubuntu-latest", "oldrel-1"),
+                                        ("ubuntu-latest", "release"), ("windows-latest", "release")])
+        self.assertIn("r-version: ${{ matrix.r }}", job)
+        self.assertIn('"--as-cran"', job)
+        self.assertIn('"--no-manual"', job)
+        self.assertIn("""error-on: '"warning"'""", job)
+        self.assertTrue(os.path.isfile(os.path.join(ROOT, "packaging", "r", "coalr", "DESCRIPTION")))
+
+    def test_vendored_sources_job_runs_the_check(self):
+        self.assertIn("run: python scripts/sync_r_sources.py --check", self._job("vendored-sources"))
+        self.assertTrue(os.path.isfile(os.path.join(ROOT, "scripts", "sync_r_sources.py")))
 
 
 if __name__ == "__main__":

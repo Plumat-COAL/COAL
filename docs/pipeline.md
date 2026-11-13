@@ -461,7 +461,10 @@ machine is still to be done.
   "Verification"). The DIAMOND 2.2.8 release archives (Linux x86_64, macOS, Windows x64) and micromamba are pinned
   by SHA-256 in COAL's source; DIAMOND publishes no checksums, so those hashes are the ones of the files as
   downloaded on 2026-11-12. Clustal Omega and MAFFT come from Bioconda (conda / mamba / micromamba; Linux and
-  macOS); `--install-tools` during a run never installs an unverified file.
+  macOS); `--install-tools` during a run never installs an unverified file. DIAMOND's macOS archive is one
+  universal binary (an x86_64 slice for macOS 10.15 and later, an arm64 slice for macOS 11 and later that carries a code signature; only
+  system libraries), so the same pinned file serves Intel and Apple-silicon Macs without Rosetta (read from the
+  2.2.8 archive, 2026-11-13; COAL's CI installs and requires it on the arm64 macOS runner).
 - **Windows: no automatic Clustal Omega or MAFFT install.** The pre-compiled Clustal Omega binaries of the
   Clustal site are gone (the address serves an unrelated site since 2026-11) and Bioconda has no Windows packages,
   so `--install-tools` and `coal pipeline install clustalo` cannot install one there and say what works: run COAL

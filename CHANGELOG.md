@@ -79,6 +79,16 @@ Packaging, command line and continuous integration (2026-11-13, not yet released
   that no COAL run wrote is never written into. The engine step has `coal codon-dnds --protein-out FILE` and
   `--protein-dir DIR`; the report's `outputs` has `protein_alignments` (docs/pipeline.md, the schema).
 
+- **Continuous integration.** A workflow of its own for the R package (`.github/workflows/r-package.yml`): `R
+  CMD check --as-cran --no-manual` of `packaging/r/coalr` on Linux (R release and the previous release), macOS
+  and Windows, and the check that the vendored C++ sources are `cpp/src`; it runs only when the package, the C++
+  core or the sync script change, so the main matrix is not slowed. The nightly run has a ThreadSanitizer job
+  (`tests/tools/tsan_threads.py`: `coal-cpp kaks`, `dnds`, `codon-dnds -j 4` with all nine methods and both
+  flavours, and `coal-cpp-align -j 4`, each also compared with `-j 1`; 28 commands, no report locally). The C++
+  job requires `tests.test_kaks_comeron_li`, `tests.test_short_options` and `tests.test_output_lock` (a missing
+  binary fails), checks the manylinux wheel with both binaries in a fresh environment, and installs and
+  requires DIAMOND on macOS too: DIAMOND's macOS archive is a universal binary with a native arm64 slice.
+
 Found by the independent review of 2026-11-12 of the Ka/Ks engine, the pipeline and the R package (all in code
 not yet released):
 

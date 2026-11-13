@@ -1,0 +1,81 @@
+name: R package
+
+# R CMD check of coalr (packaging/r/coalr), the R bindings that compile the vendored C++ core, on Linux, macOS and
+# Windows, and the check that the vendored sources are cpp/src. A workflow of its own with a paths filter, so the
+# main matrix (ci.yml) is not slowed: it runs when the package, the C++ core it vendors, the sync script, the
+# version or this file change (and by hand: Actions > R package > Run workflow).
+
+on:
+  push:
+    paths:
+      - "packaging/r/**"
+      - "cpp/src/**"
+      - "scripts/sync_r_sources.py"
+      - "pyproject.toml"
+      - ".github/workflows/r-package.yml"
+  pull_request:
+    paths:   # (the same list: no YAML anchors, which not every workflow parser accepts)
+      - "packaging/r/**"
+      - "cpp/src/**"
+      - "scripts/sync_r_sources.py"
+      - "pyproject.toml"
+      - ".github/workflows/r-package.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r-package-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  vendored-sources:
+    # packaging/r/coalr/src/coal must be cpp/src byte for byte (with the header scripts/sync_r_sources.py writes):
+    # a change to the engine that was not synced fails here, before three systems compile a stale copy.
+    name: Vendored C++ sources are in sync with cpp/src
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.13"
+      - name: scripts/sync_r_sources.py --check
+        run: python scripts/sync_r_sources.py --check
+
+  check:
+    # R CMD check --as-cran --no-manual; a WARNING fails. R release on the three systems, and the previous release
+    # on Linux. The tests that need the coal command line, DIAMOND or orthologr's example skip here (they compare
+    # with programs this job does not install); the stored references of gestimator and seqinr::kaks are checked.
+    name: R CMD check, R ${{ matrix.r }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-latest, r: release}
+          - {os: ubuntu-latest, r: oldrel-1}
+          - {os: macos-latest, r: release}
+          - {os: windows-latest, r: release}
+    env:
+      R_KEEP_PKG_SOURCE: "yes"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: r-lib/actions/setup-r@929c772977a3a13c8733b363bf5a2f685c25dd91  # v2.9.0
+        with:
+          r-version: ${{ matrix.r }}
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@929c772977a3a13c8733b363bf5a2f685c25dd91  # v2.9.0
+        with:
+          working-directory: packaging/r/coalr
+          extra-packages: any::rcmdcheck
+          needs: check
+      - uses: r-lib/actions/check-r-package@929c772977a3a13c8733b363bf5a2f685c25dd91  # v2.9.0
+        with:
+          working-directory: packaging/r/coalr
+          args: 'c("--no-manual", "--as-cran")'
+          build_args: 'c("--no-manual")'
+          error-on: '"warning"'
+          upload-snapshots: false

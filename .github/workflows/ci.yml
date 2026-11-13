@@ -303,10 +303,13 @@ jobs:
           fi
       # DIAMOND for the pipeline's default route (reciprocal best hits, the DIAMOND alignment, DeepClust), with COAL's
       # own installer: the pinned release from DIAMOND's GitHub releases, unpacked only after its SHA-256 matched the
-      # one in src/coal/dnds_pipeline.py. Linux and Windows (a pre-compiled binary for each); on macOS those tests
-      # skip. Written to GITHUB_ENV by Python with \n line ends (a path through bash on Windows would carry a \r).
+      # one in src/coal/dnds_pipeline.py. On all three systems: Linux and Windows have a pre-compiled binary each,
+      # and DIAMOND's macOS archive (the same pinned file for both architectures) holds one universal binary with
+      # an x86_64 slice (macOS 10.15+) and an arm64 slice (macOS 11+, code-signed) that link only /usr/lib libraries, so
+      # it runs natively on the arm64 macos-latest runner, without Rosetta (checked on the archive of 2.2.8,
+      # 2026-11-13; docs/pipeline.md). Written to GITHUB_ENV by Python with \n line ends (a path through bash on
+      # Windows would carry a \r).
       - name: Install DIAMOND (pinned release, SHA-256 verified by coal)
-        if: runner.os != 'macOS'
         run: python -c "import os; from coal import dnds_pipeline as P; p = P.install_diamond(method='official'); open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8', newline='\n').write('COAL_DIAMOND=' + p + '\nCOAL_TEST_DIAMOND=' + p + '\nCOAL_REQUIRE_DIAMOND=1\n')"
       # Clustal Omega and MAFFT for cluster mode's MSA route, with COAL's own installer (Bioconda through the pinned
       # micromamba, into COAL's cache, where the tests find them). Linux only: one system is enough to run those
@@ -325,12 +328,17 @@ jobs:
         # Biopython / needle optima in tests/fixtures/align are always checked); coal-cpp and coal-cpp-align are
         # not (COAL_REQUIRE_CPP, COAL_REQUIRE_ALIGN: a missing binary fails), nor is DIAMOND where the step above
         # installed it (COAL_REQUIRE_DIAMOND). tests.test_kaks: the Ka/Ks engine against the KaKs_Calculator and
-        # PAML goldens, which needs the binary and so skips in the Python jobs.
+        # PAML goldens, which needs the binary and so skips in the Python jobs. tests.test_kaks_comeron_li: the
+        # methods Comeron and Li against the stored references of gestimator and seqinr::kaks.
+        # tests.test_short_options: attached option values in the small command lines. tests.test_output_lock:
+        # the C++ engine's -o lock (race loop, Python and C++ honouring each other's locks).
         shell: bash
         env:
           COAL_REQUIRE_ALIGN: "1"
           COAL_REQUIRE_CPP: "1"
-        run: python -m unittest -v tests.test_kaks tests.test_align tests.test_msa tests.test_dnds_pipeline
+        run: |
+          python -m unittest -v tests.test_kaks tests.test_kaks_comeron_li tests.test_align tests.test_msa \
+            tests.test_dnds_pipeline tests.test_short_options tests.test_output_lock
       # The release's Linux wheels are built inside the manylinux_2_28 container (GCC 14, -Werror): build there on
       # every change too, so a warning that only that compiler raises fails CI, not the release (v0.5.0rc1 did).
       - name: Build inside the manylinux_2_28 container, as the release does (Linux)
@@ -341,11 +349,17 @@ jobs:
             bash packaging/wheels/build_linux_binary.sh /io /io/build-manylinux
           sudo chown -R "$(id -u):$(id -g)" build-manylinux
           ./build-manylinux/coal-cpp --version
+          ./build-manylinux/coal-cpp-align --version
           # and the wheel step of the release, auditwheel check included (v0.5.0rc2 failed there)
           python -m pip install auditwheel==6.4.2
           python -m build --wheel -o dist-ci .
           python packaging/wheels/build_platform_wheel.py --binary build-manylinux/coal-cpp \
+            --align-binary build-manylinux/coal-cpp-align \
             --wheel dist-ci/coal_align-*-py3-none-any.whl --platform-tag manylinux_2_28_x86_64 --outdir wheelhouse-ci --audit
+          # the wheel in a fresh environment: both binaries are the wheel's, one alignment, one pipeline run
+          python -m venv "$RUNNER_TEMP/wheel-venv"
+          "$RUNNER_TEMP/wheel-venv/bin/python" -m pip install --quiet wheelhouse-ci/coal_align-*-manylinux_2_28_x86_64.whl
+          "$RUNNER_TEMP/wheel-venv/bin/python" packaging/wheels/check_wheel_binaries.py
       # The library as an outside program uses it: install to a prefix, build examples/cpp-embed with
       # find_package(coal CONFIG), run it and check its codon alignment.
       - name: Install and build the embedding example (Linux)

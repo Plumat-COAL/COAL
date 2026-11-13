@@ -177,8 +177,11 @@ stored values of orthologr 0.4.3's gestimator code and of `seqinr::kaks()` for 1
 1e-12), `seqinr::kaks()` itself when seqinr is installed, the default flavours, names and arguments, and the
 three entry points. With them the package has 38 tests and 1,005 expectations.
 
-Not tested: Windows and macOS (the C++ core builds there in COAL's CI, the R package was built on Linux only);
-R older than 4.5; clusters or pair sets large enough to matter for memory.
+Not tested by hand: Windows and macOS (the R package was built and checked on Linux only; from 2026-11-13 the
+workflow `.github/workflows/r-package.yml` runs `R CMD check --as-cran --no-manual` on Linux (R release and the
+previous release), macOS and Windows whenever the package, `cpp/src` or the sync script change, and its first
+runs are the first builds of coalr on those two systems); R older than 4.5; clusters or pair sets large enough
+to matter for memory.
 
 ## Maintenance
 
