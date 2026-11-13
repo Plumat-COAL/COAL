@@ -114,7 +114,7 @@ killed, so a pipeline reading COAL's output never waits on an orphaned worker.
   such a run is large while it runs (about 55 KB per 400-codon gene of unrelated DNA: a million of them write
   55 GB next to the output, removed at the end).
 - `-q --progress` still prints the progress lines (`-q` silences warnings, notices and the summary, not progress).
-- One run at a time per output file: a run with `-o` keeps `<out>.coal-lock` (holding its process number) next to
+- One run at a time per output file: a run with `-o` keeps `<out>.coal-lock` (holding its process number, and from the Python engine also the host name) next to
   the output while it runs, because the partial output and checkpoint files it writes there have fixed names. A
   second run writing the same file at the same time is refused before it starts (`coal: error: another COAL run
   (process 12345) is writing out.fa: wait for it to finish, or write to another file ...`, exit 1); a lock left

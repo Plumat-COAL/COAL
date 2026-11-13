@@ -121,9 +121,13 @@ line ends. Rows are in input order (pairs: the query file's order; clusters: the
 | `codon_alignments/<cluster>.fasta` | clusters | `--keep-alignments`: one codon MSA per cluster (not for clusters aligned pairwise); characters other than letters, digits, `.`, `_`, `-` in the cluster ID become `_` |
 | `work/` | both | proteins, DIAMOND tables, logs of every external command (`work/logs/`), the `--resume` state |
 
-**One run per folder, and one run's files only.** A run takes the lock `<out_dir>.coal-lock` (next to the folder,
-holding its process id: COAL's convention for `-o` files) and a second run into the same folder is refused with
-exit 1 while the first one is alive; the lock of a process that is gone is replaced. When a run starts, the files
+**One run per folder, and one run's files only.** A run takes the lock `<out_dir>.coal-lock` (next to the real
+folder: a symbolic link to the folder and the folder are one output; COAL's convention for `-o` files) and a
+second run into the same folder is refused with exit 1 while the first one is alive. The lock is one line,
+`<process id> <host name> <process start> <token>`. The lock of a process that is gone (or whose id now belongs
+to a process that started at another time; Linux) is replaced, by exactly one of the runs that find it. A lock
+written on another machine cannot be checked and is never replaced: the message names the machine and the file
+to remove if that run is gone. When a run starts, the files
 of the table above that an earlier COAL run wrote into the folder are removed (a `dnds.kaks` or
 `codon_alignments.fasta` of a run with other options, the `.fasta` files of a `codon_alignments/` that a cluster
 run with `--keep-alignments` wrote, a half-written `dnds.tsv.tmp`), so the folder never mixes two runs. COAL
@@ -407,9 +411,12 @@ machine is still to be done.
 
 - **`--resume` does not cover the engine step or the cluster MSAs.** A cluster run that is interrupted during the
   MSAs repeats them.
-- **The lock is per process, not per thread and not across machines.** Two `run_pairs()` calls into one folder
-  from two threads of the same Python process are not kept apart (the lock holds a process id), and on a shared
-  file system a run on another host is seen as "gone" when its process id is not alive here.
+- **The lock is a file, not an operating-system lock.** A lock left by a run on another machine that was killed
+  stays until you remove it (the message says which file); COAL cannot tell it from a run that is still going.
+  The process start time that tells a reused process id from the holder is recorded on Linux only. `coal-cpp`
+  writes and reads only the process id (the first field): its own `-o` lock has neither the host check nor the
+  one-at-a-time replacement of a stale lock, so several `coal-cpp` runs started at the same moment onto one
+  `-o` file that has a stale lock are not kept apart as reliably as Python runs are.
 - **A file the run writes replaces a file of that name that was already in the folder**, as with any `-o`: a
   `dnds.tsv` or `genes.tsv` of your own in the output folder is overwritten (unless it is one of this run's
   inputs, which is refused). Only the removal at the start is limited to what an earlier run wrote.

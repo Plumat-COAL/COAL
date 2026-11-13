@@ -64,6 +64,15 @@ Found by the second independent review (2026-11-13) of the fixes above (not yet 
   was. Starting and registering now happen under the lock that `kill_running()` takes, and after
   `kill_running()` the interrupted batch starts no further aligner (its clusters get the error `interrupted`);
   the next batch runs normally.
+- **The output lock (`<out>.coal-lock`; `coal -o` and `coal pipeline`) holds under simultaneous starts, through
+  links and across machines** (the Python side). Several runs that started together and found a stale or empty
+  lock could all take it; a stale lock is now replaced by one run at a time (`<out>.coal-lock.takeover`, held
+  for an instant) and only if it still is the lock that was judged stale. The lock is next to the real output,
+  so a symbolic link to a pipeline folder no longer has a lock of its own. The lock line is now
+  `<pid> <host> <process start> <token>` (the pid stays first, which is all `coal-cpp` and earlier versions
+  read): a lock from another machine counts as held and the message names the machine, a process id that is
+  alive but started at another time (Linux) is not the holder, a second call into the same output from the same
+  process is refused, and releasing never removes a lock that is not the run's own (docs/pipeline.md).
 
 Found by the first CI runs on Windows and macOS of the code above (not yet released):
 

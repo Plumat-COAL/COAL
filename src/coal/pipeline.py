@@ -27,8 +27,10 @@ import time
 from array import array
 import shutil
 import signal
+import socket
 import sys
 import tempfile
+import threading
 from collections import deque
 from itertools import islice
 
@@ -752,65 +754,234 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
-def _lock_pid(path: str) -> int | None:
+# ------------------------------------------------------------------------------------------------ the output lock
+#
+# `<real output>.coal-lock`, one line: "<pid> <host> <start> <token>\n".
+#   pid    the process id (the first field, and all that COAL up to 0.5.0 and coal-cpp write or read);
+#   host   the machine's name: a process id says nothing on another machine, so a lock from another host counts
+#          as held and is never replaced automatically;
+#   start  when that process started (Linux: field 22 of /proc/<pid>/stat; "-" where that is not cheap to get):
+#          a process id that is alive but started at another time is a different process (the id was reused);
+#   token  random, so that a process recognises exactly its own lock.
+# Fields that are missing (an older lock) are unknown and are judged by the pid alone, as before.
+
+_held_locks: dict = {}                 # lock path -> the bytes this process wrote into it
+_held_mutex = threading.Lock()
+
+
+def _hostname() -> str:
     try:
-        with open(path, encoding="ascii", errors="replace") as fh:
-            return int(fh.read(64).split()[0])
-    except (OSError, ValueError, IndexError):
+        name = socket.gethostname()
+    except OSError:
+        name = ""
+    return "".join(c if c.isprintable() and not c.isspace() else "_" for c in name) or "-"
+
+
+def _proc_start(pid: int) -> str:
+    """The start time of a process as the system counts it, or "-" (unknown: not Linux, or no such process)."""
+    try:
+        with open(f"/proc/{pid}/stat", "rb") as fh:
+            return fh.read(4096).rsplit(b")", 1)[1].split()[19].decode("ascii")
+    except (OSError, IndexError, ValueError):
+        return "-"
+
+
+def _read_lock(path: str):
+    """(raw bytes, pid, host, start) of a lock file; pid None when it is empty or not a lock; None when there is
+    no such file."""
+    try:
+        with open(path, "rb") as fh:
+            raw = fh.read(4096)
+    except FileNotFoundError:
         return None
+    except OSError:
+        return b"", None, "-", "-"
+    f = raw.decode("utf-8", "replace").split()
+    try:
+        pid = int(f[0])
+    except (ValueError, IndexError):
+        return raw, None, "-", "-"
+    return raw, pid, (f[1] if len(f) > 1 else "-"), (f[2] if len(f) > 2 else "-")
 
 
-def take_output_lock(real_out: str, name: str) -> str:
-    """Create `<out>.coal-lock` holding this process's id, or refuse: two runs writing the same -o file at the same
-    time shared one `<out>.coal-partial` (the --resume file), so one of them could finish with the other's output
-    or an empty file. A lock left by a run that was killed (its process is gone) is replaced. The same words and
-    file in coal-cpp (sysio.cpp take_output_lock)."""
-    path = real_out + ".coal-lock"
-    removed = False
-    waited = 0.0
-    while True:
+def _lock_holder(pid: int, host: str, start: str) -> str | None:
+    """Who holds a lock with these fields: None (nobody: its process is gone), "host" (a process on another
+    machine, which cannot be checked from here) or "process"."""
+    if host != "-" and host != _hostname():
+        return "host"
+    if not _pid_alive(pid):
+        return None
+    if start != "-":
+        now = _proc_start(pid)
+        if now != "-" and now != start:
+            return None     # the id is in use again, by a process that started at another time
+    if pid == os.getpid():
+        return None         # this process's id, but not a lock it holds (_held_locks): left by an earlier process
+    return "process"
+
+
+def _create_lock(path: str, raw: bytes) -> bool:
+    """Create the lock file with its content in one step (a hard link to a finished temporary file: the lock is
+    never seen empty), or, where links are not possible, exclusively and then written. False if it exists."""
+    tmp = f"{path}.{os.getpid()}.{raw.split()[-1].decode('ascii')}.tmp"
+    try:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    except FileExistsError:
+        fd = None
+    if fd is not None:
+        linked = None
         try:
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
-        except FileExistsError:
-            pid = _lock_pid(path)
-            if pid is None:
-                # Empty (or unreadable): another run created it an instant ago and has not written its id yet (the
-                # window between the two calls below), so it is not stale; only one that stays empty is
-                if waited < 2.0:
-                    time.sleep(0.05)
-                    waited += 0.05
-                    continue
-            elif pid != os.getpid() and _pid_alive(pid):
-                raise CoalError(f"another COAL run (process {pid}) is writing {name}: wait for it to finish, or write to another file (if that process is gone, remove {path})", code="file_error") from None
-            if removed:
-                raise CoalError(f"cannot write {name}: {path} is in the way and cannot be removed",
-                                code="file_error") from None
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(raw)
             try:
-                os.unlink(path)  # a lock whose process is gone (or one empty for 2 s): replaced
+                os.link(tmp, path)
+                linked = True
+            except FileExistsError:
+                linked = False
+            except (OSError, AttributeError, NotImplementedError):
+                linked = None     # no hard links here: the other way below
+        finally:
+            try:
+                os.unlink(tmp)
             except OSError:
                 pass
-            removed = True
-            continue
-        except OSError as e:  # e.g. a folder that cannot be written: the usual output error
-            raise _output_error(name, e) from None
-        try:
-            with os.fdopen(fd, "w", encoding="ascii", newline="\n") as fh:  # the same bytes on every system
-                fh.write(f"{os.getpid()}\n")
-        except BaseException:  # a signal between creating the lock and writing the id into it: leave nothing behind
-            try:
-                os.unlink(path)
-            except OSError:
-                pass
-            raise
-        return path
-
-
-def release_output_lock(path: str | None) -> None:
-    if path:
+        if linked is not None:
+            return linked
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    except FileExistsError:
+        return False
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(raw)
+    except BaseException:  # a signal between creating the lock and writing into it: leave nothing behind
         try:
             os.unlink(path)
         except OSError:
             pass
+        raise
+    return True
+
+
+_before_takeover = None   # test hook: called with the lock path before a stale lock is replaced
+
+
+def _replace_stale_lock(path: str, raw: bytes) -> None:
+    """Remove the lock at `path` if it still holds `raw` (the content that was judged stale). Only one process at
+    a time does this for a path: it first creates `<lock>.takeover` exclusively. Without that, several runs that
+    started together all read the stale id, each removed "the stale lock" and created its own, and the later ones
+    removed the lock an earlier one had just taken: more than one run held the folder."""
+    guard = path + ".takeover"
+    mine = f"{os.getpid()} {_hostname()} {_proc_start(os.getpid())}\n".encode("ascii", "replace")
+    if _before_takeover is not None:
+        _before_takeover(path)
+    if not _create_lock(guard, mine):
+        # another run is replacing the lock right now (it takes microseconds). A guard whose process is gone, or
+        # one that has been there for 30 s, is a leftover: moved aside under a unique name (one mover wins)
+        g = _read_lock(guard)
+        old = False
+        try:
+            old = time.time() - os.stat(guard).st_mtime > 30
+        except OSError:
+            pass
+        if g is not None and (old or (g[1] is not None and _lock_holder(g[1], g[2], g[3]) is None)):
+            aside = f"{guard}.{os.getpid()}.{os.urandom(4).hex()}"
+            try:
+                os.rename(guard, aside)
+                os.unlink(aside)
+            except OSError:
+                pass
+        time.sleep(0.01)
+        return
+    try:
+        now = _read_lock(path)
+        if now is not None and now[0] == raw:   # still the stale one: nobody else can have replaced it meanwhile
+            os.unlink(path)
+    except OSError:
+        pass
+    finally:
+        try:
+            os.unlink(guard)
+        except OSError:
+            pass
+
+
+def take_output_lock(real_out: str, name: str) -> str:
+    """Create `<out>.coal-lock` for this process, or refuse: two runs writing the same -o file (or pipeline folder)
+    at the same time shared one `<out>.coal-partial` / work folder, so one of them could finish with the other's
+    output or an empty file. The lock is next to the real output (links resolved, so a link to a folder and the
+    folder are one output). A lock left by a run that was killed (its process is gone) is replaced, by exactly one
+    of the runs that find it; a lock written on another machine is never replaced automatically. coal-cpp uses
+    the same file (sysio.cpp take_output_lock) and reads the process id, the first field."""
+    path = os.path.realpath(real_out) + ".coal-lock"
+    raw = (f"{os.getpid()} {_hostname()} {_proc_start(os.getpid())} {os.urandom(8).hex()}\n").encode("ascii", "replace")
+    with _held_mutex:
+        if path in _held_locks:
+            raise CoalError(f"this process is already writing {name} (another call or thread): wait for it to "
+                            "finish, or write to another file", code="file_error")
+        _held_locks[path] = raw
+    ok = False
+    try:
+        waited = 0.0
+        deadline = time.monotonic() + 30
+        while True:
+            try:
+                created = _create_lock(path, raw)
+            except OSError as e:  # e.g. a folder that cannot be written: the usual output error
+                raise _output_error(name, e) from None
+            if created:
+                got = _read_lock(path)
+                if got is not None and got[0] == raw:   # (and not replaced under us by a COAL that predates this)
+                    ok = True
+                    return path
+                continue
+            cur = _read_lock(path)
+            if cur is None:
+                continue      # gone in the meantime: try again
+            old_raw, pid, host, start = cur
+            if pid is None:
+                # Empty (or not a lock): a COAL up to 0.5.0 or coal-cpp created it an instant ago and has not
+                # written its id yet, so it is not stale; only one that stays empty for 2 s is
+                if waited < 2.0:
+                    time.sleep(0.05)
+                    waited += 0.05
+                    continue
+            else:
+                holder = _lock_holder(pid, host, start)
+                if holder == "host":
+                    raise CoalError(f"another COAL run (process {pid} on the machine {host}) is writing {name}, or "
+                                    f"was when it last ran: a process on another machine cannot be checked from "
+                                    f"here. Wait for it to finish, or write to another file (if that run is "
+                                    f"gone, remove {path})", code="file_error")
+                if holder == "process":
+                    raise CoalError(f"another COAL run (process {pid}) is writing {name}: wait for it to finish, or write to another file (if that process is gone, remove {path})", code="file_error")
+            if time.monotonic() > deadline:
+                raise CoalError(f"cannot write {name}: {path} is in the way and cannot be removed",
+                                code="file_error")
+            try:
+                _replace_stale_lock(path, old_raw)   # a lock whose process is gone (or one empty for 2 s)
+            except OSError as e:
+                raise _output_error(name, e) from None
+    finally:
+        if not ok:
+            with _held_mutex:
+                _held_locks.pop(path, None)
+
+
+def release_output_lock(path: str | None) -> None:
+    """Remove the lock this process took. A file at that path that is not ours any more (someone removed the lock
+    by hand and another run took it) is left alone."""
+    if not path:
+        return
+    with _held_mutex:
+        raw = _held_locks.pop(path, None)
+    cur = _read_lock(path)
+    if cur is None or (raw is not None and cur[0] != raw and cur[1] is not None):
+        return
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
 
 
 def _output_error(out_path, e: OSError) -> CoalError:
