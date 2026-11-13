@@ -95,7 +95,8 @@ Found by the second independent review (2026-11-13) of the fixes above (not yet 
   byte-identical). The statements "no value that both tools print differs by more than 1e-9" and "the corrected
   reference gives COAL's numbers" were made from 4,000 random pairs in which no codon differs at more than one
   position, and are now scoped to them. On 3,000 short pairs with codons drawn independently YN and MYN print
-  different numbers in 33 fields, each now explained and tested (differences 11 to 13): KaKs_Calculator drops
+  different numbers in 33 fields (23 since the next entry but one: where the iteration does not converge COAL
+  now prints none), each now explained and tested (differences 11 to 13): KaKs_Calculator drops
   the differences of codons that differ at several positions once a NaN is in its iteration and prints a Ka
   that is too small (COAL is right: it gives yn00's unweighted value, or the corrected reference's); an
   iteration that does not converge is not an estimate in either program; a saturated kind of site changes the
@@ -104,9 +105,31 @@ Found by the second independent review (2026-11-13) of the fixes above (not yet 
   **Not said before: the MYN fix above ("gives the defined value where KaKs_Calculator prints `nan`") also
   changed MYN numbers that COAL used to print** on such short pairs (13 Ka and 3 Ks among the 3,000; for
   example Ka 0.0781 became 0.1673, where YN gives 0.1672): COAL had followed the reference into the lost codons.
-- **Ka/Ks: a YN or MYN iteration that does not converge is status `warning`** (it was `ok` with a note), the
-  note adds that the values are those of the last round, and `coal kaks` / `coal dnds` count such results in
-  their summary. The numbers are unchanged. Among the real-gene sets this is one simulated pair (MYN).
+- **Ka/Ks: a YN or MYN iteration that does not converge gives no estimate: status `not_converged`, NA.** It was
+  `ok` with a note, then `warning`, with the values of the last round printed, as KaKs_Calculator and PAML do.
+  Those values are not reproducible: for the one-codon pair `AAA` / `ATG` the same source printed Ka 3.1688 on
+  Linux, 3.1736 on Windows and macOS, and "saturated" with another compiler and C library (CI of 2026-11-13).
+  The wandering iteration amplifies a last-bit difference of `exp` / `log`, or a fused multiply-add, into the
+  third digit. Now `coal dnds`, `coal kaks`, the pipeline and coalr give `NA` for Ka, Ks, Ka/Ks, the standard
+  errors and the weighted difference counts (in `coal kaks` also Fisher's p and Divergence-Time), the status is
+  `not_converged` (new; between `warning` and `saturated`, and also where the last round was saturated, since
+  that differs by platform too), and the note keeps the last round for inspection. The site counts are kept.
+  `cluster_summary.tsv` has a new column `n_not_converged` (after `n_ok`, which does not count these pairs), the
+  pipeline report has `counts.pairs.not_converged` (docs/pipeline.schema.json), the summaries on stderr name the
+  count, and the C++ `Result` has `last_ka` / `last_ks`. Among the real-gene validation sets this changes one
+  row (a simulated pair, MYN: Ka 0.58117 and Ks 1.43957 became NA); the 999 orthologr pairs' output is
+  byte-identical. Among 3,000 random short pairs: 123 YN and 87 MYN rows. docs/kaks.md, difference 12.
+- **Ka/Ks: the same digits on every compiler.** The engine is compiled without floating-point contraction
+  (a pragma in `kaks.cpp`, `-ffp-contract=off` / `/fp:precise` in CMake), so a build for a CPU with FMA (every
+  arm64 Mac) no longer differs from an x86-64 one in the last digits. Eight builds (GCC 13 and 16, Clang 18,
+  `-O2` / `-O3`, with and without `-march=x86-64-v3`) are byte-identical on about 67,000 rows. What remains is
+  the C library's `exp` and `log`: with another one, no row of the 999 + 600 real-gene pairs changes at the
+  default precision, and the last one to three of 15 digits change in 8 to 12% of them. No measurable cost in
+  speed. docs/kaks.md, "Platform reproducibility", says what is guaranteed and what is not.
+- **Ka/Ks: Fisher's test with a cell that is zero up to rounding.** When the weighted differences add up to the
+  number of sites (Sd = S = 2, or 2.0000000000000004), the test was made or left out by the last bit (p = 0 or
+  NA, by platform). The cell now counts as zero (p = 0, as KaKs_Calculator prints). No row of the real-gene sets
+  changes.
 - **A helper process killed before it had started no longer ends the run with exit 141 and no message.** With
   the spawn and forkserver start methods (macOS, Windows, Python 3.14 on Linux) the first child of a run with
   `-j` is Python's resource tracker; if it was killed at once, the pool's first write to it failed with a broken
