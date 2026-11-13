@@ -39,7 +39,8 @@ Encoding: UTF-8
 Depends: R (>= 4.0.0)
 Imports: Rcpp (>= 1.0.7), utils
 LinkingTo: Rcpp
-Suggests: testthat (>= 3.0.0), reticulate, Biostrings, seqinr
+Suggests: testthat (>= 3.0.0), reticulate, Biostrings, seqinr, knitr, rmarkdown
+VignetteBuilder: knitr
 SystemRequirements: C++17
 NeedsCompilation: yes
 Config/testthat/edition: 3

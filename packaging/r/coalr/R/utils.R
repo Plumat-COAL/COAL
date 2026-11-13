@@ -176,17 +176,32 @@ default_threads <- function() getOption("coalr.threads", 1L)
 # estimate (status ok or warning) and fewer than min_codons compared codons, or a dS above max_ds, gets the note
 # appended and status "warning" when it was "ok". No row is dropped and no number changes. Attribute "flagged":
 # how many rows each flag marked.
-check_flags <- function(min_codons, max_ds) {
+check_flags <- function(min_codons, max_ds, min_identity = NULL) {
   min_codons <- check_count(min_codons, "min_codons", 0L)
+  if (!is.null(min_identity) && (!is.numeric(min_identity) || length(min_identity) != 1L || is.na(min_identity) ||
+                                 !is.finite(min_identity) || min_identity <= 0 || min_identity > 100)) {
+    stop("`min_identity` must be NULL (off) or one percentage, above 0 and at most 100", call. = FALSE)
+  }
   if (!is.null(max_ds) && (!is.numeric(max_ds) || length(max_ds) != 1L || is.na(max_ds) || !is.finite(max_ds) ||
                            max_ds <= 0)) {
     stop("`max_ds` must be NULL (off) or one number greater than 0", call. = FALSE)
   }
-  list(min_codons = min_codons, max_ds = max_ds)
+  list(min_codons = min_codons, max_ds = max_ds, min_identity = min_identity)
+}
+
+# `methods` and `method` name the same argument (the command line's -m / --method; coal_kaks() has `method`, the
+# other functions `methods`): either is accepted everywhere. given: whether the function's own argument was given.
+pick_methods <- function(own, other, given, own_name, other_name) {
+  if (is.null(other)) return(own)
+  if (given && !identical(toupper(as.character(own)), toupper(as.character(other)))) {
+    stop("give the Ka/Ks methods once, as `", own_name, "` or as `", other_name, "` (both were given and differ)",
+         call. = FALSE)
+  }
+  other
 }
 
 flag_pairs <- function(out, flags) {
-  if (flags$min_codons == 0L && is.null(flags$max_ds)) return(out)
+  if (flags$min_codons == 0L && is.null(flags$max_ds) && is.null(flags$min_identity)) return(out)
   has <- out$status %in% c("ok", "warning")
   add <- function(rows, text) {
     if (!any(rows)) return(invisible())
@@ -203,6 +218,11 @@ flag_pairs <- function(out, flags) {
     rows <- has & !is.na(out$dS) & out$dS > flags$max_ds
     add(rows, paste0("dS above ", sprintf("%.6g", flags$max_ds)))
     flagged <- c(flagged, max_ds = sum(rows))
+  }
+  if (!is.null(flags$min_identity) && "prot_identity" %in% names(out)) {
+    rows <- has & !is.na(out$prot_identity) & out$prot_identity < flags$min_identity
+    add(rows, paste0("protein identity below ", sprintf("%.6g", flags$min_identity), "%"))
+    flagged <- c(flagged, min_identity = sum(rows))
   }
   attr(out, "flagged") <- flagged
   out

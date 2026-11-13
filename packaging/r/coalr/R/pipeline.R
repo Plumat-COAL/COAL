@@ -106,10 +106,14 @@ pipeline_result <- function(res, out_dir, keep) {
 #' @param clusters Optional clusters file (representative, member); `NULL` runs DIAMOND DeepClust.
 #' @param out_dir Output folder; `NULL` uses a temporary folder that is removed afterwards.
 #' @param methods Ka/Ks methods (see [coal_dnds_pairs()]).
-#' @param threads Threads (`0` = all).
+#' @param method The same as `methods`; give one of the two.
+#' @param threads Threads; `0` (the default here, as `coal pipeline -j 0`) = one per CPU the process may use. The
+#'   in-process functions default to `getOption("coalr.threads", 1L)` instead.
 #' @param ... Further options of `coal pipeline pairs` / `clusters`, with underscores: for example
 #'   `ortho = "bh"`, `aligner = "diamond"`, `pairs = "pairs.tsv"`, `codontable = 2L`, `max_cluster_size = 100L`,
-#'   `large_clusters = "sample"`, `install_tools = TRUE`, `resume = TRUE`.
+#'   `large_clusters = "sample"`, `install_tools = TRUE`, `resume = TRUE`, `longest_isoform = TRUE`,
+#'   `min_codons = 50L`, `max_ds = 2`, `min_identity = 30`. The section "Command line and R arguments" of
+#'   [coalr][coalr-package] has the names side by side.
 #' @param python Optional Python to use (see [coal_python_available()]).
 #' @return A list: `exit_code` (0 finished; 2 finished with entries in `failed`; 1 the run could not be done),
 #'   `pairs` (`dnds.tsv` as a data frame), `summary` (clusters: `cluster_summary.tsv`), `orthologs` and `unpaired`
@@ -123,7 +127,9 @@ pipeline_result <- function(res, out_dir, keep) {
 #' head(cl$summary)
 #' }
 #' @export
-coal_pipeline_pairs <- function(query, subject, out_dir = NULL, methods = "YN", threads = 0L, ..., python = NULL) {
+coal_pipeline_pairs <- function(query, subject, out_dir = NULL, methods = "YN", threads = 0L, ..., python = NULL,
+                                method = NULL) {
+  methods <- pick_methods(methods, method, !missing(methods), "methods", "method")
   P <- py_pipeline(python)
   run_pipeline(function(dir, opts) do.call(P$run_pairs, c(list(path.expand(query), path.expand(subject), dir),
                                                          opts)),
@@ -133,7 +139,8 @@ coal_pipeline_pairs <- function(query, subject, out_dir = NULL, methods = "YN", 
 #' @rdname coal_pipeline_pairs
 #' @export
 coal_pipeline_clusters <- function(cds, clusters = NULL, out_dir = NULL, methods = "YN", threads = 0L, ...,
-                                   python = NULL) {
+                                   python = NULL, method = NULL) {
+  methods <- pick_methods(methods, method, !missing(methods), "methods", "method")
   P <- py_pipeline(python)
   cds <- as.list(path.expand(cds))
   run_pipeline(function(dir, opts) {
