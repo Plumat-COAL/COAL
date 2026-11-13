@@ -418,9 +418,12 @@ machine is still to be done.
 - **The lock is a file, not an operating-system lock.** A lock left by a run on another machine that was killed
   stays until you remove it (the message says which file); COAL cannot tell it from a run that is still going.
   The process start time that tells a reused process id from the holder is recorded on Linux only. `coal-cpp`
-  writes and reads only the process id (the first field): its own `-o` lock has neither the host check nor the
-  one-at-a-time replacement of a stale lock, so several `coal-cpp` runs started at the same moment onto one
-  `-o` file that has a stale lock are not kept apart as reliably as Python runs are.
+  follows the same rules for its own `-o` lock (the same four fields, the host check, the start time, the
+  one-at-a-time replacement of a stale lock), so Python and C++ runs honour each other's locks and runs of
+  either engine that start together onto a stale lock have one holder (`tests/test_output_lock.py`: 200 trials
+  of six simultaneous `coal-cpp -o` starts, and mixed Python and C++ starts). On Windows the C++ code checks the
+  holder through a process handle and creates the lock through a hard link, like the Python code; it is compiled
+  by CI, but these lock tests have only been run on Linux.
 - **A file the run writes replaces a file of that name that was already in the folder**, as with any `-o`: a
   `dnds.tsv` or `genes.tsv` of your own in the output folder is overwritten (unless it is one of this run's
   inputs, which is refused). Only the removal at the start is limited to what an earlier run wrote.

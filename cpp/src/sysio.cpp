@@ -1,5 +1,6 @@
 #include "sysio.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <cerrno>
 #include <chrono>
@@ -12,6 +13,7 @@
 #include <functional>
 #include <iostream>
 #include <random>
+#include <sstream>
 #include <stdexcept>
 #include <thread>
 
@@ -480,9 +482,25 @@ int write_json_file(const std::string& path, const std::function<void(std::ostre
     return err;
 }
 
+// ------------------------------------------------------------------------------------------------ the output lock
+//
+// `<real output>.coal-lock`, one line: "<pid> <host> <start> <token>\n", the format of the Python engine
+// (src/coal/pipeline.py, where each rule below is explained; docs/pipeline.md "One run per folder"):
+//   pid    the process id (all that COAL up to 0.5.0 wrote);
+//   host   the machine's name: a lock from another machine counts as held and is never replaced automatically;
+//   start  when that process started (Linux: field 22 of /proc/<pid>/stat; "-" elsewhere): a process id that is
+//          alive but started at another time is another process (the id was reused);
+//   token  random, so that a process recognises exactly its own lock.
+// Missing fields (an older lock) are unknown and judged by the pid alone. The lock is created with its content in
+// one step (a hard link to a finished temporary file), so it is never seen empty, and a stale lock is replaced by
+// one process at a time (`<lock>.takeover`, created exclusively), which removes it only if it still holds the
+// content that was judged stale. So runs of either engine that start together onto a stale lock have one holder.
+
 static bool pid_alive(long long pid) {
     if (pid <= 0) return false;
 #ifdef _WIN32
+    // (no /proc on Windows: a handle to the process and its exit code. Written to mirror pipeline.py's
+    // _pid_alive; compiled by CI, its behaviour on Windows is not verified by a test of this lock.)
     HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, (DWORD)pid);
     if (!h) return false;
     DWORD code = 0;
@@ -495,63 +513,295 @@ static bool pid_alive(long long pid) {
 #endif
 }
 
+namespace {
+
+long long own_pid() {
+#ifdef _WIN32
+    return (long long)_getpid();
+#else
+    return (long long)::getpid();
+#endif
+}
+
+// The machine's name as pipeline.py's _hostname() writes it: printable ASCII as it is, other ASCII (blanks,
+// control characters) as '_', every other character as '?'; "-" when there is none.
+std::string host_name() {
+    std::string out;
+#ifdef _WIN32
+    wchar_t buf[256];
+    DWORD n = 256;
+    if (GetComputerNameExW(ComputerNamePhysicalDnsHostname, buf, &n))   // what Python's socket.gethostname() asks
+        for (DWORD k = 0; k < n; ++k)
+            out += buf[k] >= 128 ? '?' : (buf[k] > 32 && buf[k] < 127 ? (char)buf[k] : '_');
+#else
+    char buf[256];
+    if (::gethostname(buf, sizeof buf) == 0) {
+        buf[sizeof buf - 1] = '\0';
+        for (const char* q = buf; *q; ++q) {
+            const unsigned char ch = (unsigned char)*q;
+            if (ch >= 0x80) {
+                if (ch >= 0xC0) out += '?';   // one '?' per character: UTF-8 continuation bytes are skipped
+            } else {
+                out += (ch > 32 && ch < 127) ? (char)ch : '_';
+            }
+        }
+    }
+#endif
+    return out.empty() ? "-" : out;
+}
+
+// The start time of a process as the system counts it, or "-" (unknown: not Linux, or no such process). The same
+// text as pipeline.py's _proc_start: the 20th field after the last ')' of /proc/<pid>/stat.
+std::string proc_start(long long pid) {
+#ifdef __linux__
+    std::ifstream in("/proc/" + std::to_string(pid) + "/stat", std::ios::binary);
+    if (!in) return "-";
+    std::string text(4096, '\0');
+    in.read(&text[0], (std::streamsize)text.size());
+    text.resize((size_t)in.gcount());
+    const size_t close = text.rfind(')');
+    if (close == std::string::npos) return "-";
+    std::istringstream fields(text.substr(close + 1));
+    std::string f;
+    for (int k = 0; k <= 19; ++k)
+        if (!(fields >> f)) return "-";
+    return f;
+#else
+    (void)pid;
+    return "-";
+#endif
+}
+
+struct LockInfo {
+    bool exists = false;     // there is a file at that path
+    std::string raw;         // its bytes (at most 4096)
+    bool has_pid = false;    // the first field is a number
+    long long pid = -1;
+    std::string host = "-", start = "-";
+};
+
+LockInfo read_lock(const std::string& path) {
+    LockInfo li;
+    errno = 0;
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        std::error_code ec;
+        li.exists = fs::exists(fs::symlink_status(path, ec));   // there, but unreadable: not a lock we can judge
+        return li;
+    }
+    li.exists = true;
+    li.raw.assign(4096, '\0');
+    in.read(&li.raw[0], (std::streamsize)li.raw.size());
+    li.raw.resize((size_t)in.gcount());
+    std::istringstream fields(li.raw);
+    std::string f0, f1, f2;
+    if (!(fields >> f0)) return li;
+    size_t k = (f0[0] == '-' || f0[0] == '+') ? 1 : 0;
+    if (k == f0.size() || f0.size() > 18) return li;
+    for (size_t q = k; q < f0.size(); ++q)
+        if (f0[q] < '0' || f0[q] > '9') return li;
+    li.pid = std::atoll(f0.c_str());
+    li.has_pid = true;
+    if (fields >> f1) li.host = f1;
+    if (fields >> f2) li.start = f2;
+    return li;
+}
+
+enum class Holder { nobody, other_host, process };
+
+// Who holds a lock with these fields (pipeline.py _lock_holder).
+Holder lock_holder(const LockInfo& li) {
+    if (li.host != "-" && li.host != host_name()) return Holder::other_host;
+    if (!pid_alive(li.pid)) return Holder::nobody;
+    if (li.start != "-") {
+        const std::string now = proc_start(li.pid);
+        if (now != "-" && now != li.start) return Holder::nobody;   // the id is in use again, by another process
+    }
+    if (li.pid == own_pid()) return Holder::nobody;   // our id, but this process holds no lock yet: a leftover
+    return Holder::process;
+}
+
+bool write_all(int fd, const std::string& data) {
+    size_t done = 0;
+    while (done < data.size()) {
+        auto n = COAL_WRITE(fd, data.data() + done, (unsigned)(data.size() - done));
+        if (n <= 0) return false;
+        done += (size_t)n;
+    }
+    return true;
+}
+
+int open_excl(const std::string& path) {
+#ifdef _WIN32
+    return ::_open(path.c_str(), _O_WRONLY | _O_CREAT | _O_EXCL | _O_BINARY, _S_IREAD | _S_IWRITE);
+#else
+    return ::open(path.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0644);
+#endif
+}
+
+void close_fd(int fd) {
+#ifdef _WIN32
+    ::_close(fd);
+#else
+    ::close(fd);
+#endif
+}
+
+// Create the file `path` holding `raw` in one step: a hard link to a finished temporary file, so that the lock is
+// never seen empty; where links are not possible, exclusively and then written. 1: created; 0: it exists;
+// < 0: -errno of what went wrong (a folder that cannot be written).
+int create_lock(const std::string& path, const std::string& raw) {
+    const std::string tmp = path + "." + std::to_string(own_pid()) + "." + unique_name() + ".tmp";
+    register_temp(tmp);
+    int fd = open_excl(tmp);
+    if (fd < 0 && errno != EEXIST) {
+        const int e = errno;
+        unregister_temp(tmp);
+        return -e;
+    }
+    if (fd >= 0) {
+        const bool written = write_all(fd, raw);
+        close_fd(fd);
+        int linked = -1;   // 1 linked, 0 the lock exists, -1 no hard links here (or the write failed)
+        if (written) {
+#ifdef _WIN32
+            if (CreateHardLinkA(path.c_str(), tmp.c_str(), nullptr)) linked = 1;
+            else if (GetLastError() == ERROR_ALREADY_EXISTS || GetLastError() == ERROR_FILE_EXISTS) linked = 0;
+#else
+            if (::link(tmp.c_str(), path.c_str()) == 0) linked = 1;
+            else if (errno == EEXIST) linked = 0;
+#endif
+        }
+        COAL_UNLINK(tmp.c_str());
+        unregister_temp(tmp);
+        if (linked >= 0) return linked;
+    } else {
+        unregister_temp(tmp);
+    }
+    fd = open_excl(path);
+    if (fd < 0) return errno == EEXIST ? 0 : -errno;
+    const bool written = write_all(fd, raw);
+    const int e = errno;
+    close_fd(fd);
+    if (!written) {
+        COAL_UNLINK(path.c_str());
+        return -(e ? e : EIO);
+    }
+    return 1;
+}
+
+// Remove the lock at `path` if it still holds `stale` (the content that was judged stale). One process at a time
+// does this for a path: it first creates `<lock>.takeover` exclusively (pipeline.py _replace_stale_lock). Returns
+// 0 or the errno of a guard that cannot be created.
+int replace_stale_lock(const std::string& path, const std::string& stale) {
+    const std::string guard = path + ".takeover";
+    const std::string mine = std::to_string(own_pid()) + " " + host_name() + " " + proc_start(own_pid()) + "\n";
+    const int made = create_lock(guard, mine);
+    if (made < 0) return -made;
+    if (made == 0) {
+        // another run is replacing the lock right now (it takes microseconds). A guard whose process is gone, or
+        // one that has been there for 30 s, is a leftover: moved aside under a unique name (one mover wins)
+        const LockInfo g = read_lock(guard);
+        std::error_code ec;
+        bool old = false;
+        const auto mtime = fs::last_write_time(guard, ec);
+        if (!ec) old = fs::file_time_type::clock::now() - mtime > std::chrono::seconds(30);
+        if (g.exists && (old || (g.has_pid && lock_holder(g) == Holder::nobody))) {
+            const std::string aside = guard + "." + std::to_string(own_pid()) + "." + unique_name();
+            fs::rename(guard, aside, ec);
+            if (!ec) fs::remove(aside, ec);
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        return 0;
+    }
+    register_temp(guard);
+    const LockInfo now = read_lock(path);
+    std::error_code ec;
+    if (now.exists && now.raw == stale) fs::remove(path, ec);   // still the stale one: nobody else replaced it
+    fs::remove(guard, ec);
+    unregister_temp(guard);
+    return 0;
+}
+
+std::string g_lock_raw;   // what this process wrote into the lock it holds (one -o per run)
+
+}  // namespace
+
 std::string take_output_lock(const std::string& real, const std::string& name) {
     const std::string path = real + ".coal-lock";
-    bool removed = false;
+    const std::string raw = std::to_string(own_pid()) + " " + host_name() + " " + proc_start(own_pid()) + " " +
+                            unique_name() + unique_name() + "\n";
+    // Test hook (tests/test_output_lock.py): start at this time (milliseconds since the epoch), so that several
+    // runs reach the lock in the same instant.
+    if (const char* at = std::getenv("COAL_TEST_LOCK_START_AT")) {
+        const auto when = std::chrono::system_clock::time_point(std::chrono::milliseconds(std::atoll(at)));
+        if (when - std::chrono::system_clock::now() < std::chrono::seconds(60))
+            while (std::chrono::system_clock::now() < when) {}
+    }
     double waited = 0.0;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
     for (;;) {
-#ifdef _WIN32
-        int fd = ::_open(path.c_str(), _O_WRONLY | _O_CREAT | _O_EXCL, _S_IREAD | _S_IWRITE);
-#else
-        int fd = ::open(path.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0644);
-#endif
-        if (fd >= 0) {
-            const std::string pid = std::to_string((long long)
-#ifdef _WIN32
-                                                       _getpid()
-#else
-                                                       ::getpid()
-#endif
-                                                       ) + "\n";
-            (void)!COAL_WRITE(fd, pid.data(), (unsigned)pid.size());
-#ifdef _WIN32
-            ::_close(fd);
-#else
-            ::close(fd);
-#endif
+        const int made = create_lock(path, raw);
+        if (made < 0) throw CoalError(output_error(name, -made), "file_error");
+        if (made == 1) {
+            const LockInfo got = read_lock(path);
+            if (!(got.exists && got.raw == raw)) continue;   // replaced under us by a COAL that predates this
             register_temp(path);
+            g_lock_raw = raw;
+            // Test hook (tests/test_output_lock.py): hold the lock until this file exists, then check that it is
+            // still ours, so that a test can count the runs that hold one output at the same moment.
+            if (const char* until = std::getenv("COAL_TEST_HOLD_LOCK_UNTIL")) {
+                std::error_code ec;
+                for (int k = 0; k < 12000 && !fs::exists(until, ec); ++k)
+                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                if (read_lock(path).raw != raw)
+                    throw CoalError("test hook: the lock " + path + " was replaced under its holder", "file_error");
+            }
             return path;
         }
-        const int err = errno;
-        if (err != EEXIST) throw CoalError(output_error(name, err), "file_error");
-        long long pid = -1;
-        {
-            std::ifstream in(path);
-            if (!(in >> pid)) pid = -1;
+        const LockInfo cur = read_lock(path);
+        if (!cur.exists) continue;   // gone in the meantime: try again
+        if (!cur.has_pid) {
+            // Empty (or not a lock): a COAL up to 0.5.0 created it an instant ago and has not written its id yet,
+            // so it is not stale; only one that stays empty for 2 s is
+            if (waited < 2.0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                waited += 0.05;
+                continue;
+            }
+        } else {
+            const Holder h = lock_holder(cur);
+            if (h == Holder::other_host)
+                throw CoalError("another COAL run (process " + std::to_string(cur.pid) + " on the machine " + cur.host +
+                                    ") is writing " + name + ", or was when it last ran: a process on another machine "
+                                    "cannot be checked from here. Wait for it to finish, or write to another file (if "
+                                    "that run is gone, remove " + path + ")",
+                                "file_error");
+            if (h == Holder::process)
+                throw CoalError("another COAL run (process " + std::to_string(cur.pid) + ") is writing " + name +
+                                    ": wait for it to finish, or write to another file (if that process is gone, remove " +
+                                    path + ")",
+                                "file_error");
         }
-        if (pid <= 0 && waited < 2.0) {
-            // empty: another run created it an instant ago and has not written its id yet (pipeline.py): not stale
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            waited += 0.05;
-            continue;
-        }
-        if (pid > 0 && pid_alive(pid))
-            throw CoalError("another COAL run (process " + std::to_string(pid) + ") is writing " + name +
-                                ": wait for it to finish, or write to another file (if that process is gone, remove " +
-                                path + ")",
-                            "file_error");
-        if (removed) throw CoalError("cannot write " + name + ": " + path + " is in the way and cannot be removed", "file_error");
-        std::error_code ec;
-        fs::remove(path, ec);  // a lock whose process is gone (or one empty for 2 s): replaced
-        removed = true;
+        if (std::chrono::steady_clock::now() > deadline)
+            throw CoalError("cannot write " + name + ": " + path + " is in the way and cannot be removed", "file_error");
+        // Test hook: wait between judging the lock stale and replacing it (the window of the race)
+        if (const char* ms = std::getenv("COAL_TEST_LOCK_BEFORE_TAKEOVER_MS"))
+            std::this_thread::sleep_for(std::chrono::milliseconds(std::min(std::atoll(ms), 60000LL)));
+        const int err = replace_stale_lock(path, cur.raw);   // a lock whose process is gone (or one empty for 2 s)
+        if (err) throw CoalError(output_error(name, err), "file_error");
     }
 }
 
+// Removes the lock this process took. A file at that path that is not ours any more (someone removed the lock by
+// hand and another run took it) is left alone.
 void release_output_lock(const std::string& path) {
     if (path.empty()) return;
+    const LockInfo cur = read_lock(path);
+    unregister_temp(path);
+    if (!cur.exists || (!g_lock_raw.empty() && cur.raw != g_lock_raw && cur.has_pid)) return;
     std::error_code ec;
     fs::remove(path, ec);
-    unregister_temp(path);
 }
 
 void copy_mode(const std::string& real, const std::string& tmp) {

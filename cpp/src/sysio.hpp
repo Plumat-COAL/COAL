@@ -77,9 +77,10 @@ int write_json_file(const std::string& path, const std::function<void(std::ostre
 // Gives `tmp` the permissions `real` has (existing file) before it replaces it.
 void copy_mode(const std::string& real, const std::string& tmp);
 
-// Creates `<real>.coal-lock` with this process's id (registered for the signal handlers) and returns its path, or
-// throws CoalError when another live COAL process holds it: one run at a time per output file (pipeline.py
-// take_output_lock). A lock whose process is gone is replaced.
+// Creates `<real>.coal-lock` for this process ("<pid> <host> <start> <token>", the Python engine's format;
+// registered for the signal handlers) and returns its path, or throws CoalError when another COAL process holds
+// it, here or on another machine: one run at a time per output file (pipeline.py take_output_lock). A lock whose
+// process is gone is replaced, by exactly one of the runs that find it. `real`: resolve_output()'s real path.
 std::string take_output_lock(const std::string& real, const std::string& name);
 void release_output_lock(const std::string& path);
 

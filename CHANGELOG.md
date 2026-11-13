@@ -59,6 +59,17 @@ Packaging, command line and continuous integration (2026-11-13, not yet released
   `coal codon-dnds` and `coal-cpp-align` (which also takes `--jobs=4` now). They were "unrecognized argument"
   while `-j 1` worked. The value of an option is never taken apart (`-o -q1` still writes a file called `-q1`).
 
+- **`coal-cpp -o`: the output lock of the C++ engine follows the Python engine's rules.** `<out>.coal-lock`
+  holds `<pid> <host> <start> <token>` in both engines; it is created with its content in one step (never seen
+  empty), a lock written on another machine is held and never replaced, a process id that was reused (another
+  start time; Linux) is not the holder, and a stale lock is replaced by one run at a time (`<lock>.takeover`),
+  which removes it only if it is still the one that was judged stale. Before, several `coal-cpp -o` runs that
+  found a stale lock at the same moment could each remove "the stale lock", the later ones removing the lock an
+  earlier one had just taken, and both wrote the output; and a lock from another machine counted as stale.
+  Tests: the race step by step (the unguarded code fails it), 200 trials of six simultaneous starts onto a stale
+  lock (one holder each time), Python and C++ starts mixed, each engine refused by the other's lock. The
+  Windows code path (process handle, `CreateHardLink`) is compiled by CI and not exercised by these tests there.
+
 Found by the independent review of 2026-11-12 of the Ka/Ks engine, the pipeline and the R package (all in code
 not yet released):
 
