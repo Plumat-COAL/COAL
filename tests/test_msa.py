@@ -225,14 +225,16 @@ class Install(unittest.TestCase):
         p.start()
         self.addCleanup(p.stop)
 
-    def test_cache_dir_and_find(self):
-        self.assertEqual(msa.cache_dir(), os.path.join(self.tmp, "cache"))
+    def _cache_binary_needs_its_record(self, name: str):
+        """A binary in the cache without COAL's checksum record is not run and is named once; with the record it
+        is found, until the file changes. `name`: the file name the cache lookup uses on this platform."""
         with mock.patch.dict(os.environ, {"PATH": self.tmp}):
             os.environ.pop("COAL_CLUSTALO", None)
             self.assertIsNone(msa.find_clustalo())
             d = os.path.join(self.tmp, "cache", "tools", "clustalo")
             os.makedirs(d)
-            exe = fake_tool(d, "clustalo", "echo 1.2.4")
+            exe = fake_tool(d, name, "echo 1.2.4")
+            self.assertEqual(msa._cached("clustalo")[0], exe)
             # Finding 5b: a binary in the cache without COAL's checksum record (0.5.0 and earlier fetched Clustal
             # Omega unverified; anything can have been put there) is not run, and that is said once
             err = io.StringIO()
@@ -250,12 +252,45 @@ class Install(unittest.TestCase):
             # with the record written at install time it is found, until the file changes
             msa._write_manifest(exe, "test", "test")
             self.assertEqual(msa.find_clustalo(), exe)
-            self.assertEqual(msa.install_clustalo(quiet=True), exe)  # cached: nothing installed
+            # (the stand-in is a shell script: its version is given here, so the same lines hold where it cannot run)
+            with mock.patch.object(msa, "tool_version", return_value="1.2.4"):
+                self.assertEqual(msa.install_clustalo(quiet=True), exe)  # cached: nothing installed
             with open(exe, "a", encoding="utf-8") as fh:
                 fh.write("echo changed\n")
             with redirect_stderr(io.StringIO()) as err:
                 self.assertIsNone(msa.find_clustalo())
             self.assertIn("is not the file COAL installed", err.getvalue())
+
+    def test_cache_dir_and_find(self):
+        self.assertEqual(msa.cache_dir(), os.path.join(self.tmp, "cache"))
+        # the cache holds <tool>.exe on Windows, <tool> elsewhere (msa._EXE). The test used to plant `clustalo`
+        # everywhere: on Windows the lookup never saw that file, so nothing was said about it (CI, 2026-11-13)
+        self._cache_binary_needs_its_record("clustalo" + msa._EXE)
+
+    def test_cache_lookup_with_windows_names(self):
+        """The Windows side of the cache lookup, run everywhere: the binary is <tool>.exe, there is no executable
+        bit to ask for, and a file named <tool> without .exe is not a cache binary (not used, not reported)."""
+        with mock.patch.object(msa, "_EXE", ".exe"), mock.patch.object(msa.os, "name", "nt"):
+            self.assertTrue(msa._cached("clustalo")[0].endswith(os.path.join("tools", "clustalo", "clustalo.exe")))
+            self.assertTrue(msa._cached("clustalo")[1].endswith(os.path.join("Library", "bin", "clustalo.exe")))
+            self._cache_binary_needs_its_record("clustalo.exe")
+            exe = msa._cached("clustalo")[0]
+            # no executable bit on Windows: a recorded file without one is still the cache binary
+            os.remove(exe)
+            with open(exe, "w", encoding="utf-8") as fh:
+                fh.write("MZ")
+            os.chmod(exe, 0o644)
+            msa._write_manifest(exe, "test", "test")
+            with mock.patch.dict(os.environ, {"PATH": self.tmp}):
+                os.environ.pop("COAL_CLUSTALO", None)
+                self.assertEqual(msa.find_clustalo(), exe)
+                # a file without .exe next to it is not looked at
+                os.remove(exe)
+                os.remove(exe + msa.MANIFEST_SUFFIX)
+                fake_tool(os.path.dirname(exe), "clustalo", "echo 1.2.4")
+                with redirect_stderr(io.StringIO()) as err:
+                    self.assertIsNone(msa.find_clustalo())
+                self.assertEqual(err.getvalue(), "")
 
     @unittest.skipIf(os.name == "nt", "symbolic links need a privilege on Windows")
     def test_download_is_not_written_through_a_planted_part_file(self):
