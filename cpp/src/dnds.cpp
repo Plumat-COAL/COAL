@@ -293,7 +293,29 @@ PairResult compute_pair(const GroupResult& r, int i, int j, const Options& opt) 
         if (!nb.empty()) p.note += (p.note.empty() ? "" : "; ") + ("seq2: " + nb);
     }
     kaks::Prepared prep = kaks::prepare(a.codon_row, b.codon_row, *code);
-    for (kaks::Method m : ordered_methods(opt.methods)) p.results.push_back(kaks::compute(prep, m, *code, opt.kaks));
+    // The reference flavours of Comeron and Li (ComeronFlavour::gestimator, LiFlavour::seqinr) compare stop
+    // codons, and the pipelines they reproduce (orthologr: the stop codon is translated to '*', aligned and
+    // threaded like a residue) have the two terminal stop codons as the last column of the codon alignment.
+    // The codon rows here end before a terminal stop, so for these flavours that column is put back when both
+    // genes have a terminal stop. (One gene only: there is no column to restore; see docs/kaks.md.)
+    const bool stops = a.tr.terminal_stop && b.tr.terminal_stop && a.tr.cds.size() >= 3 && b.tr.cds.size() >= 3;
+    kaks::Prepared prep_stops;
+    bool have_stops = false;
+    for (kaks::Method m : ordered_methods(opt.methods)) {
+        const bool reference =
+            (m == kaks::Method::Comeron && opt.kaks.comeron_flavour == kaks::ComeronFlavour::gestimator) ||
+            (m == kaks::Method::Li && opt.kaks.li_flavour == kaks::LiFlavour::seqinr);
+        if (reference && stops) {
+            if (!have_stops) {
+                prep_stops = kaks::prepare(a.codon_row + a.tr.cds.substr(a.tr.cds.size() - 3),
+                                           b.codon_row + b.tr.cds.substr(b.tr.cds.size() - 3), *code);
+                have_stops = true;
+            }
+            p.results.push_back(kaks::compute(prep_stops, m, *code, opt.kaks));
+        } else {
+            p.results.push_back(kaks::compute(prep, m, *code, opt.kaks));
+        }
+    }
     return p;
 }
 
