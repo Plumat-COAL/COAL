@@ -79,6 +79,17 @@ Found by the second independent review (2026-11-13) of the fixes above (not yet 
   of its own, the batch process hands out the jobs and watches the workers themselves, and a killed worker fails
   its job with the documented one line (`error: the job's worker process died (out of memory?)`) while the
   batch goes on; the dead job's lock file is removed. Nothing else about `--batch` changes.
+- **Installers: what is in COAL's cache is checked before it is run.** Each installed binary gets a
+  `<binary>.coal-manifest.json` with its SHA-256, and a cache binary is used only while it has that hash.
+  **Tools installed into the cache by COAL 0.5.0 or earlier have no manifest and are no longer used
+  automatically** (that includes a Clustal Omega fetched without verification): COAL says so once and
+  `coal pipeline install <tool> --force` installs them again. Tools on `PATH` or given by `COAL_CLUSTALO`,
+  `COAL_MAFFT`, `COAL_DIAMOND`, `--diamond` are unaffected. Also: downloads go to a new randomly named file
+  instead of the fixed `<name>.part` (two installs collided there, and a link at that name was written
+  through), the hash is taken from the file on disk, one install per tool runs at a time and the others wait, an
+  archive that was cut short (possible with `--allow-unverified`) is a clear error instead of an `EOFError`,
+  and a zip member name with `:`, an absolute path, `..` or a reserved device name is refused
+  (docs/alignment.md).
 
 Found by the first CI runs on Windows and macOS of the code above (not yet released):
 

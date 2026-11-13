@@ -21,7 +21,10 @@ Not part of the stable `import coal` API yet (python-api.md): it may change befo
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
+import http.client
+import json
 import os
 import platform
 import shutil
@@ -30,10 +33,13 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Iterable, Mapping, Sequence
+
+from . import __version__
 
 __all__ = ["cache_dir", "find_clustalo", "find_mafft", "install_clustalo", "install_mafft", "tool_version",
            "run_msa", "align_clusters", "MsaResult", "MsaError", "CLUSTALO_VERSION", "MICROMAMBA_VERSION",
@@ -115,6 +121,75 @@ def _cached(tool: str) -> list[str]:
                                                                           tool + _EXE)]
 
 
+# Every binary COAL installs into its cache gets a manifest next to it (<binary>.coal-manifest.json) with the
+# SHA-256 of the installed file(s), written when the install has been verified. A cache binary is used only while
+# it still has that hash: one without a manifest (installed by COAL 0.5.0 or earlier, whose Clustal Omega
+# download was not verified at all, or put there by something else) or one that changed since is not run.
+# The manifest is in the same folder as the binary, so this is a check on what COAL installed, not a defence
+# against someone who can write to the cache folder.
+MANIFEST_SUFFIX = ".coal-manifest.json"
+_trust_seen: dict = {}      # (path, size, mtime_ns) -> state, so a binary is hashed once per process
+_trust_told: set = set()    # paths whose "not used" note was printed
+
+
+def _write_manifest(exe: str, source: str, verified: str, also: Sequence[str] = ()) -> None:
+    files = {os.path.basename(f): _sha256(f) for f in (exe, *also)}
+    tmp = exe + MANIFEST_SUFFIX + f".{os.getpid()}.tmp"
+    with open(tmp, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as fh:
+        json.dump({"tool": os.path.basename(exe), "files": files, "source": source, "verified": verified,
+                   "coal_version": __version__, "installed": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
+                  fh, indent=1)
+        fh.write("\n")
+    os.replace(tmp, exe + MANIFEST_SUFFIX)
+
+
+def _cache_state(exe: str) -> str:
+    """"ok" (the file and its companions have the hashes of the manifest), "no_manifest", "changed" or "missing"."""
+    try:
+        st = os.stat(exe)
+    except OSError:
+        return "missing"
+    if not os.path.isfile(exe):
+        return "missing"
+    key = (exe, st.st_size, st.st_mtime_ns)
+    try:
+        mst = os.stat(exe + MANIFEST_SUFFIX)
+        key += (mst.st_size, mst.st_mtime_ns)
+    except OSError:
+        return "no_manifest"
+    if key in _trust_seen:
+        return _trust_seen[key]
+    state = "changed"
+    try:
+        with open(exe + MANIFEST_SUFFIX, encoding="utf-8", errors="backslashreplace") as fh:
+            files = json.load(fh)["files"]
+        if isinstance(files, dict) and os.path.basename(exe) in files:
+            folder = os.path.dirname(exe)
+            if all(isinstance(n, str) and os.path.basename(n) == n and isinstance(h, str)
+                   and _sha256(os.path.join(folder, n)) == h.lower() for n, h in files.items()):
+                state = "ok"
+    except (OSError, ValueError, KeyError, TypeError):
+        state = "changed"
+    _trust_seen[key] = state
+    return state
+
+
+def _trusted_cached(tool: str, exe: str) -> bool:
+    """Whether the cache binary `exe` may be run. One that may not is named once on stderr, with what to do."""
+    state = _cache_state(exe)
+    if state == "ok":
+        return os.name == "nt" or os.access(exe, os.X_OK)
+    if state != "missing" and (exe, state) not in _trust_told:
+        _trust_told.add((exe, state))
+        why = ("has no checksum record (it was installed by COAL 0.5.0 or earlier, or was not installed by COAL)"
+               if state == "no_manifest" else "is not the file COAL installed (its checksum changed)")
+        how = (f"`coal pipeline install {tool} --force`" if tool in ("diamond", "clustalo", "mafft")
+               else "it is fetched again when it is next needed")
+        print(f"coal: note: {exe} in COAL's cache {why} and is not used. Install it again: {how}",
+              file=sys.stderr)
+    return False
+
+
 def _find(tool: str, env_var: str) -> str | None:
     env = os.environ.get(env_var)
     if env:
@@ -123,9 +198,35 @@ def _find(tool: str, env_var: str) -> str | None:
     if p:
         return p
     for c in _cached(tool):
-        if os.path.isfile(c) and (os.name == "nt" or os.access(c, os.X_OK)):
+        if _trusted_cached(tool, c):
             return c
     return None
+
+
+@contextlib.contextmanager
+def _install_lock(tool: str, timeout: float = 1800):
+    """One install of a tool at a time into the cache (processes and threads): a second one waits, and then
+    usually finds the tool installed. COAL's lock file convention (coal.pipeline.take_output_lock)."""
+    from .core import CoalError
+    from .pipeline import release_output_lock, take_output_lock
+    folder = os.path.join(cache_dir(), "tools")
+    os.makedirs(folder, exist_ok=True)
+    target = os.path.join(folder, tool + ".install")
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            lock = take_output_lock(target, f"COAL's cache ({tool})")
+            break
+        except CoalError as e:
+            if "is writing" not in str(e) and "already writing" not in str(e):
+                raise MsaError(str(e)) from None
+            if "on the machine" in str(e) or time.monotonic() > deadline:
+                raise MsaError(f"another install of {tool} is running: {e}") from None
+            time.sleep(0.2)
+    try:
+        yield
+    finally:
+        release_output_lock(lock)
 
 
 def find_clustalo() -> str | None:
@@ -149,17 +250,27 @@ def tool_version(exe: str, timeout: float = 60) -> str:
     return out[0].strip() if out else ""
 
 
-def _download(url: str, dest: str, quiet: bool) -> str:
-    """Fetch url into dest + ".part" (dest itself is not touched) and return the SHA-256 of what was fetched."""
+def _download(url: str, dest: str, quiet: bool) -> tuple[str, str]:
+    """Fetch url into a new file of its own next to dest (dest itself is not touched) and return (that file's
+    path, the SHA-256 of the bytes that are in it). The file is created exclusively under a random name
+    (tempfile.mkstemp): two installs never share it, and a file or link someone put at a known name
+    (`<dest>.part`, as it used to be) is not written through. The hash is taken from the file on disk, the bytes
+    that will be unpacked or run, not from the stream."""
     if not quiet:
         print(f"coal: downloading {url}", file=sys.stderr)
-    tmp = dest + ".part"
-    h = hashlib.sha256()
-    with urllib.request.urlopen(url, timeout=600) as r, open(tmp, "wb") as fh:  # noqa: S310 (fixed https/http URLs)
-        for chunk in iter(lambda: r.read(1 << 20), b""):
-            h.update(chunk)
-            fh.write(chunk)
-    return h.hexdigest()
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(os.path.abspath(dest)), prefix=os.path.basename(dest) + ".",
+                               suffix=".part")
+    try:
+        with os.fdopen(fd, "wb") as fh, urllib.request.urlopen(url, timeout=600) as r:  # noqa: S310 (fixed URLs)
+            for chunk in iter(lambda: r.read(1 << 20), b""):
+                fh.write(chunk)
+        return tmp, _sha256(tmp)
+    except BaseException:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def _sha256(path: str) -> str:
@@ -200,16 +311,13 @@ def _fetch_verified(urls: Sequence[str], dest: str, quiet: bool, pinned: str | N
             + (", and the host serves plain HTTP" if plain else "") + "). Download and check the file yourself and "
             "pass its hash (sha256=\"...\"; `coal pipeline install ... --sha256 HEX`), or accept an unverified "
             "download (allow_unverified=True; `--allow-unverified`)" + (". " + hint if hint else ""))
-    tmp = dest + ".part"
-    errors, got = [], None
+    errors, got, tmp = [], None, None
     for url in urls:
         try:
-            got = _download(url, dest, quiet)
+            tmp, got = _download(url, dest, quiet)
             break
-        except (OSError, ValueError) as e:   # URLError and HTTPError are OSErrors
+        except (OSError, ValueError, EOFError, http.client.HTTPException) as e:   # URLError, HTTPError: OSErrors
             errors.append(f"{url}: {e}")
-            if os.path.exists(tmp):
-                os.remove(tmp)
     if got is None:
         raise MsaError("download failed (" + "; ".join(errors) + ")")
     if want is not None and got != want:
@@ -231,7 +339,7 @@ def _conda_exe() -> str | None:
     if os.environ.get("CONDA_EXE") and os.path.isfile(os.environ["CONDA_EXE"]):
         return os.environ["CONDA_EXE"]
     p = os.path.join(cache_dir(), "tools", "micromamba", "micromamba" + _EXE)
-    return p if os.path.isfile(p) else None
+    return p if _trusted_cached("micromamba", p) else None
 
 
 def _get_micromamba(quiet: bool) -> str:
@@ -246,6 +354,7 @@ def _get_micromamba(quiet: bool) -> str:
     _fetch_verified([_MICROMAMBA_URL.format(version=MICROMAMBA_VERSION, asset=asset)], exe, quiet, pinned,
                     what=f"micromamba {MICROMAMBA_VERSION}")
     os.chmod(exe, os.stat(exe).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    _write_manifest(exe, _MICROMAMBA_URL.format(version=MICROMAMBA_VERSION, asset=asset), "pinned SHA-256")
     return exe
 
 
@@ -262,6 +371,8 @@ def _conda_install(tool: str, spec: str, conda: str, quiet: bool, timeout: float
     exe = _cached(tool)[1]
     if r.returncode != 0 or not os.path.isfile(exe):
         raise MsaError(f"installing {spec} with {conda} failed: {(r.stderr or r.stdout).strip()[-800:]}")
+    _write_manifest(exe, f"{spec} (conda-forge / bioconda) with {os.path.basename(conda)}",
+                    "by conda against the channel index")
     return exe
 
 
@@ -287,28 +398,34 @@ def install_clustalo(method: str = "auto", force: bool = False, quiet: bool = Fa
     if sha256 is not None or allow_unverified:
         raise MsaError("sha256 / allow_unverified (--sha256, --allow-unverified) do not apply to Clustal Omega: "
                        + CLUSTAL_ORG_GONE)
-    if not force:
-        for c in _cached("clustalo"):
-            if os.path.isfile(c) and tool_version(c).startswith("1.2"):
+    def have():
+        for c in _cached("clustalo"):   # only one COAL installed and that is unchanged since (_trusted_cached)
+            if _trusted_cached("clustalo", c) and tool_version(c).startswith("1.2"):
                 return c
+        return None
+    if not force and have():
+        return have()
     if _platform()[0] == "Windows":
         raise MsaError(NO_WINDOWS_CLUSTALO)
     order = [method] if method != "auto" else ["conda" if _conda_exe() else "micromamba"]
     errors = []
-    for m in order:
-        try:
-            conda = _conda_exe() if m == "conda" else _get_micromamba(quiet)
-            if conda is None:
-                raise MsaError("no conda, mamba or micromamba found")
-            exe = _conda_install("clustalo", f"clustalo={CLUSTALO_VERSION}", conda, quiet, timeout)
-            v = tool_version(exe)
-            if not v.startswith("1.2"):
-                raise MsaError(f"{exe} does not run or is not Clustal Omega 1.2 ({v or 'no output'})")
-            if not quiet:
-                print(f"coal: Clustal Omega {v} installed: {exe}", file=sys.stderr)
-            return exe
-        except (MsaError, OSError, subprocess.SubprocessError) as e:
-            errors.append(f"{m}: {e}")
+    with _install_lock("clustalo", timeout):
+        if not force and have():    # another install finished while this one waited
+            return have()
+        for m in order:
+            try:
+                conda = _conda_exe() if m == "conda" else _get_micromamba(quiet)
+                if conda is None:
+                    raise MsaError("no conda, mamba or micromamba found")
+                exe = _conda_install("clustalo", f"clustalo={CLUSTALO_VERSION}", conda, quiet, timeout)
+                v = tool_version(exe)
+                if not v.startswith("1.2"):
+                    raise MsaError(f"{exe} does not run or is not Clustal Omega 1.2 ({v or 'no output'})")
+                if not quiet:
+                    print(f"coal: Clustal Omega {v} installed: {exe}", file=sys.stderr)
+                return exe
+            except (MsaError, OSError, subprocess.SubprocessError) as e:
+                errors.append(f"{m}: {e}")
     raise MsaError("could not install Clustal Omega (" + "; ".join(errors) + "). Install it yourself (`conda install "
                    "-c bioconda clustalo`, `apt install clustalo`, `brew install clustal-omega`) or set COAL_CLUSTALO.")
 
@@ -317,21 +434,23 @@ def install_mafft(method: str = "auto", force: bool = False, quiet: bool = False
     """Install MAFFT (BSD licence) into cache_dir() through conda / mamba / micromamba (Bioconda). Not on Windows:
     Bioconda has no Windows package, and COAL pins no hash for the Windows package of https://mafft.cbrc.jp, so it
     does not download it (install that yourself and set COAL_MAFFT; untested with COAL)."""
-    if not force:
-        c = _cached("mafft")[1]
-        if os.path.isfile(c):
-            return c
+    c = _cached("mafft")[1]
+    if not force and _trusted_cached("mafft", c):
+        return c
     if platform.system() == "Windows":
         raise MsaError("there is no automatic MAFFT install on Windows (no Bioconda package, and COAL has no "
                        "verified download for it): install MAFFT yourself from "
                        "https://mafft.cbrc.jp/alignment/software/windows.html and set COAL_MAFFT (untested with "
                        "COAL), or run COAL under WSL, where `coal pipeline install mafft` works")
-    conda = _conda_exe() if method in ("auto", "conda") else None
-    if conda is None:
-        if method == "conda":
-            raise MsaError("no conda, mamba or micromamba found")
-        conda = _get_micromamba(quiet)
-    return _conda_install("mafft", "mafft", conda, quiet, timeout)
+    with _install_lock("mafft", timeout):
+        if not force and _trusted_cached("mafft", c):    # another install finished while this one waited
+            return c
+        conda = _conda_exe() if method in ("auto", "conda") else None
+        if conda is None:
+            if method == "conda":
+                raise MsaError("no conda, mamba or micromamba found")
+            conda = _get_micromamba(quiet)
+        return _conda_install("mafft", "mafft", conda, quiet, timeout)
 
 
 # ---------------------------------------------------------------- running

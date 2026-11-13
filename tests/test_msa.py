@@ -233,8 +233,52 @@ class Install(unittest.TestCase):
             d = os.path.join(self.tmp, "cache", "tools", "clustalo")
             os.makedirs(d)
             exe = fake_tool(d, "clustalo", "echo 1.2.4")
+            # Finding 5b: a binary in the cache without COAL's checksum record (0.5.0 and earlier fetched Clustal
+            # Omega unverified; anything can have been put there) is not run, and that is said once
+            err = io.StringIO()
+            with redirect_stderr(err):
+                self.assertIsNone(msa.find_clustalo())
+                self.assertIsNone(msa.find_clustalo())
+            self.assertEqual(err.getvalue().count("has no checksum record"), 1, err.getvalue())
+            self.assertIn("`coal pipeline install clustalo --force`", err.getvalue())
+            self.assertIn(exe, err.getvalue())
+            with mock.patch.object(msa, "tool_version", side_effect=AssertionError("the cache binary was run")), \
+                    mock.patch.object(msa, "_conda_exe", return_value=None), \
+                    mock.patch.object(msa, "_get_micromamba", side_effect=msa.MsaError("no network in the test")), \
+                    self.assertRaises(msa.MsaError), redirect_stderr(io.StringIO()):
+                msa.install_clustalo(quiet=True)      # it installs afresh instead of trusting what is there
+            # with the record written at install time it is found, until the file changes
+            msa._write_manifest(exe, "test", "test")
             self.assertEqual(msa.find_clustalo(), exe)
             self.assertEqual(msa.install_clustalo(quiet=True), exe)  # cached: nothing installed
+            with open(exe, "a", encoding="utf-8") as fh:
+                fh.write("echo changed\n")
+            with redirect_stderr(io.StringIO()) as err:
+                self.assertIsNone(msa.find_clustalo())
+            self.assertIn("is not the file COAL installed", err.getvalue())
+
+    @unittest.skipIf(os.name == "nt", "symbolic links need a privilege on Windows")
+    def test_download_is_not_written_through_a_planted_part_file(self):
+        """Finding 5a: the download went to the fixed name `<dest>.part`; a link there was written through."""
+        body = b"#!/bin/sh\necho 1.2.4\n"
+        victim = os.path.join(self.tmp, "victim.txt")
+        with open(victim, "w", encoding="utf-8") as fh:
+            fh.write("the user's file\n")
+        dest = os.path.join(self.tmp, "dl", "tool")
+        os.mkdir(os.path.dirname(dest))
+        os.symlink(victim, dest + ".part")
+        calls, served = self._serve(body)
+        with served:
+            with self.assertRaises(msa.MsaError):
+                msa._fetch_verified(["https://example.org/t"], dest, True, None, sha256="0" * 64)
+            with open(victim, encoding="utf-8") as fh:
+                self.assertEqual(fh.read(), "the user's file\n")
+            msa._fetch_verified(["https://example.org/t"], dest, True, None, sha256=hashlib.sha256(body).hexdigest())
+        with open(victim, encoding="utf-8") as fh:
+            self.assertEqual(fh.read(), "the user's file\n")
+        self.assertEqual(sorted(os.listdir(os.path.dirname(dest))), ["tool", "tool.part"])
+        with open(dest, "rb") as fh:
+            self.assertEqual(fh.read(), body)
 
     def _serve(self, body: bytes, fail_https: bool = False):
         """A stand-in for urllib.request.urlopen that serves `body` and records the URLs asked for."""

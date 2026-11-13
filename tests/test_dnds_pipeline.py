@@ -33,6 +33,7 @@ import tempfile
 import threading
 import time
 import unittest
+import zipfile
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
@@ -271,9 +272,9 @@ class Units(unittest.TestCase):
             def serving(data, calls):
                 def fake(url, dest, quiet):
                     calls.append(url)
-                    with open(dest + ".part", "wb") as fh:
+                    with open(dest + ".fetched", "wb") as fh:
                         fh.write(data)
-                    return hashlib.sha256(data).hexdigest()
+                    return dest + ".fetched", hashlib.sha256(data).hexdigest()
                 return mock.patch.object(msa, "_download", side_effect=fake)
             calls = []
             # the real pinned hash: a file that is not the release asset is deleted, never unpacked or run
@@ -306,11 +307,101 @@ class Units(unittest.TestCase):
                 self.assertEqual(calls, [])
                 self.assertEqual(P.install_diamond(method="official", version="2.1.0", quiet=True, force=True,
                                                    sha256=hashlib.sha256(good).hexdigest()), exe)
+            # the installed binary has a checksum record; one that changed since, or has none, is not used
+            manifest = json.loads(Path(exe + msa.MANIFEST_SUFFIX).read_text(encoding="utf-8"))
+            self.assertEqual(manifest["files"], {"diamond": hashlib.sha256(script).hexdigest()})
+            self.assertEqual(manifest["verified"], "SHA-256 given by the caller")
+            with mock.patch.dict(os.environ, {"PATH": ""}), redirect_stderr(io.StringIO()) as note:
+                os.environ.pop("COAL_DIAMOND", None)
+                with open(exe, "ab") as fh:
+                    fh.write(b"echo planted\n")
+                self.assertIsNone(P.find_diamond())
+                self.assertIn("is not the file COAL installed", note.getvalue())
+                os.remove(exe + msa.MANIFEST_SUFFIX)
+                self.assertIsNone(P.find_diamond())
+            # a download that was cut short (possible only when nobody verifies it): a clear error, nothing kept
+            with serving(good[:len(good) // 2], calls), self.assertRaises(P.PipelineError) as cm, \
+                    redirect_stderr(io.StringIO()):
+                P.install_diamond(method="official", version="9.9.9", quiet=True, force=True, allow_unverified=True)
+            self.assertIn("is not a complete archive", str(cm.exception))
+            self.assertIn("Nothing was installed", str(cm.exception))
+            self.assertEqual([n for n in os.listdir(os.path.join(td, "tools", "diamond")) if "diamond-" in n], [])
             # a binary that does not run is refused
             bad = archive(b"#!/bin/sh\nexit 3\n")
             with serving(bad, calls), mock.patch.dict(P._DIAMOND_SHA256, {asset: hashlib.sha256(bad).hexdigest()}):
                 with self.assertRaises(P.PipelineError):
                     P.install_diamond(method="official", quiet=True, force=True)
+
+    def test_zip_member_names_cannot_leave_the_tool_folder(self):
+        """Finding 5d: a name with ':' (a drive, an alternate data stream), an absolute path, `..` or a reserved
+        device name is refused, on every system, and nothing of such an archive is installed."""
+        for good in ("diamond.exe", "bin/libgcc_s_seh-1.dll", "x\\\\diamond.exe".replace("\\\\", "\\"), "a/b/zlib1.dll"):
+            self.assertEqual(P._safe_member_name(good, "a.zip"), good.replace("\\", "/").rsplit("/", 1)[-1])
+        for bad in ("C:evil.exe", "diamond.exe:stream", "x/C:/evil.exe", "/abs/diamond.exe", "\\\\srv\\share\\d.exe",
+                    "../diamond.exe", "a/../../b.dll", "NUL", "con.txt", "COM1.exe", "diamond.exe.", "dia mond.exe",
+                    ".hidden", "a/..", "d\u00e9.exe"):
+            with self.subTest(name=bad), self.assertRaises(msa.MsaError):
+                P._safe_member_name(bad, "a.zip")
+        with tempfile.TemporaryDirectory() as td, mock.patch.dict(os.environ, {"COAL_CACHE_DIR": td}), \
+                mock.patch.object(msa, "_platform", return_value=("Windows", "AMD64")):
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w") as zf:
+                zf.writestr("diamond.exe", b"MZ")
+                zf.writestr("diamond.exe:evil", b"stream")
+            data = buf.getvalue()
+
+            def fake(url, dest, quiet):
+                with open(dest + ".fetched", "wb") as fh:
+                    fh.write(data)
+                return dest + ".fetched", hashlib.sha256(data).hexdigest()
+            with mock.patch.object(msa, "_download", side_effect=fake), self.assertRaises(msa.MsaError) as cm:
+                P._install_diamond_official("9.9.9", True, hashlib.sha256(data).hexdigest())
+            self.assertIn("unsafe name", str(cm.exception))
+            self.assertEqual(os.listdir(os.path.join(td, "tools", "diamond")), [])
+
+    def test_concurrent_installs_wait_and_all_succeed(self):
+        """Finding 5a: two installs wrote the same `<archive>.part`. Now one installs and the others wait for it."""
+        if os.name == "nt":
+            self.skipTest("POSIX shell stand-in for DIAMOND")
+        script = b"#!/bin/sh\necho 'diamond version 2.2.8'\n"
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as tf:
+            info = tarfile.TarInfo("diamond")
+            info.size, info.mode = len(script), 0o755
+            tf.addfile(info, io.BytesIO(script))
+        data = buf.getvalue()
+        calls = []
+
+        def urlopen(url, timeout=None):
+            calls.append(url)
+            time.sleep(0.3)
+            return io.BytesIO(data)
+        with tempfile.TemporaryDirectory() as td, mock.patch.dict(os.environ, {"COAL_CACHE_DIR": td}), \
+                mock.patch.object(msa, "_platform", return_value=("Linux", "x86_64")), \
+                mock.patch.object(msa.urllib.request, "urlopen", urlopen), \
+                mock.patch.dict(P._DIAMOND_SHA256, {("2.2.8", "diamond-linux64.tar.gz"): hashlib.sha256(data).hexdigest()}):
+            got, errors = [], []
+
+            def one():
+                try:
+                    got.append(P.install_diamond(method="official", quiet=True))
+                except Exception as e:   # noqa: BLE001
+                    errors.append(repr(e))
+            threads = [threading.Thread(target=one) for _ in range(5)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(60)
+            self.assertEqual(errors, [])
+            self.assertEqual(len(set(got)), 1)
+            self.assertEqual(len(got), 5)
+            self.assertEqual(len(calls), 1, "the installs that waited found the tool installed")
+            self.assertEqual(sorted(os.listdir(os.path.join(td, "tools", "diamond"))),
+                             ["diamond", "diamond" + msa.MANIFEST_SUFFIX])
+            self.assertEqual(sorted(os.listdir(os.path.join(td, "tools"))), ["diamond"])
+            # --force installs again, also while the installed binary is "running" (it is replaced, not rewritten)
+            self.assertEqual(P.install_diamond(method="official", quiet=True, force=True), got[0])
+            self.assertEqual(len(calls), 2)
 
     def test_install_command_takes_a_hash_or_explicit_permission(self):
         seen = {}

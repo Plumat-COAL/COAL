@@ -44,8 +44,10 @@ import signal
 import subprocess
 import sys
 import tarfile
+import tempfile
 import time
 import zipfile
+import zlib
 from dataclasses import dataclass, field
 
 from . import __version__
@@ -158,10 +160,14 @@ def install_diamond(method: str = "auto", version: str = DIAMOND_VERSION, force:
     deleted if it differs) or allow_unverified=True (unpack and run whatever arrives; the hash is printed);
     without either the official route refuses before downloading. Nothing downloaded runs before this check."""
     _msa._check_hash_argument(sha256)
-    if not force:
-        for c in _msa._cached("diamond"):
-            if os.path.isfile(c) and _diamond_version(c):
+
+    def have():
+        for c in _msa._cached("diamond"):   # only one COAL installed and that is unchanged since
+            if _msa._trusted_cached("diamond", c) and _diamond_version(c):
                 return c
+        return None
+    if not force and have():
+        return have()
     if method == "auto":
         order = ["official"] + ([] if platform.system() == "Windows" else
                                 ["conda" if _msa._conda_exe() else "micromamba"])
@@ -170,23 +176,27 @@ def install_diamond(method: str = "auto", version: str = DIAMOND_VERSION, force:
     else:
         raise ValueError("method: 'auto', 'official', 'conda' or 'micromamba'")
     errors = []
-    for m in order:
-        try:
-            if m == "official":
-                exe = _install_diamond_official(version, quiet, sha256, allow_unverified)
-            else:
-                conda = _msa._conda_exe() if m == "conda" else _msa._get_micromamba(quiet)
-                if conda is None:
-                    raise _msa.MsaError("no conda, mamba or micromamba found")
-                exe = _msa._conda_install("diamond", f"diamond={version}", conda, quiet, timeout)
-            v = _diamond_version(exe)
-            if not v:
-                raise _msa.MsaError(f"{exe} does not run")
-            if not quiet:
-                print(f"coal: DIAMOND {v} installed: {exe}", file=sys.stderr)
-            return exe
-        except (_msa.MsaError, OSError, subprocess.SubprocessError, tarfile.TarError, zipfile.BadZipFile) as e:
-            errors.append(f"{m}: {e}")
+    with _msa._install_lock("diamond", timeout):
+        if not force and have():    # another install finished while this one waited
+            return have()
+        for m in order:
+            try:
+                if m == "official":
+                    exe = _install_diamond_official(version, quiet, sha256, allow_unverified)
+                else:
+                    conda = _msa._conda_exe() if m == "conda" else _msa._get_micromamba(quiet)
+                    if conda is None:
+                        raise _msa.MsaError("no conda, mamba or micromamba found")
+                    exe = _msa._conda_install("diamond", f"diamond={version}", conda, quiet, timeout)
+                v = _diamond_version(exe)
+                if not v:
+                    raise _msa.MsaError(f"{exe} does not run")
+                if not quiet:
+                    print(f"coal: DIAMOND {v} installed: {exe}", file=sys.stderr)
+                return exe
+            except (_msa.MsaError, OSError, subprocess.SubprocessError, tarfile.TarError, zipfile.BadZipFile,
+                    EOFError, zlib.error) as e:
+                errors.append(f"{m}: {e}")
     raise PipelineError("could not install DIAMOND (" + "; ".join(errors) + "). Install it yourself (`conda install "
                         "-c bioconda diamond`, or https://github.com/bbuchfink/diamond/releases) or set COAL_DIAMOND.")
 
@@ -205,30 +215,75 @@ def _install_diamond_official(version: str, quiet: bool, sha256: str | None = No
                          what=f"DIAMOND {version} ({asset})",
                          hint=f"COAL pins the hashes of DIAMOND {DIAMOND_VERSION} only. Or install it another way: "
                               "`conda install -c bioconda diamond`; or set COAL_DIAMOND")
+    url = _DIAMOND_URL.format(version=version, asset=asset)
+    pinned = _DIAMOND_SHA256.get((version, asset))
     exe = os.path.join(d, "diamond" + _EXE)
+    written: list[str] = []
+
+    def put(src, name: str) -> None:
+        # through a new file of its own, then renamed: never written through a link at the final name, never a
+        # half-written binary under the final name, and a binary that is running can be replaced
+        fd, tmp = tempfile.mkstemp(dir=d, prefix=name + ".", suffix=".part")
+        try:
+            with os.fdopen(fd, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+            if os.name != "nt":
+                os.chmod(tmp, 0o755)
+            os.replace(tmp, os.path.join(d, name))
+        except BaseException:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+            raise
+        written.append(os.path.join(d, name))
     try:
-        if asset.endswith(".zip"):
-            with zipfile.ZipFile(archive) as zf:
-                for n in zf.namelist():   # diamond.exe and its DLLs, flattened; no path leaves the folder
-                    base = n.replace("\\", "/").rsplit("/", 1)[-1]
-                    if base and not n.endswith("/"):
-                        with zf.open(n) as src, open(os.path.join(d, base), "wb") as dst:
-                            shutil.copyfileobj(src, dst)
-        else:
-            with tarfile.open(archive) as tf:
-                member = next((m for m in tf.getmembers() if m.isfile() and os.path.basename(m.name) == "diamond"),
-                              None)
-                if member is None:
-                    raise _msa.MsaError(f"{asset} holds no diamond binary")
-                with tf.extractfile(member) as src, open(exe, "wb") as dst:
-                    shutil.copyfileobj(src, dst)
+        try:
+            if asset.endswith(".zip"):
+                with zipfile.ZipFile(archive) as zf:
+                    members = [(n, _safe_member_name(n, asset)) for n in zf.namelist() if not n.endswith(("/", "\\"))]
+                    for n, base in members:   # diamond.exe and its DLLs, flattened; no name leaves the folder
+                        with zf.open(n) as src:
+                            put(src, base)
+            else:
+                with tarfile.open(archive) as tf:
+                    member = next((m for m in tf.getmembers()
+                                   if m.isfile() and os.path.basename(m.name) == "diamond"), None)
+                    if member is None:
+                        raise _msa.MsaError(f"{asset} holds no diamond binary")
+                    with tf.extractfile(member) as src:
+                        put(src, "diamond")
+        except (EOFError, zlib.error, tarfile.TarError, zipfile.BadZipFile) as e:
+            # (only an archive nobody verified can be broken here: allow_unverified, or a wrong sha256 given)
+            raise _msa.MsaError(f"{asset} from {url} is not a complete archive ({type(e).__name__}: {e}); "
+                                "the download was probably cut short. Nothing was installed") from None
     finally:
         os.remove(archive)
-    if not os.path.isfile(exe):
+    if exe not in written:
         raise _msa.MsaError(f"{asset} holds no diamond binary")
-    if os.name != "nt":
-        os.chmod(exe, os.stat(exe).st_mode | 0o111)
+    _msa._write_manifest(exe, url, "pinned SHA-256 of the archive" if pinned else
+                         ("SHA-256 given by the caller" if sha256 else "NOT verified (allow_unverified)"),
+                         also=[w for w in written if w != exe])
     return exe
+
+
+_WINDOWS_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{k}" for k in range(1, 10)), *(f"LPT{k}" for k in range(1, 10))}
+
+
+def _safe_member_name(name: str, asset: str) -> str:
+    """The file name under which a zip member is unpacked into the tool folder, or MsaError: members are
+    flattened to their last path component, and a name that could mean another place on any system is refused
+    (an absolute path, a `..` component, a drive letter or an alternate data stream (`:`), a reserved Windows
+    device name, a trailing dot or space, anything outside letters, digits, `.`, `_`, `+`, `-`)."""
+    parts = name.replace("\\", "/").split("/")
+    base = parts[-1]
+    ok = (bool(base) and not name.startswith(("/", "\\")) and ".." not in parts and ":" not in name
+          and all(c.isascii() and (c.isalnum() or c in "._+-") for c in base)
+          and not base.startswith(".") and not base.endswith(".")
+          and base.split(".")[0].upper() not in _WINDOWS_RESERVED)
+    if not ok:
+        raise _msa.MsaError(f"{asset} holds a member with an unsafe name ({name!r}); nothing was installed")
+    return base
 
 
 def _find_cpp() -> str:

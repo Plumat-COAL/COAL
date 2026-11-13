@@ -214,6 +214,24 @@ msa.find_mafft(); msa.install_mafft(); msa.cache_dir(); msa.tool_version(exe)
 
 A hash that does not match never falls back to "run it anyway".
 
+**What is in the cache is checked before it is used.** When an install has been verified, COAL writes
+`<binary>.coal-manifest.json` next to the binary (for DIAMOND on Windows also its DLLs) with the SHA-256 of the
+installed files, where they came from and how they were verified. `find_clustalo()`, `find_mafft()`,
+`find_diamond()`, the installers and the pipeline use a binary from the cache only while it still has that hash.
+A cache binary **without a manifest is not used**: that is every tool installed by COAL 0.5.0 or earlier (whose
+Clustal Omega download was not verified at all) and anything that was not installed by COAL. COAL says so once,
+names the file, and `coal pipeline install <tool> --force` (or `install_clustalo(force=True)` ...) installs it
+again. Tools on `PATH` or named by `COAL_CLUSTALO` / `COAL_MAFFT` / `COAL_DIAMOND` / `--diamond` are yours and are
+not checked. The manifest lies in the same folder as the binary, so this detects old, incomplete or altered
+installs; it is not a defence against someone who can write to your cache folder. For a conda-installed tool the
+manifest covers the program that is started (`clustalo`, `mafft`, `diamond`), not the rest of the environment.
+
+Downloads go to a new file with a random name in the destination folder (never to a fixed `<name>.part`), the
+hash is taken from that file as it is on disk, and binaries are put in place by renaming. One install of a tool
+runs at a time (`<cache>/tools/<tool>.install.coal-lock`): a second one waits and then finds the tool installed.
+A zip archive (DIAMOND for Windows) is unpacked flat, and a member whose name has a `:` (drive letter, alternate
+data stream), is absolute, has a `..` component or is a reserved device name is refused with the whole archive.
+
 - Tested here: the micromamba route end to end with the pinned release (Clustal Omega 1.2.4 installed in 30 s),
   and the pinned DIAMOND 2.2.8 archive for Linux.
 
