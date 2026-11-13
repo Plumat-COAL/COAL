@@ -1,6 +1,6 @@
 {
  "schema": "coal.report/1",
- "coal_version": "0.5.0",
+ "coal_version": "0.6.0.dev0",
  "source": "coal",
  "engine": "coal-python",
  "command": "coal pep.fasta nuc.fasta -o out.fa",
@@ -196,5 +196,5 @@
  "summary_text": [
   "8 of 8 sequences have codons that do not match their amino acid (kept in the alignment). The only mismatches are at the first codon of 8 sequences (for example ATA where the protein starts with M): an alternative start codon, which code 11 accepts. Under genetic code 11 (Bacterial, archaeal and plant plastid), all 8 sequences match their protein; under code 1, none do. Codes 4, 2, 5 and 13 fit as well, but code 11 differs least from code 1. Re-run with -codontable 11."
  ],
- "methods_text": "Fix the warnings first: only 0 of 8 sequences matched their protein exactly, so this alignment is probably not ready to use (see the hints and the messages for each sequence). Methods text for this run as it stands: Codon alignments were built with COAL v0.5.0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 8 sequences, 0 matched their protein exactly, and 8 contained codons that did not match the aligned amino acid (kept in the alignment). Command: coal pep.fasta nuc.fasta -o out.fa"
+ "methods_text": "Fix the warnings first: only 0 of 8 sequences matched their protein exactly, so this alignment is probably not ready to use (see the hints and the messages for each sequence). Methods text for this run as it stands: Codon alignments were built with COAL v0.6.0.dev0 (https://github.com/plumat-coal/COAL), which places each coding DNA sequence onto the protein multiple sequence alignment codon by codon (the method of PAL2NAL; Suyama et al. 2006), using the standard genetic code (NCBI translation table 1). Of 8 sequences, 0 matched their protein exactly, and 8 contained codons that did not match the aligned amino acid (kept in the alignment). Command: coal pep.fasta nuc.fasta -o out.fa"
 }
