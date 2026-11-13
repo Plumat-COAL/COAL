@@ -1484,6 +1484,8 @@ class _Run:
             cmd += ["--min-codons", str(a.min_codons)]
         if a.max_ds is not None:
             cmd += ["--max-ds", repr(float(a.max_ds))]
+        if getattr(a, "min_identity", None) is not None:
+            cmd += ["--min-identity", repr(float(a.min_identity))]
         if group_column:
             cmd += ["--group-column", group_column]
         if a.kaks_format:
@@ -1669,7 +1671,9 @@ def _count_pairs(run: _Run, dnds_path: str, group_col: bool) -> None:
     min_codons, max_ds = getattr(a, "min_codons", 0), getattr(a, "max_ds", None)
     short = f"fewer than {min_codons} codons compared" if min_codons else None
     high = f"dS above {float(max_ds):.6g}" if max_ds is not None else None
-    flagged = {"min_codons": 0, "max_ds": 0}
+    min_identity = getattr(a, "min_identity", None)
+    low = f"protein identity below {float(min_identity):.6g}%" if min_identity is not None else None
+    flagged = {"min_codons": 0, "max_ds": 0, "min_identity": 0}
     with open(dnds_path, encoding="utf-8", errors="backslashreplace") as fh:
         next(fh)
         for line in fh:
@@ -1680,16 +1684,18 @@ def _count_pairs(run: _Run, dnds_path: str, group_col: bool) -> None:
                 continue
             c["total"] += 1
             c[f[-2]] = c.get(f[-2], 0) + 1
-            if short or high:
+            if short or high or low:
                 notes = f[-1].split("; ")
                 flagged["min_codons"] += short in notes
                 flagged["max_ds"] += high in notes
+                flagged["min_identity"] += low in notes
             if f[-2] == "error":
                 run.fail("pair", "pair_failed", f[-1], cluster=f[0] if group_col else "", seq1=f[k], seq2=f[k + 1])
     run.counts["pairs"] = c
-    if short or high:
+    if short or high or low:
         run.counts["flagged"] = {key: n for key, n, on in (("min_codons", flagged["min_codons"], short),
-                                                           ("max_ds", flagged["max_ds"], high)) if on}
+                                                           ("max_ds", flagged["max_ds"], high),
+                                                           ("min_identity", flagged["min_identity"], low)) if on}
 
 
 # ------------------------------------------------------------------------------------------------ pair mode
@@ -2397,6 +2403,11 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--max-ds", type=float, default=None, metavar="X",
                    help="flag estimates with dS above X (saturation): status warning and the note \"dS above X\" "
                         "(default: off; docs/pipeline.md \"Filtering before interpretation\")")
+    g.add_argument("--min-identity", type=float, default=None, metavar="P",
+                   help="flag pairs whose protein identity (the column prot_identity, percent of the alignment's "
+                        "columns) is below P: status warning and the note \"protein identity below P%%\"; no row is "
+                        "dropped and no number changes (default: off). A cluster can hold pairs that are not "
+                        "related at all")
     g = common.add_argument_group("Pairwise protein alignment (COAL's global aligner)")
     g.add_argument("--preset", choices=("needle", "pwalign"),
                    help="needle: BLOSUM62, open 10, extend 0.5, end gaps free (the default); pwalign: open 14, "
@@ -2510,6 +2521,10 @@ def _flag_error(a: argparse.Namespace) -> str | None:
     if a.max_ds is not None and not (isinstance(a.max_ds, (int, float)) and not isinstance(a.max_ds, bool)
                                      and math.isfinite(a.max_ds) and a.max_ds > 0):
         return "--max-ds: expected a number greater than 0"
+    mi = getattr(a, "min_identity", None)
+    if mi is not None and not (isinstance(mi, (int, float)) and not isinstance(mi, bool) and math.isfinite(mi)
+                               and 0 < mi <= 100):
+        return "--min-identity: expected a percentage, above 0 and at most 100"
     return None
 
 
@@ -2684,7 +2699,9 @@ def _execute(mode: str, a: argparse.Namespace, argv) -> PipelineResult:
         if fl is not None:
             parts = ([f"{fl['min_codons']:,} pair(s) with fewer than {a.min_codons} codons compared"]
                      if "min_codons" in fl else []) + \
-                    ([f"{fl['max_ds']:,} with dS above {float(a.max_ds):.6g}"] if "max_ds" in fl else [])
+                    ([f"{fl['max_ds']:,} with dS above {float(a.max_ds):.6g}"] if "max_ds" in fl else []) + \
+                    ([f"{fl['min_identity']:,} with protein identity below {float(a.min_identity):.6g}%"]
+                     if "min_identity" in fl else [])
             run.say("summary: flagged (status warning, numbers unchanged): " + ", ".join(parts))
         if run.n_failures:
             run.say(f"summary: {run.n_failures:,} failure(s) listed in {run.outputs['failed']}")

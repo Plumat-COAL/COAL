@@ -240,7 +240,7 @@ coal pipeline clusters --cds all_cds.fa --clusters deepclust.tsv -o out --max-cl
 | `--msa-timeout S` | give up on one Clustal Omega / MAFFT run after S seconds | none |
 | `--longest-isoform`, `--gene-map TSV` | keep the longest CDS per gene; the genes from a map where it names the record, else from the headers and IDs ([One record is one gene](#one-record-is-one-gene)) | off |
 | `--isoform-rule auto\|suffix\|map` | `auto`: header fields, else ID suffixes, and `--longest-isoform` stops when a suffix rule alone would drop more than half of a file's records; `suffix`: the ID suffixes are transcripts, whatever their share; `map`: only `--gene-map`, nothing is read from headers or IDs | `auto` |
-| `--min-codons N`, `--max-ds X` | flag estimates from fewer than N compared codons / with dS above X: status `warning` and a note; no row dropped, no number changed ([Filtering before interpretation](#filtering-before-interpretation)) | off |
+| `--min-codons N`, `--max-ds X`, `--min-identity P` | flag estimates from fewer than N compared codons / with dS above X / from a pair whose protein identity is below P percent: status `warning` and a note; no row dropped, no number changed ([Filtering before interpretation](#filtering-before-interpretation)) | off |
 | `--yn-flavour`, `--yn-weighting`, `--digits`, `--max-cells` | as in `coal dnds` and `coal-cpp-align` | |
 | `--comeron-flavour coal\|gestimator`, `--li-flavour coal\|seqinr` | how `Comeron` and `Li` read a pair: COAL's policy, or as their reference programs (stop codons compared; [kaks.md](kaks.md), "Comeron and Li") | `coal` |
 | `--terminal-stops drop\|compare` | only with the reference flavours: `compare` takes the two terminal stop codons of a pair as the last compared codon column when both genes end in one, as orthologr 0.4.3's pipeline does; `drop` ends the pair before them | `drop` |
@@ -508,13 +508,22 @@ short, for a pipeline table:
   biological reason; `dNdS` is `NA` only when dS is below 1e-6.
 
 These thresholds are conventions, with the usual caveat: report the ones you use, and check that the result does
-not hinge on them. `--min-codons N` and `--max-ds X` flag such rows (status `warning`, notes `fewer than N codons
-compared` and `dS above X`) **without dropping a row or changing a number**; the counts are in the summary on
-stderr and in `report.json` (`counts.flagged`). They are off by default.
+not hinge on them. `--min-codons N`, `--max-ds X` and `--min-identity P` flag such rows (status `warning`, notes
+`fewer than N codons compared`, `dS above X` and `protein identity below P%`) **without dropping a row or
+changing a number**; the counts are in the summary on stderr and in `report.json` (`counts.flagged`). They are
+off by default. `--min-identity` compares the column `prot_identity` (identical residues as a percentage of the
+protein alignment's columns, gap columns included) with P.
 
 ```
-coal pipeline pairs --query q_cds.fa --subject s_cds.fa -o out --min-codons 50 --max-ds 2
+coal pipeline pairs --query q_cds.fa --subject s_cds.fa -o out --min-codons 50 --max-ds 2 --min-identity 30
 ```
+
+**A cluster can hold pairs that are not related.** Clustering puts a sequence with a representative it matches;
+two members of one cluster need not match each other, and with DeepClust's defaults many do not. Every pair of a
+cluster is still aligned and estimated, and an alignment of two unrelated proteins gives numbers like any other:
+in a 3,000-member cluster of the second review, 306 of 1,000 sampled pairs had status `ok` at a protein identity
+below 15% (dN around 1, dS around 1.7). Status `ok` says that the method ran. Use `--min-identity` (30 to 40 is
+a common floor), or filter on `prot_identity` yourself, before reading such rows.
 
 ## What the search and clustering defaults do
 

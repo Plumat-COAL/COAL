@@ -26,11 +26,14 @@ std::string kaks_num(double v, int digits);
 struct PairFlags {
     long min_codons = 0;       // 0: off
     double max_ds = -1;        // < 0: off
-    long n_short = 0, n_high_ds = 0;   // results flagged (counted by apply; call it from one thread)
-    bool on() const { return min_codons > 0 || max_ds >= 0; }
-    // Reads the value of --min-codons / --max-ds; false with the reason in `why`.
+    double min_identity = -1;  // percent; < 0: off. Only where a protein alignment exists (codon-dnds)
+    long n_short = 0, n_high_ds = 0, n_low_identity = 0;   // results flagged (counted by apply; one thread)
+    bool on() const { return min_codons > 0 || max_ds >= 0 || min_identity >= 0; }
+    // Reads the value of --min-codons / --max-ds / --min-identity; false with the reason in `why`.
     bool parse(const std::string& option, const std::string& value, std::string& why);
-    void apply(kaks::Status& status, std::string& note, long codons_compared, double ks);
+    // identity: the protein identity of the pair in percent (the prot_identity column), or a negative number
+    // when there is no protein alignment.
+    void apply(kaks::Status& status, std::string& note, long codons_compared, double ks, double identity = -1);
     // "3 result(s) flagged: 2 with fewer than 50 codons compared, 1 with dS above 2" ("" when off).
     std::string summary() const;
 };

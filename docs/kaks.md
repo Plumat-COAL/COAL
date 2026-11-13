@@ -278,7 +278,10 @@ and, from one pair, weak evidence; site and branch models (PAML codeml, HyPhy) t
 COAL's codon alignments are their input.
 
 **The flags.** `--min-codons N` and `--max-ds X` (`coal dnds`, `coal pipeline`; `min_codons`, `max_ds` in coalr)
-mark the rows concerned without removing anything:
+mark the rows concerned without removing anything. Where a protein alignment exists (`coal pipeline`,
+`coal codon-dnds`; `min_identity` in coalr's `coal_dnds_pairs()` and `coal_dnds_clusters()`) there is a third,
+`--min-identity P`: a pair whose protein identity (`prot_identity`, percent) is below P gets the note
+`protein identity below P%`. `coal dnds` reads codon alignments and refuses it.
 
 ```
 coal dnds codon.fasta --min-codons 50 --max-ds 2 -o dnds.tsv

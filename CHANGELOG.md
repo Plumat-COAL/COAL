@@ -220,6 +220,11 @@ entry under "Added", not under "Fixed".
     DIAMOND's version is read as the first dotted number of `diamond version` (`2.1` is 2.1.0, not "too old"),
     and a version that cannot be read gives one warning. A gzip input has `sha256_uncompressed` next to `sha256`
     in the report.
+  - **`--min-identity P`**, the third flag next to `--min-codons` and `--max-ds` (`coal pipeline`,
+    `coal codon-dnds`; `min_identity` in coalr): a pair whose protein identity (the column `prot_identity`) is
+    below P percent gets status `warning` and the note `protein identity below P%`; no row is dropped, no number
+    changes. docs/pipeline.md says why: a cluster can hold pairs that are not related at all, and they get
+    status `ok`.
   - **Cluster mode does not depend on the order of the input.** DIAMOND DeepClust is order-dependent, so it is
     given the proteins sorted by ID: the same sequences give the same `clusters.tsv` whatever the order of the
     `--cds` files and records. (Development builds before 2026-11-13 clustered in input order; their clusters can
