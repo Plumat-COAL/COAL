@@ -1664,8 +1664,13 @@ class ClustersGiven(PipelineCase):
 class ClustersMsa(PipelineCase):
     def check(self, tool):
         res = P.run_clusters(FAM, self.tmp / tool, clusters=FAM_CLUSTERS, max_cluster_size=8, aligner=tool, jobs=2,
-                             keep_alignments=True, quiet=True)
+                             keep_alignments=True, keep_protein_alignments=True, quiet=True)
         self.assertEqual(res.exit_code, 2)
+        # the MSA tool's protein rows, kept under the same names as the codon MSAs and threaded column by column
+        self.assertEqual(sorted(os.listdir(res.outputs["protein_alignments"])), ["famA_001.fasta", "famC_001.fasta"])
+        n = ProteinAlignments.assert_threaded(self, Path(res.outputs["protein_alignments"]) / "famA_001.fasta",
+                                              Path(res.outputs["codon_alignments"]) / "famA_001.fasta")
+        self.assertEqual(n, 6)
         rows = read_tsv(res.outputs["dnds"])
         summ = {x["cluster_id"]: x for x in read_tsv(res.outputs["cluster_summary"])}
         self.assertEqual((summ["famA_001"]["pair_selection"], summ["famA_001"]["aligner"],
