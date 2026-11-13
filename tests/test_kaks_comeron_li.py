@@ -300,5 +300,42 @@ class TestComeronLiCli(ComeronLiBase):
                 self.assertIn(word, h, sub)
 
 
+class TestComeronLiPipeline(ComeronLiBase):
+    """`coal pipeline` and coal.dnds_pipeline pass the two methods and their flavours to the engine."""
+
+    def test_method_names(self):
+        from coal import dnds_pipeline as dp
+        self.assertEqual(dp.METHODS[-2:], ("Comeron", "Li"))
+        for given, want in (("comeron", "Comeron"), ("C95", "Comeron"), ("c95", "Comeron"), ("LI", "Li"),
+                            ("yn", "YN"), ("nope", "nope")):
+            self.assertEqual(dp._method_name(given), want)
+        a = dp._namespace("pairs", ["--query", "q", "--subject", "s", "-o", "o"], {"method": ["c95", "li", "yn"]})
+        self.assertEqual(a.method, ["Comeron", "Li", "YN"])
+        self.assertEqual((a.comeron_flavour, a.li_flavour), ("coal", "coal"))
+        with self.assertRaisesRegex(ValueError, "standard genetic code only"):
+            dp._namespace("pairs", ["--query", "q", "--subject", "s", "-o", "o"],
+                          {"method": ["Comeron"], "codontable": 2})
+        with self.assertRaises(ValueError):
+            dp._namespace("pairs", ["--query", "q", "--subject", "s", "-o", "o"], {"comeron_flavour": "x"})
+
+    def test_codon_dnds(self):
+        import tempfile
+        from pathlib import Path
+        from coal import dnds_pipeline as dp
+        a = "ATGGCTAAAGGTCTGTTTGATCCGGAATGGTAA"
+        b = "ATGGCAAAGGGTTTGTTCGACCCGGAGTGGTGA"
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "pairs.tsv"
+            dp.codon_dnds([("g1", [("x", a), ("y", b)])], str(out), method=["Comeron", "Li"], cpp=str(self.bin))
+            rows = [l.split("\t") for l in out.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual([r[2] for r in rows[1:]], ["Comeron", "Li"])
+            default = rows[1][3:5]
+            dp.codon_dnds([("g1", [("x", a), ("y", b)])], str(out), method=["Comeron"], cpp=str(self.bin),
+                          extra_args=["--comeron-flavour", "gestimator"])
+            rows = [l.split("\t") for l in out.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual(rows[1][2], "Comeron")
+            self.assertNotEqual(rows[1][3:5], default)   # the stop codons TAA / TGA are compared there
+
+
 if __name__ == "__main__":
     unittest.main()

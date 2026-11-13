@@ -61,7 +61,15 @@ __all__ = ["run_pairs", "run_clusters", "main", "PipelineResult", "PipelineError
 
 SCHEMA = "coal.pipeline/1"
 DIAMOND_VERSION = "2.2.8"   # the version install_diamond() fetches; any DIAMOND >= 2.1 on PATH is used as it is
-METHODS = ("NG", "LWL", "MLWL", "LPB", "MLPB", "YN", "MYN")   # KaKs_Calculator's order, the order of the rows
+# KaKs_Calculator's order, then the two methods it does not have (docs/kaks.md): the order of the rows
+METHODS = ("NG", "LWL", "MLWL", "LPB", "MLPB", "YN", "MYN", "Comeron", "Li")
+_METHOD_NAMES = {**{m.upper(): m for m in METHODS}, "C95": "Comeron"}
+
+
+def _method_name(name: str) -> str:
+    """The engine's name of a method, whatever the case ("comeron", "C95" -> "Comeron"); unknown names are
+    returned as given, for the caller's error message."""
+    return _METHOD_NAMES.get(str(name).upper(), str(name))
 SENSITIVITIES = ("faster", "fast", "default", "mid-sensitive", "sensitive", "more-sensitive", "very-sensitive",
                  "ultra-sensitive")
 # out_dir/dnds.tsv (cluster mode has `cluster_id` first); docs/pipeline.md and docs/pipeline.schema.json
@@ -814,7 +822,8 @@ class _Run:
         cmd = [self.cpp, "codon-dnds", "-i", "-", "-o", out + ".tmp", "--failures", fail, "-c", str(a.codontable),
                "-j", str(self.jobs), "--digits", str(a.digits), "--matrix", a.matrix, "--gap-open", str(a.gap_open),
                "--gap-extend", str(a.gap_extend), "--end-gaps", a.end_gaps, "--max-cells", str(a.max_cells),
-               "--flanks", a.flanks, "--yn-flavour", a.yn_flavour, "--yn-weighting", str(a.yn_weighting)]
+               "--flanks", a.flanks, "--yn-flavour", a.yn_flavour, "--yn-weighting", str(a.yn_weighting),
+               "--comeron-flavour", a.comeron_flavour, "--li-flavour", a.li_flavour]
         for m in a.method:
             cmd += ["-m", m]
         if group_column:
@@ -1528,13 +1537,19 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--digits", type=int, default=8, metavar="N", help="significant digits (default 8)")
     g.add_argument("-q", "--quiet", action="store_true", help="no progress or summary on stderr")
     g = common.add_argument_group("Ka/Ks")
-    g.add_argument("-m", "--method", action="append", metavar="METHOD", type=str.upper, choices=METHODS,
-                   help="YN (default), NG, LWL, MLWL, LPB, MLPB, MYN; repeat for several")
+    g.add_argument("-m", "--method", action="append", metavar="METHOD", type=_method_name, choices=METHODS,
+                   help="YN (default), NG, LWL, MLWL, LPB, MLPB, MYN, Comeron (alias C95), Li; repeat for several "
+                        "(Comeron and Li: genetic code 1 only)")
     g.add_argument("-c", "--codontable", type=int, default=1, choices=SUPPORTED, metavar="N",
                    help="NCBI genetic code for translation, the codon alignment and Ka/Ks (default 1)")
     g.add_argument("--yn-flavour", "--yn-flavor", default="kaks", choices=("kaks", "paml"),
                    help="YN00 as KaKs_Calculator (default) or as PAML yn00")
     g.add_argument("--yn-weighting", type=int, default=1, choices=(0, 1), help="YN00 pathway weighting (default 1)")
+    g.add_argument("--comeron-flavour", "--comeron-flavor", default="coal", choices=("coal", "gestimator"),
+                   help="Comeron with COAL's stop-codon and saturation policy (default) or with the numbers of "
+                        "orthologr's gestimator")
+    g.add_argument("--li-flavour", "--li-flavor", default="coal", choices=("coal", "seqinr"),
+                   help="Li with COAL's stop-codon policy (default) or reading stop codons as seqinr::kaks does")
     g = common.add_argument_group("Pairwise protein alignment (COAL's global aligner)")
     g.add_argument("--preset", choices=("needle", "pwalign"),
                    help="needle: BLOSUM62, open 10, extend 0.5, end gaps free (the default); pwalign: open 14, "
@@ -1622,6 +1637,15 @@ def build_parser() -> argparse.ArgumentParser:
                         "It does not apply to clustalo or mafft (Bioconda only)")
     p.add_argument("-q", "--quiet", action="store_true")
     return ap
+
+
+def _method_code_error(a: argparse.Namespace) -> str | None:
+    """Comeron and Li exist for the standard genetic code only (their references have no other)."""
+    ms = [_method_name(m) for m in (a.method or [])]
+    for m in ("Comeron", "Li"):
+        if m in ms and a.codontable != 1:
+            return f"method {m} is implemented for the standard genetic code only (codontable 1)"
+    return None
 
 
 def _finish_args(a: argparse.Namespace) -> None:
@@ -1730,10 +1754,16 @@ def _namespace(mode: str, required: list[str], options: dict) -> argparse.Namesp
     if isinstance(a.method, str):
         a.method = [a.method]
     if a.method:
-        a.method = [str(m).upper() for m in a.method]
+        a.method = [_method_name(m) for m in a.method]
         bad = [m for m in a.method if m not in METHODS]
         if bad:
             raise ValueError(f"method {bad[0]!r}: choose from {', '.join(METHODS)}")
+    why = _method_code_error(a)
+    if why:
+        raise ValueError(why)
+    for opt, allowed in (("comeron_flavour", ("coal", "gestimator")), ("li_flavour", ("coal", "seqinr"))):
+        if getattr(a, opt) not in allowed:
+            raise ValueError(f"{opt} {getattr(a, opt)!r}: choose from {', '.join(allowed)}")
     return a
 
 
@@ -1792,6 +1822,8 @@ def main(argv=None) -> int:
         ap.error("--digits: expected 1 to 17")
     if a.jobs < 0:
         ap.error("-j: expected 0 (one per CPU) or more")
+    if _method_code_error(a):
+        ap.error(_method_code_error(a))
     try:
         return _execute(a.mode, a, ["pipeline", *argv]).exit_code
     except KeyboardInterrupt:
