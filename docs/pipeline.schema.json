@@ -21,6 +21,7 @@
     "cite": {"type": "array", "items": {"type": "string"}, "description": "citation keys for this run (coal cite REPORT.json prints the references; src/coal/citations.py)"},
     "warnings": {"type": "array", "items": {"type": "string"}, "description": "the warning lines of the run"},
     "report_truncated": {"const": true, "description": "only in the short report written when the whole one could not be (a full disk): it has schema, coal_version, mode, out_dir, exit_code, status and error only"},
+    "isoforms": {"type": "object", "description": "several transcripts per gene (docs/pipeline.md, One record is one gene): what was found in each input set (query, subject or cds) and what --longest-isoform did", "required": ["longest_isoform", "gene_map", "sets"], "properties": {"longest_isoform": {"type": "boolean"}, "gene_map": {"type": ["string", "null"]}, "sets": {"type": "object"}}},
     "error": {"type": "string"},
     "parameters": {"type": "object"},
     "tools": {
@@ -60,7 +61,8 @@
             "total": {"type": "integer", "minimum": 0},
             "ok": {"type": "integer", "minimum": 0},
             "warning": {"type": "integer", "minimum": 0},
-            "failed": {"type": "integer", "minimum": 0}
+            "failed": {"type": "integer", "minimum": 0},
+            "dropped": {"type": "integer", "minimum": 0, "description": "with --longest-isoform: records that are not the longest of their gene"}
           }
         },
         "orthologs": {"type": "integer", "minimum": 0},

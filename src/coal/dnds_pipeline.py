@@ -516,6 +516,8 @@ class _Run:
         self._commands: list[list[str]] = []  # the external commands of the stage that is running
         self._plain: dict[str, str] = {}   # a gzip-compressed input -> its decompressed copy in work/inputs
         self.notes: list[str] = []         # warnings of the run, also in the report
+        self.isoforms: dict = {}           # the report's `isoforms`: per set what was found and done
+        self._gene_map: dict | None = None
 
     # -- set-up
     def start(self) -> None:
@@ -668,10 +670,10 @@ class _Run:
         """(option, path) of every file this run reads."""
         a = self.a
         got = []
-        for opt in ("query", "subject", "pairs", "clusters", "diamond"):
+        for opt in ("query", "subject", "pairs", "clusters", "gene_map", "diamond"):
             v = getattr(a, opt, None)
             if v:
-                got.append(("--" + opt, os.fspath(v)))
+                got.append(("--" + opt.replace("_", "-"), os.fspath(v)))
         for v in (getattr(a, "cds", None) or ()):
             got.append(("--cds", os.fspath(v)))
         return got
@@ -975,16 +977,30 @@ class _Run:
                    [faa, genes], go)
         return faa, genes, {}
 
-    def read_genes(self, genes_path: str, set_name: str, out_fh, order: dict | None = None) -> dict:
+    def read_genes(self, genes_path: str, set_name: str, out_fh, order: dict | None = None,
+                   dropped: dict | None = None) -> dict:
         """Copy a genes table into out_dir/genes.tsv (with the `set` column), report the failed genes, and return
-        {id: reason} of the failed ones. order: filled with {id: rank} of the usable genes (file order)."""
+        {id: reason} of the failed ones. order: filled with {id: rank} of the usable genes (file order).
+        dropped: {id: (gene, kept id)} of the records --longest-isoform leaves out: written with status `dropped`
+        (code not_longest_isoform; the note names the gene and the record kept), counted apart, not in `order`."""
         failed: dict[str, str] = {}
+        dropped = dropped or {}
         c = self.counts.setdefault("genes", {"total": 0, "ok": 0, "warning": 0, "failed": 0})
+        if dropped:
+            c.setdefault("dropped", 0)
         codes = self.gene_failures.setdefault(set_name, {"usable": 0, "codes": {}, "first": None})
         with open(genes_path, encoding="utf-8", errors="backslashreplace") as fh:
             next(fh)
             for line in fh:
                 f = line.rstrip("\n").split("\t")
+                if f[0] in dropped and f[7] != "failed":
+                    gene, kept = dropped[f[0]]
+                    f[7], f[8] = "dropped", "not_longest_isoform"
+                    f[9] = "; ".join(x for x in (f[9], f"gene {gene}: {kept} is kept (--longest-isoform)") if x)
+                    out_fh.write(set_name + "\t" + "\t".join(f) + "\n")
+                    c["total"] += 1
+                    c["dropped"] += 1
+                    continue
                 out_fh.write(set_name + "\t" + line)
                 c["total"] += 1
                 c[f[7]] = c.get(f[7], 0) + 1
@@ -1000,6 +1016,105 @@ class _Run:
                     if order is not None:
                         order[f[0]] = len(order)
         return failed
+
+    # -- several transcripts per gene (coal/isoforms.py)
+    def find_isoforms(self, set_name: str, paths: list[str], genes_path: str) -> dict:
+        """What the records of one set say about their genes; with --longest-isoform the records to drop,
+        {id: (gene, kept id)}. Fills self.isoforms[set_name]; the warning is printed by isoform_warning()."""
+        from . import isoforms as I
+        a = self.a
+        lengths: dict[str, int] = {}
+        ids: list[str] = []
+        with open(genes_path, encoding="utf-8", errors="backslashreplace") as fh:
+            next(fh)
+            for line in fh:
+                f = line.rstrip("\n").split("\t")
+                if f[8] == "duplicate_id":
+                    continue
+                ids.append(f[0])
+                if f[7] != "failed":
+                    lengths[f[0]] = int(f[1])
+        if a.gene_map:
+            if self._gene_map is None:
+                try:
+                    self._gene_map = I.read_gene_map(self.plain(a.gene_map), a.gene_map)
+                except ValueError as e:
+                    raise PipelineError(str(e)) from None
+                except OSError as e:
+                    raise PipelineError(f"cannot open {a.gene_map!r}: {e.strerror or e}") from None
+            det = I.from_gene_map(self._gene_map, ids)
+            unknown = sum(1 for r in ids if r not in self._gene_map)
+        else:
+            det = I.detect([(rid, rest) for rid, rest in I.read_headers([self.plain(p) for p in paths])])
+            unknown = None
+        dropped = I.choose_longest(det, lengths) if a.longest_isoform else {}
+        rec = {"records": det.records, "genes": det.genes, "genes_with_several_records": det.multi,
+               "records_beyond_one_per_gene": det.extra, "gene_source": det.source, "dropped": len(dropped)}
+        if unknown is not None:
+            rec["records_not_in_gene_map"] = unknown
+        if det.example:
+            rec["example"] = {"gene": det.example[0], "records": det.example[1]}
+        self.isoforms[set_name] = rec
+        return dropped
+
+    def isoform_warning(self) -> None:
+        """One line for the run: input that looks like several transcripts per gene (and nothing done about it),
+        or what --longest-isoform did."""
+        a = self.a
+        sets = self.isoforms
+        if a.longest_isoform:
+            total = sum(r["dropped"] for r in sets.values())
+            none = [n for n, r in sets.items() if r["gene_source"] is None]
+            parts = [f"{n}: {r['dropped']:,} of {r['records']:,} records dropped, {r['genes']:,} genes "
+                     f"(from {'--gene-map' if r['gene_source'] == 'gene map' else r['gene_source']})"
+                     for n, r in sets.items() if r["gene_source"] is not None]
+            self.say("--longest-isoform: " + ("; ".join(parts) if parts else "no record dropped")
+                     + (f"; {total:,} in all, listed in genes.tsv with status dropped" if total else ""))
+            if none:
+                self.warn(f"--longest-isoform: the headers of the {' and '.join(none)} file(s) name no gene (no "
+                          "gene: / [gene= / locus_tag= field, no shared ID stem with a transcript suffix), so "
+                          "every record was kept there; give the genes with --gene-map TSV (record ID, gene ID)")
+            if a.gene_map:
+                missing = sum(r.get("records_not_in_gene_map", 0) for r in sets.values())
+                if missing:
+                    self.warn(f"{missing:,} record(s) are not in --gene-map {a.gene_map}: each is kept as a gene "
+                              "of its own")
+            return
+        multi = {n: r for n, r in sets.items() if r["genes_with_several_records"]}
+        if not multi:
+            return
+        parts = []
+        for n, r in multi.items():
+            ex = r.get("example")
+            parts.append(f"{n}: {r['records']:,} records of {r['genes']:,} genes, "
+                         f"{r['genes_with_several_records']:,} genes with several records"
+                         + (f" (e.g. {ex['gene']}: {', '.join(ex['records'])})" if ex else "")
+                         + f", read from the {'--gene-map' if r['gene_source'] == 'gene map' else r['gene_source']}")
+        self.warn("the input looks like several transcripts per gene (" + "; ".join(parts) + "). The pipeline "
+                  "treats each record as a gene: such a gene is compared once per transcript, and reciprocal best "
+                  "hits are split between its transcripts. Use --longest-isoform to keep the longest CDS of each "
+                  "gene (with --gene-map TSV if the genes are not in the headers), or give one sequence per gene")
+
+    def kept_proteins(self, faa: str, dropped: dict, name: str) -> str:
+        """The protein file without the dropped records (what DIAMOND gets); faa itself when nothing is dropped.
+        Rewritten only when its content changes, so --resume can reuse the search."""
+        if not dropped:
+            return faa
+        out = self.wpath(f"{name}.kept.faa")
+        with open(faa, "rb") as src, open(out + ".tmp", "wb") as dst:
+            keep = True
+            for line in src:
+                if line[:1] == b">":
+                    words = line[1:].split()
+                    keep = (words[0].decode("utf-8", "backslashreplace") if words else "") not in dropped
+                if keep:
+                    dst.write(line)
+        import filecmp
+        if os.path.isfile(out) and filecmp.cmp(out, out + ".tmp", shallow=False):
+            os.remove(out + ".tmp")
+        else:
+            os.replace(out + ".tmp", out)
+        return out
 
     def require_usable_genes(self, set_name: str, paths: list[str]) -> None:
         """Stop here, before DIAMOND or an aligner is started, when a CDS file has no usable gene at all: the
@@ -1178,6 +1293,9 @@ class _Run:
             clustalo="clustalo" in self.tools, mafft="mafft" in self.tools)
         if error:
             report["error"] = error
+        if self.isoforms:
+            report["isoforms"] = {"longest_isoform": bool(a.longest_isoform), "gene_map": a.gene_map or None,
+                                  "sets": self.isoforms}
         if self.notes:
             report["warnings"] = self.notes
         rp = a.report or self.path("report.json")
@@ -1274,15 +1392,24 @@ def _pairs_mode(run: _Run) -> None:
     run.outputs["genes"] = run.path("genes.tsv")
     q_order: dict[str, int] = {}
     s_order: dict[str, int] = {}
+    q_drop = run.find_isoforms("query", [a.query], q_genes)
+    s_drop = run.find_isoforms("subject", [a.subject], s_genes)
     with open(run.outputs["genes"], "w", encoding="utf-8", errors="backslashreplace", newline="\n") as gf:
         with open(q_genes, encoding="utf-8", errors="backslashreplace") as fh:
             gf.write("set\t" + fh.readline())
-        q_failed = run.read_genes(q_genes, "query", gf, q_order)
-        s_failed = run.read_genes(s_genes, "subject", gf, s_order)
-    run.say(f"translated {len(q_order) + len(q_failed):,} query and {len(s_order) + len(s_failed):,} subject CDS "
+        q_failed = run.read_genes(q_genes, "query", gf, q_order, q_drop)
+        s_failed = run.read_genes(s_genes, "subject", gf, s_order, s_drop)
+    run.say(f"translated {len(q_order) + len(q_failed) + len(q_drop):,} query and "
+            f"{len(s_order) + len(s_failed) + len(s_drop):,} subject CDS "
             f"({len(q_failed) + len(s_failed):,} not usable)")
     run.require_usable_genes("query", [a.query])
     run.require_usable_genes("subject", [a.subject])
+    run.isoform_warning()
+    if q_drop or s_drop:   # DIAMOND searches the kept records only; a pair that names a dropped one says why
+        q_faa, s_faa = run.kept_proteins(q_faa, q_drop, "query"), run.kept_proteins(s_faa, s_drop, "subject")
+        for failed, drop in ((q_failed, q_drop), (s_failed, s_drop)):
+            for rid, (gene, kept) in drop.items():
+                failed.setdefault(rid, f"dropped by --longest-isoform: {kept} is the longest record of gene {gene}")
 
     orth = run.outputs["orthologs"] = run.path("orthologs.tsv")
     hits: dict[str, list[str]] = {}
@@ -1544,12 +1671,19 @@ def _clusters_mode(run: _Run) -> None:
     faa, genes, _ = run.translate("proteins", list(a.cds))
     run.outputs["genes"] = run.path("genes.tsv")
     order: dict[str, int] = {}
+    drop = run.find_isoforms("cds", list(a.cds), genes)
     with open(run.outputs["genes"], "w", encoding="utf-8", errors="backslashreplace", newline="\n") as gf:
         with open(genes, encoding="utf-8", errors="backslashreplace") as fh:
             gf.write("set\t" + fh.readline())
-        failed = run.read_genes(genes, "cds", gf, order)
-    run.say(f"translated {len(order) + len(failed):,} CDS ({len(failed):,} not usable)")
+        failed = run.read_genes(genes, "cds", gf, order, drop)
+    run.say(f"translated {len(order) + len(failed) + len(drop):,} CDS ({len(failed):,} not usable)")
     run.require_usable_genes("cds", list(a.cds))
+    run.isoform_warning()
+    all_faa = faa
+    if drop:   # DeepClust clusters the kept records only; a given cluster that names a dropped one says why
+        faa = run.kept_proteins(faa, drop, "proteins")
+        for rid, (gene, kept) in drop.items():
+            failed.setdefault(rid, f"dropped by --longest-isoform: {kept} is the longest record of gene {gene}")
 
     if a.clusters:
         cfile = run.plain(a.clusters)
@@ -1599,7 +1733,7 @@ def _clusters_mode(run: _Run) -> None:
                 "first one is used")
     run.say(f"{len(clusters):,} clusters, {sum(len(m) for m in clusters.values()):,} sequences")
 
-    cds_idx, prot_idx = FastaIndex([run.plain(p) for p in a.cds]), FastaIndex(faa)
+    cds_idx, prot_idx = FastaIndex([run.plain(p) for p in a.cds]), FastaIndex(all_faa)
     if a.clusters:
         _unmatched_ids_warning(run, "--clusters", a.clusters,
                                [("CDS", [m for mem in clusters.values() for m in mem], cds_idx, failed)])
@@ -1879,6 +2013,15 @@ def build_parser() -> argparse.ArgumentParser:
                         "records why a larger one was skipped; always; never")
     g.add_argument("--digits", type=int, default=8, metavar="N", help="significant digits (default 8)")
     g.add_argument("-q", "--quiet", action="store_true", help="no progress or summary on stderr")
+    g = common.add_argument_group("Genes with several transcripts (every FASTA record is treated as a gene)")
+    g.add_argument("--longest-isoform", action="store_true",
+                   help="keep one record per gene, the longest CDS (ties: the ID that sorts first); the others are "
+                        "listed in DIR/genes.tsv with status dropped. The gene of a record comes from --gene-map, "
+                        "else from its header (gene:, [gene=, locus_tag=, gene_symbol:) or a shared ID stem with a "
+                        "transcript suffix (AT1G01010.1 / .2)")
+    g.add_argument("--gene-map", metavar="TSV",
+                   help="record ID and gene ID, tab-separated, for --longest-isoform (and for the warning about "
+                        "several transcripts per gene); records it does not name are genes of their own")
     g = common.add_argument_group("Ka/Ks")
     g.add_argument("-m", "--method", action="append", metavar="METHOD", type=_method_name, choices=METHODS,
                    help="YN (default), NG, LWL, MLWL, LPB, MLPB, MYN, Comeron (alias C95), Li; repeat for several "

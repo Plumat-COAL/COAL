@@ -25,6 +25,47 @@ and MAFFT are separate programs. They are looked for on `PATH`, in `$COAL_DIAMON
 `$COAL_MAFFT`, and in COAL's cache; `--install-tools` (or `coal pipeline install ...`) installs a missing one into
 the cache. They are not bundled (licences: [alignment.md](alignment.md#licences-why-clustal-omega-is-not-bundled)).
 
+## One record is one gene
+
+**The pipeline treats every FASTA record as a gene.** It does not know about transcripts. CDS files from genome
+annotations (Ensembl, NCBI, TAIR, Phytozome, a Trinity assembly) usually hold every transcript of every gene, and
+with such a file a gene with five isoforms is five "genes": it is compared once per transcript, the reciprocal
+best hits are split between the isoforms of a gene (most transcripts end up in `unpaired.tsv` as
+`not_reciprocal`), and the same gene pair appears several times with different values. On an Ensembl human / mouse
+subset (36,827 and 9,931 transcripts) an independent review found 3,967 pairs for only 2,854 gene pairs, 685 gene
+pairs appearing 2 to 18 times, and for 202 of them a spread of more than 1.5-fold in dN/dS between the isoform
+pairs. **Give one sequence per gene**, or let COAL choose one:
+
+```
+coal pipeline pairs --query q_cds.fa --subject s_cds.fa -o out --longest-isoform
+coal pipeline pairs --query q_cds.fa --subject s_cds.fa -o out --longest-isoform --gene-map genes.tsv
+```
+
+- **A warning by default.** When the records of a file look like several transcripts per gene, the run prints
+  one warning with the counts (`query: 36,827 records of 3,734 genes, ...`), an example and where the genes were
+  read from, and goes on as before: nothing else changes without the options below.
+- **Where the gene of a record comes from.** (1) `--gene-map TSV`: record ID and gene ID, tab-separated (a header
+  line and `#` lines are skipped; one map serves all input files; a record it does not name is a gene of its
+  own). Without a map, (2) a field of the FASTA header that at least 90% of a file's records have, the first of:
+  `gene:ENSG...` (Ensembl), `[gene=...]` or `gene=...` (NCBI `cds_from_genomic`, GFF-derived files),
+  `[locus_tag=...]` or `locus_tag=...`, `gene_symbol:...`; else (3) the ID itself, when IDs share a stem and
+  differ in a transcript suffix: `AT1G01010.1` / `AT1G01010.2` (TAIR, Ensembl Plants, Phytozome), `g12.t1` /
+  `g12.t2` (AUGUSTUS, BRAKER), `..._g1_i1` / `..._g1_i2` (Trinity). The detection is conservative: an ID that is
+  alone with its stem is its own gene (the `.8` of `ENST00000380152.8` is a version, not an isoform), and a
+  suffix rule is not applied when a stem has more than four records on average (`scaffold7.1` ...
+  `scaffold7.340` numbers genes). When a file's annotation follows none of these conventions, give a gene map.
+- **`--longest-isoform`** keeps, for every gene, the record with the longest CDS (in nucleotides; of equally long
+  ones the ID that sorts first) among the records that can be used, in both modes, before DIAMOND runs. The other
+  records are listed in `genes.tsv` with status `dropped`, code `not_longest_isoform` and a note naming the gene
+  and the record kept; they are not failures (the exit code is not affected). A `--pairs` or `--clusters` file
+  that names a dropped record gets that pair's `error` row, or that member left out, with the reason.
+  `report.json` records the choice (`isoforms`: the option, the gene map, and per input set the records, genes,
+  genes with several records, where the genes were read from and how many records were dropped), and
+  `counts.genes.dropped` the number. With `--longest-isoform` and no gene information in a file, every record
+  of it is kept and a warning says so.
+- The longest CDS is a convention, not the biologically "main" transcript. For a curated choice (Ensembl
+  canonical, MANE Select, APPRIS) filter the FASTA file yourself and run without the option.
+
 ## Pair mode
 
 ```
@@ -102,6 +143,7 @@ coal pipeline clusters --cds all_cds.fa --clusters deepclust.tsv -o out --max-cl
 | `--report FILE` | the JSON report | `DIR/report.json` |
 | `--hash-inputs auto\|always\|never` | SHA-256 of the input files in the report: files up to 2 GiB, every file, or none | `auto` |
 | `--msa-timeout S` | give up on one Clustal Omega / MAFFT run after S seconds | none |
+| `--longest-isoform`, `--gene-map TSV` | keep the longest CDS per gene; the genes from a map instead of the headers ([One record is one gene](#one-record-is-one-gene)) | off |
 | `--min-codons N`, `--max-ds X` | flag estimates from fewer than N compared codons / with dS above X: status `warning` and a note; no row dropped, no number changed ([Filtering before interpretation](#filtering-before-interpretation)) | off |
 | `--yn-flavour`, `--yn-weighting`, `--digits`, `--max-cells` | as in `coal dnds` and `coal-cpp-align` | |
 | `--comeron-flavour coal\|gestimator`, `--li-flavour coal\|seqinr` | how `Comeron` and `Li` read a pair: COAL's policy, or as their reference programs (stop codons compared; [kaks.md](kaks.md), "Comeron and Li") | `coal` |
@@ -218,6 +260,7 @@ complete codon), `status`, `code`, `note`.
 | a codon with an ambiguous base (N, IUPAC) | `ok` | translated to the residue every reading gives, else X; that codon column is skipped in Ka/Ks |
 | length not a multiple of 3 | `warning`, `cds_length` | the last 1 or 2 bases are ignored; the gene's pairs get status `warning` |
 | an internal stop codon | `warning`, `internal_stop` | written as `*` and aligned; those codon columns are skipped; the gene's pairs get status `warning` |
+| not the longest record of its gene, with `--longest-isoform` | `dropped`, `not_longest_isoform` | the record is left out before the search; the note names the gene and the record kept ([One record is one gene](#one-record-is-one-gene)) |
 | empty, shorter than one codon, only a stop codon | `failed`, `cds_empty` / `cds_too_short` / `cds_only_stop` | the gene is left out |
 | a character that is no nucleotide code | `failed`, `cds_invalid_character` | the gene is left out |
 | an ID that already occurred | `failed`, `duplicate_id` | the first record is used, this one is left out |
@@ -594,7 +637,8 @@ machine is still to be done.
   file is recognised only when it leaves no usable gene (see "Inputs that cannot work"); a file that mixes CDS and
   protein records runs, with the protein records listed as failed genes.
 - **Python holds every ID** (and a byte offset per record), so memory grows with the number of sequences, not
-  with their length.
+  with their length. The check for several transcripts per gene reads every FASTA header once more and holds the
+  header lines while it looks at them.
 - **Tools in COAL's cache are used only with their checksum record.** A DIAMOND, Clustal Omega or MAFFT that an
   earlier COAL (0.5.0 or before) installed into the cache has no `<binary>.coal-manifest.json` and is not used:
   the run says so once and asks for `coal pipeline install <tool> --force` (or `--install-tools`). The record
