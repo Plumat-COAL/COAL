@@ -100,6 +100,7 @@ coal pipeline clusters --cds all_cds.fa --clusters deepclust.tsv -o out --max-cl
 | `--install-tools` | install a missing DIAMOND / Clustal Omega / MAFFT into COAL's cache | off |
 | `--diamond PATH` | the DIAMOND to run | found automatically |
 | `--report FILE` | the JSON report | `DIR/report.json` |
+| `--hash-inputs auto\|always\|never` | SHA-256 of the input files in the report: files up to 2 GiB, every file, or none | `auto` |
 | `--msa-timeout S` | give up on one Clustal Omega / MAFFT run after S seconds | none |
 | `--min-codons N`, `--max-ds X` | flag estimates from fewer than N compared codons / with dS above X: status `warning` and a note; no row dropped, no number changed ([Filtering before interpretation](#filtering-before-interpretation)) | off |
 | `--yn-flavour`, `--yn-weighting`, `--digits`, `--max-cells` | as in `coal dnds` and `coal-cpp-align` | |
@@ -227,6 +228,19 @@ Schema `coal.pipeline/1`: [pipeline.schema.json](pipeline.schema.json). It is wr
 
 - `mode`, `command`, `out_dir`, `parameters` (every option as used), `tools` (path and version of coal-cpp,
   DIAMOND, Clustal Omega, MAFFT).
+- **Provenance, for a methods section.** `started` and `finished` (UTC, ISO 8601: `2026-11-13T09:15:46Z`);
+  `platform` (`system`, `release`, `machine`, `python`, `cpus`); `coal_version`; `threads` (`requested`: `-j` as
+  given; `engine`: the threads of coal-cpp; `tools`: what DIAMOND and the aligners were given); `inputs`: every
+  file the run read, with `option`, absolute `path`, `bytes`, `modified` and `sha256` (of the file as given: a
+  `.gz` input is hashed compressed and has `"compression": "gzip"`). Hashing reads each input once more; with
+  the default `--hash-inputs auto` a file above 2 GiB is not hashed (`"sha256": null`, and `sha256_skipped` says
+  why); `--hash-inputs always` hashes every file, `never` none. `tools.<name>.commands`: the exact command
+  lines, as argv arrays, of every DIAMOND and coal-cpp run (the same lines as in `work/logs/`; kept in the
+  `--resume` state, so a reused stage still shows how its files were made), and for Clustal Omega / MAFFT,
+  which run once per cluster, `command_template` (one run's command with `IN.fasta` / `OUT.fasta`). `cite`: the
+  citation keys for what this run used; `coal cite DIR/report.json` prints the references
+  ([kaks.md](kaks.md#what-to-cite)). `warnings`: the warning lines of the run, when there were any. None of
+  this changes a table: `dnds.tsv` and the others are byte-identical whatever `--hash-inputs` is.
 - `stages`: name, wall `seconds`, `cached` (reused by `--resume`). The stage `align_codon_kaks` also has
   `align_codon_seconds` and `kaks_seconds` (inside the engine) and, when an MSA program ran, `msa_seconds`.
 - `counts`: `genes` (total, ok, warning, failed), `pairs` (total and one count per status), `flagged`

@@ -85,6 +85,7 @@ SUMMARY_COLUMNS = ("cluster_id", "representative", "n_members", "n_used", "metho
                    "n_pairs", "n_ok", "n_not_converged", "n_saturated", "n_no_data", "n_failed",
                    *(f"{v}_{s}" for v in ("dN", "dS", "dNdS") for s in _STATS), "n_dNdS", "status", "note")
 FAILED_COLUMNS = ("level", "cluster_id", "seq1", "seq2", "code", "message")
+HASH_LIMIT = 2 * 1024 ** 3   # --hash-inputs auto: files up to this size get a SHA-256 in the report (2 GiB)
 REPORT_MAX_FAILURES = 1000   # the JSON report lists this many failures; failed.tsv has all of them
 _CLUSTER_HEADERS = {("centroid", "member"), ("representative", "member"), ("representative_id", "member_id"),
                     ("cluster", "member"), ("cluster_id", "member_id"), ("rep", "member")}
@@ -417,6 +418,15 @@ def sort_fasta_by_id(src: str, dst: str) -> int:
     return len(recs)
 
 
+def _utc_iso(seconds: float) -> str:
+    """Seconds since the epoch as UTC, ISO 8601 with seconds: 2026-11-13T09:15:02Z."""
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(seconds))
+
+
+def _utc_now() -> str:
+    return _utc_iso(time.time())
+
+
 def _file_sig(paths) -> list:
     out = []
     for p in paths:
@@ -501,6 +511,9 @@ class _Run:
         self._earlier: tuple[set, set] = (set(), set())
         self.pairs_in_place = False   # --pairs is DIR/orthologs.tsv itself: read, not written again
         self._engine = None     # the running coal-cpp codon-dnds (killed if the run is interrupted)
+        self.started = _utc_now()
+        self.input_records: list[dict] = []   # the report's `inputs`
+        self._commands: list[list[str]] = []  # the external commands of the stage that is running
         self._plain: dict[str, str] = {}   # a gzip-compressed input -> its decompressed copy in work/inputs
         self.notes: list[str] = []         # warnings of the run, also in the report
 
@@ -547,6 +560,43 @@ class _Run:
                       f"aligners are run with {self.threads} thread(s)")
         self._same_file_warning()
         self._gunzip_inputs()
+        self._describe_inputs()
+
+    def _describe_inputs(self) -> None:
+        """The report's `inputs`: every file the run reads, with its size, modification time and SHA-256 (of the
+        file as given, compressed or not). --hash-inputs auto (default) skips the hash of a file above HASH_LIMIT
+        and says so; always hashes everything; never hashes nothing."""
+        mode = getattr(self.a, "hash_inputs", "auto")
+        t = time.perf_counter()
+        for opt, p in self._inputs:
+            if opt == "--diamond":
+                continue
+            rec: dict = {"option": opt, "path": os.path.abspath(p)}
+            try:
+                st = os.stat(p)
+            except OSError as e:
+                rec["error"] = e.strerror or str(e)
+                self.input_records.append(rec)
+                continue
+            rec["bytes"] = st.st_size
+            rec["modified"] = _utc_iso(st.st_mtime)
+            if os.path.abspath(p) in self._plain:
+                rec["compression"] = "gzip"
+            if mode == "never":
+                rec["sha256"] = None
+                rec["sha256_skipped"] = "--hash-inputs never"
+            elif mode == "auto" and st.st_size > HASH_LIMIT:
+                rec["sha256"] = None
+                rec["sha256_skipped"] = (f"larger than {HASH_LIMIT:,} bytes (--hash-inputs auto); run with "
+                                         "--hash-inputs always to hash it")
+            else:
+                h = hashlib.sha256()
+                with open(p, "rb") as fh:
+                    for block in iter(lambda: fh.read(1 << 20), b""):
+                        h.update(block)
+                rec["sha256"] = h.hexdigest()
+            self.input_records.append(rec)
+        self.hash_seconds = round(time.perf_counter() - t, 3)
 
     def warn(self, text: str) -> None:
         """One warning line on stderr (not with -q), kept for the report's `warnings`."""
@@ -826,7 +876,11 @@ class _Run:
             self.say(f"{name}: reused from the earlier run (--resume)")
         else:
             t = time.perf_counter()
+            self._commands = []
             detail = fn() or {}
+            if self._commands:   # the argv of every program the stage ran (kept for --resume: a reused stage
+                detail = {**detail, "commands": self._commands}   # still says how its files were made)
+                self._commands = []
             rec = {"name": name, "seconds": round(time.perf_counter() - t, 3), "cached": False, **detail}
             self.state[name] = {"sig": sig, "detail": detail}
             self._save_state()
@@ -842,6 +896,7 @@ class _Run:
     def run_tool(self, cmd: list[str], log: str, what: str) -> None:
         """One external program, no shell, its output appended to work/logs/<log>.log; PipelineError if it fails."""
         logp = self.wpath("logs", log + ".log")
+        self._commands.append([str(c) for c in cmd])
         with open(logp, "ab") as fh:
             fh.write(("$ " + " ".join(shlex.quote(c) for c in cmd) + "\n").encode())
             fh.flush()
@@ -1067,6 +1122,7 @@ class _Run:
                     detail["kaks_seconds"] = round(float(w[w.index("kaks") + 1]), 3)
                 except (ValueError, IndexError):
                     pass
+        detail["commands"] = [[str(c) for c in cmd]]   # (the groups arrive on its standard input)
         return detail
 
     # -- the end
@@ -1087,11 +1143,29 @@ class _Run:
         skip = {"out_dir", "quiet", "report", "resume", "install_tools"}
         if status is None:
             status = {0: "completed", 2: "completed_with_failures"}.get(exit_code, "failed")
+        # every tool's command lines, from the stages (also the reused ones); the aligners run once per cluster
+        # or pair, so they have the template of that command
+        tools = {name: dict(t) for name, t in self.tools.items()}
+        for st in self.stages:
+            for cmd in st.get("commands", ()):
+                for t in tools.values():
+                    if cmd and cmd[0] == t.get("path"):
+                        t.setdefault("commands", []).append(cmd)
+        for name in ("clustalo", "mafft"):
+            if name in tools:
+                threads = 1 if self.mode == "pairs" else getattr(a, "msa_threads", 1)
+                tools[name]["command_template"] = _msa.command_line(name, tools[name]["path"], threads)
         report = {
             "schema": SCHEMA, "coal_version": __version__, "mode": self.mode, "command": self.argv,
             "out_dir": self.out, "exit_code": exit_code, "status": status,
+            "started": self.started, "finished": _utc_now(),
+            "platform": {"system": platform.system(), "release": platform.release(), "machine": platform.machine(),
+                         "python": platform.python_version(), "python_implementation": platform.python_implementation(),
+                         "cpus": os.cpu_count()},
+            "threads": {"requested": a.jobs, "engine": self.jobs, "tools": self.threads},
+            "inputs": self.input_records,
             "parameters": {k: v for k, v in sorted(vars(a).items()) if k not in skip},
-            "tools": self.tools, "stages": self.stages,
+            "tools": tools, "stages": self.stages,
             "seconds": round(time.time() - self.t0, 3), "counts": self.counts,
             "failures_total": self.n_failures, "failures": self.failures,
             "failures_truncated": self.n_failures > len(self.failures),
@@ -1800,6 +1874,9 @@ def build_parser() -> argparse.ArgumentParser:
                         "DIR/protein_alignments.fasta; clusters: one file per cluster in DIR/protein_alignments/), "
                         "with the same records in the same order as --keep-alignments writes")
     g.add_argument("--report", metavar="FILE.json", help="the JSON run report (default: DIR/report.json)")
+    g.add_argument("--hash-inputs", choices=("auto", "always", "never"), default="auto",
+                   help="SHA-256 of the input files in the report: auto (default) hashes files up to 2 GiB and "
+                        "records why a larger one was skipped; always; never")
     g.add_argument("--digits", type=int, default=8, metavar="N", help="significant digits (default 8)")
     g.add_argument("-q", "--quiet", action="store_true", help="no progress or summary on stderr")
     g = common.add_argument_group("Ka/Ks")
@@ -2080,7 +2157,7 @@ def _namespace(mode: str, required: list[str], options: dict) -> argparse.Namesp
     why = _method_code_error(a) or _flag_error(a)
     if why:
         raise ValueError(why)
-    for opt, allowed in (("comeron_flavour", ("coal", "gestimator")), ("li_flavour", ("coal", "seqinr")),
+    for opt, allowed in (("hash_inputs", ("auto", "always", "never")), ("comeron_flavour", ("coal", "gestimator")), ("li_flavour", ("coal", "seqinr")),
                          ("terminal_stops", ("drop", "compare"))):
         if getattr(a, opt) not in allowed:
             raise ValueError(f"{opt} {getattr(a, opt)!r}: choose from {', '.join(allowed)}")
