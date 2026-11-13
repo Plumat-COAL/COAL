@@ -78,9 +78,10 @@ test:
     # test_dispatch.sh builds such an input by repeating the fixture under new IDs.
     - bash test_dispatch.sh
     # Ka/Ks (the native engine in coal-cpp): the tidy table and KaKs_Calculator's format from the codon alignment
-    - coal dnds py.fasta -o dnds.tsv --pairs consecutive && head -1 dnds.tsv | grep -q "^seq1	seq2	method	dN	dS	dNdS"
+    # (double-quoted: \t is a tab; a literal tab in a YAML plain scalar is not valid YAML for every parser)
+    - "coal dnds py.fasta -o dnds.tsv --pairs consecutive && head -1 dnds.tsv | grep -q \"^seq1\tseq2\tmethod\tdN\tdS\tdNdS\""
     - test "$(wc -l < dnds.tsv)" -eq 5
-    - coal kaks -i py.fasta -o out.kaks -m NG --pairs consecutive && head -1 out.kaks | grep -q "^Sequence	Method	Ka	Ks"
+    - "coal kaks -i py.fasta -o out.kaks -m NG --pairs consecutive && head -1 out.kaks | grep -q \"^Sequence\tMethod\tKa\tKs\""
     - coal kaks --help > kaks_help.txt && grep -q "KaKs_Calculator" kaks_help.txt
     # The pipeline's command line (a run needs DIAMOND, which is optional: run_constrained above)
     - coal pipeline --help > pipeline_help.txt && grep -q "pairs" pipeline_help.txt

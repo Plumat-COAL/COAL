@@ -512,6 +512,16 @@ In commands that 0.5.0 has (both engines unless said):
 
 ### Internal
 
+- **Bioconda recipe (packaging/bioconda), second review.** The test line for `pal2nal` without arguments expected
+  exit 0 and the usage on stdout and would have failed the first build: it now tests what the command does (exit
+  1, usage on stderr, nothing on stdout). `python` is unpinned in `host:` / `run:` and Pythons below 3.10 are
+  skipped by a selector (the form for a compiled, non-noarch package); `linux-aarch64` and `osx-arm64` are
+  additional platforms; the package is the command line and the Python package only (`build.sh` no longer
+  installs the static library, the headers and the CMake package); the two test commands with tab characters are
+  quoted YAML strings. Rendered with `conda-render`, `build.sh` and all 23 test commands run against a virtual
+  environment; a real `conda build` and `bioconda-utils lint` are still to do (packaging/bioconda/README.md).
+  `tests/test_bioconda_recipe.py`.
+
 - **Package metadata follows PEP 639:** `license = "GPL-3.0-only"` (an SPDX expression) with
   `license-files = ["LICENSE", "NOTICE"]` in both `pyproject.toml` files, no licence classifier; the build needs
   setuptools 77.0.3 or later (Python 3.9+, below the floor of 3.10; the Bioconda recipe asks for it too). The

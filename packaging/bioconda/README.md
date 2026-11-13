@@ -37,9 +37,9 @@ run. That tag does not exist yet, so `meta.yaml` carries two **placeholders, mar
 (`0.6.0`) and `sha256` (64 zeros, which is not a checksum; `conda build` fails on it by design). At release time set
 both (below, "The sha256 step") and nothing else needs to change.
 
-`build.sh` runs `cmake --install`, which installs `coal-cpp` **and** `coal-cpp-align` into `$PREFIX/bin` (and, for
-C++ users, `lib/libcoal_core.a`, `include/coal/`, `lib/cmake/coal/`, and `LICENSE` + `NOTICE` under
-`share/licenses/coal`), then `pip install .` for the Python package.
+`build.sh` builds the C++ programs and copies `coal-cpp` **and** `coal-cpp-align` into `$PREFIX/bin` (nothing
+else of the C++ build: see "What the package is" below), then runs `pip install .` for the Python package. The
+licence files travel as `about: license_file:`.
 
 **Dependencies.** `run:` is Python only: codon alignment, `coal kaks` and `coal dnds` need nothing else.
 `coal pipeline` runs DIAMOND, and Clustal Omega or MAFFT in cluster mode; conda has no optional dependencies, so they
@@ -80,10 +80,34 @@ bioconda-utils build recipes config.yml --packages coal-align
 # or in Bioconda's Docker image: bioconda-utils build --docker --mulled-test recipes config.yml --packages coal-align
 ```
 
-Status of the current recipe (2026-11-13): not built with conda yet. The commands of its `test:` section were run by
-hand against the development tree (a virtual environment with `coal` and the built `coal-cpp` / `coal-cpp-align`
-on `PATH`), except the two that compare with `{{ version }}` (the tree is 0.6.0.dev0) and `test_dispatch.sh`
-(unchanged); all passed. An earlier version of the recipe (the PAL2NAL scope only):
+Status of the current recipe (2026-11-13, second review):
+
+- **Rendered with conda-build 26's `conda-render`** (`-c conda-forge`, `source:` pointed at a copy of the tree, the
+  version set to the tree's): valid YAML with the Jinja resolved, 23 test commands, `python` pinned by the build
+  variant (`python >=3.12,<3.13.0a0` and `python_abi` in `run:` for the 3.12 variant), `additional-platforms`
+  as written. With `--python 3.9` the recipe renders to nothing: the `py<310` selector skips it.
+- **`build.sh` run against a virtual environment** as above (`PREFIX` = the environment): `bin/coal`,
+  `bin/pal2nal`, `bin/coal-cpp`, `bin/coal-cpp-align` and the Python package; no `lib/libcoal_core.a`, no
+  `include/coal/`, no `lib/cmake/coal/`.
+- **All 23 rendered test commands run under `set -ex`** in that environment (no `COAL_CPP`, no `COAL_ENGINE`),
+  `test_dispatch.sh` included: all pass. The line that failed before (`pal2nal > usage.txt && grep ...`: `pal2nal`
+  without arguments exits 1 with the usage on stderr) now tests that behaviour.
+- **Not done: a real `conda build` and `bioconda-utils lint`.** The build was started and stopped while it
+  unpacked the compiler packages: the machine had too little free disk. So unverified until someone runs the
+  commands above: that the package builds with conda's compilers on linux-64, linux-aarch64, osx-64 and
+  osx-arm64 (the C++ is plain C++17, built in CI with GCC, Clang, Apple Clang and MSVC), that
+  `bioconda-utils lint` has no complaint (the `extra: identifiers: doi:TODO` and `recipe-maintainers` placeholders
+  must be filled or removed first), and the run-time behaviour inside a conda environment.
+
+What the package is: **one output, the command line and the Python package** (`coal`, `pal2nal`, `coal-cpp`,
+`coal-cpp-align`, `import coal`). The static library `libcoal_core.a`, its headers and CMake package, which
+`cmake --install` adds for C++ projects that embed the engine, are not shipped: nothing in Bioconda links against
+them. If a C++ consumer appears, add a second output (`libcoal`) rather than putting them back into this one.
+The recipe is not `noarch` (it holds compiled programs), so `python` is unpinned in `host:` / `run:` and the
+Pythons below 3.10 are skipped with a selector; `python >=3.10` there is the `noarch: python` form and is wrong
+for a compiled package.
+
+An earlier version of the recipe (the PAL2NAL scope only):
 on 2026-10-22 it (with `source:` pointed at a tarball of the `packaging/bioconda` branch, i.e. the split
 layout) built and passed all of its tests with `conda build -c conda-forge` on linux-64 (python 3.15 variant); the
 package held `bin/coal`, `bin/coal-cpp`, `bin/pal2nal`, the `coal` and `coal_compat` modules and
