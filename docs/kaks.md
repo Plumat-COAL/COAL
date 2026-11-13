@@ -928,7 +928,21 @@ counts of Kimura's distance) is part of preparing every pair and adds about 0.01
 other methods.
 
 YN00 and MYN spend about 90 % of their time on P(t) (a 61 × 61 symmetric eigendecomposition per iteration, as in
-both reference tools), so their single-thread gain is modest. The gain comes from threads (`-j`): pairs are
+both reference tools), so their single-thread gain is modest. P(t) is only read to weight the pathways between
+two codons that differ at two or three positions, so **for a pair of sequences in which no codon differs at more
+than one position it is not computed** (from 0.6). The result is the same bits: nothing that is computed depends
+on the matrix then, and this was checked at 17 significant digits, before against after, on the 999 orthologr
+pairs, the 600 simulated pairs, 4,000 + 3,000 random short pairs, 1,500 random pairs of 30 to 400 codons at
+divergences from 0 to 0.3 per site and the three test sets of `tests/kaks`, for YN and MYN in both flavours and
+both weightings and in both output formats (80 output files per build, byte-identical), with GCC 13 `-O3`,
+Clang 18 `-O3` and, for four of the sets, GCC `-O2 -march=native` (2026-11-13); `tests/test_kaks_yn_shortcut.py`
+repeats the comparison on every platform CI builds, against `--yn-always-pmat` (a testing option that computes
+the matrix regardless). How much it saves depends on how close the sequences are: 141 of the 999 orthologr pairs
+(*A. thaliana* / *A. lyrata*) have no such codon and none of the 600 simulated ones; on the 999 pairs YN took
+about 10 to 20% less CPU time and MYN no measurable amount less (the machine's run-to-run noise was about 10%;
+the pairs concerned are the short and nearly identical ones, which were cheap already), and on the 1,500 random
+pairs, 913 of which have no such codon, YN took 46% and MYN 34% less (best of 9 runs each, `-j 1`). Closely
+related genomes (strains, populations, recent duplicates) are where it pays. The gain comes from threads (`-j`): pairs are
 independent and computed on the thread pool. In a pipeline, Ka/Ks takes a small share of the time (in the orthologr 0.4.3
 profile of 2026-10-29, about 0.5 %); alignment dominates.
 
