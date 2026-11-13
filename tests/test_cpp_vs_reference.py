@@ -22,6 +22,7 @@ import os
 import subprocess
 import sys
 import unittest
+from unittest import mock
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -228,7 +229,9 @@ def run_ref_tests(modules=REF_TEST_MODULES, timeout=360):
     import tempfile
     with tempfile.TemporaryDirectory(prefix="coal_shim_") as t:
         tests = build_shim(Path(t))
-        env = dict(os.environ, PYTHONPATH=str(Path(t) / "src"))
+        # COAL_TEST_SHIM_CPP: tests/cpp_hooks.py asks this binary whether it has the test hooks, so that the tests
+        # which pause a run are skipped (or fail under COAL_REQUIRE_CPP) with a build that has none
+        env = dict(os.environ, PYTHONPATH=str(Path(t) / "src"), COAL_TEST_SHIM_CPP=str(cpp_binary()))
         r = subprocess.run([sys.executable, "-m", "unittest", "-v", *modules], cwd=tests, env=env,
                            capture_output=True, text=True, timeout=timeout)
         return r.returncode, r.stdout + r.stderr
@@ -272,6 +275,27 @@ class TestReferenceTestsWithCpp(unittest.TestCase):
                and not any(n.split(".")[1] in ln and n.split(".")[0] in ln for n in NOT_APPLICABLE)]
         self.assertTrue(" tests in " in out, out[-2000:])
         self.assertEqual(bad, [], out[-4000:])
+
+    def test_hookless_build_skips_the_tests_that_pause_a_run(self):
+        """A coal-cpp without the test hooks (the default build, a wheel's binary): the reference tests that pause
+        a run at a checkpoint are skipped with the reason, as in the main suite, not failed (the shim's `python -m
+        coal` is coal-cpp, which tests/cpp_hooks.py could not see)."""
+        sys.path.insert(0, str(HERE))
+        import cpp_hooks
+        cmd = [sys.executable, "-m", "coal", "pep.fasta", "nuc.fasta", "-o", "out.fa"]
+        self.assertEqual(cpp_hooks.engine_binary(cmd, {"COAL_TEST_SHIM_CPP": "/x/coal-cpp", "COAL_ENGINE": "python"}),
+                         "/x/coal-cpp")
+        nohooks = os.environ.get("COAL_CPP_NOHOOKS") or (None if cpp_hooks.has_test_hooks(cpp_binary()) else
+                                                         str(cpp_binary()))
+        if not nohooks or cpp_hooks.has_test_hooks(nohooks):
+            self.skipTest("needs a coal-cpp built without -DCOAL_TEST_HOOKS=ON (COAL_CPP_NOHOOKS=<path>, or the "
+                          "binary under test)")
+        env = {k: v for k, v in os.environ.items() if k not in ("COAL_REQUIRE_CPP",)}
+        with mock.patch.dict(os.environ, {**env, "COAL_CPP_BIN": nohooks}, clear=True):
+            rc, out = run_ref_tests(("test_engine_extras.TestResume",))
+        self.assertEqual(rc, 0, out[-3000:])
+        self.assertRegex(out, r"test_resume_with_workers .*skipped .*has no test hooks")
+        self.assertNotIn("FAIL:", out)
 
 
 @unittest.skipIf(_skip_reason(), _skip_reason() or "")
