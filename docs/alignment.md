@@ -91,8 +91,14 @@ coal-cpp-align [options] A.fasta [B.fasta]
   pairs: n-th of A with n-th of B; one file: records 1+2, 3+4, ...; --pairs TSV: ID pairs
   --diamond TSV [--flanks gap|align]     expand DIAMOND hits instead of aligning
   -m BLOSUM62|BLOSUM45|BLOSUM80|PAM250  --gap-open 10  --gap-extend 0.5  --end-gaps free|penalized
-  --preset needle|pwalign  --max-cells N  -j N  -o out.fasta  --scores scores.tsv
+  --preset needle|pwalign  --max-cells N  -j N  -o out.fasta  --scores scores.tsv  --version
 ```
+
+The tool comes with `coal-cpp`: in the platform wheels of `coal-align` (`coal/bin/coal-cpp-align` inside the
+installed package), in a CMake build and install, and next to `coal-cpp` wherever that is.
+`coal.align.find_align_binary()` returns the one Python would run: `COAL_CPP_ALIGN` (that path only); the
+installed package's `coal/bin`; next to the Python running COAL; next to the `coal-cpp` of `coal --cpp-path`;
+`PATH`.
 
 - **Output:** the two gapped rows of every pair, one after the other, in input order.
 - **`--scores`:** a TSV with the columns `pair id_a id_b len_a len_b length score identities similarities gaps
@@ -371,8 +377,9 @@ r dN/dS for DIAMOND split by hit coverage:
 
 ## Known gaps
 
-- The platform wheels ship `coal-cpp` but not yet `coal-cpp-align` (`packaging/wheels/build_platform_wheel.py`
-  copies one binary). Without it, `coal.align.align_pairs` falls back to pure Python.
+- The pure wheel (`py3-none-any`), the sdist and a source checkout carry no binaries: there
+  `coal.align.align_pairs` falls back to pure Python unless a `coal-cpp-align` is found elsewhere. The platform
+  wheels ship it next to `coal-cpp` (from the release after 0.5.0).
 - There is no alignment-only subcommand in `coal`/`coal-cpp`. `coal pipeline` ([pipeline.md](pipeline.md)) runs
   the aligner as one of its steps; alone, it is the `coal-cpp-align` tool and the library and Python APIs.
 - **No Clustal Omega (or MAFFT) install on Windows** (see "Install"): cluster mode with clusters of three or more

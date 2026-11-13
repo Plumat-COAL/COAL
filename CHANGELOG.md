@@ -43,6 +43,17 @@
   (docs/kaks.md, "Platform reproducibility"). The status `not_converged` (YN and MYN only) is in every status
   list, count and summary that Comeron and Li rows go through; they never have it.
 
+Packaging, command line and continuous integration (2026-11-13, not yet released):
+
+- **The platform wheels ship `coal-cpp-align` next to `coal-cpp`** (`coal/bin/` inside the package), so
+  `coal.align.align_pairs` runs the native aligner after `pip install coal-align` on Linux, macOS and Windows
+  instead of the pure-Python kernel (about 1,000 times slower). `packaging/wheels/build_platform_wheel.py` takes
+  `--align-binary`; `build_linux_binary.sh` and the release workflow build and check both binaries;
+  `packaging/wheels/check_wheel_binaries.py` runs in the environment the wheel was installed into (both lookups
+  return the wheel's binaries, one alignment, one `coal pipeline pairs` run with an empty `PATH`).
+  `coal-cpp-align --version` is new. Verified on Linux x86-64 with the repository's build script outside the
+  container; the macOS and Windows steps of the workflow are changed the same way and have not run yet.
+
 Found by the independent review of 2026-11-12 of the Ka/Ks engine, the pipeline and the R package (all in code
 not yet released):
 

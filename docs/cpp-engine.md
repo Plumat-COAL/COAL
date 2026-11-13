@@ -50,15 +50,24 @@ when there is none or it is another version), so a pipeline can call the binary 
    environment's `bin`/`Scripts` (where Bioconda installs it).
 4. **`PATH`.**
 
+The pairwise aligner `coal-cpp-align` (used by `coal.align.align_pairs`; [alignment.md](alignment.md)) is in the
+same places: the platform wheels put it in `coal/bin` next to `coal-cpp`, and `coal.align.find_align_binary()`
+looks at `COAL_CPP_ALIGN`, `coal/bin`, the folders of point 3, the folder of the `coal-cpp` found here, then `PATH`.
+
 A found `coal-cpp` is used only when its `--version` is this package's version; otherwise `coal` says so once
 (`coal: notice: ... using the Python engine`) and goes on in Python, unless `COAL_ENGINE=cpp` demands it (exit 1).
 
 ### How the platform wheels are made
 
-`release.yml` (job `cpp-wheels`) builds `coal-cpp` per platform and `packaging/wheels/build_platform_wheel.py` copies
-it into the pure wheel as `coal/bin/coal-cpp` with the executable bit set in the zip, rewrites `RECORD`, and retags the
+`release.yml` (job `cpp-wheels`) builds `coal-cpp` and `coal-cpp-align` per platform and
+`packaging/wheels/build_platform_wheel.py` copies them into the pure wheel as `coal/bin/coal-cpp` and
+`coal/bin/coal-cpp-align` with the executable bit set in the zip, rewrites `RECORD`, and retags the
 wheel (`py3-none-manylinux_2_28_x86_64`, `..._aarch64`, `py3-none-macosx_11_0_universal2`, `py3-none-win_amd64`).
-No compiled Python extension is involved: the wheel is the pure package plus one data file that `coal` execs. Linux
+No compiled Python extension is involved: the wheel is the pure package plus two data files that `coal` execs
+(nothing changes in `pyproject.toml` or `MANIFEST.in`: the binaries are never in the source tree or the sdist).
+After installing the wheel into a fresh environment the job runs `packaging/wheels/check_wheel_binaries.py`
+there: both lookups return the wheel's binaries, `coal.align.align_pairs` gives the Python kernel's alignments
+through `coal-cpp-align`, and `coal pipeline pairs --pairs` runs with nothing else on `PATH`. Linux
 binaries are built in the `manylinux_2_28` containers with `libstdc++`/`libgcc` linked statically
 (`packaging/wheels/build_linux_binary.sh`), so glibc 2.28 is the only requirement, and `auditwheel show` confirms
 the tag; the macOS binary is a universal2 build (`CMAKE_OSX_ARCHITECTURES="arm64;x86_64"`, deployment target 11.0,
