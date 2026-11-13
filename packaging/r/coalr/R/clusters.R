@@ -61,11 +61,13 @@ coal_dnds_clusters <- function(cds, clusters, msa = NULL, aligner = NULL, method
                                pair_sample = 1000L, seed = 1L,
                                matrix = "BLOSUM62", gap_open = 10, gap_extend = 0.5,
                                end_gaps = c("free", "penalized"), preset = NULL, max_cells = 4e9,
-                               yn_flavour = c("kaks", "paml"), yn_weighting = TRUE, keep_alignments = FALSE) {
+                               yn_flavour = c("kaks", "paml"), yn_weighting = TRUE, keep_alignments = FALSE,
+                               comeron_flavour = c("coal", "gestimator"), li_flavour = c("coal", "seqinr")) {
   cds <- as_seqs(cds, "cds")
   cl <- as_clusters(clusters)
   methods <- check_methods(methods)
   code <- check_count(code, "code", 1L)
+  check_method_code(methods, code)
   threads <- check_count(threads, "threads", 0L)
   cap <- check_count(max_cluster_size, "max_cluster_size", 2L)
   large_clusters <- match.arg(large_clusters)
@@ -73,6 +75,8 @@ coal_dnds_clusters <- function(cds, clusters, msa = NULL, aligner = NULL, method
   if (!is.numeric(seed) || length(seed) != 1L || is.na(seed)) stop("`seed` must be one number", call. = FALSE)
   ap <- align_params(matrix, gap_open, gap_extend, end_gaps, max_cells, preset)
   yn_flavour <- match.arg(yn_flavour)
+  comeron_flavour <- match.arg(comeron_flavour)
+  li_flavour <- match.arg(li_flavour)
   check_flag(yn_weighting, "yn_weighting")
   check_flag(keep_alignments, "keep_alignments")
   if (!is.null(msa) && (!is.list(msa) || is.null(names(msa)))) {
@@ -226,7 +230,8 @@ coal_dnds_clusters <- function(cds, clusters, msa = NULL, aligner = NULL, method
   nu <- length(unit_sizes)
   raw <- coalr_dnds(unname(cds), member_ids, members, rows, as.integer(c(0L, cumsum(unit_sizes))),
                     as.integer(unlist(u_mode, use.names = FALSE) %||% integer(0)), integer(nu + 1L), integer(0),
-                    integer(0), methods, code, threads, ap, yn_flavour, yn_weighting, keep_alignments)
+                    integer(0), methods, code, threads, ap, yn_flavour, yn_weighting, comeron_flavour, li_flavour,
+                    keep_alignments)
 
   row_cluster <- unit_cluster[raw$pairs$unit + 1L]
   pairs <- pair_table(raw, member_ids, cluster_id = cids[row_cluster])

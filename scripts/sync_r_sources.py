@@ -13,7 +13,7 @@ ends, and VENDORED.txt holds the sha256 of exactly those bytes). cpp/src is read
 checkout with core.autocrlf compares equal. A copy that differs from what is wanted only by its line ends is
 reported as that (--check), not as "out of date".
 
-Only the in-memory core is vendored: tables, core, kaks, align, dnds and pool.hpp. The file readers (seqio) and
+Only the in-memory core is vendored: tables, core, kaks (with kaks_comeron and kaks_li), align, dnds and pool.hpp. The file readers (seqio) and
 the command-line front ends are not: the R package takes sequences from R objects and writes nothing.
 """
 from __future__ import annotations
@@ -26,11 +26,12 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / "cpp" / "src"
 DST = ROOT / "packaging" / "r" / "coalr" / "src" / "coal"
-FILES = ["tables.hpp", "tables.cpp", "core.hpp", "core.cpp", "kaks.hpp", "kaks.cpp", "align.hpp", "align.cpp",
-         "dnds.hpp", "dnds.cpp", "pool.hpp"]
+FILES = ["tables.hpp", "tables.cpp", "core.hpp", "core.cpp", "kaks.hpp", "kaks.cpp", "kaks_comeron.cpp", "kaks_li.cpp",
+         "align.hpp", "align.cpp", "dnds.hpp", "dnds.cpp", "pool.hpp"]
 HEADER = ("// Vendored from COAL cpp/src/{name} by scripts/sync_r_sources.py. Do not edit here: edit cpp/src and sync.\n"
           "// Licence: GPL-3.0-only, as COAL (https://github.com/Plumat-COAL/COAL); copyright and third-party notices\n"
-          "// (KaKs_Calculator 2.0 and PAML for kaks.cpp / kaks.hpp): inst/COPYRIGHTS of this package.\n")
+          "// (KaKs_Calculator 2.0 and PAML for kaks.cpp / kaks.hpp, libsequence for kaks_comeron.cpp, seqinr for\n"
+          "// kaks_li.cpp): inst/COPYRIGHTS of this package.\n")
 
 
 def coal_version() -> str:

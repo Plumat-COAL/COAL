@@ -6,8 +6,9 @@
 // (https://cran.r-project.org/package=seqinr, https://github.com/lbbe-software/seqinr): the functions kaks(),
 // num(), fastlwl(), catsite(), transf(), titv1(), titv2(), titv3() and prefastlwl(). kaks.c carries no copyright
 // notice of its own; its comments name M. Gouy ("ajoute par M. Gouy", "MG") and J. R. Lobry ("JRL", "JLO") as
-// authors of parts of it, and seqinr's documentation (?kaks) says the code is Manolo Gouy's, from his program
-// jadis. The package as a whole:
+// authors of parts of it, and seqinr's documentation (?kaks, author field "D. Charif, J.R. Lobry") says: "The C
+// programm implementing this method was provided by Manolo Gouy. More info is needed here to trace back the
+// original C source so as to credit correct source." The package as a whole:
 //   seqinr: Biological Sequences Retrieval and Analysis. Authors: Delphine Charif [aut], Olivier Clerc [ctb],
 //   Carolin Frank [ctb], Jean R. Lobry [aut, cph], Anamaria Necsulea [ctb], Leonor Palmeira [ctb], Simon Penel
 //   [cre], Guy Perriere [ctb].

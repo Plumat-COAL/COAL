@@ -110,19 +110,34 @@ check_flag <- function(x, arg) {
   x
 }
 
+# The seven methods of KaKs_Calculator that COAL computes: what "ALL" means. Comeron and Li (which KaKs_Calculator
+# does not have, and which exist for the standard genetic code only) are asked for by name.
+kaks_calculator_methods <- c("NG", "LWL", "MLWL", "LPB", "MLPB", "YN", "MYN")
+
+# Method names as the engine writes them, whatever the case given ("comeron", "C95" -> "Comeron"; "li" -> "Li").
 check_methods <- function(methods) {
+  known <- coalr_info()$methods
   if (!is.character(methods) || !length(methods) || anyNA(methods)) {
-    stop("`methods` must name at least one Ka/Ks method: ", paste(coalr_info()$methods, collapse = ", "),
-         call. = FALSE)
+    stop("`methods` must name at least one Ka/Ks method: ", paste(known, collapse = ", "), call. = FALSE)
   }
   m <- toupper(methods)
-  if (identical(m, "ALL")) return(coalr_info()$methods)
-  bad <- setdiff(m, coalr_info()$methods)
-  if (length(bad)) {
-    stop("method '", bad[1L], "' is not one COAL computes; choose from ",
-         paste(coalr_info()$methods, collapse = ", "), call. = FALSE)
+  if (identical(m, "ALL")) return(kaks_calculator_methods)
+  m[m == "C95"] <- "COMERON"
+  i <- match(m, toupper(known))
+  if (anyNA(i)) {
+    stop("method '", methods[is.na(i)][1L], "' is not one COAL computes; choose from ",
+         paste(known, collapse = ", "), call. = FALSE)
   }
-  unique(m)
+  unique(known[i])
+}
+
+# Comeron and Li are implemented for the standard genetic code only, as their references (gestimator, seqinr).
+check_method_code <- function(methods, code) {
+  m <- intersect(c("Comeron", "Li"), methods)
+  if (length(m) && code != 1L) {
+    stop("method '", m[1L], "' is implemented for the standard genetic code only (code = 1)", call. = FALSE)
+  }
+  invisible(NULL)
 }
 
 # The alignment parameters as the C++ side reads them. preset: NULL, "needle" (the defaults) or "pwalign"

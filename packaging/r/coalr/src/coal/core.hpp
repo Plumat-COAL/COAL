@@ -1,6 +1,7 @@
 // Vendored from COAL cpp/src/core.hpp by scripts/sync_r_sources.py. Do not edit here: edit cpp/src and sync.
 // Licence: GPL-3.0-only, as COAL (https://github.com/Plumat-COAL/COAL); copyright and third-party notices
-// (KaKs_Calculator 2.0 and PAML for kaks.cpp / kaks.hpp): inst/COPYRIGHTS of this package.
+// (KaKs_Calculator 2.0 and PAML for kaks.cpp / kaks.hpp, libsequence for kaks_comeron.cpp, seqinr for
+// kaks_li.cpp): inst/COPYRIGHTS of this package.
 // Core conversion: protein alignment row + coding DNA -> codon-aligned row.
 // Same algorithm and behaviour as src/coal/core.py (see its docstring):
 //   1. locate the whole protein in the DNA (any frame, leftmost fit);
