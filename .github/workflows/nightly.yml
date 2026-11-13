@@ -189,7 +189,8 @@ jobs:
         shell: bash
         run: |
           # Debug adds only -g, so the -O1 here is the optimisation level that applies (Release's -O3 would win).
-          cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug -DCOAL_WARNINGS_AS_ERRORS=ON \
+          # COAL_TEST_HOOKS=ON: the tests below pause and kill runs through the test hooks (docs/development.md)
+          cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug -DCOAL_WARNINGS_AS_ERRORS=ON -DCOAL_TEST_HOOKS=ON \
             -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -O1 -g" \
             -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
           cmake --build build-asan -j 2

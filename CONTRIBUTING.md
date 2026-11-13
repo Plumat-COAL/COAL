@@ -18,7 +18,7 @@ git clone https://github.com/Plumat-COAL/COAL && cd COAL
 python -m venv .venv && . .venv/bin/activate          # Windows: .venv\Scripts\activate
 python -m pip install -e . -e "apps/coal-app[gui]"      # the engine (coal-align) and the app (coal-align-app)
 python -m pip install psutil                            # tests only (the worker-process tests)
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release -j 4   # coal-cpp
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCOAL_TEST_HOOKS=ON && cmake --build build --config Release -j 4   # coal-cpp, a test build (docs/development.md "Test hooks")
 export COAL_CPP_BIN=$PWD/build/coal-cpp                 # Windows: build\Release\coal-cpp.exe
 ```
 

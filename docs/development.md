@@ -16,6 +16,48 @@ difference, help-text regeneration): [CONTRIBUTING.md](../CONTRIBUTING.md). The 
 versioning promise: [python-api.md](python-api.md); the run report's fields and JSON Schema:
 [report-schema.md](report-schema.md) (`tests/test_report_schema.py` validates both engines' reports against it).
 
+## Test hooks
+
+Some tests have to stop a run at a chosen point (to kill it there), or to make several runs reach the output lock
+in the same instant. They do that with environment variables named `COAL_TEST_*`. None of them is part of COAL's
+interface, and none does anything in an ordinary run.
+
+**`coal-cpp`.** The hooks are compiled in only when the build is configured with `-DCOAL_TEST_HOOKS=ON` (a CMake
+option, `OFF` by default). Release builds, the wheels' binaries, the Bioconda build and the desktop app's binary
+are built without: their `coal-cpp` does not contain the code and never reads the variables. The test builds of CI
+(`ci.yml` job `cpp`, the sanitizer job of `nightly.yml`) and a local build for the test suite switch the option on:
+
+```
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCOAL_TEST_HOOKS=ON && cmake --build build --config Release
+```
+
+Even in such a build a hook acts only while `COAL_TEST_HOOKS=1` is set in the environment as well.
+
+| Variable | Effect (test builds of `coal-cpp`) | Python engine |
+| --- | --- | --- |
+| `COAL_TEST_HOOKS=1` | switches the hooks below on | the same variable (`pipeline._test_hooks`) |
+| `COAL_TEST_HOOKS=probe` | the binary prints `coal-cpp: test hooks compiled in` and exits 0: how the tests ask a binary | none |
+| `COAL_TEST_PAUSE_AFTER_CHECKPOINT=k` | sleeps after the k-th checkpoint | the same variable |
+| `COAL_TEST_PAUSE_BEFORE_CHECKPOINT=1` | sleeps before the first checkpoint, partial files written | none |
+| `COAL_TEST_PAUSE_IN_REPORT=1` | sleeps while the report's temporary file exists | the same variable (`report.py`) |
+| `COAL_TEST_LOCK_START_AT=<ms since the epoch>` | waits until then before it takes the output lock | none (the tests pass the time to their own starter) |
+| `COAL_TEST_HOLD_LOCK_UNTIL=<path>` | holds the output lock until that file exists, then checks the lock is still its own | none |
+| `COAL_TEST_LOCK_BEFORE_TAKEOVER_MS=<ms>` | waits between judging a lock stale and replacing it | `pipeline._before_takeover`, `pipeline._in_takeover` (attributes a test sets) |
+| `COAL_TEST_UNLINK_FAILS=N` | the first N removals of lock, guard and temporary files fail as on Windows while another process has the file open | `pipeline._unlink_fails` (an attribute a test sets) |
+
+**Python engine.** Python has no build step to leave the hooks out of, so the three it reads from the environment
+(`COAL_TEST_PAUSE_AFTER_CHECKPOINT` in `pipeline.py`, `COAL_TEST_PAUSE_IN_REPORT` in `report.py`, both only with
+`COAL_TEST_HOOKS=1`) stay in the installed package: test-only, not an interface, and they may change without
+notice. The other Python hooks are module attributes that only a test in the same process can set.
+
+**Variables that are not hooks.** `COAL_TEST_DIAMOND` (the DIAMOND binary the tests use), `COAL_TEST_SLOW_FACTOR`
+(longer time limits in the app's tests) and `COAL_LOCK_RACE_TRIALS` are read by the tests only, not by COAL.
+
+**Tests and binaries without hooks.** A test that needs a hook asks the binary first (`tests/cpp_hooks.py`). With a
+`coal-cpp` that has none it is skipped with that reason; when `COAL_REQUIRE_CPP` is set (CI) it fails instead, so
+a test build without the option cannot pass unnoticed. `COAL_ALLOW_NO_TEST_HOOKS=1` turns that failure back into
+a skip, for running the suite against a release binary on purpose.
+
 ## Two packages
 
 | Package | Folder | What | Depends on |

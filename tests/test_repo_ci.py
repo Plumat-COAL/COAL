@@ -401,6 +401,44 @@ class TestCiJobs(unittest.TestCase):
         self.assertIn("--align-binary build-manylinux/coal-cpp-align", cpp)
         self.assertIn("packaging/wheels/check_wheel_binaries.py", cpp)
 
+    def test_test_hooks_only_in_test_builds(self):
+        """coal-cpp's COAL_TEST_* hooks are a CMake option (default OFF): on in the builds the tests run against,
+        nowhere else (release.yml, the wheels' build script, the Bioconda recipe, the app's binary)."""
+        def text(*parts):
+            with open(os.path.join(ROOT, *parts), encoding="utf-8") as fh:
+                return fh.read()
+        cmake = text("CMakeLists.txt")
+        self.assertRegex(cmake, r'option\(COAL_TEST_HOOKS "[^"]+" OFF\)')
+        self.assertIn("target_compile_definitions(coal-cpp PRIVATE COAL_TEST_HOOKS)", cmake)
+        cpp = self._job("cpp")
+        self.assertIn("cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCOAL_WARNINGS_AS_ERRORS=ON -DCOAL_TEST_HOOKS=ON",
+                      cpp)
+        self.assertEqual(_ci("ci.yml").count("COAL_TEST_HOOKS=ON"), 2)      # that line and the comment above it
+        self.assertNotIn("COAL_TEST_HOOKS", self._job("windows-app"))
+        self.assertIn("-B build-asan -DCMAKE_BUILD_TYPE=Debug -DCOAL_WARNINGS_AS_ERRORS=ON -DCOAL_TEST_HOOKS=ON",
+                      _ci("nightly.yml"))
+        for rel in (".github/workflows/release.yml", "packaging/wheels/build_linux_binary.sh",
+                    "packaging/bioconda/build.sh"):
+            self.assertNotIn("COAL_TEST_HOOKS", text(*rel.split("/")), rel)
+        # no hook is read outside an #ifdef COAL_TEST_HOOKS block, and only through test_hook_env
+        for name in ("main.cpp", "sysio.cpp"):
+            depth, src = 0, text("cpp", "src", name)
+            for line in src.splitlines():
+                code = line.split("//")[0]
+                if code.startswith("#ifdef COAL_TEST_HOOKS"):
+                    depth = 1
+                elif depth and code.startswith("#if"):
+                    depth += 1
+                elif depth and code.startswith("#endif"):
+                    depth -= 1
+                elif depth == 1 and code.startswith("#else"):
+                    depth = 0
+                elif "COAL_TEST_" in code or "test_hook_env" in code:
+                    self.assertTrue(depth, f"{name}: {line.strip()}")
+        docs = text("docs", "development.md")
+        for var in sorted(set(re.findall(r"COAL_TEST_[A-Z_]+", text("cpp", "src", "sysio.cpp") + text("cpp", "src", "main.cpp")))):
+            self.assertIn(var, docs, f"{var} is not in docs/development.md \"Test hooks\"")
+
     def test_cpp_job_cannot_go_green_without_exercising_cpp(self):
         cpp = self._job("cpp")
         # coal-cpp builds from the root CMakeLists.txt and tests/test_differential.py reads COAL_IMPL

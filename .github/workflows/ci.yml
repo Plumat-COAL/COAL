@@ -258,7 +258,9 @@ jobs:
       - name: Build
         shell: bash
         run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCOAL_WARNINGS_AS_ERRORS=ON
+          # COAL_TEST_HOOKS=ON: the COAL_TEST_* hooks the tests below drive coal-cpp with (docs/development.md
+          # "Test hooks"). A test build only: release.yml and the wheel builds leave the option OFF.
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCOAL_WARNINGS_AS_ERRORS=ON -DCOAL_TEST_HOOKS=ON
           # Compiler diagnostics as annotations: they are readable from the checks API, the raw log is not always.
           if ! cmake --build build --config Release -j 2 2>&1 | tee build.log; then
             grep -iE "error|warning" build.log | head -40 | while IFS= read -r line; do echo "::error::$line"; done

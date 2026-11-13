@@ -13,6 +13,8 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "tests"))
+from cpp_hooks import check_command  # noqa: E402  (coal-cpp without test hooks: the test is skipped)
 CPP = os.environ.get("COAL_CPP_BIN") or str(ROOT / "build" / "coal-cpp")
 HAVE_CPP = os.path.isfile(CPP) or os.path.isfile(CPP + ".exe")
 ENV = dict(os.environ, COAL_ENGINE="python", PYTHONPATH=str(ROOT / "src"))
@@ -182,6 +184,7 @@ class ConcurrentSameOutput(unittest.TestCase):
         hold = dict(ENV, COAL_TEST_HOOKS="1", COAL_TEST_PAUSE_AFTER_CHECKPOINT="1", COAL_CHECKPOINT_EVERY="0",
                     COAL_BATCH_NT="1", COAL_MIN_NT_PER_JOB="0")
         for engine in self.engines():
+            check_command(self.cmd(engine, []), hold)
             with tempfile.TemporaryDirectory() as tmp:
                 d = Path(tmp)
                 expected = mixed_endings_case(d, 100)
@@ -219,6 +222,7 @@ class ConcurrentSameOutput(unittest.TestCase):
         hold = dict(ENV, COAL_TEST_HOOKS="1", COAL_TEST_PAUSE_AFTER_CHECKPOINT="1", COAL_CHECKPOINT_EVERY="0",
                     COAL_BATCH_NT="1", COAL_MIN_NT_PER_JOB="0")
         for engine in self.engines():
+            check_command(self.cmd(engine, []), hold)
             with tempfile.TemporaryDirectory() as tmp:
                 d = Path(tmp)
                 mixed_endings_case(d, 100)
@@ -350,6 +354,7 @@ class QuietKeepsNoEntries(unittest.TestCase):
         hold = dict(ENV, COAL_TEST_HOOKS="1", COAL_TEST_PAUSE_AFTER_CHECKPOINT="1", COAL_CHECKPOINT_EVERY="0",
                     COAL_BATCH_NT="1", COAL_MIN_NT_PER_JOB="0")
         for engine in ("python", "cpp") if HAVE_CPP else ("python",):
+            check_command([sys.executable] if engine == "python" else [CPP], hold)
             for quiet in (True, False):
                 with tempfile.TemporaryDirectory() as tmp:
                     d = Path(tmp)
@@ -664,6 +669,7 @@ class ResumeStaysIdentical(unittest.TestCase):
         hold = dict(ENV, COAL_TEST_HOOKS="1", COAL_TEST_PAUSE_AFTER_CHECKPOINT="5", COAL_CHECKPOINT_EVERY="0",
                     COAL_BATCH_NT="1", COAL_MIN_NT_PER_JOB="0")
         base = [sys.executable, "-m", "coal"] if engine == "python" else [CPP]
+        check_command(base, hold)
         args = ["pep.fasta", "nuc.fasta", "-o", "out.fa", "--report", "r.json", "-j", "1"]
         with tempfile.TemporaryDirectory() as ref, tempfile.TemporaryDirectory() as tmp:
             for d in (ref, tmp):
