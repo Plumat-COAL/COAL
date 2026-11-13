@@ -24,7 +24,9 @@ coal_dnds_pairs(
   terminal_stops = c("drop", "compare"),
   keep_alignments = FALSE,
   min_codons = 0L,
-  max_ds = NULL
+  max_ds = NULL,
+  min_identity = NULL,
+  method = NULL
 )
 }
 \arguments{
@@ -88,6 +90,14 @@ off by default (\code{0}, \code{NULL}). A row that has an estimate (status \code
 (a saturated synonymous distance) gets \code{"dS above X"}; its status becomes \code{warning} if it was \code{ok}. No row is
 dropped and no number changes, so the cluster summary is unaffected. Attribute \code{"flagged"} counts the rows
 each flag marked. See "Filtering before interpretation" in COAL's \code{docs/kaks.md}.}
+
+\item{min_identity}{A third flag of the same kind, as \verb{coal pipeline --min-identity P}: a row whose protein
+identity (\code{prot_identity}, percent of the alignment's columns) is below \code{min_identity} gets the note
+\code{"protein identity below P\%"}. \code{NULL} (default): off. Pairs of a cluster need not be related at all, and an
+alignment of two unrelated proteins still gives numbers with status \code{ok}.}
+
+\item{method}{The same as \code{methods} (the name \code{\link[=coal_kaks]{coal_kaks()}} and the command line's \code{--method} use); give one
+of the two.}
 }
 \value{
 A data frame with one row per pair and method: \code{seq1}, \code{seq2}, \code{method}, \code{dN}, \code{dS}, \code{dNdS}, \code{SE_dN},

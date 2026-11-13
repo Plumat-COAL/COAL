@@ -157,3 +157,60 @@ test_that("the cluster summary does not change with the flags", {
   expect_identical(f$pairs$dN, plain$pairs$dN)
   expect_identical(unname(attr(f$pairs, "flagged")), sum(plain$pairs$status %in% c("ok", "warning")))
 })
+
+test_that("min_identity flags pairs below a protein identity, and only flags", {
+  plain <- coal_dnds_pairs(q, s, pairs = orthologs(), methods = c("YN", "NG"))
+  has <- plain$status %in% c("ok", "warning")
+  cut <- stats::median(plain$prot_identity[has]) + 0.005
+  f <- coal_dnds_pairs(q, s, pairs = orthologs(), methods = c("YN", "NG"), min_identity = cut)
+  low <- has & plain$prot_identity < cut
+  expect_true(any(low) && !all(low))
+  num <- setdiff(names(plain), c("status", "note"))
+  expect_identical(f[num], plain[num])
+  expect_identical(f$status[!low], plain$status[!low])
+  expect_true(all(f$status[low] == "warning"))
+  expect_true(all(grepl(sprintf("protein identity below %.6g%%", cut), f$note[low], fixed = TRUE)))
+  expect_identical(attr(f, "flagged"), c(min_identity = sum(low)))
+  all3 <- coal_dnds_pairs(q, s, pairs = orthologs(), min_codons = 8, max_ds = 0.5, min_identity = 100)
+  expect_named(attr(all3, "flagged"), c("min_codons", "max_ds", "min_identity"))
+  for (bad in list(0, -1, 101, NA_real_, "30", c(20, 30))) {
+    expect_error(coal_dnds_pairs(q, s, min_identity = bad), "`min_identity` must be NULL")
+  }
+  # the same flag in cluster mode
+  cl <- data.frame(representative = names(q)[1], member = names(q)[1:3])
+  cc <- coal_dnds_clusters(q[1:3], cl, min_identity = 100)
+  expect_true("min_identity" %in% names(attr(cc$pairs, "flagged")))
+})
+
+test_that("`method` and `methods` are the same argument everywhere", {
+  a <- coal_dnds_pairs(q, s, pairs = orthologs(), methods = c("YN", "NG"))
+  b <- coal_dnds_pairs(q, s, pairs = orthologs(), method = c("YN", "NG"))
+  attr(a, "seconds") <- attr(b, "seconds") <- NULL
+  expect_identical(a, b)
+  expect_identical(unique(coal_dnds_pairs(q, s, pairs = orthologs(), method = "NG")$method), "NG")
+  expect_error(coal_dnds_pairs(q, s, methods = "YN", method = "NG"), "give the Ka/Ks methods once")
+  expect_silent(coal_dnds_pairs(q, s, pairs = orthologs(), methods = "ng", method = "NG"))      # the same, given twice
+  x <- "ATGGCTAAAGGTCTGGAACGT"
+  y <- "ATGGCGAAAGGCCTGGATCGT"
+  expect_identical(coal_kaks(x, y, methods = c("NG", "YN"))$method, coal_kaks(x, y, method = c("NG", "YN"))$method)
+  expect_error(coal_kaks(x, y, method = "YN", methods = "NG"), "give the Ka/Ks methods once")
+  cl <- data.frame(representative = names(q)[1], member = names(q)[1:3])
+  expect_identical(unique(coal_dnds_clusters(q[1:3], cl, method = "NG")$pairs$method), "NG")
+  # the pipeline functions take both too (checked before Python is looked for)
+  expect_true(all(c("methods", "method") %in% names(formals(coal_pipeline_pairs))))
+  expect_true(all(c("methods", "method") %in% names(formals(coal_pipeline_clusters))))
+})
+
+test_that("the shipped example and the vignette's steps", {
+  dir <- system.file("extdata", package = "coalr")
+  expect_true(all(file.exists(file.path(dir, c("species_a_cds.fasta", "species_b_cds.fasta", "orthologs.tsv")))))
+  a <- coal_read_fasta(file.path(dir, "species_a_cds.fasta"))
+  b <- coal_read_fasta(file.path(dir, "species_b_cds.fasta"))
+  pairs <- utils::read.delim(file.path(dir, "orthologs.tsv"))[, 1:2]
+  res <- coal_dnds_pairs(a, b, pairs = pairs)
+  expect_identical(nrow(res), 12L)
+  expect_true(all(res$status == "ok"))
+  f <- coal_dnds_pairs(a, b, pairs = pairs, min_codons = 250, max_ds = 0.6, min_identity = 80)
+  expect_true(all(attr(f, "flagged") > 0))            # the vignette shows each of the three flags
+  expect_true(any(f$status == "ok"))
+})
