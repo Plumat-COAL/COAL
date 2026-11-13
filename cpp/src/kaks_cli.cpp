@@ -30,6 +30,7 @@
 #include "kaks.hpp"
 #include "pool.hpp"
 #include "seqio.hpp"
+#include "shortopts.hpp"
 #include "sysio.hpp"
 #include "tables.hpp"
 
@@ -43,26 +44,37 @@ using kaks::Status;
 const char* KAKS_HELP =
     "usage: coal kaks -i IN -o OUT [-m METHOD ...] [-c TABLE] [-j N] [--pairs all|consecutive]\n"
     "                 [--digits N] [--yn-flavour kaks|paml] [--yn-weighting 0|1]\n"
+    "                 [--comeron-flavour coal|gestimator] [--li-flavour coal|seqinr]\n"
     "\n"
     "Ka/Ks for pairs of aligned coding sequences, written in KaKs_Calculator 2.0's tab-separated format.\n"
-    "Takes KaKs_Calculator's -i -o -m -c for the seven methods below (the default is YN; KaKs_Calculator's is\n"
-    "MA). The engine is derived from KaKs_Calculator 2.0 and PAML yn00 (GPL v3); see docs/kaks.md.\n"
+    "Takes KaKs_Calculator's -i -o -m -c for the seven KaKs_Calculator methods below (the default is YN;\n"
+    "KaKs_Calculator's is MA), and has Comeron (1995) and Li (1993) as the R package orthologr computes them.\n"
+    "The engine is derived from KaKs_Calculator 2.0, PAML yn00, libsequence and seqinr (GPL); see docs/kaks.md.\n"
     "\n"
     "  -i IN          AXT (name line, two aligned sequences, blank line) or aligned FASTA\n"
     "  -o OUT         output file ('-' or none: standard output)\n"
     "  -m METHOD      NG, LWL, MLWL, LPB, MLPB, YN (default), MYN; repeat for several. KaKs_Calculator's\n"
-    "                 GY, MS, MA, NONE and gamma (G*) methods are not implemented natively and are refused\n"
+    "                 GY, MS, MA, NONE and gamma (G*) methods are not implemented natively and are refused.\n"
+    "                 Comeron (alias C95): Comeron 1995 as libsequence's gestimator; Li: Li 1993 as\n"
+    "                 seqinr::kaks (both: standard genetic code only; rows come after KaKs_Calculator's)\n"
     "  -c TABLE       NCBI genetic code (default 1), the tables COAL's --codontable accepts\n"
     "  -j, --jobs N   threads (default: all hardware threads)\n"
     "  --pairs P      FASTA input: all (every pair, default) or consecutive (records 1+2, 3+4, ...)\n"
     "  --digits N     significant digits of numbers (default 6, as KaKs_Calculator)\n"
     "  --yn-flavour F YN00 iteration as KaKs_Calculator (kaks, default) or PAML yn00 (paml)\n"
     "  --yn-weighting W  1: weight pathways (default); 0: equal weights (PAML yn00 weighting = 0)\n"
+    "  --comeron-flavour F  Comeron: coal (default: COAL's stop-codon policy, NA when the correction is\n"
+    "                 undefined) or gestimator (the numbers of orthologr 0.4.3's gestimator: stop codons\n"
+    "                 compared, undefined logarithms set to 0)\n"
+    "  --li-flavour F Li: coal (default: COAL's stop-codon policy) or seqinr (stop codons compared, as\n"
+    "                 seqinr::kaks); seqinr's sentinel 9.999999 is NA in both\n"
     "  -q, --quiet    no summary on stderr\n";
 
 const char* DNDS_HELP =
     "usage: coal dnds IN [-o OUT] [-m METHOD ...] [-c TABLE] [-j N] [--pairs all|consecutive]\n"
     "                 [--format auto|axt|fasta] [--digits N] [--yn-flavour kaks|paml] [--yn-weighting 0|1]\n"
+    "                 [--comeron-flavour coal|gestimator] [--li-flavour coal|seqinr]\n"
+    "                 [--min-codons N] [--max-ds X]\n"
     "\n"
     "dN/dS for pairs of aligned coding sequences as a tidy TSV, one row per pair and method:\n"
     "seq1 seq2 method dN dS dNdS SE_dN SE_dS N_sites S_sites Nd Sd codons_compared status note\n"
@@ -71,7 +83,8 @@ const char* DNDS_HELP =
     "\n"
     "  IN             aligned FASTA or AXT file (or -i IN)\n"
     "  -o OUT         output file (default: standard output)\n"
-    "  -m METHOD      YN (default), NG, LWL, MLWL, LPB, MLPB, MYN; repeat for several\n"
+    "  -m METHOD      YN (default), NG, LWL, MLWL, LPB, MLPB, MYN, Comeron (alias C95), Li; repeat for\n"
+    "                 several (Comeron and Li: standard genetic code only; SE for YN, MYN, NG and Li)\n"
     "  -c, --codontable TABLE  NCBI genetic code (default 1)\n"
     "  -j, --jobs N   threads (default: all hardware threads)\n"
     "  --pairs P      FASTA input: all (every pair, default) or consecutive (records 1+2, 3+4, ...)\n"
@@ -79,7 +92,20 @@ const char* DNDS_HELP =
     "  --digits N     significant digits of numbers (default 8)\n"
     "  --yn-flavour F YN00 iteration as KaKs_Calculator (kaks, default) or PAML yn00 (paml)\n"
     "  --yn-weighting W  1: weight pathways (default); 0: equal weights (PAML yn00 weighting = 0)\n"
-    "  -q, --quiet    no summary on stderr\n";
+    "  --comeron-flavour F  Comeron: coal (default: COAL's stop-codon policy, NA when the correction is\n"
+    "                 undefined) or gestimator (the numbers of orthologr 0.4.3's gestimator: stop codons\n"
+    "                 compared, undefined logarithms set to 0)\n"
+    "  --li-flavour F Li: coal (default: COAL's stop-codon policy) or seqinr (stop codons compared, as\n"
+    "                 seqinr::kaks); seqinr's sentinel 9.999999 is NA in both\n"
+    "  --min-codons N flag estimates from fewer than N compared codons: status warning and the note\n"
+    "                 \"fewer than N codons compared\" (default 0: off). No row is dropped, no number changes\n"
+    "  --max-ds X     flag estimates with dS above X (saturation): status warning and the note \"dS above X\"\n"
+    "                 (default: off). See docs/kaks.md, \"Filtering before interpretation\"\n"
+    "  -q, --quiet    no summary on stderr\n"
+    "\n"
+    "Exit status: 0 done; 1 the input cannot be read or the output cannot be written; 2 command-line error,\n"
+    "or no pair has an estimate because of the input (every result error or no_data: a protein file,\n"
+    "sequences that are not aligned).\n";
 
 struct Cli {
     bool compat = false;
@@ -91,6 +117,7 @@ struct Cli {
     bool all_pairs = true;
     std::string format = "auto";
     kaks::Options opt;
+    PairFlags flags;
     bool quiet = false;
 };
 
@@ -122,6 +149,8 @@ struct Pair {
     const std::string* r1 = nullptr;              // FASTA: rows in the record table
     const std::string* r2 = nullptr;
     std::string read_error;                       // malformed record (status error)
+    bool unequal = false;                         // the two rows differ in length (not an alignment)
+    bool protein_like = false;                    // no estimate, and letters that only amino acids have
     std::vector<Result> res;
     const std::string& row1() const { return r1 ? *r1 : own1; }
     const std::string& row2() const { return r2 ? *r2 : own2; }
@@ -237,6 +266,20 @@ std::string sniff(const std::string& path) {
     return "axt";
 }
 
+// True when a row holds a letter that is an amino acid code and no nucleotide code (IUPAC: ACGTU RYSWKMBDHVN):
+// E, F, I, L, P, Q, and the rarer Z, J, O. (X is left out: some files use it for an unknown base.)
+bool looks_like_protein(const std::string& row) {
+    for (char ch : row) {
+        switch (ch) {
+            case 'E': case 'F': case 'I': case 'L': case 'P': case 'Q': case 'Z': case 'J': case 'O':
+            case 'e': case 'f': case 'i': case 'l': case 'p': case 'q': case 'z': case 'j': case 'o':
+                return true;
+            default: break;
+        }
+    }
+    return false;
+}
+
 // ------------------------------------------------------------------------------------------------ output
 std::string num(double v, int digits) {
     if (std::isnan(v)) return "NA";
@@ -339,9 +382,13 @@ std::string tidy_row(const Pair& p, const Result& r, int dg) {
     return o;
 }
 
-int parse(const std::vector<std::string>& a, Cli& c) {
+int parse(const std::vector<std::string>& args, Cli& c) {
+    std::vector<std::string> a = args;
     std::vector<std::string> pos;
     for (size_t i = 0; i < a.size(); ++i) {
+        // -j4, -mYN, -ofile, -qj4: attached values and chained flags, as the main command line reads them
+        // (KaKs_Calculator's own letters in either case)
+        expand_short_option(a, i, c.compat ? "iomcIOMCj" : "iomcj", "q", {"-codontable"});
         std::string s = a[i];
         std::string val;
         bool has_eq = false;
@@ -405,9 +452,24 @@ int parse(const std::vector<std::string>& a, Cli& c) {
         } else if (u == "--yn-flavour" || u == "--yn-flavor") {
             if (!need(v) || (v != "kaks" && v != "paml")) return usage(c, s + ": expected kaks or paml");
             c.opt.yn_flavour = v == "kaks" ? kaks::Flavour::kaks_calculator : kaks::Flavour::paml;
+        } else if (u == "--yn-always-pmat") {   // testing (kaks.hpp Options::yn_always_pmat); not in the help
+            c.opt.yn_always_pmat = true;
         } else if (u == "--yn-weighting") {
             if (!need(v) || (v != "0" && v != "1")) return usage(c, "--yn-weighting: expected 0 or 1");
             c.opt.yn_weighting = v == "1";
+        } else if (u == "--comeron-flavour" || u == "--comeron-flavor") {
+            if (!need(v) || (v != "coal" && v != "gestimator")) return usage(c, s + ": expected coal or gestimator");
+            c.opt.comeron_flavour = v == "coal" ? kaks::ComeronFlavour::coal : kaks::ComeronFlavour::gestimator;
+        } else if (u == "--li-flavour" || u == "--li-flavor") {
+            if (!need(v) || (v != "coal" && v != "seqinr")) return usage(c, s + ": expected coal or seqinr");
+            c.opt.li_flavour = v == "coal" ? kaks::LiFlavour::coal : kaks::LiFlavour::seqinr;
+        } else if (u == "--min-identity" && !c.compat) {
+            return usage(c, "--min-identity needs a protein alignment, which this command does not have (it reads "
+                            "codon alignments): it is an option of `coal pipeline` and `coal codon-dnds`, whose "
+                            "tables have the column prot_identity");
+        } else if ((u == "--min-codons" || u == "--max-ds") && !c.compat) {
+            std::string why;
+            if (!need(v) || !c.flags.parse(u, v, why)) return usage(c, why.empty() ? u + ": expected a number" : why);
         } else if (u == "-q" || u == "--quiet") {
             c.quiet = true;
         } else if (u == "-D" && c.compat) {
@@ -428,6 +490,10 @@ int parse(const std::vector<std::string>& a, Cli& c) {
     }
     if (c.in.empty()) return usage(c, c.compat ? "-i IN is required" : "the input file is required");
     if (c.methods.empty()) c.methods.push_back(Method::YN);
+    for (Method m : c.methods)
+        if ((m == Method::Comeron || m == Method::Li) && c.table != 1)
+            return usage(c, std::string("method ") + kaks::method_name(m) +
+                                " is implemented for the standard genetic code only (-c 1), as its reference");
     if (c.digits < 0) c.digits = c.compat ? 6 : 8;
     if (c.out == "-") c.out.clear();
     if (c.in == "-") return usage(c, "reading standard input ('-') is not supported: give a file");
@@ -439,6 +505,70 @@ int parse(const std::vector<std::string>& a, Cli& c) {
 }
 
 }  // namespace
+
+bool PairFlags::parse(const std::string& option, const std::string& value, std::string& why) {
+    char* end = nullptr;
+    if (option == "--min-codons") {
+        const long long n = value.empty() ? -1 : std::strtoll(value.c_str(), &end, 10);
+        if (value.empty() || *end != '\0' || n < 0 || n > 1000000000) {
+            why = "--min-codons: expected a whole number of codons, 0 or more (0 = off)";
+            return false;
+        }
+        min_codons = (long)n;
+        return true;
+    }
+    const double x = value.empty() ? -1 : std::strtod(value.c_str(), &end);
+    if (option == "--min-identity") {
+        if (value.empty() || *end != '\0' || !std::isfinite(x) || x <= 0 || x > 100) {
+            why = "--min-identity: expected a percentage, above 0 and at most 100";
+            return false;
+        }
+        min_identity = x;
+        return true;
+    }
+    if (value.empty() || *end != '\0' || !std::isfinite(x) || x <= 0) {
+        why = "--max-ds: expected a number greater than 0";
+        return false;
+    }
+    max_ds = x;
+    return true;
+}
+
+void PairFlags::apply(kaks::Status& status, std::string& note, long codons_compared, double ks, double identity) {
+    if (status != kaks::Status::ok && status != kaks::Status::warning) return;
+    auto add = [&](const std::string& text) {
+        note += (note.empty() ? "" : "; ") + text;
+        if (status == kaks::Status::ok) status = kaks::Status::warning;
+    };
+    if (min_codons > 0 && codons_compared < min_codons) {
+        add("fewer than " + std::to_string(min_codons) + " codons compared");
+        ++n_short;
+    }
+    if (max_ds >= 0 && !std::isnan(ks) && ks > max_ds) {
+        add("dS above " + num(max_ds, 6));
+        ++n_high_ds;
+    }
+    if (min_identity >= 0 && identity >= 0 && identity < min_identity) {
+        add("protein identity below " + num(min_identity, 6) + "%");
+        ++n_low_identity;
+    }
+}
+
+std::string PairFlags::summary() const {
+    if (!on()) return "";
+    std::string o = std::to_string(n_short + n_high_ds + n_low_identity) +
+                    " flag(s) set (status warning, numbers unchanged):";
+    if (min_codons > 0)
+        o += " " + std::to_string(n_short) + " result(s) with fewer than " + std::to_string(min_codons) +
+             " codons compared";
+    if (max_ds >= 0)
+        o += std::string(min_codons > 0 ? "," : "") + " " + std::to_string(n_high_ds) + " with dS above " +
+             num(max_ds, 6);
+    if (min_identity >= 0)
+        o += std::string(min_codons > 0 || max_ds >= 0 ? "," : "") + " " + std::to_string(n_low_identity) +
+             " with protein identity below " + num(min_identity, 6) + "%";
+    return o;
+}
 
 const char* kaks_compat_header() { return COMPAT_HEADER; }
 std::string kaks_compat_row(const std::string& name, const kaks::Result& r, int digits) {
@@ -461,6 +591,7 @@ int kaks_main(const std::string& sub, const std::vector<std::string>& argv) {
             if (x == m) methods.push_back(m);
     const char* prog = c.compat ? "coal kaks" : "coal dnds";
     try {
+        refuse_gzip(c.in);
         std::string fmt = c.format == "auto" ? sniff(c.in) : c.format;
         std::unique_ptr<AxtReader> axt;
         std::vector<FastaRec> recs;
@@ -478,14 +609,14 @@ int kaks_main(const std::string& sub, const std::vector<std::string>& argv) {
         if (!c.out.empty()) {
             // (checked in parse() too, before anything is read; opening the output truncates it)
             fout.open(c.out, std::ios::binary);
-            if (!fout) throw InputError("cannot write '" + c.out + "'", "file_error");
+            if (!fout) throw InputError(cannot_write(c.out), "file_error");
         }
 #ifdef _WIN32
         if (c.out.empty()) _setmode(_fileno(stdout), _O_BINARY);  // \n line ends, as KaKs_Calculator's files
 #endif
         std::ostream& os = c.out.empty() ? std::cout : fout;
         os << (c.compat ? COMPAT_HEADER : TIDY_HEADER);
-        long n_pairs = 0, n_status[kaks::STATUS_COUNT] = {}, n_unconverged = 0;
+        long n_pairs = 0, n_status[kaks::STATUS_COUNT] = {}, n_unconverged = 0, n_unequal = 0, n_protein_like = 0;
         std::string first_error;
         auto read_batch = [&](std::vector<Pair>& b) {
             size_t nt = 0;
@@ -530,13 +661,25 @@ int kaks_main(const std::string& sub, const std::vector<std::string>& argv) {
                 return;
             }
             kaks::Prepared prep = kaks::prepare(p.row1(), p.row2(), *code);
-            for (Method m : methods) p.res.push_back(kaks::compute(prep, m, *code, c.opt));
+            bool estimate = false;
+            for (Method m : methods) {
+                p.res.push_back(kaks::compute(prep, m, *code, c.opt));
+                const Status st = p.res.back().status;
+                estimate = estimate || (st != Status::error && st != Status::no_data);
+            }
+            if (!estimate) {   // for the hint at the end of a run without any estimate
+                p.unequal = p.row1().size() != p.row2().size();
+                p.protein_like = looks_like_protein(p.row1()) || looks_like_protein(p.row2());
+            }
         };
         auto emit = [&](std::vector<Pair>& b) {
             std::string buf;
             for (Pair& p : b) {
                 ++n_pairs;
-                for (const Result& r : p.res) {
+                if (p.unequal) ++n_unequal;
+                if (p.protein_like) ++n_protein_like;
+                for (Result& r : p.res) {
+                    if (c.flags.on()) c.flags.apply(r.status, r.note, (long)r.codons_compared, r.ks);
                     ++n_status[(int)r.status];
                     if (!r.converged) ++n_unconverged;
                     if (r.status == Status::error) {
@@ -547,15 +690,20 @@ int kaks_main(const std::string& sub, const std::vector<std::string>& argv) {
                 }
             }
             os << buf;
-            if (!os) throw InputError("write error on " + (c.out.empty() ? std::string("stdout") : c.out), "file_error");
+            if (!os) throw InputError(write_error(c.out), "file_error");
         };
         run_ordered<Pair>(read_batch, work, emit, c.jobs);
         os.flush();
-        if (!os) throw InputError("write error", "file_error");
+        if (!os) throw InputError(write_error(c.out), "file_error");
+        if (fout.is_open()) {
+            fout.close();   // (a full disk can show only here)
+            if (!fout) throw InputError(write_error(c.out), "file_error");
+        }
         if (!c.quiet) {
             std::cerr << prog << ": " << n_pairs << " pair(s), " << methods.size() << " method(s): " << n_status[0]
                       << " ok, " << n_status[1] << " warning, " << n_status[2] << " not_converged, " << n_status[3]
                       << " saturated, " << n_status[4] << " no_data, " << n_status[5] << " error\n";
+            if (c.flags.on()) std::cerr << prog << ": " << c.flags.summary() << "\n";
             if (n_unconverged > 0)
                 std::cerr << prog << ": warning: " << n_unconverged << " result(s): the YN/MYN iteration did not "
                           << "converge, so there is no estimate: Ka and Ks are NA"
@@ -568,6 +716,33 @@ int kaks_main(const std::string& sub, const std::vector<std::string>& argv) {
                           << (c.compat ? " and were left out" : " (status error)") << "; first: " << first_error
                           << "\n";
         }
+        // No estimate at all, for reasons that lie in the input (every result is error or no_data): the usual
+        // causes are a protein file or sequences that are not aligned. Exit status 2 and one line that says so
+        // (also with -q: it is the reason for the exit status), so a script does not take the table for a result.
+        long n_results = 0;
+        for (int k = 0; k < kaks::STATUS_COUNT; ++k) n_results += n_status[k];
+        const bool nothing = n_results > 0 && n_status[4] + n_status[5] == n_results;
+        const char* codon_hint =
+            "Ka/Ks needs a codon alignment (aligned coding DNA): make one from a protein alignment and the coding "
+            "sequences with `coal PROTEIN_ALN CDS.fasta -o codon.fasta`, or start from the coding sequences with "
+            "`coal pipeline`";
+        if (nothing) {
+            std::cerr << prog << ": error: none of the " << n_pairs << " pair(s) has an estimate (" << n_status[5]
+                      << " result(s) error, " << n_status[4] << " no_data). ";
+            if (n_protein_like * 2 >= n_pairs)
+                std::cerr << "The input looks like protein sequences (letters that no nucleotide code has). "
+                          << codon_hint;
+            else if (n_unequal * 2 >= n_pairs)
+                std::cerr << "The two sequences of " << n_unequal << " pair(s) differ in length, so the input is "
+                          << "not an alignment. " << codon_hint;
+            else
+                std::cerr << "Check that the input is a codon alignment of the pairs (docs/kaks.md, \"Input\")";
+            std::cerr << "\n";
+            return 2;
+        }
+        if (!c.quiet && n_unequal > 0)
+            std::cerr << prog << ": warning: the two sequences of " << n_unequal << " pair(s) differ in length: "
+                      << "is the input aligned? " << codon_hint << "\n";
         return 0;
     } catch (const InputError& e) {
         std::cerr << prog << ": error: " << e.what() << "\n";

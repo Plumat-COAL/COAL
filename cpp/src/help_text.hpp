@@ -69,5 +69,16 @@ Batch:
                         = one per CPU core; default: one after the other),
                         each job's messages printed together when it ends
 
+Other commands (`coal COMMAND --help`):
+  coal kaks        Ka/Ks for pairs of aligned coding sequences, in KaKs_Calculator's format
+  coal dnds        dN/dS for pairs of aligned coding sequences, as a tidy table
+  coal pipeline    coding sequences in, dN/dS table out (pairs | clusters | install)
+  coal translate   coding sequences to proteins (a step of the pipeline)
+  coal codon-dnds  protein alignment, codon alignment and Ka/Ks for groups (the pipeline's engine)
+  coal cite        what to cite for what you ran
+  coal help        this help; `coal help COMMAND` is `coal COMMAND --help`
+  coal --cpp-path  where the C++ engine coal-cpp is (Ka/Ks and the pipeline need it)
+pipeline, cite and help are commands of `coal` (Python), not of coal-cpp.
+
 Every option in detail: README.md (https://github.com/plumat-coal/COAL).
 )COALHELP";

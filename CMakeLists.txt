@@ -6,7 +6,11 @@ cmake_minimum_required(VERSION 3.16)
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND (NOT DEFINED CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL ""))
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type (Release, Debug, RelWithDebInfo, MinSizeRel)")
 endif()
-project(coal_cpp VERSION 0.5.0 LANGUAGES CXX)
+project(coal_cpp VERSION 0.6.0 LANGUAGES CXX)
+# The version the programs and <coal/version.hpp> report: the one of src/coal/__init__.py. project(VERSION) takes
+# digits only, so a development tree (0.6.0.dev0) or a release candidate has the full string here
+# (tests/test_feature_combinations.py checks both; scripts/release_version.py).
+set(COAL_VERSION_FULL "0.6.0.dev0")
 
 # coal-cpp: C++17, standard library only. Builds with MSVC, Clang and GCC (Windows, macOS, Linux).
 #   cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release
@@ -25,6 +29,10 @@ endif()
 option(COAL_WARNINGS_AS_ERRORS "Treat compiler warnings as errors (for CI)" OFF)
 option(COAL_BUILD_CLI "Build the coal-cpp command-line tool" ${COAL_TOP_LEVEL})
 option(COAL_BUILD_TOOLS "Build coal-cpp-dump (test helper used by tests/test_cpp_*.py)" ${COAL_TOP_LEVEL})
+# Test hooks (docs/development.md "Test hooks"): COAL_TEST_* environment variables with which the tests stop
+# coal-cpp at a chosen point or line up several runs. OFF, they are not in the binary at all: release builds,
+# wheels and packages are built without. The test builds of CI and a local build for the test suite switch it ON.
+option(COAL_TEST_HOOKS "Compile the COAL_TEST_* test hooks into coal-cpp (test builds only)" OFF)
 option(COAL_INSTALL "Generate the install rules (coal-cpp, coal_core, headers, CMake package)" ${COAL_TOP_LEVEL})
 
 if(COAL_TOP_LEVEL)
@@ -53,7 +61,7 @@ endforeach()
 configure_file(cpp/src/version.hpp.in "${COAL_GEN_INCLUDE}/coal/version.hpp" @ONLY)
 
 add_library(coal_core STATIC cpp/src/tables.cpp cpp/src/core.cpp cpp/src/seqio.cpp cpp/src/json.cpp cpp/src/report.cpp
-            cpp/src/kaks.cpp cpp/src/align.cpp cpp/src/dnds.cpp)
+            cpp/src/kaks.cpp cpp/src/kaks_comeron.cpp cpp/src/kaks_li.cpp cpp/src/align.cpp cpp/src/dnds.cpp)
 add_library(coal::core ALIAS coal_core)
 set_target_properties(coal_core PROPERTIES EXPORT_NAME core OUTPUT_NAME coal_core)
 target_compile_features(coal_core PUBLIC cxx_std_17)
@@ -71,6 +79,10 @@ if(COAL_BUILD_CLI)
                  cpp/src/dnds_cli.cpp)
   target_include_directories(coal-cpp PRIVATE cpp/src)
   target_link_libraries(coal-cpp PRIVATE coal_core Threads::Threads)
+  if(COAL_TEST_HOOKS)
+    target_compile_definitions(coal-cpp PRIVATE COAL_TEST_HOOKS)
+    message(STATUS "coal-cpp: test hooks compiled in (COAL_TEST_HOOKS=ON): not a build to release")
+  endif()
   # pairwise protein alignment for the codon step (cpp/src/align.hpp, docs/alignment.md)
   add_executable(coal-cpp-align cpp/src/align_main.cpp)
   target_include_directories(coal-cpp-align PRIVATE cpp/src)

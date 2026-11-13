@@ -16,6 +16,13 @@ namespace coal {
 // Thrown when stdout is a closed pipe: the caller exits 141 without a message.
 struct BrokenPipe {};
 
+// Test hooks (docs/development.md "Test hooks"): compiled only into builds configured with -DCOAL_TEST_HOOKS=ON
+// (CI and local test builds; never release builds, wheels or packages), and then acting only while COAL_TEST_HOOKS=1
+// is in the environment as well. The value of the hook variable `name`, or nullptr.
+#ifdef COAL_TEST_HOOKS
+const char* test_hook_env(const char* name);
+#endif
+
 // Signal handlers (SIGTERM, SIGHUP, SIGINT; SIGPIPE ignored so writes fail with EPIPE instead).
 void install_signal_handlers();
 // Temp files removed by the signal handlers (and by unregister_temp's caller as usual).
@@ -52,6 +59,16 @@ struct OutTarget {
     bool existing = false;  // a regular file exists there
     bool direct = false;    // write in place (FIFO, device, a file with other hard links)
 };
+// A file created anew for writing, never written through: whatever has this name (a leftover of an earlier run,
+// or a symbolic link, which is removed and not followed) goes first, then the file is created with
+// O_CREAT | O_EXCL | O_NOFOLLOW (Windows: _O_EXCL; it has no O_NOFOLLOW). The descriptor, or -1 with errno set.
+int open_new_file(const std::string& path);
+// write(2) until all is written; false with errno set.
+bool write_fd(int fd, const char* data, size_t n);
+// close(2); false with errno set when the system reports an error only now (a full disk on some file systems).
+bool close_fd_checked(int fd);
+// rename(tmp, path), replacing a file or symbolic link at path (never following it). False with errno set.
+bool replace_file(const std::string& tmp, const std::string& path);
 // Checks -o PATH before any work: throws CoalError for a symlink loop or an unusable folder.
 OutTarget resolve_output(const std::string& out);
 // "cannot write <out>: <reason in plain words>" (pipeline.py _output_error); out "" = stdout's temp file.
@@ -77,9 +94,10 @@ int write_json_file(const std::string& path, const std::function<void(std::ostre
 // Gives `tmp` the permissions `real` has (existing file) before it replaces it.
 void copy_mode(const std::string& real, const std::string& tmp);
 
-// Creates `<real>.coal-lock` with this process's id (registered for the signal handlers) and returns its path, or
-// throws CoalError when another live COAL process holds it: one run at a time per output file (pipeline.py
-// take_output_lock). A lock whose process is gone is replaced.
+// Creates `<real>.coal-lock` for this process ("<pid> <host> <start> <token>", the Python engine's format;
+// registered for the signal handlers) and returns its path, or throws CoalError when another COAL process holds
+// it, here or on another machine: one run at a time per output file (pipeline.py take_output_lock). A lock whose
+// process is gone is replaced, by exactly one of the runs that find it. `real`: resolve_output()'s real path.
 std::string take_output_lock(const std::string& real, const std::string& name);
 void release_output_lock(const std::string& path);
 

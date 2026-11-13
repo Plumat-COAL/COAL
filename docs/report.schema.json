@@ -9,7 +9,7 @@
                "methods_text"],
   "properties": {
     "schema": {"const": "coal.report/1"},
-    "coal_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+((a|b|rc)[0-9]+)?$"},
+    "coal_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+((a|b|rc)[0-9]+|\\.dev[0-9]+)?$", "description": "the COAL version; X.Y.Z.devN is a build of the development tree between releases"},
     "source": {"const": "coal"},
     "engine": {"enum": ["coal-python", "coal-cpp"]},
     "command": {"type": "string"},

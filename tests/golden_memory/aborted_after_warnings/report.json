@@ -1,6 +1,6 @@
 {
  "schema": "coal.report/1",
- "coal_version": "0.5.0",
+ "coal_version": "0.6.0.dev0",
  "source": "coal",
  "engine": "coal-python",
  "command": "coal pep.fasta nuc.fasta -o out.fa",

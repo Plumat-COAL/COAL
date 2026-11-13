@@ -18,6 +18,8 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "tests"))
+from cpp_hooks import check_command  # noqa: E402  (coal-cpp without test hooks: the test is skipped)
 SRC = ROOT / "src"
 TIMEOUT = 60
 WINDOWS = os.name == "nt"
@@ -200,6 +202,7 @@ class TestReportPath(EngineCase):
                     if f.name.startswith(("o.fa", "r.json")):
                         f.unlink()
                 env = self.env(COAL_TEST_HOOKS="1", COAL_TEST_PAUSE_IN_REPORT="1")
+                check_command(cmd, env)
                 p = subprocess.Popen([*cmd, "p.fa", "n.fa", "-o", "o.fa", "--report", "r.json"], cwd=self.d, env=env,
                                      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
                                      text=True)
@@ -429,6 +432,7 @@ def interrupt(cmd, cwd, after=2, extra_env=None):
     env = {**os.environ, "PYTHONPATH": str(SRC), "COAL_ENGINE": "python", "COAL_BATCH_NT": "20000",
            "COAL_CHECKPOINT_EVERY": "0", "COAL_TEST_HOOKS": "1", "COAL_TEST_PAUSE_AFTER_CHECKPOINT": str(after),
            **(extra_env or {})}
+    check_command(cmd, env)
     p = subprocess.Popen(cmd, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                          stderr=subprocess.PIPE, text=True)
     dog = threading.Timer(60, p.kill)

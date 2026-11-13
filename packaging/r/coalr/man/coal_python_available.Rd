@@ -15,7 +15,7 @@ coal_python_available(python = NULL)
 }
 \description{
 \code{TRUE} when \pkg{reticulate} is installed and its Python can import \code{coal.dnds_pipeline} (the Python package
-\code{coal-align}, 0.5 or later). Never errors.
+\code{coal-align}, 0.6 or later). Never errors.
 }
 \details{
 Which Python: the one \pkg{reticulate} already runs; else \code{python}; else the one reticulate finds

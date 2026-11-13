@@ -1,6 +1,7 @@
 // Vendored from COAL cpp/src/dnds.hpp by scripts/sync_r_sources.py. Do not edit here: edit cpp/src and sync.
 // Licence: GPL-3.0-only, as COAL (https://github.com/Plumat-COAL/COAL); copyright and third-party notices
-// (KaKs_Calculator 2.0 and PAML for kaks.cpp / kaks.hpp): inst/COPYRIGHTS of this package.
+// (KaKs_Calculator 2.0 and PAML for kaks.cpp / kaks.hpp, libsequence for kaks_comeron.cpp, seqinr for
+// kaks_li.cpp): inst/COPYRIGHTS of this package.
 // The one-step dN/dS core: coding sequences (CDS) -> translation -> protein alignment -> codon alignment ->
 // Ka/Ks, for a pair of genes or for a group (cluster) of genes. It ties together tables.hpp (genetic codes),
 // align.hpp (pairwise alignment, DIAMOND-hit expansion), core.hpp (codon threading) and kaks.hpp (Ka/Ks).
@@ -78,6 +79,13 @@ struct Options {
     AlignParams align;               // for two-member groups without rows, and the flanks of a local hit
     Flanks flanks = Flanks::Align;   // how a local hit's unaligned ends are completed
     kaks::Options kaks;
+    // The reference flavours of Comeron and Li (kaks::ComeronFlavour::gestimator, kaks::LiFlavour::seqinr) compare
+    // stop codons when the rows hold them. The codon rows made here end before a terminal stop codon. true: for
+    // those two flavours, a pair of genes that both end in a stop codon is compared with these two codons as
+    // its last column, which is what a pipeline gives that translates the stop codon to '*', aligns it and
+    // threads the codons (orthologr 0.4.3 with PAL2NAL). false (default): the pair ends before the stop
+    // codons. No effect on the other methods and flavours, which never compare stop codons.
+    bool compare_terminal_stops = false;
 };
 
 struct MemberResult {

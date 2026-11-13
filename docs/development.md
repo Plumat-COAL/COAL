@@ -16,6 +16,73 @@ difference, help-text regeneration): [CONTRIBUTING.md](../CONTRIBUTING.md). The 
 versioning promise: [python-api.md](python-api.md); the run report's fields and JSON Schema:
 [report-schema.md](report-schema.md) (`tests/test_report_schema.py` validates both engines' reports against it).
 
+## Test hooks
+
+Some tests have to stop a run at a chosen point (to kill it there), or to make several runs reach the output lock
+in the same instant. They do that with environment variables named `COAL_TEST_*`. None of them is part of COAL's
+interface, and none does anything in an ordinary run.
+
+**`coal-cpp`.** The hooks are compiled in only when the build is configured with `-DCOAL_TEST_HOOKS=ON` (a CMake
+option, `OFF` by default). Release builds, the wheels' binaries, the Bioconda build and the desktop app's binary
+are built without: their `coal-cpp` does not contain the code and never reads the variables. The test builds of CI
+(`ci.yml` job `cpp`, the sanitizer job of `nightly.yml`) and a local build for the test suite switch the option on:
+
+```
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCOAL_TEST_HOOKS=ON && cmake --build build --config Release
+```
+
+Even in such a build a hook acts only while `COAL_TEST_HOOKS=1` is set in the environment as well.
+
+| Variable | Effect (test builds of `coal-cpp`) | Python engine |
+| --- | --- | --- |
+| `COAL_TEST_HOOKS=1` | switches the hooks below on | the same variable (`pipeline._test_hooks`) |
+| `COAL_TEST_HOOKS=probe` | the binary prints `coal-cpp: test hooks compiled in` and exits 0: how the tests ask a binary | none |
+| `COAL_TEST_PAUSE_AFTER_CHECKPOINT=k` | sleeps after the k-th checkpoint | the same variable |
+| `COAL_TEST_PAUSE_BEFORE_CHECKPOINT=1` | sleeps before the first checkpoint, partial files written | none |
+| `COAL_TEST_PAUSE_IN_REPORT=1` | sleeps while the report's temporary file exists | the same variable (`report.py`) |
+| `COAL_TEST_LOCK_START_AT=<ms since the epoch>` | waits until then before it takes the output lock | none (the tests pass the time to their own starter) |
+| `COAL_TEST_HOLD_LOCK_UNTIL=<path>` | holds the output lock until that file exists, then checks the lock is still its own | none |
+| `COAL_TEST_LOCK_BEFORE_TAKEOVER_UNTIL=<file>` | between judging a lock stale and replacing it: creates `<file>.waiting`, then waits until `<file>` exists (at most 60 s), so a test can act inside the window without a fixed sleep | |
+| `COAL_TEST_LOCK_BEFORE_TAKEOVER_MS=<ms>` | waits between judging a lock stale and replacing it | `pipeline._before_takeover`, `pipeline._in_takeover` (attributes a test sets) |
+| `COAL_TEST_UNLINK_FAILS=N` | the first N removals of lock, guard and temporary files fail as on Windows while another process has the file open | `pipeline._unlink_fails` (an attribute a test sets) |
+| `COAL_TEST_DNDS_FAIL_AFTER_GROUPS=k` | `coal-cpp codon-dnds` fails with a write error when k groups have been written (what it wrote so far is flushed first): a stage that dies in the middle, for `tests/test_pipeline_atomic.py` | none |
+
+**Python engine.** Python has no build step to leave the hooks out of, so the three it reads from the environment
+(`COAL_TEST_PAUSE_AFTER_CHECKPOINT` in `pipeline.py`, `COAL_TEST_PAUSE_IN_REPORT` in `report.py`, both only with
+`COAL_TEST_HOOKS=1`) stay in the installed package: test-only, not an interface, and they may change without
+notice. The other Python hooks are module attributes that only a test in the same process can set.
+
+**Variables that are not hooks.** `COAL_TEST_DIAMOND` (the DIAMOND binary the tests use), `COAL_TEST_SLOW_FACTOR`
+(longer time limits in the app's tests) and `COAL_LOCK_RACE_TRIALS` are read by the tests only, not by COAL.
+
+**Tests and binaries without hooks.** A test that needs a hook asks the binary first (`tests/cpp_hooks.py`). With a
+`coal-cpp` that has none it is skipped with that reason; when `COAL_REQUIRE_CPP` is set (CI) it fails instead, so
+a test build without the option cannot pass unnoticed. `COAL_ALLOW_NO_TEST_HOOKS=1` turns that failure back into
+a skip, for running the suite against a release binary on purpose.
+
+## A genetic code per gene (design note)
+
+`coal pipeline` has one genetic code per run (`-c`). A per-gene code (`--code-map TSV`: record ID, NCBI table)
+was evaluated on 2026-11-13 and **not built**, because the engine has no cheap and correct place for it yet:
+
+- `coal-cpp translate` takes one `-c` for the file, and `coal-cpp codon-dnds` one `dnds::Options::table` for the
+  run: it is used for the protein rows of two-member groups, for threading the codons onto the protein rows
+  (`codon_align` checks every codon against its residue under that table) and by every Ka/Ks method (the
+  site-counting tables of `kaks.cpp` are built per code). The group stream (`G` / `M` / `E` lines) has no field
+  for a code.
+- What a correct implementation needs, end to end: (1) `translate --code-map` (a code per record; the genes table
+  gains a `genetic_code` column); (2) a code on the `G` line of the group stream, with one set of Ka/Ks tables per
+  code in the worker threads (they are built once per run today); (3) the rule for mixed groups: a pair whose two
+  genes have different codes is that pair's `error` (code `mixed_genetic_code`), a cluster with mixed codes is
+  aligned as proteins but only its same-code pairs are estimated; (4) DIAMOND and the MSA tools see proteins, so
+  nothing changes there; (5) `Comeron` / `Li` stay code 1: a pair of another code gets `error` for those methods
+  only; (6) the report records the map as an input and counts pairs per code; (7) the same in coalr
+  (`coal_dnds_pairs(code = )` already takes one code per call) and in the pair table's validation tests, which
+  compare with KaKs_Calculator per code.
+- Until then: the hint of `_Run.code_hint` (genes with internal stops under `-c` that are clean under another
+  table) and the two-run recipe of docs/pipeline.md "Genes of another genetic code". Two runs give exactly what a
+  code map would, for the cost of splitting two files.
+
 ## Two packages
 
 | Package | Folder | What | Depends on |

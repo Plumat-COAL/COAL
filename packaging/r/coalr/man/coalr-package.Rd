@@ -49,9 +49,33 @@ uses \code{/}) is taken as a file name. To pass one sequence that could be mista
 
 \section{Threads and interrupts}{
 
-\code{threads} sets the number of worker threads (default: \code{getOption("coalr.threads", 1L)}; \code{0} = one per hardware
-thread). Results do not depend on it. Worker threads never call into R; a user interrupt (Ctrl-C, Esc) is
+\code{threads} sets the number of worker threads (default: \code{getOption("coalr.threads", 1L)}, that is one thread
+unless the option is set; \code{0} = one per hardware thread). The command line's default is the other way round
+(\verb{-j 0}, every usable CPU), and so is that of \code{\link[=coal_pipeline_pairs]{coal_pipeline_pairs()}} / \code{\link[=coal_pipeline_clusters]{coal_pipeline_clusters()}}
+(\code{threads = 0}), which run the command line's code. Results do not depend on it. Worker threads never call into R; a user interrupt (Ctrl-C, Esc) is
 noticed within about 0.1 s plus the time of the pair each thread is working on.
+}
+
+\section{Command line and R arguments}{
+
+The R functions take the options of the \code{coal} command line under these names:\tabular{lll}{
+   \code{coal} command line \tab In-process (\code{coal_dnds_pairs()}, \code{coal_dnds_clusters()}, \code{coal_kaks()}) \tab Through Python (\code{coal_pipeline_pairs()}, \code{coal_pipeline_clusters()}) \cr
+   \code{-m}, \verb{--method YN} (repeatable) \tab \code{methods = c("YN", "NG")}; \verb{method =} is accepted as well (and is the name in \code{coal_kaks()}, which also accepts \verb{methods =}) \tab \verb{methods =} or \verb{method =} \cr
+   \code{-c}, \verb{--codontable N} \tab \code{code = N} \tab \code{codontable = N} \cr
+   \verb{-j N} (default 0: one per usable CPU) \tab \code{threads = N} (default \code{getOption("coalr.threads", 1L)}: one thread; \code{0} = one per hardware thread) \tab \code{threads = N} (default \code{0}, as the command line) \cr
+   \verb{--min-codons N}, \verb{--max-ds X} \tab \code{min_codons = N}, \code{max_ds = X} \tab \code{min_codons = N}, \code{max_ds = X} \cr
+   \verb{--min-identity P} \tab \code{min_identity = P} (not in \code{coal_kaks()}: it has no protein alignment) \tab \code{min_identity = P} \cr
+   \code{--matrix}, \code{--gap-open}, \code{--gap-extend}, \code{--end-gaps}, \code{--preset}, \code{--max-cells} \tab \code{matrix}, \code{gap_open}, \code{gap_extend}, \code{end_gaps}, \code{preset}, \code{max_cells} \tab the same names \cr
+   \code{--yn-flavour}, \verb{--yn-weighting 0\|1}, \code{--comeron-flavour}, \code{--li-flavour}, \code{--terminal-stops} \tab \code{yn_flavour}, \verb{yn_weighting = FALSE\|TRUE}, \code{comeron_flavour}, \code{li_flavour}, \code{terminal_stops} \tab the same names (\code{yn_weighting = 0L} or \code{1L}) \cr
+   \code{--keep-alignments} \tab \code{keep_alignments = TRUE} (returned as an attribute) \tab \code{keep_alignments = TRUE} (files in \code{out_dir}) \cr
+   \verb{--pairs TSV}, \verb{--clusters TSV} \tab \verb{pairs =} / \verb{clusters =} (a data frame, or what the function documents) \tab \code{pairs = "file"}, \code{clusters = "file"} \cr
+   \code{--max-cluster-size}, \code{--large-clusters}, \code{--pair-sample}, \code{--seed} \tab \code{max_cluster_size}, \code{large_clusters}, \code{pair_sample}, \code{seed} \tab the same names \cr
+   \code{--longest-isoform}, \code{--gene-map}, \code{--ortho}, \code{--aligner}, \code{--sensitivity}, \code{--resume}, ... \tab (no search or isoform handling in process: the pairs or clusters are given) \tab the option with underscores: \code{longest_isoform = TRUE}, \code{gene_map = "file"}, ... \cr
+}
+
+
+The in-process functions return data frames with the columns of the command line's tables; the functions
+through Python read the tables \verb{coal pipeline} wrote.
 }
 
 \seealso{
@@ -79,6 +103,12 @@ Other contributors:
   \item Kristian K Ullrich (kakscalculator2 2.0.1) [contributor]
   \item Beijing Institute of Genomics of CAS (KaKs_Calculator 2.0) [copyright holder]
   \item Ziheng Yang (PAML yn00.c, from which src/coal/kaks.cpp is derived) [contributor, copyright holder]
+  \item Kevin Thornton (libsequence, from which src/coal/kaks_comeron.cpp is derived) [contributor, copyright holder]
+  \item Sarah Scharfenberg (the copy of libsequence in the R package orthologr (gestimator)) [contributor]
+  \item Hajk-Georg Drost (the copy of libsequence in the R package orthologr (gestimator)) [contributor]
+  \item Manolo Gouy (src/kaks.c of the R package seqinr, from which src/coal/kaks_li.cpp is derived) [contributor]
+  \item Jean R. Lobry (R package seqinr) [contributor, copyright holder]
+  \item Delphine Charif (R package seqinr) [contributor]
 }
 
 }

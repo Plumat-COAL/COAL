@@ -110,19 +110,34 @@ check_flag <- function(x, arg) {
   x
 }
 
+# The seven methods of KaKs_Calculator that COAL computes: what "ALL" means. Comeron and Li (which KaKs_Calculator
+# does not have, and which exist for the standard genetic code only) are asked for by name.
+kaks_calculator_methods <- c("NG", "LWL", "MLWL", "LPB", "MLPB", "YN", "MYN")
+
+# Method names as the engine writes them, whatever the case given ("comeron", "C95" -> "Comeron"; "li" -> "Li").
 check_methods <- function(methods) {
+  known <- coalr_info()$methods
   if (!is.character(methods) || !length(methods) || anyNA(methods)) {
-    stop("`methods` must name at least one Ka/Ks method: ", paste(coalr_info()$methods, collapse = ", "),
-         call. = FALSE)
+    stop("`methods` must name at least one Ka/Ks method: ", paste(known, collapse = ", "), call. = FALSE)
   }
   m <- toupper(methods)
-  if (identical(m, "ALL")) return(coalr_info()$methods)
-  bad <- setdiff(m, coalr_info()$methods)
-  if (length(bad)) {
-    stop("method '", bad[1L], "' is not one COAL computes; choose from ",
-         paste(coalr_info()$methods, collapse = ", "), call. = FALSE)
+  if (identical(m, "ALL")) return(kaks_calculator_methods)
+  m[m == "C95"] <- "COMERON"
+  i <- match(m, toupper(known))
+  if (anyNA(i)) {
+    stop("method '", methods[is.na(i)][1L], "' is not one COAL computes; choose from ",
+         paste(known, collapse = ", "), call. = FALSE)
   }
-  unique(m)
+  unique(known[i])
+}
+
+# Comeron and Li are implemented for the standard genetic code only, as their references (gestimator, seqinr).
+check_method_code <- function(methods, code) {
+  m <- intersect(c("Comeron", "Li"), methods)
+  if (length(m) && code != 1L) {
+    stop("method '", m[1L], "' is implemented for the standard genetic code only (code = 1)", call. = FALSE)
+  }
+  invisible(NULL)
 }
 
 # The alignment parameters as the C++ side reads them. preset: NULL, "needle" (the defaults) or "pwalign"
@@ -155,6 +170,63 @@ align_params <- function(matrix, gap_open, gap_extend, end_gaps, max_cells, pres
 }
 
 default_threads <- function() getOption("coalr.threads", 1L)
+
+# min_codons / max_ds of coal_dnds_pairs(), coal_dnds_clusters() and coal_kaks(): the flags of
+# `coal dnds --min-codons N --max-ds X` (cpp/src/kaks_cli.cpp PairFlags), with the same notes. A row that has an
+# estimate (status ok or warning) and fewer than min_codons compared codons, or a dS above max_ds, gets the note
+# appended and status "warning" when it was "ok". No row is dropped and no number changes. Attribute "flagged":
+# how many rows each flag marked.
+check_flags <- function(min_codons, max_ds, min_identity = NULL) {
+  min_codons <- check_count(min_codons, "min_codons", 0L)
+  if (!is.null(min_identity) && (!is.numeric(min_identity) || length(min_identity) != 1L || is.na(min_identity) ||
+                                 !is.finite(min_identity) || min_identity <= 0 || min_identity > 100)) {
+    stop("`min_identity` must be NULL (off) or one percentage, above 0 and at most 100", call. = FALSE)
+  }
+  if (!is.null(max_ds) && (!is.numeric(max_ds) || length(max_ds) != 1L || is.na(max_ds) || !is.finite(max_ds) ||
+                           max_ds <= 0)) {
+    stop("`max_ds` must be NULL (off) or one number greater than 0", call. = FALSE)
+  }
+  list(min_codons = min_codons, max_ds = max_ds, min_identity = min_identity)
+}
+
+# `methods` and `method` name the same argument (the command line's -m / --method; coal_kaks() has `method`, the
+# other functions `methods`): either is accepted everywhere. given: whether the function's own argument was given.
+pick_methods <- function(own, other, given, own_name, other_name) {
+  if (is.null(other)) return(own)
+  if (given && !identical(toupper(as.character(own)), toupper(as.character(other)))) {
+    stop("give the Ka/Ks methods once, as `", own_name, "` or as `", other_name, "` (both were given and differ)",
+         call. = FALSE)
+  }
+  other
+}
+
+flag_pairs <- function(out, flags) {
+  if (flags$min_codons == 0L && is.null(flags$max_ds) && is.null(flags$min_identity)) return(out)
+  has <- out$status %in% c("ok", "warning")
+  add <- function(rows, text) {
+    if (!any(rows)) return(invisible())
+    out$note[rows] <<- ifelse(nzchar(out$note[rows]), paste0(out$note[rows], "; ", text), text)
+    out$status[rows & out$status == "ok"] <<- "warning"
+  }
+  flagged <- integer(0)
+  if (flags$min_codons > 0L) {
+    rows <- has & !is.na(out$codons_compared) & out$codons_compared < flags$min_codons
+    add(rows, sprintf("fewer than %d codons compared", flags$min_codons))
+    flagged <- c(flagged, min_codons = sum(rows))
+  }
+  if (!is.null(flags$max_ds)) {
+    rows <- has & !is.na(out$dS) & out$dS > flags$max_ds
+    add(rows, paste0("dS above ", sprintf("%.6g", flags$max_ds)))
+    flagged <- c(flagged, max_ds = sum(rows))
+  }
+  if (!is.null(flags$min_identity) && "prot_identity" %in% names(out)) {
+    rows <- has & !is.na(out$prot_identity) & out$prot_identity < flags$min_identity
+    add(rows, paste0("protein identity below ", sprintf("%.6g", flags$min_identity), "%"))
+    flagged <- c(flagged, min_identity = sum(rows))
+  }
+  attr(out, "flagged") <- flagged
+  out
+}
 
 PAIR_COLUMNS <- c("seq1", "seq2", "method", "dN", "dS", "dNdS", "SE_dN", "SE_dS", "N_sites", "S_sites", "Nd", "Sd",
                   "codons_compared", "prot_aln_length", "prot_identity", "status", "note")

@@ -1,6 +1,7 @@
 // Vendored from COAL cpp/src/tables.cpp by scripts/sync_r_sources.py. Do not edit here: edit cpp/src and sync.
 // Licence: GPL-3.0-only, as COAL (https://github.com/Plumat-COAL/COAL); copyright and third-party notices
-// (KaKs_Calculator 2.0 and PAML for kaks.cpp / kaks.hpp): inst/COPYRIGHTS of this package.
+// (KaKs_Calculator 2.0 and PAML for kaks.cpp / kaks.hpp, libsequence for kaks_comeron.cpp, seqinr for
+// kaks_li.cpp): inst/COPYRIGHTS of this package.
 #include "tables.hpp"
 
 #include <array>

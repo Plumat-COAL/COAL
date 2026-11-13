@@ -102,7 +102,11 @@ test_that("coal_read_fasta reads what it should", {
   expect_error(coal_read_fasta(tempfile()), "no such file")
   writeLines("ATG", f)
   expect_error(coal_read_fasta(f), "not a FASTA file")
-  expect_identical(coal_info()$coal_version, as.character(utils::packageVersion("coalr")))
+  # the package version is COAL's; a development tree (COAL 0.6.0.dev0) is 0.6.0.9000 in R's form
+  v <- coal_info()$coal_version
+  dev <- regmatches(v, regexec("^([0-9.]+)\\.dev([0-9]+)$", v))[[1]]
+  if (length(dev) == 3) v <- paste0(dev[2], ".", 9000 + as.integer(dev[3]))
+  expect_identical(v, as.character(utils::packageVersion("coalr")))
 })
 
 test_that("one string that looks like a path but names no file is 'file not found', never a sequence", {

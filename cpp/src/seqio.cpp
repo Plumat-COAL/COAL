@@ -56,6 +56,36 @@ std::string open_error(const std::string& path) {
     return "cannot open '" + path + "': " + why;
 }
 
+static std::string errno_text(int e, const std::string& path) {
+    std::error_code ec;
+    if (!path.empty() && std::filesystem::is_directory(path, ec)) return "it is a folder, not a file";
+    return e ? std::strerror(e) : "the system gave no reason";
+}
+
+std::string cannot_write(const std::string& path) {
+    const int e = errno;
+    return "cannot write '" + path + "': " + errno_text(e, path);
+}
+
+std::string write_error(const std::string& path) {
+    const int e = errno;
+    return "write error on " + (path.empty() ? std::string("standard output") : "'" + path + "'") + ": " +
+           errno_text(e, path);
+}
+
+void refuse_gzip(const std::string& path) {
+    std::FILE* f = std::fopen(path.c_str(), "rb");
+    if (!f) return;  // (the reader reports a file that cannot be opened)
+    unsigned char magic[2] = {0, 0};
+    const size_t n = std::fread(magic, 1, 2, f);
+    std::fclose(f);
+    if (n == 2 && magic[0] == 0x1f && magic[1] == 0x8b)
+        throw InputError("'" + path + "' is gzip-compressed: decompress it first (gunzip -k '" + path +
+                             "'). coal-cpp reads plain text only; the `coal` command and `coal pipeline` "
+                             "decompress .gz inputs themselves",
+                         "input_format");
+}
+
 bool py_space(unsigned char c) {
     return c == ' ' || (c >= 9 && c <= 13) || (c >= 0x1c && c <= 0x1f);
 }

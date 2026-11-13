@@ -7,6 +7,17 @@
 //   * The main thread polls for a user interrupt (Ctrl-C / Esc) about every 100 ms while workers run, stops them
 //     after the item each is working on, and only then signals the interrupt.
 //   * Nothing is written to files, stdout or stderr, and no process is started.
+
+// No floating-point contraction here either (as in coal/kaks.cpp, which says why): the quartiles of the cluster
+// summary are interpolated with a * b + c, and R's Makeconf decides the flags of this file.
+#if defined(__clang__)
+#pragma STDC FP_CONTRACT OFF
+#elif defined(__GNUC__)
+#pragma GCC optimize("fp-contract=off")
+#elif defined(_MSC_VER)
+#pragma fp_contract(off)
+#endif
+
 #include <Rcpp.h>
 
 #include <algorithm>
@@ -173,8 +184,17 @@ AlignParams need_align(const Rcpp::List& a) {
     return p;
 }
 
-kaks::Options need_kaks(const std::string& flavour, bool weighting) {
+kaks::Options need_kaks(const std::string& flavour, bool weighting, const std::string& comeron_flavour,
+                        const std::string& li_flavour) {
     kaks::Options o;
+    if (comeron_flavour == "gestimator")
+        o.comeron_flavour = kaks::ComeronFlavour::gestimator;
+    else if (comeron_flavour != "coal")
+        Rcpp::stop("comeron_flavour must be \"coal\" or \"gestimator\"");
+    if (li_flavour == "seqinr")
+        o.li_flavour = kaks::LiFlavour::seqinr;
+    else if (li_flavour != "coal")
+        Rcpp::stop("li_flavour must be \"coal\" or \"seqinr\"");
     if (flavour == "paml")
         o.yn_flavour = kaks::Flavour::paml;
     else if (flavour != "kaks")
@@ -222,7 +242,9 @@ struct Task {
 Rcpp::List coalr_dnds(SEXP cds, SEXP member_ids, Rcpp::IntegerVector members, SEXP rows,
                       Rcpp::IntegerVector unit_start, Rcpp::IntegerVector unit_pairs, Rcpp::IntegerVector pl_start,
                       Rcpp::IntegerVector pl_i, Rcpp::IntegerVector pl_j, Rcpp::CharacterVector methods, int table,
-                      int threads, Rcpp::List align, std::string yn_flavour, bool yn_weighting, bool keep_alignments) {
+                      int threads, Rcpp::List align, std::string yn_flavour, bool yn_weighting,
+                      std::string comeron_flavour, std::string li_flavour, bool compare_terminal_stops,
+                      bool keep_alignments) {
     if (TYPEOF(cds) != STRSXP || TYPEOF(member_ids) != STRSXP) Rcpp::stop("internal: cds and ids must be character");
     const bool have_rows = !Rf_isNull(rows);
     if (have_rows && (TYPEOF(rows) != STRSXP || XLENGTH(rows) != members.size()))
@@ -238,7 +260,8 @@ Rcpp::List coalr_dnds(SEXP cds, SEXP member_ids, Rcpp::IntegerVector members, SE
     opt.table = table;
     need_code(table);
     opt.align = need_align(align);
-    opt.kaks = need_kaks(yn_flavour, yn_weighting);
+    opt.kaks = need_kaks(yn_flavour, yn_weighting, comeron_flavour, li_flavour);
+    opt.compare_terminal_stops = compare_terminal_stops;
     const std::vector<kaks::Method> ms = opt.methods;
     const size_t nm = ms.size();
     const int nthreads = resolve_threads(threads);
@@ -422,7 +445,8 @@ Rcpp::List coalr_dnds(SEXP cds, SEXP member_ids, Rcpp::IntegerVector members, SE
     for (kaks::Method m : kaks::output_order()) method_names.push_back(kaks::method_name(m));
     for (int s = 0; s < kaks::STATUS_COUNT; ++s)   // the codes index status_names
         status_names.push_back(kaks::status_name((kaks::Status)s));
-    // Method's enumerators are in output order (NG, LWL, MLWL, LPB, MLPB, YN, MYN): the codes index method_names.
+    // Method's enumerators are in output order (NG, LWL, MLWL, LPB, MLPB, YN, MYN, Comeron, Li): the codes index
+    // method_names.
     std::vector<std::string> enum_names(method_names.size());
     for (kaks::Method m : kaks::output_order()) enum_names[(size_t)(int)m] = kaks::method_name(m);
 
@@ -543,12 +567,12 @@ Rcpp::List coalr_summary(Rcpp::IntegerVector cluster, Rcpp::IntegerVector method
 // Ka/Ks for pairs of codon-aligned sequences. One row per pair and method.
 // [[Rcpp::export(rng = false)]]
 Rcpp::List coalr_kaks(SEXP a, SEXP b, Rcpp::CharacterVector methods, int table, int threads, std::string yn_flavour,
-                      bool yn_weighting) {
+                      bool yn_weighting, std::string comeron_flavour, std::string li_flavour) {
     if (TYPEOF(a) != STRSXP || TYPEOF(b) != STRSXP || XLENGTH(a) != XLENGTH(b))
         Rcpp::stop("internal: the two alignments must be character vectors of one length");
     const std::vector<kaks::Method> ms = need_methods(methods);
     const GeneticCode* code = need_code(table);
-    const kaks::Options ko = need_kaks(yn_flavour, yn_weighting);
+    const kaks::Options ko = need_kaks(yn_flavour, yn_weighting, comeron_flavour, li_flavour);
     const size_t n = (size_t)XLENGTH(a), nm = ms.size();
     const int nthreads = resolve_threads(threads);
     const size_t total = n * nm;

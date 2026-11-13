@@ -20,6 +20,7 @@ destination when everything succeeded, so an error never leaves partial output
 """
 from __future__ import annotations
 
+import atexit
 import errno
 import os
 import re
@@ -787,24 +788,69 @@ def _pid_alive(pid: int) -> bool:
 # ------------------------------------------------------------------------------------------------ the output lock
 #
 # `<real output>.coal-lock`, one line: "<pid> <host> <start> <token>\n".
-#   pid    the process id (the first field, and all that COAL up to 0.5.0 and coal-cpp write or read);
-#   host   the machine's name: a process id says nothing on another machine, so a lock from another host counts
-#          as held and is never replaced automatically;
+#   pid    the process id (the first field, and all that COAL up to 0.5.0 wrote or read);
+#   host   the machine's name (_hostname: one source and one spelling for both engines): a process id says nothing
+#          on another machine, so a lock from another host counts as held and is never replaced automatically;
 #   start  when that process started (Linux: field 22 of /proc/<pid>/stat; "-" where that is not cheap to get):
 #          a process id that is alive but started at another time is a different process (the id was reused);
 #   token  random, so that a process recognises exactly its own lock.
 # Fields that are missing (an older lock) are unknown and are judged by the pid alone, as before.
+#
+# A stale lock is replaced under the guard `<lock>.takeover` (the same four fields; _replace_stale_lock). The
+# process that created the guard removes it, on every path. One that is left all the same (the process was killed
+# in that instant, or Windows refused the removal for as long as we retried) is judged like a lock: its process is
+# gone, or it is older than _GUARD_MAX_AGE; then the next run that needs it clears it.
+#
+# Windows: a file that another process has open cannot be removed or renamed (PermissionError, WinError 32)
+# unless it was opened with FILE_SHARE_DELETE, which neither open() nor the C runtime does. The check is per file,
+# not per name: a run that is reading the lock also blocks the removal of the temporary name that is a hard link
+# to it. Runs that start together read each other's lock and guard all the time, so every removal here goes
+# through _remove, which tries again for about 2 s. The reads close their handle before anything is removed.
+# coal-cpp does the same (cpp/src/sysio.cpp, "the output lock").
 
 _held_locks: dict = {}                 # lock path -> the bytes this process wrote into it
 _held_mutex = threading.Lock()
+_GUARD_MAX_AGE = 15                    # seconds; a takeover holds its guard for microseconds (Windows: up to ~2 s)
+_REMOVE_TRIES = 220                    # 20 x 1 ms, then 200 x 10 ms: about 2 s
+_leftovers: set = set()                # files _remove could not remove: tried again at release and at exit
+_unlink_fails = 0                      # test hook (tests only): the next N removals fail as on Windows
 
 
 def _hostname() -> str:
-    try:
-        name = socket.gethostname()
-    except OSError:
-        name = ""
-    return "".join(c if c.isprintable() and not c.isspace() else "_" for c in name) or "-"
+    """The machine's name, the `host` field of a lock. Both engines take it from the same place and spell it the
+    same way (sysio.cpp host_name; docs/pipeline.md "One run per folder"):
+      source    Windows: GetComputerNameExW(ComputerNamePhysicalDnsHostname), the DNS host name of this computer
+                (which is also what socket.gethostname() returns there); elsewhere gethostname(2);
+      spelling  one character per character of the name: printable ASCII (33..126) as it is, any other ASCII
+                character (blanks, control characters) as "_", every character outside ASCII as "?"; at most 255
+                characters; "-" when the system gives no name.
+    Compared with _same_host: exactly, and on Windows without regard to ASCII case."""
+    name = ""
+    if _WINDOWS:
+        try:
+            import ctypes
+            buf = ctypes.create_unicode_buffer(256)
+            n = ctypes.c_ulong(256)
+            if ctypes.windll.kernel32.GetComputerNameExW(5, buf, ctypes.byref(n)):  # ComputerNamePhysicalDnsHostname
+                name = buf.value
+        except (OSError, AttributeError, ValueError):
+            name = ""
+    if not name:
+        try:
+            name = socket.gethostname()
+        except OSError:
+            name = ""
+    if not _WINDOWS:
+        # the bytes gethostname(2) gave, one character per UTF-8 lead byte (as sysio.cpp counts them)
+        raw = os.fsencode(name)
+        name = "".join(chr(c) if c < 0x80 else "\u00bf" for c in raw if not 0x80 <= c < 0xC0)
+    return "".join((c if 32 < ord(c) < 127 else "_") if ord(c) < 128 else "?" for c in name)[:255] or "-"
+
+
+def _same_host(a: str, b: str) -> bool:
+    if _WINDOWS:   # computer names are not case sensitive there (ASCII: the field holds nothing else)
+        return a.encode("ascii", "replace").lower() == b.encode("ascii", "replace").lower()
+    return a == b
 
 
 def _proc_start(pid: int) -> str:
@@ -837,7 +883,7 @@ def _read_lock(path: str):
 def _lock_holder(pid: int, host: str, start: str) -> str | None:
     """Who holds a lock with these fields: None (nobody: its process is gone), "host" (a process on another
     machine, which cannot be checked from here) or "process"."""
-    if host != "-" and host != _hostname():
+    if host != "-" and not _same_host(host, _hostname()):
         return "host"
     if not _pid_alive(pid):
         return None
@@ -850,10 +896,49 @@ def _lock_holder(pid: int, host: str, start: str) -> str | None:
     return "process"
 
 
+def _remove(path: str) -> bool:
+    """Remove a lock, guard or temporary file of this process; True when it is gone. PermissionError is what
+    Windows answers while another process has the file open (see above): tried again for about 2 s; after that
+    the path is remembered and tried again when a lock is released and when the process ends."""
+    global _unlink_fails
+    for k in range(_REMOVE_TRIES):
+        try:
+            if _unlink_fails > 0:
+                _unlink_fails -= 1
+                raise PermissionError(13, "test hook: the file is open in another process", path)
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
+        except PermissionError:
+            if k + 1 < _REMOVE_TRIES:
+                time.sleep(0.001 if k < 20 else 0.01)
+                continue
+            break
+        except OSError:
+            break
+        _leftovers.discard(path)
+        return True
+    if not _leftovers:
+        atexit.register(_remove_leftovers)
+    _leftovers.add(path)
+    return False
+
+
+def _remove_leftovers() -> None:
+    for path in list(_leftovers):
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            continue
+        _leftovers.discard(path)
+
+
 def _create_lock(path: str, raw: bytes) -> bool:
     """Create the lock file with its content in one step (a hard link to a finished temporary file: the lock is
     never seen empty), or, where links are not possible, exclusively and then written. False if it exists."""
-    tmp = f"{path}.{os.getpid()}.{raw.split()[-1].decode('ascii')}.tmp"
+    tmp = f"{path}.{os.getpid()}.{os.urandom(8).hex()}.tmp"
     try:
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
     except FileExistsError:
@@ -871,69 +956,86 @@ def _create_lock(path: str, raw: bytes) -> bool:
             except (OSError, AttributeError, NotImplementedError):
                 linked = None     # no hard links here: the other way below
         finally:
-            try:
-                os.unlink(tmp)
-            except OSError:
-                pass
+            _remove(tmp)
         if linked is not None:
             return linked
-    try:
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
-    except FileExistsError:
-        return False
+    for k in range(51):
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+            break
+        except FileExistsError:
+            return False
+        except PermissionError:
+            # Windows: a name whose file is being deleted (removed, but still open in another process) answers
+            # "access denied" for an instant, not "exists": not an error of the folder yet
+            if not _WINDOWS or k == 50:
+                raise
+            time.sleep(0.01)
     try:
         with os.fdopen(fd, "wb") as fh:
             fh.write(raw)
     except BaseException:  # a signal between creating the lock and writing into it: leave nothing behind
-        try:
-            os.unlink(path)
-        except OSError:
-            pass
+        _remove(path)
         raise
     return True
 
 
 _before_takeover = None   # test hook: called with the lock path before a stale lock is replaced
+_in_takeover = None       # test hook: called with the lock path while this process holds the guard
+
+
+def _clear_leftover_guard(guard: str, g) -> None:
+    """The guard was read as `g` (_read_lock) and is in the way. If it is a leftover (its process is gone, or it
+    is older than _GUARD_MAX_AGE), clear it: moved aside under a unique name (one mover wins), then removed. A
+    guard that was replaced by a live one between the reading and the move is put back."""
+    if g is None:
+        return
+    old = False
+    try:
+        old = time.time() - os.stat(guard).st_mtime > _GUARD_MAX_AGE
+    except OSError:
+        pass
+    if not (old or (g[1] is not None and _lock_holder(g[1], g[2], g[3]) is None)):
+        return
+    aside = f"{guard}.{os.getpid()}.{os.urandom(4).hex()}"
+    try:
+        os.rename(guard, aside)
+    except OSError:
+        return     # another run moved it first (Windows: or has it open; the next round tries again)
+    try:
+        moved = _read_lock(aside)
+        if moved is None or moved[0] != g[0]:   # not the one that was judged: back in place
+            try:
+                os.link(aside, guard)
+            except (OSError, AttributeError, NotImplementedError):
+                pass
+    finally:
+        _remove(aside)
 
 
 def _replace_stale_lock(path: str, raw: bytes) -> None:
     """Remove the lock at `path` if it still holds `raw` (the content that was judged stale). Only one process at
-    a time does this for a path: it first creates `<lock>.takeover` exclusively. Without that, several runs that
-    started together all read the stale id, each removed "the stale lock" and created its own, and the later ones
-    removed the lock an earlier one had just taken: more than one run held the folder."""
+    a time does this for a path: it first creates `<lock>.takeover` exclusively, and removes it when it is done,
+    whatever happened in between. Without that guard, several runs that started together all read the stale id,
+    each removed "the stale lock" and created its own, and the later ones removed the lock an earlier one had just
+    taken: more than one run held the folder."""
     guard = path + ".takeover"
-    mine = f"{os.getpid()} {_hostname()} {_proc_start(os.getpid())}\n".encode("ascii", "replace")
+    mine = (f"{os.getpid()} {_hostname()} {_proc_start(os.getpid())} {os.urandom(8).hex()}\n").encode("ascii", "replace")
     if _before_takeover is not None:
         _before_takeover(path)
     if not _create_lock(guard, mine):
-        # another run is replacing the lock right now (it takes microseconds). A guard whose process is gone, or
-        # one that has been there for 30 s, is a leftover: moved aside under a unique name (one mover wins)
-        g = _read_lock(guard)
-        old = False
-        try:
-            old = time.time() - os.stat(guard).st_mtime > 30
-        except OSError:
-            pass
-        if g is not None and (old or (g[1] is not None and _lock_holder(g[1], g[2], g[3]) is None)):
-            aside = f"{guard}.{os.getpid()}.{os.urandom(4).hex()}"
-            try:
-                os.rename(guard, aside)
-                os.unlink(aside)
-            except OSError:
-                pass
+        # another run is replacing the lock right now (it takes microseconds), or left its guard behind
+        _clear_leftover_guard(guard, _read_lock(guard))
         time.sleep(0.01)
         return
-    try:
-        now = _read_lock(path)
+    try:   # the guard is ours from here on
+        if _in_takeover is not None:
+            _in_takeover(path)
+        now = _read_lock(path)   # (read and closed before the removal)
         if now is not None and now[0] == raw:   # still the stale one: nobody else can have replaced it meanwhile
-            os.unlink(path)
-    except OSError:
-        pass
+            _remove(path)        # left in place, it is judged again in the caller's next round
     finally:
-        try:
-            os.unlink(guard)
-        except OSError:
-            pass
+        _remove(guard)
 
 
 def take_output_lock(real_out: str, name: str) -> str:
@@ -1005,13 +1107,12 @@ def release_output_lock(path: str | None) -> None:
         return
     with _held_mutex:
         raw = _held_locks.pop(path, None)
+    if _leftovers:
+        _remove_leftovers()
     cur = _read_lock(path)
     if cur is None or (raw is not None and cur[0] != raw and cur[1] is not None):
         return
-    try:
-        os.unlink(path)
-    except OSError:
-        pass
+    _remove(path)
 
 
 def _output_error(out_path, e: OSError) -> CoalError:

@@ -1,10 +1,12 @@
 name: Nightly
 
 # The test campaign that finds the bugs the per-push CI does not: a fresh random seed every night (the run number,
-# or the `seed` input of a manual run), so the random comparisons keep covering new inputs. Three independent jobs:
+# or the `seed` input of a manual run), so the random comparisons keep covering new inputs. Four independent jobs:
 #   pal2nal-fuzz   COAL vs the real PAL2NAL v14 (3,000 random cases x 4 formats), the Python engine and coal-cpp
 #   engine-fuzz    coal-cpp vs the Python engine on tests/tools/engine_fuzz.py's wider input space (1,500 cases)
 #   sanitizers     coal-cpp built with ASan + UBSan: the C++ test set and 300 generator cases
+#   tsan           coal-cpp and coal-cpp-align built with ThreadSanitizer: kaks / dnds / codon-dnds -j 4 (all
+#                  methods, Comeron and Li included) and the aligner, each also compared with its -j 1 output
 # A failing fuzz job uploads the differing cases as an artifact (each case folder holds its inputs and args.txt).
 # How to read one and how to run each job locally: CONTRIBUTING.md, "Nightly checks".
 
@@ -187,7 +189,8 @@ jobs:
         shell: bash
         run: |
           # Debug adds only -g, so the -O1 here is the optimisation level that applies (Release's -O3 would win).
-          cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug -DCOAL_WARNINGS_AS_ERRORS=ON \
+          # COAL_TEST_HOOKS=ON: the tests below pause and kill runs through the test hooks (docs/development.md)
+          cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug -DCOAL_WARNINGS_AS_ERRORS=ON -DCOAL_TEST_HOOKS=ON \
             -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -O1 -g" \
             -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
           cmake --build build-asan -j 2
@@ -201,7 +204,12 @@ jobs:
           python -m unittest -v tests.test_differential tests.test_cpp_vs_python tests.test_cpp_cli \
             tests.test_cpp_readers tests.test_cpp_tables tests.test_cpp_pool \
             tests.test_stdin tests.test_robustness tests.test_cpp_error_precedence tests.test_batch \
-            tests.test_kaks tests.test_align tests.test_msa tests.test_dnds_pipeline 2>&1 | tee san-tests.txt
+            tests.test_kaks tests.test_kaks_comeron_li tests.test_align tests.test_msa tests.test_dnds_pipeline \
+            tests.test_short_options tests.test_output_lock \
+            tests.test_pair_table tests.test_kaks_cli_inputs tests.test_kaks_yn_shortcut tests.test_dnds_flags \
+            tests.test_pipeline_order tests.test_pipeline_robustness tests.test_pipeline_provenance \
+            tests.test_pipeline_isoforms tests.test_pipeline_atomic tests.test_citations tests.test_cli_commands tests.test_examples \
+            2>&1 | tee san-tests.txt
           status=${PIPESTATUS[0]}
           if grep -qE "AddressSanitizer|LeakSanitizer|runtime error" san-tests.txt; then
             echo "::error::a sanitizer reported during the C++ tests (see san-tests.txt)"; exit 1
@@ -231,5 +239,60 @@ jobs:
             san-keep/
             san-tests.txt
             san-fuzz.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+  tsan:
+    # coal-cpp and coal-cpp-align under ThreadSanitizer (tests/tools/tsan_threads.py): `coal-cpp kaks`, `dnds` and
+    # `codon-dnds` with -j 4 for all nine methods (Comeron and Li included) in the default and the reference
+    # flavours, and the aligner with -j 4. A ThreadSanitizer report fails the job, and so does an output that
+    # differs from the same command's with -j 1. Tonight's seed draws the random pairs.
+    name: "coal-cpp kaks / dnds / align -j 4 under ThreadSanitizer"
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      TSAN_OPTIONS: exitcode=66:halt_on_error=0:second_deadlock_stack=1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            apps/coal-app/pyproject.toml
+            apps/coal-app/desktop/requirements.txt
+      - name: Build coal-cpp and coal-cpp-align with ThreadSanitizer
+        shell: bash
+        run: |
+          # ThreadSanitizer maps its shadow memory at fixed addresses; the runner's kernel randomises more address
+          # bits than older TSan runtimes accept ("unexpected memory mapping"): fewer bits for this job
+          sudo sysctl vm.mmap_rnd_bits=28 || true
+          cmake -S . -B build-tsan -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCOAL_WARNINGS_AS_ERRORS=ON -DCOAL_BUILD_TOOLS=OFF \
+            -DCMAKE_CXX_FLAGS="-fsanitize=thread -g -O1" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread"
+          cmake --build build-tsan -j 2
+          test -x build-tsan/coal-cpp
+          test -x build-tsan/coal-cpp-align
+          build-tsan/coal-cpp --version
+      - name: Threaded commands under ThreadSanitizer
+        shell: bash
+        run: |
+          python tests/tools/tsan_threads.py --build build-tsan --seed "$FUZZ_SEED" --jobs 4 --keep tsan-keep 2>&1 | tee tsan.txt
+          status=${PIPESTATUS[0]}
+          echo "### ThreadSanitizer, seed $FUZZ_SEED" >> "$GITHUB_STEP_SUMMARY"
+          grep -E "^(tsan threads|FAIL )" tsan.txt >> "$GITHUB_STEP_SUMMARY" || true
+          if grep -q "ThreadSanitizer" tsan.txt; then
+            echo "::error::ThreadSanitizer reported (see tsan.txt)"; exit 1
+          fi
+          test "$status" -eq 0
+          grep -q "^tsan threads: .* 0 failed" tsan.txt || { echo "::error::the ThreadSanitizer run did not finish"; exit 1; }
+      - name: Upload the ThreadSanitizer reports
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: tsan-seed-${{ env.FUZZ_SEED }}
+          path: |
+            tsan-keep/
+            tsan.txt
           if-no-files-found: warn
           retention-days: 30

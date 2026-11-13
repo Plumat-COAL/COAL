@@ -931,6 +931,25 @@ struct Diffs {
     double sts1 = 0, sts2 = 0, stv = 0, nts1 = 0, nts2 = 0, ntv = 0, snp = 0;
 };
 
+// True when some compared codon pair differs at two or three positions: only those pairs have several pathways,
+// and only the pathway weights read P(t) (count_diffs below). For a pair of sequences without such a codon the
+// transition-probability matrix is never read, so run_yn and run_myn do not compute it: its 61 x 61
+// eigendecomposition per round is most of the time of YN and MYN. The results are the same bits (nothing that is
+// computed depends on the matrix then); tests/test_kaks.py compares them, on every platform, with the matrix
+// computed all the same (Options::yn_always_pmat, `--yn-always-pmat`).
+bool needs_pathway_weights(const Prepared& p) {
+    const size_t n = p.c1.size();
+    for (size_t h = 0; h < n; ++h) {
+        const int c0 = p.c1[h], c1 = p.c2[h];
+        if (c0 == c1) continue;
+        int nd = 0;
+        for (int k = 0; k < 3; ++k)
+            if (base_at(c0, k) != base_at(c1, k)) ++nd;
+        if (nd >= 2) return true;
+    }
+    return false;
+}
+
 Diffs count_diffs(const Prepared& p, const GeneticCode& g, const PMat* P, bool myn) {
     Diffs D;
     const size_t n = p.c1.size();
@@ -1083,9 +1102,10 @@ Result run_yn(const Prepared& p, const GeneticCode& g, const Options& opt, Resul
     F84Out os, on;
     Diffs D;
     int ir;
+    const bool weights = P && (opt.yn_always_pmat || needs_pathway_weights(p));   // (else P(t) is never read)
     for (ir = 0; ir < nround; ++ir) {
-        if (P) pmat_codon(g, pi, kappa, kappa, omega, t, *P);
-        D = count_diffs(p, g, P, false);
+        if (weights) pmat_codon(g, pi, kappa, kappa, omega, t, *P);
+        D = count_diffs(p, g, weights ? P : nullptr, false);
         const double Sdts = D.sts1 + D.sts2, Sdtv = D.stv, Ndts = D.nts1 + D.nts2, Ndtv = D.ntv;
         if (hasS) os = distance_f84(S, Sdts / S, Sdtv / S, fbS, cap, capset);
         if (hasN) on = distance_f84(N, Ndts / N, Ndtv / N, fbN, cap, capset);
@@ -1196,7 +1216,7 @@ F84Out distance_tn93(double n, double P1, double P2, double Q, const double pi4[
     return o;
 }
 
-Result run_myn(const Prepared& p, const GeneticCode& g, Result r) {
+Result run_myn(const Prepared& p, const GeneticCode& g, const Options& opt, Result r) {
     double pi[64];
     f3x4(p, g, pi);
     double F[2][16];
@@ -1248,9 +1268,10 @@ Result run_myn(const Prepared& p, const GeneticCode& g, Result r) {
     F84Out os, on;
     Diffs D;
     int ir;
+    const bool weights = opt.yn_always_pmat || needs_pathway_weights(p);   // (else P(t) is never read)
     for (ir = 0; ir < nround; ++ir) {
-        pmat_codon(g, pi, ktc, kag, omega, t, P);
-        D = count_diffs(p, g, &P, true);
+        if (weights) pmat_codon(g, pi, ktc, kag, omega, t, P);
+        D = count_diffs(p, g, weights ? &P : nullptr, true);   // (without weights no codon has several pathways)
         double Sd = D.sts1 + D.sts2 + D.stv, Nd = D.nts1 + D.nts2 + D.ntv;
         double s1 = D.sts1, s2 = D.sts2, sv = D.stv, n1 = D.nts1, n2 = D.nts2, nv = D.ntv;
         if (hasS && Sd > S) {
@@ -1313,33 +1334,43 @@ const char* method_name(Method m) {
         case Method::MLPB: return "MLPB";
         case Method::YN: return "YN";
         case Method::MYN: return "MYN";
+        case Method::Comeron: return "Comeron";
+        case Method::Li: return "Li";
     }
     return "?";
 }
 
 const std::vector<Method>& output_order() {
-    static const std::vector<Method> o = {Method::NG,   Method::LWL, Method::MLWL, Method::LPB,
-                                          Method::MLPB, Method::YN,  Method::MYN};
+    // KaKs_Calculator's order, then the two methods it does not have
+    static const std::vector<Method> o = {Method::NG,  Method::LWL, Method::MLWL,    Method::LPB, Method::MLPB,
+                                          Method::YN,  Method::MYN, Method::Comeron, Method::Li};
     return o;
 }
 
 bool parse_method(const std::string& name, Method& out, std::string& why) {
     std::string u;
     for (char ch : name) u += (char)std::toupper((unsigned char)ch);
-    for (Method m : output_order())
-        if (u == method_name(m)) {
+    for (Method m : output_order()) {
+        std::string n;
+        for (const char* q = method_name(m); *q; ++q) n += (char)std::toupper((unsigned char)*q);
+        if (u == n) {
             out = m;
             return true;
         }
+    }
+    if (u == "C95") {
+        out = Method::Comeron;
+        return true;
+    }
     static const char* const known[] = {"GY",   "MS",    "MA",    "NONE", "GNG", "GLWL",
                                         "GLPB", "GMLWL", "GMLPB", "GYN",  "GMYN", "ALL"};
     for (const char* k : known)
         if (u == k) {
             why = "method " + u + " is a KaKs_Calculator method that COAL does not implement natively "
-                  "(available: NG, LWL, MLWL, LPB, MLPB, YN, MYN)";
+                  "(available: NG, LWL, MLWL, LPB, MLPB, YN, MYN, Comeron, Li)";
             return false;
         }
-    why = "unknown method '" + name + "' (available: NG, LWL, MLWL, LPB, MLPB, YN, MYN)";
+    why = "unknown method '" + name + "' (available: NG, LWL, MLWL, LPB, MLPB, YN, MYN, Comeron, Li)";
     return false;
 }
 
@@ -1385,6 +1416,42 @@ Prepared prepare(const std::string& row1, const std::string& row2, const Genetic
         return p;
     }
     const size_t nc = row1.size() / 3;
+    // Kimura80 counts as libsequence takes them (gestimator's ad-hoc rule, kaks_comeron.cpp): positions where
+    // neither row is '-'; letters are numbered A 0, T 1, G 2, C 3 and anything else -1, and a difference is a
+    // transition when the sum of the two numbers is even
+    {
+        auto nuc = [](char c) {
+            switch (c) {
+                case 'A': case 'a': return 0;
+                case 'T': case 't': return 1;
+                case 'G': case 'g': return 2;
+                case 'C': case 'c': return 3;
+            }
+            return -1;
+        };
+        for (size_t i = 0; i < row1.size(); ++i) {
+            const char a = row1[i], b = row2[i];
+            if (a == '-' || b == '-') continue;
+            ++p.k80_sites;
+            if (std::toupper((unsigned char)a) != std::toupper((unsigned char)b)) {
+                if ((nuc(a) + nuc(b)) % 2 != 0)
+                    ++p.k80_tv;
+                else
+                    ++p.k80_ts;
+            }
+        }
+    }
+    // the codon as the reference programs of Comeron and Li read it: A C G T in any case, anything else (U too)
+    // makes the column unusable; -1 then
+    auto raw_codon_at = [](const std::string& s, size_t col) {
+        int idx = 0;
+        for (int k = 0; k < 3; ++k) {
+            const char c = (char)std::toupper((unsigned char)s[col * 3 + k]);
+            if (c != 'A' && c != 'C' && c != 'G' && c != 'T') return -1;
+            idx = idx * 4 + base_index((unsigned char)c);
+        }
+        return idx;
+    };
     // per column: -1 gap, -2 ambiguous, else codon index
     auto codon_at = [](const std::string& s, size_t col) {
         int idx = 0;
@@ -1427,6 +1494,15 @@ Prepared prepare(const std::string& row1, const std::string& row2, const Genetic
     p.c2.reserve(nc);
     for (size_t c = 0; c < nc; ++c) {
         const int a = codon_at(row1, c), b = codon_at(row2, c);
+        {
+            const int ra = raw_codon_at(row1, c), rb = raw_codon_at(row2, c);
+            if (ra >= 0 && rb >= 0) {
+                p.r1.push_back((uint8_t)ra);
+                p.r2.push_back((uint8_t)rb);
+            } else {
+                ++p.raw_skipped;
+            }
+        }
         if ((long)c == term[0] || (long)c == term[1]) {
             r.terminal_stop_dropped = true;
             continue;
@@ -1462,7 +1538,32 @@ Prepared prepare(const std::string& row1, const std::string& row2, const Genetic
 Result compute(const Prepared& p, Method m, const GeneticCode& code, const Options& opt) {
     Result r = p.base;
     r.method = m;
-    if (r.status == Status::error || r.status == Status::no_data) return r;
+    if (r.status == Status::error) return r;
+    if (m == Method::Comeron || m == Method::Li) {
+        if (code.number != 1) {
+            r.status = Status::error;
+            r.note = std::string(method_name(m)) + " is implemented for the standard genetic code (table 1) only";
+            return r;
+        }
+        // the reference flavours read the pair themselves (stop codons included): prepare()'s policy counts,
+        // its warning about internal stops and its "no codon column left" do not apply to them
+        const bool raw = m == Method::Comeron ? opt.comeron_flavour == ComeronFlavour::gestimator
+                                              : opt.li_flavour == LiFlavour::seqinr;
+        if (raw) {
+            r.status = Status::ok;
+            r.note.clear();
+            r.codons_compared = (long)p.r1.size();
+            r.length = 3 * r.codons_compared;
+            r.internal_stops = 0;
+            r.terminal_stop_dropped = false;
+        } else if (r.status == Status::no_data) {
+            return r;
+        }
+        r = m == Method::Comeron ? detail::run_comeron(p, code, opt, r) : detail::run_li(p, code, opt, r);
+        finish(r);
+        return r;
+    }
+    if (r.status == Status::no_data) return r;
     switch (m) {
         case Method::NG: r = run_ng(p, code, r); break;
         case Method::LWL:
@@ -1470,7 +1571,9 @@ Result compute(const Prepared& p, Method m, const GeneticCode& code, const Optio
         case Method::LPB:
         case Method::MLPB: r = run_lwl(p, code, m, r); break;
         case Method::YN: r = run_yn(p, code, opt, r); break;
-        case Method::MYN: r = run_myn(p, code, r); break;
+        case Method::MYN: r = run_myn(p, code, opt, r); break;
+        case Method::Comeron:
+        case Method::Li: break;  // handled above
     }
     finish(r);
     return r;

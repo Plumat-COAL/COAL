@@ -33,8 +33,13 @@ class TestLicence(unittest.TestCase):
     def test_every_declaration_says_gpl3_only(self):
         for rel in (("pyproject.toml",), ("apps", "coal-app", "pyproject.toml")):
             text = _read(*rel)
-            self.assertRegex(text, r'(?m)^license = \{text = "GPL-3\.0-only"\}', rel)
-            self.assertIn("License :: OSI Approved :: GNU General Public License v3 (GPLv3)", text, rel)
+            # PEP 639: an SPDX expression and the licence files; no licence classifier, no table (both deprecated)
+            self.assertRegex(text, r'(?m)^license = "GPL-3\.0-only"', rel)
+            self.assertRegex(text, r'(?m)^license-files = \["LICENSE", "NOTICE"\]$', rel)
+            self.assertNotIn("License ::", text, rel)
+            self.assertNotIn("license = {", text, rel)
+            need = re.search(r'(?m)^requires = \["setuptools>=(\d+)\.', text)
+            self.assertGreaterEqual(int(need.group(1)), 77, rel)   # the first setuptools that reads them
         self.assertRegex(_read("CITATION.cff"), r"(?m)^license: GPL-3\.0-only$")
         meta = _read("packaging", "bioconda", "meta.yaml")
         self.assertRegex(meta, r"(?m)^  license: GPL-3\.0-only$")
@@ -78,6 +83,47 @@ class TestLicence(unittest.TestCase):
         kaks_doc = " ".join(_read("docs", "kaks.md").split())
         self.assertIn("The engine is not an independent implementation", kaks_doc)
         self.assertIn("derived from the source code of KaKs_Calculator 2.0", kaks_doc)
+
+    def test_comeron_and_li_attribution(self):
+        """Comeron is derived from libsequence (orthologr's copy), Li from seqinr's kaks.c, and both say so
+        everywhere, with the licence statements of the upstream files."""
+        libseq = ("Copyright (C) 2003-2009 Kevin Thornton", "libsequence", "version 3 of the License, or (at your",
+                  "Sarah Scharfenberg and Hajk-Georg Drost", "version 2 of the License, or any", "orthologr 0.4.3",
+                  "Comeron95.h", "TwoSubs.h", "Grantham.h")
+        seqinr = ("seqinr", "kaks.c", "GPL (>= 2)", "Manolo Gouy", "Lobry", "Charif", "4.2-44")
+        for src, notices in (("kaks_comeron.cpp", libseq), ("kaks_li.cpp", seqinr)):
+            for rel in (("cpp", "src", src), ("packaging", "r", "coalr", "src", "coal", src)):
+                text = _read(*rel)
+                flat = " ".join(text.replace("//", " ").split())
+                for must in notices:
+                    self.assertIn(" ".join(must.split()), flat, (rel, must))
+                head = text.split("#include")[0]
+                self.assertIn("SPDX-License-Identifier: GPL-3.0-only", head)
+                self.assertIn("is derived from", head)
+                self.assertIn("not an independent", " ".join(head.replace("//", " ").split()))
+                self.assertIn("Modified for COAL by Chloe Newton and Keanu Murati, 2026. What was changed:", head)
+        for rel in (("NOTICE",), ("packaging", "r", "coalr", "inst", "COPYRIGHTS")):
+            flat = " ".join(_read(*rel).split())
+            for must in libseq + seqinr:
+                self.assertIn(" ".join(must.split()), flat, (rel, must))
+            self.assertIn("kaks_comeron.cpp", flat)
+            self.assertIn("kaks_li.cpp", flat)
+        desc = _read("packaging", "r", "coalr", "DESCRIPTION")
+        for must in ('person("Kevin", "Thornton", role = c("ctb", "cph")', 'person("Sarah", "Scharfenberg"',
+                     'person("Hajk-Georg", "Drost"', 'person("Manolo", "Gouy"', 'person("Jean R.", "Lobry"',
+                     'person("Delphine", "Charif"', "Comeron (1995)"):
+            self.assertIn(must, desc)
+        hpp = " ".join(_read("cpp", "src", "kaks.hpp").replace("//", " ").split())
+        self.assertIn("Kevin Thornton", hpp)
+        self.assertIn("seqinr", hpp)
+        doc = " ".join(_read("docs", "kaks.md").split())
+        self.assertIn("`cpp/src/kaks_comeron.cpp` is derived from libsequence", doc)
+        self.assertIn("`cpp/src/kaks_li.cpp` from `src/kaks.c` of the R package seqinr", doc)
+        # the vendored copies are the sources (scripts/sync_r_sources.py --check does the byte comparison)
+        makevars = _read("packaging", "r", "coalr", "src", "Makevars")
+        self.assertIn("coal/kaks_comeron.o", makevars)
+        self.assertIn("coal/kaks_li.o", makevars)
+        self.assertIn("coal/kaks_li.o", _read("packaging", "r", "coalr", "src", "Makevars.win"))
 
     def test_nothing_still_calls_coal_mit(self):
         """'MIT' is left only where it is true: the earlier releases, and third-party test data."""

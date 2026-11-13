@@ -1,14 +1,16 @@
 # Ka/Ks (dN/dS): `coal kaks` and `coal dnds`
 
 COAL estimates Ka (dN) and Ks (dS) for pairs of aligned coding sequences in process, with a C++ engine
-(`cpp/src/kaks.cpp`) derived from KaKs_Calculator 2.0 and PAML's yn00 (see "Where the code comes from" below). No
-external program runs. It has two commands:
+(`cpp/src/kaks.cpp`, `kaks_comeron.cpp`, `kaks_li.cpp`) derived from KaKs_Calculator 2.0, PAML's yn00,
+libsequence and seqinr (see "Where the code comes from" below). No external program runs. It has two commands:
 
 - **`coal kaks`** does the job of `KaKs_Calculator -i IN.axt -o OUT.kaks -m METHOD` for seven of KaKs_Calculator's
   methods (NG, LWL, MLWL, LPB, MLPB, YN, MYN). It takes KaKs_Calculator's `-i`, `-o`, `-m` and `-c` and writes its
   tab-separated format: the same 22 columns, the same NA rules and 6 significant digits. It is not a drop-in for
   every KaKs_Calculator command line: the other methods are refused, and without `-m` it computes YN, where
-  KaKs_Calculator computes MA (model averaging).
+  KaKs_Calculator computes MA (model averaging). It also has two methods that KaKs_Calculator does not have,
+  `Comeron` and `Li`, the two that the R package orthologr computes without KaKs_Calculator (see
+  "Comeron and Li" below).
 - **`coal dnds`** writes a tidy TSV from the same engine, with one row per pair and method, plus standard errors,
   a status and a note.
 
@@ -17,6 +19,8 @@ coal kaks -i pairs.axt -o pairs.kaks                     # YN00 (the default)
 coal kaks -i pairs.axt -o pairs.kaks -m NG -m YN -m MYN  # several methods; rows come in KaKs_Calculator's order
 coal dnds codon_aln.fasta -o dnds.tsv                    # every pair of an aligned FASTA (MSA), YN00
 coal dnds pairs.fasta --pairs consecutive -m YN -m NG -j 8 -c 2
+coal dnds codon_aln.fasta -m Comeron -m Li               # Comeron (1995) and Li (1993), COAL's policy
+coal dnds codon_aln.fasta -m Comeron --comeron-flavour gestimator   # the numbers of orthologr's gestimator
 ```
 
 Both commands are subcommands of `coal-cpp`, and `coal` (Python) hands them to the `coal-cpp` of its own version
@@ -34,6 +38,8 @@ install has no Ka/Ks engine; `coal kaks` then says so and exits 1.
 | `LPB` | Li (1993); Pamilo & Bianchi (1993) | J Mol Evol 36:96-99; Mol Biol Evol 10:271-281 | NA |
 | `MLPB` | LPB with Tzeng et al.'s (2004) Ile/Arg rules | Mol Biol Evol 21:2290-2298 | NA |
 | `MYN` | Zhang, Li & Yu (2006): YN00 with separate transition rates for purines and pyrimidines (TN93) | BMC Evol Biol 6:44 | yes (TN93 variance; F84 fallback) |
+| `Comeron` (alias `C95`) | Comeron (1995) as libsequence's `gestimator` computes it (the default method of the R package orthologr): non-degenerate, transitional and transversional 2-fold and 4-fold sites, Kimura's two-parameter correction per class, pathways weighted by Grantham's distance | J Mol Evol 41:1152-1159 | NA |
+| `Li` | Li (1993) as `seqinr::kaks()` computes it (orthologr's `"Li"`): 0-, 2- and 4-fold sites, pathways weighted by an amino-acid similarity table | J Mol Evol 36:96-99 | yes (seqinr's variance formulas) |
 
 **`NG` is KaKs_Calculator's NG, not the textbook Nei-Gojobori count.** KaKs_Calculator takes a codon's synonymous
 sites from its first and third positions only, leaves the changes that lead to a stop codon out of the
@@ -48,6 +54,12 @@ natively". These are `GY` (maximum likelihood), `MS` and `MA` (model selection a
 variants `GNG GLWL GLPB GMLWL GMLPB GYN GMYN`, and `ALL`. KaKs_Calculator's default method is MA. COAL's default is
 YN, so `coal kaks` without `-m` gives YN rows.
 
+`Comeron` and `Li` are not KaKs_Calculator methods. Their names are orthologr's, they are read in any case
+(`-m comeron`), their rows come after KaKs_Calculator's seven, and they are implemented for the standard genetic
+code only, as their references are (`-c` other than 1 with them is refused with exit status 2). `Li` is not
+`LPB`: the two implement the same formulas of Li (1993) with different site and pathway counting, and give
+different numbers (see "Comeron and Li").
+
 **Where the code comes from.** The engine is not an independent implementation: `cpp/src/kaks.cpp` is derived
 from the source code of KaKs_Calculator 2.0 (Copyright (C) 2009 Beijing Institute of Genomics of CAS; Da-Peng Wang,
 Yu-Bin Zhang, Zhang Zhang, Kristian K Ullrich) and of PAML's `yn00.c` (Copyright 1998 Ziheng Yang), both under the
@@ -56,6 +68,15 @@ numbers are the same; they were rewritten without classes and global state, for 
 for threads, and changed where listed under "Differences from KaKs_Calculator". The header of `kaks.cpp` and the
 `NOTICE` file give the details. This is the reason COAL is distributed under GPL-3.0-only from this release on.
 Neither program is included as such, and `coal kaks` / `coal dnds` do not run them.
+
+In the same way, `cpp/src/kaks_comeron.cpp` is derived from libsequence (Copyright (C) 2003-2009 Kevin Thornton;
+GNU GPL version 3 or later) in the form the R package orthologr compiles into its `gestimator()` (modified by
+Sarah Scharfenberg and Hajk-Georg Drost, 2014; their changes under GPL version 2 or later), and
+`cpp/src/kaks_li.cpp` from `src/kaks.c` of the R package seqinr 4.2-44 (licence `GPL (>= 2)`; the file has no
+notice of its own, and seqinr's help says the C program "was provided by Manolo Gouy"). Both are modified
+versions of that code, with the same structure, constants and order of floating-point operations, which is why
+their numbers are the references' to the last bit. The headers of the two files and `NOTICE` give the exact
+licence statements and what was changed. All three licences allow distribution under GPL version 3.
 
 ## Policy
 
@@ -103,7 +124,14 @@ allows academic use only, and it has no public repository). Values follow KaKs_C
 - `GC` is computed over both rows as given, with gaps included in the length.
 - ML-Score, AICc, Akaike-Weight and Model are `NA`; they belong to the GY, MS and MA methods.
 
-Rows come per pair in KaKs_Calculator's method order (NG, LWL, MLWL, LPB, MLPB, YN, MYN). Pairs with status
+For `Comeron` and `Li` the same 22 columns are written with what the method defines: Ka, Ks, Ka/Ks, Length,
+Substitutions (nucleotide differences in the compared codons) and GC; for `Li` also `Fold-Sites(0:2:4)` (its
+L0:L2:L4) and the two `Fold-*-Substitutions` columns (its transitional and transversional differences per
+class). The other columns are `NA` (there are no S / N counts, so no Fisher test), and the rate-ratio column is
+`1:1:1:1:1:1`, as for NG. The Method column says `Comeron` or `Li`.
+
+Rows come per pair in KaKs_Calculator's method order (NG, LWL, MLWL, LPB, MLPB, YN, MYN), then Comeron, then
+Li. Pairs with status
 `error` are left out, as KaKs_Calculator leaves out pairs it cannot read, and the summary on stderr counts them.
 This format has no status column. A YN or MYN row whose iteration did not converge has `NA` in Ka, Ks, Ka/Ks,
 P-Value(Fisher), S-Substitutions, N-Substitutions and Divergence-Time (KaKs_Calculator prints the values of its
@@ -111,16 +139,31 @@ last round there: difference 12); the summary on stderr says how many such rows 
 them.
 `--digits N` sets the number of significant digits.
 
+**What `P-Value(Fisher)` tests, and what has a standard error.** The p-value is Fisher's exact test on the
+2 x 2 table of substitutions against sites that did not change, synonymous in one row and nonsynonymous in the
+other: `[[Sd, S - Sd], [Nd, N - Nd]]`. It asks whether the proportion of changed sites differs between
+synonymous and nonsynonymous sites, that is whether dN/dS differs from 1 for this pair; a small p with dN/dS
+below 1 is evidence of purifying selection on the pair, not of anything about single sites, and with thousands
+of pairs the p-values need a correction for multiple testing. The counts are estimates and not whole numbers
+(KaKs_Calculator's convention, kept; "Differences" below says how the tails are summed), so read it as
+KaKs_Calculator's statistic, comparable with its output, more than as an exact test. It is in the `coal kaks`
+format only; `coal dnds` does not print it. **Standard errors** are given by the methods that have a variance
+formula: `NG`, `YN`, `MYN` and `Li` (`SE_dN`, `SE_dS` in `coal dnds`; `NA` for LWL, MLWL, LPB, MLPB and Comeron).
+They are the standard errors **of dN and of dS, each on its own**. No method here gives a standard error or a
+confidence interval for dN/dS itself: the ratio of two estimates has no simple variance, and dividing the two
+SEs is not one. For an interval on the ratio use a likelihood method (PAML's codeml, HyPhy) on the codon
+alignment, or bootstrap the codon columns.
+
 **`coal dnds`** (`--digits` default 8):
 
 | Column | Meaning |
 |---|---|
 | `seq1`, `seq2` | the two IDs. For FASTA input, the record IDs. For AXT, the name line split at the first `&`; when there is no `&`, seq1 is the whole name line and seq2 is `NA` |
-| `method` | NG, LWL, MLWL, LPB, MLPB, YN or MYN |
+| `method` | NG, LWL, MLWL, LPB, MLPB, YN, MYN, Comeron or Li |
 | `dN`, `dS`, `dNdS` | Ka, Ks, Ka/Ks. `NA` when not available; dNdS is `NA` when dS < 1e-6. Zeros print as 0 |
-| `SE_dN`, `SE_dS` | standard errors (YN, MYN, NG); `NA` elsewhere |
-| `N_sites`, `S_sites` | nonsynonymous and synonymous sites |
-| `Nd`, `Sd` | nonsynonymous and synonymous differences |
+| `SE_dN`, `SE_dS` | standard errors of dN and of dS (YN, MYN, NG, Li); `NA` elsewhere. There is none for the ratio (below) |
+| `N_sites`, `S_sites` | nonsynonymous and synonymous sites (`NA` for Comeron and Li, which count sites by degeneracy class, not as S and N) |
+| `Nd`, `Sd` | nonsynonymous and synonymous differences (`NA` for Comeron and Li) |
 | `codons_compared` | codon columns used after the policy |
 | `status`, `note` | see Policy: `ok`, `warning`, `not_converged`, `saturated`, `no_data`, `error` |
 
@@ -140,14 +183,140 @@ with `--format`.
   link) is refused with exit status 2 before anything is written; the output is opened while the input is still
   being read, so the input would be destroyed. The same holds for `coal translate` and `coal codon-dnds`.
 
-**Exit status.** 0 when the run finished, even if some pairs have a status other than `ok`. 1 when the input
-cannot be read or the output cannot be written. 2 for a command-line error, including a method that is not
-implemented. `-j N` sets the number of threads (default: all hardware threads). Pairs are computed in parallel
+**Exit status.** 0 when the run finished and at least one result is an estimate or a statement about the pair
+(`ok`, `warning`, `saturated`, `not_converged`), even if other pairs have a status other than `ok`. 1 when the
+input cannot be read or the output cannot be written; the message names the file and the cause (`write error on
+'out.tsv': No space left on device`). 2 for a command-line error, including a method that is not implemented,
+**and when no pair has an estimate because of the input**: every result is `error` or `no_data`. The table is
+still written with every row (`coal dnds`; `coal kaks` leaves `error` pairs out, as KaKs_Calculator does), and one
+line on stderr, printed also with `-q`, names the usual cause: the input looks like protein sequences, or the two
+sequences of the pairs differ in length (the input is not aligned), with the way to a codon alignment. When only
+some pairs differ in length the exit status stays 0 and a warning says how many. (KaKs_Calculator returns 0
+in these cases too, so this is a difference for a script that reads its exit status; the numbers and the file
+format are KaKs_Calculator's as before.)
+
+**Compressed input.** `coal kaks`, `coal dnds` and `coal translate` read a gzip-compressed input (recognised by
+its first two bytes, whatever the file is called): the `coal` command decompresses it into a temporary folder,
+runs the engine on the copy and removes the folder. `coal-cpp` itself has no decompressor (it uses the C++
+standard library only): called directly on such a file it stops with "is gzip-compressed: decompress it first
+(gunzip -k FILE)". `-j N` sets the number of threads (default: all hardware threads). A one-letter option takes its
+value attached as well (`-j4`, `-j=4`, `-mYN`, `-ofile`; flags chain: `-qj4`), and a long one after `=`
+(`--jobs=4`), in `coal kaks`, `coal dnds`, `coal translate`, `coal codon-dnds` and `coal-cpp-align`, as in the
+main `coal` command. Pairs are computed in parallel
 and written in input order, and the output does not depend on `-j`.
+
+`--comeron-flavour gestimator` and `--li-flavour seqinr` make `Comeron` and `Li` read the pair as their
+reference programs do ("Comeron and Li" below); the default for both is `coal`, the policy above.
 
 `--yn-flavour paml` and `--yn-weighting 0|1` choose which reference YN00 follows where the two differ (below).
 `--yn-weighting 0` gives equal pathway weights in one round, which is the default control file of PAML's yn00
 (`weighting = 0`). KaKs_Calculator always weights pathways.
+
+## What to cite
+
+The numbers of `coal kaks`, `coal dnds` and `coal pipeline` come from published estimators, implemented in code
+derived from KaKs_Calculator 2.0, PAML's yn00, libsequence and seqinr; the pipeline also runs DIAMOND and an
+aligner. A paper should cite the methods and programs its numbers come from, with COAL (and the version
+`coal --version` prints):
+
+| What you ran | Cite |
+|---|---|
+| Anything | COAL |
+| A codon alignment (`coal PEP NUC`, `pal2nal`, every Ka/Ks route of the pipeline) | Suyama et al. 2006 (PAL2NAL) |
+| Ka/Ks, method NG | Nei & Gojobori 1986; Wang et al. 2010 (KaKs_Calculator 2.0) |
+| Ka/Ks, method LWL | Li, Wu & Luo 1985; Wang et al. 2010 (KaKs_Calculator 2.0) |
+| Ka/Ks, method MLWL | Li, Wu & Luo 1985; Tzeng, Pan & Li 2004; Wang et al. 2010 (KaKs_Calculator 2.0) |
+| Ka/Ks, method LPB | Li 1993; Pamilo & Bianchi 1993; Wang et al. 2010 (KaKs_Calculator 2.0) |
+| Ka/Ks, method MLPB | Li 1993; Pamilo & Bianchi 1993; Tzeng, Pan & Li 2004; Wang et al. 2010 (KaKs_Calculator 2.0) |
+| Ka/Ks, method YN (the default) | Yang & Nielsen 2000; Wang et al. 2010 (KaKs_Calculator 2.0); Yang 2007 (PAML 4) |
+| Ka/Ks, method MYN | Zhang, Li & Yu 2006; Yang & Nielsen 2000; Wang et al. 2010 (KaKs_Calculator 2.0); Yang 2007 (PAML 4) |
+| Ka/Ks, method Comeron | Comeron 1995; Thornton 2003 (libsequence) |
+| Ka/Ks, method Li | Li 1993; Charif & Lobry 2007 (seqinr) |
+| `coal pipeline pairs` with DIAMOND (orthologs) | Buchfink et al. 2021 (DIAMOND) |
+| `coal pipeline clusters` with DIAMOND DeepClust | Buchfink et al. 2021 (DIAMOND); Buchfink et al. 2026 (DIAMOND DeepClust) |
+| Protein alignments by Clustal Omega (`--aligner clustalo`, the cluster default) | Sievers et al. 2011 (Clustal Omega) |
+| Protein alignments by MAFFT (`--aligner mafft`) | Katoh & Standley 2013 (MAFFT) |
+| Through the R package orthologr | Drost et al. 2015 (orthologr) |
+
+`coal cite` prints this table and the references; `coal cite YN` those of one method; `coal cite out/report.json`
+those of one pipeline run, whose report lists the keys as `cite`.
+
+- Suyama M, Torrents D, Bork P (2006). PAL2NAL: robust conversion of protein sequence alignments into the corresponding codon alignments. Nucleic Acids Research 34:W609-W612. <https://doi.org/10.1093/nar/gkl315>
+- Nei M, Gojobori T (1986). Simple methods for estimating the numbers of synonymous and nonsynonymous nucleotide substitutions. Molecular Biology and Evolution 3:418-426. <https://doi.org/10.1093/oxfordjournals.molbev.a040410>
+- Li W-H, Wu C-I, Luo C-C (1985). A new method for estimating synonymous and nonsynonymous rates of nucleotide substitution considering the relative likelihood of nucleotide and codon changes. Molecular Biology and Evolution 2:150-174. <https://doi.org/10.1093/oxfordjournals.molbev.a040343>
+- Li W-H (1993). Unbiased estimation of the rates of synonymous and nonsynonymous substitution. Journal of Molecular Evolution 36:96-99. <https://doi.org/10.1007/BF02407308>
+- Pamilo P, Bianchi NO (1993). Evolution of the Zfx and Zfy genes: rates and interdependence between the genes. Molecular Biology and Evolution 10:271-281. <https://doi.org/10.1093/oxfordjournals.molbev.a040003>
+- Tzeng Y-H, Pan R, Li W-H (2004). Comparison of three methods for estimating rates of synonymous and nonsynonymous nucleotide substitutions. Molecular Biology and Evolution 21:2290-2298. <https://doi.org/10.1093/molbev/msh242>
+- Yang Z, Nielsen R (2000). Estimating synonymous and nonsynonymous substitution rates under realistic evolutionary models. Molecular Biology and Evolution 17:32-43. <https://doi.org/10.1093/oxfordjournals.molbev.a026236>
+- Zhang Z, Li J, Yu J (2006). Computing Ka and Ks with a consideration of unequal transitional substitutions. BMC Evolutionary Biology 6:44. <https://doi.org/10.1186/1471-2148-6-44>
+- Comeron JM (1995). A method for estimating the numbers of synonymous and nonsynonymous substitutions per site. Journal of Molecular Evolution 41:1152-1159. <https://doi.org/10.1007/BF00173196>
+- Wang D, Zhang Y, Zhang Z, Zhu J, Yu J (2010). KaKs_Calculator 2.0: a toolkit incorporating gamma-series methods and sliding window strategies. Genomics, Proteomics & Bioinformatics 8:77-80. <https://doi.org/10.1016/S1672-0229(10)60008-3>
+- Yang Z (2007). PAML 4: phylogenetic analysis by maximum likelihood. Molecular Biology and Evolution 24:1586-1591. <https://doi.org/10.1093/molbev/msm088>
+- Thornton K (2003). libsequence: a C++ class library for evolutionary genetic analysis. Bioinformatics 19:2325-2327. <https://doi.org/10.1093/bioinformatics/btg316>
+- Charif D, Lobry JR (2007). SeqinR 1.0-2: a contributed package to the R project for statistical computing devoted to biological sequences retrieval and analysis. In: Bastolla U, Porto M, Roman HE, Vendruscolo M (eds), Structural Approaches to Sequence Evolution: Molecules, Networks, Populations. Springer, pp. 207-232. <https://doi.org/10.1007/978-3-540-35306-5_10>
+- Buchfink B, Reuter K, Drost H-G (2021). Sensitive protein alignments at tree-of-life scale using DIAMOND. Nature Methods 18:366-368. <https://doi.org/10.1038/s41592-021-01101-x>
+- Buchfink B, Barbé É, Ashkenazy H, Reuter K, Kennedy JA, Drost H-G (2026). Clustering the protein universe of life using DIAMOND DeepClust. Nature Methods 23:724-727. <https://doi.org/10.1038/s41592-026-03030-z>
+- Sievers F, Wilm A, Dineen D, Gibson TJ, Karplus K, Li W, Lopez R, McWilliam H, Remmert M, Soding J, Thompson JD, Higgins DG (2011). Fast, scalable generation of high-quality protein multiple sequence alignments using Clustal Omega. Molecular Systems Biology 7:539. <https://doi.org/10.1038/msb.2011.75>
+- Katoh K, Standley DM (2013). MAFFT multiple sequence alignment software version 7: improvements in performance and usability. Molecular Biology and Evolution 30:772-780. <https://doi.org/10.1093/molbev/mst010>
+- Drost H-G, Gabel A, Grosse I, Quint M (2015). Evidence for active maintenance of phylotranscriptomic hourglass patterns in animal and plant embryogenesis. Molecular Biology and Evolution 32:1221-1231. (the R package orthologr) <https://doi.org/10.1093/molbev/msv012>
+
+Each DOI is that of the cited work, checked against the publisher's or the institution's page of the paper. COAL
+itself has no DOI: cite its version and repository (`CITATION.cff`). The DeepClust preprint (bioRxiv 2023,
+<https://doi.org/10.1101/2023.01.24.525373>, key `buchfink2023` in reports written by earlier versions) is
+superseded by the paper above; `coal cite` still resolves the old key and prints the paper after it.
+
+## Filtering before interpretation
+
+A row with status `ok` says that the method produced numbers, not that the numbers mean much. Before dN/dS values
+are read, compared or averaged, four things are worth checking for every pair. They are the usual reasons for
+impossible-looking values in a pairwise table.
+
+| What | Why it matters | Where to look |
+|---|---|---|
+| **Few compared codons** | With a few dozen codons a single substitution moves dN/dS a long way, and the standard errors are of the size of the estimates. In orthologr's *Arabidopsis* example one pair is compared over 46 codons and has dN/dS 1.84 with status `ok`: that is noise, not positive selection | `codons_compared` |
+| **Low coverage or identity** | When only a small part of the two proteins aligns, or they align at 30% identity, the pair may not be orthologous over its length and the alignment itself is uncertain; misaligned codons count as substitutions and inflate dN and dS | `codons_compared` against `prot_aln_length`; `prot_identity` (pipeline and coalr tables) |
+| **Saturated dS** | Above a dS of about 1 to 2 most synonymous sites have changed more than once, the correction for multiple hits dominates the estimate, and dS (so dN/dS) is no longer reliable; dN/dS is then usually too low or erratic. `saturated` marks only the pairs where the correction formula has no value at all: a pair with dS 3 or 5 and status `ok` is not better (268 such pairs with dS above 2 stood next to 3,748 `saturated` ones in a yeast *S. cerevisiae* / *C. glabrata* run) | `dS` |
+| **Very small dS** | dN/dS is a ratio: between very close sequences dS rests on one or two synonymous differences, and dividing by it gives values that are large, variable and often above 1 for no biological reason. `dNdS` is `NA` only when dS is below 1e-6 | `dS`, `Sd`, `SE_dS` |
+
+**Suggested starting thresholds.** These are conventions in common use, not properties of your data: state the
+ones you used, and check that your conclusion does not depend on their exact values.
+
+- at least 50 compared codons (100 for anything read gene by gene);
+- compared codons covering at least half of the protein alignment, and protein identity of at least 30 to 40%;
+- dS at most 2 (1 if synonymous rates are compared between genes), and for the ratio dS at least about 0.01;
+- status `ok` or `warning` only (`saturated`, `not_converged`, `no_data` and `error` have no estimate), and for
+  `warning` a look at the note (an internal stop codon or a CDS that is not a multiple of 3 often means a
+  pseudogene or an annotation error).
+
+A whole-gene pairwise dN/dS averages over all sites and the whole time since divergence. A value above 1 is rare
+and, from one pair, weak evidence; site and branch models (PAML codeml, HyPhy) test for positive selection, and
+COAL's codon alignments are their input.
+
+**The flags.** `--min-codons N` and `--max-ds X` (`coal dnds`, `coal pipeline`; `min_codons`, `max_ds` in coalr)
+mark the rows concerned without removing anything. Where a protein alignment exists (`coal pipeline`,
+`coal codon-dnds`; `min_identity` in coalr's `coal_dnds_pairs()` and `coal_dnds_clusters()`) there is a third,
+`--min-identity P`: a pair whose protein identity (`prot_identity`, percent) is below P gets the note
+`protein identity below P%`. `coal dnds` reads codon alignments and refuses it.
+
+```
+coal dnds codon.fasta --min-codons 50 --max-ds 2 -o dnds.tsv
+coal pipeline pairs --query q_cds.fa --subject s_cds.fa -o out --min-codons 50 --max-ds 2
+```
+
+A row that has an estimate (status `ok` or `warning`) and fewer than N compared codons gets the note
+`fewer than N codons compared`; one whose dS is above X gets `dS above X`; the notes are appended to what the
+row already says (`; ` between them), and its status becomes `warning` if it was `ok`. **No row is dropped and no
+number changes**: the table is the one without the options but for `status` and `note` of the flagged rows, and
+the per-cluster summary, which counts `ok` and `warning` together, is the same. Rows without an estimate are left
+as they are. Both options are off by default. stderr and, for the pipeline, `report.json`
+(`counts.flagged`) say how many rows each flag marked. Filtering is then one line in whatever reads the table:
+
+```r
+d <- read.delim("out/dnds.tsv")
+keep <- d$status == "ok" & d$dS >= 0.01 & d$codons_compared / d$prot_aln_length >= 0.5 & d$prot_identity >= 40
+```
+
+`coal kaks` has no such options: KaKs_Calculator's format has no status column.
 
 ## C++ API
 
@@ -173,7 +342,12 @@ coal::kaks::Method m; std::string why;
 if (!coal::kaks::parse_method("GY", m, why)) { /* why: "... does not implement natively ..." */ }
 ```
 
-`Options{yn_flavour, yn_weighting}` is the fourth argument (the defaults follow KaKs_Calculator).
+`Options{yn_flavour, yn_weighting, comeron_flavour, li_flavour}` is the fourth argument (the defaults follow
+KaKs_Calculator, and COAL's policy for Comeron and Li: `ComeronFlavour::coal`, `LiFlavour::coal`; the reference
+flavours are `ComeronFlavour::gestimator` and `LiFlavour::seqinr`). `Method::Comeron` and `Method::Li` are the
+two further methods; `parse_method()` reads `"Comeron"`, `"C95"` and `"Li"` in any case; with a genetic code
+other than the standard one they return status `error`. Their degeneracy tables are built once, into immutable
+function-local statics (thread-safe initialisation), so the statement about global state holds for them too.
 `Result` also carries the fields KaKs_Calculator prints: `p_fisher`, `divergence`, `rates[6]`, `fold_*`, `gc[4]`,
 `substitutions` and `length`. It also has the policy counts (`gap_codons`, `ambiguous_codons`, `internal_stops`,
 `terminal_stop_dropped`) and, for YN/MYN, `iterations`, `converged` and, when the iteration did not converge
@@ -455,8 +629,9 @@ about it, what was measured, and what is not guaranteed.
 **Guaranteed by the source.**
 
 - No fused multiply-add and no fast-math: the engine is compiled without floating-point contraction on every
-  compiler (a `#pragma` in `kaks.cpp` for Clang, GCC and MSVC, and `-ffp-contract=off` / `/fp:precise` in
-  `CMakeLists.txt`). Clang contracts `a * b + c` by default, and arm64 always has the instruction, so without
+  compiler (a `#pragma` in `kaks.cpp`, `kaks_comeron.cpp` and `kaks_li.cpp` for Clang, GCC and MSVC, and
+  `-ffp-contract=off` / `/fp:precise` in `CMakeLists.txt`; coalr's copies of the three files carry the pragma,
+  and so does its `coalr.cpp`, which computes the quartiles of the cluster summary). Clang contracts `a * b + c` by default, and arm64 always has the instruction, so without
   this a macOS build and a Linux build would differ in the last digits of nearly every YN / MYN value.
 - No dependence on the number of threads, on the order of the pairs, or on the locale.
 - An iteration that did not converge prints no value (difference 12).
@@ -467,6 +642,19 @@ builds without any build-system flag (the pragma alone, on FMA-capable targets):
 byte-identical on the 999 orthologr pairs (and on a second, independent alignment of the same genes), the 600
 simulated pairs, the edge cases and both random sets (about 67,000 rows; `coal kaks` at 6 and 15 digits, `coal
 dnds` at 8 digits, and for all but the first set also at 15 digits and with `--yn-flavour paml`).
+
+**Comeron and Li** were measured apart (2026-11-13, x86-64 Linux, glibc 2.39): GCC 13.3 `-O3`, `-O3
+-march=x86-64-v3` and `-O0`, Clang 18.1 `-O3` and `-O3 -march=x86-64-v3`, and two builds without any build-system
+flag on an FMA target (GCC `-O2 -march=x86-64-v3 -ffp-contract=fast`, Clang `-O2 -march=x86-64-v3`: the pragma
+alone, as R compiles coalr). On the 14,153 pairs of "Validation of Comeron and Li", both methods, both flavours,
+`coal dnds` at 17 and at 8 digits and `coal kaks` at 15 digits (54 outputs, 169,828 rows per build), the seven
+builds print the same bytes: 0 rows differ. So the statement of that section (every number is the same double as
+gestimator's and `seqinr::kaks`'s) holds for builds that target FMA as well, on this C library. It did not before
+the pragma: the same two FMA builds with the pragma removed differ from the default build in 3,045 of the 28,306
+rows of the reference flavours at 17 digits (534 Comeron, 2,511 Li; in the last one or two digits) and in none at
+8 digits. Both methods call `log` and `sqrt`, so the next paragraph applies to them too: with another C library
+the last bit of a value can differ from the reference's, which is why the tests compare to a relative 1e-12 and
+not bit for bit.
 
 **Not guaranteed: the C library.** `exp`, `log` and `hypot` are not correctly rounded in every C library, and
 glibc (which changed them between 2.39 and 2.43), Apple's libm and Microsoft's UCRT return a different last bit
@@ -539,6 +727,203 @@ low. The methods that ignore the transition/transversion bias (NG, LWL) underest
 high divergence and high omega. This is the bias Yang & Nielsen (2000) describe. NG's 27 NA are Ks saturations
 (Jukes-Cantor) at omega = 0.1, t = 2.
 
+## Comeron and Li
+
+`-m Comeron` and `-m Li` are the two dN/dS methods that the R package
+[orthologr](https://github.com/drostlab/orthologr) computes without KaKs_Calculator: `"Comeron"`, its default,
+with libsequence's `gestimator` (compiled into the package), and `"Li"` with `seqinr::kaks()`. COAL has both so
+that an orthologr run can be reproduced, or continued, with COAL's engine. They are ports of those two
+programs (see "Where the code comes from"), not new implementations of the papers.
+
+**Comeron (1995).** Every codon position is put in one of four classes: non-degenerate (L0), 2-fold degenerate
+where the synonymous change is the transition (L2S) or the transversion (L2V), and 4-fold degenerate (L4).
+Transitions (P) and transversions (Q) are counted per class; for codons that differ at two or three positions
+the two or six pathways are weighted by the inverse of their length in Grantham's (1974) amino-acid distance. With
+Kimura's two-parameter correction per class, A = -1/2 ln(1 - 2P - Q) + 1/4 ln(1 - 2Q) and B = -1/2 ln(1 - 2Q):
+
+    Ks = (L2S A2S + L4 A4) / (L2S + L4) + Bs,   Bs from Qs = (Q2V + Q4) / (L2V + L4)
+    Ka = (L2V A2V + L0 A0) / (L2V + L0) + Ba,   Ba from Qa = (Q0 + Q2S) / (L0 + L2S)
+
+There is no variance, so `SE_dN` and `SE_dS` are `NA`.
+
+**Li (1993).** Positions are non-degenerate (L0), 2-fold (L2) or 4-fold (L4); transitional (A) and
+transversional (B) distances per class, again Kimura's; Ks = (L2 A2 + L4 A4) / (L2 + L4) + B4 and
+Ka = A0 + (L0 B0 + L2 B2) / (L0 + L2). seqinr's counting has rules of its own: the three isoleucine codons and
+the arginine codons are 2-fold with corrections for which changes are synonymous, and the pathways between
+codons that differ at several positions are weighted with a table of amino-acid similarities (a stop codon gets
+the smallest value of the table). The standard errors are the square roots of seqinr's variances `vka` and `vks`.
+
+**`Li` is not `LPB`.** Both are "Li (1993)", and KaKs_Calculator's LPB / MLPB use the same two formulas, but the
+site classes and the pathway weights differ. On the 999 orthologr pairs Li and LPB agree to 1e-6 in 105 (dN)
+and 102 (dS) pairs, Li and MLPB in 273 and 263; the largest differences are 0.034 (dN) and 0.069 (dS) against
+LPB, 0.018 and 0.053 against MLPB, with correlations of 0.999 and 0.995 or better. So `Li` is a method of its
+own, not an alias (`tests/test_kaks_comeron_li.py`, `test_li_is_not_lpb`).
+
+### Two flavours
+
+Each method can read a pair in two ways. The default (`coal`) applies the policy of this page, as for every
+other method. The other (`--comeron-flavour gestimator`, `--li-flavour seqinr`) reads the pair as the reference
+program does, to reproduce numbers that were made with orthologr. The counting and the formulas are the same
+in both; on a pair without stop codons, without `U`, and with every correction defined, the two flavours give
+the same doubles.
+
+| | `Comeron`, default (`coal`) | `--comeron-flavour gestimator` (orthologr 0.4.3's gestimator) |
+|---|---|---|
+| Stop codon at the end of both rows | the column is dropped | compared like any codon: a stop codon has no sites (the column counts half the sites of the other codon), `TAA` against `TGA` or against a sense codon is counted as a change, and a pathway through a stop codon is kept, with Grantham distance 999 |
+| Stop codon elsewhere | the column is skipped; status `warning` | compared, as above; no warning |
+| `U` | read as `T` | the codon is not A/C/G/T: the column is skipped |
+| Gap or ambiguous letter in a codon | column skipped | column skipped (the same) |
+| A logarithm of the correction has an argument <= 0, in a class that has sites | the estimate is `NA`; status `saturated` | gestimator sets that logarithm to 0 and prints the finite number that results (too small). COAL gives that number, with status `warning` and the note `Ka: correction undefined, gestimator's value (...)` (or `Ks:`) |
+| 1 - 2Qa <= 0 (Ba undefined) | Ka is `NA`; `saturated` | gestimator's rule: Ba = 0 when Kimura's distance over the whole rows is below 1 (a number comes out, flagged as above); otherwise it prints 999: `NA`, `saturated` |
+| 1 - 2Qs <= 0 (Bs undefined) | Ks is `NA`; `saturated` | gestimator prints 999: `NA`, `saturated` |
+| No synonymous (nonsynonymous) sites | `NA`; `no_data` | gestimator prints 999: `NA`, `no_data` |
+| dN/dS | `NA` when dS < 1e-6, as for the other methods | gestimator's: 999 (`NA`) only when dS is 0, or dN or dS is 999 |
+| Rows of different length, or not a multiple of 3 | status `error` | status `error` (gestimator 0.4.3 reads beyond the rows) |
+
+gestimator's "cannot be calculated" value 999 is never a number in COAL; orthologr turns it into `NA` too. One
+refinement of the default flavour: an undefined logarithm in a class that has **no** sites (weight 0 in the
+formula) is not a saturation.
+
+| | `Li`, default (`coal`) | `--li-flavour seqinr` (`seqinr::kaks`) |
+|---|---|---|
+| Stop codons (at the end, or elsewhere) | dropped; skipped with status `warning` | compared like any codon: a stop is an "amino acid" with the smallest similarity, and its positions count as sites (so even two identical stop codons change L0, L2 and with them Ka and Ks a little) |
+| `U` | read as `T` | the codon is removed with its column |
+| Gap or ambiguous letter | column skipped | column removed (the same for two sequences; for an alignment of several sequences `seqinr::kaks` removes a column when **any** sequence has a gap, COAL only when one of the two has) |
+| Correction undefined | `NA`; `saturated` | seqinr returns 9.999999 for the value and its variance. COAL: `NA`, `saturated`, in both flavours |
+| A class of sites is empty (Ks needs L2 and L4, Ka needs L0 and L2) | `NA`; `no_data` | seqinr returns 9.999999 here too ("saturated"); COAL: `NA`, `no_data`, in both flavours |
+| Negative Ka or Ks (the formulas give one for some short pairs) | the number, status `warning` | the number, status `warning` (seqinr returns it; orthologr turns it into `NA`) |
+
+`coal dnds` and `coal kaks` compare the rows they are given, so with a reference flavour a terminal stop codon
+is compared when the rows contain it. `coal pipeline`, `coal codon-dnds` and coalr's `coal_dnds_pairs()` /
+`coal_dnds_clusters()` make the codon alignment themselves, and it ends before a terminal stop codon. Their
+option `--terminal-stops compare` (`terminal_stops = "compare"`) adds the two stop codons as the last compared
+column for the reference flavours when both genes end in one. orthologr 0.4.3 needs it: it translates the stop
+codon to `*`, aligns it, and PAL2NAL threads it, so its gestimator compares the two stop codons (the fork of
+orthologr with COAL built in translates without the stop codon; for its numbers the option stays `drop`).
+
+**A property of libsequence that both flavours keep.** For codons that differ at two positions, libsequence's
+`TwoSubs` passes (codon 1, intermediate 1, codon 2, intermediate 2) to a function whose parameters are
+(codon 1, intermediate 1, intermediate 2, codon 2). The four branches counted are therefore codon 1 to
+intermediate 1, intermediate 1 to intermediate 2, codon 1 to codon 2, and codon 2 to intermediate 2, where
+the two pathways are codon 1 to intermediate 1 to codon 2 and codon 1 to intermediate 2 to codon 2; and
+`SingleSub`, given two codons that differ at two positions, classifies the change at the last of them. The
+same nucleotide changes are counted, but the degeneracy class of some is taken from another codon than the
+pathway's. The current libsequence (1.9.8) makes the same call, so this is how "Comeron as gestimator" has
+always been computed, and COAL reproduces it in both flavours because the purpose of the method is to give
+those numbers. It is one reason why Comeron and the other methods differ by a few percent (cross-checks below).
+Use `YN` when the estimate itself matters more than comparability with orthologr.
+
+### Validation of Comeron and Li
+
+References (`benchmarks/kaks/ref/`): **gestimator** is orthologr 0.4.3's own copy of the libsequence headers,
+compiled unmodified with a driver that calls them as `gestimator()` does (`maxHits = 3`) and prints 17
+significant digits (`gestimator_ref.cpp`; the package function prints 4). **seqinr** is `seqinr::kaks()` 4.2-44
+called per pair from R, 17 digits (`seqinr_ref.R`). `benchmarks/kaks/validate_comeron_li.py` runs the
+comparisons; a value is "identical" when the 17-digit texts give the same double. Results of 2026-11-13,
+Linux x86-64, gcc 13.3:
+
+| Set | Pairs | Comeron `gestimator`: dN, dS identical to gestimator | 999 in gestimator = NA in COAL (dN, dS) | Li `seqinr`: Ka, Ks identical to seqinr | 9.999999 in seqinr = NA in COAL (Ka, Ks) | Mismatches |
+|---|---:|---:|---:|---:|---:|---:|
+| orthologr 999 (COAL's alignments, no stop codons) | 999 | 999, 998 | 0, 1 | 999, 998 | 0, 1 | 0 |
+| orthologr 0.4.3's own 984 codon alignments (terminal stop codons in 968) | 984 | 984, 981 | 0, 3 | 984, 981 | 0, 3 | 0 |
+| simulated 600 | 600 | 600, 600 | 0, 0 | 600, 599 | 0, 1 | 0 |
+| `tests/kaks/comeron_li_cases.axt` (hand-made edge cases, stops, gaps, IUPAC, case, U, 1 to 3 codons, saturated) | 499 | 471, 408 | 27, 90 | 376, 254 | 122, 244 | 0 |
+| `edge_cases.axt`, `sim_small.axt` | 71 | 69, 64 | 1, 6 | 65, 62 | 5, 8 | 0 |
+| random short pairs, one changed position per codon | 4,000 | 4,000, 3,810 | 0, 190 | 3,512, 2,725 | 488, 1,275 | 0 |
+| random short pairs, codons drawn independently | 3,000 | 2,866, 2,232 | 134, 768 | 1,773, 1,005 | 1,227, 1,995 | 0 |
+| random short pairs from all 64 codons, with stops, gaps, N / IUPAC, lower case, U | 4,000 | 3,724, 3,179 | 276, 821 | 3,118, 2,055 | 882, 1,945 | 0 |
+
+Every number that a reference returns is the same double in COAL (no value differs at all, so the 1e-12
+tolerance of the tests is not used on this platform), dN/dS and the standard errors (against the square roots of
+seqinr's variances) included; every 999 and 9.999999 is `NA`; the two pairs that both references refuse (a
+length that is not a multiple of 3) have status `error`. gestimator's Kimura rule (Ba = 0) decided 248 of the
+random and hand-made rows. The two files are compiled without floating-point contraction, so a build for a
+target with FMA (`-march=x86-64-v3`, arm64) gives the same bytes; a C library with another `log` can differ in
+the last bit ("Platform reproducibility" has the counts for both).
+
+**What the default flavours change** (default against reference flavour, same input):
+
+| Set | Method | Pairs the policy reads differently | dN changes | by > 1% | by > 20% | number to `NA` | dS changes | by > 1% | by > 20% | number to `NA` |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| orthologr 999 (no stop codons) | Comeron | 0 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | 0 |
+| orthologr 999 | Li | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| orthologr 0.4.3's own 984 alignments | Comeron | 968 | 111 | 105 | 8 | 3 | 1 | 1 | 0 | 0 |
+| orthologr 0.4.3's own 984 alignments | Li | 968 | 957 | 124 | 5 | 0 | 572 | 39 | 0 | 0 |
+| simulated 600 | Comeron | 0 | 0 | 0 | 0 | 0 | 2 | 0 | 0 | 2 |
+| simulated 600 | Li | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+So on real genes as orthologr 0.4.3 aligns them, dropping the terminal stop codons changes Comeron's dN in the
+108 pairs whose two stop codons differ (gestimator counts `TAA` against `TGA` as a substitution), by more than
+1% in 105 and by more than 20% in 8 (0.8% of the pairs); 3 further values are `NA` where gestimator computes a
+number from an undefined correction; dS changes in one pair. Li's values change a little in nearly all pairs, because seqinr
+counts the positions of stop codons as sites. In the three tables, every change is explained by the policy
+(a stop codon or `U` in a compared column) or by the saturation rule; the script fails otherwise ("unexplained":
+0 in all sets, the random ones included).
+
+**Cross-checks** (default flavours; COAL's MLPB, LPB and YN are KaKs_Calculator's numbers):
+
+| Set | Comeron vs MLPB: r (dN, dS), median ratio (dN, dS) | Comeron vs YN | Comeron vs Li | Li vs MLPB | Li vs YN |
+|---|---|---|---|---|---|
+| orthologr 999 | 0.9997, 0.9920; 0.988, 1.027 | 0.9989, 0.9304; 0.992, 1.006 | 0.9998, 0.9931; 0.994, 1.016 | 0.9997, 0.9973; 1.000, 1.001 | 0.9991, 0.9226; 0.998, 0.988 |
+| orthologr 0.4.3's 984 | 0.9997, 0.9924; 0.988, 1.027 | 0.9990, 0.9410; 0.992, 1.003 | 0.9998, 0.9930; 0.994, 1.016 | 0.9995, 0.9974; 1.000, 1.001 | 0.9991, 0.9402; 0.999, 0.988 |
+| simulated 600 | 0.9999, 0.9974; 0.980, 1.064 | 0.9994, 0.9550; 0.966, 1.087 | 0.9999, 0.9968; 0.988, 1.025 | 0.9999, 0.9993; 0.993, 1.030 | 0.9995, 0.9478; 0.979, 1.046 |
+
+(The audit of orthologr of 2026-11-11 measured Comeron against KaKs_Calculator's MLPB on its 984 pairs:
+r = 0.9998 for dN and 0.9926 for dS.)
+
+### With orthologr
+
+`benchmarks/kaks/orthologr_e2e.R` runs `orthologr::dNdS(dnds_est.method = "Comeron")` with its default path
+(reciprocal best hits, pairwise protein alignment, PAL2NAL, gestimator), keeps orthologr's protein and codon
+alignment of every pair, and gives the same pairs to coalr. gestimator prints 4 significant digits, so "equal"
+means: COAL's value printed with `%.4g` is orthologr's. orthologr 0.4.3 (CRAN / GitHub master), its examples of
+20 and of 1,000 genes per species (*A. thaliana*, *A. lyrata*), one core, 2026-11-13:
+
+| What coalr is given | 20 genes: pairs equal to orthologr (dN, dS, dN/dS) | 1,000 genes |
+|---|---:|---:|
+| orthologr's codon alignments: `coal_kaks(method = "Comeron", comeron_flavour = "gestimator")` | 20, 20, 20 of 20 | 984, 984, 984 of 984 |
+| orthologr's protein alignments and the CDS: `coal_codon_align()`, then `coal_kaks()` as above (the codon alignments are PAL2NAL's in all pairs) | 20, 20, 20 of 20 | 984, 984, 984 of 984 |
+| the CDS only: `coal_dnds_pairs(methods = "Comeron", comeron_flavour = "gestimator", terminal_stops = "compare", preset = "pwalign")`, pairs where COAL's protein alignment is orthologr's | 7, 7, 7 of 7 | 444, 444, 444 of 444 |
+| the same call, pairs where the protein alignments differ | 4, 2, 3 of 13 | 204, 144, 135 of 540 |
+
+So the engine gives orthologr's numbers for every pair when the alignment is the same, and the protein
+alignment is the only source of difference. **It differs in more than half of the pairs, and not because of
+ties:** orthologr 0.4.3 calls `pwalign::pairwiseAlignment(type = "global")` without a substitution matrix, which
+scores identities and mismatches only; COAL aligns with BLOSUM62 (or BLOSUM45 / 80, PAM250). Among the 540 pairs,
+409 have another dN or dS at 4 digits: the median difference is 2.7% (dN) and 3.3% (dS), above 1% in 267 (dN) and
+331 (dS) pairs. Over all 981 pairs with values, r = 0.960 (dN) and 0.925 (dS). To reproduce a published orthologr
+0.4.3 table exactly, give COAL orthologr's protein alignments (second row of the table).
+
+The fork of orthologr with COAL built in (`integration/all`, 0.5.0) aligns with BLOSUM62 and translates without
+the stop codon. Against its default path (995 pairs; `options(orthologr.legacy_comeron_saturation = TRUE)` for
+the 0.4.3 treatment of saturation; `terminal_stops = "drop"`): from its protein alignments, 995 of 995 pairs
+equal in dN, dS and dN/dS; from the CDS, COAL's protein alignment is the fork's in 505 pairs, all 505 equal;
+in the other 490 pairs, 291 (dN) and 185 (dS) are equal, the median difference of the rest is 0.07% (dN) and
+2.8% (dS), and r over all pairs is 0.9994 (dN) and 0.9943 (dS). (Why these 490 alignments differ, co-optimal
+alignments or the scoring of end gaps, was not examined here.)
+
+**Time**, 1,000 genes, one core, on a 2-core cloud VM that other jobs were using: orthologr 0.4.3's default path
+1,176 s in this run (745 s in a quieter run of 2026-11-11, one file and several processes per pair);
+`coal_dnds_pairs()` with Comeron 0.57 s for the same 984 pairs from the coding sequences (alignment, codon
+threading and Ka/Ks); `coal_codon_align()` + `coal_kaks()` on orthologr's protein alignments 0.25 s. The
+reciprocal-best-hit search is not in COAL's figure.
+
+**What an orthologr build with `engine = "coal"` has to do to offer Comeron and Li** (the fork's
+`dNdS_coal()` calls `coalr::coal_dnds_pairs()`; nothing in orthologr was changed for this work):
+
+1. accept `dnds_est.method = "Comeron"` and `"Li"` for the COAL engine when
+   `all(c("Comeron", "Li") %in% coalr::coal_info()$methods)` (its `coal_methods()` lists KaKs_Calculator's seven);
+2. pass `comeron_flavour = "gestimator"` and `li_flavour = "seqinr"` to `coalr::coal_dnds_pairs()` (and to
+   `coal_dnds_clusters()`, `coal_kaks()`) for orthologr's numbers, with `terminal_stops = "compare"` only to
+   reproduce 0.4.3, whose alignments include the stop codons; or leave the defaults for COAL's policy and say so;
+3. saturation: with `comeron_flavour = "gestimator"` a row whose note contains `Ka: correction undefined` (or
+   `Ks:`) holds the finite value of orthologr 0.4.3. The fork returns `NA` for these unless
+   `options(orthologr.legacy_comeron_saturation = TRUE)`: set dN (dS) and dN/dS to `NA` for such rows otherwise;
+4. Li: coalr already returns `NA` where seqinr returns 9.999999, and flags a negative value with status
+   `warning` (orthologr turns it into `NA`);
+5. values are doubles, where gestimator's file has 4 significant digits: `signif(x, 4)` gives orthologr's
+   printed values.
+
 ## Benchmark
 
 The benchmark used the 999 orthologr pairs on the cloud workspace, a 2-core Xeon VM at 2.1 GHz that other jobs
@@ -557,14 +942,39 @@ taken on a 16-thread desktop. KaKs_Calculator is single-threaded. Each figure is
 | LPB | 0.67 | 0.09 | 1,484 | 11,654 | 7.9x |
 | MLPB | 0.81 | 0.09 | 1,236 | 11,435 | 9.2x |
 
+`Comeron` and `Li` are table look-ups per codon column: 0.08 CPU s each for the 999 pairs on the same machine
+(2026-11-13; about 13,000 pairs per CPU-second, the same as NG and the LWL family; gestimator's code compiled
+on its own takes 0.09 s). Reading the pair for the two reference flavours (the columns with stop codons, the
+counts of Kimura's distance) is part of preparing every pair and adds about 0.01 s per 1,000 pairs to the
+other methods.
+
 YN00 and MYN spend about 90 % of their time on P(t) (a 61 × 61 symmetric eigendecomposition per iteration, as in
-both reference tools), so their single-thread gain is modest. The gain comes from threads (`-j`): pairs are
+both reference tools), so their single-thread gain is modest. P(t) is only read to weight the pathways between
+two codons that differ at two or three positions, so **for a pair of sequences in which no codon differs at more
+than one position it is not computed** (from 0.6). The result is the same bits: nothing that is computed depends
+on the matrix then, and this was checked at 17 significant digits, before against after, on the 999 orthologr
+pairs, the 600 simulated pairs, 4,000 + 3,000 random short pairs, 1,500 random pairs of 30 to 400 codons at
+divergences from 0 to 0.3 per site and the three test sets of `tests/kaks`, for YN and MYN in both flavours and
+both weightings and in both output formats (80 output files per build, byte-identical), with GCC 13 `-O3`,
+Clang 18 `-O3` and, for four of the sets, GCC `-O2 -march=native` (2026-11-13); `tests/test_kaks_yn_shortcut.py`
+repeats the comparison on every platform CI builds, against `--yn-always-pmat` (a testing option that computes
+the matrix regardless). How much it saves depends on how close the sequences are: 141 of the 999 orthologr pairs
+(*A. thaliana* / *A. lyrata*) have no such codon and none of the 600 simulated ones; on the 999 pairs YN took
+about 10 to 20% less CPU time and MYN no measurable amount less (the machine's run-to-run noise was about 10%;
+the pairs concerned are the short and nearly identical ones, which were cheap already), and on the 1,500 random
+pairs, 913 of which have no such codon, YN took 46% and MYN 34% less (best of 9 runs each, `-j 1`). Closely
+related genomes (strains, populations, recent duplicates) are where it pays. The gain comes from threads (`-j`): pairs are
 independent and computed on the thread pool. In a pipeline, Ka/Ks takes a small share of the time (in the orthologr 0.4.3
 profile of 2026-10-29, about 0.5 %); alignment dominates.
 
 ## Not done (yet)
 
 - GY94 maximum likelihood, model selection and averaging (MS, MA), and the gamma variants.
+- Comeron and Li for genetic codes other than the standard one (their references have no other; Comeron's
+  tables could be built for any code, seqinr's site classes are written out for the standard code).
+- Comeron with `maxHits` 1 or 2 (libsequence's option to leave out codons that differ at several positions;
+  orthologr always uses 3).
+- A corrected two-substitution count for Comeron (see "Comeron and Li": both flavours keep libsequence's).
 - Standard input.
 - A Python API: the commands are reachable from `coal`, and an in-process binding is planned with the R/Python
   bindings work.

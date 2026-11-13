@@ -16,6 +16,8 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "tests"))
+from cpp_hooks import check_command  # noqa: E402  (coal-cpp without test hooks: the test is skipped)
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "tests"))
 from coal import __version__, pipeline  # noqa: E402
@@ -245,6 +247,7 @@ def interrupt(cmd, cwd, after=2, extra_env=None):
     env = {**ENV, "COAL_BATCH_NT": "20000", "COAL_CHECKPOINT_EVERY": "0",
            "COAL_TEST_HOOKS": "1",  # the hooks need this too
            "COAL_TEST_PAUSE_AFTER_CHECKPOINT": str(after), **(extra_env or {})}
+    check_command(cmd, env)
     p = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
     dog = threading.Timer(60, p.kill)
     dog.start()
@@ -334,11 +337,24 @@ class TestMrg8Version(unittest.TestCase):
         # files that are absent are skipped (tests/test_cpp_vs_reference.py runs this module in a
         # partial copy of the repository); in the repository itself pyproject.toml must be there, so at least that
         # check always runs.
-        numeric = re.sub(r"(a|b|rc)\d+$", "", v)  # CMake's project(VERSION) takes digits only: 0.5.0 for 0.5.0rc1
+        # CMake's project(VERSION) takes digits only: 0.5.0 for 0.5.0rc1, 0.6.0 for the development tree 0.6.0.dev0
+        dev = re.match(r"^(\d+(?:\.\d+)+)\.dev(\d+)$", v)
+        numeric = dev.group(1) if dev else re.sub(r"(a|b|rc)\d+$", "", v)
+        # A development tree (scripts/release_version.py): the places that describe the release (the citation,
+        # the website) name the release it becomes, the R package has R's development form, and the changelog's
+        # section is still "Unreleased".
+        shown = numeric if dev else v
+        r_v = f"{numeric}.{9000 + int(dev.group(2))}" if dev else v
         checks = [("pyproject.toml", f'version = "{v}"'), ("CMakeLists.txt", f"VERSION {numeric} "),
+                  ("CMakeLists.txt", f'set(COAL_VERSION_FULL "{v}")'),
                   ("cpp/src/main.cpp", f'VERSION = "{v}"'), ("cpp/src/report.cpp", f'VERSION = "{v}"'),
-                  ("CITATION.cff", f"version: {v}"), ("site/index.html", f'data-version="{v}">{v}<'),
-                  ("site/cite.html", f"<span data-version-ref>{v}</span>"), ("CHANGELOG.md", f"## {v}")]
+                  ("apps/coal-app/pyproject.toml", f'version = "{v}"'),
+                  ("apps/coal-app/pyproject.toml", f'"coal-align=={v}"'),
+                  ("packaging/r/coalr/DESCRIPTION", f"\nVersion: {r_v}\n"),
+                  ("packaging/r/coalr/src/coal/coal_version.h", f'COAL_VERSION_STRING "{v}"'),
+                  ("CITATION.cff", f"version: {shown}"), ("site/index.html", f'data-version="{shown}">{shown}<'),
+                  ("site/cite.html", f"<span data-version-ref>{shown}</span>"),
+                  ("CHANGELOG.md", "## Unreleased" if dev else f"## {v}")]
         self.assertTrue((ROOT / "pyproject.toml").exists())
         for rel, want in checks:
             path = ROOT / rel

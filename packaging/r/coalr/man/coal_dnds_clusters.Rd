@@ -24,7 +24,14 @@ coal_dnds_clusters(
   max_cells = 4e+09,
   yn_flavour = c("kaks", "paml"),
   yn_weighting = TRUE,
-  keep_alignments = FALSE
+  keep_alignments = FALSE,
+  comeron_flavour = c("coal", "gestimator"),
+  li_flavour = c("coal", "seqinr"),
+  terminal_stops = c("drop", "compare"),
+  min_codons = 0L,
+  max_ds = NULL,
+  min_identity = NULL,
+  method = NULL
 )
 }
 \arguments{
@@ -41,8 +48,11 @@ member ID (extra clusters and clusters without an entry are allowed).}
 rows. Called in the main R session, one cluster at a time.}
 
 \item{methods}{Ka/Ks methods: any of \code{"YN"} (Yang & Nielsen 2000, the default), \code{"NG"}, \code{"LWL"}, \code{"MLWL"},
-\code{"LPB"}, \code{"MLPB"}, \code{"MYN"}; \code{"ALL"} for all seven. With several methods a pair's rows come in KaKs_Calculator's
-order (NG, LWL, MLWL, LPB, MLPB, YN, MYN).}
+\code{"LPB"}, \code{"MLPB"}, \code{"MYN"} (KaKs_Calculator's methods; \code{"ALL"} for these seven), \code{"Comeron"} (Comeron 1995
+as libsequence's gestimator computes it, the default method of the R package orthologr; alias \code{"C95"}) and
+\code{"Li"} (Li 1993 as \code{seqinr::kaks()} computes it). Names are read in any case. With several methods a pair's
+rows come in the order NG, LWL, MLWL, LPB, MLPB, YN, MYN, Comeron, Li. Comeron and Li are implemented for
+the standard genetic code only (\code{code = 1}).}
 
 \item{code}{NCBI genetic code number (1 = standard), used for translation, codon threading and Ka/Ks.}
 
@@ -69,6 +79,37 @@ limit. The table takes half a byte per cell and thread.}
 
 \item{keep_alignments}{\code{TRUE}: also return the protein and codon alignment of every pair, as attribute
 \code{"alignments"} (a data frame: \code{seq1}, \code{seq2}, \code{protein1}, \code{protein2}, \code{codon1}, \code{codon2}).}
+
+\item{comeron_flavour}{For \code{"Comeron"}: \code{"coal"} (default) applies COAL's policy (a terminal stop codon is
+dropped, columns with an internal stop are skipped) and gives \code{NA} with status \code{saturated} where the
+correction is undefined; \code{"gestimator"} gives the numbers of orthologr 0.4.3's \code{gestimator()} (stop codons
+are compared like other codons, an undefined logarithm is replaced by 0; status \code{warning} then), for
+reproducing published orthologr results.}
+
+\item{li_flavour}{For \code{"Li"}: \code{"coal"} (default) applies COAL's policy; \code{"seqinr"} compares stop codons as
+\code{seqinr::kaks()} does. In both, seqinr's sentinel 9.999999 is \code{NA}.}
+
+\item{terminal_stops}{Only with \code{comeron_flavour = "gestimator"} or \code{li_flavour = "seqinr"}: \code{"drop"} (default)
+ends every pair before the terminal stop codons, as everywhere else in COAL; \code{"compare"} takes the two
+terminal stop codons as the last compared codon column when both genes end in a stop codon. That is what
+orthologr 0.4.3 does (it translates the stop codon to \code{*}, aligns it and lets PAL2NAL thread it), so
+\code{"compare"} is needed to reproduce its numbers; pairs whose two stop codons differ (\code{TAA} against \code{TGA})
+get another dN by it.}
+
+\item{min_codons, max_ds}{Flags for estimates that need care, as \verb{coal dnds --min-codons N --max-ds X}; both
+off by default (\code{0}, \code{NULL}). A row that has an estimate (status \code{ok} or \code{warning}) and fewer than
+\code{min_codons} compared codons gets the note \code{"fewer than N codons compared"}; one with a dS above \code{max_ds}
+(a saturated synonymous distance) gets \code{"dS above X"}; its status becomes \code{warning} if it was \code{ok}. No row is
+dropped and no number changes, so the cluster summary is unaffected. Attribute \code{"flagged"} counts the rows
+each flag marked. See "Filtering before interpretation" in COAL's \code{docs/kaks.md}.}
+
+\item{min_identity}{A third flag of the same kind, as \verb{coal pipeline --min-identity P}: a row whose protein
+identity (\code{prot_identity}, percent of the alignment's columns) is below \code{min_identity} gets the note
+\code{"protein identity below P\%"}. \code{NULL} (default): off. Pairs of a cluster need not be related at all, and an
+alignment of two unrelated proteins still gives numbers with status \code{ok}.}
+
+\item{method}{The same as \code{methods} (the name \code{\link[=coal_kaks]{coal_kaks()}} and the command line's \code{--method} use); give one
+of the two.}
 }
 \value{
 A list:

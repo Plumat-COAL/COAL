@@ -1,6 +1,7 @@
 // Vendored from COAL cpp/src/align.cpp by scripts/sync_r_sources.py. Do not edit here: edit cpp/src and sync.
 // Licence: GPL-3.0-only, as COAL (https://github.com/Plumat-COAL/COAL); copyright and third-party notices
-// (KaKs_Calculator 2.0 and PAML for kaks.cpp / kaks.hpp): inst/COPYRIGHTS of this package.
+// (KaKs_Calculator 2.0 and PAML for kaks.cpp / kaks.hpp, libsequence for kaks_comeron.cpp, seqinr for
+// kaks_li.cpp): inst/COPYRIGHTS of this package.
 // Pairwise protein alignment (align.hpp): Gotoh global alignment with a row-wise, vectorisable kernel, and the
 // expansion of local (DIAMOND) hits to full length.
 //

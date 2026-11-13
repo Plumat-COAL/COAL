@@ -1,5 +1,6 @@
 #include "sysio.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <cerrno>
 #include <chrono>
@@ -12,6 +13,7 @@
 #include <functional>
 #include <iostream>
 #include <random>
+#include <sstream>
 #include <stdexcept>
 #include <thread>
 
@@ -68,6 +70,13 @@ std::string unique_name() {
 }
 
 }  // namespace
+
+#ifdef COAL_TEST_HOOKS
+const char* test_hook_env(const char* name) {
+    const char* on = std::getenv("COAL_TEST_HOOKS");
+    return (on && std::strcmp(on, "1") == 0) ? std::getenv(name) : nullptr;
+}
+#endif
 
 void install_signal_handlers() {
     std::signal(SIGTERM, on_signal);
@@ -414,14 +423,16 @@ std::string report_folder_missing(const std::string& report) {
     return "the report path " + report + ": folder " + folder + " does not exist";
 }
 
-// Test hook: COAL_TEST_HOOKS=1 and COAL_TEST_PAUSE_IN_REPORT=1 stop here while the report's temp file exists (so a
-// test can send SIGTERM at that point), as report.py _test_pause_in_report
+// Test hook (builds with -DCOAL_TEST_HOOKS=ON, and COAL_TEST_HOOKS=1 in the environment): COAL_TEST_PAUSE_IN_REPORT=1
+// stops here while the report's temp file exists (so a test can send SIGTERM at that point), as report.py
+// _test_pause_in_report
 static void test_pause_in_report() {
-    const char* h = std::getenv("COAL_TEST_HOOKS");
-    const char* v = std::getenv("COAL_TEST_PAUSE_IN_REPORT");
-    if (!h || std::string(h) != "1" || !v || std::string(v) != "1") return;
+#ifdef COAL_TEST_HOOKS
+    const char* v = test_hook_env("COAL_TEST_PAUSE_IN_REPORT");
+    if (!v || std::string(v) != "1") return;
     std::cerr << "coal: test: paused in report" << std::endl;
     std::this_thread::sleep_for(std::chrono::seconds(3600));
+#endif
 }
 
 int write_json_file(const std::string& path, const std::string& text) {
@@ -480,9 +491,38 @@ int write_json_file(const std::string& path, const std::function<void(std::ostre
     return err;
 }
 
+// ------------------------------------------------------------------------------------------------ the output lock
+//
+// `<real output>.coal-lock`, one line: "<pid> <host> <start> <token>\n", the format of the Python engine
+// (src/coal/pipeline.py, where each rule below is explained; docs/pipeline.md "One run per folder"):
+//   pid    the process id (all that COAL up to 0.5.0 wrote);
+//   host   the machine's name (host_name() below: one source and one spelling for both engines): a lock from
+//          another machine counts as held and is never replaced automatically;
+//   start  when that process started (Linux: field 22 of /proc/<pid>/stat; "-" elsewhere): a process id that is
+//          alive but started at another time is another process (the id was reused);
+//   token  random, so that a process recognises exactly its own lock.
+// Missing fields (an older lock) are unknown and judged by the pid alone. The lock is created with its content in
+// one step (a hard link to a finished temporary file), so it is never seen empty, and a stale lock is replaced by
+// one process at a time (`<lock>.takeover`, created exclusively), which removes it only if it still holds the
+// content that was judged stale. So runs of either engine that start together onto a stale lock have one holder.
+//
+// The guard `<lock>.takeover` (the same four fields) is removed by the process that created it, on every path.
+// One that is left all the same (the process was killed in that instant, or Windows refused the removal for as
+// long as we retried) is judged like a lock: its process is gone, or it is older than GUARD_MAX_AGE, and then it
+// is cleared by the next run that needs it.
+//
+// Windows: a file that another process has open cannot be removed or renamed unless that process opened it with
+// FILE_SHARE_DELETE, which neither the C runtime nor Python's open() does: DeleteFile fails with
+// ERROR_SHARING_VIOLATION (errno EACCES). The check is per file, not per name, so a run that is reading the lock
+// also blocks the removal of the temporary name that is a hard link to it. Runs that start together read each
+// other's lock and guard all the time, so every removal here goes through remove_file(), which tries again for
+// about 2 s; the reads themselves take microseconds and close their handle before anything is removed.
+
 static bool pid_alive(long long pid) {
     if (pid <= 0) return false;
 #ifdef _WIN32
+    // (no /proc on Windows: a handle to the process and its exit code. Written to mirror pipeline.py's
+    // _pid_alive; compiled by CI, its behaviour on Windows is not verified by a test of this lock.)
     HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, (DWORD)pid);
     if (!h) return false;
     DWORD code = 0;
@@ -495,62 +535,468 @@ static bool pid_alive(long long pid) {
 #endif
 }
 
-std::string take_output_lock(const std::string& real, const std::string& name) {
-    const std::string path = real + ".coal-lock";
-    bool removed = false;
-    double waited = 0.0;
-    for (;;) {
+namespace {
+
+long long own_pid() {
 #ifdef _WIN32
-        int fd = ::_open(path.c_str(), _O_WRONLY | _O_CREAT | _O_EXCL, _S_IREAD | _S_IWRITE);
+    return (long long)_getpid();
 #else
-        int fd = ::open(path.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0644);
+    return (long long)::getpid();
 #endif
-        if (fd >= 0) {
-            const std::string pid = std::to_string((long long)
+}
+
+// The machine's name, the `host` field. Both engines take it from the same place and spell it the same way
+// (pipeline.py _hostname; docs/pipeline.md "One run per folder"):
+//   source   Windows: GetComputerNameExW(ComputerNamePhysicalDnsHostname), the DNS host name of this computer
+//            (what Python's socket.gethostname() returns there); elsewhere gethostname(2);
+//   spelling one character per character of the name: printable ASCII (33..126) as it is, any other ASCII
+//            character (blanks, control characters) as '_', every character outside ASCII as '?'; at most 255
+//            characters; "-" when the system gives no name.
+// Compared with same_host(): exactly, and on Windows without regard to ASCII case (computer names are not case
+// sensitive there).
+std::string host_name() {
+    std::string out;
 #ifdef _WIN32
-                                                       _getpid()
-#else
-                                                       ::getpid()
-#endif
-                                                       ) + "\n";
-            (void)!COAL_WRITE(fd, pid.data(), (unsigned)pid.size());
-#ifdef _WIN32
-            ::_close(fd);
-#else
-            ::close(fd);
-#endif
-            register_temp(path);
-            return path;
+    wchar_t buf[256];
+    DWORD n = 256;
+    if (GetComputerNameExW(ComputerNamePhysicalDnsHostname, buf, &n))
+        for (DWORD k = 0; k < n; ++k) {
+            if (buf[k] >= 0xDC00 && buf[k] <= 0xDFFF) continue;   // the second half of a character outside the BMP
+            out += buf[k] >= 128 ? '?' : (buf[k] > 32 && buf[k] < 127 ? (char)buf[k] : '_');
         }
-        const int err = errno;
-        if (err != EEXIST) throw CoalError(output_error(name, err), "file_error");
-        long long pid = -1;
-        {
-            std::ifstream in(path);
-            if (!(in >> pid)) pid = -1;
+#else
+    char buf[256];
+    if (::gethostname(buf, sizeof buf) == 0) {
+        buf[sizeof buf - 1] = '\0';
+        for (const char* q = buf; *q; ++q) {
+            const unsigned char ch = (unsigned char)*q;
+            if (ch >= 0x80) {
+                if (ch >= 0xC0) out += '?';   // one '?' per character: UTF-8 continuation bytes are skipped
+            } else {
+                out += (ch > 32 && ch < 127) ? (char)ch : '_';
+            }
         }
-        if (pid <= 0 && waited < 2.0) {
-            // empty: another run created it an instant ago and has not written its id yet (pipeline.py): not stale
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            waited += 0.05;
+    }
+#endif
+    if (out.size() > 255) out.resize(255);
+    return out.empty() ? "-" : out;
+}
+
+bool same_host(const std::string& a, const std::string& b) {
+#ifdef _WIN32
+    if (a.size() != b.size()) return false;
+    for (size_t k = 0; k < a.size(); ++k) {
+        const char x = (a[k] >= 'A' && a[k] <= 'Z') ? (char)(a[k] + 32) : a[k];
+        const char y = (b[k] >= 'A' && b[k] <= 'Z') ? (char)(b[k] + 32) : b[k];
+        if (x != y) return false;
+    }
+    return true;
+#else
+    return a == b;
+#endif
+}
+
+// The start time of a process as the system counts it, or "-" (unknown: not Linux, or no such process). The same
+// text as pipeline.py's _proc_start: the 20th field after the last ')' of /proc/<pid>/stat.
+std::string proc_start(long long pid) {
+#ifdef __linux__
+    std::ifstream in("/proc/" + std::to_string(pid) + "/stat", std::ios::binary);
+    if (!in) return "-";
+    std::string text(4096, '\0');
+    in.read(&text[0], (std::streamsize)text.size());
+    text.resize((size_t)in.gcount());
+    const size_t close = text.rfind(')');
+    if (close == std::string::npos) return "-";
+    std::istringstream fields(text.substr(close + 1));
+    std::string f;
+    for (int k = 0; k <= 19; ++k)
+        if (!(fields >> f)) return "-";
+    return f;
+#else
+    (void)pid;
+    return "-";
+#endif
+}
+
+struct LockInfo {
+    bool exists = false;     // there is a file at that path
+    std::string raw;         // its bytes (at most 4096)
+    bool has_pid = false;    // the first field is a number
+    long long pid = -1;
+    std::string host = "-", start = "-";
+};
+
+LockInfo read_lock(const std::string& path) {
+    LockInfo li;
+    errno = 0;
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        std::error_code ec;
+        li.exists = fs::exists(fs::symlink_status(path, ec));   // there, but unreadable: not a lock we can judge
+        return li;
+    }
+    li.exists = true;
+    li.raw.assign(4096, '\0');
+    in.read(&li.raw[0], (std::streamsize)li.raw.size());
+    li.raw.resize((size_t)in.gcount());
+    std::istringstream fields(li.raw);
+    std::string f0, f1, f2;
+    if (!(fields >> f0)) return li;
+    size_t k = (f0[0] == '-' || f0[0] == '+') ? 1 : 0;
+    if (k == f0.size() || f0.size() > 18) return li;
+    for (size_t q = k; q < f0.size(); ++q)
+        if (f0[q] < '0' || f0[q] > '9') return li;
+    li.pid = std::atoll(f0.c_str());
+    li.has_pid = true;
+    if (fields >> f1) li.host = f1;
+    if (fields >> f2) li.start = f2;
+    return li;
+}
+
+enum class Holder { nobody, other_host, process };
+
+// Who holds a lock with these fields (pipeline.py _lock_holder).
+Holder lock_holder(const LockInfo& li) {
+    if (li.host != "-" && !same_host(li.host, host_name())) return Holder::other_host;
+    if (!pid_alive(li.pid)) return Holder::nobody;
+    if (li.start != "-") {
+        const std::string now = proc_start(li.pid);
+        if (now != "-" && now != li.start) return Holder::nobody;   // the id is in use again, by another process
+    }
+    if (li.pid == own_pid()) return Holder::nobody;   // our id, but this process holds no lock yet: a leftover
+    return Holder::process;
+}
+
+bool write_all(int fd, const std::string& data) {
+    size_t done = 0;
+    while (done < data.size()) {
+        auto n = COAL_WRITE(fd, data.data() + done, (unsigned)(data.size() - done));
+        if (n <= 0) return false;
+        done += (size_t)n;
+    }
+    return true;
+}
+
+int open_excl(const std::string& path) {
+#ifdef _WIN32
+    return ::_open(path.c_str(), _O_WRONLY | _O_CREAT | _O_EXCL | _O_BINARY, _S_IREAD | _S_IWRITE);
+#else
+    return ::open(path.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0644);
+#endif
+}
+
+void close_fd(int fd) {
+#ifdef _WIN32
+    ::_close(fd);
+#else
+    ::close(fd);
+#endif
+}
+
+#ifdef COAL_TEST_HOOKS
+// Test hook (tests/test_output_lock.py): COAL_TEST_UNLINK_FAILS=N makes the first N attempts of this process to
+// remove a lock, guard or temporary file fail as they do on Windows while another process has the file open.
+bool test_unlink_fails() {
+    static long long left = [] {
+        const char* v = test_hook_env("COAL_TEST_UNLINK_FAILS");
+        return v ? std::atoll(v) : 0LL;
+    }();
+    if (left <= 0) return false;
+    --left;
+    return true;
+}
+#endif
+
+// Files this process could not remove although it tried for REMOVE_TRIES: tried once more when the run ends.
+struct Leftovers {
+    std::vector<std::string> paths;
+    ~Leftovers() {
+        for (const std::string& p : paths) COAL_UNLINK(p.c_str());
+    }
+} g_leftovers;
+
+constexpr int REMOVE_TRIES = 220;   // 20 x 1 ms, then 200 x 10 ms: about 2 s
+
+// Remove a lock, guard or temporary file of this process. True when it is gone. EACCES is what Windows answers
+// while another process has the file open (see the top of this section): tried again for about 2 s, then the
+// path is remembered and tried a last time when the process ends.
+bool remove_file(const std::string& path) {
+    for (int k = 0;; ++k) {
+        errno = 0;
+        bool refused = false;
+#ifdef COAL_TEST_HOOKS
+        refused = test_unlink_fails();
+        if (refused) errno = EACCES;
+#endif
+        if (!refused && (COAL_UNLINK(path.c_str()) == 0 || errno == ENOENT)) return true;
+        if (errno != EACCES || k + 1 >= REMOVE_TRIES) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(k < 20 ? 1 : 10));
+    }
+    g_leftovers.paths.push_back(path);
+    return false;
+}
+
+// link(2): `to` becomes another name of the file `from`. 1: made; 0: `to` exists; -1: not possible here.
+int hard_link(const std::string& from, const std::string& to) {
+#ifdef _WIN32
+    if (CreateHardLinkA(to.c_str(), from.c_str(), nullptr)) return 1;
+    const DWORD e = GetLastError();
+    return (e == ERROR_ALREADY_EXISTS || e == ERROR_FILE_EXISTS) ? 0 : -1;
+#else
+    if (::link(from.c_str(), to.c_str()) == 0) return 1;
+    return errno == EEXIST ? 0 : -1;
+#endif
+}
+
+// Create the file `path` holding `raw` in one step: a hard link to a finished temporary file, so that the lock is
+// never seen empty; where links are not possible, exclusively and then written. 1: created; 0: it exists;
+// < 0: -errno of what went wrong (a folder that cannot be written).
+int create_lock(const std::string& path, const std::string& raw) {
+    const std::string tmp = path + "." + std::to_string(own_pid()) + "." + unique_name() + ".tmp";
+    register_temp(tmp);
+    int fd = open_excl(tmp);
+    if (fd < 0 && errno != EEXIST) {
+        const int e = errno;
+        unregister_temp(tmp);
+        return -e;
+    }
+    if (fd >= 0) {
+        const bool written = write_all(fd, raw);
+        close_fd(fd);
+        const int linked = written ? hard_link(tmp, path) : -1;   // -1: no hard links here (or the write failed)
+        remove_file(tmp);
+        unregister_temp(tmp);
+        if (linked >= 0) return linked;
+    } else {
+        unregister_temp(tmp);
+    }
+    for (int k = 0;; ++k) {
+        fd = open_excl(path);
+#ifdef _WIN32
+        // a name whose file is being deleted (removed, but still open in another process) answers "access
+        // denied" for an instant, not "exists": not an error of the folder yet
+        if (fd < 0 && errno == EACCES && k < 50) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
             continue;
         }
-        if (pid > 0 && pid_alive(pid))
-            throw CoalError("another COAL run (process " + std::to_string(pid) + ") is writing " + name +
-                                ": wait for it to finish, or write to another file (if that process is gone, remove " +
-                                path + ")",
-                            "file_error");
-        if (removed) throw CoalError("cannot write " + name + ": " + path + " is in the way and cannot be removed", "file_error");
-        std::error_code ec;
-        fs::remove(path, ec);  // a lock whose process is gone (or one empty for 2 s): replaced
-        removed = true;
+#else
+        (void)k;
+#endif
+        break;
+    }
+    if (fd < 0) return errno == EEXIST ? 0 : -errno;
+    const bool written = write_all(fd, raw);
+    const int e = errno;
+    close_fd(fd);
+    if (!written) {
+        remove_file(path);
+        return -(e ? e : EIO);
+    }
+    return 1;
+}
+
+constexpr int GUARD_MAX_AGE = 15;   // seconds; a takeover holds its guard for microseconds (Windows: up to ~2 s)
+
+// The guard at `guard` was read as `g` and is in the way. If it is a leftover (its process is gone, or it is older
+// than GUARD_MAX_AGE), clear it: moved aside under a unique name (one mover wins), then removed. A guard that was
+// replaced by a live one between the reading and the move is put back.
+void clear_leftover_guard(const std::string& guard, const LockInfo& g) {
+    if (!g.exists) return;
+    std::error_code ec;
+    bool old = false;
+    const auto mtime = fs::last_write_time(guard, ec);
+    if (!ec) old = fs::file_time_type::clock::now() - mtime > std::chrono::seconds(GUARD_MAX_AGE);
+    if (!(old || (g.has_pid && lock_holder(g) == Holder::nobody))) return;
+    const std::string aside = guard + "." + std::to_string(own_pid()) + "." + unique_name();
+    fs::rename(guard, aside, ec);
+    if (ec) return;   // another run moved it first (Windows: or has it open; the next round tries again)
+    register_temp(aside);
+    if (read_lock(aside).raw != g.raw) hard_link(aside, guard);   // not the one that was judged: back in place
+    remove_file(aside);
+    unregister_temp(aside);
+}
+
+// Remove the lock at `path` if it still holds `stale` (the content that was judged stale). One process at a time
+// does this for a path: it first creates `<lock>.takeover` exclusively (pipeline.py _replace_stale_lock) and
+// removes it when it is done, whatever happened in between. Returns 0 or the errno of a guard that cannot be
+// created.
+int replace_stale_lock(const std::string& path, const std::string& stale) {
+    const std::string guard = path + ".takeover";
+    const std::string mine = std::to_string(own_pid()) + " " + host_name() + " " + proc_start(own_pid()) + " " +
+                             unique_name() + unique_name() + "\n";
+    const int made = create_lock(guard, mine);
+    if (made < 0) return -made;
+    if (made == 0) {
+        // another run is replacing the lock right now (it takes microseconds), or left its guard behind
+        clear_leftover_guard(guard, read_lock(guard));
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        return 0;
+    }
+    struct Guard {   // ours from here on: removed on every way out of this function (and by the signal handlers)
+        const std::string& g;
+        explicit Guard(const std::string& p) : g(p) { register_temp(g); }
+        ~Guard() {
+            remove_file(g);
+            unregister_temp(g);
+        }
+    } held(guard);
+    bool still_stale = false;
+    {
+        const LockInfo now = read_lock(path);   // (its handle is closed before the removal below)
+        still_stale = now.exists && now.raw == stale;
+    }
+    if (still_stale) remove_file(path);   // nobody else replaced it; left in place it is judged again next round
+    return 0;
+}
+
+std::string g_lock_raw;   // what this process wrote into the lock it holds (one -o per run)
+
+}  // namespace
+
+int open_new_file(const std::string& path) {
+    errno = 0;
+    if (COAL_UNLINK(path.c_str()) != 0 && errno != ENOENT) return -1;   // (a symbolic link itself, not its target)
+#ifdef _WIN32
+    return ::_open(path.c_str(), _O_WRONLY | _O_CREAT | _O_EXCL | _O_BINARY, _S_IREAD | _S_IWRITE);
+#else
+    int flags = O_WRONLY | O_CREAT | O_EXCL;
+#ifdef O_NOFOLLOW
+    flags |= O_NOFOLLOW;
+#endif
+#ifdef O_CLOEXEC
+    flags |= O_CLOEXEC;
+#endif
+    return ::open(path.c_str(), flags, 0666);
+#endif
+}
+
+bool write_fd(int fd, const char* data, size_t n) {
+    size_t done = 0;
+    while (done < n) {
+        const size_t chunk = n - done > (1u << 30) ? (1u << 30) : n - done;
+        errno = 0;
+        auto w = COAL_WRITE(fd, data + done, (unsigned)chunk);
+        if (w < 0 && errno == EINTR) continue;
+        if (w <= 0) {
+            if (errno == 0) errno = ENOSPC;
+            return false;
+        }
+        done += (size_t)w;
+    }
+    return true;
+}
+
+bool close_fd_checked(int fd) {
+    errno = 0;
+#ifdef _WIN32
+    return ::_close(fd) == 0;
+#else
+    return ::close(fd) == 0;
+#endif
+}
+
+bool replace_file(const std::string& tmp, const std::string& path) {
+    errno = 0;
+#ifdef _WIN32
+    if (::MoveFileExA(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING) != 0) return true;
+    errno = EACCES;
+    return false;
+#else
+    return ::rename(tmp.c_str(), path.c_str()) == 0;   // (rename(2) replaces a symbolic link, it does not follow it)
+#endif
+}
+
+
+std::string take_output_lock(const std::string& real, const std::string& name) {
+    const std::string path = real + ".coal-lock";
+    const std::string raw = std::to_string(own_pid()) + " " + host_name() + " " + proc_start(own_pid()) + " " +
+                            unique_name() + unique_name() + "\n";
+#ifdef COAL_TEST_HOOKS
+    // Test hook (tests/test_output_lock.py): start at this time (milliseconds since the epoch), so that several
+    // runs reach the lock in the same instant.
+    if (const char* at = test_hook_env("COAL_TEST_LOCK_START_AT")) {
+        const auto when = std::chrono::system_clock::time_point(std::chrono::milliseconds(std::atoll(at)));
+        if (when - std::chrono::system_clock::now() < std::chrono::seconds(60))
+            while (std::chrono::system_clock::now() < when) {}
+    }
+#endif
+    double waited = 0.0;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    for (;;) {
+        const int made = create_lock(path, raw);
+        if (made < 0) throw CoalError(output_error(name, -made), "file_error");
+        if (made == 1) {
+            const LockInfo got = read_lock(path);
+            if (!(got.exists && got.raw == raw)) continue;   // replaced under us by a COAL that predates this
+            register_temp(path);
+            g_lock_raw = raw;
+#ifdef COAL_TEST_HOOKS
+            // Test hook (tests/test_output_lock.py): hold the lock until this file exists, then check that it is
+            // still ours, so that a test can count the runs that hold one output at the same moment.
+            if (const char* until = test_hook_env("COAL_TEST_HOLD_LOCK_UNTIL")) {
+                std::error_code ec;
+                for (int k = 0; k < 12000 && !fs::exists(until, ec); ++k)
+                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                if (read_lock(path).raw != raw)
+                    throw CoalError("test hook: the lock " + path + " was replaced under its holder", "file_error");
+            }
+#endif
+            return path;
+        }
+        const LockInfo cur = read_lock(path);
+        if (!cur.exists) continue;   // gone in the meantime: try again
+        if (!cur.has_pid) {
+            // Empty (or not a lock): a COAL up to 0.5.0 created it an instant ago and has not written its id yet,
+            // so it is not stale; only one that stays empty for 2 s is
+            if (waited < 2.0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                waited += 0.05;
+                continue;
+            }
+        } else {
+            const Holder h = lock_holder(cur);
+            if (h == Holder::other_host)
+                throw CoalError("another COAL run (process " + std::to_string(cur.pid) + " on the machine " + cur.host +
+                                    ") is writing " + name + ", or was when it last ran: a process on another machine "
+                                    "cannot be checked from here. Wait for it to finish, or write to another file (if "
+                                    "that run is gone, remove " + path + ")",
+                                "file_error");
+            if (h == Holder::process)
+                throw CoalError("another COAL run (process " + std::to_string(cur.pid) + ") is writing " + name +
+                                    ": wait for it to finish, or write to another file (if that process is gone, remove " +
+                                    path + ")",
+                                "file_error");
+        }
+        if (std::chrono::steady_clock::now() > deadline)
+            throw CoalError("cannot write " + name + ": " + path + " is in the way and cannot be removed", "file_error");
+#ifdef COAL_TEST_HOOKS
+        // Test hook: wait between judging the lock stale and replacing it (the window of the race)
+        if (const char* ms = test_hook_env("COAL_TEST_LOCK_BEFORE_TAKEOVER_MS"))
+            std::this_thread::sleep_for(std::chrono::milliseconds(std::min(std::atoll(ms), 60000LL)));
+        // ... or, without a fixed time: say that this run is in the window (the file <name>.waiting appears) and
+        // stay there until the file <name> exists (at most 60 s)
+        if (const char* go = test_hook_env("COAL_TEST_LOCK_BEFORE_TAKEOVER_UNTIL")) {
+            { std::ofstream mark(std::string(go) + ".waiting"); }
+            std::error_code ec;
+            for (int k = 0; k < 12000 && !fs::exists(go, ec); ++k)
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+#endif
+        const int err = replace_stale_lock(path, cur.raw);   // a lock whose process is gone (or one empty for 2 s)
+        if (err) throw CoalError(output_error(name, err), "file_error");
     }
 }
 
+// Removes the lock this process took. A file at that path that is not ours any more (someone removed the lock by
+// hand and another run took it) is left alone.
 void release_output_lock(const std::string& path) {
     if (path.empty()) return;
-    std::error_code ec;
-    fs::remove(path, ec);
+    bool ours = false;
+    {
+        const LockInfo cur = read_lock(path);   // (its handle is closed before the removal below)
+        ours = cur.exists && !(!g_lock_raw.empty() && cur.raw != g_lock_raw && cur.has_pid);
+    }
+    if (ours) remove_file(path);
     unregister_temp(path);
 }
 

@@ -85,12 +85,15 @@ class RBindings(unittest.TestCase):
 
     def test_version_is_coals(self):
         version = re.search(r'^version\s*=\s*"([^"]+)"', read(ROOT, "pyproject.toml"), re.M).group(1)
-        self.assertRegex(read(PKG, "DESCRIPTION"), rf"(?m)^Version: {re.escape(version)}$")
+        # a development version in R's form (scripts/release_version.py r_version): 0.6.0.dev0 -> 0.6.0.9000
+        dev = re.match(r"^(\d+(?:\.\d+)+)\.dev(\d+)$", version)
+        r_version = f"{dev.group(1)}.{9000 + int(dev.group(2))}" if dev else version
+        self.assertRegex(read(PKG, "DESCRIPTION"), rf"(?m)^Version: {re.escape(r_version)}$")
         self.assertIn(f'"{version}"', read(PKG, "src", "coal", "coal_version.h"))
 
     def test_makevars_compile_every_vendored_source(self):
         cpps = sorted(f[:-4] for f in os.listdir(os.path.join(PKG, "src", "coal")) if f.endswith(".cpp"))
-        self.assertEqual(cpps, ["align", "core", "dnds", "kaks", "tables"])
+        self.assertEqual(cpps, ["align", "core", "dnds", "kaks", "kaks_comeron", "kaks_li", "tables"])
         for name in ("Makevars", "Makevars.win"):
             text = read(PKG, "src", name)
             for c in cpps:
@@ -106,6 +109,47 @@ class RBindings(unittest.TestCase):
                     if bad == "printf(":
                         text = text.replace("snprintf(", "")
                     self.assertNotIn(bad, text, f"{f}: {bad}")
+
+    def test_vignette_and_its_example_data(self):
+        """The vignette builds in R CMD check: knitr and rmarkdown are suggested, the builder is declared, CI has
+        pandoc, and the example it reads is a byte-for-byte copy of examples/dnds."""
+        pkg = os.path.join(ROOT, "packaging", "r", "coalr")
+        with open(os.path.join(pkg, "DESCRIPTION"), encoding="utf-8") as fh:
+            desc = fh.read()
+        self.assertRegex(desc, r"(?m)^Suggests: .*\bknitr\b.*\brmarkdown\b")
+        self.assertRegex(desc, r"(?m)^VignetteBuilder: knitr$")
+        with open(os.path.join(pkg, "vignettes", "from-two-cds-files-to-dnds.Rmd"), "rb") as fh:
+            rmd = fh.read()
+        self.assertNotIn(b"\r", rmd)
+        text = rmd.decode("utf-8")
+        for must in ("%\\VignetteIndexEntry{From two CDS files to dN/dS}", "%\\VignetteEngine{knitr::rmarkdown}",
+                     'system.file("extdata", package = "coalr")', "coal_dnds_pairs(a, b, pairs = pairs)",
+                     "min_identity", "eval = FALSE"):
+            self.assertIn(must, text)
+        for bad in ("download.file", "http://", "system(", "system2(", "install.packages"):   # no network, no programs
+            self.assertNotIn(bad, text)
+        for name in ("species_a_cds.fasta", "species_b_cds.fasta", "orthologs.tsv"):
+            with open(os.path.join(pkg, "inst", "extdata", name), "rb") as a, \
+                    open(os.path.join(ROOT, "examples", "dnds", name), "rb") as b:
+                self.assertEqual(a.read(), b.read().replace(b"\r\n", b"\n"), name)
+        with open(os.path.join(ROOT, ".github", "workflows", "r-package.yml"), encoding="utf-8") as fh:
+            self.assertRegex(fh.read(), r"r-lib/actions/setup-pandoc@[0-9a-f]{40}")
+
+    def test_method_and_methods_and_the_argument_table(self):
+        pkg = os.path.join(ROOT, "packaging", "r", "coalr")
+        src = {}
+        for name in ("dnds.R", "clusters.R", "kaks.R", "pipeline.R", "coalr-package.R"):
+            with open(os.path.join(pkg, "R", name), encoding="utf-8") as fh:
+                src[name] = fh.read()
+        self.assertEqual(sum(s.count("pick_methods(") for s in src.values()), 5)   # the five functions
+        with open(os.path.join(ROOT, "docs", "r.md"), encoding="utf-8") as fh:
+            doc = fh.read()
+        for text in (src["coalr-package.R"], doc):
+            for must in ("`-m`, `--method YN`", "`code = N`", "`codontable = N`", "`min_identity = P`",
+                         "`threads = N` (default `0`, as the command line)"):
+                self.assertIn(must, text)
+        self.assertIn("## Command line and R arguments", doc)
+        self.assertIn("@section Command line and R arguments:", src["coalr-package.R"])
 
     def test_licence_and_exports(self):
         self.assertRegex(read(PKG, "DESCRIPTION"), r"(?m)^License: GPL-3$")  # version 3 only, as COAL

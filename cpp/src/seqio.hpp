@@ -26,6 +26,16 @@ std::string py_repr(const std::string& s);
 // "cannot open '<path>': no such file" (or: permission denied, it is a folder, or strerror), as
 // open_error_message in src/coal/seqio.py, for an input that cannot be opened.
 std::string open_error(const std::string& path);
+// "cannot write '<path>': <cause>" / "write error on <path>: <cause>" (path "": standard output), with the cause
+// the system gave when the stream failed (errno as it is when this is called: call it right after the failed
+// operation; "No space left on device", "Permission denied", "it is a folder, not a file", ...).
+std::string cannot_write(const std::string& path);
+std::string write_error(const std::string& path);
+// Throws InputError (code input_format) when the file starts with the gzip magic bytes (1f 8b): coal-cpp has no
+// decompressor (the standard library only), and read as text such a file gives a misleading "control character"
+// message. Used by `coal kaks`, `coal dnds`, `coal translate` and `coal codon-dnds -i FILE`; the `coal` command
+// (Python) decompresses a .gz input for these before it starts coal-cpp, and so does `coal pipeline`.
+void refuse_gzip(const std::string& path);
 
 // The reader messages (src/coal/seqio.py NON_ASCII, NON_ASCII_ID, EMPTY_HEADER, BEFORE_HEADER_*).
 extern const char* const NON_ASCII;

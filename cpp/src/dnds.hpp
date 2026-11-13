@@ -75,6 +75,13 @@ struct Options {
     AlignParams align;               // for two-member groups without rows, and the flanks of a local hit
     Flanks flanks = Flanks::Align;   // how a local hit's unaligned ends are completed
     kaks::Options kaks;
+    // The reference flavours of Comeron and Li (kaks::ComeronFlavour::gestimator, kaks::LiFlavour::seqinr) compare
+    // stop codons when the rows hold them. The codon rows made here end before a terminal stop codon. true: for
+    // those two flavours, a pair of genes that both end in a stop codon is compared with these two codons as
+    // its last column, which is what a pipeline gives that translates the stop codon to '*', aligns it and
+    // threads the codons (orthologr 0.4.3 with PAL2NAL). false (default): the pair ends before the stop
+    // codons. No effect on the other methods and flavours, which never compare stop codons.
+    bool compare_terminal_stops = false;
 };
 
 struct MemberResult {

@@ -7,6 +7,13 @@ The app for [COAL](https://github.com/plumat-coal/COAL), a fast codon aligner, f
 - an MCP server for AI agents (`python -m coal_app --mcp`), with the tools `codon_align` and `explain_report`;
 - the Windows app (`desktop/`) and the Hugging Face Space (`space/`), built from this package.
 
+**The app and its MCP server cover codon alignment only.** COAL's Ka/Ks (dN/dS) estimation and its one-step
+pipeline from coding sequences to dN/dS are not in the GUI and are not MCP tools: use the `coal` command line for
+them (`coal dnds`, `coal kaks`, `coal pipeline`; [docs/kaks.md](../../docs/kaks.md),
+[docs/pipeline.md](../../docs/pipeline.md)), which the engine package installs. The GUI's About section and the MCP
+server's instructions say the same. MCP tools for Ka/Ks and the pipeline are planned
+([docs/mcp.md](../../docs/mcp.md#planned-tools-for-kaks-and-the-pipeline)).
+
 The engine is a separate package, `coal-align` (the repository root), which this one depends on at exactly the same
 version. Pipelines that only need the `coal` / `pal2nal` commands install `coal-align` alone.
 
