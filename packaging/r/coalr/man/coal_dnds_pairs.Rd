@@ -22,7 +22,9 @@ coal_dnds_pairs(
   comeron_flavour = c("coal", "gestimator"),
   li_flavour = c("coal", "seqinr"),
   terminal_stops = c("drop", "compare"),
-  keep_alignments = FALSE
+  keep_alignments = FALSE,
+  min_codons = 0L,
+  max_ds = NULL
 )
 }
 \arguments{
@@ -79,6 +81,13 @@ get another dN by it.}
 
 \item{keep_alignments}{\code{TRUE}: also return the protein and codon alignment of every pair, as attribute
 \code{"alignments"} (a data frame: \code{seq1}, \code{seq2}, \code{protein1}, \code{protein2}, \code{codon1}, \code{codon2}).}
+
+\item{min_codons, max_ds}{Flags for estimates that need care, as \verb{coal dnds --min-codons N --max-ds X}; both
+off by default (\code{0}, \code{NULL}). A row that has an estimate (status \code{ok} or \code{warning}) and fewer than
+\code{min_codons} compared codons gets the note \code{"fewer than N codons compared"}; one with a dS above \code{max_ds}
+(a saturated synonymous distance) gets \code{"dS above X"}; its status becomes \code{warning} if it was \code{ok}. No row is
+dropped and no number changes, so the cluster summary is unaffected. Attribute \code{"flagged"} counts the rows
+each flag marked. See "Filtering before interpretation" in COAL's \code{docs/kaks.md}.}
 }
 \value{
 A data frame with one row per pair and method: \code{seq1}, \code{seq2}, \code{method}, \code{dN}, \code{dS}, \code{dNdS}, \code{SE_dN},

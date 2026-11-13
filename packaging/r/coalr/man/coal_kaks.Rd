@@ -14,7 +14,9 @@ coal_kaks(
   yn_weighting = TRUE,
   details = FALSE,
   comeron_flavour = c("coal", "gestimator"),
-  li_flavour = c("coal", "seqinr")
+  li_flavour = c("coal", "seqinr"),
+  min_codons = 0L,
+  max_ds = NULL
 )
 }
 \arguments{
@@ -38,6 +40,13 @@ these seven), \code{"Comeron"} (alias \code{"C95"}) and \code{"Li"}; see \code{\
 
 \item{comeron_flavour, li_flavour}{Which reading of the pair \code{"Comeron"} and \code{"Li"} follow: COAL's policy
 (\code{"coal"}, the default) or the reference program's (\code{"gestimator"}, \code{"seqinr"}); see \code{\link[=coal_dnds_pairs]{coal_dnds_pairs()}}.}
+
+\item{min_codons, max_ds}{Flags for estimates that need care, as \verb{coal dnds --min-codons N --max-ds X}; both
+off by default (\code{0}, \code{NULL}). A row that has an estimate (status \code{ok} or \code{warning}) and fewer than
+\code{min_codons} compared codons gets the note \code{"fewer than N codons compared"}; one with a dS above \code{max_ds}
+(a saturated synonymous distance) gets \code{"dS above X"}; its status becomes \code{warning} if it was \code{ok}. No row is
+dropped and no number changes, so the cluster summary is unaffected. Attribute \code{"flagged"} counts the rows
+each flag marked. See "Filtering before interpretation" in COAL's \code{docs/kaks.md}.}
 }
 \value{
 A data frame, one row per pair and method: \code{seq1}, \code{seq2} (the names, or the positions), \code{method},

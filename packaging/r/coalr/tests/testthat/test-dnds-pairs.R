@@ -119,21 +119,21 @@ test_that("min_codons and max_ds flag rows without dropping them or changing a n
   s <- c(h1 = "ATGGCGAAAGGCCTGGATCGTTAA", h2 = "ATGAAGCCAGGGTTCTAG", h3 = "ATGAAGGTTTTGGCAGGACCGCTA")
   plain <- coal_dnds_pairs(q, s, methods = c("YN", "NG"))
   expect_null(attr(plain, "flagged"))
-  f <- coal_dnds_pairs(q, s, methods = c("YN", "NG"), min_codons = 7, max_ds = 0.5)
+  f <- coal_dnds_pairs(q, s, methods = c("YN", "NG"), min_codons = 8, max_ds = 0.5)
   num <- setdiff(names(plain), c("status", "note"))
   expect_identical(f[num], plain[num])
   expect_identical(nrow(f), nrow(plain))
   has <- plain$status %in% c("ok", "warning")
-  short <- has & plain$codons_compared < 7
+  short <- has & plain$codons_compared < 8
   high <- has & !is.na(plain$dS) & plain$dS > 0.5
   expect_true(any(short) && any(high) && any(!short))
-  expect_identical(grepl("fewer than 7 codons compared", f$note, fixed = TRUE), short)
+  expect_identical(grepl("fewer than 8 codons compared", f$note, fixed = TRUE), short)
   expect_identical(grepl("dS above 0.5", f$note, fixed = TRUE), high)
   expect_true(all(f$status[short | high] == "warning"))
   expect_identical(f$status[!(short | high)], plain$status[!(short | high)])
   expect_identical(f$note[!(short | high)], plain$note[!(short | high)])
   both <- short & high
-  if (any(both)) expect_true(all(endsWith(f$note[both], "fewer than 7 codons compared; dS above 0.5")))
+  if (any(both)) expect_true(all(endsWith(f$note[both], "fewer than 8 codons compared; dS above 0.5")))
   expect_identical(attr(f, "flagged"), c(min_codons = sum(short), max_ds = sum(high)))
   # rows without an estimate are left alone; the notes are appended to an existing one
   sat <- coal_kaks(strrep("AAACCCGGGTTT", 5), strrep("CCCGGGTTTAAA", 5), method = "NG", min_codons = 1000, max_ds = 0.01)

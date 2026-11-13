@@ -27,7 +27,9 @@ coal_dnds_clusters(
   keep_alignments = FALSE,
   comeron_flavour = c("coal", "gestimator"),
   li_flavour = c("coal", "seqinr"),
-  terminal_stops = c("drop", "compare")
+  terminal_stops = c("drop", "compare"),
+  min_codons = 0L,
+  max_ds = NULL
 )
 }
 \arguments{
@@ -91,6 +93,13 @@ terminal stop codons as the last compared codon column when both genes end in a 
 orthologr 0.4.3 does (it translates the stop codon to \code{*}, aligns it and lets PAL2NAL thread it), so
 \code{"compare"} is needed to reproduce its numbers; pairs whose two stop codons differ (\code{TAA} against \code{TGA})
 get another dN by it.}
+
+\item{min_codons, max_ds}{Flags for estimates that need care, as \verb{coal dnds --min-codons N --max-ds X}; both
+off by default (\code{0}, \code{NULL}). A row that has an estimate (status \code{ok} or \code{warning}) and fewer than
+\code{min_codons} compared codons gets the note \code{"fewer than N codons compared"}; one with a dS above \code{max_ds}
+(a saturated synonymous distance) gets \code{"dS above X"}; its status becomes \code{warning} if it was \code{ok}. No row is
+dropped and no number changes, so the cluster summary is unaffected. Attribute \code{"flagged"} counts the rows
+each flag marked. See "Filtering before interpretation" in COAL's \code{docs/kaks.md}.}
 }
 \value{
 A list:
