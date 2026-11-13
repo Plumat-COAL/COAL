@@ -24,3 +24,6 @@ packaging/r/** eol=lf
 examples/** text eol=lf
 # Windows batch files need CRLF (cmd mis-reads labels in LF-only files)
 *.bat text eol=crlf
+# The website is deployed byte for byte and has a size budget (tests/test_docs_site.py): LF on every system.
+# `eol=lf` without `text` leaves the text/binary decision to text=auto, so images and fonts are untouched.
+site/** eol=lf

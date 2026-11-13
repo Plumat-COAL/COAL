@@ -11,6 +11,7 @@ import hashlib
 import io
 import os
 import re
+import shlex
 import sys
 import time
 import unittest
@@ -127,7 +128,8 @@ class DiamondCommands(PipelineCase):
         self.assertIn("--max-target-seqs", cmds[1])
         log = (self.tmp / "o" / "work" / "logs" / "diamond.log").read_text(encoding="utf-8")
         for c in cmds:   # the report has what the log shows was run
-            self.assertIn("$ " + " ".join(c), log)
+            # the log quotes each argument as a shell would (Windows paths have backslashes)
+            self.assertIn("$ " + " ".join(shlex.quote(a) for a in c), log)
         again = quiet(P.run_pairs, Q, S, self.tmp / "o", jobs=2, resume=True)
         self.assertTrue(next(s for s in again.report["stages"] if s["name"] == "diamond_search")["cached"])
         self.assertEqual(again.report["tools"]["diamond"]["commands"], cmds)

@@ -44,7 +44,8 @@ class DndsFlags(PipelineCase):
         out = self.tmp / "o.tsv"
         r = run_cpp("dnds", AXT, "-o", out, *args)
         self.assertEqual(r.returncode, 0, r.stderr)
-        return read_tsv(out), r.stderr.decode()
+        # stderr is a text stream: \r\n line ends on Windows
+        return read_tsv(out), r.stderr.decode().replace("\r\n", "\n")
 
     def test_off_by_default_and_zero_is_off(self):
         a = run_cpp("dnds", AXT, "-q", "-m", "YN", "-m", "NG")
