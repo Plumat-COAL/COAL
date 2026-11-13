@@ -207,13 +207,15 @@ fam002/pep.aln fam002/nuc.fa -o fam002/codon.fa -codontable 2
   single run, and a job's half-written output is removed as it is for a single run (each job writes a temporary file
   and renames it at the end).
 - **Parallel jobs:** `--batch-parallel N` runs up to N jobs at a time in worker processes (`0` = one per CPU core;
-  the default is one after the other). Each worker imports COAL once and takes jobs from a queue, so the start-up
+  the default is one after the other). Each worker imports COAL once and is handed one job after another, so the start-up
   saving stays; every job's output is still byte-identical to running it alone. A job's messages are kept until it
   ends and then printed together (prefixed as above), so the lines of two jobs never interleave; jobs finish, and
   print, in whatever order they end, while the batch report lists them in job order. `-j N` keeps its meaning
   inside each job, so `--batch-parallel 8 -j 2` can use 16 processes. Ctrl-C or SIGTERM stops every worker and
   removes half-written outputs as above; a worker killed from outside (out of memory) fails its job with
-  `error: the job's worker process died (out of memory?)` and the batch goes on. Measured (16-core WSL 2,
+  `error: the job's worker process died (out of memory?)` and the batch goes on with the remaining workers (at
+  whatever moment the worker is killed; if no worker is left, the jobs not yet run fail with
+  `no worker process left to run the job`). Measured (16-core WSL 2,
   Python engine): 64 jobs of 2,000 sequences × 300 codons (0.15 s each alone) take 4.15 s one after the other,
   1.20 s with `--batch-parallel 4` and 0.71 s with `--batch-parallel 0`; on 200 jobs of `examples/clean` (8 genes
   each) 0.12 s against 0.09 s, since a job that takes less than a millisecond has nothing to gain. Batches always run in the Python engine (never handed to `coal-cpp`, which has no

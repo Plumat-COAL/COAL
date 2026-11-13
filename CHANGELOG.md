@@ -73,6 +73,12 @@ Found by the second independent review (2026-11-13) of the fixes above (not yet 
   read): a lock from another machine counts as held and the message names the machine, a process id that is
   alive but started at another time (Linux) is not the holder, a second call into the same output from the same
   process is refused, and releasing never removes a lock that is not the run's own (docs/pipeline.md).
+- **`--batch-parallel`: a worker killed while it sends a result no longer hangs the batch.** Jobs and results
+  went through two queues shared by all workers; a worker killed in the middle of writing a result died holding
+  the queue's lock, with half a message in the pipe, and the batch waited for ever. Every worker now has a pipe
+  of its own, the batch process hands out the jobs and watches the workers themselves, and a killed worker fails
+  its job with the documented one line (`error: the job's worker process died (out of memory?)`) while the
+  batch goes on; the dead job's lock file is removed. Nothing else about `--batch` changes.
 
 Found by the first CI runs on Windows and macOS of the code above (not yet released):
 

@@ -199,19 +199,33 @@ def _entry(job: Job, code: int, rec, reporting: bool) -> dict:
     return entry
 
 
-def _worker(todo, results, n: int, reporting: bool) -> None:
-    """A --batch-parallel worker process: takes jobs from `todo` until None, runs each through cli.run_job with
-    its stderr lines kept, and sends {'started'} then {'index', 'code', 'stderr', 'entry'} to `results`."""
+# The parent's ends of the workers' pipes, as they are when a worker is started. With the fork start method a
+# worker inherits copies of them (the ends of the workers started before it, and its own): it closes them first
+# thing, so that a worker that dies is an end-of-file on its pipe and nobody else holds it open.
+_parent_ends: list = []
+
+
+def _worker(conn, n: int, reporting: bool) -> None:
+    """A --batch-parallel worker process: receives jobs on `conn` until None, runs each through cli.run_job with
+    its stderr lines kept, and sends back {'index', 'code', 'stderr', 'entry'}. The pipe is this worker's alone
+    (one writer, no lock shared with the other workers)."""
     import io
     from .cli import install_signal_handlers, run_job
     from .core import limit_blas_threads
+    for c in _parent_ends:
+        try:
+            c.close()
+        except OSError:
+            pass
     limit_blas_threads()
     install_signal_handlers()
     while True:
-        job = todo.get()
+        try:
+            job = conn.recv()
+        except (EOFError, OSError):
+            return      # the batch process is gone
         if job is None:
             return
-        results.put({"started": job.index, "pid": os.getpid()})
         buf = io.StringIO()
         real = sys.stderr
         sys.stderr = buf  # cli.run_job's say() prints to sys.stderr at call time
@@ -228,78 +242,180 @@ def _worker(todo, results, n: int, reporting: bool) -> None:
                 code, entry = (e.code if isinstance(e.code, int) else 1), None
         finally:
             sys.stderr = real
-        results.put({"index": job.index, "code": code, "stderr": buf.getvalue(), "entry": entry})
+        try:
+            conn.send({"index": job.index, "code": code, "stderr": buf.getvalue(), "entry": entry})
+        except (BrokenPipeError, OSError):
+            return
         if code in (130, 141, 143, 129):
             return
+
+
+class _Slot:
+    """One worker process as the batch process sees it."""
+    __slots__ = ("proc", "conn", "job", "reader", "gone")
+
+    def __init__(self, proc, conn):
+        self.proc, self.conn, self.job, self.reader, self.gone = proc, conn, None, None, False
 
 
 def _run_parallel(jobs: list[Job], workers: int, reporting: bool, progress: bool) -> tuple[int, list[dict]]:
     """Run the jobs up to `workers` at a time. Returns (code, entries in job order): code 0 when every job ran
     (their own exit codes are in the entries), or 130 / 143 when a job was interrupted or the batch was stopped
-    (the other workers are ended, as a single run's workers are)."""
+    (the other workers are ended, as a single run's workers are).
+
+    Each worker has a pipe of its own, and the batch process hands it one job at a time. A thread per worker
+    reads its results; the main loop waits on those and looks at the workers' sentinels in between. A worker
+    that is killed (the OOM killer) at any moment, also in the middle of sending a result, is therefore noticed:
+    its job fails with one line and the batch goes on with the other workers. (Before, jobs and results went
+    through two queues shared by all workers: a worker killed while it wrote a result died holding the queue's
+    lock with half a message in the pipe, the other workers waited for the lock, the batch process waited for
+    the rest of the message, and the batch hung.)"""
     import multiprocessing as mp
+    import queue
+    import threading
+    from collections import deque
     n = len(jobs)
     ctx = mp.get_context()
-    todo, results = ctx.Queue(), ctx.Queue()
-    for job in jobs:
-        todo.put(job)
-    for _ in range(workers):
-        todo.put(None)
-    procs = [ctx.Process(target=_worker, args=(todo, results, n, reporting), daemon=False) for _ in range(workers)]
-    for p in procs:
-        p.start()
+    inbox: queue.Queue = queue.Queue()   # (slot, message) from the reader threads; message None = pipe closed
+
+    def read(slot: _Slot) -> None:
+        while True:
+            try:
+                msg = slot.conn.recv()
+            except (EOFError, OSError, ValueError, TypeError, AttributeError):
+                msg = None
+            except Exception:  # noqa: BLE001 - half a message that does not unpickle
+                msg = None
+            inbox.put((slot, msg))
+            if msg is None:
+                return
+
+    slots: list[_Slot] = []
     entries: dict[int, dict] = {}
-    running: dict[int, int] = {}  # worker pid -> the job it is on
+    todo = deque(jobs)
     stop = 0
-    by_index = {job.index: job for job in jobs}
+
+    def fail(job: Job, why: str) -> None:
+        sys.stderr.write(f"coal: {_prefix(job, n)}error: {why}\n")
+        sys.stderr.flush()
+        entries[job.index] = {"index": job.index, "line": job.line, "exit_code": 1, "output": job.output,
+                              "_skipped": 0}
+
+    def lost(slot: _Slot) -> None:
+        """The worker is gone: its job (if it had one) failed, and the lock of that job's output is removed."""
+        if slot.gone:
+            return
+        slot.gone = True
+        job, slot.job = slot.job, None
+        if job is not None and job.index not in entries:
+            fail(job, "the job's worker process died (out of memory?)")
+            try:
+                from .pipeline import _read_lock
+                lock = os.path.realpath(job.output) + ".coal-lock"
+                cur = _read_lock(lock)
+                if cur is not None and cur[1] == slot.proc.pid:
+                    os.unlink(lock)
+            except OSError:
+                pass
+
+    def give(slot: _Slot) -> None:
+        while todo and not slot.gone and slot.job is None:
+            job = todo.popleft()
+            if progress:
+                print(f"coal: progress: job {job.index}/{n} {job.args.pep_aln}", file=sys.stderr, flush=True)
+            slot.job = job
+            try:
+                slot.conn.send(job)
+            except (OSError, ValueError):   # the worker died while it was idle: the job goes to another one
+                slot.job = None
+                todo.appendleft(job)
+                lost(slot)
+
     try:
+        for _ in range(workers):
+            parent, child = ctx.Pipe()
+            _parent_ends.append(parent)
+            proc = ctx.Process(target=_worker, args=(child, n, reporting), daemon=False)
+            try:
+                proc.start()
+            finally:
+                child.close()
+            slot = _Slot(proc, parent)
+            slot.reader = threading.Thread(target=read, args=(slot,), daemon=True, name="coal-batch-reader")
+            slot.reader.start()
+            slots.append(slot)
+        for slot in slots:
+            give(slot)
         while len(entries) < n:
             try:
-                msg = results.get(timeout=0.5)
-            except Exception:  # queue.Empty: see whether a worker died with a job in hand
-                for p in procs:
-                    if not p.is_alive() and p.pid in running:
-                        k = running.pop(p.pid)
-                        job = by_index[k]
-                        sys.stderr.write(f"coal: {_prefix(job, n)}error: the job's worker process died "
-                                         f"(out of memory?)\n")
-                        entries[k] = {"index": k, "line": job.line, "exit_code": 1, "output": job.output, "_skipped": 0}
-                if not any(p.is_alive() for p in procs) and len(entries) < n:
-                    for job in jobs:  # jobs no worker ever started
-                        if job.index not in entries:
-                            sys.stderr.write(f"coal: {_prefix(job, n)}error: no worker process left to run the job\n")
-                            entries[job.index] = {"index": job.index, "line": job.line, "exit_code": 1,
-                                                  "output": job.output, "_skipped": 0}
+                slot, msg = inbox.get(timeout=0.2)
+            except queue.Empty:
+                # no result: has a worker died? (also one whose pipe gives no end-of-file: half a message is in
+                # it, or another process still holds a copy of its end)
+                for slot in slots:
+                    if not slot.gone and not slot.proc.is_alive():
+                        # what it sent in full before it ended is read first (the reader then sees the end of
+                        # the pipe, or stays in the half message for good); only a worker with nothing more to
+                        # come is lost here, the others when their last message has been handled
+                        slot.reader.join(1.0)
+                        with inbox.mutex:
+                            waiting = any(s is slot for s, _ in inbox.queue)
+                        if not waiting:
+                            lost(slot)
+                if all(s.gone for s in slots):
+                    while todo:
+                        fail(todo.popleft(), "no worker process left to run the job")
+                else:
+                    for slot in slots:
+                        give(slot)
                 continue
-            if "started" in msg:
-                running[msg["pid"]] = msg["started"]
-                if progress:
-                    job = by_index[msg["started"]]
-                    print(f"coal: progress: job {job.index}/{n} {job.args.pep_aln}", file=sys.stderr, flush=True)
+            if msg is None:
+                lost(slot)
+                if all(s.gone for s in slots):
+                    while todo:
+                        fail(todo.popleft(), "no worker process left to run the job")
                 continue
-            running = {pid: k for pid, k in running.items() if k != msg["index"]}
+            slot.job = None
             sys.stderr.write(msg["stderr"])
             sys.stderr.flush()
             if msg["entry"] is None:  # interrupted inside the job: stop the batch, as a single run stops
                 stop = msg["code"]
                 break
             entries[msg["index"]] = msg["entry"]
+            give(slot)
     except KeyboardInterrupt:
         stop = 130
         print("coal: interrupted", file=sys.stderr)
     except SystemExit as e:  # SIGTERM / SIGHUP to the batch
         stop = e.code if isinstance(e.code, int) else 143
     finally:
-        for p in procs:
-            if stop and p.is_alive():
-                p.terminate()  # SIGTERM: the worker's own handler removes its job's half-written output
-        for p in procs:
-            p.join(timeout=10)
-            if p.is_alive():
-                p.kill()
-                p.join()
-        for q in (todo, results):
-            q.close()
+        for slot in slots:
+            if stop:
+                if slot.proc.is_alive():
+                    slot.proc.terminate()  # SIGTERM: the worker's own handler removes its job's half-written output
+            elif not slot.gone:
+                try:
+                    slot.conn.send(None)
+                except (OSError, ValueError):
+                    pass
+        for slot in slots:
+            slot.proc.join(timeout=10)
+            if slot.proc.is_alive():
+                slot.proc.kill()
+                slot.proc.join()
+        for slot in slots:
+            # (a reader that still waits for the rest of a dead worker's message is a daemon thread: closing the
+            # pipe under it is not safe on every Python, so its pipe is left to the end of the process)
+            slot.reader.join(timeout=1.0)
+            if not slot.reader.is_alive():
+                try:
+                    slot.conn.close()
+                except OSError:
+                    pass
+            try:
+                _parent_ends.remove(slot.conn)
+            except ValueError:
+                pass
     return stop, [entries[k] for k in sorted(entries)]
 
 
