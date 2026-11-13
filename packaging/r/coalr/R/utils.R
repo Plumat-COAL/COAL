@@ -37,19 +37,34 @@ coal_read_fasta <- function(path) {
   seqs
 }
 
-# Whether one unnamed string is meant as a file name although no such file exists: it has a path separator, starts
-# with "~", or ends in an extension that sequence files carry (optionally compressed). A sequence has none of
-# these ("/", "\\" and "~" are no sequence characters, and no sequence ends in ".fasta").
+# Whether one unnamed string is meant as a file name although no such file exists. The first version said yes to
+# every string with "/", "\\", a leading "~" or a sequence-file extension, and so called aligned rows files:
+# "MKV..LFA.FA" (a dot-gapped row ending in the residues F, A), "MK/VL" (a frameshift mark), "~~MKV" (GCG's end
+# gaps). A string is a file name here only if
+#   1. it has a path separator, a leading "~" or a sequence-file extension, and a character that no sequence row
+#      has (a digit, "_", ":", a space; anything but letters and - . * ~ ? / \): "C:\\data\\cds", "run2/cds",
+#      "query_cds.fasta"; or
+#   2. it is written like a file name and not like a row: it has a lower-case letter and none of - * ?, and either
+#      a path separator ("data/cds", "~/x/cds") or a lower-case extension after a name without a dot ("cds.fasta",
+#      "genes.fa.gz").
+# Every other string is a sequence: rows in upper case whatever their gaps ("MKV.FA", "ACGT.NT", "MK/VL"), and
+# lower-case rows with dashes or with more dots than an extension has ("ac.gt.aa").
 looks_like_path <- function(x) {
-  grepl("[/\\\\]", x) || startsWith(x, "~") ||
-    grepl("\\.(fa|fasta|fas|fna|ffn|faa|frn|cds|pep|aa|nt|aln|afa|mfa|seq|txt)(\\.(gz|bz2|xz))?$", x, ignore.case = TRUE)
+  ext <- "\\.(fa|fasta|fas|fna|ffn|faa|frn|cds|pep|aa|nt|aln|afa|mfa|seq|txt)(\\.(gz|bz2|xz))?$"
+  sep <- grepl("[/\\\\]", x)
+  pathish <- sep || startsWith(x, "~") || grepl(ext, x, ignore.case = TRUE)
+  if (!pathish) return(FALSE)
+  if (grepl("[^A-Za-z.*~?/\\\\-]", x)) return(TRUE)                       # 1: no sequence row has this character
+  if (!grepl("[a-z]", x) || grepl("[*?-]", x)) return(FALSE)              # an upper-case row, or one with gaps
+  if (sep) return(!grepl("~", sub("^~", "", x)))                           # 2: lower case with a separator
+  grepl(ext, x) && !grepl("[.~]", sub(ext, "", x))                         # 2: name.ext, the name without a dot
 }
 
 # Sequences from what the user gave: a named character vector, a FASTA path, an XStringSet (Biostrings), a list
 # (seqinr: one vector of characters per record) or a two-column data.frame (id, sequence).
-# One unnamed string is a FASTA file name when that file exists or when it looks like a path (looks_like_path):
-# then a missing file is an error, and the string is never taken for a sequence. Any other single string is one
-# sequence.
+# One unnamed string is a FASTA file name when that file exists or when it is written like a file name and not
+# like a sequence row (looks_like_path): then a missing file is an error, and the string is never taken for a
+# sequence. Any other single string is one sequence.
 as_seqs <- function(x, arg, need_names = TRUE) {
   if (inherits(x, "XStringSet") || inherits(x, "XString") || inherits(x, "BStringSet")) {
     x <- as.character(x)
@@ -62,8 +77,8 @@ as_seqs <- function(x, arg, need_names = TRUE) {
              (file.exists(x) || looks_like_path(x))) {
     if (dir.exists(x)) stop("`", arg, "`: '", x, "' is a folder, not a FASTA file", call. = FALSE)
     if (!file.exists(x)) {
-      stop("`", arg, "`: file not found: '", x, "' (one string with a path separator or a sequence-file extension ",
-           "is read as a FASTA file name; for a single sequence give a named vector, c(id = \"ATG...\"))",
+      stop("`", arg, "`: file not found: '", x, "' (one string written like a file name is read as a FASTA file ",
+           "name; for a single sequence give a named vector, c(id = \"ATG...\"))",
            call. = FALSE)
     }
     x <- coal_read_fasta(x)

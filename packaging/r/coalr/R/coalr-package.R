@@ -18,12 +18,22 @@
 #' Where a function takes sequences (`cds`, `query_cds`, `protein_rows`, ...) it accepts a named character vector,
 #' a `DNAStringSet` / `AAStringSet`, a list as `seqinr::read.fasta()` returns it, a two-column data frame (ID,
 #' sequence), or **one string naming a FASTA file**. One unnamed string is taken as a file name when a file of
-#' that name exists, or when it looks like a path: it contains `/` or `\`, starts with `~`, or ends in a
-#' sequence-file extension (`.fa`, `.fasta`, `.fas`, `.fna`, `.ffn`, `.faa`, `.frn`, `.cds`, `.pep`, `.aa`, `.nt`,
-#' `.aln`, `.afa`, `.mfa`, `.seq`, `.txt`, each optionally followed by `.gz`, `.bz2` or `.xz`). A string that
-#' looks like a path but names no file is an error ("file not found"); it is never used as a sequence. Any other
-#' single string is one sequence, where a function accepts sequences without names (for example
-#' `coal_translate("ATGAAA")`). To pass one sequence whose text could be mistaken for a file name, name it:
+#' that name exists. When no such file exists it is still taken as a file name, and is then the error "file not
+#' found" instead of being used as a sequence, if it is written like a file name and not like a sequence row:
+#' \itemize{
+#' \item it has a path separator (`/` or `\`), a leading `~` or a sequence-file extension (`.fa`, `.fasta`,
+#'   `.fas`, `.fna`, `.ffn`, `.faa`, `.frn`, `.cds`, `.pep`, `.aa`, `.nt`, `.aln`, `.afa`, `.mfa`, `.seq`, `.txt`,
+#'   each optionally followed by `.gz`, `.bz2` or `.xz`) **and** a character that no sequence row has (a digit,
+#'   `_`, `:`, a space, ...): `"run2/cds"`, `"query_cds.fasta"`, `"C:\\data\\cds"`; or
+#' \item it has a lower-case letter, none of `-`, `*`, `?`, and either a path separator (`"data/cds"`) or a
+#'   lower-case extension after a name without a dot (`"cds.fasta"`, `"genes.fa.gz"`).
+#' }
+#' Any other single string is one sequence, where a function accepts sequences without names (for example
+#' `coal_translate("ATGAAA")`). In particular an aligned row is a sequence whatever it ends in or contains:
+#' `"MKV..LFA.FA"`, `"ACGT.NT"`, `"MK/VL"` (a frameshift mark), `"~~MKV"`; so is a lower-case row with dashes or
+#' with several dots. What this cannot tell apart: a mistyped file name in upper case (`"CDS.FASTA"`) is taken
+#' as a sequence, and a lower-case row whose only gap is one dot just before `fa`, `aa`, `nt`, ... (or that
+#' uses `/`) is taken as a file name. To pass one sequence that could be mistaken for a file name, name it:
 #' `c(id = "...")`.
 #'
 #' @section Threads and interrupts:

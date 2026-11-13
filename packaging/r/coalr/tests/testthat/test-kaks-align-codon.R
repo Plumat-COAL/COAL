@@ -130,3 +130,23 @@ test_that("one string that looks like a path but names no file is 'file not foun
   expect_false(coalr:::looks_like_path("ATGAAA"))
   expect_false(coalr:::looks_like_path("MKV-L.A*"))
 })
+
+test_that("an aligned row is a sequence whatever it ends in or contains (never 'file not found')", {
+  # independent review 2026-11-13, finding 7: dot-gapped rows that end in the letters of a file extension, rows
+  # with a frameshift mark (/ or \) and rows with GCG's ~ gaps were called missing files
+  rows <- c("MKV..LFA.FA", "MKV.FA", "ACGT.AA", "ACG.NT", "MKL.SEQ", "MK.PEP", "AC.TXT", "MKVLA.FASTA", "MK.CDS",
+            "MKV/LA", "MK\\VL", "~~MKV", "~MKV..FA", "MKV~~", "mk..v.fa", "acgt-ac.nt", "ac.gt.aa", "mkv*.fa",
+            "MKV.FA.GZ", "M/K.FA")
+  for (r in rows) expect_false(coalr:::looks_like_path(r), info = r)
+  # ... and is used as one
+  expect_no_error(coal_align_pairs("MKV.FA", "MKVFA"))
+  expect_no_error(coal_align_pairs("MKV..LFA.FA", "MKVLFAFA"))
+  # what is written like a file name still is one
+  paths <- c("cds.fasta", "genes.fa.gz", "aln.fasta", "a.faa", "x/y", "~/no/such/file", "data/cds", "Data/Cds.fasta",
+             "C:\\data\\cds", "query_cds.fasta", "run2/cds", "genes2.fa", "my genes.txt", "CDS_1.FASTA", "~/CDS1",
+             "..\\cds.fa", "./cds.fa")
+  for (p in paths) expect_true(coalr:::looks_like_path(p), info = p)
+  # the two readings the rule cannot tell apart, as documented
+  expect_false(coalr:::looks_like_path("CDS.FASTA"))     # a mistyped upper-case file name: taken as a sequence
+  expect_true(coalr:::looks_like_path("acgtn.nt"))       # a lower-case row with one dot before "nt": a file name
+})

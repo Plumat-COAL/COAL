@@ -28,12 +28,22 @@ through Python and \pkg{reticulate}; optional.
 Where a function takes sequences (\code{cds}, \code{query_cds}, \code{protein_rows}, ...) it accepts a named character vector,
 a \code{DNAStringSet} / \code{AAStringSet}, a list as \code{seqinr::read.fasta()} returns it, a two-column data frame (ID,
 sequence), or \strong{one string naming a FASTA file}. One unnamed string is taken as a file name when a file of
-that name exists, or when it looks like a path: it contains \code{/} or \verb{\\}, starts with \code{~}, or ends in a
-sequence-file extension (\code{.fa}, \code{.fasta}, \code{.fas}, \code{.fna}, \code{.ffn}, \code{.faa}, \code{.frn}, \code{.cds}, \code{.pep}, \code{.aa}, \code{.nt},
-\code{.aln}, \code{.afa}, \code{.mfa}, \code{.seq}, \code{.txt}, each optionally followed by \code{.gz}, \code{.bz2} or \code{.xz}). A string that
-looks like a path but names no file is an error ("file not found"); it is never used as a sequence. Any other
-single string is one sequence, where a function accepts sequences without names (for example
-\code{coal_translate("ATGAAA")}). To pass one sequence whose text could be mistaken for a file name, name it:
+that name exists. When no such file exists it is still taken as a file name, and is then the error "file not
+found" instead of being used as a sequence, if it is written like a file name and not like a sequence row:
+\itemize{
+\item it has a path separator (\code{/} or \verb{\\}), a leading \code{~} or a sequence-file extension (\code{.fa}, \code{.fasta},
+\code{.fas}, \code{.fna}, \code{.ffn}, \code{.faa}, \code{.frn}, \code{.cds}, \code{.pep}, \code{.aa}, \code{.nt}, \code{.aln}, \code{.afa}, \code{.mfa}, \code{.seq}, \code{.txt},
+each optionally followed by \code{.gz}, \code{.bz2} or \code{.xz}) \strong{and} a character that no sequence row has (a digit,
+\verb{_}, \code{:}, a space, ...): \code{"run2/cds"}, \code{"query_cds.fasta"}, \code{"C:\\\\data\\\\cds"}; or
+\item it has a lower-case letter, none of \code{-}, \code{*}, \verb{?}, and either a path separator (\code{"data/cds"}) or a
+lower-case extension after a name without a dot (\code{"cds.fasta"}, \code{"genes.fa.gz"}).
+}
+Any other single string is one sequence, where a function accepts sequences without names (for example
+\code{coal_translate("ATGAAA")}). In particular an aligned row is a sequence whatever it ends in or contains:
+\code{"MKV..LFA.FA"}, \code{"ACGT.NT"}, \code{"MK/VL"} (a frameshift mark), \code{"~~MKV"}; so is a lower-case row with dashes or
+with several dots. What this cannot tell apart: a mistyped file name in upper case (\code{"CDS.FASTA"}) is taken
+as a sequence, and a lower-case row whose only gap is one dot just before \code{fa}, \code{aa}, \code{nt}, ... (or that
+uses \code{/}) is taken as a file name. To pass one sequence that could be mistaken for a file name, name it:
 \code{c(id = "...")}.
 }
 

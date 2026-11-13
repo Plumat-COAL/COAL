@@ -52,12 +52,19 @@ res <- coal_dnds_pairs("thaliana_cds.fasta", "lyrata_cds.fasta",
 - `query_cds`, `subject_cds`: a named character vector, a `DNAStringSet`, a `seqinr` list, a two-column data frame
   (ID, sequence: `orthologr::read.cds()`'s table works) or a FASTA path.
 - **When one string is a file name** (every function that takes sequences; `?coalr` "Sequence inputs"): one
-  unnamed string is read as a FASTA file when a file of that name exists, or when it looks like a path: it
-  contains `/` or `\`, starts with `~`, or ends in a sequence-file extension (`.fa`, `.fasta`, `.fas`, `.fna`,
-  `.ffn`, `.faa`, `.frn`, `.cds`, `.pep`, `.aa`, `.nt`, `.aln`, `.afa`, `.mfa`, `.seq`, `.txt`, optionally with
-  `.gz`, `.bz2`, `.xz`). A path-like string that names no file is the error "file not found" (a mistyped path
-  used to be taken for a sequence). Any other single string is one sequence; name it (`c(id = "...")`) if its
-  text could be mistaken for a file name.
+  unnamed string is read as a FASTA file when a file of that name exists. When none exists, it is the error
+  "file not found" (a mistyped path used to be taken for a sequence) only if it is written like a file name and
+  not like a sequence row: (1) it has `/` or `\`, a leading `~` or a sequence-file extension (`.fa`, `.fasta`,
+  `.fas`, `.fna`, `.ffn`, `.faa`, `.frn`, `.cds`, `.pep`, `.aa`, `.nt`, `.aln`, `.afa`, `.mfa`, `.seq`, `.txt`,
+  optionally with `.gz`, `.bz2`, `.xz`) together with a character no sequence row has (a digit, `_`, `:`, a
+  space: `"run2/cds"`, `"query_cds.fasta"`, `"C:\data\cds"`); or (2) it has a lower-case letter, none of `-`,
+  `*`, `?`, and a path separator (`"data/cds"`) or a lower-case extension after a name without a dot
+  (`"cds.fasta"`, `"genes.fa.gz"`). Any other single string is one sequence. An aligned row is therefore never
+  "file not found" because of what it ends in or contains: `"MKV..LFA.FA"`, `"ACGT.NT"`, `"MK/VL"`, `"~~MKV"`
+  are sequences (the first rule of 2026-11-12 called them missing files). The rule cannot tell everything apart:
+  a mistyped file name in upper case (`"CDS.FASTA"`) is taken as a sequence, and a lower-case row whose only gap
+  is one dot just before `fa`, `aa`, `nt`, ... or that uses `/` is taken as a file name. Name a single sequence
+  (`c(id = "...")`) and it is always a sequence.
 - `pairs`: two columns, query ID and subject ID (for example `orthologr::diamond_rec()`'s first two columns).
   Without it, the i-th query goes with the i-th subject.
 - Result: a data frame with the columns of [`dnds.tsv`](pipeline.md#dndstsv): `seq1 seq2 method dN dS dNdS SE_dN
