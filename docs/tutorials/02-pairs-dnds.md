@@ -42,7 +42,7 @@ coal pipeline pairs \
 ```
 coal pipeline: 2 gzip-compressed input file(s) decompressed into .../ecoli_vs_salmonella/work/inputs
 coal pipeline: translated 4,318 query and 4,554 subject records (0 not usable)
-coal pipeline: warning: the input looks like several transcripts per gene (query: 4,318 records of 4,308 genes, 9 genes with several records (e.g. b0149: lcl|NC_000913.3_cds_NP_414691.1_149, lcl|NC_000913.3_cds_YP_010051172.1_150), read from the header field [locus_tag=). The pipeline treats each record as a gene: such a gene is compared once per transcript, and reciprocal best hits are split between its transcripts. Use --longest-isoform to keep the longest CDS of each gene (with --gene-map TSV if the genes are not in the headers), or give one sequence per gene
+coal pipeline: warning: the input has several CDS records per gene (isoforms or alternative start sites; query: 4,318 records of 4,308 genes, 9 genes with several records (e.g. b0149: lcl|NC_000913.3_cds_NP_414691.1_149, lcl|NC_000913.3_cds_YP_010051172.1_150), read from the header field [locus_tag=). The pipeline treats each record as a gene: such a gene is compared once per record, and its reciprocal best hits are split between its records. Use --longest-isoform to keep the longest CDS of each gene (with --gene-map TSV if the genes are not in the headers), or give one sequence per gene
 coal pipeline: 3,142 pairs (rbh)
 coal pipeline: summary: 8,872 records (0 not usable); 3,142 pairs: 2,973 ok, 3 warning, 11 not_converged, 155 saturated, 0 no_data, 0 error
 coal pipeline: summary: decompress_inputs 0.0 s, translate_query 0.0 s, translate_subject 0.1 s, diamond_search 6.0 s, orthologs 0.0 s, align_codon_kaks 9.7 s
@@ -55,7 +55,7 @@ has the same codons), DIAMOND searched the proteins both ways, the 3,142 **recip
 pairs, each pair's proteins were aligned (global Needleman-Wunsch, BLOSUM62), the CDS were threaded onto that
 alignment, and Ka/Ks was estimated with Yang & Nielsen's (2000) method, YN00.
 
-**The warning about transcripts** is worth reading rather than skipping. *E. coli* has no splicing, so these are
+**The warning about several CDS per gene** is worth reading rather than skipping. *E. coli* has no splicing, so these are
 not transcripts: they are 9 genes annotated with two or three alternative start sites (*mrcB*'s PBP1B alpha and
 gamma, *infB*'s three IF2 forms, ...). Here they cost nothing (the pairs are the same with and without the fix),
 but in a eukaryote with five isoforms per gene they split the reciprocal best hits; `--longest-isoform` keeps

@@ -52,7 +52,8 @@
 //     default with ComeronFlavour::gestimator) the upstream branches, for gestimator's numbers;
 //   - Options::comeron_min_sites (default 3): in ComeronFlavour::coal a site class with fewer sites than this
 //     cannot make dN or dS NA; its undefined logarithm is set to 0, as upstream does (status warning, with a
-//     note). docs/kaks.md ("Comeron") describes both.
+//     note), but only where the distance that results is positive: a 0 from such a class stays NA (saturated),
+//     as without the rule. docs/kaks.md ("Comeron") describes both.
 //
 // Reference: Comeron JM (1995) A method for estimating the numbers of synonymous and nonsynonymous substitutions
 // per site. J Mol Evol 41:1152-1159.
@@ -487,6 +488,19 @@ Result run_comeron(const Prepared& p, const GeneticCode& code, const Options& op
     if (Ba <= 0.0) Ba = 0.0;
     const double dS = As + Bs;
     const double dN = Aa + Ba;
+    // Options::comeron_min_sites applies only where it yields a positive distance (D9 refinement, 2026-11-14): a
+    // small class's undefined logarithm set to 0 can leave dS (in principle dN) at exactly 0 although a change was
+    // seen (ATGGCTAAA / ATGGCCAAA: dS 0), which reads as "no synonymous change" (orthologr: dS_zero). There the
+    // class counts as saturated, as with --comeron-min-sites 0: NA, status saturated (coal flavour), the note
+    // "Ks: correction undefined, gestimator's value (...)" (gestimator flavour). A positive value is unaffected.
+    if (small_a && !(dN > 0.0)) {
+        small_a = false;
+        saturated_a = true;
+    }
+    if (small_s && !(dS > 0.0)) {
+        small_s = false;
+        saturated_s = true;
+    }
 
     // what upstream prints as 999 ("cannot be calculated"): not finite
     const bool s_undefined = !std::isfinite(dS), a_undefined = !std::isfinite(dN);
