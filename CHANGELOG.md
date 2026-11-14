@@ -363,6 +363,13 @@ entry under "Added", not under "Fixed".
     was. Starting and registering now happen under the lock that `kill_running()` takes, and after
     `kill_running()` the interrupted batch starts no further aligner (its clusters get the error `interrupted`);
     the next batch runs normally.
+  - **Very long pairs no longer take 600 MB or more** (deep test of 2026-11-14). The traceback is held at most
+    256 MiB at a time (`AlignParams::traceback_bytes`); a larger pair is aligned with checkpoints, recomputing
+    one block of rows at a time with the same code, so its alignment is identical. Human / mouse Ensembl pipeline
+    (17,118 pairs with titin): peak 711 MB before, 227 MB after, 49.9 s → 53.2 s on 2 cores; `dnds.tsv` and
+    the codon alignments byte-identical, and identical to the deep test's run. Forced on every pair (test hook,
+    blocks of 1 and more rows): Salmonella / Shigella and S. cerevisiae / C. glabrata `dnds.tsv`, codon and
+    protein alignments byte-identical.
 - **R package `coalr` (packaging/r/coalr, docs/r.md).** COAL's C++ core compiled into an R package with Rcpp:
   `coal_dnds_pairs()` (CDS of ortholog pairs to dN, dS, dN/dS: the columns of `dnds.tsv`), `coal_dnds_clusters()`
   (every pair of each cluster and the per-cluster summary of `cluster_summary.tsv`; protein alignments from given

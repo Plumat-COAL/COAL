@@ -730,6 +730,9 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
         };
         OutFile fout, fcodon, fprot, fkaks, ffail;
 #ifdef COAL_TEST_HOOKS
+        // Test hook (tests/test_deep_findings.py): COAL_TEST_TRACEBACK_BYTES=b sets AlignParams::traceback_bytes, so
+        // that small pairs take the checkpointed traceback, whose alignments must equal the plain ones.
+        if (const char* tbv = test_hook_env("COAL_TEST_TRACEBACK_BYTES")) c.opt.align.traceback_bytes = std::strtoull(tbv, nullptr, 10);
         // Test hook (tests/test_pipeline_atomic.py): COAL_TEST_DNDS_FAIL_AFTER_GROUPS=k makes the run fail, as a
         // full disk does, when k groups have been written (everything written so far is flushed first).
         const char* fail_after_v = test_hook_env("COAL_TEST_DNDS_FAIL_AFTER_GROUPS");

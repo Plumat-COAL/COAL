@@ -51,8 +51,13 @@ neighbouring cells:
 - **AVX2 dispatch.** With GCC or Clang on x86 the row loops are compiled twice, for the baseline (SSE2) and for
   AVX2, and the CPU picks one at run time. MSVC and ARM builds get the baseline, which the compiler vectorises for
   its own target.
-- **Traceback** takes 4 bits per cell, so memory is `n·m/2` bytes. Titin against titin (35k × 35k) needs ~600 MB.
-  Pairs above `max_cells` (default 4·10⁹ cells, ~2 GB) are refused for that pair only.
+- **Traceback** takes 4 bits per cell, `n·m/2` bytes, held at most `traceback_bytes` at a time (default 256 MiB).
+  A larger pair (above about 23,000 × 23,000 residues) is aligned with checkpoints: the forward pass keeps the
+  scores of every k-th row, and the traceback recomputes one block of k rows at a time from its checkpoint, with
+  the same code, so the alignment is the same bit for bit; only the forward pass is run twice for that pair.
+  Titin against titin (35k × 36k) took ~630 MB of traceback and now takes ~130 MB (the human / mouse Ensembl
+  pipeline run: peak 711 MB before, 227 MB after, 50 s → 53 s, every output byte-identical). Pairs above
+  `max_cells` (default 4·10⁹ cells) are refused for that pair only.
 - **Threads.** `align_pairs` runs on the repository's thread pool (`pool.hpp`) and starts the biggest pairs first.
 
 **parasail** (BSD-style licence, compatible with COAL's GPL-3.0-only) was measured, not vendored. Its 16-bit `sg_trace_scan`
@@ -65,6 +70,7 @@ about 1,500 pairs a second on one thread, so alignment is no longer the slow ste
 ```cpp
 struct AlignParams { std::string matrix = "BLOSUM62"; double gap_open = 10.0, gap_extend = 0.5;
                      bool free_end_gaps = true; uint64_t max_cells = 4000000000ULL;
+                     uint64_t traceback_bytes = 256ULL << 20;   // 0: the whole traceback in memory
                      static AlignParams needle(); static AlignParams pwalign(); };
 struct PairAlignment { std::string a, b; double score; size_t length, identities, similarities, gaps;
                        std::string error; };

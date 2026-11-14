@@ -2849,7 +2849,7 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--gap-extend", type=float, default=None, metavar="X", help="cost of each further position")
     g.add_argument("--end-gaps", choices=("free", "penalized"), default=None, help="default free")
     g.add_argument("--max-cells", type=int, default=4_000_000_000, metavar="N",
-                   help="refuse a pair whose alignment table has more cells (default 4e9, about 2 GB)")
+                   help="refuse a pair whose alignment table has more cells (default 4e9)")
     g = common.add_argument_group("Running")
     g.add_argument("-j", "--jobs", type=int, default=0, metavar="N",
                    help="threads, and aligner processes at a time (default 0 = one per CPU this process may use; "

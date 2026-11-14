@@ -440,5 +440,30 @@ class PipelineMessages(PipelineCase):
             P.run_pairs(Q, S, self.tmp / "ok", pairs=self.pairs_file(PLAIN))
         self.assertNotIn("too divergent", err.getvalue())
 
+# ---------------------------------------------------------------------------------------------- memory
+@needs_cpp
+class CheckpointedTraceback(PipelineCase):
+    """A pair whose traceback is above AlignParams::traceback_bytes is aligned with checkpoints (titin: 630 MB of
+    traceback before). The test hook COAL_TEST_TRACEBACK_BYTES makes every pair of the fixture take that route,
+    with blocks of one row and of a few rows: every output byte must equal the plain run's."""
+
+    def test_the_same_bytes(self):
+        from unittest import mock
+        from cpp_hooks import need_test_hooks
+        from test_dnds_pipeline import PLAIN, Q, S
+        need_test_hooks(self, CPP)
+        outs = {}
+        for budget in (None, "1", "100", "4096"):
+            env = {"COAL_TEST_HOOKS": "1", **({"COAL_TEST_TRACEBACK_BYTES": budget} if budget else {})}
+            with mock.patch.dict(os.environ, env):
+                if budget is None:
+                    os.environ.pop("COAL_TEST_TRACEBACK_BYTES", None)
+                res = P.run_pairs(Q, S, self.tmp / f"o{budget}", pairs=self.pairs_file(PLAIN), quiet=True,
+                                  keep_alignments=True, keep_protein_alignments=True, preset="pwalign")
+            outs[budget] = [Path(res.outputs[k]).read_bytes() for k in ("dnds", "codon_alignments",
+                                                                        "protein_alignments")]
+        for budget in ("1", "100", "4096"):
+            self.assertEqual(outs[budget], outs[None], budget)
+
 if __name__ == "__main__":
     unittest.main()

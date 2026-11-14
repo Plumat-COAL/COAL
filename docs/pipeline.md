@@ -784,8 +784,9 @@ machine is still to be done.
   size. Lower `--max-cluster-size`, or use `--aligner mafft`, for inputs with many clusters of hundreds of members.
 - **Large clusters are aligned pairwise**, so their values come from pairwise alignments and those of smaller
   clusters from an MSA. The summary says which (`aligner`).
-- **Pair alignment memory** is cells / 2 bytes per thread (`--max-cells`, default 4·10⁹ cells): a titin-sized pair
-  needs about 600 MB. Above the limit that pair gets status `error`.
+- **Pair alignment memory** is cells / 2 bytes per thread up to 256 MiB; a larger pair is aligned with
+  checkpoints in about that much (the same alignment, its forward pass run twice): a titin-sized pair needs about
+  130 MB instead of 630 MB. Above `--max-cells` (default 4·10⁹ cells) that pair gets status `error`.
 - **`--aligner diamond` uses one HSP** and DIAMOND's heuristic alignment ([alignment.md](alignment.md)); a hit that
   does not fit the translated sequences is that pair's error.
 - **Best hits are DIAMOND's first target per query** (`--max-target-seqs 1`). Ties are broken by DIAMOND
