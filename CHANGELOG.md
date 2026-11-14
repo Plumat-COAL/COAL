@@ -338,6 +338,45 @@ entry under "Added", not under "Fixed".
     7.526 installed". When more than 30% of the pairs are `saturated` or `not_converged` the run says that the
     sequences are too divergent for dS and points to "Filtering before interpretation" (S. cerevisiae /
     C. glabrata: 3,775 of 4,388, 86%).
+  - **Retest of 2026-11-14 (R01-R04).** **The genetic-code hint names the code of a whole set read with the
+    wrong `-c`** (R01). *Mycoplasma genitalium* (524 CDS, code 4) with `-c 1` or `-c 11` got no hint at all
+    although 376 genes have internal TGA: the rule that keeps only molecules with at least half of their records
+    as evidence dropped its one chromosome (253 of 524). *Tetrahymena* with its records shuffled got "81 of the
+    26,927 genes ... mitochondrial or plastid genes in a nuclear set? ... the rest with -c 1 and these with -c 6"
+    (the first 5,000 flagged genes looked at, spread over scaffolds), i.e. advice to keep 26,846 genes under the
+    wrong code. Now, when at least half of a set's records have internal stops, the hint is about the whole set
+    ("most genes (376 of the 524) have internal stop codons under genetic code 11, and 253 of the 264 with two
+    or more have none under NCBI genetic code 4 ... The whole set looks like code 4 ... Run again with -c 4"),
+    the molecule rule does not apply, a molecule with 150 records or more is a genome (only the codes of whole
+    genomes are candidates: 1, 4, 6, 10, 11, 12, 15), and of codes that tie those whose start codons do not fit
+    a tenth of the genes drop out (Mycoplasma starts 34 of 264 genes with GTG / TTG / TTA, which code 10 does
+    not allow). A set with more than 5,000 flagged genes is judged on 5,000 spread evenly over the file, not the
+    first ones. `report.json`: new `records` and `whole_set` in `genetic_code_hints`. The organelle wording and
+    the two-run recipe are kept for sets in which fewer than half of the records have internal stops. Before
+    (0153e3b) and after, the warning of `coal pipeline pairs` for the query set, on every real CDS set of the
+    deep test, the retest and the D02 evaluation (43 runs); 33 are unchanged (listed below the table):
+
+    | Set | `-c` | Before | After |
+    |---|---|---|---|
+    | *M. genitalium* RefSeq (524) | 1 | none | whole set: code 4 (376 of 524 with internal stops) |
+    | *M. genitalium* RefSeq | 11 | none | whole set: code 4 |
+    | *T. thermophila* RefSeq (26,996) | 1 | "4,896 of the 26,927 genes": code 6, organelle wording | whole set: code 6 (4,966 of 5,000 looked at) |
+    | *T. thermophila*, records shuffled | 1 | "81 of the 26,927 genes": code 6, organelle wording | whole set: code 6 (4,971 of 5,000) |
+    | *P. tetraurelia* RefSeq (39,642) | 1 | "4,850 of the 39,534 genes": code 6, organelle wording | whole set: code 6 (4,995 of 5,000) |
+    | human Ensembl (19,746) | 2 | "4,988 of the 19,311 genes": codes 1, 11, 12, "mitochondrial genes in a nuclear set?" | whole set: codes 1, 11 or 12 |
+    | *S. cerevisiae* mitochondrial genes alone (19) | 1 | code 3, organelle wording | whole set: code 3 |
+    | *C. glabrata* mitochondrial genes alone (11) | 1 | code 3, organelle wording | whole set: code 3 |
+    | *K. lactis* mitochondrial genes alone (9) | 1 | codes 3, 4, 5, 13, organelle wording | whole set: codes 3, 4, 5 or 13 |
+
+    Unchanged: *S. cerevisiae*, *C. glabrata*, *K. lactis*, *A. gossypii* whole genomes (`-c 1`: code 3 for
+    their mitochondrial genes); human and mouse Ensembl (`-c 1`: code 2, 12 genes each); *D. melanogaster*
+    Ensembl (twice) and RefSeq (`-c 1`: codes 4 or 5, 11 genes); no hint for *Salmonella* (twice), *Shigella*
+    (twice), *Y. pestis* (twice), *E. coli* K-12 and Sakai (`-c 11`), *A. thaliana* (whole, 1,000, TAIR10
+    RefSeq), *A. lyrata* (whole, 1,000), the human giant-gene and exon sets, the human and mouse subsets and
+    all-isoform files; none with the right code (*M. genitalium* `-c 4`, *T. thermophila* and *P. tetraurelia*
+    `-c 6`, *S. cerevisiae* mitochondrial genes `-c 3`), and none where the code reads fewer codons as stops than
+    the genes' own, so that no gene has an internal stop to explain (*S. cerevisiae* genome `-c 3`,
+    *D. melanogaster* `-c 5`). No run names a wrong single code.
 - **Protein alignment for the codon step (docs/alignment.md).** `<coal/align.hpp>` and the `coal-cpp-align` tool: a
   global Needleman-Wunsch/Gotoh aligner (BLOSUM62/45/80, PAM250, affine gaps; EMBOSS needle defaults, a pwalign
   preset), full length (overhangs gapped, never cut off), AVX2 row loops picked at run time, multithreaded; optimal

@@ -19,6 +19,7 @@ import sys
 import unittest
 from contextlib import redirect_stderr
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
@@ -313,6 +314,37 @@ class GeneticCodeHint(unittest.TestCase):
         h = self.hint(orgs, header=ens, org_header=lambda k: "cds chromosome:GRCh38:MT:1:900:1")
         self.assertEqual(len(h["genes"]), 4)
 
+    # retest of 2026-11-14, R01: the code of the WHOLE set
+    def mycoplasma(self, n=200, nuclear=60):
+        """A Mycoplasma-like genome on one molecule: most genes read TGA as Trp, 15% start with GTG / TTG."""
+        starts = ["ATG"] * 17 + ["GTG", "TTG", "TTG"]
+        return [cds(self.rng, start=starts[k % 20]) for k in range(n - nuclear)], nuclear
+
+    def test_a_genome_read_with_the_wrong_code_gets_its_code(self):
+        orgs, nuc = self.mycoplasma()
+        lcl = lambda k: ""   # noqa: E731
+        h = self.hint(orgs, nuclear=nuc, chosen=11, header=lcl)
+        # no molecule named: the codes whose start codons do not fit 15% of the genes drop out, 4, 5, 13 stay
+        self.assertEqual((h["codes"], h["whole_set"]), ([4, 5, 13], True))
+        # one molecule with 200 records is a genome, not an organelle: code 4 (the old replicon rule, "at least
+        # half of the molecule's records are evidence", dropped every gene: 140 of 200 here, 253 of 524 in
+        # M. genitalium, and the hint was silent)
+        recs = [(f"lcl|NC_000908.2_cds_N{k}_{k}", cds(self.rng, stops=())) for k in range(nuc)]
+        recs += [(f"lcl|NC_000908.2_cds_O{k}_{nuc + k}", s) for k, s in enumerate(orgs)]
+        path = write_fasta(self.tmp / "myco.fa", recs)
+        flagged = {r: 0 for r, _ in recs[nuc:][::2]}   # (half of them, as a sample would be)
+        genes, bg, reps = P._hint_inputs([str(path)], flagged, {r for r, _ in recs[:nuc]})
+        h = P.suggest_genetic_code(11, genes, bg, len(recs), len(orgs), reps, fraction=0.5)
+        self.assertEqual((h["codes"], h["whole_set"]), ([4], True))
+        # a mitochondrial set alone (few records on its molecule): organelle codes stay candidates
+        h = self.hint([cds(self.rng, avoid=("CGA", "CGC")) for _ in range(5)], nuclear=2,
+                      org_header=lambda k: "", header=lambda k: "")
+        self.assertEqual((h["codes"], h["whole_set"]), ([3], True))
+
+    def test_organelle_genes_in_a_nuclear_set_are_not_the_whole_set(self):
+        h = self.hint([cds(self.rng, avoid=("CGA", "CGC")) for _ in range(5)])
+        self.assertFalse(h["whole_set"])
+
 
 
 @needs_cpp
@@ -331,6 +363,52 @@ class GeneticCodeHintRun(PipelineCase):
         self.assertEqual((h["clean_under"], h["candidates"], h["genes"]), (None, [4, 5, 9, 10, 13, 21], 3))
         validate(res.report, SCHEMA)
         self.assertIn("have none under any of the NCBI genetic codes 4, 5, 9, 10, 13 and 21", err.getvalue())
+        self.assertFalse(h["whole_set"])
+
+    def run_set(self, recs, **options):
+        q = write_fasta(self.tmp / "q.fa", recs)
+        cl = self.tmp / "cl.tsv"
+        cl.write_text(f"{recs[0][0]}\t{recs[1][0]}\n", encoding="utf-8")
+        with redirect_stderr(io.StringIO()) as err:
+            res = P.run_clusters(q, self.tmp / "out", clusters=cl, **options)
+        validate(res.report, SCHEMA)
+        return res.report["genetic_code_hints"], " ".join(err.getvalue().split())
+
+    def test_a_genome_with_the_wrong_code_is_told_to_run_again(self):
+        """R01: M. genitalium with -c 11 got no hint at all; now 'the whole set looks like code 4'."""
+        import random
+        self.rng = random.Random(7)
+        starts = ["ATG"] * 17 + ["GTG", "TTG", "TTG"]
+        recs = [(f"lcl|NC_000908.2_cds_N{k}_{k}", cds(self.rng, stops=())) for k in range(60)]
+        recs += [(f"lcl|NC_000908.2_cds_O{k}_{60 + k}", cds(self.rng, start=starts[k % 20])) for k in range(140)]
+        hints, err = self.run_set(recs, codontable=11)
+        h = hints[0]
+        self.assertEqual((h["whole_set"], h["candidates"], h["clean_under"], h["records"],
+                          h["genes_with_internal_stops"], h["genes"]), (True, [4], 4, 200, 140, 140))
+        self.assertIn("cds: most genes (140 of the 200) have internal stop codons under genetic code 11, and 140 of the "
+                      "140 with two or more have none under NCBI genetic code 4", err)
+        self.assertIn("The whole set looks like code 4: its rows are estimates from mistranslated codons. Run "
+                      "again with -c 4", err)
+        self.assertNotIn("take them out", err)
+        self.assertNotIn("nuclear set", err)
+
+    def test_a_large_set_is_sampled_evenly(self):
+        """R01: the first CODE_HINT_MAX_GENES genes of a record-shuffled ciliate set lay on many scaffolds (81 of
+        26,927 genes, organelle wording); now a sample spread over the set, and the whole set's code."""
+        import random
+        self.rng = random.Random(7)
+        recs = [(f"lcl|NW_{k:05d}.1_cds_X{k}_1", cds(self.rng, stops=("TAA", "TAG"))) for k in range(40)]
+        recs += [(f"lcl|NW_{k:05d}.1_cds_N{k}_2", cds(self.rng, stops=())) for k in range(40, 50)]
+        with mock.patch.object(P._Run, "CODE_HINT_MAX_GENES", 8):
+            hints, err = self.run_set(recs)
+        h = hints[0]
+        self.assertEqual((h["whole_set"], h["candidates"], h["genes_looked_at"], h["genes"]), (True, [6], 8, 8))
+        self.assertIn("most genes (40 of the 50) have internal stop codons under genetic code 1, and 8 of the 8 "
+                      "looked at (of 40 with two or more) have none under NCBI genetic code 6 (ciliate nuclear)", err)
+        self.assertIn("Run again with -c 6", err)
+        # spread over the set: the 8 genes are every fifth, not the first 8
+        self.assertIn("lcl|NW_00004.1_cds_X4_1", h["examples"])
+        self.assertNotIn("lcl|NW_00001.1_cds_X1_1", h["examples"])
 
 
 # ---------------------------------------------------------------------------------------------- D04, D06, D07, D08

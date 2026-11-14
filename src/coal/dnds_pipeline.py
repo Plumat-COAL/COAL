@@ -673,6 +673,11 @@ _PSEUDO = re.compile(r"\[pseudo=true\]|biotype:\S*pseudogene")
 _REPLICON = re.compile(r"^lcl\|(.+?)_cds_|\s(?:chromosome|primary_assembly|scaffold|supercontig|"
                                      r"plasmid|contig):[^:\s]*:([^:\s]+):")
 HINT_BACKGROUND_CODONS = 1_000_000   # codons of the other genes read to measure the set's codon usage
+# Codes of whole genomes (nuclear, bacterial): the others are organelle codes. A molecule with this many CDS
+# records is a genome, not an organelle (the largest mitochondrial genomes have under 70 protein genes; plastids,
+# code 11, about 100).
+GENOME_CODES = frozenset({1, 4, 6, 10, 11, 12, 15})
+GENOME_MIN_RECORDS = 150
 
 
 def _and(items) -> str:
@@ -733,7 +738,7 @@ def _hint_inputs(paths, flagged: dict, usable: set):
 
 
 def suggest_genetic_code(chosen: int, genes: list[dict], background, n_records: int, with_stops: int,
-                         replicons: dict | None = None, min_genes: int = 2) -> dict | None:
+                         replicons: dict | None = None, min_genes: int = 2, fraction: float = 1.0) -> dict | None:
     """Which genetic code explains genes that have internal stop codons under `chosen`, or None (no hint).
 
     genes: {id, seq (upper case DNA), header} of the genes with two or more internal stops. background: codon
@@ -754,8 +759,18 @@ def suggest_genetic_code(chosen: int, genes: list[dict], background, n_records: 
        codons do not fit at least two and a quarter of the genes when another candidate's do.
     5. No hint unless at least min_genes genes and half of the evidence genes fit, and a code that reads TAA or
        TAG as an amino acid is suggested only when half the set has internal stops (the whole set's code).
+    6. When at least half of all records have internal stops (with_stops of n_records), the question is the code
+       of the whole set (retest of 2026-11-14, R01: Mycoplasma read with -c 11 got no hint, because rule 2 left
+       out its one chromosome, of which "only" 253 of 524 records were evidence): rule 2 does not apply; when a
+       molecule has GENOME_MIN_RECORDS records or more (a genome, not an organelle) only the codes of whole
+       genomes (GENOME_CODES) are candidates; and of codes that tie, those whose start codons do not fit at
+       least two and a tenth of the genes when another candidate's do drop out (bacteria start 10-15 % of their
+       genes with GTG / TTG: code 4, not code 10, for Mycoplasma).
 
-    Returns {"codes": [...], "genes": [ids], "also": [codes that also fit these genes], "evidence": text}."""
+    genes may be a sample of the flagged genes: fraction is the share looked at (for rule 2).
+
+    Returns {"codes": [...], "genes": [ids], "also": [codes that also fit these genes], "evidence": text,
+    "whole_set": bool}."""
     from collections import Counter
     from .tables import get_code
     std = get_code(chosen)
@@ -783,10 +798,17 @@ def suggest_genetic_code(chosen: int, genes: list[dict], background, n_records: 
         clean = frozenset(t for t, (st, _) in tables.items() if not (cod.keys() & st))
         ev.append({"id": g["id"], "cod": cod, "types": types, "clean": clean, "first": seq[:3],
                    "n": sum(cod.values())})
-    if replicons and all(g["id"] in replicons["of"] for g in ev):
+    whole = 2 * with_stops >= n_records
+    genome = False
+    if replicons and whole:
+        genome = max(replicons["records"].values(), default=0) >= GENOME_MIN_RECORDS
+    elif replicons and all(g["id"] in replicons["of"] for g in ev):
         per = Counter(replicons["of"][g["id"]] for g in ev)
-        keep = {r for r, n in per.items() if 2 * n >= replicons["records"].get(r, 0)}
+        keep = {r for r, n in per.items() if 2 * n >= fraction * replicons["records"].get(r, 0)}
         ev = [g for g in ev if replicons["of"][g["id"]] in keep]
+    if genome:   # a genome's genes: an organelle code cannot be the whole set's (unless nothing else fits)
+        for g in ev:
+            g["clean"] = (g["clean"] & GENOME_CODES) or g["clean"]
     groups: dict[frozenset, list] = {}
     for g in ev:
         if g["clean"]:
@@ -828,7 +850,7 @@ def suggest_genetic_code(chosen: int, genes: list[dict], background, n_records: 
         for t in W:
             bad = sum(1 for g in G if g["first"] not in tables[t][1]
                       and any(g["first"] in tables[u][1] for u in W if u != t))
-            if bad >= 2 and 4 * bad >= len(G):
+            if bad >= 2 and (10 if whole else 4) * bad >= len(G):
                 drop.add(t)
         if len(drop) < len(W):
             W = [t for t in W if t not in drop]
@@ -843,7 +865,7 @@ def suggest_genetic_code(chosen: int, genes: list[dict], background, n_records: 
             else "their internal stop codons are " + " / ".join(kinds))
     if len(W) == 1 and best[0] < 0 and W[0] in notes:
         text += "; they have " + notes[W[0]]
-    return {"codes": W, "genes": [g["id"] for g in support], "also": also, "evidence": text}
+    return {"codes": W, "genes": [g["id"] for g in support], "also": also, "evidence": text, "whole_set": whole}
 
 
 class _Run:
@@ -1549,7 +1571,7 @@ class _Run:
     _CODE_NAMES = GENETIC_CODE_NAMES
     CODE_HINT_MIN_STOPS = 2      # a gene counts with this many internal stops under the chosen code ...
     CODE_HINT_MIN_GENES = 2      # ... and the hint needs this many such genes that are clean under another code
-    CODE_HINT_MAX_GENES = 5000   # genes looked at per set (the first ones)
+    CODE_HINT_MAX_GENES = 5000   # genes looked at per set (spread evenly over the set when it has more)
 
     def code_hint(self, set_name: str, paths: list[str], genes_path: str, shown: list[str] | None = None) -> None:
         """One warning when genes of this set have internal stop codons under the chosen genetic code (-c) and
@@ -1560,53 +1582,87 @@ class _Run:
         selenoprotein reads "clean" under every code where TGA is Trp.)"""
         chosen = int(self.a.codontable)
         flagged: dict[str, int] = {}     # id -> trailing nucleotides
-        usable: set[str] = set()
+        usable: set[str] = set()         # genes for the set's codon usage (fewer than MIN_STOPS internal stops)
         with_stops = 0
         n_records = 0
-        with open(genes_path, encoding="utf-8", errors="backslashreplace") as fh:
-            col = {n: k for k, n in enumerate(fh.readline().rstrip("\n").split("\t"))}
-            ki, si, ci, ti = col.get("internal_stops"), col.get("status"), col.get("code"), col.get("trailing_nt")
-            if ki is None or si is None:
-                return
-            for line in fh:
-                f = line.rstrip("\n").split("\t")
-                try:
-                    n = int(f[ki])
-                except (ValueError, IndexError):
-                    continue
-                if ci is not None and f[ci] == "duplicate_id":
-                    continue
-                n_records += 1
-                if f[si] != "failed":
-                    usable.add(f[0])
-                if n < 1:
-                    continue
-                with_stops += 1
-                if n >= self.CODE_HINT_MIN_STOPS and len(flagged) < self.CODE_HINT_MAX_GENES:
+        n_flagged = 0
+
+        def rows():
+            with open(genes_path, encoding="utf-8", errors="backslashreplace") as fh:
+                col = {n: k for k, n in enumerate(fh.readline().rstrip("\n").split("\t"))}
+                ki, si, ci, ti = col.get("internal_stops"), col.get("status"), col.get("code"), col.get("trailing_nt")
+                if ki is None or si is None:
+                    return
+                for line in fh:
+                    f = line.rstrip("\n").split("\t")
                     try:
-                        flagged[f[0]] = int(f[ti]) if ti is not None else 0
+                        n = int(f[ki])
                     except (ValueError, IndexError):
-                        flagged[f[0]] = 0
-        if len(flagged) < self.CODE_HINT_MIN_GENES:
+                        continue
+                    if ci is not None and f[ci] == "duplicate_id":
+                        continue
+                    yield f, n, f[si] != "failed", ti
+
+        for _f, n, _ok, _ti in rows():
+            n_records += 1
+            with_stops += n >= 1
+            n_flagged += n >= self.CODE_HINT_MIN_STOPS
+        if n_flagged < self.CODE_HINT_MIN_GENES:
             return
+        # the genes looked at: all, or CODE_HINT_MAX_GENES spread evenly over the set (the first ones of a
+        # record-shuffled ciliate set lay on many scaffolds, which rule 2 then left out: R01)
+        take = min(n_flagged, self.CODE_HINT_MAX_GENES)
+        k = 0
+        for f, n, ok, ti in rows():
+            if n < self.CODE_HINT_MIN_STOPS:
+                if ok:
+                    usable.add(f[0])
+                continue
+            if (k + 1) * take // n_flagged > k * take // n_flagged:
+                try:
+                    flagged[f[0]] = int(f[ti]) if ti is not None else 0
+                except (ValueError, IndexError):
+                    flagged[f[0]] = 0
+            k += 1
         genes, background, replicons = _hint_inputs(paths, flagged, usable)
         hint = suggest_genetic_code(chosen, genes, background, n_records, with_stops, replicons,
-                                    min_genes=self.CODE_HINT_MIN_GENES)
+                                    min_genes=self.CODE_HINT_MIN_GENES, fraction=len(flagged) / n_flagged)
         if hint is None:
             return
         codes = hint["codes"]
         best = len(hint["genes"])
         examples = hint["genes"][:3]
-        self.code_hints.append({"set": set_name, "genetic_code": chosen, "genes_with_internal_stops": with_stops,
-                                "genes_looked_at": len(flagged), "clean_under": codes[0] if len(codes) == 1 else None,
+        whole = hint["whole_set"]
+        self.code_hints.append({"set": set_name, "genetic_code": chosen, "records": n_records,
+                                "genes_with_internal_stops": with_stops, "genes_looked_at": len(flagged),
+                                "whole_set": whole, "clean_under": codes[0] if len(codes) == 1 else None,
                                 "candidates": codes, "genes": best, "also_clean_under": hint["also"],
                                 "evidence": hint["evidence"], "examples": examples})
         shown = [str(p) for p in (shown or paths)]      # the files as the user named them (not work/ copies)
         files = " ".join(shown[:2]) + (" ..." if len(shown) > 2 else "")
-        head = (f"{set_name}: {best:,} of the {with_stops:,} genes with internal stop codons under genetic code "
-                f"{chosen}")
         names = "; ".join(f"{t} {GENETIC_CODE_NAMES.get(t, 'NCBI')}" for t in codes)
         why = f" ({hint['evidence']})" if hint["evidence"] else ""
+        looked = (f"{best:,} of the {len(flagged):,} looked at (of {n_flagged:,} with two or more)"
+                  if len(flagged) < n_flagged else f"{best:,} of the {n_flagged:,} with two or more")
+        if whole:
+            # the whole set read with the wrong code: no "organelle genes in a nuclear set", no two-run recipe
+            head = (f"{set_name}: most genes ({with_stops:,} of the {n_records:,}) have internal stop codons under "
+                    f"genetic code {chosen}, and {looked} have none under ")
+            if len(codes) == 1:
+                t = codes[0]
+                self.warn(head + f"NCBI genetic code {t} ({GENETIC_CODE_NAMES.get(t, 'NCBI')}){why}, e.g. "
+                          f"{', '.join(examples)}. The whole set looks like code {t}: its rows are estimates from "
+                          f"mistranslated codons. Run again with -c {t} (docs/pipeline.md \"Genes of another "
+                          "genetic code\")")
+            else:
+                self.warn(head + f"any of the NCBI genetic codes {_and(codes)}{why}, e.g. {', '.join(examples)}. "
+                          "The whole set looks like another genetic code, and its sequences cannot tell which of "
+                          "these it is: " + names + ". Its rows are estimates from mistranslated codons. Run again "
+                          "with the -c of its organism (and organelle) (docs/pipeline.md \"Genes of another genetic "
+                          "code\")")
+            return
+        head = (f"{set_name}: {best:,} of the {with_stops:,} genes with internal stop codons under genetic code "
+                f"{chosen}" + (f" ({len(flagged):,} of them looked at)" if len(flagged) < n_flagged else ""))
         if len(codes) == 1:
             t = codes[0]
             self.warn(head + f" have none under NCBI genetic code {t} ({GENETIC_CODE_NAMES.get(t, 'NCBI')}), the "

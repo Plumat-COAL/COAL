@@ -456,15 +456,26 @@ class GeneticCodeHint(PipelineCase):
             if k < 4:
                 codons[20] = "TGA"
             recs2.append((name, "".join(codons)))
-        q.write_text("".join(f">{n}\n{s}\n" for n, s in recs2), encoding="utf-8")
+        rest = list(a.items())[6:]   # (4 of 13 records: genes of another code in the set, not the whole set)
+        q.write_text("".join(f">{n}\n{s}\n" for n, s in recs2 + rest), encoding="utf-8")
         res, err = run(P.run_clusters, q, self.tmp / "sel2", clusters=self.tmp / "none.tsv")
         # (nuclear genes hold AGA / AGG, which are stops in code 2; nothing else tells the codes that read TGA
         # apart, so they are all named, and none is recommended: deep test 2026-11-14, D02)
+        # (with 9 other genes to compare with, code 3 drops out: the 4 genes use CGA / CGC like them)
         self.assertIn("cds: 4 of the 4 genes with internal stop codons under genetic code 1 have none under any of "
-                      "the NCBI genetic codes 3, 4, 5, 9, 10, 13 and 21 (their only internal stop codon is TGA)", err)
+                      "the NCBI genetic codes 4, 5, 9, 10, 13 and 21 (their only internal stop codon is TGA)", err)
         self.assertIn("their sequences cannot tell which of these it is", err)
         self.assertNotIn("these with -c", err)
         self.assertIn(f"take them out of {q} into a file of their own", err)
+        # 4 of 6 records: the whole set's code (retest 2026-11-14, R01): run again, nothing to take out
+        q.write_text("".join(f">{n}\n{s}\n" for n, s in recs2), encoding="utf-8")
+        res, err = run(P.run_clusters, q, self.tmp / "sel3", clusters=self.tmp / "none.tsv")
+        self.assertIn("cds: most genes (4 of the 6) have internal stop codons under genetic code 1, and 4 of the 4 "
+                      "with two or more have none under any of the NCBI genetic codes 3, 4, 5, 9, 10, 13 and 21 "
+                      "(their only internal stop codon is TGA)", err)
+        self.assertIn("The whole set looks like another genetic code", err)
+        self.assertIn("Run again with the -c of its organism", err)
+        self.assertNotIn("take them out", err)
 
     def test_docs(self):
         doc = (ROOT / "docs" / "pipeline.md").read_text(encoding="utf-8")
