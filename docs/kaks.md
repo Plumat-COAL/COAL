@@ -191,7 +191,9 @@ with `--format`.
 (`ok`, `warning`, `saturated`, `not_converged`), even if other pairs have a status other than `ok`. 1 when the
 input cannot be read or the output cannot be written; the message names the file and the cause (`write error on
 'out.tsv': No space left on device`). 2 for a command-line error, including a method that is not implemented,
-**and when no pair has an estimate because of the input**: every result is `error` or `no_data`. The table is
+**and when no pair has an estimate because of the input**: every result is `error` or `no_data`, or the input holds
+no pair at all (an empty file, or blank or `#` comment lines only: `coal dnds: error: the input holds no pair of
+sequences (...)`, also with `-q`). The table is
 still written with every row (`coal dnds`; `coal kaks` leaves `error` pairs out, as KaKs_Calculator does), and one
 line on stderr, printed also with `-q`, names the usual cause: the input looks like protein sequences, or the two
 sequences of the pairs differ in length (the input is not aligned), with the way to a codon alignment. When only
