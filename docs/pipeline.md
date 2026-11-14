@@ -10,6 +10,9 @@ coal pipeline clusters --cds all_cds.fa [--clusters clusters.tsv] -o out_dir   #
 coal pipeline install diamond clustalo                                      # the external tools, into COAL's cache (verified)
 ```
 
+Worked examples: [tutorial 2](tutorials/02-pairs-dnds.md) (pairs: *E. coli* / *Salmonella*) and
+[tutorial 3](tutorials/03-clusters.md) (clusters: four *Chlamydia* genomes).
+
 | Step | Pair mode | Cluster mode | Done by |
 |---|---|---|---|
 | 1. Translate | both files | all files | `coal-cpp translate` |
@@ -619,6 +622,9 @@ protein alignment's columns, gap columns included) with P.
 ```
 coal pipeline pairs --query q_cds.fa --subject s_cds.fa -o out --min-codons 50 --max-ds 2 --min-identity 30
 ```
+
+Tutorial 2 applies these filters step by step
+([docs/tutorials/02-pairs-dnds.md#5-filter-then-interpret](tutorials/02-pairs-dnds.md#5-filter-then-interpret)).
 
 **A cluster can hold pairs that are not related.** Clustering puts a sequence with a representative it matches;
 two members of one cluster need not match each other, and with DeepClust's defaults many do not. Every pair of a
