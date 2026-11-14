@@ -2392,8 +2392,12 @@ SATURATION_NOTICE_MIN_PAIRS = 20
 
 
 def _count_pairs(run: _Run, dnds_path: str, group_col: bool) -> None:
-    """Pair counts by status from dnds.tsv (the first method's rows), and the error pairs into failed.tsv."""
-    c = {"total": 0, "ok": 0, "warning": 0, "not_converged": 0, "saturated": 0, "no_data": 0, "error": 0}
+    """Pair counts by status from dnds.tsv: counts.pairs for the first method of the rows (named in its "method"),
+    counts.pairs_by_method for every method; the error pairs into failed.tsv (once per pair; a method named when
+    the error is not that of every method of the pair)."""
+    zero = {"total": 0, "ok": 0, "warning": 0, "not_converged": 0, "saturated": 0, "no_data": 0, "error": 0}
+    by: dict[str, dict] = {}
+    errors: dict[tuple, list] = {}   # (cluster, seq1, seq2) -> [(method, message)]
     k = 1 if group_col else 0
     first = None
     # the notes of --min-codons / --max-ds as the engine writes them (cpp/src/kaks_cli.cpp PairFlags)
@@ -2410,25 +2414,50 @@ def _count_pairs(run: _Run, dnds_path: str, group_col: bool) -> None:
             f = line.rstrip("\n").split("\t")
             if first is None:
                 first = f[k + 2]
-            if f[k + 2] != first:
-                continue
+            c = by.get(f[k + 2])
+            if c is None:
+                c = by[f[k + 2]] = dict(zero)
             c["total"] += 1
             c[f[-2]] = c.get(f[-2], 0) + 1
+            if f[-2] == "error":
+                errors.setdefault((f[0] if group_col else "", f[k], f[k + 1]), []).append((f[k + 2], f[-1]))
+            if f[k + 2] != first:
+                continue
             if short or high or low:
                 notes = f[-1].split("; ")
                 flagged["min_codons"] += short in notes
                 flagged["max_ds"] += high in notes
                 flagged["min_identity"] += low in notes
-            if f[-2] == "error":
-                run.fail("pair", "pair_failed", f[-1], cluster=f[0] if group_col else "", seq1=f[k], seq2=f[k + 1])
+    n_methods = len(by)
+    for (cl, s1, s2), errs in errors.items():
+        msgs = {m for _, m in errs}
+        if len(errs) == n_methods and len(msgs) == 1:   # the pair failed for every method (alignment, a gene)
+            run.fail("pair", "pair_failed", errs[0][1], cluster=cl, seq1=s1, seq2=s2)
+        else:   # (integration pass 2026-11-14, C03: only the first method's error rows were listed)
+            for m, msg in errs:
+                run.fail("pair", "pair_failed", f"{m}: {msg}", cluster=cl, seq1=s1, seq2=s2)
+    c = dict(by.get(first, zero))
     run.counts["pairs"] = c
-    lost = c["saturated"] + c["not_converged"]
-    if c["total"] >= SATURATION_NOTICE_MIN_PAIRS and lost > SATURATION_NOTICE_SHARE * c["total"] and hasattr(run, "warn"):
-        # (deep test 2026-11-14, D08: 85% of the yeast pairs ended NA without a word about why)
-        run.warn(f"{lost:,} of the {c['total']:,} pairs ({100 * lost / c['total']:.0f}%) are saturated or "
-                 "not_converged: dS (sometimes dN too) has no estimate there: these sequences are too divergent for "
-                 "synonymous changes to be counted (dN and the protein identity are still given). Compare closer "
-                 "species for dS; docs/pipeline.md \"Filtering before interpretation\"")
+    if first is not None and n_methods > 1:
+        c["method"] = first
+        run.counts["pairs_by_method"] = by
+    # (deep test 2026-11-14, D08: 85% of the yeast pairs ended NA without a word about why; C03: with several
+    # methods, each method's share, named)
+    lost = {m: v["saturated"] + v["not_converged"] for m, v in by.items()}
+    hit = [m for m, v in by.items()
+           if v["total"] >= SATURATION_NOTICE_MIN_PAIRS and lost[m] > SATURATION_NOTICE_SHARE * v["total"]]
+    if hit and hasattr(run, "warn"):
+        why = (": dS (sometimes dN too) has no estimate there: these sequences are too divergent for synonymous "
+               "changes to be counted (dN and the protein identity are still given). Compare closer species for dS; "
+               "docs/pipeline.md \"Filtering before interpretation\"")
+        if n_methods == 1:
+            m = hit[0]
+            run.warn(f"{lost[m]:,} of the {by[m]['total']:,} pairs ({100 * lost[m] / by[m]['total']:.0f}%) are "
+                     "saturated or not_converged" + why)
+        else:
+            run.warn("pairs saturated or not_converged: " + ", ".join(
+                f"{m} {lost[m]:,} of {by[m]['total']:,} ({100 * lost[m] / by[m]['total']:.0f}%)" for m in by
+                if by[m]["total"]) + why)
     if short or high or low:
         run.counts["flagged"] = {key: n for key, n, on in (("min_codons", flagged["min_codons"], short),
                                                            ("max_ds", flagged["max_ds"], high),
@@ -3490,12 +3519,15 @@ def _execute(mode: str, a: argparse.Namespace, argv) -> PipelineResult:
         genes = run.counts.get("genes", {})
         n_drop = genes.get("dropped", 0)
         kept = genes.get("total", 0) - genes.get("failed", 0) - n_drop
+        def statuses(p):
+            return (f"{p.get('ok', 0):,} ok, {p.get('warning', 0):,} warning, {p.get('not_converged', 0):,} "
+                    f"not_converged, {p.get('saturated', 0):,} saturated, {p.get('no_data', 0):,} no_data, "
+                    f"{p.get('error', 0):,} error")
+        by = run.counts.get("pairs_by_method")
         run.say(f"summary: {genes.get('total', 0):,} records ({genes.get('failed', 0):,} not usable"
                 + (f", {n_drop:,} dropped by --longest-isoform: {kept:,} genes" if n_drop else "") + "); "
-                f"{pairs.get('total', 0):,} pairs: {pairs.get('ok', 0):,} ok, {pairs.get('warning', 0):,} warning, "
-                f"{pairs.get('not_converged', 0):,} not_converged, {pairs.get('saturated', 0):,} saturated, "
-                f"{pairs.get('no_data', 0):,} no_data, "
-                f"{pairs.get('error', 0):,} error")
+                f"{pairs.get('total', 0):,} pairs: "
+                + ("; ".join(f"{m} {statuses(p)}" for m, p in by.items()) if by else statuses(pairs)))
         if mode == "clusters":
             c = run.counts["clusters"]
             run.say(f"summary: {c['total']:,} clusters: {c['all_pairs']:,} with every pair, {c['singletons']:,} without "

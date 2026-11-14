@@ -54,6 +54,7 @@
     "counts": {
       "type": "object",
       "properties": {
+        "pairs_by_method": {"type": "object", "description": "with several methods: the counts of \"pairs\" for each method, by name", "additionalProperties": {"type": "object"}},
         "flagged": {"type": "object", "description": "with --min-codons / --max-ds: the pairs each flag marked", "properties": {"min_codons": {"type": "integer", "minimum": 0}, "max_ds": {"type": "integer", "minimum": 0}}},
         "genes": {
           "type": "object",
@@ -85,7 +86,8 @@
             "not_converged": {"type": "integer", "minimum": 0},
             "saturated": {"type": "integer", "minimum": 0},
             "no_data": {"type": "integer", "minimum": 0},
-            "error": {"type": "integer", "minimum": 0}
+            "error": {"type": "integer", "minimum": 0},
+            "method": {"type": "string", "description": "with several methods: the method these counts are of (the first of the rows; the others are in pairs_by_method)"}
           }
         },
         "clusters": {

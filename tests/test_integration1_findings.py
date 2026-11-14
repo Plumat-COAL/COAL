@@ -301,3 +301,82 @@ class C02InputOrder(PipelineCase):
         bad, _ = run(f"G\tg\tall\tswapped\nM\tx\t{x}\nM\ty\t{y}\nE\n")
         self.assertNotEqual(bad.returncode, 0)
         self.assertIn("nocodon or swap", bad.stderr)
+
+
+class _StubRun:
+    def __init__(self):
+        self.counts, self.failed, self.warnings = {}, [], []
+        self.a = None
+
+    def fail(self, level, code, message, cluster="", seq1="", seq2=""):
+        self.failed.append((level, code, message, cluster, seq1, seq2))
+
+    def warn(self, text):
+        self.warnings.append(text)
+
+
+class C03SeveralMethods(unittest.TestCase):
+    HEAD = "seq1\tseq2\tmethod\tdN\tdS\tdNdS\tstatus\tnote\n"
+
+    def table(self, rows, tmp):
+        p = Path(tmp) / "dnds.tsv"
+        p.write_text(self.HEAD + "".join("\t".join(r) + "\n" for r in rows), encoding="utf-8")
+        return str(p)
+
+    def test_counts_failures_and_notice_per_method(self):
+        import tempfile
+        rows = []
+        for i in range(30):
+            sat_yn = i < 25           # YN: 25 of 30 saturated, LWL: 5 of 30
+            rows.append((f"a{i}", f"b{i}", "LWL", "0.1", "NA" if i >= 25 else "0.2", "NA",
+                         "saturated" if i >= 25 else "ok", ""))
+            rows.append((f"a{i}", f"b{i}", "YN", "0.1", "NA" if sat_yn else "0.2", "NA",
+                         "saturated" if sat_yn else "ok", ""))
+        rows.append(("x", "y", "LWL", "NA", "NA", "NA", "error", "protein alignment failed: too large"))
+        rows.append(("x", "y", "YN", "NA", "NA", "NA", "error", "protein alignment failed: too large"))
+        rows.append(("u", "v", "LWL", "0.1", "0.2", "0.5", "ok", ""))
+        rows.append(("u", "v", "YN", "NA", "NA", "NA", "error", "made-up YN-only error"))
+        with tempfile.TemporaryDirectory() as td:
+            run = _StubRun()
+            P._count_pairs(run, self.table(rows, td), False)
+        c = run.counts
+        self.assertEqual(c["pairs"]["method"], "LWL")
+        self.assertEqual(set(c["pairs_by_method"]), {"LWL", "YN"})
+        self.assertEqual(c["pairs_by_method"]["YN"]["saturated"], 25)
+        self.assertEqual(c["pairs_by_method"]["YN"]["error"], 2)
+        self.assertEqual(c["pairs"]["saturated"], 5)
+        # one entry for the pair that failed in every method, the YN-only error named
+        self.assertEqual([(f[4], f[5], f[2]) for f in run.failed],
+                         [("x", "y", "protein alignment failed: too large"), ("u", "v", "YN: made-up YN-only error")])
+        # the notice names each method (only YN is above 30%, all are listed)
+        self.assertEqual(len(run.warnings), 1)
+        self.assertIn("LWL 5 of 32 (16%), YN 25 of 32 (78%)", run.warnings[0])
+
+    def test_one_method_as_before(self):
+        import tempfile
+        rows = [(f"a{i}", f"b{i}", "YN", "0.1", "NA", "NA", "saturated", "") for i in range(25)]
+        with tempfile.TemporaryDirectory() as td:
+            run = _StubRun()
+            P._count_pairs(run, self.table(rows, td), False)
+        self.assertNotIn("method", run.counts["pairs"])
+        self.assertNotIn("pairs_by_method", run.counts)
+        self.assertTrue(run.warnings[0].startswith("25 of the 25 pairs (100%) are saturated or not_converged: dS"))
+
+
+@needs_cpp
+class C03Pipeline(PipelineCase):
+    def test_report_and_summary_name_the_methods(self):
+        import contextlib
+        import io
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            res = P.run_pairs(Q, S, self.tmp / "o", method=["YN", "NG", "LWL"], jobs=1)
+        self.assertIn(res.exit_code, (0, 2))
+        self.check_report(res)
+        by = res.report["counts"]["pairs_by_method"]
+        self.assertEqual(list(by), ["NG", "LWL", "YN"])   # the order of the rows
+        self.assertEqual(res.report["counts"]["pairs"]["method"], "NG")
+        line = [x for x in err.getvalue().splitlines() if "pairs: NG " in x]
+        self.assertEqual(len(line), 1, err.getvalue())
+        self.assertIn("; LWL ", line[0])
+        self.assertIn("; YN ", line[0])

@@ -461,7 +461,9 @@ Schema `coal.pipeline/1`: [pipeline.schema.json](pipeline.schema.json). It is wr
   this changes a table: `dnds.tsv` and the others are byte-identical whatever `--hash-inputs` is.
 - `stages`: name, wall `seconds`, `cached` (reused by `--resume`). The stage `align_codon_kaks` also has
   `align_codon_seconds` and `kaks_seconds` (inside the engine) and, when an MSA program ran, `msa_seconds`.
-- `counts`: `genes` (total, ok, warning, failed), `pairs` (total and one count per status), `flagged`
+- `counts`: `genes` (total, ok, warning, failed), `pairs` (total and one count per status; with several `-m`
+  the counts of the first method of the rows, named in `pairs.method`, and `pairs_by_method` with every method's
+  counts: the summary line on stderr and the saturation notice name each method too), `flagged`
   (with `--min-codons` / `--max-ds`: `min_codons`, `max_ds`, the pairs each flag marked), `orthologs` and
   `unpaired` (pair mode), `clusters` (total, singletons, all_pairs, above_max_size, skipped, msa_fallback,
   members_dropped).
