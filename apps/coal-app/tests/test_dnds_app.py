@@ -625,10 +625,20 @@ class TestDndsTools(RunsDirCase):
 # ---------------------------------------------------------------- the real engine, where it is installed
 
 _CPP = dnds.cpp_path()
+# CI's app jobs build coal-cpp and set COAL_REQUIRE_CPP, and COAL_REQUIRE_DIAMOND after installing DIAMOND: there a
+# missing engine or DIAMOND fails these tests instead of skipping them (a pure-Python install still skips them).
+_REQUIRE_CPP = bool(os.environ.get("COAL_REQUIRE_CPP"))
+_REQUIRE_DIAMOND = bool(os.environ.get("COAL_REQUIRE_DIAMOND"))
 
 
-@unittest.skipUnless(_CPP and os.path.isfile(EX_CODON), "coal-cpp not found (`coal --cpp-path`): pure-Python install")
+@unittest.skipUnless((_CPP or _REQUIRE_CPP) and os.path.isfile(EX_CODON),
+                     "coal-cpp not found (`coal --cpp-path`): pure-Python install")
 class TestRealEngine(RunsDirCase):
+    def setUp(self):
+        super().setUp()
+        if not _CPP:
+            self.fail("coal-cpp not found (`coal --cpp-path`) and COAL_REQUIRE_CPP is set")
+
     def test_kaks_on_the_example(self):
         r = dnds.run_kaks(EX_CODON, self.tmp(), ["YN", "NG"], 1, "consecutive")
         self.assertEqual((r.exit_code, r.counts["ok"], r.counts["total"]), (0, 24, 24))
@@ -641,8 +651,10 @@ class TestRealEngine(RunsDirCase):
         self.assertGreater(r["counts"]["error"], 0)
         self.assertTrue(any("differ in length" in m for m in r["engine_messages"]), r["engine_messages"])
 
-    @unittest.skipUnless(dnds.diamond_path(), "DIAMOND not found")
+    @unittest.skipUnless(dnds.diamond_path() or _REQUIRE_DIAMOND, "DIAMOND not found")
     def test_pipeline_on_the_example(self):
+        if not dnds.diamond_path():
+            self.fail("DIAMOND not found and COAL_REQUIRE_DIAMOND is set")
         r = tools.pipeline_pairs(EX_A, EX_B, methods=["YN"], threads=1)
         self.assertEqual((r["status"], r["exit_code"], r["pair_counts"]["ok"]), ("completed", 0, 12))
         self.assertEqual(set(r["counts"]["pairs"]) - {"total"}, set(dnds.STATUS_ORDER))

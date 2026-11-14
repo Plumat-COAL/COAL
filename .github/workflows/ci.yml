@@ -83,6 +83,19 @@ jobs:
         run: python -m pip install -e . -e "apps/coal-app[gui]"
       - name: Dependency check
         run: python -m pip check
+      # The app's Ka/Ks and pipeline features run COAL's C++ engine: build coal-cpp and coal-cpp-align here (Release,
+      # the two tools only; the C++ engine jobs below test the build itself), point the app at them (COAL_CPP; coal
+      # finds coal-cpp-align next to it) and install DIAMOND with COAL's own installer, as the C++ engine jobs do. So
+      # TestRealEngine (apps/coal-app/tests/test_dnds_app.py) runs the real engine and pipeline, and fails instead of
+      # skipping (COAL_REQUIRE_CPP, COAL_REQUIRE_DIAMOND); the stub-based tests run as before. Paths are written to
+      # GITHUB_ENV by Python with \n line ends (a path through bash on Windows would carry a \r).
+      - name: Build coal-cpp and coal-cpp-align (for the app's Ka/Ks and pipeline tests)
+        shell: bash
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release --parallel 4 --target coal-cpp coal-cpp-align
+      - name: Point the app at coal-cpp and install DIAMOND (pinned release, SHA-256 verified by coal)
+        run: python -c "import os; from coal import dnds_pipeline as P; b = os.path.abspath(os.path.join('build', 'Release', 'coal-cpp.exe') if os.name == 'nt' else os.path.join('build', 'coal-cpp')); assert os.path.isfile(b), b; p = P.install_diamond(method='official'); open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8', newline='\n').write('COAL_CPP=' + b + '\nCOAL_REQUIRE_CPP=1\nCOAL_DIAMOND=' + p + '\nCOAL_REQUIRE_DIAMOND=1\n')"
       - name: App tests (GUI tests required)
         env:
           GRADIO_ANALYTICS_ENABLED: "False"
@@ -199,6 +212,19 @@ jobs:
         run: python -m pip install -e . -e "apps/coal-app[mcp]"
       - name: Dependency check
         run: python -m pip check
+      # The app's Ka/Ks and pipeline features run COAL's C++ engine: build coal-cpp and coal-cpp-align here (Release,
+      # the two tools only; the C++ engine jobs below test the build itself), point the app at them (COAL_CPP; coal
+      # finds coal-cpp-align next to it) and install DIAMOND with COAL's own installer, as the C++ engine jobs do. So
+      # TestRealEngine (apps/coal-app/tests/test_dnds_app.py) runs the real engine and pipeline, and fails instead of
+      # skipping (COAL_REQUIRE_CPP, COAL_REQUIRE_DIAMOND); the stub-based tests run as before. Paths are written to
+      # GITHUB_ENV by Python with \n line ends (a path through bash on Windows would carry a \r).
+      - name: Build coal-cpp and coal-cpp-align (for the app's Ka/Ks and pipeline tests)
+        shell: bash
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release --parallel 4 --target coal-cpp coal-cpp-align
+      - name: Point the app at coal-cpp and install DIAMOND (pinned release, SHA-256 verified by coal)
+        run: python -c "import os; from coal import dnds_pipeline as P; b = os.path.abspath(os.path.join('build', 'Release', 'coal-cpp.exe') if os.name == 'nt' else os.path.join('build', 'coal-cpp')); assert os.path.isfile(b), b; p = P.install_diamond(method='official'); open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8', newline='\n').write('COAL_CPP=' + b + '\nCOAL_REQUIRE_CPP=1\nCOAL_DIAMOND=' + p + '\nCOAL_REQUIRE_DIAMOND=1\n')"
       - name: App tests (MCP tests required)
         env:
           COAL_REQUIRE_EXTRAS: mcp
