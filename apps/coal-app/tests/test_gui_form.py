@@ -122,7 +122,8 @@ class TestOneSettingsPlace(StubUiCase):
             with open(os.path.join(APP, "src", "coal_app", m), encoding="utf-8") as fh:
                 text = fh.read()
             self.assertIsNone(re.search(r"\b(i18n|I18n|locale|Language\b)", text), m)
-            self.assertEqual(re.findall(r"language=\"(\w+)\"", text), ["shell"] if m == "ui.py" else [])
+            # "language" only as the code boxes' syntax (the equivalent commands of the Align, Ka/Ks and pipeline tabs)
+            self.assertEqual(re.findall(r"language=\"(\w+)\"", text), ["shell"] * 3 if m == "ui.py" else [])
 
 
 class TestUploadClearsPathBox(RunsDirCase):

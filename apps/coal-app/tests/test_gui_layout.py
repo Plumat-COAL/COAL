@@ -215,7 +215,7 @@ class TestGui3Layout(unittest.TestCase):
         self.ui.build(demo_mode=True)
         events = [ev for _, ev, _, _ in _Comp.REG]
         self.assertGreaterEqual(events.count("click"), 3 + len(core.available_examples()))  # run, sample, hint, ex
-        self.assertEqual(events.count("upload"), 2)
+        self.assertEqual(events.count("upload"), 3)  # the two drop zones (clear their path boxes) + the Ka/Ks one
         self.assertEqual(events.count("change"), 2)
         loads = [(a, kw) for c, ev, a, kw in _Comp.REG if ev == "load"]
         self.assertTrue(loads)

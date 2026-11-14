@@ -124,19 +124,29 @@ def _stub_gradio():
     return mod
 
 
+def _restore_modules(saved: dict) -> None:
+    """Put back the modules a stand-in test replaced, and the package's own `ui` attribute: `from coal_app import ui`
+    reads that attribute first, so the stand-in's ui module would otherwise outlive the test (and a later test with
+    the real Gradio would get it)."""
+    import coal_app
+    for k, v in saved.items():
+        if v is None:
+            sys.modules.pop(k, None)
+        else:
+            sys.modules[k] = v
+    if saved.get("coal_app.ui") is not None:
+        coal_app.ui = saved["coal_app.ui"]
+    elif hasattr(coal_app, "ui"):
+        del coal_app.ui
+
+
 class StubUiCase(unittest.TestCase):
     """coal_app.ui imported against the Gradio stand-in; self.src is ui.py's source."""
 
     def setUp(self):
         saved = {k: sys.modules.get(k) for k in ("gradio", "coal_app.ui")}
 
-        def restore():
-            for k, v in saved.items():
-                if v is None:
-                    sys.modules.pop(k, None)
-                else:
-                    sys.modules[k] = v
-        self.addCleanup(restore)
+        self.addCleanup(_restore_modules, saved)
         sys.modules["gradio"] = _stub_gradio()
         sys.modules.pop("coal_app.ui", None)
         import importlib
@@ -169,13 +179,7 @@ class UiCase(SettingsDirCase):
         super().setUp()
         saved = {k: sys.modules.get(k) for k in ("gradio", "coal_app.ui")}
 
-        def restore():
-            for k, v in saved.items():
-                if v is None:
-                    sys.modules.pop(k, None)
-                else:
-                    sys.modules[k] = v
-        self.addCleanup(restore)
+        self.addCleanup(_restore_modules, saved)
         sys.modules["gradio"] = _stub_gradio()
         sys.modules.pop("coal_app.ui", None)
         import importlib

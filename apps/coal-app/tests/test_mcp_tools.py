@@ -169,13 +169,15 @@ class TestToolSchemas(unittest.TestCase):
     def test_paths_are_described_as_absolute(self):
         import typing
         for fn, names in ((tools.codon_align, ("protein_alignment_path", "dna_fasta_path")),
-                          (tools.explain_report, ("report_path",))):
+                          (tools.explain_report, ("report_path",)),
+                          (tools.dnds_pairs, ("codon_alignment_path",)),
+                          (tools.pipeline_pairs, ("query_cds_path", "subject_cds_path", "pairs_path"))):
             hints = typing.get_type_hints(fn, include_extras=True)
             for n in names:
                 meta = [m for m in getattr(hints[n], "__metadata__", ()) if m is not None]
                 if not meta:
                     self.skipTest("pydantic not installed: no Field metadata")
-                self.assertIn("Absolute path", meta[0].description, n)
+                self.assertIn("absolute path", meta[0].description.lower(), n)
 
     @unittest.skipUnless(importlib.util.find_spec("pydantic"), "pydantic not installed")
     def test_json_schema_has_enums_and_descriptions(self):
@@ -240,7 +242,7 @@ class TestStdioMcpServer(_PrivateRuns):
     def test_lists_and_calls_tools(self):
         from coal_app import mcp_stdio
         _, tools_, call, _ = _mcp1_or_2(mcp_stdio.build_server())
-        self.assertEqual(sorted(tools_), ["codon_align", "explain_report"])
+        self.assertEqual(sorted(tools_), ["codon_align", "dnds_pairs", "explain_report", "pipeline_pairs"])
         text, _ = call("explain_report", {"report_path": core.SAMPLE_REPORT})
         self.assertIn("Homo_COX1", text)
 
@@ -355,7 +357,8 @@ class _HandshakeChecks:
         self.assertTrue(replies[4]["result"]["isError"])
         self.assertIn("Could not read the report", replies[4]["result"]["content"][0]["text"])
         self.assertFalse(replies[3]["result"].get("isError"))
-        self.assertEqual(sorted(t["name"] for t in replies[2]["result"]["tools"]), ["codon_align", "explain_report"])
+        self.assertEqual(sorted(t["name"] for t in replies[2]["result"]["tools"]),
+                         ["codon_align", "dnds_pairs", "explain_report", "pipeline_pairs"])
         text = "".join(c.get("text", "") for c in replies[3]["result"]["content"])
         self.assertIn("Homo_COX1", text)
 
@@ -475,35 +478,90 @@ class TestStrictAndBlockonlyOptions(ExampleVariantCase):
 
 
 class TestScopeIsSaid(unittest.TestCase):
-    """The app and its MCP server cover codon alignment only, and say so (README, About, the server's
-    instructions): Ka/Ks and the pipeline are in the `coal` command line."""
+    """What the app and its MCP server cover (codon alignment, Ka/Ks on alignments, the pairs pipeline) is said the
+    same way in the README, the GUI's About and the server's instructions; the pipeline's cluster mode and
+    KaKs_Calculator's format are left to the `coal` command line, and each says so."""
 
     def test_instructions_about_and_readme(self):
-        import os
         from coal_app import mcp_stdio
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.assertIn(mcp_stdio.SCOPE, mcp_stdio.INSTRUCTIONS)
-        for text in (mcp_stdio.SCOPE,):
-            self.assertIn("codon alignment only", text)
-            for cmd in ("coal dnds", "coal kaks", "coal pipeline"):
-                self.assertIn(cmd, text)
+        for name in ("codon_align", "explain_report", "dnds_pairs", "pipeline_pairs"):
+            self.assertIn(name, mcp_stdio.SCOPE)
+            self.assertTrue(callable(getattr(tools, name)))
+        for words in ("coal pipeline install diamond", "`coal pipeline`", "`coal kaks`"):
+            self.assertIn(words, mcp_stdio.SCOPE)
+        self.assertNotIn("alignment only", mcp_stdio.SCOPE)
         with open(os.path.join(root, "src", "coal_app", "ui.py"), encoding="utf-8") as fh:
             ui = fh.read()
         self.assertIn("ABOUT_SCOPE + ", ui)
-        self.assertIn("not in this app: `coal dnds`, `coal kaks`, `coal pipeline`", ui)
+        self.assertIn("`coal pipeline clusters`, `coal kaks`", ui)
+        self.assertNotIn("not in this app", ui)
         with open(os.path.join(root, "README.md"), encoding="utf-8") as fh:
             readme = fh.read()
-        self.assertIn("**The app and its MCP server cover codon alignment only.**", readme)
-        doc = os.path.join(root, "..", "..", "docs", "mcp.md")
-        if os.path.isfile(doc):   # (the app's tests also run from an unpacked sdist, which has no docs/)
-            with open(doc, encoding="utf-8") as fh:
-                text = fh.read()
-            for must in ("## Scope: codon alignment only", "## Planned: tools for Ka/Ks and the pipeline",
-                         "`dnds_pairs`", "`pipeline_pairs`", "Not built yet"):
-                self.assertIn(must, text)
-        # no such tool exists yet
-        from coal_app import tools
-        self.assertFalse(hasattr(tools, "dnds_pairs") or hasattr(tools, "pipeline_pairs"))
+        self.assertNotIn("alignment only", readme)
+        for words in ("`dnds_pairs`", "`pipeline_pairs`", "coal pipeline install diamond", "Ka/Ks",
+                      "GPL-3.0-only"):
+            self.assertIn(words, readme)
+
+
+@unittest.skipUnless(has_mcp() or REQUIRE_MCP, "mcp not installed (pip install -e 'apps/coal-app[mcp]' or '[gui]')")
+class TestDndsMcpTools(_PrivateRuns):
+    """dnds_pairs and pipeline_pairs through the server object (mcp 2.x and 1.x): schemas, structured results and
+    tool errors. COAL runs as tests/coal_stub.py here (the CI's engine has no coal-cpp or DIAMOND)."""
+
+    def setUp(self):
+        super().setUp()
+        from test_dnds_app import use_stub
+        use_stub(self)
+
+    def test_schemas(self):
+        from coal_app import dnds, mcp_stdio
+        _, tools_, _, _ = _mcp1_or_2(mcp_stdio.build_server())
+        props, out = tools_["dnds_pairs"]
+        self.assertEqual(props["properties"]["pairs"]["enum"], ["all", "consecutive"])
+        self.assertEqual(sorted(props["properties"]["methods"]["items"]["enum"]), sorted(dnds.METHODS))
+        self.assertEqual(props["properties"]["methods"]["default"], ["YN"])
+        self.assertEqual(props["properties"]["codontable"]["enum"], list(core.GENETIC_CODES))
+        self.assertIn("100 MB", props["properties"]["codon_alignment_path"]["description"])
+        self.assertEqual(props["required"], ["codon_alignment_path"])
+        for k in ("completed", "all_estimated", "counts", "flagged", "statuses", "next_step"):
+            self.assertIn(k, out["properties"])
+        props, out = tools_["pipeline_pairs"]
+        self.assertEqual(props["properties"]["ortho"]["enum"], ["rbh", "bh"])
+        self.assertIn("500 MB", props["properties"]["query_cds_path"]["description"])
+        self.assertEqual(sorted(props["required"]), ["query_cds_path", "subject_cds_path"])
+        for k in ("completed", "status", "outputs", "report_path", "zip_path", "next_step"):
+            self.assertIn(k, out["properties"])
+        doc = tools.pipeline_pairs.__doc__
+        self.assertIn("coal pipeline install diamond", doc)
+        self.assertIn("500 MB per file and one hour", doc)
+
+    def test_calls_and_errors(self):
+        from coal_app import dnds, mcp_stdio
+        from test_dnds_app import FASTA4, two_species
+        _, _, call, ToolError = _mcp1_or_2(mcp_stdio.build_server())
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        fa = os.path.join(d, "aln.fasta")
+        with open(fa, "w") as fh:
+            fh.write(FASTA4)
+        text, structured = call("dnds_pairs", {"codon_alignment_path": fa, "methods": ["YN", "MYN"]})
+        res = structured or json.loads(text)
+        self.assertTrue(res["all_estimated"])
+        self.assertEqual(res["counts"]["total"], 12)
+        for bad in ({"codon_alignment_path": fa, "methods": ["GY"]},
+                    {"codon_alignment_path": fa, "methods": ["Li"], "codontable": 2},
+                    {"codon_alignment_path": "/no/such.fasta"},
+                    {"codon_alignment_path": fa, "pairs": "some"}):
+            with self.subTest(bad=bad), self.assertRaises(ToolError):
+                call("dnds_pairs", bad)
+        a, b = two_species(d)
+        text, structured = call("pipeline_pairs", {"query_cds_path": a, "subject_cds_path": b})
+        self.assertEqual((structured or json.loads(text))["status"], "completed")
+        dnds.diamond_path = lambda: None
+        with self.assertRaises(ToolError):
+            call("pipeline_pairs", {"query_cds_path": a, "subject_cds_path": b})
 
 
 if __name__ == "__main__":
