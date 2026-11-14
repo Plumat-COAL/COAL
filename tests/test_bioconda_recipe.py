@@ -25,12 +25,13 @@ SELECTOR = re.compile(r"#\s*\[([^\]]+)\]\s*$")
 
 
 def rendered(version: str = "0.6.0") -> str:
-    """meta.yaml with its Jinja resolved the way conda-build does for this recipe's three constructs."""
+    """meta.yaml with its Jinja resolved the way conda-build does for this recipe's four constructs."""
     text = (RECIPE / "meta.yaml").read_text(encoding="utf-8")
     sets = dict(re.findall(r'\{%\s*set\s+(\w+)\s*=\s*"([^"]*)"\s*%\}', text))
     sets["version"] = version
     text = re.sub(r"\{%.*?%\}", "", text)
     text = re.sub(r"\{\{\s*compiler\('cxx'\)\s*\}\}", "cxx-compiler", text)
+    text = re.sub(r"\{\{\s*stdlib\('c'\)\s*\}\}", "c-stdlib", text)
     text = re.sub(r"\{\{\s*pin_subpackage\([^)]*\)\s*\}\}", sets["name"], text)
     text = re.sub(r"\{\{\s*(\w+)\s*\}\}", lambda m: sets[m.group(1)], text)
     assert "{{" not in text and "{%" not in text
