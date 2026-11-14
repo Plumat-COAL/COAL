@@ -27,7 +27,7 @@ import threading
 import time
 import unittest
 import urllib.error
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -434,8 +434,119 @@ class Install(unittest.TestCase):
                     msa.install_clustalo(quiet=True)
                 with self.assertRaises(msa.MsaError):
                     msa.install_clustalo(method="micromamba", quiet=True)
-        self.assertEqual(tried, [("/opt/conda/bin/mamba", "clustalo=1.2.4"), ("/cache/micromamba", "clustalo=1.2.4"),
-                                 ("/cache/micromamba", "clustalo=1.2.4")])
+        spec = "bioconda::clustalo=1.2.4=h503566f_10"      # the pinned build for linux-64 (D6b)
+        self.assertEqual(tried, [("/opt/conda/bin/mamba", spec), ("/cache/micromamba", spec),
+                                 ("/cache/micromamba", spec)])
+
+
+@unittest.skipIf(os.name == "nt", "shell scripts stand in for conda and the tools")
+class PinnedBuilds(unittest.TestCase):
+    """D6b (2026-11-14): MAFFT and Clustal Omega are installed as one exact conda package per platform (channel,
+    build string and the package's SHA-256), and the manifest, `coal pipeline install` and report.json say which."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        p = mock.patch.dict(os.environ, {"COAL_CACHE_DIR": os.path.join(self.tmp, "cache")})
+        p.start()
+        self.addCleanup(p.stop)
+
+    def fake_conda(self, sha: str, version_line: str, fail: str = "") -> str:
+        """A 'conda' that makes the environment `-p PREFIX` with bin/<tool> and the conda-meta record of the last
+        argument's package, with the SHA-256 `sha`; or prints `fail` and exits 1."""
+        if fail:
+            return fake_tool(self.tmp, "conda", f"echo '{fail}' >&2; exit 1")
+        return fake_tool(self.tmp, "conda", f"""
+while [ $# -gt 0 ]; do case "$1" in -p) prefix="$2"; shift 2;; *) spec="$1"; shift;; esac; done
+pkg="${{spec#*::}}"; name="${{pkg%%=*}}"; rest="${{pkg#*=}}"; ver="${{rest%%=*}}"; build="${{rest#*=}}"
+[ "$build" = "$rest" ] && build=hfake_0
+mkdir -p "$prefix/bin" "$prefix/conda-meta"
+printf '#!/bin/sh\necho "{version_line}"\n' > "$prefix/bin/$name"; chmod +x "$prefix/bin/$name"
+printf '{{"name": "%s", "version": "%s", "build": "%s", "channel": "c", "subdir": "linux-64", "url": "https://x/%s-%s-%s.conda", "sha256": "{sha}"}}' "$name" "$ver" "$build" "$name" "$ver" "$build" > "$prefix/conda-meta/$name-$ver-$build.json"
+""")
+
+    def test_pins_are_complete(self):
+        for tool, channel, version in (("mafft", "conda-forge", msa.MAFFT_VERSION),
+                                       ("clustalo", "bioconda", msa.CLUSTALO_VERSION)):
+            pins = msa._PACKAGE_PINS[tool]
+            self.assertEqual(set(pins), {("Linux", "x86_64"), ("Linux", "aarch64"), ("Darwin", "x86_64"),
+                                         ("Darwin", "arm64")})
+            for p in pins.values():
+                self.assertEqual((p.channel, p.name, p.version), (channel, tool, version))
+                self.assertRegex(p.sha256, r"^[0-9a-f]{64}$")
+                self.assertRegex(p.build, r"^h[0-9a-f]{7}_\d+$")
+                self.assertEqual(p.spec, f"{channel}::{tool}={version}={p.build}")
+            self.assertEqual(len({p.sha256 for p in pins.values()}), 4)
+        with mock.patch.object(msa, "_platform", return_value=("Linux", "ppc64le")):
+            self.assertIsNone(msa.package_pin("mafft"))
+
+    def test_pinned_build_installed_and_recorded(self):
+        with mock.patch.object(msa, "_platform", return_value=("Linux", "x86_64")):
+            pin = msa.package_pin("mafft")
+            conda = self.fake_conda(pin.sha256, "v7.526 (2024/Apr/26)")
+            with redirect_stderr(io.StringIO()) as err:
+                exe = msa._install_pinned("mafft", "MAFFT", conda, False, 60)
+            self.assertIn(f"coal: MAFFT build: {pin.spec} (linux-64, {pin.filename}, SHA-256 {pin.sha256}), "
+                          "verified", err.getvalue())
+            pkg = msa.installed_package("mafft", exe)
+            self.assertEqual(pkg, {"spec": pin.spec, "channel": "conda-forge", "subdir": "linux-64",
+                                   "filename": pin.filename, "sha256": pin.sha256, "pinned": True})
+            self.assertIsNone(msa.pin_note("mafft", exe, "v7.526 (2024/Apr/26)"))
+            self.assertEqual(msa._cache_state(exe), "ok")
+            # `coal pipeline install mafft` shows the package
+            from coal import dnds_pipeline as P
+            with mock.patch.object(msa, "install_mafft", return_value=exe), redirect_stderr(io.StringIO()) as err, \
+                    redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(P.main(["install", "mafft"]), 0)
+            self.assertEqual(out.getvalue().strip(), exe)
+            self.assertIn(f"coal: MAFFT package: {pin.spec} (linux-64, {pin.filename}, SHA-256 {pin.sha256}, the "
+                          "pinned build)", err.getvalue())
+
+    def test_another_package_is_refused(self):
+        with mock.patch.object(msa, "_platform", return_value=("Linux", "x86_64")):
+            pin = msa.package_pin("clustalo")
+            conda = self.fake_conda("0" * 64, "1.2.4")
+            with self.assertRaises(msa.MsaError) as cm:
+                msa._install_pinned("clustalo", "Clustal Omega", conda, True, 60)
+            self.assertIn(f"is not the pinned package: expected SHA-256 {pin.sha256}", str(cm.exception))
+            self.assertFalse(os.path.exists(os.path.join(msa.cache_dir(), "envs", "clustalo")))
+
+    def test_fallback_to_the_version_pin(self):
+        # the channel no longer serves the build: the version pin, with a warning, recorded as not pinned
+        specs = []
+        real = msa._conda_install
+
+        def install(tool, spec, conda, quiet, timeout):
+            specs.append(spec)
+            if spec.count("=") == 2:
+                raise msa.MsaError(f"installing {spec} with micromamba failed: nothing provides requested {spec}")
+            return real(tool, spec, self.fake_conda("ab" * 32, "v7.526 (2024/Apr/26)"), quiet, timeout)
+        with mock.patch.object(msa, "_platform", return_value=("Darwin", "arm64")), \
+                mock.patch.object(msa, "_conda_install", install), redirect_stderr(io.StringIO()) as err:
+            exe = msa._install_pinned("mafft", "MAFFT", "/x/conda", True, 60)
+            pkg = msa.installed_package("mafft", exe)
+            note = msa.pin_note("mafft", exe, "v7.526 (2024/Apr/26)")
+        self.assertEqual(specs, ["conda-forge::mafft=7.526=h99b78c6_0", "mafft=7.526"])
+        self.assertIn("warning: the pinned MAFFT build conda-forge::mafft=7.526=h99b78c6_0 is not available",
+                      err.getvalue())
+        self.assertFalse(pkg["pinned"])
+        self.assertEqual(pkg["sha256"], "ab" * 32)
+        self.assertIn("not the pinned build mafft-7.526-h99b78c6_0.conda", note)
+        # a network failure is not a missing build: no second attempt
+        specs.clear()
+        with mock.patch.object(msa, "_platform", return_value=("Darwin", "arm64")), \
+                mock.patch.object(msa, "_conda_install", side_effect=msa.MsaError("connection reset")):
+            with self.assertRaises(msa.MsaError):
+                msa._install_pinned("mafft", "MAFFT", "/x/conda", True, 60)
+
+    def test_no_pin_for_the_platform(self):
+        calls = []
+        with mock.patch.object(msa, "_platform", return_value=("Linux", "ppc64le")), \
+                mock.patch.object(msa, "_conda_install", lambda *a: calls.append(a[1]) or "/x/mafft"), \
+                redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(msa._install_pinned("mafft", "MAFFT", "/x/conda", False, 60), "/x/mafft")
+        self.assertEqual(calls, ["mafft=7.526"])
+        self.assertIn("COAL pins no MAFFT build for Linux/ppc64le", err.getvalue())
 
 
 class ClustalSiteGone(unittest.TestCase):

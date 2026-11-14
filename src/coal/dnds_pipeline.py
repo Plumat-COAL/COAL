@@ -1616,6 +1616,9 @@ class _Run:
             raise PipelineError(f"{name} was not found (PATH, $COAL_{tool.upper()}, COAL's cache). Run again with "
                                 f"--install-tools, or run `coal pipeline install {tool}`")
         self.tools[tool] = {"path": exe, "version": _msa.tool_version(exe)}
+        pkg = _msa.installed_package(tool, exe)
+        if pkg:   # the conda package of COAL's cache copy (D6b: the pinned build and its SHA-256)
+            self.tools[tool]["package"] = pkg
         note = _msa.pin_note(tool, exe, self.tools[tool]["version"])
         if note:
             self.warn(note)
@@ -3719,6 +3722,18 @@ def main(argv: Sequence[str] | None = None) -> int:
                                                  allow_unverified=a.allow_unverified)
                 else:
                     path = _msa.install_mafft(force=a.force, quiet=a.quiet)
+                if t in ("clustalo", "mafft") and not a.quiet:
+                    # the exact package (D6b): what this copy was installed from, and what COAL pins here
+                    name = "Clustal Omega" if t == "clustalo" else "MAFFT"
+                    pkg, pin = _msa.installed_package(t, path), _msa.package_pin(t)
+                    if pkg:
+                        print(f"coal: {name} package: {pkg.get('spec')} ({pkg.get('subdir')}, {pkg.get('filename')}, "
+                              f"SHA-256 {pkg.get('sha256')}" + (", the pinned build)" if pkg.get("pinned") else
+                                                                 ", not the pinned build)"), file=sys.stderr)
+                    else:
+                        print(f"coal: {name}: {path} (installed before COAL recorded its package)", file=sys.stderr)
+                    if pin and (not pkg or not pkg.get("pinned")):
+                        print(f"coal: {name} build COAL pins here: {pin.describe()}", file=sys.stderr)
                 print(path)
         except (PipelineError, _msa.MsaError) as e:
             print(f"coal pipeline: error: {e}", file=sys.stderr)

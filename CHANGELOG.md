@@ -624,6 +624,15 @@ entry under "Added", not under "Fixed".
 
 ### Changed
 
+- **MAFFT and Clustal Omega are installed as one exact package per platform** (decision D6b of 2026-11-14). A
+  version pin left the build open (conda-forge has three linux-64 builds of mafft 7.526, Bioconda twelve of
+  clustalo 1.2.4). `coal pipeline install mafft|clustalo`, `--install-tools` and `coal.msa.install_*()` now ask
+  for `channel::name=version=build` (`conda-forge::mafft=7.526=h4bc722e_0`, `bioconda::clustalo=1.2.4=h503566f_10`
+  on linux-64; four platforms each) and keep the install only if conda's record of the package has the pinned
+  SHA-256. The install prints the package and its SHA-256; the manifest and `report.json` (`tools.<tool>.package`)
+  record it. A build the channel no longer serves falls back to the version pin with a warning. docs/alignment.md,
+  "Exact builds". (MAFFT now comes from conda-forge, where it came from before too: conda-forge is the first
+  channel and Bioconda has no 7.526.)
 - **Comeron: Comeron's two pathways for codons that differ at two positions, by default** (decision D8 of
   2026-11-14). libsequence's `TwoSubs` (and so orthologr 0.4.3's `gestimator()`, and COAL until now) counts the
   branches codon 1 - intermediate 1, intermediate 1 - intermediate 2, codon 1 - codon 2 and codon 2 -

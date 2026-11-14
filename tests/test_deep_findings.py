@@ -495,7 +495,9 @@ class Messages(unittest.TestCase):
                 mock.patch.object(msa, "tool_version", return_value="v7.526 (2024/Apr/26)"), \
                 redirect_stderr(io.StringIO()) as err:
             self.assertEqual(msa.install_mafft(), "/x/mafft")
-        self.assertEqual(calls, ["mafft=7.526"])
+        # one exact package for the platform (D6b): channel::name=version=build
+        self.assertEqual(calls, [msa.package_pin("mafft").spec])
+        self.assertTrue(calls[0].startswith("conda-forge::mafft=7.526="))
         self.assertIn("MAFFT 7.526 installed: /x/mafft", err.getvalue())
 
     @unittest.skipIf(os.name == "nt", "a shell script stands in for MAFFT")
