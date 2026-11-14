@@ -35,7 +35,7 @@ coal dnds ecsa_filtered/codon_alignments.fasta --pairs consecutive \
 ```
 
 ```text
-coal dnds: 3142 pair(s), 5 method(s): 14624 ok, 21 warning, 23 not_converged, 1042 saturated, 0 no_data, 0 error
+coal dnds: 3142 pair(s), 5 method(s): 14623 ok, 20 warning, 23 not_converged, 1044 saturated, 0 no_data, 0 error
 coal dnds: warning: 23 result(s): the YN/MYN iteration did not converge, so there is no estimate: Ka and Ks are NA (status not_converged; the note has the last round)
 ```
 
@@ -50,15 +50,15 @@ python3 $T/scripts/compare_methods.py methods.tsv
 statuses per method:
   method              ok       warning     saturated not_converged       no_data         error
   NG                2924             3           215             0             0             0
-  LWL               2999             3           140             0             0             0
+  LWL               2998             3           141             0             0             0
   YN                2973             3           155            11             0             0
   MYN               2853             3           274            12             0             0
-  Comeron           2875             9           258             0             0             0
+  Comeron           2875             8           259             0             0             0
 
-2695 pairs have a dN/dS from every method; median dS / median dN/dS, by YN's dS:
+2694 pairs have a dN/dS from every method; median dS / median dN/dS, by YN's dS:
   YN dS      pairs                NG               LWL                YN               MYN           Comeron
   0-0.5        222    0.331 / 0.0418    0.343 / 0.0410    0.294 / 0.0452    0.289 / 0.0445    0.301 / 0.0478
-  0.5-1        639    0.809 / 0.0390    0.793 / 0.0408    0.795 / 0.0371    0.871 / 0.0332    0.710 / 0.0412
+  0.5-1        638    0.809 / 0.0390    0.793 / 0.0408    0.795 / 0.0371    0.872 / 0.0332    0.710 / 0.0411
   1-1.5        985    1.216 / 0.0444    1.123 / 0.0507    1.280 / 0.0408    1.436 / 0.0355    1.043 / 0.0489
   1.5-2        538    1.525 / 0.0486    1.321 / 0.0599    1.686 / 0.0410    1.778 / 0.0380    1.303 / 0.0535
   >= 2         311    1.504 / 0.0480    1.303 / 0.0607    2.381 / 0.0267    1.722 / 0.0382    1.232 / 0.0549
@@ -87,7 +87,7 @@ How to read it:
   counting methods cannot exceed their saturation ceiling, YN can, and neither number is reliable. These are the
   pairs that tutorial 2 filters out with `dS <= 2`. That is an outer bound only: for conclusions about single
   genes, cut at dS 1 (`--max-ds 1`; about 0.5 with strong codon-usage bias).
-- **The statuses differ too.** For the same 3,142 pairs, from 140 (LWL) to 274 (MYN) are `saturated`. A method
+- **The statuses differ too.** For the same 3,142 pairs, from 141 (LWL) to 274 (MYN) are `saturated`. A method
   that saturates less is not more accurate there: it gives a number where the correction is about to break down.
   Only YN and MYN iterate, so only they have `not_converged`.
 - **Short genes are noisy whatever the method.** For pairs of the same divergence, the relative standard error of

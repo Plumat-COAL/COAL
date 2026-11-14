@@ -41,9 +41,9 @@ KK_METHODS = P.KK_METHODS
 # 4 invertebrate mt, 5 ciliate, 6 echinoderm mt, 7 euplotid, 8 alternative yeast, 9 ascidian mt, 10 blepharisma)
 PAML_ICODE = {1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 9: 6, 10: 7, 12: 8, 13: 9, 15: 10}
 KFIELDS = {2: "Ka", 3: "Ks", 4: "Ka/Ks", 7: "S-Sites", 8: "N-Sites"}
-# K03 (a rounding residue printed as an estimate; tests/test_kaks_properties.py) is a known bug: counted in its
-# own class, not failed, until it is fixed (then set this to False)
-KNOWN_K03_OK = True
+# K03 (a rounding residue printed as an estimate; tests/test_kaks_properties.py) was a known bug, counted in its
+# own class and not failed; it is fixed (2026-11-14, docs/kaks.md "Differences", 14), so such a value fails again
+KNOWN_K03_OK = False
 
 
 def num(x):

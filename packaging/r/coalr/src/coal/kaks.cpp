@@ -76,6 +76,15 @@ namespace kaks {
 namespace {
 
 constexpr double SMALL = 1e-6;  // KaKs_Calculator's SMALLVALUE
+// The argument of a multiple-hit correction's logarithm (JC69's 1 - 4p/3, K80's 1 - 2P - Q and 1 - 2Q, F84's and
+// TN93's terms) at or below LOG_ARG_TOL counts as 0: the correction is undefined and the distance saturated. Where
+// the argument is 0 in exact arithmetic (P = Q = 1/3; p = 3/4) the floating-point result is 0, a residue of about
+// 1e-16 or a negative number depending on the fractions and on the order of the sums; a residue gave a distance
+// of 19 to 28 with status `ok` (fuzz finding K03, 2026-11-14). 1e-10 leaves room for the rounding of sums over
+// long genes; a distance from an argument this small would be above 11 (K80) or 17 (JC69), which no data set
+// supports. kaks_comeron.cpp and kaks_li.cpp use the same value; the kappa estimates (YN's K80 / F84 kappa,
+// MYN's TN93 kappa) keep the references' exact test (docs/kaks.md, "Differences", 14 and 15).
+constexpr double LOG_ARG_TOL = 1e-10;
 
 inline bool is_stop(const GeneticCode& g, int c) { return g.aa[c] == '*'; }
 inline int base_at(int c, int pos) { return pos == 0 ? c / 16 : pos == 1 ? (c / 4) % 4 : c % 4; }
@@ -281,7 +290,7 @@ Result run_ng(const Prepared& p, const GeneticCode& g, Result r) {
         if (!(sites_ > 0)) return NA;
         double pp = d_ / sites_;
         double x = 1 - 4 * pp / 3;
-        if (!(x > 0)) {
+        if (!(x > LOG_ARG_TOL)) {
             mark_saturated(r, which);
             return NA;
         }
@@ -311,16 +320,25 @@ int fold_class(const GeneticCode& g, int c, int pos) {  // 0, 1 (2-fold), 2 (4-f
 }
 
 // codon indices of the special cases KaKs_Calculator (following Li's kakstools.py, and Tzeng et al. 2004 for
-// the M variants) hard-codes; they are standard-code codons and are applied with every genetic code, as there.
+// the M variants) hard-codes. They are facts of the standard code (CGA/AGA and CGG/AGG are both Arg, ATA/ATC/ATT
+// are Ile, ATG is Met), and KaKs_Calculator applies them with every genetic code. COAL applies LWL / LPB's
+// Arg rule only where the selected code makes the two codons synonymous, and the M variants' rules by what they
+// are about (lwl_step); elsewhere the change is counted by the general rule, transition or transversion. With
+// the standard code the counts are KaKs_Calculator's, unchanged. Fuzz
+// findings K01 (code 13: AGA is Gly, so LWL / LPB depended on which sequence is first) and K02 (code 2: ATA is
+// Met, so MLWL / MLPB counted half of the synonymous ATA -> ATG as nonsynonymous); docs/kaks.md, "Differences".
 constexpr int cod(int a, int b, int c) { return a * 16 + b * 4 + c; }
 constexpr int T_ = 0, C_ = 1, A_ = 2, G_ = 3;
 constexpr int CGA = cod(C_, G_, A_), AGA = cod(A_, G_, A_), CGG = cod(C_, G_, G_), AGG = cod(A_, G_, G_);
-constexpr int ATA = cod(A_, T_, A_), ATG = cod(A_, T_, G_), ATC = cod(A_, T_, C_), ATT = cod(A_, T_, T_);
+constexpr int ATA = cod(A_, T_, A_), ATG = cod(A_, T_, G_);
 
 struct LwlAcc {
     double L[3] = {0, 0, 0}, Si[3] = {0, 0, 0}, Vi[3] = {0, 0, 0};
     double snp = 0;
 };
+
+// x and y code for the same amino acid in g (neither is a stop codon)
+bool same_aa(const GeneticCode& g, int x, int y) { return !is_stop(g, x) && !is_stop(g, y) && g.aa[x] == g.aa[y]; }
 
 // One substitution x -> y at position pos, adding half a difference to the class of each end codon.
 void lwl_step(const GeneticCode& g, bool modified, int x, int y, int pos, double* si, double* vi) {
@@ -328,17 +346,23 @@ void lwl_step(const GeneticCode& g, bool modified, int x, int y, int pos, double
     int syn = -1;
     if (!modified) {
         if (pos == 0 && ((x == CGA && y == AGA) || (x == AGA && y == CGA) || (x == CGG && y == AGG) ||
-                         (x == AGG && y == CGG))) {
+                         (x == AGG && y == CGG)) && same_aa(g, x, y)) {   // Arg <-> Arg (standard code)
             si[c1] += 0.5;  // as KaKs_Calculator's LWL85: half a transition, half a transversion
             vi[c2] += 0.5;
             return;
         }
     } else {
-        if (pos == 2 && ((x == ATA && y == ATG) || (x == ATG && y == ATA))) syn = 0;
-        if (pos == 2 && ((x == ATA && (y == ATC || y == ATT)) || ((x == ATC || x == ATT) && y == ATA))) syn = 1;
-        if (pos == 0 && ((x == CGA && y == AGA) || (x == AGA && y == CGA) || (x == CGG && y == AGG) ||
-                         (x == AGG && y == CGG)))
-            syn = 1;
+        // Tzeng et al.'s rules, by what they are about: between two codons that are both 2-fold degenerate at
+        // the position, the change is synonymous exactly when the code says so, whether it is a transition or
+        // not. In the standard code the changes where that differs from "transition = synonymous" are exactly
+        // the hard-coded Ile <-> Ile (ATA <-> ATC, ATT) and Arg <-> Arg (CGA <-> AGA, CGG <-> AGG); other codes
+        // have their own (Asn AAA <-> AAC, AAT in codes 9, 14, 21; Cys TGA <-> TGC, TGT in code 10; ...).
+        // And Ile <-> Met (ATA <-> ATG, a 2-fold and a non-degenerate codon) is nonsynonymous where the code
+        // has those amino acids.
+        if (c1 == 1 && c2 == 1)
+            syn = same_aa(g, x, y) ? 1 : 0;
+        else if (pos == 2 && ((x == ATA && y == ATG) || (x == ATG && y == ATA)) && !same_aa(g, x, y))
+            syn = 0;
     }
     if (syn < 0) syn = transition(base_at(x, pos), base_at(y, pos)) ? 1 : 0;
     double* t = syn ? si : vi;
@@ -411,7 +435,7 @@ Result run_lwl(const Prepared& p, const GeneticCode& g, Method m, Result r) {
         if (!(acc.L[k] > 0)) continue;  // no site of this class: contributes nothing
         const double P = acc.Si[k] / acc.L[k], Q = acc.Vi[k] / acc.L[k];
         const double x = 1 - 2 * P - Q, y = 1 - 2 * Q;
-        if (x > 0 && y > 0) {
+        if (x > LOG_ARG_TOL && y > LOG_ARG_TOL) {
             const double la = std::log(1 / x), lb = std::log(1 / y);
             B[k] = lb >= 0 ? 0.5 * lb : 0;
             const double av = 0.5 * la - 0.25 * lb;
@@ -717,7 +741,10 @@ struct F84Out {
     int fails = 0;
 };
 
-F84Out distance_f84(double n, double P, double Q, const double pi4[4], double maxkappa_cap, double maxkappa_set) {
+// tol: an argument of a logarithm at or below it counts as 0 (LOG_ARG_TOL for a distance, 0 for the kappa estimate,
+// which keeps the references' exact test).
+F84Out distance_f84(double n, double P, double Q, const double pi4[4], double maxkappa_cap, double maxkappa_set,
+                    double tol) {
     F84Out o;
     const double Qsmall = std::min(1e-10, 0.1 / n), maxt = 99;
     const double Y = pi4[0] + pi4[1], R = pi4[2] + pi4[3], tc = pi4[0] * pi4[1], ag = pi4[2] * pi4[3];
@@ -745,7 +772,7 @@ F84Out distance_f84(double n, double P, double Q, const double pi4[4], double ma
         C = Y * R;
         a = (2 * B + 2 * (tc * R / Y + ag * Y / R) * (1 - Q / (2 * C)) - P) / (2 * A);
         b = 1 - Q / (2 * C);
-        if (a <= 0 || b <= 0) f84 = true;
+        if (a <= tol || b <= tol) f84 = true;
     }
     if (!f84) {
         a = -0.5 * std::log(a);
@@ -764,7 +791,7 @@ F84Out distance_f84(double n, double P, double Q, const double pi4[4], double ma
     if (f84 && !k80) {
         a = 1 - 2 * P - Q;
         b = 1 - 2 * Q;
-        if (a <= 0 || b <= 0) {
+        if (a <= tol || b <= tol) {
             k80 = true;
         } else {
             a = -std::log(a);
@@ -781,7 +808,7 @@ F84Out distance_f84(double n, double P, double Q, const double pi4[4], double ma
     }
     if (k80) {
         P += Q;
-        if (P >= 0.75) {
+        if (P >= 0.75 || (tol > 0 && 1 - P * 4 / 3.0 <= tol)) {
             jc = true;
             o.saturated = true;
             P = 0.75 * (n - 1.0) / n;
@@ -1052,6 +1079,17 @@ Diffs count_diffs(const Prepared& p, const GeneticCode& g, const PMat* P, bool m
     return D;
 }
 
+// YN / MYN: neither Ka nor Ks has an estimate (saturated, or saturated beside no sites of the other kind), so
+// t, from which the pathway weights of the codons that differ at several positions come, is a cap and not an
+// estimate. The weighted difference counts Sd and Nd are then not reproducible (swapping the two rows changes
+// them: fuzz finding K06) and are NA, as for an iteration that did not converge. Without such codons (or with
+// --yn-weighting 0) the counts do not depend on t and are kept.
+void no_estimate_counts(const Prepared& p, Result& r, bool saturated) {
+    if (!saturated || std::isfinite(r.ks) || std::isfinite(r.ka)) return;
+    if (!needs_pathway_weights(p)) return;
+    r.Sd = r.Nd = NA;
+}
+
 Result run_yn(const Prepared& p, const GeneticCode& g, const Options& opt, Result r) {
     const bool kc = opt.yn_flavour == Flavour::kaks_calculator;
     const double cap = kc ? 99 : 999, capset = kc ? 2 : 999;
@@ -1077,7 +1115,7 @@ Result run_yn(const Prepared& p, const GeneticCode& g, const Options& opt, Resul
         const double V = kc ? 1 - T - same : 1 - same - T;
         double pi4[4];
         for (int j = 0; j < 4; ++j) pi4[j] = F[k][j * 4] + F[k][j * 4 + 1] + F[k][j * 4 + 2] + F[k][j * 4 + 3];
-        F84Out o = distance_f84(S, T, V, pi4, cap, capset);
+        F84Out o = distance_f84(S, T, V, pi4, cap, capset, 0);
         ka[k] = o.kappa;
         wk[k] = o.kappa > 0 ? S : 0;
     }
@@ -1117,8 +1155,8 @@ Result run_yn(const Prepared& p, const GeneticCode& g, const Options& opt, Resul
         if (weights) pmat_codon(g, pi, kappa, kappa, omega, t, *P);
         D = count_diffs(p, g, weights ? P : nullptr, false);
         const double Sdts = D.sts1 + D.sts2, Sdtv = D.stv, Ndts = D.nts1 + D.nts2, Ndtv = D.ntv;
-        if (hasS) os = distance_f84(S, Sdts / S, Sdtv / S, fbS, cap, capset);
-        if (hasN) on = distance_f84(N, Ndts / N, Ndtv / N, fbN, cap, capset);
+        if (hasS) os = distance_f84(S, Sdts / S, Sdtv / S, fbS, cap, capset, LOG_ARG_TOL);
+        if (hasN) on = distance_f84(N, Ndts / N, Ndtv / N, fbN, cap, capset, LOG_ARG_TOL);
         if (hasS && (os.fails != 3 || os.saturated)) dS = os.t;
         if (hasN && (on.fails != 3 || on.saturated)) dN = on.t;
         // With one kind of site missing, omega has no meaning; the references' own arithmetic then leaves it at
@@ -1156,6 +1194,7 @@ Result run_yn(const Prepared& p, const GeneticCode& g, const Options& opt, Resul
         mark_saturated(r, "Ka");
         r.ka = r.se_ka = NA;
     }
+    if (weights) no_estimate_counts(p, r, (hasS && os.saturated) || (hasN && on.saturated));
     if (std::isfinite(r.ks) && std::isfinite(r.ka)) r.divergence = (S * r.ks + N * r.ka) / (S + N);
     return r;
 }
@@ -1205,7 +1244,7 @@ F84Out distance_tn93(double n, double P1, double P2, double Q, const double pi4[
         double a1 = 1 - R * P1 / (2 * ag) - Q / (2 * R);
         double a2 = 1 - Y * P2 / (2 * tc) - Q / (2 * Y);
         double b = 1 - Q / (2 * C);
-        if (a1 < 0 || a2 < 0 || b < 0) {
+        if (a1 <= LOG_ARG_TOL || a2 <= LOG_ARG_TOL || b <= LOG_ARG_TOL) {   // (the reference: < 0)
             fail = true;
         } else {
             const double la1 = std::log(a1), la2 = std::log(a2), lb = std::log(b);
@@ -1222,7 +1261,7 @@ F84Out distance_tn93(double n, double P1, double P2, double Q, const double pi4[
             if (!std::isfinite(o.t)) o.saturated = true;
         }
     }
-    if (fail) o = distance_f84(n, P1 + P2, Q, pi4, 99, 2);
+    if (fail) o = distance_f84(n, P1 + P2, Q, pi4, 99, 2, LOG_ARG_TOL);
     return o;
 }
 
@@ -1263,6 +1302,23 @@ Result run_myn(const Prepared& p, const GeneticCode& g, const Options& opt, Resu
     r.kappa = kappa;
     r.rates[0] = ktc;
     r.rates[1] = kag;
+    // kappa_TC or kappa_AG infinite: in one class of sites the TN93 transition term is exactly at its limit
+    // (1 - R*P1/(2*ag) - Q/(2*R) == 0, a rational boundary such as P1 = 3/25, Q = 12/25 with equal purine
+    // frequencies), so its logarithm is -inf. The site counts would be inf/inf = NaN and nothing can be estimated:
+    // the multiple-hit correction of that class is undefined, which the policy calls `saturated` (docs/kaks.md,
+    // "Policy" and "Differences", 14). Before 2026-11-14 the NaN sites gave `no_data` ("no synonymous sites; no
+    // nonsynonymous sites"). KaKs_Calculator prints `nan` throughout such a row, with the same rate ratio
+    // (`...:inf:1:1:1:1`). The number of nucleotide differences does not depend on kappa and is kept.
+    if (!std::isfinite(ktc) || !std::isfinite(kag)) {
+        r.S = r.N = NA;
+        r.substitutions = count_diffs(p, g, nullptr, true).snp;
+        if (r.status != Status::no_data && r.status != Status::error) r.status = Status::saturated;
+        add_note(r, std::string("MYN: ") + (std::isfinite(ktc) ? "kappa_AG" : std::isfinite(kag) ? "kappa_TC"
+                                                                                                  : "kappa_TC and kappa_AG") +
+                        " estimated as infinite (TN93 transition correction undefined in a class of sites): no "
+                        "site counts, Ka and Ks NA");
+        return r;
+    }
     double S = 0, N = 0, fbS[4], fbN[4];
     pair_sites(p, g, pi, ktc, kag, S, N, fbS, fbN);
     r.S = S;
@@ -1329,6 +1385,8 @@ Result run_myn(const Prepared& p, const GeneticCode& g, const Options& opt, Resu
         mark_saturated(r, "Ka");
         r.ka = r.se_ka = NA;
     }
+    if (weights) no_estimate_counts(p, r, (hasS && (os.saturated || !std::isfinite(dS))) ||
+                                              (hasN && (on.saturated || !std::isfinite(dN))));
     if (std::isfinite(r.ks) && std::isfinite(r.ka)) r.divergence = (S * r.ks + N * r.ka) / (S + N);
     return r;
 }
