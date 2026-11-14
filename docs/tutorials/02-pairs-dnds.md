@@ -350,6 +350,8 @@ Built from the report, for this run:
 
 ## Clean up
 
+Tutorials 4 and 5 use `ecoli_vs_salmonella/` and `ecsa_filtered/`; once you are done with them:
+
 ```
 rm -rf ecoli_vs_salmonella ecsa_filtered ecsa_rerun kept.tsv kept_awk.tsv ribo.ids
 ```

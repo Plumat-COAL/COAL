@@ -6,7 +6,7 @@ any of them. Everything here is grounded in [kaks.md](../kaks.md), which has the
 
 | | |
 |---|---|
-| Data | the 3,142 *E. coli* K-12 / *S. enterica* LT2 ortholog pairs of tutorial 2; the *glpK* alignment of tutorial 1 |
+| Data | the 3,142 *E. coli* K-12 / *S. enterica* LT2 ortholog pairs of tutorial 2 (`ecsa_filtered/`); the *glpK* alignment of tutorial 1 (`t01/`); run from the scratch folder `coal-tutorials/` |
 | Needs | the platform wheel (`coal-cpp`), Python 3 for the comparison script |
 | Runtime | 16 s for five methods on 3,142 pairs with one thread (YN and MYN take most of it) |
 | Tested with | COAL 0.6.0.dev0 (commit 009bdd5), Linux x86_64 |
@@ -99,8 +99,10 @@ Choose the method before looking at the result, and do not switch methods to mak
 Tutorial 1's *glpK* of three mycoplasmas, with YN and with NG / LWL:
 
 ```
+cd t01
 coal dnds glpK.codon.fasta -c 4 -j 1 | cut -f1-6,13-15
 coal dnds glpK.codon.fasta -c 4 -j 1 -m NG -m LWL | cut -f1-6,13-15
+cd ..
 ```
 
 ```

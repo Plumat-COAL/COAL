@@ -255,6 +255,8 @@ should not be trusted either. [Tutorial 2](02-pairs-dnds.md) does all of this fo
 
 ## Clean up
 
+[Tutorial 5](05-choosing-a-method.md) uses `t01/glpK.codon.fasta`; once you are done with it:
+
 ```
 cd .. && rm -rf t01
 ```

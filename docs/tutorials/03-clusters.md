@@ -330,6 +330,8 @@ largest uncertainty. That is one more reason to filter on identity and to name t
 
 ## Clean up
 
+Tutorial 4 uses `chlamydia/`; once you are done with it:
+
 ```
 rm -rf chlamydia chlamydia_tight chlamydia_cap chlamydia_mafft ct_vs_cm.tsv
 ```
