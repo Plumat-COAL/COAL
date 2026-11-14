@@ -651,11 +651,24 @@ def _utc_now() -> str:
     return _utc_iso(time.time())
 
 
-def _file_sig(paths) -> list:
+def _file_sig(paths, base: str | None = None) -> list:
+    """What --resume compares of each file: its path, size and modification time. A file inside the folder base
+    (the output folder: the copies in work/inputs/, the translated proteins, clusters.tsv) is named relative to it
+    ("OUT/work/query.faa"), so a renamed, moved or copied (with its times: cp -a, mv, rsync -a) output folder
+    reuses its stages; the state those stages are checked against lives in the same folder. A file outside it (an
+    input) keeps its full path: another file of the same size and time is another input."""
     out = []
     for p in paths:
         st = os.stat(p)
-        out.append([os.path.abspath(p), st.st_size, st.st_mtime_ns])
+        ap = os.path.abspath(p)
+        if base is not None:
+            try:
+                rel = os.path.relpath(ap, base)
+            except ValueError:   # (Windows: another drive)
+                rel = os.pardir
+            if rel != os.pardir and not rel.startswith(os.pardir + os.sep) and not os.path.isabs(rel):
+                ap = "OUT/" + rel.replace(os.sep, "/")
+        out.append([ap, st.st_size, st.st_mtime_ns])
     return out
 
 
@@ -1250,7 +1263,8 @@ class _Run:
             dst = os.path.join(d, f"{k}_{name}")
             st = os.stat(p)
             sig = [os.path.abspath(p), st.st_size, st.st_mtime_ns]
-            old = record.get(dst)
+            key = os.path.basename(dst)   # (not the full path: a moved output folder keeps its copies)
+            old = record.get(key)
             if isinstance(old, list) and old[:3] == sig and os.path.isfile(dst):
                 digest = old[3] if len(old) > 3 else None    # (a copy made by an earlier version has none)
             else:
@@ -1258,7 +1272,7 @@ class _Run:
                     digest = gunzip_to(p, dst)
                 except ValueError as e:
                     raise PipelineError(f"{opt}: {e}") from None
-                record[dst] = [*sig, digest]
+                record[key] = [*sig, digest]
                 # the copy keeps the source's times, so an unchanged input gives the same --resume signature
                 os.utime(dst, ns=(st.st_atime_ns, st.st_mtime_ns))
             self._plain[os.path.abspath(p)] = dst
@@ -1639,7 +1653,7 @@ class _Run:
         def go():
             self.run_tool([self.cpp, "translate", *plain, "-o", faa, "--genes", genes, "-c",
                            str(self.a.codontable)], "translate", f"translating {paths[0]}")
-        self.stage(f"translate_{name}", _sig("translate", _file_sig(plain), self.a.codontable, __version__),
+        self.stage(f"translate_{name}", _sig("translate", _file_sig(plain, self.out), self.a.codontable, __version__),
                    [faa, genes], go)
         return faa, genes, {}
 
@@ -2079,7 +2093,7 @@ class _Run:
         return "--gene-map" + (f", and {fb} for the records it does not name" if fb else "")
 
     def isoform_warning(self) -> None:
-        """One line for the run: input that looks like several transcripts per gene (and nothing done about it),
+        """One line for the run: input with several CDS records per gene (and nothing done about it),
         or what --longest-isoform did."""
         a = self.a
         self.check_gene_map()
@@ -2141,13 +2155,17 @@ class _Run:
         for n, r in multi.items():
             ex = r.get("example")
             parts.append(f"{n}: {r['records']:,} records of {r['genes']:,} genes, "
-                         f"{r['genes_with_several_records']:,} genes with several records"
+                         f"{r['genes_with_several_records']:,} gene"
+                         f"{'' if r['genes_with_several_records'] == 1 else 's'} with several records"
                          + (f" (e.g. {ex['gene']}: {', '.join(ex['records'])})" if ex else "")
                          + f", read from the {self._source_text(r)}")
-        self.warn("the input looks like several transcripts per gene (" + "; ".join(parts) + "). The pipeline "
-                  "treats each record as a gene: such a gene is compared once per transcript, and reciprocal best "
-                  "hits are split between its transcripts. Use --longest-isoform to keep the longest CDS of each "
-                  "gene (with --gene-map TSV if the genes are not in the headers), or give one sequence per gene")
+        # (isoforms of eukaryotic genes, or alternative start sites: NCBI annotates some bacterial genes, E. coli
+        # mrcB and infB, with two or three CDS records of one locus tag; tutorial 2)
+        split = (", and its reciprocal best hits are split between its records" if self.mode == "pairs" else "")
+        self.warn("the input has several CDS records per gene (isoforms or alternative start sites; "
+                  + "; ".join(parts) + "). The pipeline treats each record as a gene: such a gene is compared "
+                  f"once per record{split}. Use --longest-isoform to keep the longest CDS of each gene (with "
+                  "--gene-map TSV if the genes are not in the headers), or give one sequence per gene")
 
     def kept_proteins(self, faa: str, dropped: dict, name: str) -> str:
         """The protein file without the dropped records (what DIAMOND gets); faa itself when nothing is dropped.
@@ -2720,8 +2738,9 @@ def _search(run: _Run, q_faa: str, s_faa: str, q_order: dict, s_order: dict, ort
         for d in ("subject.dmnd", "query.dmnd"):
             if os.path.isfile(run.wpath(d)):
                 os.remove(run.wpath(d))
-    run.stage("diamond_search", _sig("search", _file_sig([q_faa, s_faa]), run.tools["diamond"]["version"], a.ortho,
-                                     a.evalue, a.sensitivity, gapped, extra), [fwd] + ([rev] if both else []), go)
+    run.stage("diamond_search", _sig("search", _file_sig([q_faa, s_faa], run.out), run.tools["diamond"]["version"],
+                                     a.ortho, a.evalue, a.sensitivity, gapped, extra),
+              [fwd] + ([rev] if both else []), go)
     t = time.perf_counter()
     hits = _best_hits(fwd, 12 if gapped else 10)
     back = _best_hits(rev, 2) if both else {}
@@ -2869,8 +2888,8 @@ def _clusters_mode(run: _Run) -> None:
                           "--quiet", *opts, *extra], "diamond", "diamond deepclust")
             os.replace(cfile + ".tmp", cfile)
             return {"input_order": "sorted by ID", "sequences": n}
-        run.stage("deepclust", _sig("deepclust", "sorted-by-id", _file_sig([faa]), run.tools["diamond"]["version"],
-                                    opts, extra), [cfile, sfaa], go)
+        run.stage("deepclust", _sig("deepclust", "sorted-by-id", _file_sig([faa], run.out),
+                                    run.tools["diamond"]["version"], opts, extra), [cfile, sfaa], go)
         if a.realign:
             rfile = run.outputs["realign"] = run.path("realign.tsv")
             rextra = shlex.split(a.realign_args) if a.realign_args else []
@@ -2889,7 +2908,7 @@ def _clusters_mode(run: _Run) -> None:
                     out.write("member\trepresentative\tapprox_pident\tevalue\tbitscore\tqcovhsp\tscovhsp\n")
                     shutil.copyfileobj(body, out)
                 os.remove(rfile + ".body")
-            run.stage("realign", _sig("realign", _file_sig([cfile]), run.tools["diamond"]["version"], rextra),
+            run.stage("realign", _sig("realign", _file_sig([cfile], run.out), run.tools["diamond"]["version"], rextra),
                       [rfile], go2)
     t0 = time.perf_counter()
     clusters, dup = read_clusters(cfile)
@@ -2923,7 +2942,7 @@ def _clusters_mode(run: _Run) -> None:
 
     def first_in_input(x: str, y: str) -> bool:
         """y comes before x in the input (--cds files in order, then records): a pair is aligned in input order
-        (dnds.hpp Group::swap_pair; docs/pipeline.md, "Which gene is aligned first")."""
+        (dnds.hpp Group::swap_pair; docs/pipeline.md, "Which gene comes first")."""
         return cds_idx.pos[y][:2] < cds_idx.pos[x][:2]
 
     def emit_pairwise(write, cid: str, ids: list[str], pairs) -> None:
@@ -2977,6 +2996,18 @@ def _clusters_mode(run: _Run) -> None:
                 buf = [b"G\t", cid.encode(), b"\tall\tswap\n" if swap else b"\tall\n"]
                 for m, row in zip(ids, rows):
                     buf += [b"M\t", m.encode(), b"\t", cds_idx.get(m), b"\t" if row else b"", row, b"\n"]
+                if r is not None and len(ids) > 2:
+                    # the pairs of an MSA in input order too (the earlier --cds file, then the earlier record
+                    # first; the rows still list the clusters file's order): the members' input ranks, when
+                    # that order is not the members' (dnds.hpp Group::rank; docs/pipeline.md "Which gene comes
+                    # first")
+                    key = [cds_idx.pos[m][:2] for m in ids]
+                    if any(key[k + 1] < key[k] for k in range(len(key) - 1)):
+                        rank = sorted(range(len(ids)), key=key.__getitem__)
+                        rk = [0] * len(ids)
+                        for k, t in enumerate(rank):
+                            rk[t] = k
+                        buf.append(b"O\t" + "\t".join(map(str, rk)).encode() + b"\n")
                 buf.append(b"E\n")
                 write(b"".join(buf))
             pending.clear()
@@ -3210,7 +3241,8 @@ def build_parser() -> argparse.ArgumentParser:
                         "records why a larger one was skipped; always; never")
     g.add_argument("--digits", type=int, default=8, metavar="N", help="significant digits (default 8)")
     g.add_argument("-q", "--quiet", action="store_true", help="no progress or summary on stderr")
-    g = common.add_argument_group("Genes with several transcripts (every FASTA record is treated as a gene)")
+    g = common.add_argument_group("Genes with several CDS records: isoforms, alternative starts (every FASTA record is "
+                                  "treated as a gene)")
     g.add_argument("--longest-isoform", action="store_true",
                    help="keep one record per gene, the longest CDS (ties: the ID that sorts first); the others are "
                         "listed in DIR/genes.tsv with status dropped. The gene of a record comes from --gene-map, "
@@ -3219,7 +3251,7 @@ def build_parser() -> argparse.ArgumentParser:
                         "_i1, -RA, -mRNA-1, _T001; docs/pipeline.md lists the styles)")
     g.add_argument("--gene-map", metavar="TSV",
                    help="record ID and gene ID, tab-separated, for --longest-isoform (and for the warning about "
-                        "several transcripts per gene). It wins for the records it names; the genes of the others "
+                        "several CDS records per gene). It wins for the records it names; the genes of the others "
                         "are read from their headers or IDs as without it. A map that names no record of the "
                         "input, or gives a record two genes, is an error")
     g.add_argument("--isoform-rule", choices=("auto", "suffix", "map"), default="auto",

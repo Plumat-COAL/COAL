@@ -79,6 +79,12 @@ struct Group {
     // species). Without rows and hit, member 1 is aligned against member 0 and the rows are exchanged back.
     // docs/pipeline.md, "Which gene comes first".
     bool swap_pair = false;
+    // Groups of any size: each member's rank in the input (lower = earlier; ignored unless there is one value
+    // per member). Every pair i, j is then computed with the member of the lower rank first (the result still
+    // lists i as seq1), so the pairs taken from a protein multiple alignment are computed in input order too
+    // (docs/pipeline.md, "Which gene comes first"). It decides the estimators' order in place of swap_pair;
+    // swap_pair still decides how a two-member group without rows is aligned. Empty: member order.
+    std::vector<long long> rank;
 };
 
 struct Options {
@@ -120,6 +126,7 @@ struct GroupResult {
     std::vector<std::string> protein_rows;  // the protein alignment used (one row per member; "" for failed ones)
     std::vector<PairResult> pairs;       // filled by run_group / compute_pair
     bool swap_pair = false;              // Group::swap_pair of a two-member group: compute_pair takes j, i
+    std::vector<long long> rank;         // Group::rank (one per member) or empty
 };
 
 // The pairs Group::pairs asks for, in output order.
