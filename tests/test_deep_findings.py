@@ -208,6 +208,36 @@ class ByteOrderMarkRuns(PipelineCase):
             got = got[1]
             self.assertEqual(len(got.splitlines()), 1 + len(PLAIN))
 
+# ---------------------------------------------------------------------------------------------- D01
+@needs_cpp
+class YnPamlBoundary(unittest.TestCase):
+    """D01: tests/kaks/yn_paml_boundary_pair.fasta is an S. cerevisiae / C. glabrata ortholog pair (NCBI RefSeq,
+    the codon alignment of `coal pipeline`, stop codons and ambiguous columns removed) whose 4-fold sites have
+    P = 11/34 and Q = 12/34, so 1 - 2P - Q is exactly 0. PAML yn00 4.10.10 (weighting 1): S 128.0, N 529.0,
+    dN 0.4123 (K80 fails, kappa 0.7704 from the non-degenerate sites); KaKs_Calculator 2.0 YN: S 194.22, N 462.78,
+    Ka 0.502369, Ks 2.15976 (a rounding residue of 1e-17 gives kappa 60 at the 4-fold sites)."""
+
+    def rows(self, *opts):
+        import subprocess
+        r = subprocess.run([str(CPP), "dnds", str(ROOT / "tests" / "kaks" / "yn_paml_boundary_pair.fasta"),
+                            "--pairs", "consecutive", "-m", "YN", "-o", "-", "-q", *opts], capture_output=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        lines = r.stdout.decode().splitlines()
+        return dict(zip(lines[0].split("\t"), lines[1].split("\t")))
+
+    def test_paml_flavour_is_yn00(self):
+        for w in ("1", "0"):
+            r = self.rows("--yn-flavour", "paml", "--yn-weighting", w)
+            self.assertEqual((round(float(r["S_sites"]), 1), round(float(r["N_sites"]), 1)), (128.0, 529.0), w)
+            self.assertAlmostEqual(float(r["dN"]), {"1": 0.4123, "0": 0.4278}[w], places=4)
+            # yn00 prints dS 3.6389; the Ks correction is undefined, which COAL reports as saturated (docs/kaks.md)
+            self.assertEqual(r["status"], "saturated")
+
+    def test_default_flavour_is_still_kaks_calculator(self):
+        r = self.rows()
+        self.assertEqual((r["S_sites"], r["N_sites"], r["dN"], r["dS"]),
+                         ("194.22024", "462.77976", "0.50236926", "2.1597608"))
+
 # ---------------------------------------------------------------------------------------------- D02
 SENSE = [a + b + c for a in "TCAG" for b in "TCAG" for c in "TCAG" if a + b + c not in ("TAA", "TAG", "TGA")]
 

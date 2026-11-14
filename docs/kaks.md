@@ -445,6 +445,16 @@ weighting 1 and 0.
 
 These differences are the 12-digit printing of yn00.
 
+**The K80 boundary 2P + Q = 1.** At the non-degenerate or 4-fold sites of a pair the proportions of transitions
+(P) and transversions (Q) can be fractions whose sum 2P + Q is exactly 1 (P = 11/34, Q = 12/34). Whether
+`1 - 2P - Q` then comes out as 0 (K80 undefined: kappa from the other kind of sites) or as a residue of 1e-17
+(kappa about 60) depends on the order in which the floating-point proportions are formed. `--yn-flavour paml`
+forms them as yn00's `GetKappa` does (Q = 1 − identical − P) and so agrees with yn00 at the boundary; the
+default flavour keeps KaKs_Calculator's order (1 − P − identical) and its numbers. Such pairs are not rare in
+distant species (319 of the 4,388 *S. cerevisiae* / *C. glabrata* pairs are at the boundary; for 10 of them the
+two orders give different kappa), and their kappa from the 4-fold sites is a rounding artefact in either
+program. Deep test of 2026-11-14, finding D01; the pair is `tests/kaks/yn_paml_boundary_pair.fasta`.
+
 **Text of every row compared with the stock KaKs_Calculator, 6 digits.** Every differing field is classified;
 the categories are explained in the next section.
 

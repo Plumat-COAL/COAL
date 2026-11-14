@@ -45,6 +45,19 @@ entry under "Added", not under "Fixed".
 
   Settled before the release (states that no release ever had are not listed as fixes):
 
+  - **`--yn-flavour paml` agrees with yn00 at the K80 boundary 2P + Q = 1** (deep test of 2026-11-14, D01).
+    When the transition and transversion proportions of the 4-fold (or non-degenerate) sites satisfy 2P + Q = 1
+    exactly, yn00 finds K80 undefined while COAL, forming Q in KaKs_Calculator's order, found a residue of 1e-17
+    and a kappa of 60 there. The paml flavour now forms Q as yn00's `GetKappa` does. The S. cerevisiae /
+    C. glabrata pair of the finding: before S 194.22, N 462.78, dN 0.5024, dS 2.1598 (`ok`); after S 128.0,
+    N 529.0, dN 0.4123, as yn00 (dS: yn00 prints 3.6389, COAL `saturated`, as for every pair whose Ks
+    correction is undefined). All pairs with `--yn-flavour paml`: 10 of 4,388 Scer / Cgla rows change, 8 of
+    4,208 Scer / Klac, 1 of 3,685 E. coli K-12 / Sakai, 0 of 2,862 Salmonella / Shigella; the 10 Scer / Cgla
+    pairs disagreed with yn00 in S and N before and agree to yn00's printed digits after (weighting 1 and 0). The
+    300-pair samples against yn00 (Scer / Cgla, Scer / Klac, Salmonella / Shigella, K-12 / Sakai, human / mouse,
+    A. thaliana / lyrata): every value agrees to yn00's printed digits where both give one (Scer / Cgla before:
+    1 pair of 300 differed). The default flavour (KaKs_Calculator's numbers) is unchanged: 0 rows differ on all
+    four sets.
   - **Exit status 2 when no pair has an estimate because of the input.** `coal dnds` / `coal kaks` end with 2
     (not 0) when every result is `error` or `no_data`, with one line naming the usual cause: the input looks like
     protein sequences, or the sequences of the pairs differ in length (not aligned), and the way to a codon

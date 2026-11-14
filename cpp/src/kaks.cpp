@@ -1064,7 +1064,13 @@ Result run_yn(const Prepared& p, const GeneticCode& g, const Options& opt, Resul
         if (S <= 0) continue;
         for (double& x : F[k]) x /= S;
         const double T = (F[k][0 * 4 + 1] + F[k][2 * 4 + 3]) * 2;
-        const double V = 1 - T - (F[k][0] + F[k][5] + F[k][10] + F[k][15]);
+        // The proportion of transversions in each reference's order of operations: KaKs_Calculator's 1 - T - same,
+        // PAML yn00's GetKappa Q = 1 - same - P. The two differ in the last bit, and that decides the K80 test
+        // 1 - 2P - Q <= 0 when 2P + Q = 1 exactly (a rational boundary that real pairs hit: deep test of
+        // 2026-11-14, D01, an S. cerevisiae / C. glabrata pair with P = 11/34 and Q = 12/34 at the 4-fold sites,
+        // where yn00 finds K80 undefined and COAL found a residue of 1e-17 and kappa 60).
+        const double same = F[k][0] + F[k][5] + F[k][10] + F[k][15];
+        const double V = kc ? 1 - T - same : 1 - same - T;
         double pi4[4];
         for (int j = 0; j < 4; ++j) pi4[j] = F[k][j * 4] + F[k][j * 4 + 1] + F[k][j * 4 + 2] + F[k][j * 4 + 3];
         F84Out o = distance_f84(S, T, V, pi4, cap, capset);
