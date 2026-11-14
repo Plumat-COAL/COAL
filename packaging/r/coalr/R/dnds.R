@@ -20,8 +20,10 @@
 #'   the standard genetic code only (`code = 1`).
 #' @param code NCBI genetic code number (1 = standard), used for translation, codon threading and Ka/Ks.
 #' @param threads Worker threads; `0` = one per hardware thread. Default `getOption("coalr.threads", 1L)`.
-#' @param matrix Substitution matrix: `"BLOSUM62"`, `"BLOSUM45"`, `"BLOSUM80"`, `"PAM250"` or `"BLOSUM62-PWALIGN"`
-#'   (pwalign's copy of BLOSUM62, which scores B, Z and X differently). `NULL`: `"BLOSUM62"`, with
+#' @param matrix Substitution matrix: `"BLOSUM62"`, `"BLOSUM45"`, `"BLOSUM80"`, `"PAM250"` (NCBI's),
+#'   `"BLOSUM62-PWALIGN"`, `"BLOSUM45-PWALIGN"` or `"BLOSUM80-PWALIGN"` (pwalign's copies, which score B, Z, X and J
+#'   differently, BLOSUM80 on another scale; pwalign's PAM250 is `"PAM250"`): with `preset = "pwalign"`, pwalign's
+#'   copy gives the alignments of `pwalign::pairwiseAlignment()` with that matrix. `NULL`: `"BLOSUM62"`, with
 #'   `preset = "pwalign"` `"BLOSUM62-PWALIGN"`.
 #' @param gap_open,gap_extend Cost of the first position of a gap and of each further position (EMBOSS needle's
 #'   convention; defaults 10 and 0.5).

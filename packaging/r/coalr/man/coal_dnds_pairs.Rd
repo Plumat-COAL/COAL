@@ -51,8 +51,10 @@ the standard genetic code only (\code{code = 1}).}
 
 \item{threads}{Worker threads; \code{0} = one per hardware thread. Default \code{getOption("coalr.threads", 1L)}.}
 
-\item{matrix}{Substitution matrix: \code{"BLOSUM62"}, \code{"BLOSUM45"}, \code{"BLOSUM80"}, \code{"PAM250"} or \code{"BLOSUM62-PWALIGN"}
-(pwalign's copy of BLOSUM62, which scores B, Z and X differently). \code{NULL}: \code{"BLOSUM62"}, with
+\item{matrix}{Substitution matrix: \code{"BLOSUM62"}, \code{"BLOSUM45"}, \code{"BLOSUM80"}, \code{"PAM250"} (NCBI's),
+\code{"BLOSUM62-PWALIGN"}, \code{"BLOSUM45-PWALIGN"} or \code{"BLOSUM80-PWALIGN"} (pwalign's copies, which score B, Z, X and J
+differently, BLOSUM80 on another scale; pwalign's PAM250 is \code{"PAM250"}): with \code{preset = "pwalign"}, pwalign's
+copy gives the alignments of \code{pwalign::pairwiseAlignment()} with that matrix. \code{NULL}: \code{"BLOSUM62"}, with
 \code{preset = "pwalign"} \code{"BLOSUM62-PWALIGN"}.}
 
 \item{gap_open, gap_extend}{Cost of the first position of a gap and of each further position (EMBOSS needle's
