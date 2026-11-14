@@ -24,9 +24,18 @@ def open_text(path):
     return gzip.open(path, "rt") if path.endswith(".gz") else open(path)
 
 
-def read_names(paths):
+def file_label(path):
+    base = path.replace("\\", "/").rsplit("/", 1)[-1]
+    for suffix in (".gz", ".fna", ".fasta", ".fa", ".cds"):
+        if base.endswith(suffix):
+            base = base[: -len(suffix)]
+    return base
+
+
+def read_names(paths, species=None):
     names = {}
     for path in paths or []:
+        label_of_file = file_label(path)
         with open_text(path) as fh:
             for line in fh:
                 if line.startswith(">"):
@@ -36,6 +45,8 @@ def read_names(paths):
                     tag = re.search(r"\[locus_tag=([^\]]+)\]", line)
                     label = gene.group(1) if gene else (tag.group(1) if tag else "")
                     names[rid] = (label, prot.group(1) if prot else "")
+                    if species is not None:
+                        species[rid] = label_of_file
     return names
 
 
@@ -63,6 +74,8 @@ def main():
     ap.add_argument("--max-ds", type=float, default=2)
     ap.add_argument("--top", type=int, default=10)
     ap.add_argument("--write-kept", metavar="TSV", help="write the rows that pass every filter")
+    ap.add_argument("--by-species", action="store_true",
+                    help="with --cds: a table per pair of input files (species): rows, statuses, median dS and dN/dS")
     ap.add_argument("--only-ids", metavar="FILE", help="only rows whose seq1 or seq2 is one of the IDs in FILE (one per line)")
     a = ap.parse_args()
 
@@ -82,6 +95,24 @@ def main():
     for r in rows:
         counts[r["status"]] = counts.get(r["status"], 0) + 1
     print("status: " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items(), key=lambda kv: -kv[1])))
+
+    species = {} if a.by_species else None
+    names = read_names(a.cds, species)
+    if a.by_species:
+        groups = {}
+        for r in rows:
+            k = tuple(sorted((species.get(r["seq1"], "?"), species.get(r["seq2"], "?"))))
+            groups.setdefault(k, []).append(r)
+        print("by species pair: rows, with an estimate, saturated + not_converged, median dS, median dN/dS (rows with an estimate)")
+        for k in sorted(groups):
+            g = groups[k]
+            est = [r for r in g if r["status"] in ("ok", "warning")]
+            sat = sum(1 for r in g if r["status"] in ("saturated", "not_converged"))
+            ds = [num(r["dS"]) for r in est if num(r["dS"]) is not None]
+            w = [num(r["dNdS"]) for r in est if num(r["dNdS"]) is not None]
+            md = f"{statistics.median(ds):.4f}" if ds else "NA"
+            mw = f"{statistics.median(w):.4f}" if w else "NA"
+            print(f"  {k[0]} x {k[1]}: {len(g)}, {len(est)}, {sat}, {md}, {mw}")
 
     has_ident = "prot_identity" in fields
     steps = [
@@ -115,13 +146,11 @@ def main():
     above1 = sum(1 for r in kept if num(r["dNdS"]) is not None and num(r["dNdS"]) > 1)
     print(f"  dN/dS > 1: {above1} of {len(kept)}")
 
-    names = read_names(a.cds)
     def show(r):
         g1 = names.get(r["seq1"], ("", ""))
         g2 = names.get(r["seq2"], ("", ""))
         label = g1[0] if g1[0] == g2[0] or not g2[0] else f"{g1[0]}/{g2[0]}"
-        cl = (r["cluster_id"] + "  ") if "cluster_id" in r else ""
-        print(f"  {cl}{label:<10} dN {float(r['dN']):.4f}  dS {float(r['dS']):.4f}  dN/dS {float(r['dNdS']):.4f}"
+        print(f"  {label:<10} dN {float(r['dN']):.4f}  dS {float(r['dS']):.4f}  dN/dS {float(r['dNdS']):.4f}"
               f"  codons {r['codons_compared']:>4}  {g1[1][:45]}")
     ranked = sorted((r for r in kept if num(r["dNdS"]) is not None), key=lambda r: float(r["dNdS"]))
     if a.top and ranked:
