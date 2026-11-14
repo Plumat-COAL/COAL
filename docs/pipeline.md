@@ -293,7 +293,7 @@ coal pipeline clusters --cds all_cds.fa --clusters deepclust.tsv -o out --max-cl
 | `--kaks-format` | also write `dnds.kaks` in KaKs_Calculator's 22-column format | off |
 | `--keep-alignments` | also write the codon alignments | off |
 | `--keep-protein-alignments` | also write the protein alignments the codon alignments are made from | off |
-| `--resume` | reuse the translation, search and clustering results in `DIR/work` when the inputs (path, size, modification time), the options and the DIAMOND version are the same | off |
+| `--resume` | reuse the translation, search and clustering results in `DIR/work` when the inputs (full path, size, modification time), the options and the DIAMOND version are the same. Where `DIR` itself is does not count: a renamed or moved output folder, or a copy that keeps the files' times (`cp -a`, `rsync -a`), is resumed (a copy with new times, `cp -r`, redoes the stages after the translation of unchanged plain inputs) | off |
 | `--install-tools` | install a missing DIAMOND / Clustal Omega / MAFFT into COAL's cache | off |
 | `--diamond PATH` | the DIAMOND to run | found automatically |
 | `--report FILE` | the JSON report | `DIR/report.json` |

@@ -651,11 +651,24 @@ def _utc_now() -> str:
     return _utc_iso(time.time())
 
 
-def _file_sig(paths) -> list:
+def _file_sig(paths, base: str | None = None) -> list:
+    """What --resume compares of each file: its path, size and modification time. A file inside the folder base
+    (the output folder: the copies in work/inputs/, the translated proteins, clusters.tsv) is named relative to it
+    ("OUT/work/query.faa"), so a renamed, moved or copied (with its times: cp -a, mv, rsync -a) output folder
+    reuses its stages; the state those stages are checked against lives in the same folder. A file outside it (an
+    input) keeps its full path: another file of the same size and time is another input."""
     out = []
     for p in paths:
         st = os.stat(p)
-        out.append([os.path.abspath(p), st.st_size, st.st_mtime_ns])
+        ap = os.path.abspath(p)
+        if base is not None:
+            try:
+                rel = os.path.relpath(ap, base)
+            except ValueError:   # (Windows: another drive)
+                rel = os.pardir
+            if rel != os.pardir and not rel.startswith(os.pardir + os.sep) and not os.path.isabs(rel):
+                ap = "OUT/" + rel.replace(os.sep, "/")
+        out.append([ap, st.st_size, st.st_mtime_ns])
     return out
 
 
@@ -1250,7 +1263,8 @@ class _Run:
             dst = os.path.join(d, f"{k}_{name}")
             st = os.stat(p)
             sig = [os.path.abspath(p), st.st_size, st.st_mtime_ns]
-            old = record.get(dst)
+            key = os.path.basename(dst)   # (not the full path: a moved output folder keeps its copies)
+            old = record.get(key)
             if isinstance(old, list) and old[:3] == sig and os.path.isfile(dst):
                 digest = old[3] if len(old) > 3 else None    # (a copy made by an earlier version has none)
             else:
@@ -1258,7 +1272,7 @@ class _Run:
                     digest = gunzip_to(p, dst)
                 except ValueError as e:
                     raise PipelineError(f"{opt}: {e}") from None
-                record[dst] = [*sig, digest]
+                record[key] = [*sig, digest]
                 # the copy keeps the source's times, so an unchanged input gives the same --resume signature
                 os.utime(dst, ns=(st.st_atime_ns, st.st_mtime_ns))
             self._plain[os.path.abspath(p)] = dst
@@ -1639,7 +1653,7 @@ class _Run:
         def go():
             self.run_tool([self.cpp, "translate", *plain, "-o", faa, "--genes", genes, "-c",
                            str(self.a.codontable)], "translate", f"translating {paths[0]}")
-        self.stage(f"translate_{name}", _sig("translate", _file_sig(plain), self.a.codontable, __version__),
+        self.stage(f"translate_{name}", _sig("translate", _file_sig(plain, self.out), self.a.codontable, __version__),
                    [faa, genes], go)
         return faa, genes, {}
 
@@ -2724,8 +2738,9 @@ def _search(run: _Run, q_faa: str, s_faa: str, q_order: dict, s_order: dict, ort
         for d in ("subject.dmnd", "query.dmnd"):
             if os.path.isfile(run.wpath(d)):
                 os.remove(run.wpath(d))
-    run.stage("diamond_search", _sig("search", _file_sig([q_faa, s_faa]), run.tools["diamond"]["version"], a.ortho,
-                                     a.evalue, a.sensitivity, gapped, extra), [fwd] + ([rev] if both else []), go)
+    run.stage("diamond_search", _sig("search", _file_sig([q_faa, s_faa], run.out), run.tools["diamond"]["version"],
+                                     a.ortho, a.evalue, a.sensitivity, gapped, extra),
+              [fwd] + ([rev] if both else []), go)
     t = time.perf_counter()
     hits = _best_hits(fwd, 12 if gapped else 10)
     back = _best_hits(rev, 2) if both else {}
@@ -2873,8 +2888,8 @@ def _clusters_mode(run: _Run) -> None:
                           "--quiet", *opts, *extra], "diamond", "diamond deepclust")
             os.replace(cfile + ".tmp", cfile)
             return {"input_order": "sorted by ID", "sequences": n}
-        run.stage("deepclust", _sig("deepclust", "sorted-by-id", _file_sig([faa]), run.tools["diamond"]["version"],
-                                    opts, extra), [cfile, sfaa], go)
+        run.stage("deepclust", _sig("deepclust", "sorted-by-id", _file_sig([faa], run.out),
+                                    run.tools["diamond"]["version"], opts, extra), [cfile, sfaa], go)
         if a.realign:
             rfile = run.outputs["realign"] = run.path("realign.tsv")
             rextra = shlex.split(a.realign_args) if a.realign_args else []
@@ -2893,7 +2908,7 @@ def _clusters_mode(run: _Run) -> None:
                     out.write("member\trepresentative\tapprox_pident\tevalue\tbitscore\tqcovhsp\tscovhsp\n")
                     shutil.copyfileobj(body, out)
                 os.remove(rfile + ".body")
-            run.stage("realign", _sig("realign", _file_sig([cfile]), run.tools["diamond"]["version"], rextra),
+            run.stage("realign", _sig("realign", _file_sig([cfile], run.out), run.tools["diamond"]["version"], rextra),
                       [rfile], go2)
     t0 = time.perf_counter()
     clusters, dup = read_clusters(cfile)

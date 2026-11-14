@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "tests"))
 from coal import dnds_pipeline as P  # noqa: E402
-from test_dnds_pipeline import CPP, PipelineCase, needs_cpp  # noqa: E402
+from test_dnds_pipeline import CPP, PipelineCase, needs_cpp, needs_diamond  # noqa: E402
 
 TIMEOUT = 300
 SENSE = [a + b + c for a in "TCAG" for b in "TCAG" for c in "TCAG" if a + b + c not in ("TAA", "TAG", "TGA")]
@@ -170,6 +170,70 @@ class MsaClusterOrder(PipelineCase):
         rv = {key(r): tuple(r[c] for c in cols) for r in rows(rev.outputs["dnds"])}
         self.assertTrue(any(rv[k] != pv[k] for k in pv if k[1] == "Comeron"))
         self.assertEqual({k: v for k, v in rv.items() if k[1] == "YN"}, {k: v for k, v in pv.items() if k[1] == "YN"})
+
+
+def cached(res) -> dict:
+    return {st["name"]: st["cached"] for st in res.report["stages"] if "cached" in st}
+
+
+@needs_cpp
+class ResumeMovedFolder(PipelineCase):
+    """--resume compares the inputs (full path, size, time), the options and the tool versions, not where the output
+    folder is: a renamed, moved or time-keeping copy of it reuses its stages."""
+
+    def inputs(self):
+        import gzip
+        rng = random.Random(9)
+        q, s = self.tmp / "in" / "q.fa", self.tmp / "in" / "s.fa.gz"
+        q.parent.mkdir()
+        fams = [family(rng, 2) for _ in range(5)]
+        q.write_text("".join(f">q{k}\n{f[0]}\n" for k, f in enumerate(fams)), encoding="utf-8")
+        with gzip.open(s, "wt", encoding="utf-8") as fh:
+            fh.write("".join(f">s{k}\n{f[1]}\n" for k, f in enumerate(fams)))
+        return q, s, self.pairs_file([(f"q{k}", f"s{k}") for k in range(5)])
+
+    def test_renamed_and_copied_folders_resume(self):
+        q, s, pf = self.inputs()
+        first = P.run_pairs(q, s, self.tmp / "a", pairs=pf, jobs=1, quiet=True)
+        self.assertEqual(first.exit_code, 0)
+        want = Path(first.outputs["dnds"]).read_bytes()
+        os.rename(self.tmp / "a", self.tmp / "b")
+        moved = P.run_pairs(q, s, self.tmp / "b", pairs=pf, jobs=1, quiet=True, resume=True)
+        self.assertEqual(cached(moved), {"decompress_inputs": False, "translate_query": True,
+                                         "translate_subject": True, "orthologs": False, "align_codon_kaks": False})
+        self.assertEqual(Path(moved.outputs["dnds"]).read_bytes(), want)
+        # the decompressed copy was reused, not made again (its record is keyed by its name in work/inputs)
+        self.assertEqual(sorted(os.listdir(self.tmp / "b" / "work" / "inputs")), ["0_s.fa", "sources.json"])
+        # a copy that keeps the files' times (cp -a, rsync -a; shutil.copytree copies them)
+        shutil.copytree(self.tmp / "b", self.tmp / "c")
+        copied = P.run_pairs(q, s, self.tmp / "c", pairs=pf, jobs=1, quiet=True, resume=True)
+        self.assertEqual(cached(copied)["translate_subject"], True)
+        self.assertEqual(Path(copied.outputs["dnds"]).read_bytes(), want)
+        # a copy with new times (cp -r): the plain input's translation is reused (the input did not change), the
+        # decompressed copy has a new time, so its translation is made again
+        shutil.copytree(self.tmp / "b", self.tmp / "d", copy_function=shutil.copyfile)
+        later = P.run_pairs(q, s, self.tmp / "d", pairs=pf, jobs=1, quiet=True, resume=True)
+        self.assertEqual((cached(later)["translate_query"], cached(later)["translate_subject"]), (True, False))
+        self.assertEqual(Path(later.outputs["dnds"]).read_bytes(), want)
+        # the inputs still count by their full path: the same input under another path is a new input
+        q2 = self.tmp / "in" / "q2.fa"
+        shutil.copy2(q, q2)
+        other = P.run_pairs(q2, s, self.tmp / "b", pairs=pf, jobs=1, quiet=True, resume=True)
+        self.assertEqual((cached(other)["translate_query"], cached(other)["translate_subject"]), (False, True))
+        # the signature names a file in the output folder relative to it
+        sig = P._file_sig([self.tmp / "b" / "work" / "query.faa", q], str(self.tmp / "b"))
+        self.assertEqual([x[0] for x in sig], ["OUT/work/query.faa", str(q)])
+
+    @needs_diamond
+    def test_moved_folder_reuses_the_search(self):
+        q, s, _ = self.inputs()
+        first = P.run_pairs(q, s, self.tmp / "a", jobs=1, quiet=True)
+        self.assertIn(first.exit_code, (0, 2))
+        os.rename(self.tmp / "a", self.tmp / "b")
+        moved = P.run_pairs(q, s, self.tmp / "b", jobs=1, quiet=True, resume=True)
+        self.assertEqual(cached(moved)["diamond_search"], True)
+        self.assertEqual(Path(moved.outputs["dnds"]).read_bytes(), Path(first.outputs["dnds"].replace(
+            str(self.tmp / "a"), str(self.tmp / "b"))).read_bytes())
 
 
 def run_quiet_err(fn, *args, **kw):
