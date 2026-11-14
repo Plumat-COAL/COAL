@@ -103,6 +103,24 @@ class SameIdsInSeveralCdsFiles(PipelineCase):
         self.assertEqual(res.exit_code, 0)
         self.assertEqual(res.report["isoforms"]["sets"]["cds"]["genes"], 2 * len(ids))
         self.assertEqual(len(read_tsv(res.outputs["dnds"])), len(ids))
+        # the map in prefixed form, with the same gene IDs in both species (retest R02: one record of each gene
+        # was dropped as "not the longest isoform" of the other species' record, exit 0); a gene ID that already
+        # carries the prefix stays as it is
+        for name, lines in (("pref", [f"{x}|{n}\tG{k}\n" for x in ("sp_one", "sp_two") for k, n in enumerate(ids)]),
+                            ("both", [f"{x}|{n}\t{x}|G{k}\n" for x in ("sp_one", "sp_two")
+                                      for k, n in enumerate(ids)])):
+            gm.write_text("".join(lines), encoding="utf-8")
+            res = P.run_clusters([one, two], self.tmp / name, clusters=cl, max_cluster_size=2, prefix_ids=True,
+                                 gene_map=gm, longest_isoform=True, quiet=True)
+            self.assertEqual(res.exit_code, 0, name)
+            iso = res.report["isoforms"]["sets"]["cds"]
+            self.assertEqual((iso["genes"], iso["dropped"]), (2 * len(ids), 0), name)
+            self.assertEqual(len(read_tsv(res.outputs["dnds"])), len(ids), name)
+        # two transcripts of one gene of one species, named in prefixed form: still one gene
+        gm.write_text(f"sp_one|{ids[0]}\tG0\nsp_one|{ids[1]}\tG0\n", encoding="utf-8")
+        res = P.run_clusters([one, two], self.tmp / "iso", clusters=cl, max_cluster_size=2, prefix_ids=True,
+                             gene_map=gm, longest_isoform=True, quiet=True)
+        self.assertEqual(res.report["isoforms"]["sets"]["cds"]["dropped"], 1)
 
     def test_translate_names_both_files(self):
         one, two, _ = self.two_species()

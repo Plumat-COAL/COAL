@@ -1720,8 +1720,11 @@ class _Run:
                     gm: dict[str, str] = {}
                     for r, g in self._gene_map.items():
                         x = r.split(ID_PREFIX_SEP, 1)[0] if ID_PREFIX_SEP in r else None
-                        if x in xs:
-                            gm.setdefault(r, g)
+                        if x in xs:   # a prefixed record: its gene is a gene of that species too (retest R02:
+                            # 'q|gene0 G0' and 's|gene0 G0' made one gene G0 of two species, and
+                            # --longest-isoform dropped one of them)
+                            p = f"{x}{ID_PREFIX_SEP}"
+                            gm.setdefault(r, g if g.startswith(p) else p + g)
                         else:   # the same gene ID in two species is two genes
                             for x in xs:
                                 gm.setdefault(f"{x}{ID_PREFIX_SEP}{r}", f"{x}{ID_PREFIX_SEP}{g}")

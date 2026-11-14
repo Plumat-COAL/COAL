@@ -377,6 +377,14 @@ entry under "Added", not under "Fixed".
     `-c 6`, *S. cerevisiae* mitochondrial genes `-c 3`), and none where the code reads fewer codons as stops than
     the genes' own, so that no gene has an internal stop to explain (*S. cerevisiae* genome `-c 3`,
     *D. melanogaster* `-c 5`). No run names a wrong single code.
+    **A `--gene-map` in prefixed form no longer merges the genes of two species** (R02). With `--prefix-ids`, a
+    map naming the prefixed records (`q_sameid|gene0<TAB>G0`, `s_sameid|gene0<TAB>G0`) kept the gene ID as it
+    was, so `--longest-isoform` took the two species' records for transcripts of one gene `G0` and dropped one
+    of each (exit 0), although docs/pipeline.md says `S_cer|GENE1` and `C_gla|GENE1` are two genes. The gene
+    ID of a prefixed record now gets the record's prefix too (unless it already has it), as for a map in
+    unprefixed form. The retest's files (300 + 300 CDS, IDs `gene0`..`gene299` in both, a map of 4 lines):
+    before 598 genes, 2 records dropped, 350 pairs; after 600 genes, 0 dropped, 352 pairs, `dnds.tsv`
+    byte-identical to the run with the map in unprefixed form.
 - **Protein alignment for the codon step (docs/alignment.md).** `<coal/align.hpp>` and the `coal-cpp-align` tool: a
   global Needleman-Wunsch/Gotoh aligner (BLOSUM62/45/80, PAM250, affine gaps; EMBOSS needle defaults, a pwalign
   preset), full length (overhangs gapped, never cut off), AVX2 row loops picked at run time, multithreaded; optimal
