@@ -1420,6 +1420,9 @@ class _Run:
             raise PipelineError(f"{name} was not found (PATH, $COAL_{tool.upper()}, COAL's cache). Run again with "
                                 f"--install-tools, or run `coal pipeline install {tool}`")
         self.tools[tool] = {"path": exe, "version": _msa.tool_version(exe)}
+        note = _msa.pin_note(tool, exe, self.tools[tool]["version"])
+        if note:
+            self.warn(note)
         return exe
 
     # -- translate

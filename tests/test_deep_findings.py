@@ -480,6 +480,46 @@ class Messages(unittest.TestCase):
         self.assertEqual(calls, ["mafft=7.526"])
         self.assertIn("MAFFT 7.526 installed: /x/mafft", err.getvalue())
 
+    @unittest.skipIf(os.name == "nt", "a shell script stands in for MAFFT")
+    def test_an_unpinned_mafft_in_the_cache_is_named(self):   # retest R03
+        """An earlier COAL installed MAFFT unpinned: install kept it without a word, and runs used it."""
+        import tempfile
+        from coal import msa
+        with tempfile.TemporaryDirectory() as td, mock.patch.dict(os.environ, {"COAL_CACHE_DIR": td}):
+            exe = fake_mafft(msa, "v7.525 (2024/Mar/13)")
+            calls = []
+            with mock.patch.object(msa, "_conda_install", lambda *a: calls.append(a)), \
+                    redirect_stderr(io.StringIO()) as err:
+                self.assertEqual(msa.install_mafft(), exe)
+            self.assertEqual(calls, [])     # kept, not replaced (--force replaces it)
+            self.assertIn(f"coal: note: MAFFT 7.525 in COAL's cache ({exe}) is not the pinned 7.526 (an earlier "
+                          "COAL installed it unpinned); it is used as it is. To install 7.526: coal pipeline "
+                          "install mafft --force", err.getvalue())
+            with redirect_stderr(io.StringIO()) as err:
+                msa.install_mafft(quiet=True)
+            self.assertEqual(err.getvalue(), "")
+            # the pinned version, and a MAFFT of your own (not in the cache): nothing to say
+            self.assertIsNone(msa.pin_note("mafft", exe, "v7.526 (2024/Apr/26)"))
+            self.assertIsNone(msa.pin_note("mafft", "/usr/bin/mafft", "v7.505"))
+            self.assertIn("Clustal Omega 1.2.3", msa.pin_note("clustalo", msa._cached("clustalo")[1], "1.2.3"))
+            fake_mafft(msa, "v7.526 (2024/Apr/26)")
+            with redirect_stderr(io.StringIO()) as err:
+                msa.install_mafft()
+            self.assertEqual(err.getvalue(), "")
+
+
+def fake_mafft(msa, version: str) -> str:
+    """A 'MAFFT' in COAL's cache, with the checksum record an install writes: --version prints `version`, and an
+    alignment is its input (the test's sequences have one length)."""
+    exe = msa._cached("mafft")[1]
+    os.makedirs(os.path.dirname(exe), exist_ok=True)
+    with open(exe, "w", encoding="utf-8") as fh:
+        fh.write(f'#!/bin/sh\nif [ "$1" = --version ]; then echo "{version}" >&2; exit 0; fi\n'
+                 'for a; do last=$a; done\nexec /bin/cat "$last"\n')
+    os.chmod(exe, 0o755)
+    msa._write_manifest(exe, "mafft=7.525 (test)", "test")
+    return exe
+
 
 @needs_cpp
 class PipelineMessages(PipelineCase):
@@ -513,6 +553,32 @@ class PipelineMessages(PipelineCase):
             res = P.run_clusters(FAM, self.tmp / "o2", max_cluster_size=8)
         self.assertIn("$COAL_DIAMOND is set to", err.getvalue())
         self.assertIn("(a folder)", err.getvalue())
+
+    @unittest.skipIf(os.name == "nt", "a shell script stands in for MAFFT")
+    def test_a_run_names_an_unpinned_mafft(self):   # retest R03
+        import random
+        from coal import msa
+        rng = random.Random(5)
+        a = cds(rng, stops=())
+
+        def mutant():   # (the same length: the stand-in's "alignment" is its input)
+            b = "".join(c if rng.random() > 0.1 else rng.choice("ACGT") for c in a[:-3])
+            return "".join(b[k:k + 3] if b[k:k + 3] not in ("TAA", "TAG", "TGA") else a[k:k + 3]
+                           for k in range(0, len(b), 3)) + "TAA"
+        q = write_fasta(self.tmp / "q.fa", [("g1", a), ("g2", mutant()), ("g3", mutant())])
+        cl = self.tmp / "cl.tsv"   # (three members: two are aligned without an MSA program)
+        cl.write_text("g1\tg2\ng1\tg3\n", encoding="utf-8")
+        env = {"COAL_CACHE_DIR": str(self.tmp / "cache"), "PATH": str(self.tmp / "nothing")}
+        with mock.patch.dict(os.environ, env):
+            os.environ.pop("COAL_MAFFT", None)
+            exe = fake_mafft(msa, "v7.525 (2024/Mar/13)")
+            with redirect_stderr(io.StringIO()) as err:
+                res = P.run_clusters(q, self.tmp / "o", clusters=cl, aligner="mafft")
+        self.assertEqual(res.exit_code, 0, err.getvalue())
+        self.assertEqual(res.report["tools"]["mafft"]["path"], exe)
+        note = f"MAFFT 7.525 in COAL's cache ({exe}) is not the pinned 7.526"
+        self.assertIn(note, err.getvalue())
+        self.assertTrue(any(note in w for w in res.report["warnings"]))
 
     def test_most_pairs_saturated(self):   # D08
         import random

@@ -385,6 +385,13 @@ entry under "Added", not under "Fixed".
     unprefixed form. The retest's files (300 + 300 CDS, IDs `gene0`..`gene299` in both, a map of 4 lines):
     before 598 genes, 2 records dropped, 350 pairs; after 600 genes, 0 dropped, 352 pairs, `dnds.tsv`
     byte-identical to the run with the map in unprefixed form.
+    **An unpinned MAFFT in COAL's cache is named** (R03). A MAFFT that an earlier COAL installed unpinned
+    (7.525) was kept by `coal pipeline install mafft`, which printed only its path (exit 0), and runs used it
+    without a word (the report's `tools` had the version). It is still kept (replacing it is the user's
+    decision), but `install` and every run that uses it print one note: "MAFFT 7.525 in COAL's cache (...) is not
+    the pinned 7.526 (an earlier COAL installed it unpinned); it is used as it is. To install 7.526: coal
+    pipeline install mafft --force"; in a run it is also in the report's `warnings`. The same for a cached
+    Clustal Omega that is not 1.2.4. A MAFFT on PATH or in `COAL_MAFFT` is not checked against the pin.
 - **Protein alignment for the codon step (docs/alignment.md).** `<coal/align.hpp>` and the `coal-cpp-align` tool: a
   global Needleman-Wunsch/Gotoh aligner (BLOSUM62/45/80, PAM250, affine gaps; EMBOSS needle defaults, a pwalign
   preset), full length (overhangs gapped, never cut off), AVX2 row loops picked at run time, multithreaded; optimal
