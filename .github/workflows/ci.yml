@@ -435,9 +435,9 @@ jobs:
   # The tutorials as tests (scripts/run_tutorials.py): runs the shell commands of docs/tutorials/01, 02, 03 and 05 in
   # order, on the tutorials' own NCBI data (their download scripts check every SHA-256), with the versions the
   # tutorials name (coal-cpp built here; DIAMOND 2.2.8 and Clustal Omega 1.2.4 from COAL's installer; PAL2NAL v14 for
-  # tutorial 1's comparison), and fails when a documented output line, an exit status or a number the prose states
-  # is not what the code gives now. Tutorial 4 (R) and tutorial 3's 6-minute MAFFT run are not run (the report says
-  # what was skipped and why). Only for pull requests, pushes to main and manual runs, and only when something the
+  # tutorial 1's comparison; MAFFT 7.526 for tutorial 3's last step, --full), and fails when a documented output
+  # line, an exit status or a number the prose states is not what the code gives now. Tutorial 4 (R) is not run (the
+  # report says what was skipped and why). Only for pull requests, pushes to main and manual runs, and only when something the
   # tutorials depend on changed (first step); not a required check. The data and COAL's tool cache are cached.
   tutorials:
     name: "Tutorials as tests (docs/tutorials on real data)"
@@ -496,15 +496,15 @@ jobs:
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
           cmake --build build --parallel 4 --target coal-cpp coal-cpp-align
           echo "COAL_CPP=$PWD/build/coal-cpp" >> "$GITHUB_ENV"
-      # DIAMOND and Clustal Omega with COAL's own installer (pinned, checksum-verified), the versions the tutorials
+      # DIAMOND, Clustal Omega and MAFFT with COAL's own installer (pinned, checksum-verified), the versions the tutorials
       # were run with; Clustal Omega also on PATH, because tutorial 1 runs `clustalo` itself. PAL2NAL v14 as the
       # pal2nal-fuzz job fetches it (never committed).
-      - name: Install DIAMOND, Clustal Omega and PAL2NAL v14
+      - name: Install DIAMOND, Clustal Omega, MAFFT and PAL2NAL v14
         if: steps.changes.outputs.run == 'true'
         timeout-minutes: 10
         shell: bash
         run: |
-          python -m coal pipeline install diamond clustalo
+          python -m coal pipeline install diamond clustalo mafft
           d=$(python -c "from coal import msa; import os; print(os.path.dirname(msa.find_clustalo()))")
           echo "$d" >> "$GITHUB_PATH"
           python scripts/fetch_pal2nal.py
@@ -526,7 +526,7 @@ jobs:
         shell: bash
         run: |
           coal --cpp-path
-          python scripts/run_tutorials.py --data-cache tutorial-data --jobs 4 --workdir "$RUNNER_TEMP/tutorials" \
+          python scripts/run_tutorials.py --full --data-cache tutorial-data --jobs 4 --workdir "$RUNNER_TEMP/tutorials" \
             --report "$RUNNER_TEMP/tutorials/report.json" --summary "$GITHUB_STEP_SUMMARY"
       - name: Keep the outputs of a failed run
         if: failure() && steps.changes.outputs.run == 'true'
