@@ -180,6 +180,18 @@ def entry_flags(entry: dict) -> tuple[int, bytes]:
     return f, codon
 
 
+def _first_sentence(text: str) -> str:
+    """Up to the end of the first sentence: ". " before an upper-case letter (not after "e.g." / "i.e.")."""
+    i = 0
+    while True:
+        i = text.find(". ", i)
+        if i < 0:
+            return text
+        if i + 2 < len(text) and text[i + 2].isupper() and not text[:i + 1].endswith(("e.g.", "i.e.")):
+            return text[:i + 1]
+        i += 2
+
+
 def gene_kind(entry: dict) -> str:
     """What happened to one gene (as the app's gene_kind): ok, mismatch, unchecked, other, flagged (written but
     probably wrong), excluded (failed, no row) or not_checked."""
@@ -1176,13 +1188,20 @@ class RunReport:
         # (a gene's kind is the one recorded at add_sequence: the end-of-run break events and pattern marks never
         # change it)
         fl = kc.get("f", 0)
+        ex = kc.get("e", 0)
         if fl:
             first = self.first_flagged
-            lines.append(f"{_seqs(fl)} of {_n(n)} {'was' if fl == 1 else 'were'} written to the output but "
-                         f"{'is' if fl == 1 else 'are'} probably wrong (first: {first['id']}: "
-                         f"{first['messages'][0]['text']}) Remove {'it' if fl == 1 else 'them'} before "
-                         f"analysis, or use --strict to refuse such genes.")
-        ex = kc.get("e", 0)
+            text = first['messages'][0]['text']
+            if self.exit_code == 0 or (self.exit_code == 2 and self.keep_going and not self.errors):
+                lines.append(f"{_seqs(fl)} of {_n(n)} {'was' if fl == 1 else 'were'} written to the output but "
+                             f"{'is' if fl == 1 else 'are'} probably wrong (first: {first['id']}: {text}) Remove "
+                             f"{'it' if fl == 1 else 'them'} before analysis, or use --strict to refuse such genes.")
+            else:
+                # the run wrote no output (it stopped at a gene, or failed): the gene's message without what it
+                # says about the row COAL wrote (first sentence only), and nothing about the output
+                lines.append(f"{_seqs(fl)} of {_n(n)} {'is' if fl == 1 else 'are'} probably wrong (first: "
+                             f"{first['id']}: {_first_sentence(text)}) Fix or remove {'it' if fl == 1 else 'them'} "
+                             f"before running again, or use --strict to refuse such genes.")
         c = self.counts()
         if ex:
             first = self.first_excluded

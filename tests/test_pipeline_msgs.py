@@ -6,6 +6,8 @@
   * --resume does not depend on where the output folder is: a renamed or moved folder reuses its stages.
   * The warning for several CDS records per gene names alternative start sites (bacterial annotations) as well as
     isoforms.
+  * `coal` (codon alignment), both engines: a run that stops at a gene after pairing by order wrote no output, and
+    its summary no longer says that a probably-wrong gene "was written to the output".
 
 Synthetic inputs only; coal-cpp (COAL_CPP_BIN). The MSA tool is a stand-in script (POSIX) that returns its input,
 so no Clustal Omega is needed.
@@ -314,6 +316,74 @@ class AlternativeStarts(PipelineCase):
         w = [ln for ln in err.splitlines() if "several CDS records" in ln]
         self.assertEqual(len(w), 1, err)
         self.assertIn("such a gene is compared once per record. Use --longest-isoform", w[0])
+
+
+class StoppedRunSummary(unittest.TestCase):
+    """Sequences paired by order, one probably wrong (unrelated DNA), one that stops the run (DNA too short): no
+    output file, and no summary line says that something was written; with --keep-going the file is written and
+    the line says so, as before. Both engines print the same lines."""
+
+    @classmethod
+    def setUpClass(cls):
+        import tempfile
+        cls._tmp = tempfile.TemporaryDirectory()
+        cls.tmp = Path(cls._tmp.name)
+        rng = random.Random(3)
+        aas = "ACDEFGHIKLMNPQRSTVWY"
+        back = {CODE[c]: c for c in sorted(CODE) if CODE[c] != "*"}
+        prot = lambda: "M" + "".join(rng.choice(aas) for _ in range(59))  # noqa: E731
+        p1, p2, p3 = prot(), prot(), prot()
+        dna = lambda p: "".join(back[a] for a in p)  # noqa: E731
+        (cls.tmp / "pep.fa").write_text(f">p1\n{p1}\n>p2\n{p2}\n>p3\n{p3}\n", encoding="utf-8")
+        (cls.tmp / "nuc.fa").write_text(f">d1\n{dna(p1)}TAA\n>d2\n{dna(prot())}TAA\n>d3\n{dna(p3)[:90]}\n",
+                                        encoding="utf-8")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def run_coal(self, impl, *extra):
+        out = self.tmp / f"o_{impl}_{len(extra)}.fa"
+        rep = self.tmp / f"r_{impl}_{len(extra)}.json"
+        # the Python engine in-process (COAL_ENGINE=python), or the coal-cpp executable itself
+        env = {**os.environ, "COAL_ENGINE": "python", "PYTHONPATH": str(ROOT / "src")}
+        cmd = [sys.executable, "-m", "coal"] if impl == "python" else [str(CPP)]
+        r = subprocess.run([*cmd, "pep.fa", "nuc.fa", "-o", out.name, "--report", rep.name, *extra], cwd=self.tmp,
+                           env=env, capture_output=True, text=True, timeout=TIMEOUT)
+        lines = [ln[len("coal: summary: "):] for ln in r.stderr.splitlines() if ln.startswith("coal: summary: ")]
+        import json
+        return r.returncode, out.exists(), lines, json.loads(rep.read_text(encoding="utf-8"))
+
+    def check(self, impl):
+        code, written, lines, rep = self.run_coal(impl)
+        self.assertEqual((code, written), (1, False))
+        self.assertFalse(any("written to the output" in ln for ln in lines), lines)
+        self.assertIn("1 sequence of 3 is probably wrong (first: p2: 57 of the 60 codons COAL could check do not "
+                      "match this protein, so this is almost certainly the wrong DNA for it (or the wrong genetic "
+                      "code).) Fix or remove it before running again, or use --strict to refuse such genes.", lines)
+        self.assertFalse(any("still wrote" in ln for ln in lines), lines)
+        self.assertIn("The run stopped at p3, so no output was written. Add --keep-going to write the other "
+                      "sequences and leave this one out.", lines)
+        self.assertEqual(rep["summary_text"], lines)
+        kcode, kwritten, klines, krep = self.run_coal(impl, "--keep-going")
+        self.assertEqual((kcode, kwritten), (2, True))
+        self.assertTrue(klines[0].startswith("1 sequence of 3 was written to the output but is probably wrong "
+                                             "(first: p2: 57 of the 60 codons"), klines)
+        self.assertIn("COAL still wrote its row", klines[0])
+        return lines, klines
+
+    def test_python_engine(self):
+        self.check("python")
+
+    @needs_cpp
+    def test_cpp_engine_says_the_same(self):
+        self.assertEqual(self.check("cpp"), self.check("python"))
+
+    def test_first_sentence(self):
+        from coal.report import _first_sentence
+        self.assertEqual(_first_sentence("Only 3 (e.g. N) codons. Its row was taken."), "Only 3 (e.g. N) codons.")
+        self.assertEqual(_first_sentence("No end"), "No end")
+        self.assertEqual(_first_sentence("a. b. C d."), "a. b.")
 
 
 if __name__ == "__main__":

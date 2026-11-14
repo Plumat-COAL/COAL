@@ -106,6 +106,15 @@ std::string fmt_n(long long x) {
 
 static std::string seqs(long long n) { return fmt_n(n) + " sequence" + (n == 1 ? "" : "s"); }
 
+// Up to the end of the first sentence: ". " before an upper-case letter, not after "e.g." / "i.e." (report.py)
+static std::string first_sentence(const std::string& t) {
+    for (size_t i = t.find(". "); i != std::string::npos; i = t.find(". ", i + 2)) {
+        const bool abbrev = (i >= 3 && (t.compare(i - 3, 4, "e.g.") == 0 || t.compare(i - 3, 4, "i.e.") == 0));
+        if (i + 2 < t.size() && t[i + 2] >= 'A' && t[i + 2] <= 'Z' && !abbrev) return t.substr(0, i + 1);
+    }
+    return t;
+}
+
 static std::string shlex_quote(const std::string& s) {
     if (s.empty()) return "''";
     bool safe = true;
@@ -1380,10 +1389,16 @@ std::vector<std::string> RunReport::summary_lines() const {
     if (fl) {
         const Json& first = first_flagged_;
         bool one = fl == 1;
-        lines.push_back(seqs(fl) + " of " + fmt_n(n) + " " + (one ? "was" : "were") +
-                        " written to the output but " + (one ? "is" : "are") + " probably wrong (first: " +
-                        sget(first, "id") + ": " + sget(msgs_of(first)[0], "text") + ") Remove " + (one ? "it" : "them") +
-                        " before analysis, or use --strict to refuse such genes.");
+        const std::string text = sget(msgs_of(first)[0], "text");
+        if (exit_code == 0 || (exit_code == 2 && keep_going_ && errors_.empty()))
+            lines.push_back(seqs(fl) + " of " + fmt_n(n) + " " + (one ? "was" : "were") +
+                            " written to the output but " + (one ? "is" : "are") + " probably wrong (first: " +
+                            sget(first, "id") + ": " + text + ") Remove " + (one ? "it" : "them") +
+                            " before analysis, or use --strict to refuse such genes.");
+        else  // no output was written (the run stopped at a gene, or failed): nothing about the row (report.py)
+            lines.push_back(seqs(fl) + " of " + fmt_n(n) + " " + (one ? "is" : "are") + " probably wrong (first: " +
+                            sget(first, "id") + ": " + first_sentence(text) + ") Fix or remove " +
+                            (one ? "it" : "them") + " before running again, or use --strict to refuse such genes.");
     }
     auto c = counts();
     if (ex) {

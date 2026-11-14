@@ -842,6 +842,15 @@ entry under "Added", not under "Fixed".
 
 ### Fixed
 
+- **The summary of a `coal` run that stopped no longer says that a probably-wrong gene "was written to the
+  output"** (both engines; found by the tutorial writers, docs/tutorials/01-codon-alignment.md step 5). With
+  sequences paired by order, one gene flagged as probably wrong and another that stops the run (exit 1), the
+  summary said both "1 sequence of 3 was written to the output but is probably wrong (... COAL still wrote its
+  row ...)" and "no output was written"; no file was written. When no output was written the line is now "1
+  sequence of 3 is probably wrong (first: <id>: <the first sentence of its message>) Fix or remove it before
+  running again, or use --strict to refuse such genes."; with `--keep-going`, or a run that completes, it is as
+  before, word for word. `report.json` `summary_text` follows.
+
 In commands that 0.5.0 has (both engines unless said):
 
 - **A helper process killed before it had started no longer ends the run with exit 141 and no message.** With
