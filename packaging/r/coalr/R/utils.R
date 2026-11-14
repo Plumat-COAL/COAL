@@ -158,6 +158,9 @@ align_params <- function(matrix, gap_open, gap_extend, end_gaps, max_cells, pres
       end_gaps <- "free"
     }
   }
+  if (is.null(matrix)) {
+    matrix <- if (identical(preset, "pwalign")) "BLOSUM62-PWALIGN" else "BLOSUM62"
+  }
   if (!is.character(matrix) || length(matrix) != 1L || is.na(matrix)) {
     stop("`matrix` must be one of ", paste(coalr_info()$matrices, collapse = ", "), call. = FALSE)
   }

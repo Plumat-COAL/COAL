@@ -14,7 +14,7 @@
 #' coal_align_pairs("MAKGLERWW", "MAKGLDR")
 #' coal_align_pairs(c("MKTAYIAK", "MSSHEGGK"), c("MKTAIAK", "MSHEGGKK"), preset = "pwalign")
 #' @export
-coal_align_pairs <- function(a, b, matrix = "BLOSUM62", gap_open = 10, gap_extend = 0.5,
+coal_align_pairs <- function(a, b, matrix = NULL, gap_open = 10, gap_extend = 0.5,
                              end_gaps = c("free", "penalized"), preset = NULL, tie_break = NULL, max_cells = 4e9,
                              threads = getOption("coalr.threads", 1L)) {
   a <- as_seqs(a, "a", need_names = FALSE)

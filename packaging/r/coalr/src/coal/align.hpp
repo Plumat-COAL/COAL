@@ -34,7 +34,8 @@ struct SubstitutionMatrix {
     int8_t score[24][24];
 };
 
-// "BLOSUM62" (default), "BLOSUM45", "BLOSUM80", "PAM250" (case-insensitive); nullptr if unknown.
+// "BLOSUM62" (default), "BLOSUM45", "BLOSUM80", "PAM250", "BLOSUM62-PWALIGN" (pwalign's copy of BLOSUM62, which
+// differs for B, Z and X) (case-insensitive); nullptr if unknown.
 const SubstitutionMatrix* substitution_matrix(const std::string& name);
 // The names substitution_matrix() knows, in that order.
 const std::vector<std::string>& substitution_matrix_names();
@@ -74,9 +75,11 @@ struct AlignParams {
     static AlignParams needle() { return AlignParams(); }
     // pwalign::pairwiseAlignment(type = "global", substitutionMatrix = "BLOSUM62") with its default gapOpening = 10,
     // gapExtension = 4. pwalign charges gapOpening + k * gapExtension for a gap of length k, i.e. open 14, extend 4
-    // in the convention above; end gaps are penalised; among co-optimal alignments the one pwalign returns.
+    // in the convention above; end gaps are penalised; pwalign's copy of BLOSUM62; among co-optimal alignments the
+    // one pwalign returns: the alignment of pwalign::pairwiseAlignment().
     static AlignParams pwalign() {
         AlignParams p;
+        p.matrix = "BLOSUM62-PWALIGN";
         p.gap_open = 14.0;
         p.gap_extend = 4.0;
         p.free_end_gaps = false;

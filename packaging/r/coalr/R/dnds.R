@@ -20,14 +20,16 @@
 #'   the standard genetic code only (`code = 1`).
 #' @param code NCBI genetic code number (1 = standard), used for translation, codon threading and Ka/Ks.
 #' @param threads Worker threads; `0` = one per hardware thread. Default `getOption("coalr.threads", 1L)`.
-#' @param matrix Substitution matrix: `"BLOSUM62"`, `"BLOSUM45"`, `"BLOSUM80"` or `"PAM250"`.
+#' @param matrix Substitution matrix: `"BLOSUM62"`, `"BLOSUM45"`, `"BLOSUM80"`, `"PAM250"` or `"BLOSUM62-PWALIGN"`
+#'   (pwalign's copy of BLOSUM62, which scores B, Z and X differently). `NULL`: `"BLOSUM62"`, with
+#'   `preset = "pwalign"` `"BLOSUM62-PWALIGN"`.
 #' @param gap_open,gap_extend Cost of the first position of a gap and of each further position (EMBOSS needle's
 #'   convention; defaults 10 and 0.5).
 #' @param end_gaps `"free"`: gaps at the ends cost nothing (needle's default); `"penalized"`: as internal gaps.
 #' @param preset `NULL`, `"needle"` (the defaults above) or `"pwalign"` (the scoring of
 #'   `pwalign::pairwiseAlignment(type = "global", substitutionMatrix = "BLOSUM62")`: open 14, extend 4, end gaps
-#'   penalised, and pwalign's choice among co-optimal alignments). A preset overrides `gap_open`, `gap_extend`
-#'   and `end_gaps`.
+#'   penalised, pwalign's copy of BLOSUM62 and pwalign's choice among co-optimal alignments: the protein alignments
+#'   of `pwalign::pairwiseAlignment()`). A preset overrides `gap_open`, `gap_extend` and `end_gaps`.
 #' @param tie_break Which of several alignments with the best score: `"leftmost"` (gaps as far left as the score
 #'   allows; the default) or `"pwalign"` (the alignment `pwalign::pairwiseAlignment()` returns; the default of
 #'   `preset = "pwalign"`, with which the protein alignments are those of pwalign). `NULL`: the preset's.
@@ -81,7 +83,7 @@
 #' @export
 coal_dnds_pairs <- function(query_cds, subject_cds, pairs = NULL, methods = "YN", code = 1L,
                             threads = getOption("coalr.threads", 1L),
-                            matrix = "BLOSUM62", gap_open = 10, gap_extend = 0.5, end_gaps = c("free", "penalized"),
+                            matrix = NULL, gap_open = 10, gap_extend = 0.5, end_gaps = c("free", "penalized"),
                             preset = NULL, tie_break = NULL, max_cells = 4e9, yn_flavour = c("kaks", "paml"), yn_weighting = TRUE,
                             comeron_flavour = c("coal", "gestimator"), li_flavour = c("coal", "seqinr"),
                             terminal_stops = c("drop", "compare"),

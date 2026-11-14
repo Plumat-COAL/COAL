@@ -113,6 +113,32 @@ _MATRIX_TEXT = {
  -1  -2  -2  -3  -4  -2  -2  -3  -2  -2  -2  -2  -2  -3  -3  -1  -1  -5  -3  -2  -3  -1  -2  -8
  -8  -8  -8  -8  -8  -8  -8  -8  -8  -8  -8  -8  -8  -8  -8  -8  -8  -8  -8  -8  -8  -8  -8   1
 """,
+    "BLOSUM62-PWALIGN": """
+  4  -1  -2  -2   0  -1  -1   0  -2  -1  -1  -1  -1  -2  -1   1   0  -3  -2   0  -2  -1  -1  -4
+ -1   5   0  -2  -3   1   0  -2   0  -3  -2   2  -1  -3  -2  -1  -1  -3  -2  -3  -1   0  -1  -4
+ -2   0   6   1  -3   0   0   0   1  -3  -3   0  -2  -3  -2   1   0  -4  -2  -3   4   0  -1  -4
+ -2  -2   1   6  -3   0   2  -1  -1  -3  -4  -1  -3  -3  -1   0  -1  -4  -3  -3   4   1  -1  -4
+  0  -3  -3  -3   9  -3  -4  -3  -3  -1  -1  -3  -1  -2  -3  -1  -1  -2  -2  -1  -3  -3  -1  -4
+ -1   1   0   0  -3   5   2  -2   0  -3  -2   1   0  -3  -1   0  -1  -2  -1  -2   0   4  -1  -4
+ -1   0   0   2  -4   2   5  -2   0  -3  -3   1  -2  -3  -1   0  -1  -3  -2  -2   1   4  -1  -4
+  0  -2   0  -1  -3  -2  -2   6  -2  -4  -4  -2  -3  -3  -2   0  -2  -2  -3  -3  -1  -2  -1  -4
+ -2   0   1  -1  -3   0   0  -2   8  -3  -3  -1  -2  -1  -2  -1  -2  -2   2  -3   0   0  -1  -4
+ -1  -3  -3  -3  -1  -3  -3  -4  -3   4   2  -3   1   0  -3  -2  -1  -3  -1   3  -3  -3  -1  -4
+ -1  -2  -3  -4  -1  -2  -3  -4  -3   2   4  -2   2   0  -3  -2  -1  -2  -1   1  -4  -3  -1  -4
+ -1   2   0  -1  -3   1   1  -2  -1  -3  -2   5  -1  -3  -1   0  -1  -3  -2  -2   0   1  -1  -4
+ -1  -1  -2  -3  -1   0  -2  -3  -2   1   2  -1   5   0  -2  -1  -1  -1  -1   1  -3  -1  -1  -4
+ -2  -3  -3  -3  -2  -3  -3  -3  -1   0   0  -3   0   6  -4  -2  -2   1   3  -1  -3  -3  -1  -4
+ -1  -2  -2  -1  -3  -1  -1  -2  -2  -3  -3  -1  -2  -4   7  -1  -1  -4  -3  -2  -2  -1  -1  -4
+  1  -1   1   0  -1   0   0   0  -1  -2  -2   0  -1  -2  -1   4   1  -3  -2  -2   0   0  -1  -4
+  0  -1   0  -1  -1  -1  -1  -2  -2  -1  -1  -1  -1  -2  -1   1   5  -2  -2   0  -1  -1  -1  -4
+ -3  -3  -4  -4  -2  -2  -3  -2  -2  -3  -2  -3  -1   1  -4  -3  -2  11   2  -3  -4  -2  -1  -4
+ -2  -2  -2  -3  -2  -1  -2  -3   2  -1  -1  -2  -1   3  -3  -2  -2   2   7  -1  -3  -2  -1  -4
+  0  -3  -3  -3  -1  -2  -2  -3  -3   3   1  -2   1  -1  -2  -2   0  -3  -1   4  -3  -2  -1  -4
+ -2  -1   4   4  -3   0   1  -1   0  -3  -4   0  -3  -3  -2   0  -1  -4  -3  -3   4   0  -1  -4
+ -1   0   0   1  -3   4   4  -2   0  -3  -3   1  -1  -3  -1   0  -1  -2  -2  -2   0   4  -1  -4
+ -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -4
+ -4  -4  -4  -4  -4  -4  -4  -4  -4  -4  -4  -4  -4  -4  -4  -4  -4  -4  -4  -4  -4  -4  -4   1
+""",
     "PAM250": """
   2  -2   0   0  -2   0   0   1  -1  -1  -2  -1  -1  -3   1   1   1  -6  -3   0   0   0   0  -8
  -2   6   0  -1  -4   1  -1  -3   2  -2  -3   3   0  -4   0   0  -1   2  -4  -2  -1   0  -1  -8
@@ -178,8 +204,10 @@ class AlignParams:
     def pwalign(cls) -> "AlignParams":
         """pwalign::pairwiseAlignment(type="global", substitutionMatrix="BLOSUM62") with its default gapOpening=10,
         gapExtension=4: pwalign charges gapOpening + k*gapExtension, i.e. open 14, extend 4; end gaps penalised;
-        among co-optimal alignments the one pwalign returns (tie_break="pwalign")."""
-        return cls(gap_open=14.0, gap_extend=4.0, free_end_gaps=False, tie_break="pwalign")
+        pwalign's copy of BLOSUM62 (BLOSUM62-PWALIGN: other B, Z and X scores) and, among co-optimal alignments,
+        the one pwalign returns (tie_break="pwalign"): the alignment of pwalign::pairwiseAlignment()."""
+        return cls(matrix="BLOSUM62-PWALIGN", gap_open=14.0, gap_extend=4.0, free_end_gaps=False,
+                   tie_break="pwalign")
 
     def check(self) -> None:
         if self.matrix.upper() not in MATRICES:

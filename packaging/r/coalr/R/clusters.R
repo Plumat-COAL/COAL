@@ -60,7 +60,7 @@ coal_dnds_clusters <- function(cds, clusters, msa = NULL, aligner = NULL, method
                                threads = getOption("coalr.threads", 1L),
                                max_cluster_size = 200L, large_clusters = c("representative", "sample", "skip"),
                                pair_sample = 1000L, seed = 1L,
-                               matrix = "BLOSUM62", gap_open = 10, gap_extend = 0.5,
+                               matrix = NULL, gap_open = 10, gap_extend = 0.5,
                                end_gaps = c("free", "penalized"), preset = NULL, tie_break = NULL, max_cells = 4e9,
                                yn_flavour = c("kaks", "paml"), yn_weighting = TRUE, keep_alignments = FALSE,
                                comeron_flavour = c("coal", "gestimator"), li_flavour = c("coal", "seqinr"),
