@@ -26,9 +26,11 @@ Everything is prepared; nobody has deployed it. It takes about 5 minutes.
 7. **MCP is off on the Space on purpose.** The tools take file paths on the machine that runs them; a remote
    agent cannot give the Space its own files, and on a public server the tools must not read arbitrary
    paths. `space_app.py` sets `COAL_HOSTED=1`, which (a) shows a "your files are processed on this server"
-   notice instead of "nothing leaves your computer", (b) restricts `codon_align` / `explain_report` (also
-   reachable through Gradio's HTTP API) to the bundled examples, the Space's own run folder and Gradio's
-   upload folder (symlinks and `..` are resolved first) and (c) launches without the MCP server. Agents
+   notice instead of "nothing leaves your computer", (b) restricts `codon_align` / `explain_report` /
+   `dnds_pairs` (also reachable through Gradio's HTTP API) to the bundled examples, the Space's own run folder
+   and Gradio's upload folder (symlinks and `..` are resolved first), with smaller Ka/Ks limits (5 MB, 20,000
+   results), refuses `pipeline_pairs` and the pipeline tab, and (c) launches without the MCP server.
+   The Space has the Python engine only (no `coal-cpp`), so its Ka/Ks tab says that Ka/Ks needs a local install. Agents
    should run COAL locally (`python -m coal_app --mcp`).
 
 Notes
