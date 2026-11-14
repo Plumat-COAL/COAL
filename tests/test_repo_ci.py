@@ -194,7 +194,7 @@ class TestNightlyWorkflow(unittest.TestCase):
 
     def test_every_job_has_a_timeout_and_no_write_permission(self):
         jobs = self._jobs()
-        self.assertEqual(sorted(jobs), ["engine-fuzz", "pal2nal-fuzz", "sanitizers", "tsan"])
+        self.assertEqual(sorted(jobs), ["engine-fuzz", "kaks-properties", "pal2nal-fuzz", "sanitizers", "tsan"])
         for j in jobs:
             job = self._job(j)
             self.assertRegex(job, r"(?m)^    timeout-minutes: \d+", j)
@@ -247,7 +247,20 @@ class TestNightlyWorkflow(unittest.TestCase):
                     "tests.test_cpp_error_precedence", "tests.test_batch"):
             self.assertIn(mod, job, mod)
         self.assertIn('engine_fuzz.py --n 300 --seed "$FUZZ_SEED" --sanitizer', job)
-        self.assertEqual(job.count('grep -qE "AddressSanitizer|LeakSanitizer|runtime error"'), 2)
+        self.assertIn('tests/test_kaks_properties.py --cpp build-asan/coal-cpp --n 300 --seed "$FUZZ_SEED"', job)
+        self.assertEqual(job.count('grep -qE "AddressSanitizer|LeakSanitizer|runtime error"'), 3)
+
+    def test_kaks_properties_job(self):
+        """The Ka/Ks property fuzz with tonight's seed: COAL_SLOW unit tests, then the script's campaign, which
+        fails on any finding that is not a known bug; the findings are uploaded on failure."""
+        job = self._job("kaks-properties")
+        self.assertIn('COAL_SLOW: "1"', job)
+        self.assertIn('COAL_REQUIRE_CPP: "1"', job)
+        self.assertIn('KAKS_FUZZ_SEED="$FUZZ_SEED" python -m unittest -v tests.test_kaks_properties', job)
+        self.assertIn('tests/test_kaks_properties.py --n 1500 --seed "$FUZZ_SEED" --keep kaks-props-keep', job)
+        self.assertIn("if: failure()", job)
+        self.assertIn("kaks-props-keep/", job)
+        self.assertTrue(os.path.isfile(os.path.join(ROOT, "tests", "test_kaks_properties.py")))
 
     def test_tsan_job(self):
         job = self._job("tsan")
@@ -332,7 +345,8 @@ class TestNightlySteps(unittest.TestCase):
                     "test_kaks_yn_shortcut", "test_dnds_flags", "test_pipeline_order", "test_pipeline_robustness",
                     "test_pipeline_provenance", "test_pipeline_isoforms", "test_pipeline_atomic", "test_citations",
                     "test_cli_commands",
-                    "test_examples", "test_retest2_findings", "test_cleanup1_findings"):
+                    "test_examples", "test_retest2_findings", "test_cleanup1_findings", "test_kaks_properties",
+                    "test_kaks_myn_kappa_inf"):
             files[f"tests/{mod}.py"] = "import unittest\nclass T(unittest.TestCase):\n    def test_x(self):\n        pass\n"
         r, _ = self._run("sanitizers", step, files)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
@@ -348,6 +362,35 @@ class TestNightlySteps(unittest.TestCase):
         r, _ = self._run("sanitizers", step, unbuilt)
         self.assertEqual(r.returncode, 1)
         self.assertIn("not built", r.stdout + r.stderr)
+
+    def test_kaks_property_steps_fail_on_a_finding_and_write_the_summary(self):
+        tool = "tests/test_kaks_properties.py"
+
+        def stand_in(script_status, unit_ok=True, extra=""):
+            return ("import sys, unittest\nclass T(unittest.TestCase):\n    def test_x(self):\n"
+                    f"        self.assertTrue({unit_ok})\n"
+                    "if __name__ == '__main__':\n"
+                    f"    {extra}print('kaks properties: 10 rows, 10 swap; findings none (1 s, seed 123, 1 pairs)')\n"
+                    f"    sys.exit({script_status})\n")
+        step = "Ka/Ks properties (COAL_SLOW unit tests and a 1,500-pair campaign)"
+        files = {"tests/__init__.py": ""}
+        r, d = self._run("kaks-properties", step, {**files, tool: stand_in(0)})
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        with open(os.path.join(d, "summary.md"), encoding="utf-8") as fh:
+            self.assertIn("kaks properties: 10 rows", fh.read())
+        r, _ = self._run("kaks-properties", step, {**files, tool: stand_in(1)})          # a finding of the campaign
+        self.assertNotEqual(r.returncode, 0)
+        r, _ = self._run("kaks-properties", step, {**files, tool: stand_in(0, unit_ok=False)})   # a failed unit test
+        self.assertNotEqual(r.returncode, 0)
+        san = "Ka/Ks property harness under the sanitizers (300 pairs)"
+        r, _ = self._run("sanitizers", san, {**files, tool: stand_in(0)})
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        leak = "print('==7==ERROR: LeakSanitizer: detected memory leaks', file=sys.stderr); "
+        r, _ = self._run("sanitizers", san, {**files, tool: stand_in(0, extra=leak)})
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("a sanitizer reported", r.stdout + r.stderr)
+        r, _ = self._run("sanitizers", san, {**files, tool: stand_in(1)})
+        self.assertNotEqual(r.returncode, 0)
 
     def test_generator_steps_fail_when_the_tool_fails(self):
         tool = "tests/tools/engine_fuzz.py"

@@ -116,7 +116,13 @@ class TestAgainstGestimator(ComeronLiBase):
                     continue                      # stop codons or U: other columns are compared
                 for k in ("dN", "dS"):
                     x, y = val(d[k]), val(l[k])
-                    if math.isnan(x) and not math.isnan(y):
+                    if math.isnan(x) and not math.isnan(y) and "gestimator's value" not in l["note"]:
+                        # the default flavour counts a logarithm's argument at or below 1e-10 as 0 (K03,
+                        # docs/kaks.md "Differences", 14): where it is 0 in exact arithmetic, gestimator takes the
+                        # log of the rounding residue (~1e-16) and prints a distance above 10
+                        self.assertEqual(d["status"], "saturated", name)
+                        self.assertGreater(y, 10, f"{s} {name} {k}")
+                    elif math.isnan(x) and not math.isnan(y):
                         # the default gives NA where gestimator replaced an undefined logarithm by 0
                         self.assertEqual(d["status"], "saturated", name)
                         self.assertIn("gestimator's value", l["note"], name)
@@ -215,7 +221,8 @@ class TestComeronLiRegression(ComeronLiBase):
                                    "Li").stdout,
                 (GOLD / f"{s}.coal.comeron_li.tsv").read_text(encoding="utf-8"), f"{s} dnds")
             # the two options restore the output of COAL before D8 / D9 (byte for byte on the platform the goldens
-            # were made on; compared as the other goldens are, so that another C library's last bit is allowed)
+            # were made on, apart from the K03 rows of 2026-11-14, docs/kaks.md "Differences", 14; compared as the
+            # other goldens are, so that another C library's last bit is allowed)
             got = self.run_cpp("dnds", axt, "--format", "axt", "-q", "--digits", "15", "-m", "Comeron", "-m", "Li",
                                "--comeron-twosubs", "libsequence", "--comeron-min-sites", "0").stdout
             cmp(self, got, (GOLD / f"{s}.coal.comeron_li.libsequence.tsv").read_text(encoding="utf-8"),
