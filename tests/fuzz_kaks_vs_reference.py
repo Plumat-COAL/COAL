@@ -146,6 +146,10 @@ def classify_kk(ref: dict, ours: dict, tidy: dict, tol: float, cases=None):
             counts[(key[1], "*", "reference timeout", st)] += 1
             continue
         ref_nan = any(num(rf[i]) is None and rf[i] != "NA" for i in (2, 3))   # nan / -nan / inf printed
+        if key[1] in ("YN", "MYN") and "NA" in (rf[2], rf[3]) and num(of[2]) is not None and num(of[3]) is not None:
+            # difference 11: once a NaN is in its iteration, KaKs_Calculator prints a Ka from the remaining
+            # codons "with Ks nan or NA beside it" (values above 10, K03, are classed before this)
+            ref_nan = True
         if one_sequence_without_synonymous_sites((cases or {}).get(key[0])) and st in P.ESTIMATE:
             ref_nan = True   # the reference's NaN is printed as NA there, and its iteration lost codons (11)
         for i, name in KFIELDS.items():
@@ -185,7 +189,7 @@ def classify_kk(ref: dict, ours: dict, tidy: dict, tol: float, cases=None):
                     kind = "nan -> number (differences 8-10)"
                 elif st == "no_data":
                     kind = f"{x} -> number (difference 8)"
-                elif ref_nan:
+                elif ref_nan or (st == "saturated" and key[1] in ("YN", "MYN")):
                     kind = f"{x} -> number: reference NaN (differences 10, 11)"
                 elif name in ("Ka", "Ks") and any("nan" in rf[j] for j in range(2, 9)):
                     kind = f"{x} -> number: reference nan row (difference 11)"
