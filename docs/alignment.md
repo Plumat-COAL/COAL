@@ -241,8 +241,12 @@ data stream), is absolute, has a `..` component or is a reserved device name is 
 - Tested here: the micromamba route end to end with the pinned release (Clustal Omega 1.2.4 installed in 30 s),
   and the pinned DIAMOND 2.2.8 archive for Linux.
 
-`install_mafft()` installs MAFFT from Bioconda the same way (Linux and macOS). On Windows it installs nothing
-(see above): install MAFFT's own Windows package yourself and set `COAL_MAFFT`.
+`install_mafft()` installs MAFFT from Bioconda the same way (Linux and macOS), pinned to one version as Clustal
+Omega is: `envs/mafft` with `mafft=7.526` (`msa.MAFFT_VERSION`), checked to run and report that version, and the
+line `MAFFT 7.526 installed: PATH`. (It used to install whatever MAFFT Bioconda had that day, so two machines that
+followed the same docs could align differently.) A MAFFT that an earlier COAL installed unpinned is kept; `coal
+pipeline install mafft --force` replaces it. The report's `tools` give the version of the MAFFT a run used. On
+Windows it installs nothing (see above): install MAFFT's own Windows package yourself and set `COAL_MAFFT`.
 
 **Running.**
 

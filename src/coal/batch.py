@@ -116,6 +116,9 @@ def _default_tokens(ap: argparse.ArgumentParser, argv: list[str]) -> list[str]:
     return out
 
 
+PROGRAM_NAMES = ("coal", "coal.exe", "coal-cpp", "coal-cpp.exe", "pal2nal", "pal2nal.pl")
+
+
 def plan(ap: argparse.ArgumentParser, args: argparse.Namespace, argv: list[str], lines) -> list[Job]:
     """Parse and check every job before anything runs. Raises JobsError (with the line number)."""
     if args.pep_aln is not None or args.nuc_fasta:
@@ -127,7 +130,8 @@ def plan(ap: argparse.ArgumentParser, args: argparse.Namespace, argv: list[str],
     if args.batch_parallel is not None and args.batch_parallel < 0:
         raise JobsError(0, "--batch-parallel must be 0 (one job per CPU core) or more")
     if not lines:
-        raise JobsError(0, f"no jobs in {args.batch} (one coal command line per line; # starts a comment)")
+        raise JobsError(0, f"no jobs in {args.batch} (one coal command line per line, without the program name; "
+                           "# starts a comment)")
     jp = _job_parser()
     defaults = _default_tokens(ap, argv)
     jobs = []
@@ -137,6 +141,12 @@ def plan(ap: argparse.ArgumentParser, args: argparse.Namespace, argv: list[str],
             job.tokens = split_job_line(line)
         except ValueError as e:
             raise JobsError(n, f"{e} (quote a path that has spaces; backslashes are ordinary characters)") from None
+        first = job.tokens[0] if job.tokens else ""
+        if os.path.basename(first).lower() in PROGRAM_NAMES and not os.path.isfile(first):
+            # (deep test 2026-11-14, D04: `coal pep.aln nuc.fa -o out.fa` on every line gave one "cannot open
+            # 'coal'" per job)
+            raise JobsError(n, f"the line starts with {first!r}: a job line is a coal command line without the "
+                               f"program name (PEP.aln NUC.fasta -o OUT ...). Remove {first!r} from the lines")
         # the job's namespace starts as the defaults of the main command line; the job line's options come last
         ns = argparse.Namespace(**vars(args))
         for dest in ("pep_aln", "nuc_fasta", *NOT_IN_A_JOB, "report"):

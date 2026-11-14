@@ -326,6 +326,18 @@ entry under "Added", not under "Fixed".
     in its cluster ID (exit 2). Now the FASTA index, the header reader of `--longest-isoform`, the `--pairs`,
     `--clusters` and `--gene-map` readers and `coal --batch` job files read such files as coal-cpp does; on the
     deep test's files every output is byte-identical to the run on the plain file (exit 0).
+    **Messages** (D04, D06, D07, D08; no number changes). A `coal --batch` job line that starts with `coal` (as
+    the README's wording suggested) is refused before any job runs, naming the fix, instead of 400 errors "cannot
+    open 'coal'"; the README says "without the program name". A pipeline run with no pair says so ("no pairs:
+    DIAMOND found no reciprocal best hit ..." / "none of the N clusters has two usable members"; exit status
+    unchanged), a `--pairs` file whose columns look swapped and one with repeated pairs get one warning each (the
+    pairs are still computed as given), and `$COAL_CLUSTALO` / `$COAL_MAFFT` / `$COAL_DIAMOND` set to something
+    that is not a file is named as the cause instead of "not found (PATH, $COAL_CLUSTALO, COAL's cache)".
+    `coal dnd x.fa` (and `coal-cpp dnd x.fa`) says "did you mean `coal dnds`?". `coal pipeline install mafft`
+    installs MAFFT 7.526 (pinned, as Clustal Omega 1.2.4 is; it took whatever Bioconda had) and prints "MAFFT
+    7.526 installed". When more than 30% of the pairs are `saturated` or `not_converged` the run says that the
+    sequences are too divergent for dS and points to "Filtering before interpretation" (S. cerevisiae /
+    C. glabrata: 3,775 of 4,388, 86%).
 - **Protein alignment for the codon step (docs/alignment.md).** `<coal/align.hpp>` and the `coal-cpp-align` tool: a
   global Needleman-Wunsch/Gotoh aligner (BLOSUM62/45/80, PAM250, affine gaps; EMBOSS needle defaults, a pwalign
   preset), full length (overhangs gapped, never cut off), AVX2 row loops picked at run time, multithreaded; optimal

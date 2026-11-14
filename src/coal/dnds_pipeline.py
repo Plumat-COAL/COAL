@@ -401,6 +401,17 @@ def _safe_member_name(name: str, asset: str) -> str:
     return base
 
 
+def _bad_tool_variable(var: str, name: str, other: str = "") -> None:
+    """PipelineError when the environment variable that names a tool is set to something that is not a file: the
+    tool is then looked for there only (not on PATH or in COAL's cache), and "not found (PATH, $VAR, COAL's
+    cache)" misled (deep test 2026-11-14, D06)."""
+    v = os.environ.get(var)
+    if v and not os.path.isfile(v):
+        raise PipelineError(f"${var} is set to {v!r}, which is not a file ({'a folder' if os.path.isdir(v) else 'no such file'}). "
+                            f"While {var} is set, {name} is looked for there only, not on PATH or in COAL's cache: "
+                            f"set it to the {name} program, or unset it" + (f" (or give {other})" if other else ""))
+
+
 def _find_cpp() -> str:
     from . import dispatch
     path = dispatch.find_cpp()
@@ -1335,6 +1346,8 @@ class _Run:
         if "diamond" in self.tools:
             return self.tools["diamond"]["path"]
         exe = self.a.diamond or find_diamond()
+        if exe is None and not self.a.diamond:
+            _bad_tool_variable("COAL_DIAMOND", "DIAMOND", "--diamond PATH")
         if exe is None and self.a.install_tools:
             exe = install_diamond(quiet=self.quiet)
         if exe is None or not (os.path.isfile(exe) or shutil.which(exe)):
@@ -1366,6 +1379,8 @@ class _Run:
         if tool in self.tools:
             return self.tools[tool]["path"]
         exe = getattr(self.a, tool, None) or (_msa.find_clustalo() if tool == "clustalo" else _msa.find_mafft())
+        if exe is None:
+            _bad_tool_variable(f"COAL_{tool.upper()}", "Clustal Omega" if tool == "clustalo" else "MAFFT")
         if exe is None and self.a.install_tools:
             try:
                 exe = _msa.install_clustalo(quiet=self.quiet) if tool == "clustalo" else \
@@ -2030,6 +2045,10 @@ class _Run:
         return report
 
 
+SATURATION_NOTICE_SHARE = 0.3      # more than this share of the pairs saturated / not_converged: one notice
+SATURATION_NOTICE_MIN_PAIRS = 20
+
+
 def _count_pairs(run: _Run, dnds_path: str, group_col: bool) -> None:
     """Pair counts by status from dnds.tsv (the first method's rows), and the error pairs into failed.tsv."""
     c = {"total": 0, "ok": 0, "warning": 0, "not_converged": 0, "saturated": 0, "no_data": 0, "error": 0}
@@ -2061,6 +2080,13 @@ def _count_pairs(run: _Run, dnds_path: str, group_col: bool) -> None:
             if f[-2] == "error":
                 run.fail("pair", "pair_failed", f[-1], cluster=f[0] if group_col else "", seq1=f[k], seq2=f[k + 1])
     run.counts["pairs"] = c
+    lost = c["saturated"] + c["not_converged"]
+    if c["total"] >= SATURATION_NOTICE_MIN_PAIRS and lost > SATURATION_NOTICE_SHARE * c["total"] and hasattr(run, "warn"):
+        # (deep test 2026-11-14, D08: 85% of the yeast pairs ended NA without a word about why)
+        run.warn(f"{lost:,} of the {c['total']:,} pairs ({100 * lost / c['total']:.0f}%) are saturated or "
+                 "not_converged: dS (sometimes dN too) has no estimate there: these sequences are too divergent for "
+                 "synonymous changes to be counted (dN and the protein identity are still given). Compare closer "
+                 "species for dS; docs/pipeline.md \"Filtering before interpretation\"")
     if short or high or low:
         run.counts["flagged"] = {key: n for key, n, on in (("min_codons", flagged["min_codons"], short),
                                                            ("max_ds", flagged["max_ds"], high),
@@ -2131,6 +2157,11 @@ def _pairs_mode(run: _Run) -> None:
         pairs, hits = _search(run, q_faa, s_faa, q_order, s_order, orth)
     run.say(f"{len(pairs):,} pairs ({'given' if a.pairs else a.ortho})")
     run.counts["orthologs"] = len(pairs)
+    if not pairs:   # (deep test 2026-11-14, D06: an empty dnds.tsv and exit 0 read like a result)
+        run.warn(f"no pairs: the --pairs file {a.pairs} names none, so dnds.tsv has its header only" if a.pairs
+                 else f"no pairs: DIAMOND found no {'reciprocal best hit' if a.ortho == 'rbh' else 'hit'} between "
+                 "the two sets (e-value " + f"{a.evalue:g}), so dnds.tsv has its header only. Are both files coding "
+                 "sequences of related species? --sensitivity more-sensitive / --evalue widen the search")
 
     q_idx, s_idx = FastaIndex(run.plain(a.query)), FastaIndex(run.plain(a.subject))
     if a.pairs:
@@ -2139,6 +2170,7 @@ def _pairs_mode(run: _Run) -> None:
         _unmatched_ids_warning(run, "--pairs", a.pairs,
                                [("query", [q for q, _ in pairs], q_idx, q_failed),
                                 ("subject", [s for _, s in pairs], s_idx, s_failed)], every)
+        _pairs_file_warnings(run, pairs, q_idx, s_idx, q_failed, s_failed)
     need_prot = a.aligner in ("clustalo", "mafft")
     exe = run.msa_tool(a.aligner) if need_prot else None
     qp_idx = FastaIndex(q_faa) if need_prot else None
@@ -2224,6 +2256,31 @@ def _unmatched_ids_warning(run: _Run, option: str, path: str, sides, every_group
         run.warn(f"{len(missing):,} of the {len(ids):,} {name} IDs of {option} {path} are not in the {name} "
                  f"sequence file(s): e.g. {ex!r} in {os.path.basename(path)}"
                  + (f", while the sequences are named like {have!r}." if have is not None else ".") + hint)
+
+
+def _pairs_file_warnings(run: _Run, pairs, q_idx, s_idx, q_failed, s_failed) -> None:
+    """--pairs: one line when the columns look swapped (the query column names subject records and the subject
+    column query records), and one when pairs are repeated (each is computed and written again, as given)."""
+    a = run.a
+    known_q = lambda r: r in q_idx or r in q_failed   # noqa: E731
+    known_s = lambda r: r in s_idx or r in s_failed   # noqa: E731
+    swapped = sum(1 for q, s in pairs if not known_q(q) and not known_s(s) and known_s(q) and known_q(s))
+    if swapped and 2 * swapped >= len(pairs):
+        q, s = next((q, s) for q, s in pairs if not known_q(q) and known_s(q) and known_q(s))
+        run.warn(f"the columns of --pairs {a.pairs} look swapped: in {swapped:,} of the {len(pairs):,} pairs the "
+                 f"first ID is a record of --subject and the second one of --query (e.g. {q} {s}). The first "
+                 "column is the query, the second the subject: swap the columns, or --query and --subject")
+    seen: set = set()
+    dup = 0
+    first = None
+    for p in pairs:
+        if p in seen:
+            dup += 1
+            first = first or p
+        seen.add(p)
+    if dup:
+        run.warn(f"{dup:,} line(s) of --pairs {a.pairs} repeat an earlier pair (e.g. {first[0]} {first[1]}): each "
+                 "is computed and written again, so those pairs have more than one row in dnds.tsv")
 
 
 def _read_pairs_file(path: str, shown: str | None = None) -> list[tuple[str, str]]:
@@ -2579,6 +2636,11 @@ def _clusters_mode(run: _Run) -> None:
                        "aligner": tool, "msa_seconds": round(t_msa[0], 3), **detail})
     t = time.perf_counter()
     _count_pairs(run, run.outputs["dnds"], True)
+    if not run.counts.get("pairs", {}).get("total"):   # (deep test 2026-11-14, D06)
+        run.warn(f"no pairs: none of the {len(clusters):,} clusters has two usable members, so dnds.tsv has its "
+                 "header only" + ("" if a.clusters else ". DeepClust put every protein in a cluster of its own: "
+                                  "are the sequences related? --approx-id / --member-cover change what a cluster "
+                                  "is"))
     run.outputs["cluster_summary"] = run.path("cluster_summary.tsv")
     summarise(run.outputs["dnds"], plans, run.outputs["cluster_summary"])
     run.stages.append({"name": "cluster_summary", "seconds": round(time.perf_counter() - t, 3), "cached": False})

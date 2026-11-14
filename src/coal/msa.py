@@ -43,10 +43,14 @@ from typing import Iterable, Mapping, Sequence
 from . import __version__
 
 __all__ = ["cache_dir", "find_clustalo", "find_mafft", "install_clustalo", "install_mafft", "tool_version",
-           "run_msa", "align_clusters", "MsaResult", "MsaError", "CLUSTALO_VERSION", "MICROMAMBA_VERSION",
+           "run_msa", "align_clusters", "MsaResult", "MsaError", "CLUSTALO_VERSION", "MAFFT_VERSION",
+           "MICROMAMBA_VERSION",
            "CLUSTAL_ORG_GONE", "NO_WINDOWS_CLUSTALO"]
 
 CLUSTALO_VERSION = "1.2.4"
+# MAFFT from Bioconda, pinned to one version as Clustal Omega is (deep test 2026-11-14, D07: an unpinned install
+# gave whatever Bioconda had, so two machines that followed the same docs could align differently)
+MAFFT_VERSION = "7.526"
 _EXE = ".exe" if os.name == "nt" else ""
 
 # ---- Downloads that COAL runs afterwards: each is pinned to one file by its SHA-256 ------------------------------
@@ -451,7 +455,13 @@ def install_mafft(method: str = "auto", force: bool = False, quiet: bool = False
             if method == "conda":
                 raise MsaError("no conda, mamba or micromamba found")
             conda = _get_micromamba(quiet)
-        return _conda_install("mafft", "mafft", conda, quiet, timeout)
+        exe = _conda_install("mafft", f"mafft={MAFFT_VERSION}", conda, quiet, timeout)
+        v = tool_version(exe)
+        if MAFFT_VERSION not in v:
+            raise MsaError(f"{exe} does not run or is not MAFFT {MAFFT_VERSION} ({v or 'no output'})")
+        if not quiet:
+            print(f"coal: MAFFT {MAFFT_VERSION} installed: {exe}", file=sys.stderr)
+        return exe
 
 
 # ---------------------------------------------------------------- running

@@ -527,7 +527,8 @@ short, for a pipeline table:
   below 30 to 40%. Reciprocal best hits are not always orthologs over their whole length, and cluster members
   need not be alignable at all.
 - **Saturation**: dS above about 2 (1 to be strict). `saturated` marks only the pairs without any value; a pair
-  with dS 4 and status `ok` is no better. Default DeepClust clusters hold many such pairs
+  with dS 4 and status `ok` is no better. When more than 30% of a run's pairs (of at least 20) are `saturated` or
+  `not_converged`, the run says so in one warning that points here (*S. cerevisiae* / *C. glabrata*: 86%). Default DeepClust clusters hold many such pairs
   ([above](#cluster-mode-input-order-and-what-a-default-cluster-is)).
 - **Tiny dS**: dN/dS is a ratio, and with dS near 0 (very close sequences) it is unstable and often large for no
   biological reason; `dNdS` is `NA` only when dS is below 1e-6.

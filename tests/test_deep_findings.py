@@ -333,5 +333,112 @@ class GeneticCodeHintRun(PipelineCase):
         self.assertIn("have none under any of the NCBI genetic codes 4, 5, 9, 10, 13 and 21", err.getvalue())
 
 
+# ---------------------------------------------------------------------------------------------- D04, D06, D07, D08
+class Messages(unittest.TestCase):
+    def test_batch_line_with_the_program_name(self):   # D04
+        import subprocess
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            jobs = Path(td) / "jobs.txt"
+            jobs.write_text("coal pep.aln nuc.fa -o out.fa\n", encoding="utf-8")
+            r = subprocess.run([sys.executable, "-m", "coal", "--batch", str(jobs)], capture_output=True, text=True,
+                               cwd=td, env=dict(os.environ, PYTHONPATH=str(ROOT / "src")))
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("the line starts with 'coal': a job line is a coal command line without the program name",
+                      r.stderr)
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("without the program name", readme)
+
+    def test_mistyped_command(self):   # D06
+        import subprocess
+        from coal import cli
+        self.assertEqual([cli.mistyped_command(w) for w in ("dnd", "piepline", "kak", "Dnds", "codon-dns", "data",
+                                                             "x", "pep.aln", "cite")],
+                         ["dnds", "pipeline", "kaks", "dnds", "codon-dnds", "", "", "", ""])
+        want = ("coal: error: cannot open 'dnd': no such file, and no command of that name (did you mean "
+                "`coal dnds`?)")
+        r = subprocess.run([sys.executable, "-m", "coal", "dnd", "x.fa"], capture_output=True, text=True,
+                           env=dict(os.environ, PYTHONPATH=str(ROOT / "src")))
+        self.assertEqual((r.returncode, r.stderr.strip()), (1, want))
+        if CPP:   # the same in coal-cpp
+            r = run_cpp("dnd", "x.fa")
+            self.assertEqual((r.returncode, r.stderr.decode().strip()), (1, want))
+
+    def test_mafft_is_pinned(self):   # D07
+        from unittest import mock
+        from coal import msa
+        self.assertEqual(msa.MAFFT_VERSION, "7.526")
+        calls = []
+
+        def fake_install(tool, spec, conda, quiet, timeout):
+            calls.append(spec)
+            return "/x/mafft"
+        with mock.patch.object(msa, "_conda_install", fake_install), \
+                mock.patch.object(msa, "_conda_exe", return_value="/x/conda"), \
+                mock.patch.object(msa, "_trusted_cached", return_value=False), \
+                mock.patch.object(msa.platform, "system", return_value="Linux"), \
+                mock.patch.object(msa, "_install_lock"), \
+                mock.patch.object(msa, "tool_version", return_value="v7.526 (2024/Apr/26)"), \
+                redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(msa.install_mafft(), "/x/mafft")
+        self.assertEqual(calls, ["mafft=7.526"])
+        self.assertIn("MAFFT 7.526 installed: /x/mafft", err.getvalue())
+
+
+@needs_cpp
+class PipelineMessages(PipelineCase):
+    def test_pairs_file_swapped_repeated_and_empty(self):   # D06
+        from test_dnds_pipeline import PLAIN, Q, S
+        out = io.StringIO()
+        with redirect_stderr(out):
+            res = P.run_pairs(Q, S, self.tmp / "sw", pairs=self.pairs_file([(b, a) for a, b in PLAIN[:4]]))
+        self.assertIn("look swapped: in 4 of the 4 pairs the first ID is a record of --subject", out.getvalue())
+        self.assertTrue(any("look swapped" in w for w in res.report["warnings"]))
+        out = io.StringIO()
+        with redirect_stderr(out):
+            P.run_pairs(Q, S, self.tmp / "dup", pairs=self.pairs_file([*PLAIN[:3], PLAIN[0], PLAIN[0]]))
+        self.assertIn("2 line(s) of --pairs", out.getvalue())
+        self.assertNotIn("look swapped", out.getvalue())
+        empty = self.tmp / "empty.tsv"
+        empty.write_text("query\tsubject\n", encoding="utf-8")
+        out = io.StringIO()
+        with redirect_stderr(out):
+            res = P.run_pairs(Q, S, self.tmp / "none", pairs=empty)
+        self.assertIn("no pairs: the --pairs file", out.getvalue())
+
+    def test_a_bad_tool_variable_is_named(self):   # D06
+        from unittest import mock
+        with mock.patch.dict(os.environ, {"COAL_CLUSTALO": str(self.tmp / "nope")}), \
+                redirect_stderr(io.StringIO()) as err:
+            res = P.run_clusters(FAM, self.tmp / "o", clusters=FAM_CLUSTERS, max_cluster_size=8)
+        self.assertEqual(res.exit_code, 1)
+        self.assertIn(f"$COAL_CLUSTALO is set to '{self.tmp / 'nope'}', which is not a file", err.getvalue())
+        with mock.patch.dict(os.environ, {"COAL_DIAMOND": str(self.tmp)}), redirect_stderr(io.StringIO()) as err:
+            res = P.run_clusters(FAM, self.tmp / "o2", max_cluster_size=8)
+        self.assertIn("$COAL_DIAMOND is set to", err.getvalue())
+        self.assertIn("(a folder)", err.getvalue())
+
+    def test_most_pairs_saturated(self):   # D08
+        import random
+        rng = random.Random(3)
+        recs_q, recs_s, pairs = [], [], []
+        for k in range(25):   # unrelated sequences of one length: synonymous sites saturated
+            recs_q.append((f"q{k}", cds(rng, n=150, stops=())))
+            recs_s.append((f"s{k}", cds(rng, n=150, stops=())))
+            pairs.append((f"q{k}", f"s{k}"))
+        q, s = write_fasta(self.tmp / "q.fa", recs_q), write_fasta(self.tmp / "s.fa", recs_s)
+        with redirect_stderr(io.StringIO()) as err:
+            res = P.run_pairs(q, s, self.tmp / "o", pairs=self.pairs_file(pairs))
+        c = res.report["counts"]["pairs"]
+        lost = c["saturated"] + c["not_converged"]
+        self.assertGreater(lost, 0.3 * c["total"])
+        self.assertIn(f"{lost} of the 25 pairs", err.getvalue())
+        self.assertIn("Filtering before interpretation", err.getvalue())
+        # the closely related pairs of the fixture: no such line
+        from test_dnds_pipeline import PLAIN, Q, S
+        with redirect_stderr(io.StringIO()) as err:
+            P.run_pairs(Q, S, self.tmp / "ok", pairs=self.pairs_file(PLAIN))
+        self.assertNotIn("too divergent", err.getvalue())
+
 if __name__ == "__main__":
     unittest.main()
