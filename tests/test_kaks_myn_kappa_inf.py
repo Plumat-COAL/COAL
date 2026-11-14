@@ -148,18 +148,25 @@ def _api_build():
     cxx = os.environ.get("CXX") or shutil.which("c++") or shutil.which("g++") or shutil.which("clang++")
     if not (inc / "coal" / "kaks.hpp").exists() or lib is None or cxx is None:
         return None
-    return cxx, inc, lib
+    # the build's own compile flags (a sanitizer build's library needs -fsanitize=... at link time too)
+    flags = []
+    cache = build / "CMakeCache.txt"
+    if cache.exists():
+        for line in cache.read_text(encoding="utf-8", errors="replace").splitlines():
+            if line.startswith("CMAKE_CXX_FLAGS:"):
+                flags = line.split("=", 1)[1].split()
+    return cxx, inc, lib, flags
 
 
 @unittest.skipUnless(_api_build(), "needs a C++ compiler and the build's coal_include/ and libcoal_core.a")
 class TestMynKappaInfiniteCppApi(unittest.TestCase):
     def test_cpp_api(self):
-        cxx, inc, lib = _api_build()
+        cxx, inc, lib, flags = _api_build()
         with tempfile.TemporaryDirectory() as td:
             exe = Path(td) / "kaks_myn_kappa_inf"
             src = ROOT / "tests" / "cpp" / "kaks_myn_kappa_inf.cpp"
-            r = subprocess.run([cxx, "-std=c++17", "-O1", "-Wall", "-Wextra", "-I", str(inc), str(src), str(lib),
-                                "-o", str(exe), "-pthread"], capture_output=True, text=True)
+            r = subprocess.run([cxx, "-std=c++17", "-O1", *flags, "-Wall", "-Wextra", "-I", str(inc), str(src),
+                                str(lib), "-o", str(exe), "-pthread"], capture_output=True, text=True)
             self.assertEqual(r.returncode, 0, r.stderr)
             for r_ in [r for r in AXT.read_text(encoding="utf-8").split("\n\n") if r.strip()]:
                 lines = [x for x in r_.splitlines() if x and not x.startswith("#")]
