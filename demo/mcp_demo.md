@@ -31,7 +31,9 @@ real output of the tool functions, regenerated with `python demo/make_mcp_demo.p
 
    With the web GUI running (`python -m coal_app`), MCP clients that speak SSE can use
    `http://127.0.0.1:7860/gradio_api/mcp/sse` instead.
-3. Check the two tools are listed (`codon_align`, `explain_report`). Have `examples/` open in a file browser.
+3. Check the four tools are listed (`codon_align`, `explain_report`, `dnds_pairs`, `pipeline_pairs`; this demo
+   uses the first two, the other two need `coal-cpp`: [docs/mcp.md](../docs/mcp.md)). Have `examples/` open in a
+   file browser.
 
 ## The script
 

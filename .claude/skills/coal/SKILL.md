@@ -81,9 +81,14 @@ Genetic codes (`-codontable N`): 1 standard (nuclear), 2 vertebrate mitochondria
 4 mold/protozoan mito and Mycoplasma, 5 invertebrate mito, 9 echinoderm/flatworm mito, 11 bacteria, archaea
 and plastids; also 6, 10, 12-16, 21-23.
 
-GUI for people: `python -m coal_app` (opens on http://127.0.0.1:7860 and serves MCP there too). AI agents:
-`python -m coal_app --mcp` gives two MCP tools, `codon_align(...)` and `explain_report(report_path)`;
-`codon_align` returns a `report_path` (the engine's own `--report` file). Give both tools **absolute paths**. In the result, `completed` only means COAL finished;
+GUI for people: `python -m coal_app` (opens on http://127.0.0.1:7860 with Align, Ka/Ks and dN/dS pipeline tabs,
+and serves MCP there too). AI agents: `python -m coal_app --mcp` gives four MCP tools: `codon_align(...)` and
+`explain_report(report_path)` for codon alignments, and `dnds_pairs` (Ka/Ks for pairs of a codon alignment or AXT
+file) and `pipeline_pairs` (two species' coding sequences -> dN/dS per ortholog pair), which need `coal-cpp` (and
+DIAMOND, unless `pipeline_pairs` gets a table of pairs); arguments and limits: `docs/mcp.md`. For dN/dS from a
+protein alignment and DNA, call `codon_align`, then `dnds_pairs` on its `output_path`, and read every row's
+`status` before using its numbers.
+`codon_align` returns a `report_path` (the engine's own `--report` file). Give every tool **absolute paths**. In the result, `completed` only means COAL finished;
 use the alignment only when `all_ok` is true. If `needs_attention` is true, read `counts`
 (ok / warning / failed), `next_step` and `problems`, or call `explain_report(report_path)`; if
 `suggested_codontable` is set, re-run `codon_align` with it. A missing file, an unknown genetic code or an
