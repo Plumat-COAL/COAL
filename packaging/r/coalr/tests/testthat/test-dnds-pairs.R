@@ -33,7 +33,7 @@ test_that("file paths, lists and data frames are accepted and give the same tabl
 
 test_that("the result does not depend on the number of threads", {
   one <- coal_dnds_pairs(q, s, pairs = orthologs(), methods = c("YN", "NG"), threads = 1)
-  for (t in c(2, 4, 0)) {
+  for (t in test_threads(c(2, 4, 0))) {
     many <- coal_dnds_pairs(q, s, pairs = orthologs(), methods = c("YN", "NG"), threads = t)
     attr(one, "seconds") <- attr(many, "seconds") <- NULL
     expect_identical(many, one)
@@ -64,15 +64,64 @@ test_that("bad genes and unknown IDs are rows, not errors", {
   # NA sequences
   q2 <- c(a = NA_character_, b = "ATGGCTAAAGGTCTGGAACGTTAA")
   s2 <- c(x = "ATGGCTAAAGGTCTGGAACGTTAA", y = "ATGGCTAAAGGTCTGGAACGTTAA")
-  got <- coal_dnds_pairs(q2, s2)
+  got <- coal_dnds_pairs(q2, s2, pairs = "position")
   expect_identical(got$status, c("error", "ok"))
   expect_match(got$note[1], "the CDS is NA")
   expect_identical(got$dN[2], 0)
   expect_true(is.na(got$dNdS[2]))
 })
 
+test_that("pairing by position without `pairs` warns when the IDs differ (U02)", {
+  a <- coal_read_fasta(system.file("extdata", "species_a_cds.fasta", package = "coalr"))
+  b <- coal_read_fasta(system.file("extdata", "species_b_cds.fasta", package = "coalr"))
+  expect_warning(got <- coal_dnds_pairs(a, b),
+                 "no `pairs` given, so the i-th query was paired with the i-th subject \\(by position\\)")
+  w <- tryCatch(coal_dnds_pairs(a, b), warning = conditionMessage)
+  n <- length(a)
+  differ <- sum(names(a) != names(b))
+  expect_match(w, sprintf("the IDs of %d of %d pairs differ (e.g. '%s' with '%s')", differ, n, names(a)[1],
+                          names(b)[1]), fixed = TRUE)
+  low <- sum(!is.na(got$prot_identity) & got$prot_identity < 20)
+  expect_true(low > 0)
+  expect_match(w, sprintf("%d of them have a protein identity below 20%%", low), fixed = TRUE)
+  expect_match(w, 'pairs = "position"', fixed = TRUE)
+  # the same numbers, asked for: no warning
+  expect_silent(asked <- coal_dnds_pairs(a, b, pairs = "position"))
+  attr(asked, "seconds") <- attr(got, "seconds") <- NULL
+  expect_identical(asked, got)
+  # the same IDs in the same order, or no IDs: nothing to warn about
+  expect_silent(coal_dnds_pairs(a[1:2], structure(b[1:2], names = names(a)[1:2])))
+  expect_silent(coal_dnds_pairs(unname(a[1:2]), unname(b[1:2])))
+  # the same IDs in another order: the hint to pair by ID
+  bb <- structure(unname(a[2:1]), names = names(a)[2:1])
+  expect_warning(coal_dnds_pairs(a[1:2], bb), "every query ID is also a subject ID")
+  expect_error(coal_dnds_pairs(a, b, pairs = "positions"), "or \"position\"")
+})
+
+test_that("a call where every pair fails warns with the cause (U18)", {
+  o <- read.delim(fx("pairs_orthologs.tsv"), stringsAsFactors = FALSE)
+  expect_warning(got <- coal_dnds_pairs(q, s, pairs = o[, 3:4]),
+                 sprintf("all %d pairs failed .*none of the query IDs of `pairs` is in `query_cds`", nrow(o)))
+  expect_true(all(got$status == "error"))
+  expect_warning(coal_dnds_pairs(q, s, pairs = o[, 2:1]), "the other way round")
+  expect_warning(coal_dnds_pairs(q, s, pairs = data.frame(o[, 1], "nobody")),
+                 "none of the subject IDs of `pairs` is in `subject_cds`")
+  prot <- coal_translate(q[o$query[1:4]])
+  expect_warning(coal_dnds_pairs(prot, s, pairs = o[1:4, ]), "`query_cds` looks like protein sequences")
+  # one pair that works: no warning
+  p <- data.frame(q = c("g01", "nobody"), s = c("h01", "h02"))
+  expect_silent(coal_dnds_pairs(q, s, pairs = p))
+})
+
+test_that("an upper-case file name that names no file says so (U22)", {
+  expect_error(coal_dnds_pairs("CDS.FASTA", s), "If 'CDS.FASTA' is a file name, it does not exist", fixed = TRUE)
+  expect_error(coal_dnds_pairs("CDS.FASTA", s, pairs = orthologs()), "If 'CDS.FASTA' is a file name", fixed = TRUE)
+  expect_error(coal_dnds_pairs(q, s[1:3]), "same length \\(\\d+ and 3\\)$")
+})
+
 test_that("a pair above max_cells is that pair's error", {
-  got <- coal_dnds_pairs(q, s, pairs = orthologs()[1:3, ], max_cells = 2000)
+  expect_warning(got <- coal_dnds_pairs(q, s, pairs = orthologs()[1:3, ], max_cells = 2000),
+                 "all 3 pairs failed .*protein alignment failed")
   expect_true(all(got$status == "error"))
   expect_match(got$note[1], "protein alignment failed")
 })
@@ -108,8 +157,8 @@ test_that("arguments are checked", {
 test_that("other genetic codes are used", {
   a <- c(x = "ATGTGAAAAGGTCTGGAACGTCTTGCA")   # TGA: stop in code 1, Trp in code 2 (vertebrate mitochondrial)
   b <- c(y = "ATGTGGAAAGGCCTGGAACGACTTGCA")
-  one <- coal_dnds_pairs(a, b, code = 1)
-  two <- coal_dnds_pairs(a, b, code = 2)
+  one <- coal_dnds_pairs(a, b, pairs = "position", code = 1)
+  two <- coal_dnds_pairs(a, b, pairs = "position", code = 2)
   expect_identical(one$status, "warning")
   expect_identical(two$status, "ok")
   expect_identical(two$codons_compared, 9L)
@@ -118,9 +167,9 @@ test_that("other genetic codes are used", {
 test_that("min_codons and max_ds flag rows without dropping them or changing a number", {
   q <- c(g1 = "ATGGCTAAAGGTCTGGAACGTTAA", g2 = "ATGAAACCCGGGTTTTAG", g3 = "ATGAAAGTTCTGGCAGGTCCGTTA")
   s <- c(h1 = "ATGGCGAAAGGCCTGGATCGTTAA", h2 = "ATGAAGCCAGGGTTCTAG", h3 = "ATGAAGGTTTTGGCAGGACCGCTA")
-  plain <- coal_dnds_pairs(q, s, methods = c("YN", "NG"))
+  plain <- coal_dnds_pairs(q, s, pairs = "position", methods = c("YN", "NG"))
   expect_null(attr(plain, "flagged"))
-  f <- coal_dnds_pairs(q, s, methods = c("YN", "NG"), min_codons = 8, max_ds = 0.5)
+  f <- coal_dnds_pairs(q, s, pairs = "position", methods = c("YN", "NG"), min_codons = 8, max_ds = 0.5)
   num <- setdiff(names(plain), c("status", "note"))
   expect_identical(f[num], plain[num])
   expect_identical(nrow(f), nrow(plain))

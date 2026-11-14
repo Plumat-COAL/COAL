@@ -32,7 +32,8 @@
 #' `coal_translate("ATGAAA")`). In particular an aligned row is a sequence whatever it ends in or contains:
 #' `"MKV..LFA.FA"`, `"ACGT.NT"`, `"MK/VL"` (a frameshift mark), `"~~MKV"`; so is a lower-case row with dashes or
 #' with several dots. What this cannot tell apart: a mistyped file name in upper case (`"CDS.FASTA"`) is taken
-#' as a sequence, and a lower-case row whose only gap is one dot just before `fa`, `aa`, `nt`, ... (or that
+#' as a sequence (the error that follows, for example about the number of sequences, then says that no such file
+#' exists in the working folder), and a lower-case row whose only gap is one dot just before `fa`, `aa`, `nt`, ... (or that
 #' uses `/`) is taken as a file name. To pass one sequence that could be mistaken for a file name, name it:
 #' `c(id = "...")`.
 #'

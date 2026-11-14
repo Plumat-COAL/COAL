@@ -2,6 +2,25 @@
 
 First version. In-process bindings (Rcpp) to the C++ core of COAL 0.6:
 
+- `coal_dnds_pairs()` without `pairs` still pairs the i-th query with the i-th subject, but now warns when both
+  inputs have IDs and the i-th IDs differ: how many pairs differ (with an example) and how many of them have a
+  protein identity below 20%, as unrelated genes do. Two CDS files are rarely in ortholog order, and such pairs
+  used to get status `ok` without a word (the command line never pairs two CDS files by position). New value
+  `pairs = "position"`: the same pairing, asked for, without the warning. No number changes.
+- `coal_dnds_pairs()`: when every pair fails, a warning names the common cause: the columns of `pairs` are not
+  the query and subject IDs (or are the other way round), or the sequences are protein, not coding DNA.
+- A single string with a sequence-file extension in upper case (`"CDS.FASTA"`) that names no file is still read
+  as a sequence, but the error it then leads to says that no such file exists in the working folder.
+- `R CMD check --as-cran`: no error or warning (notes: the development version number; checks that need the
+  network or HTML Tidy). DESCRIPTION cites the methods with their DOIs; the examples of `coal_msa_aligner()` run
+  on the shipped data where Clustal Omega is installed, and those of `coal_pipeline_pairs()` (which need Python,
+  `coal-cpp` and DIAMOND) use the shipped data; the tests use at most two threads unless `NOT_CRAN=true`.
+- Comeron: `comeron_min_sites` applies only where it gives a positive distance; a 0 caused by a small class
+  stays `NA` (`saturated`). Numbers: COAL's CHANGELOG (D9, Refined).
+- `coal_dnds_clusters()`: the pairs of a cluster with `msa` rows or an `aligner` are computed in input order
+  (the earlier gene of `cds` first), as `coal pipeline clusters` does since COAL's PR #71. Changes only Comeron
+  with `comeron_twosubs = "libsequence"` (the default of `comeron_flavour = "gestimator"`).
+
 - Comeron: new arguments `comeron_twosubs` and `comeron_min_sites` in `coal_kaks()`, `coal_dnds_pairs()` and
   `coal_dnds_clusters()` (the command line's `--comeron-twosubs`, `--comeron-min-sites`). By default Comeron
   now counts Comeron's two pathways for codons that differ at two positions (libsequence's branches made the
