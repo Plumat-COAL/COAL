@@ -17,10 +17,13 @@ are the other classic), and it makes the errors below real ones rather than made
 
 ## 0. Set up
 
-From a checkout of COAL (or any folder: the download script needs `curl` or `wget` and `sha256sum` or `shasum`):
+Work in a scratch folder, with `T` pointing at this folder of a COAL checkout ([README](README.md#setup)). The
+download script needs `curl` or `wget` and `sha256sum` or `shasum`:
 
 ```
-bash docs/tutorials/data/get_mycoplasma.sh          # -> coal-tutorial-data/, checksums verified
+export T=/path/to/COAL/docs/tutorials
+mkdir -p coal-tutorials && cd coal-tutorials
+bash $T/data/get_mycoplasma.sh          # -> coal-tutorial-data/, checksums verified
 mkdir t01 && cd t01
 ```
 

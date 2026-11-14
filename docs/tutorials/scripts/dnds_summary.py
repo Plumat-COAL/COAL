@@ -5,7 +5,7 @@ Used by the COAL tutorials (docs/tutorials/). Standard library only.
 
   python3 dnds_summary.py out/dnds.tsv [--cds a.fna.gz b.fna.gz] [--method YN]
           [--min-codons 50] [--min-coverage 0.5] [--min-identity 40] [--min-ds 0.01] [--max-ds 2]
-          [--top 10] [--write-kept kept.tsv]
+          [--top 10] [--write-kept kept.tsv] [--only-ids ids.txt]
 
 It prints: the rows per status; how many rows each filter removes, in order; the quartiles of dN, dS and dN/dS
 of the rows that pass; and the rows with the highest and lowest dN/dS among those, with gene names read from
@@ -63,6 +63,7 @@ def main():
     ap.add_argument("--max-ds", type=float, default=2)
     ap.add_argument("--top", type=int, default=10)
     ap.add_argument("--write-kept", metavar="TSV", help="write the rows that pass every filter")
+    ap.add_argument("--only-ids", metavar="FILE", help="only rows whose seq1 or seq2 is one of the IDs in FILE (one per line)")
     a = ap.parse_args()
 
     with open(a.dnds, newline="") as fh:
@@ -71,7 +72,11 @@ def main():
         fields = rd.fieldnames
     method = a.method or (rows[0]["method"] if rows else "YN")
     rows = [r for r in rows if r["method"] == method]
-    print(f"{a.dnds}: {len(rows)} rows of method {method}")
+    if a.only_ids:
+        with open(a.only_ids) as fh:
+            ids = {line.strip() for line in fh if line.strip()}
+        rows = [r for r in rows if r["seq1"] in ids or r["seq2"] in ids]
+    print(f"{a.dnds}: {len(rows)} rows of method {method}" + (f" (only the IDs in {a.only_ids})" if a.only_ids else ""))
 
     counts = {}
     for r in rows:
