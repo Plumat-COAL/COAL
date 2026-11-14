@@ -236,6 +236,29 @@ class ResumeMovedFolder(PipelineCase):
             str(self.tmp / "a"), str(self.tmp / "b"))).read_bytes())
 
 
+@needs_cpp
+class SingletonRows(PipelineCase):
+    """cluster_summary.tsv: a cluster without pairs (a singleton, or fewer than two usable members) is one row with
+    status ok, method NA, n_pairs 0, n_ok 0 and NA statistics, as docs/pipeline.md says (ok: nothing failed)."""
+
+    def test_rows_without_pairs(self):
+        a, b, c = family(random.Random(2), 3)
+        f = self.tmp / "cds.fa"
+        f.write_text(f">a\n{a}\n>b\n{b}\n>c\n{c}\n>bad\nATGNNNXXX\n", encoding="utf-8")
+        cl = self.tmp / "cl.tsv"
+        cl.write_text("a\ta\na\tb\nc\tc\nbad\tbad\nbad\tmissing\n", encoding="utf-8")
+        res = P.run_clusters([f], self.tmp / "o", clusters=cl, jobs=1, quiet=True)
+        s = {r["cluster_id"]: r for r in rows(res.outputs["cluster_summary"])}
+        self.assertEqual((s["a"]["n_pairs"], s["a"]["n_ok"], s["a"]["status"]), ("1", "1", "ok"))
+        for cid, sel in (("c", "singleton"), ("bad", "none")):
+            r = s[cid]
+            self.assertEqual((r["pair_selection"], r["method"], r["aligner"], r["n_pairs"], r["n_ok"], r["status"]),
+                             (sel, "NA", "none", "0", "0", "ok"), cid)
+            self.assertEqual({r[k] for k in r if k.startswith(("dN_", "dS_", "dNdS_"))}, {"NA"})
+        doc = (ROOT / "docs" / "pipeline.md").read_text(encoding="utf-8")
+        self.assertIn("**A cluster without pairs is `ok` too**", doc)
+
+
 def run_quiet_err(fn, *args, **kw):
     err = io.StringIO()
     with redirect_stderr(err):

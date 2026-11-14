@@ -278,7 +278,8 @@ coal pipeline clusters --cds all_cds.fa --clusters deepclust.tsv -o out --max-cl
 
   The pairs of such a cluster are aligned pairwise by the global aligner, without an MSA, so the cost stays
   proportional to the number of pairs. `pair_selection` and `aligner` in the summary say what was done.
-- **Singletons** and clusters with fewer than two usable members are listed in the summary with `n_pairs` 0.
+- **Singletons** and clusters with fewer than two usable members are listed in the summary with `n_pairs` 0,
+  `method` `NA` and status `ok` (nothing failed; there is no estimate: [`cluster_summary.tsv`](#cluster_summarytsv)).
 - A cluster whose MSA run fails is not lost: its pairs are aligned pairwise instead, the summary's `aligner` is
   `nw_pairwise` and its note gives the reason.
 
@@ -442,7 +443,7 @@ row changes.
 | `dN_median`, `dN_mean`, `dN_q25`, `dN_q75`, `dN_min`, `dN_max` | over the `n_ok` pairs |
 | `dS_...`, `dNdS_...` | the same six for dS and dN/dS |
 | `n_dNdS` | how many dN/dS values the `dNdS_` columns are over (dN/dS is `NA` when dS is 0) |
-| `status` | `ok` (a pair has an estimate); pairs, but none with an estimate: `saturated` (some saturated), else `no_data`, else `not_converged`, and `failed` when a pair failed (`n_failed` > 0); `skipped`. The rule of orthologr's `dNdS_clusters()` |
+| `status` | `ok` (a pair has an estimate); pairs, but none with an estimate: `saturated` (some saturated), else `no_data`, else `not_converged`, and `failed` when a pair failed (`n_failed` > 0); `skipped` (above `--max-cluster-size` with `--large-clusters skip`). The rule of orthologr's `dNdS_clusters()`. **A cluster without pairs is `ok` too**: a singleton (`pair_selection` `singleton`) or a cluster with fewer than two usable members (`none`) has one row, `method` `NA`, `n_pairs` 0, `n_ok` 0 and every statistic `NA`; `ok` there means that nothing failed, not that there is an estimate. To keep the clusters with an estimate, filter on `n_ok` > 0 (or `n_pairs` > 0 for the clusters that had pairs), not on `status` alone |
 | `note` | members left out, the size cap, an MSA that failed; for a cluster without an estimate and no other note, what its pairs are (`no pair has an estimate (3 pairs: 2 saturated, 1 not converged)`) |
 
 Quartiles are interpolated linearly between order statistics (R's type 7, numpy's default).
