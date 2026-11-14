@@ -210,7 +210,7 @@ class Pipeline(PipelineCase):
         self.assertEqual(res.exit_code, 0, err)
         lines = [ln for ln in err.splitlines() if "warning:" in ln]
         self.assertEqual(len(lines), 1, err)
-        self.assertIn("the input looks like several transcripts per gene", lines[0])
+        self.assertIn("the input has several CDS records per gene (isoforms or alternative start sites; ", lines[0])
         self.assertIn("query: 11 records of 6 genes, 4 genes with several records", lines[0])
         self.assertIn("read from the header field gene:", lines[0])
         self.assertIn("subject: 11 records of 6 genes", lines[0])
@@ -238,7 +238,7 @@ class Pipeline(PipelineCase):
         self.assertIn("--longest-isoform: query: 5 of 11 records dropped, 6 genes (from header field gene:); "
                       "subject: 5 of 11 records dropped, 6 genes (from header field GeneID:); 10 in all, listed in "
                       "genes.tsv with status dropped", err)
-        self.assertNotIn("looks like several transcripts", err)
+        self.assertNotIn("several CDS records per gene", err)
         genes = read_tsv(res.outputs["genes"])
         for name, set_name in ((ENS.name, "query"), (NCBI.name, "subject")):
             mine = [g for g in genes if g["set"] == set_name]
@@ -285,7 +285,7 @@ class Pipeline(PipelineCase):
     def test_gene_map_alone_warns_and_partial_maps_are_reported(self):
         res, err = run(P.run_pairs, TAIR, Q, self.tmp / "o", gene_map=GMAP,
                        pairs=self.pairs_file([(KEPT[TAIR.name][0], "g01")]))
-        self.assertIn("several transcripts per gene", err)
+        self.assertIn("several CDS records per gene", err)
         self.assertIn("read from the --gene-map", err)
         res, err = run(P.run_pairs, TAIR, Q, self.tmp / "o2", gene_map=GMAP, longest_isoform=True,
                        pairs=self.pairs_file([(KEPT[TAIR.name][0], "g01")]))
@@ -380,7 +380,7 @@ class Pipeline(PipelineCase):
         # without --longest-isoform nothing is dropped, so the run goes on with the usual warning
         res, err = run(P.run_pairs, scaf, Q, self.tmp / "w", pairs=pairs)
         self.assertEqual(res.exit_code, 0, err)
-        self.assertIn("looks like several transcripts per gene", err)
+        self.assertIn("several CDS records per gene", err)
         # said explicitly, the suffixes are transcripts
         res, err = run(P.run_pairs, scaf, Q, self.tmp / "s", longest_isoform=True, isoform_rule="suffix", pairs=pairs)
         self.assertNotEqual(res.exit_code, 1, err)     # (2 when the pair names a record that was dropped)
@@ -496,7 +496,7 @@ class Pipeline(PipelineCase):
 class WithDiamond(PipelineCase):
     def test_search_with_and_without_isoforms(self):
         plain, err = run(P.run_pairs, ENS, NCBI, self.tmp / "all", jobs=2)
-        self.assertIn("several transcripts per gene", err)
+        self.assertIn("several CDS records per gene", err)
         res, err = run(P.run_pairs, ENS, NCBI, self.tmp / "one", jobs=2, longest_isoform=True)
         self.assertEqual(res.exit_code, 0, err)
         pairs = [(r["seq1"], r["seq2"]) for r in read_tsv(res.outputs["dnds"])]

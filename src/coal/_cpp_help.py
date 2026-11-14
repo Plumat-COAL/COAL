@@ -117,6 +117,8 @@ HELP = {
         '  F <id> <reason>                 a member already known to be unusable (its pairs get status error)\n'
         '  H <qstart> <qend> <sstart> <send> <qseq_gapped> <sseq_gapped>   2 members: use this DIAMOND hit\n'
         '  P <i> <j>                       a pair of member numbers (from 0), with `list`\n'
+        '  O <rank> <rank> ...             the input rank of each member (after the M/F lines): every pair is\n'
+        '                                  computed with the member of the lower rank first (listed as given)\n'
         '  X <code> <reason>               the group is already known to have failed (its pairs get status error)\n'
         '  E                               end of the group\n'
         'Two members without rows are aligned here (global, BLOSUM62, needle defaults).\n'

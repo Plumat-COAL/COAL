@@ -10,6 +10,9 @@ coal pipeline clusters --cds all_cds.fa [--clusters clusters.tsv] -o out_dir   #
 coal pipeline install diamond clustalo                                      # the external tools, into COAL's cache (verified)
 ```
 
+Worked examples: [tutorial 2](tutorials/02-pairs-dnds.md) (pairs: *E. coli* / *Salmonella*) and
+[tutorial 3](tutorials/03-clusters.md) (clusters: four *Chlamydia* genomes).
+
 | Step | Pair mode | Cluster mode | Done by |
 |---|---|---|---|
 | 1. Translate | both files | all files | `coal-cpp translate` |
@@ -41,9 +44,13 @@ coal pipeline pairs --query q_cds.fa --subject s_cds.fa -o out --longest-isoform
 coal pipeline pairs --query q_cds.fa --subject s_cds.fa -o out --longest-isoform --gene-map genes.tsv
 ```
 
-- **A warning by default.** When the records of a file look like several transcripts per gene, the run prints
-  one warning with the counts (`query: 36,827 records of 3,734 genes, ...`), an example and where the genes were
-  read from, and goes on as before: nothing else changes without the options below.
+- **A warning by default.** When a file has several CDS records per gene, the run prints one warning with the
+  counts (`the input has several CDS records per gene (isoforms or alternative start sites; query: 36,827 records
+  of 3,734 genes, ...`), an example and where the genes were read from, and goes on as before: nothing else
+  changes without the options below. The records of one gene need not be transcripts: NCBI annotates some
+  bacterial genes with two or three CDS of one locus tag that differ in their start site (*E. coli*'s *mrcB*,
+  PBP1B alpha and gamma; *infB*, three forms of IF2), and the warning counts those too. `--longest-isoform` then
+  keeps the longest form, which is what the advice means there as well.
 - **Where the gene of a record comes from.** (1) `--gene-map TSV`: record ID and gene ID, tab-separated (a header
   line and `#` lines are skipped; one map serves all input files). The map wins for every record it names. A
   record it does not name falls back to (2) and (3), read for its file as without a map, so a map for one
@@ -274,7 +281,8 @@ coal pipeline clusters --cds all_cds.fa --clusters deepclust.tsv -o out --max-cl
 
   The pairs of such a cluster are aligned pairwise by the global aligner, without an MSA, so the cost stays
   proportional to the number of pairs. `pair_selection` and `aligner` in the summary say what was done.
-- **Singletons** and clusters with fewer than two usable members are listed in the summary with `n_pairs` 0.
+- **Singletons** and clusters with fewer than two usable members are listed in the summary with `n_pairs` 0,
+  `method` `NA` and status `ok` (nothing failed; there is no estimate: [`cluster_summary.tsv`](#cluster_summarytsv)).
 - A cluster whose MSA run fails is not lost: its pairs are aligned pairwise instead, the summary's `aligner` is
   `nw_pairwise` and its note gives the reason.
 
@@ -289,7 +297,7 @@ coal pipeline clusters --cds all_cds.fa --clusters deepclust.tsv -o out --max-cl
 | `--kaks-format` | also write `dnds.kaks` in KaKs_Calculator's 22-column format | off |
 | `--keep-alignments` | also write the codon alignments | off |
 | `--keep-protein-alignments` | also write the protein alignments the codon alignments are made from | off |
-| `--resume` | reuse the translation, search and clustering results in `DIR/work` when the inputs (path, size, modification time), the options and the DIAMOND version are the same | off |
+| `--resume` | reuse the translation, search and clustering results in `DIR/work` when the inputs (full path, size, modification time), the options and the DIAMOND version are the same. Where `DIR` itself is does not count: a renamed or moved output folder, or a copy that keeps the files' times (`cp -a`, `rsync -a`), is resumed (a copy with new times, `cp -r`, redoes the stages after the translation of unchanged plain inputs) | off |
 | `--install-tools` | install a missing DIAMOND / Clustal Omega / MAFFT into COAL's cache | off |
 | `--diamond PATH` | the DIAMOND to run | found automatically |
 | `--report FILE` | the JSON report | `DIR/report.json` |
@@ -407,9 +415,22 @@ route: the pairs route with the `--query` gene first, `pipeline clusters` with t
 file first (then the earlier record), `coalr::coal_dnds_pairs()` with the query and `coal_dnds_clusters()` with
 the earlier one in `cds`. orthologr does the same (`dNdS()`: the query; `dNdS_orthogroups()`: the gene of the
 species that comes first), so the routes agree on a pair given in the same order. The rows of `dnds.tsv` still
-list a cluster's representative first. Pairs taken from a Clustal Omega / MAFFT alignment of a whole cluster
-are the exception: the multiple alignment itself depends on the order of the members (the clusters file's), and
-Comeron is computed with the earlier member of the cluster first.
+list a cluster's representative first. Pairs taken from a Clustal Omega / MAFFT alignment of a whole cluster are
+computed in input order too (since 0.6.0: before, with the earlier member of the clusters file first); only the
+multiple alignment itself still depends on the order of the members (the clusters file's), as an MSA does.
+
+Only the estimators that depend on which gene is first see the difference: Comeron with libsequence's
+two-position branches (`--comeron-twosubs libsequence`, the default of `--comeron-flavour gestimator`). YN, NG,
+LWL, MYN and the other KaKs_Calculator methods, and Comeron with its own pathways (the default), give the same
+numbers in either order. On the four-yeast cluster set (1,500 CDS each of *S. cerevisiae*, *C. glabrata*,
+*K. lactis*, *A. gossypii*; 443 clusters of 3 to 18 members aligned by Clustal Omega, 2,783 pairs) 1,548 MSA
+pairs are listed with the later gene first; with `--comeron-flavour gestimator` 1,459 of their Comeron rows
+change (dN by 0.2% in the median, 1.3% at the 90th percentile; 12 change status; MAFFT: 1,455 rows), and the
+Comeron rows equal to those of the same clusters aligned pairwise (`--max-cluster-size 2 --large-clusters
+sample`) rise from 174 to 240 (MAFFT: 191 to 272), which is as many as Li's, an estimate that does not depend on
+the order: the other pairs differ in every method because the multiple alignment aligns them otherwise than the
+pairwise aligner. With the default options, and for YN, NG, LWL and Li (`--li-flavour seqinr` too), no row
+changes.
 
 ### `cluster_summary.tsv`
 
@@ -427,7 +448,7 @@ Comeron is computed with the earlier member of the cluster first.
 | `dN_median`, `dN_mean`, `dN_q25`, `dN_q75`, `dN_min`, `dN_max` | over the `n_ok` pairs |
 | `dS_...`, `dNdS_...` | the same six for dS and dN/dS |
 | `n_dNdS` | how many dN/dS values the `dNdS_` columns are over (dN/dS is `NA` when dS is 0) |
-| `status` | `ok` (a pair has an estimate); pairs, but none with an estimate: `saturated` (some saturated), else `no_data`, else `not_converged`, and `failed` when a pair failed (`n_failed` > 0); `skipped`. The rule of orthologr's `dNdS_clusters()` |
+| `status` | `ok` (a pair has an estimate); pairs, but none with an estimate: `saturated` (some saturated), else `no_data`, else `not_converged`, and `failed` when a pair failed (`n_failed` > 0); `skipped` (above `--max-cluster-size` with `--large-clusters skip`). The rule of orthologr's `dNdS_clusters()`. **A cluster without pairs is `ok` too**: a singleton (`pair_selection` `singleton`) or a cluster with fewer than two usable members (`none`) has one row, `method` `NA`, `n_pairs` 0, `n_ok` 0 and every statistic `NA`; `ok` there means that nothing failed, not that there is an estimate. To keep the clusters with an estimate, filter on `n_ok` > 0 (or `n_pairs` > 0 for the clusters that had pairs), not on `status` alone |
 | `note` | members left out, the size cap, an MSA that failed; for a cluster without an estimate and no other note, what its pairs are (`no pair has an estimate (3 pairs: 2 saturated, 1 not converged)`) |
 
 Quartiles are interpolated linearly between order statistics (R's type 7, numpy's default).
@@ -531,7 +552,7 @@ with `--pairs`, only the lines that pair a gene with itself are counted), or a `
 of the smaller file with the same ID and the same sequence in both, whatever the line wrapping and case: a
 re-wrapped copy, or one with a record more), a cached MAFFT or Clustal Omega that is
 not the pinned version, a `-j` above the number of CPUs, an old DIAMOND, a `--pairs` / `--clusters` file whose IDs are not those of the
-sequences, input that looks like several transcripts per gene, and the counts of the `--min-codons` / `--max-ds`
+sequences, input with several CDS records per gene, and the counts of the `--min-codons` / `--max-ds`
 flags.
 
 **IDs that match nothing.** When 90% or more of the IDs of a `--pairs` or `--clusters` file are not records of
@@ -603,6 +624,9 @@ protein alignment's columns, gap columns included) with P.
 ```
 coal pipeline pairs --query q_cds.fa --subject s_cds.fa -o out --min-codons 50 --max-ds 2 --min-identity 30
 ```
+
+Tutorial 2 applies these filters step by step
+([docs/tutorials/02-pairs-dnds.md#5-filter-then-interpret](tutorials/02-pairs-dnds.md#5-filter-then-interpret)).
 
 **A cluster can hold pairs that are not related.** Clustering puts a sequence with a representative it matches;
 two members of one cluster need not match each other, and with DeepClust's defaults many do not. Every pair of a
@@ -869,7 +893,7 @@ machine is still to be done.
   file is recognised only when it leaves no usable gene (see "Inputs that cannot work"); a file that mixes CDS and
   protein records runs, with the protein records listed as failed genes.
 - **Python holds every ID** (and a byte offset per record), so memory grows with the number of sequences, not
-  with their length. The check for several transcripts per gene reads every FASTA header once more and holds the
+  with their length. The check for several CDS records per gene reads every FASTA header once more and holds the
   header lines while it looks at them.
 - **Tools in COAL's cache are used only with their checksum record.** A DIAMOND, Clustal Omega or MAFFT that an
   earlier COAL (0.5.0 or before) installed into the cache has no `<binary>.coal-manifest.json` and is not used:
