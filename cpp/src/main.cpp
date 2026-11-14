@@ -9,6 +9,7 @@
 // that replaces the destination only when everything succeeded.
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cerrno>
 #include <cstdlib>
 #include <functional>
@@ -1467,6 +1468,41 @@ static int to_int(const std::string& norm) {
     return neg ? -v : v;
 }
 
+// A first argument that is no file but one or two letters away from a command name (`coal dnd x.fa`): the
+// error says which command was probably meant. Mirrors cli.py mistyped_command(): the same names, the same rule.
+static std::string mistyped_command(const std::string& w) {
+    static const char* const names[] = {"kaks", "dnds", "pipeline", "translate", "codon-dnds", "cite", "help"};
+    if (w.empty() || !std::isalpha((unsigned char)w[0])) return "";
+    for (char c : w)
+        if (!std::isalpha((unsigned char)c) && c != '-' && c != '_') return "";
+    std::error_code ec;
+    if (std::filesystem::exists(w, ec)) return "";
+    std::string low;
+    for (char c : w) low += (char)std::tolower((unsigned char)c);
+    std::string best;
+    size_t best_d = 99;
+    for (const char* n : names) {
+        const std::string b(n);
+        std::vector<size_t> row(b.size() + 1);
+        for (size_t j = 0; j <= b.size(); ++j) row[j] = j;
+        for (size_t i = 1; i <= low.size(); ++i) {
+            size_t diag = row[0];
+            row[0] = i;
+            for (size_t j = 1; j <= b.size(); ++j) {
+                const size_t up = row[j];
+                row[j] = std::min({row[j] + 1, row[j - 1] + 1, diag + (low[i - 1] == b[j - 1] ? 0 : 1)});
+                diag = up;
+            }
+        }
+        const size_t d = row[b.size()], limit = b.size() <= 4 ? 1 : 2;
+        if (w != b && d <= limit && d < best_d) {
+            best_d = d;
+            best = b;
+        }
+    }
+    return best;
+}
+
 int main(int argc, char** argv) {
     std::ios::sync_with_stdio(false);
 #ifdef COAL_TEST_HOOKS
@@ -1487,6 +1523,14 @@ int main(int argc, char** argv) {
     if (argc >= 2 && (std::strcmp(argv[1], "translate") == 0 || std::strcmp(argv[1], "codon-dnds") == 0)) {
         std::vector<std::string> rest(argv + 2, argv + argc);
         return std::strcmp(argv[1], "translate") == 0 ? coal::translate_main(rest) : coal::codon_dnds_main(rest);
+    }
+    if (argc >= 2) {
+        const std::string guess = mistyped_command(argv[1]);
+        if (!guess.empty()) {
+            std::cerr << "coal: error: cannot open '" << argv[1] << "': no such file, and no command of that name "
+                      << "(did you mean `coal " << guess << "`?)\n";
+            return 1;
+        }
     }
     Options o;
     for (int i = 1; i < argc; ++i) o.argv.push_back(argv[i]);

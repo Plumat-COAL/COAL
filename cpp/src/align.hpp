@@ -43,6 +43,12 @@ struct AlignParams {
     // Refuse a pair whose dynamic-programming table would have more cells than this (0 = no limit). The traceback
     // takes half a byte per cell: the default (4e9 cells, ~2 GB) admits titin against titin (35k x 35k ~ 1.2e9).
     uint64_t max_cells = 4000000000ULL;
+    // Bytes of traceback held at once. A pair whose traceback is larger (above about 23,000 x 23,000 residues with
+    // the default) is aligned with checkpoints: the forward pass keeps every k-th row's scores, and the traceback
+    // recomputes one block of rows at a time from its checkpoint. The alignment is the same, bit for bit (the
+    // same rows are computed by the same code); the forward pass runs twice for those pairs. Titin against titin
+    // took 630 MB of traceback, now about 135 MB. 0 = no limit (the whole traceback in memory).
+    uint64_t traceback_bytes = 256ULL << 20;
 
     // EMBOSS needle's defaults: BLOSUM62, open 10, extend 0.5, end gaps free. COAL's default.
     static AlignParams needle() { return AlignParams(); }

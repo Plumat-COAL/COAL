@@ -272,7 +272,8 @@ int translate_main_(const std::vector<std::string>& argv) {
                       "status\tcode\tnote\n";
         }
         std::ostream& os = out.empty() ? std::cout : fout;
-        std::unordered_set<std::string> seen;
+        std::unordered_map<std::string, size_t> seen;  // ID -> the input file of its first record
+        size_t file_no = 0;
         long n = 0, n_ok = 0, n_warn = 0, n_fail = 0;
         std::string id, seq, line, obuf, gbuf;
         long long id_line = 0;
@@ -293,9 +294,14 @@ int translate_main_(const std::vector<std::string>& argv) {
                 t.error = "non-ASCII character in the sequence ID (line " + std::to_string(id_line) +
                           "): use only ASCII letters, digits and punctuation in IDs";
                 id = printable_id(id);
-            } else if (!seen.insert(id).second) {
+            } else if (auto got = seen.emplace(id, file_no); !got.second) {
                 t.error_code = "duplicate_id";
-                t.error = "the ID occurs more than once in the file (the first record is used)";
+                // within one file, or across the files of one run (the same ID in two species' files)
+                t.error = got.first->second == file_no
+                              ? "the ID occurs more than once in the file (the first record is used)"
+                              : "the ID occurs in two input files, " + ins[got.first->second] + " and " +
+                                    ins[file_no] + " (the record of the first is used): IDs must be unique "
+                                    "across the files";
             } else {
                 t = dnds::translate_cds(seq, *code);
             }
@@ -336,7 +342,8 @@ int translate_main_(const std::vector<std::string>& argv) {
                 gbuf.clear();
             }
         };
-        for (const std::string& in : ins) {
+        for (file_no = 0; file_no < ins.size(); ++file_no) {
+            const std::string& in = ins[file_no];
             refuse_gzip(in);
             LineReader lr(in, true);
             have = false;
@@ -723,6 +730,9 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
         };
         OutFile fout, fcodon, fprot, fkaks, ffail;
 #ifdef COAL_TEST_HOOKS
+        // Test hook (tests/test_deep_findings.py): COAL_TEST_TRACEBACK_BYTES=b sets AlignParams::traceback_bytes, so
+        // that small pairs take the checkpointed traceback, whose alignments must equal the plain ones.
+        if (const char* tbv = test_hook_env("COAL_TEST_TRACEBACK_BYTES")) c.opt.align.traceback_bytes = std::strtoull(tbv, nullptr, 10);
         // Test hook (tests/test_pipeline_atomic.py): COAL_TEST_DNDS_FAIL_AFTER_GROUPS=k makes the run fail, as a
         // full disk does, when k groups have been written (everything written so far is flushed first).
         const char* fail_after_v = test_hook_env("COAL_TEST_DNDS_FAIL_AFTER_GROUPS");

@@ -60,9 +60,9 @@ Reporting:
 
 Batch:
   --batch JOBS          run many small conversions in one process: one coal
-                        command line per line of JOBS (- = stdin), each with
-                        -o; the options given here are the defaults of every
-                        job (not in coal-cpp)
+                        command line per line of JOBS, without the program
+                        name (- = stdin), each with -o; the options given here
+                        are the defaults of every job (not in coal-cpp)
   --batch-out-dir DIR   with --batch: a job without -o writes DIR/<its protein
                         file's name>.<fasta|aln|paml|codon>
   --batch-parallel N    with --batch: N jobs at a time in worker processes (0

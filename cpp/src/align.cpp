@@ -20,6 +20,7 @@
 #include <cctype>
 #include <climits>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <memory>
 
@@ -328,8 +329,9 @@ COAL_INLINE void row_pass3(const int* __restrict dc, const int* __restrict q, in
     if (h > lo) out[h - 1] = (uint8_t)t[h];
 }
 
-// The forward pass over all rows: fills the traceback (n rows of `stride` bytes), leaves row n in hp and the last
-// column in lastcol.
+// The forward pass over rows i0..n: row i's traceback goes to tb + (i - i0) * stride (stride 0: every row into the
+// same scratch row, for a pass that keeps no traceback), row i's last cell to lastcol[i]; it starts from the row
+// before i0 in hp / xp and leaves row n there.
 struct Dp {
     const uint8_t* a;
     size_t n, m;
@@ -339,12 +341,13 @@ struct Dp {
     uint8_t* tb;
     size_t stride;
     int *hp, *xp, *hc, *xc, *dc, *q, *t, *lastcol;
+    size_t i0 = 1;
 };
 
 template <bool AVX2>
 COAL_INLINE void forward_body(Dp& p) {
     const int mi = (int)p.m, o = p.open, e = p.ext;
-    for (size_t i = 1; i <= p.n; ++i) {
+    for (size_t i = p.i0; i <= p.n; ++i) {
         const int h0 = p.free_ends ? 0 : -(o + (int)(i - 1) * e);
         p.hc[0] = h0;
         p.xc[0] = NEG;
@@ -356,7 +359,7 @@ COAL_INLINE void forward_body(Dp& p) {
 #else
         row_pass2_scalar(p.dc, p.q, mi, e);
 #endif
-        row_pass3(p.dc, p.q, p.hc, p.t, p.tb + (i - 1) * p.stride, mi, o);
+        row_pass3(p.dc, p.q, p.hc, p.t, p.tb + (i - p.i0) * p.stride, mi, o);
         p.lastcol[i] = p.hc[p.m];
         std::swap(p.hp, p.hc);
         std::swap(p.xp, p.xc);
@@ -388,7 +391,7 @@ struct Raw {
 };
 
 Raw kernel(const std::string& sa, const std::string& sb, const std::vector<uint8_t>& a, const std::vector<uint8_t>& b,
-           const Scaled& s, bool free_ends, uint64_t max_cells) {
+           const Scaled& s, bool free_ends, uint64_t max_cells, uint64_t traceback_bytes) {
     const size_t n = a.size(), m = b.size();
     const int o = s.open, e = s.ext;
     Raw r;
@@ -428,7 +431,11 @@ Raw kernel(const std::string& sa, const std::string& sb, const std::vector<uint8
         }
     }
     const size_t stride = (m + 1) / 2;
-    std::unique_ptr<uint8_t[]> tb(new uint8_t[n * stride]);
+    // Rows of traceback held at once: all n, or (checkpoints) a block of `block` rows recomputed from the saved
+    // scores of the row before it (H and X of that row: the forward pass needs nothing else from the past).
+    const bool whole = traceback_bytes == 0 || (uint64_t)n * stride <= traceback_bytes;
+    const size_t block = whole ? n : std::max<size_t>(1, std::min<size_t>(n, traceback_bytes / 2 / stride));
+    std::unique_ptr<uint8_t[]> tb(new uint8_t[block * stride]);
     std::vector<int> hp(m + 1), xp(m + 1), hc(m + 1), xc(m + 1), dc(m + 1), q(m + 1), t(m + 1);
     std::vector<int> lastcol(n + 1);
     hp[0] = 0;
@@ -439,7 +446,22 @@ Raw kernel(const std::string& sa, const std::string& sb, const std::vector<uint8
     lastcol[0] = hp[m];
     Dp dp{a.data(), n, m, prof, o, e, free_ends, tb.get(), stride, hp.data(), xp.data(), hc.data(), xc.data(),
           dc.data(), q.data(), t.data(), lastcol.data()};
-    forward(dp);
+    const size_t nblocks = (n + block - 1) / block;
+    std::vector<int> saved;  // checkpoints: H then X of row b * block, for b = 0 .. nblocks - 1
+    if (whole) {
+        forward(dp);
+    } else {
+        saved.resize(nblocks * 2 * (m + 1));
+        dp.stride = 0;  // the first pass keeps no traceback: every row into tb's first row
+        for (size_t bk = 0; bk < nblocks; ++bk) {
+            std::memcpy(&saved[(bk * 2) * (m + 1)], dp.hp, (m + 1) * sizeof(int));
+            std::memcpy(&saved[(bk * 2 + 1) * (m + 1)], dp.xp, (m + 1) * sizeof(int));
+            dp.i0 = bk * block + 1;
+            dp.n = std::min(n, (bk + 1) * block);
+            forward(dp);
+        }
+        dp.stride = stride;
+    }
     const int* last = dp.hp;  // row n
     size_t bi = n, bj = m;
     long long best = last[m];
@@ -458,8 +480,19 @@ Raw kernel(const std::string& sa, const std::string& sb, const std::vector<uint8
     for (size_t i = n; i > bi; --i) ra.push_back(sa[i - 1]), rb.push_back('-');
     size_t i = bi, j = bj;
     int state = 0;  // 0 = H, 1 = X, 2 = Y
+    size_t loaded = whole ? 0 : SIZE_MAX;  // checkpoints: the block whose traceback is in tb
     auto nib = [&](size_t ii, size_t jj) -> unsigned {
-        const uint8_t* rowp = tb.get() + (ii - 1) * stride;
+        const size_t bk = whole ? 0 : (ii - 1) / block;
+        if (bk != loaded) {  // the traceback only moves up: each block is recomputed once
+            std::memcpy(hp.data(), &saved[(bk * 2) * (m + 1)], (m + 1) * sizeof(int));
+            std::memcpy(xp.data(), &saved[(bk * 2 + 1) * (m + 1)], (m + 1) * sizeof(int));
+            dp.hp = hp.data(), dp.xp = xp.data(), dp.hc = hc.data(), dp.xc = xc.data();
+            dp.i0 = bk * block + 1;
+            dp.n = std::min(n, (bk + 1) * block);
+            forward(dp);
+            loaded = bk;
+        }
+        const uint8_t* rowp = tb.get() + (ii - 1 - bk * block) * stride;
         return jj <= stride ? (rowp[jj - 1] & 15u) : (unsigned)(rowp[jj - 1 - stride] >> 4);
     };
     while (i > 0 && j > 0) {
@@ -589,7 +622,7 @@ void check_align_params(const AlignParams& p) {
 PairAlignment align_pair(const std::string& a, const std::string& b, const AlignParams& p) {
     Scaled s = scale_params(p);
     std::vector<uint8_t> ea = encode(a, "first"), eb = encode(b, "second");
-    Raw r = kernel(a, b, ea, eb, s, p.free_end_gaps, p.max_cells);
+    Raw r = kernel(a, b, ea, eb, s, p.free_end_gaps, p.max_cells, p.traceback_bytes);
     PairAlignment out;
     out.a = std::move(r.a);
     out.b = std::move(r.b);

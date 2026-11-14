@@ -458,9 +458,12 @@ class GeneticCodeHint(PipelineCase):
             recs2.append((name, "".join(codons)))
         q.write_text("".join(f">{n}\n{s}\n" for n, s in recs2), encoding="utf-8")
         res, err = run(P.run_clusters, q, self.tmp / "sel2", clusters=self.tmp / "none.tsv")
-        # (nuclear genes hold AGA / AGG, which are stops in code 2: the first table that fits is 4)
-        self.assertIn("cds: 4 of the 4 genes with internal stop codons under genetic code 1 have none under NCBI "
-                      "genetic code 4", err)
+        # (nuclear genes hold AGA / AGG, which are stops in code 2; nothing else tells the codes that read TGA
+        # apart, so they are all named, and none is recommended: deep test 2026-11-14, D02)
+        self.assertIn("cds: 4 of the 4 genes with internal stop codons under genetic code 1 have none under any of "
+                      "the NCBI genetic codes 3, 4, 5, 9, 10, 13 and 21 (their only internal stop codon is TGA)", err)
+        self.assertIn("their sequences cannot tell which of these it is", err)
+        self.assertNotIn("these with -c", err)
         self.assertIn(f"take them out of {q} into a file of their own", err)
 
     def test_docs(self):

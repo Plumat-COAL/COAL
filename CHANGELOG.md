@@ -45,6 +45,19 @@ entry under "Added", not under "Fixed".
 
   Settled before the release (states that no release ever had are not listed as fixes):
 
+  - **`--yn-flavour paml` agrees with yn00 at the K80 boundary 2P + Q = 1** (deep test of 2026-11-14, D01).
+    When the transition and transversion proportions of the 4-fold (or non-degenerate) sites satisfy 2P + Q = 1
+    exactly, yn00 finds K80 undefined while COAL, forming Q in KaKs_Calculator's order, found a residue of 1e-17
+    and a kappa of 60 there. The paml flavour now forms Q as yn00's `GetKappa` does. The S. cerevisiae /
+    C. glabrata pair of the finding: before S 194.22, N 462.78, dN 0.5024, dS 2.1598 (`ok`); after S 128.0,
+    N 529.0, dN 0.4123, as yn00 (dS: yn00 prints 3.6389, COAL `saturated`, as for every pair whose Ks
+    correction is undefined). All pairs with `--yn-flavour paml`: 10 of 4,388 Scer / Cgla rows change, 8 of
+    4,208 Scer / Klac, 1 of 3,685 E. coli K-12 / Sakai, 0 of 2,862 Salmonella / Shigella; the 10 Scer / Cgla
+    pairs disagreed with yn00 in S and N before and agree to yn00's printed digits after (weighting 1 and 0). The
+    300-pair samples against yn00 (Scer / Cgla, Scer / Klac, Salmonella / Shigella, K-12 / Sakai, human / mouse,
+    A. thaliana / lyrata): every value agrees to yn00's printed digits where both give one (Scer / Cgla before:
+    1 pair of 300 differed). The default flavour (KaKs_Calculator's numbers) is unchanged: 0 rows differ on all
+    four sets.
   - **Exit status 2 when no pair has an estimate because of the input.** `coal dnds` / `coal kaks` end with 2
     (not 0) when every result is `error` or `no_data`, with one line naming the usual cause: the input looks like
     protein sequences, or the sequences of the pairs differ in length (not aligned), and the way to a codon
@@ -279,6 +292,52 @@ entry under "Added", not under "Fixed".
     test reading `failed.tsv` with the default encoding (cp1252); the tests now run the pipeline under an ASCII
     locale, with a cp1252 console and with Python's `-X warn_default_encoding` as an error, and compare every
     output byte with the UTF-8 run.
+  - **Deep test of 2026-11-14 (D01-D08).** **The same IDs in two `--cds` files no longer drop a species
+    without a word** (D05). `clusters --cds a.fa b.fa` with IDs repeated across the files (BRAKER / AUGUSTUS
+    `g1.t1` in every species) kept the first file's record of each ID and left out the other's: 300 + 300
+    Salmonella / Shigella CDS named `gene0`..`gene299` in both gave 289 clusters and 12 pairs instead of about
+    300 cross-species pairs, exit 2, and 300 failures saying "the ID occurs more than once in the file" (each
+    occurred once per file). Now such a run stops before anything runs (exit 1) and names both files, the count
+    and examples; the new `--prefix-ids` puts each file's name and `|` before its IDs (`q_sameid|gene0`; the
+    report's `inputs` give each file's `id_prefix`), which gives 600 usable records, 291 clusters and 352 pairs
+    on the same files. `coal-cpp translate` with several files says "the ID occurs in two input files, A and B"
+    for such a record (within one file the wording is as before).
+    **The genetic-code hint no longer names a wrong code** (D02). It named the code that made the most flagged
+    genes stop-free, and codes that also read TAA / TAG "clean" frameshifted pseudogenes: it fired in 6 of the 9
+    real pair datasets of the deep test and was wrong in each (S. cerevisiae mitochondrial genes: 14, should be
+    3; C. glabrata / K. lactis mitochondria: 4, should be 3; human and mouse Ensembl: 4, should be 2; E. coli K-12,
+    A. lyrata NCBI and Ensembl mouse all-transcript files: 14 for pseudogenes and NMD transcripts). Now
+    pseudogenes (`[pseudo=true]`, `*pseudogene` biotype) and frameshift-length CDS are not evidence, genes
+    scattered over nuclear chromosomes are not either when the headers name the molecule, the code whose extra
+    stop or unused codons the genes avoid wins (AGA / AGG for 2, CGA / CGC for 3) before the one with the fewest
+    unneeded stop reassignments, and when the sequences cannot tell the codes apart all candidates are named and
+    none is recommended (report: `clean_under` null, new `candidates` and `evidence`). After, on the same 9
+    datasets: Scer / Cgla and Scer / Klac: code 3 for both sets (17, 8 and 7 genes); human / mouse whole Ensembl
+    sets: code 2 (12 genes each); no hint for Salmonella / Shigella, K-12 / Sakai, the A. thaliana / lyrata and
+    human / mouse subsets, A. thaliana / lyrata whole genomes, the human / mouse all-transcript files. Also
+    A. gossypii: 3 (was 4); Y. pestis (78 genes, almost all `[pseudo=true]`): none (was 14); D. melanogaster
+    Ensembl: "4 or 5" (was 14; 5 is right). A synthetic set of four nuclear genes given two internal TGA each
+    now gets the candidates 3, 4, 5, 9, 10, 13 and 21 instead of "code 4".
+    **A byte order mark or classic Mac line ends no longer lose genes** (D03). `coal-cpp translate` skipped a
+    UTF-8 byte order mark and split lone `\r` line ends, the Python-side readers did not: with a BOM the first
+    query gene was "not in the query file" (300 Salmonella CDS: 1 pair error, exit 2), with `\r` line ends every
+    pair was "the CDS is empty" (300 errors), the first line of a `--gene-map` was silently ignored (4 records
+    dropped instead of 5, exit 0), and the first member of a `--clusters` file was dropped with an invisible U+FEFF
+    in its cluster ID (exit 2). Now the FASTA index, the header reader of `--longest-isoform`, the `--pairs`,
+    `--clusters` and `--gene-map` readers and `coal --batch` job files read such files as coal-cpp does; on the
+    deep test's files every output is byte-identical to the run on the plain file (exit 0).
+    **Messages** (D04, D06, D07, D08; no number changes). A `coal --batch` job line that starts with `coal` (as
+    the README's wording suggested) is refused before any job runs, naming the fix, instead of 400 errors "cannot
+    open 'coal'"; the README says "without the program name". A pipeline run with no pair says so ("no pairs:
+    DIAMOND found no reciprocal best hit ..." / "none of the N clusters has two usable members"; exit status
+    unchanged), a `--pairs` file whose columns look swapped and one with repeated pairs get one warning each (the
+    pairs are still computed as given), and `$COAL_CLUSTALO` / `$COAL_MAFFT` / `$COAL_DIAMOND` set to something
+    that is not a file is named as the cause instead of "not found (PATH, $COAL_CLUSTALO, COAL's cache)".
+    `coal dnd x.fa` (and `coal-cpp dnd x.fa`) says "did you mean `coal dnds`?". `coal pipeline install mafft`
+    installs MAFFT 7.526 (pinned, as Clustal Omega 1.2.4 is; it took whatever Bioconda had) and prints "MAFFT
+    7.526 installed". When more than 30% of the pairs are `saturated` or `not_converged` the run says that the
+    sequences are too divergent for dS and points to "Filtering before interpretation" (S. cerevisiae /
+    C. glabrata: 3,775 of 4,388, 86%).
 - **Protein alignment for the codon step (docs/alignment.md).** `<coal/align.hpp>` and the `coal-cpp-align` tool: a
   global Needleman-Wunsch/Gotoh aligner (BLOSUM62/45/80, PAM250, affine gaps; EMBOSS needle defaults, a pwalign
   preset), full length (overhangs gapped, never cut off), AVX2 row loops picked at run time, multithreaded; optimal
@@ -304,6 +363,13 @@ entry under "Added", not under "Fixed".
     was. Starting and registering now happen under the lock that `kill_running()` takes, and after
     `kill_running()` the interrupted batch starts no further aligner (its clusters get the error `interrupted`);
     the next batch runs normally.
+  - **Very long pairs no longer take 600 MB or more** (deep test of 2026-11-14). The traceback is held at most
+    256 MiB at a time (`AlignParams::traceback_bytes`); a larger pair is aligned with checkpoints, recomputing
+    one block of rows at a time with the same code, so its alignment is identical. Human / mouse Ensembl pipeline
+    (17,118 pairs with titin): peak 711 MB before, 227 MB after, 49.9 s → 53.2 s on 2 cores; `dnds.tsv` and
+    the codon alignments byte-identical, and identical to the deep test's run. Forced on every pair (test hook,
+    blocks of 1 and more rows): Salmonella / Shigella and S. cerevisiae / C. glabrata `dnds.tsv`, codon and
+    protein alignments byte-identical.
 - **R package `coalr` (packaging/r/coalr, docs/r.md).** COAL's C++ core compiled into an R package with Rcpp:
   `coal_dnds_pairs()` (CDS of ortholog pairs to dN, dS, dN/dS: the columns of `dnds.tsv`), `coal_dnds_clusters()`
   (every pair of each cluster and the per-cluster summary of `cluster_summary.tsv`; protein alignments from given

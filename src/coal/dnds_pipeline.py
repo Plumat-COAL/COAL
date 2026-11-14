@@ -41,6 +41,7 @@ import math
 import os
 import platform
 import random
+import re
 import shlex
 import shutil
 import signal
@@ -400,6 +401,17 @@ def _safe_member_name(name: str, asset: str) -> str:
     return base
 
 
+def _bad_tool_variable(var: str, name: str, other: str = "") -> None:
+    """PipelineError when the environment variable that names a tool is set to something that is not a file: the
+    tool is then looked for there only (not on PATH or in COAL's cache), and "not found (PATH, $VAR, COAL's
+    cache)" misled (deep test 2026-11-14, D06)."""
+    v = os.environ.get(var)
+    if v and not os.path.isfile(v):
+        raise PipelineError(f"${var} is set to {v!r}, which is not a file ({'a folder' if os.path.isdir(v) else 'no such file'}). "
+                            f"While {var} is set, {name} is looked for there only, not on PATH or in COAL's cache: "
+                            f"set it to the {name} program, or unset it" + (f" (or give {other})" if other else ""))
+
+
 def _find_cpp() -> str:
     from . import dispatch
     path = dispatch.find_cpp()
@@ -444,16 +456,15 @@ class FastaIndex:
         with fh:
             off, cur, start = 0, None, 0
             pos = self.pos
-            for line in fh:
+            for off, line in fasta_lines(fh):   # (a byte order mark, lone \r line ends: as coal-cpp reads them)
                 if line[:1] == b">":
                     if cur is not None:
                         pos.setdefault(cur, (fno, start, off))
                     words = line[1:].split()
                     cur = words[0].decode("utf-8", "backslashreplace") if words else ""
                     start = off + len(line)
-                off += len(line)
             if cur is not None:
-                pos.setdefault(cur, (fno, start, off))
+                pos.setdefault(cur, (fno, start, fh.tell()))
 
     def __contains__(self, rid: str) -> bool:
         return rid in self.pos
@@ -476,6 +487,84 @@ class FastaIndex:
         for fh in self._fh.values():
             fh.close()
         self._fh.clear()
+
+
+_BOM = b"\xef\xbb\xbf"
+
+
+def fasta_lines(fh):
+    """(offset, line) of the lines of a file opened in binary mode, split as coal-cpp splits them (cpp/src/seqio.cpp):
+    a UTF-8 byte order mark at the start is skipped (Windows Notepad writes one), and a line ends at \\n, \\r\\n or a
+    lone \\r (classic Mac OS). Each line keeps its line end; offset is where it starts in the file."""
+    off = 0
+    first = True
+    for line in fh:
+        if first:
+            first = False
+            if line.startswith(_BOM):
+                off, line = 3, line[3:]
+        k = line.find(b"\r")
+        if k < 0 or k >= len(line) - 2 and line[k:] in (b"\r\n", b"\r"):
+            yield off, line
+            off += len(line)
+            continue
+        start, n = 0, len(line)
+        while start < n:   # (one \n-line that holds lone \r line ends: a classic Mac file is one such "line")
+            k = line.find(b"\r", start)
+            if k < 0:
+                end = n
+            else:
+                end = k + 2 if line[k + 1:k + 2] == b"\n" else k + 1
+            yield off + start, line[start:end]
+            start = end
+        off += n
+
+
+def fasta_ids(path: str) -> list[bytes]:
+    """The IDs (first word of each header, bytes) of a FASTA file, in file order, repeats included."""
+    ids = []
+    with open(path, "rb") as fh:
+        for _off, line in fasta_lines(fh):
+            if line[:1] == b">":
+                words = line[1:].split()
+                ids.append(words[0] if words else b"")
+    return ids
+
+
+_FASTA_SUFFIXES = (".gz", ".fasta", ".fas", ".fa", ".fna", ".ffn", ".cds", ".fsa", ".seq", ".txt")
+
+
+def file_stem(path: str) -> str:
+    """The name of a file without its folder and its FASTA / gzip suffixes: dir/S_cer.cds.fa.gz -> S_cer."""
+    name = os.path.basename(os.fspath(path))
+    while True:
+        low = name.lower()
+        cut = next((x for x in _FASTA_SUFFIXES if low.endswith(x) and len(name) > len(x)), None)
+        if cut is None:
+            return name
+        name = name[:-len(cut)]
+
+
+ID_PREFIX_SEP = "|"
+
+
+def write_prefixed_fasta(src: str, dst: str, prefix: bytes) -> int:
+    """Copy the FASTA file src to dst with prefix + ID_PREFIX_SEP before the ID of every record (the rest of the
+    header and the sequence lines as they are; line ends as \\n). Returns the number of records."""
+    n = 0
+    tag = b">" + prefix + ID_PREFIX_SEP.encode()
+    with open(src, "rb") as fh, open(dst + ".tmp", "wb") as out:
+        for _off, line in fasta_lines(fh):
+            body = line.rstrip(b"\r\n")
+            if body[:1] == b">":
+                n += 1
+                rest = body[1:]
+                # (a header without an ID stays without one: coal-cpp reports it as such)
+                out.write((tag + rest if rest[:1].strip() else body) + b"\n")
+            else:
+                out.write(body + b"\n")
+    os.replace(dst + ".tmp", dst)
+    return n
 
 
 def sort_fasta_by_id(src: str, dst: str) -> int:
@@ -567,6 +656,196 @@ def _clean(text: str) -> str:
 
 # ------------------------------------------------------------------------------------------------ the run
 
+# ------------------------------------------------------------------------------------------------ genetic-code hint
+
+GENETIC_CODE_NAMES = {1: "standard", 2: "vertebrate mitochondrial", 3: "yeast mitochondrial",
+                      4: "mold / protozoan mitochondrial, Mycoplasma", 5: "invertebrate mitochondrial",
+                      6: "ciliate nuclear", 9: "echinoderm / flatworm mitochondrial", 10: "euplotid nuclear",
+                      11: "bacterial, archaeal and plant plastid", 12: "alternative yeast nuclear",
+                      13: "ascidian mitochondrial", 14: "alternative flatworm mitochondrial",
+                      15: "Blepharisma nuclear", 16: "chlorophycean mitochondrial", 21: "trematode mitochondrial",
+                      22: "Scenedesmus obliquus mitochondrial", 23: "Thraustochytrium mitochondrial"}
+# Codons a code does not use although NCBI's table gives them an amino acid ("CGA, CGC absent" in code 3): that a
+# gene avoids them is evidence for the code, as avoiding a code's extra stop codons is (AGA / AGG for code 2).
+_ABSENT_CODONS = {3: frozenset({b"CGA", b"CGC"})}
+_CODON_FLOOR = 0.001        # the lowest usage per codon assumed when the set has no other genes to measure it on
+_PSEUDO = re.compile(r"\[pseudo=true\]|biotype:\S*pseudogene")
+_REPLICON = re.compile(r"^lcl\|(.+?)_cds_|\s(?:chromosome|primary_assembly|scaffold|supercontig|"
+                                     r"plasmid|contig):[^:\s]*:([^:\s]+):")
+HINT_BACKGROUND_CODONS = 1_000_000   # codons of the other genes read to measure the set's codon usage
+
+
+def _and(items) -> str:
+    items = [str(x) for x in items]
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def _hint_inputs(paths, flagged: dict, usable: set):
+    """For the genetic-code hint, one pass over the FASTA files: the flagged genes ({id, seq, header}), the codon
+    usage of the other usable genes (internal codons, at most HINT_BACKGROUND_CODONS), and the replicon of every
+    record when every header names one (NCBI lcl|NC_..._cds_, Ensembl chromosome:GRCh38:MT:), else None."""
+    from collections import Counter
+    genes: dict[str, dict] = {}
+    background: Counter = Counter()
+    n_bg = 0
+    rep_of: dict[str, str] = {}
+    rep_n: Counter = Counter()
+    all_named = True
+    seen: set[str] = set()
+
+    def done(rid, header, chunks):
+        nonlocal n_bg, all_named
+        if rid is None or rid in seen:
+            return
+        seen.add(rid)
+        m = _REPLICON.search(header)
+        if m:
+            rep = m.group(1) or m.group(2)
+            rep_of[rid] = rep
+            rep_n[rep] += 1
+        else:
+            all_named = False
+        if rid in flagged:
+            genes[rid] = {"id": rid, "header": header,
+                          "seq": b"".join(chunks).upper().replace(b"U", b"T").translate(None, b" \t\r\n\x0b\x0c")}
+        elif rid in usable and n_bg < HINT_BACKGROUND_CODONS:
+            seq = b"".join(chunks).upper().replace(b"U", b"T").translate(None, b" \t\r\n\x0b\x0c")
+            n = len(seq) - len(seq) % 3 - 3
+            background.update(seq[k:k + 3] for k in range(0, n, 3))
+            n_bg += max(0, n // 3)
+
+    for path in paths:
+        rid, header, chunks = None, "", []
+        with open(path, "rb") as fh:
+            for _off, line in fasta_lines(fh):
+                if line[:1] == b">":
+                    done(rid, header, chunks)
+                    header = line[1:].decode("utf-8", "backslashreplace").strip()
+                    words = header.split()
+                    rid, chunks = (words[0] if words else ""), []
+                    if rid not in flagged and (rid not in usable or n_bg >= HINT_BACKGROUND_CODONS):
+                        chunks = None   # (nothing of its sequence is needed)
+                elif chunks is not None:
+                    chunks.append(line)
+            done(rid, header, chunks or [])
+    order = [genes[i] for i in flagged if i in genes]
+    return order, background, ({"of": rep_of, "records": rep_n} if all_named and rep_of else None)
+
+
+def suggest_genetic_code(chosen: int, genes: list[dict], background, n_records: int, with_stops: int,
+                         replicons: dict | None = None, min_genes: int = 2) -> dict | None:
+    """Which genetic code explains genes that have internal stop codons under `chosen`, or None (no hint).
+
+    genes: {id, seq (upper case DNA), header} of the genes with two or more internal stops. background: codon
+    counts of the set's other genes. The rules (deep test of 2026-11-14, finding D02: the old hint named the code
+    that made the most genes stop-free, and that was 14 for yeast mitochondria and frameshifted pseudogenes, 4
+    for vertebrate mitochondria):
+
+    1. Evidence comes only from genes that look complete: not marked as pseudogenes ([pseudo=true],
+       *_pseudogene biotype), and with a length that is a multiple of 3 or ends in the T / TA of an incomplete
+       stop codon (vertebrate mitochondria); a frameshifted CDS has random stop codons that "fit" some code.
+    2. When every header names its replicon, only genes on a replicon of which at least half the records are
+       flagged count (the mitochondrial chromosome; not scattered nuclear genes).
+    3. Genes are grouped by the codes under which they have no internal stop; the largest group decides. Of its
+       codes, those win whose extra stop codons or unused codons (AGA / AGG for code 2, CGA / CGC for code 3) the
+       genes avoid where the set's other genes use them (and lose when they do not), then those that reassign
+       no stop codon the genes do not need (code 14 also reads TAA, which TGA-only genes do not need).
+    4. Codes that tie are all named (their sequences cannot tell 4, 5 and 13 apart), less those whose start
+       codons do not fit at least two and a quarter of the genes when another candidate's do.
+    5. No hint unless at least min_genes genes and half of the evidence genes fit, and a code that reads TAA or
+       TAG as an amino acid is suggested only when half the set has internal stops (the whole set's code).
+
+    Returns {"codes": [...], "genes": [ids], "also": [codes that also fit these genes], "evidence": text}."""
+    from collections import Counter
+    from .tables import get_code
+    std = get_code(chosen)
+    stops_c = frozenset(x.encode() for x in std.codons.get("*", ()))
+    tables = {}
+    for t in SUPPORTED:
+        if t == chosen:
+            continue
+        code = get_code(t)
+        st = frozenset(x.encode() for x in code.codons.get("*", ()))
+        if st != stops_c:   # (code 11 for code 1: the same stops, nothing to explain)
+            tables[t] = (st, frozenset(x.encode() for x in code.starts))
+    ev = []
+    for g in genes:
+        if _PSEUDO.search(g["header"]):
+            continue
+        seq = g["seq"]
+        tr = len(seq) % 3
+        if tr and seq[-tr:] != (b"T", b"TA")[tr - 1]:
+            continue
+        cod = Counter(seq[k:k + 3] for k in range(0, len(seq) - tr - (0 if tr else 3), 3))
+        types = frozenset(cod) & stops_c
+        if not types:
+            continue
+        clean = frozenset(t for t, (st, _) in tables.items() if not (cod.keys() & st))
+        ev.append({"id": g["id"], "cod": cod, "types": types, "clean": clean, "first": seq[:3],
+                   "n": sum(cod.values())})
+    if replicons and all(g["id"] in replicons["of"] for g in ev):
+        per = Counter(replicons["of"][g["id"]] for g in ev)
+        keep = {r for r, n in per.items() if 2 * n >= replicons["records"].get(r, 0)}
+        ev = [g for g in ev if replicons["of"][g["id"]] in keep]
+    groups: dict[frozenset, list] = {}
+    for g in ev:
+        if g["clean"]:
+            groups.setdefault(g["clean"], []).append(g)
+    if not groups:
+        return None
+    G = max(groups.values(), key=len)
+    sig = G[0]["clean"]
+    needed = frozenset().union(*(g["types"] for g in G))
+    n_cod = sum(g["n"] for g in G)
+    seen = Counter()
+    for g in G:
+        seen.update(g["cod"])
+    bg_total = sum(background.values())
+    keys, notes = {}, {}
+    for t in sig:
+        st, _starts = tables[t]
+        unneeded = len((stops_c - st) - needed)
+        extra = (st - stops_c) | (_ABSENT_CODONS.get(t, frozenset()) - stops_c)
+        e = 0
+        if extra:
+            obs = sum(seen[x] for x in extra)
+            bg = sum(background[x] for x in extra)
+            rate = bg / bg_total if (bg >= 20 or bg_total >= 20_000) and bg_total else 0.0
+            source = "the set's other genes"
+            if rate <= 0:
+                rate, source = _CODON_FLOOR * len(extra), "the rarest usage of nuclear genes"
+            exp = rate * n_cod
+            if exp >= 5:
+                e = 1 if obs <= 0.2 * exp else -1 if obs > 0.5 * exp else 0
+                what = "reads as stops" if extra <= st else "does not use"
+                notes[t] = (f"{obs:,} {' / '.join(sorted(x.decode() for x in extra))} codons, which code {t} {what}, "
+                            f"where about {exp:,.0f} were expected from {source}")
+        keys[t] = (-e, unneeded)
+    best = min(keys.values())
+    W = sorted(t for t in sig if keys[t] == best)
+    if len(W) > 1:
+        drop = set()
+        for t in W:
+            bad = sum(1 for g in G if g["first"] not in tables[t][1]
+                      and any(g["first"] in tables[u][1] for u in W if u != t))
+            if bad >= 2 and 4 * bad >= len(G):
+                drop.add(t)
+        if len(drop) < len(W):
+            W = [t for t in W if t not in drop]
+    support = [g for g in ev if all(t in g["clean"] for t in W)]
+    if len(support) < min_genes or 2 * len(support) < len(ev):
+        return None
+    if needed - {b"TGA"} and 2 * with_stops < n_records:
+        return None
+    also = sorted(t for t in tables if t not in W and all(t in g["clean"] for g in support))
+    kinds = sorted(x.decode() for x in needed)
+    text = (f"their only internal stop codon is {kinds[0]}" if len(kinds) == 1
+            else "their internal stop codons are " + " / ".join(kinds))
+    if len(W) == 1 and best[0] < 0 and W[0] in notes:
+        text += "; they have " + notes[W[0]]
+    return {"codes": W, "genes": [g["id"] for g in support], "also": also, "evidence": text}
+
+
 class _Run:
     """State shared by the stages of one run: folders, tools, the report, the failures file."""
 
@@ -605,6 +884,8 @@ class _Run:
         self.input_records: list[dict] = []   # the report's `inputs`
         self._commands: list[list[str]] = []  # the external commands of the stage that is running
         self._plain: dict[str, str] = {}   # a gzip-compressed input -> its decompressed copy in work/inputs
+        self._prefixed: dict[str, str] = {}   # --prefix-ids: a --cds file -> its copy with prefixed IDs
+        self.id_prefixes: dict[str, str] = {}  # --prefix-ids: a --cds file (as given) -> its prefix
         self.notes: list[str] = []         # warnings of the run, also in the report
         self.isoforms: dict = {}           # the report's `isoforms`: per set what was found and done
         self._gene_map: dict | None = None
@@ -775,7 +1056,8 @@ class _Run:
 
     def plain(self, path):
         """The file to read for an input path: itself, or its decompressed copy."""
-        return self._plain.get(os.path.abspath(os.fspath(path)), os.fspath(path))
+        key = os.path.abspath(os.fspath(path))
+        return self._prefixed.get(key) or self._plain.get(key, os.fspath(path))
 
     # -- the folder: this run's inputs, what it will write, what an earlier run wrote
     def _input_paths(self) -> list[tuple[str, str]]:
@@ -981,13 +1263,14 @@ class _Run:
     def shown(self, text: str) -> str:
         """text with the paths of decompressed copies (work/inputs/...) replaced by the files as the user named
         them; lines that quote a command line (`$ ...`, from a log) are left as they ran."""
-        if not self._plain or not any(copy in text for copy in self._plain.values()):
+        copies = [*self._prefixed.items(), *self._plain.items()]
+        if not copies or not any(copy in text for _, copy in copies):
             return text
         lines = text.split("\n")
         for k, line in enumerate(lines):
             if line.startswith("$ "):
                 continue
-            for orig, copy in self._plain.items():
+            for orig, copy in copies:
                 line = line.replace(copy, orig)
             lines[k] = line
         return "\n".join(lines)
@@ -1063,6 +1346,8 @@ class _Run:
         if "diamond" in self.tools:
             return self.tools["diamond"]["path"]
         exe = self.a.diamond or find_diamond()
+        if exe is None and not self.a.diamond:
+            _bad_tool_variable("COAL_DIAMOND", "DIAMOND", "--diamond PATH")
         if exe is None and self.a.install_tools:
             exe = install_diamond(quiet=self.quiet)
         if exe is None or not (os.path.isfile(exe) or shutil.which(exe)):
@@ -1094,6 +1379,8 @@ class _Run:
         if tool in self.tools:
             return self.tools[tool]["path"]
         exe = getattr(self.a, tool, None) or (_msa.find_clustalo() if tool == "clustalo" else _msa.find_mafft())
+        if exe is None:
+            _bad_tool_variable(f"COAL_{tool.upper()}", "Clustal Omega" if tool == "clustalo" else "MAFFT")
         if exe is None and self.a.install_tools:
             try:
                 exe = _msa.install_clustalo(quiet=self.quiet) if tool == "clustalo" else \
@@ -1129,6 +1416,89 @@ class _Run:
         self.stage(f"translate_{name}", _sig("translate", _file_sig(plain), self.a.codontable, __version__),
                    [faa, genes], go)
         return faa, genes, {}
+
+    # -- clusters: the IDs of several --cds files
+    def check_cds_ids(self) -> None:
+        """Clusters mode: the --cds files are one set, so an ID must name one record across all of them. IDs that
+        occur in two files (BRAKER / AUGUSTUS g1.t1, gene1 in every species) are refused before anything runs:
+        coal-cpp translate keeps the first record of an ID, so every later file's gene of that ID would be left
+        out, a whole species when all IDs clash. With --prefix-ids every file's IDs get the file's name as a
+        prefix (S_cer|g1.t1) instead, in a copy in work/inputs/ that the run reads."""
+        a = self.a
+        paths = list(a.cds)
+        prefix = bool(getattr(a, "prefix_ids", False))
+        if len(paths) < 2 and not prefix:
+            return
+        if prefix:
+            stems = [file_stem(p) for p in paths]
+            bad = next((x for x in stems if not x or x != x.strip() or any(c in x for c in "|> \t")
+                        or not x.isascii()), None)
+            if bad is not None:
+                raise PipelineError(f"--prefix-ids: the file name {bad!r} cannot be an ID prefix (it must be ASCII, "
+                                    "without blanks, '|' or '>'): rename the file")
+            seen: dict[str, str] = {}
+            for p, x in zip(paths, stems):
+                if x in seen and os.path.abspath(seen[x]) != os.path.abspath(p):
+                    raise PipelineError(f"--prefix-ids: {seen[x]} and {p} would get the same prefix {x!r} (the "
+                                        "file name without folder and suffix): rename one of them")
+                seen.setdefault(x, p)
+            d = self.wpath("inputs")
+            os.makedirs(d, exist_ok=True)
+            t = time.perf_counter()
+            done: dict[str, str] = {}
+            for k, (p, x) in enumerate(zip(paths, stems)):
+                key = os.path.abspath(os.fspath(p))
+                if key in done:
+                    continue
+                src = self.plain(p)
+                dst = os.path.join(d, f"prefixed_{k}_{x}.fa")
+                write_prefixed_fasta(src, dst, x.encode())
+                st = os.stat(src)   # the copy keeps the source's time: an unchanged input -> the same --resume
+                os.utime(dst, ns=(st.st_atime_ns, st.st_mtime_ns))   # signature (as for decompressed copies)
+                self._prefixed[key] = done[key] = dst
+                self.id_prefixes[os.fspath(p)] = x
+            for rec in self.input_records:   # the report's `inputs`
+                if rec.get("option") == "--cds":
+                    x = next((x for p, x in zip(paths, stems) if os.path.abspath(p) == rec.get("path")), None)
+                    if x is not None:
+                        rec["id_prefix"] = x + ID_PREFIX_SEP
+            self.stages.append({"name": "prefix_ids", "seconds": round(time.perf_counter() - t, 3), "cached": False,
+                                "files": len(done)})
+            self.say("--prefix-ids: the IDs of " + ", ".join(f"{p} start with {x}{ID_PREFIX_SEP}"
+                                                              for p, x in list(self.id_prefixes.items())[:3])
+                     + (" ..." if len(self.id_prefixes) > 3 else ""))
+            return
+        first: dict[bytes, int] = {}
+        clash: dict[tuple[int, int], list[bytes]] = {}
+        files: list[str] = []
+        for k, p in enumerate(paths):
+            key = os.path.abspath(os.fspath(p))
+            if any(os.path.abspath(os.fspath(q)) == key for q in files):
+                files.append(os.fspath(p))   # the same file named twice: translate reports its records as repeats
+                continue
+            files.append(os.fspath(p))
+            try:
+                ids = fasta_ids(self.plain(p))
+            except OSError:
+                return   # (translate says what is wrong with the file)
+            for rid in dict.fromkeys(ids):   # (a repeat within one file is that file's own duplicate_id)
+                j = first.setdefault(rid, k)
+                if j != k and rid:
+                    clash.setdefault((j, k), []).append(rid)
+        if not clash:
+            return
+        total = sum(len(v) for v in clash.values())
+        parts = []
+        for (j, k), ids in list(clash.items())[:3]:
+            ex = ", ".join(i.decode("utf-8", "backslashreplace") for i in ids[:3])
+            parts.append(f"{len(ids):,} in both {paths[j]} and {paths[k]} (e.g. {ex})")
+        raise PipelineError(
+            f"--cds: {total:,} sequence ID(s) occur in more than one of the --cds files: " + "; ".join(parts)
+            + ("; ..." if len(clash) > 3 else "") + ". The files are one set of genes, so every ID must name one "
+            "record across them: only the first file's record of each such ID would be used and the other files' "
+            "genes left out. Nothing was run. Run again with --prefix-ids, which puts each file's name before its "
+            f"IDs ({file_stem(paths[next(iter(clash))[1]])}{ID_PREFIX_SEP}"
+            f"{next(iter(clash.values()))[0].decode('utf-8', 'backslashreplace')}), or make the IDs unique")
 
     def read_genes(self, genes_path: str, set_name: str, out_fh, order: dict | None = None,
                    dropped: dict | None = None) -> dict:
@@ -1176,14 +1546,7 @@ class _Run:
         return failed
 
     # -- a set that looks like another genetic code
-    _CODE_NAMES = {1: "standard", 2: "vertebrate mitochondrial", 3: "yeast mitochondrial",
-                   4: "mold / protozoan mitochondrial, Mycoplasma", 5: "invertebrate mitochondrial",
-                   6: "ciliate nuclear", 9: "echinoderm / flatworm mitochondrial", 10: "euplotid nuclear",
-                   11: "bacterial, archaeal and plant plastid", 12: "alternative yeast nuclear",
-                   13: "ascidian mitochondrial", 14: "alternative flatworm mitochondrial",
-                   15: "Blepharisma nuclear", 16: "chlorophycean mitochondrial", 21: "trematode mitochondrial",
-                   22: "Scenedesmus obliquus mitochondrial", 23: "Thraustochytrium mitochondrial"}
-    _CODE_ORDER = (2, 4, 5, 11, 3, 9, 13, 14, 21, 6, 10, 12, 15, 16, 22, 23, 1)   # which table is named first
+    _CODE_NAMES = GENETIC_CODE_NAMES
     CODE_HINT_MIN_STOPS = 2      # a gene counts with this many internal stops under the chosen code ...
     CODE_HINT_MIN_GENES = 2      # ... and the hint needs this many such genes that are clean under another code
     CODE_HINT_MAX_GENES = 5000   # genes looked at per set (the first ones)
@@ -1191,16 +1554,18 @@ class _Run:
     def code_hint(self, set_name: str, paths: list[str], genes_path: str, shown: list[str] | None = None) -> None:
         """One warning when genes of this set have internal stop codons under the chosen genetic code (-c) and
         none under another code COAL supports: mitochondrial or plastid genes in a nuclear set, or the wrong -c
-        for the whole set. Only the flagged genes are read again, and only their stop codons are counted, so a set
-        without such genes costs nothing. (A gene with one internal TGA is not counted: a selenoprotein reads
-        "clean" under every code where TGA is Trp.)"""
-        from .tables import SUPPORTED as tables, get_code
+        for the whole set. The code (or the codes, when the sequences cannot tell them apart) is chosen by
+        suggest_genetic_code(). The files are read again only when two or more genes have two or more internal
+        stops, so a set without such genes costs nothing. (A gene with one internal TGA is not counted: a
+        selenoprotein reads "clean" under every code where TGA is Trp.)"""
         chosen = int(self.a.codontable)
-        flagged: list[str] = []
+        flagged: dict[str, int] = {}     # id -> trailing nucleotides
+        usable: set[str] = set()
         with_stops = 0
+        n_records = 0
         with open(genes_path, encoding="utf-8", errors="backslashreplace") as fh:
             col = {n: k for k, n in enumerate(fh.readline().rstrip("\n").split("\t"))}
-            ki, si, ci = col.get("internal_stops"), col.get("status"), col.get("code")
+            ki, si, ci, ti = col.get("internal_stops"), col.get("status"), col.get("code"), col.get("trailing_nt")
             if ki is None or si is None:
                 return
             for line in fh:
@@ -1209,50 +1574,55 @@ class _Run:
                     n = int(f[ki])
                 except (ValueError, IndexError):
                     continue
-                if n < 1 or (ci is not None and f[ci] == "duplicate_id"):
+                if ci is not None and f[ci] == "duplicate_id":
+                    continue
+                n_records += 1
+                if f[si] != "failed":
+                    usable.add(f[0])
+                if n < 1:
                     continue
                 with_stops += 1
                 if n >= self.CODE_HINT_MIN_STOPS and len(flagged) < self.CODE_HINT_MAX_GENES:
-                    flagged.append(f[0])
+                    try:
+                        flagged[f[0]] = int(f[ti]) if ti is not None else 0
+                    except (ValueError, IndexError):
+                        flagged[f[0]] = 0
         if len(flagged) < self.CODE_HINT_MIN_GENES:
             return
-        stops = {t: frozenset(c.encode() for c in get_code(t).codons.get("*", ())) for t in tables if t != chosen}
-        clean = {t: 0 for t in stops}
-        examples: dict[int, list[str]] = {t: [] for t in stops}
-        idx = FastaIndex(paths)
-        try:
-            for rid in flagged:
-                try:
-                    seq = idx.get(rid).upper().replace(b"U", b"T")
-                except KeyError:
-                    continue
-                codons = {seq[k:k + 3] for k in range(0, len(seq) - len(seq) % 3 - 3, 3)}   # the last one may stop
-                for t, st in stops.items():
-                    if not (codons & st):
-                        clean[t] += 1
-                        if len(examples[t]) < 3:
-                            examples[t].append(rid)
-        finally:
-            idx.close()
-        best = max(clean.values(), default=0)
-        if best < self.CODE_HINT_MIN_GENES:
+        genes, background, replicons = _hint_inputs(paths, flagged, usable)
+        hint = suggest_genetic_code(chosen, genes, background, n_records, with_stops, replicons,
+                                    min_genes=self.CODE_HINT_MIN_GENES)
+        if hint is None:
             return
-        ranked = [t for t in self._CODE_ORDER if clean.get(t, 0) == best]
-        table, also = ranked[0], ranked[1:]
+        codes = hint["codes"]
+        best = len(hint["genes"])
+        examples = hint["genes"][:3]
         self.code_hints.append({"set": set_name, "genetic_code": chosen, "genes_with_internal_stops": with_stops,
-                                "genes_looked_at": len(flagged), "clean_under": table, "genes": best,
-                                "also_clean_under": also, "examples": examples[table]})
+                                "genes_looked_at": len(flagged), "clean_under": codes[0] if len(codes) == 1 else None,
+                                "candidates": codes, "genes": best, "also_clean_under": hint["also"],
+                                "evidence": hint["evidence"], "examples": examples})
         shown = [str(p) for p in (shown or paths)]      # the files as the user named them (not work/ copies)
         files = " ".join(shown[:2]) + (" ..." if len(shown) > 2 else "")
-        self.warn(f"{set_name}: {best:,} of the {with_stops:,} genes with internal stop codons under genetic code "
-                  f"{chosen} have none under NCBI genetic code {table} ({self._CODE_NAMES.get(table, 'NCBI')}"
-                  + (f"; also under {', '.join(map(str, also[:3]))}{' and others' if len(also) > 3 else ''}"
-                     if also else "")
-                  + f"), e.g. {', '.join(examples[table])}. They look like genes of another genetic code "
-                  "(mitochondrial or plastid genes in a nuclear set?): their rows are estimates from mistranslated "
-                  f"codons. Run them on their own: take them out of {files} into a file of their own and run "
-                  f"`coal pipeline` twice, the rest with -c {chosen} and these with -c {table} "
-                  "(docs/pipeline.md \"Genes of another genetic code\")")
+        head = (f"{set_name}: {best:,} of the {with_stops:,} genes with internal stop codons under genetic code "
+                f"{chosen}")
+        names = "; ".join(f"{t} {GENETIC_CODE_NAMES.get(t, 'NCBI')}" for t in codes)
+        why = f" ({hint['evidence']})" if hint["evidence"] else ""
+        if len(codes) == 1:
+            t = codes[0]
+            self.warn(head + f" have none under NCBI genetic code {t} ({GENETIC_CODE_NAMES.get(t, 'NCBI')}), the "
+                      f"code that explains them best{why}, e.g. {', '.join(examples)}. They look like genes of "
+                      "another genetic code (mitochondrial or plastid genes in a nuclear set?): their rows are "
+                      f"estimates from mistranslated codons. Run them on their own: take them out of {files} into "
+                      f"a file of their own and run `coal pipeline` twice, the rest with -c {chosen} and these with "
+                      f"-c {t} (docs/pipeline.md \"Genes of another genetic code\")")
+        else:
+            self.warn(head + f" have none under any of the NCBI genetic codes {_and(codes)}{why}, e.g. "
+                      f"{', '.join(examples)}. They look like genes of another genetic code (mitochondrial genes "
+                      "in a nuclear set?), and their sequences cannot tell which of these it is: " + names + ". "
+                      "Their rows are estimates from mistranslated codons. Run them on their own with the code of "
+                      f"their organism and organelle: take them out of {files} into a file of their own and run "
+                      f"`coal pipeline` twice, the rest with -c {chosen} (docs/pipeline.md \"Genes of another "
+                      "genetic code\")")
 
     def n_records(self, set_name: str, what: str = "total") -> int:
         """The records of a set as genes.tsv lists them (a repeated ID is a record, and not usable): the same
@@ -1289,6 +1659,17 @@ class _Run:
                 if not self._gene_map:
                     raise PipelineError(f"--gene-map {a.gene_map} names no record (it has no line with a record ID "
                                         "and a gene ID)")
+                if self.id_prefixes:   # --prefix-ids: the map names the IDs as in the files (or prefixed ones)
+                    xs = set(self.id_prefixes.values())
+                    gm: dict[str, str] = {}
+                    for r, g in self._gene_map.items():
+                        x = r.split(ID_PREFIX_SEP, 1)[0] if ID_PREFIX_SEP in r else None
+                        if x in xs:
+                            gm.setdefault(r, g)
+                        else:   # the same gene ID in two species is two genes
+                            for x in xs:
+                                gm.setdefault(f"{x}{ID_PREFIX_SEP}{r}", f"{x}{ID_PREFIX_SEP}{g}")
+                    self._gene_map = gm
             # the map wins for the records it names; the others fall back to what the headers and IDs say
             det = I.from_gene_map(self._gene_map, headers, detection=rule != "map")
             unknown = det.records - (det.in_map or 0)
@@ -1664,6 +2045,10 @@ class _Run:
         return report
 
 
+SATURATION_NOTICE_SHARE = 0.3      # more than this share of the pairs saturated / not_converged: one notice
+SATURATION_NOTICE_MIN_PAIRS = 20
+
+
 def _count_pairs(run: _Run, dnds_path: str, group_col: bool) -> None:
     """Pair counts by status from dnds.tsv (the first method's rows), and the error pairs into failed.tsv."""
     c = {"total": 0, "ok": 0, "warning": 0, "not_converged": 0, "saturated": 0, "no_data": 0, "error": 0}
@@ -1695,6 +2080,13 @@ def _count_pairs(run: _Run, dnds_path: str, group_col: bool) -> None:
             if f[-2] == "error":
                 run.fail("pair", "pair_failed", f[-1], cluster=f[0] if group_col else "", seq1=f[k], seq2=f[k + 1])
     run.counts["pairs"] = c
+    lost = c["saturated"] + c["not_converged"]
+    if c["total"] >= SATURATION_NOTICE_MIN_PAIRS and lost > SATURATION_NOTICE_SHARE * c["total"] and hasattr(run, "warn"):
+        # (deep test 2026-11-14, D08: 85% of the yeast pairs ended NA without a word about why)
+        run.warn(f"{lost:,} of the {c['total']:,} pairs ({100 * lost / c['total']:.0f}%) are saturated or "
+                 "not_converged: dS (sometimes dN too) has no estimate there: these sequences are too divergent for "
+                 "synonymous changes to be counted (dN and the protein identity are still given). Compare closer "
+                 "species for dS; docs/pipeline.md \"Filtering before interpretation\"")
     if short or high or low:
         run.counts["flagged"] = {key: n for key, n, on in (("min_codons", flagged["min_codons"], short),
                                                            ("max_ds", flagged["max_ds"], high),
@@ -1765,6 +2157,11 @@ def _pairs_mode(run: _Run) -> None:
         pairs, hits = _search(run, q_faa, s_faa, q_order, s_order, orth)
     run.say(f"{len(pairs):,} pairs ({'given' if a.pairs else a.ortho})")
     run.counts["orthologs"] = len(pairs)
+    if not pairs:   # (deep test 2026-11-14, D06: an empty dnds.tsv and exit 0 read like a result)
+        run.warn(f"no pairs: the --pairs file {a.pairs} names none, so dnds.tsv has its header only" if a.pairs
+                 else f"no pairs: DIAMOND found no {'reciprocal best hit' if a.ortho == 'rbh' else 'hit'} between "
+                 "the two sets (e-value " + f"{a.evalue:g}), so dnds.tsv has its header only. Are both files coding "
+                 "sequences of related species? --sensitivity more-sensitive / --evalue widen the search")
 
     q_idx, s_idx = FastaIndex(run.plain(a.query)), FastaIndex(run.plain(a.subject))
     if a.pairs:
@@ -1773,6 +2170,7 @@ def _pairs_mode(run: _Run) -> None:
         _unmatched_ids_warning(run, "--pairs", a.pairs,
                                [("query", [q for q, _ in pairs], q_idx, q_failed),
                                 ("subject", [s for _, s in pairs], s_idx, s_failed)], every)
+        _pairs_file_warnings(run, pairs, q_idx, s_idx, q_failed, s_failed)
     need_prot = a.aligner in ("clustalo", "mafft")
     exe = run.msa_tool(a.aligner) if need_prot else None
     qp_idx = FastaIndex(q_faa) if need_prot else None
@@ -1860,12 +2258,37 @@ def _unmatched_ids_warning(run: _Run, option: str, path: str, sides, every_group
                  + (f", while the sequences are named like {have!r}." if have is not None else ".") + hint)
 
 
+def _pairs_file_warnings(run: _Run, pairs, q_idx, s_idx, q_failed, s_failed) -> None:
+    """--pairs: one line when the columns look swapped (the query column names subject records and the subject
+    column query records), and one when pairs are repeated (each is computed and written again, as given)."""
+    a = run.a
+    known_q = lambda r: r in q_idx or r in q_failed   # noqa: E731
+    known_s = lambda r: r in s_idx or r in s_failed   # noqa: E731
+    swapped = sum(1 for q, s in pairs if not known_q(q) and not known_s(s) and known_s(q) and known_q(s))
+    if swapped and 2 * swapped >= len(pairs):
+        q, s = next((q, s) for q, s in pairs if not known_q(q) and known_s(q) and known_q(s))
+        run.warn(f"the columns of --pairs {a.pairs} look swapped: in {swapped:,} of the {len(pairs):,} pairs the "
+                 f"first ID is a record of --subject and the second one of --query (e.g. {q} {s}). The first "
+                 "column is the query, the second the subject: swap the columns, or --query and --subject")
+    seen: set = set()
+    dup = 0
+    first = None
+    for p in pairs:
+        if p in seen:
+            dup += 1
+            first = first or p
+        seen.add(p)
+    if dup:
+        run.warn(f"{dup:,} line(s) of --pairs {a.pairs} repeat an earlier pair (e.g. {first[0]} {first[1]}): each "
+                 "is computed and written again, so those pairs have more than one row in dnds.tsv")
+
+
 def _read_pairs_file(path: str, shown: str | None = None) -> list[tuple[str, str]]:
     """The pairs of a --pairs file. shown: the name for messages (the file as given, when path is its
     decompressed copy)."""
     pairs = []
     try:
-        fh = open(path, encoding="utf-8", errors="backslashreplace")
+        fh = open(path, encoding="utf-8-sig", errors="backslashreplace")
     except OSError as e:
         raise PipelineError(f"cannot open {shown or path!r}: {e.strerror or e}") from None
     path = shown or path
@@ -1958,7 +2381,7 @@ def read_clusters(path: str) -> tuple[dict[str, list[str]], int]:
     seen: set[str] = set()
     dup = 0
     try:
-        fh = open(path, encoding="utf-8", errors="backslashreplace")
+        fh = open(path, encoding="utf-8-sig", errors="backslashreplace")
     except OSError as e:
         raise PipelineError(f"cannot open {path!r}: {e.strerror or e}") from None
     with fh:
@@ -2009,6 +2432,7 @@ def sample_pairs(n: int, k: int, seed, cluster_id: str) -> list[tuple[int, int]]
 
 def _clusters_mode(run: _Run) -> None:
     a = run.a
+    run.check_cds_ids()
     faa, genes, _ = run.translate("proteins", list(a.cds))
     run.outputs["genes"] = run.path("genes.tsv")
     order: dict[str, int] = {}
@@ -2212,6 +2636,11 @@ def _clusters_mode(run: _Run) -> None:
                        "aligner": tool, "msa_seconds": round(t_msa[0], 3), **detail})
     t = time.perf_counter()
     _count_pairs(run, run.outputs["dnds"], True)
+    if not run.counts.get("pairs", {}).get("total"):   # (deep test 2026-11-14, D06)
+        run.warn(f"no pairs: none of the {len(clusters):,} clusters has two usable members, so dnds.tsv has its "
+                 "header only" + ("" if a.clusters else ". DeepClust put every protein in a cluster of its own: "
+                                  "are the sequences related? --approx-id / --member-cover change what a cluster "
+                                  "is"))
     run.outputs["cluster_summary"] = run.path("cluster_summary.tsv")
     summarise(run.outputs["dnds"], plans, run.outputs["cluster_summary"])
     run.stages.append({"name": "cluster_summary", "seconds": round(time.perf_counter() - t, 3), "cached": False})
@@ -2420,7 +2849,7 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--gap-extend", type=float, default=None, metavar="X", help="cost of each further position")
     g.add_argument("--end-gaps", choices=("free", "penalized"), default=None, help="default free")
     g.add_argument("--max-cells", type=int, default=4_000_000_000, metavar="N",
-                   help="refuse a pair whose alignment table has more cells (default 4e9, about 2 GB)")
+                   help="refuse a pair whose alignment table has more cells (default 4e9)")
     g = common.add_argument_group("Running")
     g.add_argument("-j", "--jobs", type=int, default=0, metavar="N",
                    help="threads, and aligner processes at a time (default 0 = one per CPU this process may use; "
@@ -2462,7 +2891,12 @@ def build_parser() -> argparse.ArgumentParser:
                                    "file), a protein MSA per cluster, codon MSA, Ka/Ks for every pair of a cluster, "
                                    "and a per-cluster summary.")
     g = p.add_argument_group("Clusters")
-    g.add_argument("--cds", required=True, nargs="+", metavar="CDS.fasta", help="coding sequences (one or more files)")
+    g.add_argument("--cds", required=True, nargs="+", metavar="CDS.fasta",
+                   help="coding sequences (one or more files; an ID must not occur in two of them)")
+    g.add_argument("--prefix-ids", action="store_true",
+                   help="put each --cds file's name (without folder and suffix) and '|' before its IDs: S_cer.fa's "
+                        "g1.t1 becomes S_cer|g1.t1 in every output. For files whose IDs repeat across species "
+                        "(BRAKER / AUGUSTUS g1.t1), which are refused without it")
     g.add_argument("--clusters", metavar="TSV", help="take the clusters from this file (representative, member; as "
                                                      "`diamond deepclust` writes them) and skip DIAMOND")
     g.add_argument("--aligner", choices=("clustalo", "mafft"), default="clustalo",

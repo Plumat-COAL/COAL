@@ -143,8 +143,8 @@ def build_parser(batch: bool = False) -> argparse.ArgumentParser:
     # The help strings say "not in coal-cpp" because coal-cpp prints this same help and refuses the two options.
     bat = ap.add_argument_group("Batch")
     bat.add_argument("--batch", metavar="JOBS",
-                     help="run many small conversions in one process: one coal command line per line of JOBS "
-                          "(- = stdin), each with -o; the options given here are the defaults of every job "
+                     help="run many small conversions in one process: one coal command line per line of JOBS, "
+                          "without the program name (- = stdin), each with -o; the options given here are the defaults of every job "
                           "(not in coal-cpp)")
     bat.add_argument("--batch-out-dir", metavar="DIR",
                      help="with --batch: a job without -o writes DIR/<its protein file's name>.<fasta|aln|paml|codon>")
@@ -494,6 +494,29 @@ def _run_cpp_child(path: str, argv, tmp: str) -> int:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def mistyped_command(word: str) -> str:
+    """The command a first argument that is no file probably meant (`coal dnd x.fa`: dnds), or ''. One letter off
+    for names of up to 4 letters, two for longer ones; words of letters, '-' and '_' only. coal-cpp has the same
+    rule (main.cpp mistyped_command), so both engines give the same error."""
+    import re
+    if not re.fullmatch(r"[A-Za-z][A-Za-z_-]*", word or "") or os.path.exists(word):
+        return ""
+    low = word.lower()
+    best, best_d = "", 99
+    for name, _ in COMMANDS:
+        row = list(range(len(name) + 1))
+        for i in range(1, len(low) + 1):
+            diag, row[0] = row[0], i
+            for j in range(1, len(name) + 1):
+                up = row[j]
+                row[j] = min(row[j] + 1, row[j - 1] + 1, diag + (low[i - 1] != name[j - 1]))
+                diag = up
+        d = row[len(name)]
+        if word != name and d <= (1 if len(name) <= 4 else 2) and d < best_d:
+            best, best_d = name, d
+    return best
+
+
 def main(argv=None) -> int:
     command_line = argv is None  # only the command line may hand the run to coal-cpp
     argv = sys.argv[1:] if argv is None else list(argv)
@@ -519,6 +542,11 @@ def main(argv=None) -> int:
     if argv and argv[0] == "pipeline":  # CDS -> orthologs / clusters -> alignment -> codon alignment -> Ka/Ks
         from .dnds_pipeline import main as pipeline_main
         return pipeline_main(argv[1:])
+    guess = mistyped_command(argv[0]) if argv else ""
+    if guess:   # (deep test 2026-11-14, D06: `coal dnd x.fa` said only "cannot open 'dnd'")
+        print(f"coal: error: cannot open '{argv[0]}': no such file, and no command of that name (did you mean "
+              f"`coal {guess}`?)", file=sys.stderr)
+        return 1
     batch = wants_batch(argv)
     ap = build_parser(batch=batch)
     args = ap.parse_args(argv)

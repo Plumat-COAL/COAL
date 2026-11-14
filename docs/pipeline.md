@@ -128,11 +128,26 @@ codons and stops are those of the standard code (only start codons differ), so t
 
 - **The hint.** When at least two genes of an input set have two or more internal stop codons under the chosen
   code and none under another code COAL supports, the run prints one warning per set: how many of the genes with
-  internal stops are clean under which table (the first of 2, 4, 5, 11, ... that explains the most genes, and
-  which others do as well), three examples, and the recipe below. Only the flagged genes are read again, so a
-  set without them costs nothing. `report.json` has the same as `genetic_code_hints`. A gene with a single
-  internal TGA does not count: a selenoprotein gene would look "clean" under every code where TGA is Trp. The
-  hint is a hint: it does not change a row, and a set whose every gene is flagged simply needs another `-c`.
+  internal stops are clean under which code, what the choice rests on, three examples, and the recipe below.
+  `report.json` has the same as `genetic_code_hints` (`clean_under`, `candidates`, `evidence`). A gene with a
+  single internal TGA does not count: a selenoprotein gene would look "clean" under every code where TGA is Trp.
+  The hint is a hint: it does not change a row, and a set whose every gene is flagged simply needs another `-c`.
+- **How the code is chosen** (it used to be "the code that makes the most genes stop-free", which named code 14
+  for yeast mitochondria and for frameshifted pseudogenes and code 4 for human mitochondria). Only genes that
+  look complete count: not marked as pseudogenes (`[pseudo=true]`, a `*pseudogene` biotype), and with a length
+  that is a multiple of 3 or ends in the `T` / `TA` of an incomplete stop codon. When every header names its
+  molecule (NCBI `lcl|NC_..._cds_`, Ensembl `chromosome:GRCh38:MT:`), only genes on a molecule whose records are
+  at least half flagged count (the mitochondrial chromosome, not nuclear genes here and there). Of the codes under
+  which the genes are clean, the one wins whose extra stop codons or unused codons the genes avoid where the
+  set's other genes use them: AGA / AGG (stops in code 2) for vertebrate mitochondria, CGA / CGC (unused in code
+  3) for yeast mitochondria; then the one that reassigns no stop codon the genes do not need (code 14 also reads
+  TAA). When several codes are equally good, all are named and none is recommended: codes 4, 5, 9, 10, 13 and 21
+  all read TGA as Trp (or Cys) and differ only in codons whose meaning a DNA sequence does not show; start codons
+  that only some of them allow narrow the list (Drosophila mitochondria: 4 or 5). A code that reads TAA or TAG
+  as an amino acid is suggested only when at least half of the set has internal stops (the whole set's code,
+  e.g. ciliate nuclear genes). On real genomes: *S. cerevisiae*, *C. glabrata*, *K. lactis*, *A. gossypii* with
+  their mitochondrial genes: code 3; human and mouse Ensembl: code 2 (12 genes each); *D. melanogaster*: 4 or 5;
+  *E. coli*, *Y. pestis* (pseudogenes), *A. lyrata* and Ensembl mouse all-transcript files: no hint.
 - **The two-run recipe.** Take the organelle genes out of both CDS files and run them on their own:
 
   ```
@@ -202,6 +217,14 @@ coal pipeline clusters --cds all_cds.fa --clusters deepclust.tsv -o out --max-cl
   `--threads` / `-p`, `--quiet`, and `--approx-id`, `--member-cover`, `--mutual-cover`, `--evalue` when COAL's
   own option for it is given as well; in `--realign-args` `--db`, `--clusters`, `--out`, `--outfmt` / `-f` (the
   columns of `realign.tsv` are fixed), `--threads`, `--quiet`.
+- **Several `--cds` files are one set of genes**, so an ID must name one record across all of them. IDs that
+  occur in two files (BRAKER / AUGUSTUS `g1.t1`, `gene1` in every species) are refused before anything runs, with
+  both files and examples named: only the first file's record of such an ID could be used, and with every ID
+  repeated a whole species would be left out. `--prefix-ids` puts each file's name (without folder and FASTA /
+  gzip suffix) and `|` before its IDs instead: `S_cer.fa`'s `g1.t1` is `S_cer|g1.t1` in every output, the report's
+  `inputs` give each file's `id_prefix`, a `--clusters` file names the prefixed IDs, and a `--gene-map` may name
+  either (a gene ID is then a gene of its species: `S_cer|GENE1` and `C_gla|GENE1` are two genes). Two files with
+  the same name in different folders cannot be told apart this way and are refused with `--prefix-ids`.
 - **`--clusters TSV`** is DIAMOND's two-column table: representative, member, tab-separated, one line per member.
   A header line (`centroid member`, `representative member`, ...) and `#` lines are skipped. The cluster ID is the
   representative's ID. A member named in two clusters stays in its first one.
@@ -476,7 +499,9 @@ per byte: `gène` in Latin-1 is shown as `g\xe8ne`. Nothing is dropped or replac
 become the same text, and every output file is valid UTF-8 whatever the input was. The same rule is used by
 `coal-cpp translate` (the genes table) and by the Python layer (Python's `backslashreplace` error handler), so a
 gene has one name in all tables. Messages on the console follow the console: what it cannot show is escaped.
-Read the tables as UTF-8 (`encoding="utf-8"` in Python on Windows; `fileEncoding = "UTF-8"` in R).
+Every input (sequence files, `--pairs`, `--clusters`, `--gene-map`, `coal --batch` job files) may start with a
+UTF-8 byte order mark (Windows Notepad writes one), which is skipped, and may have `\n`, `\r\n` or classic Mac
+`\r` line ends, in every reader alike (`coal-cpp` and the Python layer). Read the tables as UTF-8 (`encoding="utf-8"` in Python on Windows; `fileEncoding = "UTF-8"` in R).
 
 ## Defaults, and why
 
@@ -502,7 +527,8 @@ short, for a pipeline table:
   below 30 to 40%. Reciprocal best hits are not always orthologs over their whole length, and cluster members
   need not be alignable at all.
 - **Saturation**: dS above about 2 (1 to be strict). `saturated` marks only the pairs without any value; a pair
-  with dS 4 and status `ok` is no better. Default DeepClust clusters hold many such pairs
+  with dS 4 and status `ok` is no better. When more than 30% of a run's pairs (of at least 20) are `saturated` or
+  `not_converged`, the run says so in one warning that points here (*S. cerevisiae* / *C. glabrata*: 86%). Default DeepClust clusters hold many such pairs
   ([above](#cluster-mode-input-order-and-what-a-default-cluster-is)).
 - **Tiny dS**: dN/dS is a ratio, and with dS near 0 (very close sequences) it is unstable and often large for no
   biological reason; `dNdS` is `NA` only when dS is below 1e-6.
@@ -758,8 +784,9 @@ machine is still to be done.
   size. Lower `--max-cluster-size`, or use `--aligner mafft`, for inputs with many clusters of hundreds of members.
 - **Large clusters are aligned pairwise**, so their values come from pairwise alignments and those of smaller
   clusters from an MSA. The summary says which (`aligner`).
-- **Pair alignment memory** is cells / 2 bytes per thread (`--max-cells`, default 4·10⁹ cells): a titin-sized pair
-  needs about 600 MB. Above the limit that pair gets status `error`.
+- **Pair alignment memory** is cells / 2 bytes per thread up to 256 MiB; a larger pair is aligned with
+  checkpoints in about that much (the same alignment, its forward pass run twice): a titin-sized pair needs about
+  130 MB instead of 630 MB. Above `--max-cells` (default 4·10⁹ cells) that pair gets status `error`.
 - **`--aligner diamond` uses one HSP** and DIAMOND's heuristic alignment ([alignment.md](alignment.md)); a hit that
   does not fit the translated sequences is that pair's error.
 - **Best hits are DIAMOND's first target per query** (`--max-target-seqs 1`). Ties are broken by DIAMOND

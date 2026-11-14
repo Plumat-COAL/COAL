@@ -1256,7 +1256,9 @@ class Encoding(PipelineCase):
                     if "b" in mode:
                         continue
                     self.assertIn("encoding", kw, where)
-                    self.assertEqual(kw["encoding"].value, "utf-8", where)
+                    # (an input table may start with a byte order mark: utf-8-sig skips it; deep test D03)
+                    self.assertIn(kw["encoding"].value, ("utf-8",) if "w" in mode or "a" in mode
+                                  else ("utf-8", "utf-8-sig"), where)
                     self.assertEqual(getattr(kw.get("errors"), "value", None), "backslashreplace", where)
                     if "w" in mode or "a" in mode:
                         self.assertEqual(getattr(kw.get("newline"), "value", None), "\n", where)
