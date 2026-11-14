@@ -409,11 +409,15 @@ Result run_comeron(const Prepared& p, const GeneticCode& code, const Options& op
 
     // Comeron95::omega
     bool saturated_s = false, saturated_a = false;  // a logarithm with an argument <= 0
+    // In the coal flavour an argument at or below tol counts as 0 (kaks.cpp, LOG_ARG_TOL: a residue of 1e-16
+    // where the argument is 0 in exact arithmetic gave dS 19 with status ok, fuzz finding K03); the gestimator
+    // flavour keeps upstream's exact test and so its numbers.
+    const double tol = legacy ? 0.0 : 1e-10;
     // upstream: log(x), and 0 when the result is not finite (NaN argument from 0/0: no site of the class; an
     // argument <= 0: more differences than the correction allows)
-    auto checked_log = [](double x, bool& flag) {
+    auto checked_log = [tol](double x, bool& flag) {
         if (x != x) return 0.0;
-        if (x <= 0.0) {
+        if (x <= tol) {
             flag = true;
             return 0.0;
         }
@@ -425,12 +429,12 @@ Result run_comeron(const Prepared& p, const GeneticCode& code, const Options& op
     double Qs = (q2V + q4) / (L2V + L4);
     if (!std::isfinite(Qs)) Qs = 0.0;
     double Bs = (-0.5) * std::log(1.0 - (2.0 * Qs));
-    if (1.0 - (2.0 * Qs) <= 0.0) saturated_s = true;  // Bs is then inf or NaN: upstream prints 999 for dS
+    if (1.0 - (2.0 * Qs) <= tol) saturated_s = true;  // Bs is then inf or NaN: upstream prints 999 for dS
     double Qa = (q0 + q2S) / (L0 + L2S);
     if (!std::isfinite(Qa)) Qa = 0.0;
     double Ba = (-0.5) * std::log(1.0 - (2.0 * Qa));
     bool ba_kimura_rule = false;
-    if (!std::isfinite(Ba)) {
+    if (!std::isfinite(Ba) || 1.0 - (2.0 * Qa) <= tol) {
         saturated_a = true;  // 1 - 2 Qa <= 0
         if (legacy) {
             // upstream's ad-hoc rule: "if sites aren't saturated in general (i.e. Kimura's distance < 1.0) [...]
