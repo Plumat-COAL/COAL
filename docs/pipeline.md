@@ -412,8 +412,8 @@ the two protein-alignment columns and what it knows about each CDS.
 | `dN_median`, `dN_mean`, `dN_q25`, `dN_q75`, `dN_min`, `dN_max` | over the `n_ok` pairs |
 | `dS_...`, `dNdS_...` | the same six for dS and dN/dS |
 | `n_dNdS` | how many dN/dS values the `dNdS_` columns are over (dN/dS is `NA` when dS is 0) |
-| `status` | `ok`; `failed` (pairs, but none with an estimate); `skipped` |
-| `note` | members left out, the size cap, an MSA that failed |
+| `status` | `ok` (a pair has an estimate); pairs, but none with an estimate: `saturated` (some saturated), else `no_data`, else `not_converged`, and `failed` when a pair failed (`n_failed` > 0); `skipped`. The rule of orthologr's `dNdS_clusters()` |
+| `note` | members left out, the size cap, an MSA that failed; for a cluster without an estimate and no other note, what its pairs are (`no pair has an estimate (3 pairs: 2 saturated, 1 not converged)`) |
 
 Quartiles are interpolated linearly between order statistics (R's type 7, numpy's default).
 

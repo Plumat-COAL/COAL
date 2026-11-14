@@ -3085,12 +3085,30 @@ def summarise(dnds_path: str, plans: list[dict], out_path: str) -> None:
                 continue
             for m in (x for x in METHODS if x in acc):
                 d = acc[m]
-                status = "ok" if d["ok"] else "failed"
+                status, note = _cluster_status(d["n"], d["ok"], d["saturated"], d["no_data"], d["not_converged"],
+                                               d["error"], p.get("note", ""))
                 out.write("\t".join(lead + [m, p["pair_selection"], p["aligner"], str(d["n"]), str(d["ok"]),
                                             str(d["not_converged"]), str(d["saturated"]), str(d["no_data"]),
                                             str(d["error"])]
                                     + _stats(d["v"][0]) + _stats(d["v"][1]) + _stats(d["v"][2])
-                                    + [str(len(d["v"][2])), status, p.get("note", "")]) + "\n")
+                                    + [str(len(d["v"][2])), status, note]) + "\n")
+
+
+def _cluster_status(n: int, ok: int, saturated: int, no_data: int, not_converged: int, error: int,
+                    note: str) -> tuple[str, str]:
+    """A cluster's status for one method, and its note: ok when a pair has an estimate; without one, the pairs'
+    status (saturated, else no_data, else not_converged) unless a pair failed (failed), with a note that counts
+    them when there is no other note. The rule of orthologr's dNdS_clusters() / dNdS_orthogroups()
+    (integration pass 2026-11-14, C06: such clusters were all "failed")."""
+    if ok or not n:
+        return "ok", note
+    status = "failed" if error else ("saturated" if saturated else "no_data" if no_data else "not_converged")
+    if not note:
+        parts = ([f"{saturated} saturated"] if saturated else []) + \
+                ([f"{no_data} without codons to compare"] if no_data else []) + \
+                ([f"{not_converged} not converged"] if not_converged else []) + ([f"{error} failed"] if error else [])
+        note = f"no pair has an estimate ({n} pair{'s' if n != 1 else ''}: {', '.join(parts)})"
+    return status, note
 
 
 # ------------------------------------------------------------------------------------------------ low level

@@ -380,3 +380,34 @@ class C03Pipeline(PipelineCase):
         self.assertEqual(len(line), 1, err.getvalue())
         self.assertIn("; LWL ", line[0])
         self.assertIn("; YN ", line[0])
+
+
+class C06ClusterStatus(unittest.TestCase):
+    def test_status_and_note(self):
+        import csv
+        import tempfile
+        head = "cluster_id\tseq1\tseq2\tmethod\tdN\tdS\tdNdS\tstatus\tnote\n"
+        rows = [("c1", "a", "b", "YN", "0.5", "NA", "NA", "saturated"), ("c1", "a", "c", "YN", "NA", "NA", "NA",
+                                                                          "not_converged"),
+                ("c2", "d", "e", "YN", "NA", "NA", "NA", "not_converged"),
+                ("c3", "f", "g", "YN", "NA", "NA", "NA", "no_data"),
+                ("c4", "h", "i", "YN", "NA", "NA", "NA", "error"), ("c4", "h", "j", "YN", "0.5", "NA", "NA",
+                                                                     "saturated"),
+                ("c5", "k", "l", "YN", "0.1", "0.2", "0.5", "ok"), ("c5", "k", "m", "YN", "0.5", "NA", "NA",
+                                                                    "saturated"),
+                ("c6", "n", "o", "YN", "0.5", "NA", "NA", "saturated")]
+        plans = [{"cluster_id": c, "representative": c, "n_members": 3, "n_used": 3, "pair_selection": "all",
+                  "aligner": "nw", "note": "an MSA note" if c == "c6" else ""} for c in ("c1", "c2", "c3", "c4", "c5",
+                                                                                         "c6")]
+        with tempfile.TemporaryDirectory() as td:
+            d, o = Path(td) / "dnds.tsv", Path(td) / "summary.tsv"
+            d.write_text(head + "".join("\t".join(r) + "\t\n" for r in rows), encoding="utf-8")
+            P.summarise(str(d), plans, str(o))
+            with open(o, encoding="utf-8") as fh:
+                got = {r["cluster_id"]: (r["status"], r["note"]) for r in csv.DictReader(fh, delimiter="\t")}
+        self.assertEqual(got["c1"], ("saturated", "no pair has an estimate (2 pairs: 1 saturated, 1 not converged)"))
+        self.assertEqual(got["c2"], ("not_converged", "no pair has an estimate (1 pair: 1 not converged)"))
+        self.assertEqual(got["c3"], ("no_data", "no pair has an estimate (1 pair: 1 without codons to compare)"))
+        self.assertEqual(got["c4"], ("failed", "no pair has an estimate (2 pairs: 1 saturated, 1 failed)"))
+        self.assertEqual(got["c5"], ("ok", ""))
+        self.assertEqual(got["c6"], ("saturated", "an MSA note"))
