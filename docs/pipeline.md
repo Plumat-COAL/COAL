@@ -41,9 +41,13 @@ coal pipeline pairs --query q_cds.fa --subject s_cds.fa -o out --longest-isoform
 coal pipeline pairs --query q_cds.fa --subject s_cds.fa -o out --longest-isoform --gene-map genes.tsv
 ```
 
-- **A warning by default.** When the records of a file look like several transcripts per gene, the run prints
-  one warning with the counts (`query: 36,827 records of 3,734 genes, ...`), an example and where the genes were
-  read from, and goes on as before: nothing else changes without the options below.
+- **A warning by default.** When a file has several CDS records per gene, the run prints one warning with the
+  counts (`the input has several CDS records per gene (isoforms or alternative start sites; query: 36,827 records
+  of 3,734 genes, ...`), an example and where the genes were read from, and goes on as before: nothing else
+  changes without the options below. The records of one gene need not be transcripts: NCBI annotates some
+  bacterial genes with two or three CDS of one locus tag that differ in their start site (*E. coli*'s *mrcB*,
+  PBP1B alpha and gamma; *infB*, three forms of IF2), and the warning counts those too. `--longest-isoform` then
+  keeps the longest form, which is what the advice means there as well.
 - **Where the gene of a record comes from.** (1) `--gene-map TSV`: record ID and gene ID, tab-separated (a header
   line and `#` lines are skipped; one map serves all input files). The map wins for every record it names. A
   record it does not name falls back to (2) and (3), read for its file as without a map, so a map for one
@@ -542,7 +546,7 @@ with `--pairs`, only the lines that pair a gene with itself are counted), or a `
 of the smaller file with the same ID and the same sequence in both, whatever the line wrapping and case: a
 re-wrapped copy, or one with a record more), a cached MAFFT or Clustal Omega that is
 not the pinned version, a `-j` above the number of CPUs, an old DIAMOND, a `--pairs` / `--clusters` file whose IDs are not those of the
-sequences, input that looks like several transcripts per gene, and the counts of the `--min-codons` / `--max-ds`
+sequences, input with several CDS records per gene, and the counts of the `--min-codons` / `--max-ds`
 flags.
 
 **IDs that match nothing.** When 90% or more of the IDs of a `--pairs` or `--clusters` file are not records of
@@ -880,7 +884,7 @@ machine is still to be done.
   file is recognised only when it leaves no usable gene (see "Inputs that cannot work"); a file that mixes CDS and
   protein records runs, with the protein records listed as failed genes.
 - **Python holds every ID** (and a byte offset per record), so memory grows with the number of sequences, not
-  with their length. The check for several transcripts per gene reads every FASTA header once more and holds the
+  with their length. The check for several CDS records per gene reads every FASTA header once more and holds the
   header lines while it looks at them.
 - **Tools in COAL's cache are used only with their checksum record.** A DIAMOND, Clustal Omega or MAFFT that an
   earlier COAL (0.5.0 or before) installed into the cache has no `<binary>.coal-manifest.json` and is not used:

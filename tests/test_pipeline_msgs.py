@@ -172,5 +172,62 @@ class MsaClusterOrder(PipelineCase):
         self.assertEqual({k: v for k, v in rv.items() if k[1] == "YN"}, {k: v for k, v in pv.items() if k[1] == "YN"})
 
 
+def run_quiet_err(fn, *args, **kw):
+    err = io.StringIO()
+    with redirect_stderr(err):
+        res = fn(*args, **kw)
+    return res, err.getvalue()
+
+
+@needs_cpp
+class AlternativeStarts(PipelineCase):
+    """NCBI's bacterial CDS files have genes with two or three CDS records of one locus tag that differ in their start
+    (E. coli mrcB, infB): the warning names them as well as isoforms."""
+
+    def files(self):
+        rng = random.Random(5)
+        a, b = family(rng, 2)
+        c, d = family(rng, 2)
+        q = self.tmp / "ecoli.fna"
+        # mrcB: the long form and a form that starts 20 codons later (same stop)
+        q.write_text(f">lcl|NC_1_cds_NP_1.1_1 [gene=mrcB] [locus_tag=b0149]\n{a}\n"
+                     f">lcl|NC_1_cds_YP_2.1_2 [gene=mrcB] [locus_tag=b0149]\nATG{a[63:]}\n"
+                     f">lcl|NC_1_cds_NP_3.1_3 [gene=other] [locus_tag=b0150]\n{c}\n", encoding="utf-8")
+        s = self.tmp / "salm.fna"
+        s.write_text(f">lcl|NC_2_cds_NP_9.1_1 [gene=mrcB] [locus_tag=STM0211]\n{b}\n"
+                     f">lcl|NC_2_cds_NP_8.1_2 [gene=other] [locus_tag=STM0212]\n{d}\n", encoding="utf-8")
+        return q, s
+
+    def test_pairs_warning(self):
+        q, s = self.files()
+        pf = self.pairs_file([("lcl|NC_1_cds_NP_1.1_1", "lcl|NC_2_cds_NP_9.1_1"),
+                              ("lcl|NC_1_cds_NP_3.1_3", "lcl|NC_2_cds_NP_8.1_2")])
+        res, err = run_quiet_err(P.run_pairs, q, s, self.tmp / "o", pairs=pf, jobs=1)
+        self.assertEqual(res.exit_code, 0, err)
+        w = [ln for ln in err.splitlines() if "warning:" in ln]
+        self.assertEqual(len(w), 1, err)
+        self.assertIn("the input has several CDS records per gene (isoforms or alternative start sites; query: 3 "
+                      "records of 2 genes, 1 gene with several records (e.g. b0149: ", w[0])
+        self.assertIn("such a gene is compared once per record, and its reciprocal best hits are split between its "
+                      "records. Use --longest-isoform", w[0])
+        self.assertNotIn("transcript", w[0])
+        # --longest-isoform keeps the long form
+        res, err = run_quiet_err(P.run_pairs, q, s, self.tmp / "o2", pairs=pf, jobs=1, longest_isoform=True)
+        self.assertEqual(res.exit_code, 0, err)
+        genes = {r["id"]: r["status"] for r in rows(res.outputs["genes"])}
+        self.assertEqual(genes["lcl|NC_1_cds_YP_2.1_2"], "dropped")
+        self.assertEqual(genes["lcl|NC_1_cds_NP_1.1_1"], "ok")
+
+    def test_clusters_warning_has_no_best_hits(self):
+        q, s = self.files()
+        cl = self.tmp / "cl.tsv"
+        cl.write_text("lcl|NC_1_cds_NP_1.1_1\tlcl|NC_1_cds_NP_1.1_1\nlcl|NC_1_cds_NP_1.1_1\tlcl|NC_2_cds_NP_9.1_1\n",
+                      encoding="utf-8")
+        res, err = run_quiet_err(P.run_clusters, [q, s], self.tmp / "c", clusters=cl, jobs=1)
+        w = [ln for ln in err.splitlines() if "several CDS records" in ln]
+        self.assertEqual(len(w), 1, err)
+        self.assertIn("such a gene is compared once per record. Use --longest-isoform", w[0])
+
+
 if __name__ == "__main__":
     unittest.main()

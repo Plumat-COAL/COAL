@@ -2079,7 +2079,7 @@ class _Run:
         return "--gene-map" + (f", and {fb} for the records it does not name" if fb else "")
 
     def isoform_warning(self) -> None:
-        """One line for the run: input that looks like several transcripts per gene (and nothing done about it),
+        """One line for the run: input with several CDS records per gene (and nothing done about it),
         or what --longest-isoform did."""
         a = self.a
         self.check_gene_map()
@@ -2141,13 +2141,17 @@ class _Run:
         for n, r in multi.items():
             ex = r.get("example")
             parts.append(f"{n}: {r['records']:,} records of {r['genes']:,} genes, "
-                         f"{r['genes_with_several_records']:,} genes with several records"
+                         f"{r['genes_with_several_records']:,} gene"
+                         f"{'' if r['genes_with_several_records'] == 1 else 's'} with several records"
                          + (f" (e.g. {ex['gene']}: {', '.join(ex['records'])})" if ex else "")
                          + f", read from the {self._source_text(r)}")
-        self.warn("the input looks like several transcripts per gene (" + "; ".join(parts) + "). The pipeline "
-                  "treats each record as a gene: such a gene is compared once per transcript, and reciprocal best "
-                  "hits are split between its transcripts. Use --longest-isoform to keep the longest CDS of each "
-                  "gene (with --gene-map TSV if the genes are not in the headers), or give one sequence per gene")
+        # (isoforms of eukaryotic genes, or alternative start sites: NCBI annotates some bacterial genes, E. coli
+        # mrcB and infB, with two or three CDS records of one locus tag; tutorial 2)
+        split = (", and its reciprocal best hits are split between its records" if self.mode == "pairs" else "")
+        self.warn("the input has several CDS records per gene (isoforms or alternative start sites; "
+                  + "; ".join(parts) + "). The pipeline treats each record as a gene: such a gene is compared "
+                  f"once per record{split}. Use --longest-isoform to keep the longest CDS of each gene (with "
+                  "--gene-map TSV if the genes are not in the headers), or give one sequence per gene")
 
     def kept_proteins(self, faa: str, dropped: dict, name: str) -> str:
         """The protein file without the dropped records (what DIAMOND gets); faa itself when nothing is dropped.
@@ -3222,7 +3226,8 @@ def build_parser() -> argparse.ArgumentParser:
                         "records why a larger one was skipped; always; never")
     g.add_argument("--digits", type=int, default=8, metavar="N", help="significant digits (default 8)")
     g.add_argument("-q", "--quiet", action="store_true", help="no progress or summary on stderr")
-    g = common.add_argument_group("Genes with several transcripts (every FASTA record is treated as a gene)")
+    g = common.add_argument_group("Genes with several CDS records: isoforms, alternative starts (every FASTA record is "
+                                  "treated as a gene)")
     g.add_argument("--longest-isoform", action="store_true",
                    help="keep one record per gene, the longest CDS (ties: the ID that sorts first); the others are "
                         "listed in DIR/genes.tsv with status dropped. The gene of a record comes from --gene-map, "
@@ -3231,7 +3236,7 @@ def build_parser() -> argparse.ArgumentParser:
                         "_i1, -RA, -mRNA-1, _T001; docs/pipeline.md lists the styles)")
     g.add_argument("--gene-map", metavar="TSV",
                    help="record ID and gene ID, tab-separated, for --longest-isoform (and for the warning about "
-                        "several transcripts per gene). It wins for the records it names; the genes of the others "
+                        "several CDS records per gene). It wins for the records it names; the genes of the others "
                         "are read from their headers or IDs as without it. A map that names no record of the "
                         "input, or gives a record two genes, is an error")
     g.add_argument("--isoform-rule", choices=("auto", "suffix", "map"), default="auto",
