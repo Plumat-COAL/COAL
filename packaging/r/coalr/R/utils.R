@@ -164,6 +164,13 @@ align_params <- function(matrix, gap_open, gap_extend, end_gaps, max_cells, pres
   if (!is.character(matrix) || length(matrix) != 1L || is.na(matrix)) {
     stop("`matrix` must be one of ", paste(coalr_info()$matrices, collapse = ", "), call. = FALSE)
   }
+  # preset "pwalign": pwalign's copy of the matrix named ("BLOSUM45" -> "BLOSUM45-PWALIGN"; PAM250 is the same in
+  # pwalign, so it stays), as `coal pipeline --preset pwalign --matrix` and AlignParams::pwalign(matrix)
+  # (cpp/src/align.hpp pwalign_matrix_name). A *-PWALIGN name is used as given.
+  if (identical(preset, "pwalign")) {
+    m <- toupper(matrix)
+    matrix <- if (paste0(m, "-PWALIGN") %in% coalr_info()$matrices) paste0(m, "-PWALIGN") else m
+  }
   for (v in list(gap_open, gap_extend, max_cells)) {
     if (!is.numeric(v) || length(v) != 1L || is.na(v)) {
       stop("`gap_open`, `gap_extend` and `max_cells` must be single numbers", call. = FALSE)
