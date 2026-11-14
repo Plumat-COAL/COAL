@@ -1,0 +1,413 @@
+# Release smoke test: install the files of a release.yml run as a user would, on Linux (x86_64, aarch64), macOS and
+# Windows with the oldest and newest supported Python, and run them. Nothing here publishes: it only downloads the
+# workflow artifacts of that run (dist-python, dist-wheel-<tag>, dist-windows), so it works on a dry run
+# (release.yml dispatched with publish off) before anything is tagged.
+#
+#   gh workflow run release-smoke.yml -f run-id=<database id of a release.yml run>
+#
+# files:   the release job's own two checks (SHA256SUMS.txt, the exact list of files) on the merged artifacts, read
+#          from release.yml at the commit of that run, plus the wheels' tags and contents and the sdists' contents;
+# smoke:   no checkout (the source tree is never on the path); three fresh venvs (the platform wheel, the pure wheel,
+#          the version-free sdist coal_src.tar.gz) each run `coal --version`, codon alignments of the sdist's
+#          examples (Python and C++ engines byte-identical), `coal cite`, `coal pipeline pairs --help`; the platform
+#          wheel also `coal dnds` and `coal pipeline pairs --pairs` (no DIAMOND), whose codon alignments must equal
+#          examples/dnds/codon.fasta; the others must say that coal-cpp is missing;
+# compare: every output is byte-identical across operating systems, Pythons and install kinds;
+# windows-app: the portable zip and a silent per-user install of the installer run the frozen engine (also Ka/Ks
+#          through the bundled coal-cpp), then a silent uninstall removes it.
+name: Release smoke test
+
+on:
+  workflow_dispatch:
+    inputs:
+      run-id:
+        description: "Database id of the release.yml run whose artifacts to test (gh run list -w release.yml)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read   # download the artifacts of another workflow run
+
+concurrency:
+  group: release-smoke-${{ inputs.run-id || github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUN_ID: ${{ inputs.run-id }}
+
+jobs:
+  files:
+    name: Release files, checksums, wheel tags and sdist contents
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: The commit of that release.yml run
+        id: run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" \
+            --jq '"sha=\(.head_sha)\nworkflow=\(.path)\nconclusion=\(.conclusion)"' | tee -a "$GITHUB_OUTPUT"
+          grep -q '^workflow=.github/workflows/release.yml' "$GITHUB_OUTPUT" || { echo "::error::run $RUN_ID is not a release.yml run"; exit 1; }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ steps.run.outputs.sha }}
+          persist-credentials: false
+          path: src
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          pattern: dist-*
+          merge-multiple: true
+          path: release
+          run-id: ${{ env.RUN_ID }}
+          github-token: ${{ github.token }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: The release job's checks (SHA256SUMS.txt, the file list), from release.yml at that commit
+        run: |
+          python -m pip install pyyaml==6.0.2
+          V=$(cd release && ls coal_align-*-py3-none-any.whl | sed -E 's/^coal_align-(.+)-py3-none-any\.whl$/\1/')
+          echo "version: $V"; echo "V=$V" >> "$GITHUB_ENV"; export V
+          python -I - src/.github/workflows/release.yml "$RUNNER_TEMP" <<'PY'
+          import sys, yaml
+          steps = {s.get("name"): s for s in yaml.safe_load(open(sys.argv[1]))["jobs"]["release"]["steps"]}
+          for key, name in (("sums", "SHA-256 of every file"), ("names", "Check the release files")):
+              open(f"{sys.argv[2]}/{key}.sh", "w").write(steps[name]["run"])
+          PY
+          (cd release && bash -e "$RUNNER_TEMP/sums.sh")
+          bash -e "$RUNNER_TEMP/names.sh"
+          echo "SHA256SUMS.txt verifies and the files are exactly the release job's list"
+      - name: Wheel tags and contents, sdist contents
+        run: |
+          python -I - release "$V" <<'PY'
+          import os, re, sys, tarfile, zipfile
+          rel, v = sys.argv[1], sys.argv[2]
+          bad = []
+          for f in sorted(os.listdir(rel)):
+              p = os.path.join(rel, f)
+              if f.endswith(".whl"):
+                  m = re.fullmatch(r"(coal_align(?:_app)?)-(.+)-py3-none-(.+)\.whl", f)
+                  if not m or m.group(2) != v:
+                      bad.append(f"{f}: not <name>-{v}-py3-none-<platform>.whl"); continue
+                  dist, plat = m.group(1), m.group(3)
+                  with zipfile.ZipFile(p) as z:
+                      names = z.namelist()
+                      wheel = z.read(f"{dist}-{v}.dist-info/WHEEL").decode()
+                      meta = z.read(f"{dist}-{v}.dist-info/METADATA").decode()
+                      tags = re.findall(r"(?m)^Tag: (\S+)$", wheel)
+                      if tags != [f"py3-none-{plat}"]:
+                          bad.append(f"{f}: WHEEL tags {tags}")
+                      purelib = re.search(r"(?m)^Root-Is-Purelib: (\S+)$", wheel).group(1)
+                      if purelib != ("true" if plat == "any" else "false"):
+                          bad.append(f"{f}: Root-Is-Purelib {purelib}")
+                      if "License-Expression: GPL-3.0-only" not in meta:
+                          bad.append(f"{f}: no License-Expression GPL-3.0-only")
+                      for lic in ("LICENSE", "NOTICE"):
+                          if f"{dist}-{v}.dist-info/licenses/{lic}" not in names:
+                              bad.append(f"{f}: no {lic} in dist-info/licenses")
+                      bins = sorted(n for n in names if n.startswith("coal/bin/"))
+                      exe = ".exe" if plat == "win_amd64" else ""
+                      want = [] if plat == "any" else sorted([f"coal/bin/coal-cpp{exe}", f"coal/bin/coal-cpp-align{exe}"])
+                      if dist == "coal_align" and [b for b in bins if not b.endswith("__init__.py")] != want:
+                          bad.append(f"{f}: coal/bin is {bins}, expected {want}")
+                      if dist == "coal_align" and any(n.startswith("coal_app/") for n in names):
+                          bad.append(f"{f}: has coal_app")
+                      junk = [n for n in names if re.search(r"(__pycache__|\.pyc$|(^|/)tests?/|\.DS_Store)", n)]
+                      if junk:
+                          bad.append(f"{f}: junk {junk[:5]}")
+                      for n in names:
+                          if n.startswith("coal/bin/coal-cpp") and exe == "":
+                              mode = z.getinfo(n).external_attr >> 16
+                              if not mode & 0o111:
+                                  bad.append(f"{f}: {n} is not executable ({oct(mode)})")
+                  print(f"{f}: {wheel.count('Tag:')} tag py3-none-{plat}, {len(names)} files, coal/bin {bins}")
+              elif f.endswith(".tar.gz"):
+                  with tarfile.open(p) as t:
+                      names = t.getnames()
+                  top = names[0].split("/")[0]
+                  rels = {n.split("/", 1)[1] for n in names if "/" in n}
+                  for need in ("LICENSE", "NOTICE", "PKG-INFO", "pyproject.toml"):
+                      if need not in rels:
+                          bad.append(f"{f}: no {need}")
+                  junk = sorted(n for n in rels if re.search(r"(^|/)(__pycache__|\.git|\.github|tests|build|dist|"
+                                                                    r"\.venv|node_modules|\.pytest_cache)(/|$)|\.pyc$|"
+                                                                    r"\.DS_Store$|\.egg-info/.*\.orig$", n))
+                  if junk:
+                      bad.append(f"{f}: junk {junk[:8]}")
+                  if top.startswith("coal_align-") and not {"examples/clean/dna.fasta", "examples/dnds/codon.fasta"} <= rels:
+                      bad.append(f"{f}: no examples")
+                  print(f"{f}: {top}/, {len(names)} entries")
+          for b in bad:
+              print(f"::error::{b}")
+          sys.exit(1 if bad else 0)
+          PY
+
+  smoke:
+    name: Install and run (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.13"]
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            tag: manylinux_2_28_x86_64
+          - os: ubuntu-24.04-arm
+            tag: manylinux_2_28_aarch64
+          - os: macos-latest
+            tag: macosx_11_0_universal2
+          - os: windows-latest
+            tag: win_amd64
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: dist-python
+          path: art
+          run-id: ${{ env.RUN_ID }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: dist-wheel-${{ matrix.tag }}
+          path: art
+          run-id: ${{ env.RUN_ID }}
+          github-token: ${{ github.token }}
+      - name: Platform wheel, pure wheel and sdist, each in a fresh venv
+        env:
+          TAG_NAME: ${{ matrix.tag }}
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
+        run: |
+          set -euo pipefail
+          # bash paths on Windows too (RUNNER_TEMP is D:\a\_temp there, which tar reads as host "D")
+          tmp=$RUNNER_TEMP; if command -v cygpath > /dev/null; then tmp=$(cygpath -u "$tmp"); fi
+          art="$PWD/art"; W="$tmp/smoke"; OUT="$PWD/out"; mkdir -p "$W" "$OUT"
+          V=$(cd art && ls coal_align-*-py3-none-any.whl | sed -E 's/^coal_align-(.+)-py3-none-any\.whl$/\1/')
+          echo "version $V, $(python --version), $TAG_NAME"
+          tar -xzf "art/coal_align-$V.tar.gz" -C "$W"
+          EX="$W/coal_align-$V/examples"
+          fail() { echo "::error::$kind: $*"; exit 1; }
+          smoke() {
+            kind=$1; pkg=$2; d="$W/$kind"; o="$OUT/$kind"; mkdir -p "$d" "$o"
+            python -m venv "$d/venv"
+            if [ -d "$d/venv/Scripts" ]; then b="$d/venv/Scripts"; else b="$d/venv/bin"; fi
+            "$b/python" -m pip install -q --no-cache-dir "$pkg"
+            cd "$d"   # not the source tree, not the artifacts
+            test "$("$b/coal" --version)" = "coal $V" || fail "coal --version: $("$b/coal" --version)"
+            test "$("$b/python" -c 'import coal; print(coal.__version__)')" = "$V" || fail "coal.__version__"
+            # the examples the wheel installs under <prefix>/share/coal/examples are the sdist's
+            for f in clean/dna.fasta clean/protein.aln.fasta mito/dna.fasta dnds/codon.fasta; do
+              cmp "$d/venv/share/coal/examples/$f" "$EX/$f" || fail "installed examples/$f differs from the sdist's"
+            done
+            "$b/coal" -q "$EX/clean/protein.aln.fasta" "$EX/clean/dna.fasta" -o "$o/clean.fasta"
+            "$b/coal" -q "$EX/mito/protein.aln.fasta" "$EX/mito/dna.fasta" -codontable 2 -o "$o/mito.fasta"
+            "$b/coal" -q "$EX/clean/protein.aln.fasta" "$EX/clean/dna.fasta" -output paml -o "$o/clean.paml"
+            COAL_ENGINE=python "$b/coal" -q "$EX/clean/protein.aln.fasta" "$EX/clean/dna.fasta" -o "$d/py.fasta"
+            cmp "$d/py.fasta" "$o/clean.fasta" || fail "the Python engine's alignment differs"
+            "$b/pal2nal" "$EX/clean/protein.aln.fasta" "$EX/clean/dna.fasta" -output fasta > "$o/pal2nal_clean.fasta"
+            "$b/coal" cite > "$o/cite.txt"
+            grep -q "doi.org" "$o/cite.txt" || fail "coal cite printed no DOI"
+            "$b/coal" pipeline pairs --help > "$d/pipeline_help.txt" || fail "coal pipeline pairs --help"
+            grep -q -- "--query" "$d/pipeline_help.txt" || fail "coal pipeline pairs --help has no --query"
+            if [ "$kind" = platform ]; then
+              cpp=$("$b/coal" --cpp-path) || fail "coal --cpp-path: no bundled coal-cpp"
+              case "$cpp" in *site-packages*coal*bin*coal-cpp*) ;; *) fail "coal --cpp-path is $cpp";; esac
+              COAL_ENGINE=cpp "$b/coal" -q "$EX/clean/protein.aln.fasta" "$EX/clean/dna.fasta" -o "$d/cpp.fasta"
+              cmp "$d/cpp.fasta" "$o/clean.fasta" || fail "coal-cpp's alignment differs from the Python engine's"
+              "$b/coal" dnds "$EX/dnds/codon.fasta" --pairs consecutive -q -o "$o/dnds.tsv"
+              st=$(awk -F '\t' 'NR == 1 {for (i = 1; i <= NF; i++) if ($i == "status") c = i; next} {print $c}' "$o/dnds.tsv" | sort | uniq -c | tr -s ' ')
+              test "$st" = " 12 ok" || fail "coal dnds statuses: $st"
+              "$b/coal" pipeline pairs --query "$EX/dnds/species_a_cds.fasta" --subject "$EX/dnds/species_b_cds.fasta" \
+                --pairs "$EX/dnds/orthologs.tsv" -o "$d/pipe" --keep-alignments
+              cmp "$d/pipe/codon_alignments.fasta" "$EX/dnds/codon.fasta" || fail "pipeline codon alignments differ from examples/dnds/codon.fasta"
+              cp "$d/pipe/dnds.tsv" "$o/pipeline_dnds.tsv"
+              "$b/coal" cite "$d/pipe/report.json" > "$o/cite_pipeline.txt" || fail "coal cite report.json"
+            else
+              if "$b/coal" --cpp-path > /dev/null 2>&1; then fail "coal --cpp-path found a coal-cpp in a $kind install"; fi
+              if "$b/coal" dnds "$EX/dnds/codon.fasta" --pairs consecutive -o "$d/dnds.tsv" 2> "$d/dnds.err"; then
+                fail "coal dnds ran without coal-cpp"
+              fi
+              grep -q "needs coal-cpp" "$d/dnds.err" || fail "coal dnds without coal-cpp: $(cat "$d/dnds.err")"
+            fi
+            echo "$kind: ok"
+            cd - > /dev/null
+          }
+          smoke platform "$art/coal_align-$V-py3-none-$TAG_NAME.whl"
+          smoke pure "$art/coal_align-$V-py3-none-any.whl"
+          src="$art/coal_src.tar.gz"; if command -v cygpath > /dev/null; then src=$(cygpath -w "$src"); fi
+          smoke sdist "coal-align @ $(python -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).as_uri())' "$src")"
+          # the app wheel on top of the platform wheel: it finds the engine and the examples
+          "$W/platform/venv/$( [ -d "$W/platform/venv/Scripts" ] && echo Scripts || echo bin )/python" -m pip install -q \
+            "$art/coal_align_app-$V-py3-none-any.whl"
+          "$W/platform/venv/$( [ -d "$W/platform/venv/Scripts" ] && echo Scripts || echo bin )/python" -m coal_app --check | tee "$W/check.txt"
+          grep -q "^coal $V:" "$W/check.txt"
+      - name: The universal2 wheel's x86_64 slices (Rosetta)
+        if: runner.os == 'macOS'
+        run: |
+          if ! arch -x86_64 /usr/bin/true 2> /dev/null; then echo "::notice::no Rosetta on this runner: x86_64 slices not run"; exit 0; fi
+          for name in coal-cpp coal-cpp-align; do
+            bin=$(ls "$RUNNER_TEMP"/smoke/platform/venv/lib/python*/site-packages/coal/bin/$name)
+            arch -x86_64 "$bin" --version
+          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: smoke-out-${{ matrix.tag }}-py${{ matrix.python }}
+          path: out/
+          retention-days: 7
+          if-no-files-found: error
+
+  compare:
+    name: Outputs identical on every OS, Python and install kind
+    needs: smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          pattern: smoke-out-*
+          path: out
+      - name: Compare
+        # Files written with -o must be byte-identical everywhere. Text that `coal cite` prints to standard output is
+        # Windows text on Windows (CRLF, and the ANSI code page when redirected): it must equal the others once read
+        # as such, and the difference is reported as a notice.
+        run: |
+          python3 -I - out <<'PY'
+          import difflib, os, sys
+          root = sys.argv[1]
+          copies = {}
+          for d, _, files in os.walk(root):
+              for f in files:
+                  copies.setdefault(f, []).append(os.path.join(d, f))
+          ref_run = "smoke-out-manylinux_2_28_x86_64-py3.13"
+          bad = 0
+          for name in sorted(copies):
+              paths = sorted(copies[name], key=lambda p: (ref_run not in p, p))
+              ref = open(paths[0], "rb").read()
+              raw_diff, text_diff = [], []
+              for p in paths[1:]:
+                  data = open(p, "rb").read()
+                  if data == ref:
+                      continue
+                  raw_diff.append(p)
+                  if name.startswith("cite") and "win_amd64" in p:
+                      try:
+                          if data.replace(b"\r\n", b"\n").decode("cp1252").encode("utf-8") == ref:
+                              continue
+                      except UnicodeError:
+                          pass
+                  text_diff.append(p)
+              print(f"{name}: {len(paths)} copies, {len(raw_diff)} not byte-identical to {os.path.relpath(paths[0], root)}")
+              if raw_diff and not text_diff:
+                  print(f"::notice::{name}: the Windows copies differ only as Windows text (CRLF, cp1252)")
+              for p in text_diff:
+                  bad = 1
+                  print(f"::error::{name}: {os.path.relpath(p, root)} differs")
+                  a = ref.decode("utf-8", "backslashreplace").splitlines(True)
+                  b = open(p, "rb").read().decode("utf-8", "backslashreplace").splitlines(True)
+                  for line in list(difflib.unified_diff(a, b, "reference", p))[:30]:
+                      print(repr(line))
+          n = len(copies.get("clean.fasta", []))
+          if n != 24:   # 4 platforms x 2 Pythons x (platform wheel, pure wheel, sdist)
+              print(f"::error::{n} copies of clean.fasta, expected 24"); bad = 1
+          sys.exit(bad)
+          PY
+
+  windows-app:
+    name: Windows app (portable zip, silent install and uninstall)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: dist-windows
+          path: art
+          run-id: ${{ env.RUN_ID }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: dist-python
+          path: art
+          run-id: ${{ env.RUN_ID }}
+          github-token: ${{ github.token }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.13"
+      - name: Portable zip and installer run the frozen engine
+        run: |
+          $ErrorActionPreference = "Stop"
+          $whl = Get-ChildItem art\coal_align-*-py3-none-any.whl | Select-Object -First 1
+          $v = $whl.Name -replace '^coal_align-(.+)-py3-none-any\.whl$', '$1'
+          Write-Host "version $v"
+          foreach ($pair in @(@("COAL-Setup-$v.exe", "COAL-Setup-windows-x64.exe"), @("COAL-$v-windows-x64.zip", "COAL-windows-x64.zip"))) {
+            if ((Get-FileHash "art\$($pair[0])").Hash -ne (Get-FileHash "art\$($pair[1])").Hash) { throw "$($pair[1]) is not $($pair[0])" }
+          }
+          $w = Join-Path $env:RUNNER_TEMP "app"
+          New-Item -ItemType Directory -Force $w | Out-Null
+          Push-Location $w   # neither the artifacts nor a checkout
+          Expand-Archive -Path "$env:GITHUB_WORKSPACE\art\COAL-windows-x64.zip" -DestinationPath "$w\portable"
+          $sdist = "$env:GITHUB_WORKSPACE\art\coal_align-$v.tar.gz"
+          tar -xzf $sdist -C $w
+          $ex = "$w\coal_align-$v\examples"
+          # the reference: the pure wheel in a fresh venv
+          python -m venv "$w\venv"
+          & "$w\venv\Scripts\python.exe" -m pip install -q $whl.FullName
+          & "$w\venv\Scripts\coal.exe" -q "$ex\clean\protein.aln.fasta" "$ex\clean\dna.fasta" -o "$w\ref.fasta"
+          if ($LASTEXITCODE -ne 0) { throw "coal (pure wheel) failed" }
+          $out = "$w\frozen.out"; $err = "$w\frozen.err"
+          function Invoke-Frozen([string]$Exe, [string[]]$ArgList) {
+            $p = Start-Process -FilePath $Exe -ArgumentList $ArgList -NoNewWindow -PassThru `
+              -RedirectStandardOutput $out -RedirectStandardError $err
+            $null = $p.Handle
+            if (-not $p.WaitForExit(180000)) { & taskkill.exe /T /F /PID $p.Id; throw "$Exe $ArgList timed out" }
+            $p.WaitForExit()
+            $text = [string](Get-Content -Raw $out) + [string](Get-Content -Raw $err)
+            if ($p.ExitCode -ne 0) { throw "$Exe $ArgList exited $($p.ExitCode): $text" }
+            return $text
+          }
+          function Test-App([string]$Exe, [string]$Label) {
+            if (-not (Test-Path $Exe)) { throw "$Label`: no $Exe" }
+            $got = (Invoke-Frozen $Exe @("-m", "coal", "--version")).Trim()
+            if ($got -ne "coal $v") { throw "$Label`: COAL.exe -m coal --version printed '$got'" }
+            $null = Invoke-Frozen $Exe @("-m", "coal", "-q", "$ex\clean\protein.aln.fasta", "$ex\clean\dna.fasta", "-o", "$w\$Label.fasta")
+            if ((Get-FileHash "$w\$Label.fasta").Hash -ne (Get-FileHash "$w\ref.fasta").Hash) { throw "$Label`: alignment differs from the wheel's" }
+            $cpp = (Invoke-Frozen $Exe @("-m", "coal", "--cpp-path")).Trim()
+            Write-Host "$Label coal-cpp: $cpp"
+            $null = Invoke-Frozen $Exe @("-m", "coal", "dnds", "$ex\dnds\codon.fasta", "--pairs", "consecutive", "-q", "-o", "$w\$Label.dnds.tsv")
+            $rows = Import-Csv -Delimiter "`t" "$w\$Label.dnds.tsv"
+            $ok = @($rows | Where-Object { $_.status -eq "ok" }).Count
+            if ($ok -ne 12) { throw "$Label`: coal dnds gave $ok ok rows, not 12" }
+            $null = Invoke-Frozen $Exe @("-m", "coal", "cite")
+            # the bundle carries LICENSE and NOTICE in _internal (coal_desktop.spec); the installer also next to COAL.exe
+            $app = Split-Path $Exe
+            foreach ($f in @("LICENSE", "NOTICE")) {
+              if (-not (Test-Path "$app\_internal\$f")) { throw "$Label`: no _internal\$f" }
+              if ($Label -eq "installed" -and -not (Test-Path "$app\$f.txt")) { throw "$Label`: no $f.txt" }
+            }
+            Write-Host "$Label`: coal $v, alignment byte-identical to the wheel's, coal dnds 12 ok"
+          }
+          Test-App "$w\portable\COAL\COAL.exe" "portable"
+          # silent per-user install (no UAC), the frozen engine from the install folder, then a silent uninstall
+          $dir = Join-Path $env:LOCALAPPDATA "Programs\COAL"
+          $p = Start-Process -FilePath "$env:GITHUB_WORKSPACE\art\COAL-Setup-$v.exe" -PassThru -Wait `
+            -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/LOG=$w\setup.log")
+          if ($p.ExitCode -ne 0) { Get-Content "$w\setup.log" -Tail 40; throw "installer exited $($p.ExitCode)" }
+          Test-App "$dir\COAL.exe" "installed"
+          $un = Get-ChildItem "$dir\unins*.exe" | Select-Object -First 1
+          if (-not $un) { throw "no uninstaller in $dir" }
+          $p = Start-Process -FilePath $un.FullName -PassThru -Wait -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART")
+          if ($p.ExitCode -ne 0) { throw "uninstaller exited $($p.ExitCode)" }
+          for ($i = 0; $i -lt 30 -and (Test-Path "$dir\COAL.exe"); $i++) { Start-Sleep 2 }   # it finishes in a copy of itself
+          if (Test-Path "$dir\COAL.exe") { throw "uninstall left $dir\COAL.exe" }
+          Write-Host "installer and uninstaller: ok"
+          Pop-Location
