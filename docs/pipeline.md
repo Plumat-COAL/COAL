@@ -136,16 +136,20 @@ codons and stops are those of the standard code (only start codons differ), so t
   for yeast mitochondria and for frameshifted pseudogenes and code 4 for human mitochondria). Only genes that
   look complete count: not marked as pseudogenes (`[pseudo=true]`, a `*pseudogene` biotype), and with a length
   that is a multiple of 3 or ends in the `T` / `TA` of an incomplete stop codon. When every header names its
-  molecule (NCBI `lcl|NC_..._cds_`, Ensembl `chromosome:GRCh38:MT:`), only genes on a molecule whose records are
-  at least half flagged count (the mitochondrial chromosome, not nuclear genes here and there). Of the codes under
+  molecule (NCBI `lcl|NC_..._cds_`, Ensembl `chromosome:GRCh38:MT:`), only genes on a molecule of which at least
+  half the records have internal stops count (the mitochondrial chromosome, not nuclear genes here and there).
+  Of the codes under
   which the genes are clean, the one wins whose extra stop codons or unused codons the genes avoid where the
   set's other genes use them: AGA / AGG (stops in code 2) for vertebrate mitochondria, CGA / CGC (unused in code
   3) for yeast mitochondria; then the one that reassigns no stop codon the genes do not need (code 14 also reads
   TAA). When several codes are equally good, all are named and none is recommended: codes 4, 5, 9, 10, 13 and 21
   all read TGA as Trp (or Cys) and differ only in codons whose meaning a DNA sequence does not show; start codons
-  that only some of them allow narrow the list (Drosophila mitochondria: 4 or 5). A code that reads TAA or TAG
-  as an amino acid is suggested only when at least half of the set has internal stops (the whole set's code,
-  e.g. ciliate nuclear genes). Sets with more than 5,000 such genes are judged on 5,000 spread evenly over the
+  that only some of them allow narrow the list (Drosophila mitochondria: 4 or 5). A code that wins alone on its
+  codons is named alone only when its start codons fit the genes: *C. elegans* mitochondrial genes avoid CGA /
+  CGC as yeast mitochondrial genes do, but most start with ATT or TTG, which code 3 does not allow, so the hint
+  names 4 and 5 (their code is 5), not 3; when nothing but such a code would be left, there is no hint. A code
+  that reads TAA or TAG as an amino acid is suggested only when at least half of the set has internal stops (the
+  whole set's code, e.g. ciliate nuclear genes). Sets with more than 5,000 such genes are judged on 5,000 spread evenly over the
   file (not the first ones). On real genomes: *S. cerevisiae*, *C. glabrata*, *K. lactis*, *A. gossypii* with
   their mitochondrial genes: code 3; human and mouse Ensembl: code 2 (12 genes each); *D. melanogaster*: 4 or 5;
   *E. coli*, *Y. pestis* (pseudogenes), *A. lyrata* and Ensembl mouse all-transcript files: no hint.
@@ -154,12 +158,18 @@ codons and stops are those of the standard code (only start codons differ), so t
   under genetic code 11, ... The whole set looks like code 4 ... Run again with -c 4". The molecule rule above
   is not applied then (it left out *Mycoplasma genitalium*'s one chromosome, and the hint was silent), and when
   one molecule has 150 records or more (a genome, not an organelle) only the codes of whole genomes are
-  candidates (1, 4, 6, 10, 11, 12, 15); of codes that tie, those whose start codons do not fit at least a tenth
-  of the genes drop out (bacteria start 10-15% of their genes with GTG / TTG). On real sets: *M. genitalium*
+  candidates (1, 4, 6, 10, 11, 12, 15); in such a genome-size set (or one with 50 or more such genes), of codes
+  that tie, those whose start codons do not fit at least a tenth of the genes drop out (bacteria start 10-15% of
+  their genes with GTG / TTG); a small set keeps the quarter (*Ciona* mitochondrial genes alone: 4, 5 or 13; a
+  tenth dropped its code 13 on two odd start codons). On real sets: *M. genitalium*
   with `-c 1` or `-c 11`: code 4; *Tetrahymena thermophila* and *Paramecium tetraurelia* with `-c 1` (also with
   their records shuffled): code 6; human Ensembl with `-c 2`: codes 1, 11 or 12 (nothing in the sequences tells
   them apart); a file of yeast mitochondrial genes alone with `-c 1`: code 3. `report.json` marks such a hint
   `whole_set: true`.
+- **`pipeline clusters` judges each `--cds` file on its own** (each is one species): one hint per file, naming
+  it (`cds sp_two.fa: most genes ...`), and `file` in `report.json`. A *Mycoplasma* among other bacteria gets
+  code 4, a ciliate among animals code 6, and yeast and human mitochondrial genes get codes 3 and 2, each in its
+  own file (judged over all files together, these got no hint or codes that fit neither).
 - **The two-run recipe.** Take the organelle genes out of both CDS files and run them on their own:
 
   ```

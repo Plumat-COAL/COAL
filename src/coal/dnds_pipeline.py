@@ -678,6 +678,7 @@ HINT_BACKGROUND_CODONS = 1_000_000   # codons of the other genes read to measure
 # code 11, about 100).
 GENOME_CODES = frozenset({1, 4, 6, 10, 11, 12, 15})
 GENOME_MIN_RECORDS = 150
+GENOME_MIN_GENES = 50      # evidence genes of a whole set that make it genome-size (for the start-codon bar)
 
 
 def _and(items) -> str:
@@ -685,16 +686,18 @@ def _and(items) -> str:
     return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
 
 
-def _hint_inputs(paths, flagged: dict, usable: set):
+def _hint_inputs(paths, flagged: dict, usable: set, stopped: set | None = None):
     """For the genetic-code hint, one pass over the FASTA files: the flagged genes ({id, seq, header}), the codon
     usage of the other usable genes (internal codons, at most HINT_BACKGROUND_CODONS), and the replicon of every
-    record when every header names one (NCBI lcl|NC_..._cds_, Ensembl chromosome:GRCh38:MT:), else None."""
+    record when every header names one (NCBI lcl|NC_..._cds_, Ensembl chromosome:GRCh38:MT:), else None. stopped:
+    the IDs of the records with one or more internal stops; the replicons then also count those per molecule."""
     from collections import Counter
     genes: dict[str, dict] = {}
     background: Counter = Counter()
     n_bg = 0
     rep_of: dict[str, str] = {}
     rep_n: Counter = Counter()
+    rep_stopped: Counter = Counter()
     all_named = True
     seen: set[str] = set()
 
@@ -708,6 +711,8 @@ def _hint_inputs(paths, flagged: dict, usable: set):
             rep = m.group(1) or m.group(2)
             rep_of[rid] = rep
             rep_n[rep] += 1
+            if stopped is not None and rid in stopped:
+                rep_stopped[rep] += 1
         else:
             all_named = False
         if rid in flagged:
@@ -734,7 +739,12 @@ def _hint_inputs(paths, flagged: dict, usable: set):
                     chunks.append(line)
             done(rid, header, chunks or [])
     order = [genes[i] for i in flagged if i in genes]
-    return order, background, ({"of": rep_of, "records": rep_n} if all_named and rep_of else None)
+    reps = None
+    if all_named and rep_of:
+        reps = {"of": rep_of, "records": rep_n}
+        if stopped is not None:
+            reps["with_stops"] = rep_stopped
+    return order, background, reps
 
 
 def suggest_genetic_code(chosen: int, genes: list[dict], background, n_records: int, with_stops: int,
@@ -749,23 +759,32 @@ def suggest_genetic_code(chosen: int, genes: list[dict], background, n_records: 
     1. Evidence comes only from genes that look complete: not marked as pseudogenes ([pseudo=true],
        *_pseudogene biotype), and with a length that is a multiple of 3 or ends in the T / TA of an incomplete
        stop codon (vertebrate mitochondria); a frameshifted CDS has random stop codons that "fit" some code.
-    2. When every header names its replicon, only genes on a replicon of which at least half the records are
-       flagged count (the mitochondrial chromosome; not scattered nuclear genes).
+    2. When every header names its replicon, only genes on a replicon of which at least half the records have
+       internal stops count (the mitochondrial chromosome; not scattered nuclear genes). The records with one or
+       more stops are counted when replicons has them ("with_stops"; retest of 2026-11-14, Q02: a Mycoplasma
+       with other bacteria in one file has 376 such records of 524, but only 253 evidence genes); else the
+       evidence genes.
     3. Genes are grouped by the codes under which they have no internal stop; the largest group decides. Of its
        codes, those win whose extra stop codons or unused codons (AGA / AGG for code 2, CGA / CGC for code 3) the
        genes avoid where the set's other genes use them (and lose when they do not), then those that reassign
        no stop codon the genes do not need (code 14 also reads TAA, which TGA-only genes do not need).
     4. Codes that tie are all named (their sequences cannot tell 4, 5 and 13 apart), less those whose start
-       codons do not fit at least two and a quarter of the genes when another candidate's do.
+       codons do not fit at least two and a quarter of the genes when another candidate's do. A code that wins
+       alone is named alone only if its start codons pass the same test against the other codes of the group;
+       if not, it and the codes the codons do not argue against are the candidates (retest Q01: C. elegans
+       mitochondria, code 5, avoid CGA / CGC as code 3's genes do, but most start with ATT / TTG, which code 3
+       does not allow), and no hint when only it would be left.
     5. No hint unless at least min_genes genes and half of the evidence genes fit, and a code that reads TAA or
        TAG as an amino acid is suggested only when half the set has internal stops (the whole set's code).
     6. When at least half of all records have internal stops (with_stops of n_records), the question is the code
        of the whole set (retest of 2026-11-14, R01: Mycoplasma read with -c 11 got no hint, because rule 2 left
        out its one chromosome, of which "only" 253 of 524 records were evidence): rule 2 does not apply; when a
        molecule has GENOME_MIN_RECORDS records or more (a genome, not an organelle) only the codes of whole
-       genomes (GENOME_CODES) are candidates; and of codes that tie, those whose start codons do not fit at
-       least two and a tenth of the genes when another candidate's do drop out (bacteria start 10-15 % of their
-       genes with GTG / TTG: code 4, not code 10, for Mycoplasma).
+       genomes (GENOME_CODES) are candidates; and, for a genome-size set (such a molecule, or GENOME_MIN_GENES
+       evidence genes), of codes that tie, those whose start codons do not fit at least two and a tenth of the
+       genes when another candidate's do drop out (bacteria start 10-15 % of their genes with GTG / TTG: code 4,
+       not code 10, for Mycoplasma). A small set keeps the quarter of rule 4 (retest Q03: two odd start codons
+       of Ciona's 9 mitochondrial genes dropped its code 13).
 
     genes may be a sample of the flagged genes: fraction is the share looked at (for rule 2).
 
@@ -804,7 +823,11 @@ def suggest_genetic_code(chosen: int, genes: list[dict], background, n_records: 
         genome = max(replicons["records"].values(), default=0) >= GENOME_MIN_RECORDS
     elif replicons and all(g["id"] in replicons["of"] for g in ev):
         per = Counter(replicons["of"][g["id"]] for g in ev)
-        keep = {r for r, n in per.items() if 2 * n >= fraction * replicons["records"].get(r, 0)}
+        if "with_stops" in replicons:   # a molecule's records with one or more internal stops (Q02: Mycoplasma
+            stopped = replicons["with_stops"]   # with K12 in one file: 376 of 524, but only 253 evidence genes)
+            keep = {r for r in per if 2 * stopped.get(r, 0) >= replicons["records"].get(r, 0)}
+        else:
+            keep = {r for r, n in per.items() if 2 * n >= fraction * replicons["records"].get(r, 0)}
         ev = [g for g in ev if replicons["of"][g["id"]] in keep]
     if genome:   # a genome's genes: an organelle code cannot be the whole set's (unless nothing else fits)
         for g in ev:
@@ -845,15 +868,35 @@ def suggest_genetic_code(chosen: int, genes: list[dict], background, n_records: 
         keys[t] = (-e, unneeded)
     best = min(keys.values())
     W = sorted(t for t in sig if keys[t] == best)
+    # the start-codon bar: a tenth of the genes for a genome-size set (bacteria start 10-15 % of their genes with
+    # GTG / TTG), a quarter for a small one (two odd NCBI start annotations of Ciona's 9 mitochondrial genes
+    # dropped its code 13: retest of 2026-11-14, Q03)
+    bar = 10 if whole and (genome or len(G) >= GENOME_MIN_GENES) else 4
+
+    def bad_starts(t, others):
+        return sum(1 for g in G if g["first"] not in tables[t][1] and any(g["first"] in tables[u][1] for u in others))
+
+    doubted = None   # a single winner whose start codons argue against it
+    if len(W) == 1 and len(sig) > 1:
+        # one code wins on codons alone, but its start codons do not fit genes that another candidate's do (C.
+        # elegans mitochondria, code 5: no CGA / CGC, as code 3, but 9 of 12 genes start with ATT / TTG, which
+        # code 3 does not allow: Q01). Not that code alone, then: it and the codes the codons do not argue against
+        # are candidates, and the start codons below choose among them.
+        n_bad = bad_starts(W[0], [u for u in sig if u != W[0]])
+        if n_bad >= 2 and 4 * n_bad >= len(G):
+            doubted = W[0]
+            W = sorted({doubted} | {u for u in sig if keys[u][0] <= 0})
     if len(W) > 1:
         drop = set()
         for t in W:
-            bad = sum(1 for g in G if g["first"] not in tables[t][1]
-                      and any(g["first"] in tables[u][1] for u in W if u != t))
-            if bad >= 2 and (10 if whole else 4) * bad >= len(G):
+            bad = bad_starts(t, [u for u in W if u != t])
+            if bad >= 2 and bar * bad >= len(G):
                 drop.add(t)
         if len(drop) < len(W):
             W = [t for t in W if t not in drop]
+    if doubted is not None and W == [doubted]:
+        return None   # the start codons argue against it and nothing else is left: no hint rather than it alone
+    best = min(keys[t] for t in W)
     support = [g for g in ev if all(t in g["clean"] for t in W)]
     if len(support) < min_genes or 2 * len(support) < len(ev):
         return None
@@ -914,6 +957,7 @@ class _Run:
         self._first_ids: dict = {}
         self._plain_sha256: dict = {}
         self.code_hints: list = []         # sets whose genes with internal stops are clean under another code
+        self._inputs_dir_new = False       # work/inputs/ was made by this run
         self._engine_files: list = []
         self.set_counts: dict = {}         # per input set: records, not usable, dropped (as genes.tsv lists them)
 
@@ -961,6 +1005,7 @@ class _Run:
                       f"coal-cpp, DIAMOND and the aligners are run with {self.threads} thread(s)")
         self._same_file_warning()
         self._gunzip_inputs()
+        self._copy_warning()
         self._describe_inputs()
 
     def _describe_inputs(self) -> None:
@@ -1030,6 +1075,37 @@ class _Run:
                       "the pairs are self-pairs with dN = dS = 0. For paralogs within one genome use `coal pipeline "
                       "clusters`")
 
+    def _copy_warning(self) -> None:
+        """--subject a byte copy of --query (another file, the same content; one of them compressed or both): the
+        same warning as for the same file (retest of 2026-11-14, Q04: every pair was a self-pair with dN = dS = 0,
+        without a word). Files of different sizes are not read."""
+        a = self.a
+        if self.mode != "pairs" or getattr(a, "pairs", None):
+            return
+        try:
+            if os.path.samefile(a.query, a.subject):
+                return   # (_same_file_warning)
+            q, s = self.plain(a.query), self.plain(a.subject)
+            if os.path.getsize(q) != os.path.getsize(s):
+                return
+
+            def digest(given, path):
+                d = self._plain_sha256.get(os.path.abspath(os.fspath(given)))
+                if d:
+                    return d
+                h = hashlib.sha256()
+                with open(path, "rb") as fh:
+                    for block in iter(lambda: fh.read(1 << 20), b""):
+                        h.update(block)
+                return h.hexdigest()
+            if digest(a.query, q) != digest(a.subject, s):
+                return
+        except OSError:
+            return
+        self.warn(f"--subject {a.subject} has the same content as --query {a.query} (a copy): every gene's best "
+                  "hit is itself, so the pairs are self-pairs with dN = dS = 0. For paralogs within one genome use "
+                  "`coal pipeline clusters`")
+
     def _gunzip_inputs(self) -> None:
         """A gzip-compressed input (found by its first two bytes, whatever its name) is decompressed into
         work/inputs/ and read from there: coal-cpp, DIAMOND's makedb aside, reads plain text. The copy of an
@@ -1039,6 +1115,7 @@ class _Run:
         if not todo:
             return
         d = self.wpath("inputs")
+        self._inputs_dir_new = self._inputs_dir_new or not os.path.isdir(d)
         os.makedirs(d, exist_ok=True)
         record_path = os.path.join(d, "sources.json")
         try:
@@ -1148,6 +1225,7 @@ class _Run:
                 continue
             raise PipelineError(f"{opt} {p} is a file this run writes: nothing was changed. Use another output "
                                 "folder, or move the input out of this one")
+        self._check_cds_twice()
         inside = (os.path.realpath(self.work), os.path.realpath(self.path("codon_alignments")),
                   os.path.realpath(self.path("protein_alignments")))
         for opt, inp in self._inputs:
@@ -1443,6 +1521,26 @@ class _Run:
         return faa, genes, {}
 
     # -- clusters: the IDs of several --cds files
+    def _check_cds_twice(self) -> None:
+        """The same --cds file named twice (by any name) is refused. Called before anything is written or
+        decompressed (retest R04; Q05: a .gz named twice was refused only after both copies were decompressed
+        into work/inputs, and they stayed there)."""
+        given: dict[str, str] = {}
+        for p in (getattr(self.a, "cds", None) or ()):   # (R04: "the ID occurs in two input files, A and A")
+            key = os.path.normcase(os.path.realpath(os.fspath(p)))
+            if key in given:
+                twice = (f"{p} twice" if os.fspath(p) == given[key] else f"the same file twice: {given[key]} and {p}")
+                raise PipelineError(f"--cds names {twice}. Each file is one species' genes (or part of the set) "
+                                    "and is read once: give it once. Nothing was run")
+            given[key] = os.fspath(p)
+
+    def discard_new_inputs(self) -> None:
+        """A run refused after its inputs were decompressed (IDs repeated across --cds files, a --prefix-ids file
+        name): the copies it made in work/inputs/ go (Q05). A folder an earlier run made stays (--resume)."""
+        if self._inputs_dir_new:
+            shutil.rmtree(self.wpath("inputs"), ignore_errors=True)
+            self._inputs_dir_new = False
+
     def check_cds_ids(self) -> None:
         """Clusters mode: the --cds files are one set, so an ID must name one record across all of them. IDs that
         occur in two files (BRAKER / AUGUSTUS g1.t1, gene1 in every species) are refused before anything runs:
@@ -1454,14 +1552,7 @@ class _Run:
         prefix = bool(getattr(a, "prefix_ids", False))
         if len(paths) < 2 and not prefix:
             return
-        given: dict[str, str] = {}
-        for p in paths:   # (retest R04: the same file twice read "the ID occurs in two input files, A and A")
-            key = os.path.normcase(os.path.realpath(os.fspath(p)))
-            if key in given:
-                twice = (f"{p} twice" if os.fspath(p) == given[key] else f"the same file twice: {given[key]} and {p}")
-                raise PipelineError(f"--cds names {twice}. Each file is one species' genes (or part of the set) "
-                                    "and is read once: give it once. Nothing was run")
-            given[key] = os.fspath(p)
+        self._check_cds_twice()
         if prefix:
             stems = [file_stem(p) for p in paths]
             bad = next((x for x in stems if not x or x != x.strip() or any(c in x for c in "|> \t")
@@ -1584,13 +1675,53 @@ class _Run:
     CODE_HINT_MIN_GENES = 2      # ... and the hint needs this many such genes that are clean under another code
     CODE_HINT_MAX_GENES = 5000   # genes looked at per set (spread evenly over the set when it has more)
 
-    def code_hint(self, set_name: str, paths: list[str], genes_path: str, shown: list[str] | None = None) -> None:
+    def code_hints_per_file(self, set_name: str, paths: list[str], genes_path: str) -> None:
+        """Clusters mode with several --cds files: one hint per file, judged on that file's genes (retest of
+        2026-11-14, Q02: judged over all files together, a Mycoplasma among other bacteria, or a ciliate among
+        other species, was not "most genes" and got no hint, and the organelle genes of two species got codes
+        that fit neither). Each file is one species' genes, as docs/pipeline.md says."""
+        if len(paths) < 2:
+            self.code_hint(set_name, [self.plain(p) for p in paths], genes_path, list(paths),
+                           file=os.fspath(paths[0]) if paths else None)
+            return
+        file_of: dict[str, int] = {}
+        for k, p in enumerate(paths):
+            try:
+                ids = fasta_ids(self.plain(p))
+            except OSError:
+                continue
+            for rid in ids:
+                file_of.setdefault(rid.decode("utf-8", "backslashreplace"), k)
+        flagged = [0] * len(paths)
+        with open(genes_path, encoding="utf-8", errors="backslashreplace") as fh:
+            col = {n: k for k, n in enumerate(fh.readline().rstrip("\n").split("\t"))}
+            ki = col.get("internal_stops")
+            if ki is None:
+                return
+            for line in fh:
+                f = line.rstrip("\n").split("\t")
+                try:
+                    if int(f[ki]) >= self.CODE_HINT_MIN_STOPS and f[0] in file_of:
+                        flagged[file_of[f[0]]] += 1
+                except (ValueError, IndexError):
+                    continue
+        done: set[int] = set()
+        for k, p in enumerate(paths):
+            if flagged[k] < self.CODE_HINT_MIN_GENES or k in done:
+                continue
+            done.add(k)
+            only = {rid for rid, j in file_of.items() if j == k}
+            self.code_hint(set_name, [self.plain(p)], genes_path, [p], file=os.fspath(p), only=only)
+
+    def code_hint(self, set_name: str, paths: list[str], genes_path: str, shown: list[str] | None = None,
+                  file: str | None = None, only: set | None = None) -> None:
         """One warning when genes of this set have internal stop codons under the chosen genetic code (-c) and
         none under another code COAL supports: mitochondrial or plastid genes in a nuclear set, or the wrong -c
         for the whole set. The code (or the codes, when the sequences cannot tell them apart) is chosen by
         suggest_genetic_code(). The files are read again only when two or more genes have two or more internal
         stops, so a set without such genes costs nothing. (A gene with one internal TGA is not counted: a
-        selenoprotein reads "clean" under every code where TGA is Trp.)"""
+        selenoprotein reads "clean" under every code where TGA is Trp.) only: the IDs of the set's genes.tsv rows
+        to judge (one --cds file of several: file)."""
         chosen = int(self.a.codontable)
         flagged: dict[str, int] = {}     # id -> trailing nucleotides
         usable: set[str] = set()         # genes for the set's codon usage (fewer than MIN_STOPS internal stops)
@@ -1612,6 +1743,8 @@ class _Run:
                         continue
                     if ci is not None and f[ci] == "duplicate_id":
                         continue
+                    if only is not None and f[0] not in only:
+                        continue
                     yield f, n, f[si] != "failed", ti
 
         for _f, n, _ok, _ti in rows():
@@ -1624,7 +1757,10 @@ class _Run:
         # record-shuffled ciliate set lay on many scaffolds, which rule 2 then left out: R01)
         take = min(n_flagged, self.CODE_HINT_MAX_GENES)
         k = 0
+        stopped: set[str] = set()
         for f, n, ok, ti in rows():
+            if n >= 1:
+                stopped.add(f[0])
             if n < self.CODE_HINT_MIN_STOPS:
                 if ok:
                     usable.add(f[0])
@@ -1635,7 +1771,7 @@ class _Run:
                 except (ValueError, IndexError):
                     flagged[f[0]] = 0
             k += 1
-        genes, background, replicons = _hint_inputs(paths, flagged, usable)
+        genes, background, replicons = _hint_inputs(paths, flagged, usable, stopped)
         hint = suggest_genetic_code(chosen, genes, background, n_records, with_stops, replicons,
                                     min_genes=self.CODE_HINT_MIN_GENES, fraction=len(flagged) / n_flagged)
         if hint is None:
@@ -1644,11 +1780,16 @@ class _Run:
         best = len(hint["genes"])
         examples = hint["genes"][:3]
         whole = hint["whole_set"]
-        self.code_hints.append({"set": set_name, "genetic_code": chosen, "records": n_records,
-                                "genes_with_internal_stops": with_stops, "genes_looked_at": len(flagged),
-                                "whole_set": whole, "clean_under": codes[0] if len(codes) == 1 else None,
-                                "candidates": codes, "genes": best, "also_clean_under": hint["also"],
-                                "evidence": hint["evidence"], "examples": examples})
+        rec = {"set": set_name, "genetic_code": chosen, "records": n_records,
+               "genes_with_internal_stops": with_stops, "genes_looked_at": len(flagged),
+               "whole_set": whole, "clean_under": codes[0] if len(codes) == 1 else None,
+               "candidates": codes, "genes": best, "also_clean_under": hint["also"],
+               "evidence": hint["evidence"], "examples": examples}
+        if file is not None:
+            rec["file"] = file
+        self.code_hints.append(rec)
+        if only is not None and file is not None:
+            set_name = f"{set_name} {file}"   # (one of several --cds files: the warning names it)
         shown = [str(p) for p in (shown or paths)]      # the files as the user named them (not work/ copies)
         files = " ".join(shown[:2]) + (" ..." if len(shown) > 2 else "")
         names = "; ".join(f"{t} {GENETIC_CODE_NAMES.get(t, 'NCBI')}" for t in codes)
@@ -2510,7 +2651,11 @@ def sample_pairs(n: int, k: int, seed, cluster_id: str) -> list[tuple[int, int]]
 
 def _clusters_mode(run: _Run) -> None:
     a = run.a
-    run.check_cds_ids()
+    try:
+        run.check_cds_ids()
+    except PipelineError:
+        run.discard_new_inputs()
+        raise
     faa, genes, _ = run.translate("proteins", list(a.cds))
     run.outputs["genes"] = run.path("genes.tsv")
     order: dict[str, int] = {}
@@ -2521,7 +2666,7 @@ def _clusters_mode(run: _Run) -> None:
         failed = run.read_genes(genes, "cds", gf, order, drop)
     run.say(f"translated {run.n_records('cds'):,} records ({run.n_records('cds', 'failed'):,} not usable)")
     run.require_usable_genes("cds", list(a.cds))
-    run.code_hint("cds", [run.plain(p) for p in a.cds], genes, list(a.cds))
+    run.code_hints_per_file("cds", list(a.cds), genes)
     run.isoform_warning()
     all_faa = faa
     if drop:   # DeepClust clusters the kept records only; a given cluster that names a dropped one says why

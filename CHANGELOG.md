@@ -403,6 +403,55 @@ entry under "Added", not under "Fixed".
     No number changes (R01-R04): Salmonella / Shigella and S. cerevisiae / C. glabrata pairs and the four-yeast
     clusters run give byte-identical `dnds.tsv`, `orthologs.tsv`, `genes.tsv`, `failed.tsv`, clusters and
     alignments to the deep test's runs.
+  - **Second retest of 2026-11-14 (Q01-Q05).** **The genetic-code hint never names a single wrong code on the
+    test sets** (Q01, Q03). *C. elegans* mitochondrial genes (code 5) got "code 3" ("Run again with -c 3" for the
+    12 genes alone): they avoid CGA / CGC as yeast mitochondrial genes do, and the start-codon check ran only when
+    several codes tied, but 9 of the 12 start with ATT / TTG, which code 3 does not allow. A code that wins alone
+    now passes the same start-codon test (at least two and a quarter of the genes that another candidate's starts
+    fit); if not, it and the codes the codons do not argue against are the candidates and the start codons choose
+    among them (4 and 5), and when only it would be left there is no hint. The one-in-ten start-codon bar of
+    whole sets (R01) is used only for genome-size sets (a molecule of 150+ records, or 50+ evidence genes): two odd
+    start codons of *Ciona*'s 9 mitochondrial genes had dropped its code 13. **`pipeline clusters` judges the
+    code per `--cds` file** (Q02): over all files together a *Mycoplasma* with *E. coli* K-12 (`-c 11`) or
+    *Tetrahymena* with human and mouse (`-c 1`) got no hint, and yeast + human mitochondrial genes a list without
+    3 and 2; now one hint per file, naming it (`cds FILE: ...`; `file` in `report.json`). The molecule rule
+    counts a molecule's records with one or more internal stops (not only those with two or more). **A byte copy
+    of `--query` as `--subject` gets the same-file warning** (Q04; the files are compared by size, then SHA-256,
+    a `.gz` by its content). **The same `.gz` twice in `--cds` is refused before it is decompressed**, and a
+    run refused after decompressing (IDs in two `--cds` files) removes the `work/inputs` it made (Q05).
+    The warning of `coal pipeline pairs` for the query set before (a007063) and after, on 108 runs: the 46 of
+    the R01 evaluation and the retest's 62 (19 more NCBI genomes and their organelle subsets, BRAKER-style IDs,
+    *Mycoplasma* + K-12 mixtures); 104 are unchanged:
+
+    | Set | `-c` | Right code | Before | After |
+    |---|---|---|---|---|
+    | *C. elegans* RefSeq (30,560) | 1 | 5 (mito) | "10 of the 1,559 genes": code 3 | codes 4 or 5 |
+    | *C. elegans* mitochondrial genes alone (12) | 1 | 5 | whole set: code 3, "Run again with -c 3" | whole set: codes 4 or 5 |
+    | *Ciona intestinalis* mitochondrial genes alone (13) | 1 | 13 | whole set: codes 4 or 5 | whole set: codes 4, 5 or 13 |
+    | *M. genitalium* + 229 K-12 records in one file | 11 | 4 | none | "253 of the 376 genes": codes 3, 4, 5, 9, 10, 13 or 21 |
+
+    | Outcome (108 runs) | Before | After |
+    |---|---|---|
+    | a single code, the right one | 28 | 28 |
+    | candidates that include the right code | 21 | 25 |
+    | candidates without the right code | 1 | 0 |
+    | a single wrong code | 2 | 0 |
+    | no hint | 56 | 55 |
+
+    With the right `-c` all 22 runs that have one are silent, before and after (*M. genitalium*, *M. pneumoniae*,
+    *Mesoplasma florum*, *Ureaplasma parvum*, *Spiroplasma citri* `-c 4`; *T. thermophila*, *P. tetraurelia*,
+    *Ichthyophthirius*, *Pseudocohnilembus* `-c 6`; *Blepharisma* `-c 4`; *Stentor* `-c 1`; the mitochondrial
+    genes of *S. cerevisiae* and *D. hansenii* `-c 3`, *S. pombe* `-c 4`, *C. elegans*, *Apis* and
+    *D. melanogaster* `-c 5`, *Ciona* `-c 13`, *S. purpuratus* and *S. mansoni* `-c 9`, human `-c 2`;
+    *A. thaliana* plastid `-c 11`). `pipeline clusters`, before / after: *M. genitalium* + K-12 (+ *Salmonella*)
+    `-c 11`: none / code 4 for the *Mycoplasma* file; *Tetrahymena* + human + mouse Ensembl `-c 1`: none / code 6,
+    code 2, code 2; *S. cerevisiae* + human Ensembl: codes 4, 5, 9, 10, 13, 21 / code 3 and code 2;
+    *S. cerevisiae* + *D. melanogaster* RefSeq: the same list / code 3 and codes 4 or 5; *S. cerevisiae* + human
+    and *C. elegans* mitochondrial genes: code 3 (39 genes, the human and nematode ones among them) / code 3,
+    code 2, codes 4 or 5; *Tetrahymena* + *S. cerevisiae*: whole set code 6 / code 6 and code 3.
+    No number changes (Q01-Q05): Salmonella / Shigella and S. cerevisiae / C. glabrata pairs and the four-yeast
+    clusters run give byte-identical `dnds.tsv`, `orthologs.tsv`, `genes.tsv`, `failed.tsv`, clusters and
+    alignments to the deep test's runs.
 - **Protein alignment for the codon step (docs/alignment.md).** `<coal/align.hpp>` and the `coal-cpp-align` tool: a
   global Needleman-Wunsch/Gotoh aligner (BLOSUM62/45/80, PAM250, affine gaps; EMBOSS needle defaults, a pwalign
   preset), full length (overhangs gapped, never cut off), AVX2 row loops picked at run time, multithreaded; optimal

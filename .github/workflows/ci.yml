@@ -336,7 +336,8 @@ jobs:
         # the C++ engine's -o lock (race loop, Python and C++ honouring each other's locks). The modules of the
         # second and third line (the pair-table header, inputs that cannot work, the YN shortcut against the full
         # computation, the flags, order invariance, robustness, provenance, isoforms, citations, the command list
-        # and the dnds example) need the binary for most of their tests too.
+        # and the dnds example) need the binary for most of their tests too. tests.test_retest2_findings: the
+        # genetic-code hint per --cds file, the copy and repeated-file checks (retest Q01-Q05).
         shell: bash
         env:
           COAL_REQUIRE_ALIGN: "1"
@@ -346,7 +347,8 @@ jobs:
             tests.test_dnds_pipeline tests.test_short_options tests.test_output_lock \
             tests.test_pair_table tests.test_kaks_cli_inputs tests.test_kaks_yn_shortcut tests.test_dnds_flags \
             tests.test_pipeline_order tests.test_pipeline_robustness tests.test_pipeline_provenance \
-            tests.test_pipeline_isoforms tests.test_pipeline_atomic tests.test_citations tests.test_cli_commands tests.test_examples
+            tests.test_pipeline_isoforms tests.test_pipeline_atomic tests.test_citations tests.test_cli_commands tests.test_examples \
+            tests.test_retest2_findings
       # The release's Linux wheels are built inside the manylinux_2_28 container (GCC 14, -Werror): build there on
       # every change too, so a warning that only that compiler raises fails CI, not the release (v0.5.0rc1 did).
       - name: Build inside the manylinux_2_28 container, as the release does (Linux)
