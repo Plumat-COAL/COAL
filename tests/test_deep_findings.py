@@ -19,6 +19,7 @@ import sys
 import unittest
 from contextlib import redirect_stderr
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
@@ -102,6 +103,42 @@ class SameIdsInSeveralCdsFiles(PipelineCase):
         self.assertEqual(res.exit_code, 0)
         self.assertEqual(res.report["isoforms"]["sets"]["cds"]["genes"], 2 * len(ids))
         self.assertEqual(len(read_tsv(res.outputs["dnds"])), len(ids))
+        # the map in prefixed form, with the same gene IDs in both species (retest R02: one record of each gene
+        # was dropped as "not the longest isoform" of the other species' record, exit 0); a gene ID that already
+        # carries the prefix stays as it is
+        for name, lines in (("pref", [f"{x}|{n}\tG{k}\n" for x in ("sp_one", "sp_two") for k, n in enumerate(ids)]),
+                            ("both", [f"{x}|{n}\t{x}|G{k}\n" for x in ("sp_one", "sp_two")
+                                      for k, n in enumerate(ids)])):
+            gm.write_text("".join(lines), encoding="utf-8")
+            res = P.run_clusters([one, two], self.tmp / name, clusters=cl, max_cluster_size=2, prefix_ids=True,
+                                 gene_map=gm, longest_isoform=True, quiet=True)
+            self.assertEqual(res.exit_code, 0, name)
+            iso = res.report["isoforms"]["sets"]["cds"]
+            self.assertEqual((iso["genes"], iso["dropped"]), (2 * len(ids), 0), name)
+            self.assertEqual(len(read_tsv(res.outputs["dnds"])), len(ids), name)
+        # two transcripts of one gene of one species, named in prefixed form: still one gene
+        gm.write_text(f"sp_one|{ids[0]}\tG0\nsp_one|{ids[1]}\tG0\n", encoding="utf-8")
+        res = P.run_clusters([one, two], self.tmp / "iso", clusters=cl, max_cluster_size=2, prefix_ids=True,
+                             gene_map=gm, longest_isoform=True, quiet=True)
+        self.assertEqual(res.report["isoforms"]["sets"]["cds"]["dropped"], 1)
+
+    def test_the_same_file_twice_is_named(self):   # retest R04 (cosmetic)
+        one, _, _ = self.two_species()
+        link = self.tmp / "also_one.fa"
+        try:
+            os.symlink(one, link)
+        except OSError:
+            link = None
+        for prefix in (False, True):
+            with redirect_stderr(io.StringIO()) as err:
+                res = P.run_clusters([one, one], self.tmp / f"o{prefix}", clusters=FAM_CLUSTERS, prefix_ids=prefix)
+            self.assertEqual(res.exit_code, 1)
+            self.assertIn(f"--cds names {one} twice. Each file", err.getvalue())
+            self.assertNotIn("two input files", err.getvalue())
+        if link is not None:
+            with redirect_stderr(io.StringIO()) as err:
+                res = P.run_clusters([one, link], self.tmp / "o3", clusters=FAM_CLUSTERS)
+            self.assertIn(f"--cds names the same file twice: {one} and {link}", err.getvalue())
 
     def test_translate_names_both_files(self):
         one, two, _ = self.two_species()
@@ -313,6 +350,37 @@ class GeneticCodeHint(unittest.TestCase):
         h = self.hint(orgs, header=ens, org_header=lambda k: "cds chromosome:GRCh38:MT:1:900:1")
         self.assertEqual(len(h["genes"]), 4)
 
+    # retest of 2026-11-14, R01: the code of the WHOLE set
+    def mycoplasma(self, n=200, nuclear=60):
+        """A Mycoplasma-like genome on one molecule: most genes read TGA as Trp, 15% start with GTG / TTG."""
+        starts = ["ATG"] * 17 + ["GTG", "TTG", "TTG"]
+        return [cds(self.rng, start=starts[k % 20]) for k in range(n - nuclear)], nuclear
+
+    def test_a_genome_read_with_the_wrong_code_gets_its_code(self):
+        orgs, nuc = self.mycoplasma()
+        lcl = lambda k: ""   # noqa: E731
+        h = self.hint(orgs, nuclear=nuc, chosen=11, header=lcl)
+        # no molecule named: the codes whose start codons do not fit 15% of the genes drop out, 4, 5, 13 stay
+        self.assertEqual((h["codes"], h["whole_set"]), ([4, 5, 13], True))
+        # one molecule with 200 records is a genome, not an organelle: code 4 (the old replicon rule, "at least
+        # half of the molecule's records are evidence", dropped every gene: 140 of 200 here, 253 of 524 in
+        # M. genitalium, and the hint was silent)
+        recs = [(f"lcl|NC_000908.2_cds_N{k}_{k}", cds(self.rng, stops=())) for k in range(nuc)]
+        recs += [(f"lcl|NC_000908.2_cds_O{k}_{nuc + k}", s) for k, s in enumerate(orgs)]
+        path = write_fasta(self.tmp / "myco.fa", recs)
+        flagged = {r: 0 for r, _ in recs[nuc:][::2]}   # (half of them, as a sample would be)
+        genes, bg, reps = P._hint_inputs([str(path)], flagged, {r for r, _ in recs[:nuc]})
+        h = P.suggest_genetic_code(11, genes, bg, len(recs), len(orgs), reps, fraction=0.5)
+        self.assertEqual((h["codes"], h["whole_set"]), ([4], True))
+        # a mitochondrial set alone (few records on its molecule): organelle codes stay candidates
+        h = self.hint([cds(self.rng, avoid=("CGA", "CGC")) for _ in range(5)], nuclear=2,
+                      org_header=lambda k: "", header=lambda k: "")
+        self.assertEqual((h["codes"], h["whole_set"]), ([3], True))
+
+    def test_organelle_genes_in_a_nuclear_set_are_not_the_whole_set(self):
+        h = self.hint([cds(self.rng, avoid=("CGA", "CGC")) for _ in range(5)])
+        self.assertFalse(h["whole_set"])
+
 
 
 @needs_cpp
@@ -331,6 +399,52 @@ class GeneticCodeHintRun(PipelineCase):
         self.assertEqual((h["clean_under"], h["candidates"], h["genes"]), (None, [4, 5, 9, 10, 13, 21], 3))
         validate(res.report, SCHEMA)
         self.assertIn("have none under any of the NCBI genetic codes 4, 5, 9, 10, 13 and 21", err.getvalue())
+        self.assertFalse(h["whole_set"])
+
+    def run_set(self, recs, **options):
+        q = write_fasta(self.tmp / "q.fa", recs)
+        cl = self.tmp / "cl.tsv"
+        cl.write_text(f"{recs[0][0]}\t{recs[1][0]}\n", encoding="utf-8")
+        with redirect_stderr(io.StringIO()) as err:
+            res = P.run_clusters(q, self.tmp / "out", clusters=cl, **options)
+        validate(res.report, SCHEMA)
+        return res.report["genetic_code_hints"], " ".join(err.getvalue().split())
+
+    def test_a_genome_with_the_wrong_code_is_told_to_run_again(self):
+        """R01: M. genitalium with -c 11 got no hint at all; now 'the whole set looks like code 4'."""
+        import random
+        self.rng = random.Random(7)
+        starts = ["ATG"] * 17 + ["GTG", "TTG", "TTG"]
+        recs = [(f"lcl|NC_000908.2_cds_N{k}_{k}", cds(self.rng, stops=())) for k in range(60)]
+        recs += [(f"lcl|NC_000908.2_cds_O{k}_{60 + k}", cds(self.rng, start=starts[k % 20])) for k in range(140)]
+        hints, err = self.run_set(recs, codontable=11)
+        h = hints[0]
+        self.assertEqual((h["whole_set"], h["candidates"], h["clean_under"], h["records"],
+                          h["genes_with_internal_stops"], h["genes"]), (True, [4], 4, 200, 140, 140))
+        self.assertIn("cds: most genes (140 of the 200) have internal stop codons under genetic code 11, and 140 of the "
+                      "140 with two or more have none under NCBI genetic code 4", err)
+        self.assertIn("The whole set looks like code 4: its rows are estimates from mistranslated codons. Run "
+                      "again with -c 4", err)
+        self.assertNotIn("take them out", err)
+        self.assertNotIn("nuclear set", err)
+
+    def test_a_large_set_is_sampled_evenly(self):
+        """R01: the first CODE_HINT_MAX_GENES genes of a record-shuffled ciliate set lay on many scaffolds (81 of
+        26,927 genes, organelle wording); now a sample spread over the set, and the whole set's code."""
+        import random
+        self.rng = random.Random(7)
+        recs = [(f"lcl|NW_{k:05d}.1_cds_X{k}_1", cds(self.rng, stops=("TAA", "TAG"))) for k in range(40)]
+        recs += [(f"lcl|NW_{k:05d}.1_cds_N{k}_2", cds(self.rng, stops=())) for k in range(40, 50)]
+        with mock.patch.object(P._Run, "CODE_HINT_MAX_GENES", 8):
+            hints, err = self.run_set(recs)
+        h = hints[0]
+        self.assertEqual((h["whole_set"], h["candidates"], h["genes_looked_at"], h["genes"]), (True, [6], 8, 8))
+        self.assertIn("most genes (40 of the 50) have internal stop codons under genetic code 1, and 8 of the 8 "
+                      "looked at (of 40 with two or more) have none under NCBI genetic code 6 (ciliate nuclear)", err)
+        self.assertIn("Run again with -c 6", err)
+        # spread over the set: the 8 genes are every fifth, not the first 8
+        self.assertIn("lcl|NW_00004.1_cds_X4_1", h["examples"])
+        self.assertNotIn("lcl|NW_00001.1_cds_X1_1", h["examples"])
 
 
 # ---------------------------------------------------------------------------------------------- D04, D06, D07, D08
@@ -384,6 +498,46 @@ class Messages(unittest.TestCase):
         self.assertEqual(calls, ["mafft=7.526"])
         self.assertIn("MAFFT 7.526 installed: /x/mafft", err.getvalue())
 
+    @unittest.skipIf(os.name == "nt", "a shell script stands in for MAFFT")
+    def test_an_unpinned_mafft_in_the_cache_is_named(self):   # retest R03
+        """An earlier COAL installed MAFFT unpinned: install kept it without a word, and runs used it."""
+        import tempfile
+        from coal import msa
+        with tempfile.TemporaryDirectory() as td, mock.patch.dict(os.environ, {"COAL_CACHE_DIR": td}):
+            exe = fake_mafft(msa, "v7.525 (2024/Mar/13)")
+            calls = []
+            with mock.patch.object(msa, "_conda_install", lambda *a: calls.append(a)), \
+                    redirect_stderr(io.StringIO()) as err:
+                self.assertEqual(msa.install_mafft(), exe)
+            self.assertEqual(calls, [])     # kept, not replaced (--force replaces it)
+            self.assertIn(f"coal: note: MAFFT 7.525 in COAL's cache ({exe}) is not the pinned 7.526 (an earlier "
+                          "COAL installed it unpinned); it is used as it is. To install 7.526: coal pipeline "
+                          "install mafft --force", err.getvalue())
+            with redirect_stderr(io.StringIO()) as err:
+                msa.install_mafft(quiet=True)
+            self.assertEqual(err.getvalue(), "")
+            # the pinned version, and a MAFFT of your own (not in the cache): nothing to say
+            self.assertIsNone(msa.pin_note("mafft", exe, "v7.526 (2024/Apr/26)"))
+            self.assertIsNone(msa.pin_note("mafft", "/usr/bin/mafft", "v7.505"))
+            self.assertIn("Clustal Omega 1.2.3", msa.pin_note("clustalo", msa._cached("clustalo")[1], "1.2.3"))
+            fake_mafft(msa, "v7.526 (2024/Apr/26)")
+            with redirect_stderr(io.StringIO()) as err:
+                msa.install_mafft()
+            self.assertEqual(err.getvalue(), "")
+
+
+def fake_mafft(msa, version: str) -> str:
+    """A 'MAFFT' in COAL's cache, with the checksum record an install writes: --version prints `version`, and an
+    alignment is its input (the test's sequences have one length)."""
+    exe = msa._cached("mafft")[1]
+    os.makedirs(os.path.dirname(exe), exist_ok=True)
+    with open(exe, "w", encoding="utf-8") as fh:
+        fh.write(f'#!/bin/sh\nif [ "$1" = --version ]; then echo "{version}" >&2; exit 0; fi\n'
+                 'for a; do last=$a; done\nexec /bin/cat "$last"\n')
+    os.chmod(exe, 0o755)
+    msa._write_manifest(exe, "mafft=7.525 (test)", "test")
+    return exe
+
 
 @needs_cpp
 class PipelineMessages(PipelineCase):
@@ -417,6 +571,32 @@ class PipelineMessages(PipelineCase):
             res = P.run_clusters(FAM, self.tmp / "o2", max_cluster_size=8)
         self.assertIn("$COAL_DIAMOND is set to", err.getvalue())
         self.assertIn("(a folder)", err.getvalue())
+
+    @unittest.skipIf(os.name == "nt", "a shell script stands in for MAFFT")
+    def test_a_run_names_an_unpinned_mafft(self):   # retest R03
+        import random
+        from coal import msa
+        rng = random.Random(5)
+        a = cds(rng, stops=())
+
+        def mutant():   # (the same length: the stand-in's "alignment" is its input)
+            b = "".join(c if rng.random() > 0.1 else rng.choice("ACGT") for c in a[:-3])
+            return "".join(b[k:k + 3] if b[k:k + 3] not in ("TAA", "TAG", "TGA") else a[k:k + 3]
+                           for k in range(0, len(b), 3)) + "TAA"
+        q = write_fasta(self.tmp / "q.fa", [("g1", a), ("g2", mutant()), ("g3", mutant())])
+        cl = self.tmp / "cl.tsv"   # (three members: two are aligned without an MSA program)
+        cl.write_text("g1\tg2\ng1\tg3\n", encoding="utf-8")
+        env = {"COAL_CACHE_DIR": str(self.tmp / "cache"), "PATH": str(self.tmp / "nothing")}
+        with mock.patch.dict(os.environ, env):
+            os.environ.pop("COAL_MAFFT", None)
+            exe = fake_mafft(msa, "v7.525 (2024/Mar/13)")
+            with redirect_stderr(io.StringIO()) as err:
+                res = P.run_clusters(q, self.tmp / "o", clusters=cl, aligner="mafft")
+        self.assertEqual(res.exit_code, 0, err.getvalue())
+        self.assertEqual(res.report["tools"]["mafft"]["path"], exe)
+        note = f"MAFFT 7.525 in COAL's cache ({exe}) is not the pinned 7.526"
+        self.assertIn(note, err.getvalue())
+        self.assertTrue(any(note in w for w in res.report["warnings"]))
 
     def test_most_pairs_saturated(self):   # D08
         import random

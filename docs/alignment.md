@@ -250,8 +250,12 @@ data stream), is absolute, has a `..` component or is a reserved device name is 
 `install_mafft()` installs MAFFT from Bioconda the same way (Linux and macOS), pinned to one version as Clustal
 Omega is: `envs/mafft` with `mafft=7.526` (`msa.MAFFT_VERSION`), checked to run and report that version, and the
 line `MAFFT 7.526 installed: PATH`. (It used to install whatever MAFFT Bioconda had that day, so two machines that
-followed the same docs could align differently.) A MAFFT that an earlier COAL installed unpinned is kept; `coal
-pipeline install mafft --force` replaces it. The report's `tools` give the version of the MAFFT a run used. On
+followed the same docs could align differently.) A MAFFT that an earlier COAL installed unpinned is kept, and
+both `coal pipeline install mafft` and every run that uses it say so: "MAFFT 7.525 in COAL's cache (PATH) is not
+the pinned 7.526 ...; it is used as it is. To install 7.526: coal pipeline install mafft --force" (a run lists it
+in the report's `warnings`; the same for a Clustal Omega in the cache that is not 1.2.4). A MAFFT of your own (on
+PATH or in `COAL_MAFFT`) is not checked against the pin. The report's `tools` give the version of the MAFFT a run
+used. On
 Windows it installs nothing (see above): install MAFFT's own Windows package yourself and set `COAL_MAFFT`.
 
 **Running.**

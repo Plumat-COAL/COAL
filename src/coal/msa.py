@@ -27,6 +27,7 @@ import http.client
 import json
 import os
 import platform
+import re
 import shutil
 import stat
 import subprocess
@@ -42,7 +43,7 @@ from typing import Iterable, Mapping, Sequence
 
 from . import __version__
 
-__all__ = ["cache_dir", "find_clustalo", "find_mafft", "install_clustalo", "install_mafft", "tool_version",
+__all__ = ["cache_dir", "find_clustalo", "find_mafft", "install_clustalo", "install_mafft", "tool_version", "pin_note",
            "run_msa", "align_clusters", "MsaResult", "MsaError", "CLUSTALO_VERSION", "MAFFT_VERSION",
            "MICROMAMBA_VERSION",
            "CLUSTAL_ORG_GONE", "NO_WINDOWS_CLUSTALO"]
@@ -244,6 +245,28 @@ def find_mafft() -> str | None:
     return _find("mafft", "COAL_MAFFT")
 
 
+_PINNED = {"mafft": ("MAFFT", MAFFT_VERSION), "clustalo": ("Clustal Omega", CLUSTALO_VERSION)}
+
+
+def pin_note(tool: str, exe: str, version: str | None = None) -> str | None:
+    """A note when `exe` is the copy of `tool` in COAL's cache and is not the pinned version: an earlier COAL
+    installed whatever Bioconda had (retest of 2026-11-14, R03: MAFFT 7.525 was kept and used without a word).
+    None for the pinned version and for a program of your own (PATH, $COAL_MAFFT), whose version is yours."""
+    if tool not in _PINNED:
+        return None
+    here = os.path.normcase(os.path.realpath(exe))
+    if here not in {os.path.normcase(os.path.realpath(c)) for c in _cached(tool)}:
+        return None
+    name, pin = _PINNED[tool]
+    v = tool_version(exe) if version is None else version
+    m = re.search(r"\d+(?:\.\d+)+", v or "")
+    if m and m.group(0) == pin:
+        return None
+    found = f"{name} {m.group(0)}" if m else f"{name} (version unknown: {v or 'no output'})"
+    return (f"{found} in COAL's cache ({exe}) is not the pinned {pin} (an earlier COAL installed it unpinned); it "
+            f"is used as it is. To install {pin}: coal pipeline install {tool} --force")
+
+
 def tool_version(exe: str, timeout: float = 60) -> str:
     """The first line `exe --version` prints ('' if it does not run)."""
     try:
@@ -409,7 +432,11 @@ def install_clustalo(method: str = "auto", force: bool = False, quiet: bool = Fa
                 return c
         return None
     if not force and have():
-        return have()
+        kept = have()
+        note = pin_note("clustalo", kept)
+        if note and not quiet:
+            print(f"coal: note: {note}", file=sys.stderr)
+        return kept
     if _platform()[0] == "Windows":
         raise MsaError(NO_WINDOWS_CLUSTALO)
     order = [method] if method != "auto" else ["conda" if _conda_exe() else "micromamba"]
@@ -441,6 +468,9 @@ def install_mafft(method: str = "auto", force: bool = False, quiet: bool = False
     does not download it (install that yourself and set COAL_MAFFT; untested with COAL)."""
     c = _cached("mafft")[1]
     if not force and _trusted_cached("mafft", c):
+        note = pin_note("mafft", c)
+        if note and not quiet:
+            print(f"coal: note: {note}", file=sys.stderr)
         return c
     if platform.system() == "Windows":
         raise MsaError("there is no automatic MAFFT install on Windows (no Bioconda package, and COAL has no "

@@ -145,9 +145,21 @@ codons and stops are those of the standard code (only start codons differ), so t
   all read TGA as Trp (or Cys) and differ only in codons whose meaning a DNA sequence does not show; start codons
   that only some of them allow narrow the list (Drosophila mitochondria: 4 or 5). A code that reads TAA or TAG
   as an amino acid is suggested only when at least half of the set has internal stops (the whole set's code,
-  e.g. ciliate nuclear genes). On real genomes: *S. cerevisiae*, *C. glabrata*, *K. lactis*, *A. gossypii* with
+  e.g. ciliate nuclear genes). Sets with more than 5,000 such genes are judged on 5,000 spread evenly over the
+  file (not the first ones). On real genomes: *S. cerevisiae*, *C. glabrata*, *K. lactis*, *A. gossypii* with
   their mitochondrial genes: code 3; human and mouse Ensembl: code 2 (12 genes each); *D. melanogaster*: 4 or 5;
   *E. coli*, *Y. pestis* (pseudogenes), *A. lyrata* and Ensembl mouse all-transcript files: no hint.
+- **The whole set in another code.** When at least half of a set's records have internal stops, the hint is
+  about the whole set, not about organelle genes in it: "most genes (376 of the 524) have internal stop codons
+  under genetic code 11, ... The whole set looks like code 4 ... Run again with -c 4". The molecule rule above
+  is not applied then (it left out *Mycoplasma genitalium*'s one chromosome, and the hint was silent), and when
+  one molecule has 150 records or more (a genome, not an organelle) only the codes of whole genomes are
+  candidates (1, 4, 6, 10, 11, 12, 15); of codes that tie, those whose start codons do not fit at least a tenth
+  of the genes drop out (bacteria start 10-15% of their genes with GTG / TTG). On real sets: *M. genitalium*
+  with `-c 1` or `-c 11`: code 4; *Tetrahymena thermophila* and *Paramecium tetraurelia* with `-c 1` (also with
+  their records shuffled): code 6; human Ensembl with `-c 2`: codes 1, 11 or 12 (nothing in the sequences tells
+  them apart); a file of yeast mitochondrial genes alone with `-c 1`: code 3. `report.json` marks such a hint
+  `whole_set: true`.
 - **The two-run recipe.** Take the organelle genes out of both CDS files and run them on their own:
 
   ```
@@ -469,8 +481,9 @@ not end with exit 0. A tool that was ended by a signal is reported as that: `dia
 signal 9 (SIGKILL; out of memory?))`.
 
 **Warnings of the run** (the lines `coal pipeline: warning: ...` on stderr) are also in `report.json` as
-`warnings`: the same file given as `--query` and `--subject` (every gene's best hit is then itself: dN = dS = 0),
-a `-j` above the number of CPUs, an old DIAMOND, a `--pairs` / `--clusters` file whose IDs are not those of the
+`warnings`: the same file given as `--query` and `--subject` (every gene's best hit is then itself: dN = dS = 0;
+with `--pairs`, only the lines that pair a gene with itself are counted), a cached MAFFT or Clustal Omega that is
+not the pinned version, a `-j` above the number of CPUs, an old DIAMOND, a `--pairs` / `--clusters` file whose IDs are not those of the
 sequences, input that looks like several transcripts per gene, and the counts of the `--min-codons` / `--max-ds`
 flags.
 
