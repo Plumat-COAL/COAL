@@ -642,8 +642,8 @@ K01 to K06; the minimal pairs are in `tests/fixtures/kaks_fuzz/`) and of the sim
 standard code they change only rows at an exact boundary of a correction, MYN rows with an infinite kappa and
 the difference counts of YN / MYN rows without any estimate; every other row is byte-identical
 (checked at 17 digits, all nine methods, on the *A. thaliana* / *A. lyrata*, human / mouse, *E. coli* K-12 /
-Sakai, *Salmonella* / *Shigella* and *S. cerevisiae* / *C. glabrata* pairs of the deep test, 4,000 simulated pairs
-of the study and the test fixtures).
+Sakai, *Salmonella* / *Shigella* and *S. cerevisiae* / *C. glabrata* pairs of the deep test, the 600 simulated
+pairs of "Validation" (no row changed), 4,000 pairs of the simulation study and the test fixtures).
 
 14. **A correction whose argument is 0 in exact arithmetic is `saturated`.** Where the argument of a correction's
     logarithm is 0 in exact arithmetic (Kimura: 1 - 2P - Q = 0, for instance P = Q = 1/3; Jukes and Cantor: p =
