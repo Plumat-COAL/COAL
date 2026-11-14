@@ -199,6 +199,23 @@ check_flags <- function(min_codons, max_ds, min_identity = NULL) {
   list(min_codons = min_codons, max_ds = max_ds, min_identity = min_identity)
 }
 
+# Comeron's options (docs/kaks.md "Comeron"): the pathway order for codons that differ at two positions
+# (`comeron_twosubs`: NULL = by the flavour, "comeron" with "coal", "libsequence" with "gestimator") and the
+# smallest site class whose undefined correction makes dN or dS NA (`comeron_min_sites`). Returns the values the
+# C++ glue takes ("" for NULL).
+check_comeron <- function(comeron_twosubs, comeron_min_sites) {
+  if (!is.null(comeron_twosubs) && (!is.character(comeron_twosubs) || length(comeron_twosubs) != 1L ||
+                                    !comeron_twosubs %in% c("comeron", "libsequence"))) {
+    stop("`comeron_twosubs` must be NULL (by `comeron_flavour`), \"comeron\" or \"libsequence\"", call. = FALSE)
+  }
+  if (!is.numeric(comeron_min_sites) || length(comeron_min_sites) != 1L || is.na(comeron_min_sites) ||
+      !is.finite(comeron_min_sites) || comeron_min_sites < 0) {
+    stop("`comeron_min_sites` must be one number, 0 or more (0: any site class can make dN or dS NA)",
+         call. = FALSE)
+  }
+  list(twosubs = comeron_twosubs %||% "", min_sites = as.numeric(comeron_min_sites))
+}
+
 # `methods` and `method` name the same argument (the command line's -m / --method; coal_kaks() has `method`, the
 # other functions `methods`): either is accepted everywhere. given: whether the function's own argument was given.
 pick_methods <- function(own, other, given, own_name, other_name) {

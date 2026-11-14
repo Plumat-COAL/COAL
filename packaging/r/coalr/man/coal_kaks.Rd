@@ -17,7 +17,9 @@ coal_kaks(
   li_flavour = c("coal", "seqinr"),
   min_codons = 0L,
   max_ds = NULL,
-  methods = NULL
+  methods = NULL,
+  comeron_twosubs = NULL,
+  comeron_min_sites = 3
 )
 }
 \arguments{
@@ -50,6 +52,9 @@ dropped and no number changes, so the cluster summary is unaffected. Attribute \
 each flag marked. See "Filtering before interpretation" in COAL's \code{docs/kaks.md}.}
 
 \item{methods}{The same as \code{method} (the name \code{\link[=coal_dnds_pairs]{coal_dnds_pairs()}} uses); give one of the two.}
+
+\item{comeron_twosubs, comeron_min_sites}{For \code{"Comeron"}: the pathways for codons that differ at two positions
+and the smallest site class that can make \code{dN} or \code{dS} \code{NA}; see \code{\link[=coal_dnds_pairs]{coal_dnds_pairs()}}.}
 }
 \value{
 A data frame, one row per pair and method: \code{seq1}, \code{seq2} (the names, or the positions), \code{method},
