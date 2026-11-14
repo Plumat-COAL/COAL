@@ -16,7 +16,7 @@ coal_dnds_clusters(
   large_clusters = c("representative", "sample", "skip"),
   pair_sample = 1000L,
   seed = 1L,
-  matrix = "BLOSUM62",
+  matrix = NULL,
   gap_open = 10,
   gap_extend = 0.5,
   end_gaps = c("free", "penalized"),
@@ -61,7 +61,9 @@ the standard genetic code only (\code{code = 1}).}
 
 \item{max_cluster_size, large_clusters, pair_sample, seed}{See "Large clusters".}
 
-\item{matrix}{Substitution matrix: \code{"BLOSUM62"}, \code{"BLOSUM45"}, \code{"BLOSUM80"} or \code{"PAM250"}.}
+\item{matrix}{Substitution matrix: \code{"BLOSUM62"}, \code{"BLOSUM45"}, \code{"BLOSUM80"}, \code{"PAM250"} or \code{"BLOSUM62-PWALIGN"}
+(pwalign's copy of BLOSUM62, which scores B, Z and X differently). \code{NULL}: \code{"BLOSUM62"}, with
+\code{preset = "pwalign"} \code{"BLOSUM62-PWALIGN"}.}
 
 \item{gap_open, gap_extend}{Cost of the first position of a gap and of each further position (EMBOSS needle's
 convention; defaults 10 and 0.5).}
@@ -70,8 +72,8 @@ convention; defaults 10 and 0.5).}
 
 \item{preset}{\code{NULL}, \code{"needle"} (the defaults above) or \code{"pwalign"} (the scoring of
 \code{pwalign::pairwiseAlignment(type = "global", substitutionMatrix = "BLOSUM62")}: open 14, extend 4, end gaps
-penalised, and pwalign's choice among co-optimal alignments). A preset overrides \code{gap_open}, \code{gap_extend}
-and \code{end_gaps}.}
+penalised, pwalign's copy of BLOSUM62 and pwalign's choice among co-optimal alignments: the protein alignments
+of \code{pwalign::pairwiseAlignment()}). A preset overrides \code{gap_open}, \code{gap_extend} and \code{end_gaps}.}
 
 \item{tie_break}{Which of several alignments with the best score: \code{"leftmost"} (gaps as far left as the score
 allows; the default) or \code{"pwalign"} (the alignment \code{pwalign::pairwiseAlignment()} returns; the default of

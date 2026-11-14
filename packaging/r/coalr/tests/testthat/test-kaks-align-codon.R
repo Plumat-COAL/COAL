@@ -185,12 +185,15 @@ test_that("preset pwalign returns pwalign::pairwiseAlignment's alignment among c
   expect_identical(coal_align_pairs(a, b, tie_break = "pwalign", gap_open = 14, gap_extend = 4,
                                     end_gaps = "penalized")$aligned_a, pw$aligned_a)
   expect_error(coal_align_pairs("MK", "MK", tie_break = "rightmost"), "tie_break")
+  # pwalign (Bioconductor) is not a dependency of coalr: used when it is installed
   skip_if_not_installed("pwalign")
+  skip_if_not_installed("Biostrings")
+  pw_fun <- function(name) getExportedValue("pwalign", name)
   for (i in seq_along(a)) {
-    ref <- pwalign::pairwiseAlignment(Biostrings::AAString(a[i]), Biostrings::AAString(b[i]), type = "global",
-                                      substitutionMatrix = "BLOSUM62")
-    expect_identical(pw$aligned_a[i], as.character(pwalign::alignedPattern(ref)), info = a[i])
-    expect_identical(pw$aligned_b[i], as.character(pwalign::alignedSubject(ref)), info = a[i])
-    expect_equal(pw$score[i], pwalign::score(ref), info = a[i])
+    ref <- pw_fun("pairwiseAlignment")(Biostrings::AAString(a[i]), Biostrings::AAString(b[i]), type = "global",
+                                       substitutionMatrix = "BLOSUM62")
+    expect_identical(pw$aligned_a[i], as.character(pw_fun("alignedPattern")(ref)), info = a[i])
+    expect_identical(pw$aligned_b[i], as.character(pw_fun("alignedSubject")(ref)), info = a[i])
+    expect_equal(pw$score[i], pw_fun("score")(ref), info = a[i])
   }
 })
