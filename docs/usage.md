@@ -31,6 +31,9 @@ coal pipeline pairs --query examples/dnds/species_a_cds.fasta --subject examples
 coal cite out/report.json
 ```
 
+Tutorial 1 ([docs/tutorials/01-codon-alignment.md](tutorials/01-codon-alignment.md)) walks through a codon
+alignment on real genes, with the wrong genetic code, mismatching IDs and mismatching codons.
+
 The rest of this page is about the codon-alignment command.
 
 - **Input:** a protein alignment (FASTA or CLUSTAL) and the unaligned coding DNA (FASTA, one or more files; an
@@ -81,13 +84,21 @@ The rest of this page is about the codon-alignment command.
   longer than the gene: the start can't be told (e.g. a masked gene with a 5' UTR), so the row may be shifted; or
   (3) only some protein IDs are DNA IDs, so sequences are paired by order. **`--strict`** (or `-strict`) turns these
   three cases into errors (exit 1, nothing written), for pipelines that would rather stop than continue.
+  **`--strict` does not catch a wrong genetic code.** A wrong `-codontable` usually makes only a few codons per
+  gene disagree (TGA read as stop instead of W, ATA as I instead of M), far fewer than half, so the run gives
+  mismatch warnings and the "wrong genetic code?" notice and still exits 0, with or without `--strict` (and with
+  `-q` it prints nothing at all). Look for the hint instead: the notice and the `coal: summary:` line name the
+  code that fits (`Re-run with -codontable 2.`), and the run report has it as `hints[]` with
+  `"code": "genetic_code"` and `suggested_codontable`, which a pipeline can check. Example: `examples/mito` without
+  `-codontable 2`; [tutorial 1](tutorials/01-codon-alignment.md#4-error-1-the-wrong-genetic-code-and-the-hint).
 - **`-nogap`** removes codon columns that contain a gap or a stop codon of the selected genetic code (any case).
 - **`-blockonly`** keeps only the columns marked `#` under the blocks of a CLUSTAL protein alignment (PAL2NAL's
   convention, e.g. Gblocks-selected positions); without `-blockonly` those marks are shown under each block of
   clustal and codon output, as PAL2NAL does. No effect if the input has no `#` marks.
 - **Messages and exit codes:** the exit code is non-zero on any error (PAL2NAL always exits 0). Warnings and notices
   go to stderr; `-q` (like PAL2NAL's `-nostderr`) silences all of them, including the notices about probably-wrong
-  data, so check the exit code or use `--strict` when running quietly. Errors are always printed. stdout is the same
+  data, so check the exit code or use `--strict` when running quietly (and `--report`'s `hints` for the genetic
+  code, which `--strict` does not check). Errors are always printed. stdout is the same
   with or without `-q`. A write that fails (disk full, quota) is `coal: error: cannot write out.fa: no space left
   on device` (`cannot write a temporary file in /tmp: ...` while the rows go through the temp folder, `cannot copy
   standard input to a temporary file in /tmp: ...` for `-`), the same in both engines, and nothing half-written is

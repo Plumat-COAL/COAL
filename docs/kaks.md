@@ -41,6 +41,9 @@ install has no Ka/Ks engine; `coal kaks` then says so and exits 1.
 | `Comeron` (alias `C95`) | Comeron (1995) as libsequence's `gestimator` computes it (the default method of the R package orthologr): non-degenerate, transitional and transversional 2-fold and 4-fold sites, Kimura's two-parameter correction per class, pathways weighted by Grantham's distance | J Mol Evol 41:1152-1159 | NA |
 | `Li` | Li (1993) as `seqinr::kaks()` computes it (orthologr's `"Li"`): 0-, 2- and 4-fold sites, pathways weighted by an amino-acid similarity table | J Mol Evol 36:96-99 | yes (seqinr's variance formulas) |
 
+[Tutorial 5](tutorials/05-choosing-a-method.md) compares YN, NG, LWL, MYN and Comeron on 3,142 real ortholog
+pairs, by divergence.
+
 **`NG` is KaKs_Calculator's NG, not the textbook Nei-Gojobori count.** KaKs_Calculator takes a codon's synonymous
 sites from its first and third positions only, leaves the changes that lead to a stop codon out of the
 nonsynonymous sites, and then rescales S + N to the compared length; COAL does the same, so that `-m NG` gives
@@ -320,6 +323,9 @@ keep <- d$status == "ok" & d$dS >= 0.01 & d$codons_compared / d$prot_aln_length 
 ```
 
 `coal kaks` has no such options: KaKs_Calculator's format has no status column.
+
+Tutorial 2 applies these filters step by step
+([docs/tutorials/02-pairs-dnds.md#5-filter-then-interpret](tutorials/02-pairs-dnds.md#5-filter-then-interpret)).
 
 ## C++ API
 
@@ -973,11 +979,12 @@ alignments or the scoring of end gaps, was not examined here.)
 threading and Ka/Ks); `coal_codon_align()` + `coal_kaks()` on orthologr's protein alignments 0.25 s. The
 reciprocal-best-hit search is not in COAL's figure.
 
-**What an orthologr build with `engine = "coal"` has to do to offer Comeron and Li** (the fork's
-`dNdS_coal()` calls `coalr::coal_dnds_pairs()`; nothing in orthologr was changed for this work):
+**What an orthologr build with `engine = "coal"` has to do to offer Comeron and Li.** The fork's
+`integration/all` (0.5.0) does all five (`R/coal.R`; its `dNdS_coal()` calls `coalr::coal_dnds_pairs()`), so
+`dNdS(engine = "coal")` and `kaks_tool = "coal"` accept `"Comeron"` and `"Li"` there; the list is for other builds:
 
 1. accept `dnds_est.method = "Comeron"` and `"Li"` for the COAL engine when
-   `all(c("Comeron", "Li") %in% coalr::coal_info()$methods)` (its `coal_methods()` lists KaKs_Calculator's seven);
+   `all(c("Comeron", "Li") %in% coalr::coal_info()$methods)` (as the fork's `coal_methods()` does);
 2. pass `comeron_flavour = "gestimator"` and `li_flavour = "seqinr"` to `coalr::coal_dnds_pairs()` (and to
    `coal_dnds_clusters()`, `coal_kaks()`) for orthologr's numbers, with `terminal_stops = "compare"` only to
    reproduce 0.4.3, whose alignments include the stop codons; or leave the defaults for COAL's policy and say so;
