@@ -92,7 +92,7 @@ class C01PwalignTieBreak(unittest.TestCase):
         a = P.build_parser().parse_args(["pairs", "--query", "q", "--subject", "s", "-o", "o", "--preset", "pwalign",
                                          "--matrix", "blosum62"])
         P._finish_args(a)
-        self.assertEqual(a.matrix, "BLOSUM62")
+        self.assertEqual(a.matrix, "BLOSUM62-PWALIGN")   # the preset takes pwalign's copy (test_pwalign_matrices)
 
     def test_parameters(self):
         self.assertEqual(A.AlignParams().tie_break, "leftmost")

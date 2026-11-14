@@ -25,9 +25,13 @@ not export them).
   alignment `pwalign::pairwiseAlignment(type = "global", substitutionMatrix = "BLOSUM62")` returns** with its
   default `gapOpening = 10, gapExtension = 4`. pwalign charges `gapOpening + k * gapExtension`, which is open 14,
   extend 4 in the convention above, and its global mode penalises end gaps. Its BLOSUM62 (`data(BLOSUM62, package
-  = "pwalign")`) is an older NCBI file that differs from COAL's BLOSUM62 for B, Z and X (X scores -1 against every
-  residue); the preset uses that copy, `BLOSUM62-PWALIGN`. Use this preset to reproduce orthologr's protein
-  alignments (orthologr's `engine = "coal"` does).
+  = "pwalign")`) is an older NCBI file that differs from COAL's BLOSUM62 for B, Z, X (X scores -1 against every
+  residue) and J (a row of its own); the preset uses that copy, `BLOSUM62-PWALIGN`. With another matrix the
+  preset uses pwalign's copy of that matrix (`--matrix BLOSUM45`: `BLOSUM45-PWALIGN`; below), so that
+  `--preset pwalign --matrix M` is `pairwiseAlignment(..., substitutionMatrix = "M")`: 104 of 104 real protein
+  pairs (tests/fixtures/pwalign_matrices, pwalign 1.6.0) aligned identically, with the same score, for BLOSUM62,
+  BLOSUM45, BLOSUM80 and PAM250. Use this preset to reproduce orthologr's protein alignments (orthologr's
+  `engine = "coal"` does).
 - **Co-optimal alignments (`--tie-break`).** Most protein pairs have several alignments with the best score; they
   differ in where a gap sits in a run of equal residues or next to a mismatch. `leftmost` (the default) is COAL's
   own choice: the traceback from the ends of both sequences prefers a substitution, then a gap in the second
@@ -43,13 +47,19 @@ not export them).
   24%, 94%, 80% and 42% of them are identical, the rest co-optimal). With free end gaps `pwalign` is a
   well-defined choice, not pwalign's (pwalign's global mode has no free end gaps).
 - Matrices: BLOSUM62, BLOSUM45, BLOSUM80 and PAM250. These are the NCBI matrices, the same values as Biopython's
-  files and EMBOSS's `EBLOSUM62`. `BLOSUM62-PWALIGN` is pwalign's copy of BLOSUM62 (above).
+  files and EMBOSS's `EBLOSUM62`. `BLOSUM62-PWALIGN`, `BLOSUM45-PWALIGN` and `BLOSUM80-PWALIGN` are pwalign's
+  copies (`data(BLOSUM45, package = "pwalign")` etc.): other scores for B, Z, X (-1 against every residue) and J,
+  and pwalign's BLOSUM80 is the matrix on another scale (A-A 5, C-C 9, `*` -6 where NCBI's has 7, 13 and -8).
+  pwalign's PAM250 is NCBI's, so there is no PAM250 copy. `--preset pwalign` takes pwalign's copy of the matrix
+  named (PAM250 for PAM250); a `*-PWALIGN` name can also be given on its own.
 - Gap costs: 1000 ≥ open ≥ extend ≥ 0, in multiples of 0.001. Scores are computed exactly as integers, scaled by the
   smallest factor that makes the gap costs whole numbers.
 - **Full length.** Every residue of both sequences is in the alignment. Overhangs are gapped, never cut off.
   orthologr cuts off the overhanging ends of the longer protein.
-- Residues: letters in either case, and `*`. Letters missing from the matrix (J, O, U) score as X. Any other
-  character (`-`, `.`, digits) is an error for that pair, so give ungapped sequences.
+- Residues: letters in either case, and `*`. Letters missing from the matrix (O and U; J in all but the `*-PWALIGN`
+  matrices, which have a J row as pwalign's do) score as X. pwalign refuses O and U, and J with PAM250 ("key 85
+  not in lookup table"). Any other character (`-`, `.`, digits) is an error for that pair, so give ungapped
+  sequences.
 
 Why free end gaps are the default: with penalised end gaps, the overhang of a longer protein (an extra exon, an
 N-terminal extension) is paid for as one long gap, and the aligner tends to pull terminal residues into wrong
@@ -114,7 +124,8 @@ thread-safe. `coal::core` now links `Threads::Threads`, and the CMake package fi
 coal-cpp-align [options] A.fasta [B.fasta]
   pairs: n-th of A with n-th of B; one file: records 1+2, 3+4, ...; --pairs TSV: ID pairs
   --diamond TSV [--flanks gap|align]     expand DIAMOND hits instead of aligning
-  -m BLOSUM62|BLOSUM45|BLOSUM80|PAM250  --gap-open 10  --gap-extend 0.5  --end-gaps free|penalized
+  -m BLOSUM62|BLOSUM45|BLOSUM80|PAM250|BLOSUM62-PWALIGN|BLOSUM45-PWALIGN|BLOSUM80-PWALIGN
+  --gap-open 10  --gap-extend 0.5  --end-gaps free|penalized
   --preset needle|pwalign  --tie-break leftmost|pwalign  --max-cells N  -j N  -o out.fasta  --scores scores.tsv
   --version
 ```
