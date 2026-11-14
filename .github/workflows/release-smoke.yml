@@ -277,24 +277,50 @@ jobs:
           pattern: smoke-out-*
           path: out
       - name: Compare
+        # Files written with -o must be byte-identical everywhere. Text that `coal cite` prints to standard output is
+        # Windows text on Windows (CRLF, and the ANSI code page when redirected): it must equal the others once read
+        # as such, and the difference is reported as a notice.
         run: |
-          set -euo pipefail
-          cd out
-          find . -type f | LC_ALL=C sort | xargs sha256sum > "$RUNNER_TEMP/all.txt"
-          # group by file name (clean.fasta, dnds.tsv, ...): every copy must have one hash
-          bad=0
-          for f in $(awk '{n=$2; sub(/.*\//, "", n); print n}' "$RUNNER_TEMP/all.txt" | sort -u); do
-            n=$(awk -v f="$f" '{n=$2; sub(/.*\//, "", n); if (n == f) print $1}' "$RUNNER_TEMP/all.txt" | sort -u | wc -l)
-            c=$(awk -v f="$f" '{n=$2; sub(/.*\//, "", n); if (n == f) print $1}' "$RUNNER_TEMP/all.txt" | wc -l)
-            echo "$f: $c copies, $n distinct"
-            if [ "$n" -ne 1 ]; then
-              bad=1; echo "::error::$f differs between runs"
-              awk -v f="$f" '{n=$2; sub(/.*\//, "", n); if (n == f) print}' "$RUNNER_TEMP/all.txt"
-            fi
-          done
-          # the pure-Python installs make the same alignments as the platform wheel
-          test "$(ls */*/clean.fasta | wc -l)" -eq 24
-          exit "$bad"
+          python3 -I - out <<'PY'
+          import difflib, os, sys
+          root = sys.argv[1]
+          copies = {}
+          for d, _, files in os.walk(root):
+              for f in files:
+                  copies.setdefault(f, []).append(os.path.join(d, f))
+          ref_run = "smoke-out-manylinux_2_28_x86_64-py3.13"
+          bad = 0
+          for name in sorted(copies):
+              paths = sorted(copies[name], key=lambda p: (ref_run not in p, p))
+              ref = open(paths[0], "rb").read()
+              raw_diff, text_diff = [], []
+              for p in paths[1:]:
+                  data = open(p, "rb").read()
+                  if data == ref:
+                      continue
+                  raw_diff.append(p)
+                  if name.startswith("cite") and "win_amd64" in p:
+                      try:
+                          if data.replace(b"\r\n", b"\n").decode("cp1252").encode("utf-8") == ref:
+                              continue
+                      except UnicodeError:
+                          pass
+                  text_diff.append(p)
+              print(f"{name}: {len(paths)} copies, {len(raw_diff)} not byte-identical to {os.path.relpath(paths[0], root)}")
+              if raw_diff and not text_diff:
+                  print(f"::notice::{name}: the Windows copies differ only as Windows text (CRLF, cp1252)")
+              for p in text_diff:
+                  bad = 1
+                  print(f"::error::{name}: {os.path.relpath(p, root)} differs")
+                  a = ref.decode("utf-8", "backslashreplace").splitlines(True)
+                  b = open(p, "rb").read().decode("utf-8", "backslashreplace").splitlines(True)
+                  for line in list(difflib.unified_diff(a, b, "reference", p))[:30]:
+                      print(repr(line))
+          n = len(copies.get("clean.fasta", []))
+          if n != 24:   # 4 platforms x 2 Pythons x (platform wheel, pure wheel, sdist)
+              print(f"::error::{n} copies of clean.fasta, expected 24"); bad = 1
+          sys.exit(bad)
+          PY
 
   windows-app:
     name: Windows app (portable zip, silent install and uninstall)
