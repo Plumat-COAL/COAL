@@ -42,7 +42,8 @@ Any other single string is one sequence, where a function accepts sequences with
 \code{coal_translate("ATGAAA")}). In particular an aligned row is a sequence whatever it ends in or contains:
 \code{"MKV..LFA.FA"}, \code{"ACGT.NT"}, \code{"MK/VL"} (a frameshift mark), \code{"~~MKV"}; so is a lower-case row with dashes or
 with several dots. What this cannot tell apart: a mistyped file name in upper case (\code{"CDS.FASTA"}) is taken
-as a sequence, and a lower-case row whose only gap is one dot just before \code{fa}, \code{aa}, \code{nt}, ... (or that
+as a sequence (the error that follows, for example about the number of sequences, then says that no such file
+exists in the working folder), and a lower-case row whose only gap is one dot just before \code{fa}, \code{aa}, \code{nt}, ... (or that
 uses \code{/}) is taken as a file name. To pass one sequence that could be mistaken for a file name, name it:
 \code{c(id = "...")}.
 }

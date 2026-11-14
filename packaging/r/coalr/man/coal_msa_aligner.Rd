@@ -29,7 +29,15 @@ starts an external program (one process and two temporary files per cluster), so
 installed. Internal stop codons (\code{*}) are aligned as \code{X} and put back.
 }
 \examples{
-\dontrun{
-res <- coal_dnds_clusters(cds, clusters, aligner = coal_msa_aligner("clustalo"))
+dir <- system.file("extdata", package = "coalr")
+a <- coal_read_fasta(file.path(dir, "species_a_cds.fasta"))
+b <- coal_read_fasta(file.path(dir, "species_b_cds.fasta"))
+# a family of three: two orthologs (320 codons each) and a recombinant of the two
+mix <- paste0(substr(a[["spA_g01"]], 1, 480), substring(b[["spB_g01"]], 481))
+cds <- c(a["spA_g01"], b["spB_g01"], mix = mix)
+clusters <- data.frame(representative = "spA_g01", member = names(cds))
+if (nzchar(Sys.which("clustalo"))) {   # runs only where Clustal Omega is installed
+  res <- coal_dnds_clusters(cds, clusters, aligner = coal_msa_aligner("clustalo"))
+  res$summary[, c("cluster_id", "n_members", "aligner", "dNdS_median")]
 }
 }

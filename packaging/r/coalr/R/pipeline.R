@@ -120,10 +120,15 @@ pipeline_result <- function(res, out_dir, keep) {
 #'   (pairs), `genes`, `failed`, `report` (the JSON report as a list) and `out_dir` (when it was given). A run that
 #'   could not be done is an R error with the pipeline's message.
 #' @examples
+#' # Not run: needs a Python with the package coal-align, its C++ engine coal-cpp and DIAMOND, which
+#' # coal_python_available() can only partly check (in process, coal_dnds_pairs() needs none of them).
 #' \dontrun{
-#' res <- coal_pipeline_pairs("thaliana_cds.fa", "lyrata_cds.fa", threads = 4)
+#' dir <- system.file("extdata", package = "coalr")
+#' a <- file.path(dir, "species_a_cds.fasta")
+#' b <- file.path(dir, "species_b_cds.fasta")
+#' res <- coal_pipeline_pairs(a, b, threads = 2)
 #' head(res$pairs)
-#' cl <- coal_pipeline_clusters("all_cds.fa", methods = c("YN", "NG"))
+#' cl <- coal_pipeline_clusters(a, methods = c("YN", "NG"))
 #' head(cl$summary)
 #' }
 #' @export
