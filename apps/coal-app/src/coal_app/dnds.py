@@ -17,7 +17,6 @@ from __future__ import annotations
 import csv
 import html
 import os
-import shlex
 import shutil
 import subprocess
 import sys
@@ -362,7 +361,7 @@ def shown_command(cmd: list[str], paths=()) -> str:
     base = core._coal_cmd()
     if parts[:len(base)] == base:
         parts = ["coal"] + parts[len(base):]
-    out = " ".join(shlex.quote(p) for p in parts)
+    out = " ".join(core._q(p) for p in parts)  # POSIX shell quoting, or Windows double quotes
     return core.strip_folders(out, [p for p in paths if p])
 
 

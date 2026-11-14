@@ -590,7 +590,7 @@ class TestDndsTools(RunsDirCase):
         self.assertIsNone(r["diamond"])
         self.assertEqual(r["pair_counts"]["total"], 2)
         self.assertNotIn("--diamond", r["coal_command"])
-        self.assertIn(f"--pairs {pairs}", r["coal_command"])  # the agent gets a command it can run as it is
+        self.assertIn(f"--pairs {core._q(pairs)}", r["coal_command"])  # the agent gets a command it can run as it is
 
     def test_pipeline_pairs_refusals(self):
         d = self.tmp()
