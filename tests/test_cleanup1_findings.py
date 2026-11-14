@@ -222,5 +222,68 @@ class CppLockSignals(unittest.TestCase):
             self.assertEqual(sorted(os.listdir(td)), [])
 
 
+class UnsupportedCodes(unittest.TestCase):
+    """P02: suggest_genetic_code() on synthetic sets."""
+
+    def setUp(self):
+        self.rng = random.Random(25)
+        self._td = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._td.name)
+
+    def tearDown(self):
+        self._td.cleanup()
+
+    def hint(self, genes, nuclear=0, chosen=11):
+        recs = [(f"nuc{k}", cds(self.rng, stops=())) for k in range(nuclear)]
+        recs += [(f"g{k}", s) for k, s in enumerate(genes)]
+        path = write_fasta(self.tmp / "set.fa", recs)
+        flagged = {f"g{k}": 0 for k in range(len(genes))}
+        usable = {r for r, _ in recs} - set(flagged)
+        g, bg, reps = P._hint_inputs([str(path)], flagged, usable)
+        return P.suggest_genetic_code(chosen, g, bg, len(recs), len(genes), reps)
+
+    def test_tga_genes_of_a_genome_also_name_code_25(self):
+        h = self.hint([cds(self.rng) for _ in range(80)], nuclear=20)
+        self.assertTrue(h["whole_set"])
+        self.assertIn(4, h["codes"])
+        self.assertEqual(h["unsupported"], [25])   # (not the mitochondrial 24 / 33 for a genome-size set)
+
+    def test_a_small_set_also_names_the_organelle_codes(self):
+        h = self.hint([cds(self.rng) for _ in range(10)])
+        self.assertEqual(h["unsupported"], [24])   # (33 also reads TAA: a stop these genes do not need)
+
+    def test_no_unsupported_codes_beside_a_single_code_or_the_standard_stops(self):
+        h = self.hint([cds(self.rng, avoid=("AGA", "AGG")) for _ in range(10)], nuclear=200, chosen=1)
+        self.assertEqual((h["codes"], h["unsupported"]), ([2], []))   # vertebrate mitochondria in a nuclear set
+        h = self.hint([cds(self.rng, stops=("TAA", "TAG", "TAA")) for _ in range(80)], nuclear=20)
+        self.assertEqual((h["codes"], h["unsupported"]), ([6], []))
+
+    def test_texts(self):
+        self.assertEqual(P._supported_text(), "1-6, 9-16 and 21-23")
+        self.assertEqual(P._unsupported_text([25]),
+                         "NCBI code 25 (Candidate Division SR1 and Gracilibacteria: TGA = Gly)")
+
+
+@needs_cpp
+class UnsupportedCodeHint(PipelineCase):
+    """P02 end to end: the warning and report.json of a clusters run."""
+
+    def test_the_hint_says_that_code_25_is_not_supported(self):
+        rng = random.Random(5)
+        genes = [(f"lcl|NC_099999.1_cds_G{k}_{k}", cds(rng)) for k in range(160)]
+        f = write_fasta(self.tmp / "sr1.fa", genes)
+        cl = self.tmp / "cl.tsv"
+        cl.write_text(f"{genes[0][0]}\t{genes[1][0]}\n", encoding="utf-8")
+        res, err = run(P.run_clusters, [f], self.tmp / "out", clusters=cl, codontable=11)
+        validate(res.report, SCHEMA)
+        (h,) = res.report["genetic_code_hints"]
+        self.assertTrue(h["whole_set"])
+        self.assertEqual(h["unsupported_candidates"], [25])
+        self.assertIn("; or NCBI code 25 (Candidate Division SR1 and Gracilibacteria: TGA = Gly), which COAL does "
+                      "not support (-c takes 1-6, 9-16 and 21-23)", err)
+        self.assertIn("for a code COAL does not support, no -c gives right rows", err)
+        self.assertNotIn("Run again with the -c of its organism", err)
+
+
 if __name__ == "__main__":
     unittest.main()

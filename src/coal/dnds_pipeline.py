@@ -665,6 +665,21 @@ GENETIC_CODE_NAMES = {1: "standard", 2: "vertebrate mitochondrial", 3: "yeast mi
                       13: "ascidian mitochondrial", 14: "alternative flatworm mitochondrial",
                       15: "Blepharisma nuclear", 16: "chlorophycean mitochondrial", 21: "trematode mitochondrial",
                       22: "Scenedesmus obliquus mitochondrial", 23: "Thraustochytrium mitochondrial"}
+# NCBI genetic codes COAL does not support (no table, no -c), with the stop codons they read as amino acids, that
+# the hint names beside its candidates when the sequences fit them equally well (final retest of 2026-11-14, P02:
+# SR1 / Gracilibacteria bacteria, code 25, got "codes 4 and 10 ... run again with the -c of its organism", a list
+# without their code). The codes whose stops depend on the context (27, 28, 31) and 26 (the standard stops) are
+# left out. kind: "genome" (nuclear, bacterial) or "organelle".
+UNSUPPORTED_CODES = {
+    24: ("Rhabdopleuridae mitochondrial", "organelle", frozenset({b"TAA", b"TAG"}), "TGA = Trp, AGA = Ser, AGG = Lys"),
+    25: ("Candidate Division SR1 and Gracilibacteria", "genome", frozenset({b"TAA", b"TAG"}), "TGA = Gly"),
+    29: ("Mesodinium nuclear", "genome", frozenset({b"TGA"}), "TAA, TAG = Tyr"),
+    30: ("Peritrich nuclear", "genome", frozenset({b"TGA"}), "TAA, TAG = Glu"),
+    32: ("Balanophoraceae plastid", "organelle", frozenset({b"TAA", b"TGA"}), "TAG = Trp"),
+    33: ("Cephalodiscidae mitochondrial", "organelle", frozenset({b"TAG"}),
+         "TAA = Tyr, TGA = Trp, AGA = Ser, AGG = Lys"),
+}
+_STANDARD_STOPS = frozenset({b"TAA", b"TAG", b"TGA"})
 # Codons a code does not use although NCBI's table gives them an amino acid ("CGA, CGC absent" in code 3): that a
 # gene avoids them is evidence for the code, as avoiding a code's extra stop codons is (AGA / AGG for code 2).
 _ABSENT_CODONS = {3: frozenset({b"CGA", b"CGC"})}
@@ -788,8 +803,13 @@ def suggest_genetic_code(chosen: int, genes: list[dict], background, n_records: 
 
     genes may be a sample of the flagged genes: fraction is the share looked at (for rule 2).
 
+    7. For the whole set, when the candidates are all departures from the standard stop codons, the codes COAL
+       does not support (UNSUPPORTED_CODES; the genome codes for a genome-size set, else the organelle codes)
+       under which these genes have no internal stop and that reassign no more stop codons than the candidates
+       do are named too ("unsupported"; final retest of 2026-11-14, P02: code 25 bacteria got codes 4 and 10).
+
     Returns {"codes": [...], "genes": [ids], "also": [codes that also fit these genes], "evidence": text,
-    "whole_set": bool}."""
+    "whole_set": bool, "unsupported": [codes COAL does not support that fit as well]}."""
     from collections import Counter
     from .tables import get_code
     std = get_code(chosen)
@@ -908,7 +928,35 @@ def suggest_genetic_code(chosen: int, genes: list[dict], background, n_records: 
             else "their internal stop codons are " + " / ".join(kinds))
     if len(W) == 1 and best[0] < 0 and W[0] in notes:
         text += "; they have " + notes[W[0]]
-    return {"codes": W, "genes": [g["id"] for g in support], "also": also, "evidence": text, "whole_set": whole}
+    unsupported = []
+    if whole and len(W) > 1 and not any(tables[t][0] == _STANDARD_STOPS for t in W):
+        want = "genome" if genome or len(G) >= GENOME_MIN_GENES else "organelle"
+        for u, (_name, kind, st, _what) in UNSUPPORTED_CODES.items():
+            if (needed & st) or kind != want:
+                continue
+            if len((stops_c - st) - needed) <= best[1]:
+                unsupported.append(u)
+    return {"codes": W, "genes": [g["id"] for g in support], "also": also, "evidence": text, "whole_set": whole,
+            "unsupported": unsupported}
+
+
+def _unsupported_text(codes) -> str:
+    """'NCBI code 25 (Candidate Division SR1 and Gracilibacteria: TGA = Gly)', for the hint."""
+    names = [f"{u} ({UNSUPPORTED_CODES[u][0]}: {UNSUPPORTED_CODES[u][3]})" for u in codes]
+    return ("NCBI code " if len(names) == 1 else "NCBI codes ") + _and(names)
+
+
+def _supported_text() -> str:
+    """'1-6, 9-16 and 21-23': the codes -c accepts."""
+    runs, cur = [], [SUPPORTED[0]]
+    for t in SUPPORTED[1:]:
+        if t == cur[-1] + 1:
+            cur.append(t)
+        else:
+            runs.append(cur)
+            cur = [t]
+    runs.append(cur)
+    return _and([f"{r[0]}-{r[-1]}" if len(r) > 1 else str(r[0]) for r in runs])
 
 
 class _Run:
@@ -1785,6 +1833,8 @@ class _Run:
                "whole_set": whole, "clean_under": codes[0] if len(codes) == 1 else None,
                "candidates": codes, "genes": best, "also_clean_under": hint["also"],
                "evidence": hint["evidence"], "examples": examples}
+        if hint.get("unsupported"):
+            rec["unsupported_candidates"] = hint["unsupported"]
         if file is not None:
             rec["file"] = file
         self.code_hints.append(rec)
@@ -1806,6 +1856,14 @@ class _Run:
                           f"{', '.join(examples)}. The whole set looks like code {t}: its rows are estimates from "
                           f"mistranslated codons. Run again with -c {t} (docs/pipeline.md \"Genes of another "
                           "genetic code\")")
+            elif hint.get("unsupported"):
+                self.warn(head + f"any of the NCBI genetic codes {_and(codes)}{why}, e.g. {', '.join(examples)}. "
+                          "The whole set looks like another genetic code, and its sequences cannot tell which of "
+                          "these it is: " + names + "; or " + _unsupported_text(hint["unsupported"]) + ", which "
+                          f"COAL does not support (-c takes {_supported_text()}). Its rows are estimates from "
+                          "mistranslated codons. If its organism (and organelle) has one of COAL's codes, run "
+                          "again with that -c; for a code COAL does not support, no -c gives right rows "
+                          "(docs/pipeline.md \"Genes of another genetic code\")")
             else:
                 self.warn(head + f"any of the NCBI genetic codes {_and(codes)}{why}, e.g. {', '.join(examples)}. "
                           "The whole set looks like another genetic code, and its sequences cannot tell which of "

@@ -166,6 +166,18 @@ codons and stops are those of the standard code (only start codons differ), so t
   their records shuffled): code 6; human Ensembl with `-c 2`: codes 1, 11 or 12 (nothing in the sequences tells
   them apart); a file of yeast mitochondrial genes alone with `-c 1`: code 3. `report.json` marks such a hint
   `whole_set: true`.
+- **Codes COAL does not support.** `-c` takes the NCBI codes 1-6, 9-16 and 21-23 (those of PAL2NAL); NCBI's
+  codes 24-33 have no table in COAL. When a whole set's hint names several codes that all depart from the standard
+  stop codons, it also names the unsupported codes the genes fit as well (with no more reassigned stop codons
+  than the candidates): 24 (Rhabdopleuridae mitochondrial: TGA = Trp, AGA = Ser, AGG = Lys), 25 (Candidate
+  Division SR1 and Gracilibacteria: TGA = Gly), 29 (Mesodinium nuclear: TAA, TAG = Tyr), 30 (Peritrich nuclear:
+  TAA, TAG = Glu), 32 (Balanophoraceae plastid: TAG = Trp) and 33 (Cephalodiscidae mitochondrial: TAA = Tyr,
+  TGA = Trp, AGA = Ser, AGG = Lys): for a genome-size set the nuclear and bacterial ones (25, 29, 30), for a
+  smaller one the organelle ones (24, 32, 33). Codes 27,
+  28 and 31, whose stop codons depend on their context, and 26 (the standard stops) are never named. E.g.
+  *Ca.* Gracilibacteria (code 25) read with `-c 11`: "codes 4 and 10 ...; or NCBI code 25 (Candidate Division SR1
+  and Gracilibacteria: TGA = Gly), which COAL does not support". No `-c` gives right rows for such a set: TGA is
+  Gly there, Trp or Cys in the candidates. `report.json` has those codes as `unsupported_candidates`.
 - **`pipeline clusters` judges each `--cds` file on its own** (each is one species): one hint per file, naming
   it (`cds sp_two.fa: most genes ...`), and `file` in `report.json`. A *Mycoplasma* among other bacteria gets
   code 4, a ciliate among animals code 6, and yeast and human mitochondrial genes get codes 3 and 2, each in its

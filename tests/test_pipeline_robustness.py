@@ -487,7 +487,10 @@ class GeneticCodeHint(PipelineCase):
                       "with two or more have none under any of the NCBI genetic codes 3, 4, 5, 9, 10, 13 and 21 "
                       "(their only internal stop codon is TGA)", err)
         self.assertIn("The whole set looks like another genetic code", err)
-        self.assertIn("Run again with the -c of its organism", err)
+        # (and the code COAL does not support that fits as well: final retest of 2026-11-14, P02)
+        self.assertIn("; or NCBI code 24 (Rhabdopleuridae mitochondrial: TGA = Trp, AGA = Ser, AGG = Lys), which "
+                      "COAL does not support", err)
+        self.assertIn("If its organism (and organelle) has one of COAL's codes, run again with that -c", err)
         self.assertNotIn("take them out", err)
 
     def test_docs(self):
