@@ -6,7 +6,8 @@
   * With build/coal-cpp (COAL_CPP_BIN): --pairs / --clusters that name no record stop with exit 1, a header line
     is skipped (U07); the first unusable record on stderr (U12); a genome as --query (U04); the notice when -o
     holds an earlier run (U16); `coal translate`'s genetic-code hint (U10); "kept in the alignment" only when an
-    output was written, in both engines (U20).
+    output was written, in both engines (U20); `coal dnds` / `coal kaks` on an input without pairs exit 2 (fuzz
+    finding K05).
 """
 from __future__ import annotations
 
@@ -298,6 +299,23 @@ class TestTranslateHint(unittest.TestCase):
                 self.assertNotIn("coal translate: warning", r.stderr)
             r = coal("translate", Q, "-o", Path(td) / "q.faa")   # one gene with stops among many: no line
             self.assertNotIn("coal translate: warning", r.stderr)
+
+
+@needs_cpp
+class TestNoPair(unittest.TestCase):
+    def test_coal_dnds_and_kaks_on_an_input_without_pairs_exit_2(self):
+        """Fuzz finding K05 through `coal` (which hands the command to coal-cpp), also for a gzip input."""
+        import gzip
+        with tempfile.TemporaryDirectory() as t:
+            plain, gz = Path(t) / "empty.axt", Path(t) / "empty.axt.gz"
+            plain.write_text("\n\n", encoding="utf-8")
+            gz.write_bytes(gzip.compress(b"# a comment\n"))
+            for f in (plain, gz):
+                r = coal("dnds", f, "-q")
+                self.assertEqual(r.returncode, 2, r.stderr)
+                self.assertIn("coal dnds: error: the input holds no pair of sequences", r.stderr)
+                r = coal("kaks", "-i", f, "-o", Path(t) / "o.kaks")
+                self.assertEqual(r.returncode, 2, r.stderr)
 
 
 class TestKeptInTheAlignment(unittest.TestCase):
