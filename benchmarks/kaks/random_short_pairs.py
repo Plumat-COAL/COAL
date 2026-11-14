@@ -35,6 +35,9 @@ Every field (Ka, Ks, Ka/Ks, S-Sites, N-Sites) where the two outputs differ is pu
       reference nan row     the KaKs_Calculator row has nan / NA in Ka or Ks: a NaN got into its iteration and
                             the number it still prints lacks the same codons (difference 11)
       saturated, other path COAL status saturated and the difference is below 1e-6 (difference 13)
+      saturated, derived site count beside a boundary class
+                            LPB / MLPB S-Sites or N-Sites (Sd / Ks, Nd / Ka) of a saturated row whose class was
+                            at an exact boundary of its correction, which COAL counts as 0 (difference 14)
       unexplained           anything else: the script exits 1
 
 With --kaks-fixed (the same source with the two corrected lines of docs/kaks.md) the same table is made against
@@ -173,6 +176,11 @@ def classify(ref: dict, ours: dict, status: dict, seqs: dict, yn00: str | None):
                             kind = "number != number: unexplained (one kind of site, but not yn00 weighting 0)"
                 elif st == "saturated" and rel <= 1e-6:
                     kind = "number != number: saturated, other path"
+                elif st == "saturated" and key[1] in ("LPB", "MLPB") and name in ("S-Sites", "N-Sites"):
+                    # LPB93 prints S = Sd / Ks and N = Nd / Ka also in a saturated row; where a class's correction
+                    # has an argument that is 0 in exact arithmetic, KaKs_Calculator takes the log of the rounding
+                    # residue, COAL counts the class as saturated (difference 14), so Sd or Nd and the quotient differ
+                    kind = "number != number: saturated, derived site count beside a boundary class"
                 elif ref_nan:
                     kind = "number != number: reference nan row"
                 else:

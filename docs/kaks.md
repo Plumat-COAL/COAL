@@ -441,7 +441,7 @@ give a number.
 Fisher's p-values agree to 7e-12 (2.4e-12 on the orthologr pairs, 6.7e-12 on the simulated ones) apart from the
 two documented cases below (`p-obs`, `p-neg`). On the 4,000 random short pairs with one changed position per
 codon, no value that both tools print differs by more than 1e-9 (Ka, Ks, Ka/Ks and the site counts, all seven
-methods). **That is not true for short pairs in general:** on the 3,000 pairs with codons drawn independently,
+methods), apart from 7 LPB / MLPB site counts of `saturated` rows (difference 14, since 2026-11-14). **That is not true for short pairs in general:** on the 3,000 pairs with codons drawn independently,
 YN and MYN print different numbers in 23 fields (Ka, Ks or Ka/Ks; NG and the LWL / LPB family in none), which
 belong to differences 11 and 13 below, and in 210 rows (123 YN, 87 MYN) COAL prints no estimate at all because
 the iteration did not converge (difference 12), where KaKs_Calculator prints its last round.
@@ -549,7 +549,7 @@ base at their sites), which is why the tables above have no `nan` for YN and MYN
 one changed position per codon KaKs_Calculator's MYN prints `nan` for the sites of about a quarter of the pairs.
 A KaKs_Calculator built with two lines changed (the mean over the classes of non-zero weight; "TN93 fails" when
 either product is 0), called "the corrected reference" below, gives COAL's numbers for every one of those 4,000
-pairs where it prints a number (0 differences above 1e-9). On the 3,000 pairs with codons drawn independently it
+pairs where it prints a number (0 differences above 1e-9, apart from the 7 site counts of difference 14). On the 3,000 pairs with codons drawn independently it
 does not: see the table under difference 13.
 
 #### Short and saturated pairs: where the two programs print different numbers
@@ -618,6 +618,7 @@ per process:
 | 11, a NaN in the reference's row (its Ka or Ks is `nan` / `NA`) | 12 | 0 | COAL (= the corrected reference) |
 | 12, iteration not converged | 0 | 0 | nothing to compare: COAL prints NA. The reference prints its last round in 493 (corrected: 578) of these fields |
 | 13, saturated kind, other path | 5 | 5 | the same value within the iteration's tolerance |
+| 14, LPB / MLPB S-Sites or N-Sites of a `saturated` row beside a class at an exact boundary (since 2026-11-14) | 21 | 21 | COAL (the reference's quotient comes from a rounding residue) |
 | unexplained | 0 | 0 | |
 
 So "the corrected reference gives COAL's numbers" holds for the 4,000 pairs with one changed position per codon
@@ -664,7 +665,11 @@ of the study and the test fixtures).
     based sites: a real value of the method). Real genes: 22 rows of the 4,388 *S. cerevisiae* / *C. glabrata*
     pairs (LWL family; dS 12 to 23 with status `ok` before, or a Ka beside a class with the residue) and two
     Comeron rows of the *Salmonella* / *Shigella* pairs (a 3-site class: `NA`, `saturated`, as with 3 sites in any
-    order); none in the other genomes.
+    order); none in the other genomes. Against KaKs_Calculator on the random short pairs
+    (`benchmarks/kaks/random_short_pairs.py`, 2026-11-14): 193 (one change per codon) and 231 (codons drawn
+    independently) more fields where it prints a number and COAL `NA`, all with status `saturated`, and 7 and 21
+    LPB / MLPB site counts of `saturated` rows that differ (S = Sd / Ks with the residue's class in Sd); no
+    unexplained difference.
 15. **MYN: kappa_TC or kappa_AG infinite.** MYN estimates the two kappas with TN93 at the non-degenerate and the
     four-fold sites. When the A-G (T-C) term of one class is exactly at its limit, 1 - R P1 / (2 piA piG) -
     Q / (2 R) = 0 (P1 = 3/25, Q = 12/25 with A and G equally frequent), its logarithm is -inf and kappa_AG is
@@ -708,8 +713,8 @@ number that KaKs_Calculator prints and COAL does not is a failure unless the sta
 
 The categories, tolerances and checks are those of `tests/test_kaks.py`, `benchmarks/kaks/validate_kaks.py` and
 `benchmarks/kaks/random_short_pairs.py`. On the real-gene sets (999 + 600 pairs) and on the 4,000 random pairs
-with one changed position per codon, all fields agree to 1e-9 apart from differences 1 to 10. On short pairs
-whose codons differ at several positions they do not: differences 11 to 13.
+with one changed position per codon, all fields agree to 1e-9 apart from differences 1 to 10 and 14. On short
+pairs whose codons differ at several positions they do not: differences 11 to 14.
 
 ### Platform reproducibility
 
