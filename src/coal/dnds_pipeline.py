@@ -445,16 +445,15 @@ class FastaIndex:
         with fh:
             off, cur, start = 0, None, 0
             pos = self.pos
-            for line in fh:
+            for off, line in fasta_lines(fh):   # (a byte order mark, lone \r line ends: as coal-cpp reads them)
                 if line[:1] == b">":
                     if cur is not None:
                         pos.setdefault(cur, (fno, start, off))
                     words = line[1:].split()
                     cur = words[0].decode("utf-8", "backslashreplace") if words else ""
                     start = off + len(line)
-                off += len(line)
             if cur is not None:
-                pos.setdefault(cur, (fno, start, off))
+                pos.setdefault(cur, (fno, start, fh.tell()))
 
     def __contains__(self, rid: str) -> bool:
         return rid in self.pos
@@ -2232,7 +2231,7 @@ def _read_pairs_file(path: str, shown: str | None = None) -> list[tuple[str, str
     decompressed copy)."""
     pairs = []
     try:
-        fh = open(path, encoding="utf-8", errors="backslashreplace")
+        fh = open(path, encoding="utf-8-sig", errors="backslashreplace")
     except OSError as e:
         raise PipelineError(f"cannot open {shown or path!r}: {e.strerror or e}") from None
     path = shown or path
@@ -2325,7 +2324,7 @@ def read_clusters(path: str) -> tuple[dict[str, list[str]], int]:
     seen: set[str] = set()
     dup = 0
     try:
-        fh = open(path, encoding="utf-8", errors="backslashreplace")
+        fh = open(path, encoding="utf-8-sig", errors="backslashreplace")
     except OSError as e:
         raise PipelineError(f"cannot open {path!r}: {e.strerror or e}") from None
     with fh:

@@ -499,7 +499,9 @@ per byte: `gène` in Latin-1 is shown as `g\xe8ne`. Nothing is dropped or replac
 become the same text, and every output file is valid UTF-8 whatever the input was. The same rule is used by
 `coal-cpp translate` (the genes table) and by the Python layer (Python's `backslashreplace` error handler), so a
 gene has one name in all tables. Messages on the console follow the console: what it cannot show is escaped.
-Read the tables as UTF-8 (`encoding="utf-8"` in Python on Windows; `fileEncoding = "UTF-8"` in R).
+Every input (sequence files, `--pairs`, `--clusters`, `--gene-map`, `coal --batch` job files) may start with a
+UTF-8 byte order mark (Windows Notepad writes one), which is skipped, and may have `\n`, `\r\n` or classic Mac
+`\r` line ends, in every reader alike (`coal-cpp` and the Python layer). Read the tables as UTF-8 (`encoding="utf-8"` in Python on Windows; `fileEncoding = "UTF-8"` in R).
 
 ## Defaults, and why
 

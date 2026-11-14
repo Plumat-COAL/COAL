@@ -67,6 +67,7 @@ def read_jobs(path: str) -> list[tuple[int, str]]:
     else:
         with open(path, encoding="utf-8") as fh:
             text = fh.read()
+    text = text[1:] if text.startswith("\ufeff") else text   # a byte order mark (Windows Notepad)
     out = []
     for n, raw in enumerate(text.splitlines(), 1):
         line = raw.strip()

@@ -122,10 +122,11 @@ class Detection:
 def read_headers(paths) -> list[tuple[str, str]]:
     """[(record ID, the rest of its header line)] of FASTA files, in order (bytes that are not UTF-8 as \\xhh, as
     the pipeline names IDs)."""
+    from .dnds_pipeline import fasta_lines
     out = []
     for path in paths:
         with open(path, "rb") as fh:
-            for line in fh:
+            for _off, line in fasta_lines(fh):   # (a byte order mark, lone \r line ends: as coal-cpp reads them)
                 if line[:1] == b">":
                     text = line[1:].decode("utf-8", "backslashreplace").strip()
                     words = text.split(None, 1)
@@ -229,7 +230,7 @@ def read_gene_map(path: str, shown: str | None = None) -> dict[str, str]:
     out: dict[str, str] = {}
     conflicts: list[str] = []
     first = True
-    with open(path, encoding="utf-8", errors="backslashreplace") as fh:
+    with open(path, encoding="utf-8-sig", errors="backslashreplace") as fh:
         for n, line in enumerate(fh):
             line = line.rstrip("\r\n")
             if not line.strip() or line.startswith("#"):

@@ -305,6 +305,14 @@ entry under "Added", not under "Fixed".
     A. gossypii: 3 (was 4); Y. pestis (78 genes, almost all `[pseudo=true]`): none (was 14); D. melanogaster
     Ensembl: "4 or 5" (was 14; 5 is right). A synthetic set of four nuclear genes given two internal TGA each
     now gets the candidates 3, 4, 5, 9, 10, 13 and 21 instead of "code 4".
+    **A byte order mark or classic Mac line ends no longer lose genes** (D03). `coal-cpp translate` skipped a
+    UTF-8 byte order mark and split lone `\r` line ends, the Python-side readers did not: with a BOM the first
+    query gene was "not in the query file" (300 Salmonella CDS: 1 pair error, exit 2), with `\r` line ends every
+    pair was "the CDS is empty" (300 errors), the first line of a `--gene-map` was silently ignored (4 records
+    dropped instead of 5, exit 0), and the first member of a `--clusters` file was dropped with an invisible U+FEFF
+    in its cluster ID (exit 2). Now the FASTA index, the header reader of `--longest-isoform`, the `--pairs`,
+    `--clusters` and `--gene-map` readers and `coal --batch` job files read such files as coal-cpp does; on the
+    deep test's files every output is byte-identical to the run on the plain file (exit 0).
 - **Protein alignment for the codon step (docs/alignment.md).** `<coal/align.hpp>` and the `coal-cpp-align` tool: a
   global Needleman-Wunsch/Gotoh aligner (BLOSUM62/45/80, PAM250, affine gaps; EMBOSS needle defaults, a pwalign
   preset), full length (overhangs gapped, never cut off), AVX2 row loops picked at run time, multithreaded; optimal

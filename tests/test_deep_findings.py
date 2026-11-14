@@ -136,6 +136,78 @@ class SameIdsDeepClust(PipelineCase):
         self.assertEqual(seqs, {"one", "two"})
 
 
+# ---------------------------------------------------------------------------------------------- D03
+BOM = b"\xef\xbb\xbf"
+
+
+class ByteOrderMarkAndCarriageReturns(unittest.TestCase):
+    """D03: a UTF-8 byte order mark (Windows Notepad) and classic Mac line ends (a lone CR) are read by every
+    Python-side reader of the pipeline as coal-cpp reads them: the first record / line is not lost."""
+
+    def setUp(self):
+        import tempfile
+        self._td = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._td.name)
+
+    def tearDown(self):
+        self._td.cleanup()
+
+    def variants(self, text: str):
+        """name -> bytes of text in each style."""
+        b = text.encode("utf-8")
+        return {"plain": b, "bom": BOM + b, "crlf": b.replace(b"\n", b"\r\n"), "cr": b.replace(b"\n", b"\r"),
+                "bom_cr": BOM + b.replace(b"\n", b"\r"), "mixed": b.replace(b"\n", b"\r", 2)}
+
+    def test_fasta_lines(self):
+        data = BOM + b">a x\rAC\r\nGT\n>b\rTT"
+        got = list(P.fasta_lines(io.BytesIO(data)))
+        self.assertEqual([ln for _, ln in got], [b">a x\r", b"AC\r\n", b"GT\n", b">b\r", b"TT"])
+        self.assertEqual([data[o:o + len(ln)] for o, ln in got], [ln for _, ln in got])   # offsets into the file
+
+    def test_fasta_readers(self):
+        for name, data in self.variants(">s1 desc\nATGAAA\nCCC\n>s2\nATGGGG\n").items():
+            f = self.tmp / f"{name}.fa"
+            f.write_bytes(data)
+            idx = P.FastaIndex(str(f))
+            self.assertEqual(sorted(idx.pos), ["s1", "s2"], name)
+            self.assertEqual((idx.get("s1"), idx.get("s2")), (b"ATGAAACCC", b"ATGGGG"), name)
+            idx.close()
+            from coal import isoforms
+            self.assertEqual(isoforms.read_headers([str(f)]), [("s1", "desc"), ("s2", "")], name)
+            self.assertEqual(P.fasta_ids(str(f)), [b"s1", b"s2"], name)
+
+    def test_table_readers(self):
+        from coal import batch, isoforms
+        for name, data in self.variants("t1\tG1\nt2\tG1\n").items():
+            f = self.tmp / f"{name}.tsv"
+            f.write_bytes(data)
+            self.assertEqual(isoforms.read_gene_map(str(f)), {"t1": "G1", "t2": "G1"}, name)
+            self.assertEqual(P._read_pairs_file(str(f)), [("t1", "G1"), ("t2", "G1")], name)
+            self.assertEqual(P.read_clusters(str(f)), ({"t1": ["t1", "G1"], "t2": ["t2"]}, 1), name)
+            self.assertEqual(batch.read_jobs(str(f)), [(1, "t1\tG1"), (2, "t2\tG1")], name)
+
+
+@needs_cpp
+class ByteOrderMarkRuns(PipelineCase):
+    def test_the_same_results_with_a_bom_or_lone_cr(self):
+        from test_dnds_pipeline import PLAIN, Q, S
+        pairs = "".join(f"{a}\t{b}\n" for a, b in PLAIN).encode()
+        want = None
+        for name, (fa, pr) in {"plain": (b"", b"\n"), "bom": (BOM, b"\n"), "cr": (b"", b"\r"),
+                               "bom_cr": (BOM, b"\r")}.items():
+            q = self.tmp / f"{name}.fa"
+            q.write_bytes(fa + Q.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", pr))
+            p = self.tmp / f"{name}.tsv"
+            p.write_bytes(fa + pairs.replace(b"\n", pr))
+            res = P.run_pairs(q, S, self.tmp / name, pairs=p, quiet=True)
+            got = (res.exit_code, Path(res.outputs["dnds"]).read_bytes(),
+                   Path(res.outputs["failed"]).read_bytes().replace(str(q).encode(), b"Q"))
+            if want is None:
+                want = got
+            self.assertEqual(got, want, name)
+            got = got[1]
+            self.assertEqual(len(got.splitlines()), 1 + len(PLAIN))
+
 # ---------------------------------------------------------------------------------------------- D02
 SENSE = [a + b + c for a in "TCAG" for b in "TCAG" for c in "TCAG" if a + b + c not in ("TAA", "TAG", "TGA")]
 
