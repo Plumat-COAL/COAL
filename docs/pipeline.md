@@ -158,8 +158,10 @@ codons and stops are those of the standard code (only start codons differ), so t
   under genetic code 11, ... The whole set looks like code 4 ... Run again with -c 4". The molecule rule above
   is not applied then (it left out *Mycoplasma genitalium*'s one chromosome, and the hint was silent), and when
   one molecule has 150 records or more (a genome, not an organelle) only the codes of whole genomes are
-  candidates (1, 4, 6, 10, 11, 12, 15); of codes that tie, those whose start codons do not fit at least a tenth
-  of the genes drop out (bacteria start 10-15% of their genes with GTG / TTG). On real sets: *M. genitalium*
+  candidates (1, 4, 6, 10, 11, 12, 15); in such a genome-size set (or one with 50 or more such genes), of codes
+  that tie, those whose start codons do not fit at least a tenth of the genes drop out (bacteria start 10-15% of
+  their genes with GTG / TTG); a small set keeps the quarter (*Ciona* mitochondrial genes alone: 4, 5 or 13; a
+  tenth dropped its code 13 on two odd start codons). On real sets: *M. genitalium*
   with `-c 1` or `-c 11`: code 4; *Tetrahymena thermophila* and *Paramecium tetraurelia* with `-c 1` (also with
   their records shuffled): code 6; human Ensembl with `-c 2`: codes 1, 11 or 12 (nothing in the sequences tells
   them apart); a file of yeast mitochondrial genes alone with `-c 1`: code 3. `report.json` marks such a hint

@@ -678,6 +678,7 @@ HINT_BACKGROUND_CODONS = 1_000_000   # codons of the other genes read to measure
 # code 11, about 100).
 GENOME_CODES = frozenset({1, 4, 6, 10, 11, 12, 15})
 GENOME_MIN_RECORDS = 150
+GENOME_MIN_GENES = 50      # evidence genes of a whole set that make it genome-size (for the start-codon bar)
 
 
 def _and(items) -> str:
@@ -779,9 +780,11 @@ def suggest_genetic_code(chosen: int, genes: list[dict], background, n_records: 
        of the whole set (retest of 2026-11-14, R01: Mycoplasma read with -c 11 got no hint, because rule 2 left
        out its one chromosome, of which "only" 253 of 524 records were evidence): rule 2 does not apply; when a
        molecule has GENOME_MIN_RECORDS records or more (a genome, not an organelle) only the codes of whole
-       genomes (GENOME_CODES) are candidates; and of codes that tie, those whose start codons do not fit at
-       least two and a tenth of the genes when another candidate's do drop out (bacteria start 10-15 % of their
-       genes with GTG / TTG: code 4, not code 10, for Mycoplasma).
+       genomes (GENOME_CODES) are candidates; and, for a genome-size set (such a molecule, or GENOME_MIN_GENES
+       evidence genes), of codes that tie, those whose start codons do not fit at least two and a tenth of the
+       genes when another candidate's do drop out (bacteria start 10-15 % of their genes with GTG / TTG: code 4,
+       not code 10, for Mycoplasma). A small set keeps the quarter of rule 4 (retest Q03: two odd start codons
+       of Ciona's 9 mitochondrial genes dropped its code 13).
 
     genes may be a sample of the flagged genes: fraction is the share looked at (for rule 2).
 
@@ -865,7 +868,10 @@ def suggest_genetic_code(chosen: int, genes: list[dict], background, n_records: 
         keys[t] = (-e, unneeded)
     best = min(keys.values())
     W = sorted(t for t in sig if keys[t] == best)
-    bar = 10 if whole else 4
+    # the start-codon bar: a tenth of the genes for a genome-size set (bacteria start 10-15 % of their genes with
+    # GTG / TTG), a quarter for a small one (two odd NCBI start annotations of Ciona's 9 mitochondrial genes
+    # dropped its code 13: retest of 2026-11-14, Q03)
+    bar = 10 if whole and (genome or len(G) >= GENOME_MIN_GENES) else 4
 
     def bad_starts(t, others):
         return sum(1 for g in G if g["first"] not in tables[t][1] and any(g["first"] in tables[u][1] for u in others))

@@ -93,6 +93,22 @@ class HintRules(unittest.TestCase):
         h = self.hint([cds(self.rng, avoid=("AGA", "AGG"), start=s) for s in starts], nuclear=200)
         self.assertEqual(h["codes"], [2])
 
+    # Q03
+    def test_a_small_organelle_set_keeps_its_code(self):
+        """Ciona's 9 mitochondrial evidence genes (code 13): two start with CTG / ATT, which table 13 does not list.
+        Under the one-in-ten bar 13 dropped out ('4 and 5'); a small set keeps the one-in-four bar."""
+        starts = ["ATG"] * 5 + ["ATA", "ATA", "CTG", "ATT"]
+        h = self.hint([cds(self.rng, start=s) for s in starts])
+        self.assertTrue(h["whole_set"])
+        self.assertEqual(h["codes"], [4, 5, 13])
+
+    def test_a_genome_size_set_keeps_the_tenth_bar(self):
+        # 100 genes, 15 % GTG / TTG starts, 12 % ATT: codes without ATT drop out (whole set, no molecule named)
+        starts = ["ATG"] * 73 + ["GTG"] * 5 + ["TTG"] * 10 + ["ATT"] * 12
+        h = self.hint([cds(self.rng, n=120, start=s) for s in starts], nuclear=20)
+        self.assertTrue(h["whole_set"])
+        self.assertEqual(h["codes"], [4, 5])
+
     # Q02 (rule 2)
     def test_a_molecule_counts_its_records_with_one_stop(self):
         """Mycoplasma and K12 in one file: 376 of the Mycoplasma's 524 records have internal stops, but only 253
