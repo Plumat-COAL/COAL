@@ -325,6 +325,13 @@ Rcpp::List coalr_dnds(SEXP cds, SEXP member_ids, Rcpp::IntegerVector members, SE
             // a pair aligned here is aligned in input order (the earlier CDS first: dnds.hpp Group::swap_pair)
             if (b - a == 2 && members[a] != NA_INTEGER && members[a + 1] != NA_INTEGER && members[a + 1] < members[a])
                 it.g.swap_pair = true;
+            // the pairs of a protein multiple alignment in input order too (the earlier CDS of `cds` first, as
+            // `coal pipeline clusters` does: dnds.hpp Group::rank, docs/pipeline.md "Which gene comes first")
+            if (have_rows && b - a > 2) {
+                it.g.rank.resize((size_t)(b - a));
+                for (int k = a; k < b; ++k)
+                    it.g.rank[(size_t)(k - a)] = members[k] == NA_INTEGER ? (long long)n_cds + k : members[k];
+            }
             const int mode = unit_pairs[(R_xlen_t)u];
             if (mode == 1) {
                 it.g.pairs = dnds::Pairs::representative;
