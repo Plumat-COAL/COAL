@@ -549,7 +549,8 @@ class PipelineMessages(PipelineCase):
         with redirect_stderr(out):
             res = P.run_pairs(Q, S, self.tmp / "sw", pairs=self.pairs_file([(b, a) for a, b in PLAIN[:4]]))
         self.assertIn("look swapped: in 4 of the 4 pairs the first ID is a record of --subject", out.getvalue())
-        self.assertTrue(any("look swapped" in w for w in res.report["warnings"]))
+        self.assertIn("look swapped", res.report["error"])   # no pair can be made: an error since U07 (2026-11-14)
+        self.assertEqual(res.exit_code, 1)
         out = io.StringIO()
         with redirect_stderr(out):
             P.run_pairs(Q, S, self.tmp / "dup", pairs=self.pairs_file([*PLAIN[:3], PLAIN[0], PLAIN[0]]))

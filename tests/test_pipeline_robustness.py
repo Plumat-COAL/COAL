@@ -211,18 +211,21 @@ class OsErrors(PipelineCase):
 
 @needs_cpp
 class UnmatchedIds(PipelineCase):
-    def test_pairs_with_other_ids_get_one_summary_line(self):
+    def test_pairs_with_other_ids_stop_with_one_error(self):
+        # (new-user audit 2026-11-14, U07: no pair can be made, so the run stops before any alignment; it ran to
+        # a table of `error` rows with exit 2 and this text as a warning)
         pairs = self.pairs_file([(q + ".1", s) for q, s in PLAIN])   # a version suffix the file does not have
         res, err = run(P.run_pairs, Q, S, self.tmp / "o", pairs=pairs)
-        self.assertEqual(res.exit_code, 2)
+        self.assertEqual(res.exit_code, 1)
         lines = [ln for ln in err.splitlines() if "are not in the" in ln]
         self.assertEqual(len(lines), 1, err)
+        self.assertIn("error: none of the 12 pairs of --pairs", lines[0])
         self.assertIn("12 of the 12 query IDs of --pairs", lines[0])
         self.assertIn("'g01.1' in pairs.tsv", lines[0])
         self.assertIn("while the sequences are named like 'g01'", lines[0])
         self.assertIn("version or transcript suffix", lines[0])
-        self.assertEqual(res.report["warnings"], [lines[0].split("warning: ", 1)[1]])
-        self.assertEqual(res.report["counts"]["pairs"]["error"], 12)   # every pair still has its row
+        self.assertIn("12 of the 12 query IDs of --pairs", res.report["error"])
+        self.assertFalse((self.tmp / "o" / "dnds.tsv").exists())
 
     def test_suffix_in_the_file_and_not_in_the_pairs(self):
         q = self.tmp / "q.fa"
@@ -234,9 +237,8 @@ class UnmatchedIds(PipelineCase):
 
     def test_swapped_columns(self):
         res, err = run(P.run_pairs, Q, S, self.tmp / "o", pairs=self.pairs_file([(s, q) for q, s in PLAIN]))
-        lines = [ln for ln in err.splitlines() if "are not in the" in ln]
-        self.assertEqual(len(lines), 2, err)   # one per side
-        self.assertIn("the columns are in the right order", lines[0])
+        self.assertEqual(res.exit_code, 1)   # (U07: it ran to a table of errors)
+        self.assertIn("so nothing was computed: the columns look swapped: in 12 of the 12 pairs", err)
 
     def test_a_few_missing_ids_get_no_summary_line(self):
         res, err = run(P.run_pairs, Q, S, self.tmp / "o", pairs=self.pairs_file(PLAIN + [("nobody", "h01")]))
@@ -624,10 +626,12 @@ class MessagesAndProvenance(PipelineCase):
         # 2 of 3 query IDs and 1 of 3 subject IDs unknown: every pair fails (the hint needed 90% of one side)
         pairs = [(PLAIN[0][0] + ".1", PLAIN[0][1]), (PLAIN[1][0] + ".1", PLAIN[1][1]), (PLAIN[2][0], PLAIN[2][1] + ".x")]
         res, err = run(P.run_pairs, Q, S, self.tmp / "o", pairs=self.pairs_file(pairs))
+        # no pair can be made: one error, both sides in it (U07: it was two warnings and a table of errors)
+        self.assertEqual(res.exit_code, 1)
         lines = [ln for ln in err.splitlines() if "are not in the" in ln]
-        self.assertEqual(len(lines), 2, err)
+        self.assertEqual(len(lines), 1, err)
         self.assertIn("2 of the 3 query IDs of --pairs", lines[0])
-        self.assertIn("1 of the 3 subject IDs of --pairs", lines[1])     # under half, but no pair can be made
+        self.assertIn("1 of the 3 subject IDs of --pairs", lines[0])     # under half, but no pair can be made
         self.assertIn("version or transcript suffix", lines[0])
         # one unknown ID among many, other pairs fine: no line (it is in failed.tsv)
         res, err = run(P.run_pairs, Q, S, self.tmp / "o2", pairs=self.pairs_file(PLAIN[:5] + [("nobody", PLAIN[0][1])]))

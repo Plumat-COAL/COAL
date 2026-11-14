@@ -172,7 +172,7 @@ HELP_CASES = [["-h"], ["--help"], ["--h"], [P, "--he"], ["-qh"], ["--help", "-j"
 VERSION_CASES = [["--version"], ["--v"], ["--vers", P]]
 ERRORS = [
     [], [P], ["--foo"], ["-q"], [P, "-o", "x.fa"],
-    [P, N, "-codontable", "7"], ["-codontable", "x", P, N], [P, N, "-codontable", "2.0"],
+    [P, N, "-codontable", "7"], [P, N, "--codontable=8"], ["-codontable", "x", P, N], [P, N, "-codontable", "2.0"],
     [P, N, "-codontable"], [P, N, "-codontable", "--foo"], [P, N, "--codontable=99999999999999999999"],
     [P, N, "-codontable="], [P, N, "-codontable", "0x2"], [P, N, "-codontable", "-1"],
     [P, N, "-j", "x"], [P, N, "-jx"], [P, N, "-j"], [P, N, "-j", "1__0"], [P, N, "-j", "it's"],
@@ -199,7 +199,8 @@ PINNED = {
     "'--foo'": 'coal: error: the following arguments are required: pep_aln, nuc_fasta',
     "'-q'": 'coal: error: the following arguments are required: pep_aln, nuc_fasta',
     "'pep.fasta' '-o' 'x.fa'": 'coal: error: the following arguments are required: nuc_fasta',
-    "'pep.fasta' 'nuc.fasta' '-codontable' '7'": "coal: error: argument -codontable/--codontable: invalid choice: '7' (choose from '1', '2', '3', '4', '5', '6', '9', '10', '11', '12', '13', '14', '15', '16', '21', '22', '23')",
+    "'pep.fasta' 'nuc.fasta' '-codontable' '7'": "coal: error: -codontable 7: NCBI genetic code 7 no longer exists (NCBI merged code 7 into 4 and code 8 into 1): use -codontable 4",
+    "'pep.fasta' 'nuc.fasta' '--codontable=8'": "coal: error: --codontable 8: NCBI genetic code 8 no longer exists (NCBI merged code 7 into 4 and code 8 into 1): use --codontable 1",
     "'-codontable' 'x' 'pep.fasta' 'nuc.fasta'": "coal: error: argument -codontable/--codontable: invalid int value: 'x'",
     "'pep.fasta' 'nuc.fasta' '-codontable' '2.0'": "coal: error: argument -codontable/--codontable: invalid int value: '2.0'",
     "'pep.fasta' 'nuc.fasta' '-codontable'": 'coal: error: argument -codontable/--codontable: expected one argument',

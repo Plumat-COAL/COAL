@@ -183,7 +183,8 @@ class TestPipelineMessages(unittest.TestCase):
         rc, err = self.run_main("pairs", "--query", Q, "--subject", S, "-o", self.tmp / "o", "--pairs", pf)
         self.assertEqual(rc, 1)
         self.assertIn("error: none of the 5 pairs of --pairs", err)
-        self.assertIn("5 of the 5 query IDs are no record of --query (e.g. '1'; its records are named like", err)
+        self.assertIn("can be made, so nothing was computed. 5 of the 5 query IDs of --pairs", err)
+        self.assertIn("e.g. '1' in wrong.tsv, while the sequences are named like", err)
         self.assertIn("--pairs needs two tab-separated columns", err)
         self.assertFalse((self.tmp / "o" / "dnds.tsv").exists())
 
@@ -191,7 +192,7 @@ class TestPipelineMessages(unittest.TestCase):
         pf = self.pairs("swapped.tsv", [f"{b}\t{a}\n" for a, b in PLAIN])
         rc, err = self.run_main("pairs", "--query", Q, "--subject", S, "-o", self.tmp / "o", "--pairs", pf)
         self.assertEqual(rc, 1)
-        self.assertIn("and the columns look swapped", err)
+        self.assertIn("so nothing was computed: the columns look swapped", err)
 
     def test_a_header_line_is_not_a_pair(self):
         plain = self.pairs("plain.tsv", [f"{a}\t{b}\n" for a, b in PLAIN])
@@ -215,7 +216,8 @@ class TestPipelineMessages(unittest.TestCase):
         rc, err = self.run_main("clusters", "--cds", FAM, "-o", self.tmp / "o", "--clusters", cf)
         self.assertEqual(rc, 1)
         self.assertIn("none of the 3 IDs of --clusters", err)
-        self.assertIn("is a record of --cds (e.g. 'rep1'", err)
+        self.assertIn("is a record of --cds, so nothing was computed", err)
+        self.assertIn("e.g. 'rep1' in clusters.tsv", err)
         rc, err = self.run_main("clusters", "--cds", FAM, "-o", self.tmp / "ok", "--clusters", FAM_CLUSTERS, "-q")
         self.assertIn(rc, (0, 2))
 

@@ -2319,7 +2319,8 @@ class _Run:
         if not n:
             return
         first = next((g["first"] for g in (self.gene_failures.get(s) or {} for s in sets) if g.get("first")), None)
-        self.warn(f"{n:,} record{'s' if n != 1 else ''} not usable"
+        # (stderr only: the report has every failure in `failures` already, so not in its `warnings` too)
+        self.say(f"warning: {n:,} record{'s' if n != 1 else ''} not usable"
                   + (f" (first: {first[0]}: {first[1]})" if first else "")
                   + f"; {'every one is' if n != 1 else 'it is'} listed in {self.outputs['failed']}")
 
@@ -2804,20 +2805,26 @@ def _unmatched_ids_warning(run: _Run, option: str, path: str, sides, every_group
         # (below that, single missing genes are reported one by one in failed.tsv)
         if not missing or (len(missing) * 2 < len(ids) and not every_group_fails):
             continue
-        have = next(iter(idx.pos), None)
-        ex = missing[0]
-        hint = ""
-        if have is not None:
-            stem = ex.split(".")[0]
-            if any(h == stem or h.startswith(ex + ".") or h.split(".")[0] == stem for h in list(idx.pos)[:5000]):
-                hint = (" The IDs differ by a version or transcript suffix (.1, .2): use the IDs exactly as "
-                        "they are after '>' in the sequence file (the first word of the header)")
-            else:
-                hint = (" Check that the IDs are the first word of the FASTA headers, that the columns are in "
-                        "the right order, and whether one side has a version suffix (.1) the other lacks")
-        run.warn(f"{len(missing):,} of the {len(ids):,} {name} IDs of {option} {path} are not in the {name} "
-                 f"sequence file(s): e.g. {ex!r} in {os.path.basename(path)}"
-                 + (f", while the sequences are named like {have!r}." if have is not None else ".") + hint)
+        run.warn(_unmatched_text(name, option, path, len(missing), len(ids), missing[0], idx))
+
+
+def _unmatched_text(name: str, option: str, path: str, n_missing: int, n: int, ex: str, idx,
+                    with_hint: bool = True) -> str:
+    """The line "N of the M query IDs of --pairs FILE are not in the query sequence file(s): e.g. 'x' in FILE, while
+    the sequences are named like 'y'." and what the difference looks like (a version suffix, or other IDs)."""
+    have = next(iter(idx.pos), None)
+    hint = ""
+    if have is not None and with_hint:
+        stem = ex.split(".")[0]
+        if any(h == stem or h.startswith(ex + ".") or h.split(".")[0] == stem for h in list(idx.pos)[:5000]):
+            hint = (" The IDs differ by a version or transcript suffix (.1, .2): use the IDs exactly as "
+                    "they are after '>' in the sequence file (the first word of the header)")
+        else:
+            hint = (" Check that the IDs are the first word of the FASTA headers, that the columns are in "
+                    "the right order, and whether one side has a version suffix (.1) the other lacks")
+    return (f"{n_missing:,} of the {n:,} {name} IDs of {option} {path} are not in the {name} sequence file(s): e.g. "
+            f"'{ex}' in {os.path.basename(path)}"
+            + (f", while the sequences are named like '{have}'." if have is not None else ".") + hint)
 
 
 def _pairs_file_warnings(run: _Run, pairs, q_idx, s_idx, q_failed, s_failed) -> None:
@@ -2879,22 +2886,19 @@ def _check_given_pairs(run: _Run, pairs: list, first_line: list, q_idx, s_idx, q
     if swapped * 2 >= n:
         q, s = next((q, s) for q, s in pairs if known_s(q) and known_q(s))
         raise PipelineError(f"none of the {n:,} pairs of --pairs {a.pairs} names a record of --query and one of "
-                            f"--subject, and the columns look swapped: in {swapped:,} of them the first ID is a "
-                            f"record of --subject and the second one of --query (e.g. {q} {s}). The first "
+                            f"--subject, so nothing was computed: the columns look swapped: in {swapped:,} of the "
+                            f"{n:,} pairs the first ID is a record of --subject and the second one of --query (e.g. "
+                            f"{q} {s}). The first "
                             "column is the query, the second the subject: swap the columns, or --query and "
                             "--subject")
     miss_q = [q for q, _ in pairs if not known_q(q)]
     miss_s = [s for _, s in pairs if not known_s(s)]
-    parts = []
-    for side, opt, miss, idx in (("query", "--query", miss_q, q_idx), ("subject", "--subject", miss_s, s_idx)):
-        if not miss:
-            continue
-        have = next(iter(idx.pos), None)
-        parts.append(f"{len(miss):,} of the {n:,} {side} IDs are no record of {opt} (e.g. '{miss[0]}'"
-                     + (f"; its records are named like '{have}'" if have is not None else "") + ")")
-    raise PipelineError(f"none of the {n:,} pairs of --pairs {a.pairs} can be made: " + "; ".join(parts)
-                        + ". --pairs needs two tab-separated columns, the query ID and the subject ID, as "
-                        "they are after '>' in the FASTA files (the first word of the header)")
+    sides = [(side, miss, idx) for side, miss, idx in (("query", miss_q, q_idx), ("subject", miss_s, s_idx)) if miss]
+    parts = [_unmatched_text(side, "--pairs", a.pairs, len(miss), n, miss[0], idx,
+                             with_hint=k == len(sides) - 1).rstrip(".") for k, (side, miss, idx) in enumerate(sides)]
+    raise PipelineError(f"none of the {n:,} pairs of --pairs {a.pairs} can be made, so nothing was computed. "
+                        + ". ".join(parts) + ". --pairs needs two tab-separated columns, the query ID and the "
+                        "subject ID")
 
 
 def _read_pairs_file(path: str, shown: str | None = None, first_line: list | None = None) -> list[tuple[str, str]]:
@@ -3140,12 +3144,12 @@ def _clusters_mode(run: _Run) -> None:
         ids = [m for mem in clusters.values() for m in mem]
         if ids and not any(m in cds_idx or m in failed for m in ids):
             # (new-user audit 2026-11-14, U07: other columns ran to a table of errors)
-            have = next(iter(cds_idx.pos), None)
-            raise PipelineError(f"none of the {len(ids):,} IDs of --clusters {a.clusters} is a record of --cds (e.g. "
-                                f"'{ids[0]}'" + (f"; the records are named like '{have}'" if have is not None else "")
-                                + "). --clusters needs two tab-separated columns, the representative and the member, "
-                                "as `diamond deepclust` writes them, with the IDs as they are after '>' in the FASTA "
-                                "files (the first word of the header)")
+            raise PipelineError(f"none of the {len(ids):,} IDs of --clusters {a.clusters} is a record of --cds, so "
+                                "nothing was computed. "
+                                + _unmatched_text("CDS", "--clusters", a.clusters, len(ids), len(ids), ids[0],
+                                                  cds_idx).rstrip(".")
+                                + ". --clusters needs two tab-separated columns, the representative and the member, "
+                                "as `diamond deepclust` writes them")
         _unmatched_ids_warning(run, "--clusters", a.clusters, [("CDS", ids, cds_idx, failed)])
     tool = a.aligner
     cap = a.max_cluster_size
