@@ -539,5 +539,27 @@ class TestRPackageWorkflow(unittest.TestCase):
         self.assertTrue(os.path.isfile(os.path.join(ROOT, "scripts", "sync_r_sources.py")))
 
 
+class TestReleaseSmokeWorkflow(unittest.TestCase):
+    """release-smoke.yml installs the artifacts of a release.yml run and runs them: by hand only, a read-only token
+    (plus actions: read for another run's artifacts), nothing that publishes, actions at release.yml's SHAs."""
+
+    def test_hygiene(self):
+        wf = _ci("release-smoke.yml")
+        self.assertRegex(wf, r"(?m)^on:\n  workflow_dispatch:\n")
+        self.assertNotRegex(wf, r"(?m)^  (push|pull_request|schedule|workflow_run):")
+        self.assertRegex(wf, r"(?m)^permissions:\n  contents: read\n  actions: read[^\n]*\n\n")
+        self.assertNotRegex(wf, r"(?m)^[ ]+permissions:")          # no job widens it
+        for word in ("gh release", "pypi-publish", "contents: write", "id-token", "secrets."):
+            self.assertNotIn(word, wf)
+        rel = {r.split("@")[0]: r for r in re.findall(r"(?m)^\s+(?:- )?uses: (\S+)", _ci("release.yml"))}
+        uses = re.findall(r"(?m)^\s+(?:- )?uses: (\S+)", wf)
+        self.assertTrue(uses)
+        for u in uses:
+            self.assertRegex(u, r"@[0-9a-f]{40}$", f"unpinned action {u}")
+            self.assertEqual(u, rel.get(u.split("@")[0], u), "not the SHA release.yml uses")
+        self.assertEqual(len(re.findall(r"timeout-minutes: \d+", wf)), 4)   # every job
+        self.assertNotIn("actions/checkout@", wf.split("\n  smoke:\n", 1)[1].split("\n  compare:\n", 1)[0])
+
+
 if __name__ == "__main__":
     unittest.main()
