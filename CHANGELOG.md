@@ -392,6 +392,14 @@ entry under "Added", not under "Fixed".
     the pinned 7.526 (an earlier COAL installed it unpinned); it is used as it is. To install 7.526: coal
     pipeline install mafft --force"; in a run it is also in the report's `warnings`. The same for a cached
     Clustal Omega that is not 1.2.4. A MAFFT on PATH or in `COAL_MAFFT` is not checked against the pin.
+    **The self-pair warning only where it is true** (R04). "--query and --subject are the same file ...: every
+    gene's best hit is itself, so the pairs are self-pairs with dN = dS = 0" also came with `--pairs`, whose pairs
+    are given: Salmonella as both sets with 5 pairs of different genes (4 ok, 1 saturated) got it. With `--pairs`
+    it is now left out, and the lines that do pair a gene with itself are counted instead ("N of the M pairs of
+    --pairs ... pair a gene with itself ...: their rows have dN = dS = 0"); without `--pairs` it is as before. The
+    same `--cds` file given twice (by the same name or through a link) is refused up front ("--cds names X
+    twice ... give it once", exit 1), instead of every record failing with "the ID occurs in two input files, X
+    and X".
 - **Protein alignment for the codon step (docs/alignment.md).** `<coal/align.hpp>` and the `coal-cpp-align` tool: a
   global Needleman-Wunsch/Gotoh aligner (BLOSUM62/45/80, PAM250, affine gaps; EMBOSS needle defaults, a pwalign
   preset), full length (overhangs gapped, never cut off), AVX2 row loops picked at run time, multithreaded; optimal

@@ -345,12 +345,25 @@ class SameFile(PipelineCase):
             os.symlink(Q, link)
         except OSError:
             link = Q
+        # DIAMOND would find self-pairs (the warning comes before DIAMOND is looked for)
+        with mock.patch.dict(os.environ, {"COAL_DIAMOND": str(self.tmp / "no_diamond")}):
+            res, err = run(P.run_pairs, Q, link, self.tmp / "o0")
+        self.assertIn("warning: --query and --subject are the same file", err)
+        self.assertIn("coal pipeline clusters", err)
+        # --pairs: the pairs are given; only lines that pair a gene with itself are named (retest 2026-11-14, R04:
+        # the self-pair warning came for pairs of different genes too)
         pairs = self.pairs_file([(q, q) for q, _ in PLAIN])
         res, err = run(P.run_pairs, Q, link, self.tmp / "o", pairs=pairs)
         self.assertEqual(res.exit_code, 2, err)   # (2: the fixture's unusable genes)
-        self.assertIn("warning: --query and --subject are the same file", err)
-        self.assertIn("coal pipeline clusters", err)
+        self.assertNotIn("--query and --subject are the same file (", err)
+        self.assertIn(f"warning: {len(PLAIN)} of the {len(PLAIN)} pairs of --pairs {pairs} pair a gene with itself "
+                      f"(e.g. {PLAIN[0][0]} {PLAIN[0][0]}; --query and --subject are the same file): their rows have "
+                      "dN = dS = 0", err)
         self.assertEqual(len(res.report["warnings"]), 1)
+        ids = [q for q, _ in PLAIN]
+        res, err = run(P.run_pairs, Q, link, self.tmp / "o1", pairs=self.pairs_file(list(zip(ids, ids[1:]))))
+        self.assertNotIn("same file", err)
+        self.assertNotIn("itself", err)
         res, err = run(P.run_pairs, Q, S, self.tmp / "o2", pairs=self.pairs_file(PLAIN))
         self.assertNotIn("same file", err)
 

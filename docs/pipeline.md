@@ -481,8 +481,9 @@ not end with exit 0. A tool that was ended by a signal is reported as that: `dia
 signal 9 (SIGKILL; out of memory?))`.
 
 **Warnings of the run** (the lines `coal pipeline: warning: ...` on stderr) are also in `report.json` as
-`warnings`: the same file given as `--query` and `--subject` (every gene's best hit is then itself: dN = dS = 0),
-a `-j` above the number of CPUs, an old DIAMOND, a `--pairs` / `--clusters` file whose IDs are not those of the
+`warnings`: the same file given as `--query` and `--subject` (every gene's best hit is then itself: dN = dS = 0;
+with `--pairs`, only the lines that pair a gene with itself are counted), a cached MAFFT or Clustal Omega that is
+not the pinned version, a `-j` above the number of CPUs, an old DIAMOND, a `--pairs` / `--clusters` file whose IDs are not those of the
 sequences, input that looks like several transcripts per gene, and the counts of the `--min-codons` / `--max-ds`
 flags.
 

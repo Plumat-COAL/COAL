@@ -122,6 +122,24 @@ class SameIdsInSeveralCdsFiles(PipelineCase):
                              gene_map=gm, longest_isoform=True, quiet=True)
         self.assertEqual(res.report["isoforms"]["sets"]["cds"]["dropped"], 1)
 
+    def test_the_same_file_twice_is_named(self):   # retest R04 (cosmetic)
+        one, _, _ = self.two_species()
+        link = self.tmp / "also_one.fa"
+        try:
+            os.symlink(one, link)
+        except OSError:
+            link = None
+        for prefix in (False, True):
+            with redirect_stderr(io.StringIO()) as err:
+                res = P.run_clusters([one, one], self.tmp / f"o{prefix}", clusters=FAM_CLUSTERS, prefix_ids=prefix)
+            self.assertEqual(res.exit_code, 1)
+            self.assertIn(f"--cds names {one} twice. Each file", err.getvalue())
+            self.assertNotIn("two input files", err.getvalue())
+        if link is not None:
+            with redirect_stderr(io.StringIO()) as err:
+                res = P.run_clusters([one, link], self.tmp / "o3", clusters=FAM_CLUSTERS)
+            self.assertIn(f"--cds names the same file twice: {one} and {link}", err.getvalue())
+
     def test_translate_names_both_files(self):
         one, two, _ = self.two_species()
         r = run_cpp("translate", one, two, "-o", self.tmp / "p.faa", "--genes", self.tmp / "g.tsv")

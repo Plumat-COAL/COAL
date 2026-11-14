@@ -1025,7 +1025,7 @@ class _Run:
             same = os.path.samefile(a.query, a.subject)
         except OSError:
             pass
-        if same:
+        if same and not getattr(a, "pairs", None):   # (with --pairs the pairs are given: _pairs_file_warnings)
             self.warn(f"--query and --subject are the same file ({a.query}): every gene's best hit is itself, so "
                       "the pairs are self-pairs with dN = dS = 0. For paralogs within one genome use `coal pipeline "
                       "clusters`")
@@ -1454,6 +1454,14 @@ class _Run:
         prefix = bool(getattr(a, "prefix_ids", False))
         if len(paths) < 2 and not prefix:
             return
+        given: dict[str, str] = {}
+        for p in paths:   # (retest R04: the same file twice read "the ID occurs in two input files, A and A")
+            key = os.path.normcase(os.path.realpath(os.fspath(p)))
+            if key in given:
+                twice = (f"{p} twice" if os.fspath(p) == given[key] else f"the same file twice: {given[key]} and {p}")
+                raise PipelineError(f"--cds names {twice}. Each file is one species' genes (or part of the set) "
+                                    "and is read once: give it once. Nothing was run")
+            given[key] = os.fspath(p)
         if prefix:
             stems = [file_stem(p) for p in paths]
             bad = next((x for x in stems if not x or x != x.strip() or any(c in x for c in "|> \t")
@@ -2343,6 +2351,14 @@ def _pairs_file_warnings(run: _Run, pairs, q_idx, s_idx, q_failed, s_failed) -> 
     if dup:
         run.warn(f"{dup:,} line(s) of --pairs {a.pairs} repeat an earlier pair (e.g. {first[0]} {first[1]}): each "
                  "is computed and written again, so those pairs have more than one row in dnds.tsv")
+    try:
+        same = os.path.samefile(a.query, a.subject)
+    except OSError:
+        same = False
+    selfp = [q for q, s in pairs if q == s] if same else []
+    if selfp:   # (retest R04: the "self-pairs" warning of pairs found by DIAMOND, only for the lines it is true of)
+        run.warn(f"{len(selfp):,} of the {len(pairs):,} pairs of --pairs {a.pairs} pair a gene with itself (e.g. "
+                 f"{selfp[0]} {selfp[0]}; --query and --subject are the same file): their rows have dN = dS = 0")
 
 
 def _read_pairs_file(path: str, shown: str | None = None) -> list[tuple[str, str]]:
