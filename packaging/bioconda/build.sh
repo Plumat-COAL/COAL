@@ -8,6 +8,12 @@ set -euxo pipefail
 #    static library libcoal_core.a, its headers and CMake package (what `cmake --install` adds for C++ projects
 #    that embed the engine) are not shipped: nothing in Bioconda links against them, and a static library in a
 #    conda package needs a reason. COAL_INSTALL=OFF: no install rules are generated.
+#    macOS: Bioconda's osx-64 deployment target (10.13) predates std::filesystem in Apple's libc++; conda ships its
+#    own modern libc++, so the availability checks are switched off (conda-forge knowledge base, "Newer C++
+#    features with old SDK").
+if [[ "${target_platform:-}" == osx-* ]]; then
+  export CXXFLAGS="${CXXFLAGS:-} -D_LIBCPP_DISABLE_AVAILABILITY"
+fi
 cmake -S . -B build-conda \
   -DCMAKE_BUILD_TYPE=Release \
   -DCOAL_BUILD_TOOLS=OFF \

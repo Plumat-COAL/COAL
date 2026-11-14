@@ -31,6 +31,7 @@ build:
 requirements:
   build:
     - {{ compiler('cxx') }}
+    - {{ stdlib('c') }}
     - cmake
     - make
   host:
@@ -48,6 +49,8 @@ requirements:
     - mafft >=7         # tested: 7.526
 
 test:
+  requires:
+    - pip
   files:
     - test_protein.aln.fasta
     - test_dna.fasta
@@ -66,6 +69,7 @@ test:
     # (to a file, not a pipe: `grep -q` closing the pipe early makes the help print a BrokenPipeError traceback)
     - pal2nal -h > help.txt && grep -q "PAL2NAL" help.txt
     - python -c "import coal, coal_compat; print(coal.__version__)"
+    - python -m pip check
     # The same alignment from both engines, byte for byte (COAL_ENGINE=cpp forces coal-cpp even for small inputs).
     - COAL_ENGINE=python coal test_protein.aln.fasta test_dna.fasta > py.fasta
     - COAL_ENGINE=cpp coal test_protein.aln.fasta test_dna.fasta > cpp.fasta
@@ -116,10 +120,13 @@ extra:
   additional-platforms:
     - linux-aarch64
     - osx-arm64
-  identifiers:
-    - doi:TODO  # Zenodo / paper DOI once there is one (see CITATION.cff)
+  # identifiers: COAL has no DOI yet (CITATION.cff). When it has one (Zenodo or a paper), add it here:
+  #   identifiers:
+  #     - doi:10.xxxx/xxxxx
   recipe-maintainers:
-    - TODO-github-handle  # the GitHub user(s) who will answer BiocondaBot and review bumps
+    # TODO before submitting: the GitHub handle(s) of whoever will answer BiocondaBot and review version bumps.
+    # The repository does not document its maintainers' handles, so none is filled in here.
+    - TODO-github-handle
   notes: |
     `coal pipeline` needs DIAMOND (2.1.0 or later) and, in cluster mode, Clustal Omega or MAFFT; they are not
     dependencies of this package (codon alignment, `coal kaks` and `coal dnds` do not use them): install them into
