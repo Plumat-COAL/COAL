@@ -1,0 +1,8 @@
+# bug=K02 code=2 methods=MLWL,MLPB
+# Vertebrate mitochondrial code (2): ATA and ATG are both Met, so the pair differs by synonymous changes only
+# (ATA/ATG, GCT/GCC) and NG, LWL, LPB and YN give dN = 0. MLWL and MLPB count ATA <-> ATG as nonsynonymous
+# (Tzeng et al.'s rule for the standard code, where ATA is Ile): dN 0.1538 and 0.1373.
+k2
+ATAGCTAAACTGGGT
+ATGGCCAAACTGGGT
+
