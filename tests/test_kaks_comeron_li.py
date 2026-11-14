@@ -214,10 +214,12 @@ class TestComeronLiRegression(ComeronLiBase):
             cmp(self, self.run_cpp("dnds", axt, "--format", "axt", "-q", "--digits", "15", "-m", "Comeron", "-m",
                                    "Li").stdout,
                 (GOLD / f"{s}.coal.comeron_li.tsv").read_text(encoding="utf-8"), f"{s} dnds")
-            # the two options restore the output of COAL before D8 / D9 byte for byte
+            # the two options restore the output of COAL before D8 / D9 (byte for byte on the platform the goldens
+            # were made on; compared as the other goldens are, so that another C library's last bit is allowed)
             got = self.run_cpp("dnds", axt, "--format", "axt", "-q", "--digits", "15", "-m", "Comeron", "-m", "Li",
                                "--comeron-twosubs", "libsequence", "--comeron-min-sites", "0").stdout
-            self.assertEqual(got, (GOLD / f"{s}.coal.comeron_li.libsequence.tsv").read_text(encoding="utf-8"), s)
+            cmp(self, got, (GOLD / f"{s}.coal.comeron_li.libsequence.tsv").read_text(encoding="utf-8"),
+                f"{s} dnds (restored)")
             cmp(self, self.run_cpp("kaks", "-i", axt, "-q", "-m", "Comeron", "-m", "Li").stdout,
                 (GOLD / f"{s}.coal.comeron_li.kaks").read_text(encoding="utf-8"), f"{s} kaks")
 
