@@ -1004,6 +1004,7 @@ class _Run:
                       f"coal-cpp, DIAMOND and the aligners are run with {self.threads} thread(s)")
         self._same_file_warning()
         self._gunzip_inputs()
+        self._copy_warning()
         self._describe_inputs()
 
     def _describe_inputs(self) -> None:
@@ -1072,6 +1073,37 @@ class _Run:
             self.warn(f"--query and --subject are the same file ({a.query}): every gene's best hit is itself, so "
                       "the pairs are self-pairs with dN = dS = 0. For paralogs within one genome use `coal pipeline "
                       "clusters`")
+
+    def _copy_warning(self) -> None:
+        """--subject a byte copy of --query (another file, the same content; one of them compressed or both): the
+        same warning as for the same file (retest of 2026-11-14, Q04: every pair was a self-pair with dN = dS = 0,
+        without a word). Files of different sizes are not read."""
+        a = self.a
+        if self.mode != "pairs" or getattr(a, "pairs", None):
+            return
+        try:
+            if os.path.samefile(a.query, a.subject):
+                return   # (_same_file_warning)
+            q, s = self.plain(a.query), self.plain(a.subject)
+            if os.path.getsize(q) != os.path.getsize(s):
+                return
+
+            def digest(given, path):
+                d = self._plain_sha256.get(os.path.abspath(os.fspath(given)))
+                if d:
+                    return d
+                h = hashlib.sha256()
+                with open(path, "rb") as fh:
+                    for block in iter(lambda: fh.read(1 << 20), b""):
+                        h.update(block)
+                return h.hexdigest()
+            if digest(a.query, q) != digest(a.subject, s):
+                return
+        except OSError:
+            return
+        self.warn(f"--subject {a.subject} has the same content as --query {a.query} (a copy): every gene's best "
+                  "hit is itself, so the pairs are self-pairs with dN = dS = 0. For paralogs within one genome use "
+                  "`coal pipeline clusters`")
 
     def _gunzip_inputs(self) -> None:
         """A gzip-compressed input (found by its first two bytes, whatever its name) is decompressed into

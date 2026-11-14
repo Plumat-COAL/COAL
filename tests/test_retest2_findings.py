@@ -185,5 +185,28 @@ class PerFileHint(PipelineCase):
         self.assertIn("cds: 8 of the 8 genes", err)
 
 
+@needs_cpp
+class CopiesAndRepeats(PipelineCase):
+    def test_a_copy_of_the_query_as_subject_warns(self):   # Q04
+        copy = self.tmp / "copy.fa"
+        shutil.copyfile(Q, copy)
+        gz = self.tmp / "copy.fa.gz"
+        gz.write_bytes(gzip.compress(Path(Q).read_bytes()))
+        other = self.tmp / "other.fa"
+        other.write_bytes(Path(Q).read_bytes().replace(b"A", b"C", 1))   # same size, other bytes
+        with mock.patch.dict(os.environ, {"COAL_DIAMOND": str(self.tmp / "no_diamond")}):
+            for k, s in enumerate((copy, gz)):
+                res, err = run(P.run_pairs, Q, s, self.tmp / f"o{k}")
+                self.assertIn(f"warning: --subject {s} has the same content as --query {Q} (a copy): every gene's "
+                              "best hit is itself, so the pairs are self-pairs with dN = dS = 0", err)
+                self.assertIn("same content", " ".join(res.report["warnings"]))
+            res, err = run(P.run_pairs, Q, other, self.tmp / "o3")
+            self.assertNotIn("same content", err)
+        # --pairs: the pairs are given (the self-pair lines are named, as for the same file)
+        pairs = self.pairs_file([(q, q) for q, _ in PLAIN])
+        res, err = run(P.run_pairs, Q, copy, self.tmp / "o4", pairs=pairs)
+        self.assertNotIn("same content", err)
+
+
 if __name__ == "__main__":
     unittest.main()
