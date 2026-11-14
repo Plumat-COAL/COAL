@@ -10,8 +10,10 @@ GPL-2.0-or-later, so bundling would be licence-compatible, but it is not done).
 install_clustalo() puts one into COAL's cache folder (cache_dir()), like orthologr's diamond_install(): through
 conda / mamba / micromamba from Bioconda (micromamba itself is one pinned release fetched from GitHub and kept only
 if its SHA-256 is the pinned one, if no conda is installed). That is the only route, on Linux and macOS: the
-pre-compiled binaries that the Clustal site used to serve are gone (CLUSTAL_ORG_GONE), so there is no automatic install
-on Windows (NO_WINDOWS_CLUSTALO names what works there). No downloaded file is run before its SHA-256 was checked.
+pre-compiled binaries that the Clustal site used to serve are gone (CLUSTAL_ORG_GONE), and the conda channels have no
+Windows packages, so there is no automatic install on Windows (NO_WINDOWS_CLUSTALO and NO_WINDOWS_MAFFT name what
+works there: WSL, MSYS2's Clustal Omega, MAFFT's own Windows package). No downloaded file is run before its SHA-256
+was checked.
 
 Stop codons: '*' at the end of a sequence is removed before aligning and given back as a last column of its own
 ('*' in the rows that had one, '-' in the others); an internal '*' is aligned as X and put back afterwards. (Clustal
@@ -47,7 +49,7 @@ __all__ = ["cache_dir", "find_clustalo", "find_mafft", "install_clustalo", "inst
            "package_pin", "installed_package",
            "run_msa", "align_clusters", "MsaResult", "MsaError", "CLUSTALO_VERSION", "MAFFT_VERSION",
            "MICROMAMBA_VERSION",
-           "CLUSTAL_ORG_GONE", "NO_WINDOWS_CLUSTALO"]
+           "CLUSTAL_ORG_GONE", "NO_WINDOWS_CLUSTALO", "NO_WINDOWS_MAFFT"]
 
 CLUSTALO_VERSION = "1.2.4"
 # MAFFT from Bioconda, pinned to one version as Clustal Omega is (deep test 2026-11-14, D07: an unpinned install
@@ -125,13 +127,29 @@ CLUSTAL_ORG_GONE = ("the pre-compiled Clustal Omega binaries are gone: the site 
                     "unrelated site and the files no longer exist (checked 2026-11-12), so COAL does not download "
                     "from it, with or without a hash. Clustal Omega is installed from Bioconda (method='conda' or "
                     "'micromamba'; Linux and macOS)")
+# Windows (checked 2026-11-14): neither Bioconda nor conda-forge has a win-64 package of clustalo or mafft (their
+# win-64 repodata), so the conda route does not exist there. Clustal Omega 1.2.4 is packaged for Windows by MSYS2
+# (mingw-w64-ucrt-x86_64-clustal-omega 1.2.4-4; pacman checks its signature), and MAFFT publishes its own Windows
+# package (the "all-in-one" zip of each version; 7.526 is mafft-7.526-win64-signed.zip). COAL downloads neither:
+# a download is added only with a SHA-256 computed from the file itself (MAFFT publishes no checksum), and neither
+# file could be fetched from where COAL is developed. The messages below name them as installs of your own.
 NO_WINDOWS_CLUSTALO = (
-    "there is no automatic Clustal Omega install on Windows: Bioconda has no Windows package, and the site that "
-    "hosted the only pre-compiled Windows build no longer serves it. What works: (1) run COAL under WSL, where "
-    "`coal pipeline install clustalo` installs it from Bioconda; (2) point COAL at a clustalo.exe you obtained "
-    "and trust: put it on PATH or set COAL_CLUSTALO; (3) use MAFFT instead (`--aligner mafft`) with a MAFFT you "
-    "installed yourself (set COAL_MAFFT): COAL has no verified MAFFT download for Windows either, and that "
-    "combination is not tested")
+    "there is no automatic Clustal Omega install on Windows: Bioconda and conda-forge have no Windows package, and "
+    "the Clustal authors' site no longer serves its pre-compiled Windows build. What works: "
+    "(1) run COAL under WSL, where `coal pipeline install clustalo` installs it from Bioconda; (2) install it "
+    "with MSYS2 (https://www.msys2.org), which packages Clustal Omega 1.2.4: in an MSYS2 shell `pacman -S "
+    "mingw-w64-ucrt-x86_64-clustal-omega`, then set COAL_CLUSTALO to C:\\msys64\\ucrt64\\bin\\clustalo.exe (or "
+    "put that folder on PATH); or put another clustalo.exe you trust on PATH or in COAL_CLUSTALO; (3) use MAFFT "
+    "instead (`--aligner mafft`) with MAFFT's own Windows package (set COAL_MAFFT to its mafft.bat). COAL does "
+    "not download or check these Windows builds, and they are not tested with COAL")
+NO_WINDOWS_MAFFT = (
+    f"there is no automatic MAFFT install on Windows: Bioconda and conda-forge have no Windows package, and COAL "
+    f"pins no SHA-256 for MAFFT's own Windows package (its site publishes none), so it does not download it. "
+    f"Install that yourself: the \"all-in-one\" mafft-{MAFFT_VERSION}-win64-signed.zip from "
+    f"https://mafft.cbrc.jp/alignment/software/windows_without_cygwin.html (MAFFT {MAFFT_VERSION} is the version "
+    f"COAL pins elsewhere); extract it, keeping its LF line ends, and set COAL_MAFFT to the full path of "
+    f"mafft-win\\mafft.bat (not tested with COAL). Or run COAL under WSL, where `coal pipeline install mafft` "
+    f"works")
 # micromamba (static, BSD-3-Clause) from https://github.com/mamba-org/micromamba-releases: one fixed release, not
 # "latest", with the SHA-256 of each asset (computed from the downloads on 2026-11-12; each equals the
 # <asset>.sha256 file the release publishes).
@@ -557,8 +575,8 @@ def install_clustalo(method: str = "auto", force: bool = False, quiet: bool = Fa
     """Install Clustal Omega into cache_dir() and return its path (an existing one when force is False).
 
     method: "auto" (conda / mamba / micromamba if one is installed, else micromamba fetched into the cache),
-    "conda" or "micromamba". Linux and macOS only: on Windows there is nothing to install it from, and MsaError
-    says what works there (NO_WINDOWS_CLUSTALO: WSL, a clustalo.exe of your own, or MAFFT).
+    "conda" or "micromamba". Linux and macOS only: on Windows there is nothing COAL installs it from, and MsaError
+    says what works there (NO_WINDOWS_CLUSTALO: WSL, MSYS2's package or another clustalo.exe of your own, or MAFFT).
 
     Verification: conda fetches from conda-forge / Bioconda over HTTPS and checks each package against the
     channel's index; micromamba itself is one pinned release with a pinned SHA-256.
@@ -611,20 +629,18 @@ def install_clustalo(method: str = "auto", force: bool = False, quiet: bool = Fa
 
 
 def install_mafft(method: str = "auto", force: bool = False, quiet: bool = False, timeout: float = 1800) -> str:
-    """Install MAFFT (BSD licence) into cache_dir() through conda / mamba / micromamba (Bioconda). Not on Windows:
-    Bioconda has no Windows package, and COAL pins no hash for the Windows package of https://mafft.cbrc.jp, so it
-    does not download it (install that yourself and set COAL_MAFFT; untested with COAL)."""
+    """Install MAFFT (BSD licence) into cache_dir() through conda / mamba / micromamba (conda-forge). Not on
+    Windows: conda-forge and Bioconda have no Windows package, and COAL pins no hash for MAFFT's own Windows
+    package, so it does not download it; MsaError names that package (NO_WINDOWS_MAFFT: install it yourself and
+    set COAL_MAFFT; untested with COAL)."""
     c = _cached("mafft")[1]
     if not force and _trusted_cached("mafft", c):
         note = pin_note("mafft", c)
         if note and not quiet:
             print(f"coal: note: {note}", file=sys.stderr)
         return c
-    if platform.system() == "Windows":
-        raise MsaError("there is no automatic MAFFT install on Windows (no Bioconda package, and COAL has no "
-                       "verified download for it): install MAFFT yourself from "
-                       "https://mafft.cbrc.jp/alignment/software/windows.html and set COAL_MAFFT (untested with "
-                       "COAL), or run COAL under WSL, where `coal pipeline install mafft` works")
+    if _platform()[0] == "Windows":
+        raise MsaError(NO_WINDOWS_MAFFT)
     with _install_lock("mafft", timeout):
         if not force and _trusted_cached("mafft", c):    # another install finished while this one waited
             return c

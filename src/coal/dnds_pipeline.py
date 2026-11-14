@@ -1776,9 +1776,7 @@ class _Run:
             if platform.system() == "Windows":   # nothing to install it from there: say what works instead
                 raise PipelineError(
                     f"{name} was not found (PATH, $COAL_{tool.upper()}), and " + (_msa.NO_WINDOWS_CLUSTALO
-                    if tool == "clustalo" else
-                    "there is no automatic MAFFT install on Windows: install MAFFT yourself and set COAL_MAFFT "
-                    "(untested with COAL), or run COAL under WSL, where `coal pipeline install mafft` works"))
+                    if tool == "clustalo" else _msa.NO_WINDOWS_MAFFT))
             raise PipelineError(f"{name} was not found (PATH, $COAL_{tool.upper()}, COAL's cache). Run again with "
                                 f"--install-tools, or run `coal pipeline install {tool}`")
         self.tools[tool] = {"path": exe, "version": _msa.tool_version(exe)}
@@ -3636,7 +3634,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("install", help="install DIAMOND, Clustal Omega or MAFFT into COAL's cache",
                        description="Install the external tools into COAL's cache folder (they are not bundled: "
-                                   "docs/alignment.md \"Licences\").")
+                                   "docs/alignment.md \"Licences\"). DIAMOND: Linux, macOS and Windows. Clustal "
+                                   "Omega and MAFFT: Linux and macOS (conda packages); on Windows the command says "
+                                   "what works there instead (WSL, MSYS2's Clustal Omega, MAFFT's own Windows "
+                                   "package).")
     p.add_argument("tools", nargs="+", choices=("diamond", "clustalo", "mafft"))
     p.add_argument("--force", action="store_true", help="install again even if one is there")
     p.add_argument("--sha256", metavar="HEX",
@@ -3646,7 +3647,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--allow-unverified", action="store_true",
                    help="accept a download that nobody can verify (no pinned hash, no --sha256): it is kept and "
                         "run as it arrives, and its SHA-256 is printed. Without this such a download is refused. "
-                        "It does not apply to clustalo or mafft (Bioconda only)")
+                        "It does not apply to clustalo or mafft (conda packages only)")
     p.add_argument("-q", "--quiet", action="store_true")
     return ap
 

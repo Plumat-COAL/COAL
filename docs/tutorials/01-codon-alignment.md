@@ -20,14 +20,14 @@ are the other classic), and it makes the errors below real ones rather than made
 Work in a scratch folder, with `T` pointing at this folder of a COAL checkout ([README](README.md#setup)). The
 download script needs `curl` or `wget` and `sha256sum` or `shasum`:
 
-```
+```bash
 export T=/path/to/COAL/docs/tutorials
 mkdir -p coal-tutorials && cd coal-tutorials
 bash $T/data/get_mycoplasma.sh          # -> coal-tutorial-data/, checksums verified
 mkdir t01 && cd t01
 ```
 
-```
+```text
 ok                 coal-tutorial-data/mgenitalium_G37.cds.fna.gz
 ok                 coal-tutorial-data/mpneumoniae_M129.cds.fna.gz
 ok                 coal-tutorial-data/mgallisepticum_Rlow.cds.fna.gz
@@ -41,7 +41,7 @@ GCF_000092585.1. Their SHA-256 checksums are in the script; a file that does not
 Each file holds every CDS of its genome. Take the *glpK* record of each and give it a short ID (the protein and
 the DNA must end up with the **same IDs**; step 5 shows why):
 
-```
+```bash
 D=../coal-tutorial-data
 for sp in mgenitalium_G37:Mgen mpneumoniae_M129:Mpne mgallisepticum_Rlow:Mgal; do
   f=${sp%%:*}; s=${sp##*:}
@@ -50,7 +50,7 @@ done > glpK.cds.fasta
 grep '>' glpK.cds.fasta
 ```
 
-```
+```text
 >Mgen_glpK
 >Mpne_glpK
 >Mgal_glpK
@@ -66,13 +66,13 @@ code and align with any aligner. If you installed Clustal Omega with `coal pipel
 shell (`coal pipeline install clustalo -q` prints the path of the installed program and installs nothing when it
 is there; skip the line if `clustalo` is on your `PATH` already):
 
-```
+```bash
 export PATH="$(dirname "$(coal pipeline install clustalo -q)"):$PATH"
 coal translate glpK.cds.fasta -c 4 -o glpK.faa
 clustalo -i glpK.faa -o glpK.aln.fasta --threads 1
 ```
 
-```
+```text
 coal translate: 3 gene(s): 3 ok, 0 warning, 0 failed
 ```
 
@@ -82,14 +82,14 @@ the annotation's `.faa`), that is fine too, as long as each one is the translati
 
 ## 3. Thread the DNA onto the alignment
 
-```
+```bash
 coal glpK.aln.fasta glpK.cds.fasta -codontable 4 -o glpK.codon.fasta
 head -4 glpK.codon.fasta
 ```
 
 No message, exit status 0:
 
-```
+```text
 >Mgen_glpK
 ATGGATCTAAAAAAACAATACATTATTGCCTTAGATGAAGGTACTAGTTCTTGTCGATCA
 ATTGTTTTTGATCACAATCTTAACCAAATAGCAATAGCACAAAACGAATTTAACACTTTT
@@ -102,12 +102,12 @@ not in the protein alignment.
 
 Other output formats, as PAL2NAL writes them:
 
-```
+```bash
 coal glpK.aln.fasta glpK.cds.fasta -codontable 4 -output paml -o glpK.paml       # codeml's input
 coal glpK.aln.fasta glpK.cds.fasta -codontable 4 -nogap -o glpK.nogap.fasta      # drop columns with a gap
 ```
 
-```
+```bash
 $ head -c 120 glpK.paml
    3   1536
 Mgen_glpK
@@ -121,13 +121,13 @@ ATGGATCTAAAAAAACAATACATTATTGCCTTAGATGAAGGTACTAGTTCTTGTCGATCA
 `pal2nal` is COAL's drop-in for `pal2nal.pl`: the same command line, the same defaults (CLUSTAL output). With
 PAL2NAL v14 installed, the two outputs are byte-identical:
 
-```
+```bash
 pal2nal    glpK.aln.fasta glpK.cds.fasta -codontable 4 > coal_pal2nal.clustal
 pal2nal.pl glpK.aln.fasta glpK.cds.fasta -codontable 4 > real_pal2nal.clustal
 cmp coal_pal2nal.clustal real_pal2nal.clustal && echo IDENTICAL
 ```
 
-```
+```text
 IDENTICAL
 ```
 
@@ -137,12 +137,12 @@ The few places where COAL deliberately differs from PAL2NAL are listed in [diffe
 
 Leave out `-codontable 4`, as one easily does:
 
-```
+```bash
 coal glpK.aln.fasta glpK.cds.fasta -o wrong_code.fasta
 echo "exit $?"
 ```
 
-```
+```text
 coal: notice: wrong genetic code? Under genetic code 4 (Mold, protozoan and coelenterate mitochondrial; Mycoplasma), all 3 sequences match their protein; under code 1, none do. Re-run with -codontable 4.
 coal: warning: Mgen_glpK pepAlnPos 46: W does not correspond to TGA
 coal: warning: Mgen_glpK pepAlnPos 55: W does not correspond to TGA
@@ -175,7 +175,7 @@ The fix is the one the notice gives: `-codontable 4`.
 A protein alignment from one source and a CDS file from another rarely share IDs. Make such a file, with NCBI's
 own IDs and in another order:
 
-```
+```bash
 for f in mgallisepticum_Rlow mgenitalium_G37 mpneumoniae_M129; do
   zcat $D/$f.cds.fna.gz | awk '/^>/{keep = /\[gene=glpK\]/; if (keep) print $1; next} keep'
 done > glpK.cds.ncbi.fasta
@@ -183,7 +183,7 @@ coal glpK.aln.fasta glpK.cds.ncbi.fasta -codontable 4 -o by_order.fasta
 echo "exit $?"
 ```
 
-```
+```text
 coal: error: Mgal_glpK: protein and DNA are inconsistent (no match found) (paired by file order with DNA 'lcl|NC_000912.1_cds_WP_010874407.1_50', because no protein ID matches a DNA ID)
 coal: summary: 1 of 3 sequences has codons that do not match their amino acid.
 coal: summary: 1 sequence of 3 is probably wrong (first: Mgen_glpK: 479 of the 508 codons COAL could check do not match this protein, so this is almost certainly the wrong DNA for it (or the wrong genetic code).) Fix or remove it before running again, or use --strict to refuse such genes.
@@ -201,10 +201,10 @@ How to read it:
 - One gene *could* be placed, codon by position, with 479 of 508 codons wrong. PAL2NAL would write that row
   without a word; COAL flags it, and with `--strict` refuses it:
 
-  ```
+  ```bash
   coal glpK.aln.fasta glpK.cds.ncbi.fasta -codontable 4 -o by_order.fasta --strict
   ```
-  ```
+  ```text
   coal: error: Mgen_glpK: protein and DNA are inconsistent (479 of 508 checkable codons do not match the protein) (paired by file order with DNA 'lcl|NC_004829.2_cds_WP_011113244.1_17', because no protein ID matches a DNA ID)
   ...
   exit 1
@@ -236,11 +236,11 @@ the protein starts in the DNA, in any reading frame.
 
 With the platform wheel (`coal-cpp`), the codon alignment goes straight into Ka/Ks for every pair of its rows:
 
-```
+```bash
 coal dnds glpK.codon.fasta -c 4 -j 1 | cut -f1-6,13-15
 ```
 
-```
+```text
 coal dnds: 3 pair(s), 1 method(s): 0 ok, 0 warning, 0 not_converged, 3 saturated, 0 no_data, 0 error
 seq1	seq2	method	dN	dS	dNdS	codons_compared	status	note
 Mgen_glpK	Mpne_glpK	YN	0.17381333	NA	NA	508	saturated	Ks saturated (multiple-hit correction undefined)
@@ -261,7 +261,7 @@ should not be trusted either. [Tutorial 2](02-pairs-dnds.md) does all of this fo
 
 [Tutorial 5](05-choosing-a-method.md) uses `t01/glpK.codon.fasta`; once you are done with it:
 
-```
+```bash
 cd .. && rm -rf t01
 ```
 

@@ -127,7 +127,11 @@ corresponding codon alignments. *Nucleic Acids Res.* 34:W609–W612.
 1. Set the same version in `src/coal/__init__.py`, `pyproject.toml`, `apps/coal-app/pyproject.toml` (its
    `version` and its `coal-align==` dependency) and the `id="version"` span in `site/index.html` (a test fails if
    they differ; `scripts/release_version.py` refuses the tag), optionally add a `## <version>` section to
-   `CHANGELOG.md` for the release notes, and commit.
+   `CHANGELOG.md` for the release notes, and commit. With the first release of a development line (0.6.0 after
+   0.6.0.dev0), also remove the dev-version banner at the top of `README.md`, `docs/install.md` and
+   `docs/tutorials/README.md` (the block that starts with the `<!-- dev-version banner ... -->` comment):
+   `tests/test_new_user_ux.py` fails while a release version still has it. (The website hides its 0.6 sections
+   with `data-since` and needs no change.)
 2. Tag that commit: `git tag vX.Y.Z && git push origin vX.Y.Z`.
 3. `.github/workflows/release.yml` checks the tag against the source version, builds and checks both wheels and
    sdists (engine and app) and the Windows app (`apps/coal-app/desktop/build.ps1`), writes `SHA256SUMS.txt` and

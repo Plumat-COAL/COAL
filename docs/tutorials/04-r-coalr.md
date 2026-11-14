@@ -49,7 +49,7 @@ table(res$status)
 head(res[, c("dN", "dS", "dNdS", "codons_compared", "prot_identity", "status")], 3)
 ```
 
-```
+```text
 [1] 3142   17
 
 not_converged            ok     saturated       warning 
@@ -69,7 +69,7 @@ identical(res$status, cli$status)
 identical(signif(res$dS, 8), signif(cli$dS, 8))    # the TSV has 8 significant digits
 ```
 
-```
+```text
 [1] TRUE
 [1] TRUE
 ```
@@ -85,7 +85,7 @@ quantile(res$dS[keep], c(0.25, 0.5, 0.75))
 summary(res$dNdS[keep])
 ```
 
-```
+```text
 [1] 2468
       25%       50%       75% 
 0.8539104 1.2227868 1.4945717 
@@ -116,7 +116,7 @@ table(run$pairs$status)
 run$report$entry
 ```
 
-```
+```text
 [1] TRUE
 [1] "exit_code" "pairs"     "orthologs" "unpaired"  "genes"     "failed"   
 [7] "report"    "out_dir"  
@@ -147,7 +147,7 @@ head(res$summary[order(-res$summary$n_members),
                  c("n_members", "n_pairs", "n_ok", "n_saturated", "dS_median", "dNdS_median", "status")], 3)
 ```
 
-```
+```text
 [1] "pairs"   "summary" "failed" 
 
       no_data not_converged            ok     saturated       warning 
@@ -180,7 +180,7 @@ d <- dNdS("ecoli.fna", "salmonella.fna", dnds_est.method = "YN", engine = "coal"
 (`ecoli.fna` and `salmonella.fna` are the two files of tutorial 2, uncompressed:
 `zcat coal-tutorial-data/ecoli_K12_MG1655.cds.fna.gz > ecoli.fna`, the same for *Salmonella*.)
 
-```
+```text
 dNdS_coal(): reciprocal best hits of 'ecoli.fna' against 'salmonella.fna' (diamond, sensitivity_mode 'default', e-value 1E-5, best_hit_rule 'bitscore'), then dN/dS by method 'YN' with the COAL engine (aa_aln_scoring 'pwalign', BLOSUM62, comp_cores = 1).
 dNdS_coal(): 3143 gene pairs - 2969 with dN/dS, 4 with dS = 0 (no ratio), 170 saturated (dN or dS not estimable). Median dS: 1.33. 13 not converged (see the notes of the engine).
 1 coding sequence has a length that is not a multiple of 3 and was trimmed at the 3' end (delete_corrupt_cds = FALSE; ...). They are listed in attr(<result>, "trimmed_sequences"); ...
@@ -197,7 +197,7 @@ The result is orthologr's table (`query_id subject_id dN dS dNdS method perc_ide
 With `--preset pwalign`, the dS of all 2,972 pairs that both routes estimate agree to the 8 significant digits of
 the TSV (largest difference 5e-8):
 
-```
+```bash
 coal pipeline pairs --query coal-tutorial-data/ecoli_K12_MG1655.cds.fna.gz \
     --subject coal-tutorial-data/styphimurium_LT2.cds.fna.gz -o ecsa_pwalign -j 1 --preset pwalign -q
 ```
@@ -220,7 +220,7 @@ are in COAL's engine too (`methods = "Comeron"` in coalr, with `comeron_flavour 
 
 ## Clean up
 
-```
+```bash
 rm -rf ecsa_from_r ecsa_pwalign ecoli.fna salmonella.fna
 ```
 

@@ -41,8 +41,9 @@ installs them into the cache, checksum-verified, with
 coal pipeline install diamond clustalo
 ```
 
-(or `--install-tools` on a run; `conda install -c bioconda diamond clustalo` works as well). On Windows there is no
-automatic Clustal Omega or MAFFT install ([alignment.md](alignment.md)); pair mode needs DIAMOND only.
+(or `--install-tools` on a run; `conda install -c bioconda diamond clustalo` works as well). On Windows only
+DIAMOND installs that way: for Clustal Omega and MAFFT see
+[below](#clustal-omega-and-mafft-on-windows). Pair mode needs DIAMOND only.
 
 ## Option 1: download the app from the website (recommended)
 
@@ -142,6 +143,35 @@ python -m pip install -e . -e "apps/coal-app[gui]"
 installing one into the other's environment can break it. The Windows launchers
 (`apps\coal-app\desktop\run_from_source.bat`, `apps\coal-app\desktop\setup_mcp.bat`) do this for you. Quote
 the extras (`"apps/coal-app[gui]"`): some shells (zsh, PowerShell) treat bare brackets specially.
+
+## Clustal Omega and MAFFT on Windows
+
+Cluster mode (`coal pipeline clusters`) aligns clusters of three or more genes with Clustal Omega or MAFFT. On
+Windows, `coal pipeline install clustalo` / `mafft` (and `--install-tools`) install nothing: neither Bioconda nor
+conda-forge has a Windows package of either program (their package indexes, checked 2026-11-14), and the
+pre-compiled Clustal Omega binaries of its authors' site are gone ([alignment.md](alignment.md)). COAL downloads a
+program only with a SHA-256 pinned in its source and computed from the file itself, and none is pinned for the
+Windows packages below. The commands say what works instead:
+
+1. **WSL** (Windows Subsystem for Linux): run COAL there, and `coal pipeline install clustalo mafft` installs the
+   pinned Bioconda / conda-forge builds as on Linux (the route COAL's CI tests, on Linux).
+2. **Clustal Omega from MSYS2** (https://www.msys2.org), which packages Clustal Omega 1.2.4, the version COAL pins
+   on Linux and macOS (`mingw-w64-ucrt-x86_64-clustal-omega` 1.2.4-4; pacman checks the package's signature). In an
+   MSYS2 shell:
+
+   ```
+   pacman -S mingw-w64-ucrt-x86_64-clustal-omega
+   ```
+
+   then set `COAL_CLUSTALO` to `C:\msys64\ucrt64\bin\clustalo.exe` (MSYS2's default folder), or put
+   `C:\msys64\ucrt64\bin` on `PATH`. Any other `clustalo.exe` you trust works the same way.
+3. **MAFFT's own Windows package**: the "all-in-one" `mafft-7.526-win64-signed.zip` (MAFFT 7.526, the version COAL
+   pins elsewhere) from https://mafft.cbrc.jp/alignment/software/windows_without_cygwin.html. Extract it (keep its
+   LF line ends; MAFFT's page warns that some unzip tools convert them), set `COAL_MAFFT` to the full path of
+   `mafft-win\mafft.bat`, and run with `--aligner mafft`. MAFFT's site publishes no checksum for it.
+
+Routes 2 and 3 are installs of your own: COAL neither downloads nor checks them, uses them as they are (no version
+note, as for any program on `PATH`), and they are not tested with COAL.
 
 ## Ways to use COAL
 

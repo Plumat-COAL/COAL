@@ -38,7 +38,7 @@ outputs of 1 and 2.
 2. **External programs:** DIAMOND 2.1.0 or later (tutorials 2-4), Clustal Omega (3, 4), MAFFT (one step of 3).
    They can be on `PATH`, or installed into COAL's cache, checksum-verified:
 
-   ```
+   ```bash
    coal pipeline install diamond clustalo mafft
    ```
 
@@ -47,7 +47,7 @@ outputs of 1 and 2.
 3. **The scripts of this folder.** The tutorials call the download scripts and two small Python scripts
    (standard library only) through `$T`:
 
-   ```
+   ```bash
    git clone https://github.com/plumat-coal/COAL
    export T=$PWD/COAL/docs/tutorials
    mkdir coal-tutorials && cd coal-tutorials      # a scratch folder for data and results
@@ -75,7 +75,7 @@ stay valid; a file that does not match is refused.
 | | *Chlamydia muridarum* Nigg | GCF_000006685.1 (ASM668v1) | 898 | 347 kB | `9d66dd5e7b0d931d24db4386565effb7d906116b005ae4f82c75e0e97b6a6894` |
 | | *Chlamydia pneumoniae* CWL029 | GCF_000008745.1 (ASM874v1) | 1,052 | 387 kB | `e08181a6794d0050ff3b2e123333a5978e864d06a61fea9930f1579eeea6a981` |
 
-```
+```bash
 bash $T/data/get_mycoplasma.sh [DEST]        # default DEST: coal-tutorial-data
 ```
 

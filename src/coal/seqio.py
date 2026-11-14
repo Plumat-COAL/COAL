@@ -62,12 +62,24 @@ def open_error_message(path: str, e: OSError) -> str:
     if os.path.isdir(path):
         why = "it is a folder, not a file"
     elif e.errno == errno.ENOENT:
-        why = "no such file"
+        why = "no such file" + windows_path_hint(path)
     elif e.errno in (errno.EACCES, errno.EPERM):
         why = "permission denied"
     else:
         why = e.strerror or str(e)
     return f"cannot open '{path}': {why}"
+
+
+def windows_path_hint(path) -> str:
+    """For a Windows path (C:\\... or C:/...) that is missing on Linux or macOS, e.g. typed under WSL: ". This is a
+    Windows path; under WSL (Windows Subsystem for Linux) the same file is /mnt/c/...". "" otherwise, and always on
+    Windows. The pipeline's missing-file messages say the same (new-user audit 2026-11-14, U17)."""
+    path = os.fspath(path)
+    m = re.match(r"^([A-Za-z]):[\\/]", path) if os.name != "nt" else None
+    if not m:
+        return ""
+    return (". This is a Windows path; under WSL (Windows Subsystem for Linux) the same file is "
+            f"/mnt/{m.group(1).lower()}/{path[3:].replace(chr(92), '/')}")
 
 
 # Text inputs: a UTF-8 BOM is skipped and other non-ASCII input is an InputFormatError naming the file.
