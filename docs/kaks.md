@@ -876,6 +876,16 @@ rule. In the gestimator flavour the value is gestimator's either way, and the op
 note above instead of `Ka: correction undefined, gestimator's value`), which tells orthologr that the row is not
 saturated.
 
+The rule applies only where the distance it gives is positive. In very short alignments, setting the small
+class's logarithm to 0 can leave dS at exactly 0 although a synonymous change was seen (`ATGGCTAAA` /
+`ATGGCCAAA`: one change, GCT to GCC; dS 0), and a 0 reads as "no synonymous change" (orthologr labels such a
+pair `dS_zero`). Where a small class was the reason and the distance is not above 0, the row is what
+`--comeron-min-sites 0` gives: `NA`, status `saturated`, in the default flavour; gestimator's 0 with the note
+`Ks: correction undefined, gestimator's value (undefined logarithms set to 0)` (or `Ka:`) in the gestimator
+flavour, which orthologr reads as `NA`. In 7,000 simulated neutral pairs of 5 to 100 codons (1,000 per length)
+this concerns dS in 53 pairs at 5 codons, 4 at 10, 1 at 15 and none at 20 or more; dN never (none of its 168
+small-class values is 0). No other value or status changes.
+
 Simulated neutral pairs (kappa 2, 10-35% of codons differing, 600 pairs per length; the truth is the substitutions
 applied): at 30 codons, dN is `NA` in 22 pairs (3.7%) with the previous rule and in none with the default; the
 recovered values' mean absolute error is 8.8%, against 11.2% for all 30-codon pairs (50 codons: 2 pairs, 4.3%; 100

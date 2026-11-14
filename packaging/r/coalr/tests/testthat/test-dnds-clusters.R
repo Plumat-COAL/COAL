@@ -175,3 +175,44 @@ test_that("a two-member cluster is computed in input order, as coal_dnds_pairs c
   back <- coal_dnds_pairs(s, q, pairs = pr[, 2:1], methods = m)
   for (v in c("dN", "dS", "status")) expect_identical(clu2[[v]], back[[v]], info = v)
 })
+
+test_that("the pairs of a multiple alignment are computed in input order, as `coal pipeline clusters` does", {
+  # three genes, many codons differing at two positions: with libsequence's branches (comeron_twosubs =
+  # "libsequence") Comeron's estimate depends on which sequence is first. A cluster that lists its members in the
+  # reverse of their order in `cds` gives, pair by pair, what the cluster in input order gives (dnds.hpp
+  # Group::rank; docs/pipeline.md "Which gene comes first")
+  set.seed(20261114)
+  bases <- c("T", "C", "A", "G")
+  sense <- setdiff(apply(expand.grid(bases, bases, bases)[, 3:1], 1, paste0, collapse = ""), c("TAA", "TAG", "TGA"))
+  mutate <- function(x) {
+    vapply(x, function(c) {
+      if (runif(1) > 0.35) return(c)
+      repeat {
+        d <- strsplit(c, "")[[1]]
+        for (p in sample(3, 2)) d[p] <- sample(setdiff(bases, d[p]), 1)
+        d <- paste0(d, collapse = "")
+        if (!d %in% c("TAA", "TAG", "TGA")) return(d)
+      }
+    }, "")
+  }
+  anc <- sample(sense, 120, replace = TRUE)
+  cds <- c(g1 = paste0(anc, collapse = ""), g2 = paste0(mutate(anc), collapse = ""),
+           g3 = paste0(mutate(anc), collapse = ""))
+  rows <- coal_translate(cds)   # named, the same length, no gaps: an alignment as it is
+  m <- "Comeron"
+  fwd <- coal_dnds_clusters(cds, data.frame(rep = "g1", mem = c("g1", "g2", "g3")),
+                            msa = list(g1 = rows), methods = m, comeron_twosubs = "libsequence")$pairs
+  rev <- coal_dnds_clusters(cds, data.frame(rep = "g3", mem = c("g3", "g2", "g1")),
+                            msa = list(g3 = rows), methods = m, comeron_twosubs = "libsequence")$pairs
+  expect_identical(nrow(fwd), 3L)
+  expect_identical(nrow(rev), 3L)
+  key <- function(d) paste(pmin(d$seq1, d$seq2), pmax(d$seq1, d$seq2))
+  rev <- rev[match(key(fwd), key(rev)), ]
+  for (v in c("dN", "dS", "status")) expect_identical(rev[[v]], fwd[[v]], info = v)
+  expect_identical(rev$seq1, fwd$seq2)   # the rows still list the cluster's order
+  # and that order matters here: the pairs computed the other way round differ
+  ab <- coal_kaks(cds[c(1, 1, 2)], cds[c(2, 3, 3)], method = m, comeron_twosubs = "libsequence")
+  ba <- coal_kaks(cds[c(2, 3, 3)], cds[c(1, 1, 2)], method = m, comeron_twosubs = "libsequence")
+  expect_gt(sum(ab$dN != ba$dN | ab$dS != ba$dS, na.rm = TRUE), 0)
+  expect_equal(fwd$dN, ab$dN)
+})
