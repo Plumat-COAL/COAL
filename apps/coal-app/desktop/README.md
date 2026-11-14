@@ -6,6 +6,11 @@ acid. You need one before measuring selection (dN/dS with PAML or HyPhy) or buil
 DNA. COAL does what PAL2NAL does, but runs on Windows with no terminal, and tells you in plain
 words when a gene doesn't fit.
 
+COAL also measures selection itself: the **Ka/Ks** tab gives dN, dS and dN/dS for pairs of aligned coding
+sequences (from the Align tab, or any codon alignment), and the **dN/dS pipeline** tab goes from the coding
+sequences of two species straight to dN/dS per ortholog pair. The pipeline needs DIAMOND, which COAL does not
+include: the tab says when it is missing and how to install it (`coal pipeline install diamond`).
+
 - **None of your data leaves your computer.** COAL works offline. It doesn't upload your files, check for
   updates or collect statistics. (The page asks a public CDN for one small helper script that Gradio adds for
   embedding; it is not needed, carries nothing of yours, and the page works without it.)

@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 
 os.environ.setdefault("GRADIO_ANALYTICS_ENABLED", "False")
 
 import gradio as gr  # noqa: E402
 
-from . import core, gui_html, settings, tools, viewer  # noqa: E402
+from . import core, dnds, gui_html, settings, tools, viewer  # noqa: E402
 
 
 # The COAL theme: colours of the COAL logo and site (charcoal #2A2A2A, slate #4A4744, ember #FF6A13 under dark text
@@ -213,6 +214,32 @@ footer > button.settings, footer > div.divider:nth-last-child(2) { display:none 
   .coal-head h1 { font-size:1.4rem; } .coal-headline { font-size:1.2rem; }
   .coal-health th, .coal-health td { padding:0.45em 0.45em; }
   .coal-health td:first-child { white-space:normal; } }
+/* The Ka/Ks and dN/dS pipeline tabs: compact drop zones like the Align tab's, a scrolling result table, the
+   pipeline's stages (done ✔, running ▶, to come ○: icon + words, never colour alone) */
+#coal-kaks-file, #coal-pipe-query, #coal-pipe-subject { --block-border-width:0px; background:transparent !important;
+  box-shadow:none !important; }
+#coal-kaks-file button[aria-dropeffect], #coal-pipe-query button[aria-dropeffect],
+#coal-pipe-subject button[aria-dropeffect] { min-height:110px; height:auto !important;
+  border:1.5px dashed var(--coal-field) !important; border-radius:8px; background:var(--coal-surface) !important; }
+#coal-kaks-file button[aria-dropeffect] > div, #coal-pipe-query button[aria-dropeffect] > div,
+#coal-pipe-subject button[aria-dropeffect] > div { min-height:0 !important; padding:10px 0 !important; }
+#coal-kaks-examples { flex-wrap:wrap !important; gap:2px 14px !important; align-items:baseline; }
+#coal-kaks-examples > * { flex:0 0 auto !important; min-width:0 !important; width:auto !important; }
+#coal-kaks-examples .coal-ex-label p, #coal-kaks-examples .coal-ex-label { margin:0; color:var(--coal-muted); }
+#coal-kaks-examples button { background:none !important; border:0 !important; box-shadow:none !important;
+  padding:2px 0 !important; min-height:0 !important; font-weight:400 !important; color:var(--coal-info) !important;
+  text-decoration:underline; text-underline-offset:3px; }
+.coal-dnds-scroll { max-height:520px; overflow:auto; border-bottom:1px solid var(--coal-line); }
+.coal-dnds-table { font-size:0.92rem; }
+.coal-dnds-table th, .coal-dnds-table td { white-space:nowrap; padding:0.35em 0.6em; }
+.coal-dnds-table td:last-child { white-space:normal; min-width:16em; }
+.coal-stages { list-style:none; padding:0; margin:0.3em 0; }
+.coal-stage { margin:0.25em 0; color:var(--coal-text); }
+.coal-stage-running { font-weight:700; color:var(--coal-ink); }
+.coal-stage-to-come { color:var(--coal-muted); }
+#coal-pipe-tools p, #coal-kaks-tools p { margin:0 0 0.4em; }
+#coal-kaks-dl, #coal-pipe-dl { flex-wrap:wrap !important; gap:8px !important; }
+#coal-kaks-dl > *, #coal-pipe-dl > * { flex:0 0 auto !important; min-width:0 !important; width:auto !important; }
 @media (prefers-reduced-motion: reduce) { * { transition:none !important; animation:none !important; } }
 """
 
@@ -508,9 +535,12 @@ def show_sample():
 SETTING_ORDER = ["codontable", "output_format", "nogap", "nomismatch", "strict", "preview", "residue_colours"]
 
 
-ABOUT_SCOPE = ("This app makes codon alignments. Ka/Ks (dN/dS) and the one-step pipeline from coding sequences to "
-               "dN/dS are in COAL's command line, not in this app: `coal dnds`, `coal kaks`, `coal pipeline` "
-               "(`coal help` lists the commands).")
+# What the app covers (also said by the MCP server's instructions, mcp_stdio.SCOPE, and the README)
+ABOUT_SCOPE = ("This app makes codon alignments (Align), estimates Ka/Ks (dN/dS) for pairs of aligned coding "
+               "sequences (Ka/Ks) and runs COAL's one-step pipeline from two files of coding sequences to dN/dS "
+               "(dN/dS pipeline; it needs DIAMOND). Ka/Ks and the pipeline need COAL's C++ engine, coal-cpp. The "
+               "pipeline's cluster mode and KaKs_Calculator's output format are in COAL's command line: "
+               "`coal pipeline clusters`, `coal kaks` (`coal help` lists the commands).")
 
 
 def _settings_where() -> str:
@@ -552,6 +582,175 @@ def save_settings_ui(code, fmt, nogap, nomismatch, strict, preview, residue_colo
 def reset_settings_ui(formats=None):
     data, err = settings.reset(formats)
     return _apply(data, err or f"✔ Back to the defaults ({_now()})")
+
+
+# ---------------------------------------------------------------- Ka/Ks and the dN/dS pipeline (dnds.py)
+
+KAKS_PAIRS = [("Every pair (all against all)", "all"), ("Consecutive records (1+2, 3+4, ...)", "consecutive")]
+KAKS_EMPTY = '<p class="coal-small">Results appear here after a run.</p>'
+STATUS_HELP_ALL = "**What the statuses mean**\n\n" + dnds.status_help_md()
+KAKS_INTRO = ("Paste or upload **aligned coding DNA** (a codon alignment, e.g. from the Align tab): an aligned FASTA "
+              "or KaKs_Calculator's AXT format. Each pair gives one row per method.")
+PIPE_INTRO = ("Two FASTA files of **coding sequences** (CDS, not aligned), one per species: COAL translates them, "
+              "finds ortholog pairs with DIAMOND (reciprocal best hits), aligns each pair and estimates Ka/Ks.")
+
+
+def _method_choices():
+    return [(dnds.METHOD_NAMES.get(m, m), m) for m in dnds.METHODS]
+
+
+def kaks_example_path() -> str | None:
+    p = os.path.join(core.EXAMPLES_DIR, "dnds", "codon.fasta")
+    return p if os.path.isfile(p) else None
+
+
+def _kaks_outputs(banner, table="", tsv=None, help_md="", messages="", cite_text="", command=""):
+    """Outputs of a Ka/Ks run: banner, table, download, statuses, engine messages, references, command, results
+    area."""
+    return (gr.update(value=banner), gr.update(value=table or KAKS_EMPTY), gr.update(value=tsv, visible=bool(tsv)),
+            gr.update(value=help_md or STATUS_HELP_ALL), gr.update(value=messages or "(no messages)"),
+            gr.update(value=cite_text), gr.update(value=command), gr.update(visible=True))
+
+
+def kaks_ui(upload, pasted, pairs, methods, code, min_codons=0, max_ds=0):
+    """The Ka/Ks tab's button: `coal dnds` on the uploaded (or pasted) codon alignment. No paths are typed here:
+    only uploads and pasted text (or the bundled example) are read."""
+    text = (pasted or "").strip()
+    if not upload and not text:
+        return _kaks_outputs(gui_html.message_banner("warning", "Please add an alignment",
+                                                     "Upload an aligned codon FASTA or AXT file, paste one, or try "
+                                                     "the example."))
+    try:
+        out_dir = core.new_run_dir()
+        if upload:
+            src, desc = upload, f"File used: {os.path.basename(upload)}, {core.human_size(os.path.getsize(upload))}."
+        else:
+            src = dnds.write_pasted(text, out_dir)
+            desc = f"Pasted text, {len(text):,} characters."
+        r = dnds.run_kaks(src, out_dir, methods or [], int(code), pairs or "all", int(min_codons or 0),
+                          float(max_ds) if max_ds else None)
+    except (ValueError, OSError) as e:
+        return _kaks_outputs(gui_html.message_banner("failed", "Ka/Ks did not run",
+                                                     core.public_error(e, [upload or ""])))
+    # the engine's warnings (e.g. "the two sequences of 264 pair(s) differ in length: is the input aligned?")
+    warn = [ln for ln in dnds.engine_lines(r.stderr, 20) if "warning:" in ln][:3]
+    banner = dnds.kaks_banner(r, desc, warn)
+    _keys, refs = dnds.cite(r.methods, codon_alignment=False)
+    help_md = ("**What the statuses in this run mean**\n\n" + dnds.status_help_md(r.counts)) if r.rows else ""
+    return _kaks_outputs(banner, dnds.table_html(r.rows, dnds.SHOWN_KAKS), r.tsv_path, help_md, r.stderr.strip(),
+                         refs, r.command)
+
+
+def kaks_example_ui():
+    """The example (examples/dnds/codon.fasta: 12 ortholog pairs, written one after the other) into the form."""
+    return (kaks_example_path(), "", "consecutive", ["YN", "NG"], 1)
+
+
+def _clear_text(_upload):
+    return ""
+
+
+def _pipe_outputs(banner, stage=0, done=False, log="", table="", tsv=None, report=None, zip_path=None, cmd="",
+                  elapsed=None, cite_text="", ended=False):
+    """Outputs of the pipeline tab: banner, stages, log, table, three downloads, command, references, results
+    area."""
+    return (gr.update(value=banner),
+            gr.update(value=dnds.progress_html(stage, done, elapsed, ended) if (stage or done or elapsed is not None)
+                      else ""),
+            gr.update(value=log),
+            gr.update(value=table or KAKS_EMPTY),
+            gr.update(value=tsv, visible=bool(tsv)),
+            gr.update(value=report, visible=bool(report)),
+            gr.update(value=zip_path, visible=bool(zip_path)),
+            gr.update(value=cmd),
+            gr.update(value=cite_text),
+            gr.update(visible=True))
+
+
+PIPE_LOG_LINES = 40  # lines of the progress log shown (the last ones)
+
+
+def _session(request) -> str:
+    return getattr(request, "session_hash", None) or "local"
+
+
+def pipeline_ui(query, subject, methods, code, longest_isoform=False, ortho="rbh", min_codons=0, max_ds=0,
+                keep_alignments=False, request: gr.Request = None):
+    """The dN/dS pipeline tab's button (a generator: Gradio shows each yield, so the stages and the log move as the
+    run goes). Runs `coal pipeline pairs` on two uploaded CDS files; only when DIAMOND and coal-cpp are found.
+    The Stop button (stop_pipeline_ui) stops the pipeline of this browser session and its tools; the run then
+    ends here as 'stopped', with whatever it had written."""
+    def fail(title, text):
+        return _pipe_outputs(gui_html.message_banner("failed", title, text))
+
+    if core.hosted():
+        yield fail("Not on this shared server", "The dN/dS pipeline runs DIAMOND and can take a long time; install "
+                   "COAL on your own computer to use it (pip install, or the Windows app).")
+        return
+    if not query or not subject:
+        missing = " and ".join(n for n, v in (("the first species' CDS", query), ("the second species' CDS", subject))
+                               if not v)
+        yield _pipe_outputs(gui_html.message_banner("warning", "Please add both files", f"Add {missing}."))
+        return
+    try:
+        methods = dnds.check_pipeline_args(methods or [], int(code), ortho or "rbh", min_codons, max_ds)
+        dnds.check_cds_input(query, "first")
+        dnds.check_cds_input(subject, "second")
+    except (ValueError, OSError) as e:
+        yield fail("Could not start", core.public_error(e, [query, subject]))
+        return
+    st = dnds.tool_status()
+    if not st.pipeline_ready:
+        yield fail("A tool is missing", dnds.NEEDS_CPP if not st.cpp else dnds.NEEDS_DIAMOND)
+        return
+    try:
+        out_dir = core.new_run_dir()
+    except ValueError as e:
+        yield fail("Could not start", str(e))
+        return
+    cmd = dnds.pipeline_command(query, subject, out_dir, methods, int(code), bool(longest_isoform), ortho or "rbh",
+                                int(min_codons or 0), float(max_ds) if max_ds else None, bool(keep_alignments),
+                                diamond=st.diamond)
+    hide = [query, subject, out_dir]
+    t0 = time.monotonic()
+    stage, log = 0, []
+    running = gui_html.message_banner("info", "Running the dN/dS pipeline",
+                                      f"{os.path.basename(query)} against {os.path.basename(subject)}. "
+                                      "Stop ends the run and its tools.")
+    yield _pipe_outputs(running, 0, False, "", elapsed=0.0, cmd=dnds.shown_command(cmd, hide))
+    result = None
+    for kind, value in dnds.iter_pipeline(cmd, out_dir, dnds.PIPELINE_TIMEOUT, hide, key=_session(request)):
+        if kind == "line":
+            log.append(value)
+            stage = dnds.stage_of(value, stage)
+            yield _pipe_outputs(running, stage, False, "\n".join(log[-PIPE_LOG_LINES:]),
+                                elapsed=time.monotonic() - t0, cmd=dnds.shown_command(cmd, hide))
+        else:
+            result = value
+    r = result
+    _keys, refs = dnds.cite(methods, codon_alignment=True, diamond=True)
+    if r.report.get("cite"):
+        try:
+            from coal import citations
+            refs = citations.format_references(r.report["cite"])
+        except (ImportError, KeyError):
+            pass
+    yield _pipe_outputs(dnds.pipeline_banner(r), stage, r.status == "completed",
+                        "\n".join(r.log[-PIPE_LOG_LINES:]), dnds.table_html(r.rows, dnds.SHOWN_PIPELINE),
+                        r.outputs.get("dnds"), r.report_path, r.zip_path, r.command, time.monotonic() - t0, refs,
+                        ended=r.status != "completed")
+
+
+def stop_pipeline_ui(request: gr.Request = None):
+    """The Stop button: stop this session's pipeline (SIGTERM, then its whole process group); pipeline_ui then
+    shows the run as stopped."""
+    dnds.stop_run(_session(request))
+
+
+def pipeline_tools_ui():
+    """'Check again': the tools line and whether the run button can be used."""
+    st = dnds.tool_status()
+    return gr.update(value=dnds.tools_md(st)), gr.update(interactive=st.pipeline_ready and not core.hosted())
 
 
 def build(demo_mode: bool = False) -> gr.Blocks:
@@ -670,6 +869,110 @@ def build(demo_mode: bool = False) -> gr.Blocks:
                         raw = gr.Textbox(label="Raw COAL messages", lines=6, max_lines=20, interactive=False)
                         gr.Markdown("**Glossary**\n" + GLOSSARY)
 
+            # Ka/Ks for pairs of aligned coding sequences (`coal dnds`): upload or paste, never a typed path
+            with gr.Tab("Ka/Ks", id="kaks", elem_id="coal-kaks-tab"):
+                kaks_st = dnds.tool_status(need_diamond=False)
+                gr.HTML(_sec("Alignment", first=True), padding=False)
+                gr.Markdown(KAKS_INTRO, elem_classes=["coal-small"])
+                if not kaks_st.kaks_ready:
+                    gr.Markdown("✖ " + dnds.NEEDS_CPP, elem_id="coal-kaks-tools")
+                with gr.Row(equal_height=True):
+                    k_file = gr.File(label="Codon alignment (FASTA or AXT)", type="filepath",
+                                     file_types=[".fasta", ".fa", ".fas", ".fna", ".aln", ".axt", ".txt"],
+                                     elem_id="coal-kaks-file")
+                    k_text = gr.Textbox(label="Or paste it here", lines=6, max_lines=12,
+                                        placeholder=">seq1\nATGAAACCC...\n>seq2\nATGAAGCCC...",
+                                        elem_id="coal-kaks-text")
+                with gr.Row(elem_id="coal-kaks-examples"):
+                    gr.Markdown("Try an example:", elem_classes=["coal-ex-label"])
+                    k_ex = gr.Button("12 ortholog pairs", size="sm", variant="secondary",
+                                     visible=kaks_example_path() is not None, elem_id="coal-kaks-example")
+                k_pairs = gr.Radio(KAKS_PAIRS, value="all", label="Pairs in a FASTA",
+                                   info="AXT files are read pair by pair.", elem_id="coal-kaks-pairs")
+                gr.HTML(_sec("Methods"), padding=False)
+                k_methods = gr.CheckboxGroup(_method_choices(), value=list(dnds.DEFAULT_METHODS), label="Methods",
+                                             show_label=False, info="YN is the usual choice. Comeron and Li: "
+                                             "standard genetic code only.", elem_id="coal-kaks-methods")
+                k_code = gr.Dropdown(_code_choices(), value=1, label="Genetic code", min_width=260,
+                                     elem_id="coal-kaks-code")
+                with gr.Accordion("More options", open=False, elem_id="coal-kaks-more"):
+                    k_min = gr.Number(value=0, precision=0, minimum=0, label="Flag pairs with fewer codons than",
+                                      info="Status warning, nothing dropped (0: off). (--min-codons)")
+                    k_maxds = gr.Number(value=0, minimum=0, label="Flag pairs with dS above",
+                                        info="Saturation: status warning, nothing dropped (0: off). (--max-ds)")
+                k_run = gr.Button("Estimate Ka/Ks", variant="primary", size="lg", elem_id="coal-kaks-run")
+                with gr.Column(elem_id="coal-kaks-results", visible=False) as k_results:
+                    gr.HTML(_sec("Results"), padding=False)
+                    k_banner = gr.HTML("", elem_id="coal-kaks-banner", padding=False)
+                    with gr.Row(elem_id="coal-kaks-dl"):
+                        k_dl = gr.DownloadButton("Download table (TSV)", visible=False, variant="secondary",
+                                                 size="md", elem_id="coal-kaks-download")
+                    k_table = gr.HTML(KAKS_EMPTY, padding=False, elem_id="coal-kaks-table")
+                    k_help = gr.Markdown(STATUS_HELP_ALL, elem_id="coal-kaks-statuses")
+                    with gr.Accordion("Command, references and messages", open=False, elem_id="coal-kaks-details"):
+                        k_cmd = gr.Code(label="Equivalent command", language="shell", interactive=False)
+                        k_cite = gr.Textbox(label="What to cite", lines=4, max_lines=10, interactive=False)
+                        k_raw = gr.Textbox(label="Raw COAL messages", lines=4, max_lines=12, interactive=False)
+
+            # the one-step pipeline for two species (`coal pipeline pairs`); runs only when DIAMOND is found
+            with gr.Tab("dN/dS pipeline", id="pipeline", elem_id="coal-pipeline-tab"):
+                pipe_st = dnds.tool_status() if not core.hosted() else dnds.ToolStatus(None, None)
+                gr.HTML(_sec("Coding sequences", first=True), padding=False)
+                gr.Markdown(PIPE_INTRO, elem_classes=["coal-small"])
+                with gr.Row(elem_id="coal-pipe-tools-row"):
+                    p_tools = gr.Markdown(
+                        dnds.tools_md(pipe_st) if not core.hosted() else
+                        "This shared server does not run the pipeline: install COAL on your own computer.",
+                        elem_id="coal-pipe-tools")
+                    p_check = gr.Button("Check again", size="sm", variant="secondary", visible=not core.hosted(),
+                                        elem_id="coal-pipe-check")
+                with gr.Row(equal_height=True):
+                    p_query = gr.File(label="Species 1 (CDS FASTA)", type="filepath",
+                                      file_types=[".fasta", ".fa", ".fna", ".ffn", ".fas", ".cds", ".txt", ".gz"],
+                                      elem_id="coal-pipe-query")
+                    p_subject = gr.File(label="Species 2 (CDS FASTA)", type="filepath",
+                                        file_types=[".fasta", ".fa", ".fna", ".ffn", ".fas", ".cds", ".txt", ".gz"],
+                                        elem_id="coal-pipe-subject")
+                gr.HTML(_sec("Methods"), padding=False)
+                p_methods = gr.CheckboxGroup(_method_choices(), value=list(dnds.DEFAULT_METHODS), label="Methods",
+                                             show_label=False, elem_id="coal-pipe-methods")
+                p_code = gr.Dropdown(_code_choices(), value=1, label="Genetic code", min_width=260,
+                                     elem_id="coal-pipe-code")
+                with gr.Accordion("More options", open=False, elem_id="coal-pipe-more"):
+                    p_longest = gr.Checkbox(value=False, label="Keep one transcript per gene (the longest)",
+                                            info="For files with several isoforms per gene. (--longest-isoform)")
+                    p_ortho = gr.Radio([("Reciprocal best hits", "rbh"), ("Best hit of each gene", "bh")],
+                                       value="rbh", label="Ortholog pairs", elem_id="coal-pipe-ortho")
+                    p_min = gr.Number(value=0, precision=0, minimum=0, label="Flag pairs with fewer codons than",
+                                      info="Status warning, nothing dropped (0: off). (--min-codons)")
+                    p_maxds = gr.Number(value=0, minimum=0, label="Flag pairs with dS above",
+                                        info="Saturation: status warning, nothing dropped (0: off). (--max-ds)")
+                    p_keep = gr.Checkbox(value=False, label="Also save the codon alignments",
+                                         info="codon_alignments.fasta, in the zip. (--keep-alignments)")
+                with gr.Row():
+                    p_run = gr.Button("Run the pipeline", variant="primary", size="lg", elem_id="coal-pipe-run",
+                                      interactive=pipe_st.pipeline_ready and not core.hosted(), scale=3)
+                    p_stop = gr.Button("Stop", variant="stop", size="lg", elem_id="coal-pipe-stop", scale=1)
+                with gr.Column(elem_id="coal-pipe-results", visible=False) as p_results:
+                    gr.HTML(_sec("Progress and results"), padding=False)
+                    p_banner = gr.HTML("", elem_id="coal-pipe-banner", padding=False)
+                    p_progress = gr.HTML("", elem_id="coal-pipe-progress", padding=False)
+                    with gr.Row(elem_id="coal-pipe-dl"):
+                        p_dl_tsv = gr.DownloadButton("Download dnds.tsv", visible=False, variant="secondary",
+                                                     size="md", elem_id="coal-pipe-dl-tsv")
+                        p_dl_rep = gr.DownloadButton("Download report.json", visible=False, variant="secondary",
+                                                     size="md", elem_id="coal-pipe-dl-report")
+                        p_dl_zip = gr.DownloadButton("Download all results (zip)", visible=False,
+                                                     variant="secondary", size="md", elem_id="coal-pipe-dl-zip")
+                    p_table = gr.HTML(KAKS_EMPTY, padding=False, elem_id="coal-pipe-table")
+                    gr.Markdown(STATUS_HELP_ALL, elem_id="coal-pipe-statuses")
+                    with gr.Accordion("Progress log, command and references", open=False,
+                                      elem_id="coal-pipe-details"):
+                        p_log = gr.Textbox(label="Progress log", lines=6, max_lines=20, interactive=False,
+                                           elem_id="coal-pipe-log")
+                        p_cmd = gr.Code(label="Equivalent command", language="shell", interactive=False)
+                        p_cite = gr.Textbox(label="What to cite", lines=4, max_lines=10, interactive=False)
+
             # Settings. Few settings (only what people set once), plain words, saved as soon as
             # they change (no Save button), "Reset to defaults", and where they are kept. See docs/ui-principles.md
             # No intro paragraph, no help lines; one-word group headers (Microsoft: "Accounts", not "Account
@@ -767,6 +1070,21 @@ def build(demo_mode: bool = False) -> gr.Blocks:
 
         sample_btn.click(show_sample, None, outputs, show_api=False)
 
+        # Ka/Ks: an upload clears the pasted text (one input at a time); the example fills the form, then runs
+        k_inputs = [k_file, k_text, k_pairs, k_methods, k_code, k_min, k_maxds]
+        k_outputs = [k_banner, k_table, k_dl, k_help, k_raw, k_cite, k_cmd, k_results]
+        k_run.click(kaks_ui, k_inputs, k_outputs, show_api=False, concurrency_limit=2)
+        k_file.upload(_clear_text, k_file, k_text, show_api=False)
+        k_ex.click(kaks_example_ui, None, [k_file, k_text, k_pairs, k_methods, k_code],
+                   show_api=False).then(kaks_ui, k_inputs, k_outputs, show_api=False)
+        # the pipeline: one run at a time; Stop stops this session's pipeline and its tools (dnds.stop_run), and
+        # the running event then ends by itself, showing the run as stopped (not a cancelled, blank event)
+        p_inputs = [p_query, p_subject, p_methods, p_code, p_longest, p_ortho, p_min, p_maxds, p_keep]
+        p_outputs = [p_banner, p_progress, p_log, p_table, p_dl_tsv, p_dl_rep, p_dl_zip, p_cmd, p_cite, p_results]
+        p_run.click(pipeline_ui, p_inputs, p_outputs, show_api=False, concurrency_limit=1)
+        p_stop.click(stop_pipeline_ui, None, None, show_api=False, queue=False)
+        p_check.click(pipeline_tools_ui, None, [p_tools, p_run], show_api=False)
+
         def apply_code(c):
             return gr.update(value=int(c)) if c else gr.update()
 
@@ -775,10 +1093,12 @@ def build(demo_mode: bool = False) -> gr.Blocks:
         if demo_mode:
             demo.load(show_sample, None, outputs, show_api=False)
 
-        # MCP / API: only these two tools are exposed to AI agents.
+        # MCP / API: only these tools are exposed to AI agents (the same four as the stdio server).
         if hasattr(gr, "api"):
             gr.api(tools.codon_align, api_name="codon_align")
             gr.api(tools.explain_report, api_name="explain_report")
+            gr.api(tools.dnds_pairs, api_name="dnds_pairs")
+            gr.api(tools.pipeline_pairs, api_name="pipeline_pairs")
     return demo
 
 
