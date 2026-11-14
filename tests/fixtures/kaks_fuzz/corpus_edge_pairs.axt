@@ -1,0 +1,27 @@
+# code=1
+# Pairs the fuzz found interesting that behave as documented (no bug): every property must hold.
+# arg_cga_aga_code1: the CGA/AGA rule of K01 in the standard code (both 2-fold there: symmetric).
+# li_negative_ks: Li's Ks is negative (status warning, note "Ks is negative"); seqinr flavour: saturated + note.
+# exact_boundary: 1 - 2P - Q = 0 exactly in binary: saturated.
+# one_codon_stop_end: a terminal stop codon is dropped, the rest compared.
+# split_gap: a codon split by a gap counts as a gap.
+arg_cga_aga_code1
+CGAGCTAAACTGGGT
+AGAGCCAAACTGGGT
+
+li_negative_ks
+GUACAGAUUCGGGUAUGUAGAACGAGUUAA
+GTAGAGATTGCGGCATCTTCACCGCTT---
+
+exact_boundary
+GCTGCTGCTGCT
+GCCGCAGCGGCT
+
+one_codon_stop_end
+ATGAAACCCTAA
+ATGAAGCCATAG
+
+split_gap
+ATGA-ACCCGGG
+ATGAAGCCAGGC
+
