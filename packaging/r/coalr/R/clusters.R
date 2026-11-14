@@ -64,6 +64,7 @@ coal_dnds_clusters <- function(cds, clusters, msa = NULL, aligner = NULL, method
                                end_gaps = c("free", "penalized"), preset = NULL, tie_break = NULL, max_cells = 4e9,
                                yn_flavour = c("kaks", "paml"), yn_weighting = TRUE, keep_alignments = FALSE,
                                comeron_flavour = c("coal", "gestimator"), li_flavour = c("coal", "seqinr"),
+                               comeron_twosubs = NULL, comeron_min_sites = 3,
                                terminal_stops = c("drop", "compare"), min_codons = 0L, max_ds = NULL,
                                min_identity = NULL, method = NULL) {
   methods <- pick_methods(methods, method, !missing(methods), "methods", "method")
@@ -82,6 +83,7 @@ coal_dnds_clusters <- function(cds, clusters, msa = NULL, aligner = NULL, method
   yn_flavour <- match.arg(yn_flavour)
   comeron_flavour <- match.arg(comeron_flavour)
   li_flavour <- match.arg(li_flavour)
+  com <- check_comeron(comeron_twosubs, comeron_min_sites)
   terminal_stops <- match.arg(terminal_stops)
   check_flag(yn_weighting, "yn_weighting")
   check_flag(keep_alignments, "keep_alignments")
@@ -237,7 +239,7 @@ coal_dnds_clusters <- function(cds, clusters, msa = NULL, aligner = NULL, method
   raw <- coalr_dnds(unname(cds), member_ids, members, rows, as.integer(c(0L, cumsum(unit_sizes))),
                     as.integer(unlist(u_mode, use.names = FALSE) %||% integer(0)), integer(nu + 1L), integer(0),
                     integer(0), methods, code, threads, ap, yn_flavour, yn_weighting, comeron_flavour, li_flavour,
-                    terminal_stops == "compare", keep_alignments)
+                    terminal_stops == "compare", keep_alignments, com$twosubs, com$min_sites)
 
   row_cluster <- unit_cluster[raw$pairs$unit + 1L]
   pairs <- flag_pairs(pair_table(raw, member_ids, cluster_id = cids[row_cluster]), flags)

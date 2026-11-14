@@ -491,11 +491,13 @@ class Messages(unittest.TestCase):
                 mock.patch.object(msa, "_conda_exe", return_value="/x/conda"), \
                 mock.patch.object(msa, "_trusted_cached", return_value=False), \
                 mock.patch.object(msa.platform, "system", return_value="Linux"), \
+                mock.patch.object(msa, "_platform", return_value=("Linux", "x86_64")), \
                 mock.patch.object(msa, "_install_lock"), \
                 mock.patch.object(msa, "tool_version", return_value="v7.526 (2024/Apr/26)"), \
                 redirect_stderr(io.StringIO()) as err:
             self.assertEqual(msa.install_mafft(), "/x/mafft")
-        self.assertEqual(calls, ["mafft=7.526"])
+        # one exact package for the platform (D6b): channel::name=version=build
+        self.assertEqual(calls, ["conda-forge::mafft=7.526=h4bc722e_0"])
         self.assertIn("MAFFT 7.526 installed: /x/mafft", err.getvalue())
 
     @unittest.skipIf(os.name == "nt", "a shell script stands in for MAFFT")

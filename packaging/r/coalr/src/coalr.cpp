@@ -187,13 +187,24 @@ AlignParams need_align(const Rcpp::List& a) {
     return p;
 }
 
+// comeron_twosubs: "" = by the flavour (comeron with "coal", libsequence with "gestimator")
 kaks::Options need_kaks(const std::string& flavour, bool weighting, const std::string& comeron_flavour,
-                        const std::string& li_flavour) {
+                        const std::string& li_flavour, const std::string& comeron_twosubs,
+                        double comeron_min_sites) {
     kaks::Options o;
     if (comeron_flavour == "gestimator")
         o.comeron_flavour = kaks::ComeronFlavour::gestimator;
     else if (comeron_flavour != "coal")
         Rcpp::stop("comeron_flavour must be \"coal\" or \"gestimator\"");
+    if (comeron_twosubs == "comeron")
+        o.comeron_twosubs = kaks::ComeronTwoSubs::comeron;
+    else if (comeron_twosubs == "libsequence")
+        o.comeron_twosubs = kaks::ComeronTwoSubs::libsequence;
+    else if (!comeron_twosubs.empty())
+        Rcpp::stop("comeron_twosubs must be \"comeron\" or \"libsequence\"");
+    if (!(comeron_min_sites >= 0) || !std::isfinite(comeron_min_sites))
+        Rcpp::stop("comeron_min_sites must be a number >= 0");
+    o.comeron_min_sites = comeron_min_sites;
     if (li_flavour == "seqinr")
         o.li_flavour = kaks::LiFlavour::seqinr;
     else if (li_flavour != "coal")
@@ -247,7 +258,7 @@ Rcpp::List coalr_dnds(SEXP cds, SEXP member_ids, Rcpp::IntegerVector members, SE
                       Rcpp::IntegerVector pl_i, Rcpp::IntegerVector pl_j, Rcpp::CharacterVector methods, int table,
                       int threads, Rcpp::List align, std::string yn_flavour, bool yn_weighting,
                       std::string comeron_flavour, std::string li_flavour, bool compare_terminal_stops,
-                      bool keep_alignments) {
+                      bool keep_alignments, std::string comeron_twosubs, double comeron_min_sites) {
     if (TYPEOF(cds) != STRSXP || TYPEOF(member_ids) != STRSXP) Rcpp::stop("internal: cds and ids must be character");
     const bool have_rows = !Rf_isNull(rows);
     if (have_rows && (TYPEOF(rows) != STRSXP || XLENGTH(rows) != members.size()))
@@ -263,7 +274,7 @@ Rcpp::List coalr_dnds(SEXP cds, SEXP member_ids, Rcpp::IntegerVector members, SE
     opt.table = table;
     need_code(table);
     opt.align = need_align(align);
-    opt.kaks = need_kaks(yn_flavour, yn_weighting, comeron_flavour, li_flavour);
+    opt.kaks = need_kaks(yn_flavour, yn_weighting, comeron_flavour, li_flavour, comeron_twosubs, comeron_min_sites);
     opt.compare_terminal_stops = compare_terminal_stops;
     const std::vector<kaks::Method> ms = opt.methods;
     const size_t nm = ms.size();
@@ -573,12 +584,14 @@ Rcpp::List coalr_summary(Rcpp::IntegerVector cluster, Rcpp::IntegerVector method
 // Ka/Ks for pairs of codon-aligned sequences. One row per pair and method.
 // [[Rcpp::export(rng = false)]]
 Rcpp::List coalr_kaks(SEXP a, SEXP b, Rcpp::CharacterVector methods, int table, int threads, std::string yn_flavour,
-                      bool yn_weighting, std::string comeron_flavour, std::string li_flavour) {
+                      bool yn_weighting, std::string comeron_flavour, std::string li_flavour,
+                      std::string comeron_twosubs, double comeron_min_sites) {
     if (TYPEOF(a) != STRSXP || TYPEOF(b) != STRSXP || XLENGTH(a) != XLENGTH(b))
         Rcpp::stop("internal: the two alignments must be character vectors of one length");
     const std::vector<kaks::Method> ms = need_methods(methods);
     const GeneticCode* code = need_code(table);
-    const kaks::Options ko = need_kaks(yn_flavour, yn_weighting, comeron_flavour, li_flavour);
+    const kaks::Options ko =
+        need_kaks(yn_flavour, yn_weighting, comeron_flavour, li_flavour, comeron_twosubs, comeron_min_sites);
     const size_t n = (size_t)XLENGTH(a), nm = ms.size();
     const int nthreads = resolve_threads(threads);
     const size_t total = n * nm;

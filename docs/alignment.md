@@ -216,7 +216,8 @@ msa.find_mafft(); msa.install_mafft(); msa.cache_dir(); msa.tool_version(exe)
 `$COAL_CACHE_DIR`, or `~/.cache/coal`, `~/Library/Caches/coal`, `%LOCALAPPDATA%\coal\Cache`.
 
 - On Linux and macOS it uses the conda, mamba or micromamba already installed, or else micromamba fetched from its
-  GitHub releases. It creates `envs/clustalo` with `clustalo=1.2.4` from Bioconda.
+  GitHub releases. It creates `envs/clustalo` with one exact package of Clustal Omega 1.2.4 from Bioconda (the
+  pinned build for the platform; "Exact builds" below).
 - That is the only route. The pre-compiled binaries of the Clustal site, which earlier versions of this code
   could fetch (`method="official"`), no longer exist: checked from a browser on 2026-11-12, the site's address
   serves an unrelated "people search" site and the three binary paths (1.2.4 for Linux, 1.2.3 for macOS, 1.2.2
@@ -240,7 +241,8 @@ msa.find_mafft(); msa.install_mafft(); msa.cache_dir(); msa.tool_version(exe)
 | Download | How it is verified |
 |---|---|
 | micromamba | one fixed release (`msa.MICROMAMBA_VERSION`, 2.10.0-0; not "latest") over HTTPS, kept only if its SHA-256 is the one pinned in `src/coal/msa.py` (four assets; each equals the `.sha256` file of that release) |
-| Clustal Omega, MAFFT, DIAMOND through conda / mamba / micromamba | conda's own: HTTPS, each package checked against the channel index |
+| Clustal Omega, MAFFT through conda / mamba / micromamba | one exact package per platform (channel, version, build string), and the install is kept only if the package conda recorded has the SHA-256 pinned in `src/coal/msa.py` ("Exact builds" below); conda itself checks each package against the channel index |
+| DIAMOND through conda / mamba / micromamba | conda's own: HTTPS, each package checked against the channel index |
 | DIAMOND release archive (`coal pipeline install diamond`) | HTTPS, kept and unpacked only if its SHA-256 is the one pinned in `src/coal/dnds_pipeline.py` for DIAMOND 2.2.8 (Linux, macOS, Windows). DIAMOND publishes no checksums: the pinned values are those of the files downloaded on 2026-11-12. Another version needs `sha256=` or `allow_unverified=True` |
 | Clustal Omega from the Clustal site ("official") | **removed.** The files no longer exist and the address serves an unrelated site (2026-11-12), so COAL never downloads from it, with or without a hash |
 
@@ -267,9 +269,9 @@ data stream), is absolute, has a `..` component or is a reserved device name is 
 - Tested here: the micromamba route end to end with the pinned release (Clustal Omega 1.2.4 installed in 30 s),
   and the pinned DIAMOND 2.2.8 archive for Linux.
 
-`install_mafft()` installs MAFFT from Bioconda the same way (Linux and macOS), pinned to one version as Clustal
-Omega is: `envs/mafft` with `mafft=7.526` (`msa.MAFFT_VERSION`), checked to run and report that version, and the
-line `MAFFT 7.526 installed: PATH`. (It used to install whatever MAFFT Bioconda had that day, so two machines that
+`install_mafft()` installs MAFFT through conda the same way (Linux and macOS), pinned as Clustal Omega is:
+`envs/mafft` with one exact package of MAFFT 7.526 (`msa.MAFFT_VERSION`; from conda-forge, which has the
+current builds), checked to run and report that version, and the line `MAFFT 7.526 installed: PATH`. (It used to install whatever MAFFT Bioconda had that day, so two machines that
 followed the same docs could align differently.) A MAFFT that an earlier COAL installed unpinned is kept, and
 both `coal pipeline install mafft` and every run that uses it say so: "MAFFT 7.525 in COAL's cache (PATH) is not
 the pinned 7.526 ...; it is used as it is. To install 7.526: coal pipeline install mafft --force" (a run lists it
@@ -277,6 +279,33 @@ in the report's `warnings`; the same for a Clustal Omega in the cache that is no
 PATH or in `COAL_MAFFT`) is not checked against the pin. The report's `tools` give the version of the MAFFT a run
 used. On
 Windows it installs nothing (see above): install MAFFT's own Windows package yourself and set `COAL_MAFFT`.
+
+**Exact builds** (2026-11-14). A version pin is not one file: conda channels rebuild a version under the same
+number (conda-forge has three linux-64 builds of mafft 7.526, Bioconda twelve of clustalo 1.2.4), so two
+machines that followed the same docs could get different binaries. COAL therefore asks conda for one package,
+`channel::name=version=build`, and keeps the environment only if conda's record of the installed package
+(`envs/<tool>/conda-meta/<name>-<version>-<build>.json`) has the SHA-256 pinned for it; otherwise the environment
+is removed and the install fails. The pins (`msa._PACKAGE_PINS`, read from the channels' repodata on 2026-11-14;
+the newest build of each platform):
+
+| Tool | Platform | Package | SHA-256 |
+|---|---|---|---|
+| MAFFT 7.526 | linux-64 | `conda-forge::mafft=7.526=h4bc722e_0` | `e307b4d817c5f1d1173896d8d54b1b11761b0fc7889bf618ff59dd6407b11d36` |
+| | linux-aarch64 | `conda-forge::mafft=7.526=h68df207_0` | `9ba9270e75d94c654c88a758577428fb3b0b743451b1b1106336929d9c37b81c` |
+| | osx-64 | `conda-forge::mafft=7.526=hfdf4475_0` | `8c161223ae8b8d24fbc8cac5f283ed02dda3ed3eb7d2bfed5fd5caafca1bb4d3` |
+| | osx-arm64 | `conda-forge::mafft=7.526=h99b78c6_0` | `89b847250232bae9af4fa28c6ffffc857b480dc44d9489ad7ccef25bf271c7d1` |
+| Clustal Omega 1.2.4 | linux-64 | `bioconda::clustalo=1.2.4=h503566f_10` | `30fd59e21c866ffe8ed22d2099a645d6df0956b3138ed4fa836a6e2b55a93644` |
+| | linux-aarch64 | `bioconda::clustalo=1.2.4=h80f0ee0_10` | `a5000f8202d0edbc4c0a7b3d75d9a068f12c50c8de24538a58f6d4a81b86ccc5` |
+| | osx-64 | `bioconda::clustalo=1.2.4=h5eaf441_10` | `91e4a8abb0f95da4b30d7c72437efa03eaaa4b590f9697c167aca056387005a7` |
+| | osx-arm64 | `bioconda::clustalo=1.2.4=haef7865_10` | `a7d51a72432477bcf4694bda298ffdc578d00849e21b0395703fa3bbef994cc8` |
+
+`coal pipeline install mafft` (and `clustalo`) prints the package it installed, or the one already in the cache,
+with its SHA-256 and whether it is the pinned build; the manifest next to the binary and the report's
+`tools.<tool>.package` record it. If a channel stops serving a pinned build, the install falls back to the version
+pin with a warning, and the record says `"pinned": false` (a run then notes that the copy is not the pinned build);
+on a platform without a pin (for example Linux ppc64le) the version pin is used and the install says so. Only the
+tool's own package is pinned this way: its dependencies (gawk for MAFFT, argtable2 and the C++ runtime for
+Clustal Omega) are resolved by conda as before.
 
 **Running.**
 

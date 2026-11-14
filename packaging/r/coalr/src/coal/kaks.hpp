@@ -74,6 +74,26 @@ enum class Flavour { kaks_calculator, paml };
 // read as T (the codon is skipped), and an undefined logarithm is replaced by 0, so a finite number comes out
 // (status `warning`); only where gestimator itself prints 999 is the value NA. docs/kaks.md lists the differences.
 enum class ComeronFlavour { coal, gestimator };
+// Comeron, codons that differ at two positions: the four branches of the two pathways. `comeron`: codon1 -
+// int1 - codon2 and codon1 - int2 - codon2, as Comeron (1995) defines them; the estimate does not depend on
+// which sequence is first. `libsequence`: the branches libsequence's TwoSubs counts (codon1 - int1, int1 - int2,
+// codon1 - codon2, codon2 - int2; see kaks_comeron.cpp), gestimator's numbers, which change when the two
+// sequences are swapped. `by_flavour`: comeron with ComeronFlavour::coal, libsequence with
+// ComeronFlavour::gestimator. docs/kaks.md "Two-position codon differences".
+enum class ComeronTwoSubs { by_flavour, comeron, libsequence };
+// the order a run uses (by_flavour resolved)
+inline ComeronTwoSubs resolved_twosubs(ComeronTwoSubs t, ComeronFlavour f) {
+    if (t != ComeronTwoSubs::by_flavour) return t;
+    return f == ComeronFlavour::gestimator ? ComeronTwoSubs::libsequence : ComeronTwoSubs::comeron;
+}
+inline const char* twosubs_name(ComeronTwoSubs t) {
+    return t == ComeronTwoSubs::libsequence ? "libsequence" : t == ComeronTwoSubs::comeron ? "comeron" : "by_flavour";
+}
+// Comeron: a site class (L0, L2S, L2V, L4) with fewer than this many sites cannot make dN or dS NA. Its
+// undefined logarithm is set to 0, as gestimator does for every class, and the row says so (status warning,
+// note "Ka: a class with fewer than 3 sites has an undefined correction ..."). 0: every class with sites can
+// (COAL 0.5.x before this option). Never changes a value that is not NA otherwise. docs/kaks.md.
+constexpr double COMERON_MIN_SITES_DEFAULT = 3.0;
 // Li: `coal` applies COAL's policy; `seqinr` compares stop codons as seqinr::kaks does and does not read U as T.
 // In both, seqinr's sentinel 9.999999 ("saturated") is NA.
 enum class LiFlavour { coal, seqinr };
@@ -88,6 +108,8 @@ struct Options {
     // The results are the same bits either way; the tests compare the two (`--yn-always-pmat`).
     bool yn_always_pmat = false;
     ComeronFlavour comeron_flavour = ComeronFlavour::coal;
+    ComeronTwoSubs comeron_twosubs = ComeronTwoSubs::by_flavour;
+    double comeron_min_sites = COMERON_MIN_SITES_DEFAULT;
     LiFlavour li_flavour = LiFlavour::coal;
 };
 

@@ -27,7 +27,7 @@ met_trp_only	NA	Comeron	0.491739846761005	NA	NA	NA	NA	NA	NA	NA	NA	40	no_data	no 
 met_trp_only	NA	Li	NA	NA	NA	NA	NA	NA	NA	NA	NA	40	no_data	Li: no 2-fold or no 4-fold degenerate sites (Ks needs both; seqinr returns 9.999999); Ka saturated (multiple-hit correction undefined)
 multi_hit_codons	NA	Comeron	0.0323944147384336	0.18792338235165	0.172380968951569	NA	NA	NA	NA	NA	NA	141	ok	
 multi_hit_codons	NA	Li	0.0290033353787639	0.13388294263181	0.216632042952071	0.00996227322964923	0.0382497600732971	NA	NA	NA	NA	141	ok	
-short_one_codon	NA	Comeron	0	NA	NA	NA	NA	NA	NA	NA	NA	2	saturated	Ks saturated (multiple-hit correction undefined)
+short_one_codon	NA	Comeron	0	0	NA	NA	NA	NA	NA	NA	NA	2	warning	Ks: a site class with fewer than 3 sites has an undefined correction (its logarithm set to 0)
 short_one_codon	NA	Li	0	NA	NA	0	NA	NA	NA	NA	NA	2	no_data	Li: no 2-fold or no 4-fold degenerate sites (Ks needs both; seqinr returns 9.999999)
 no_nonsyn_sites_one_codon	NA	Comeron	0	NA	NA	NA	NA	NA	NA	NA	NA	1	saturated	Ks saturated (multiple-hit correction undefined)
 no_nonsyn_sites_one_codon	NA	Li	NA	NA	NA	NA	NA	NA	NA	NA	NA	1	no_data	Li: no 2-fold or no 4-fold degenerate sites (Ks needs both; seqinr returns 9.999999); Li: no non-degenerate or no 2-fold degenerate sites (Ka needs both; seqinr returns 9.999999)

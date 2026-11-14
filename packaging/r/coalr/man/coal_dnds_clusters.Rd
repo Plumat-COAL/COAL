@@ -28,6 +28,8 @@ coal_dnds_clusters(
   keep_alignments = FALSE,
   comeron_flavour = c("coal", "gestimator"),
   li_flavour = c("coal", "seqinr"),
+  comeron_twosubs = NULL,
+  comeron_min_sites = 3,
   terminal_stops = c("drop", "compare"),
   min_codons = 0L,
   max_ds = NULL,
@@ -96,6 +98,17 @@ reproducing published orthologr results.}
 
 \item{li_flavour}{For \code{"Li"}: \code{"coal"} (default) applies COAL's policy; \code{"seqinr"} compares stop codons as
 \code{seqinr::kaks()} does. In both, seqinr's sentinel 9.999999 is \code{NA}.}
+
+\item{comeron_twosubs}{For \code{"Comeron"}, codons that differ at two positions: \code{"comeron"} counts the two
+pathways of Comeron (1995), so the estimate does not depend on which sequence is first; \code{"libsequence"}
+counts the branches libsequence's \code{TwoSubs} counts (orthologr 0.4.3's \code{gestimator()} numbers, which change in
+most pairs when the two sequences are swapped). \code{NULL} (default): \code{"comeron"} with \code{comeron_flavour = "coal"},
+\code{"libsequence"} with \code{"gestimator"}. The command line's \code{--comeron-twosubs}.}
+
+\item{comeron_min_sites}{For \code{"Comeron"}: a site class with fewer than this many sites cannot make \code{dN} or \code{dS}
+\code{NA}; its undefined logarithm is set to 0 (as \code{gestimator()} does), with status \code{warning} and a note. Never
+changes a value that is not \code{NA} otherwise. Default 3; \code{0} restores the rule of COAL before 2026-11-14 (every
+class with sites can). The command line's \code{--comeron-min-sites}.}
 
 \item{terminal_stops}{Only with \code{comeron_flavour = "gestimator"} or \code{li_flavour = "seqinr"}: \code{"drop"} (default)
 ends every pair before the terminal stop codons, as everywhere else in COAL; \code{"compare"} takes the two

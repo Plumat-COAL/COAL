@@ -213,5 +213,50 @@ class PipelineFlags(PipelineCase):
             self.assertIn(args[0], err.getvalue())
 
 
+@needs_cpp
+class PipelineComeronOptions(PipelineCase):
+    """D8 / D9 (2026-11-14): --comeron-twosubs and --comeron-min-sites reach the engine, and report.json records the
+    pathway order the run used (resolved from --comeron-flavour when not given)."""
+
+    def run_pairs(self, name, **kw):
+        with redirect_stderr(io.StringIO()):
+            return P.run_pairs(Q, S, self.tmp / name, pairs=self.pairs_file(PLAIN), jobs=1, method=["Comeron"], **kw)
+
+    def engine_argv(self, res):
+        cmds = [c for st in res.report["stages"] for c in st.get("commands", ()) if "codon-dnds" in c]
+        self.assertEqual(len(cmds), 1)
+        return cmds[0]
+
+    def test_recorded_and_passed(self):
+        for kw, order, ms in (({}, "comeron", 3.0),
+                              ({"comeron_flavour": "gestimator"}, "libsequence", 3.0),
+                              ({"comeron_flavour": "gestimator", "comeron_twosubs": "comeron"}, "comeron", 3.0),
+                              ({"comeron_twosubs": "libsequence", "comeron_min_sites": 0}, "libsequence", 0.0)):
+            res = self.run_pairs("r" + str(len(kw)) + order, **kw)
+            self.assertIn(res.exit_code, (0, 2))           # the fixture has genes that fail on purpose
+            self.assertNotIn("error", res.report)
+            self.assertEqual(res.report["parameters"]["comeron_twosubs"], order, kw)
+            self.assertEqual(float(res.report["parameters"]["comeron_min_sites"]), ms, kw)
+            argv = self.engine_argv(res)
+            self.assertEqual(argv[argv.index("--comeron-twosubs") + 1], order)
+            self.assertEqual(float(argv[argv.index("--comeron-min-sites") + 1]), ms)
+            self.check_report(res)
+
+    def test_restore_gives_the_previous_numbers(self):
+        new, old = self.run_pairs("new"), self.run_pairs("old", comeron_twosubs="libsequence", comeron_min_sites=0)
+        a, b = read_tsv(new.outputs["dnds"]), read_tsv(old.outputs["dnds"])
+        self.assertEqual([(r["seq1"], r["seq2"]) for r in a], [(r["seq1"], r["seq2"]) for r in b])
+        self.assertGreater(sum(x["dS"] != y["dS"] for x, y in zip(a, b)), 0)    # two-position codons exist here
+
+    def test_bad_values(self):
+        for kw in ({"comeron_twosubs": "x"}, {"comeron_min_sites": -1}, {"comeron_min_sites": float("nan")},
+                   {"comeron_min_sites": "3"}, {"comeron_min_sites": True}):
+            with self.assertRaises(ValueError, msg=repr(kw)):
+                P.run_pairs(Q, S, self.tmp / "x", **kw)
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            P.main(["pairs", "--query", str(Q), "--subject", str(S), "-o", str(self.tmp / "y"),
+                    "--comeron-twosubs", "both"])
+
+
 if __name__ == "__main__":
     unittest.main()

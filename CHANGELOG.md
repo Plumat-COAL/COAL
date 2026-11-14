@@ -624,6 +624,49 @@ entry under "Added", not under "Fixed".
 
 ### Changed
 
+- **MAFFT and Clustal Omega are installed as one exact package per platform** (decision D6b of 2026-11-14). A
+  version pin left the build open (conda-forge has three linux-64 builds of mafft 7.526, Bioconda twelve of
+  clustalo 1.2.4). `coal pipeline install mafft|clustalo`, `--install-tools` and `coal.msa.install_*()` now ask
+  for `channel::name=version=build` (`conda-forge::mafft=7.526=h4bc722e_0`, `bioconda::clustalo=1.2.4=h503566f_10`
+  on linux-64; four platforms each) and keep the install only if conda's record of the package has the pinned
+  SHA-256. The install prints the package and its SHA-256; the manifest and `report.json` (`tools.<tool>.package`)
+  record it. A build the channel no longer serves falls back to the version pin with a warning. docs/alignment.md,
+  "Exact builds". (MAFFT now comes from conda-forge, where it came from before too: conda-forge is the first
+  channel and Bioconda has no 7.526.)
+- **Comeron: Comeron's two pathways for codons that differ at two positions, by default** (decision D8 of
+  2026-11-14). libsequence's `TwoSubs` (and so orthologr 0.4.3's `gestimator()`, and COAL until now) counts the
+  branches codon 1 - intermediate 1, intermediate 1 - intermediate 2, codon 1 - codon 2 and codon 2 -
+  intermediate 2 instead of the pathways codon 1 - intermediate 1 - codon 2 and codon 1 - intermediate 2 - codon
+  2 (an argument-order slip; libsequence's repository is archived), which makes the estimate depend on which
+  sequence is first. Swap test, 300 random 150-codon pairs: Ka changes in 279 and Ks in 190 pairs with
+  libsequence's branches, in **0** with Comeron's pathways. New option `--comeron-twosubs comeron|libsequence`
+  (`coal kaks`, `coal dnds`, `coal codon-dnds`, `coal pipeline`; coalr `comeron_twosubs`; C++
+  `Options::comeron_twosubs`): `comeron` is the default of the default flavour, `libsequence` that of
+  `--comeron-flavour gestimator`, which therefore still gives gestimator's numbers. `report.json` records the
+  order used (`parameters.comeron_twosubs`). Effect on the default flavour (`coal pipeline pairs --preset pwalign -m
+  Comeron`, new default against `--comeron-twosubs libsequence --comeron-min-sites 0`, which restore the previous
+  output byte for byte):
+
+  | Genome pair | Pairs | dS changed | dS median / p95 / max relative change | mean dS ratio new / old | dN/dS median / p95 change | status changes |
+  |---|---:|---:|---|---:|---|---:|
+  | *A. thaliana* / *A. lyrata* | 995 | 474 of 994 | 0% / 2.9% / 12% | 1.006 | 0% / 5.4% | 0 |
+  | human / mouse | 946 | 809 of 932 | 1.0% / 4.8% / 50% | 1.015 | 2.1% / 8.2% | 6 |
+  | *S. cerevisiae* / *C. glabrata* | 4,164 | 807 of 847 | 5.9% / 39% / 166% | 1.108 | 9.9% / 36% | 314 |
+
+  (yeast: 308 pairs go from `ok` to `saturated`, 6 the other way; these are distant species, most of whose pairs
+  are saturated either way.) In a neutral simulation (300 codons) the median error of dN against the truth is
+  2.0% (libsequence's branches 2.3%), of dS -2.1% (-3.0%). docs/kaks.md, "Two-position codon differences".
+- **Comeron: a site class with fewer than 3 sites cannot make dN or dS `NA`** (decision D9 of 2026-11-14). In
+  short alignments the 2-fold transversional class has one or two sites, and a single change there made the whole
+  estimate `NA`. Such a class's undefined logarithm is now set to 0 (gestimator's treatment), with status
+  `warning` and the note `Ka: a site class with fewer than 3 sites has an undefined correction (its logarithm set
+  to 0)`; no value that was not `NA` changes. New option `--comeron-min-sites N` (coalr `comeron_min_sites`;
+  `0` restores the previous rule). Simulated neutral pairs, 600 per length: dN `NA` at 30 codons 22 (3.7%) to 0,
+  the recovered values' mean absolute error 8.8% (all 30-codon pairs: 11.2%); 50 codons 2 to 0; 300 codons none
+  before or after. Real data: *A. thaliana* 0 rows, human / mouse 3, yeast 14 get a value. In the gestimator
+  flavour (whose numbers are gestimator's either way) only the note changes, so that orthologr can tell such a row
+  from a saturated one. docs/kaks.md, "Small site classes".
+
 - **The app and its MCP server say that they cover codon alignment only.** The app's README, the GUI's About
   section and the MCP server's instructions now state that Ka/Ks (dN/dS) and the pipeline are in the `coal` command
   line (`coal dnds`, `coal kaks`, `coal pipeline`), so that neither a person nor an AI agent looks for them in

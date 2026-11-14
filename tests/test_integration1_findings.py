@@ -258,25 +258,28 @@ class C02InputOrder(PipelineCase):
     def test_clusters_equal_pairs_in_input_order(self):
         f1, f2, cl, n = self.files()
         methods = ["YN", "LWL", "Comeron"]
+        # libsequence's two-position branches: with them Comeron depends on which gene is first, which lets the test
+        # see the order (Comeron's own pathways, the default since D8 of 2026-11-14, do not depend on it)
+        lib = {"comeron_twosubs": "libsequence"}
         for preset in ("needle", "pwalign"):
             clu = P.run_clusters([f1, f2], self.tmp / f"clu_{preset}", clusters=cl, method=methods, jobs=1,
-                                 quiet=True, preset=preset)
+                                 quiet=True, preset=preset, **lib)
             self.assertIn(clu.exit_code, (0, 2))
             rows = (self.tmp / f"clu_{preset}" / "dnds.tsv").read_text(encoding="utf-8").splitlines()[1:]
             self.assertTrue(all(r.split("\t")[1].startswith("x") for r in rows))   # still the representative first
             pp = self.pairs_file([(f"y{k}", f"x{k}") for k in range(n)])
             pr = P.run_pairs(f1, f2, self.tmp / f"pairs_{preset}", pairs=str(pp), method=methods, jobs=1, quiet=True,
-                             preset=preset)
+                             preset=preset, **lib)
             self.assertIn(pr.exit_code, (0, 2))
             c, p = self.values(clu.outputs["dnds"]), self.values(pr.outputs["dnds"])
             self.assertEqual(len(p), 3 * n)
             self.assertEqual(c, p, preset)
             # the other input order: the representative's file first, no exchange, the pairs route with x first
             clu2 = P.run_clusters([f2, f1], self.tmp / f"clu2_{preset}", clusters=cl, method=methods, jobs=1,
-                                  quiet=True, preset=preset)
+                                  quiet=True, preset=preset, **lib)
             pp2 = self.pairs_file([(f"x{k}", f"y{k}") for k in range(n)])
             pr2 = P.run_pairs(f2, f1, self.tmp / f"pairs2_{preset}", pairs=str(pp2), method=methods, jobs=1,
-                              quiet=True, preset=preset)
+                              quiet=True, preset=preset, **lib)
             c2, p2 = self.values(clu2.outputs["dnds"]), self.values(pr2.outputs["dnds"])
             self.assertEqual(c2, p2, preset)
             # the test can tell: Comeron depends on which gene is first
@@ -289,7 +292,9 @@ class C02InputOrder(PipelineCase):
 
         def run(text):
             out = self.tmp / "o.tsv"
-            r = subprocess.run([str(CPP), "codon-dnds", "-o", str(out), "-m", "YN", "-m", "Comeron", "-q"],
+            # (libsequence's branches: Comeron then depends on which gene is first, so the swap is visible)
+            r = subprocess.run([str(CPP), "codon-dnds", "-o", str(out), "-m", "YN", "-m", "Comeron", "-q",
+                                "--comeron-twosubs", "libsequence"],
                                input=text, capture_output=True, text=True, timeout=TIMEOUT)
             return r, (out.read_text(encoding="utf-8").splitlines()[1:] if r.returncode in (0, 2) else [])
         _, swapped = run(f"G\tg\tall\tswap\nM\tx\t{x}\nM\ty\t{y}\nE\n")

@@ -54,7 +54,7 @@
 #' | `--min-codons N`, `--max-ds X` | `min_codons = N`, `max_ds = X` | `min_codons = N`, `max_ds = X` |
 #' | `--min-identity P` | `min_identity = P` (not in `coal_kaks()`: it has no protein alignment) | `min_identity = P` |
 #' | `--matrix`, `--gap-open`, `--gap-extend`, `--end-gaps`, `--preset`, `--tie-break`, `--max-cells` | `matrix`, `gap_open`, `gap_extend`, `end_gaps`, `preset`, `tie_break`, `max_cells` | the same names |
-#' | `--yn-flavour`, `--yn-weighting 0\|1`, `--comeron-flavour`, `--li-flavour`, `--terminal-stops` | `yn_flavour`, `yn_weighting = FALSE\|TRUE`, `comeron_flavour`, `li_flavour`, `terminal_stops` | the same names (`yn_weighting = 0L` or `1L`) |
+#' | `--yn-flavour`, `--yn-weighting 0\|1`, `--comeron-flavour`, `--comeron-twosubs`, `--comeron-min-sites`, `--li-flavour`, `--terminal-stops` | `yn_flavour`, `yn_weighting = FALSE\|TRUE`, `comeron_flavour`, `comeron_twosubs`, `comeron_min_sites`, `li_flavour`, `terminal_stops` | the same names (`yn_weighting = 0L` or `1L`) |
 #' | `--keep-alignments` | `keep_alignments = TRUE` (returned as an attribute) | `keep_alignments = TRUE` (files in `out_dir`) |
 #' | `--pairs TSV`, `--clusters TSV` | `pairs =` / `clusters =` (a data frame, or what the function documents) | `pairs = "file"`, `clusters = "file"` |
 #' | `--max-cluster-size`, `--large-clusters`, `--pair-sample`, `--seed` | `max_cluster_size`, `large_clusters`, `pair_sample`, `seed` | the same names |

@@ -300,6 +300,8 @@ coal pipeline clusters --cds all_cds.fa --clusters deepclust.tsv -o out --max-cl
 | `--min-codons N`, `--max-ds X`, `--min-identity P` | flag estimates from fewer than N compared codons / with dS above X / from a pair whose protein identity is below P percent: status `warning` and a note; no row dropped, no number changed ([Filtering before interpretation](#filtering-before-interpretation)) | off |
 | `--yn-flavour`, `--yn-weighting`, `--digits`, `--max-cells` | as in `coal dnds` and `coal-cpp-align` | |
 | `--comeron-flavour coal\|gestimator`, `--li-flavour coal\|seqinr` | how `Comeron` and `Li` read a pair: COAL's policy, or as their reference programs (stop codons compared; [kaks.md](kaks.md), "Comeron and Li") | `coal` |
+| `--comeron-twosubs comeron\|libsequence` | Comeron, codons that differ at two positions: Comeron's two pathways, or libsequence's branches (orthologr 0.4.3's numbers; they depend on which gene is first). `report.json` records the order used ([kaks.md](kaks.md), "Two-position codon differences") | `comeron` (`libsequence` with `--comeron-flavour gestimator`) |
+| `--comeron-min-sites N` | Comeron: a site class with fewer than N sites cannot make dN or dS `NA` (its undefined logarithm is 0; status `warning`); 0 = any class can ([kaks.md](kaks.md), "Small site classes") | `3` |
 | `--terminal-stops drop\|compare` | only with the reference flavours: `compare` takes the two terminal stop codons of a pair as the last compared codon column when both genes end in one, as orthologr 0.4.3's pipeline does; `drop` ends the pair before them | `drop` |
 
 ## Output

@@ -42,6 +42,15 @@
 #'   correction is undefined; `"gestimator"` gives the numbers of orthologr 0.4.3's `gestimator()` (stop codons
 #'   are compared like other codons, an undefined logarithm is replaced by 0; status `warning` then), for
 #'   reproducing published orthologr results.
+#' @param comeron_twosubs For `"Comeron"`, codons that differ at two positions: `"comeron"` counts the two
+#'   pathways of Comeron (1995), so the estimate does not depend on which sequence is first; `"libsequence"`
+#'   counts the branches libsequence's `TwoSubs` counts (orthologr 0.4.3's `gestimator()` numbers, which change in
+#'   most pairs when the two sequences are swapped). `NULL` (default): `"comeron"` with `comeron_flavour = "coal"`,
+#'   `"libsequence"` with `"gestimator"`. The command line's `--comeron-twosubs`.
+#' @param comeron_min_sites For `"Comeron"`: a site class with fewer than this many sites cannot make `dN` or `dS`
+#'   `NA`; its undefined logarithm is set to 0 (as `gestimator()` does), with status `warning` and a note. Never
+#'   changes a value that is not `NA` otherwise. Default 3; `0` restores the rule of COAL before 2026-11-14 (every
+#'   class with sites can). The command line's `--comeron-min-sites`.
 #' @param li_flavour For `"Li"`: `"coal"` (default) applies COAL's policy; `"seqinr"` compares stop codons as
 #'   `seqinr::kaks()` does. In both, seqinr's sentinel 9.999999 is `NA`.
 #' @param terminal_stops Only with `comeron_flavour = "gestimator"` or `li_flavour = "seqinr"`: `"drop"` (default)
@@ -86,6 +95,7 @@ coal_dnds_pairs <- function(query_cds, subject_cds, pairs = NULL, methods = "YN"
                             matrix = NULL, gap_open = 10, gap_extend = 0.5, end_gaps = c("free", "penalized"),
                             preset = NULL, tie_break = NULL, max_cells = 4e9, yn_flavour = c("kaks", "paml"), yn_weighting = TRUE,
                             comeron_flavour = c("coal", "gestimator"), li_flavour = c("coal", "seqinr"),
+                            comeron_twosubs = NULL, comeron_min_sites = 3,
                             terminal_stops = c("drop", "compare"),
                             keep_alignments = FALSE, min_codons = 0L, max_ds = NULL, min_identity = NULL,
                             method = NULL) {
@@ -101,6 +111,7 @@ coal_dnds_pairs <- function(query_cds, subject_cds, pairs = NULL, methods = "YN"
   yn_flavour <- match.arg(yn_flavour)
   comeron_flavour <- match.arg(comeron_flavour)
   li_flavour <- match.arg(li_flavour)
+  com <- check_comeron(comeron_twosubs, comeron_min_sites)
   terminal_stops <- match.arg(terminal_stops)
   check_flag(yn_weighting, "yn_weighting")
   check_flag(keep_alignments, "keep_alignments")
@@ -132,7 +143,7 @@ coal_dnds_pairs <- function(query_cds, subject_cds, pairs = NULL, methods = "YN"
   raw <- coalr_dnds(c(unname(q), unname(s)), member_ids, as.integer(members), NULL,
                     as.integer(2L * (0:n)), rep.int(0L, n), integer(n + 1L), integer(0), integer(0),
                     methods, code, threads, ap, yn_flavour, yn_weighting, comeron_flavour, li_flavour,
-                    terminal_stops == "compare", keep_alignments)
+                    terminal_stops == "compare", keep_alignments, com$twosubs, com$min_sites)
   out <- flag_pairs(pair_table(raw, member_ids), flags)
   attr(out, "seconds") <- raw$seconds
   if (keep_alignments) {

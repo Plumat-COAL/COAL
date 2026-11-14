@@ -184,3 +184,67 @@ test_that("coal_dnds_pairs and coal_dnds_clusters compute Comeron and Li", {
   expect_true(all(c("Comeron", "Li") %in% res$summary$method))
   expect_gt(sum(!is.na(res$pairs$dN)), 10)
 })
+
+test_that("Comeron's two-position pathways (comeron_twosubs) and the minimum class size (comeron_min_sites)", {
+  set.seed(20261114)
+  bases <- c("T", "C", "A", "G")
+  sense <- setdiff(apply(expand.grid(bases, bases, bases)[, 3:1], 1, paste0, collapse = ""), c("TAA", "TAG", "TGA"))
+  mutate2 <- function(c) {
+    repeat {
+      d <- strsplit(c, "")[[1]]
+      for (p in sample(3, 2)) d[p] <- sample(setdiff(bases, d[p]), 1)
+      d <- paste0(d, collapse = "")
+      if (!d %in% c("TAA", "TAG", "TGA")) return(d)
+    }
+  }
+  pair <- function(n) {
+    x <- sample(sense, n, replace = TRUE)
+    y <- vapply(x, function(c) if (runif(1) < 0.3) mutate2(c) else c, "")
+    c(paste0(x, collapse = ""), paste0(y, collapse = ""))
+  }
+  p <- replicate(40, pair(150))
+  ab <- coal_kaks(p[1, ], p[2, ], method = "Comeron")
+  ba <- coal_kaks(p[2, ], p[1, ], method = "Comeron")
+  # the default (comeron's pathways) does not depend on which sequence is first; libsequence's branches do
+  expect_identical(ab$dN, ba$dN)
+  expect_identical(ab$dS, ba$dS)
+  lab <- coal_kaks(p[1, ], p[2, ], method = "Comeron", comeron_twosubs = "libsequence")
+  lba <- coal_kaks(p[2, ], p[1, ], method = "Comeron", comeron_twosubs = "libsequence")
+  expect_gt(sum(lab$dN != lba$dN), 20)
+  # NULL = by the flavour: comeron with "coal", libsequence with "gestimator"
+  expect_identical(coal_kaks(p[1, ], p[2, ], method = "Comeron", comeron_twosubs = "comeron"), ab)
+  expect_identical(coal_kaks(p[1, ], p[2, ], method = "Comeron", comeron_flavour = "gestimator"),
+                   coal_kaks(p[1, ], p[2, ], method = "Comeron", comeron_flavour = "gestimator",
+                             comeron_twosubs = "libsequence"))
+  # the pair functions take the options too (codon alignments of coal_dnds_pairs = coal_kaks on them)
+  q <- coal_read_fasta(fx("query_cds.fasta"))
+  s <- coal_read_fasta(fx("subject_cds.fasta"))
+  for (ts in c("comeron", "libsequence")) {
+    got <- coal_dnds_pairs(q, s, pairs = orthologs(), methods = "Comeron", comeron_twosubs = ts,
+                           keep_alignments = TRUE)
+    aln <- attr(got, "alignments")
+    ok <- !is.na(aln$codon1)
+    k <- coal_kaks(aln$codon1[ok], aln$codon2[ok], method = "Comeron", comeron_twosubs = ts)
+    expect_identical(got$dS[ok], k$dS)
+  }
+  # one codon, a nonsynonymous change: the 2-fold transversional class has less than one site and an undefined
+  # correction. Default (3): gestimator's value, status warning; 0: NA, saturated (the rule before 2026-11-14)
+  d3 <- coal_kaks("GCT", "GAT", method = "Comeron")
+  d0 <- coal_kaks("GCT", "GAT", method = "Comeron", comeron_min_sites = 0)
+  expect_false(is.na(d3$dN))
+  expect_identical(d3$status, "warning")
+  expect_match(d3$note, "fewer than 3 sites has an undefined correction", fixed = TRUE)
+  expect_true(is.na(d0$dN))
+  expect_identical(d0$status, "saturated")
+  # never changes a value that is not NA otherwise
+  r <- refs()
+  a <- coal_kaks(r$seq1, r$seq2, method = "Comeron", comeron_min_sites = 0)
+  b <- coal_kaks(r$seq1, r$seq2, method = "Comeron")
+  expect_identical(a$dN[!is.na(a$dN)], b$dN[!is.na(a$dN)])
+  expect_identical(a$dS[!is.na(a$dS)], b$dS[!is.na(a$dS)])
+  expect_gt(sum(is.na(a$dN) & !is.na(b$dN)), 0)
+  expect_error(coal_kaks("GCT", "GAT", method = "Comeron", comeron_twosubs = "x"), "comeron_twosubs")
+  expect_error(coal_kaks("GCT", "GAT", method = "Comeron", comeron_min_sites = -1), "comeron_min_sites")
+  expect_error(coal_dnds_pairs(q, s, pairs = orthologs(), methods = "Comeron", comeron_min_sites = NA),
+               "comeron_min_sites")
+})

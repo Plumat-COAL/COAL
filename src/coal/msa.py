@@ -44,6 +44,7 @@ from typing import Iterable, Mapping, Sequence
 from . import __version__
 
 __all__ = ["cache_dir", "find_clustalo", "find_mafft", "install_clustalo", "install_mafft", "tool_version", "pin_note",
+           "package_pin", "installed_package",
            "run_msa", "align_clusters", "MsaResult", "MsaError", "CLUSTALO_VERSION", "MAFFT_VERSION",
            "MICROMAMBA_VERSION",
            "CLUSTAL_ORG_GONE", "NO_WINDOWS_CLUSTALO"]
@@ -53,6 +54,61 @@ CLUSTALO_VERSION = "1.2.4"
 # gave whatever Bioconda had, so two machines that followed the same docs could align differently)
 MAFFT_VERSION = "7.526"
 _EXE = ".exe" if os.name == "nt" else ""
+
+# ---- The exact conda package of each tool, per platform (decision D6b, 2026-11-14) ---------------------------------
+# A version pin is not one file: conda-forge has three linux-64 builds of mafft 7.526 (h4ab18f5_0, ha3fa977_0,
+# h4bc722e_0) and Bioconda twelve of clustalo 1.2.4, so two machines that follow the same docs could get different
+# binaries. COAL asks for one build (channel::name=version=build) and keeps the install only if the package conda
+# recorded (<env>/conda-meta/<name>-<version>-<build>.json, field "sha256": the hash of the file conda downloaded
+# and checked against the channel index) has the SHA-256 pinned here. Values: the channels' sharded repodata
+# (repodata_shards.msgpack.zst) read on 2026-11-14; for each platform the newest build. MAFFT comes from
+# conda-forge (Bioconda has no 7.526), Clustal Omega from Bioconda. A platform without an entry, or a build the
+# channel no longer serves, falls back to the version pin with a warning, and the manifest says so.
+@dataclass(frozen=True)
+class PackagePin:
+    channel: str
+    name: str
+    version: str
+    build: str
+    subdir: str
+    filename: str
+    sha256: str
+
+    @property
+    def spec(self) -> str:
+        return f"{self.channel}::{self.name}={self.version}={self.build}"
+
+    def describe(self) -> str:
+        return f"{self.spec} ({self.subdir}, {self.filename}, SHA-256 {self.sha256})"
+
+
+def _pins(channel: str, name: str, version: str, rows: dict) -> dict:
+    return {plat: PackagePin(channel, name, version, build, subdir, f"{name}-{version}-{build}.conda", digest)
+            for plat, (subdir, build, digest) in rows.items()}
+
+
+_PACKAGE_PINS = {
+    "mafft": _pins("conda-forge", "mafft", MAFFT_VERSION, {
+        ("Linux", "x86_64"): ("linux-64", "h4bc722e_0",
+                              "e307b4d817c5f1d1173896d8d54b1b11761b0fc7889bf618ff59dd6407b11d36"),
+        ("Linux", "aarch64"): ("linux-aarch64", "h68df207_0",
+                               "9ba9270e75d94c654c88a758577428fb3b0b743451b1b1106336929d9c37b81c"),
+        ("Darwin", "x86_64"): ("osx-64", "hfdf4475_0",
+                               "8c161223ae8b8d24fbc8cac5f283ed02dda3ed3eb7d2bfed5fd5caafca1bb4d3"),
+        ("Darwin", "arm64"): ("osx-arm64", "h99b78c6_0",
+                              "89b847250232bae9af4fa28c6ffffc857b480dc44d9489ad7ccef25bf271c7d1"),
+    }),
+    "clustalo": _pins("bioconda", "clustalo", CLUSTALO_VERSION, {
+        ("Linux", "x86_64"): ("linux-64", "h503566f_10",
+                              "30fd59e21c866ffe8ed22d2099a645d6df0956b3138ed4fa836a6e2b55a93644"),
+        ("Linux", "aarch64"): ("linux-aarch64", "h80f0ee0_10",
+                               "a5000f8202d0edbc4c0a7b3d75d9a068f12c50c8de24538a58f6d4a81b86ccc5"),
+        ("Darwin", "x86_64"): ("osx-64", "h5eaf441_10",
+                               "91e4a8abb0f95da4b30d7c72437efa03eaaa4b590f9697c167aca056387005a7"),
+        ("Darwin", "arm64"): ("osx-arm64", "haef7865_10",
+                              "a7d51a72432477bcf4694bda298ffdc578d00849e21b0395703fa3bbef994cc8"),
+    }),
+}
 
 # ---- Downloads that COAL runs afterwards: each is pinned to one file by its SHA-256 ------------------------------
 # A downloaded file is moved into the cache only after its SHA-256 matched the pinned value (or the one the caller
@@ -138,13 +194,16 @@ _trust_seen: dict = {}      # (path, size, mtime_ns) -> state, so a binary is ha
 _trust_told: set = set()    # paths whose "not used" note was printed
 
 
-def _write_manifest(exe: str, source: str, verified: str, also: Sequence[str] = ()) -> None:
+def _write_manifest(exe: str, source: str, verified: str, also: Sequence[str] = (),
+                    package: dict | None = None) -> None:
     files = {os.path.basename(f): _sha256(f) for f in (exe, *also)}
     tmp = exe + MANIFEST_SUFFIX + f".{os.getpid()}.tmp"
+    rec = {"tool": os.path.basename(exe), "files": files, "source": source, "verified": verified,
+           "coal_version": __version__, "installed": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    if package is not None:
+        rec["package"] = package
     with open(tmp, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as fh:
-        json.dump({"tool": os.path.basename(exe), "files": files, "source": source, "verified": verified,
-                   "coal_version": __version__, "installed": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
-                  fh, indent=1)
+        json.dump(rec, fh, indent=1)
         fh.write("\n")
     os.replace(tmp, exe + MANIFEST_SUFFIX)
 
@@ -261,10 +320,37 @@ def pin_note(tool: str, exe: str, version: str | None = None) -> str | None:
     v = tool_version(exe) if version is None else version
     m = re.search(r"\d+(?:\.\d+)+", v or "")
     if m and m.group(0) == pin:
+        # the pinned version; and, where COAL recorded it, the pinned build (D6b)
+        pkg, want = installed_package(tool, exe), package_pin(tool)
+        if pkg and want and (pkg.get("filename"), pkg.get("sha256")) != (want.filename, want.sha256):
+            return (f"{name} {pin} in COAL's cache ({exe}) is the package {pkg.get('filename') or 'of unknown build'}, "
+                    f"not the pinned build {want.filename} (SHA-256 {want.sha256[:12]}...); it is used as it is. "
+                    f"To install the pinned build: coal pipeline install {tool} --force")
         return None
     found = f"{name} {m.group(0)}" if m else f"{name} (version unknown: {v or 'no output'})"
     return (f"{found} in COAL's cache ({exe}) is not the pinned {pin} (an earlier COAL installed it unpinned); it "
             f"is used as it is. To install {pin}: coal pipeline install {tool} --force")
+
+
+def package_pin(tool: str) -> PackagePin | None:
+    """The exact conda package COAL installs for `tool` ("mafft", "clustalo") on this platform, or None (no pin
+    for this platform: the version pin applies)."""
+    return _PACKAGE_PINS.get(tool, {}).get(_platform())
+
+
+def installed_package(tool: str, exe: str) -> dict | None:
+    """The conda package the copy of `tool` in COAL's cache was installed from, as its manifest records it
+    ({"spec", "channel", "subdir", "filename", "sha256", "pinned"}), or None (not the cache copy, or installed
+    before COAL recorded it)."""
+    here = os.path.normcase(os.path.realpath(exe))
+    if here not in {os.path.normcase(os.path.realpath(c)) for c in _cached(tool)}:
+        return None
+    try:
+        with open(exe + MANIFEST_SUFFIX, encoding="utf-8", errors="backslashreplace") as fh:
+            pkg = json.load(fh).get("package")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return pkg if isinstance(pkg, dict) else None
 
 
 def tool_version(exe: str, timeout: float = 60) -> str:
@@ -399,9 +485,71 @@ def _conda_install(tool: str, spec: str, conda: str, quiet: bool, timeout: float
     exe = _cached(tool)[1]
     if r.returncode != 0 or not os.path.isfile(exe):
         raise MsaError(f"installing {spec} with {conda} failed: {(r.stderr or r.stdout).strip()[-800:]}")
-    _write_manifest(exe, f"{spec} (conda-forge / bioconda) with {os.path.basename(conda)}",
-                    "by conda against the channel index")
+    pin = package_pin(tool)
+    if pin is not None and spec == pin.spec:
+        # the package conda installed must be the pinned file: its record holds the SHA-256 of what was downloaded
+        got = _conda_record(prefix, pin.name).get("sha256")
+        if got != pin.sha256:
+            shutil.rmtree(prefix, ignore_errors=True)
+            raise MsaError(f"{pin.filename} installed by {os.path.basename(conda)} is not the pinned package: "
+                           f"expected SHA-256 {pin.sha256}, conda recorded {got or 'none'}; the environment was "
+                           f"removed")
+        package = {"spec": pin.spec, "channel": pin.channel, "subdir": pin.subdir, "filename": pin.filename,
+                   "sha256": pin.sha256, "pinned": True}
+        verified = "pinned build; SHA-256 of the package as conda recorded it"
+    else:
+        rec = _conda_record(prefix, tool)
+        package = {"spec": spec, "channel": rec.get("channel"), "subdir": rec.get("subdir"),
+                   "filename": os.path.basename(rec.get("url") or "") or None, "sha256": rec.get("sha256"),
+                   "pinned": False}
+        verified = "by conda against the channel index (version pin only)"
+    _write_manifest(exe, f"{spec} with {os.path.basename(conda)}", verified, package=package)
     return exe
+
+
+def _conda_record(prefix: str, name: str) -> dict:
+    """conda's record of the installed package `name` in the environment `prefix` ({} if there is none)."""
+    meta = os.path.join(prefix, "conda-meta")
+    try:
+        files = sorted(f for f in os.listdir(meta) if f.startswith(name + "-") and f.endswith(".json"))
+    except OSError:
+        return {}
+    for f in files:
+        try:
+            with open(os.path.join(meta, f), encoding="utf-8", errors="backslashreplace") as fh:
+                rec = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        if isinstance(rec, dict) and rec.get("name") == name:
+            return rec
+    return {}
+
+
+# conda / mamba / micromamba saying that a spec cannot be satisfied (as opposed to a network or disk failure)
+_UNSATISFIABLE = re.compile(r"nothing provides|PackagesNotFound|could not be found|not found in|could not solve|"
+                            r"unsatisfiable|does not exist", re.I)
+
+
+def _install_pinned(tool: str, name: str, conda: str, quiet: bool, timeout: float) -> str:
+    """Install the pinned build of `tool`; if this platform has no pin, or the channel no longer has that build,
+    the version pin with a warning (the manifest records which)."""
+    pin = package_pin(tool)
+    version = _PINNED[tool][1]
+    if pin is not None:
+        try:
+            exe = _conda_install(tool, pin.spec, conda, quiet, timeout)
+            if not quiet:
+                print(f"coal: {name} build: {pin.describe()}, verified", file=sys.stderr)
+            return exe
+        except MsaError as e:
+            if not _UNSATISFIABLE.search(str(e)):
+                raise
+            print(f"coal: warning: the pinned {name} build {pin.spec} is not available ({str(e)[-200:]}); "
+                  f"installing {tool}={version} instead, whose build is not pinned", file=sys.stderr)
+    elif not quiet:
+        print(f"coal: note: COAL pins no {name} build for {'/'.join(_platform())}; installing {tool}={version} "
+              "(version pin only)", file=sys.stderr)
+    return _conda_install(tool, f"{tool}={version}", conda, quiet, timeout)
 
 
 def install_clustalo(method: str = "auto", force: bool = False, quiet: bool = False,
@@ -449,7 +597,7 @@ def install_clustalo(method: str = "auto", force: bool = False, quiet: bool = Fa
                 conda = _conda_exe() if m == "conda" else _get_micromamba(quiet)
                 if conda is None:
                     raise MsaError("no conda, mamba or micromamba found")
-                exe = _conda_install("clustalo", f"clustalo={CLUSTALO_VERSION}", conda, quiet, timeout)
+                exe = _install_pinned("clustalo", "Clustal Omega", conda, quiet, timeout)
                 v = tool_version(exe)
                 if not v.startswith("1.2"):
                     raise MsaError(f"{exe} does not run or is not Clustal Omega 1.2 ({v or 'no output'})")
@@ -485,7 +633,7 @@ def install_mafft(method: str = "auto", force: bool = False, quiet: bool = False
             if method == "conda":
                 raise MsaError("no conda, mamba or micromamba found")
             conda = _get_micromamba(quiet)
-        exe = _conda_install("mafft", f"mafft={MAFFT_VERSION}", conda, quiet, timeout)
+        exe = _install_pinned("mafft", "MAFFT", conda, quiet, timeout)
         v = tool_version(exe)
         if MAFFT_VERSION not in v:
             raise MsaError(f"{exe} does not run or is not MAFFT {MAFFT_VERSION} ({v or 'no output'})")

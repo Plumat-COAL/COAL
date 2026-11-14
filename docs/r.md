@@ -87,7 +87,9 @@ res <- coal_dnds_pairs("thaliana_cds.fasta", "lyrata_cds.fasta",
   `"Li"`, the two methods of the R package orthologr that need no KaKs_Calculator, in any case. Comeron and Li
   need `code = 1`. `comeron_flavour = "gestimator"` gives the numbers of orthologr 0.4.3's `gestimator()`
   (stop codons compared like other codons, undefined logarithms replaced by 0), `li_flavour = "seqinr"` reads
-  stop codons as `seqinr::kaks()` does; the defaults (`"coal"`) apply COAL's policy. With the reference
+  stop codons as `seqinr::kaks()` does; the defaults (`"coal"`) apply COAL's policy. `comeron_twosubs`
+  (`"comeron"` or `"libsequence"`; `NULL`, the default, follows the flavour) and `comeron_min_sites` (default 3)
+  are the command line's `--comeron-twosubs` and `--comeron-min-sites` ([kaks.md](kaks.md)). With the reference
   flavours, `terminal_stops = "compare"` makes `coal_dnds_pairs()` and `coal_dnds_clusters()` compare the two
   terminal stop codons of a pair as the last codon column when both genes have one, which is what orthologr
   0.4.3's own pipeline does ([kaks.md](kaks.md), "Comeron and Li"). `coal_kaks()` has the two flavour arguments
@@ -157,7 +159,7 @@ The R functions take the options of the `coal` command line under these names (t
 | `--min-codons N`, `--max-ds X` | `min_codons = N`, `max_ds = X` | `min_codons = N`, `max_ds = X` |
 | `--min-identity P` | `min_identity = P` (not in `coal_kaks()`: it has no protein alignment) | `min_identity = P` |
 | `--matrix`, `--gap-open`, `--gap-extend`, `--end-gaps`, `--preset`, `--max-cells` | `matrix`, `gap_open`, `gap_extend`, `end_gaps`, `preset`, `max_cells` | the same names |
-| `--yn-flavour`, `--yn-weighting 0\|1`, `--comeron-flavour`, `--li-flavour`, `--terminal-stops` | `yn_flavour`, `yn_weighting = FALSE\|TRUE`, `comeron_flavour`, `li_flavour`, `terminal_stops` | the same names (`yn_weighting = 0L` or `1L`) |
+| `--yn-flavour`, `--yn-weighting 0\|1`, `--comeron-flavour`, `--comeron-twosubs`, `--comeron-min-sites`, `--li-flavour`, `--terminal-stops` | `yn_flavour`, `yn_weighting = FALSE\|TRUE`, `comeron_flavour`, `comeron_twosubs`, `comeron_min_sites`, `li_flavour`, `terminal_stops` | the same names (`yn_weighting = 0L` or `1L`) |
 | `--keep-alignments` | `keep_alignments = TRUE` (returned as an attribute) | `keep_alignments = TRUE` (files in `out_dir`) |
 | `--pairs TSV`, `--clusters TSV` | `pairs =` / `clusters =` (a data frame) | `pairs = "file"`, `clusters = "file"` |
 | `--max-cluster-size`, `--large-clusters`, `--pair-sample`, `--seed` | `max_cluster_size`, `large_clusters`, `pair_sample`, `seed` | the same names |

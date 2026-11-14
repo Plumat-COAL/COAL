@@ -16,6 +16,8 @@
 #' @param methods The same as `method` (the name [coal_dnds_pairs()] uses); give one of the two.
 #' @param comeron_flavour,li_flavour Which reading of the pair `"Comeron"` and `"Li"` follow: COAL's policy
 #'   (`"coal"`, the default) or the reference program's (`"gestimator"`, `"seqinr"`); see [coal_dnds_pairs()].
+#' @param comeron_twosubs,comeron_min_sites For `"Comeron"`: the pathways for codons that differ at two positions
+#'   and the smallest site class that can make `dN` or `dS` `NA`; see [coal_dnds_pairs()].
 #' @param details `TRUE`: add KaKs_Calculator's further columns (`p_fisher`, `length`, `substitutions`, `kappa`,
 #'   `divergence`, `gc`) and the counts of skipped columns.
 #' @inheritParams coal_dnds_pairs
@@ -33,7 +35,8 @@
 coal_kaks <- function(aligned1, aligned2 = NULL, method = "YN", code = 1L,
                       threads = getOption("coalr.threads", 1L), yn_flavour = c("kaks", "paml"),
                       yn_weighting = TRUE, details = FALSE, comeron_flavour = c("coal", "gestimator"),
-                      li_flavour = c("coal", "seqinr"), min_codons = 0L, max_ds = NULL, methods = NULL) {
+                      li_flavour = c("coal", "seqinr"), min_codons = 0L, max_ds = NULL, methods = NULL,
+                      comeron_twosubs = NULL, comeron_min_sites = 3) {
   method <- pick_methods(method, methods, !missing(method), "method", "methods")
   flags <- check_flags(min_codons, max_ds)
   a <- as_seqs(aligned1, "aligned1", need_names = FALSE)
@@ -44,6 +47,7 @@ coal_kaks <- function(aligned1, aligned2 = NULL, method = "YN", code = 1L,
   yn_flavour <- match.arg(yn_flavour)
   comeron_flavour <- match.arg(comeron_flavour)
   li_flavour <- match.arg(li_flavour)
+  com <- check_comeron(comeron_twosubs, comeron_min_sites)
   check_flag(yn_weighting, "yn_weighting")
   if (is.null(aligned2)) {
     if (length(a) < 2L) stop("give two sequences, or one alignment of two or more rows", call. = FALSE)
@@ -63,7 +67,7 @@ coal_kaks <- function(aligned1, aligned2 = NULL, method = "YN", code = 1L,
     id2 <- names(b) %||% as.character(seq_along(b))
   }
   r <- coalr_kaks(unname(a), unname(b), methods, code, threads, yn_flavour, yn_weighting, comeron_flavour,
-                  li_flavour)
+                  li_flavour, com$twosubs, com$min_sites)
   out <- data.frame(seq1 = id1[r$pair + 1L], seq2 = id2[r$pair + 1L], method = r$method_names[r$method + 1L],
                     dN = r$dN, dS = r$dS, dNdS = r$dNdS, SE_dN = r$SE_dN, SE_dS = r$SE_dS, N_sites = r$N_sites,
                     S_sites = r$S_sites, Nd = r$Nd, Sd = r$Sd, codons_compared = r$codons_compared,
