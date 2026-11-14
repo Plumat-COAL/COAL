@@ -1,13 +1,14 @@
 # COAL website and releases
 
 `site/` is the website at **https://plumat-coal.github.io/COAL/**: plain HTML, CSS and JavaScript, no build
-step, nothing loaded from other sites (no CDNs, font services, trackers or analytics). About 225 KB in all.
+step, nothing loaded from other sites (no CDNs, font services, trackers or analytics). About 390 KB in all
+(budget 400 KB, and 200 KB without images: `tests/test_docs_site.py`).
 
 | File | What it is |
 |---|---|
 | `index.html` | home: what COAL is, the downloads, a short example, why use it, how to get the C++ engine, a cite pointer |
 | `install.html` | install steps for Windows (SmartScreen, Smart App Control), macOS, Linux, the command line; files and checksums |
-| `guide.html` | the explainer animation inline (an iframe of `explainer.html`), an example run, warnings and errors, the C++ engine, what it does not do, help |
+| `guide.html` | the explainer animation inline (an iframe of `explainer.html`), an example run, warnings and errors, from coding sequences to dN/dS (0.6.0), the C++ engine, help |
 | `differences.html` | "Why use it" in the menu: the reasons, the differences from PAL2NAL v14 (the test counts) and the speed table |
 | `cite.html` | how to cite COAL and PAL2NAL (the version is in a `data-version-ref` span); what to cite for what was run, each cited paper's title a link to its DOI (the table and list follow `src/coal/citations.py`; `tests/test_citations.py` compares them). COAL itself has no DOI |
 | `style.css` | styles for every page; dark only, light when printed. `.files` is the table of file names (first column monospace, never wrapped); `.files.refs` is the "what to cite" table of `cite.html`: prose in both columns, wrapped, and below 30rem (a phone) the two cells of a row are stacked, the first in semibold (checked at 390 px in headless Chrome). The comment that explained the shared header and footer at the top of each page went to this file to keep the site inside its size budget |
@@ -21,6 +22,11 @@ step, nothing loaded from other sites (no CDNs, font services, trackers or analy
 | `assets/coal-mark.svg` | the logo's squares as SVG (written by `apps/coal-app/desktop/make_icon.py --site site`); the small mark in the page header |
 | `assets/coal-train.svg` | the owner's train drawing as SVG; the page inlines a copy in the footer, beside the authors' names, so CSS can recolour it in dark mode |
 | `assets/favicon-32.png`, `apple-touch-icon.png`, `icon-512.png` | PNG icons (written by `apps/coal-app/desktop/make_icon.py --site site`) |
+
+Every PNG in `assets/` was recompressed losslessly (oxipng level 6 with zopfli; the decoded pixels are identical),
+which freed about 8 KB of the budget. Writing them again with `make_icon.py` gives the same pixels in larger files:
+recompress them again afterwards (`pip install pyoxipng`, then
+`oxipng.optimize(path, level=6, deflate=oxipng.Deflaters.zopfli(50))` on each).
 
 <!-- Several pages with one shared header and footer (a test checks they are identical; when you
      change the header or footer, change it in every page). The fonts were made from google/fonts ofl/literata
