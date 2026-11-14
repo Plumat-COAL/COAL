@@ -143,9 +143,12 @@ codons and stops are those of the standard code (only start codons differ), so t
   3) for yeast mitochondria; then the one that reassigns no stop codon the genes do not need (code 14 also reads
   TAA). When several codes are equally good, all are named and none is recommended: codes 4, 5, 9, 10, 13 and 21
   all read TGA as Trp (or Cys) and differ only in codons whose meaning a DNA sequence does not show; start codons
-  that only some of them allow narrow the list (Drosophila mitochondria: 4 or 5). A code that reads TAA or TAG
-  as an amino acid is suggested only when at least half of the set has internal stops (the whole set's code,
-  e.g. ciliate nuclear genes). Sets with more than 5,000 such genes are judged on 5,000 spread evenly over the
+  that only some of them allow narrow the list (Drosophila mitochondria: 4 or 5). A code that wins alone on its
+  codons is named alone only when its start codons fit the genes: *C. elegans* mitochondrial genes avoid CGA /
+  CGC as yeast mitochondrial genes do, but most start with ATT or TTG, which code 3 does not allow, so the hint
+  names 4 and 5 (their code is 5), not 3; when nothing but such a code would be left, there is no hint. A code
+  that reads TAA or TAG as an amino acid is suggested only when at least half of the set has internal stops (the
+  whole set's code, e.g. ciliate nuclear genes). Sets with more than 5,000 such genes are judged on 5,000 spread evenly over the
   file (not the first ones). On real genomes: *S. cerevisiae*, *C. glabrata*, *K. lactis*, *A. gossypii* with
   their mitochondrial genes: code 3; human and mouse Ensembl: code 2 (12 genes each); *D. melanogaster*: 4 or 5;
   *E. coli*, *Y. pestis* (pseudogenes), *A. lyrata* and Ensembl mouse all-transcript files: no hint.

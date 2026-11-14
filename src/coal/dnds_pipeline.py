@@ -756,7 +756,11 @@ def suggest_genetic_code(chosen: int, genes: list[dict], background, n_records: 
        genes avoid where the set's other genes use them (and lose when they do not), then those that reassign
        no stop codon the genes do not need (code 14 also reads TAA, which TGA-only genes do not need).
     4. Codes that tie are all named (their sequences cannot tell 4, 5 and 13 apart), less those whose start
-       codons do not fit at least two and a quarter of the genes when another candidate's do.
+       codons do not fit at least two and a quarter of the genes when another candidate's do. A code that wins
+       alone is named alone only if its start codons pass the same test against the other codes of the group;
+       if not, it and the codes the codons do not argue against are the candidates (retest Q01: C. elegans
+       mitochondria, code 5, avoid CGA / CGC as code 3's genes do, but most start with ATT / TTG, which code 3
+       does not allow), and no hint when only it would be left.
     5. No hint unless at least min_genes genes and half of the evidence genes fit, and a code that reads TAA or
        TAG as an amino acid is suggested only when half the set has internal stops (the whole set's code).
     6. When at least half of all records have internal stops (with_stops of n_records), the question is the code
@@ -845,15 +849,32 @@ def suggest_genetic_code(chosen: int, genes: list[dict], background, n_records: 
         keys[t] = (-e, unneeded)
     best = min(keys.values())
     W = sorted(t for t in sig if keys[t] == best)
+    bar = 10 if whole else 4
+
+    def bad_starts(t, others):
+        return sum(1 for g in G if g["first"] not in tables[t][1] and any(g["first"] in tables[u][1] for u in others))
+
+    doubted = None   # a single winner whose start codons argue against it
+    if len(W) == 1 and len(sig) > 1:
+        # one code wins on codons alone, but its start codons do not fit genes that another candidate's do (C.
+        # elegans mitochondria, code 5: no CGA / CGC, as code 3, but 9 of 12 genes start with ATT / TTG, which
+        # code 3 does not allow: Q01). Not that code alone, then: it and the codes the codons do not argue against
+        # are candidates, and the start codons below choose among them.
+        n_bad = bad_starts(W[0], [u for u in sig if u != W[0]])
+        if n_bad >= 2 and 4 * n_bad >= len(G):
+            doubted = W[0]
+            W = sorted({doubted} | {u for u in sig if keys[u][0] <= 0})
     if len(W) > 1:
         drop = set()
         for t in W:
-            bad = sum(1 for g in G if g["first"] not in tables[t][1]
-                      and any(g["first"] in tables[u][1] for u in W if u != t))
-            if bad >= 2 and (10 if whole else 4) * bad >= len(G):
+            bad = bad_starts(t, [u for u in W if u != t])
+            if bad >= 2 and bar * bad >= len(G):
                 drop.add(t)
         if len(drop) < len(W):
             W = [t for t in W if t not in drop]
+    if doubted is not None and W == [doubted]:
+        return None   # the start codons argue against it and nothing else is left: no hint rather than it alone
+    best = min(keys[t] for t in W)
     support = [g for g in ev if all(t in g["clean"] for t in W)]
     if len(support) < min_genes or 2 * len(support) < len(ev):
         return None
