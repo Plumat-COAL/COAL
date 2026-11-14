@@ -331,6 +331,73 @@ class TestTwoSubsAndMinSites(ComeronLiBase):
         self.assertNotIn("Ka: correction undefined", g["3"]["note"])
         self.assertIn("Ka: correction undefined", g["0"]["note"])
 
+    def test_min_sites_zero_stays_saturated(self):
+        # D9 refinement (2026-11-14): the rule only applies where it yields a positive distance. ATGGCTAAA /
+        # ATGGCCAAA has one synonymous change (GCT -> GCC); the small class's logarithm set to 0 left dS = 0, which
+        # reads as "no synonymous change" (orthologr: dS_zero). Now: as without the rule
+        d = self.pair_rows("ATGGCTAAA", "ATGGCCAAA")
+        self.assertEqual(d["3"], d["0"])
+        self.assertEqual(d["3"]["dS"], "NA")
+        self.assertEqual(d["3"]["status"], "saturated")
+        self.assertIn("Ks saturated (multiple-hit correction undefined)", d["3"]["note"])
+        self.assertNotIn("site class", d["3"]["note"])
+        # gestimator flavour (orthologr's COAL engine): gestimator's 0 stays, with the note that tells orthologr
+        # that it is not an estimate (orthologr: NA), not the small-class note (orthologr: dS = 0)
+        g = self.pair_rows("ATGGCTAAA", "ATGGCCAAA", "--comeron-flavour", "gestimator")
+        self.assertEqual(g["3"], g["0"])
+        self.assertEqual(float(g["3"]["dS"]), 0.0)
+        self.assertEqual(g["3"]["status"], "warning")
+        self.assertIn("Ks: correction undefined, gestimator's value (undefined logarithms set to 0)", g["3"]["note"])
+        self.assertNotIn("site class", g["3"]["note"])
+
+    def test_min_sites_short_simulation(self):
+        # seeded neutral pairs of 5-20 codons (kappa 2, no stop codons): under the default (3) no distance is 0
+        # because of a small class; every value that is not NA with --comeron-min-sites 0 is unchanged; a value
+        # the rule gives in place of NA is > 0 and has the note. Fails with the rule before its refinement
+        import random
+        import tempfile
+        rng = random.Random(20261114)
+        bases = "TCAG"
+        sense = [a + b + c for a in bases for b in bases for c in bases if a + b + c not in STOPS]
+        ts = {"AG", "GA", "CT", "TC"}
+        pairs = []
+        for n in (5, 10, 15, 20):
+            for k in range(250):
+                anc = [rng.choice(sense) for _ in range(n)]
+                s = list(anc)
+                need = max(1, round(rng.uniform(0.02, 0.35) * n))
+                while sum(x != y for x, y in zip(s, anc)) < need:
+                    i, pos = rng.randrange(n), rng.randrange(3)
+                    old = s[i][pos]
+                    opts = [b for b in bases if b != old]
+                    b = rng.choices(opts, [2 if old + b in ts else 1 for b in opts])[0]
+                    m = s[i][:pos] + b + s[i][pos + 1:]
+                    if m not in STOPS:
+                        s[i] = m
+                pairs.append((f"c{n}_{k}", "".join(anc), "".join(s)))
+        flagged_zeros = 0
+        with tempfile.TemporaryDirectory() as tmp:
+            p = self.write_pairs(tmp, pairs)
+            for flav in ((), ("--comeron-flavour", "gestimator")):
+                new = self.tidy(p, "-m", "Comeron", *flav)
+                old = self.tidy(p, "-m", "Comeron", "--comeron-min-sites", "0", *flav)
+                for key, n in new.items():
+                    o = old[key]
+                    for k, which in (("dN", "Ka"), ("dS", "Ks")):
+                        small = f"{which}: a site class with fewer than 3 sites" in n["note"]
+                        if small:
+                            self.assertGreater(float(n[k]), 0.0, f"{flav} {key} {k}")
+                        if o[k] != "NA":
+                            self.assertEqual(n[k], o[k], f"{flav} {key} {k}")
+                        elif n[k] != "NA":
+                            self.assertTrue(small, f"{flav} {key} {k}")
+                        undefined = f"{which}: correction undefined" in n["note"]
+                        if flav and undefined and n[k] != "NA" and float(n[k]) == 0.0:
+                            flagged_zeros += 1   # gestimator's 0 from an undefined correction, flagged as such
+        # (23: 21 of them, 20 at 5 codons and 1 at 10, all dS, had the small-class note before the refinement,
+        # which orthologr read as dS = 0; the coal flavour gave them dS = 0, now NA)
+        self.assertGreaterEqual(flagged_zeros, 21)
+
     def pair_rows(self, a, b, *extra):
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
