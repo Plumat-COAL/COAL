@@ -120,14 +120,19 @@ the extras (`"apps/coal-app[gui]"`): some shells (zsh, PowerShell) treat bare br
   `.venv-gui` on first start, repairs it if an install was interrupted, then opens the window). Building it:
   `apps/coal-app/desktop/BUILD.md`.
 - **Web GUI on any OS:** `coal-gui` (or `python -m coal_app`, from `coal-align-app[gui]`) runs on this computer at
-  http://127.0.0.1:7860, with a
-  per-gene health check, an alignment view that marks where a gene breaks, genetic-code suggestions and a
-  ready-to-paste methods sentence.
+  http://127.0.0.1:7860. Its **Align** tab has a per-gene health check, an alignment view that marks where a gene
+  breaks, genetic-code suggestions and a ready-to-paste methods sentence; its **Ka/Ks** tab gives dN, dS and dN/dS
+  for pairs of a codon alignment or AXT file, and its **dN/dS pipeline** tab goes from the coding sequences of two
+  species to dN/dS per ortholog pair (DIAMOND best or reciprocal best hits). Ka/Ks and the pipeline need `coal-cpp`
+  (below),
+  and the pipeline DIAMOND (`coal pipeline install diamond`).
 - **Command line:** `coal` / `python -m coal`.
 - **Drop-in for PAL2NAL pipelines:** `pal2nal pep.aln nuc.fasta [PAL2NAL options]` (or `python -m coal_compat`)
   accepts an unchanged PAL2NAL v14 command line, with PAL2NAL's default clustal output, all four formats,
   `-blockonly` and `-nostderr` (= `-q`); `-html` is a clear error.
-- **AI agents (MCP):** two tools, `codon_align` and `explain_report`; see [mcp.md](mcp.md).
+- **AI agents (MCP):** four tools: `codon_align` and `explain_report` (codon alignment and its report),
+  `dnds_pairs` (Ka/Ks for pairs of a codon alignment or AXT file) and `pipeline_pairs` (two species' coding
+  sequences to dN/dS per ortholog pair); the last two need `coal-cpp`; see [mcp.md](mcp.md).
 - **C++ engine for the largest jobs:** `coal-cpp`, same options and output ([cpp-engine.md](cpp-engine.md)); it
   comes inside the platform wheels (above) and the Windows app, or build it from source.
 - **Two-species preset:** `demo/diamond_pipeline.py` (DIAMOND reciprocal best hits, then COAL on every pair).
