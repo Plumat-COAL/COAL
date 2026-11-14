@@ -396,6 +396,19 @@ Ka/Ks compares and not the files), and hold the members that could be used: a ge
 The numeric columns, statuses and notes are those of `coal dnds` ([kaks.md](kaks.md#output)); the pipeline adds
 the two protein-alignment columns and what it knows about each CDS.
 
+### Which gene comes first
+
+Most protein pairs have several alignments with the same best score (docs/alignment.md, "Co-optimal
+alignments"), and which one an aligner returns depends on which sequence is the first; Comeron's estimate depends
+on it too (libsequence counts the sites of the first sequence). COAL computes a pair in input order in every
+route: the pairs route with the `--query` gene first, `pipeline clusters` with the gene of the earlier `--cds`
+file first (then the earlier record), `coalr::coal_dnds_pairs()` with the query and `coal_dnds_clusters()` with
+the earlier one in `cds`. orthologr does the same (`dNdS()`: the query; `dNdS_orthogroups()`: the gene of the
+species that comes first), so the routes agree on a pair given in the same order. The rows of `dnds.tsv` still
+list a cluster's representative first. Pairs taken from a Clustal Omega / MAFFT alignment of a whole cluster
+are the exception: the multiple alignment itself depends on the order of the members (the clusters file's), and
+Comeron is computed with the earlier member of the cluster first.
+
 ### `cluster_summary.tsv`
 
 | Column | Meaning |
