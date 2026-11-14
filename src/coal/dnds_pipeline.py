@@ -957,6 +957,7 @@ class _Run:
         self._first_ids: dict = {}
         self._plain_sha256: dict = {}
         self.code_hints: list = []         # sets whose genes with internal stops are clean under another code
+        self._inputs_dir_new = False       # work/inputs/ was made by this run
         self._engine_files: list = []
         self.set_counts: dict = {}         # per input set: records, not usable, dropped (as genes.tsv lists them)
 
@@ -1114,6 +1115,7 @@ class _Run:
         if not todo:
             return
         d = self.wpath("inputs")
+        self._inputs_dir_new = self._inputs_dir_new or not os.path.isdir(d)
         os.makedirs(d, exist_ok=True)
         record_path = os.path.join(d, "sources.json")
         try:
@@ -1223,6 +1225,7 @@ class _Run:
                 continue
             raise PipelineError(f"{opt} {p} is a file this run writes: nothing was changed. Use another output "
                                 "folder, or move the input out of this one")
+        self._check_cds_twice()
         inside = (os.path.realpath(self.work), os.path.realpath(self.path("codon_alignments")),
                   os.path.realpath(self.path("protein_alignments")))
         for opt, inp in self._inputs:
@@ -1518,6 +1521,26 @@ class _Run:
         return faa, genes, {}
 
     # -- clusters: the IDs of several --cds files
+    def _check_cds_twice(self) -> None:
+        """The same --cds file named twice (by any name) is refused. Called before anything is written or
+        decompressed (retest R04; Q05: a .gz named twice was refused only after both copies were decompressed
+        into work/inputs, and they stayed there)."""
+        given: dict[str, str] = {}
+        for p in (getattr(self.a, "cds", None) or ()):   # (R04: "the ID occurs in two input files, A and A")
+            key = os.path.normcase(os.path.realpath(os.fspath(p)))
+            if key in given:
+                twice = (f"{p} twice" if os.fspath(p) == given[key] else f"the same file twice: {given[key]} and {p}")
+                raise PipelineError(f"--cds names {twice}. Each file is one species' genes (or part of the set) "
+                                    "and is read once: give it once. Nothing was run")
+            given[key] = os.fspath(p)
+
+    def discard_new_inputs(self) -> None:
+        """A run refused after its inputs were decompressed (IDs repeated across --cds files, a --prefix-ids file
+        name): the copies it made in work/inputs/ go (Q05). A folder an earlier run made stays (--resume)."""
+        if self._inputs_dir_new:
+            shutil.rmtree(self.wpath("inputs"), ignore_errors=True)
+            self._inputs_dir_new = False
+
     def check_cds_ids(self) -> None:
         """Clusters mode: the --cds files are one set, so an ID must name one record across all of them. IDs that
         occur in two files (BRAKER / AUGUSTUS g1.t1, gene1 in every species) are refused before anything runs:
@@ -1529,14 +1552,7 @@ class _Run:
         prefix = bool(getattr(a, "prefix_ids", False))
         if len(paths) < 2 and not prefix:
             return
-        given: dict[str, str] = {}
-        for p in paths:   # (retest R04: the same file twice read "the ID occurs in two input files, A and A")
-            key = os.path.normcase(os.path.realpath(os.fspath(p)))
-            if key in given:
-                twice = (f"{p} twice" if os.fspath(p) == given[key] else f"the same file twice: {given[key]} and {p}")
-                raise PipelineError(f"--cds names {twice}. Each file is one species' genes (or part of the set) "
-                                    "and is read once: give it once. Nothing was run")
-            given[key] = os.fspath(p)
+        self._check_cds_twice()
         if prefix:
             stems = [file_stem(p) for p in paths]
             bad = next((x for x in stems if not x or x != x.strip() or any(c in x for c in "|> \t")
@@ -2635,7 +2651,11 @@ def sample_pairs(n: int, k: int, seed, cluster_id: str) -> list[tuple[int, int]]
 
 def _clusters_mode(run: _Run) -> None:
     a = run.a
-    run.check_cds_ids()
+    try:
+        run.check_cds_ids()
+    except PipelineError:
+        run.discard_new_inputs()
+        raise
     faa, genes, _ = run.translate("proteins", list(a.cds))
     run.outputs["genes"] = run.path("genes.tsv")
     order: dict[str, int] = {}

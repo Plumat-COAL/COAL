@@ -207,6 +207,34 @@ class CopiesAndRepeats(PipelineCase):
         res, err = run(P.run_pairs, Q, copy, self.tmp / "o4", pairs=pairs)
         self.assertNotIn("same content", err)
 
+    def test_the_same_gz_twice_is_refused_before_decompressing(self):   # Q05
+        src = write_fasta(self.tmp / "a.fa", [(f"g{k}", cds(random.Random(k), stops=())) for k in range(4)])
+        gz = self.tmp / "a.fa.gz"
+        gz.write_bytes(gzip.compress(src.read_bytes()))
+        res, err = run(P.run_clusters, [gz, gz], self.tmp / "o", clusters=FAM_CLUSTERS)
+        self.assertEqual(res.exit_code, 1)
+        self.assertIn(f"--cds names {gz} twice", err)
+        self.assertNotIn("decompressed", err)
+        self.assertFalse((self.tmp / "o" / "work" / "inputs").exists())
+
+    def test_a_refused_run_leaves_no_decompressed_copies(self):   # Q05
+        rng = random.Random(3)
+        files = []
+        for name in ("one", "two"):   # the same IDs in both: refused after the files were decompressed
+            p = self.tmp / f"{name}.fa.gz"
+            p.write_bytes(gzip.compress("".join(f">g{k}\n{cds(rng, stops=())}\n" for k in range(4)).encode()))
+            files.append(p)
+        res, err = run(P.run_clusters, files, self.tmp / "o", clusters=FAM_CLUSTERS)
+        self.assertEqual(res.exit_code, 1)
+        self.assertIn("occur in more than one of the --cds files", err)
+        self.assertFalse((self.tmp / "o" / "work" / "inputs").exists())
+        # a folder an earlier run made stays (its copies serve --resume)
+        res = P.run_clusters(files[:1], self.tmp / "o2", clusters=FAM_CLUSTERS, quiet=True)
+        self.assertTrue((self.tmp / "o2" / "work" / "inputs").is_dir())
+        res, err = run(P.run_clusters, files, self.tmp / "o2", clusters=FAM_CLUSTERS)
+        self.assertEqual(res.exit_code, 1)
+        self.assertTrue((self.tmp / "o2" / "work" / "inputs").is_dir())
+
 
 if __name__ == "__main__":
     unittest.main()
