@@ -32,9 +32,10 @@ The fast subset (a few hundred pairs, fixed seed) takes well under 60 s. COAL_SL
 
     python tests/test_kaks_properties.py --n 3000 --seed 7 [--max-codons 2000] [--keep DIR] [--cpp build/coal-cpp]
 
-Known bugs (K01-K06; tests/fixtures/kaks_fuzz/K0*.axt hold the minimal pairs and say what is wrong) are
-expected failures in TestKnownBugs, and the random tests leave out exactly the rows that a known bug explains
-(KNOWN below), so that the suite stays green and still checks everything else. Skipped if build/coal-cpp
+The bugs this fuzz found (K01-K06; tests/fixtures/kaks_fuzz/K0*.axt hold the minimal pairs) have their
+reproducers in TestKnownBugs; a bug that is not yet fixed is an expected failure there, and the random tests
+leave out exactly the rows it explains (KNOWN below), so that the suite stays green and still checks everything
+else. K01, K02, K03 and K06 are fixed (2026-11-14). Skipped if build/coal-cpp
 (COAL_CPP_BIN) is not built.
 """
 from __future__ import annotations
@@ -399,7 +400,7 @@ def check_row(case: Case, method: str, d: dict, flavour: dict) -> list[str]:
     if st not in ESTIMATE and dn is not None and ds is not None and st != "no_data":
         # saturated / not_converged / error with both numbers: a status without its NA
         bad.append(f"P3: status {st} but dN {d['dN']} and dS {d['dS']} both printed")
-    gest = flavour.get("comeron") == "gestimator" and method == "Comeron"
+    gest = flavour.get("comeron", "").startswith("gestimator") and method == "Comeron"
     if dn is not None and ds is not None:
         want_na = (ds == 0) if gest else (ds < 1e-6)
         if want_na and r is not None:
@@ -448,9 +449,14 @@ def check_row(case: Case, method: str, d: dict, flavour: dict) -> list[str]:
                 bad.append(f"P9: synonymous changes only, but {c} = {d[c]}")
     # P10: a multiple-hit correction (Jukes-Cantor, Kimura, F84 / TN93) of a pair of at most a million sites
     # cannot exceed about 8 unless the argument of its logarithm is a rounding residue of an exact 0 (p = 3/4,
-    # 2P + Q = 1): such a value is not an estimate, whatever the status of the row
+    # 2P + Q = 1): such a value is not an estimate, whatever the status of the row. Two exceptions: the gestimator
+    # flavour reproduces gestimator's number, residue included (docs/kaks.md "Differences", 14), and LWL / MLWL
+    # divide Sd (Nd) by S (N), which with MLWL's kappa-based sites can be a small fraction of a site
     for c in ("dN", "dS"):
         v = num(d[c])
+        sites = num(d["S_sites" if c == "dS" else "N_sites"])
+        if gest or (method in ("LWL", "MLWL") and sites is not None and sites < 1):
+            continue
         if v is not None and v > 10:
             bad.append(f"P10: {c} = {d[c]} with status {st}: a rounding residue at the boundary of the correction")
     cc = num(d["codons_compared"])
@@ -762,41 +768,10 @@ def shrink(case: Case, still_fails, max_steps: int = 400) -> Case:
 # Known bugs found by this fuzz (tests/fixtures/kaks_fuzz/K*.axt). A property that a known bug breaks is checked
 # on every other row, and on the bug's reproducer as an expected failure (TestKnownBugs).
 KNOWN = {
-    # K01: LWL / LPB put the halves of CGA <-> AGA (CGG <-> AGG) into the fold classes of the two end codons
-    # (KaKs_Calculator's LWL85); with code 13, where AGA / AGG are Gly, the two classes differ, so the result
-    # depends on which sequence is first
-    "K01": lambda f: f.prop == "P5" and f.method in ("LWL", "LPB") and f.case.code == 13,
-    # K02: MLWL / MLPB apply Tzeng et al.'s standard-code rules (ATA <-> ATG nonsynonymous, CGA <-> AGA
-    # synonymous) with every genetic code: a synonymous ATA <-> ATG (codes 2, 3, 5, 13, 21) counts as a
-    # nonsynonymous difference
-    "K02": lambda f: f.prop == "P9" and f.method in ("MLWL", "MLPB") and f.case.code != 1,
-    # K03: the argument of a correction's logarithm that is 0 in exact arithmetic (Kimura's 1 - 2P - Q, Jukes and
-    # Cantor's 1 - 4p/3) comes out as a residue of 1e-16: a finite, huge dN or dS (19 to 28) with status ok (or
-    # beside a saturated or missing other estimate), or saturated, depending on the order of the sums
-    "K03": lambda f: f.prop == "P10" or (f.prop == "P6" and f.method in COUNT_METHODS and _boundary(f)),
-    # K06: a YN / MYN row that is saturated prints the weighted difference counts (Sd, Nd) of an iteration whose
-    # t has no value; like a not_converged row's they depend on the path, here on the order of the sequences
-    "K06": lambda f: f.prop in ("P5", "P6") and f.method in ("YN", "MYN") and _saturated_counts_only(f),
+    # K01, K02, K03 and K06 were fixed on 2026-11-14 (branch fix/kaks-accuracy; docs/kaks.md "Differences", 14 to
+    # 17): their reproducers in TestKnownBugs pass, and the random tests check every row again. Add an entry here
+    # (id -> predicate on a Finding) for a bug that is found and not yet fixed.
 }
-
-
-def _saturated_counts_only(f: Finding) -> bool:
-    ex = f.extra
-    if f.prop == "P5" and len(ex) == 3 and isinstance(ex[1], dict):
-        return set(ex[1]) <= {"Nd", "Sd"} and ex[2] == "saturated"
-    if f.prop == "P6" and len(ex) == 3:
-        return set(ex[0]) <= {"Nd", "Sd"} and ex[2] == "saturated"
-    return False
-
-
-def _boundary(f: Finding) -> bool:
-    """A P6 finding of a row that is saturated, or whose dN / dS is a residue-sized value (K03)."""
-    ex = f.extra
-    if len(ex) == 3:
-        return ex[2] == "saturated" or any((num(x) or 0) > 10 for k in ("dN", "dS") for x in ex[0].get(k, ()))
-    if len(ex) == 2 and isinstance(ex[0], dict) and "a" in ex[0]:
-        return "saturated" in (ex[0]["a"]["status"], ex[0]["b"]["status"])
-    return False
 
 
 def known(f: Finding) -> str:
@@ -974,28 +949,24 @@ class TestKnownBugs(PropertyBase):
                 self.assertFalse(crashed(r), r.err)
                 self.assertEqual(r.rc, 2, f"{sub} {name}")
 
-    @unittest.expectedFailure
     def test_K06_saturated_myn_counts_do_not_depend_on_the_order(self):
         _, rows = self.rows("K06_myn_saturated_counts_swap_code5.axt", 5, ["MYN"])
         a, b = rows[("f", "MYN")], rows[("r", "MYN")]
         self.assertEqual((a["status"], b["status"]), ("saturated", "saturated"))
         self.assertEqual((a["Nd"], a["Sd"]), (b["Nd"], b["Sd"]))
 
-    @unittest.expectedFailure
     def test_K01_lwl_lpb_do_not_depend_on_the_order_of_the_sequences(self):
         _, rows = self.rows("K01_lwl_lpb_swap_code13.axt", 13, ["LWL", "LPB"])
         for m in ("LWL", "LPB"):
             a, b = rows[("f", m)], rows[("r", m)]
             self.assertEqual([a[k] for k in VALUE_COLS], [b[k] for k in VALUE_COLS], m)
 
-    @unittest.expectedFailure
     def test_K02_mlwl_mlpb_no_nonsynonymous_difference_for_synonymous_changes(self):
         _, rows = self.rows("K02_mlwl_mlpb_synonymous_ata_atg_code2.axt", 2, ["NG", "MLWL", "MLPB"])
         self.assertEqual(rows[("k2", "NG")]["dN"], "0")
         for m in ("MLWL", "MLPB"):
             self.assertEqual(rows[("k2", m)]["dN"], "0", m)
 
-    @unittest.expectedFailure
     def test_K03_an_exact_zero_of_the_correction_is_saturated(self):
         ms = ["NG", "LWL", "MLWL", "LPB", "MLPB", "YN", "MYN", "Comeron"]
         _, rows = self.rows("K03_kimura_boundary_residue.axt", 1, ms)

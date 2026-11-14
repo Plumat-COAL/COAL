@@ -317,16 +317,16 @@ int fold_class(const GeneticCode& g, int c, int pos) {  // 0, 1 (2-fold), 2 (4-f
 
 // codon indices of the special cases KaKs_Calculator (following Li's kakstools.py, and Tzeng et al. 2004 for
 // the M variants) hard-codes. They are facts of the standard code (CGA/AGA and CGG/AGG are both Arg, ATA/ATC/ATT
-// are Ile, ATG is Met), and KaKs_Calculator applies them with every genetic code. COAL applies each one only
-// where the selected code has the relation the rule is about (the two codons synonymous, or not, as in the
-// standard code); elsewhere the change is counted by the general rule, transition or transversion. With the
-// standard code (and every code where those codons keep their standard amino acids) nothing changes. Fuzz
+// are Ile, ATG is Met), and KaKs_Calculator applies them with every genetic code. COAL applies LWL / LPB's
+// Arg rule only where the selected code makes the two codons synonymous, and the M variants' rules by what they
+// are about (lwl_step); elsewhere the change is counted by the general rule, transition or transversion. With
+// the standard code the counts are KaKs_Calculator's, unchanged. Fuzz
 // findings K01 (code 13: AGA is Gly, so LWL / LPB depended on which sequence is first) and K02 (code 2: ATA is
 // Met, so MLWL / MLPB counted half of the synonymous ATA -> ATG as nonsynonymous); docs/kaks.md, "Differences".
 constexpr int cod(int a, int b, int c) { return a * 16 + b * 4 + c; }
 constexpr int T_ = 0, C_ = 1, A_ = 2, G_ = 3;
 constexpr int CGA = cod(C_, G_, A_), AGA = cod(A_, G_, A_), CGG = cod(C_, G_, G_), AGG = cod(A_, G_, G_);
-constexpr int ATA = cod(A_, T_, A_), ATG = cod(A_, T_, G_), ATC = cod(A_, T_, C_), ATT = cod(A_, T_, T_);
+constexpr int ATA = cod(A_, T_, A_), ATG = cod(A_, T_, G_);
 
 struct LwlAcc {
     double L[3] = {0, 0, 0}, Si[3] = {0, 0, 0}, Vi[3] = {0, 0, 0};
@@ -340,21 +340,25 @@ bool same_aa(const GeneticCode& g, int x, int y) { return !is_stop(g, x) && !is_
 void lwl_step(const GeneticCode& g, bool modified, int x, int y, int pos, double* si, double* vi) {
     const int c1 = fold_class(g, x, pos), c2 = fold_class(g, y, pos);
     int syn = -1;
-    const bool arg = pos == 0 && ((x == CGA && y == AGA) || (x == AGA && y == CGA) || (x == CGG && y == AGG) ||
-                                  (x == AGG && y == CGG)) && same_aa(g, x, y);   // Arg <-> Arg (standard code)
     if (!modified) {
-        if (arg) {
+        if (pos == 0 && ((x == CGA && y == AGA) || (x == AGA && y == CGA) || (x == CGG && y == AGG) ||
+                         (x == AGG && y == CGG)) && same_aa(g, x, y)) {   // Arg <-> Arg (standard code)
             si[c1] += 0.5;  // as KaKs_Calculator's LWL85: half a transition, half a transversion
             vi[c2] += 0.5;
             return;
         }
     } else {
-        // Ile <-> Met and Ile <-> Ile (standard code); Arg <-> Arg as above
-        if (pos == 2 && ((x == ATA && y == ATG) || (x == ATG && y == ATA)) && !same_aa(g, x, y)) syn = 0;
-        if (pos == 2 && ((x == ATA && (y == ATC || y == ATT)) || ((x == ATC || x == ATT) && y == ATA)) &&
-            same_aa(g, x, y))
-            syn = 1;
-        if (arg) syn = 1;
+        // Tzeng et al.'s rules, by what they are about: between two codons that are both 2-fold degenerate at
+        // the position, the change is synonymous exactly when the code says so, whether it is a transition or
+        // not. In the standard code the changes where that differs from "transition = synonymous" are exactly
+        // the hard-coded Ile <-> Ile (ATA <-> ATC, ATT) and Arg <-> Arg (CGA <-> AGA, CGG <-> AGG); other codes
+        // have their own (Asn AAA <-> AAC, AAT in codes 9, 14, 21; Cys TGA <-> TGC, TGT in code 10; ...).
+        // And Ile <-> Met (ATA <-> ATG, a 2-fold and a non-degenerate codon) is nonsynonymous where the code
+        // has those amino acids.
+        if (c1 == 1 && c2 == 1)
+            syn = same_aa(g, x, y) ? 1 : 0;
+        else if (pos == 2 && ((x == ATA && y == ATG) || (x == ATG && y == ATA)) && !same_aa(g, x, y))
+            syn = 0;
     }
     if (syn < 0) syn = transition(base_at(x, pos), base_at(y, pos)) ? 1 : 0;
     double* t = syn ? si : vi;

@@ -463,9 +463,13 @@ Result run_comeron(const Prepared& p, const GeneticCode& code, const Options& op
 
     // (a class without sites has weight 0 in As / Aa: an undefined logarithm there is no saturation; one in a
     // class with fewer than min_sites sites is set to 0 and flagged in small_s / small_a, Options::comeron_min_sites)
+    // (A class's number of sites is a sum of thirds and halves whose last bit depends on the order of the codon
+    // columns: exactly 3 sites can come out as 2.9999999999999996. "Fewer than min_sites" is therefore tested with
+    // a margin of 1e-9, so that the rule does not depend on the order of the columns; fuzz property P6.)
     bool none = false, small_s = false, small_a = false;
-    auto flag_s = [&](double L) -> bool& { return !(L > 0) ? none : L < min_sites ? small_s : saturated_s; };
-    auto flag_a = [&](double L) -> bool& { return !(L > 0) ? none : L < min_sites ? small_a : saturated_a; };
+    const double small_below = min_sites - 1e-9;
+    auto flag_s = [&](double L) -> bool& { return !(L > 0) ? none : L < small_below ? small_s : saturated_s; };
+    auto flag_a = [&](double L) -> bool& { return !(L > 0) ? none : L < small_below ? small_a : saturated_a; };
     log1 = checked_log(1.0 - (2.0 * P2S_site) - Qa, flag_s(L2S));
     log2 = checked_log(1.0 - (2.0 * Qa), flag_s(L2S));
     const double A2S = (-0.5) * log1 + (0.25) * log2;
