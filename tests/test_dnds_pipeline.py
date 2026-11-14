@@ -178,6 +178,14 @@ class PipelineCase(unittest.TestCase):
         self._env.stop()
         self._td.cleanup()
 
+    def stop_after_translation(self) -> Path:
+        """A --clusters file that cannot be used (one column): the run translates its input, prints the notes and
+        hints of that step, then stops when it reads the file. (A path that does not exist is refused before
+        anything runs: final retest of 2026-11-14, P05.)"""
+        p = self.tmp / "unusable_clusters.tsv"
+        p.write_text("one_column\n", encoding="utf-8")
+        return p
+
     def pairs_file(self, pairs) -> Path:
         p = self.tmp / "pairs.tsv"
         p.write_text("".join(f"{a}\t{b}\n" for a, b in pairs), encoding="utf-8")

@@ -1100,6 +1100,7 @@ class _Run:
             self.warn(f"-j {self.jobs_requested} is more than the {self.cpus} CPU(s) this process may use: "
                       f"coal-cpp, DIAMOND and the aligners are run with {self.threads} thread(s)")
         self._same_file_warning()
+        self._inputs_exist()
         self._gunzip_inputs()
         self._copy_warning()
         self._describe_inputs()
@@ -1213,6 +1214,15 @@ class _Run:
                   "records of the smaller file have the same ID and sequence in both (a copy, re-wrapped or "
                   "edited?): their best hits are themselves, so their pairs are self-pairs with dN = dS = 0. For "
                   "paralogs within one genome use `coal pipeline clusters`")
+
+    def _inputs_exist(self) -> None:
+        """An input that does not exist is refused before any .gz input is decompressed (final retest of
+        2026-11-14, P05: the copies were made first, and stayed in work/inputs). The error is the one the stages
+        gave; the report lists the inputs as before."""
+        for opt, p in self._inputs:
+            if opt != "--diamond" and not os.path.exists(p):
+                self._describe_inputs()
+                raise PipelineError(f"cannot open {p!r}: no such file")
 
     def _gunzip_inputs(self) -> None:
         """A gzip-compressed input (found by its first two bytes, whatever its name) is decompressed into
@@ -1616,6 +1626,7 @@ class _Run:
         """coal-cpp translate -> (protein FASTA, genes table, counts)."""
         for p in paths:
             if not os.path.isfile(p):
+                self.discard_new_inputs()
                 raise PipelineError(f"cannot open {p!r}: no such file")
         faa, genes = self.wpath(f"{name}.faa"), self.wpath(f"{name}.genes.tsv")
 
@@ -2442,6 +2453,7 @@ def _pairs_mode(run: _Run) -> None:
     a = run.a
     for p in (a.query, a.subject):
         if not os.path.isfile(p):
+            run.discard_new_inputs()
             raise PipelineError(f"cannot open {p!r}: no such file")
     q_faa, q_genes, _ = run.translate("query", [a.query])
     s_faa, s_genes, _ = run.translate("subject", [a.subject])

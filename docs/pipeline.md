@@ -842,7 +842,9 @@ machine is still to be done.
 - **Compressed input.** A gzip-compressed `--query`, `--subject`, `--cds`, `--pairs` or `--clusters` file
   (recognised by its first two bytes, whatever its name) is decompressed into `DIR/work/inputs/` and read from
   there, so the folder needs room for the plain copies; they are kept for `--resume` and reused while the
-  compressed file is unchanged. Messages of the translation step name the copy. Other compression formats
+  compressed file is unchanged. Every input must exist before anything is decompressed (a missing one is
+  refused first, and no copy is made); copies made by a run that is then refused are removed. Messages of the
+  translation step name the copy. Other compression formats
   (bzip2, xz, zstd) are not read: decompress them first.
 - **Protein input is not accepted**: the pipeline starts from CDS, so that protein and CDS always match. A protein
   file is recognised only when it leaves no usable gene (see "Inputs that cannot work"); a file that mixes CDS and

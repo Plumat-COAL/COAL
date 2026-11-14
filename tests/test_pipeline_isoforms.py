@@ -444,7 +444,7 @@ class Pipeline(PipelineCase):
         res, err = run(P.run_pairs, dup, NCBI, self.tmp / "p", pairs=self.pairs_file(self.pairs(TAIR, NCBI)))
         self.assertIn("summary: 23 records (1 not usable); ", err)
         self.assertNotRegex(err, r"summary: \d+ genes")
-        res, err = run(P.run_clusters, dup, self.tmp / "c", clusters=self.tmp / "none.tsv")
+        res, err = run(P.run_clusters, dup, self.tmp / "c", clusters=self.stop_after_translation())
         self.assertIn("translated 12 records (1 not usable)", err)
 
     def test_no_gene_information_keeps_everything_and_says_so(self):

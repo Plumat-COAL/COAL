@@ -341,5 +341,37 @@ class SameRecords(PipelineCase):
         self.assertIsNone(P._same_records(a, empty))
 
 
+@needs_cpp
+class MissingInputs(PipelineCase):
+    """P05: a missing input is refused before any .gz input is decompressed."""
+
+    def gz(self):
+        src = write_fasta(self.tmp / "a.fa", [(f"g{k}", cds(random.Random(k), stops=())) for k in range(4)])
+        gz = self.tmp / "a.fa.gz"
+        gz.write_bytes(gzip.compress(src.read_bytes()))
+        return gz
+
+    def test_clusters(self):
+        gz = self.gz()
+        missing = self.tmp / "nonexistent" / "x.fa"
+        for k, files in enumerate(([gz, missing], [missing, gz])):
+            res, err = run(P.run_clusters, files, self.tmp / f"o{k}", clusters=FAM_CLUSTERS)
+            self.assertEqual(res.exit_code, 1)
+            self.assertIn(f"error: cannot open {str(missing)!r}: no such file", err)
+            self.assertNotIn("decompressed", err)
+            self.assertFalse((self.tmp / f"o{k}" / "work" / "inputs").exists())
+            validate(res.report, SCHEMA)
+
+    def test_pairs(self):
+        gz = self.gz()
+        missing = self.tmp / "x.fa"
+        res, err = run(P.run_pairs, gz, missing, self.tmp / "o")
+        self.assertEqual(res.exit_code, 1)
+        self.assertIn(f"error: cannot open {str(missing)!r}: no such file", err)
+        self.assertNotIn("decompressed", err)
+        self.assertFalse((self.tmp / "o" / "work" / "inputs").exists())
+        self.assertEqual([r["option"] for r in res.report["inputs"]], ["--query", "--subject"])
+
+
 if __name__ == "__main__":
     unittest.main()
