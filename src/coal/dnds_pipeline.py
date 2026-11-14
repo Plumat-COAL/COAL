@@ -478,6 +478,84 @@ class FastaIndex:
         self._fh.clear()
 
 
+_BOM = b"\xef\xbb\xbf"
+
+
+def fasta_lines(fh):
+    """(offset, line) of the lines of a file opened in binary mode, split as coal-cpp splits them (cpp/src/seqio.cpp):
+    a UTF-8 byte order mark at the start is skipped (Windows Notepad writes one), and a line ends at \\n, \\r\\n or a
+    lone \\r (classic Mac OS). Each line keeps its line end; offset is where it starts in the file."""
+    off = 0
+    first = True
+    for line in fh:
+        if first:
+            first = False
+            if line.startswith(_BOM):
+                off, line = 3, line[3:]
+        k = line.find(b"\r")
+        if k < 0 or k >= len(line) - 2 and line[k:] in (b"\r\n", b"\r"):
+            yield off, line
+            off += len(line)
+            continue
+        start, n = 0, len(line)
+        while start < n:   # (one \n-line that holds lone \r line ends: a classic Mac file is one such "line")
+            k = line.find(b"\r", start)
+            if k < 0:
+                end = n
+            else:
+                end = k + 2 if line[k + 1:k + 2] == b"\n" else k + 1
+            yield off + start, line[start:end]
+            start = end
+        off += n
+
+
+def fasta_ids(path: str) -> list[bytes]:
+    """The IDs (first word of each header, bytes) of a FASTA file, in file order, repeats included."""
+    ids = []
+    with open(path, "rb") as fh:
+        for _off, line in fasta_lines(fh):
+            if line[:1] == b">":
+                words = line[1:].split()
+                ids.append(words[0] if words else b"")
+    return ids
+
+
+_FASTA_SUFFIXES = (".gz", ".fasta", ".fas", ".fa", ".fna", ".ffn", ".cds", ".fsa", ".seq", ".txt")
+
+
+def file_stem(path: str) -> str:
+    """The name of a file without its folder and its FASTA / gzip suffixes: dir/S_cer.cds.fa.gz -> S_cer."""
+    name = os.path.basename(os.fspath(path))
+    while True:
+        low = name.lower()
+        cut = next((x for x in _FASTA_SUFFIXES if low.endswith(x) and len(name) > len(x)), None)
+        if cut is None:
+            return name
+        name = name[:-len(cut)]
+
+
+ID_PREFIX_SEP = "|"
+
+
+def write_prefixed_fasta(src: str, dst: str, prefix: bytes) -> int:
+    """Copy the FASTA file src to dst with prefix + ID_PREFIX_SEP before the ID of every record (the rest of the
+    header and the sequence lines as they are; line ends as \\n). Returns the number of records."""
+    n = 0
+    tag = b">" + prefix + ID_PREFIX_SEP.encode()
+    with open(src, "rb") as fh, open(dst + ".tmp", "wb") as out:
+        for _off, line in fasta_lines(fh):
+            body = line.rstrip(b"\r\n")
+            if body[:1] == b">":
+                n += 1
+                rest = body[1:]
+                # (a header without an ID stays without one: coal-cpp reports it as such)
+                out.write((tag + rest if rest[:1].strip() else body) + b"\n")
+            else:
+                out.write(body + b"\n")
+    os.replace(dst + ".tmp", dst)
+    return n
+
+
 def sort_fasta_by_id(src: str, dst: str) -> int:
     """Write the records of the FASTA file src to dst in the order of their IDs (the first word of the header,
     compared as bytes; records with the same ID keep their order). Returns the number of records. Memory: the
@@ -605,6 +683,8 @@ class _Run:
         self.input_records: list[dict] = []   # the report's `inputs`
         self._commands: list[list[str]] = []  # the external commands of the stage that is running
         self._plain: dict[str, str] = {}   # a gzip-compressed input -> its decompressed copy in work/inputs
+        self._prefixed: dict[str, str] = {}   # --prefix-ids: a --cds file -> its copy with prefixed IDs
+        self.id_prefixes: dict[str, str] = {}  # --prefix-ids: a --cds file (as given) -> its prefix
         self.notes: list[str] = []         # warnings of the run, also in the report
         self.isoforms: dict = {}           # the report's `isoforms`: per set what was found and done
         self._gene_map: dict | None = None
@@ -775,7 +855,8 @@ class _Run:
 
     def plain(self, path):
         """The file to read for an input path: itself, or its decompressed copy."""
-        return self._plain.get(os.path.abspath(os.fspath(path)), os.fspath(path))
+        key = os.path.abspath(os.fspath(path))
+        return self._prefixed.get(key) or self._plain.get(key, os.fspath(path))
 
     # -- the folder: this run's inputs, what it will write, what an earlier run wrote
     def _input_paths(self) -> list[tuple[str, str]]:
@@ -981,13 +1062,14 @@ class _Run:
     def shown(self, text: str) -> str:
         """text with the paths of decompressed copies (work/inputs/...) replaced by the files as the user named
         them; lines that quote a command line (`$ ...`, from a log) are left as they ran."""
-        if not self._plain or not any(copy in text for copy in self._plain.values()):
+        copies = [*self._prefixed.items(), *self._plain.items()]
+        if not copies or not any(copy in text for _, copy in copies):
             return text
         lines = text.split("\n")
         for k, line in enumerate(lines):
             if line.startswith("$ "):
                 continue
-            for orig, copy in self._plain.items():
+            for orig, copy in copies:
                 line = line.replace(copy, orig)
             lines[k] = line
         return "\n".join(lines)
@@ -1129,6 +1211,89 @@ class _Run:
         self.stage(f"translate_{name}", _sig("translate", _file_sig(plain), self.a.codontable, __version__),
                    [faa, genes], go)
         return faa, genes, {}
+
+    # -- clusters: the IDs of several --cds files
+    def check_cds_ids(self) -> None:
+        """Clusters mode: the --cds files are one set, so an ID must name one record across all of them. IDs that
+        occur in two files (BRAKER / AUGUSTUS g1.t1, gene1 in every species) are refused before anything runs:
+        coal-cpp translate keeps the first record of an ID, so every later file's gene of that ID would be left
+        out, a whole species when all IDs clash. With --prefix-ids every file's IDs get the file's name as a
+        prefix (S_cer|g1.t1) instead, in a copy in work/inputs/ that the run reads."""
+        a = self.a
+        paths = list(a.cds)
+        prefix = bool(getattr(a, "prefix_ids", False))
+        if len(paths) < 2 and not prefix:
+            return
+        if prefix:
+            stems = [file_stem(p) for p in paths]
+            bad = next((x for x in stems if not x or x != x.strip() or any(c in x for c in "|> \t")
+                        or not x.isascii()), None)
+            if bad is not None:
+                raise PipelineError(f"--prefix-ids: the file name {bad!r} cannot be an ID prefix (it must be ASCII, "
+                                    "without blanks, '|' or '>'): rename the file")
+            seen: dict[str, str] = {}
+            for p, x in zip(paths, stems):
+                if x in seen and os.path.abspath(seen[x]) != os.path.abspath(p):
+                    raise PipelineError(f"--prefix-ids: {seen[x]} and {p} would get the same prefix {x!r} (the "
+                                        "file name without folder and suffix): rename one of them")
+                seen.setdefault(x, p)
+            d = self.wpath("inputs")
+            os.makedirs(d, exist_ok=True)
+            t = time.perf_counter()
+            done: dict[str, str] = {}
+            for k, (p, x) in enumerate(zip(paths, stems)):
+                key = os.path.abspath(os.fspath(p))
+                if key in done:
+                    continue
+                src = self.plain(p)
+                dst = os.path.join(d, f"prefixed_{k}_{x}.fa")
+                write_prefixed_fasta(src, dst, x.encode())
+                st = os.stat(src)   # the copy keeps the source's time: an unchanged input -> the same --resume
+                os.utime(dst, ns=(st.st_atime_ns, st.st_mtime_ns))   # signature (as for decompressed copies)
+                self._prefixed[key] = done[key] = dst
+                self.id_prefixes[os.fspath(p)] = x
+            for rec in self.input_records:   # the report's `inputs`
+                if rec.get("option") == "--cds":
+                    x = next((x for p, x in zip(paths, stems) if os.path.abspath(p) == rec.get("path")), None)
+                    if x is not None:
+                        rec["id_prefix"] = x + ID_PREFIX_SEP
+            self.stages.append({"name": "prefix_ids", "seconds": round(time.perf_counter() - t, 3), "cached": False,
+                                "files": len(done)})
+            self.say("--prefix-ids: the IDs of " + ", ".join(f"{p} start with {x}{ID_PREFIX_SEP}"
+                                                              for p, x in list(self.id_prefixes.items())[:3])
+                     + (" ..." if len(self.id_prefixes) > 3 else ""))
+            return
+        first: dict[bytes, int] = {}
+        clash: dict[tuple[int, int], list[bytes]] = {}
+        files: list[str] = []
+        for k, p in enumerate(paths):
+            key = os.path.abspath(os.fspath(p))
+            if any(os.path.abspath(os.fspath(q)) == key for q in files):
+                files.append(os.fspath(p))   # the same file named twice: translate reports its records as repeats
+                continue
+            files.append(os.fspath(p))
+            try:
+                ids = fasta_ids(self.plain(p))
+            except OSError:
+                return   # (translate says what is wrong with the file)
+            for rid in dict.fromkeys(ids):   # (a repeat within one file is that file's own duplicate_id)
+                j = first.setdefault(rid, k)
+                if j != k and rid:
+                    clash.setdefault((j, k), []).append(rid)
+        if not clash:
+            return
+        total = sum(len(v) for v in clash.values())
+        parts = []
+        for (j, k), ids in list(clash.items())[:3]:
+            ex = ", ".join(i.decode("utf-8", "backslashreplace") for i in ids[:3])
+            parts.append(f"{len(ids):,} in both {paths[j]} and {paths[k]} (e.g. {ex})")
+        raise PipelineError(
+            f"--cds: {total:,} sequence ID(s) occur in more than one of the --cds files: " + "; ".join(parts)
+            + ("; ..." if len(clash) > 3 else "") + ". The files are one set of genes, so every ID must name one "
+            "record across them: only the first file's record of each such ID would be used and the other files' "
+            "genes left out. Nothing was run. Run again with --prefix-ids, which puts each file's name before its "
+            f"IDs ({file_stem(paths[next(iter(clash))[1]])}{ID_PREFIX_SEP}"
+            f"{next(iter(clash.values()))[0].decode('utf-8', 'backslashreplace')}), or make the IDs unique")
 
     def read_genes(self, genes_path: str, set_name: str, out_fh, order: dict | None = None,
                    dropped: dict | None = None) -> dict:
@@ -1289,6 +1454,17 @@ class _Run:
                 if not self._gene_map:
                     raise PipelineError(f"--gene-map {a.gene_map} names no record (it has no line with a record ID "
                                         "and a gene ID)")
+                if self.id_prefixes:   # --prefix-ids: the map names the IDs as in the files (or prefixed ones)
+                    xs = set(self.id_prefixes.values())
+                    gm: dict[str, str] = {}
+                    for r, g in self._gene_map.items():
+                        x = r.split(ID_PREFIX_SEP, 1)[0] if ID_PREFIX_SEP in r else None
+                        if x in xs:
+                            gm.setdefault(r, g)
+                        else:   # the same gene ID in two species is two genes
+                            for x in xs:
+                                gm.setdefault(f"{x}{ID_PREFIX_SEP}{r}", f"{x}{ID_PREFIX_SEP}{g}")
+                    self._gene_map = gm
             # the map wins for the records it names; the others fall back to what the headers and IDs say
             det = I.from_gene_map(self._gene_map, headers, detection=rule != "map")
             unknown = det.records - (det.in_map or 0)
@@ -2009,6 +2185,7 @@ def sample_pairs(n: int, k: int, seed, cluster_id: str) -> list[tuple[int, int]]
 
 def _clusters_mode(run: _Run) -> None:
     a = run.a
+    run.check_cds_ids()
     faa, genes, _ = run.translate("proteins", list(a.cds))
     run.outputs["genes"] = run.path("genes.tsv")
     order: dict[str, int] = {}
@@ -2462,7 +2639,12 @@ def build_parser() -> argparse.ArgumentParser:
                                    "file), a protein MSA per cluster, codon MSA, Ka/Ks for every pair of a cluster, "
                                    "and a per-cluster summary.")
     g = p.add_argument_group("Clusters")
-    g.add_argument("--cds", required=True, nargs="+", metavar="CDS.fasta", help="coding sequences (one or more files)")
+    g.add_argument("--cds", required=True, nargs="+", metavar="CDS.fasta",
+                   help="coding sequences (one or more files; an ID must not occur in two of them)")
+    g.add_argument("--prefix-ids", action="store_true",
+                   help="put each --cds file's name (without folder and suffix) and '|' before its IDs: S_cer.fa's "
+                        "g1.t1 becomes S_cer|g1.t1 in every output. For files whose IDs repeat across species "
+                        "(BRAKER / AUGUSTUS g1.t1), which are refused without it")
     g.add_argument("--clusters", metavar="TSV", help="take the clusters from this file (representative, member; as "
                                                      "`diamond deepclust` writes them) and skip DIAMOND")
     g.add_argument("--aligner", choices=("clustalo", "mafft"), default="clustalo",

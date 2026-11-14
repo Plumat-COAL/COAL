@@ -279,6 +279,16 @@ entry under "Added", not under "Fixed".
     test reading `failed.tsv` with the default encoding (cp1252); the tests now run the pipeline under an ASCII
     locale, with a cp1252 console and with Python's `-X warn_default_encoding` as an error, and compare every
     output byte with the UTF-8 run.
+  - **Deep test of 2026-11-14 (D01-D08).** **The same IDs in two `--cds` files no longer drop a species
+    without a word** (D05). `clusters --cds a.fa b.fa` with IDs repeated across the files (BRAKER / AUGUSTUS
+    `g1.t1` in every species) kept the first file's record of each ID and left out the other's: 300 + 300
+    Salmonella / Shigella CDS named `gene0`..`gene299` in both gave 289 clusters and 12 pairs instead of about
+    300 cross-species pairs, exit 2, and 300 failures saying "the ID occurs more than once in the file" (each
+    occurred once per file). Now such a run stops before anything runs (exit 1) and names both files, the count
+    and examples; the new `--prefix-ids` puts each file's name and `|` before its IDs (`q_sameid|gene0`; the
+    report's `inputs` give each file's `id_prefix`), which gives 600 usable records, 291 clusters and 352 pairs
+    on the same files. `coal-cpp translate` with several files says "the ID occurs in two input files, A and B"
+    for such a record (within one file the wording is as before).
 - **Protein alignment for the codon step (docs/alignment.md).** `<coal/align.hpp>` and the `coal-cpp-align` tool: a
   global Needleman-Wunsch/Gotoh aligner (BLOSUM62/45/80, PAM250, affine gaps; EMBOSS needle defaults, a pwalign
   preset), full length (overhangs gapped, never cut off), AVX2 row loops picked at run time, multithreaded; optimal

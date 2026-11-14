@@ -202,6 +202,14 @@ coal pipeline clusters --cds all_cds.fa --clusters deepclust.tsv -o out --max-cl
   `--threads` / `-p`, `--quiet`, and `--approx-id`, `--member-cover`, `--mutual-cover`, `--evalue` when COAL's
   own option for it is given as well; in `--realign-args` `--db`, `--clusters`, `--out`, `--outfmt` / `-f` (the
   columns of `realign.tsv` are fixed), `--threads`, `--quiet`.
+- **Several `--cds` files are one set of genes**, so an ID must name one record across all of them. IDs that
+  occur in two files (BRAKER / AUGUSTUS `g1.t1`, `gene1` in every species) are refused before anything runs, with
+  both files and examples named: only the first file's record of such an ID could be used, and with every ID
+  repeated a whole species would be left out. `--prefix-ids` puts each file's name (without folder and FASTA /
+  gzip suffix) and `|` before its IDs instead: `S_cer.fa`'s `g1.t1` is `S_cer|g1.t1` in every output, the report's
+  `inputs` give each file's `id_prefix`, a `--clusters` file names the prefixed IDs, and a `--gene-map` may name
+  either (a gene ID is then a gene of its species: `S_cer|GENE1` and `C_gla|GENE1` are two genes). Two files with
+  the same name in different folders cannot be told apart this way and are refused with `--prefix-ids`.
 - **`--clusters TSV`** is DIAMOND's two-column table: representative, member, tab-separated, one line per member.
   A header line (`centroid member`, `representative member`, ...) and `#` lines are skipped. The cluster ID is the
   representative's ID. A member named in two clusters stays in its first one.
