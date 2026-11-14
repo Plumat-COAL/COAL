@@ -142,8 +142,9 @@ check_method_code <- function(methods, code) {
 
 # The alignment parameters as the C++ side reads them. preset: NULL, "needle" (the defaults) or "pwalign"
 # (pwalign::pairwiseAlignment(type = "global", substitutionMatrix = "BLOSUM62")'s scoring: open 14, extend 4,
-# end gaps penalised).
-align_params <- function(matrix, gap_open, gap_extend, end_gaps, max_cells, preset = NULL) {
+# end gaps penalised, pwalign's tie-break). tie_break: NULL (the preset's: pwalign for preset "pwalign", else
+# leftmost), "leftmost" or "pwalign".
+align_params <- function(matrix, gap_open, gap_extend, end_gaps, max_cells, preset = NULL, tie_break = NULL) {
   end_gaps <- match.arg(end_gaps, c("free", "penalized"))
   if (!is.null(preset)) {
     preset <- match.arg(preset, c("needle", "pwalign"))
@@ -165,8 +166,14 @@ align_params <- function(matrix, gap_open, gap_extend, end_gaps, max_cells, pres
       stop("`gap_open`, `gap_extend` and `max_cells` must be single numbers", call. = FALSE)
     }
   }
+  if (is.null(tie_break)) {
+    tie_break <- if (identical(preset, "pwalign")) "pwalign" else "leftmost"
+  }
+  if (!is.character(tie_break) || length(tie_break) != 1L || !tie_break %in% c("leftmost", "pwalign")) {
+    stop("`tie_break` must be \"leftmost\" or \"pwalign\"", call. = FALSE)
+  }
   list(matrix = matrix, gap_open = as.numeric(gap_open), gap_extend = as.numeric(gap_extend),
-       free_end_gaps = end_gaps == "free", max_cells = as.numeric(max_cells))
+       free_end_gaps = end_gaps == "free", max_cells = as.numeric(max_cells), tie_break = tie_break)
 }
 
 default_threads <- function() getOption("coalr.threads", 1L)

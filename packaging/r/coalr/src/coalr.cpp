@@ -173,6 +173,9 @@ AlignParams need_align(const Rcpp::List& a) {
     p.gap_open = Rcpp::as<double>(a["gap_open"]);
     p.gap_extend = Rcpp::as<double>(a["gap_extend"]);
     p.free_end_gaps = Rcpp::as<bool>(a["free_end_gaps"]);
+    if (a.containsElementNamed("tie_break") &&
+        !coal::parse_tie_break(Rcpp::as<std::string>(a["tie_break"]), p.tie_break))
+        Rcpp::stop("tie_break must be \"leftmost\" or \"pwalign\"");
     const double mc = Rcpp::as<double>(a["max_cells"]);
     if (!(mc >= 0) || !std::isfinite(mc)) Rcpp::stop("max_cells must be a number >= 0 (0 = no limit)");
     p.max_cells = (uint64_t)mc;

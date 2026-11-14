@@ -61,7 +61,7 @@ coal_dnds_clusters <- function(cds, clusters, msa = NULL, aligner = NULL, method
                                max_cluster_size = 200L, large_clusters = c("representative", "sample", "skip"),
                                pair_sample = 1000L, seed = 1L,
                                matrix = "BLOSUM62", gap_open = 10, gap_extend = 0.5,
-                               end_gaps = c("free", "penalized"), preset = NULL, max_cells = 4e9,
+                               end_gaps = c("free", "penalized"), preset = NULL, tie_break = NULL, max_cells = 4e9,
                                yn_flavour = c("kaks", "paml"), yn_weighting = TRUE, keep_alignments = FALSE,
                                comeron_flavour = c("coal", "gestimator"), li_flavour = c("coal", "seqinr"),
                                terminal_stops = c("drop", "compare"), min_codons = 0L, max_ds = NULL,
@@ -78,7 +78,7 @@ coal_dnds_clusters <- function(cds, clusters, msa = NULL, aligner = NULL, method
   large_clusters <- match.arg(large_clusters)
   pair_sample <- check_count(pair_sample, "pair_sample", 1L)
   if (!is.numeric(seed) || length(seed) != 1L || is.na(seed)) stop("`seed` must be one number", call. = FALSE)
-  ap <- align_params(matrix, gap_open, gap_extend, end_gaps, max_cells, preset)
+  ap <- align_params(matrix, gap_open, gap_extend, end_gaps, max_cells, preset, tie_break)
   yn_flavour <- match.arg(yn_flavour)
   comeron_flavour <- match.arg(comeron_flavour)
   li_flavour <- match.arg(li_flavour)

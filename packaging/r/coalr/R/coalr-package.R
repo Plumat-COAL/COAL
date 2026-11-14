@@ -53,7 +53,7 @@
 #' | `-j N` (default 0: one per usable CPU) | `threads = N` (default `getOption("coalr.threads", 1L)`: one thread; `0` = one per hardware thread) | `threads = N` (default `0`, as the command line) |
 #' | `--min-codons N`, `--max-ds X` | `min_codons = N`, `max_ds = X` | `min_codons = N`, `max_ds = X` |
 #' | `--min-identity P` | `min_identity = P` (not in `coal_kaks()`: it has no protein alignment) | `min_identity = P` |
-#' | `--matrix`, `--gap-open`, `--gap-extend`, `--end-gaps`, `--preset`, `--max-cells` | `matrix`, `gap_open`, `gap_extend`, `end_gaps`, `preset`, `max_cells` | the same names |
+#' | `--matrix`, `--gap-open`, `--gap-extend`, `--end-gaps`, `--preset`, `--tie-break`, `--max-cells` | `matrix`, `gap_open`, `gap_extend`, `end_gaps`, `preset`, `tie_break`, `max_cells` | the same names |
 #' | `--yn-flavour`, `--yn-weighting 0\|1`, `--comeron-flavour`, `--li-flavour`, `--terminal-stops` | `yn_flavour`, `yn_weighting = FALSE\|TRUE`, `comeron_flavour`, `li_flavour`, `terminal_stops` | the same names (`yn_weighting = 0L` or `1L`) |
 #' | `--keep-alignments` | `keep_alignments = TRUE` (returned as an attribute) | `keep_alignments = TRUE` (files in `out_dir`) |
 #' | `--pairs TSV`, `--clusters TSV` | `pairs =` / `clusters =` (a data frame, or what the function documents) | `pairs = "file"`, `clusters = "file"` |

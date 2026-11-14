@@ -26,7 +26,11 @@
 #' @param end_gaps `"free"`: gaps at the ends cost nothing (needle's default); `"penalized"`: as internal gaps.
 #' @param preset `NULL`, `"needle"` (the defaults above) or `"pwalign"` (the scoring of
 #'   `pwalign::pairwiseAlignment(type = "global", substitutionMatrix = "BLOSUM62")`: open 14, extend 4, end gaps
-#'   penalised). A preset overrides `gap_open`, `gap_extend` and `end_gaps`.
+#'   penalised, and pwalign's choice among co-optimal alignments). A preset overrides `gap_open`, `gap_extend`
+#'   and `end_gaps`.
+#' @param tie_break Which of several alignments with the best score: `"leftmost"` (gaps as far left as the score
+#'   allows; the default) or `"pwalign"` (the alignment `pwalign::pairwiseAlignment()` returns; the default of
+#'   `preset = "pwalign"`, with which the protein alignments are those of pwalign). `NULL`: the preset's.
 #' @param max_cells Refuse (status `error`) a pair whose alignment table would have more cells than this; 0 = no
 #'   limit. The table takes half a byte per cell and thread.
 #' @param yn_flavour,yn_weighting Where KaKs_Calculator and PAML's yn00 differ for YN/MYN: `"kaks"` (default) or
@@ -78,7 +82,7 @@
 coal_dnds_pairs <- function(query_cds, subject_cds, pairs = NULL, methods = "YN", code = 1L,
                             threads = getOption("coalr.threads", 1L),
                             matrix = "BLOSUM62", gap_open = 10, gap_extend = 0.5, end_gaps = c("free", "penalized"),
-                            preset = NULL, max_cells = 4e9, yn_flavour = c("kaks", "paml"), yn_weighting = TRUE,
+                            preset = NULL, tie_break = NULL, max_cells = 4e9, yn_flavour = c("kaks", "paml"), yn_weighting = TRUE,
                             comeron_flavour = c("coal", "gestimator"), li_flavour = c("coal", "seqinr"),
                             terminal_stops = c("drop", "compare"),
                             keep_alignments = FALSE, min_codons = 0L, max_ds = NULL, min_identity = NULL,
@@ -91,7 +95,7 @@ coal_dnds_pairs <- function(query_cds, subject_cds, pairs = NULL, methods = "YN"
   code <- check_count(code, "code", 1L)
   check_method_code(methods, code)
   threads <- check_count(threads, "threads", 0L)
-  ap <- align_params(matrix, gap_open, gap_extend, end_gaps, max_cells, preset)
+  ap <- align_params(matrix, gap_open, gap_extend, end_gaps, max_cells, preset, tie_break)
   yn_flavour <- match.arg(yn_flavour)
   comeron_flavour <- match.arg(comeron_flavour)
   li_flavour <- match.arg(li_flavour)

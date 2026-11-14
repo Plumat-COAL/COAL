@@ -16,6 +16,7 @@ coal_dnds_pairs(
   gap_extend = 0.5,
   end_gaps = c("free", "penalized"),
   preset = NULL,
+  tie_break = NULL,
   max_cells = 4e+09,
   yn_flavour = c("kaks", "paml"),
   yn_weighting = TRUE,
@@ -57,7 +58,12 @@ convention; defaults 10 and 0.5).}
 
 \item{preset}{\code{NULL}, \code{"needle"} (the defaults above) or \code{"pwalign"} (the scoring of
 \code{pwalign::pairwiseAlignment(type = "global", substitutionMatrix = "BLOSUM62")}: open 14, extend 4, end gaps
-penalised). A preset overrides \code{gap_open}, \code{gap_extend} and \code{end_gaps}.}
+penalised, and pwalign's choice among co-optimal alignments). A preset overrides \code{gap_open}, \code{gap_extend}
+and \code{end_gaps}.}
+
+\item{tie_break}{Which of several alignments with the best score: \code{"leftmost"} (gaps as far left as the score
+allows; the default) or \code{"pwalign"} (the alignment \code{pwalign::pairwiseAlignment()} returns; the default of
+\code{preset = "pwalign"}, with which the protein alignments are those of pwalign). \code{NULL}: the preset's.}
 
 \item{max_cells}{Refuse (status \code{error}) a pair whose alignment table would have more cells than this; 0 = no
 limit. The table takes half a byte per cell and thread.}
