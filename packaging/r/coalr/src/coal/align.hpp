@@ -14,7 +14,8 @@
 //   * Output is always full length: every residue of both sequences is in the alignment, overhangs are gapped,
 //     never cut off (orthologr truncates them).
 //
-// Residues: letters A-Z (either case) and '*' (stop). Letters missing from the matrix (J, O, U) score as X.
+// Residues: letters A-Z (either case) and '*' (stop). Letters missing from the matrix (O and U; J in all but the
+// *-PWALIGN matrices) score as X.
 // Anything else ('-', '.', digits, spaces) is an error (coal::CoalError, code "align_input").
 //
 // Like the rest of coal_core: no global mutable state, no output, errors are exceptions; every function can be
@@ -28,17 +29,25 @@
 
 namespace coal {
 
-// A substitution matrix over "ARNDCQEGHILKMFPSTWYVBZX*" (NCBI order).
+// The letters of a substitution matrix: "ARNDCQEGHILKMFPSTWYVBZX*" (NCBI's order), then J.
+constexpr int MATRIX_SIZE = 25;
+
+// A substitution matrix over those letters, in that order.
 struct SubstitutionMatrix {
     const char* name;
-    int8_t score[24][24];
+    int8_t score[MATRIX_SIZE][MATRIX_SIZE];
 };
 
-// "BLOSUM62" (default), "BLOSUM45", "BLOSUM80", "PAM250", "BLOSUM62-PWALIGN" (pwalign's copy of BLOSUM62, which
-// differs for B, Z and X) (case-insensitive); nullptr if unknown.
+// "BLOSUM62" (default), "BLOSUM45", "BLOSUM80", "PAM250" (NCBI's matrices), "BLOSUM62-PWALIGN", "BLOSUM45-PWALIGN",
+// "BLOSUM80-PWALIGN" (pwalign's copies of those: other scores for B, Z, X and J, and for BLOSUM80 another scale)
+// (case-insensitive); nullptr if unknown.
 const SubstitutionMatrix* substitution_matrix(const std::string& name);
 // The names substitution_matrix() knows, in that order.
 const std::vector<std::string>& substitution_matrix_names();
+// The matrix pwalign::pairwiseAlignment() uses for `name`: "<NAME>-PWALIGN" where COAL has pwalign's copy of the
+// matrix, else NAME itself (PAM250: pwalign's copy is NCBI's), upper-cased. A *-PWALIGN name and an unknown name
+// are returned upper-cased. --preset pwalign aligns with this matrix.
+std::string pwalign_matrix_name(const std::string& name);
 
 // Which of several co-optimal alignments (the same score) is returned.
 //   Leftmost: COAL's own traceback, from the end of both sequences towards the start, preferring a substitution,
@@ -73,13 +82,13 @@ struct AlignParams {
 
     // EMBOSS needle's defaults: BLOSUM62, open 10, extend 0.5, end gaps free. COAL's default.
     static AlignParams needle() { return AlignParams(); }
-    // pwalign::pairwiseAlignment(type = "global", substitutionMatrix = "BLOSUM62") with its default gapOpening = 10,
+    // pwalign::pairwiseAlignment(type = "global", substitutionMatrix = matrix) with its default gapOpening = 10,
     // gapExtension = 4. pwalign charges gapOpening + k * gapExtension for a gap of length k, i.e. open 14, extend 4
-    // in the convention above; end gaps are penalised; pwalign's copy of BLOSUM62; among co-optimal alignments the
-    // one pwalign returns: the alignment of pwalign::pairwiseAlignment().
-    static AlignParams pwalign() {
+    // in the convention above; end gaps are penalised; pwalign's copy of the matrix (pwalign_matrix_name); among
+    // co-optimal alignments the one pwalign returns: the alignment of pwalign::pairwiseAlignment().
+    static AlignParams pwalign(const std::string& matrix = "BLOSUM62") {
         AlignParams p;
-        p.matrix = "BLOSUM62-PWALIGN";
+        p.matrix = pwalign_matrix_name(matrix);
         p.gap_open = 14.0;
         p.gap_extend = 4.0;
         p.free_end_gaps = false;

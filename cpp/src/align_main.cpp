@@ -52,8 +52,9 @@ const char* USAGE =
     "                        columns after them are ignored); queries in A, subjects in B (or A). The first\n"
     "                        line of each query-subject pair is used\n"
     "  --flanks gap|align    --diamond: unaligned ends against gaps (default) or aligned globally\n"
-    "  -m, --matrix NAME     BLOSUM62 (default), BLOSUM45, BLOSUM80, PAM250, BLOSUM62-PWALIGN (pwalign's copy\n"
-    "                        of BLOSUM62: other scores for B, Z and X)\n"
+    "  -m, --matrix NAME     BLOSUM62 (default), BLOSUM45, BLOSUM80, PAM250, BLOSUM62-PWALIGN, BLOSUM45-PWALIGN,\n"
+    "                        BLOSUM80-PWALIGN (pwalign's copies: other scores for B, Z, X and J; BLOSUM80 on\n"
+    "                        another scale). After --preset pwalign, pwalign's copy of NAME\n"
     "  --gap-open X          cost of a gap of length 1 (default 10)\n"
     "  --gap-extend X        cost of each further gap position (default 0.5)\n"
     "  --end-gaps free|penalized\n"
@@ -61,7 +62,8 @@ const char* USAGE =
     "  --preset needle|pwalign\n"
     "                        needle: the defaults above; pwalign: pwalign::pairwiseAlignment(type='global',\n"
     "                        BLOSUM62) with its default gaps (open 14, extend 4, end gaps penalized), its\n"
-    "                        copy of BLOSUM62 (BLOSUM62-PWALIGN) and its choice among co-optimal alignments.\n"
+    "                        copy of the matrix (BLOSUM62-PWALIGN; -m BLOSUM45 after it: BLOSUM45-PWALIGN)\n"
+    "                        and its choice among co-optimal alignments.\n"
     "                        Options given after --preset change it\n"
     "  --tie-break leftmost|pwalign\n"
     "                        which of several alignments with the best score: leftmost (gaps as far left as\n"
@@ -155,6 +157,7 @@ struct Job {
 
 int main(int argc, char** argv) {
     AlignParams p;
+    bool pwalign_preset = false;   // --preset pwalign was the last --preset: -m after it names pwalign's copy
     std::string pairs_tsv, diamond_tsv, out_path, scores_path;
     Flanks flanks = Flanks::Gap;
     int jobs = 0;
@@ -191,8 +194,10 @@ int main(int argc, char** argv) {
             if (v == "gap") flanks = Flanks::Gap;
             else if (v == "align") flanks = Flanks::Align;
             else die("--flanks: gap or align, not '" + v + "'");
-        } else if (a == "-m" || a == "--matrix") p.matrix = val();
-        else if (a == "--gap-open") p.gap_open = parse_num(a, val());
+        } else if (a == "-m" || a == "--matrix") {
+            p.matrix = val();
+            if (pwalign_preset) p.matrix = pwalign_matrix_name(p.matrix);
+        } else if (a == "--gap-open") p.gap_open = parse_num(a, val());
         else if (a == "--gap-extend") p.gap_extend = parse_num(a, val());
         else if (a == "--end-gaps") {
             std::string v = val();
@@ -205,6 +210,7 @@ int main(int argc, char** argv) {
             if (v == "needle") p = AlignParams::needle();
             else if (v == "pwalign") p = AlignParams::pwalign();
             else die("--preset: needle or pwalign, not '" + v + "'");
+            pwalign_preset = v == "pwalign";
             p.max_cells = mc;
         } else if (a == "--tie-break") {
             std::string v = val();
