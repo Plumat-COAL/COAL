@@ -400,6 +400,9 @@ entry under "Added", not under "Fixed".
     same `--cds` file given twice (by the same name or through a link) is refused up front ("--cds names X
     twice ... give it once", exit 1), instead of every record failing with "the ID occurs in two input files, X
     and X".
+    No number changes (R01-R04): Salmonella / Shigella and S. cerevisiae / C. glabrata pairs and the four-yeast
+    clusters run give byte-identical `dnds.tsv`, `orthologs.tsv`, `genes.tsv`, `failed.tsv`, clusters and
+    alignments to the deep test's runs.
 - **Protein alignment for the codon step (docs/alignment.md).** `<coal/align.hpp>` and the `coal-cpp-align` tool: a
   global Needleman-Wunsch/Gotoh aligner (BLOSUM62/45/80, PAM250, affine gaps; EMBOSS needle defaults, a pwalign
   preset), full length (overhangs gapped, never cut off), AVX2 row loops picked at run time, multithreaded; optimal
