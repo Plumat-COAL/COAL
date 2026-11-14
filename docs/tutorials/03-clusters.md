@@ -284,8 +284,35 @@ coal pipeline: summary: 3,738 records (0 not usable); 6,873 pairs: 3,377 ok, 33 
 coal pipeline: summary: decompress_inputs 0.0 s, translate_proteins 0.1 s, clusters 0.0 s, align_codon_kaks 377.3 s, cluster_summary 0.0 s
 ```
 
-MAFFT took 359 s for the 814 alignments, Clustal Omega 58 s. Comparing the 3,262 pairs that have an estimate in
-both runs, by protein identity (computed from the two `dnds.tsv` files):
+MAFFT took 359 s for the 814 alignments, Clustal Omega 58 s. Compare the two `dnds.tsv` files pair by pair,
+by protein identity:
+
+```
+python3 - <<'EOF'
+import csv
+def load(d):
+    return {(r["seq1"], r["seq2"]): r for r in csv.DictReader(open(d + "/dnds.tsv"), delimiter="\t")}
+a, b = load("chlamydia"), load("chlamydia_mafft")
+est = lambda r: r["status"] in ("ok", "warning")
+both = [k for k in a if est(a[k]) and est(b[k])]
+print(len(both), "pairs with an estimate in both")
+for lo, hi in ((90, 101), (70, 90), (50, 70), (0, 50)):
+    ks = [k for k in both if lo <= float(a[k]["prot_identity"]) < hi]
+    diff = sum(1 for k in ks if a[k]["dS"] != b[k]["dS"])
+    big = sum(1 for k in ks if abs(float(a[k]["dS"]) - float(b[k]["dS"])) > 0.1 * float(a[k]["dS"]))
+    print(f"identity {lo}-{hi}: {len(ks)} pairs, dS not identical {diff}, more than 10% apart {big}")
+EOF
+```
+
+```
+3262 pairs with an estimate in both
+identity 90-101: 1488 pairs, dS not identical 49, more than 10% apart 14
+identity 70-90: 1092 pairs, dS not identical 276, more than 10% apart 75
+identity 50-70: 242 pairs, dS not identical 161, more than 10% apart 61
+identity 0-50: 440 pairs, dS not identical 412, more than 10% apart 223
+```
+
+In a table:
 
 | Protein identity | Pairs | dS not identical | dS differs by more than 10% |
 |---|---|---|---|
