@@ -61,6 +61,10 @@ const char* USAGE =
     "                        needle: the defaults above; pwalign: pwalign::pairwiseAlignment(type='global',\n"
     "                        BLOSUM62) with its default gaps (open 14, extend 4, end gaps penalized).\n"
     "                        Options given after --preset change it\n"
+    "  --tie-break leftmost|pwalign\n"
+    "                        which of several alignments with the best score: leftmost (gaps as far left as\n"
+    "                        possible; the default) or pwalign (the one pwalign::pairwiseAlignment returns;\n"
+    "                        the default of --preset pwalign)\n"
     "  --max-cells N         refuse pairs with more than N dynamic-programming cells (default 4e9; 0 = none)\n"
     "  -j, --jobs N          threads (default: one per hardware thread)\n"
     "  -o, --output FILE     aligned pairs (FASTA; default: standard output)\n"
@@ -200,6 +204,9 @@ int main(int argc, char** argv) {
             else if (v == "pwalign") p = AlignParams::pwalign();
             else die("--preset: needle or pwalign, not '" + v + "'");
             p.max_cells = mc;
+        } else if (a == "--tie-break") {
+            std::string v = val();
+            if (!parse_tie_break(v, p.tie_break)) die("--tie-break: leftmost or pwalign, not '" + v + "'");
         } else if (a == "--max-cells") p.max_cells = (uint64_t)parse_num(a, val());
         else if (a == "-j" || a == "--jobs") jobs = (int)parse_num(a, val());
         else if (a == "-o" || a == "--output") out_path = val();

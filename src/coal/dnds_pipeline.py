@@ -2202,6 +2202,8 @@ class _Run:
                "--flanks", a.flanks, "--yn-flavour", a.yn_flavour, "--yn-weighting", str(a.yn_weighting),
                "--comeron-flavour", a.comeron_flavour, "--li-flavour", a.li_flavour,
                "--terminal-stops", a.terminal_stops]
+        if a.tie_break != "leftmost":
+            cmd += ["--tie-break", a.tie_break]
         for m in a.method:
             cmd += ["-m", m]
         if a.min_codons:
@@ -3196,11 +3198,16 @@ def build_parser() -> argparse.ArgumentParser:
     g = common.add_argument_group("Pairwise protein alignment (COAL's global aligner)")
     g.add_argument("--preset", choices=("needle", "pwalign"),
                    help="needle: BLOSUM62, open 10, extend 0.5, end gaps free (the default); pwalign: open 14, "
-                        "extend 4, end gaps penalised")
+                        "extend 4, end gaps penalised, and pwalign's choice among co-optimal alignments "
+                        "(--tie-break pwalign): the protein alignments of pwalign::pairwiseAlignment")
     g.add_argument("--matrix", default=None, help="BLOSUM62 (default), BLOSUM45, BLOSUM80, PAM250")
     g.add_argument("--gap-open", type=float, default=None, metavar="X", help="cost of a gap's first position")
     g.add_argument("--gap-extend", type=float, default=None, metavar="X", help="cost of each further position")
     g.add_argument("--end-gaps", choices=("free", "penalized"), default=None, help="default free")
+    g.add_argument("--tie-break", choices=("leftmost", "pwalign"), default=None,
+                   help="which of several alignments with the best score: leftmost (gaps as far left as possible; "
+                        "the default) or pwalign (the one pwalign::pairwiseAlignment returns; the default of "
+                        "--preset pwalign). docs/alignment.md")
     g.add_argument("--max-cells", type=int, default=4_000_000_000, metavar="N",
                    help="refuse a pair whose alignment table has more cells (default 4e9)")
     g = common.add_argument_group("Running")
@@ -3397,6 +3404,7 @@ def _finish_args(a: argparse.Namespace) -> None:
     a.gap_open = a.gap_open if a.gap_open is not None else (14.0 if pw else 10.0)
     a.gap_extend = a.gap_extend if a.gap_extend is not None else (4.0 if pw else 0.5)
     a.end_gaps = a.end_gaps or ("penalized" if pw else "free")
+    a.tie_break = getattr(a, "tie_break", None) or ("pwalign" if pw else "leftmost")
     if not hasattr(a, "flanks"):
         a.flanks = "align"
 

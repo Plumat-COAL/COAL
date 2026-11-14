@@ -394,6 +394,21 @@ struct Raw {
     long long score = 0;  // scaled
 };
 
+// The size checks of the kernel, n x m as the caller gave the pair.
+void check_size(size_t n, size_t m, const Scaled& s, uint64_t max_cells) {
+    if (n == 0 || m == 0) return;
+    if (max_cells && (uint64_t)n * (uint64_t)m > max_cells)
+        throw CoalError("pair too large to align: " + std::to_string(n) + " x " + std::to_string(m) +
+                            " residues is more than max_cells = " + std::to_string(max_cells) + " (" +
+                            std::to_string(max_cells / 2 / 1000000) + " MB of traceback)",
+                        "align_too_large");
+    // int32 headroom: every score is within (n + m + 2) * max_abs of 0
+    if ((double)(n + m + 2) * (double)s.max_abs * 1.0 > (double)(INT_MAX / 8))
+        throw CoalError("pair too long for 32-bit scores at this scale (" + std::to_string(n) + " + " +
+                            std::to_string(m) + " residues)",
+                        "align_too_large");
+}
+
 Raw kernel(const std::string& sa, const std::string& sb, const std::vector<uint8_t>& a, const std::vector<uint8_t>& b,
            const Scaled& s, bool free_ends, uint64_t max_cells, uint64_t traceback_bytes) {
     const size_t n = a.size(), m = b.size();
@@ -406,16 +421,7 @@ Raw kernel(const std::string& sa, const std::string& sb, const std::vector<uint8
         r.score = free_ends ? 0 : -gap_cost(n + m);
         return r;
     }
-    if (max_cells && (uint64_t)n * (uint64_t)m > max_cells)
-        throw CoalError("pair too large to align: " + std::to_string(n) + " x " + std::to_string(m) +
-                            " residues is more than max_cells = " + std::to_string(max_cells) + " (" +
-                            std::to_string(max_cells / 2 / 1000000) + " MB of traceback)",
-                        "align_too_large");
-    // int32 headroom: every score is within (n + m + 2) * max_abs of 0
-    if ((double)(n + m + 2) * (double)s.max_abs * 1.0 > (double)(INT_MAX / 8))
-        throw CoalError("pair too long for 32-bit scores at this scale (" + std::to_string(n) + " + " +
-                            std::to_string(m) + " residues)",
-                        "align_too_large");
+    check_size(n, m, s, max_cells);
 
     // query profile: prof[c][j] = s(c, b[j-1]) for the residue types c that occur in a
     bool used[24] = {};
@@ -589,6 +595,15 @@ long long score_rows_scaled(const std::string& ra, const std::string& rb, const 
 
 }  // namespace
 
+const char* tie_break_name(TieBreak t) { return t == TieBreak::Pwalign ? "pwalign" : "leftmost"; }
+
+bool parse_tie_break(const std::string& name, TieBreak& t) {
+    if (name == "leftmost") t = TieBreak::Leftmost;
+    else if (name == "pwalign") t = TieBreak::Pwalign;
+    else return false;
+    return true;
+}
+
 const SubstitutionMatrix* substitution_matrix(const std::string& name) {
     std::string u = upper_name(name);
     for (const auto& m : MATRICES)
@@ -626,8 +641,21 @@ void check_align_params(const AlignParams& p) {
 PairAlignment align_pair(const std::string& a, const std::string& b, const AlignParams& p) {
     Scaled s = scale_params(p);
     std::vector<uint8_t> ea = encode(a, "first"), eb = encode(b, "second");
-    Raw r = kernel(a, b, ea, eb, s, p.free_end_gaps, p.max_cells, p.traceback_bytes);
     PairAlignment out;
+    if (p.tie_break == TieBreak::Pwalign) {
+        // pwalign's choice (align.hpp): the kernel on the reversed sequences, a and b exchanged, mirrored back
+        check_size(a.size(), b.size(), s, p.max_cells);  // the messages in the caller's order
+        const std::string ra(a.rbegin(), a.rend()), rb(b.rbegin(), b.rend());
+        std::reverse(ea.begin(), ea.end());
+        std::reverse(eb.begin(), eb.end());
+        Raw r = kernel(rb, ra, eb, ea, s, p.free_end_gaps, p.max_cells, p.traceback_bytes);
+        out.a.assign(r.b.rbegin(), r.b.rend());
+        out.b.assign(r.a.rbegin(), r.a.rend());
+        out.score = (double)r.score / s.scale;
+        fill_stats(out, s);
+        return out;
+    }
+    Raw r = kernel(a, b, ea, eb, s, p.free_end_gaps, p.max_cells, p.traceback_bytes);
     out.a = std::move(r.a);
     out.b = std::move(r.b);
     out.score = (double)r.score / s.scale;
