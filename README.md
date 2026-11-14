@@ -124,6 +124,9 @@ orthologr::dNdS("examples/dnds/species_a_cds.fasta", "examples/dnds/species_b_cd
                 dnds_est.method = "YN", engine = "coal", sensitivity_mode = "default")
 ```
 
+Worked tutorials on real genomes, with the outputs and how to read them: [docs/tutorials/](docs/tutorials/README.md)
+(codon alignment and its common errors; two genomes to a dN/dS table; gene families; R; choosing a method).
+
 **In the pipeline every FASTA record is a gene.** A CDS file with several transcripts per gene (Ensembl, NCBI,
 TAIR) gives several rows per gene and splits the reciprocal best hits; the run warns about it, and
 `--longest-isoform` (with `--gene-map TSV` if the headers do not name the gene) keeps the longest CDS of each gene
@@ -171,6 +174,7 @@ very small dS give numbers that mean little.
 
 | Topic | Where |
 |---|---|
+| Worked tutorials on real data: codon alignment, pairs, clusters, R, choosing a method | [docs/tutorials/](docs/tutorials/README.md) |
 | Every option, input and output rules, large inputs, run report | [docs/usage.md](docs/usage.md) |
 | Using COAL from Python (`codon_align`, `align_files`, `CoalError`) and the 1.0 versioning promise | [docs/python-api.md](docs/python-api.md) |
 | The run report's fields (`--report` / `--json`, schema `coal.report/1`) and its JSON Schema | [docs/report-schema.md](docs/report-schema.md), [docs/report.schema.json](docs/report.schema.json) |

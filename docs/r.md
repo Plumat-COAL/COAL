@@ -13,6 +13,9 @@ frames, and need nothing outside R. When COAL should also find the orthologs or 
 its report, `--resume`, or the files on disk, use the Python route (or the command line). Both give the same
 numbers: the in-process functions compile the same C++ sources as `coal-cpp`.
 
+[Tutorial 4](tutorials/04-r-coalr.md) runs the three R routes (in process, through Python, orthologr's
+`engine = "coal"`) on the data of tutorials 2 and 3 and checks that they agree.
+
 ## Install
 
 ```r

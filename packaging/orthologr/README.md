@@ -35,17 +35,19 @@ file.copy(standin, target, overwrite = TRUE)
 Reinstalling or updating orthologr restores the original file. To check which program runs:
 
 ```r
-system2("perl", c(target, "--version"))   # "coal 0.4.2 (C++)" or "coal 0.4.2"; PAL2NAL v14 prints its usage
+system2("perl", c(target, "--version"))   # "coal <version> (C++)" or "coal <version>"; PAL2NAL v14 prints its usage
 ```
 
-## 2. The fork with COAL built in (Plumat-COAL/orthologr, branch `feat/coal`)
+## 2. The fork with COAL built in (Plumat-COAL/orthologr, branch `integration/all`)
 
-The fork adds COAL to orthologr as an optional dependency (the R package [`coalr`](../r/coalr), see
-[docs/r.md](../../docs/r.md); or the `coal-cpp` program when `coalr` is not installed). Not merged upstream.
+The fork (orthologr 0.5.0 on branch `integration/all`, which contains the earlier `feat/coal`) adds COAL to
+orthologr as an optional dependency (the R package [`coalr`](../r/coalr), see [docs/r.md](../../docs/r.md); or
+the `coal-cpp` program when `coalr` is not installed). Not merged upstream. Its `NEWS.md` lists every change from
+orthologr 0.4.3, including changed defaults that change results.
 
 ```r
 remotes::install_github("Plumat-COAL/COAL", subdir = "packaging/r/coalr")
-remotes::install_github("Plumat-COAL/orthologr", ref = "feat/coal")
+remotes::install_github("Plumat-COAL/orthologr", ref = "integration/all")
 
 dNdS(q, s, codon_aln_tool = "coal")                                         # PAL2NAL's step without Perl
 dNdS(q, s, dnds_est.method = "YN", codon_aln_tool = "coal", kaks_tool = "coal")   # ... and without KaKs_Calculator
@@ -54,16 +56,22 @@ dNdS_clusters(c(q, s), aa_aln_tool = "clustalo")                            # ev
 ```
 
 - `codon_aln_tool = "coal"` gives the same codon alignments as `"pal2nal"` (so the same dN/dS), one pair at a
-  time; the gain is robustness (no Perl, no length limit, a checked result).
-- `kaks_tool = "coal"` computes NG, LWL, MLWL, LPB, MLPB, YN and MYN with COAL's engine ([docs/kaks.md](../../docs/kaks.md)).
+  time; the gain is robustness (no Perl, no length limit, a checked result). It is the fork's default when `coalr`
+  is installed (`"pal2nal"` otherwise).
+- `kaks_tool = "coal"` computes NG, LWL, MLWL, LPB, MLPB, YN and MYN with COAL's engine, and Comeron and Li with a
+  COAL that has them (below; [docs/kaks.md](../../docs/kaks.md)).
 - `engine = "coal"` (`dNdS_coal()`) keeps orthologr's DIAMOND/BLAST reciprocal-best-hit search and hands every
   pair to `coalr::coal_dnds_pairs()`: no file and no process per pair. It returns `dNdS()`'s table.
 - `dNdS_clusters()` uses `deepclust()` / `deepclust_realign()` tables with `coalr::coal_dnds_clusters()`.
 - orthologr's own two methods, `"Comeron"` (its default) and `"Li"`, are in COAL's engine too (`methods =
-  "Comeron"`, `"Li"` in coalr, with `comeron_flavour = "gestimator"` / `li_flavour = "seqinr"` for orthologr's
-  numbers). The fork does not use them yet: its `engine = "coal"` and `kaks_tool = "coal"` accept
-  KaKs_Calculator's seven methods. [docs/kaks.md](../../docs/kaks.md), "Comeron and Li", has the validation
-  against orthologr and the five things an orthologr build has to do to offer them.
+  "Comeron"`, `"Li"` in coalr). The fork uses them: `engine = "coal"` and `kaks_tool = "coal"` accept
+  `dnds_est.method = "Comeron"` and `"Li"` when the installed `coalr` lists them in `coalr::coal_info()$methods`
+  (the `coalr` of COAL's main branch does; the fork asks for coalr >= 0.5.0) or the `coal-cpp` program has
+  `--comeron-flavour`, and otherwise stops with a message saying how to update `coalr`. It passes
+  `comeron_flavour = "gestimator"` and `li_flavour = "seqinr"`, so the values are orthologr's own (Comeron
+  rounded to gestimator's 4 significant digits; a saturated dN or dS is `NA` unless
+  `options(orthologr.legacy_comeron_saturation = TRUE)`). [docs/kaks.md](../../docs/kaks.md), "Comeron and Li"
+  and "With orthologr", has the validation against orthologr.
 
 The fork's `NEWS.md` also lists its fixes to orthologr's own path (BLOSUM62 scoring and full-length alignments in
 `pairwise_aln()`, exit-status checks, one failing pair no longer ends a run, hyphens in gene IDs, input files of
