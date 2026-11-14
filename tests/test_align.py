@@ -124,7 +124,10 @@ class ReferenceScores(unittest.TestCase, FullLength):
         cfgs = {(c["matrix"], c["gap_open"], c["gap_extend"], c["free_end_gaps"]) for c in self.data["configs"]}
         p, w = A.AlignParams(), A.AlignParams.pwalign()
         self.assertIn((p.matrix, p.gap_open, p.gap_extend, p.free_end_gaps), cfgs)
-        self.assertIn((w.matrix, w.gap_open, w.gap_extend, w.free_end_gaps), cfgs)
+        # the pwalign preset's gap scheme; its matrix (pwalign's copy of BLOSUM62) and alignments are checked against
+        # pwalign itself in tests/test_integration1_findings.py (tests/fixtures/pwalign)
+        self.assertEqual(w.matrix, "BLOSUM62-PWALIGN")
+        self.assertIn(("BLOSUM62", w.gap_open, w.gap_extend, w.free_end_gaps), cfgs)
         self.assertIsNotNone(self.data["configs"][0]["needle"], "the default setting is checked against needle")
 
     def test_needle_agrees_with_biopython_except_one_residue_sequences(self):
@@ -457,7 +460,7 @@ class LocalHits(unittest.TestCase, FullLength):
 class ParamsAndHelpers(unittest.TestCase):
     def test_presets(self):
         self.assertEqual(A.AlignParams.needle(), A.AlignParams("BLOSUM62", 10, 0.5, True))
-        self.assertEqual(A.AlignParams.pwalign(), A.AlignParams("BLOSUM62", 14, 4, False))
+        self.assertEqual(A.AlignParams.pwalign(), A.AlignParams("BLOSUM62-PWALIGN", 14, 4, False, "pwalign"))
         with self.assertRaises(A.AlignError):
             A.AlignParams("BLOSUM99").check()
         with self.assertRaises(A.AlignError):

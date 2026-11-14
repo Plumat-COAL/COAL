@@ -21,13 +21,29 @@ not export them).
 - **Default: BLOSUM62, open 10, extend 0.5, end gaps free.** These are EMBOSS needle's defaults. "End gaps free"
   means that gaps before the first or after the last residue of either sequence cost nothing (needle with
   `-endweight` off).
-- **`pwalign` preset: BLOSUM62, open 14, extend 4, end gaps penalised.** This is what
-  `pwalign::pairwiseAlignment(type = "global", substitutionMatrix = "BLOSUM62")` scores with its default
-  `gapOpening = 10, gapExtension = 4`. pwalign charges `gapOpening + k * gapExtension`, which is open 14, extend 4 in
-  the convention above, and its global mode penalises end gaps. Use this preset to match the orthologr fork when it
-  switches pwalign to BLOSUM62.
+- **`pwalign` preset: pwalign's BLOSUM62, open 14, extend 4, end gaps penalised, pwalign's tie-break: the
+  alignment `pwalign::pairwiseAlignment(type = "global", substitutionMatrix = "BLOSUM62")` returns** with its
+  default `gapOpening = 10, gapExtension = 4`. pwalign charges `gapOpening + k * gapExtension`, which is open 14,
+  extend 4 in the convention above, and its global mode penalises end gaps. Its BLOSUM62 (`data(BLOSUM62, package
+  = "pwalign")`) is an older NCBI file that differs from COAL's BLOSUM62 for B, Z and X (X scores -1 against every
+  residue); the preset uses that copy, `BLOSUM62-PWALIGN`. Use this preset to reproduce orthologr's protein
+  alignments (orthologr's `engine = "coal"` does).
+- **Co-optimal alignments (`--tie-break`).** Most protein pairs have several alignments with the best score; they
+  differ in where a gap sits in a run of equal residues or next to a mismatch. `leftmost` (the default) is COAL's
+  own choice: the traceback from the ends of both sequences prefers a substitution, then a gap in the second
+  sequence, then a gap in the first, so gaps end up as far left as the score allows. `pwalign` (the default of the
+  pwalign preset) is the choice of pwalign / Biostrings: pwalign fills its matrices over the reversed sequences and
+  prefers a substitution, then a gap in the pattern (first sequence), then a gap in the subject, and opens a gap
+  rather than extending one when both score the same. Its alignment is the mirror image of COAL's kernel run on the
+  reversed pair with the two sequences exchanged, which is how COAL computes it (same kernel, same speed). With
+  pwalign's gap costs (end gaps penalised, open > extend) and matrix the result is pwalign's alignment, row for
+  row: 85 of 85 synthetic pairs (tests/fixtures/pwalign, pwalign 1.6.0) and every protein alignment of
+  orthologr's native engine on five genome pairs (995 *A. thaliana* / *A. lyrata*, 4,164 *S. cerevisiae* /
+  *C. glabrata*, 3,663 *E. coli*, 2,820 *Salmonella* / *Shigella*, 945 human / mouse pairs; with `leftmost` 51%,
+  24%, 94%, 80% and 42% of them are identical, the rest co-optimal). With free end gaps `pwalign` is a
+  well-defined choice, not pwalign's (pwalign's global mode has no free end gaps).
 - Matrices: BLOSUM62, BLOSUM45, BLOSUM80 and PAM250. These are the NCBI matrices, the same values as Biopython's
-  files and EMBOSS's `EBLOSUM62`.
+  files and EMBOSS's `EBLOSUM62`. `BLOSUM62-PWALIGN` is pwalign's copy of BLOSUM62 (above).
 - Gap costs: 1000 ≥ open ≥ extend ≥ 0, in multiples of 0.001. Scores are computed exactly as integers, scaled by the
   smallest factor that makes the gap costs whole numbers.
 - **Full length.** Every residue of both sequences is in the alignment. Overhangs are gapped, never cut off.
@@ -71,7 +87,9 @@ about 1,500 pairs a second on one thread, so alignment is no longer the slow ste
 struct AlignParams { std::string matrix = "BLOSUM62"; double gap_open = 10.0, gap_extend = 0.5;
                      bool free_end_gaps = true; uint64_t max_cells = 4000000000ULL;
                      uint64_t traceback_bytes = 256ULL << 20;   // 0: the whole traceback in memory
+                     TieBreak tie_break = TieBreak::Leftmost;   // or TieBreak::Pwalign
                      static AlignParams needle(); static AlignParams pwalign(); };
+enum class TieBreak { Leftmost, Pwalign };   // tie_break_name(), parse_tie_break()
 struct PairAlignment { std::string a, b; double score; size_t length, identities, similarities, gaps;
                        std::string error; };
 PairAlignment align_pair(const std::string& a, const std::string& b, const AlignParams& p = {});
@@ -97,7 +115,8 @@ coal-cpp-align [options] A.fasta [B.fasta]
   pairs: n-th of A with n-th of B; one file: records 1+2, 3+4, ...; --pairs TSV: ID pairs
   --diamond TSV [--flanks gap|align]     expand DIAMOND hits instead of aligning
   -m BLOSUM62|BLOSUM45|BLOSUM80|PAM250  --gap-open 10  --gap-extend 0.5  --end-gaps free|penalized
-  --preset needle|pwalign  --max-cells N  -j N  -o out.fasta  --scores scores.tsv  --version
+  --preset needle|pwalign  --tie-break leftmost|pwalign  --max-cells N  -j N  -o out.fasta  --scores scores.tsv
+  --version
 ```
 
 The tool comes with `coal-cpp`: in the platform wheels of `coal-align` (`coal/bin/coal-cpp-align` inside the
@@ -118,7 +137,8 @@ installed package's `coal/bin`; next to the Python running COAL; next to the `co
 
 ```python
 from coal import align as A
-A.AlignParams(matrix="BLOSUM62", gap_open=10.0, gap_extend=0.5, free_end_gaps=True)   # .needle(), .pwalign()
+A.AlignParams(matrix="BLOSUM62", gap_open=10.0, gap_extend=0.5, free_end_gaps=True,
+              tie_break="leftmost")    # .needle(), .pwalign()
 A.align_pairs(pairs, params=A.AlignParams(), jobs=0, binary=None, python_fallback=True)  # -> [PairAlignment]
 A.align_pair(a, b, params)              # pure Python, the same kernel and tie-breaking (slow)
 A.score_alignment(row_a, row_b, params)
