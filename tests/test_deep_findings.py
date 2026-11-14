@@ -136,5 +136,100 @@ class SameIdsDeepClust(PipelineCase):
         self.assertEqual(seqs, {"one", "two"})
 
 
+# ---------------------------------------------------------------------------------------------- D02
+SENSE = [a + b + c for a in "TCAG" for b in "TCAG" for c in "TCAG" if a + b + c not in ("TAA", "TAG", "TGA")]
+
+
+def cds(rng, n=300, avoid=(), stops=("TGA", "TGA", "TGA"), start="ATG", tail="TAA") -> str:
+    pool = [c for c in SENSE if c not in avoid]
+    codons = [start] + [rng.choice(pool) for _ in range(n)]
+    for k, c in enumerate(stops):
+        codons[20 + 37 * k] = c
+    return "".join(codons) + tail
+
+
+class GeneticCodeHint(unittest.TestCase):
+    """D02: the hint named 14 for yeast mitochondrial genes and for frameshifted pseudogenes, 4 for vertebrate
+    mitochondrial genes. suggest_genetic_code() on synthetic sets (uniform codon usage in the nuclear genes)."""
+
+    def setUp(self):
+        import random
+        import tempfile
+        self.rng = random.Random(7)
+        self._td = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._td.name)
+
+    def tearDown(self):
+        self._td.cleanup()
+
+    def hint(self, organelle, nuclear=100, chosen=1, header=lambda k: "", org_header=lambda k: ""):
+        recs = [(f"nuc{k} {header(k)}", cds(self.rng, stops=())) for k in range(nuclear)]
+        recs += [(f"org{k} {org_header(k)}", s) for k, s in enumerate(organelle)]
+        path = write_fasta(self.tmp / "set.fa", recs)
+        flagged = {f"org{k}": 0 for k in range(len(organelle))}
+        usable = {r.split()[0] for r, _ in recs}
+        genes, bg, reps = P._hint_inputs([str(path)], flagged, usable)
+        return P.suggest_genetic_code(chosen, genes, bg, len(recs), len(organelle), reps)
+
+    def test_yeast_mitochondrial_genes_get_code_3(self):
+        h = self.hint([cds(self.rng, avoid=("CGA", "CGC")) for _ in range(5)])
+        self.assertEqual(h["codes"], [3])
+        self.assertIn("CGA / CGC codons, which code 3 does not use", h["evidence"])
+        self.assertEqual(len(h["genes"]), 5)
+
+    def test_vertebrate_mitochondrial_genes_get_code_2(self):
+        h = self.hint([cds(self.rng, avoid=("AGA", "AGG"), start="ATT") for _ in range(5)])
+        self.assertEqual(h["codes"], [2])
+        self.assertIn("AGA / AGG codons, which code 2 reads as stops", h["evidence"])
+        # an incomplete stop codon (T, TA: completed by polyadenylation) is no frameshift
+        h = self.hint([cds(self.rng, avoid=("AGA", "AGG"), tail=t) for t in ("T", "TA", "TAA", "T")])
+        self.assertEqual((h["codes"], len(h["genes"])), ([2], 4))
+
+    def test_nothing_tells_the_codes_apart(self):
+        h = self.hint([cds(self.rng) for _ in range(4)])
+        self.assertEqual(h["codes"], [4, 5, 9, 10, 13, 21])   # 3 loses: the genes use CGA / CGC like the others
+        # ATT / ATA starts: codes whose start codons do not include them drop out
+        h = self.hint([cds(self.rng, start=("ATT", "ATA")[k % 2]) for k in range(4)])
+        self.assertEqual(h["codes"], [4, 5])
+        # no other genes to compare with: the codes that avoid codons cannot be told apart either
+        h = self.hint([cds(self.rng, n=120, avoid=("CGA", "CGC")) for _ in range(3)], nuclear=0)
+        self.assertEqual(h["codes"], [3, 4, 5, 9, 10, 13, 21])
+
+    def test_pseudogenes_and_frameshifts_give_no_hint(self):
+        taa = [cds(self.rng, stops=("TAA", "TGA", "TAA")) for _ in range(3)]
+        self.assertIsNone(self.hint(taa))      # TAA as an amino acid: only for a whole set
+        self.assertIsNone(self.hint([cds(self.rng) for _ in range(4)], org_header=lambda k: "[pseudo=true]"))
+        self.assertIsNone(self.hint([cds(self.rng)[:-3] + "G" for _ in range(4)]))   # length 3n + 1, ends in G
+        # the whole set read with the wrong code (ciliate nuclear genes with -c 1): code 6
+        h = self.hint([cds(self.rng, stops=("TAA", "TAG")) for _ in range(30)], nuclear=5)
+        self.assertEqual(h["codes"], [6])
+
+    def test_genes_scattered_over_nuclear_chromosomes_give_no_hint(self):
+        ens = lambda k: f"cds chromosome:GRCh38:{k % 20 + 1}:100:400:1"   # noqa: E731
+        orgs = [cds(self.rng) for _ in range(4)]
+        self.assertIsNone(self.hint(orgs, header=ens, org_header=lambda k: f"cds chromosome:GRCh38:{k + 1}:1:9:1"))
+        h = self.hint(orgs, header=ens, org_header=lambda k: "cds chromosome:GRCh38:MT:1:900:1")
+        self.assertEqual(len(h["genes"]), 4)
+
+
+
+@needs_cpp
+class GeneticCodeHintRun(PipelineCase):
+    def test_the_report_and_the_message(self):
+        import random
+        self.rng = random.Random(7)
+        recs = [(f"nuc{k}", cds(self.rng, stops=())) for k in range(60)]
+        recs += [(f"mt{k}", cds(self.rng)) for k in range(3)]
+        q = write_fasta(self.tmp / "q.fa", recs)
+        cl = self.tmp / "cl.tsv"
+        cl.write_text("nuc0\tnuc1\n", encoding="utf-8")
+        with redirect_stderr(io.StringIO()) as err:
+            res = P.run_clusters(q, self.tmp / "out", clusters=cl)
+        h = res.report["genetic_code_hints"][0]
+        self.assertEqual((h["clean_under"], h["candidates"], h["genes"]), (None, [4, 5, 9, 10, 13, 21], 3))
+        validate(res.report, SCHEMA)
+        self.assertIn("have none under any of the NCBI genetic codes 4, 5, 9, 10, 13 and 21", err.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

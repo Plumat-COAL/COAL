@@ -41,6 +41,7 @@ import math
 import os
 import platform
 import random
+import re
 import shlex
 import shutil
 import signal
@@ -644,6 +645,196 @@ def _clean(text: str) -> str:
 
 
 # ------------------------------------------------------------------------------------------------ the run
+
+# ------------------------------------------------------------------------------------------------ genetic-code hint
+
+GENETIC_CODE_NAMES = {1: "standard", 2: "vertebrate mitochondrial", 3: "yeast mitochondrial",
+                      4: "mold / protozoan mitochondrial, Mycoplasma", 5: "invertebrate mitochondrial",
+                      6: "ciliate nuclear", 9: "echinoderm / flatworm mitochondrial", 10: "euplotid nuclear",
+                      11: "bacterial, archaeal and plant plastid", 12: "alternative yeast nuclear",
+                      13: "ascidian mitochondrial", 14: "alternative flatworm mitochondrial",
+                      15: "Blepharisma nuclear", 16: "chlorophycean mitochondrial", 21: "trematode mitochondrial",
+                      22: "Scenedesmus obliquus mitochondrial", 23: "Thraustochytrium mitochondrial"}
+# Codons a code does not use although NCBI's table gives them an amino acid ("CGA, CGC absent" in code 3): that a
+# gene avoids them is evidence for the code, as avoiding a code's extra stop codons is (AGA / AGG for code 2).
+_ABSENT_CODONS = {3: frozenset({b"CGA", b"CGC"})}
+_CODON_FLOOR = 0.001        # the lowest usage per codon assumed when the set has no other genes to measure it on
+_PSEUDO = re.compile(r"\[pseudo=true\]|biotype:\S*pseudogene")
+_REPLICON = re.compile(r"^lcl\|(.+?)_cds_|\s(?:chromosome|primary_assembly|scaffold|supercontig|"
+                                     r"plasmid|contig):[^:\s]*:([^:\s]+):")
+HINT_BACKGROUND_CODONS = 1_000_000   # codons of the other genes read to measure the set's codon usage
+
+
+def _and(items) -> str:
+    items = [str(x) for x in items]
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def _hint_inputs(paths, flagged: dict, usable: set):
+    """For the genetic-code hint, one pass over the FASTA files: the flagged genes ({id, seq, header}), the codon
+    usage of the other usable genes (internal codons, at most HINT_BACKGROUND_CODONS), and the replicon of every
+    record when every header names one (NCBI lcl|NC_..._cds_, Ensembl chromosome:GRCh38:MT:), else None."""
+    from collections import Counter
+    genes: dict[str, dict] = {}
+    background: Counter = Counter()
+    n_bg = 0
+    rep_of: dict[str, str] = {}
+    rep_n: Counter = Counter()
+    all_named = True
+    seen: set[str] = set()
+
+    def done(rid, header, chunks):
+        nonlocal n_bg, all_named
+        if rid is None or rid in seen:
+            return
+        seen.add(rid)
+        m = _REPLICON.search(header)
+        if m:
+            rep = m.group(1) or m.group(2)
+            rep_of[rid] = rep
+            rep_n[rep] += 1
+        else:
+            all_named = False
+        if rid in flagged:
+            genes[rid] = {"id": rid, "header": header,
+                          "seq": b"".join(chunks).upper().replace(b"U", b"T").translate(None, b" \t\r\n\x0b\x0c")}
+        elif rid in usable and n_bg < HINT_BACKGROUND_CODONS:
+            seq = b"".join(chunks).upper().replace(b"U", b"T").translate(None, b" \t\r\n\x0b\x0c")
+            n = len(seq) - len(seq) % 3 - 3
+            background.update(seq[k:k + 3] for k in range(0, n, 3))
+            n_bg += max(0, n // 3)
+
+    for path in paths:
+        rid, header, chunks = None, "", []
+        with open(path, "rb") as fh:
+            for _off, line in fasta_lines(fh):
+                if line[:1] == b">":
+                    done(rid, header, chunks)
+                    header = line[1:].decode("utf-8", "backslashreplace").strip()
+                    words = header.split()
+                    rid, chunks = (words[0] if words else ""), []
+                    if rid not in flagged and (rid not in usable or n_bg >= HINT_BACKGROUND_CODONS):
+                        chunks = None   # (nothing of its sequence is needed)
+                elif chunks is not None:
+                    chunks.append(line)
+            done(rid, header, chunks or [])
+    order = [genes[i] for i in flagged if i in genes]
+    return order, background, ({"of": rep_of, "records": rep_n} if all_named and rep_of else None)
+
+
+def suggest_genetic_code(chosen: int, genes: list[dict], background, n_records: int, with_stops: int,
+                         replicons: dict | None = None, min_genes: int = 2) -> dict | None:
+    """Which genetic code explains genes that have internal stop codons under `chosen`, or None (no hint).
+
+    genes: {id, seq (upper case DNA), header} of the genes with two or more internal stops. background: codon
+    counts of the set's other genes. The rules (deep test of 2026-11-14, finding D02: the old hint named the code
+    that made the most genes stop-free, and that was 14 for yeast mitochondria and frameshifted pseudogenes, 4
+    for vertebrate mitochondria):
+
+    1. Evidence comes only from genes that look complete: not marked as pseudogenes ([pseudo=true],
+       *_pseudogene biotype), and with a length that is a multiple of 3 or ends in the T / TA of an incomplete
+       stop codon (vertebrate mitochondria); a frameshifted CDS has random stop codons that "fit" some code.
+    2. When every header names its replicon, only genes on a replicon of which at least half the records are
+       flagged count (the mitochondrial chromosome; not scattered nuclear genes).
+    3. Genes are grouped by the codes under which they have no internal stop; the largest group decides. Of its
+       codes, those win whose extra stop codons or unused codons (AGA / AGG for code 2, CGA / CGC for code 3) the
+       genes avoid where the set's other genes use them (and lose when they do not), then those that reassign
+       no stop codon the genes do not need (code 14 also reads TAA, which TGA-only genes do not need).
+    4. Codes that tie are all named (their sequences cannot tell 4, 5 and 13 apart), less those whose start
+       codons do not fit at least two and a quarter of the genes when another candidate's do.
+    5. No hint unless at least min_genes genes and half of the evidence genes fit, and a code that reads TAA or
+       TAG as an amino acid is suggested only when half the set has internal stops (the whole set's code).
+
+    Returns {"codes": [...], "genes": [ids], "also": [codes that also fit these genes], "evidence": text}."""
+    from collections import Counter
+    from .tables import get_code
+    std = get_code(chosen)
+    stops_c = frozenset(x.encode() for x in std.codons.get("*", ()))
+    tables = {}
+    for t in SUPPORTED:
+        if t == chosen:
+            continue
+        code = get_code(t)
+        st = frozenset(x.encode() for x in code.codons.get("*", ()))
+        if st != stops_c:   # (code 11 for code 1: the same stops, nothing to explain)
+            tables[t] = (st, frozenset(x.encode() for x in code.starts))
+    ev = []
+    for g in genes:
+        if _PSEUDO.search(g["header"]):
+            continue
+        seq = g["seq"]
+        tr = len(seq) % 3
+        if tr and seq[-tr:] != (b"T", b"TA")[tr - 1]:
+            continue
+        cod = Counter(seq[k:k + 3] for k in range(0, len(seq) - tr - (0 if tr else 3), 3))
+        types = frozenset(cod) & stops_c
+        if not types:
+            continue
+        clean = frozenset(t for t, (st, _) in tables.items() if not (cod.keys() & st))
+        ev.append({"id": g["id"], "cod": cod, "types": types, "clean": clean, "first": seq[:3],
+                   "n": sum(cod.values())})
+    if replicons and all(g["id"] in replicons["of"] for g in ev):
+        per = Counter(replicons["of"][g["id"]] for g in ev)
+        keep = {r for r, n in per.items() if 2 * n >= replicons["records"].get(r, 0)}
+        ev = [g for g in ev if replicons["of"][g["id"]] in keep]
+    groups: dict[frozenset, list] = {}
+    for g in ev:
+        if g["clean"]:
+            groups.setdefault(g["clean"], []).append(g)
+    if not groups:
+        return None
+    G = max(groups.values(), key=len)
+    sig = G[0]["clean"]
+    needed = frozenset().union(*(g["types"] for g in G))
+    n_cod = sum(g["n"] for g in G)
+    seen = Counter()
+    for g in G:
+        seen.update(g["cod"])
+    bg_total = sum(background.values())
+    keys, notes = {}, {}
+    for t in sig:
+        st, _starts = tables[t]
+        unneeded = len((stops_c - st) - needed)
+        extra = (st - stops_c) | (_ABSENT_CODONS.get(t, frozenset()) - stops_c)
+        e = 0
+        if extra:
+            obs = sum(seen[x] for x in extra)
+            bg = sum(background[x] for x in extra)
+            rate = bg / bg_total if (bg >= 20 or bg_total >= 20_000) and bg_total else 0.0
+            source = "the set's other genes"
+            if rate <= 0:
+                rate, source = _CODON_FLOOR * len(extra), "the rarest usage of nuclear genes"
+            exp = rate * n_cod
+            if exp >= 5:
+                e = 1 if obs <= 0.2 * exp else -1 if obs > 0.5 * exp else 0
+                what = "reads as stops" if extra <= st else "does not use"
+                notes[t] = (f"{obs:,} {' / '.join(sorted(x.decode() for x in extra))} codons, which code {t} {what}, "
+                            f"where about {exp:,.0f} were expected from {source}")
+        keys[t] = (-e, unneeded)
+    best = min(keys.values())
+    W = sorted(t for t in sig if keys[t] == best)
+    if len(W) > 1:
+        drop = set()
+        for t in W:
+            bad = sum(1 for g in G if g["first"] not in tables[t][1]
+                      and any(g["first"] in tables[u][1] for u in W if u != t))
+            if bad >= 2 and 4 * bad >= len(G):
+                drop.add(t)
+        if len(drop) < len(W):
+            W = [t for t in W if t not in drop]
+    support = [g for g in ev if all(t in g["clean"] for t in W)]
+    if len(support) < min_genes or 2 * len(support) < len(ev):
+        return None
+    if needed - {b"TGA"} and 2 * with_stops < n_records:
+        return None
+    also = sorted(t for t in tables if t not in W and all(t in g["clean"] for g in support))
+    kinds = sorted(x.decode() for x in needed)
+    text = (f"their only internal stop codon is {kinds[0]}" if len(kinds) == 1
+            else "their internal stop codons are " + " / ".join(kinds))
+    if len(W) == 1 and best[0] < 0 and W[0] in notes:
+        text += "; they have " + notes[W[0]]
+    return {"codes": W, "genes": [g["id"] for g in support], "also": also, "evidence": text}
+
 
 class _Run:
     """State shared by the stages of one run: folders, tools, the report, the failures file."""
@@ -1341,14 +1532,7 @@ class _Run:
         return failed
 
     # -- a set that looks like another genetic code
-    _CODE_NAMES = {1: "standard", 2: "vertebrate mitochondrial", 3: "yeast mitochondrial",
-                   4: "mold / protozoan mitochondrial, Mycoplasma", 5: "invertebrate mitochondrial",
-                   6: "ciliate nuclear", 9: "echinoderm / flatworm mitochondrial", 10: "euplotid nuclear",
-                   11: "bacterial, archaeal and plant plastid", 12: "alternative yeast nuclear",
-                   13: "ascidian mitochondrial", 14: "alternative flatworm mitochondrial",
-                   15: "Blepharisma nuclear", 16: "chlorophycean mitochondrial", 21: "trematode mitochondrial",
-                   22: "Scenedesmus obliquus mitochondrial", 23: "Thraustochytrium mitochondrial"}
-    _CODE_ORDER = (2, 4, 5, 11, 3, 9, 13, 14, 21, 6, 10, 12, 15, 16, 22, 23, 1)   # which table is named first
+    _CODE_NAMES = GENETIC_CODE_NAMES
     CODE_HINT_MIN_STOPS = 2      # a gene counts with this many internal stops under the chosen code ...
     CODE_HINT_MIN_GENES = 2      # ... and the hint needs this many such genes that are clean under another code
     CODE_HINT_MAX_GENES = 5000   # genes looked at per set (the first ones)
@@ -1356,16 +1540,18 @@ class _Run:
     def code_hint(self, set_name: str, paths: list[str], genes_path: str, shown: list[str] | None = None) -> None:
         """One warning when genes of this set have internal stop codons under the chosen genetic code (-c) and
         none under another code COAL supports: mitochondrial or plastid genes in a nuclear set, or the wrong -c
-        for the whole set. Only the flagged genes are read again, and only their stop codons are counted, so a set
-        without such genes costs nothing. (A gene with one internal TGA is not counted: a selenoprotein reads
-        "clean" under every code where TGA is Trp.)"""
-        from .tables import SUPPORTED as tables, get_code
+        for the whole set. The code (or the codes, when the sequences cannot tell them apart) is chosen by
+        suggest_genetic_code(). The files are read again only when two or more genes have two or more internal
+        stops, so a set without such genes costs nothing. (A gene with one internal TGA is not counted: a
+        selenoprotein reads "clean" under every code where TGA is Trp.)"""
         chosen = int(self.a.codontable)
-        flagged: list[str] = []
+        flagged: dict[str, int] = {}     # id -> trailing nucleotides
+        usable: set[str] = set()
         with_stops = 0
+        n_records = 0
         with open(genes_path, encoding="utf-8", errors="backslashreplace") as fh:
             col = {n: k for k, n in enumerate(fh.readline().rstrip("\n").split("\t"))}
-            ki, si, ci = col.get("internal_stops"), col.get("status"), col.get("code")
+            ki, si, ci, ti = col.get("internal_stops"), col.get("status"), col.get("code"), col.get("trailing_nt")
             if ki is None or si is None:
                 return
             for line in fh:
@@ -1374,50 +1560,55 @@ class _Run:
                     n = int(f[ki])
                 except (ValueError, IndexError):
                     continue
-                if n < 1 or (ci is not None and f[ci] == "duplicate_id"):
+                if ci is not None and f[ci] == "duplicate_id":
+                    continue
+                n_records += 1
+                if f[si] != "failed":
+                    usable.add(f[0])
+                if n < 1:
                     continue
                 with_stops += 1
                 if n >= self.CODE_HINT_MIN_STOPS and len(flagged) < self.CODE_HINT_MAX_GENES:
-                    flagged.append(f[0])
+                    try:
+                        flagged[f[0]] = int(f[ti]) if ti is not None else 0
+                    except (ValueError, IndexError):
+                        flagged[f[0]] = 0
         if len(flagged) < self.CODE_HINT_MIN_GENES:
             return
-        stops = {t: frozenset(c.encode() for c in get_code(t).codons.get("*", ())) for t in tables if t != chosen}
-        clean = {t: 0 for t in stops}
-        examples: dict[int, list[str]] = {t: [] for t in stops}
-        idx = FastaIndex(paths)
-        try:
-            for rid in flagged:
-                try:
-                    seq = idx.get(rid).upper().replace(b"U", b"T")
-                except KeyError:
-                    continue
-                codons = {seq[k:k + 3] for k in range(0, len(seq) - len(seq) % 3 - 3, 3)}   # the last one may stop
-                for t, st in stops.items():
-                    if not (codons & st):
-                        clean[t] += 1
-                        if len(examples[t]) < 3:
-                            examples[t].append(rid)
-        finally:
-            idx.close()
-        best = max(clean.values(), default=0)
-        if best < self.CODE_HINT_MIN_GENES:
+        genes, background, replicons = _hint_inputs(paths, flagged, usable)
+        hint = suggest_genetic_code(chosen, genes, background, n_records, with_stops, replicons,
+                                    min_genes=self.CODE_HINT_MIN_GENES)
+        if hint is None:
             return
-        ranked = [t for t in self._CODE_ORDER if clean.get(t, 0) == best]
-        table, also = ranked[0], ranked[1:]
+        codes = hint["codes"]
+        best = len(hint["genes"])
+        examples = hint["genes"][:3]
         self.code_hints.append({"set": set_name, "genetic_code": chosen, "genes_with_internal_stops": with_stops,
-                                "genes_looked_at": len(flagged), "clean_under": table, "genes": best,
-                                "also_clean_under": also, "examples": examples[table]})
+                                "genes_looked_at": len(flagged), "clean_under": codes[0] if len(codes) == 1 else None,
+                                "candidates": codes, "genes": best, "also_clean_under": hint["also"],
+                                "evidence": hint["evidence"], "examples": examples})
         shown = [str(p) for p in (shown or paths)]      # the files as the user named them (not work/ copies)
         files = " ".join(shown[:2]) + (" ..." if len(shown) > 2 else "")
-        self.warn(f"{set_name}: {best:,} of the {with_stops:,} genes with internal stop codons under genetic code "
-                  f"{chosen} have none under NCBI genetic code {table} ({self._CODE_NAMES.get(table, 'NCBI')}"
-                  + (f"; also under {', '.join(map(str, also[:3]))}{' and others' if len(also) > 3 else ''}"
-                     if also else "")
-                  + f"), e.g. {', '.join(examples[table])}. They look like genes of another genetic code "
-                  "(mitochondrial or plastid genes in a nuclear set?): their rows are estimates from mistranslated "
-                  f"codons. Run them on their own: take them out of {files} into a file of their own and run "
-                  f"`coal pipeline` twice, the rest with -c {chosen} and these with -c {table} "
-                  "(docs/pipeline.md \"Genes of another genetic code\")")
+        head = (f"{set_name}: {best:,} of the {with_stops:,} genes with internal stop codons under genetic code "
+                f"{chosen}")
+        names = "; ".join(f"{t} {GENETIC_CODE_NAMES.get(t, 'NCBI')}" for t in codes)
+        why = f" ({hint['evidence']})" if hint["evidence"] else ""
+        if len(codes) == 1:
+            t = codes[0]
+            self.warn(head + f" have none under NCBI genetic code {t} ({GENETIC_CODE_NAMES.get(t, 'NCBI')}), the "
+                      f"code that explains them best{why}, e.g. {', '.join(examples)}. They look like genes of "
+                      "another genetic code (mitochondrial or plastid genes in a nuclear set?): their rows are "
+                      f"estimates from mistranslated codons. Run them on their own: take them out of {files} into "
+                      f"a file of their own and run `coal pipeline` twice, the rest with -c {chosen} and these with "
+                      f"-c {t} (docs/pipeline.md \"Genes of another genetic code\")")
+        else:
+            self.warn(head + f" have none under any of the NCBI genetic codes {_and(codes)}{why}, e.g. "
+                      f"{', '.join(examples)}. They look like genes of another genetic code (mitochondrial genes "
+                      "in a nuclear set?), and their sequences cannot tell which of these it is: " + names + ". "
+                      "Their rows are estimates from mistranslated codons. Run them on their own with the code of "
+                      f"their organism and organelle: take them out of {files} into a file of their own and run "
+                      f"`coal pipeline` twice, the rest with -c {chosen} (docs/pipeline.md \"Genes of another "
+                      "genetic code\")")
 
     def n_records(self, set_name: str, what: str = "total") -> int:
         """The records of a set as genes.tsv lists them (a repeated ID is a record, and not usable): the same

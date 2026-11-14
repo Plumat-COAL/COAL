@@ -128,11 +128,26 @@ codons and stops are those of the standard code (only start codons differ), so t
 
 - **The hint.** When at least two genes of an input set have two or more internal stop codons under the chosen
   code and none under another code COAL supports, the run prints one warning per set: how many of the genes with
-  internal stops are clean under which table (the first of 2, 4, 5, 11, ... that explains the most genes, and
-  which others do as well), three examples, and the recipe below. Only the flagged genes are read again, so a
-  set without them costs nothing. `report.json` has the same as `genetic_code_hints`. A gene with a single
-  internal TGA does not count: a selenoprotein gene would look "clean" under every code where TGA is Trp. The
-  hint is a hint: it does not change a row, and a set whose every gene is flagged simply needs another `-c`.
+  internal stops are clean under which code, what the choice rests on, three examples, and the recipe below.
+  `report.json` has the same as `genetic_code_hints` (`clean_under`, `candidates`, `evidence`). A gene with a
+  single internal TGA does not count: a selenoprotein gene would look "clean" under every code where TGA is Trp.
+  The hint is a hint: it does not change a row, and a set whose every gene is flagged simply needs another `-c`.
+- **How the code is chosen** (it used to be "the code that makes the most genes stop-free", which named code 14
+  for yeast mitochondria and for frameshifted pseudogenes and code 4 for human mitochondria). Only genes that
+  look complete count: not marked as pseudogenes (`[pseudo=true]`, a `*pseudogene` biotype), and with a length
+  that is a multiple of 3 or ends in the `T` / `TA` of an incomplete stop codon. When every header names its
+  molecule (NCBI `lcl|NC_..._cds_`, Ensembl `chromosome:GRCh38:MT:`), only genes on a molecule whose records are
+  at least half flagged count (the mitochondrial chromosome, not nuclear genes here and there). Of the codes under
+  which the genes are clean, the one wins whose extra stop codons or unused codons the genes avoid where the
+  set's other genes use them: AGA / AGG (stops in code 2) for vertebrate mitochondria, CGA / CGC (unused in code
+  3) for yeast mitochondria; then the one that reassigns no stop codon the genes do not need (code 14 also reads
+  TAA). When several codes are equally good, all are named and none is recommended: codes 4, 5, 9, 10, 13 and 21
+  all read TGA as Trp (or Cys) and differ only in codons whose meaning a DNA sequence does not show; start codons
+  that only some of them allow narrow the list (Drosophila mitochondria: 4 or 5). A code that reads TAA or TAG
+  as an amino acid is suggested only when at least half of the set has internal stops (the whole set's code,
+  e.g. ciliate nuclear genes). On real genomes: *S. cerevisiae*, *C. glabrata*, *K. lactis*, *A. gossypii* with
+  their mitochondrial genes: code 3; human and mouse Ensembl: code 2 (12 genes each); *D. melanogaster*: 4 or 5;
+  *E. coli*, *Y. pestis* (pseudogenes), *A. lyrata* and Ensembl mouse all-transcript files: no hint.
 - **The two-run recipe.** Take the organelle genes out of both CDS files and run them on their own:
 
   ```

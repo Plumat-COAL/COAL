@@ -289,6 +289,22 @@ entry under "Added", not under "Fixed".
     report's `inputs` give each file's `id_prefix`), which gives 600 usable records, 291 clusters and 352 pairs
     on the same files. `coal-cpp translate` with several files says "the ID occurs in two input files, A and B"
     for such a record (within one file the wording is as before).
+    **The genetic-code hint no longer names a wrong code** (D02). It named the code that made the most flagged
+    genes stop-free, and codes that also read TAA / TAG "clean" frameshifted pseudogenes: it fired in 6 of the 9
+    real pair datasets of the deep test and was wrong in each (S. cerevisiae mitochondrial genes: 14, should be
+    3; C. glabrata / K. lactis mitochondria: 4, should be 3; human and mouse Ensembl: 4, should be 2; E. coli K-12,
+    A. lyrata NCBI and Ensembl mouse all-transcript files: 14 for pseudogenes and NMD transcripts). Now
+    pseudogenes (`[pseudo=true]`, `*pseudogene` biotype) and frameshift-length CDS are not evidence, genes
+    scattered over nuclear chromosomes are not either when the headers name the molecule, the code whose extra
+    stop or unused codons the genes avoid wins (AGA / AGG for 2, CGA / CGC for 3) before the one with the fewest
+    unneeded stop reassignments, and when the sequences cannot tell the codes apart all candidates are named and
+    none is recommended (report: `clean_under` null, new `candidates` and `evidence`). After, on the same 9
+    datasets: Scer / Cgla and Scer / Klac: code 3 for both sets (17, 8 and 7 genes); human / mouse whole Ensembl
+    sets: code 2 (12 genes each); no hint for Salmonella / Shigella, K-12 / Sakai, the A. thaliana / lyrata and
+    human / mouse subsets, A. thaliana / lyrata whole genomes, the human / mouse all-transcript files. Also
+    A. gossypii: 3 (was 4); Y. pestis (78 genes, almost all `[pseudo=true]`): none (was 14); D. melanogaster
+    Ensembl: "4 or 5" (was 14; 5 is right). A synthetic set of four nuclear genes given two internal TGA each
+    now gets the candidates 3, 4, 5, 9, 10, 13 and 21 instead of "code 4".
 - **Protein alignment for the codon step (docs/alignment.md).** `<coal/align.hpp>` and the `coal-cpp-align` tool: a
   global Needleman-Wunsch/Gotoh aligner (BLOSUM62/45/80, PAM250, affine gaps; EMBOSS needle defaults, a pwalign
   preset), full length (overhangs gapped, never cut off), AVX2 row loops picked at run time, multithreaded; optimal
