@@ -25,6 +25,7 @@ Files:
 | `build.sh` | Builds `coal-cpp` with CMake (Release, `COAL_BUILD_TOOLS=OFF`) into `$PREFIX/bin`, then `pip install .` of the Python package. |
 | `test_protein.aln.fasta`, `test_dna.fasta` | Tiny fixture pair (a copy of `examples/clean/`) for the recipe's tests. |
 | `test_dispatch.sh` | Recipe test: `COAL_ENGINE=cpp` works with no `COAL_CPP`; a >= 1 MB input dispatches to `coal-cpp`; both engines' output is identical. |
+| `build_local.sh` | Not submitted. `conda build` of this recipe against the current checkout (below, "Testing the recipe locally"). |
 
 Bioconda builds Linux (x86_64, optionally aarch64) and macOS (x86_64, arm64). It does not build Windows; the
 Windows app and `coal-cpp.exe` come from [GitHub Releases](https://github.com/plumat-coal/COAL/releases).
@@ -54,50 +55,58 @@ recipe for one of those tags.
 
 ## Testing the recipe locally
 
-Without conda at all, the build steps can be run by hand against a virtual environment, which is what `find_cpp`
-sees in a conda environment too (binary next to the interpreter):
+`build_local.sh` (in this folder; **not** part of the submission) builds the recipe with `conda build` against the
+committed `HEAD` of the checkout: it makes a `git archive` tarball, copies the recipe to a work folder with `version`
+set to the tree's version and `url` / `sha256` pointing at that tarball, and builds and tests the copy. The committed
+`meta.yaml` keeps its placeholders. It needs `conda-build` on `PATH` (conda-build 26.9 was used; boa is not needed,
+conda-build uses the libmamba solver).
+
+`{{ stdlib('c') }}` only resolves with Bioconda's pinnings, so pass them as Bioconda's CI does: conda-forge's
+`conda_build_config.yaml` (from the `conda-forge-pinning` package, the version bioconda-utils pins; it installs the
+file at the root of its environment) and bioconda-utils' own `bioconda_utils-conda_build_config.yaml`
+(`c_stdlib_version` 2.17 on Linux, 10.13 / 11.0 on macOS):
 
 ```
-python3 -m venv .venv-conda && .venv-conda/bin/pip install 'setuptools>=77.0.3'
-PREFIX=$PWD/.venv-conda PYTHON=$PWD/.venv-conda/bin/python bash packaging/bioconda/build.sh
-cd packaging/bioconda && PATH=$OLDPWD/.venv-conda/bin:$PATH bash test_dispatch.sh
+micromamba create -p ./cb -c conda-forge conda-build 'conda-forge-pinning==2026.01.07.13.16.30'
+curl -sLO https://raw.githubusercontent.com/bioconda/bioconda-utils/master/bioconda_utils/bioconda_utils-conda_build_config.yaml
+PATH=$PWD/cb/bin:$PATH bash packaging/bioconda/build_local.sh /tmp/coal-conda \
+  -e cb/conda_build_config.yaml -e bioconda_utils-conda_build_config.yaml
+# one Python only (Bioconda builds 3.10-3.13): add  -m py.yaml  with
+#   python: ["3.10.* *_cpython"]
+#   is_python_min: [true]
 ```
 
-With conda (the real thing; [bioconda-utils](https://bioconda.github.io/contributor/building-locally.html) is what
-Bioconda's CI runs):
+The full check Bioconda's CI runs is bioconda-utils inside a `bioconda-recipes` checkout (copy the recipe to
+`recipes/coal-align/` first):
 
 ```
-# conda-build directly: fastest check that the recipe builds and its tests pass
-conda install -c conda-forge conda-build
-conda build -c conda-forge -c bioconda packaging/bioconda
-conda create -n coal-test -c local -c conda-forge -c bioconda coal-align && conda activate coal-test && coal --version
-
-# bioconda-utils: the same lint + build the PR will get (inside a bioconda-recipes checkout)
-conda create -n bioconda -c conda-forge -c bioconda bioconda-utils
-conda activate bioconda
 bioconda-utils lint recipes config.yml --packages coal-align
-bioconda-utils build recipes config.yml --packages coal-align
-# or in Bioconda's Docker image: bioconda-utils build --docker --mulled-test recipes config.yml --packages coal-align
+bioconda-utils build recipes config.yml --packages coal-align     # add --docker --mulled-test for the container test
 ```
 
-Status of the current recipe (2026-11-13, second review):
+Status of the recipe (2026-11-14):
 
-- **Rendered with conda-build 26's `conda-render`** (`-c conda-forge`, `source:` pointed at a copy of the tree, the
-  version set to the tree's): valid YAML with the Jinja resolved, 23 test commands, `python` pinned by the build
-  variant (`python >=3.12,<3.13.0a0` and `python_abi` in `run:` for the 3.12 variant), `additional-platforms`
-  as written. With `--python 3.9` the recipe renders to nothing: the `py<310` selector skips it.
-- **`build.sh` run against a virtual environment** as above (`PREFIX` = the environment): `bin/coal`,
-  `bin/pal2nal`, `bin/coal-cpp`, `bin/coal-cpp-align` and the Python package; no `lib/libcoal_core.a`, no
-  `include/coal/`, no `lib/cmake/coal/`.
-- **All 23 rendered test commands run under `set -ex`** in that environment (no `COAL_CPP`, no `COAL_ENGINE`),
-  `test_dispatch.sh` included: all pass. The line that failed before (`pal2nal > usage.txt && grep ...`: `pal2nal`
-  without arguments exits 1 with the usage on stderr) now tests that behaviour.
-- **Not done: a real `conda build` and `bioconda-utils lint`.** The build was started and stopped while it
-  unpacked the compiler packages: the machine had too little free disk. So unverified until someone runs the
-  commands above: that the package builds with conda's compilers on linux-64, linux-aarch64, osx-64 and
-  osx-arm64 (the C++ is plain C++17, built in CI with GCC, Clang, Apple Clang and MSVC), that
-  `bioconda-utils lint` has no complaint (the `extra: identifiers: doi:TODO` and `recipe-maintainers` placeholders
-  must be filled or removed first), and the run-time behaviour inside a conda environment.
+- **`conda build` succeeds and all 24 test commands pass on linux-64** (conda-build 26.9.1, libmamba solver,
+  `-c conda-forge -c bioconda`, strict channel priority, source = `git archive` of the tree at 0.6.0.dev0):
+  - with Bioconda's pinnings (conda-forge-pinning 2026.01.07.13.16.30 + bioconda-utils' config): Python 3.10
+    variant, `gxx_linux-64` 14.4, `sysroot_linux-64` 2.17. Package `coal-align-0.6.0.dev0-py310hd766df8_0.conda`,
+    0.99 MB (3.6 MB installed). Build step 75 s, tests 4 s (1 job, `nice -n 10`, 2-core VM; the first run of
+    `conda build` takes about 4.5 min more to fetch repodata and the compiler packages).
+  - without pinnings (conda-build's defaults, before `stdlib('c')` was added): Python 3.12 variant, GCC 16, 1.13 MB.
+  - Package contents: `bin/coal`, `bin/pal2nal`, `bin/coal-cpp`, `bin/coal-cpp-align`, the `coal` and `coal_compat`
+    modules, `share/coal/examples/`; `info/licenses/` holds `LICENSE` and `NOTICE`. Depends on `libgcc`, `libstdcxx`,
+    `python`, `python_abi`; `run_exports` = `coal-align >=0.6.0,<0.7.0a0` (weak, `max_pin="x.x"`); `coal-cpp` has
+    `RPATH $ORIGIN/../lib` and links only `libstdc++`, `libm`, `libgcc_s`, `libc`.
+  - Harmless conda-build messages: "Number of parsed outputs does not match detected raw metadata blocks"
+    (conda/conda-build#5571, printed for every recipe without `outputs:`) and CMake's unused `CMAKE_*` variables
+    from conda's toolchain.
+- **`bioconda-utils lint`: "All checks OK"** (bioconda-utils `master` at 5a0a355, 2026-11-14, with the pinnings above). Before
+  the fix it reported `compiler_needs_stdlib_c`. The linter does not check `recipe-maintainers`: fill it anyway.
+- **Not built here:** Python 3.11 / 3.13 (only the site-packages path differs from 3.10; the binaries are the same),
+  linux-aarch64, osx-64, osx-arm64 (Bioconda's CI builds them). macOS: `build.sh` defines
+  `_LIBCPP_DISABLE_AVAILABILITY`, because Bioconda's osx-64 deployment target (10.13) predates `std::filesystem` in
+  libc++ and `coal-cpp` uses it (conda-forge's documented fix; conda ships a modern libc++).
+
 
 What the package is: **one output, the command line and the Python package** (`coal`, `pal2nal`, `coal-cpp`,
 `coal-cpp-align`, `import coal`). The static library `libcoal_core.a`, its headers and CMake package, which
@@ -106,16 +115,6 @@ them. If a C++ consumer appears, add a second output (`libcoal`) rather than put
 The recipe is not `noarch` (it holds compiled programs), so `python` is unpinned in `host:` / `run:` and the
 Pythons below 3.10 are skipped with a selector; `python >=3.10` there is the `noarch: python` form and is wrong
 for a compiled package.
-
-An earlier version of the recipe (the PAL2NAL scope only):
-on 2026-10-22 it (with `source:` pointed at a tarball of the `packaging/bioconda` branch, i.e. the split
-layout) built and passed all of its tests with `conda build -c conda-forge` on linux-64 (python 3.15 variant); the
-package held `bin/coal`, `bin/coal-cpp`, `bin/pal2nal`, the `coal` and `coal_compat` modules and
-`share/coal/examples/`.
-
-To test a not-yet-tagged checkout, point `source:` at a local tarball:
-`git archive --format=tar.gz --prefix=COAL-<version>/ -o /tmp/coal.tar.gz HEAD`, then set
-`url: file:///tmp/coal.tar.gz` and its sha256 in a copy of `meta.yaml` (do not commit that copy).
 
 ## The sha256 step
 
@@ -133,17 +132,17 @@ Put the version in `{% set version = "..." %}` and the hash in `{% set sha256 = 
 
 1. Fork and clone https://github.com/bioconda/bioconda-recipes, create a branch.
 2. Copy this folder to `recipes/coal-align/` (`meta.yaml`, `build.sh`, the two fixtures and `test_dispatch.sh`; **not**
-   this README).
-3. Fill in the TODOs in `meta.yaml`: `extra: recipe-maintainers:` (GitHub handles of the people who will review
-   version bumps and answer BiocondaBot), `extra: identifiers:` (a DOI, or drop the line if there is none yet), and
-   the release version + sha256.
+   this README or `build_local.sh`).
+3. Fill in `meta.yaml`: the release version + sha256 (the two `PLACEHOLDER` lines), `extra: recipe-maintainers:`
+   (replace `TODO-github-handle` with the GitHub handles of the people who will review version bumps and answer
+   BiocondaBot), and, if COAL has a DOI by then, uncomment `extra: identifiers:`.
 4. Lint and build locally as above (at least `conda build`).
 5. Open a pull request titled `Add coal-align 0.x.y`. Bioconda's CI builds Linux and macOS and runs the tests.
    When CI is green, comment `@BiocondaBot please add label` to request review; a Bioconda core member merges.
    The package then appears on https://anaconda.org/bioconda/coal-align within a few hours, and a Biocontainer
    (`quay.io/biocontainers/coal-align`) is built automatically.
-6. For `linux-aarch64` and `osx-arm64` builds, add under `extra:`
-   `additional-platforms: [linux-aarch64, osx-arm64]` (the code is plain C++17 and Python, so this should just work).
+6. `extra: additional-platforms: [linux-aarch64, osx-arm64]` is already set, so the CI also builds ARM Linux and
+   Apple silicon; if one of them fails and the fix is not quick, remove that platform rather than holding the PR.
 
 Name checks before submitting: `coal` is taken on PyPI by another project (hence `coal-align`); check that nothing
 called `coal-align` or `coal` exists on anaconda.org (conda-forge, bioconda) at submission time. The `pal2nal` command
