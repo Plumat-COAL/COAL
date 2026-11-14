@@ -67,6 +67,14 @@ struct Group {
     // Two members without rows: use this local hit (member 0 = query, member 1 = subject) instead of aligning.
     bool has_hit = false;
     LocalHit hit;
+    // Two members: compute the pair as member 1 against member 0 (the result still lists member 0 as seq1). Set
+    // when member 1 comes first in the input, so that a pair is computed in input order whichever member a route
+    // lists first: the choice among co-optimal alignments depends on which sequence is first (align.hpp,
+    // TieBreak), and so does Comeron's estimate (libsequence counts the sites of the first sequence); orthologr
+    // computes a pair in input order too (dNdS: the query first; dNdS_orthogroups: the gene of the first
+    // species). Without rows and hit, member 1 is aligned against member 0 and the rows are exchanged back.
+    // docs/pipeline.md, "Which gene comes first".
+    bool swap_pair = false;
 };
 
 struct Options {
@@ -107,6 +115,7 @@ struct GroupResult {
     std::string error_code;
     std::vector<std::string> protein_rows;  // the protein alignment used (one row per member; "" for failed ones)
     std::vector<PairResult> pairs;       // filled by run_group / compute_pair
+    bool swap_pair = false;              // Group::swap_pair of a two-member group: compute_pair takes j, i
 };
 
 // The pairs Group::pairs asks for, in output order.

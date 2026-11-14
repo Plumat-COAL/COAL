@@ -469,6 +469,53 @@ entry under "Added", not under "Fixed".
     No number changes (P01-P05): Salmonella / Shigella and S. cerevisiae / C. glabrata pairs and the four-yeast
     clusters run give byte-identical `dnds.tsv`, `orthologs.tsv`, `unpaired.tsv`, `genes.tsv`, `failed.tsv`,
     clusters and alignments to the deep test's runs.
+  - **Integration pass with orthologr of 2026-11-14 (C01-C03, C06, C08).** **`--preset pwalign` now returns
+    pwalign's protein alignment, not only one with its score** (C01). Most pairs have several alignments with the
+    best score; COAL's traceback put the gaps leftmost, pwalign (which fills its matrices over the reversed
+    sequences) does otherwise, so orthologr's `engine = "coal"` and its native engine aligned about half of the
+    pairs differently and their dN/dS differed by more than 1% in 5-27% of the pairs. New option `--tie-break
+    leftmost|pwalign` (`coal pipeline`, `coal codon-dnds`, `coal-cpp-align`; `AlignParams.tie_break` in C++ and
+    Python, `tie_break` in coalr): `leftmost` is COAL's choice and stays the default; `pwalign`, the default of
+    `--preset pwalign`, is the mirror image of the same kernel run on the reversed pair with the sequences
+    exchanged (no measurable cost: 4,164 yeast pairs 2.63 / 2.57 s, 945 human / mouse pairs 6.78 / 6.51 s on one
+    thread). The preset also uses pwalign's copy of BLOSUM62 (new matrix `BLOSUM62-PWALIGN`: X scores -1
+    against every residue, other B and Z values), so that scores agree for proteins with X too. `report.json`
+    records `parameters.tie_break`. orthologr's native protein alignments (pwalign 1.6.0) that COAL reproduces
+    row for row, before / after, and orthologr native vs COAL `--preset pwalign` (YN dS of the pairs where both
+    give one, equal to the 6 digits orthologr prints):
+
+    | Genome pair | Pairs | Identical protein alignments | YN dS equal to print precision | YN dS differing by > 1% |
+    |---|---|---|---|---|
+    | *A. thaliana* / *A. lyrata* | 995 | 505 → 995 / 995 | 677 / 994 → 994 / 994 | 267 → 0 |
+    | *S. cerevisiae* / *C. glabrata* | 4,164 | 998 → 4,164 / 4,164 | 322 / 565 → 587 / 587 | 206 → 0 |
+    | *E. coli* | 3,663 | 3,441 → 3,663 / 3,663 | 3,585 / 3,640 → 3,639 / 3,639 | 47 → 0 |
+    | *Salmonella* / *Shigella* | 2,820 | 2,269 → 2,820 / 2,820 | 2,414 / 2,676 → 2,673 / 2,673 | 214 → 0 |
+    | human / mouse | 946 | 397 → 945 / 945 | 484 / 924 → 926 / 926 | 256 → 0 |
+
+    LWL agrees in the same way, Comeron to the 4 digits orthologr prints; what still differs is not the alignment:
+    pairs whose YN iteration does not converge (COAL: `not_converged`, no estimate; KaKs_Calculator: its last
+    round) and orthologr's NA rule for Comeron (docs/kaks.md). The pwalign fixture (tests/fixtures/pwalign, 85
+    synthetic pairs and pwalign's alignments of them): 85 identical, 48 with `leftmost`. **A pair is computed in
+    input order in every route** (C02): `coal pipeline clusters` (and `coalr::coal_dnds_clusters()`) aligned and
+    estimated a pair aligned on its own with the representative first, the pairs route and orthologr with the
+    gene that comes first in the input (orthologr's `dNdS_orthogroups()`: the first species' gene). Which gene
+    is first decides among co-optimal alignments, and Comeron's estimate (libsequence counts the first sequence's
+    sites). Now the gene of the earlier `--cds` file (then the earlier record) is first; the rows still list the
+    representative first. 914 two-member clusters of four yeasts against the pairs route with the same pairs:
+    differing rows YN 5 → 0, LWL 5 → 0, Comeron 809 → 0 (`--preset pwalign --comeron-flavour gestimator`); with
+    the defaults 27 YN, 27 LWL and 210 Comeron rows of the 11,091 change. Clusters aligned by Clustal Omega / MAFFT
+    are not affected (their alignment depends on the input order in another way; docs/pipeline.md, "Which gene
+    comes first"). **Several
+    `-m`** (C03): the summary line, the saturation notice and `report.json` described the first method of the
+    rows only, unnamed (yeast with `-m YN -m Comeron -m LWL`: "46% saturated", LWL's share, where YN's is 86%), and
+    failed.tsv listed only its error rows. Now the summary line and the notice name every method, `counts.pairs`
+    names its method and `counts.pairs_by_method` has all of them, and failed.tsv has the error rows of every
+    method (once per pair when all methods failed alike). **A cluster whose pairs have no estimate is
+    `saturated`, `no_data` or `not_converged` in cluster_summary.tsv**, not `failed` (C06; `failed` when a pair
+    failed), with a note that counts its pairs: orthologr's rule (four yeasts, three methods: 2,728 cluster rows were
+    `failed` that orthologr calls `saturated` or `not_converged`).
+    **`report.json` of a run from Python or R** (C08) has the equivalent `coal pipeline` command line in
+    `command` (it was null) and `entry` (`cli`, `python-api`, or `coalr <version> coal_pipeline_pairs()`).
 - **Protein alignment for the codon step (docs/alignment.md).** `<coal/align.hpp>` and the `coal-cpp-align` tool: a
   global Needleman-Wunsch/Gotoh aligner (BLOSUM62/45/80, PAM250, affine gaps; EMBOSS needle defaults, a pwalign
   preset), full length (overhangs gapped, never cut off), AVX2 row loops picked at run time, multithreaded; optimal

@@ -68,16 +68,18 @@ const char* CODON_DNDS_HELP =
     "usage: coal codon-dnds [-i GROUPS] -o PAIRS.tsv [-m METHOD ...] [-c TABLE] [-j N] [--group-column NAME]\n"
     "                 [--codon-out FILE] [--codon-dir DIR] [--kaks-out FILE] [--failures FILE] [--digits N]\n"
     "                 [--matrix NAME] [--gap-open X] [--gap-extend X] [--end-gaps free|penalized] [--max-cells N]\n"
-    "                 [--flanks gap|align] [--yn-flavour kaks|paml] [--yn-weighting 0|1]\n"
-    "                 [--comeron-flavour coal|gestimator] [--li-flavour coal|seqinr]\n"
+    "                 [--tie-break leftmost|pwalign] [--flanks gap|align] [--yn-flavour kaks|paml]\n"
+    "                 [--yn-weighting 0|1] [--comeron-flavour coal|gestimator] [--li-flavour coal|seqinr]\n"
     "                 [--terminal-stops drop|compare] [--min-codons N] [--max-ds X] [--min-identity P]\n"
     "                 [--new-files] [-q]\n"
     "\n"
     "Protein alignment -> codon alignment -> Ka/Ks for groups of coding sequences (the engine of\n"
     "`coal pipeline`, docs/pipeline.md). GROUPS (a file, or standard input when -i is - or absent) is\n"
     "tab-separated, one group after the other:\n"
-    "  G <group id> <all|rep|list> [nocodon]  start of a group; which pairs: all, member 1 against the others,\n"
-    "                                  P lines; nocodon: do not write this group's codon (or protein) alignment\n"
+    "  G <group id> <all|rep|list> [nocodon] [swap]  start of a group; which pairs: all, member 1 against the\n"
+    "                                  others, P lines; nocodon: do not write this group's codon (or protein)\n"
+    "                                  alignment; swap: two members aligned here are aligned as member 2 against\n"
+    "                                  member 1 (the rows come out in member order)\n"
     "  M <id> <CDS> [<protein row>]    a member; rows (when given, for every member) are the protein alignment\n"
     "  F <id> <reason>                 a member already known to be unusable (its pairs get status error)\n"
     "  H <qstart> <qend> <sstart> <send> <qseq_gapped> <sseq_gapped>   2 members: use this DIAMOND hit\n"
@@ -91,6 +93,8 @@ const char* CODON_DNDS_HELP =
     "  --group-column NAME  write the group id as a first column called NAME\n"
     "  -m METHOD        YN (default), NG, LWL, MLWL, LPB, MLPB, MYN, Comeron (alias C95), Li; repeat for\n"
     "                   several (Comeron and Li: genetic code 1 only)\n"
+    "  --tie-break T    which of several protein alignments with the best score: leftmost (gaps as far left\n"
+    "                   as possible; the default) or pwalign (the one pwalign::pairwiseAlignment returns)\n"
     "  --comeron-flavour F, --li-flavour F  as in `coal dnds` (coal, the default; gestimator; seqinr)\n"
     "  --terminal-stops S  with the flavours gestimator / seqinr: drop (default) ends a pair before the\n"
     "                   terminal stop codons; compare takes the two stop codons as the last compared column\n"
@@ -532,7 +536,14 @@ public:
                     it.g.pairs = dnds::Pairs::list;
                 else
                     bad("G: the third field must be all, rep or list");
-                it.no_codon = f.size() > 3 && f[3] == "nocodon";
+                for (size_t t = 3; t < f.size(); ++t) {
+                    if (f[t] == "nocodon")
+                        it.no_codon = true;
+                    else if (f[t] == "swap")
+                        it.g.swap_pair = true;
+                    else
+                        bad("G: the fields after all|rep|list must be nocodon or swap");
+                }
                 open = true;
             } else if (!open) {
                 bad("a line before the first G");
@@ -667,6 +678,9 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
         } else if (s == "--max-cells") {
             if (!it.value(v) || !to_int(v, n) || n < 0) return usage(prog, s + ": expected a number >= 0");
             c.opt.align.max_cells = (uint64_t)n;
+        } else if (s == "--tie-break") {
+            if (!it.value(v) || !parse_tie_break(v, c.opt.align.tie_break))
+                return usage(prog, "--tie-break: expected leftmost or pwalign");
         } else if (s == "--flanks") {
             if (!it.value(v) || (v != "gap" && v != "align")) return usage(prog, "--flanks: expected gap or align");
             c.opt.flanks = v == "gap" ? Flanks::Gap : Flanks::Align;

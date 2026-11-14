@@ -2202,6 +2202,8 @@ class _Run:
                "--flanks", a.flanks, "--yn-flavour", a.yn_flavour, "--yn-weighting", str(a.yn_weighting),
                "--comeron-flavour", a.comeron_flavour, "--li-flavour", a.li_flavour,
                "--terminal-stops", a.terminal_stops]
+        if a.tie_break != "leftmost":
+            cmd += ["--tie-break", a.tie_break]
         for m in a.method:
             cmd += ["-m", m]
         if a.min_codons:
@@ -2313,7 +2315,7 @@ class _Run:
                     exit_code, error, status = 1, why, "failed"
         self.remove_temporaries()
         a = self.a
-        skip = {"out_dir", "quiet", "report", "resume", "install_tools"}
+        skip = {"out_dir", "quiet", "report", "resume", "install_tools", "_api"}
         if status is None:
             status = {0: "completed", 2: "completed_with_failures"}.get(exit_code, "failed")
         # every tool's command lines, from the stages (also the reused ones); the aligners run once per cluster
@@ -2330,6 +2332,7 @@ class _Run:
                 tools[name]["command_template"] = _msa.command_line(name, tools[name]["path"], threads)
         report = {
             "schema": SCHEMA, "coal_version": __version__, "mode": self.mode, "command": self.argv,
+            "entry": getattr(a, "_api", {}).get("entry", "cli" if self.argv is not None else "python-api"),
             "out_dir": self.out, "exit_code": exit_code, "status": status,
             "started": self.started, "finished": _utc_now(),
             "platform": {"system": platform.system(), "release": platform.release(), "machine": platform.machine(),
@@ -2390,8 +2393,12 @@ SATURATION_NOTICE_MIN_PAIRS = 20
 
 
 def _count_pairs(run: _Run, dnds_path: str, group_col: bool) -> None:
-    """Pair counts by status from dnds.tsv (the first method's rows), and the error pairs into failed.tsv."""
-    c = {"total": 0, "ok": 0, "warning": 0, "not_converged": 0, "saturated": 0, "no_data": 0, "error": 0}
+    """Pair counts by status from dnds.tsv: counts.pairs for the first method of the rows (named in its "method"),
+    counts.pairs_by_method for every method; the error pairs into failed.tsv (once per pair; a method named when
+    the error is not that of every method of the pair)."""
+    zero = {"total": 0, "ok": 0, "warning": 0, "not_converged": 0, "saturated": 0, "no_data": 0, "error": 0}
+    by: dict[str, dict] = {}
+    errors: dict[tuple, list] = {}   # (cluster, seq1, seq2) -> [(method, message)]
     k = 1 if group_col else 0
     first = None
     # the notes of --min-codons / --max-ds as the engine writes them (cpp/src/kaks_cli.cpp PairFlags)
@@ -2408,25 +2415,50 @@ def _count_pairs(run: _Run, dnds_path: str, group_col: bool) -> None:
             f = line.rstrip("\n").split("\t")
             if first is None:
                 first = f[k + 2]
-            if f[k + 2] != first:
-                continue
+            c = by.get(f[k + 2])
+            if c is None:
+                c = by[f[k + 2]] = dict(zero)
             c["total"] += 1
             c[f[-2]] = c.get(f[-2], 0) + 1
+            if f[-2] == "error":
+                errors.setdefault((f[0] if group_col else "", f[k], f[k + 1]), []).append((f[k + 2], f[-1]))
+            if f[k + 2] != first:
+                continue
             if short or high or low:
                 notes = f[-1].split("; ")
                 flagged["min_codons"] += short in notes
                 flagged["max_ds"] += high in notes
                 flagged["min_identity"] += low in notes
-            if f[-2] == "error":
-                run.fail("pair", "pair_failed", f[-1], cluster=f[0] if group_col else "", seq1=f[k], seq2=f[k + 1])
+    n_methods = len(by)
+    for (cl, s1, s2), errs in errors.items():
+        msgs = {m for _, m in errs}
+        if len(errs) == n_methods and len(msgs) == 1:   # the pair failed for every method (alignment, a gene)
+            run.fail("pair", "pair_failed", errs[0][1], cluster=cl, seq1=s1, seq2=s2)
+        else:   # (integration pass 2026-11-14, C03: only the first method's error rows were listed)
+            for m, msg in errs:
+                run.fail("pair", "pair_failed", f"{m}: {msg}", cluster=cl, seq1=s1, seq2=s2)
+    c = dict(by.get(first, zero))
     run.counts["pairs"] = c
-    lost = c["saturated"] + c["not_converged"]
-    if c["total"] >= SATURATION_NOTICE_MIN_PAIRS and lost > SATURATION_NOTICE_SHARE * c["total"] and hasattr(run, "warn"):
-        # (deep test 2026-11-14, D08: 85% of the yeast pairs ended NA without a word about why)
-        run.warn(f"{lost:,} of the {c['total']:,} pairs ({100 * lost / c['total']:.0f}%) are saturated or "
-                 "not_converged: dS (sometimes dN too) has no estimate there: these sequences are too divergent for "
-                 "synonymous changes to be counted (dN and the protein identity are still given). Compare closer "
-                 "species for dS; docs/pipeline.md \"Filtering before interpretation\"")
+    if first is not None and n_methods > 1:
+        c["method"] = first
+        run.counts["pairs_by_method"] = by
+    # (deep test 2026-11-14, D08: 85% of the yeast pairs ended NA without a word about why; C03: with several
+    # methods, each method's share, named)
+    lost = {m: v["saturated"] + v["not_converged"] for m, v in by.items()}
+    hit = [m for m, v in by.items()
+           if v["total"] >= SATURATION_NOTICE_MIN_PAIRS and lost[m] > SATURATION_NOTICE_SHARE * v["total"]]
+    if hit and hasattr(run, "warn"):
+        why = (": dS (sometimes dN too) has no estimate there: these sequences are too divergent for synonymous "
+               "changes to be counted (dN and the protein identity are still given). Compare closer species for dS; "
+               "docs/pipeline.md \"Filtering before interpretation\"")
+        if n_methods == 1:
+            m = hit[0]
+            run.warn(f"{lost[m]:,} of the {by[m]['total']:,} pairs ({100 * lost[m] / by[m]['total']:.0f}%) are "
+                     "saturated or not_converged" + why)
+        else:
+            run.warn("pairs saturated or not_converged: " + ", ".join(
+                f"{m} {lost[m]:,} of {by[m]['total']:,} ({100 * lost[m] / by[m]['total']:.0f}%)" for m in by
+                if by[m]["total"]) + why)
     if short or high or low:
         run.counts["flagged"] = {key: n for key, n, on in (("min_codons", flagged["min_codons"], short),
                                                            ("max_ds", flagged["max_ds"], high),
@@ -2884,10 +2916,16 @@ def _clusters_mode(run: _Run) -> None:
                 ok.append(m)
         return ok
 
+    def first_in_input(x: str, y: str) -> bool:
+        """y comes before x in the input (--cds files in order, then records): a pair is aligned in input order
+        (dnds.hpp Group::swap_pair; docs/pipeline.md, "Which gene is aligned first")."""
+        return cds_idx.pos[y][:2] < cds_idx.pos[x][:2]
+
     def emit_pairwise(write, cid: str, ids: list[str], pairs) -> None:
         """Each pair as a two-member group of its own (aligned pairwise by the engine)."""
         cache: dict[int, bytes] = {}
         head = b"G\t" + cid.encode() + b"\tall\tnocodon\n"
+        head_swap = b"G\t" + cid.encode() + b"\tall\tnocodon\tswap\n"
         for i, j in pairs:
             if len(cache) > 256:   # a bounded cache of member lines (member 0, the representative, stays)
                 keep = cache.get(0)
@@ -2897,7 +2935,7 @@ def _clusters_mode(run: _Run) -> None:
             for k in (i, j):
                 if k not in cache:
                     cache[k] = b"M\t" + ids[k].encode() + b"\t" + cds_idx.get(ids[k]) + b"\n"
-            write(b"".join((head, cache[i], cache[j], b"E\n")))
+            write(b"".join((head_swap if first_in_input(ids[i], ids[j]) else head, cache[i], cache[j], b"E\n")))
 
     def feed(write) -> dict:
         pending: list[tuple[dict, list[str]]] = []   # clusters waiting for their MSA, in order
@@ -2930,7 +2968,8 @@ def _clusters_mode(run: _Run) -> None:
                     emit_pairwise(write, cid, ids, p.pop("_pairs"))
                     continue
                 rows = [x[1].encode() for x in r.rows] if r is not None else [b""] * len(ids)
-                buf = [b"G\t", cid.encode(), b"\tall\n"]
+                swap = r is None and len(ids) == 2 and first_in_input(ids[0], ids[1])
+                buf = [b"G\t", cid.encode(), b"\tall\tswap\n" if swap else b"\tall\n"]
                 for m, row in zip(ids, rows):
                     buf += [b"M\t", m.encode(), b"\t", cds_idx.get(m), b"\t" if row else b"", row, b"\n"]
                 buf.append(b"E\n")
@@ -3047,12 +3086,30 @@ def summarise(dnds_path: str, plans: list[dict], out_path: str) -> None:
                 continue
             for m in (x for x in METHODS if x in acc):
                 d = acc[m]
-                status = "ok" if d["ok"] else "failed"
+                status, note = _cluster_status(d["n"], d["ok"], d["saturated"], d["no_data"], d["not_converged"],
+                                               d["error"], p.get("note", ""))
                 out.write("\t".join(lead + [m, p["pair_selection"], p["aligner"], str(d["n"]), str(d["ok"]),
                                             str(d["not_converged"]), str(d["saturated"]), str(d["no_data"]),
                                             str(d["error"])]
                                     + _stats(d["v"][0]) + _stats(d["v"][1]) + _stats(d["v"][2])
-                                    + [str(len(d["v"][2])), status, p.get("note", "")]) + "\n")
+                                    + [str(len(d["v"][2])), status, note]) + "\n")
+
+
+def _cluster_status(n: int, ok: int, saturated: int, no_data: int, not_converged: int, error: int,
+                    note: str) -> tuple[str, str]:
+    """A cluster's status for one method, and its note: ok when a pair has an estimate; without one, the pairs'
+    status (saturated, else no_data, else not_converged) unless a pair failed (failed), with a note that counts
+    them when there is no other note. The rule of orthologr's dNdS_clusters() / dNdS_orthogroups()
+    (integration pass 2026-11-14, C06: such clusters were all "failed")."""
+    if ok or not n:
+        return "ok", note
+    status = "failed" if error else ("saturated" if saturated else "no_data" if no_data else "not_converged")
+    if not note:
+        parts = ([f"{saturated} saturated"] if saturated else []) + \
+                ([f"{no_data} without codons to compare"] if no_data else []) + \
+                ([f"{not_converged} not converged"] if not_converged else []) + ([f"{error} failed"] if error else [])
+        note = f"no pair has an estimate ({n} pair{'s' if n != 1 else ''}: {', '.join(parts)})"
+    return status, note
 
 
 # ------------------------------------------------------------------------------------------------ low level
@@ -3196,11 +3253,18 @@ def build_parser() -> argparse.ArgumentParser:
     g = common.add_argument_group("Pairwise protein alignment (COAL's global aligner)")
     g.add_argument("--preset", choices=("needle", "pwalign"),
                    help="needle: BLOSUM62, open 10, extend 0.5, end gaps free (the default); pwalign: open 14, "
-                        "extend 4, end gaps penalised")
-    g.add_argument("--matrix", default=None, help="BLOSUM62 (default), BLOSUM45, BLOSUM80, PAM250")
+                        "extend 4, end gaps penalised, pwalign's copy of BLOSUM62 (--matrix BLOSUM62-PWALIGN) and "
+                        "pwalign's choice among co-optimal alignments (--tie-break pwalign): the protein alignments "
+                        "of pwalign::pairwiseAlignment")
+    g.add_argument("--matrix", default=None, help="BLOSUM62 (default), BLOSUM45, BLOSUM80, PAM250, BLOSUM62-PWALIGN "
+                                                    "(pwalign's copy of BLOSUM62, the default of --preset pwalign)")
     g.add_argument("--gap-open", type=float, default=None, metavar="X", help="cost of a gap's first position")
     g.add_argument("--gap-extend", type=float, default=None, metavar="X", help="cost of each further position")
     g.add_argument("--end-gaps", choices=("free", "penalized"), default=None, help="default free")
+    g.add_argument("--tie-break", choices=("leftmost", "pwalign"), default=None,
+                   help="which of several alignments with the best score: leftmost (gaps as far left as possible; "
+                        "the default) or pwalign (the one pwalign::pairwiseAlignment returns; the default of "
+                        "--preset pwalign). docs/alignment.md")
     g.add_argument("--max-cells", type=int, default=4_000_000_000, metavar="N",
                    help="refuse a pair whose alignment table has more cells (default 4e9)")
     g = common.add_argument_group("Running")
@@ -3393,10 +3457,11 @@ def _finish_args(a: argparse.Namespace) -> None:
     """Defaults that depend on other options, and the method list in the order of the rows."""
     a.method = [m for m in METHODS if m in set(a.method or ["YN"])]
     pw = a.preset == "pwalign"
-    a.matrix = (a.matrix or "BLOSUM62").upper()
+    a.matrix = (a.matrix or ("BLOSUM62-PWALIGN" if pw else "BLOSUM62")).upper()
     a.gap_open = a.gap_open if a.gap_open is not None else (14.0 if pw else 10.0)
     a.gap_extend = a.gap_extend if a.gap_extend is not None else (4.0 if pw else 0.5)
     a.end_gaps = a.end_gaps or ("penalized" if pw else "free")
+    a.tie_break = getattr(a, "tie_break", None) or ("pwalign" if pw else "leftmost")
     if not hasattr(a, "flanks"):
         a.flanks = "align"
 
@@ -3473,12 +3538,15 @@ def _execute(mode: str, a: argparse.Namespace, argv) -> PipelineResult:
         genes = run.counts.get("genes", {})
         n_drop = genes.get("dropped", 0)
         kept = genes.get("total", 0) - genes.get("failed", 0) - n_drop
+        def statuses(p):
+            return (f"{p.get('ok', 0):,} ok, {p.get('warning', 0):,} warning, {p.get('not_converged', 0):,} "
+                    f"not_converged, {p.get('saturated', 0):,} saturated, {p.get('no_data', 0):,} no_data, "
+                    f"{p.get('error', 0):,} error")
+        by = run.counts.get("pairs_by_method")
         run.say(f"summary: {genes.get('total', 0):,} records ({genes.get('failed', 0):,} not usable"
                 + (f", {n_drop:,} dropped by --longest-isoform: {kept:,} genes" if n_drop else "") + "); "
-                f"{pairs.get('total', 0):,} pairs: {pairs.get('ok', 0):,} ok, {pairs.get('warning', 0):,} warning, "
-                f"{pairs.get('not_converged', 0):,} not_converged, {pairs.get('saturated', 0):,} saturated, "
-                f"{pairs.get('no_data', 0):,} no_data, "
-                f"{pairs.get('error', 0):,} error")
+                f"{pairs.get('total', 0):,} pairs: "
+                + ("; ".join(f"{m} {statuses(p)}" for m, p in by.items()) if by else statuses(pairs)))
         if mode == "clusters":
             c = run.counts["clusters"]
             run.say(f"summary: {c['total']:,} clusters: {c['all_pairs']:,} with every pair, {c['singletons']:,} without "
@@ -3538,13 +3606,47 @@ def _namespace(mode: str, required: list[str], options: dict) -> argparse.Namesp
     if why:
         raise ValueError(why)
     for opt, allowed in (("hash_inputs", ("auto", "always", "never")), ("comeron_flavour", ("coal", "gestimator")), ("li_flavour", ("coal", "seqinr")),
-                         ("terminal_stops", ("drop", "compare"))):
+                         ("terminal_stops", ("drop", "compare")), ("tie_break", (None, "leftmost", "pwalign"))):
         if getattr(a, opt) not in allowed:
-            raise ValueError(f"{opt} {getattr(a, opt)!r}: choose from {', '.join(allowed)}")
+            raise ValueError(f"{opt} {getattr(a, opt)!r}: choose from {', '.join(v for v in allowed if v)}")
     return a
 
 
-def run_pairs(query: _Path, subject: _Path, out_dir: _Path, **options: Any) -> PipelineResult:
+def _equivalent_argv(mode: str, required: list[str], a: argparse.Namespace, options: dict) -> list[str]:
+    """The `coal pipeline` command line of an API call: the required arguments, then the given options as flags
+    (their values as the run uses them). For report.json's "command" (integration pass 2026-11-14, C08: it was
+    null for runs from Python and R)."""
+    ap = build_parser()
+    sub = next(x for x in ap._actions if isinstance(x, argparse._SubParsersAction)).choices[mode]
+    by_dest = {x.dest: x for x in sub._actions if x.option_strings}
+    argv = ["pipeline", mode, *required]
+    for k in options:
+        act = by_dest.get(k)
+        v = getattr(a, k, None)
+        if act is None or v is None:
+            continue
+        flag = max(act.option_strings, key=len)
+        if isinstance(act, argparse._StoreTrueAction):
+            if v:
+                argv.append(flag)
+        elif isinstance(act, argparse._AppendAction):
+            for x in (v if isinstance(v, (list, tuple)) else [v]):
+                argv += [flag, str(x)]
+        elif act.nargs in ("+", "*"):
+            argv += [flag, *(str(x) for x in (v if isinstance(v, (list, tuple)) else [v]))]
+        else:
+            argv += [flag, str(v)]
+    return argv
+
+
+def _api_run(mode: str, required: list[str], options: dict, entry: str | None) -> PipelineResult:
+    a = _namespace(mode, required, options)
+    a._api = {"entry": entry or "python-api", "function": f"coal.dnds_pipeline.run_{mode}"}
+    return _execute(mode, a, _equivalent_argv(mode, required, a, options))
+
+
+def run_pairs(query: _Path, subject: _Path, out_dir: _Path, *, entry: str | None = None,
+              **options: Any) -> PipelineResult:
     """Pair mode from Python: the options of `coal pipeline pairs` as keyword arguments (method=["YN", "NG"],
     ortho="rbh", aligner="nw", pairs=None, jobs=0, codontable=1, kaks_format=False, keep_alignments=False,
     keep_protein_alignments=False, resume=False, quiet=False, ...).
@@ -3553,22 +3655,23 @@ def run_pairs(query: _Path, subject: _Path, out_dir: _Path, **options: Any) -> P
     report["error"] (the message is also printed on stderr). Raises TypeError for an option that does not exist
     and ValueError for a value that is not allowed (an unknown method, Comeron with another genetic code), before
     anything is written. KeyboardInterrupt and a termination signal pass through, after the run has ended its
-    programs and written an "interrupted" report."""
-    a = _namespace("pairs", ["--query", os.fspath(query), "--subject", os.fspath(subject), "-o", os.fspath(out_dir)],
-                   options)
-    return _execute("pairs", a, None)
+    programs and written an "interrupted" report.
+
+    report.json: "command" is the equivalent `coal pipeline pairs` command line, "entry" says where the run came
+    from: "python-api", or what a caller names in `entry` (coalr: "coalr <version> coal_pipeline_pairs()")."""
+    return _api_run("pairs", ["--query", os.fspath(query), "--subject", os.fspath(subject), "-o", os.fspath(out_dir)],
+                    options, entry)
 
 
-def run_clusters(cds: _Path | Iterable[_Path], out_dir: _Path, clusters: _Path | None = None,
-                 **options: Any) -> PipelineResult:
+def run_clusters(cds: _Path | Iterable[_Path], out_dir: _Path, clusters: _Path | None = None, *,
+                 entry: str | None = None, **options: Any) -> PipelineResult:
     """Cluster mode from Python: the options of `coal pipeline clusters` as keyword arguments (clusters=None runs
     DIAMOND DeepClust; aligner="clustalo", max_cluster_size=200, large_clusters="representative", pair_sample=1000,
     seed=1, method=["YN"], jobs=0, ...). cds: one path or a list. Returns and raises as run_pairs()."""
     files = [os.fspath(cds)] if isinstance(cds, (str, os.PathLike)) else [os.fspath(c) for c in cds]
     if clusters is not None:
         options = {**options, "clusters": os.fspath(clusters)}
-    a = _namespace("clusters", ["--cds", *files, "-o", os.fspath(out_dir)], options)
-    return _execute("clusters", a, None)
+    return _api_run("clusters", ["--cds", *files, "-o", os.fspath(out_dir)], options, entry)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

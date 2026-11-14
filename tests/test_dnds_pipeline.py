@@ -704,7 +704,8 @@ class PairsGiven(PipelineCase):
         c = res.report["counts"]
         self.assertEqual(c["genes"], {"total": 40, "ok": 34, "warning": 2, "failed": 4})
         self.assertEqual(c["pairs"], {"total": 17, "ok": 15, "warning": 2, "not_converged": 0, "saturated": 0,
-                                      "no_data": 0, "error": 0})
+                                      "no_data": 0, "error": 0, "method": "YN"})   # two methods: named (C03)
+        self.assertEqual(c["pairs_by_method"]["YN"], {k: v for k, v in c["pairs"].items() if k != "method"})
         failed = read_tsv(res.outputs["failed"])
         self.assertEqual(list(failed[0]), list(P.FAILED_COLUMNS))
         self.assertEqual(sorted((f["level"], f["seq1"], f["code"]) for f in failed),
@@ -1537,9 +1538,9 @@ class SummaryCounts(unittest.TestCase):
             self.assertEqual([c1[k] for k in ("n_pairs", "n_ok", "n_not_converged", "n_saturated", "n_no_data",
                                               "n_failed", "n_dNdS", "status")], ["4", "2", "1", "1", "0", "0", "2", "ok"])
             self.assertAlmostEqual(float(c1["dN_mean"]), 0.15)
-            # a cluster whose only pair did not converge has no pair with an estimate
+            # a cluster whose only pair did not converge has no pair with an estimate: not_converged (C06)
             self.assertEqual([c2[k] for k in ("n_pairs", "n_ok", "n_not_converged", "dN_median", "status")],
-                             ["1", "0", "1", "NA", "failed"])
+                             ["1", "0", "1", "NA", "not_converged"])
             self.assertEqual([c3[k] for k in ("n_pairs", "n_ok", "n_not_converged", "n_saturated", "status")],
                              ["0", "0", "0", "0", "ok"])
             self.assertTrue(all(len(x) == len(P.SUMMARY_COLUMNS) for x in summ))

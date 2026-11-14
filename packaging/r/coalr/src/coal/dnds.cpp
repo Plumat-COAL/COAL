@@ -152,6 +152,7 @@ GroupResult prepare_group(const Group& g, const Options& opt) {
     const size_t n = g.members.size();
     r.members.resize(n);
     r.protein_rows.assign(n, "");
+    r.swap_pair = g.swap_pair && n == 2;
     const GeneticCode* code = get_code(opt.table);
     if (!code) {
         r.error_code = "genetic_code";
@@ -212,6 +213,10 @@ GroupResult prepare_group(const Group& g, const Options& opt) {
             if (g.has_hit) {
                 pa = expand_local_hit(a, b, g.hit, opt.flanks, opt.align);
                 r.aligner = "local_hit";
+            } else if (r.swap_pair) {
+                pa = align_pair(b, a, opt.align);
+                std::swap(pa.a, pa.b);
+                r.aligner = "nw";
             } else {
                 pa = align_pair(a, b, opt.align);
                 r.aligner = "nw";
@@ -296,7 +301,10 @@ PairResult compute_pair(const GroupResult& r, int i, int j, const Options& opt) 
         if (!na.empty()) p.note = "seq1: " + na;
         if (!nb.empty()) p.note += (p.note.empty() ? "" : "; ") + ("seq2: " + nb);
     }
-    kaks::Prepared prep = kaks::prepare(a.codon_row, b.codon_row, *code);
+    // Group::swap_pair: the pair in input order (member 1 first) for the estimators
+    const MemberResult& x = r.swap_pair ? b : a;
+    const MemberResult& y = r.swap_pair ? a : b;
+    kaks::Prepared prep = kaks::prepare(x.codon_row, y.codon_row, *code);
     // Options::compare_terminal_stops: the reference flavours of Comeron and Li (ComeronFlavour::gestimator,
     // LiFlavour::seqinr) compare stop codons, and a pipeline that translates the stop codon to '*', aligns it
     // and threads it like a residue (orthologr 0.4.3) has the two terminal stop codons as the last column of
@@ -312,8 +320,8 @@ PairResult compute_pair(const GroupResult& r, int i, int j, const Options& opt) 
             (m == kaks::Method::Li && opt.kaks.li_flavour == kaks::LiFlavour::seqinr);
         if (reference && stops) {
             if (!have_stops) {
-                prep_stops = kaks::prepare(a.codon_row + a.tr.cds.substr(a.tr.cds.size() - 3),
-                                           b.codon_row + b.tr.cds.substr(b.tr.cds.size() - 3), *code);
+                prep_stops = kaks::prepare(x.codon_row + x.tr.cds.substr(x.tr.cds.size() - 3),
+                                           y.codon_row + y.tr.cds.substr(y.tr.cds.size() - 3), *code);
                 have_stops = true;
             }
             p.results.push_back(kaks::compute(prep_stops, m, *code, opt.kaks));

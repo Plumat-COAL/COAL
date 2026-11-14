@@ -396,6 +396,19 @@ Ka/Ks compares and not the files), and hold the members that could be used: a ge
 The numeric columns, statuses and notes are those of `coal dnds` ([kaks.md](kaks.md#output)); the pipeline adds
 the two protein-alignment columns and what it knows about each CDS.
 
+### Which gene comes first
+
+Most protein pairs have several alignments with the same best score (docs/alignment.md, "Co-optimal
+alignments"), and which one an aligner returns depends on which sequence is the first; Comeron's estimate depends
+on it too (libsequence counts the sites of the first sequence). COAL computes a pair in input order in every
+route: the pairs route with the `--query` gene first, `pipeline clusters` with the gene of the earlier `--cds`
+file first (then the earlier record), `coalr::coal_dnds_pairs()` with the query and `coal_dnds_clusters()` with
+the earlier one in `cds`. orthologr does the same (`dNdS()`: the query; `dNdS_orthogroups()`: the gene of the
+species that comes first), so the routes agree on a pair given in the same order. The rows of `dnds.tsv` still
+list a cluster's representative first. Pairs taken from a Clustal Omega / MAFFT alignment of a whole cluster
+are the exception: the multiple alignment itself depends on the order of the members (the clusters file's), and
+Comeron is computed with the earlier member of the cluster first.
+
 ### `cluster_summary.tsv`
 
 | Column | Meaning |
@@ -412,8 +425,8 @@ the two protein-alignment columns and what it knows about each CDS.
 | `dN_median`, `dN_mean`, `dN_q25`, `dN_q75`, `dN_min`, `dN_max` | over the `n_ok` pairs |
 | `dS_...`, `dNdS_...` | the same six for dS and dN/dS |
 | `n_dNdS` | how many dN/dS values the `dNdS_` columns are over (dN/dS is `NA` when dS is 0) |
-| `status` | `ok`; `failed` (pairs, but none with an estimate); `skipped` |
-| `note` | members left out, the size cap, an MSA that failed |
+| `status` | `ok` (a pair has an estimate); pairs, but none with an estimate: `saturated` (some saturated), else `no_data`, else `not_converged`, and `failed` when a pair failed (`n_failed` > 0); `skipped`. The rule of orthologr's `dNdS_clusters()` |
+| `note` | members left out, the size cap, an MSA that failed; for a cluster without an estimate and no other note, what its pairs are (`no pair has an estimate (3 pairs: 2 saturated, 1 not converged)`) |
 
 Quartiles are interpolated linearly between order statistics (R's type 7, numpy's default).
 
@@ -440,7 +453,9 @@ complete codon), `status`, `code`, `note`.
 Schema `coal.pipeline/1`: [pipeline.schema.json](pipeline.schema.json). It is written also when the run fails.
 
 - `mode`, `command`, `out_dir`, `parameters` (every option as used), `tools` (path and version of coal-cpp,
-  DIAMOND, Clustal Omega, MAFFT).
+  DIAMOND, Clustal Omega, MAFFT). `entry`: `cli`, `python-api` (`run_pairs()` / `run_clusters()`), or the caller
+  that named itself (`coalr 0.6.0 coal_pipeline_pairs()`); for a run from Python or R, `command` is the equivalent
+  `coal pipeline` command line of the call (the options given, with the values the run used).
 - **Provenance, for a methods section.** `started` and `finished` (UTC, ISO 8601: `2026-11-13T09:15:46Z`);
   `platform` (`system`, `release`, `machine`, `python`, `cpus`); `coal_version`; `threads` (`requested`: `-j` as
   given, 0 for the default; `usable_cpus`: the CPUs this process may run on; `engine`: the threads coal-cpp was
@@ -461,7 +476,9 @@ Schema `coal.pipeline/1`: [pipeline.schema.json](pipeline.schema.json). It is wr
   this changes a table: `dnds.tsv` and the others are byte-identical whatever `--hash-inputs` is.
 - `stages`: name, wall `seconds`, `cached` (reused by `--resume`). The stage `align_codon_kaks` also has
   `align_codon_seconds` and `kaks_seconds` (inside the engine) and, when an MSA program ran, `msa_seconds`.
-- `counts`: `genes` (total, ok, warning, failed), `pairs` (total and one count per status), `flagged`
+- `counts`: `genes` (total, ok, warning, failed), `pairs` (total and one count per status; with several `-m`
+  the counts of the first method of the rows, named in `pairs.method`, and `pairs_by_method` with every method's
+  counts: the summary line on stderr and the saturation notice name each method too), `flagged`
   (with `--min-codons` / `--max-ds`: `min_codons`, `max_ds`, the pairs each flag marked), `orthologs` and
   `unpaired` (pair mode), `clusters` (total, singletons, all_pairs, above_max_size, skipped, msa_fallback,
   members_dropped).

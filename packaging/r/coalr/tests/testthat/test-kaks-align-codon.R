@@ -173,3 +173,27 @@ test_that("an iteration that does not converge gives no estimate", {
   # without pathway weighting there is no iteration
   expect_false(coal_kaks("AAA", "ATG", yn_flavour = "paml", yn_weighting = FALSE)$status == "not_converged")
 })
+
+test_that("preset pwalign returns pwalign::pairwiseAlignment's alignment among co-optimal ones", {
+  # each pair has several alignments with the best score; COAL's own tie-break puts the gaps leftmost
+  a <- c("MKTAYIAKQRQISFVKSHFSRQ", "MAAAKAAA", "MKVLAAGG", "GGGGAGGG", "MSTNPKPQRKTKRNTNRRPQDVKFPGG")
+  b <- c("MKTAYAKQRQISFVKSHFSRQLE", "MAAKAAAA", "MKVLAGG", "GGGAGGGG", "MSTNPKPQKKNKRNTNRRPQDVKFPG")
+  pw <- coal_align_pairs(a, b, preset = "pwalign")
+  left <- coal_align_pairs(a, b, preset = "pwalign", tie_break = "leftmost")
+  expect_identical(pw$score, left$score)
+  expect_false(identical(pw$aligned_a, left$aligned_a) && identical(pw$aligned_b, left$aligned_b))
+  expect_identical(coal_align_pairs(a, b, tie_break = "pwalign", gap_open = 14, gap_extend = 4,
+                                    end_gaps = "penalized")$aligned_a, pw$aligned_a)
+  expect_error(coal_align_pairs("MK", "MK", tie_break = "rightmost"), "tie_break")
+  # pwalign (Bioconductor) is not a dependency of coalr: used when it is installed
+  skip_if_not_installed("pwalign")
+  skip_if_not_installed("Biostrings")
+  pw_fun <- function(name) getExportedValue("pwalign", name)
+  for (i in seq_along(a)) {
+    ref <- pw_fun("pairwiseAlignment")(Biostrings::AAString(a[i]), Biostrings::AAString(b[i]), type = "global",
+                                       substitutionMatrix = "BLOSUM62")
+    expect_identical(pw$aligned_a[i], as.character(pw_fun("alignedPattern")(ref)), info = a[i])
+    expect_identical(pw$aligned_b[i], as.character(pw_fun("alignedSubject")(ref)), info = a[i])
+    expect_equal(pw$score[i], pw_fun("score")(ref), info = a[i])
+  }
+})

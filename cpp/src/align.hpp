@@ -30,10 +30,26 @@ struct SubstitutionMatrix {
     int8_t score[24][24];
 };
 
-// "BLOSUM62" (default), "BLOSUM45", "BLOSUM80", "PAM250" (case-insensitive); nullptr if unknown.
+// "BLOSUM62" (default), "BLOSUM45", "BLOSUM80", "PAM250", "BLOSUM62-PWALIGN" (pwalign's copy of BLOSUM62, which
+// differs for B, Z and X) (case-insensitive); nullptr if unknown.
 const SubstitutionMatrix* substitution_matrix(const std::string& name);
 // The names substitution_matrix() knows, in that order.
 const std::vector<std::string>& substitution_matrix_names();
+
+// Which of several co-optimal alignments (the same score) is returned.
+//   Leftmost: COAL's own traceback, from the end of both sequences towards the start, preferring a substitution,
+//     then a gap in b, then a gap in a: gaps end up as far left as the score allows. The default.
+//   Pwalign: the alignment pwalign::pairwiseAlignment() (Biostrings) returns. pwalign fills its matrices over the
+//     reversed sequences and prefers a substitution, then a gap in the pattern (a), then a gap in the subject (b),
+//     opening a gap rather than extending one when both are equal; its alignment is therefore the mirror image of
+//     COAL's kernel run on the reversed sequences with a and b exchanged, which is how it is computed here (same
+//     kernel, same speed). Identical to pwalign's alignment whenever the gap costs are those of pwalign (end gaps
+//     penalised, gap_open > gap_extend); with free end gaps it is a well-defined choice, not pwalign's.
+enum class TieBreak { Leftmost, Pwalign };
+// "leftmost" / "pwalign"
+const char* tie_break_name(TieBreak t);
+// false (t unchanged) if name is neither
+bool parse_tie_break(const std::string& name, TieBreak& t);
 
 struct AlignParams {
     std::string matrix = "BLOSUM62";
@@ -49,17 +65,21 @@ struct AlignParams {
     // same rows are computed by the same code); the forward pass runs twice for those pairs. Titin against titin
     // took 630 MB of traceback, now about 135 MB. 0 = no limit (the whole traceback in memory).
     uint64_t traceback_bytes = 256ULL << 20;
+    TieBreak tie_break = TieBreak::Leftmost;
 
     // EMBOSS needle's defaults: BLOSUM62, open 10, extend 0.5, end gaps free. COAL's default.
     static AlignParams needle() { return AlignParams(); }
     // pwalign::pairwiseAlignment(type = "global", substitutionMatrix = "BLOSUM62") with its default gapOpening = 10,
     // gapExtension = 4. pwalign charges gapOpening + k * gapExtension for a gap of length k, i.e. open 14, extend 4
-    // in the convention above; end gaps are penalised.
+    // in the convention above; end gaps are penalised; pwalign's copy of BLOSUM62; among co-optimal alignments the
+    // one pwalign returns: the alignment of pwalign::pairwiseAlignment().
     static AlignParams pwalign() {
         AlignParams p;
+        p.matrix = "BLOSUM62-PWALIGN";
         p.gap_open = 14.0;
         p.gap_extend = 4.0;
         p.free_end_gaps = false;
+        p.tie_break = TieBreak::Pwalign;
         return p;
     }
 };

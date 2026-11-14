@@ -283,8 +283,8 @@ class TestPipelineSection(unittest.TestCase):
                 self.assertIn(name, mod.__all__, f"{mod.__name__}.{name}")
                 self.assertIn(name, sec)
         # the signatures as the page prints them
-        for fn, shown in ((P.run_pairs, "run_pairs(query, subject, out_dir, **options)"),
-                          (P.run_clusters, "run_clusters(cds, out_dir, clusters=None, **options)")):
+        for fn, shown in ((P.run_pairs, "run_pairs(query, subject, out_dir, entry=None, **options)"),
+                          (P.run_clusters, "run_clusters(cds, out_dir, clusters=None, entry=None, **options)")):
             sig = inspect.signature(fn)
             plain = fn.__name__ + "(" + ", ".join(
                 ("**" + n if p.kind is p.VAR_KEYWORD else n + ("=None" if p.default is None else ""))

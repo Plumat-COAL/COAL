@@ -2,6 +2,14 @@
 
 First version. In-process bindings (Rcpp) to the C++ core of COAL 0.6:
 
+- `preset = "pwalign"` now returns the protein alignment `pwalign::pairwiseAlignment()` returns, not only one
+  with the same score: pwalign's choice among co-optimal alignments (`tie_break = "pwalign"`, the preset's
+  default). Before, 49% (A. thaliana) to 76% (yeast) of orthologr's protein alignments differed from COAL's
+  under the same scoring; now 100% are identical on five genome pairs, and orthologr's `engine = "coal"`
+  agrees with its native engine to print precision. New argument `tie_break` (`"leftmost"`, COAL's own
+  choice and the default otherwise, or `"pwalign"`) in `coal_align_pairs()`, `coal_dnds_pairs()` and
+  `coal_dnds_clusters()`.
+
 - A vignette, "From two CDS files to dN/dS" (`vignette("from-two-cds-files-to-dnds")`), on the example that
   ships in `inst/extdata`; it runs in process, in seconds.
 - `min_identity` in `coal_dnds_pairs()` and `coal_dnds_clusters()`: the third flag next to `min_codons` and

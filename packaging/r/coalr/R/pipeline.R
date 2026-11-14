@@ -132,7 +132,7 @@ coal_pipeline_pairs <- function(query, subject, out_dir = NULL, methods = "YN", 
   methods <- pick_methods(methods, method, !missing(methods), "methods", "method")
   P <- py_pipeline(python)
   run_pipeline(function(dir, opts) do.call(P$run_pairs, c(list(path.expand(query), path.expand(subject), dir),
-                                                         opts)),
+                                                         with_entry(P$run_pairs, opts, "coal_pipeline_pairs"))),
                out_dir, methods, threads, list(...))
 }
 
@@ -145,7 +145,7 @@ coal_pipeline_clusters <- function(cds, clusters = NULL, out_dir = NULL, methods
   cds <- as.list(path.expand(cds))
   run_pipeline(function(dir, opts) {
     if (!is.null(clusters)) opts$clusters <- path.expand(clusters)
-    do.call(P$run_clusters, c(list(cds, dir), opts))
+    do.call(P$run_clusters, c(list(cds, dir), with_entry(P$run_clusters, opts, "coal_pipeline_clusters")))
   }, out_dir, methods, threads, list(...))
 }
 
@@ -168,4 +168,13 @@ run_pipeline <- function(call, out_dir, methods, threads, opts) {
          res$report$error %||% "see the report", call. = FALSE)
   }
   pipeline_result(res, out_dir, keep)
+}
+
+# report.json says where the run came from ("entry": "coalr <version> coal_pipeline_pairs()") and has the
+# equivalent `coal pipeline` command line, with a COAL whose run_pairs() / run_clusters() take `entry`.
+with_entry <- function(fun, opts, name) {
+  takes <- tryCatch("entry" %in% reticulate::import("inspect")$getfullargspec(fun)$kwonlyargs,
+                    error = function(e) FALSE)
+  if (isTRUE(takes)) opts$entry <- paste0("coalr ", utils::packageVersion("coalr"), " ", name, "()")
+  opts
 }

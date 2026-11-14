@@ -154,5 +154,24 @@ test_that("pairs without an estimate are counted apart in the summary", {
   expect_identical(sm$n_no_data, c(1L, 0L))
   expect_identical(sm$n_saturated + sm$n_failed, c(0L, 0L))
   expect_true(is.na(sm$dN_median[1]))
-  expect_identical(sm$status, c("failed", "ok"))
+  # no pair with an estimate and none failed: the pairs' status (saturated, else no_data, else not_converged)
+  expect_identical(sm$status, c("no_data", "ok"))
+  expect_identical(sm$note[1], "no pair has an estimate (3 pairs: 1 without codons to compare, 2 not converged)")
+})
+
+test_that("a two-member cluster is computed in input order, as coal_dnds_pairs computes the pair", {
+  q <- coal_read_fasta(fx("query_cds.fasta"))
+  s <- coal_read_fasta(fx("subject_cds.fasta"))
+  pr <- orthologs()
+  m <- c("YN", "LWL", "Comeron")
+  pairs <- coal_dnds_pairs(q, s, pairs = pr, methods = m)
+  # the representative is the subject's gene, which comes after the query's in `cds`
+  cl <- data.frame(rep = rep(pr[[2]], each = 2), mem = as.vector(rbind(pr[[2]], pr[[1]])))
+  clu <- coal_dnds_clusters(c(q, s), cl, methods = m)$pairs
+  expect_identical(clu$seq1, pairs$seq2)
+  for (v in c("dN", "dS", "status")) expect_identical(clu[[v]], pairs[[v]], info = v)
+  # the other way round in `cds`: the subject's gene first, as coal_dnds_pairs with the sets exchanged
+  clu2 <- coal_dnds_clusters(c(s, q), cl, methods = m)$pairs
+  back <- coal_dnds_pairs(s, q, pairs = pr[, 2:1], methods = m)
+  for (v in c("dN", "dS", "status")) expect_identical(clu2[[v]], back[[v]], info = v)
 })

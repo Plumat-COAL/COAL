@@ -244,8 +244,8 @@ more. The R package's `coal_pipeline_pairs()` / `coal_pipeline_clusters()` call 
 
 | Name | What |
 |---|---|
-| `run_pairs(query, subject, out_dir, **options) -> PipelineResult` | pair mode: two CDS files in, `out_dir/dnds.tsv` out |
-| `run_clusters(cds, out_dir, clusters=None, **options) -> PipelineResult` | cluster mode: `cds` is one path or a list; `clusters=None` runs DIAMOND DeepClust |
+| `run_pairs(query, subject, out_dir, entry=None, **options) -> PipelineResult` | pair mode: two CDS files in, `out_dir/dnds.tsv` out |
+| `run_clusters(cds, out_dir, clusters=None, entry=None, **options) -> PipelineResult` | cluster mode: `cds` is one path or a list; `clusters=None` runs DIAMOND DeepClust |
 | `PipelineResult` | dataclass: `exit_code: int`, `report: dict[str, Any]`, `outputs: dict[str, str]` |
 | `PipelineError` | `RuntimeError`: raised by `codon_dnds`, `install_diamond`; a failed `run_pairs` / `run_clusters` does **not** raise it (below) |
 | `codon_dnds(groups, out_tsv, method=("YN",), codontable=1, jobs=0, group_column=None, codon_out=None, kaks_out=None, failures=None, extra_args=(), cpp=None) -> int` | the engine step alone, for groups held in Python: protein alignment, codon alignment and Ka/Ks in one `coal-cpp codon-dnds` process; returns the number of groups sent |
@@ -257,7 +257,9 @@ more. The R package's `coal_pipeline_pairs()` / `coal_pipeline_clusters()` call 
 | `summarise(dnds_path, plans, out_path)`, `main(argv=None) -> int` | the cluster summary from a `dnds.tsv`; the `coal pipeline` command line |
 
 **Arguments.** `query`, `subject`, `out_dir`, `cds`, `clusters` and every path option take a `str` or an
-`os.PathLike`. `**options` are the options of `coal pipeline pairs --help` / `clusters --help` with underscores:
+`os.PathLike`. `entry` (keyword only) names the caller in `report.json` (`"entry"`; default `"python-api"`;
+coalr passes `"coalr <version> coal_pipeline_pairs()"`); the report's `command` is the equivalent `coal pipeline`
+command line of the call. `**options` are the options of `coal pipeline pairs --help` / `clusters --help` with underscores:
 `method=["YN", "NG"]` (or one name), `pairs="orthologs.tsv"`, `jobs=8`, `codontable=1`, `aligner="nw"`,
 `ortho="rbh"`, `longest_isoform=True`, `gene_map=...`, `min_codons=50`, `max_ds=3`, `kaks_format=True`,
 `keep_alignments=True`, `resume=True`, `quiet=True`, ... The table in [pipeline.md](pipeline.md#options-common-to-both-modes) is the

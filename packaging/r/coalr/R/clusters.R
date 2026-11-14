@@ -60,8 +60,8 @@ coal_dnds_clusters <- function(cds, clusters, msa = NULL, aligner = NULL, method
                                threads = getOption("coalr.threads", 1L),
                                max_cluster_size = 200L, large_clusters = c("representative", "sample", "skip"),
                                pair_sample = 1000L, seed = 1L,
-                               matrix = "BLOSUM62", gap_open = 10, gap_extend = 0.5,
-                               end_gaps = c("free", "penalized"), preset = NULL, max_cells = 4e9,
+                               matrix = NULL, gap_open = 10, gap_extend = 0.5,
+                               end_gaps = c("free", "penalized"), preset = NULL, tie_break = NULL, max_cells = 4e9,
                                yn_flavour = c("kaks", "paml"), yn_weighting = TRUE, keep_alignments = FALSE,
                                comeron_flavour = c("coal", "gestimator"), li_flavour = c("coal", "seqinr"),
                                terminal_stops = c("drop", "compare"), min_codons = 0L, max_ds = NULL,
@@ -78,7 +78,7 @@ coal_dnds_clusters <- function(cds, clusters, msa = NULL, aligner = NULL, method
   large_clusters <- match.arg(large_clusters)
   pair_sample <- check_count(pair_sample, "pair_sample", 1L)
   if (!is.numeric(seed) || length(seed) != 1L || is.na(seed)) stop("`seed` must be one number", call. = FALSE)
-  ap <- align_params(matrix, gap_open, gap_extend, end_gaps, max_cells, preset)
+  ap <- align_params(matrix, gap_open, gap_extend, end_gaps, max_cells, preset, tie_break)
   yn_flavour <- match.arg(yn_flavour)
   comeron_flavour <- match.arg(comeron_flavour)
   li_flavour <- match.arg(li_flavour)
@@ -263,6 +263,7 @@ coal_dnds_clusters <- function(cds, clusters, msa = NULL, aligner = NULL, method
   summary$status <- ifelse(n_pairs == 0L, ifelse(selection[k_ord] == "skipped", "skipped", "ok"),
                            ifelse(n_ok > 0L, "ok", "failed"))
   summary$note <- notes[k_ord]
+  summary <- cluster_status(summary)
   rownames(summary) <- NULL
 
   # ---- failures of the engine (a member that could not be threaded, an alignment that does not fit)
@@ -455,4 +456,26 @@ coal_msa_aligner <- function(tool = c("clustalo", "mafft"), path = NULL, threads
     structure(rows, names = names(proteins))
   }
   structure(fn, name = tool)
+}
+
+# Pairs, but none with an estimate: the status of the pairs (saturated, else no_data, else not_converged) unless a
+# pair failed, and a note that counts them when there is no other one: the rule of `coal pipeline clusters`
+# (dnds_pipeline.py _cluster_status) and of orthologr's dNdS_clusters().
+cluster_status <- function(summary) {
+  none <- summary$n_pairs > 0L & summary$n_ok == 0L
+  for (i in which(none)) {
+    sat <- summary$n_saturated[i]
+    nd <- summary$n_no_data[i]
+    nc <- summary$n_not_converged[i]
+    fl <- summary$n_failed[i]
+    if (fl == 0L) summary$status[i] <- if (sat > 0L) "saturated" else if (nd > 0L) "no_data" else "not_converged"
+    if (is.na(summary$note[i]) || !nzchar(summary$note[i])) {
+      parts <- c(if (sat > 0L) paste(sat, "saturated"), if (nd > 0L) paste(nd, "without codons to compare"),
+                 if (nc > 0L) paste(nc, "not converged"), if (fl > 0L) paste(fl, "failed"))
+      n <- summary$n_pairs[i]
+      summary$note[i] <- paste0("no pair has an estimate (", n, " pair", if (n != 1L) "s", ": ",
+                                paste(parts, collapse = ", "), ")")
+    }
+  }
+  summary
 }

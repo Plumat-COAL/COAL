@@ -7,7 +7,10 @@ library (cpp/src/align.hpp) and its command-line tool ``coal-cpp-align``:
 * a gap of length k costs ``gap_open + (k - 1) * gap_extend`` (EMBOSS needle / Biopython convention);
 * ``free_end_gaps``: gaps before the first or after the last residue of either sequence cost nothing (EMBOSS
   needle's default); off, they cost the same as internal gaps (pwalign ``type = "global"``);
-* residues: letters (either case) and ``*``; letters missing from the matrix (J, O, U) score as X.
+* residues: letters (either case) and ``*``; letters missing from the matrix (J, O, U) score as X;
+* ``tie_break``: which of several co-optimal alignments is returned: ``"leftmost"`` (COAL's own traceback, gaps as
+  far left as the score allows; the default) or ``"pwalign"`` (the alignment pwalign::pairwiseAlignment returns:
+  the mirror image of the kernel run on the reversed sequences with a and b exchanged; the preset pwalign's).
 
 :func:`align_pairs` runs ``coal-cpp-align`` (multithreaded, ~1 GCUPS per thread) when it is found
 (:func:`find_align_binary`), else this module's pure-Python kernel (~1,000x slower; fine for a few short pairs).
@@ -29,6 +32,7 @@ __all__ = ["AlignParams", "PairAlignment", "LocalHit", "align_pair", "align_pair
            "expand_local_hit", "read_diamond_hits", "find_align_binary", "MATRICES", "DIAMOND_COLUMNS"]
 
 ALPHABET = "ARNDCQEGHILKMFPSTWYVBZX*"
+TIE_BREAKS = ("leftmost", "pwalign")
 # NCBI matrices (the values of Biopython's / NCBI's files; the same as cpp/src/align.cpp)
 _MATRIX_TEXT = {
     "BLOSUM62": """
@@ -109,6 +113,32 @@ _MATRIX_TEXT = {
  -1  -2  -2  -3  -4  -2  -2  -3  -2  -2  -2  -2  -2  -3  -3  -1  -1  -5  -3  -2  -3  -1  -2  -8
  -8  -8  -8  -8  -8  -8  -8  -8  -8  -8  -8  -8  -8  -8  -8  -8  -8  -8  -8  -8  -8  -8  -8   1
 """,
+    "BLOSUM62-PWALIGN": """
+  4  -1  -2  -2   0  -1  -1   0  -2  -1  -1  -1  -1  -2  -1   1   0  -3  -2   0  -2  -1  -1  -4
+ -1   5   0  -2  -3   1   0  -2   0  -3  -2   2  -1  -3  -2  -1  -1  -3  -2  -3  -1   0  -1  -4
+ -2   0   6   1  -3   0   0   0   1  -3  -3   0  -2  -3  -2   1   0  -4  -2  -3   4   0  -1  -4
+ -2  -2   1   6  -3   0   2  -1  -1  -3  -4  -1  -3  -3  -1   0  -1  -4  -3  -3   4   1  -1  -4
+  0  -3  -3  -3   9  -3  -4  -3  -3  -1  -1  -3  -1  -2  -3  -1  -1  -2  -2  -1  -3  -3  -1  -4
+ -1   1   0   0  -3   5   2  -2   0  -3  -2   1   0  -3  -1   0  -1  -2  -1  -2   0   4  -1  -4
+ -1   0   0   2  -4   2   5  -2   0  -3  -3   1  -2  -3  -1   0  -1  -3  -2  -2   1   4  -1  -4
+  0  -2   0  -1  -3  -2  -2   6  -2  -4  -4  -2  -3  -3  -2   0  -2  -2  -3  -3  -1  -2  -1  -4
+ -2   0   1  -1  -3   0   0  -2   8  -3  -3  -1  -2  -1  -2  -1  -2  -2   2  -3   0   0  -1  -4
+ -1  -3  -3  -3  -1  -3  -3  -4  -3   4   2  -3   1   0  -3  -2  -1  -3  -1   3  -3  -3  -1  -4
+ -1  -2  -3  -4  -1  -2  -3  -4  -3   2   4  -2   2   0  -3  -2  -1  -2  -1   1  -4  -3  -1  -4
+ -1   2   0  -1  -3   1   1  -2  -1  -3  -2   5  -1  -3  -1   0  -1  -3  -2  -2   0   1  -1  -4
+ -1  -1  -2  -3  -1   0  -2  -3  -2   1   2  -1   5   0  -2  -1  -1  -1  -1   1  -3  -1  -1  -4
+ -2  -3  -3  -3  -2  -3  -3  -3  -1   0   0  -3   0   6  -4  -2  -2   1   3  -1  -3  -3  -1  -4
+ -1  -2  -2  -1  -3  -1  -1  -2  -2  -3  -3  -1  -2  -4   7  -1  -1  -4  -3  -2  -2  -1  -1  -4
+  1  -1   1   0  -1   0   0   0  -1  -2  -2   0  -1  -2  -1   4   1  -3  -2  -2   0   0  -1  -4
+  0  -1   0  -1  -1  -1  -1  -2  -2  -1  -1  -1  -1  -2  -1   1   5  -2  -2   0  -1  -1  -1  -4
+ -3  -3  -4  -4  -2  -2  -3  -2  -2  -3  -2  -3  -1   1  -4  -3  -2  11   2  -3  -4  -2  -1  -4
+ -2  -2  -2  -3  -2  -1  -2  -3   2  -1  -1  -2  -1   3  -3  -2  -2   2   7  -1  -3  -2  -1  -4
+  0  -3  -3  -3  -1  -2  -2  -3  -3   3   1  -2   1  -1  -2  -2   0  -3  -1   4  -3  -2  -1  -4
+ -2  -1   4   4  -3   0   1  -1   0  -3  -4   0  -3  -3  -2   0  -1  -4  -3  -3   4   0  -1  -4
+ -1   0   0   1  -3   4   4  -2   0  -3  -3   1  -1  -3  -1   0  -1  -2  -2  -2   0   4  -1  -4
+ -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -4
+ -4  -4  -4  -4  -4  -4  -4  -4  -4  -4  -4  -4  -4  -4  -4  -4  -4  -4  -4  -4  -4  -4  -4   1
+""",
     "PAM250": """
   2  -2   0   0  -2   0   0   1  -1  -1  -2  -1  -1  -3   1   1   1  -6  -3   0   0   0   0  -8
  -2   6   0  -1  -4   1  -1  -3   2  -2  -3   3   0  -4   0   0  -1   2  -4  -2  -1   0  -1  -8
@@ -163,6 +193,7 @@ class AlignParams:
     gap_open: float = 10.0
     gap_extend: float = 0.5
     free_end_gaps: bool = True
+    tie_break: str = "leftmost"
 
     @classmethod
     def needle(cls) -> "AlignParams":
@@ -172,8 +203,11 @@ class AlignParams:
     @classmethod
     def pwalign(cls) -> "AlignParams":
         """pwalign::pairwiseAlignment(type="global", substitutionMatrix="BLOSUM62") with its default gapOpening=10,
-        gapExtension=4: pwalign charges gapOpening + k*gapExtension, i.e. open 14, extend 4; end gaps penalised."""
-        return cls(gap_open=14.0, gap_extend=4.0, free_end_gaps=False)
+        gapExtension=4: pwalign charges gapOpening + k*gapExtension, i.e. open 14, extend 4; end gaps penalised;
+        pwalign's copy of BLOSUM62 (BLOSUM62-PWALIGN: other B, Z and X scores) and, among co-optimal alignments,
+        the one pwalign returns (tie_break="pwalign"): the alignment of pwalign::pairwiseAlignment()."""
+        return cls(matrix="BLOSUM62-PWALIGN", gap_open=14.0, gap_extend=4.0, free_end_gaps=False,
+                   tie_break="pwalign")
 
     def check(self) -> None:
         if self.matrix.upper() not in MATRICES:
@@ -183,11 +217,14 @@ class AlignParams:
         if not (0 <= e <= o <= 1000):
             raise AlignError(f"gap costs must satisfy 1000 >= gap_open >= gap_extend >= 0 (given open {o}, "
                              f"extend {e})", "align_params")
+        if self.tie_break not in TIE_BREAKS:
+            raise AlignError(f"tie_break: {' or '.join(TIE_BREAKS)}, not {self.tie_break!r}", "align_params")
 
     def args(self) -> list[str]:
         """The coal-cpp-align options for these parameters."""
-        return ["--matrix", self.matrix, "--gap-open", repr(float(self.gap_open)), "--gap-extend",
-                repr(float(self.gap_extend)), "--end-gaps", "free" if self.free_end_gaps else "penalized"]
+        out = ["--matrix", self.matrix, "--gap-open", repr(float(self.gap_open)), "--gap-extend",
+               repr(float(self.gap_extend)), "--end-gaps", "free" if self.free_end_gaps else "penalized"]
+        return out + (["--tie-break", self.tie_break] if self.tie_break != "leftmost" else [])
 
 
 @dataclass
@@ -285,6 +322,12 @@ def align_pair(a: str, b: str, params: AlignParams = AlignParams()) -> PairAlign
     """Global alignment of a against b in pure Python (O(len(a) * len(b)) time; use align_pairs for many or long
     pairs). Same kernel, tie-breaking and result as coal-cpp-align."""
     params.check()
+    if params.tie_break == "pwalign":  # the mirror image of the kernel on the reversed pair (module docstring)
+        _encode(a, "first"), _encode(b, "second")
+        r = align_pair(b[::-1], a[::-1], AlignParams(params.matrix, params.gap_open, params.gap_extend,
+                                                     params.free_end_gaps))
+        res = PairAlignment(r.b[::-1], r.a[::-1], score=r.score)
+        return _stats(res, MATRICES[params.matrix.upper()])
     k, o, e = _scale(params)
     mat = MATRICES[params.matrix.upper()]
     ea, eb = _encode(a, "first"), _encode(b, "second")

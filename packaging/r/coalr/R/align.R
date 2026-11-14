@@ -14,8 +14,8 @@
 #' coal_align_pairs("MAKGLERWW", "MAKGLDR")
 #' coal_align_pairs(c("MKTAYIAK", "MSSHEGGK"), c("MKTAIAK", "MSHEGGKK"), preset = "pwalign")
 #' @export
-coal_align_pairs <- function(a, b, matrix = "BLOSUM62", gap_open = 10, gap_extend = 0.5,
-                             end_gaps = c("free", "penalized"), preset = NULL, max_cells = 4e9,
+coal_align_pairs <- function(a, b, matrix = NULL, gap_open = 10, gap_extend = 0.5,
+                             end_gaps = c("free", "penalized"), preset = NULL, tie_break = NULL, max_cells = 4e9,
                              threads = getOption("coalr.threads", 1L)) {
   a <- as_seqs(a, "a", need_names = FALSE)
   b <- as_seqs(b, "b", need_names = FALSE)
@@ -25,6 +25,6 @@ coal_align_pairs <- function(a, b, matrix = "BLOSUM62", gap_open = 10, gap_exten
     stop("`a` and `b` must have the same length (", length(a), " and ", length(b), ")", call. = FALSE)
   }
   threads <- check_count(threads, "threads", 0L)
-  ap <- align_params(matrix, gap_open, gap_extend, end_gaps, max_cells, preset)
+  ap <- align_params(matrix, gap_open, gap_extend, end_gaps, max_cells, preset, tie_break)
   as.data.frame(coalr_align(unname(a), unname(b), ap, threads), stringsAsFactors = FALSE)
 }

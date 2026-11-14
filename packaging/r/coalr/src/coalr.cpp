@@ -173,6 +173,9 @@ AlignParams need_align(const Rcpp::List& a) {
     p.gap_open = Rcpp::as<double>(a["gap_open"]);
     p.gap_extend = Rcpp::as<double>(a["gap_extend"]);
     p.free_end_gaps = Rcpp::as<bool>(a["free_end_gaps"]);
+    if (a.containsElementNamed("tie_break") &&
+        !coal::parse_tie_break(Rcpp::as<std::string>(a["tie_break"]), p.tie_break))
+        Rcpp::stop("tie_break must be \"leftmost\" or \"pwalign\"");
     const double mc = Rcpp::as<double>(a["max_cells"]);
     if (!(mc >= 0) || !std::isfinite(mc)) Rcpp::stop("max_cells must be a number >= 0 (0 = no limit)");
     p.max_cells = (uint64_t)mc;
@@ -308,6 +311,9 @@ Rcpp::List coalr_dnds(SEXP cds, SEXP member_ids, Rcpp::IntegerVector members, SE
                     if (have_rows && !is_na(rows, k)) mem.row = str_at(rows, k);
                 }
             }
+            // a pair aligned here is aligned in input order (the earlier CDS first: dnds.hpp Group::swap_pair)
+            if (b - a == 2 && members[a] != NA_INTEGER && members[a + 1] != NA_INTEGER && members[a + 1] < members[a])
+                it.g.swap_pair = true;
             const int mode = unit_pairs[(R_xlen_t)u];
             if (mode == 1) {
                 it.g.pairs = dnds::Pairs::representative;
