@@ -12,6 +12,9 @@ sets comeron_li_cases, edge_cases and sim_small:
                                     column names are in that script)
   golden/<set>.coal.comeron_li.tsv  `coal dnds -m Comeron -m Li`, the default flavours (regression)
   golden/<set>.coal.comeron_li.kaks `coal kaks -m Comeron -m Li` (regression of the 22-column format)
+  golden/<set>.coal.comeron_li.libsequence.tsv  the same as .tsv with --comeron-twosubs libsequence
+                                    --comeron-min-sites 0: the defaults of COAL before 2026-11-14 (D8, D9),
+                                    which these options restore
 and, from the references of comeron_li_cases, the fixture of the R package's tests:
   packaging/r/coalr/tests/testthat/fixtures/comeron_li_refs.tsv   (139 pairs: the rows, gestimator's dN, dS and
                                     ratio, seqinr's ka, ks, vka and vks)
@@ -137,6 +140,9 @@ def main() -> int:
         if a.coal_cpp:
             subprocess.run([a.coal_cpp, "dnds", str(src), "--format", "axt", "-m", "Comeron", "-m", "Li", "-q",
                             "--digits", "15", "-o", str(gold / f"{s}.coal.comeron_li.tsv")], check=True)
+            subprocess.run([a.coal_cpp, "dnds", str(src), "--format", "axt", "-m", "Comeron", "-m", "Li", "-q",
+                            "--digits", "15", "--comeron-twosubs", "libsequence", "--comeron-min-sites", "0",
+                            "-o", str(gold / f"{s}.coal.comeron_li.libsequence.tsv")], check=True)
             subprocess.run([a.coal_cpp, "kaks", "-i", str(src), "-m", "Comeron", "-m", "Li", "-q",
                             "-o", str(gold / f"{s}.coal.comeron_li.kaks")], check=True)
     ref_g, ref_s = gold / "comeron_li_cases.gestimator_ref.tsv", gold / "comeron_li_cases.seqinr_ref.tsv"

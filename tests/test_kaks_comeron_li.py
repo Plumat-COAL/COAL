@@ -99,10 +99,14 @@ class TestAgainstGestimator(ComeronLiBase):
         self.assertGreater(n_values, 1200)
 
     def test_default_flavour_differs_only_as_documented(self):
+        # the policy of the default flavour, with the pathways and the NA rule of the gestimator flavour
+        # (--comeron-twosubs libsequence --comeron-min-sites 0: COAL's defaults before D8 / D9, 2026-11-14)
         for s in SETS:
             seqs = read_axt(KDIR / f"{s}.axt")
-            dfl = self.tidy(KDIR / f"{s}.axt", "-m", "Comeron")
-            leg = self.tidy(KDIR / f"{s}.axt", "-m", "Comeron", "--comeron-flavour", "gestimator")
+            dfl = self.tidy(KDIR / f"{s}.axt", "-m", "Comeron", "--comeron-twosubs", "libsequence",
+                            "--comeron-min-sites", "0")
+            leg = self.tidy(KDIR / f"{s}.axt", "-m", "Comeron", "--comeron-flavour", "gestimator",
+                            "--comeron-min-sites", "0")
             same = 0
             for (name, m), d in dfl.items():
                 l = leg[(name, m)]
@@ -210,8 +214,140 @@ class TestComeronLiRegression(ComeronLiBase):
             cmp(self, self.run_cpp("dnds", axt, "--format", "axt", "-q", "--digits", "15", "-m", "Comeron", "-m",
                                    "Li").stdout,
                 (GOLD / f"{s}.coal.comeron_li.tsv").read_text(encoding="utf-8"), f"{s} dnds")
+            # the two options restore the output of COAL before D8 / D9 byte for byte
+            got = self.run_cpp("dnds", axt, "--format", "axt", "-q", "--digits", "15", "-m", "Comeron", "-m", "Li",
+                               "--comeron-twosubs", "libsequence", "--comeron-min-sites", "0").stdout
+            self.assertEqual(got, (GOLD / f"{s}.coal.comeron_li.libsequence.tsv").read_text(encoding="utf-8"), s)
             cmp(self, self.run_cpp("kaks", "-i", axt, "-q", "-m", "Comeron", "-m", "Li").stdout,
                 (GOLD / f"{s}.coal.comeron_li.kaks").read_text(encoding="utf-8"), f"{s} kaks")
+
+
+def random_pairs(n: int, codons: int, seed: int):
+    """Random sense-codon pairs in which many codons differ at two positions (the TwoSubs case)."""
+    import random
+    rng = random.Random(seed)
+    bases = "TCAG"
+    sense = [a + b + c for a in bases for b in bases for c in bases if a + b + c not in STOPS]
+    out = []
+    for k in range(n):
+        x, y = [], []
+        for _ in range(codons):
+            c = rng.choice(sense)
+            x.append(c)
+            r = rng.random()
+            if r < 0.6:
+                y.append(c)
+                continue
+            npos = 2 if r < 0.85 else 1
+            while True:
+                d = list(c)
+                for pos in rng.sample(range(3), npos):
+                    d[pos] = rng.choice([b for b in bases if b != c[pos]])
+                if "".join(d) not in STOPS:
+                    break
+            y.append("".join(d))
+        out.append((f"p{k}", "".join(x), "".join(y)))
+    return out
+
+
+class TestTwoSubsAndMinSites(ComeronLiBase):
+    """D8 (2026-11-14): Comeron's two-position pathways (--comeron-twosubs); D9: the minimum number of sites for
+    which a class's undefined correction makes dN or dS NA (--comeron-min-sites). docs/kaks.md."""
+
+    def write_pairs(self, tmp, pairs, swap=False):
+        from pathlib import Path
+        p = Path(tmp) / ("ba.axt" if swap else "ab.axt")
+        with open(p, "w", encoding="utf-8", newline="\n") as f:
+            for name, a, b in pairs:
+                f.write(f"{name}\n{b if swap else a}\n{a if swap else b}\n\n")
+        return p
+
+    def test_symmetric_by_default(self):
+        # a distance does not depend on which sequence is first: with Comeron's pathways swapping the rows changes
+        # no digit (0 of 300 pairs); libsequence's branches change Ka in most pairs (279 of these 300)
+        import tempfile
+        pairs = random_pairs(300, 150, 20261114)
+        with tempfile.TemporaryDirectory() as tmp:
+            ab, ba = self.write_pairs(tmp, pairs), self.write_pairs(tmp, pairs, swap=True)
+            for flav in ((), ("--comeron-flavour", "gestimator", "--comeron-twosubs", "comeron")):
+                x, y = self.tidy(ab, "-m", "Comeron", *flav), self.tidy(ba, "-m", "Comeron", *flav)
+                for key in x:
+                    for k in ("dN", "dS", "dNdS", "status"):
+                        self.assertEqual(x[key][k], y[key][k], f"{flav} {key} {k}")
+            x = self.tidy(ab, "-m", "Comeron", "--comeron-twosubs", "libsequence")
+            y = self.tidy(ba, "-m", "Comeron", "--comeron-twosubs", "libsequence")
+            self.assertGreater(sum(x[k]["dN"] != y[k]["dN"] for k in x), 200)
+            # the default is comeron in the coal flavour, libsequence in the gestimator flavour
+            dfl = self.tidy(ab, "-m", "Comeron")
+            self.assertEqual(dfl, self.tidy(ab, "-m", "Comeron", "--comeron-twosubs", "comeron"))
+            g = self.tidy(ab, "-m", "Comeron", "--comeron-flavour", "gestimator")
+            self.assertEqual(g, self.tidy(ab, "-m", "Comeron", "--comeron-flavour", "gestimator",
+                                          "--comeron-twosubs", "libsequence"))
+            self.assertNotEqual([dfl[k]["dN"] for k in dfl], [g[k]["dN"] for k in g])
+
+    def test_one_position_pairs_unchanged(self):
+        # only codons that differ at exactly two positions take the TwoSubs pathways
+        import tempfile
+        a = "GCTAAAGGTCTGTTTGATCATACC" * 5
+        b = "GCAAAGGGTTTGTTCGACCACACT" * 5      # every codon differs at one position at most
+        with tempfile.TemporaryDirectory() as tmp:
+            p = self.write_pairs(tmp, [("x", a, b)])
+            self.assertEqual(self.tidy(p, "-m", "Comeron", "--comeron-twosubs", "comeron"),
+                             self.tidy(p, "-m", "Comeron", "--comeron-twosubs", "libsequence"))
+
+    def test_min_sites_never_changes_a_value(self):
+        # a value that is not NA under the previous rule (--comeron-min-sites 0) is the same under the default (3)
+        # and under a larger threshold; only NA rows can get a value, with status warning and the note
+        for s in SETS:
+            old = self.tidy(KDIR / f"{s}.axt", "-m", "Comeron", "--comeron-min-sites", "0")
+            for ms in ("3", "10"):
+                new = self.tidy(KDIR / f"{s}.axt", "-m", "Comeron", "--comeron-min-sites", ms)
+                if ms == "3":
+                    self.assertEqual(new, self.tidy(KDIR / f"{s}.axt", "-m", "Comeron"))
+                for key, o in old.items():
+                    n = new[key]
+                    for k, which in (("dN", "Ka"), ("dS", "Ks")):
+                        if o[k] != "NA":
+                            self.assertEqual(n[k], o[k], f"{s} {key} {k}")
+                        elif n[k] != "NA":
+                            self.assertIn(f"{which}: a site class with fewer than {ms} sites", n["note"], key)
+                            self.assertIn(n["status"], ("warning", "saturated", "no_data"), key)
+
+    def test_min_sites_one_codon(self):
+        # one codon, nonsynonymous change: the 2-fold transversional class has < 1 site, its correction is
+        # undefined. Previous rule: dN NA (saturated); default: gestimator's value, flagged
+        d = self.pair_rows("GCT", "GAT")
+        self.assertEqual(d["0"]["dN"], "NA")
+        self.assertEqual(d["0"]["status"], "saturated")
+        self.assertNotEqual(d["3"]["dN"], "NA")
+        self.assertEqual(d["3"]["status"], "warning")
+        self.assertIn("fewer than 3 sites has an undefined correction", d["3"]["note"])
+        g = self.pair_rows("GCT", "GAT", "--comeron-flavour", "gestimator")
+        self.assertEqual(g["3"]["dN"], d["3"]["dN"])      # gestimator's number
+        self.assertEqual(g["0"]["dN"], d["3"]["dN"])      # the gestimator flavour always gives it
+        # only the note says why: orthologr reads "Ka: correction undefined" as "not an estimate"
+        self.assertNotIn("Ka: correction undefined", g["3"]["note"])
+        self.assertIn("Ka: correction undefined", g["0"]["note"])
+
+    def pair_rows(self, a, b, *extra):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            p = self.write_pairs(tmp, [("x", a, b)])
+            return {ms: self.tidy(p, "-m", "Comeron", "--comeron-min-sites", ms, *extra)[("x", "Comeron")]
+                    for ms in ("0", "3")}
+
+    def test_options_refused(self):
+        r = self.run_cpp("dnds", KDIR / "sim_small.axt", "-m", "Comeron", "--comeron-twosubs", "x", check=False)
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("expected comeron or libsequence", r.stderr)
+        for bad in ("-1", "x", "nan"):
+            r = self.run_cpp("dnds", KDIR / "sim_small.axt", "-m", "Comeron", "--comeron-min-sites", bad, check=False)
+            self.assertEqual(r.returncode, 2, bad)
+            self.assertIn("--comeron-min-sites", r.stderr)
+        r = self.run_cpp("kaks", "-i", KDIR / "sim_small.axt", "-q", "-m", "Comeron", "--comeron-twosubs",
+                         "libsequence", "--comeron-min-sites", "0")
+        self.assertEqual(r.stdout, self.run_cpp("kaks", "-i", KDIR / "sim_small.axt", "-q", "-m", "Comeron",
+                                                "--comeron-twosubs=libsequence", "--comeron-min-sites=0").stdout)
 
 
 class TestComeronLiCli(ComeronLiBase):
