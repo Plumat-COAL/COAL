@@ -70,6 +70,7 @@ const char* CODON_DNDS_HELP =
     "                 [--matrix NAME] [--gap-open X] [--gap-extend X] [--end-gaps free|penalized] [--max-cells N]\n"
     "                 [--tie-break leftmost|pwalign] [--flanks gap|align] [--yn-flavour kaks|paml]\n"
     "                 [--yn-weighting 0|1] [--comeron-flavour coal|gestimator] [--li-flavour coal|seqinr]\n"
+    "                 [--comeron-twosubs comeron|libsequence] [--comeron-min-sites N]\n"
     "                 [--terminal-stops drop|compare] [--min-codons N] [--max-ds X] [--min-identity P]\n"
     "                 [--new-files] [-q]\n"
     "\n"
@@ -96,6 +97,7 @@ const char* CODON_DNDS_HELP =
     "  --tie-break T    which of several protein alignments with the best score: leftmost (gaps as far left\n"
     "                   as possible; the default) or pwalign (the one pwalign::pairwiseAlignment returns)\n"
     "  --comeron-flavour F, --li-flavour F  as in `coal dnds` (coal, the default; gestimator; seqinr)\n"
+    "  --comeron-twosubs T, --comeron-min-sites N  as in `coal dnds`\n"
     "  --terminal-stops S  with the flavours gestimator / seqinr: drop (default) ends a pair before the\n"
     "                   terminal stop codons; compare takes the two stop codons as the last compared column\n"
     "                   when both genes end in one (as orthologr 0.4.3 does)\n"
@@ -694,6 +696,14 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
             if (!it.value(v) || (v != "coal" && v != "gestimator"))
                 return usage(prog, s + ": expected coal or gestimator");
             c.opt.kaks.comeron_flavour = v == "coal" ? kaks::ComeronFlavour::coal : kaks::ComeronFlavour::gestimator;
+        } else if (s == "--comeron-twosubs") {
+            if (!it.value(v) || (v != "comeron" && v != "libsequence"))
+                return usage(prog, s + ": expected comeron or libsequence");
+            c.opt.kaks.comeron_twosubs = v == "comeron" ? kaks::ComeronTwoSubs::comeron : kaks::ComeronTwoSubs::libsequence;
+        } else if (s == "--comeron-min-sites") {
+            double ms;
+            if (!it.value(v) || !to_double(v, ms) || !(ms >= 0)) return usage(prog, s + ": expected a number >= 0");
+            c.opt.kaks.comeron_min_sites = ms;
         } else if (s == "--li-flavour" || s == "--li-flavor") {
             if (!it.value(v) || (v != "coal" && v != "seqinr")) return usage(prog, s + ": expected coal or seqinr");
             c.opt.kaks.li_flavour = v == "coal" ? kaks::LiFlavour::coal : kaks::LiFlavour::seqinr;

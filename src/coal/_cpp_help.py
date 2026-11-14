@@ -7,7 +7,8 @@ HELP = {
     'kaks': (
         'usage: coal kaks -i IN -o OUT [-m METHOD ...] [-c TABLE] [-j N] [--pairs all|consecutive]\n'
         '                 [--digits N] [--yn-flavour kaks|paml] [--yn-weighting 0|1]\n'
-        '                 [--comeron-flavour coal|gestimator] [--li-flavour coal|seqinr]\n'
+        '                 [--comeron-flavour coal|gestimator] [--comeron-twosubs comeron|libsequence]\n'
+        '                 [--comeron-min-sites N] [--li-flavour coal|seqinr]\n'
         '\n'
         "Ka/Ks for pairs of aligned coding sequences, written in KaKs_Calculator 2.0's tab-separated format.\n"
         "Takes KaKs_Calculator's -i -o -m -c for the seven KaKs_Calculator methods below (the default is YN;\n"
@@ -28,7 +29,12 @@ HELP = {
         '  --yn-weighting W  1: weight pathways (default); 0: equal weights (PAML yn00 weighting = 0)\n'
         "  --comeron-flavour F  Comeron: coal (default: COAL's stop-codon policy, NA when the correction is\n"
         "                 undefined) or gestimator (the numbers of orthologr 0.4.3's gestimator: stop codons\n"
-        '                 compared, undefined logarithms set to 0)\n'
+        "                 compared, undefined logarithms set to 0, libsequence's two-position pathways)\n"
+        '  --comeron-twosubs T  Comeron, codons that differ at two positions: comeron (the two pathways of\n'
+        '                 Comeron 1995; default with --comeron-flavour coal) or libsequence (the branches\n'
+        '                 libsequence counts, which depend on which sequence is first; default with gestimator)\n'
+        '  --comeron-min-sites N  Comeron, coal flavour: a site class with fewer than N sites cannot make dN or\n'
+        '                 dS NA (its undefined logarithm is 0, status warning; default 3; 0: any class can)\n'
         "  --li-flavour F Li: coal (default: COAL's stop-codon policy) or seqinr (stop codons compared, as\n"
         "                 seqinr::kaks); seqinr's sentinel 9.999999 is NA in both\n"
         '  -q, --quiet    no summary on stderr\n'
@@ -36,8 +42,8 @@ HELP = {
     'dnds': (
         'usage: coal dnds IN [-o OUT] [-m METHOD ...] [-c TABLE] [-j N] [--pairs all|consecutive]\n'
         '                 [--format auto|axt|fasta] [--digits N] [--yn-flavour kaks|paml] [--yn-weighting 0|1]\n'
-        '                 [--comeron-flavour coal|gestimator] [--li-flavour coal|seqinr]\n'
-        '                 [--min-codons N] [--max-ds X]\n'
+        '                 [--comeron-flavour coal|gestimator] [--comeron-twosubs comeron|libsequence]\n'
+        '                 [--comeron-min-sites N] [--li-flavour coal|seqinr] [--min-codons N] [--max-ds X]\n'
         '\n'
         'dN/dS for pairs of aligned coding sequences as a tidy TSV, one row per pair and method:\n'
         'seq1 seq2 method dN dS dNdS SE_dN SE_dS N_sites S_sites Nd Sd codons_compared status note\n'
@@ -57,7 +63,12 @@ HELP = {
         '  --yn-weighting W  1: weight pathways (default); 0: equal weights (PAML yn00 weighting = 0)\n'
         "  --comeron-flavour F  Comeron: coal (default: COAL's stop-codon policy, NA when the correction is\n"
         "                 undefined) or gestimator (the numbers of orthologr 0.4.3's gestimator: stop codons\n"
-        '                 compared, undefined logarithms set to 0)\n'
+        "                 compared, undefined logarithms set to 0, libsequence's two-position pathways)\n"
+        '  --comeron-twosubs T  Comeron, codons that differ at two positions: comeron (the two pathways of\n'
+        '                 Comeron 1995; default with --comeron-flavour coal) or libsequence (the branches\n'
+        '                 libsequence counts, which depend on which sequence is first; default with gestimator)\n'
+        '  --comeron-min-sites N  Comeron, coal flavour: a site class with fewer than N sites cannot make dN or\n'
+        '                 dS NA (its undefined logarithm is 0, status warning; default 3; 0: any class can)\n'
         "  --li-flavour F Li: coal (default: COAL's stop-codon policy) or seqinr (stop codons compared, as\n"
         "                 seqinr::kaks); seqinr's sentinel 9.999999 is NA in both\n"
         '  --min-codons N flag estimates from fewer than N compared codons: status warning and the note\n'
@@ -91,6 +102,7 @@ HELP = {
         '                 [--matrix NAME] [--gap-open X] [--gap-extend X] [--end-gaps free|penalized] [--max-cells N]\n'
         '                 [--tie-break leftmost|pwalign] [--flanks gap|align] [--yn-flavour kaks|paml]\n'
         '                 [--yn-weighting 0|1] [--comeron-flavour coal|gestimator] [--li-flavour coal|seqinr]\n'
+        '                 [--comeron-twosubs comeron|libsequence] [--comeron-min-sites N]\n'
         '                 [--terminal-stops drop|compare] [--min-codons N] [--max-ds X] [--min-identity P]\n'
         '                 [--new-files] [-q]\n'
         '\n'
@@ -117,6 +129,7 @@ HELP = {
         '  --tie-break T    which of several protein alignments with the best score: leftmost (gaps as far left\n'
         '                   as possible; the default) or pwalign (the one pwalign::pairwiseAlignment returns)\n'
         '  --comeron-flavour F, --li-flavour F  as in `coal dnds` (coal, the default; gestimator; seqinr)\n'
+        '  --comeron-twosubs T, --comeron-min-sites N  as in `coal dnds`\n'
         '  --terminal-stops S  with the flavours gestimator / seqinr: drop (default) ends a pair before the\n'
         '                   terminal stop codons; compare takes the two stop codons as the last compared column\n'
         '                   when both genes end in one (as orthologr 0.4.3 does)\n'

@@ -37,13 +37,18 @@
 //   - ComeronFlavour::gestimator: upstream's behaviour throughout (stop codons compared as codons, U not read
 //     as T, undefined logarithms replaced by 0, the Kimura rule); upstream's 999 ("cannot be calculated") is NA;
 //   - only maxHits = 3 (gestimator's default, the one orthologr uses) is implemented.
-// One property of the upstream code is kept on purpose in both flavours, because the task of this method is to
-// give gestimator's numbers: for codons that differ at two positions, TwoSubs calls its Calculate() with the
-// arguments (codon1, intermediate1, codon2, intermediate2) where the parameters are (codon1, intermediate1,
-// intermediate2, codon2), so the four branches counted are codon1-int1, int1-int2, codon1-codon2 and
-// codon2-int2 instead of codon1-int1, int1-codon2, codon1-int2, int2-codon2, and SingleSub, given two codons that
-// differ at two positions, classifies the change at the last of them. The current libsequence (1.9.8,
-// src/TwoSubs.cc) makes the same call. docs/kaks.md ("Comeron") describes what follows from it.
+//   - codons that differ at two positions (TwoSubs): upstream calls its Calculate() with the arguments (codon1,
+//     intermediate1, codon2, intermediate2) where the parameters are (codon1, intermediate1, intermediate2,
+//     codon2), so the four branches it counts are codon1-int1, int1-int2, codon1-codon2 and codon2-int2 instead
+//     of the two pathways codon1-int1-codon2 and codon1-int2-codon2 (and SingleSub, given two codons that differ
+//     at two positions, classifies the change at the last of them). The current libsequence (1.9.8,
+//     src/TwoSubs.cc) makes the same call, and its repository is archived. With it the estimate depends on which
+//     sequence is first (Ka changes in 279 of 300 random pairs when the rows are swapped). Options::comeron_twosubs:
+//     ComeronTwoSubs::comeron (the default with ComeronFlavour::coal) counts the two pathways; libsequence (the
+//     default with ComeronFlavour::gestimator) the upstream branches, for gestimator's numbers;
+//   - Options::comeron_min_sites (default 3): in ComeronFlavour::coal a site class with fewer sites than this
+//     cannot make dN or dS NA; its undefined logarithm is set to 0, as upstream does (status warning, with a
+//     note). docs/kaks.md ("Comeron") describes both.
 //
 // Reference: Comeron JM (1995) A method for estimating the numbers of synonymous and nonsynonymous substitutions
 // per site. J Mol Evol 41:1152-1159.
@@ -62,6 +67,7 @@
 
 #include <cfloat>
 #include <cmath>
+#include <cstdio>
 #include <string>
 
 #include "kaks.hpp"
@@ -281,8 +287,9 @@ Counts single_sub(const Tables& t, int c1, int c2) {
 
 inline double gdist(const Tables& t, int c1, int c2) { return GRANTHAM[t.aa[c1]][t.aa[c2]]; }
 
-// TwoSubs with GranthamWeights2
-Counts two_subs(const Tables& t, int c1, int c2) {
+// TwoSubs with GranthamWeights2. libseq: the branches upstream counts (see the header of this file); otherwise
+// the two pathways c1 - int0 - c2 and c1 - int1 - c2.
+Counts two_subs(const Tables& t, int c1, int c2, bool libseq) {
     int pos[2] = {0, 0};
     for (int i = 0, j = 0; i <= 2; ++i)
         if (base_at(c1, i) != base_at(c2, i)) pos[j++] = i;
@@ -307,9 +314,9 @@ Counts two_subs(const Tables& t, int c1, int c2) {
     // upstream: Calculate(sitesObj, codon1, intermediates[0], codon2, intermediates[1], ...) into the parameters
     // (codon1, int_1, int_2, codon2): see the header of this file
     const Counts b1 = single_sub(t, c1, int0);
-    const Counts b2 = single_sub(t, int0, int1);
-    const Counts b3 = single_sub(t, c1, c2);
-    const Counts b4 = single_sub(t, c2, int1);
+    const Counts b2 = libseq ? single_sub(t, int0, int1) : single_sub(t, int0, c2);
+    const Counts b3 = libseq ? single_sub(t, c1, c2) : single_sub(t, c1, int1);
+    const Counts b4 = libseq ? single_sub(t, c2, int1) : single_sub(t, int1, c2);
     Counts out;
     for (int k = 0; k < NCOUNT; ++k) out.v[k] = (b1.v[k] + b2.v[k]) * w[0] + (b3.v[k] + b4.v[k]) * w[1];
     return out;
@@ -369,6 +376,8 @@ Result run_comeron(const Prepared& p, const GeneticCode& code, const Options& op
     const std::vector<uint8_t>& s1 = legacy ? p.r1 : p.c1;
     const std::vector<uint8_t>& s2 = legacy ? p.r2 : p.c2;
     const Tables& t = tables();
+    const bool libseq = resolved_twosubs(opt.comeron_twosubs, opt.comeron_flavour) == ComeronTwoSubs::libsequence;
+    const double min_sites = opt.comeron_min_sites > 0.0 ? opt.comeron_min_sites : 0.0;
 
     // Sites::count_sites (maxhits = 3: every codon column counts)
     double L0 = 0., L2S = 0., L2V = 0.0, L4 = 0.0;
@@ -388,7 +397,7 @@ Result run_comeron(const Prepared& p, const GeneticCode& code, const Options& op
         if (a == b) continue;
         const int ndiff = num_diffs(a, b);
         subs += ndiff;
-        const Counts k = ndiff == 1 ? single_sub(t, a, b) : ndiff == 2 ? two_subs(t, a, b) : three_subs(t, a, b);
+        const Counts k = ndiff == 1 ? single_sub(t, a, b) : ndiff == 2 ? two_subs(t, a, b, libseq) : three_subs(t, a, b);
         for (int j = 0; j < NCOUNT; ++j) c[j] += k.v[j];
     }
     for (int j = 0; j < NCOUNT; ++j)
@@ -447,21 +456,24 @@ Result run_comeron(const Prepared& p, const GeneticCode& code, const Options& op
     const double P4_site = p4 / L4;
     const double Q4_site = q4 / L4;
 
-    // (a class without sites has weight 0 in As / Aa: an undefined logarithm there is no saturation)
-    bool none = false;
-    log1 = checked_log(1.0 - (2.0 * P2S_site) - Qa, L2S > 0 ? saturated_s : none);
-    log2 = checked_log(1.0 - (2.0 * Qa), L2S > 0 ? saturated_s : none);
+    // (a class without sites has weight 0 in As / Aa: an undefined logarithm there is no saturation; one in a
+    // class with fewer than min_sites sites is set to 0 and flagged in small_s / small_a, Options::comeron_min_sites)
+    bool none = false, small_s = false, small_a = false;
+    auto flag_s = [&](double L) -> bool& { return !(L > 0) ? none : L < min_sites ? small_s : saturated_s; };
+    auto flag_a = [&](double L) -> bool& { return !(L > 0) ? none : L < min_sites ? small_a : saturated_a; };
+    log1 = checked_log(1.0 - (2.0 * P2S_site) - Qa, flag_s(L2S));
+    log2 = checked_log(1.0 - (2.0 * Qa), flag_s(L2S));
     const double A2S = (-0.5) * log1 + (0.25) * log2;
-    log1 = checked_log(1.0 - (2.0 * P4_site) - Q4_site, L4 > 0 ? saturated_s : none);
-    log2 = checked_log(1.0 - (2.0 * Q4_site), L4 > 0 ? saturated_s : none);
+    log1 = checked_log(1.0 - (2.0 * P4_site) - Q4_site, flag_s(L4));
+    log2 = checked_log(1.0 - (2.0 * Q4_site), flag_s(L4));
     const double A4 = (-0.5) * log1 + (0.25) * log2;
     double As = (L2S * A2S + L4 * A4) / (L2S + L4);
 
-    log1 = checked_log(1.0 - (2.0 * P2V_site) - Qs, L2V > 0 ? saturated_a : none);
-    log2 = checked_log(1.0 - (2.0 * Qs), L2V > 0 ? saturated_a : none);
+    log1 = checked_log(1.0 - (2.0 * P2V_site) - Qs, flag_a(L2V));
+    log2 = checked_log(1.0 - (2.0 * Qs), flag_a(L2V));
     const double A2V = (-0.5) * log1 + (0.25) * log2;
-    log1 = checked_log(1.0 - (2.0 * P0_site) - Q0_site, L0 > 0 ? saturated_a : none);
-    log2 = checked_log(1.0 - (2.0 * Q0_site), L0 > 0 ? saturated_a : none);
+    log1 = checked_log(1.0 - (2.0 * P0_site) - Q0_site, flag_a(L0));
+    log2 = checked_log(1.0 - (2.0 * Q0_site), flag_a(L0));
     const double A0 = (-0.5) * log1 + (0.25) * log2;
     double Aa = (L2V * A2V + L0 * A0) / (L2V + L0);
 
@@ -482,6 +494,15 @@ Result run_comeron(const Prepared& p, const GeneticCode& code, const Options& op
     auto no_sites = [&](const char* msg) {
         r.status = Status::no_data;
         add_note(r, msg);
+    };
+    // Options::comeron_min_sites: the value stands; say why (the note must not read "correction undefined, ..."
+    // at its start: orthologr turns rows with that note into NA)
+    auto small_class = [&](const char* which) {
+        if (r.status == Status::ok) r.status = Status::warning;
+        char n[32];
+        std::snprintf(n, sizeof n, "%g", min_sites);
+        add_note(r, std::string(which) + ": a site class with fewer than " + n +
+                        " sites has an undefined correction (its logarithm set to 0)");
     };
     if (legacy) {
         // gestimator's numbers. NA only where it prints 999; where it replaced an undefined logarithm by 0 the
@@ -506,10 +527,14 @@ Result run_comeron(const Prepared& p, const GeneticCode& code, const Options& op
                             ? "Ka: correction undefined, gestimator's value (Ba set to 0 by its Kimura rule, "
                               "undefined logarithms set to 0)"
                             : "Ka: correction undefined, gestimator's value (undefined logarithms set to 0)");
+        } else if (!a_undefined && small_a) {
+            small_class("Ka");
         }
         if (!s_undefined && saturated_s) {
             if (r.status == Status::ok) r.status = Status::warning;
             add_note(r, "Ks: correction undefined, gestimator's value (undefined logarithms set to 0)");
+        } else if (!s_undefined && small_s) {
+            small_class("Ks");
         }
         // gestimator's ratio: 999 when dN or dS is 999 or dS == 0
         if (!a_undefined && !s_undefined && dS != 0.) r.ka_ks = dN / dS;
@@ -520,6 +545,7 @@ Result run_comeron(const Prepared& p, const GeneticCode& code, const Options& op
             saturated("Ka");
         } else {
             r.ka = dN;
+            if (small_a) small_class("Ka");
         }
         if (no_s_sites) {
             no_sites("no synonymous sites");
@@ -527,6 +553,7 @@ Result run_comeron(const Prepared& p, const GeneticCode& code, const Options& op
             saturated("Ks");
         } else {
             r.ks = dS;
+            if (small_s) small_class("Ks");
         }
     }
     return r;

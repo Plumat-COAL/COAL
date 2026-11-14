@@ -44,7 +44,8 @@ using kaks::Status;
 const char* KAKS_HELP =
     "usage: coal kaks -i IN -o OUT [-m METHOD ...] [-c TABLE] [-j N] [--pairs all|consecutive]\n"
     "                 [--digits N] [--yn-flavour kaks|paml] [--yn-weighting 0|1]\n"
-    "                 [--comeron-flavour coal|gestimator] [--li-flavour coal|seqinr]\n"
+    "                 [--comeron-flavour coal|gestimator] [--comeron-twosubs comeron|libsequence]\n"
+    "                 [--comeron-min-sites N] [--li-flavour coal|seqinr]\n"
     "\n"
     "Ka/Ks for pairs of aligned coding sequences, written in KaKs_Calculator 2.0's tab-separated format.\n"
     "Takes KaKs_Calculator's -i -o -m -c for the seven KaKs_Calculator methods below (the default is YN;\n"
@@ -65,7 +66,12 @@ const char* KAKS_HELP =
     "  --yn-weighting W  1: weight pathways (default); 0: equal weights (PAML yn00 weighting = 0)\n"
     "  --comeron-flavour F  Comeron: coal (default: COAL's stop-codon policy, NA when the correction is\n"
     "                 undefined) or gestimator (the numbers of orthologr 0.4.3's gestimator: stop codons\n"
-    "                 compared, undefined logarithms set to 0)\n"
+    "                 compared, undefined logarithms set to 0, libsequence's two-position pathways)\n"
+    "  --comeron-twosubs T  Comeron, codons that differ at two positions: comeron (the two pathways of\n"
+    "                 Comeron 1995; default with --comeron-flavour coal) or libsequence (the branches\n"
+    "                 libsequence counts, which depend on which sequence is first; default with gestimator)\n"
+    "  --comeron-min-sites N  Comeron, coal flavour: a site class with fewer than N sites cannot make dN or\n"
+    "                 dS NA (its undefined logarithm is 0, status warning; default 3; 0: any class can)\n"
     "  --li-flavour F Li: coal (default: COAL's stop-codon policy) or seqinr (stop codons compared, as\n"
     "                 seqinr::kaks); seqinr's sentinel 9.999999 is NA in both\n"
     "  -q, --quiet    no summary on stderr\n";
@@ -73,8 +79,8 @@ const char* KAKS_HELP =
 const char* DNDS_HELP =
     "usage: coal dnds IN [-o OUT] [-m METHOD ...] [-c TABLE] [-j N] [--pairs all|consecutive]\n"
     "                 [--format auto|axt|fasta] [--digits N] [--yn-flavour kaks|paml] [--yn-weighting 0|1]\n"
-    "                 [--comeron-flavour coal|gestimator] [--li-flavour coal|seqinr]\n"
-    "                 [--min-codons N] [--max-ds X]\n"
+    "                 [--comeron-flavour coal|gestimator] [--comeron-twosubs comeron|libsequence]\n"
+    "                 [--comeron-min-sites N] [--li-flavour coal|seqinr] [--min-codons N] [--max-ds X]\n"
     "\n"
     "dN/dS for pairs of aligned coding sequences as a tidy TSV, one row per pair and method:\n"
     "seq1 seq2 method dN dS dNdS SE_dN SE_dS N_sites S_sites Nd Sd codons_compared status note\n"
@@ -94,7 +100,12 @@ const char* DNDS_HELP =
     "  --yn-weighting W  1: weight pathways (default); 0: equal weights (PAML yn00 weighting = 0)\n"
     "  --comeron-flavour F  Comeron: coal (default: COAL's stop-codon policy, NA when the correction is\n"
     "                 undefined) or gestimator (the numbers of orthologr 0.4.3's gestimator: stop codons\n"
-    "                 compared, undefined logarithms set to 0)\n"
+    "                 compared, undefined logarithms set to 0, libsequence's two-position pathways)\n"
+    "  --comeron-twosubs T  Comeron, codons that differ at two positions: comeron (the two pathways of\n"
+    "                 Comeron 1995; default with --comeron-flavour coal) or libsequence (the branches\n"
+    "                 libsequence counts, which depend on which sequence is first; default with gestimator)\n"
+    "  --comeron-min-sites N  Comeron, coal flavour: a site class with fewer than N sites cannot make dN or\n"
+    "                 dS NA (its undefined logarithm is 0, status warning; default 3; 0: any class can)\n"
     "  --li-flavour F Li: coal (default: COAL's stop-codon policy) or seqinr (stop codons compared, as\n"
     "                 seqinr::kaks); seqinr's sentinel 9.999999 is NA in both\n"
     "  --min-codons N flag estimates from fewer than N compared codons: status warning and the note\n"
@@ -460,6 +471,15 @@ int parse(const std::vector<std::string>& args, Cli& c) {
         } else if (u == "--comeron-flavour" || u == "--comeron-flavor") {
             if (!need(v) || (v != "coal" && v != "gestimator")) return usage(c, s + ": expected coal or gestimator");
             c.opt.comeron_flavour = v == "coal" ? kaks::ComeronFlavour::coal : kaks::ComeronFlavour::gestimator;
+        } else if (u == "--comeron-twosubs") {
+            if (!need(v) || (v != "comeron" && v != "libsequence")) return usage(c, s + ": expected comeron or libsequence");
+            c.opt.comeron_twosubs = v == "comeron" ? kaks::ComeronTwoSubs::comeron : kaks::ComeronTwoSubs::libsequence;
+        } else if (u == "--comeron-min-sites") {
+            char* end = nullptr;
+            const double x = need(v) ? std::strtod(v.c_str(), &end) : -1;
+            if (v.empty() || end == nullptr || *end != '\0' || !(x >= 0) || !std::isfinite(x))
+                return usage(c, s + ": expected a number >= 0");
+            c.opt.comeron_min_sites = x;
         } else if (u == "--li-flavour" || u == "--li-flavor") {
             if (!need(v) || (v != "coal" && v != "seqinr")) return usage(c, s + ": expected coal or seqinr");
             c.opt.li_flavour = v == "coal" ? kaks::LiFlavour::coal : kaks::LiFlavour::seqinr;

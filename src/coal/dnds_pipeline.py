@@ -2200,7 +2200,8 @@ class _Run:
                "-j", str(self.jobs), "--digits", str(a.digits), "--matrix", a.matrix, "--gap-open", str(a.gap_open),
                "--gap-extend", str(a.gap_extend), "--end-gaps", a.end_gaps, "--max-cells", str(a.max_cells),
                "--flanks", a.flanks, "--yn-flavour", a.yn_flavour, "--yn-weighting", str(a.yn_weighting),
-               "--comeron-flavour", a.comeron_flavour, "--li-flavour", a.li_flavour,
+               "--comeron-flavour", a.comeron_flavour, "--comeron-twosubs", a.comeron_twosubs,
+               "--comeron-min-sites", repr(float(a.comeron_min_sites)), "--li-flavour", a.li_flavour,
                "--terminal-stops", a.terminal_stops]
         if a.tie_break != "leftmost":
             cmd += ["--tie-break", a.tie_break]
@@ -3234,6 +3235,14 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--comeron-flavour", "--comeron-flavor", default="coal", choices=("coal", "gestimator"),
                    help="Comeron with COAL's stop-codon and saturation policy (default) or with the numbers of "
                         "orthologr's gestimator")
+    g.add_argument("--comeron-twosubs", default=None, choices=("comeron", "libsequence"),
+                   help="Comeron, codons that differ at two positions: the two pathways of Comeron (1995) (default "
+                        "with --comeron-flavour coal) or the branches libsequence counts, which depend on which "
+                        "sequence is first (default with --comeron-flavour gestimator; orthologr 0.4.3's numbers). "
+                        "report.json records the order used")
+    g.add_argument("--comeron-min-sites", type=float, default=3.0, metavar="N",
+                   help="Comeron: a site class with fewer than N sites cannot make dN or dS NA; its undefined "
+                        "logarithm is set to 0 (status warning, with a note). Default 3; 0: any class can")
     g.add_argument("--li-flavour", "--li-flavor", default="coal", choices=("coal", "seqinr"),
                    help="Li with COAL's stop-codon policy (default) or reading stop codons as seqinr::kaks does")
     g.add_argument("--terminal-stops", default="drop", choices=("drop", "compare"),
@@ -3379,6 +3388,10 @@ def _flag_error(a: argparse.Namespace) -> str | None:
     if mi is not None and not (isinstance(mi, (int, float)) and not isinstance(mi, bool) and math.isfinite(mi)
                                and 0 < mi <= 100):
         return "--min-identity: expected a percentage, above 0 and at most 100"
+    ms = getattr(a, "comeron_min_sites", 3.0)
+    if ms is not None and not (isinstance(ms, (int, float)) and not isinstance(ms, bool) and math.isfinite(ms)
+                               and ms >= 0):
+        return "--comeron-min-sites: expected a number of sites, 0 or more (0 = any class can make dN or dS NA)"
     return None
 
 
@@ -3462,6 +3475,11 @@ def _finish_args(a: argparse.Namespace) -> None:
     a.gap_extend = a.gap_extend if a.gap_extend is not None else (4.0 if pw else 0.5)
     a.end_gaps = a.end_gaps or ("penalized" if pw else "free")
     a.tie_break = getattr(a, "tie_break", None) or ("pwalign" if pw else "leftmost")
+    # the order of Comeron's two-position pathways the run uses (report.json "parameters")
+    a.comeron_twosubs = getattr(a, "comeron_twosubs", None) or (
+        "libsequence" if a.comeron_flavour == "gestimator" else "comeron")
+    if getattr(a, "comeron_min_sites", None) is None:
+        a.comeron_min_sites = 3.0
     if not hasattr(a, "flanks"):
         a.flanks = "align"
 
@@ -3605,7 +3623,8 @@ def _namespace(mode: str, required: list[str], options: dict) -> argparse.Namesp
     why = _method_code_error(a) or _flag_error(a) or _args_error(a)
     if why:
         raise ValueError(why)
-    for opt, allowed in (("hash_inputs", ("auto", "always", "never")), ("comeron_flavour", ("coal", "gestimator")), ("li_flavour", ("coal", "seqinr")),
+    for opt, allowed in (("hash_inputs", ("auto", "always", "never")), ("comeron_flavour", ("coal", "gestimator")),
+                         ("comeron_twosubs", (None, "comeron", "libsequence")), ("li_flavour", ("coal", "seqinr")),
                          ("terminal_stops", ("drop", "compare")), ("tie_break", (None, "leftmost", "pwalign"))):
         if getattr(a, opt) not in allowed:
             raise ValueError(f"{opt} {getattr(a, opt)!r}: choose from {', '.join(v for v in allowed if v)}")
