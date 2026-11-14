@@ -166,7 +166,10 @@ class TestBatchParallel(_Tmp):
         subprocess.run([sys.executable, str(gen), "--nseq", "4000", "--ncodons", "200", "--mismatch", "none", str(data)],
                        check=True, capture_output=True, timeout=120)
         lines = [f"{data / 'pep.fasta'} {data / 'nuc.fasta'} -o job{i}.fa" for i in range(8)]
-        env = dict(os.environ, PYTHONPATH=str(ROOT / "src"))
+        # No checkpoint: a job that has run for COAL_CHECKPOINT_EVERY (2 s) when the signal comes keeps its
+        # checkpoint, partial output and entries file for --resume, by design; on a loaded machine the job that runs
+        # beside the first one can get there (final retest of 2026-11-14, P01: 3 of 300 such batches under load)
+        env = dict(os.environ, PYTHONPATH=str(ROOT / "src"), COAL_CHECKPOINT_EVERY="3600")
         env.pop("COAL_IMPL", None)
         p = subprocess.Popen([sys.executable, "-m", "coal", "--batch", self.jobs(lines), "--batch-parallel", "2", "-q"],
                              cwd=self.tmp, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)

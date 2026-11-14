@@ -339,7 +339,10 @@ is, any other ASCII character as `_`, every character outside ASCII as `?`, at m
 is none; two names are the same machine when they are equal (on Windows without regard to case). While a stale
 lock is replaced, the file `<lock>.takeover` (the same four fields) exists for an instant; the run that created it
 removes it. Should one stay behind (a run killed in that instant), the next run clears it when its process is gone
-or when it is older than 15 s. When a run starts, the files
+or when it is older than 15 s. A SIGTERM, SIGHUP or Ctrl-C while a run takes or releases its lock leaves neither
+the lock nor its temporary file `<lock>.<pid>.<random>.tmp` behind (both engines block those signals for the
+few system calls of these steps on Linux and macOS, and the Python engine also removes any lock it still holds
+when it exits); a run killed with SIGKILL can still leave its lock, which the next run replaces. When a run starts, the files
 of the table above that an earlier COAL run wrote into the folder are removed (a `dnds.kaks` or
 `codon_alignments.fasta` or `protein_alignments.fasta` of a run with other options, the `.fasta` files of a
 `codon_alignments/` or `protein_alignments/` that a cluster run with `--keep-alignments` /

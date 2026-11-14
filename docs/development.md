@@ -44,6 +44,7 @@ Even in such a build a hook acts only while `COAL_TEST_HOOKS=1` is set in the en
 | `COAL_TEST_HOLD_LOCK_UNTIL=<path>` | holds the output lock until that file exists, then checks the lock is still its own | none |
 | `COAL_TEST_LOCK_BEFORE_TAKEOVER_UNTIL=<file>` | between judging a lock stale and replacing it: creates `<file>.waiting`, then waits until `<file>` exists (at most 60 s), so a test can act inside the window without a fixed sleep | |
 | `COAL_TEST_LOCK_BEFORE_TAKEOVER_MS=<ms>` | waits between judging a lock stale and replacing it | `pipeline._before_takeover`, `pipeline._in_takeover` (attributes a test sets) |
+| `COAL_TEST_LOCK_SIGNAL_AT=link` | sends itself SIGTERM right after the output lock is linked, before it is read back and registered: the lock must not stay behind (`tests/test_cleanup1_findings.py`) | none (the Python test sends the signal from a patched `os.link`) |
 | `COAL_TEST_UNLINK_FAILS=N` | the first N removals of lock, guard and temporary files fail as on Windows while another process has the file open | `pipeline._unlink_fails` (an attribute a test sets) |
 | `COAL_TEST_DNDS_FAIL_AFTER_GROUPS=k` | `coal-cpp codon-dnds` fails with a write error when k groups have been written (what it wrote so far is flushed first): a stage that dies in the middle, for `tests/test_pipeline_atomic.py` | none |
 

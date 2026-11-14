@@ -814,6 +814,43 @@ _GUARD_MAX_AGE = 15                    # seconds; a takeover holds its guard for
 _REMOVE_TRIES = 220                    # 20 x 1 ms, then 200 x 10 ms: about 2 s
 _leftovers: set = set()                # files _remove could not remove: tried again at release and at exit
 _unlink_fails = 0                      # test hook (tests only): the next N removals fail as on Windows
+_own_tmps: set = set()                 # this process's `<lock>.<pid>.<hex>.tmp` files that may exist right now
+
+# Signals and the lock (final retest of 2026-11-14, P01: about 2.4 % of the CI runs of the batch SIGTERM test left
+# a lock or its temporary file). cli._on_sigterm raises SystemExit, and Ctrl-C KeyboardInterrupt, at whatever
+# point the main thread is, so every step below keeps a state that can be cleaned up from:
+#   - the creation of a lock (temporary file, link, removal of the temporary file) and its release run with
+#     SIGINT / SIGTERM / SIGHUP blocked in the calling thread on POSIX (_SignalsBlocked; a signal that comes
+#     meanwhile is delivered when the step is done). Windows has no signal mask, and in a process with other
+#     threads the system may hand a signal to one of them, after which the main thread still sees it at once;
+#   - so the bookkeeping is ordered to cover those cases as well: a path is in _held_locks before its lock file
+#     can exist and leaves it only after the file is removed, and a temporary file is in _own_tmps before it is
+#     created and until it is removed; take_output_lock removes the lock it made when anything (a signal too)
+#     ends it before it returns;
+#   - release_held_locks() removes what is still held: at exit (atexit: SystemExit and KeyboardInterrupt end a
+#     process through it) and in a batch worker after each job (a worker made by fork ends without atexit).
+_BLOCKED = tuple(getattr(signal, n) for n in ("SIGINT", "SIGTERM", "SIGHUP") if hasattr(signal, n))
+_CAN_BLOCK = hasattr(signal, "pthread_sigmask") and not _WINDOWS
+
+
+class _SignalsBlocked:
+    """SIGINT, SIGTERM and SIGHUP blocked in this thread for the `with` block (POSIX; nothing on Windows), then
+    the mask as it was: a signal that came meanwhile is delivered when the block ends. Nests."""
+    __slots__ = ("old",)
+
+    def __enter__(self):
+        self.old = None
+        if _CAN_BLOCK:
+            try:
+                self.old = signal.pthread_sigmask(signal.SIG_BLOCK, _BLOCKED)
+            except (OSError, ValueError):
+                self.old = None
+        return self
+
+    def __exit__(self, *exc):
+        if self.old is not None:
+            signal.pthread_sigmask(signal.SIG_SETMASK, self.old)
+        return False
 
 
 def _hostname() -> str:
@@ -937,47 +974,52 @@ def _remove_leftovers() -> None:
 
 def _create_lock(path: str, raw: bytes) -> bool:
     """Create the lock file with its content in one step (a hard link to a finished temporary file: the lock is
-    never seen empty), or, where links are not possible, exclusively and then written. False if it exists."""
+    never seen empty), or, where links are not possible, exclusively and then written. False if it exists.
+    Signals wait until it is done (_SignalsBlocked); the temporary file is in _own_tmps while it may exist."""
     tmp = f"{path}.{os.getpid()}.{os.urandom(8).hex()}.tmp"
-    try:
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
-    except FileExistsError:
-        fd = None
-    if fd is not None:
-        linked = None
+    with _SignalsBlocked():
+        _own_tmps.add(tmp)
+        fd = linked = None
+        try:
+            try:
+                fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+            except FileExistsError:
+                fd = None
+            if fd is not None:
+                with os.fdopen(fd, "wb") as fh:
+                    fh.write(raw)
+                try:
+                    os.link(tmp, path)
+                    linked = True
+                except FileExistsError:
+                    linked = False
+                except (OSError, AttributeError, NotImplementedError):
+                    linked = None     # no hard links here: the other way below
+        finally:
+            if fd is not None:
+                _remove(tmp)
+            _own_tmps.discard(tmp)
+        if fd is not None and linked is not None:
+            return linked
+        for k in range(51):
+            try:
+                fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+                break
+            except FileExistsError:
+                return False
+            except PermissionError:
+                # Windows: a name whose file is being deleted (removed, but still open in another process) answers
+                # "access denied" for an instant, not "exists": not an error of the folder yet
+                if not _WINDOWS or k == 50:
+                    raise
+                time.sleep(0.01)
         try:
             with os.fdopen(fd, "wb") as fh:
                 fh.write(raw)
-            try:
-                os.link(tmp, path)
-                linked = True
-            except FileExistsError:
-                linked = False
-            except (OSError, AttributeError, NotImplementedError):
-                linked = None     # no hard links here: the other way below
-        finally:
-            _remove(tmp)
-        if linked is not None:
-            return linked
-    for k in range(51):
-        try:
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
-            break
-        except FileExistsError:
-            return False
-        except PermissionError:
-            # Windows: a name whose file is being deleted (removed, but still open in another process) answers
-            # "access denied" for an instant, not "exists": not an error of the folder yet
-            if not _WINDOWS or k == 50:
-                raise
-            time.sleep(0.01)
-    try:
-        with os.fdopen(fd, "wb") as fh:
-            fh.write(raw)
-    except BaseException:  # a signal between creating the lock and writing into it: leave nothing behind
-        _remove(path)
-        raise
-    return True
+        except BaseException:  # a signal between creating the lock and writing into it: leave nothing behind
+            _remove(path)
+            raise
+        return True
 
 
 _before_takeover = None   # test hook: called with the lock path before a stale lock is replaced
@@ -1052,20 +1094,22 @@ def take_output_lock(real_out: str, name: str) -> str:
             raise CoalError(f"this process is already writing {name} (another call or thread): wait for it to "
                             "finish, or write to another file", code="file_error")
         _held_locks[path] = raw
-    ok = False
     try:
         waited = 0.0
         deadline = time.monotonic() + 30
         while True:
-            try:
-                created = _create_lock(path, raw)
-            except OSError as e:  # e.g. a folder that cannot be written: the usual output error
-                raise _output_error(name, e) from None
+            with _SignalsBlocked():
+                try:
+                    created = _create_lock(path, raw)
+                except OSError as e:  # e.g. a folder that cannot be written: the usual output error
+                    raise _output_error(name, e) from None
+                ours = False
+                if created:
+                    got = _read_lock(path)
+                    ours = got is not None and got[0] == raw   # (not replaced under us by a COAL before this)
+            if ours:
+                return path
             if created:
-                got = _read_lock(path)
-                if got is not None and got[0] == raw:   # (and not replaced under us by a COAL that predates this)
-                    ok = True
-                    return path
                 continue
             cur = _read_lock(path)
             if cur is None:
@@ -1094,25 +1138,62 @@ def take_output_lock(real_out: str, name: str) -> str:
                 _replace_stale_lock(path, old_raw)   # a lock whose process is gone (or one empty for 2 s)
             except OSError as e:
                 raise _output_error(name, e) from None
-    finally:
-        if not ok:
-            with _held_mutex:
+    except BaseException:
+        # a refusal, an error, or a signal at any point before the caller has the path (also after the lock was
+        # made): the lock, if this call made it, goes, and only then the entry
+        _drop_lock(path, raw)
+        raise
+
+
+def _drop_lock(path: str, raw: bytes) -> None:
+    """Remove the lock at `path` if it holds `raw` (this process's bytes), then forget it. In this order, so that
+    a signal in between leaves an entry without a file, which release_held_locks passes over, not a file without
+    an entry."""
+    with _SignalsBlocked():
+        cur = _read_lock(path)
+        if cur is not None and cur[0] == raw:
+            _remove(path)
+        with _held_mutex:
+            if _held_locks.get(path) == raw:
                 _held_locks.pop(path, None)
 
 
 def release_output_lock(path: str | None) -> None:
     """Remove the lock this process took. A file at that path that is not ours any more (someone removed the lock
     by hand and another run took it) is left alone."""
-    if not path:
-        return
+    if path:
+        _release_lock(path)
+
+
+def _release_lock(path: str) -> None:
+    with _SignalsBlocked():
+        with _held_mutex:
+            raw = _held_locks.get(path)
+        if _leftovers:
+            _remove_leftovers()
+        cur = _read_lock(path)
+        if cur is not None and not (raw is not None and cur[0] != raw and cur[1] is not None):
+            _remove(path)
+        with _held_mutex:   # (forgotten after the removal: see _drop_lock)
+            _held_locks.pop(path, None)
+
+
+def release_held_locks() -> None:
+    """Remove every lock this process still holds (those holding its bytes) and its temporary lock files: what
+    a signal or Ctrl-C at the wrong instant left between take_output_lock and the caller's release (P01). Run at
+    exit, and by a batch worker after each job. Not for a process in which other threads are still writing:
+    their locks would go too."""
     with _held_mutex:
-        raw = _held_locks.pop(path, None)
-    if _leftovers:
-        _remove_leftovers()
-    cur = _read_lock(path)
-    if cur is None or (raw is not None and cur[0] != raw and cur[1] is not None):
-        return
-    _remove(path)
+        held = list(_held_locks)
+    for path in held:
+        _release_lock(path)
+    for tmp in list(_own_tmps):
+        with _SignalsBlocked():
+            _remove(tmp)
+            _own_tmps.discard(tmp)
+
+
+atexit.register(release_held_locks)
 
 
 def _output_error(out_path, e: OSError) -> CoalError:
@@ -1547,31 +1628,35 @@ def _run(pep_path, nuc_paths, out_path=None, table: int = 1, nogap: bool = False
             # (its traceback references the frame) is a reference cycle, and the frame holds `results` (the pool)
             raise _output_error(None if sink_is_temp and not final_pass else out_path, e) from None
         finally:
-            if results is not None:
-                # An error on this side (a failed write, a CoalError) leaves the pool's generator suspended at its
-                # yield: closing it runs its finally, which ends the workers now, not when the cyclic garbage
-                # collector gets to the frame
-                results.close()
-            if rec is not None:
-                # The entries file stays for the report when the run ended (normally or with an error): the report
-                # removes it once written (RunReport.close); a temporary one of an interrupted run goes now
-                rec.finish_entries(keep=(finished or failed) and rec.keep_entries)
-            for f in (tmp, stage, entries_fh, *scratch):
-                if f is not None:
+            # The clean-up runs with SIGINT / SIGTERM / SIGHUP waiting (POSIX; _SignalsBlocked): a signal in the
+            # middle of it left the checkpoint's entries file or the lock behind (final retest P01)
+            with _SignalsBlocked():
+                if results is not None:
+                    # An error on this side (a failed write, a CoalError) leaves the pool's generator suspended at
+                    # its yield: closing it runs its finally, which ends the workers now, not when the cyclic
+                    # garbage collector gets to the frame
+                    results.close()
+                if rec is not None:
+                    # The entries file stays for the report when the run ended (normally or with an error): the
+                    # report removes it once written (RunReport.close); a temporary one of an interrupted run goes
+                    # now
+                    rec.finish_entries(keep=(finished or failed) and rec.keep_entries)
+                for f in (tmp, stage, entries_fh, *scratch):
+                    if f is not None:
+                        try:
+                            f.close()
+                        except OSError:  # a buffered write failing at close (disk full): the error is raised already
+                            pass
+                for f in scratch:
                     try:
-                        f.close()
-                    except OSError:  # a buffered write failing at close (disk full): the error is already raised
+                        os.unlink(f.name)
+                    except OSError:
                         pass
-            for f in scratch:
-                try:
-                    os.unlink(f.name)
-                except OSError:
-                    pass
-            if ck is not None:
-                # After a crash, kill or signal (cleanup) the partial files are kept only when a checkpoint describes
-                # them, so --resume can continue; otherwise they are removed
-                if finished or failed or not os.path.exists(ck.path):
-                    ck.remove(keep_entries=rec is not None and rec.owns_entries())
-            release_output_lock(lock)
+                if ck is not None:
+                    # After a crash, kill or signal (cleanup) the partial files are kept only when a checkpoint
+                    # describes them, so --resume can continue; otherwise they are removed
+                    if finished or failed or not os.path.exists(ck.path):
+                        ck.remove(keep_entries=rec is not None and rec.owns_entries())
+                release_output_lock(lock)
     finally:
         dna.close()

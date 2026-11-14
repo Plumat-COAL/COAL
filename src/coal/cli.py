@@ -233,6 +233,12 @@ def run_job(args, argv, prefix: str = "", want_report: bool = False, close: bool
     note = None if args.quiet else (lambda t: say(f"notice: {t}"))
     try:
         return _run_job(args, rec, say, warn, notice, note, reporting, hidden)
+    except BaseException:
+        # a signal or Ctrl-C (SystemExit / KeyboardInterrupt out of the job): the caller never gets the report, so
+        # its entries file `<out>.coal-entries.jsonl` goes now (final retest P01: a batch worker, close=False,
+        # left one after a SIGTERM; a worker made by fork ends without running finalizers)
+        rec.close()
+        raise
     finally:
         if close:
             rec.close()  # the entries file (also on SIGTERM / Ctrl-C between the run and the report)

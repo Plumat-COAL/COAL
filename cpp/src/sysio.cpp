@@ -31,6 +31,8 @@
 #define COAL_EXIT _exit
 #else
 #include <fcntl.h>
+#include <pthread.h>
+#include <signal.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #define COAL_UNLINK ::unlink
@@ -748,6 +750,39 @@ int hard_link(const std::string& from, const std::string& to) {
 #endif
 }
 
+// Signals and the lock (final retest of 2026-11-14, P01; pipeline.py _SignalsBlocked): on_signal removes the
+// registered files and ends the process at whatever point it is. A lock made by create_lock() was registered only
+// after it had been read back, so a SIGTERM in between left it behind. The steps from creating a lock (or guard)
+// to registering it, and the release, therefore run with SIGINT / SIGTERM / SIGHUP blocked in this thread on
+// POSIX: a signal that comes meanwhile is handled when the step is done, with the lock registered (or gone).
+// Windows has no signal mask (its console handler runs in a thread of its own); there a file is registered
+// before anything can create it where that is safe (the temporary file), and the gap after the link stays.
+class BlockSignals {
+#ifndef _WIN32
+    sigset_t old_{};
+    bool on_ = false;
+
+public:
+    BlockSignals() {
+        sigset_t s;
+        sigemptyset(&s);
+        sigaddset(&s, SIGINT);
+        sigaddset(&s, SIGTERM);
+        sigaddset(&s, SIGHUP);
+        on_ = pthread_sigmask(SIG_BLOCK, &s, &old_) == 0;
+    }
+    ~BlockSignals() {
+        if (on_) pthread_sigmask(SIG_SETMASK, &old_, nullptr);
+    }
+#else
+public:
+    BlockSignals() {}   // (user-provided: no "unused variable" warning where the class does nothing)
+    ~BlockSignals() {}
+#endif
+    BlockSignals(const BlockSignals&) = delete;
+    BlockSignals& operator=(const BlockSignals&) = delete;
+};
+
 // Create the file `path` holding `raw` in one step: a hard link to a finished temporary file, so that the lock is
 // never seen empty; where links are not possible, exclusively and then written. 1: created; 0: it exists;
 // < 0: -errno of what went wrong (a folder that cannot be written).
@@ -764,6 +799,13 @@ int create_lock(const std::string& path, const std::string& raw) {
         const bool written = write_all(fd, raw);
         close_fd(fd);
         const int linked = written ? hard_link(tmp, path) : -1;   // -1: no hard links here (or the write failed)
+#ifdef COAL_TEST_HOOKS
+        // Test hook (tests/test_cleanup1_findings.py): SIGTERM to this process right after the lock is linked,
+        // before it is read back and registered (the window of P01)
+        if (linked == 1 && path.size() > 10 && path.compare(path.size() - 10, 10, ".coal-lock") == 0)
+            if (const char* at = test_hook_env("COAL_TEST_LOCK_SIGNAL_AT"); at && std::strcmp(at, "link") == 0)
+                std::raise(SIGTERM);
+#endif
         remove_file(tmp);
         unregister_temp(tmp);
         if (linked >= 0) return linked;
@@ -824,7 +866,12 @@ int replace_stale_lock(const std::string& path, const std::string& stale) {
     const std::string guard = path + ".takeover";
     const std::string mine = std::to_string(own_pid()) + " " + host_name() + " " + proc_start(own_pid()) + " " +
                              unique_name() + unique_name() + "\n";
-    const int made = create_lock(guard, mine);
+    int made = 0;
+    {
+        BlockSignals quiet;   // (registered before a signal can end the process: see BlockSignals)
+        made = create_lock(guard, mine);
+        if (made == 1) register_temp(guard);
+    }
     if (made < 0) return -made;
     if (made == 0) {
         // another run is replacing the lock right now (it takes microseconds), or left its guard behind
@@ -834,7 +881,7 @@ int replace_stale_lock(const std::string& path, const std::string& stale) {
     }
     struct Guard {   // ours from here on: removed on every way out of this function (and by the signal handlers)
         const std::string& g;
-        explicit Guard(const std::string& p) : g(p) { register_temp(g); }
+        explicit Guard(const std::string& p) : g(p) {}
         ~Guard() {
             remove_file(g);
             unregister_temp(g);
@@ -923,13 +970,23 @@ std::string take_output_lock(const std::string& real, const std::string& name) {
     double waited = 0.0;
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
     for (;;) {
-        const int made = create_lock(path, raw);
+        int made = 0;
+        bool ours = false;
+        {
+            BlockSignals quiet;   // from creating the lock to registering it (see BlockSignals)
+            made = create_lock(path, raw);
+            if (made == 1) {
+                const LockInfo got = read_lock(path);
+                ours = got.exists && got.raw == raw;   // (not replaced under us by a COAL that predates this)
+                if (ours) {
+                    register_temp(path);
+                    g_lock_raw = raw;
+                }
+            }
+        }
         if (made < 0) throw CoalError(output_error(name, -made), "file_error");
         if (made == 1) {
-            const LockInfo got = read_lock(path);
-            if (!(got.exists && got.raw == raw)) continue;   // replaced under us by a COAL that predates this
-            register_temp(path);
-            g_lock_raw = raw;
+            if (!ours) continue;
 #ifdef COAL_TEST_HOOKS
             // Test hook (tests/test_output_lock.py): hold the lock until this file exists, then check that it is
             // still ours, so that a test can count the runs that hold one output at the same moment.
@@ -991,6 +1048,7 @@ std::string take_output_lock(const std::string& real, const std::string& name) {
 // hand and another run took it) is left alone.
 void release_output_lock(const std::string& path) {
     if (path.empty()) return;
+    BlockSignals quiet;   // removed and unregistered together (see BlockSignals)
     bool ours = false;
     {
         const LockInfo cur = read_lock(path);   // (its handle is closed before the removal below)
