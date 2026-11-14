@@ -20,6 +20,16 @@ def _load_demo(name):
     return mod
 
 
+def _python_engine(case):
+    """For the rest of the test, coal runs its pure-Python engine (COAL_ENGINE=python). The timeout tests below need
+    a run that outlasts a 0.8 s timeout; with coal-cpp found (COAL_CPP, or a platform wheel's bundled binary) coal
+    would hand the run to coal-cpp, which finishes in time."""
+    from unittest import mock
+    patcher = mock.patch.dict(os.environ, {"COAL_ENGINE": "python"})
+    patcher.start()
+    case.addCleanup(patcher.stop)
+
+
 @unittest.skipUnless(os.path.isdir("/proc/self") and os.name != "nt", "R2-A4: needs Linux /proc and POSIX signals")
 class TestNoOrphanProcesses(unittest.TestCase):
     @classmethod
@@ -41,6 +51,7 @@ class TestNoOrphanProcesses(unittest.TestCase):
         shutil.rmtree(cls.data, True)
 
     def test_app_timeout_leaves_no_processes_or_temp_files(self):
+        _python_engine(self)
         out_dir = tempfile.mkdtemp(prefix="coal_test_orphan_out_")
         self.addCleanup(shutil.rmtree, out_dir, True)
         code, err, _ = core._run_engine(self.pep, self.nuc, os.path.join(out_dir, "o.fasta"), "fasta", 1,
@@ -105,6 +116,7 @@ class TestDemoTimeoutsStopWorkers(unittest.TestCase):
 
     def test_diamond_run_batch_timeout(self):
         import argparse
+        _python_engine(self)
         dp = _load_demo("diamond_pipeline")
         recs = dp.read_fasta(self.pep)
         dna = {rid: seq for rid, _, seq in dp.read_fasta(self.nuc)}

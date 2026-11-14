@@ -1,0 +1,17 @@
+{
+  "_about": "Documented output lines of docs/tutorials that are known to differ from what the code prints now (scripts/run_tutorials.py). They are reported as known drift, as warnings, and do not fail the run; any other difference does. An entry matches a documented line that starts with `line` (whitespace collapsed). Remove an entry when the tutorial is fixed: an entry that matches nothing is reported (warning, or an error with --strict-known). `since`: the commit that changed the output.",
+  "entries": [
+    {"tutorial": "01", "line": "coal: summary: 1 sequence of 3 was written to the output but is probably wrong",
+     "since": "4aa6fbc", "now": "coal: summary: 1 sequence of 3 is probably wrong (first: ...) Fix or remove it before running again, or use --strict to refuse such genes."},
+    {"tutorial": "02", "line": "coal pipeline: warning: the input looks like several transcripts per gene",
+     "since": "9b90fbd", "now": "coal pipeline: warning: the input has several CDS records per gene (isoforms or alternative start sites; ...) ... compared once per record, and its reciprocal best hits are split between its records. ..."},
+    {"tutorial": "05", "line": "coal dnds: 3142 pair(s), 5 method(s): 14671 ok, 15 warning, 23 not_converged, 1001 saturated",
+     "since": "902f123", "now": "coal dnds: 3142 pair(s), 5 method(s): 14624 ok, 21 warning, 23 not_converged, 1042 saturated, 0 no_data, 0 error"},
+    {"tutorial": "05", "line": "Comeron 2922 3 217 0 0 0", "since": "902f123", "now": "Comeron 2875 9 258 0 0 0"},
+    {"tutorial": "05", "line": "2706 pairs have a dN/dS from every method", "since": "902f123", "now": "2695 pairs ..."},
+    {"tutorial": "05", "line": "0.5-1 639 0.809 / 0.0390", "since": "902f123", "now": "Comeron 0.710 / 0.0412"},
+    {"tutorial": "05", "line": "1-1.5 988 1.216 / 0.0446", "since": "902f123", "now": "985 pairs; Comeron 1.043 / 0.0489"},
+    {"tutorial": "05", "line": "1.5-2 543 1.528 / 0.0488", "since": "902f123", "now": "538 pairs; Comeron 1.303 / 0.0535"},
+    {"tutorial": "05", "line": ">= 2 314 1.509 / 0.0478", "since": "902f123", "now": "311 pairs; Comeron 1.232 / 0.0549"}
+  ]
+}
