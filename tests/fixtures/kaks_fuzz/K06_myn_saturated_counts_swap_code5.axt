@@ -1,0 +1,12 @@
+# bug=K06 code=5 methods=MYN
+# MYN with code 5, both kinds saturated (dN and dS NA): the weighted difference counts Nd / Sd it still prints
+# come out of an iteration whose t has no value, and they depend on which sequence is first
+# (f: Nd 23.0929 Sd 10.9071; r: Nd 23.1773 Sd 10.8227). A not_converged row has NA there.
+f
+gatagcaatgcatagcctagcttgattccgtatc-ctgactatgt
+TGCCGTTGCTTG---ACGTCTACAATTATACCGGTGGTCTATCCG
+
+r
+TGCCGTTGCTTG---ACGTCTACAATTATACCGGTGGTCTATCCG
+gatagcaatgcatagcctagcttgattccgtatc-ctgactatgt
+

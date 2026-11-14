@@ -1,8 +1,13 @@
-# bug=K03 code=1 methods=LWL,MLWL,LPB,MLPB,Comeron
-# Three 4-fold sites with one transition and one transversion: P = Q = 1/3, so 1 - 2P - Q = 0 and Kimura's
-# correction is undefined (saturated). In floating point 1 - 2/3 - 1/3 = 5.6e-17, and LWL, MLWL, LPB, MLPB and
-# Comeron print dS = 18.99 with status ok. With four sites (P = 1/4, Q = 1/2, exact in binary) the same methods
-# say saturated, as they should.
+# bug=K03 code=1 methods=NG,LWL,MLWL,LPB,MLPB,YN,MYN,Comeron
+# The argument of a correction's logarithm is 0 in exact arithmetic, but a residue of about 1e-16 in floating
+# point, and a huge finite value is printed as an estimate.
+# b3: three 4-fold sites with one transition and one transversion: P = Q = 1/3, 1 - 2P - Q = 0 (Kimura undefined).
+#     1 - 2/3 - 1/3 = 5.6e-17 in binary: LWL, MLWL, LPB, MLPB and Comeron print dS = 18.99, status ok.
+# b4: P = 1/4, Q = 1/2 (exact in binary): the same methods say saturated, as they should.
+# ng1: one codon, TCA (Ser) against TTT (Phe): NG's synonymous p = 0.5 / (2/3) = 3/4, Jukes-Cantor undefined;
+#     NG prints dS = 27.55, status ok (as KaKs_Calculator does).
+# yn1: TAT (Tyr) against TGG (Trp): no synonymous site; YN's and MYN's Ka from p = 3/4: 18.99, status no_data
+#     (KaKs_Calculator prints NA).
 b3
 GCTGCTGCT
 GCCGCAGCT
@@ -10,4 +15,12 @@ GCCGCAGCT
 b4
 GCTGCTGCTGCT
 GCCGCAGCGGCT
+
+ng1
+TCA
+TTT
+
+yn1
+TAT
+TGG
 

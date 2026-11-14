@@ -22,13 +22,17 @@ P7  `coal dnds` / `coal kaks` (the Python command, plain and gzip-compressed inp
     `coal-cpp dnds` / `coal-cpp kaks`; AXT and FASTA (`--pairs consecutive`) input give the same values; the two
     output formats agree (Ka = dN, Ks = dS, Length = 3 x codons compared, the same codons for every method)
 P8  the output is the same bytes across runs, for -j 1, 2 and 4, and for a pair alone or among others
+P9  synonymous changes only (every compared codon pair identical or one synonymous change apart): dN = Nd = 0
+    for NG, YN, MYN, MLWL and MLPB
+P10 no dN or dS above 10: with fewer than a million sites only a rounding residue of an exact 0 inside the
+    logarithm of a correction gives such a value
 
 The fast subset (a few hundred pairs, fixed seed) takes well under 60 s. COAL_SLOW=1 runs more and longer pairs
 (KAKS_FUZZ_N, KAKS_FUZZ_SEED override the count and the seed). Run it as a script for a campaign:
 
     python tests/test_kaks_properties.py --n 3000 --seed 7 [--max-codons 2000] [--keep DIR] [--cpp build/coal-cpp]
 
-Known bugs (K01-K03; tests/fixtures/kaks_fuzz/K*.axt hold their minimal pairs and say what is wrong) are
+Known bugs (K01-K06; tests/fixtures/kaks_fuzz/K0*.axt hold the minimal pairs and say what is wrong) are
 expected failures in TestKnownBugs, and the random tests leave out exactly the rows that a known bug explains
 (KNOWN below), so that the suite stays green and still checks everything else. Skipped if build/coal-cpp
 (COAL_CPP_BIN) is not built.
@@ -37,7 +41,6 @@ from __future__ import annotations
 
 import argparse
 import gzip
-import itertools
 import math
 import os
 import random
@@ -409,7 +412,8 @@ def check_row(case: Case, method: str, d: dict, flavour: dict) -> list[str]:
     elif r is not None:
         bad.append(f"P3: dNdS {d['dNdS']} printed with dN {d['dN']} dS {d['dS']}")
     for c, v in (("dN", dn), ("dS", ds)):
-        if v is not None and v < 0 and not (method == "Li" and st != "ok" and ("Ka" if c == "dN" else "Ks") + " is negative" in d["note"]):
+        li_note = ("Ka" if c == "dN" else "Ks") + " is negative" in d["note"]
+        if v is not None and v < 0 and not (method == "Li" and st != "ok" and li_note):
             bad.append(f"P3: negative {c} {v} (status {st})")
     for c in ("SE_dN", "SE_dS"):
         v = num(d[c])
@@ -442,14 +446,13 @@ def check_row(case: Case, method: str, d: dict, flavour: dict) -> list[str]:
             v = num(d[c])
             if v is not None and v != 0:
                 bad.append(f"P9: synonymous changes only, but {c} = {d[c]}")
-    # P10: the count-based corrections (Jukes-Cantor, Kimura) of a pair of at most a million sites cannot exceed
-    # about 8 unless their logarithm's argument is a rounding residue of an exact 0 (2P + Q = 1, p = 3/4)
-    if method in COUNT_METHODS and st in ESTIMATE:
-        for c in ("dN", "dS"):
-            v = num(d[c])
-            if v is not None and v > 10:
-                bad.append(f"P10: {c} = {d[c]} with status {st}: a rounding residue at the boundary of the "
-                           "correction")
+    # P10: a multiple-hit correction (Jukes-Cantor, Kimura, F84 / TN93) of a pair of at most a million sites
+    # cannot exceed about 8 unless the argument of its logarithm is a rounding residue of an exact 0 (p = 3/4,
+    # 2P + Q = 1): such a value is not an estimate, whatever the status of the row
+    for c in ("dN", "dS"):
+        v = num(d[c])
+        if v is not None and v > 10:
+            bad.append(f"P10: {c} = {d[c]} with status {st}: a rounding residue at the boundary of the correction")
     cc = num(d["codons_compared"])
     if cc is None or cc < 0 or cc > len(case.s1) // 3 or cc != int(cc):
         if st != "error":
@@ -600,7 +603,7 @@ class Harness:
                             continue
                         self.findings.append(Finding(
                             "P5", c, m, f"P5: swap changes {','.join(big)} with {' '.join(extra) or 'defaults'}",
-                            (tuple(extra), {k: (a[k], b[k]) for k in diff})))
+                            (tuple(extra), {k: (a[k], b[k]) for k in diff}, a["status"])))
 
     def permutation(self, cases, seed: int) -> None:
         rng = random.Random(seed)
@@ -654,7 +657,8 @@ class Harness:
                      *mflags(methods_for(code))], self.timeout)
             fwd = outs["dnds"][0][1].splitlines()
             if sorted(fwd[1:]) != sorted(r.out.splitlines()[1:]):
-                self.findings.append(Finding("P8", group[0], "*", f"P8: a row depends on the order of the pairs (code {code})"))
+                self.findings.append(Finding("P8", group[0], "*",
+                                             f"P8: a row depends on the order of the pairs (code {code})"))
             self.counts["determinism batches"] += 1
 
     def formats(self, cases) -> None:
@@ -757,7 +761,6 @@ def shrink(case: Case, still_fails, max_steps: int = 400) -> Case:
 
 # Known bugs found by this fuzz (tests/fixtures/kaks_fuzz/K*.axt). A property that a known bug breaks is checked
 # on every other row, and on the bug's reproducer as an expected failure (TestKnownBugs).
-LWL_FAMILY = ("LWL", "MLWL", "LPB", "MLPB")
 KNOWN = {
     # K01: LWL / LPB put the halves of CGA <-> AGA (CGG <-> AGG) into the fold classes of the two end codons
     # (KaKs_Calculator's LWL85); with code 13, where AGA / AGG are Gly, the two classes differ, so the result
@@ -767,10 +770,23 @@ KNOWN = {
     # synonymous) with every genetic code: a synonymous ATA <-> ATG (codes 2, 3, 5, 13, 21) counts as a
     # nonsynonymous difference
     "K02": lambda f: f.prop == "P9" and f.method in ("MLWL", "MLPB") and f.case.code != 1,
-    # K03: Kimura's 1 - 2P - Q (and the like) that is 0 in exact arithmetic comes out as a residue of 1e-17:
-    # a finite, huge estimate with status ok, or saturated, depending on the order of the sums
+    # K03: the argument of a correction's logarithm that is 0 in exact arithmetic (Kimura's 1 - 2P - Q, Jukes and
+    # Cantor's 1 - 4p/3) comes out as a residue of 1e-16: a finite, huge dN or dS (19 to 28) with status ok (or
+    # beside a saturated or missing other estimate), or saturated, depending on the order of the sums
     "K03": lambda f: f.prop == "P10" or (f.prop == "P6" and f.method in COUNT_METHODS and _boundary(f)),
+    # K06: a YN / MYN row that is saturated prints the weighted difference counts (Sd, Nd) of an iteration whose
+    # t has no value; like a not_converged row's they depend on the path, here on the order of the sequences
+    "K06": lambda f: f.prop in ("P5", "P6") and f.method in ("YN", "MYN") and _saturated_counts_only(f),
 }
+
+
+def _saturated_counts_only(f: Finding) -> bool:
+    ex = f.extra
+    if f.prop == "P5" and len(ex) == 3 and isinstance(ex[1], dict):
+        return set(ex[1]) <= {"Nd", "Sd"} and ex[2] == "saturated"
+    if f.prop == "P6" and len(ex) == 3:
+        return set(ex[0]) <= {"Nd", "Sd"} and ex[2] == "saturated"
+    return False
 
 
 def _boundary(f: Finding) -> bool:
@@ -866,12 +882,24 @@ class TestProperties(PropertyBase):
         self.assertNoFindings(h, {"P1", "P8"})
 
     def test_order_dependent_flavours_are_documented(self):
-        text = (ROOT / "docs" / "kaks.md").read_text(encoding="utf-8")
-        self.assertIn("depend on which sequence is first", (ROOT / "cpp" / "src" / "dnds_cli.cpp").read_text(
-            encoding="utf-8") + text.replace("\n", " ") + run([self.bin, "dnds", "--help"]).out.replace("\n", " ")
-            .replace("  ", " "))
-        self.assertRegex(text.replace("\n", " "), r"the estimate depends on which sequence is first")
-        self.assertRegex(text.replace("\n", " "), r"`libsequence` \| libsequence's four branches")
+        """P5's exception: `--comeron-twosubs libsequence` (the default of the gestimator flavour) depends on
+        which sequence is first. The documentation and the help say so, and it is still true (else the exception
+        would hide nothing and should go)."""
+        doc = " ".join((ROOT / "docs" / "kaks.md").read_text(encoding="utf-8").split())
+        self.assertIn("the estimate depends on which sequence is first", doc)
+        self.assertIn("| `libsequence` | libsequence's four branches, as above | `--comeron-flavour gestimator` |", doc)
+        helptext = " ".join(run([self.bin, "dnds", "--help"]).out.split())
+        self.assertIn("depend on which sequence is first", helptext)
+        h = self.harness()
+        rng = random.Random(3)   # a fifth of the codons redrawn: many differ at two positions, few saturate
+        cases = []
+        for k in range(10):
+            a = rng.choices(SENSE[1], k=150)
+            b = [rng.choice(SENSE[1]) if rng.random() < 0.2 else c for c in a]
+            cases.append(Case(f"d{k}", "".join(a), "".join(b)))
+        _, a = h.dnds(cases, 1, ["--comeron-twosubs", "libsequence"], methods=["Comeron"])
+        _, b = h.dnds([c.swapped() for c in cases], 1, ["--comeron-twosubs", "libsequence"], methods=["Comeron"])
+        self.assertTrue(any(a[k]["dN"] != b[k]["dN"] or a[k]["dS"] != b[k]["dS"] for k in a))
 
     def test_comeron_li_refused_with_other_codes(self):
         d = Path(tempfile.mkdtemp(dir=self.tmp))
@@ -936,6 +964,24 @@ class TestKnownBugs(PropertyBase):
         return cases, rows
 
     @unittest.expectedFailure
+    def test_K05_an_input_without_pairs_exits_2(self):
+        """docs/kaks.md, Exit status: 2 when no pair has an estimate because of the input."""
+        d = Path(tempfile.mkdtemp(dir=self.tmp))
+        for name, text in (("empty.axt", ""), ("blank.axt", "\n\n\n"), ("comment.axt", "# only a comment\n")):
+            (d / name).write_text(text)
+            for sub in ("dnds", "kaks"):
+                r = run([self.bin, sub, *([] if sub == "dnds" else ["-i"]), d / name, "-q"])
+                self.assertFalse(crashed(r), r.err)
+                self.assertEqual(r.rc, 2, f"{sub} {name}")
+
+    @unittest.expectedFailure
+    def test_K06_saturated_myn_counts_do_not_depend_on_the_order(self):
+        _, rows = self.rows("K06_myn_saturated_counts_swap_code5.axt", 5, ["MYN"])
+        a, b = rows[("f", "MYN")], rows[("r", "MYN")]
+        self.assertEqual((a["status"], b["status"]), ("saturated", "saturated"))
+        self.assertEqual((a["Nd"], a["Sd"]), (b["Nd"], b["Sd"]))
+
+    @unittest.expectedFailure
     def test_K01_lwl_lpb_do_not_depend_on_the_order_of_the_sequences(self):
         _, rows = self.rows("K01_lwl_lpb_swap_code13.axt", 13, ["LWL", "LPB"])
         for m in ("LWL", "LPB"):
@@ -951,11 +997,14 @@ class TestKnownBugs(PropertyBase):
 
     @unittest.expectedFailure
     def test_K03_an_exact_zero_of_the_correction_is_saturated(self):
-        ms = ["LWL", "MLWL", "LPB", "MLPB", "Comeron"]
+        ms = ["NG", "LWL", "MLWL", "LPB", "MLPB", "YN", "MYN", "Comeron"]
         _, rows = self.rows("K03_kimura_boundary_residue.axt", 1, ms)
-        for m in ms:
+        for m in ms[1:5] + ["Comeron"]:
             self.assertEqual(rows[("b4", m)]["status"], "saturated", m)   # exact in binary: right already
-            self.assertEqual((rows[("b3", m)]["status"], rows[("b3", m)]["dS"]), ("saturated", "NA"), m)
+        found = [(k, d["dN"], d["dS"], d["status"]) for k, d in rows.items()
+                 if any((num(d[c]) or 0) > 10 for c in ("dN", "dS"))]
+        self.assertEqual(found, [])
+        self.assertEqual((rows[("ng1", "NG")]["status"], rows[("ng1", "NG")]["dS"]), ("saturated", "NA"))
 
 
 # ------------------------------------------------------------------------------------------------------ script
