@@ -166,6 +166,18 @@ codons and stops are those of the standard code (only start codons differ), so t
   their records shuffled): code 6; human Ensembl with `-c 2`: codes 1, 11 or 12 (nothing in the sequences tells
   them apart); a file of yeast mitochondrial genes alone with `-c 1`: code 3. `report.json` marks such a hint
   `whole_set: true`.
+- **Codes COAL does not support.** `-c` takes the NCBI codes 1-6, 9-16 and 21-23 (those of PAL2NAL); NCBI's
+  codes 24-33 have no table in COAL. When a whole set's hint names several codes that all depart from the standard
+  stop codons, it also names the unsupported codes the genes fit as well (with no more reassigned stop codons
+  than the candidates): 24 (Rhabdopleuridae mitochondrial: TGA = Trp, AGA = Ser, AGG = Lys), 25 (Candidate
+  Division SR1 and Gracilibacteria: TGA = Gly), 29 (Mesodinium nuclear: TAA, TAG = Tyr), 30 (Peritrich nuclear:
+  TAA, TAG = Glu), 32 (Balanophoraceae plastid: TAG = Trp) and 33 (Cephalodiscidae mitochondrial: TAA = Tyr,
+  TGA = Trp, AGA = Ser, AGG = Lys): for a genome-size set the nuclear and bacterial ones (25, 29, 30), for a
+  smaller one the organelle ones (24, 32, 33). Codes 27,
+  28 and 31, whose stop codons depend on their context, and 26 (the standard stops) are never named. E.g.
+  *Ca.* Gracilibacteria (code 25) read with `-c 11`: "codes 4 and 10 ...; or NCBI code 25 (Candidate Division SR1
+  and Gracilibacteria: TGA = Gly), which COAL does not support". No `-c` gives right rows for such a set: TGA is
+  Gly there, Trp or Cys in the candidates. `report.json` has those codes as `unsupported_candidates`.
 - **`pipeline clusters` judges each `--cds` file on its own** (each is one species): one hint per file, naming
   it (`cds sp_two.fa: most genes ...`), and `file` in `report.json`. A *Mycoplasma* among other bacteria gets
   code 4, a ciliate among animals code 6, and yeast and human mitochondrial genes get codes 3 and 2, each in its
@@ -339,7 +351,10 @@ is, any other ASCII character as `_`, every character outside ASCII as `?`, at m
 is none; two names are the same machine when they are equal (on Windows without regard to case). While a stale
 lock is replaced, the file `<lock>.takeover` (the same four fields) exists for an instant; the run that created it
 removes it. Should one stay behind (a run killed in that instant), the next run clears it when its process is gone
-or when it is older than 15 s. When a run starts, the files
+or when it is older than 15 s. A SIGTERM, SIGHUP or Ctrl-C while a run takes or releases its lock leaves neither
+the lock nor its temporary file `<lock>.<pid>.<random>.tmp` behind (both engines block those signals for the
+few system calls of these steps on Linux and macOS, and the Python engine also removes any lock it still holds
+when it exits); a run killed with SIGKILL can still leave its lock, which the next run replaces. When a run starts, the files
 of the table above that an earlier COAL run wrote into the folder are removed (a `dnds.kaks` or
 `codon_alignments.fasta` or `protein_alignments.fasta` of a run with other options, the `.fasta` files of a
 `codon_alignments/` or `protein_alignments/` that a cluster run with `--keep-alignments` /
@@ -492,7 +507,10 @@ signal 9 (SIGKILL; out of memory?))`.
 
 **Warnings of the run** (the lines `coal pipeline: warning: ...` on stderr) are also in `report.json` as
 `warnings`: the same file given as `--query` and `--subject` (every gene's best hit is then itself: dN = dS = 0;
-with `--pairs`, only the lines that pair a gene with itself are counted), a cached MAFFT or Clustal Omega that is
+with `--pairs`, only the lines that pair a gene with itself are counted), or a `--subject` that is a copy of the
+`--query` (the same bytes, also when one of them is compressed; or, without `--pairs`, 90% or more of the records
+of the smaller file with the same ID and the same sequence in both, whatever the line wrapping and case: a
+re-wrapped copy, or one with a record more), a cached MAFFT or Clustal Omega that is
 not the pinned version, a `-j` above the number of CPUs, an old DIAMOND, a `--pairs` / `--clusters` file whose IDs are not those of the
 sequences, input that looks like several transcripts per gene, and the counts of the `--min-codons` / `--max-ds`
 flags.
@@ -824,7 +842,9 @@ machine is still to be done.
 - **Compressed input.** A gzip-compressed `--query`, `--subject`, `--cds`, `--pairs` or `--clusters` file
   (recognised by its first two bytes, whatever its name) is decompressed into `DIR/work/inputs/` and read from
   there, so the folder needs room for the plain copies; they are kept for `--resume` and reused while the
-  compressed file is unchanged. Messages of the translation step name the copy. Other compression formats
+  compressed file is unchanged. Every input must exist before anything is decompressed (a missing one is
+  refused first, and no copy is made); copies made by a run that is then refused are removed. Messages of the
+  translation step name the copy. Other compression formats
   (bzip2, xz, zstd) are not read: decompress them first.
 - **Protein input is not accepted**: the pipeline starts from CDS, so that protein and CDS always match. A protein
   file is recognised only when it leaves no usable gene (see "Inputs that cannot work"); a file that mixes CDS and

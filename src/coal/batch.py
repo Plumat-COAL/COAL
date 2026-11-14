@@ -223,6 +223,7 @@ def _worker(conn, n: int, reporting: bool) -> None:
     import io
     from .cli import install_signal_handlers, run_job
     from .core import limit_blas_threads
+    from .pipeline import release_held_locks
     for c in _parent_ends:
         try:
             c.close()
@@ -240,19 +241,23 @@ def _worker(conn, n: int, reporting: bool) -> None:
         buf = io.StringIO()
         real = sys.stderr
         sys.stderr = buf  # cli.run_job's say() prints to sys.stderr at call time
+        rec = None
         try:
             try:
                 code, rec = run_job(job.args, job.argv, prefix=_prefix(job, n), want_report=reporting, close=False)
-                try:
-                    entry = _entry(job, code, rec, reporting) if code not in (130, 141) else None
-                finally:
-                    rec.close()
+                entry = _entry(job, code, rec, reporting) if code not in (130, 141) else None
             except KeyboardInterrupt:
                 code, entry = 130, None
             except SystemExit as e:  # SIGTERM / SIGHUP: cli's handler raises SystemExit(128 + signal)
                 code, entry = (e.code if isinstance(e.code, int) else 1), None
         finally:
             sys.stderr = real
+            if rec is not None:
+                rec.close()   # (its entries file; also when a signal ended _entry)
+            # A signal between taking the job's output lock and the job's own cleanup left the lock (or its
+            # temporary file) behind; a worker started by fork ends without atexit, so it is removed here (P01).
+            # The worker runs one job at a time, so nothing else holds a lock in this process.
+            release_held_locks()
         try:
             conn.send({"index": job.index, "code": code, "stderr": buf.getvalue(), "entry": entry})
         except (BrokenPipeError, OSError):

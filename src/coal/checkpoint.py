@@ -153,9 +153,10 @@ class Checkpoint:
 
     def remove(self, *, keep_partial: bool = False, keep_entries: bool = False):
         """Remove the checkpoint and its files. keep_entries: the entries file stays (the run report reads it back
-        for --report and removes it itself, RunReport.close)."""
-        for p in ((self.path, self.path + ".tmp", self.stage) + (() if keep_entries else (self.entries,))
-                  + (() if keep_partial else (self.partial,))):
+        for --report and removes it itself, RunReport.close). The checkpoint goes last: a removal cut short leaves
+        a checkpoint that the next run judges and removes (no stray file without one)."""
+        for p in ((self.path + ".tmp", self.stage) + (() if keep_entries else (self.entries,))
+                  + (() if keep_partial else (self.partial,)) + (self.path,)):
             try:
                 os.unlink(p)
             except OSError:

@@ -151,7 +151,8 @@ killed, so a pipeline reading COAL's output never waits on an orphaned worker.
   the output while it runs, because the partial output and checkpoint files it writes there have fixed names. A
   second run writing the same file at the same time is refused before it starts (`coal: error: another COAL run
   (process 12345) is writing out.fa: wait for it to finish, or write to another file ...`, exit 1); a lock left
-  behind by a run that was killed is replaced once that process is gone. Different output files in one folder never
+  behind by a run that was killed is replaced once that process is gone (a SIGTERM, SIGHUP or Ctrl-C, whenever it
+  comes, leaves no lock and no `<out>.coal-lock.<pid>.<random>.tmp` behind; only SIGKILL can). Different output files in one folder never
   wait for each other.
 - Many DNA files: at most about as many files as the open-file limit allows stay open at once (the least recently
   used is closed first; the limit is raised towards its hard limit when the files need it), with read buffers that

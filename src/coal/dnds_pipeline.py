@@ -492,6 +492,54 @@ class FastaIndex:
 _BOM = b"\xef\xbb\xbf"
 
 
+_HEADER = re.compile(rb"^(?:\xef\xbb\xbf)?>([^\s]*)[^\r\n]*", re.M)
+COPY_SHARE = 0.9          # records with the same ID and sequence, of the smaller file, that make --subject a copy
+COPY_FIRST_IDS = 200      # IDs of --subject looked up among those of --query before anything is hashed
+
+
+def _fasta_records(path, digests: bool = True, limit: int | None = None) -> list:
+    """The records of a FASTA file: [ID] (digests=False) or [(ID, digest of the sequence with white space
+    removed and in upper case)], at most `limit`. Read through mmap with one regular expression: C speed."""
+    import mmap
+    with open(path, "rb") as fh:
+        if os.fstat(fh.fileno()).st_size == 0:
+            return []
+        with mmap.mmap(fh.fileno(), 0, access=mmap.ACCESS_READ) as mm:
+            heads = []
+            for m in _HEADER.finditer(mm):
+                heads.append((m.group(1), m.start(), m.end()))
+                if limit is not None and len(heads) >= limit:
+                    break
+            if not digests:
+                return [h[0] for h in heads]
+            out = []
+            for k, (rid, _start, end) in enumerate(heads):
+                stop = heads[k + 1][1] if k + 1 < len(heads) else len(mm)
+                seq = mm[end:stop].translate(None, b" \t\r\n\x0b\x0c").upper()
+                out.append((rid, hashlib.blake2b(seq, digest_size=16).digest()))
+            return out
+
+
+def _same_records(query, subject):
+    """(records with the same ID and sequence in both files, records of the smaller file) when that is at least
+    COPY_SHARE of the smaller file; else None. Files of which fewer than half of the first COPY_FIRST_IDS IDs of
+    `subject` are IDs of `query` are not hashed."""
+    from collections import Counter
+    first = _fasta_records(subject, digests=False, limit=COPY_FIRST_IDS)
+    if not first:
+        return None
+    q_ids = set(_fasta_records(query, digests=False))
+    if 2 * sum(1 for i in first if i in q_ids) < min(len(first), len(q_ids)):
+        return None   # (fewer than half of them: other genes; the files are not hashed)
+    q = Counter(_fasta_records(query))
+    s = Counter(_fasta_records(subject))
+    n_small = min(sum(q.values()), sum(s.values()))
+    n_same = sum(min(n, s[k]) for k, n in q.items() if k in s)
+    if n_small and n_same >= COPY_SHARE * n_small:
+        return n_same, n_small
+    return None
+
+
 def fasta_lines(fh):
     """(offset, line) of the lines of a file opened in binary mode, split as coal-cpp splits them (cpp/src/seqio.cpp):
     a UTF-8 byte order mark at the start is skipped (Windows Notepad writes one), and a line ends at \\n, \\r\\n or a
@@ -665,6 +713,21 @@ GENETIC_CODE_NAMES = {1: "standard", 2: "vertebrate mitochondrial", 3: "yeast mi
                       13: "ascidian mitochondrial", 14: "alternative flatworm mitochondrial",
                       15: "Blepharisma nuclear", 16: "chlorophycean mitochondrial", 21: "trematode mitochondrial",
                       22: "Scenedesmus obliquus mitochondrial", 23: "Thraustochytrium mitochondrial"}
+# NCBI genetic codes COAL does not support (no table, no -c), with the stop codons they read as amino acids, that
+# the hint names beside its candidates when the sequences fit them equally well (final retest of 2026-11-14, P02:
+# SR1 / Gracilibacteria bacteria, code 25, got "codes 4 and 10 ... run again with the -c of its organism", a list
+# without their code). The codes whose stops depend on the context (27, 28, 31) and 26 (the standard stops) are
+# left out. kind: "genome" (nuclear, bacterial) or "organelle".
+UNSUPPORTED_CODES = {
+    24: ("Rhabdopleuridae mitochondrial", "organelle", frozenset({b"TAA", b"TAG"}), "TGA = Trp, AGA = Ser, AGG = Lys"),
+    25: ("Candidate Division SR1 and Gracilibacteria", "genome", frozenset({b"TAA", b"TAG"}), "TGA = Gly"),
+    29: ("Mesodinium nuclear", "genome", frozenset({b"TGA"}), "TAA, TAG = Tyr"),
+    30: ("Peritrich nuclear", "genome", frozenset({b"TGA"}), "TAA, TAG = Glu"),
+    32: ("Balanophoraceae plastid", "organelle", frozenset({b"TAA", b"TGA"}), "TAG = Trp"),
+    33: ("Cephalodiscidae mitochondrial", "organelle", frozenset({b"TAG"}),
+         "TAA = Tyr, TGA = Trp, AGA = Ser, AGG = Lys"),
+}
+_STANDARD_STOPS = frozenset({b"TAA", b"TAG", b"TGA"})
 # Codons a code does not use although NCBI's table gives them an amino acid ("CGA, CGC absent" in code 3): that a
 # gene avoids them is evidence for the code, as avoiding a code's extra stop codons is (AGA / AGG for code 2).
 _ABSENT_CODONS = {3: frozenset({b"CGA", b"CGC"})}
@@ -788,8 +851,13 @@ def suggest_genetic_code(chosen: int, genes: list[dict], background, n_records: 
 
     genes may be a sample of the flagged genes: fraction is the share looked at (for rule 2).
 
+    7. For the whole set, when the candidates are all departures from the standard stop codons, the codes COAL
+       does not support (UNSUPPORTED_CODES; the genome codes for a genome-size set, else the organelle codes)
+       under which these genes have no internal stop and that reassign no more stop codons than the candidates
+       do are named too ("unsupported"; final retest of 2026-11-14, P02: code 25 bacteria got codes 4 and 10).
+
     Returns {"codes": [...], "genes": [ids], "also": [codes that also fit these genes], "evidence": text,
-    "whole_set": bool}."""
+    "whole_set": bool, "unsupported": [codes COAL does not support that fit as well]}."""
     from collections import Counter
     from .tables import get_code
     std = get_code(chosen)
@@ -908,7 +976,35 @@ def suggest_genetic_code(chosen: int, genes: list[dict], background, n_records: 
             else "their internal stop codons are " + " / ".join(kinds))
     if len(W) == 1 and best[0] < 0 and W[0] in notes:
         text += "; they have " + notes[W[0]]
-    return {"codes": W, "genes": [g["id"] for g in support], "also": also, "evidence": text, "whole_set": whole}
+    unsupported = []
+    if whole and len(W) > 1 and not any(tables[t][0] == _STANDARD_STOPS for t in W):
+        want = "genome" if genome or len(G) >= GENOME_MIN_GENES else "organelle"
+        for u, (_name, kind, st, _what) in UNSUPPORTED_CODES.items():
+            if (needed & st) or kind != want:
+                continue
+            if len((stops_c - st) - needed) <= best[1]:
+                unsupported.append(u)
+    return {"codes": W, "genes": [g["id"] for g in support], "also": also, "evidence": text, "whole_set": whole,
+            "unsupported": unsupported}
+
+
+def _unsupported_text(codes) -> str:
+    """'NCBI code 25 (Candidate Division SR1 and Gracilibacteria: TGA = Gly)', for the hint."""
+    names = [f"{u} ({UNSUPPORTED_CODES[u][0]}: {UNSUPPORTED_CODES[u][3]})" for u in codes]
+    return ("NCBI code " if len(names) == 1 else "NCBI codes ") + _and(names)
+
+
+def _supported_text() -> str:
+    """'1-6, 9-16 and 21-23': the codes -c accepts."""
+    runs, cur = [], [SUPPORTED[0]]
+    for t in SUPPORTED[1:]:
+        if t == cur[-1] + 1:
+            cur.append(t)
+        else:
+            runs.append(cur)
+            cur = [t]
+    runs.append(cur)
+    return _and([f"{r[0]}-{r[-1]}" if len(r) > 1 else str(r[0]) for r in runs])
 
 
 class _Run:
@@ -1004,6 +1100,7 @@ class _Run:
             self.warn(f"-j {self.jobs_requested} is more than the {self.cpus} CPU(s) this process may use: "
                       f"coal-cpp, DIAMOND and the aligners are run with {self.threads} thread(s)")
         self._same_file_warning()
+        self._inputs_exist()
         self._gunzip_inputs()
         self._copy_warning()
         self._describe_inputs()
@@ -1078,7 +1175,7 @@ class _Run:
     def _copy_warning(self) -> None:
         """--subject a byte copy of --query (another file, the same content; one of them compressed or both): the
         same warning as for the same file (retest of 2026-11-14, Q04: every pair was a self-pair with dN = dS = 0,
-        without a word). Files of different sizes are not read."""
+        without a word); or one with the same records (P04, below)."""
         a = self.a
         if self.mode != "pairs" or getattr(a, "pairs", None):
             return
@@ -1086,8 +1183,6 @@ class _Run:
             if os.path.samefile(a.query, a.subject):
                 return   # (_same_file_warning)
             q, s = self.plain(a.query), self.plain(a.subject)
-            if os.path.getsize(q) != os.path.getsize(s):
-                return
 
             def digest(given, path):
                 d = self._plain_sha256.get(os.path.abspath(os.fspath(given)))
@@ -1098,13 +1193,36 @@ class _Run:
                     for block in iter(lambda: fh.read(1 << 20), b""):
                         h.update(block)
                 return h.hexdigest()
-            if digest(a.query, q) != digest(a.subject, s):
+            if os.path.getsize(q) == os.path.getsize(s) and digest(a.query, q) == digest(a.subject, s):
+                self.warn(f"--subject {a.subject} has the same content as --query {a.query} (a copy): every gene's "
+                          "best hit is itself, so the pairs are self-pairs with dN = dS = 0. For paralogs within one "
+                          "genome use `coal pipeline clusters`")
                 return
         except OSError:
             return
-        self.warn(f"--subject {a.subject} has the same content as --query {a.query} (a copy): every gene's best "
-                  "hit is itself, so the pairs are self-pairs with dN = dS = 0. For paralogs within one genome use "
-                  "`coal pipeline clusters`")
+        # Not a byte copy, but the same records: re-wrapped, upper / lower case, a record more or less (final
+        # retest of 2026-11-14, P04: 300 of 300 self-pairs without a word). Cheap: the first IDs of --subject are
+        # looked up among the IDs of --query first (a header scan), and only files that share them are hashed.
+        try:
+            got = _same_records(q, s)
+        except (OSError, ValueError):
+            return
+        if got is None:
+            return
+        n_same, n_small = got
+        self.warn(f"--subject {a.subject} has the same genes as --query {a.query}: {n_same:,} of the {n_small:,} "
+                  "records of the smaller file have the same ID and sequence in both (a copy, re-wrapped or "
+                  "edited?): their best hits are themselves, so their pairs are self-pairs with dN = dS = 0. For "
+                  "paralogs within one genome use `coal pipeline clusters`")
+
+    def _inputs_exist(self) -> None:
+        """An input that does not exist is refused before any .gz input is decompressed (final retest of
+        2026-11-14, P05: the copies were made first, and stayed in work/inputs). The error is the one the stages
+        gave; the report lists the inputs as before."""
+        for opt, p in self._inputs:
+            if opt != "--diamond" and not os.path.exists(p):
+                self._describe_inputs()
+                raise PipelineError(f"cannot open {p!r}: no such file")
 
     def _gunzip_inputs(self) -> None:
         """A gzip-compressed input (found by its first two bytes, whatever its name) is decompressed into
@@ -1508,6 +1626,7 @@ class _Run:
         """coal-cpp translate -> (protein FASTA, genes table, counts)."""
         for p in paths:
             if not os.path.isfile(p):
+                self.discard_new_inputs()
                 raise PipelineError(f"cannot open {p!r}: no such file")
         faa, genes = self.wpath(f"{name}.faa"), self.wpath(f"{name}.genes.tsv")
 
@@ -1785,6 +1904,8 @@ class _Run:
                "whole_set": whole, "clean_under": codes[0] if len(codes) == 1 else None,
                "candidates": codes, "genes": best, "also_clean_under": hint["also"],
                "evidence": hint["evidence"], "examples": examples}
+        if hint.get("unsupported"):
+            rec["unsupported_candidates"] = hint["unsupported"]
         if file is not None:
             rec["file"] = file
         self.code_hints.append(rec)
@@ -1806,6 +1927,14 @@ class _Run:
                           f"{', '.join(examples)}. The whole set looks like code {t}: its rows are estimates from "
                           f"mistranslated codons. Run again with -c {t} (docs/pipeline.md \"Genes of another "
                           "genetic code\")")
+            elif hint.get("unsupported"):
+                self.warn(head + f"any of the NCBI genetic codes {_and(codes)}{why}, e.g. {', '.join(examples)}. "
+                          "The whole set looks like another genetic code, and its sequences cannot tell which of "
+                          "these it is: " + names + "; or " + _unsupported_text(hint["unsupported"]) + ", which "
+                          f"COAL does not support (-c takes {_supported_text()}). Its rows are estimates from "
+                          "mistranslated codons. If its organism (and organelle) has one of COAL's codes, run "
+                          "again with that -c; for a code COAL does not support, no -c gives right rows "
+                          "(docs/pipeline.md \"Genes of another genetic code\")")
             else:
                 self.warn(head + f"any of the NCBI genetic codes {_and(codes)}{why}, e.g. {', '.join(examples)}. "
                           "The whole set looks like another genetic code, and its sequences cannot tell which of "
@@ -2324,6 +2453,7 @@ def _pairs_mode(run: _Run) -> None:
     a = run.a
     for p in (a.query, a.subject):
         if not os.path.isfile(p):
+            run.discard_new_inputs()
             raise PipelineError(f"cannot open {p!r}: no such file")
     q_faa, q_genes, _ = run.translate("query", [a.query])
     s_faa, s_genes, _ = run.translate("subject", [a.subject])
