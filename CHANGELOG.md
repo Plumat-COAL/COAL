@@ -452,6 +452,23 @@ entry under "Added", not under "Fixed".
     No number changes (Q01-Q05): Salmonella / Shigella and S. cerevisiae / C. glabrata pairs and the four-yeast
     clusters run give byte-identical `dnds.tsv`, `orthologs.tsv`, `genes.tsv`, `failed.tsv`, clusters and
     alignments to the deep test's runs.
+  - **Final retest of 2026-11-14 (P02, P04, P05).** **Codes COAL does not support** (P02): *Ca.* Gracilibacteria
+    and *Ca.* Absconditicoccus (code 25, TGA = Gly) read with `-c 11` got "codes 4 and 10 ... Run again with the
+    -c of its organism", a list without their code, which `-c` does not take. A whole set's hint whose
+    candidates all depart from the standard stops now also names the NCBI codes 24-33 that fit as well ("; or
+    NCBI code 25 (Candidate Division SR1 and Gracilibacteria: TGA = Gly), which COAL does not support (-c takes
+    1-6, 9-16 and 21-23)"), says that no `-c` gives right rows for such a code, and `report.json` lists them as
+    `unsupported_candidates`; docs/pipeline.md lists the codes COAL does not support. **A copy of `--query` that
+    is not a byte copy** (P04): a re-wrapped copy, or one with a record more, ran into 300 of 300 self-pairs
+    without a word; without `--pairs`, 90% or more of the smaller file's records with the same ID and sequence in
+    both (white space and case aside) now give the copy warning ("has the same genes as --query: 300 of the 300
+    records ..."). Cheap: the first 200 IDs of `--subject` are looked up among those of `--query` (one header scan
+    through mmap, 0.04 s for two 5 MB genomes) before anything is hashed (0.2 s for a 5 MB copy). **A missing
+    input is refused before any `.gz` input is decompressed** (P05: the copies were made first and stayed in
+    `work/inputs`); the error is as before.
+    No number changes (P01-P05): Salmonella / Shigella and S. cerevisiae / C. glabrata pairs and the four-yeast
+    clusters run give byte-identical `dnds.tsv`, `orthologs.tsv`, `unpaired.tsv`, `genes.tsv`, `failed.tsv`,
+    clusters and alignments to the deep test's runs.
 - **Protein alignment for the codon step (docs/alignment.md).** `<coal/align.hpp>` and the `coal-cpp-align` tool: a
   global Needleman-Wunsch/Gotoh aligner (BLOSUM62/45/80, PAM250, affine gaps; EMBOSS needle defaults, a pwalign
   preset), full length (overhangs gapped, never cut off), AVX2 row loops picked at run time, multithreaded; optimal
@@ -604,6 +621,26 @@ entry under "Added", not under "Fixed".
     changed since the checkpoint, a checkpoint of the other engine) or a signal there left the lock, and the next run
     reported a stale lock of a dead process. Found by the new `--batch-parallel` SIGTERM test on a macOS CI runner;
     a test refuses a resume in both engines and checks the lock is gone.
+  - **A SIGTERM, SIGHUP or Ctrl-C at any instant leaves no lock and no `<lock>.<pid>.<hex>.tmp` (final retest of
+    2026-11-14, P01).** The cause of the flaky `test_batch` SIGTERM test (2 of 84 CI jobs on PR #62): Python's
+    handler raises SystemExit wherever the main thread is, and a signal right after the lock was linked, while its
+    temporary file was removed, after `take_output_lock` returned and before the caller's `try`, or during the
+    final release left the lock (and in one window its temporary file, which nothing ever removed). Now the
+    creation and the release of a lock, and the clean-up at the end of a run, run with SIGINT / SIGTERM / SIGHUP
+    blocked on POSIX (delivered when the step is done); the bookkeeping is ordered so that what a signal can
+    still cut short (Windows, other threads) is cleaned up: `take_output_lock` removes the lock it made when
+    anything ends it, a lock is forgotten only after its file is removed, and every lock and temporary file this
+    process still holds is removed at exit and by a batch worker after each job. A batch worker also closes the
+    job's report (its entries file `<out>.coal-entries.jsonl` stayed after a SIGTERM), and a checkpoint is removed
+    after its files. coal-cpp registered the lock for its signal handler only after reading it back: a SIGTERM in
+    between left it; the steps from creating the lock to registering it, and the release, now run with those
+    signals blocked (POSIX). Numbers: the retest's deterministic windows (`coal pep nuc -o out.fa` sending itself
+    SIGTERM at each instant) left the lock in 4 of 5, now in none; the retest's storm (the CI scenario, SIGTERM
+    after a random 0-60 ms) left a lock, `.tmp` or entries file in 4 of 600 batches (retest) and 2 of 300 under
+    load (here), now in none of 600 (300 unloaded, 300 under 3 CPU hogs); coal-cpp with SIGTERM right after the
+    link: lock left, now nothing. `tests/test_batch.py` passes 100 of 100 times under 3 CPU hogs. The test
+    itself now runs without checkpoints (`COAL_CHECKPOINT_EVERY`): a job that has run for 2 s when the signal
+    comes keeps its checkpoint for `--resume` by design, which a loaded machine reached in 3 of 300 storm batches.
   - **`coal-cpp -o`: the output lock of the C++ engine follows the Python engine's rules.** `<out>.coal-lock`
     holds `<pid> <host> <start> <token>` in both engines; it is created with its content in one step (never seen
     empty), a lock written on another machine is held and never replaced, a process id that was reused (another
