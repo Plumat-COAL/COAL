@@ -2923,7 +2923,7 @@ def _clusters_mode(run: _Run) -> None:
 
     def first_in_input(x: str, y: str) -> bool:
         """y comes before x in the input (--cds files in order, then records): a pair is aligned in input order
-        (dnds.hpp Group::swap_pair; docs/pipeline.md, "Which gene is aligned first")."""
+        (dnds.hpp Group::swap_pair; docs/pipeline.md, "Which gene comes first")."""
         return cds_idx.pos[y][:2] < cds_idx.pos[x][:2]
 
     def emit_pairwise(write, cid: str, ids: list[str], pairs) -> None:
@@ -2977,6 +2977,18 @@ def _clusters_mode(run: _Run) -> None:
                 buf = [b"G\t", cid.encode(), b"\tall\tswap\n" if swap else b"\tall\n"]
                 for m, row in zip(ids, rows):
                     buf += [b"M\t", m.encode(), b"\t", cds_idx.get(m), b"\t" if row else b"", row, b"\n"]
+                if r is not None and len(ids) > 2:
+                    # the pairs of an MSA in input order too (the earlier --cds file, then the earlier record
+                    # first; the rows still list the clusters file's order): the members' input ranks, when
+                    # that order is not the members' (dnds.hpp Group::rank; docs/pipeline.md "Which gene comes
+                    # first")
+                    key = [cds_idx.pos[m][:2] for m in ids]
+                    if any(key[k + 1] < key[k] for k in range(len(key) - 1)):
+                        rank = sorted(range(len(ids)), key=key.__getitem__)
+                        rk = [0] * len(ids)
+                        for k, t in enumerate(rank):
+                            rk[t] = k
+                        buf.append(b"O\t" + "\t".join(map(str, rk)).encode() + b"\n")
                 buf.append(b"E\n")
                 write(b"".join(buf))
             pending.clear()

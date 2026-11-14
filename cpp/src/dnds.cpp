@@ -149,6 +149,7 @@ GroupResult prepare_group(const Group& g, const Options& opt) {
     r.members.resize(n);
     r.protein_rows.assign(n, "");
     r.swap_pair = g.swap_pair && n == 2;
+    if (g.rank.size() == n) r.rank = g.rank;
     const GeneticCode* code = get_code(opt.table);
     if (!code) {
         r.error_code = "genetic_code";
@@ -297,9 +298,11 @@ PairResult compute_pair(const GroupResult& r, int i, int j, const Options& opt) 
         if (!na.empty()) p.note = "seq1: " + na;
         if (!nb.empty()) p.note += (p.note.empty() ? "" : "; ") + ("seq2: " + nb);
     }
-    // Group::swap_pair: the pair in input order (member 1 first) for the estimators
-    const MemberResult& x = r.swap_pair ? b : a;
-    const MemberResult& y = r.swap_pair ? a : b;
+    // The pair in input order for the estimators: Group::rank (any group size), else Group::swap_pair (two
+    // members: member 1 first)
+    const bool sw = r.rank.empty() ? r.swap_pair : r.rank[(size_t)j] < r.rank[(size_t)i];
+    const MemberResult& x = sw ? b : a;
+    const MemberResult& y = sw ? a : b;
     kaks::Prepared prep = kaks::prepare(x.codon_row, y.codon_row, *code);
     // Options::compare_terminal_stops: the reference flavours of Comeron and Li (ComeronFlavour::gestimator,
     // LiFlavour::seqinr) compare stop codons, and a pipeline that translates the stop codon to '*', aligns it

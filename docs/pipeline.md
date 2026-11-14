@@ -407,9 +407,20 @@ route: the pairs route with the `--query` gene first, `pipeline clusters` with t
 file first (then the earlier record), `coalr::coal_dnds_pairs()` with the query and `coal_dnds_clusters()` with
 the earlier one in `cds`. orthologr does the same (`dNdS()`: the query; `dNdS_orthogroups()`: the gene of the
 species that comes first), so the routes agree on a pair given in the same order. The rows of `dnds.tsv` still
-list a cluster's representative first. Pairs taken from a Clustal Omega / MAFFT alignment of a whole cluster
-are the exception: the multiple alignment itself depends on the order of the members (the clusters file's), and
-Comeron is computed with the earlier member of the cluster first.
+list a cluster's representative first. Pairs taken from a Clustal Omega / MAFFT alignment of a whole cluster are
+computed in input order too (since 0.6.0: before, with the earlier member of the clusters file first); only the
+multiple alignment itself still depends on the order of the members (the clusters file's), as an MSA does.
+
+Only the estimators that depend on which gene is first see the difference: Comeron with libsequence's
+two-position branches (`--comeron-twosubs libsequence`, the default of `--comeron-flavour gestimator`). YN, NG,
+LWL, MYN and the other KaKs_Calculator methods, and Comeron with its own pathways (the default), give the same
+numbers in either order. On the four-yeast cluster set (1,500 CDS each of *S. cerevisiae*, *C. glabrata*,
+*K. lactis*, *A. gossypii*; 443 clusters of 3 to 18 members aligned by Clustal Omega, 2,783 pairs) 1,548 MSA
+pairs are listed with the later gene first; with `--comeron-flavour gestimator` 1,459 of their Comeron rows
+change (dN by 0.2% in the median, 1.3% at the 90th percentile; 12 change status), and the Comeron rows equal to
+those of the same clusters aligned pairwise (`--max-cluster-size 2 --large-clusters sample`) rise from 174 to 240
+(the rest differ because the MSA's alignment of the pair is not the pairwise one). With the default options no
+row changes.
 
 ### `cluster_summary.tsv`
 

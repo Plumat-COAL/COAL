@@ -85,6 +85,8 @@ const char* CODON_DNDS_HELP =
     "  F <id> <reason>                 a member already known to be unusable (its pairs get status error)\n"
     "  H <qstart> <qend> <sstart> <send> <qseq_gapped> <sseq_gapped>   2 members: use this DIAMOND hit\n"
     "  P <i> <j>                       a pair of member numbers (from 0), with `list`\n"
+    "  O <rank> <rank> ...             the input rank of each member (after the M/F lines): every pair is\n"
+    "                                  computed with the member of the lower rank first (listed as given)\n"
     "  X <code> <reason>               the group is already known to have failed (its pairs get status error)\n"
     "  E                               end of the group\n"
     "Two members without rows are aligned here (global, BLOSUM62, needle defaults).\n"
@@ -580,11 +582,21 @@ public:
                     b > 2000000000)
                     bad("P needs two member numbers");
                 it.g.pair_list.emplace_back((int)a, (int)b);
+            } else if (k == "O") {
+                it.g.rank.clear();
+                for (size_t t = 1; t < f.size(); ++t) {
+                    long long v;
+                    if (!to_int(f[t], v)) bad("O needs one input rank (an integer) per member");
+                    it.g.rank.push_back(v);
+                }
             } else if (k == "X") {
                 if (f.size() < 3) bad("X needs a code and a reason");
                 it.fail_code = f[1].empty() ? "failed_before" : f[1];
                 it.fail = f[2].empty() ? "not usable" : f[2];
             } else if (k == "E") {
+                if (!it.g.rank.empty() && it.g.rank.size() != it.g.members.size())
+                    bad("O gives " + std::to_string(it.g.rank.size()) + " ranks for " +
+                        std::to_string(it.g.members.size()) + " members");
                 return true;
             } else {
                 bad("unknown line type '" + k.substr(0, 20) + "'");
