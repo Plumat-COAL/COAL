@@ -1,0 +1,12 @@
+# bug=K01 code=13 methods=LWL,LPB
+# LWL / LPB with the ascidian mitochondrial code (13): the result depends on which sequence is first.
+# CGA (Arg) against AGA (Gly in code 13) at the first position: KaKs_Calculator's LWL85 adds half a transition to
+# the fold class of the first codon (CGA: 0-fold) and half a transversion to that of the second (AGA: 2-fold).
+f
+CGAGCTAAACTGGGT
+AGAGCCAAACTGGGT
+
+r
+AGAGCCAAACTGGGT
+CGAGCTAAACTGGGT
+
