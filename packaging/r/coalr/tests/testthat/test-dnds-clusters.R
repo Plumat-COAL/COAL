@@ -154,7 +154,9 @@ test_that("pairs without an estimate are counted apart in the summary", {
   expect_identical(sm$n_no_data, c(1L, 0L))
   expect_identical(sm$n_saturated + sm$n_failed, c(0L, 0L))
   expect_true(is.na(sm$dN_median[1]))
-  expect_identical(sm$status, c("failed", "ok"))
+  # no pair with an estimate and none failed: the pairs' status (saturated, else no_data, else not_converged)
+  expect_identical(sm$status, c("no_data", "ok"))
+  expect_identical(sm$note[1], "no pair has an estimate (3 pairs: 1 without codons to compare, 2 not converged)")
 })
 
 test_that("a two-member cluster is computed in input order, as coal_dnds_pairs computes the pair", {

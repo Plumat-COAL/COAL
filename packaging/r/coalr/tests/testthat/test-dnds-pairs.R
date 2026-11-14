@@ -44,7 +44,8 @@ test_that("the pwalign preset equals the command line's", {
   want <- read_expected("pairs_pwalign_dnds.tsv")
   got <- coal_dnds_pairs(q, s, pairs = orthologs(), preset = "pwalign")
   expect_same_table(got, want)
-  same <- coal_dnds_pairs(q, s, pairs = orthologs(), gap_open = 14, gap_extend = 4, end_gaps = "penalized")
+  same <- coal_dnds_pairs(q, s, pairs = orthologs(), matrix = "BLOSUM62-PWALIGN", gap_open = 14, gap_extend = 4,
+                          end_gaps = "penalized", tie_break = "pwalign")
   expect_equal(got$dN, same$dN)
 })
 
