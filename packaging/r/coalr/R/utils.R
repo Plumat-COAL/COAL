@@ -49,8 +49,10 @@ coal_read_fasta <- function(path) {
 #      "genes.fa.gz").
 # Every other string is a sequence: rows in upper case whatever their gaps ("MKV.FA", "ACGT.NT", "MK/VL"), and
 # lower-case rows with dashes or with more dots than an extension has ("ac.gt.aa").
+SEQ_FILE_EXT <- "\\.(fa|fasta|fas|fna|ffn|faa|frn|cds|pep|aa|nt|aln|afa|mfa|seq|txt)(\\.(gz|bz2|xz))?$"
+
 looks_like_path <- function(x) {
-  ext <- "\\.(fa|fasta|fas|fna|ffn|faa|frn|cds|pep|aa|nt|aln|afa|mfa|seq|txt)(\\.(gz|bz2|xz))?$"
+  ext <- SEQ_FILE_EXT
   sep <- grepl("[/\\\\]", x)
   pathish <- sep || startsWith(x, "~") || grepl(ext, x, ignore.case = TRUE)
   if (!pathish) return(FALSE)
@@ -66,6 +68,7 @@ looks_like_path <- function(x) {
 # like a sequence row (looks_like_path): then a missing file is an error, and the string is never taken for a
 # sequence. Any other single string is one sequence.
 as_seqs <- function(x, arg, need_names = TRUE) {
+  raw <- x
   if (inherits(x, "XStringSet") || inherits(x, "XString") || inherits(x, "BStringSet")) {
     x <- as.character(x)
   } else if (is.data.frame(x)) {
@@ -92,10 +95,28 @@ as_seqs <- function(x, arg, need_names = TRUE) {
   if (need_names) {
     nm <- names(x)
     if (is.null(nm) || anyNA(nm) || any(!nzchar(nm))) {
-      stop("`", arg, "` needs names: the sequence IDs", call. = FALSE)
+      stop("`", arg, "` needs names: the sequence IDs", file_hint(raw), call. = FALSE)
     }
   }
   x
+}
+
+# For an error about an input that was taken as one sequence: when that one string has a sequence-file extension
+# in any case ("CDS.FASTA", which looks_like_path() reads as an upper-case row) but names no file, say so (new-user
+# audit 2026-11-14, U22). "" otherwise.
+file_hint <- function(x) {
+  if (!is.character(x) || length(x) != 1L || !is.null(names(x)) || is.na(x) || nchar(x) >= 4096L) return("")
+  if (!grepl(SEQ_FILE_EXT, x, ignore.case = TRUE) || file.exists(x)) return("")
+  paste0(". If '", x, "' is a file name, it does not exist (looked in ", getwd(), ")")
+}
+
+# Whether the sequences look like protein, not coding DNA: most of them have a letter that is no nucleotide code
+# (IUPAC: A C G T U R Y S W K M B D H V N) but is an amino acid code (E F I L P Q J O Z, or the stop *).
+looks_like_protein <- function(x) {
+  x <- x[!is.na(x) & nzchar(x)]
+  if (!length(x)) return(FALSE)
+  x <- utils::head(x, 200L)
+  mean(grepl("[EFILPQJOZefilpqjoz*]", x)) > 0.5
 }
 
 check_count <- function(x, arg, min = 0L) {
@@ -208,8 +229,8 @@ check_flags <- function(min_codons, max_ds, min_identity = NULL) {
 
 # Comeron's options (docs/kaks.md "Comeron"): the pathway order for codons that differ at two positions
 # (`comeron_twosubs`: NULL = by the flavour, "comeron" with "coal", "libsequence" with "gestimator") and the
-# smallest site class whose undefined correction makes dN or dS NA (`comeron_min_sites`). Returns the values the
-# C++ glue takes ("" for NULL).
+# smallest site class whose undefined correction makes dN or dS NA, unless the distance is then 0
+# (`comeron_min_sites`). Returns the values the C++ glue takes ("" for NULL).
 check_comeron <- function(comeron_twosubs, comeron_min_sites) {
   if (!is.null(comeron_twosubs) && (!is.character(comeron_twosubs) || length(comeron_twosubs) != 1L ||
                                     !comeron_twosubs %in% c("comeron", "libsequence"))) {

@@ -38,7 +38,14 @@ as \code{seqinr::read.fasta()} returns it, a two-column data frame (ID, sequence
 When an ID occurs twice the first record is used.}
 
 \item{pairs}{Which query goes with which subject: a data frame or matrix whose first two columns are query ID
-and subject ID. \code{NULL}: the i-th query with the i-th subject.}
+and subject ID (for example the first two columns of an ortholog table, \verb{coal pipeline pairs}'
+\code{orthologs.tsv} or \code{orthologr::diamond_rec()}). \code{"position"}: the i-th query with the i-th subject.
+\strong{\code{NULL} (the default) also pairs by position, which is right only when the two inputs are in the same
+order}: the two CDS files of two species rarely are, and two unrelated genes still give numbers with
+status \code{ok}. So with \code{NULL}, when both inputs have IDs and the i-th IDs differ, a warning says how many
+differ and how many of those pairs have a protein identity below 20\%; \code{"position"} pairs the same way without
+it. (The command line never pairs two CDS files by position: \verb{coal pipeline pairs} finds the pairs, or takes
+them from \code{--pairs}.)}
 
 \item{methods}{Ka/Ks methods: any of \code{"YN"} (Yang & Nielsen 2000, the default), \code{"NG"}, \code{"LWL"}, \code{"MLWL"},
 \code{"LPB"}, \code{"MLPB"}, \code{"MYN"} (KaKs_Calculator's methods; \code{"ALL"} for these seven), \code{"Comeron"} (Comeron 1995
@@ -93,8 +100,9 @@ most pairs when the two sequences are swapped). \code{NULL} (default): \code{"co
 \code{"libsequence"} with \code{"gestimator"}. The command line's \code{--comeron-twosubs}.}
 
 \item{comeron_min_sites}{For \code{"Comeron"}: a site class with fewer than this many sites cannot make \code{dN} or \code{dS}
-\code{NA}; its undefined logarithm is set to 0 (as \code{gestimator()} does), with status \code{warning} and a note. Never
-changes a value that is not \code{NA} otherwise. Default 3; \code{0} restores the rule of COAL before 2026-11-14 (every
+\code{NA}; its undefined logarithm is set to 0 (as \code{gestimator()} does), with status \code{warning} and a note; where the
+distance would then be 0, the row stays \code{NA} (\code{saturated}), as with \code{0}. Never changes a value that is not \code{NA}
+otherwise. Default 3; \code{0} restores the rule of COAL before 2026-11-14 (every
 class with sites can). The command line's \code{--comeron-min-sites}.}
 
 \item{terminal_stops}{Only with \code{comeron_flavour = "gestimator"} or \code{li_flavour = "seqinr"}: \code{"drop"} (default)
@@ -140,12 +148,15 @@ columns of \code{dnds.tsv} of \verb{coal pipeline pairs}.
 }
 \details{
 One bad gene or pair never stops the call: the pair's row gets \code{status = "error"} and the reason in \code{note}.
+When every pair fails, a warning gives the common cause (for example the columns of \code{pairs} are not the query
+and subject IDs, or protein sequences were given instead of coding DNA).
 }
 \examples{
 q <- c(g1 = "ATGGCTAAAGGTCTGGAACGTTAA", g2 = "ATGAAACCCGGGTTTTAG")
 s <- c(h1 = "ATGGCGAAAGGCCTGGATCGTTAA", h2 = "ATGAAGCCAGGGTTCTAG")
 coal_dnds_pairs(q, s, pairs = data.frame(query = c("g1", "g2"), subject = c("h1", "h2")))
-coal_dnds_pairs(q, s, methods = c("YN", "NG"))[, 1:7]
+# the two inputs are in the same order: pair them by position
+coal_dnds_pairs(q, s, pairs = "position", methods = c("YN", "NG"))[, 1:7]
 }
 \seealso{
 \code{\link[=coal_dnds_clusters]{coal_dnds_clusters()}}, \code{\link[=coal_kaks]{coal_kaks()}}, \code{\link[=coal_pipeline_pairs]{coal_pipeline_pairs()}}

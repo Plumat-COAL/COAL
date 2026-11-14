@@ -6,12 +6,21 @@
 #' columns of `dnds.tsv` of `coal pipeline pairs`.
 #'
 #' One bad gene or pair never stops the call: the pair's row gets `status = "error"` and the reason in `note`.
+#' When every pair fails, a warning gives the common cause (for example the columns of `pairs` are not the query
+#' and subject IDs, or protein sequences were given instead of coding DNA).
 #'
 #' @param query_cds,subject_cds Coding sequences: a named character vector (names = IDs), a `DNAStringSet`, a list
 #'   as `seqinr::read.fasta()` returns it, a two-column data frame (ID, sequence) or the path of a FASTA file.
 #'   When an ID occurs twice the first record is used.
 #' @param pairs Which query goes with which subject: a data frame or matrix whose first two columns are query ID
-#'   and subject ID. `NULL`: the i-th query with the i-th subject.
+#'   and subject ID (for example the first two columns of an ortholog table, `coal pipeline pairs`'
+#'   `orthologs.tsv` or `orthologr::diamond_rec()`). `"position"`: the i-th query with the i-th subject.
+#'   **`NULL` (the default) also pairs by position, which is right only when the two inputs are in the same
+#'   order**: the two CDS files of two species rarely are, and two unrelated genes still give numbers with
+#'   status `ok`. So with `NULL`, when both inputs have IDs and the i-th IDs differ, a warning says how many
+#'   differ and how many of those pairs have a protein identity below 20%; `"position"` pairs the same way without
+#'   it. (The command line never pairs two CDS files by position: `coal pipeline pairs` finds the pairs, or takes
+#'   them from `--pairs`.)
 #' @param methods Ka/Ks methods: any of `"YN"` (Yang & Nielsen 2000, the default), `"NG"`, `"LWL"`, `"MLWL"`,
 #'   `"LPB"`, `"MLPB"`, `"MYN"` (KaKs_Calculator's methods; `"ALL"` for these seven), `"Comeron"` (Comeron 1995
 #'   as libsequence's gestimator computes it, the default method of the R package orthologr; alias `"C95"`) and
@@ -50,8 +59,9 @@
 #'   most pairs when the two sequences are swapped). `NULL` (default): `"comeron"` with `comeron_flavour = "coal"`,
 #'   `"libsequence"` with `"gestimator"`. The command line's `--comeron-twosubs`.
 #' @param comeron_min_sites For `"Comeron"`: a site class with fewer than this many sites cannot make `dN` or `dS`
-#'   `NA`; its undefined logarithm is set to 0 (as `gestimator()` does), with status `warning` and a note. Never
-#'   changes a value that is not `NA` otherwise. Default 3; `0` restores the rule of COAL before 2026-11-14 (every
+#'   `NA`; its undefined logarithm is set to 0 (as `gestimator()` does), with status `warning` and a note; where the
+#'   distance would then be 0, the row stays `NA` (`saturated`), as with `0`. Never changes a value that is not `NA`
+#'   otherwise. Default 3; `0` restores the rule of COAL before 2026-11-14 (every
 #'   class with sites can). The command line's `--comeron-min-sites`.
 #' @param li_flavour For `"Li"`: `"coal"` (default) applies COAL's policy; `"seqinr"` compares stop codons as
 #'   `seqinr::kaks()` does. In both, seqinr's sentinel 9.999999 is `NA`.
@@ -89,7 +99,8 @@
 #' q <- c(g1 = "ATGGCTAAAGGTCTGGAACGTTAA", g2 = "ATGAAACCCGGGTTTTAG")
 #' s <- c(h1 = "ATGGCGAAAGGCCTGGATCGTTAA", h2 = "ATGAAGCCAGGGTTCTAG")
 #' coal_dnds_pairs(q, s, pairs = data.frame(query = c("g1", "g2"), subject = c("h1", "h2")))
-#' coal_dnds_pairs(q, s, methods = c("YN", "NG"))[, 1:7]
+#' # the two inputs are in the same order: pair them by position
+#' coal_dnds_pairs(q, s, pairs = "position", methods = c("YN", "NG"))[, 1:7]
 #' @seealso [coal_dnds_clusters()], [coal_kaks()], [coal_pipeline_pairs()]
 #' @export
 coal_dnds_pairs <- function(query_cds, subject_cds, pairs = NULL, methods = "YN", code = 1L,
@@ -118,10 +129,11 @@ coal_dnds_pairs <- function(query_cds, subject_cds, pairs = NULL, methods = "YN"
   check_flag(yn_weighting, "yn_weighting")
   check_flag(keep_alignments, "keep_alignments")
 
-  if (is.null(pairs)) {
+  by_position <- is.null(pairs) || identical(pairs, "position")
+  if (by_position) {
     if (length(q) != length(s)) {
       stop("without `pairs`, `query_cds` and `subject_cds` must have the same length (", length(q), " and ",
-           length(s), ")", call. = FALSE)
+           length(s), ")", file_hint(query_cds), file_hint(subject_cds), call. = FALSE)
     }
     n <- length(q)
     qi <- si <- seq_len(n)
@@ -130,7 +142,8 @@ coal_dnds_pairs <- function(query_cds, subject_cds, pairs = NULL, methods = "YN"
   } else {
     if (is.matrix(pairs)) pairs <- as.data.frame(pairs, stringsAsFactors = FALSE)
     if (!is.list(pairs) || length(pairs) < 2L) {
-      stop("`pairs` must be a data frame or matrix with two columns: query ID, subject ID", call. = FALSE)
+      stop("`pairs` must be a data frame or matrix with two columns: query ID, subject ID (or \"position\": ",
+           "the i-th query with the i-th subject)", call. = FALSE)
     }
     id1 <- as.character(pairs[[1L]])
     id2 <- as.character(pairs[[2L]])
@@ -148,6 +161,9 @@ coal_dnds_pairs <- function(query_cds, subject_cds, pairs = NULL, methods = "YN"
                     terminal_stops == "compare", keep_alignments, com$twosubs, com$min_sites)
   out <- flag_pairs(pair_table(raw, member_ids), flags)
   attr(out, "seconds") <- raw$seconds
+  # After the table is complete, so that a warning never changes a value (new-user audit 2026-11-14, U02, U18)
+  if (is.null(pairs)) warn_position_pairs(names(q), names(s), out)
+  warn_all_failed(out, n, by_position, id1, id2, qi, si, q, s)
   if (keep_alignments) {
     odd <- seq.int(1L, by = 2L, length.out = n)
     na_empty <- function(x) ifelse(nzchar(x), x, NA_character_)
@@ -171,4 +187,52 @@ pair_table <- function(raw, member_ids, cluster_id = NULL) {
     status = raw$status_names[p$status + 1L], note = p$note, stringsAsFactors = FALSE)
   if (!is.null(cluster_id)) out <- cbind(data.frame(cluster_id = cluster_id, stringsAsFactors = FALSE), out)
   out
+}
+
+# `pairs = NULL` pairs the i-th query with the i-th subject. When both inputs have IDs and some i-th IDs differ, that
+# may not be what was meant (two CDS files are rarely in ortholog order): say so, with the protein identities that
+# betray unrelated genes. `pairs = "position"` asks for the positional pairing and has no warning. The command line
+# never pairs two CDS files by position (`coal pipeline pairs` searches, or takes --pairs); `coal` (codon
+# alignment) pairs by file order only as PAL2NAL does, and its report says so when the IDs differ.
+warn_position_pairs <- function(qn, sn, out) {
+  if (is.null(qn) || is.null(sn) || !length(qn)) return(invisible())
+  differ <- which(qn != sn)
+  if (!length(differ)) return(invisible())
+  n <- length(qn)
+  k <- differ[1L]
+  first <- !duplicated(paste(out$seq1, out$seq2, sep = "\r"))   # one row per pair (the first method's)
+  has <- first & !is.na(out$prot_identity)   # whatever the status: a saturated pair can be an unrelated one
+  low <- sum(has & out$prot_identity < 20)
+  same_ids <- !anyDuplicated(qn) && setequal(qn, sn)
+  warning(sprintf(paste0(
+    "coal_dnds_pairs(): no `pairs` given, so the i-th query was paired with the i-th subject (by position), and ",
+    "the IDs of %d of %d pairs differ (e.g. '%s' with '%s')%s%s. Give `pairs` (a data frame: query ID, subject ID, ",
+    "e.g. the first two columns of an ortholog table), or `pairs = \"position\"` if the two inputs are in the same ",
+    "order."),
+    length(differ), n, qn[k], sn[k],
+    if (low) sprintf("; %d of them have a protein identity below 20%%, as unrelated genes do", low) else "",
+    if (same_ids) "; every query ID is also a subject ID: `pairs = data.frame(ids, ids)`, with `ids` the query IDs, pairs them by ID" else ""),
+    call. = FALSE)
+}
+
+# Every pair failed (status "error"): one R warning with the common cause, as the command line stops with one
+# message for these mistakes (pairs columns that are not the IDs, protein sequences given as CDS).
+warn_all_failed <- function(out, n, by_position, id1, id2, qi, si, q, s) {
+  if (!n || !all(out$status == "error")) return(invisible())
+  eg <- function(x) paste0("'", x[1L], "'")
+  why <- if (!by_position && all(is.na(qi)) && all(is.na(si)) && all(id1 %in% names(s)) && all(id2 %in% names(q))) {
+    "the two columns of `pairs` are the other way round (its first column holds subject IDs): give query ID, subject ID"
+  } else if (!by_position && all(is.na(qi))) {
+    paste0("none of the query IDs of `pairs` is in `query_cds` (e.g. ", eg(id1), "). Are the first two columns of ",
+           "`pairs` the query and subject IDs?")
+  } else if (!by_position && all(is.na(si))) {
+    paste0("none of the subject IDs of `pairs` is in `subject_cds` (e.g. ", eg(id2), "). Are the first two columns ",
+           "of `pairs` the query and subject IDs?")
+  } else if (looks_like_protein(q) || looks_like_protein(s)) {
+    paste0("`", if (looks_like_protein(q)) "query_cds" else "subject_cds", "` looks like protein sequences; ",
+           "give the coding DNA (CDS) of the genes")
+  } else {
+    paste0("the note of the first: ", out$note[1L])
+  }
+  warning(sprintf("coal_dnds_pairs(): all %d pairs failed (status \"error\"): %s", n, why), call. = FALSE)
 }
