@@ -61,9 +61,13 @@ grep '>' glpK.cds.fasta
 ## 2. Translate and align the proteins
 
 COAL needs a **protein alignment**; it does not align anything in this step. Translate with the right genetic
-code and align with any aligner:
+code and align with any aligner. If you installed Clustal Omega with `coal pipeline install clustalo`
+([Setup](README.md#setup)), it is in COAL's cache, not on `PATH`: the first line below puts it there for this
+shell (`coal pipeline install clustalo -q` prints the path of the installed program and installs nothing when it
+is there; skip the line if `clustalo` is on your `PATH` already):
 
 ```
+export PATH="$(dirname "$(coal pipeline install clustalo -q)"):$PATH"
 coal translate glpK.cds.fasta -c 4 -o glpK.faa
 clustalo -i glpK.faa -o glpK.aln.fasta --threads 1
 ```
@@ -181,7 +185,7 @@ echo "exit $?"
 
 ```
 coal: error: Mgal_glpK: protein and DNA are inconsistent (no match found) (paired by file order with DNA 'lcl|NC_000912.1_cds_WP_010874407.1_50', because no protein ID matches a DNA ID)
-coal: summary: 1 of 3 sequences has codons that do not match their amino acid (kept in the alignment).
+coal: summary: 1 of 3 sequences has codons that do not match their amino acid.
 coal: summary: 1 sequence of 3 is probably wrong (first: Mgen_glpK: 479 of the 508 codons COAL could check do not match this protein, so this is almost certainly the wrong DNA for it (or the wrong genetic code).) Fix or remove it before running again, or use --strict to refuse such genes.
 coal: summary: Mgal_glpK: The DNA does not spell the start of this protein in any reading frame.
 coal: summary: The run stopped at Mgal_glpK, so no output was written. Add --keep-going to write the other sequences and leave this one out.

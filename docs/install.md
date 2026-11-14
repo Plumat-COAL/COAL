@@ -1,5 +1,20 @@
 # Installing COAL
 
+<!-- dev-version banner (tests/test_new_user_ux.py): remove it when 0.6.0 is released -->
+> **These pages describe the development version, 0.6.0.dev0.** The latest release, 0.5.0, makes codon
+> alignments only: `coal dnds`, `coal kaks`, `coal translate` and `coal pipeline` are not in it (its wheels answer
+> `unrecognized arguments` or `cannot open 'pipeline'`). Until 0.6.0 is released, install from a checkout (Python
+> 3.10+, a C++17 compiler, CMake 3.16+; about a minute):
+>
+> ```
+> git clone https://github.com/plumat-coal/COAL && cd COAL
+> python -m pip install -e .
+> cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release
+> export COAL_CPP=$PWD/build/coal-cpp     # for this shell
+> ```
+>
+> To keep `COAL_CPP` in new shells, and for what each install gives: [Option 3](#option-3-from-source) below.
+
 **What each install gives.** COAL does three things (codon alignments; Ka/Ks for pairs: `coal kaks`, `coal dnds`;
 the one-step `coal pipeline` from coding sequences to dN/dS), and not every install has all three:
 
@@ -7,14 +22,15 @@ the one-step `coal pipeline` from coding sequences to dN/dS), and not every inst
 |---|---|---|---|
 | **Platform wheel** (`coal_align-<version>-py3-none-<platform>.whl`; [below](#the-c-engine-comes-with-the-wheel)) | yes, both engines | yes | yes, with DIAMOND (and Clustal Omega or MAFFT for clusters) |
 | Source package (`coal_src.tar.gz`, the pip commands on this page), the `py3-none-any` wheel | yes, the Python engine | no | no |
-| A checkout with `coal-cpp` built (`cmake`; README) and `COAL_CPP` set | yes, both engines | yes | yes, with DIAMOND |
+| A checkout with `coal-cpp` built and `COAL_CPP` set ([Option 3](#option-3-from-source)) | yes, both engines | yes | yes, with DIAMOND |
 | The Windows app, the web GUI | yes | no (the command line of the same install has what its wheel has) | no |
 | R package `coalr` | yes | yes, in process | pairs and clusters you give, in process; the search and clustering through Python (reticulate) |
 
 An install without `coal-cpp` has the Python engine only: it makes codon alignments, and `coal kaks`, `coal dnds`
 and `coal pipeline` stop with a message that says so and names the platform wheel. `coal --cpp-path` tells which
 kind an install is (it prints the path of `coal-cpp`, or exits 1). `coal-align` is **not on PyPI yet**
-(publication is pending): every command on this page installs from a GitHub release.
+(publication is pending): every command on this page installs from a GitHub release, which until 0.6.0 is
+released means 0.5.0, codon alignment only (the note at the top).
 
 **DIAMOND and the aligners** are separate programs that only `coal pipeline` uses: DIAMOND 2.1.0 or later for the
 ortholog search and the clustering (tested with 2.2.8), and Clustal Omega (or MAFFT) for clusters of three or more.
@@ -94,13 +110,27 @@ will find `coal-cpp` in the same environment with no settings. Until then, use t
 
 ## Option 3: from source
 
+Needs Python 3.10+, git, a C++17 compiler (gcc, clang, or Visual Studio 2019+) and CMake 3.16+ for `coal-cpp`,
+which Ka/Ks, `coal translate` and `coal pipeline` need (the build takes about a minute):
+
 ```
 git clone https://github.com/plumat-coal/COAL && cd COAL
 python -m pip install -e .
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release
+export COAL_CPP=$PWD/build/coal-cpp
+coal --cpp-path                      # prints the path of coal-cpp (exit 1: not found)
 coal examples/clean/protein.aln.fasta examples/clean/dna.fasta > codon_aln.fasta
+coal dnds examples/dnds/codon.fasta --pairs consecutive -o dnds.tsv
 ```
 
-That installs the engine only. Its optional extra `".[fast]"` adds a numpy speed-up for large inputs. The app is
+`export COAL_CPP` lasts for the current shell only. To make it permanent, copy the program next to the Python
+that runs COAL, where `coal` looks for it ([cpp-engine.md](cpp-engine.md) "Where coal looks for coal-cpp"):
+`cp build/coal-cpp "$(dirname "$(command -v python)")/"` (in a virtual environment: its `bin/`), or add the
+`export COAL_CPP=...` line, with the full path, to `~/.bashrc` (or `~/.zshrc`). On Windows the program is
+`build\Release\coal-cpp.exe`. Without the `cmake` lines, the checkout has the Python engine only: codon
+alignments, and `coal dnds`, `coal kaks`, `coal translate` and `coal pipeline` say that they need `coal-cpp`.
+
+`python -m pip install -e .` installs the engine only. Its optional extra `".[fast]"` adds a numpy speed-up for large inputs. The app is
 the package in `apps/coal-app`, with two extras: `"apps/coal-app[gui]"` (web GUI and Windows app, Gradio) and
 `"apps/coal-app[mcp]"` (stand-alone MCP server for AI agents). Install it next to the engine:
 

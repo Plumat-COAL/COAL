@@ -1173,10 +1173,13 @@ class RunReport:
         lines = []
         hint = self.gc_hint_cli if self.gc_hint else None  # the command-line wording
         k = 0 if self.nomismatch else kc.get("m", 0)
+        # was an output written? (a run that stopped at a gene or failed wrote none: no "kept in the alignment"
+        # next to "no output was written"; new-user audit 2026-11-14, U20)
+        written = self.exit_code == 0 or (self.exit_code == 2 and self.keep_going and not self.errors)
         if k:
-            fate = "removed by -nomismatch" if self.nomismatch else "kept in the alignment"
+            fate = "removed by -nomismatch" if self.nomismatch else "kept in the alignment" if written else ""
             s = (f"{_n(k)} of {_n(n)} sequences " + ("has" if k == 1 else "have")
-                 + f" codons that do not match their amino acid ({fate}).")
+                 + " codons that do not match their amino acid" + (f" ({fate})." if fate else "."))
             if hint:
                 s += " " + hint
             lines.append(s)
@@ -1192,7 +1195,7 @@ class RunReport:
         if fl:
             first = self.first_flagged
             text = first['messages'][0]['text']
-            if self.exit_code == 0 or (self.exit_code == 2 and self.keep_going and not self.errors):
+            if written:
                 lines.append(f"{_seqs(fl)} of {_n(n)} {'was' if fl == 1 else 'were'} written to the output but "
                              f"{'is' if fl == 1 else 'are'} probably wrong (first: {first['id']}: {text}) Remove "
                              f"{'it' if fl == 1 else 'them'} before analysis, or use --strict to refuse such genes.")

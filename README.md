@@ -2,6 +2,21 @@
 
 **Website:** [plumat-coal.github.io/COAL](https://plumat-coal.github.io/COAL/) · [Install](https://plumat-coal.github.io/COAL/install.html) · [Guide](https://plumat-coal.github.io/COAL/guide.html)
 
+<!-- dev-version banner (tests/test_new_user_ux.py): remove it when 0.6.0 is released -->
+> **These pages describe the development version, 0.6.0.dev0.** The latest release, 0.5.0, makes codon
+> alignments only: `coal dnds`, `coal kaks`, `coal translate` and `coal pipeline` are not in it (its wheels answer
+> `unrecognized arguments` or `cannot open 'pipeline'`). Until 0.6.0 is released, install from a checkout (Python
+> 3.10+, a C++17 compiler, CMake 3.16+; about a minute):
+>
+> ```
+> git clone https://github.com/plumat-coal/COAL && cd COAL
+> python -m pip install -e .
+> cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release
+> export COAL_CPP=$PWD/build/coal-cpp     # for this shell
+> ```
+>
+> To keep `COAL_CPP` in new shells, and for what each install gives: [docs/install.md, Option 3](docs/install.md#option-3-from-source).
+
 **Codon alignments from a protein alignment and its coding DNA, Ka/Ks (dN/dS) for pairs, and one step from coding
 sequences to a dN/dS table.** COAL is a fast, open-source alternative to
 [PAL2NAL](https://www.bork.embl.de/pal2nal/): it maps unaligned coding DNA onto an existing protein multiple sequence
@@ -41,8 +56,9 @@ estimates Ka/Ks itself and runs the whole route from two CDS files to dN/dS.
 ## Install
 
 Needs Python 3.10+. The package is called `coal-align` (the name `coal` on PyPI belongs to another project); the
-command and the Python module are both `coal`. **Publication on PyPI is pending**, so install from a release. There
-are two routes, and they do not give the same thing:
+command and the Python module are both `coal`. **Publication on PyPI is pending**, so install from a release (until
+0.6.0 is released, that is 0.5.0, with codon alignment only: see the note at the top). There are two routes, and
+they do not give the same thing:
 
 | Route | What you get |
 |---|---|
@@ -63,8 +79,8 @@ coal pipeline install diamond clustalo
 
 Once it is on PyPI, `python -m pip install coal-align` will pick the platform wheel by itself.
 
-From source, with the C++ engine (needs a C++17 compiler and CMake 3.16+; optional but recommended for large inputs
-and for many small runs):
+From source, with the C++ engine (needs a C++17 compiler and CMake 3.16+; Ka/Ks, `coal translate` and `coal pipeline`
+need it, and codon alignments of large inputs are faster with it):
 
 ```
 git clone https://github.com/plumat-coal/COAL && cd COAL
@@ -72,6 +88,8 @@ python -m pip install -e .
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release
 export COAL_CPP=$PWD/build/coal-cpp       # coal hands large inputs to coal-cpp when it finds it
 ```
+
+`COAL_CPP` lasts for this shell; [docs/install.md](docs/install.md#option-3-from-source) says how to keep it.
 
 The engine (`coal-align`) has no dependencies and no app code: it is all a pipeline needs. The web GUI, the MCP
 server for AI agents and the Windows app are a second package in this repository, `coal-align-app`
@@ -118,10 +136,11 @@ s <- coal_read_fasta("examples/dnds/species_b_cds.fasta")
 coal_dnds_pairs(q, s, pairs = read.delim("examples/dnds/orthologs.tsv")[, 1:2])
 
 # 5. inside orthologr (the fork with COAL built in; packaging/orthologr/README.md)
-#    sensitivity_mode = "default": DIAMOND's own default, as `coal pipeline` uses, gives the same 12 pairs as
-#    example 3. orthologr's default is "fast" (DIAMOND --fast, for hits above 90% identity), which finds 8 here.
+#    orthologr 0.5.0 searches with DIAMOND's default sensitivity, as `coal pipeline` does, and finds the same 12
+#    pairs as example 3 (0.4.3 used "fast", for hits above 90% identity, which finds 8 here;
+#    orthologr_legacy_options() or sensitivity_mode = "fast" restores it)
 orthologr::dNdS("examples/dnds/species_a_cds.fasta", "examples/dnds/species_b_cds.fasta",
-                dnds_est.method = "YN", engine = "coal", sensitivity_mode = "default")
+                dnds_est.method = "YN", engine = "coal")
 ```
 
 Worked tutorials on real genomes, with the outputs and how to read them: [docs/tutorials/](docs/tutorials/README.md)

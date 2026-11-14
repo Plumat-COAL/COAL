@@ -1371,10 +1371,13 @@ std::vector<std::string> RunReport::summary_lines() const {
     const long long n = total();
     std::vector<std::string> lines;
     long long k = nomismatch_ ? 0 : kc['m'];
+    // was an output written? (a run that stopped at a gene or failed wrote none: no "kept in the alignment" next
+    // to "no output was written"; report.py)
+    const bool written = exit_code == 0 || (exit_code == 2 && keep_going_ && errors_.empty());
     if (k) {
-        std::string fate = nomismatch_ ? "removed by -nomismatch" : "kept in the alignment";
+        std::string fate = nomismatch_ ? "removed by -nomismatch" : written ? "kept in the alignment" : "";
         std::string s = fmt_n(k) + " of " + fmt_n(n) + " sequences " + (k == 1 ? "has" : "have") +
-                        " codons that do not match their amino acid (" + fate + ").";
+                        " codons that do not match their amino acid" + (fate.empty() ? "." : " (" + fate + ").");
         if (has_gc_hint_) s += " " + gc_hint_cli_;
         lines.push_back(s);
     }
@@ -1390,7 +1393,7 @@ std::vector<std::string> RunReport::summary_lines() const {
         const Json& first = first_flagged_;
         bool one = fl == 1;
         const std::string text = sget(msgs_of(first)[0], "text");
-        if (exit_code == 0 || (exit_code == 2 && keep_going_ && errors_.empty()))
+        if (written)
             lines.push_back(seqs(fl) + " of " + fmt_n(n) + " " + (one ? "was" : "were") +
                             " written to the output but " + (one ? "is" : "are") + " probably wrong (first: " +
                             sget(first, "id") + ": " + text + ") Remove " + (one ? "it" : "them") +

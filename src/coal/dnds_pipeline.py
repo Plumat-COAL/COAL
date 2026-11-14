@@ -413,6 +413,19 @@ def _bad_tool_variable(var: str, name: str, other: str = "") -> None:
                             f"set it to the {name} program, or unset it" + (f" (or give {other})" if other else ""))
 
 
+def _cannot_open(path, why: str = "no such file") -> str:
+    """The message "cannot open 'PATH': WHY", with the path as typed (not Python's repr, which doubles backslashes), with a hint when
+    a Windows path is given on Linux or macOS, e.g. under WSL (new-user audit 2026-11-14, U17)."""
+    path = os.fspath(path)
+    text = f"cannot open '{path}': {why}"
+    m = re.match(r"^([A-Za-z]):[\\/]", path) if os.name != "nt" else None
+    if m:
+        rest = path[3:].replace("\\", "/")
+        text += (f". This is a Windows path; under WSL (Windows Subsystem for Linux) the same file is "
+                 f"/mnt/{m.group(1).lower()}/{rest}")
+    return text
+
+
 def _find_cpp() -> str:
     from . import dispatch
     path = dispatch.find_cpp()
@@ -453,7 +466,7 @@ class FastaIndex:
         try:
             fh = open(path, "rb")
         except OSError as e:
-            raise PipelineError(f"cannot open {path!r}: {e.strerror or e}") from None
+            raise PipelineError(_cannot_open(path, e.strerror or str(e))) from None
         with fh:
             off, cur, start = 0, None, 0
             pos = self.pos
@@ -824,6 +837,124 @@ def _hint_inputs(paths, flagged: dict, usable: set, stopped: set | None = None):
     return order, background, reps
 
 
+def _code_hint_of(paths, genes_path: str, chosen: int, only: set | None = None, min_stops: int = 2,
+                  min_genes: int = 2, max_genes: int = 5000):
+    """The evidence for _Run.code_hint() (and for `coal translate`'s hint): the genes of a genes table with
+    min_stops or more internal stops under the code `chosen`, up to max_genes of them spread evenly over the set,
+    judged by suggest_genetic_code(). Returns (the hint or None, records, records with internal stops, records
+    with min_stops or more, {the genes looked at: trailing nucleotides}). only: the IDs of the rows to judge."""
+    flagged: dict[str, int] = {}     # id -> trailing nucleotides
+    usable: set[str] = set()         # genes for the set's codon usage (fewer than MIN_STOPS internal stops)
+    with_stops = 0
+    n_records = 0
+    n_flagged = 0
+
+    def rows():
+        with open(genes_path, encoding="utf-8", errors="backslashreplace") as fh:
+            col = {n: k for k, n in enumerate(fh.readline().rstrip("\n").split("\t"))}
+            ki, si, ci, ti = col.get("internal_stops"), col.get("status"), col.get("code"), col.get("trailing_nt")
+            if ki is None or si is None:
+                return
+            for line in fh:
+                f = line.rstrip("\n").split("\t")
+                try:
+                    n = int(f[ki])
+                except (ValueError, IndexError):
+                    continue
+                if ci is not None and f[ci] == "duplicate_id":
+                    continue
+                if only is not None and f[0] not in only:
+                    continue
+                yield f, n, f[si] != "failed", ti
+
+    for _f, n, _ok, _ti in rows():
+        n_records += 1
+        with_stops += n >= 1
+        n_flagged += n >= min_stops
+    if n_flagged < min_genes:
+        return None, n_records, with_stops, n_flagged, flagged
+    # the genes looked at: all, or CODE_HINT_MAX_GENES spread evenly over the set (the first ones of a
+    # record-shuffled ciliate set lay on many scaffolds, which rule 2 then left out: R01)
+    take = min(n_flagged, max_genes)
+    k = 0
+    stopped: set[str] = set()
+    for f, n, ok, ti in rows():
+        if n >= 1:
+            stopped.add(f[0])
+        if n < min_stops:
+            if ok:
+                usable.add(f[0])
+            continue
+        if (k + 1) * take // n_flagged > k * take // n_flagged:
+            try:
+                flagged[f[0]] = int(f[ti]) if ti is not None else 0
+            except (ValueError, IndexError):
+                flagged[f[0]] = 0
+        k += 1
+    genes, background, replicons = _hint_inputs(paths, flagged, usable, stopped)
+    hint = suggest_genetic_code(chosen, genes, background, n_records, with_stops, replicons,
+                                min_genes=min_genes, fraction=len(flagged) / n_flagged)
+    return hint, n_records, with_stops, n_flagged, flagged
+
+
+def translate_hint(paths: list[str], genes_path: str, chosen: int, genes_shown: str | None = None) -> str | None:
+    """`coal translate`: one warning when most genes have internal stop codons, or when genes with internal stops
+    look like another genetic code, with the first such gene and the code that explains them (the evidence of
+    `coal pipeline`'s hint, _code_hint_of). None when there is nothing to say. (New-user audit 2026-11-14, U10:
+    the run said only "3 gene(s): 0 ok, 3 warning, 0 failed".) paths: the CDS files; genes_shown: the --genes file
+    the user named (None: they named none)."""
+    n = with_stops = 0
+    first = None
+    with open(genes_path, encoding="utf-8", errors="backslashreplace") as fh:
+        col = {c: k for k, c in enumerate(fh.readline().rstrip("\n").split("\t"))}
+        ki, ci = col.get("internal_stops"), col.get("code")
+        if ki is None:
+            return None
+        for line in fh:
+            f = line.rstrip("\n").split("\t")
+            try:
+                k = int(f[ki])
+            except (ValueError, IndexError):
+                continue
+            if ci is not None and f[ci] == "duplicate_id":
+                continue
+            n += 1
+            if k:
+                with_stops += 1
+                first = first or (f[0], k)
+    if not with_stops:
+        return None
+    try:
+        hint, _, _, n_flagged, _ = _code_hint_of(paths, genes_path, chosen)
+    except OSError:
+        hint, n_flagged = None, 0
+    if hint is None and with_stops * 2 <= n:
+        return None
+    text = (f"{with_stops:,} of the {n:,} genes have internal stop codons under genetic code {chosen} (first: "
+            f"{first[0]}, {first[1]:,} internal stop{'s' if first[1] != 1 else ''})")
+    if hint is not None:
+        codes, examples = hint["codes"], hint["genes"][:3]
+        under = (f"NCBI genetic code {codes[0]} ({GENETIC_CODE_NAMES.get(codes[0], 'NCBI')})" if len(codes) == 1
+                 else f"any of the NCBI genetic codes {_and(codes)}")
+        why = f" ({hint['evidence']})" if hint["evidence"] else ""
+        text += (f", and {len(hint['genes']):,} of the {n_flagged:,} with two or more have none under {under}{why}, "
+                 f"e.g. {', '.join(examples)}.")
+        names = "; ".join(f"{t} {GENETIC_CODE_NAMES.get(t, 'NCBI')}" for t in codes)
+        if hint["whole_set"]:
+            text += (f" The whole input looks like code {codes[0]}: translate it again with -c {codes[0]}"
+                     if len(codes) == 1 else f" The whole input looks like another genetic code ({names}): "
+                     "translate it again with the -c of its organism (and organelle)")
+        else:
+            text += (" They look like genes of another genetic code (mitochondrial or plastid genes?): translate "
+                     f"them on their own with " + (f"-c {codes[0]}" if len(codes) == 1 else "the -c of their "
+                                                   "organism and organelle"))
+    else:
+        text += (": their proteins have '*' inside (the wrong reading frame, pseudogenes, sequences that are not "
+                 "CDS, or a genetic code these sequences cannot tell). -c sets the genetic code")
+    return text + (f". Every gene is in {genes_shown} (column internal_stops)" if genes_shown
+                   else ". --genes FILE lists every gene with its internal stops")
+
+
 def suggest_genetic_code(chosen: int, genes: list[dict], background, n_records: int, with_stops: int,
                          replicons: dict | None = None, min_genes: int = 2, fraction: float = 1.0) -> dict | None:
     """Which genetic code explains genes that have internal stop codons under `chosen`, or None (no hint).
@@ -1091,6 +1222,7 @@ class _Run:
             # nothing is written into the folder (no report either: report.json could be the input itself)
             self.release()
             raise
+        self._replaced_notice()
         self._clear_earlier_outputs()
         try:
             os.makedirs(os.path.join(self.work, "logs"), exist_ok=True)
@@ -1236,7 +1368,7 @@ class _Run:
         for opt, p in self._inputs:
             if opt != "--diamond" and not os.path.exists(p):
                 self._describe_inputs()
-                raise PipelineError(f"cannot open {p!r}: no such file")
+                raise PipelineError(_cannot_open(p))
 
     def _gunzip_inputs(self) -> None:
         """A gzip-compressed input (found by its first two bytes, whatever its name) is decompressed into
@@ -1410,6 +1542,25 @@ class _Run:
                                         "writes one file per cluster there and would mix with (or replace) what "
                                         "it holds. Nothing was changed: move it away or use another output folder")
         return {n for n in names if n in _RUN_OUTPUTS}, dirs
+
+    def _replaced_notice(self) -> None:
+        """One notice when the output folder holds the results of an earlier run, which this run replaces (new-user
+        audit 2026-11-14, U16: they were replaced without a word). Not with --resume, which means to go on there."""
+        if self.a.resume:
+            return
+        known, _ = self._earlier
+        if "dnds.tsv" not in known or not os.path.isfile(self.path("dnds.tsv")):
+            return   # (a run that failed early left no results: its report and failed.tsv go without a word)
+        when = ""
+        try:
+            with open(self.path("report.json"), encoding="utf-8", errors="backslashreplace") as fh:
+                rep = json.load(fh)
+            if isinstance(rep, dict) and isinstance(rep.get("finished") or rep.get("started"), str):
+                when = f" ({rep.get('status') or 'run'} {rep.get('finished') or rep.get('started')}, report.json)"
+        except (OSError, ValueError):
+            pass
+        self.say(f"notice: {self.out} holds the results of an earlier run{when}; they are replaced by this run's. "
+                 "Use another -o to keep them")
 
     def _clear_earlier_outputs(self) -> None:
         """Remove the files an earlier COAL run wrote into this folder, so the folder holds this run's results
@@ -1645,7 +1796,7 @@ class _Run:
         for p in paths:
             if not os.path.isfile(p):
                 self.discard_new_inputs()
-                raise PipelineError(f"cannot open {p!r}: no such file")
+                raise PipelineError(_cannot_open(p))
         faa, genes = self.wpath(f"{name}.faa"), self.wpath(f"{name}.genes.tsv")
 
         plain = [self.plain(p) for p in paths]
@@ -1860,57 +2011,9 @@ class _Run:
         selenoprotein reads "clean" under every code where TGA is Trp.) only: the IDs of the set's genes.tsv rows
         to judge (one --cds file of several: file)."""
         chosen = int(self.a.codontable)
-        flagged: dict[str, int] = {}     # id -> trailing nucleotides
-        usable: set[str] = set()         # genes for the set's codon usage (fewer than MIN_STOPS internal stops)
-        with_stops = 0
-        n_records = 0
-        n_flagged = 0
-
-        def rows():
-            with open(genes_path, encoding="utf-8", errors="backslashreplace") as fh:
-                col = {n: k for k, n in enumerate(fh.readline().rstrip("\n").split("\t"))}
-                ki, si, ci, ti = col.get("internal_stops"), col.get("status"), col.get("code"), col.get("trailing_nt")
-                if ki is None or si is None:
-                    return
-                for line in fh:
-                    f = line.rstrip("\n").split("\t")
-                    try:
-                        n = int(f[ki])
-                    except (ValueError, IndexError):
-                        continue
-                    if ci is not None and f[ci] == "duplicate_id":
-                        continue
-                    if only is not None and f[0] not in only:
-                        continue
-                    yield f, n, f[si] != "failed", ti
-
-        for _f, n, _ok, _ti in rows():
-            n_records += 1
-            with_stops += n >= 1
-            n_flagged += n >= self.CODE_HINT_MIN_STOPS
-        if n_flagged < self.CODE_HINT_MIN_GENES:
-            return
-        # the genes looked at: all, or CODE_HINT_MAX_GENES spread evenly over the set (the first ones of a
-        # record-shuffled ciliate set lay on many scaffolds, which rule 2 then left out: R01)
-        take = min(n_flagged, self.CODE_HINT_MAX_GENES)
-        k = 0
-        stopped: set[str] = set()
-        for f, n, ok, ti in rows():
-            if n >= 1:
-                stopped.add(f[0])
-            if n < self.CODE_HINT_MIN_STOPS:
-                if ok:
-                    usable.add(f[0])
-                continue
-            if (k + 1) * take // n_flagged > k * take // n_flagged:
-                try:
-                    flagged[f[0]] = int(f[ti]) if ti is not None else 0
-                except (ValueError, IndexError):
-                    flagged[f[0]] = 0
-            k += 1
-        genes, background, replicons = _hint_inputs(paths, flagged, usable, stopped)
-        hint = suggest_genetic_code(chosen, genes, background, n_records, with_stops, replicons,
-                                    min_genes=self.CODE_HINT_MIN_GENES, fraction=len(flagged) / n_flagged)
+        hint, n_records, with_stops, n_flagged, flagged = _code_hint_of(
+            paths, genes_path, chosen, only, self.CODE_HINT_MIN_STOPS, self.CODE_HINT_MIN_GENES,
+            self.CODE_HINT_MAX_GENES)
         if hint is None:
             return
         codes = hint["codes"]
@@ -2207,6 +2310,64 @@ class _Run:
         what = ", ".join(f"{n:,} {code}" for code, n in sorted(g["codes"].items(), key=lambda kv: (-kv[1], kv[0])))
         raise PipelineError(f"none of the {total:,} sequences of {files} can be used as a coding sequence "
                             f"({what}){first}. Every gene and its reason is in {self.path('failed.tsv')}")
+
+    def not_usable_warning(self, sets: list[str]) -> None:
+        """One line on stderr when records of these sets cannot be used (a non-ASCII or repeated ID, no coding
+        DNA): how many, and the first one with its reason, so the cause is not only in failed.tsv (new-user
+        audit 2026-11-14, U12: the run ended with exit 2 and "1 failure(s) listed in failed.tsv")."""
+        n = sum(self.n_records(s, "failed") for s in sets)
+        if not n:
+            return
+        first = next((g["first"] for g in (self.gene_failures.get(s) or {} for s in sets) if g.get("first")), None)
+        self.warn(f"{n:,} record{'s' if n != 1 else ''} not usable"
+                  + (f" (first: {first[0]}: {first[1]})" if first else "")
+                  + f"; {'every one is' if n != 1 else 'it is'} listed in {self.outputs['failed']}")
+
+    # a record that reads like non-coding DNA: this many internal stops, and more than one per this many codons
+    # (random sequence has one stop in about 21 codons in every frame; a gene of another genetic code, read with
+    # the standard one, has far fewer: those are what code_hint() is for), or this many stops in 100 kb or more
+    GENOME_MIN_STOPS = 20
+    GENOME_CODONS_PER_STOP = 30
+    GENOME_LONG_NT = 100_000
+
+    def genome_warning(self, option: str, paths: list[str], genes_path: str) -> bool:
+        """One warning when a CDS input looks like a genome, chromosomes or contigs rather than one coding
+        sequence per gene: a record of 100 kb or more, or most records, with internal stops throughout (new-user
+        audit 2026-11-14, U04: a 4 Mb genome as --query ran to "no reciprocal best hit"). True when it warned."""
+        n = like = 0
+        longest = None   # (nt, id, stops) of the longest such record
+        long_one = False
+        with open(genes_path, encoding="utf-8", errors="backslashreplace") as fh:
+            col = {c: k for k, c in enumerate(fh.readline().rstrip("\n").split("\t"))}
+            ki, kn = col.get("internal_stops"), col.get("nt_length")
+            if ki is None or kn is None:
+                return False
+            for line in fh:
+                f = line.rstrip("\n").split("\t")
+                try:
+                    stops, nt = int(f[ki]), int(f[kn])
+                except (ValueError, IndexError):
+                    continue
+                n += 1
+                if stops < self.GENOME_MIN_STOPS:
+                    continue
+                is_long = nt >= self.GENOME_LONG_NT   # no gene's CDS is 100 kb with 20 stops inside
+                if is_long or stops * self.GENOME_CODONS_PER_STOP > nt // 3:
+                    like += 1
+                    long_one = long_one or is_long
+                    if longest is None or nt > longest[0]:
+                        longest = (nt, f[0], stops)
+        if not like or not (long_one or like * 2 > n):
+            return False
+        files = " ".join(str(p) for p in paths[:2]) + (" ..." if len(paths) > 2 else "")
+        nt, rid, stops = longest
+        what = (f"{n:,} record of {nt:,} nt with {stops:,} internal stop codons" if n == 1 else
+                f"{like:,} of its {n:,} records have internal stop codons throughout (e.g. {rid}: {nt:,} nt, "
+                f"{stops:,} internal stops)")
+        self.warn(f"{option} {files}: {what}: this looks like a genome, chromosomes or contigs, not coding "
+                  "sequences. The pipeline needs one coding sequence (CDS) per gene, e.g. NCBI's "
+                  "*_cds_from_genomic.fna or Ensembl's *.cds.all.fa")
+        return True
 
     # -- the engine step
     def engine_cmd(self, group_column: str | None) -> tuple[list[str], str, str]:
@@ -2509,7 +2670,7 @@ def _pairs_mode(run: _Run) -> None:
     for p in (a.query, a.subject):
         if not os.path.isfile(p):
             run.discard_new_inputs()
-            raise PipelineError(f"cannot open {p!r}: no such file")
+            raise PipelineError(_cannot_open(p))
     q_faa, q_genes, _ = run.translate("query", [a.query])
     s_faa, s_genes, _ = run.translate("subject", [a.subject])
     run.outputs["genes"] = run.path("genes.tsv")
@@ -2526,8 +2687,11 @@ def _pairs_mode(run: _Run) -> None:
             f"({run.n_records('query', 'failed') + run.n_records('subject', 'failed'):,} not usable)")
     run.require_usable_genes("query", [a.query])
     run.require_usable_genes("subject", [a.subject])
-    run.code_hint("query", [run.plain(a.query)], q_genes, [a.query])
-    run.code_hint("subject", [run.plain(a.subject)], s_genes, [a.subject])
+    run.not_usable_warning(["query", "subject"])
+    if not run.genome_warning("--query", [a.query], q_genes):
+        run.code_hint("query", [run.plain(a.query)], q_genes, [a.query])
+    if not run.genome_warning("--subject", [a.subject], s_genes):
+        run.code_hint("subject", [run.plain(a.subject)], s_genes, [a.subject])
     run.isoform_warning()
     if q_drop or s_drop:   # DIAMOND searches the kept records only; a pair that names a dropped one says why
         q_faa, s_faa = run.kept_proteins(q_faa, q_drop, "query"), run.kept_proteins(s_faa, s_drop, "subject")
@@ -2537,11 +2701,14 @@ def _pairs_mode(run: _Run) -> None:
 
     orth = run.outputs["orthologs"] = run.path("orthologs.tsv")
     hits: dict[str, list[str]] = {}
+    q_idx, s_idx = FastaIndex(run.plain(a.query)), FastaIndex(run.plain(a.subject))
     if a.pairs:
         if a.aligner == "diamond":
             raise PipelineError("--aligner diamond uses the alignments of the DIAMOND search, so it cannot be "
                                 "combined with --pairs")
-        pairs = _read_pairs_file(run.plain(a.pairs), a.pairs)
+        first_line: list[int] = []
+        pairs = _read_pairs_file(run.plain(a.pairs), a.pairs, first_line)
+        pairs = _check_given_pairs(run, pairs, first_line, q_idx, s_idx, q_failed, s_failed)
         run.stages.append({"name": "orthologs", "seconds": 0.0, "cached": False, "source": "given",
                            "pairs": len(pairs)})
         if not run.pairs_in_place:   # (--pairs DIR/orthologs.tsv: the input is the table; it is not rewritten)
@@ -2559,7 +2726,6 @@ def _pairs_mode(run: _Run) -> None:
                  "the two sets (e-value " + f"{a.evalue:g}), so dnds.tsv has its header only. Are both files coding "
                  "sequences of related species? --sensitivity more-sensitive / --evalue widen the search")
 
-    q_idx, s_idx = FastaIndex(run.plain(a.query)), FastaIndex(run.plain(a.subject))
     if a.pairs:
         every = bool(pairs) and all((q not in q_idx and q not in q_failed) or (s not in s_idx and s not in s_failed)
                                     for q, s in pairs)
@@ -2687,14 +2853,58 @@ def _pairs_file_warnings(run: _Run, pairs, q_idx, s_idx, q_failed, s_failed) -> 
                  f"{selfp[0]} {selfp[0]}; --query and --subject are the same file): their rows have dN = dS = 0")
 
 
-def _read_pairs_file(path: str, shown: str | None = None) -> list[tuple[str, str]]:
+def _check_given_pairs(run: _Run, pairs: list, first_line: list, q_idx, s_idx, q_failed: dict,
+                       s_failed: dict) -> list:
+    """--pairs, before any alignment (new-user audit 2026-11-14, U07): a first line whose two fields are records of
+    neither file, while other lines are, is a column header (a notice says so, and it is not computed); and a file
+    none of whose pairs names a query record and a subject record (other columns, swapped columns, another ID
+    type) stops the run with exit 1 instead of a table of errors.
+    first_line: [the line number of the first pair] (from _read_pairs_file)."""
+    a = run.a
+    if not pairs:
+        return pairs
+    known_q = lambda r: r in q_idx or r in q_failed   # noqa: E731
+    known_s = lambda r: r in s_idx or r in s_failed   # noqa: E731
+    q0, s0 = pairs[0]
+    if (first_line and first_line[0] == 1 and len(pairs) > 1 and not known_q(q0) and not known_s(s0)
+            and not known_s(q0) and not known_q(s0)
+            and any(known_q(q) and known_s(s) for q, s in pairs[1:])):
+        run.say(f"notice: line 1 of --pairs {a.pairs} ({q0} {s0}) names no record of --query or --subject: it "
+                "is read as a column header, not as a pair")
+        pairs = pairs[1:]
+    if any(known_q(q) and known_s(s) for q, s in pairs):
+        return pairs
+    n = len(pairs)
+    swapped = sum(1 for q, s in pairs if known_s(q) and known_q(s))
+    if swapped * 2 >= n:
+        q, s = next((q, s) for q, s in pairs if known_s(q) and known_q(s))
+        raise PipelineError(f"none of the {n:,} pairs of --pairs {a.pairs} names a record of --query and one of "
+                            f"--subject, and the columns look swapped: in {swapped:,} of them the first ID is a "
+                            f"record of --subject and the second one of --query (e.g. {q} {s}). The first "
+                            "column is the query, the second the subject: swap the columns, or --query and "
+                            "--subject")
+    miss_q = [q for q, _ in pairs if not known_q(q)]
+    miss_s = [s for _, s in pairs if not known_s(s)]
+    parts = []
+    for side, opt, miss, idx in (("query", "--query", miss_q, q_idx), ("subject", "--subject", miss_s, s_idx)):
+        if not miss:
+            continue
+        have = next(iter(idx.pos), None)
+        parts.append(f"{len(miss):,} of the {n:,} {side} IDs are no record of {opt} (e.g. '{miss[0]}'"
+                     + (f"; its records are named like '{have}'" if have is not None else "") + ")")
+    raise PipelineError(f"none of the {n:,} pairs of --pairs {a.pairs} can be made: " + "; ".join(parts)
+                        + ". --pairs needs two tab-separated columns, the query ID and the subject ID, as "
+                        "they are after '>' in the FASTA files (the first word of the header)")
+
+
+def _read_pairs_file(path: str, shown: str | None = None, first_line: list | None = None) -> list[tuple[str, str]]:
     """The pairs of a --pairs file. shown: the name for messages (the file as given, when path is its
-    decompressed copy)."""
+    decompressed copy). first_line: a list that gets the line number (from 1) of the first pair."""
     pairs = []
     try:
         fh = open(path, encoding="utf-8-sig", errors="backslashreplace")
     except OSError as e:
-        raise PipelineError(f"cannot open {shown or path!r}: {e.strerror or e}") from None
+        raise PipelineError(_cannot_open(shown or path, e.strerror or str(e))) from None
     path = shown or path
     with fh:
         for n, line in enumerate(fh):
@@ -2703,10 +2913,16 @@ def _read_pairs_file(path: str, shown: str | None = None) -> list[tuple[str, str
                 continue
             f = line.split("\t") if "\t" in line else line.split()
             if len(f) < 2:
-                raise PipelineError(f"{path}: line {n + 1}: expected two columns (query ID, subject ID)")
+                shown_line = line if len(line) <= 60 else line[:57] + "..."
+                comma = (f"; the line has commas: is this a CSV file? Convert it with tr ',' '\\t' < "
+                         f"{os.path.basename(path)} > pairs.tsv" if "," in line else "")
+                raise PipelineError(f"{path}: line {n + 1}: expected two tab-separated columns (query ID, subject "
+                                    f"ID), found 1 column \"{shown_line}\"{comma}")
             if n == 0 and (f[0].lower(), f[1].lower()) in (("query", "subject"), ("query_id", "subject_id"),
                                                              ("seq1", "seq2"), ("qseqid", "sseqid")):
                 continue
+            if first_line is not None and not first_line:
+                first_line.append(n + 1)
             pairs.append((f[0].strip(), f[1].strip()))
     return pairs
 
@@ -2788,7 +3004,7 @@ def read_clusters(path: str) -> tuple[dict[str, list[str]], int]:
     try:
         fh = open(path, encoding="utf-8-sig", errors="backslashreplace")
     except OSError as e:
-        raise PipelineError(f"cannot open {path!r}: {e.strerror or e}") from None
+        raise PipelineError(_cannot_open(path, e.strerror or str(e))) from None
     with fh:
         for n, line in enumerate(fh):
             line = line.rstrip("\r\n")
@@ -2852,7 +3068,9 @@ def _clusters_mode(run: _Run) -> None:
         failed = run.read_genes(genes, "cds", gf, order, drop)
     run.say(f"translated {run.n_records('cds'):,} records ({run.n_records('cds', 'failed'):,} not usable)")
     run.require_usable_genes("cds", list(a.cds))
-    run.code_hints_per_file("cds", list(a.cds), genes)
+    run.not_usable_warning(["cds"])
+    if not run.genome_warning("--cds", list(a.cds), genes):
+        run.code_hints_per_file("cds", list(a.cds), genes)
     run.isoform_warning()
     all_faa = faa
     if drop:   # DeepClust clusters the kept records only; a given cluster that names a dropped one says why
@@ -2919,8 +3137,16 @@ def _clusters_mode(run: _Run) -> None:
 
     cds_idx, prot_idx = FastaIndex([run.plain(p) for p in a.cds]), FastaIndex(all_faa)
     if a.clusters:
-        _unmatched_ids_warning(run, "--clusters", a.clusters,
-                               [("CDS", [m for mem in clusters.values() for m in mem], cds_idx, failed)])
+        ids = [m for mem in clusters.values() for m in mem]
+        if ids and not any(m in cds_idx or m in failed for m in ids):
+            # (new-user audit 2026-11-14, U07: other columns ran to a table of errors)
+            have = next(iter(cds_idx.pos), None)
+            raise PipelineError(f"none of the {len(ids):,} IDs of --clusters {a.clusters} is a record of --cds (e.g. "
+                                f"'{ids[0]}'" + (f"; the records are named like '{have}'" if have is not None else "")
+                                + "). --clusters needs two tab-separated columns, the representative and the member, "
+                                "as `diamond deepclust` writes them, with the IDs as they are after '>' in the FASTA "
+                                "files (the first word of the header)")
+        _unmatched_ids_warning(run, "--clusters", a.clusters, [("CDS", ids, cds_idx, failed)])
     tool = a.aligner
     cap = a.max_cluster_size
     plans: list[dict] = []
@@ -3215,6 +3441,21 @@ def _positive(kind):
     return conv
 
 
+def _matrix_error(name) -> str | None:
+    """Why a --matrix value is not a matrix of COAL's aligner, or None (new-user audit 2026-11-14, U08: a typo was
+    reported after the translation and the DIAMOND search, as a failure of `coal-cpp codon-dnds`)."""
+    if name is None or (isinstance(name, str) and name.upper() in _align.MATRICES):
+        return None
+    return f"unknown matrix {str(name)!r} (choose from {', '.join(_align.MATRICES)}; upper or lower case)"
+
+
+def _matrix_name(text: str) -> str:
+    why = _matrix_error(text)
+    if why:
+        raise argparse.ArgumentTypeError(why)
+    return text
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="coal pipeline",
@@ -3263,7 +3504,7 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("-m", "--method", action="append", metavar="METHOD", type=_method_name, choices=METHODS,
                    help="YN (default), NG, LWL, MLWL, LPB, MLPB, MYN, Comeron (alias C95), Li; repeat for several "
                         "(Comeron and Li: genetic code 1 only)")
-    g.add_argument("-c", "--codontable", type=int, default=1, choices=SUPPORTED, metavar="N",
+    g.add_argument("-c", "--codontable", "-codontable", type=int, default=1, choices=SUPPORTED, metavar="N",
                    help="NCBI genetic code for translation, the codon alignment and Ka/Ks (default 1)")
     g.add_argument("--yn-flavour", "--yn-flavor", default="kaks", choices=("kaks", "paml"),
                    help="YN00 as KaKs_Calculator (default) or as PAML yn00")
@@ -3301,7 +3542,7 @@ def build_parser() -> argparse.ArgumentParser:
                         "extend 4, end gaps penalised, pwalign's copy of the matrix (BLOSUM62-PWALIGN; with "
                         "--matrix BLOSUM45: BLOSUM45-PWALIGN) and pwalign's choice among co-optimal alignments "
                         "(--tie-break pwalign): the protein alignments of pwalign::pairwiseAlignment")
-    g.add_argument("--matrix", default=None, help="BLOSUM62 (default), BLOSUM45, BLOSUM80, PAM250, BLOSUM62-PWALIGN, "
+    g.add_argument("--matrix", default=None, type=_matrix_name, help="BLOSUM62 (default), BLOSUM45, BLOSUM80, PAM250, BLOSUM62-PWALIGN, "
                                                     "BLOSUM45-PWALIGN, BLOSUM80-PWALIGN (pwalign's copies: other "
                                                     "scores for B, Z, X and J; BLOSUM80 on another scale). With "
                                                     "--preset pwalign, pwalign's copy of the matrix named")
@@ -3663,6 +3904,9 @@ def _namespace(mode: str, required: list[str], options: dict) -> argparse.Namesp
     why = _method_code_error(a) or _flag_error(a) or _args_error(a)
     if why:
         raise ValueError(why)
+    why = _matrix_error(a.matrix)
+    if why:
+        raise ValueError(f"matrix: {why}")
     for opt, allowed in (("hash_inputs", ("auto", "always", "never")), ("comeron_flavour", ("coal", "gestimator")),
                          ("comeron_twosubs", (None, "comeron", "libsequence")), ("li_flavour", ("coal", "seqinr")),
                          ("terminal_stops", ("drop", "compare")), ("tie_break", (None, "leftmost", "pwalign"))):
@@ -3733,12 +3977,56 @@ def run_clusters(cds: _Path | Iterable[_Path], out_dir: _Path, clusters: _Path |
     return _api_run("clusters", ["--cds", *files, "-o", os.fspath(out_dir)], options, entry)
 
 
+# Option names that users bring from orthologr (its dNdS() arguments) or DIAMOND: the option of `coal pipeline`
+# that does the same (new-user audit 2026-11-14, U21)
+_FOREIGN_OPTIONS = {
+    "--sensitivity-mode": ("--sensitivity", "orthologr's sensitivity_mode"),
+    "--sensitivity_mode": ("--sensitivity", "orthologr's sensitivity_mode"),
+    "--comp-cores": ("-j", "orthologr's comp_cores"), "--comp_cores": ("-j", "orthologr's comp_cores"),
+    "--dnds-est-method": ("-m", "orthologr's dnds_est.method"),
+    "--dnds_est.method": ("-m", "orthologr's dnds_est.method"),
+    "--ortho-detection": ("--ortho", "orthologr's ortho_detection"),
+    "--ortho_detection": ("--ortho", "orthologr's ortho_detection"),
+    "--eval": ("--evalue", "orthologr's eval"),
+    "--threads": ("-j", "DIAMOND's --threads"), "-p": ("-j", "DIAMOND's -p"),
+}
+
+
+def _unknown_option_hint(extra: list[str], parser: argparse.ArgumentParser) -> str:
+    """For `unrecognized arguments`: what each unknown option is called here (orthologr's and DIAMOND's names),
+    or the closest option of this command."""
+    import difflib
+    known = [o for act in parser._actions for o in act.option_strings if o.startswith("--")]
+    hints = []
+    for w in extra:
+        if not w.startswith("-") or w[1:2].isdigit():
+            continue
+        name = w.split("=", 1)[0]
+        if name in _FOREIGN_OPTIONS:
+            ours, theirs = _FOREIGN_OPTIONS[name]
+            hints.append(f"{name} is {theirs}: here it is {ours}")
+            continue
+        close = difflib.get_close_matches(name, known, n=1, cutoff=0.75)
+        if close:
+            hints.append(f"did you mean {close[0]}?")
+    return f" ({'; '.join(hints)})" if hints else ""
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """`coal pipeline ...`. Exit codes: 0 done and nothing failed; 2 done, but some genes, pairs or clusters failed
     (failed.tsv, report.json), or a command-line error; 1 the run could not be done."""
     argv = sys.argv[1:] if argv is None else list(argv)
     ap = build_parser()
-    a = ap.parse_args(argv)
+    modes = next(x for x in ap._actions if isinstance(x, argparse._SubParsersAction)).choices
+    mode_ap = modes.get(argv[0]) if argv else None
+    if mode_ap is not None and argv[0] != "install":
+        from .cli import merged_code_error
+        why = merged_code_error(argv[1:], ("-c", "--codontable", "-codontable"))
+        if why:
+            mode_ap.error(why)
+    a, extra = ap.parse_known_args(argv)
+    if extra:
+        (mode_ap or ap).error("unrecognized arguments: " + " ".join(extra) + _unknown_option_hint(extra, mode_ap or ap))
     if a.mode is None:
         ap.print_help(sys.stderr)
         return 2
@@ -3785,12 +4073,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         ap.error(why)
     if _method_code_error(a):
         ap.error(_method_code_error(a))
+    # (new-user audit 2026-11-14, U13: the line did not say how to go on; report.json did)
+    again = (f"the tables in {a.out_dir} are incomplete. Run the same command with --resume to reuse the finished "
+             "stages (translation, the DIAMOND search or clustering); nothing is left running")
     try:
         return _execute(a.mode, a, ["pipeline", *argv]).exit_code
     except KeyboardInterrupt:
-        print("coal pipeline: interrupted (the report says so; nothing is left running)", file=sys.stderr)
+        print(f"coal pipeline: interrupted; {again}", file=sys.stderr)
         return 130
     except _Terminated as e:
-        print(f"coal pipeline: interrupted by {e.name} (the report says so; nothing is left running)",
-              file=sys.stderr)
+        print(f"coal pipeline: interrupted by {e.name}; {again}", file=sys.stderr)
         return int(e.code)

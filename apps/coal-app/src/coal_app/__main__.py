@@ -63,6 +63,14 @@ def main(argv=None) -> int:
         print(f"coal {f.version}: formats={','.join(f.output_formats)} report={f.report} "
               f"json={f.json} keep_going={f.keep_going}")
         print(f"examples: {', '.join(core.available_examples()) or 'none found'}")
+        # what the Ka/Ks and pipeline tabs can do here (new-user audit 2026-11-14, U19)
+        from . import dnds
+        st = dnds.tool_status()
+        print(f"coal-cpp: {st.cpp} (Ka/Ks and dN/dS pipeline tabs enabled)" if st.cpp else
+              "coal-cpp: not found (Ka/Ks and dN/dS pipeline tabs disabled; `coal --cpp-path` shows where COAL "
+              "looks; docs/install.md)")
+        print(f"DIAMOND: {st.diamond}" + (f" (version {st.diamond_version})" if st.diamond_version else "")
+              if st.diamond else f"DIAMOND: not found (the dN/dS pipeline needs it: {dnds.install_command()})")
         return 0
     if args.mcp:
         try:
