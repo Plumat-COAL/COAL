@@ -300,7 +300,8 @@ checksum; another DIAMOND version can find slightly different hits.
 
 **Change the method without searching again:** `--pairs ecoli_vs_salmonella/orthologs.tsv` skips DIAMOND and
 uses those pairs; `--resume` in the *same* output folder reuses the translation and the search when the inputs
-and search options are unchanged (the report's `stages` then say `cached: true`):
+and search options are unchanged (the report's `stages` then say `cached: true`). Adding a method changes
+neither:
 
 ```
 coal pipeline pairs --query coal-tutorial-data/ecoli_K12_MG1655.cds.fna.gz \
@@ -308,7 +309,13 @@ coal pipeline pairs --query coal-tutorial-data/ecoli_K12_MG1655.cds.fna.gz \
 ```
 
 ```
+coal pipeline: translate_query: reused from the earlier run (--resume)
+coal pipeline: translate_subject: reused from the earlier run (--resume)
+...
+coal pipeline: diamond_search: reused from the earlier run (--resume)
+coal pipeline: 3,142 pairs (rbh)
 coal pipeline: summary: 8,872 records (0 not usable); 3,142 pairs: NG 2,924 ok, 3 warning, 0 not_converged, 215 saturated, 0 no_data, 0 error; YN 2,973 ok, 3 warning, 11 not_converged, 155 saturated, 0 no_data, 0 error
+coal pipeline: summary: decompress_inputs 0.0 s, translate_query 0.0 s (reused), translate_subject 0.0 s (reused), diamond_search 0.0 s (reused), orthologs 0.0 s, align_codon_kaks 7.0 s
 ```
 
 (`--resume` reuses `work/` of the same folder: a copied or renamed folder starts again.) Which method to pick,

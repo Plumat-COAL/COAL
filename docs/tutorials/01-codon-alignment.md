@@ -156,8 +156,9 @@ How to read it:
   found one under which all of them fit. Every warning below it (`W does not correspond to TGA`) is the same
   problem, one codon at a time.
 - **The exit status is 0 and the file is written**, as PAL2NAL does: a few mismatching codons are often real
-  (sequencing errors, selenocysteine). The alignment is still the right one here, column for column; what would
-  go wrong is everything downstream that uses code 1 (Ka/Ks under code 1 reads the 10 to 13 TGA codons of each gene as internal stop codons and skips those columns).
+  (sequencing errors, selenocysteine). The alignment is still the right one here: `wrong_code.fasta` is
+  byte-identical to `glpK.codon.fasta` (threading does not depend on the code when every codon can be placed).
+  What would go wrong is everything downstream that uses code 1 (Ka/Ks under code 1 reads the 10 to 13 TGA codons of each gene as internal stop codons and skips those columns).
 - `--report run.json` has the same hint in machine-readable form (`hints[0].suggested_codontable: 4`) and every
   mismatch per sequence.
 - `--strict` does **not** stop this run: it refuses genes where more than half of the checkable codons
