@@ -492,6 +492,54 @@ class FastaIndex:
 _BOM = b"\xef\xbb\xbf"
 
 
+_HEADER = re.compile(rb"^(?:\xef\xbb\xbf)?>([^\s]*)[^\r\n]*", re.M)
+COPY_SHARE = 0.9          # records with the same ID and sequence, of the smaller file, that make --subject a copy
+COPY_FIRST_IDS = 200      # IDs of --subject looked up among those of --query before anything is hashed
+
+
+def _fasta_records(path, digests: bool = True, limit: int | None = None) -> list:
+    """The records of a FASTA file: [ID] (digests=False) or [(ID, digest of the sequence with white space
+    removed and in upper case)], at most `limit`. Read through mmap with one regular expression: C speed."""
+    import mmap
+    with open(path, "rb") as fh:
+        if os.fstat(fh.fileno()).st_size == 0:
+            return []
+        with mmap.mmap(fh.fileno(), 0, access=mmap.ACCESS_READ) as mm:
+            heads = []
+            for m in _HEADER.finditer(mm):
+                heads.append((m.group(1), m.start(), m.end()))
+                if limit is not None and len(heads) >= limit:
+                    break
+            if not digests:
+                return [h[0] for h in heads]
+            out = []
+            for k, (rid, _start, end) in enumerate(heads):
+                stop = heads[k + 1][1] if k + 1 < len(heads) else len(mm)
+                seq = mm[end:stop].translate(None, b" \t\r\n\x0b\x0c").upper()
+                out.append((rid, hashlib.blake2b(seq, digest_size=16).digest()))
+            return out
+
+
+def _same_records(query, subject):
+    """(records with the same ID and sequence in both files, records of the smaller file) when that is at least
+    COPY_SHARE of the smaller file; else None. Files of which fewer than half of the first COPY_FIRST_IDS IDs of
+    `subject` are IDs of `query` are not hashed."""
+    from collections import Counter
+    first = _fasta_records(subject, digests=False, limit=COPY_FIRST_IDS)
+    if not first:
+        return None
+    q_ids = set(_fasta_records(query, digests=False))
+    if 2 * sum(1 for i in first if i in q_ids) < min(len(first), len(q_ids)):
+        return None   # (fewer than half of them: other genes; the files are not hashed)
+    q = Counter(_fasta_records(query))
+    s = Counter(_fasta_records(subject))
+    n_small = min(sum(q.values()), sum(s.values()))
+    n_same = sum(min(n, s[k]) for k, n in q.items() if k in s)
+    if n_small and n_same >= COPY_SHARE * n_small:
+        return n_same, n_small
+    return None
+
+
 def fasta_lines(fh):
     """(offset, line) of the lines of a file opened in binary mode, split as coal-cpp splits them (cpp/src/seqio.cpp):
     a UTF-8 byte order mark at the start is skipped (Windows Notepad writes one), and a line ends at \\n, \\r\\n or a
@@ -1126,7 +1174,7 @@ class _Run:
     def _copy_warning(self) -> None:
         """--subject a byte copy of --query (another file, the same content; one of them compressed or both): the
         same warning as for the same file (retest of 2026-11-14, Q04: every pair was a self-pair with dN = dS = 0,
-        without a word). Files of different sizes are not read."""
+        without a word); or one with the same records (P04, below)."""
         a = self.a
         if self.mode != "pairs" or getattr(a, "pairs", None):
             return
@@ -1134,8 +1182,6 @@ class _Run:
             if os.path.samefile(a.query, a.subject):
                 return   # (_same_file_warning)
             q, s = self.plain(a.query), self.plain(a.subject)
-            if os.path.getsize(q) != os.path.getsize(s):
-                return
 
             def digest(given, path):
                 d = self._plain_sha256.get(os.path.abspath(os.fspath(given)))
@@ -1146,13 +1192,27 @@ class _Run:
                     for block in iter(lambda: fh.read(1 << 20), b""):
                         h.update(block)
                 return h.hexdigest()
-            if digest(a.query, q) != digest(a.subject, s):
+            if os.path.getsize(q) == os.path.getsize(s) and digest(a.query, q) == digest(a.subject, s):
+                self.warn(f"--subject {a.subject} has the same content as --query {a.query} (a copy): every gene's "
+                          "best hit is itself, so the pairs are self-pairs with dN = dS = 0. For paralogs within one "
+                          "genome use `coal pipeline clusters`")
                 return
         except OSError:
             return
-        self.warn(f"--subject {a.subject} has the same content as --query {a.query} (a copy): every gene's best "
-                  "hit is itself, so the pairs are self-pairs with dN = dS = 0. For paralogs within one genome use "
-                  "`coal pipeline clusters`")
+        # Not a byte copy, but the same records: re-wrapped, upper / lower case, a record more or less (final
+        # retest of 2026-11-14, P04: 300 of 300 self-pairs without a word). Cheap: the first IDs of --subject are
+        # looked up among the IDs of --query first (a header scan), and only files that share them are hashed.
+        try:
+            got = _same_records(q, s)
+        except (OSError, ValueError):
+            return
+        if got is None:
+            return
+        n_same, n_small = got
+        self.warn(f"--subject {a.subject} has the same genes as --query {a.query}: {n_same:,} of the {n_small:,} "
+                  "records of the smaller file have the same ID and sequence in both (a copy, re-wrapped or "
+                  "edited?): their best hits are themselves, so their pairs are self-pairs with dN = dS = 0. For "
+                  "paralogs within one genome use `coal pipeline clusters`")
 
     def _gunzip_inputs(self) -> None:
         """A gzip-compressed input (found by its first two bytes, whatever its name) is decompressed into

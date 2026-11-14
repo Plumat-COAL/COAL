@@ -285,5 +285,61 @@ class UnsupportedCodeHint(PipelineCase):
         self.assertNotIn("Run again with the -c of its organism", err)
 
 
+@needs_cpp
+class SameRecords(PipelineCase):
+    """P04: --subject with the same records as --query."""
+
+    def variants(self):
+        text = Path(Q).read_text(encoding="utf-8")
+        recs = [r.split("\n", 1) for r in text.split(">")[1:]]
+        wrap = "".join(f">{h}\n" + "\n".join(textwrap.wrap(s.replace("\n", ""), 7)) + "\n" for h, s in recs)
+        lower = "".join(f">{h}\n{s.lower()}" for h, s in recs)
+        more = text + ">extra_gene\nATGAAATAA\n"
+        out = {}
+        for name, body in (("wrap.fa", wrap), ("lower.fa", lower), ("more.fa", more)):
+            out[name] = self.tmp / name
+            out[name].write_text(body, encoding="utf-8")
+        out["more.fa.gz"] = self.tmp / "more.fa.gz"
+        out["more.fa.gz"].write_bytes(gzip.compress(more.encode()))
+        return out, len(recs)
+
+    def test_copies_that_are_not_byte_copies_warn(self):
+        files, n = self.variants()
+        with mock.patch.dict(os.environ, {"COAL_DIAMOND": str(self.tmp / "no_diamond")}):
+            for k, (name, s) in enumerate(files.items()):
+                res, err = run(P.run_pairs, Q, s, self.tmp / f"o{k}")
+                self.assertIn(f"warning: --subject {s} has the same genes as --query {Q}: {n:,} of the {n:,} records "
+                              "of the smaller file have the same ID and sequence in both", err, name)
+                self.assertIn("same genes", " ".join(res.report["warnings"]))
+
+    def test_other_genes_or_ids_do_not_warn(self):
+        text = Path(Q).read_text(encoding="utf-8")
+        recs = [r.split("\n", 1) for r in text.split(">")[1:]]
+        renamed = self.tmp / "renamed.fa"   # the same sequences under other IDs: other genes for the check
+        renamed.write_text("".join(f">x_{h}\n{s}" for h, s in recs), encoding="utf-8")
+        half = self.tmp / "half.fa"         # half of the records changed
+        half.write_text("".join(f">{h}\n" + (s.replace("A", "C", 3) if k % 2 else s) for k, (h, s) in
+                                enumerate(recs)), encoding="utf-8")
+        with mock.patch.dict(os.environ, {"COAL_DIAMOND": str(self.tmp / "no_diamond")}):
+            for k, s in enumerate((renamed, half)):
+                res, err = run(P.run_pairs, Q, s, self.tmp / f"o{k}")
+                self.assertNotIn("same genes", err)
+        # --pairs: the pairs are given
+        files, _ = self.variants()
+        pairs = self.pairs_file([(h.split()[0], h.split()[0]) for h, _ in recs])
+        res, err = run(P.run_pairs, Q, files["wrap.fa"], self.tmp / "o3", pairs=pairs)
+        self.assertNotIn("same genes", err)
+
+    def test_same_records_unit(self):
+        a = write_fasta(self.tmp / "a.fa", [("g1 x", "ATGAAA\nTAA"), ("g2", "ATGCCCTAA")], eol="\r\n", bom=True)
+        b = write_fasta(self.tmp / "b.fa", [("g1", "atgaaataa"), ("g2 y", "ATG\nCCC\nTAA"), ("g3", "ATGTAA")])
+        self.assertEqual(P._same_records(a, b), (2, 2))
+        c = write_fasta(self.tmp / "c.fa", [("g1", "ATGAAATAA"), ("g2", "ATGCCGTAA")])
+        self.assertIsNone(P._same_records(a, c))   # 1 of 2
+        empty = self.tmp / "e.fa"
+        empty.write_bytes(b"")
+        self.assertIsNone(P._same_records(a, empty))
+
+
 if __name__ == "__main__":
     unittest.main()

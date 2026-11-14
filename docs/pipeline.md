@@ -507,7 +507,10 @@ signal 9 (SIGKILL; out of memory?))`.
 
 **Warnings of the run** (the lines `coal pipeline: warning: ...` on stderr) are also in `report.json` as
 `warnings`: the same file given as `--query` and `--subject` (every gene's best hit is then itself: dN = dS = 0;
-with `--pairs`, only the lines that pair a gene with itself are counted), a cached MAFFT or Clustal Omega that is
+with `--pairs`, only the lines that pair a gene with itself are counted), or a `--subject` that is a copy of the
+`--query` (the same bytes, also when one of them is compressed; or, without `--pairs`, 90% or more of the records
+of the smaller file with the same ID and the same sequence in both, whatever the line wrapping and case: a
+re-wrapped copy, or one with a record more), a cached MAFFT or Clustal Omega that is
 not the pinned version, a `-j` above the number of CPUs, an old DIAMOND, a `--pairs` / `--clusters` file whose IDs are not those of the
 sequences, input that looks like several transcripts per gene, and the counts of the `--min-codons` / `--max-ds`
 flags.
