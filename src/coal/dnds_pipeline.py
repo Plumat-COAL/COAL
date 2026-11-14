@@ -56,6 +56,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Sequence, Union
 
 from . import __version__
+from . import align as _align
 from . import msa as _msa
 from .core import CoalError
 from .pipeline import release_output_lock, take_output_lock
@@ -3265,11 +3266,13 @@ def build_parser() -> argparse.ArgumentParser:
     g = common.add_argument_group("Pairwise protein alignment (COAL's global aligner)")
     g.add_argument("--preset", choices=("needle", "pwalign"),
                    help="needle: BLOSUM62, open 10, extend 0.5, end gaps free (the default); pwalign: open 14, "
-                        "extend 4, end gaps penalised, pwalign's copy of BLOSUM62 (--matrix BLOSUM62-PWALIGN) and "
-                        "pwalign's choice among co-optimal alignments (--tie-break pwalign): the protein alignments "
-                        "of pwalign::pairwiseAlignment")
-    g.add_argument("--matrix", default=None, help="BLOSUM62 (default), BLOSUM45, BLOSUM80, PAM250, BLOSUM62-PWALIGN "
-                                                    "(pwalign's copy of BLOSUM62, the default of --preset pwalign)")
+                        "extend 4, end gaps penalised, pwalign's copy of the matrix (BLOSUM62-PWALIGN; with "
+                        "--matrix BLOSUM45: BLOSUM45-PWALIGN) and pwalign's choice among co-optimal alignments "
+                        "(--tie-break pwalign): the protein alignments of pwalign::pairwiseAlignment")
+    g.add_argument("--matrix", default=None, help="BLOSUM62 (default), BLOSUM45, BLOSUM80, PAM250, BLOSUM62-PWALIGN, "
+                                                    "BLOSUM45-PWALIGN, BLOSUM80-PWALIGN (pwalign's copies: other "
+                                                    "scores for B, Z, X and J; BLOSUM80 on another scale). With "
+                                                    "--preset pwalign, pwalign's copy of the matrix named")
     g.add_argument("--gap-open", type=float, default=None, metavar="X", help="cost of a gap's first position")
     g.add_argument("--gap-extend", type=float, default=None, metavar="X", help="cost of each further position")
     g.add_argument("--end-gaps", choices=("free", "penalized"), default=None, help="default free")
@@ -3473,7 +3476,9 @@ def _finish_args(a: argparse.Namespace) -> None:
     """Defaults that depend on other options, and the method list in the order of the rows."""
     a.method = [m for m in METHODS if m in set(a.method or ["YN"])]
     pw = a.preset == "pwalign"
-    a.matrix = (a.matrix or ("BLOSUM62-PWALIGN" if pw else "BLOSUM62")).upper()
+    a.matrix = (a.matrix or "BLOSUM62").upper()
+    if pw:   # pwalign's copy of the matrix (BLOSUM62 -> BLOSUM62-PWALIGN; PAM250 is the same in pwalign)
+        a.matrix = _align.pwalign_matrix(a.matrix)
     a.gap_open = a.gap_open if a.gap_open is not None else (14.0 if pw else 10.0)
     a.gap_extend = a.gap_extend if a.gap_extend is not None else (4.0 if pw else 0.5)
     a.end_gaps = a.end_gaps or ("penalized" if pw else "free")

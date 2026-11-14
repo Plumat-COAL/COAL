@@ -516,6 +516,25 @@ entry under "Added", not under "Fixed".
     `failed` that orthologr calls `saturated` or `not_converged`).
     **`report.json` of a run from Python or R** (C08) has the equivalent `coal pipeline` command line in
     `command` (it was null) and `entry` (`cli`, `python-api`, or `coalr <version> coal_pipeline_pairs()`).
+  - **pwalign's copies of every matrix: `--preset pwalign` with BLOSUM45, BLOSUM80 or PAM250 gives pwalign's
+    alignments too.** pwalign's matrices (`data(<NAME>, package = "pwalign")`, pwalign 1.6.0) are not NCBI's:
+    its BLOSUM45 scores B, Z, X and J otherwise (X -1 against every residue), its BLOSUM80 is the matrix on another
+    scale (A-A 5, C-C 9, `*` -6 where NCBI's has 7, 13 and -8), and its BLOSUM62 has a J row (I or L) where
+    `BLOSUM62-PWALIGN` read J as X. New matrices `BLOSUM45-PWALIGN` and `BLOSUM80-PWALIGN`, and J in
+    `BLOSUM62-PWALIGN`, in C++, Python and coalr (the matrices now have 25 letters: NCBI's 24, then J, which
+    NCBI's matrices read as X, as before). pwalign's PAM250 is NCBI's, value for value (and has no J): there is no
+    PAM250 copy. **`--preset pwalign` now aligns with pwalign's copy of the matrix named** (`--matrix BLOSUM45`:
+    `BLOSUM45-PWALIGN`; `--matrix BLOSUM62`: `BLOSUM62-PWALIGN`, where it was NCBI's BLOSUM62; PAM250 stays
+    PAM250) in `coal pipeline`, `AlignParams.pwalign(matrix)` (C++ and Python, new argument) and `coal-cpp-align`
+    (`-m` after `--preset pwalign`); `report.json` records the matrix used. A *-PWALIGN name given explicitly is
+    used as given, with or without the preset; without the preset a plain name is NCBI's matrix, as before. New
+    `pwalign_matrix_name()` (C++) / `coal.align.pwalign_matrix()` (Python): the name the preset uses. 104 real
+    protein pairs (yeast, *Arabidopsis*, human / mouse, *E. coli*, *Salmonella* / *Shigella*, yeast mitochondria;
+    some with B, Z, X, J, U, O, `*`), tests/fixtures/pwalign_matrices: identical alignments and scores to
+    `pwalign::pairwiseAlignment(type = "global", substitutionMatrix = M)` for BLOSUM62, BLOSUM45, BLOSUM80 and
+    PAM250, 104 / 104 each (before: 91, 83, 0 and 104; pwalign refuses U and O, and J with PAM250, so for the
+    pairs with those letters the comparison is with pwalign's alignment of the pair with them as X, which is how
+    COAL reads them). Other presets and explicit NCBI matrices give the same output as before, byte for byte.
 - **Protein alignment for the codon step (docs/alignment.md).** `<coal/align.hpp>` and the `coal-cpp-align` tool: a
   global Needleman-Wunsch/Gotoh aligner (BLOSUM62/45/80, PAM250, affine gaps; EMBOSS needle defaults, a pwalign
   preset), full length (overhangs gapped, never cut off), AVX2 row loops picked at run time, multithreaded; optimal

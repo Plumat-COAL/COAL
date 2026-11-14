@@ -1,8 +1,8 @@
 COAL 0.6.0.dev0
 Licence: GPL-3.0-only (see inst/COPYRIGHTS for the third-party notices)
 sha256 of the vendored files (scripts/sync_r_sources.py --check verifies them)
-ab3f6f0ea7ad74f078dd8ee7fbed9c02c27aa602d29ff0a5c1fa41585e11dc22  align.cpp
-96f0d486b3fbd6c6ae3a411ee03ed9b4e32e071e4337b056eb7d1309ac9a76f2  align.hpp
+ad7a5cbeedce7039ec076200ed6c9552e1429223bf3493203dd04ba5c2a8fb23  align.cpp
+34c7a6f7d5397950897b8636317509cc1e4759bea7bb0f283f17ad84be213f13  align.hpp
 04758c41c9ec0bd655308cff7a4a3263b3c663a0979e5c599ba1501a05df810f  coal_version.h
 0585d8dc7cdd80e9da09fceaf74179310e981777030df387e0847b2474a21e4d  core.cpp
 0abe3a80cd8891e39ddc8545c8c474715851f9aacf1f3310aa59dcfe533dff4e  core.hpp
