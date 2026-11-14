@@ -547,7 +547,8 @@ entry under "Added", not under "Fixed".
     median, 1.3% at the 90th percentile; 12 change status) and 139 (143) Comeron rows of cluster_summary.tsv;
     Comeron rows equal to the same clusters aligned pairwise 174 → 240 (191 → 272), as many as Li's; no YN, NG,
     LWL or Li row changes. With the default options `dnds.tsv`, `cluster_summary.tsv`, `genes.tsv` and
-    `failed.tsv` are byte for byte the same (both aligners). **`--resume` reuses the stages of a renamed or moved
+    `failed.tsv` are byte for byte the same (both aligners). coalr's `coal_dnds_clusters()` does the same for
+    clusters with `msa` rows or an `aligner` (the earlier gene of `cds` first). **`--resume` reuses the stages of a renamed or moved
     output folder** (or a copy that keeps the files' times): the signatures named every file by its full path,
     also those inside the output folder, so a renamed folder started again. Files inside the folder are now named
     relative to it; inputs keep their full path (the first `--resume` of a folder made before this change redoes
@@ -709,6 +710,20 @@ entry under "Added", not under "Fixed".
   before or after. Real data: *A. thaliana* 0 rows, human / mouse 3, yeast 14 get a value. In the gestimator
   flavour (whose numbers are gestimator's either way) only the note changes, so that orthologr can tell such a row
   from a saturated one. docs/kaks.md, "Small site classes".
+
+  **Refined: the rule applies only where it gives a positive distance.** In very short alignments the small
+  class's logarithm set to 0 could leave dS at exactly 0 although a synonymous change was seen (`ATGGCTAAA` /
+  `ATGGCCAAA`: dS 0), which reads as "no synonymous change" (orthologr labels it `dS_zero`). Where a small class
+  was the reason and the distance is not above 0, the row is now what `--comeron-min-sites 0` gives: `NA` with
+  status `saturated` (default flavour); gestimator's 0 with the note `Ks: correction undefined, gestimator's
+  value (undefined logarithms set to 0)` (gestimator flavour, the one orthologr's COAL engine uses, so that
+  orthologr gives `NA`, not a plain 0). 7,000 simulated neutral pairs, 1,000 per length (an independent re-check
+  of D9): dS was 0 this way in 53 pairs at 5 codons, 4 at 10, 1 at 15 and none at 20, 30, 50 or 100; 57 of the
+  58 had true synonymous substitutions. All 58 are now `saturated` (gestimator flavour: noted); dN never became 0
+  (none of 168 small-class values); no finite value changes, and the `ok` rows are the same (6,738). COAL's
+  hand-made test cases: 17 rows (15 dS, 4 dN values), all with at most 4 codons compared. `coal pipeline pairs`
+  on *A. thaliana* / *A. lyrata* (1,000 genes) and on yeast mitochondria writes byte-identical output files,
+  also with `-m Comeron` in both flavours; in the real data of D9 none of the 17 small-class rows is 0 (re-check).
 
 - **The app and its MCP server say that they cover codon alignment only.** The app's README, the GUI's About
   section and the MCP server's instructions now state that Ka/Ks (dN/dS) and the pipeline are in the `coal` command
