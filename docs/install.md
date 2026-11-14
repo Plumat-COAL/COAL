@@ -124,8 +124,7 @@ the extras (`"apps/coal-app[gui]"`): some shells (zsh, PowerShell) treat bare br
   breaks, genetic-code suggestions and a ready-to-paste methods sentence; its **Ka/Ks** tab gives dN, dS and dN/dS
   for pairs of a codon alignment or AXT file, and its **dN/dS pipeline** tab goes from the coding sequences of two
   species to dN/dS per ortholog pair (DIAMOND best or reciprocal best hits). Ka/Ks and the pipeline need `coal-cpp`
-  (below),
-  and the pipeline DIAMOND (`coal pipeline install diamond`).
+  (below), and the pipeline DIAMOND (`coal pipeline install diamond`).
 - **Command line:** `coal` / `python -m coal`.
 - **Drop-in for PAL2NAL pipelines:** `pal2nal pep.aln nuc.fasta [PAL2NAL options]` (or `python -m coal_compat`)
   accepts an unchanged PAL2NAL v14 command line, with PAL2NAL's default clustal output, all four formats,
