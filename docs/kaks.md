@@ -93,7 +93,8 @@ COAL applies the same rules to every pair and every method. When a pair cannot b
 | A letter other than A/C/G/T/U in a codon of either sequence (N, IUPAC, X) | that column is skipped | `ok` |
 | Stop codon anywhere else (internal) in either sequence | that column is skipped; the note gives the number | `warning` |
 | YN or MYN: the iteration reaches its round limit (10 or 100) without converging (short or nearly saturated pairs; "Differences", 12) | no estimate: Ka, Ks, Ka/Ks, the standard errors and the weighted difference counts (Sd, Nd) are NA. The site counts stay. The note gives the last round's Ka and Ks, which are not estimates ("Platform reproducibility") | `not_converged` |
-| Multiple-hit correction undefined (log of a non-positive number; for YN00/MYN, F84, K80 and JC69 all fail, or P + Q > 1) | that estimate is NA; the note says which (Ka, Ks) | `saturated` |
+| Multiple-hit correction undefined (log of a number that is not above 1e-10, so that an argument which is 0 in exact arithmetic counts as 0 whatever the rounding: "Differences", 14; for YN00/MYN, F84, K80 and JC69 all fail, or P + Q > 1) | that estimate is NA; the note says which (Ka, Ks). A YN or MYN row in which neither Ka nor Ks has an estimate has NA also in Sd and Nd when the pathways were weighted ("Differences", 17) | `saturated` |
+| MYN: kappa_TC or kappa_AG estimated as infinite (the TN93 transition term of a class of sites exactly at its limit) | nothing is estimated: Ka, Ks and the site counts are NA; the rate ratio shows `inf`; the note names the kappa ("Differences", 15) | `saturated` |
 | No codon column left | nothing is estimated | `no_data` |
 | No synonymous site (e.g. Met/Trp codons only), or no nonsynonymous site (e.g. `GCT` against `GCA`; 200 × `AAA` against `AAG`) | that estimate (Ks, or Ka) and Ka/Ks are NA; **the other one is still estimated**. The note says which sites are missing | `no_data` |
 | Rows of different length, or a length that is not a multiple of 3 | nothing is estimated | `error` |
@@ -211,8 +212,8 @@ and written in input order, and the output does not depend on `-j`.
 `--comeron-flavour gestimator` and `--li-flavour seqinr` make `Comeron` and `Li` read the pair as their
 reference programs do ("Comeron and Li" below); the default for both is `coal`, the policy above.
 `--comeron-twosubs comeron|libsequence` chooses Comeron's pathways for codons that differ at two positions, and
-`--comeron-min-sites N` the smallest site class whose undefined correction makes dN or dS `NA` ("Two-position
-codon differences" and "Small site classes" below).
+`--comeron-min-sites N` the smallest site class whose undefined correction makes dN or dS `NA` (a smaller class
+cannot, unless the distance would then be 0; "Two-position codon differences" and "Small site classes" below).
 
 `--yn-flavour paml` and `--yn-weighting 0|1` choose which reference YN00 follows where the two differ (below).
 `--yn-weighting 0` gives equal pathway weights in one round, which is the default control file of PAML's yn00
@@ -281,15 +282,16 @@ impossible-looking values in a pairwise table.
 |---|---|---|
 | **Few compared codons** | With a few dozen codons a single substitution moves dN/dS a long way, and the standard errors are of the size of the estimates. In orthologr's *Arabidopsis* example one pair is compared over 46 codons and has dN/dS 1.84 with status `ok`: that is noise, not positive selection | `codons_compared` |
 | **Low coverage or identity** | When only a small part of the two proteins aligns, or they align at 30% identity, the pair may not be orthologous over its length and the alignment itself is uncertain; misaligned codons count as substitutions and inflate dN and dS | `codons_compared` against `prot_aln_length`; `prot_identity` (pipeline and coalr tables) |
-| **Saturated dS** | Above a dS of about 1 to 2 most synonymous sites have changed more than once, the correction for multiple hits dominates the estimate, and dS (so dN/dS) is no longer reliable; dN/dS is then usually too low or erratic. `saturated` marks only the pairs where the correction formula has no value at all: a pair with dS 3 or 5 and status `ok` is not better (268 such pairs with dS above 2 stood next to 3,748 `saturated` ones in a yeast *S. cerevisiae* / *C. glabrata* run) | `dS` |
-| **Very small dS** | dN/dS is a ratio: between very close sequences dS rests on one or two synonymous differences, and dividing by it gives values that are large, variable and often above 1 for no biological reason. `dNdS` is `NA` only when dS is below 1e-6 | `dS`, `Sd`, `SE_dS` |
+| **Saturated dS** | From a dS of about 1 (about 0.5 with strong codon-usage bias) many synonymous sites have changed more than once and the correction for multiple hits dominates the estimate. In simulations with a known answer ("Accuracy against simulated truth" below) YN and MYN then overestimate dS (by 10 to 30% with even codon usage, 25 to 60% with skewed usage) and underestimate dN/dS (by about 20%, up to 50%), even at 1,000 codons; above a dS of about 2.5 the pairs that still have an estimate have dN/dS too high (+30% median at dS 3). `saturated` marks only the pairs where the correction formula has no value at all: a pair with dS 3 or 5 and status `ok` is not better (268 such pairs with dS above 2 stood next to 3,748 `saturated` ones in a yeast *S. cerevisiae* / *C. glabrata* run) | `dS` |
+| **Very small dS** | dN/dS is a ratio: between very close sequences dS rests on one or two synonymous differences, and dividing by it gives values that are large, variable and often above 1 for no biological reason. In the simulations, at a true dS of 0.01 only 3 to 57% of the YN ratios of 300-codon genes are within ±50% of the truth. `dNdS` is `NA` only when dS is below 1e-6 | `dS`, `Sd`, `SE_dS` |
 
 **Suggested starting thresholds.** These are conventions in common use, not properties of your data: state the
 ones you used, and check that your conclusion does not depend on their exact values.
 
-- at least 50 compared codons (100 for anything read gene by gene);
+- at least 50 compared codons, and 100 for anything read gene by gene, dN/dS included;
 - compared codons covering at least half of the protein alignment, and protein identity of at least 30 to 40%;
-- dS at most 2 (1 if synonymous rates are compared between genes), and for the ratio dS at least about 0.01;
+- dS at most 1 (`--max-ds 1`), or 0.5 where codon usage is strongly biased (GC3 far from 50%); 2 only as an outer
+  bound beyond which nothing is usable; and for the ratio, dS at least about 0.05;
 - status `ok` or `warning` only (`saturated`, `not_converged`, `no_data` and `error` have no estimate), and for
   `warning` a look at the note (an internal stop codon or a CDS that is not a multiple of 3 often means a
   pseudogene or an annotation error).
@@ -305,8 +307,8 @@ mark the rows concerned without removing anything. Where a protein alignment exi
 `protein identity below P%`. `coal dnds` reads codon alignments and refuses it.
 
 ```
-coal dnds codon.fasta --min-codons 50 --max-ds 2 -o dnds.tsv
-coal pipeline pairs --query q_cds.fa --subject s_cds.fa -o out --min-codons 50 --max-ds 2
+coal dnds codon.fasta --min-codons 100 --max-ds 1 -o dnds.tsv
+coal pipeline pairs --query q_cds.fa --subject s_cds.fa -o out --min-codons 100 --max-ds 1
 ```
 
 A row that has an estimate (status `ok` or `warning`) and fewer than N compared codons gets the note
@@ -319,7 +321,7 @@ as they are. Both options are off by default. stderr and, for the pipeline, `rep
 
 ```r
 d <- read.delim("out/dnds.tsv")
-keep <- d$status == "ok" & d$dS >= 0.01 & d$codons_compared / d$prot_aln_length >= 0.5 & d$prot_identity >= 40
+keep <- d$status == "ok" & d$dS >= 0.05 & d$codons_compared / d$prot_aln_length >= 0.5 & d$prot_identity >= 40
 ```
 
 `coal kaks` has no such options: KaKs_Calculator's format has no status column.
@@ -462,7 +464,9 @@ forms them as yn00's `GetKappa` does (Q = 1 − identical − P) and so agrees w
 default flavour keeps KaKs_Calculator's order (1 − P − identical) and its numbers. Such pairs are not rare in
 distant species (319 of the 4,388 *S. cerevisiae* / *C. glabrata* pairs are at the boundary; for 10 of them the
 two orders give different kappa), and their kappa from the 4-fold sites is a rounding artefact in either
-program. Deep test of 2026-11-14, finding D01; the pair is `tests/kaks/yn_paml_boundary_pair.fasta`.
+program. Deep test of 2026-11-14, finding D01; the pair is `tests/kaks/yn_paml_boundary_pair.fasta`. The
+tolerance of difference 14 below is not applied to the kappa estimate (of YN or MYN), so that both flavours keep
+their reference's kappa.
 
 **Text of every row compared with the stock KaKs_Calculator, 6 digits.** Every differing field is classified;
 the categories are explained in the next section.
@@ -630,6 +634,73 @@ real genes above were made with one run per file; there the stock and the 15-dig
 the stated tolerances, so no such row occurs in them. COAL has no state between pairs: every pair gives the same
 row alone, in any order and with any number of threads (`tests/test_kaks.py`, `test_threads_same_output`).
 
+#### Boundaries, an infinite kappa and other genetic codes (2026-11-14)
+
+Differences 14 to 17 came out of the property-based fuzz of the engine (`tests/test_kaks_properties.py`, findings
+K01 to K06; the minimal pairs are in `tests/fixtures/kaks_fuzz/`) and of the simulation study above. With the
+standard code they change only rows at an exact boundary of a correction, MYN rows with an infinite kappa and
+the difference counts of YN / MYN rows without any estimate; every other row is byte-identical
+(checked at 17 digits, all nine methods, on the *A. thaliana* / *A. lyrata*, human / mouse, *E. coli* K-12 /
+Sakai, *Salmonella* / *Shigella* and *S. cerevisiae* / *C. glabrata* pairs of the deep test, 4,000 simulated pairs
+of the study and the test fixtures).
+
+14. **A correction whose argument is 0 in exact arithmetic is `saturated`.** Where the argument of a correction's
+    logarithm is 0 in exact arithmetic (Kimura: 1 - 2P - Q = 0, for instance P = Q = 1/3; Jukes and Cantor: p =
+    3/4), the floating-point value is 0, a residue of about 1e-16 or a small negative number, depending on the
+    fractions and on the order of the sums. A residue gave a distance of 19 to 28 that was printed as an estimate:
+    `GCTGCTGCT` / `GCCGCAGCT` had LWL dS 18.99 with status `ok` (the same pair with four codons, whose fractions
+    are exact in binary, was `saturated`), and `TCA` / `TTT` NG dS 27.55. COAL now counts an argument at or below
+    1e-10 as 0 (a distance from a larger one is below about 12 for K80 and 17 for JC69), in NG, the LWL family, the
+    F84 / K80 / JC69 and TN93 distances of YN and MYN, and the default flavours of Comeron and Li; the result no
+    longer depends on the order of the codon columns. KaKs_Calculator prints the residue's number (for YN / MYN it
+    loses such pairs to NaN instead, difference 11), so these are rows where it prints a number and COAL `NA`
+    (difference 1). For YN and MYN the fallback chain then works as at an exact 0: `TAT` / `TGG` (no synonymous
+    site) has F84 and K80 undefined and JC69 defined, Ka = 1.648 (it was 18.99). Not changed: the kappa estimates
+    (D01 above) and the reference flavours `--comeron-flavour gestimator` and `--li-flavour seqinr`, which keep
+    their programs' numbers, residue included. In the same way, Comeron's "a class with fewer than
+    `--comeron-min-sites` sites" is tested with a margin of 1e-9, because a class of exactly 3 sites can sum to
+    2.9999999999999996 in one column order and 3 in another. What changed: of the 1,830 one-codon pairs of sense
+    codons, 355 rows had a dN or dS above 10 (36 of them `ok`); one remains (MLWL, whose dS divides by 0.12 kappa-
+    based sites: a real value of the method). Real genes: 22 rows of the 4,388 *S. cerevisiae* / *C. glabrata*
+    pairs (LWL family; dS 12 to 23 with status `ok` before, or a Ka beside a class with the residue) and two
+    Comeron rows of the *Salmonella* / *Shigella* pairs (a 3-site class: `NA`, `saturated`, as with 3 sites in any
+    order); none in the other genomes.
+15. **MYN: kappa_TC or kappa_AG infinite.** MYN estimates the two kappas with TN93 at the non-degenerate and the
+    four-fold sites. When the A-G (T-C) term of one class is exactly at its limit, 1 - R P1 / (2 piA piG) -
+    Q / (2 R) = 0 (P1 = 3/25, Q = 12/25 with A and G equally frequent), its logarithm is -inf and kappa_AG is
+    infinite. The site counts were then NaN, and the row had status `no_data` with the note `no synonymous sites;
+    no nonsynonymous sites` although the pair has its full number of sites; `coal kaks` on such pairs alone exited
+    2 and suggested that the input might not be a codon alignment. The status is now `saturated`, with the note
+    `MYN: kappa_AG estimated as infinite (TN93 transition correction undefined in a class of sites): no site
+    counts, Ka and Ks NA`, and the Substitutions column keeps the number of differences. KaKs_Calculator prints
+    `nan` for Ka, Ks, Ka/Ks and the site counts, and the same rate ratio, `kappa_TC:inf:1:1:1:1`. In the simulation
+    study 79 of 240,000 MYN rows (dS 0.5 to 3, all lengths); among real genes one *Salmonella* / *Shigella* and
+    two *S. cerevisiae* / *C. glabrata* pairs. `tests/test_kaks_myn_kappa_inf.py` (and, through the C++ API,
+    `tests/cpp/kaks_myn_kappa_inf.cpp`). A residue instead of the exact 0 gives a very large but finite kappa and
+    an estimate, as in KaKs_Calculator: like D01, the kappa keeps the reference's exact test.
+16. **Genetic codes other than the standard one: the special cases of the LWL family.** KaKs_Calculator
+    hard-codes rules for codons of the standard code: LWL and LPB split a CGA <-> AGA (CGG <-> AGG) change at the
+    first position into half a transition and half a transversion, and MLWL and MLPB (Tzeng et al. 2004) count
+    ATA <-> ATG as nonsynonymous and ATA <-> ATC, ATT and CGA <-> AGA as synonymous; it applies them with every
+    code. In the vertebrate mitochondrial code (2), where ATA is Met, MLWL and MLPB therefore counted half of a
+    synonymous ATA -> ATG as nonsynonymous (ATAGCTAAACTGGGT / ATGGCCAAACTGGGT: dN 0.154 and 0.137 instead of 0),
+    and in code 13, where AGA is Gly, LWL and LPB depended on which sequence was first (dN 0.109 against 0.051).
+    COAL applies the LWL / LPB rule only where the code makes the two codons synonymous (an ordinary
+    nonsynonymous transversion otherwise, and then the order does not matter), and the M variants' rules by what
+    they are about: between two codons that are both 2-fold degenerate at the position, the change is synonymous
+    exactly when the code says so. In the standard code those are exactly Tzeng et al.'s Ile and Arg cases, so its
+    numbers are KaKs_Calculator's, unchanged; other codes have their own such cases (Asn AAA <-> AAC, AAT in codes
+    9, 14 and 21; Cys TGA <-> TGC, TGT in code 10; Leu, Tyr and Ser codons in codes 12, 14, 16 and 22), which
+    COAL now counts as synonymous too. ATA <-> ATG is nonsynonymous where the code has Ile and Met there. With
+    those codes COAL's MLWL, MLPB, LWL and LPB differ from KaKs_Calculator's.
+17. **No weighted difference counts without an estimate.** A YN or MYN row in which neither Ka nor Ks has an
+    estimate (both saturated, or one saturated beside no sites of the other kind) used to print Sd and Nd, the
+    pathway-weighted counts of an iteration whose t was a cap (99, or JC69's cap: difference 13). Like the last
+    round of an iteration that did not converge, they depended on the path, and swapping the two sequences changed
+    them (Nd 23.09 against 23.18 for a pair of code 5). They are now `NA` in such rows, as for `not_converged`
+    (and so is Fisher's p, which needs them). Without codons that differ at several positions, and with
+    `--yn-weighting 0`, the counts do not depend on t and are printed as before.
+
 `tests/test_kaks.py` holds the cases (`TestOneKindOfSite`, `TestMynNan`, `TestMultiPositionCodons`), and its
 comparison with KaKs_Calculator's stored output does not accept a difference because of the status alone: a
 number that KaKs_Calculator prints and COAL does not is a failure unless the status is `saturated`
@@ -653,6 +724,10 @@ about it, what was measured, and what is not guaranteed.
   and so does its `coalr.cpp`, which computes the quartiles of the cluster summary). Clang contracts `a * b + c` by default, and arm64 always has the instruction, so without
   this a macOS build and a Linux build would differ in the last digits of nearly every YN / MYN value.
 - No dependence on the number of threads, on the order of the pairs, or on the locale.
+- Swapping the two sequences of a pair, or permuting its codon columns, gave the same statuses and the same
+  numbers at the default digits in every pair of the fuzz campaigns; at `--digits 17` the last one or two digits of NG, YN, MYN and Comeron (default
+  flavours) can change, because sums are formed in another order, and the YN / MYN iteration can carry that to
+  about 3e-10 relative (70 of 1,593 rows of 300 random pairs at 17 digits, none at 8 or 6; fuzz finding K04).
 - An iteration that did not converge prints no value (difference 12).
 
 With that, builds that use the same math library print the same bytes. Measured on 2026-11-13 on x86-64 Linux
@@ -741,10 +816,100 @@ t = 0.3, 1 and 2 substitutions per codon.
 | LWL | 0.10 / 0.10 / 0.11 | 0.44 / 0.43 / 0.43 | 0.85 / 0.86 / 0.78 | 1.58 / 1.44 / 1.37 | 2 |
 | MLWL | 0.11 / 0.10 / 0.10 | 0.46 / 0.44 / 0.44 | 0.87 / 0.86 / 0.78 | 1.60 / 1.45 / 1.31 | 2 |
 
-YN00 and MYN recover omega to within about 10 % at every divergence; at omega = 0.1 and t = 1 they run about 20 %
-low. The methods that ignore the transition/transversion bias (NG, LWL) underestimate omega, increasingly so at
-high divergence and high omega. This is the bias Yang & Nielsen (2000) describe. NG's 27 NA are Ks saturations
-(Jukes-Cantor) at omega = 0.1, t = 2.
+On these 600 pairs (one kappa and one codon usage, t up to 2 substitutions per codon) YN00 and MYN recover omega to within about
+10 %; at omega = 0.1 and t = 1 they run about 20 % low, and NG and LWL are low. That does not generalise: the
+larger study below finds YN00 and MYN unbiased only up to a dS of about 0.5, and the sign of the counting methods'
+error set by the codon usage (too high with skewed usage). NG's 27 NA are Ks saturations (Jukes-Cantor) at
+omega = 0.1, t = 2.
+
+### Accuracy against simulated truth
+
+The comparisons above say that COAL computes what KaKs_Calculator, yn00, gestimator and seqinr compute. How close
+those estimators are to the truth was measured separately (2026-11-14, COAL 3232dd9; since then only the D9
+refinement of Comeron's small classes and the rows of "Differences" 14 to 17 changed, in few of the 240,000
+pairs, among them the 79 MYN rows of difference 15).
+
+**Truth.** Pairs were simulated under GY94 / M0 with F3x4 codon frequencies (the rate matrix scaled to one
+substitution per codon). The true dS and dN are those of the model in Yang & Nielsen's (2000) definition, which
+YN00 and codeml estimate: the synonymous sites S are counted with omega set to 1 (S = 3 rhoS(omega = 1)),
+dS = t rhoS / S and dN likewise, so that dN/dS is omega exactly. The counting methods (NG, the LWL family,
+Comeron, Li) count sites without codon frequencies, so when kappa is not 1 or codon usage is skewed they estimate
+a different quantity; their "error" here is their distance from the model's dS, dN and omega. The simulator was
+checked against the model's algebra, against PAML's evolver (40 distribution tests) and with codeml, whose
+pairwise maximum likelihood recovers the truth to within 8 % at every dS from 0.1 to 3.
+
+**Grid.** dS 0.01, 0.03, 0.1, 0.2, 0.5, 1, 1.5, 2, 2.5 and 3; omega 0.05, 0.2, 0.5, 1 and 2; kappa 1, 2 and 4;
+30, 100, 300 and 1,000 codons; even codon usage or a GC3-skewed one (third positions 80 % G/C); 200 pairs per
+cell, 240,000 pairs.
+
+**Bias.** Median relative error, over the 30 combinations of codon usage, kappa and omega (the median of the
+cell medians; dS / dN/dS):
+
+| Method | codons | dS 0.1 | dS 0.5 | dS 1 | dS 2 | dS 3 |
+|---|---:|---|---|---|---|---|
+| YN | 1,000 | -1% / +0% | +3% / -6% | +18% / -21% | +14% / -30% | -16% / -14% |
+| MYN | 1,000 | -2% / +1% | +3% / -6% | +18% / -21% | +11% / -21% | -25% / -11% |
+| NG | 1,000 | -9% / +11% | -12% / +5% | -17% / +4% | -24% / +5% | -55% / +22% |
+| LPB | 1,000 | -11% / +23% | -6% / +18% | -8% / +16% | -11% / +20% | -30% / +32% |
+| Comeron | 1,000 | -0% / -1% | +6% / -8% | +8% / -11% | +8% / -16% | -24% / +15% |
+| Li | 1,000 | -7% / +8% | -0% / -1% | -0% / -1% | -2% / -3% | -20% / +8% |
+| YN | 300 | -2% / +0% | +4% / -7% | +16% / -20% | +7% / -21% | -19% / +0% |
+| MYN | 300 | -3% / +1% | +4% / -7% | +18% / -22% | +4% / -15% | -21% / +8% |
+| NG | 300 | -11% / +15% | -12% / +4% | -17% / +4% | -24% / +6% | -36% / +18% |
+| LPB | 300 | -11% / +27% | -7% / +18% | -7% / +13% | -18% / +25% | -36% / +43% |
+| Comeron | 300 | -0% / +0% | +5% / -10% | +8% / -12% | +1% / -12% | -30% / +14% |
+| Li | 300 | -8% / +10% | -1% / -2% | +0% / -1% | -8% / -1% | -30% / +17% |
+
+The medians hide the spread for the counting methods, whose error depends on the codon usage and kappa in both
+directions. With skewed usage every counting method has dS 20 to 35 % too low and dN/dS 30 to 90 % too high
+already at dS 0.03 to 0.1, rising to +100 to +190 % at dS 2 to 3 (kappa 4, omega 0.2, 300 codons: NG +31 % at
+dS 0.1, +105 % at dS 2). With even usage and kappa 2 to 4, NG and LWL give dN/dS 10 to 30 % too low; with kappa 1,
+NG is the most accurate method (within 3 % up to dS 1.5 at omega 0.2 and 1,000 codons) and LPB, MLPB and Li are within about 10 %. YN and MYN are
+within about 5 % up to dS 0.5 in all 30 combinations; from dS about 1 they overestimate dS (+10 to +30 % with even
+usage, +25 to +60 % skewed) and underestimate dN/dS (-20 to -40 % skewed), even at 1,000 codons. That is the bias
+of the YN00 approximation, the same in yn00 and KaKs_Calculator; codeml's likelihood on the same pairs is within
+8 %. Real genes usually lie between the two codon usages, so the counting methods' differences from YN on real
+data (as in [tutorial 5](tutorials/05-choosing-a-method.md)) can be in either direction. YN's kappa is 3 to 10 %
+high; MYN is as accurate as YN.
+
+**Reliability limits.** YN and MYN have a median error within 15 % with at least 90 % of the pairs estimated up
+to dS about 1 with even codon usage and about 0.5 with skewed usage, at every length from 100 codons. Status
+`ok` does not mark the rest: at 1,000 codons, 29 % of the YN pairs at dS 1 and 35 % at dS 1.5 are more than 30 %
+off, and none (dS 1) or 14 % (dS 1.5) of them are flagged. `saturated` becomes the majority only from dS 2.5;
+`not_converged` is 3 to 7 % of the pairs from dS 1.5, at every length. Comeron's dN becomes NA when the synonymous
+sites saturate (11 to 19 % of the pairs at dN 0.1 and dS 2, 41 % at dS 3), where YN still has a number.
+
+**Gene length.** For 80 % of the YN dN/dS values to be within ±50 % of the truth, about 100 codons are needed at
+dS 0.5 and about 300 at dS 0.1. At 30 codons it is 35 to 55 %, whatever the method; at dS 0.01, 3 to 57 % (300
+codons) and 37 to 76 % (1,000 codons).
+
+**Standard errors.** YN and MYN's SE of dS covers the truth (estimate ± 1.96 SE) in 88 to 95 % of the pairs for
+dS 0.1 to 1 at 100 codons and more; beyond dS 1 it is too small (reported SE / actual SD 0.58 to 0.69 at dS 1 to
+2, 1,000 codons), and also at dS 0.03 and below. The SE of dN covers less (0.58 to 0.75 at dS 1 to 2). NG's
+standard errors match its scatter, but its bias brings the coverage down to 0.26 to 0.60 at 1,000 codons. Li's
+standard errors are about 25 % too large.
+
+**What follows for filtering** ("Filtering before interpretation" above): gene by gene, `--max-ds 1`, or 0.5 with
+strong codon-usage bias, and 2 only as an outer bound; at least 100 codons and a dS of at least about 0.05 for a
+ratio. YN stays the default (NG is better only with even codon usage and kappa near 1); Comeron's
+`--comeron-min-sites 3` is supported (at 30 codons it cuts dN `NA` from 18 to 45 % to 1 to 2 % at dS 1 to 2 with
+the same median error and RMSE; 10 is supported as well). A GY94 maximum-likelihood method ("Not done") would
+remove the YN00 bias.
+
+**`--yn-weighting 0`** (equal pathway weights, one round: PAML yn00's default) is less biased than the default
+weighting at omega below 1 and dS 1 to 1.5: kappa 1, 2 and 4, both codon usages, 1,000 codons, omega 0.2, dS 1:
+dN/dS -8 to -32 % with the default, +5 to -22 % with `--yn-weighting 0`; and more pairs keep an estimate at dS 2
+(70 % against 90 % over the 12 conditions). At omega 1 the two agree (the weights then hardly differ between pathways), and at omega
+0.2 with even codon usage `--yn-weighting 0` overestimates dN/dS from dS 2 (+11 to +101 % at dS 2 to 3, against
+-14 to +91 % with the default); 300 codons give the same picture. Measured on kappa 1, 2 and 4, both codon
+usages, omega 0.2 and 1, dS 0.5 to 3, 300 and 1,000 codons, 200 pairs each. The default stays KaKs_Calculator's weighting: it is what makes `coal kaks -m YN` give KaKs_Calculator's
+numbers (on the 4,000 reference pairs of the study, 0 of 3,120 differ; with `--yn-weighting 0`, 2,424 of 3,318
+differ by more than 1e-5, the median dN/dS by 2 %).
+
+**Reproducing it.** `benchmarks/kaks/sim_truth/` has the simulator (`codonsim.py`, `validate_sim.py`), the grid
+(`gen.py`, fixed seeds; about 500 MB), the runs (`run_coal.sh`) and the tables and figures (`analyze.py`,
+`perpair.py`, `make_tables.py`, `make_figs.py`); `run_coal.sh` lists the order. The comparisons with
+KaKs_Calculator, yn00, codeml and orthologr of the study are not part of it.
 
 ## Comeron and Li
 
@@ -794,7 +959,7 @@ between them: next section).
 | Stop codon elsewhere | the column is skipped; status `warning` | compared, as above; no warning |
 | `U` | read as `T` | the codon is not A/C/G/T: the column is skipped |
 | Gap or ambiguous letter in a codon | column skipped | column skipped (the same) |
-| A logarithm of the correction has an argument <= 0, in a class that has sites | the estimate is `NA`; status `saturated` (a class with fewer than 3 sites, `--comeron-min-sites`: the logarithm is 0, status `warning`) | gestimator sets that logarithm to 0 and prints the finite number that results (too small). COAL gives that number, with status `warning` and the note `Ka: correction undefined, gestimator's value (...)` (or `Ks:`) |
+| A logarithm of the correction has an argument <= 0, in a class that has sites | the estimate is `NA`; status `saturated` (a class with fewer than 3 sites, `--comeron-min-sites`: the logarithm is 0, status `warning`; `NA`, `saturated` if the distance is then 0) | gestimator sets that logarithm to 0 and prints the finite number that results (too small). COAL gives that number, with status `warning` and the note `Ka: correction undefined, gestimator's value (...)` (or `Ks:`) |
 | 1 - 2Qa <= 0 (Ba undefined) | Ka is `NA`; `saturated` | gestimator's rule: Ba = 0 when Kimura's distance over the whole rows is below 1 (a number comes out, flagged as above); otherwise it prints 999: `NA`, `saturated` |
 | 1 - 2Qs <= 0 (Bs undefined) | Ks is `NA`; `saturated` | gestimator prints 999: `NA`, `saturated` |
 | No synonymous (nonsynonymous) sites | `NA`; `no_data` | gestimator prints 999: `NA`, `no_data` |
@@ -856,12 +1021,15 @@ against `--comeron-twosubs libsequence --comeron-min-sites 0`, COAL's defaults b
 | human / mouse | 946 | 809 of 932 | 1.0% / 4.8% / 50% | 1.015 | 2.1% / 8.2% | 6 |
 | *S. cerevisiae* / *C. glabrata* | 4,164 | 807 of 847 | 5.9% / 39% / 166% | 1.108 | 9.9% / 36% | 314 (308 `ok` to `saturated`) |
 
-Pairs of codons that differ at one or three positions are not affected. Against YN (a maximum-likelihood
+Pairs of codons that differ at one or three positions are not affected. Against YN (a model-based
 estimate, independent of both; measured with the gestimator flavour on the same alignments), the corrected dS is
 slightly closer (median absolute difference 7.68 to 7.53% for
 *A. thaliana*, 13.95 to 13.74% human / mouse, 25.97 to 25.47% yeast), and in a neutral simulation (kappa 2, 300
-codons, 300 pairs) its median error of dN against the true number is 2.0% (libsequence's: 2.3%) and of dS -2.1%
-(-3.0%).
+codons, 300 pairs) its median error of dN against the number of substitutions applied is 2.0% (libsequence's:
+2.3%) and of dS -2.1% (-3.0%). (That truth is the count of substitutions per site as Comeron's own sites see them.
+Against the model's dS in Yang & Nielsen's definition, "Accuracy against simulated truth" above, Comeron's dS at
+kappa 2, omega 1 and 300 codons is +8 to +17% off with even codon usage and -17 to -21% with skewed usage; the
+comparison of the two pathway orders is not affected.)
 
 ### Small site classes (`--comeron-min-sites`)
 

@@ -375,6 +375,10 @@ Result run_li(const Prepared& pr, const GeneticCode& code, const Options& opt, R
         aaa[ii] = 1 / (1 - 2 * p[ii] - q[ii]);
         bb[ii] = 1 / (1 - 2 * q[ii]);
         cc[ii] = (aaa[ii] + bb[ii]) / 2;
+        // coal flavour: an argument 1 - 2p - q or 1 - 2q at or below 1e-10 counts as 0, i.e. undefined (kaks.cpp,
+        // LOG_ARG_TOL; fuzz finding K03); the seqinr flavour keeps seqinr's test and its numbers
+        if (!raw && 1 - 2 * q[ii] <= 1e-10) bb[ii] = -1;
+        if (!raw && 1 - 2 * p[ii] - q[ii] <= 1e-10) aaa[ii] = -1;
         if (bb[ii] <= 0 || !std::isfinite(bb[ii])) {
             b[ii] = 10.0;
         } else {
