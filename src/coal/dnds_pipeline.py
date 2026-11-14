@@ -2315,7 +2315,7 @@ class _Run:
                     exit_code, error, status = 1, why, "failed"
         self.remove_temporaries()
         a = self.a
-        skip = {"out_dir", "quiet", "report", "resume", "install_tools"}
+        skip = {"out_dir", "quiet", "report", "resume", "install_tools", "_api"}
         if status is None:
             status = {0: "completed", 2: "completed_with_failures"}.get(exit_code, "failed")
         # every tool's command lines, from the stages (also the reused ones); the aligners run once per cluster
@@ -2332,6 +2332,7 @@ class _Run:
                 tools[name]["command_template"] = _msa.command_line(name, tools[name]["path"], threads)
         report = {
             "schema": SCHEMA, "coal_version": __version__, "mode": self.mode, "command": self.argv,
+            "entry": getattr(a, "_api", {}).get("entry", "cli" if self.argv is not None else "python-api"),
             "out_dir": self.out, "exit_code": exit_code, "status": status,
             "started": self.started, "finished": _utc_now(),
             "platform": {"system": platform.system(), "release": platform.release(), "machine": platform.machine(),
@@ -3611,7 +3612,41 @@ def _namespace(mode: str, required: list[str], options: dict) -> argparse.Namesp
     return a
 
 
-def run_pairs(query: _Path, subject: _Path, out_dir: _Path, **options: Any) -> PipelineResult:
+def _equivalent_argv(mode: str, required: list[str], a: argparse.Namespace, options: dict) -> list[str]:
+    """The `coal pipeline` command line of an API call: the required arguments, then the given options as flags
+    (their values as the run uses them). For report.json's "command" (integration pass 2026-11-14, C08: it was
+    null for runs from Python and R)."""
+    ap = build_parser()
+    sub = next(x for x in ap._actions if isinstance(x, argparse._SubParsersAction)).choices[mode]
+    by_dest = {x.dest: x for x in sub._actions if x.option_strings}
+    argv = ["pipeline", mode, *required]
+    for k in options:
+        act = by_dest.get(k)
+        v = getattr(a, k, None)
+        if act is None or v is None:
+            continue
+        flag = max(act.option_strings, key=len)
+        if isinstance(act, argparse._StoreTrueAction):
+            if v:
+                argv.append(flag)
+        elif isinstance(act, argparse._AppendAction):
+            for x in (v if isinstance(v, (list, tuple)) else [v]):
+                argv += [flag, str(x)]
+        elif act.nargs in ("+", "*"):
+            argv += [flag, *(str(x) for x in (v if isinstance(v, (list, tuple)) else [v]))]
+        else:
+            argv += [flag, str(v)]
+    return argv
+
+
+def _api_run(mode: str, required: list[str], options: dict, entry: str | None) -> PipelineResult:
+    a = _namespace(mode, required, options)
+    a._api = {"entry": entry or "python-api", "function": f"coal.dnds_pipeline.run_{mode}"}
+    return _execute(mode, a, _equivalent_argv(mode, required, a, options))
+
+
+def run_pairs(query: _Path, subject: _Path, out_dir: _Path, *, entry: str | None = None,
+              **options: Any) -> PipelineResult:
     """Pair mode from Python: the options of `coal pipeline pairs` as keyword arguments (method=["YN", "NG"],
     ortho="rbh", aligner="nw", pairs=None, jobs=0, codontable=1, kaks_format=False, keep_alignments=False,
     keep_protein_alignments=False, resume=False, quiet=False, ...).
@@ -3620,22 +3655,23 @@ def run_pairs(query: _Path, subject: _Path, out_dir: _Path, **options: Any) -> P
     report["error"] (the message is also printed on stderr). Raises TypeError for an option that does not exist
     and ValueError for a value that is not allowed (an unknown method, Comeron with another genetic code), before
     anything is written. KeyboardInterrupt and a termination signal pass through, after the run has ended its
-    programs and written an "interrupted" report."""
-    a = _namespace("pairs", ["--query", os.fspath(query), "--subject", os.fspath(subject), "-o", os.fspath(out_dir)],
-                   options)
-    return _execute("pairs", a, None)
+    programs and written an "interrupted" report.
+
+    report.json: "command" is the equivalent `coal pipeline pairs` command line, "entry" says where the run came
+    from: "python-api", or what a caller names in `entry` (coalr: "coalr <version> coal_pipeline_pairs()")."""
+    return _api_run("pairs", ["--query", os.fspath(query), "--subject", os.fspath(subject), "-o", os.fspath(out_dir)],
+                    options, entry)
 
 
-def run_clusters(cds: _Path | Iterable[_Path], out_dir: _Path, clusters: _Path | None = None,
-                 **options: Any) -> PipelineResult:
+def run_clusters(cds: _Path | Iterable[_Path], out_dir: _Path, clusters: _Path | None = None, *,
+                 entry: str | None = None, **options: Any) -> PipelineResult:
     """Cluster mode from Python: the options of `coal pipeline clusters` as keyword arguments (clusters=None runs
     DIAMOND DeepClust; aligner="clustalo", max_cluster_size=200, large_clusters="representative", pair_sample=1000,
     seed=1, method=["YN"], jobs=0, ...). cds: one path or a list. Returns and raises as run_pairs()."""
     files = [os.fspath(cds)] if isinstance(cds, (str, os.PathLike)) else [os.fspath(c) for c in cds]
     if clusters is not None:
         options = {**options, "clusters": os.fspath(clusters)}
-    a = _namespace("clusters", ["--cds", *files, "-o", os.fspath(out_dir)], options)
-    return _execute("clusters", a, None)
+    return _api_run("clusters", ["--cds", *files, "-o", os.fspath(out_dir)], options, entry)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

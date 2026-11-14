@@ -411,3 +411,38 @@ class C06ClusterStatus(unittest.TestCase):
         self.assertEqual(got["c4"], ("failed", "no pair has an estimate (2 pairs: 1 saturated, 1 failed)"))
         self.assertEqual(got["c5"], ("ok", ""))
         self.assertEqual(got["c6"], ("saturated", "an MSA note"))
+
+
+@needs_cpp
+class C08ApiCommand(PipelineCase):
+    def test_api_runs_record_the_equivalent_command(self):
+        pairs = self.pairs_file(_fixture_pair_ids())
+        res = P.run_pairs(Q, S, self.tmp / "o", pairs=str(pairs), method=["YN", "NG"], jobs=1, quiet=True,
+                          preset="pwalign", keep_alignments=True, max_ds=3)
+        self.assertIn(res.exit_code, (0, 2))
+        self.check_report(res)
+        rep = res.report
+        self.assertEqual(rep["entry"], "python-api")
+        cmd = rep["command"]
+        self.assertEqual(cmd[:8], ["pipeline", "pairs", "--query", str(Q), "--subject", str(S), "-o",
+                                   str(self.tmp / "o")])
+        self.assertNotIn("_api", rep["parameters"])
+        # the command line gives the same run
+        again = P.build_parser().parse_args(cmd[1:])
+        P._finish_args(again)
+        for k, v in rep["parameters"].items():
+            if k not in ("method",):
+                self.assertEqual(json.loads(json.dumps(getattr(again, k, None), default=str)), v, k)
+        self.assertEqual(again.method, ["NG", "YN"])
+        cli = P.main(cmd[1:3] + cmd[3:6] + ["-o", str(self.tmp / "cli")] + cmd[8:] + ["-q"])
+        self.assertIn(cli, (0, 2))
+        self.assertEqual((self.tmp / "cli" / "dnds.tsv").read_bytes(), Path(res.outputs["dnds"]).read_bytes())
+        cli_rep = json.loads((self.tmp / "cli" / "report.json").read_text(encoding="utf-8"))
+        self.assertEqual(cli_rep["entry"], "cli")
+        # a caller names itself
+        res2 = P.run_clusters(FAM, self.tmp / "c", clusters=FAM_CLUSTERS, method="YN", jobs=1, quiet=True,
+                              aligner="nw", entry="coalr 9.9 coal_pipeline_clusters()")
+        self.assertEqual(res2.report["entry"], "coalr 9.9 coal_pipeline_clusters()")
+        self.assertEqual(res2.report["command"][:4], ["pipeline", "clusters", "--cds", str(FAM)])
+        self.assertIn("--clusters", res2.report["command"])
+        self.assertIn("--aligner", res2.report["command"])

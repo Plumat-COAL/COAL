@@ -440,7 +440,9 @@ complete codon), `status`, `code`, `note`.
 Schema `coal.pipeline/1`: [pipeline.schema.json](pipeline.schema.json). It is written also when the run fails.
 
 - `mode`, `command`, `out_dir`, `parameters` (every option as used), `tools` (path and version of coal-cpp,
-  DIAMOND, Clustal Omega, MAFFT).
+  DIAMOND, Clustal Omega, MAFFT). `entry`: `cli`, `python-api` (`run_pairs()` / `run_clusters()`), or the caller
+  that named itself (`coalr 0.6.0 coal_pipeline_pairs()`); for a run from Python or R, `command` is the equivalent
+  `coal pipeline` command line of the call (the options given, with the values the run used).
 - **Provenance, for a methods section.** `started` and `finished` (UTC, ISO 8601: `2026-11-13T09:15:46Z`);
   `platform` (`system`, `release`, `machine`, `python`, `cpus`); `coal_version`; `threads` (`requested`: `-j` as
   given, 0 for the default; `usable_cpus`: the CPUs this process may run on; `engine`: the threads coal-cpp was
