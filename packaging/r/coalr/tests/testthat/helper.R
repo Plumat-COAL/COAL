@@ -43,3 +43,10 @@ orthologr_1000 <- function() {
   f <- file.path(dir, c("ortho_thal_cds_1000.fasta", "ortho_lyra_cds_1000.fasta"))
   if (nzchar(dir) && all(file.exists(f))) f else NULL
 }
+
+# Thread counts for the tests that compare thread counts. CRAN's check machines allow two cores, so more threads
+# (and 0, one per hardware thread) only where NOT_CRAN is "true" (testthat::skip_on_cran()'s variable).
+test_threads <- function(t) {
+  if (identical(Sys.getenv("NOT_CRAN"), "true")) return(t)
+  unique(pmin(ifelse(t == 0, 2, t), 2))
+}

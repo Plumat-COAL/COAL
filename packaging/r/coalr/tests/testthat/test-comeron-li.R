@@ -171,7 +171,7 @@ test_that("coal_dnds_pairs and coal_dnds_clusters compute Comeron and Li", {
                "standard genetic code only")
   # threads do not change the result
   expect_identical(coal_dnds_pairs(q, s, pairs = orthologs(), methods = c("Comeron", "Li"), threads = 1L)$dN,
-                   coal_dnds_pairs(q, s, pairs = orthologs(), methods = c("Comeron", "Li"), threads = 4L)$dN)
+                   coal_dnds_pairs(q, s, pairs = orthologs(), methods = c("Comeron", "Li"), threads = test_threads(4L))$dN)
 
   cds <- coal_read_fasta(fx("family_cds.fasta"))
   msa_tbl <- utils::read.delim(fx("clusters_msa.tsv"), stringsAsFactors = FALSE)

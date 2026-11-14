@@ -108,8 +108,9 @@ most pairs when the two sequences are swapped). \code{NULL} (default): \code{"co
 \code{"libsequence"} with \code{"gestimator"}. The command line's \code{--comeron-twosubs}.}
 
 \item{comeron_min_sites}{For \code{"Comeron"}: a site class with fewer than this many sites cannot make \code{dN} or \code{dS}
-\code{NA}; its undefined logarithm is set to 0 (as \code{gestimator()} does), with status \code{warning} and a note. Never
-changes a value that is not \code{NA} otherwise. Default 3; \code{0} restores the rule of COAL before 2026-11-14 (every
+\code{NA}; its undefined logarithm is set to 0 (as \code{gestimator()} does), with status \code{warning} and a note; where the
+distance would then be 0, the row stays \code{NA} (\code{saturated}), as with \code{0}. Never changes a value that is not \code{NA}
+otherwise. Default 3; \code{0} restores the rule of COAL before 2026-11-14 (every
 class with sites can). The command line's \code{--comeron-min-sites}.}
 
 \item{terminal_stops}{Only with \code{comeron_flavour = "gestimator"} or \code{li_flavour = "seqinr"}: \code{"drop"} (default)

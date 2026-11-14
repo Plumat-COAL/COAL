@@ -24,14 +24,17 @@ Authors@R: c(
     person("Jean R.", "Lobry", role = c("ctb", "cph"), comment = "R package seqinr"),
     person("Delphine", "Charif", role = "ctb", comment = "R package seqinr"))
 Copyright: See the file inst/COPYRIGHTS
-Description: In-process R bindings to the C++ core of 'COAL', a fast replacement for 'PAL2NAL'.
-    Translates coding sequences, aligns the proteins (global Needleman-Wunsch with 'BLOSUM62'),
-    threads the codons onto the protein alignment and estimates dN, dS and dN/dS (Ka/Ks) with the
-    methods of Yang and Nielsen (2000), Nei and Gojobori (1986), Li, Wu and Luo (1985), Li (1993),
-    Pamilo and Bianchi (1993), Comeron (1995), Tzeng, Pan and Li (2004) and Zhang, Li and Yu (2006), for pairs of
-    orthologs or for every pair of the genes in a cluster, on several threads, without external
-    programs or temporary files. An optional route through 'reticulate' runs the complete 'COAL'
-    pipeline (with 'DIAMOND' and 'Clustal Omega') from R.
+Description: In-process R bindings to the C++ core of 'COAL', a fast replacement for 'PAL2NAL' (Suyama,
+    Torrents and Bork (2006) <doi:10.1093/nar/gkl315>). Translates coding sequences, aligns the proteins (global
+    Needleman-Wunsch with 'BLOSUM62'), threads the codons onto the protein alignment and estimates dN, dS and
+    dN/dS (Ka/Ks) with the methods of Yang and Nielsen (2000) <doi:10.1093/oxfordjournals.molbev.a026236>, Nei
+    and Gojobori (1986) <doi:10.1093/oxfordjournals.molbev.a040410>, Li, Wu and Luo (1985)
+    <doi:10.1093/oxfordjournals.molbev.a040343>, Li (1993) <doi:10.1007/BF02407308>, Pamilo and Bianchi (1993)
+    <doi:10.1093/oxfordjournals.molbev.a040003>, Comeron (1995) <doi:10.1007/BF00173196>, Tzeng, Pan and Li
+    (2004) <doi:10.1093/molbev/msh242> and Zhang, Li and Yu (2006) <doi:10.1186/1471-2148-6-44>, for pairs of
+    orthologs or for every pair of the genes in a cluster, on several threads, without external programs or
+    temporary files. An optional route through 'reticulate' runs the complete 'COAL' pipeline (with 'DIAMOND' and
+    'Clustal Omega') from R.
 License: GPL-3
 URL: https://github.com/Plumat-COAL/COAL
 BugReports: https://github.com/Plumat-COAL/COAL/issues

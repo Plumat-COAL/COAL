@@ -72,10 +72,15 @@ package is not on PyPI yet); DIAMOND, and for clusters Clustal Omega (on the \co
 \code{\link[=coal_python_available]{coal_python_available()}} tells whether Python is ready.
 }
 \examples{
+# Not run: needs a Python with the package coal-align, its C++ engine coal-cpp and DIAMOND, which
+# coal_python_available() can only partly check (in process, coal_dnds_pairs() needs none of them).
 \dontrun{
-res <- coal_pipeline_pairs("thaliana_cds.fa", "lyrata_cds.fa", threads = 4)
+dir <- system.file("extdata", package = "coalr")
+a <- file.path(dir, "species_a_cds.fasta")
+b <- file.path(dir, "species_b_cds.fasta")
+res <- coal_pipeline_pairs(a, b, threads = 2)
 head(res$pairs)
-cl <- coal_pipeline_clusters("all_cds.fa", methods = c("YN", "NG"))
+cl <- coal_pipeline_clusters(a, methods = c("YN", "NG"))
 head(cl$summary)
 }
 }
