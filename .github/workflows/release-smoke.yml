@@ -111,7 +111,7 @@ jobs:
                               bad.append(f"{f}: no {lic} in dist-info/licenses")
                       bins = sorted(n for n in names if n.startswith("coal/bin/"))
                       exe = ".exe" if plat == "win_amd64" else ""
-                      want = [] if plat == "any" else [f"coal/bin/coal-cpp{exe}", f"coal/bin/coal-cpp-align{exe}"]
+                      want = [] if plat == "any" else sorted([f"coal/bin/coal-cpp{exe}", f"coal/bin/coal-cpp-align{exe}"])
                       if dist == "coal_align" and [b for b in bins if not b.endswith("__init__.py")] != want:
                           bad.append(f"{f}: coal/bin is {bins}, expected {want}")
                       if dist == "coal_align" and any(n.startswith("coal_app/") for n in names):
@@ -189,7 +189,9 @@ jobs:
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
         run: |
           set -euo pipefail
-          art="$PWD/art"; W="$RUNNER_TEMP/smoke"; OUT="$PWD/out"; mkdir -p "$W" "$OUT"
+          # bash paths on Windows too (RUNNER_TEMP is D:\a\_temp there, which tar reads as host "D")
+          tmp=$RUNNER_TEMP; if command -v cygpath > /dev/null; then tmp=$(cygpath -u "$tmp"); fi
+          art="$PWD/art"; W="$tmp/smoke"; OUT="$PWD/out"; mkdir -p "$W" "$OUT"
           V=$(cd art && ls coal_align-*-py3-none-any.whl | sed -E 's/^coal_align-(.+)-py3-none-any\.whl$/\1/')
           echo "version $V, $(python --version), $TAG_NAME"
           tar -xzf "art/coal_align-$V.tar.gz" -C "$W"
@@ -362,10 +364,12 @@ jobs:
             $ok = @($rows | Where-Object { $_.status -eq "ok" }).Count
             if ($ok -ne 12) { throw "$Label`: coal dnds gave $ok ok rows, not 12" }
             $null = Invoke-Frozen $Exe @("-m", "coal", "cite")
-            $lic = @(Get-ChildItem (Split-Path $Exe) -Filter "LICENSE*" -File).Name
-            Write-Host "$Label licence files next to COAL.exe: $($lic -join ', ')"
-            if ($Label -eq "installed" -and -not (Test-Path (Join-Path (Split-Path $Exe) "NOTICE.txt"))) { throw "$Label`: no NOTICE.txt" }
-            if (-not $lic) { Write-Host "::warning::$Label`: no LICENSE file next to COAL.exe" }
+            # the bundle carries LICENSE and NOTICE in _internal (coal_desktop.spec); the installer also next to COAL.exe
+            $app = Split-Path $Exe
+            foreach ($f in @("LICENSE", "NOTICE")) {
+              if (-not (Test-Path "$app\_internal\$f")) { throw "$Label`: no _internal\$f" }
+              if ($Label -eq "installed" -and -not (Test-Path "$app\$f.txt")) { throw "$Label`: no $f.txt" }
+            }
             Write-Host "$Label`: coal $v, alignment byte-identical to the wheel's, coal dnds 12 ok"
           }
           Test-App "$w\portable\COAL\COAL.exe" "portable"
