@@ -425,10 +425,12 @@ LWL, MYN and the other KaKs_Calculator methods, and Comeron with its own pathway
 numbers in either order. On the four-yeast cluster set (1,500 CDS each of *S. cerevisiae*, *C. glabrata*,
 *K. lactis*, *A. gossypii*; 443 clusters of 3 to 18 members aligned by Clustal Omega, 2,783 pairs) 1,548 MSA
 pairs are listed with the later gene first; with `--comeron-flavour gestimator` 1,459 of their Comeron rows
-change (dN by 0.2% in the median, 1.3% at the 90th percentile; 12 change status), and the Comeron rows equal to
-those of the same clusters aligned pairwise (`--max-cluster-size 2 --large-clusters sample`) rise from 174 to 240
-(the rest differ because the MSA's alignment of the pair is not the pairwise one). With the default options no
-row changes.
+change (dN by 0.2% in the median, 1.3% at the 90th percentile; 12 change status; MAFFT: 1,455 rows), and the
+Comeron rows equal to those of the same clusters aligned pairwise (`--max-cluster-size 2 --large-clusters
+sample`) rise from 174 to 240 (MAFFT: 191 to 272), which is as many as Li's, an estimate that does not depend on
+the order: the other pairs differ in every method because the multiple alignment aligns them otherwise than the
+pairwise aligner. With the default options, and for YN, NG, LWL and Li (`--li-flavour seqinr` too), no row
+changes.
 
 ### `cluster_summary.tsv`
 

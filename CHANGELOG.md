@@ -535,6 +535,30 @@ entry under "Added", not under "Fixed".
     PAM250, 104 / 104 each (before: 91, 83, 0 and 104; pwalign refuses U and O, and J with PAM250, so for the
     pairs with those letters the comparison is with pwalign's alignment of the pair with them as X, which is how
     COAL reads them). Other presets and explicit NCBI matrices give the same output as before, byte for byte.
+  - **Pipeline messages and the order of MSA pairs (tutorial writers and testers, 2026-11-14).** **The pairs of a
+    cluster aligned by Clustal Omega / MAFFT are computed in input order** (the gene of the earlier `--cds` file,
+    then the earlier record, first), as the pairwise-aligned pairs already were; the rows still list the clusters
+    file's order. New `O <rank> ...` line of `coal-cpp codon-dnds` (C++ `Group::rank`): every pair of a group of
+    any size is computed with the member of the lower rank first. Only estimates that depend on which gene is
+    first change: Comeron with libsequence's two-position branches (`--comeron-twosubs libsequence`, the default
+    of `--comeron-flavour gestimator`). Four yeasts, 1,500 CDS each, DeepClust's clusters (443 MSA clusters,
+    2,783 pairs, 1,548 of them listed later gene first), `-m YN NG LWL Li Comeron --comeron-flavour gestimator
+    --li-flavour seqinr`: 1,459 Comeron rows change with Clustal Omega (1,455 with MAFFT; dN by 0.2% in the
+    median, 1.3% at the 90th percentile; 12 change status) and 139 (143) Comeron rows of cluster_summary.tsv;
+    Comeron rows equal to the same clusters aligned pairwise 174 → 240 (191 → 272), as many as Li's; no YN, NG,
+    LWL or Li row changes. With the default options `dnds.tsv`, `cluster_summary.tsv`, `genes.tsv` and
+    `failed.tsv` are byte for byte the same (both aligners). **`--resume` reuses the stages of a renamed or moved
+    output folder** (or a copy that keeps the files' times): the signatures named every file by its full path,
+    also those inside the output folder, so a renamed folder started again. Files inside the folder are now named
+    relative to it; inputs keep their full path (the first `--resume` of a folder made before this change redoes
+    its stages once). **The warning for several CDS records per gene names alternative start sites**: it said
+    "several transcripts per gene" also for bacterial genes that NCBI annotates with two or three CDS of one locus
+    tag (*E. coli* mrcB, infB), and now says "the input has several CDS records per gene (isoforms or
+    alternative start sites; ...)", mentions the reciprocal best hits in pair mode only and counts "1 gene" in
+    the singular. **docs/pipeline.md** says that a cluster without pairs (singleton, or fewer than two usable
+    members) is `ok` in cluster_summary.tsv with `n_pairs` 0 (nothing failed; no estimate: filter on `n_ok` > 0;
+    the value is unchanged), and links tutorials 2 and 3. **coalr: `preset = "pwalign"` takes pwalign's copy of
+    the matrix named** (`matrix = "BLOSUM45"` → `BLOSUM45-PWALIGN`), as `coal pipeline` does.
 - **Protein alignment for the codon step (docs/alignment.md).** `<coal/align.hpp>` and the `coal-cpp-align` tool: a
   global Needleman-Wunsch/Gotoh aligner (BLOSUM62/45/80, PAM250, affine gaps; EMBOSS needle defaults, a pwalign
   preset), full length (overhangs gapped, never cut off), AVX2 row loops picked at run time, multithreaded; optimal
