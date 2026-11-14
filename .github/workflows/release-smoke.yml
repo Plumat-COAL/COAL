@@ -24,6 +24,8 @@ on:
         description: "Database id of the release.yml run whose artifacts to test (gh run list -w release.yml)"
         required: true
         type: string
+  push:   # TEMPORARY, removed in the next commit: a workflow_dispatch workflow can be dispatched only once it is on main
+    branches: [ci/release-smoke]
 
 permissions:
   contents: read
@@ -34,7 +36,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  RUN_ID: ${{ inputs.run-id }}
+  RUN_ID: ${{ inputs.run-id || '43634356017' }}   # TEMPORARY default (the dry run of 4165aca)
 
 jobs:
   files:
