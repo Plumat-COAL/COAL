@@ -207,6 +207,9 @@ and written in input order, and the output does not depend on `-j`.
 
 `--comeron-flavour gestimator` and `--li-flavour seqinr` make `Comeron` and `Li` read the pair as their
 reference programs do ("Comeron and Li" below); the default for both is `coal`, the policy above.
+`--comeron-twosubs comeron|libsequence` chooses Comeron's pathways for codons that differ at two positions, and
+`--comeron-min-sites N` the smallest site class whose undefined correction makes dN or dS `NA` ("Two-position
+codon differences" and "Small site classes" below).
 
 `--yn-flavour paml` and `--yn-weighting 0|1` choose which reference YN00 follows where the two differ (below).
 `--yn-weighting 0` gives equal pathway weights in one round, which is the default control file of PAML's yn00
@@ -775,15 +778,17 @@ Each method can read a pair in two ways. The default (`coal`) applies the policy
 other method. The other (`--comeron-flavour gestimator`, `--li-flavour seqinr`) reads the pair as the reference
 program does, to reproduce numbers that were made with orthologr. The counting and the formulas are the same
 in both; on a pair without stop codons, without `U`, and with every correction defined, the two flavours give
-the same doubles.
+the same doubles when they use the same two-position pathways (`--comeron-twosubs`, whose default differs
+between them: next section).
 
 | | `Comeron`, default (`coal`) | `--comeron-flavour gestimator` (orthologr 0.4.3's gestimator) |
 |---|---|---|
+| Codons that differ at two positions | Comeron's two pathways (`--comeron-twosubs comeron`) | libsequence's branches (`--comeron-twosubs libsequence`) |
 | Stop codon at the end of both rows | the column is dropped | compared like any codon: a stop codon has no sites (the column counts half the sites of the other codon), `TAA` against `TGA` or against a sense codon is counted as a change, and a pathway through a stop codon is kept, with Grantham distance 999 |
 | Stop codon elsewhere | the column is skipped; status `warning` | compared, as above; no warning |
 | `U` | read as `T` | the codon is not A/C/G/T: the column is skipped |
 | Gap or ambiguous letter in a codon | column skipped | column skipped (the same) |
-| A logarithm of the correction has an argument <= 0, in a class that has sites | the estimate is `NA`; status `saturated` | gestimator sets that logarithm to 0 and prints the finite number that results (too small). COAL gives that number, with status `warning` and the note `Ka: correction undefined, gestimator's value (...)` (or `Ks:`) |
+| A logarithm of the correction has an argument <= 0, in a class that has sites | the estimate is `NA`; status `saturated` (a class with fewer than 3 sites, `--comeron-min-sites`: the logarithm is 0, status `warning`) | gestimator sets that logarithm to 0 and prints the finite number that results (too small). COAL gives that number, with status `warning` and the note `Ka: correction undefined, gestimator's value (...)` (or `Ks:`) |
 | 1 - 2Qa <= 0 (Ba undefined) | Ka is `NA`; `saturated` | gestimator's rule: Ba = 0 when Kimura's distance over the whole rows is below 1 (a number comes out, flagged as above); otherwise it prints 999: `NA`, `saturated` |
 | 1 - 2Qs <= 0 (Bs undefined) | Ks is `NA`; `saturated` | gestimator prints 999: `NA`, `saturated` |
 | No synonymous (nonsynonymous) sites | `NA`; `no_data` | gestimator prints 999: `NA`, `no_data` |
@@ -811,17 +816,67 @@ column for the reference flavours when both genes end in one. orthologr 0.4.3 ne
 codon to `*`, aligns it, and PAL2NAL threads it, so its gestimator compares the two stop codons (the fork of
 orthologr with COAL built in translates without the stop codon; for its numbers the option stays `drop`).
 
-**A property of libsequence that both flavours keep.** For codons that differ at two positions, libsequence's
-`TwoSubs` passes (codon 1, intermediate 1, codon 2, intermediate 2) to a function whose parameters are
-(codon 1, intermediate 1, intermediate 2, codon 2). The four branches counted are therefore codon 1 to
-intermediate 1, intermediate 1 to intermediate 2, codon 1 to codon 2, and codon 2 to intermediate 2, where
-the two pathways are codon 1 to intermediate 1 to codon 2 and codon 1 to intermediate 2 to codon 2; and
-`SingleSub`, given two codons that differ at two positions, classifies the change at the last of them. The
-same nucleotide changes are counted, but the degeneracy class of some is taken from another codon than the
-pathway's. The current libsequence (1.9.8) makes the same call, so this is how "Comeron as gestimator" has
-always been computed, and COAL reproduces it in both flavours because the purpose of the method is to give
-those numbers. It is one reason why Comeron and the other methods differ by a few percent (cross-checks below).
-Use `YN` when the estimate itself matters more than comparability with orthologr.
+### Two-position codon differences (`--comeron-twosubs`)
+
+For codons that differ at two positions, libsequence's `TwoSubs` passes (codon 1, intermediate 1, codon 2,
+intermediate 2) to a function whose parameters are (codon 1, intermediate 1, intermediate 2, codon 2). The four
+branches it counts are therefore codon 1 to intermediate 1, intermediate 1 to intermediate 2, codon 1 to codon 2,
+and codon 2 to intermediate 2, where Comeron's two pathways are codon 1 to intermediate 1 to codon 2 and codon 1
+to intermediate 2 to codon 2; and `SingleSub`, given two codons that differ at two positions, classifies the
+change at the last of them. The same nucleotide changes are counted, but the degeneracy class of some is taken
+from another codon than the pathway's. The current libsequence (1.9.8) makes the same call, and its repository is
+archived (read-only since 2023), so the call will not be changed there.
+
+A consequence is that the estimate depends on which sequence is first: on 300 random 150-codon pairs with many
+two-position differences, swapping the two rows changes Ka in 279 and Ks in 190 pairs (by up to 1.1%). So COAL
+offers both:
+
+| `--comeron-twosubs` | branches | default with | swap test (300 pairs) |
+|---|---|---|---|
+| `comeron` | the two pathways of Comeron (1995) | `--comeron-flavour coal` (the default) | 0 of 300 change |
+| `libsequence` | libsequence's four branches, as above | `--comeron-flavour gestimator` | Ka 279, Ks 190 change |
+
+`--comeron-flavour gestimator` alone still gives the numbers of orthologr 0.4.3's `gestimator()`;
+`--comeron-flavour gestimator --comeron-twosubs comeron` gives the numbers of orthologr 0.5.0's native engine
+(which corrected the same call). `coal pipeline` records the order a run used in `report.json`
+(`parameters.comeron_twosubs`); coalr's argument is `comeron_twosubs` (`NULL`: by the flavour).
+
+What it changes (default flavour, `coal pipeline pairs --preset pwalign -m Comeron`, 2026-11-14; new default
+against `--comeron-twosubs libsequence --comeron-min-sites 0`, COAL's defaults before):
+
+| Genome pair | Pairs | dS changed | dS median / p95 / max relative change | mean dS ratio new / old | dN/dS median / p95 change | status changes |
+|---|---:|---:|---|---:|---|---:|
+| *A. thaliana* / *A. lyrata* (orthologr's 1,000-gene example) | 995 | 474 of 994 | 0% / 2.9% / 12% | 1.006 | 0% / 5.4% | 0 |
+| human / mouse | 946 | 809 of 932 | 1.0% / 4.8% / 50% | 1.015 | 2.1% / 8.2% | 6 |
+| *S. cerevisiae* / *C. glabrata* | 4,164 | 807 of 847 | 5.9% / 39% / 166% | 1.108 | 9.9% / 36% | 314 (308 `ok` to `saturated`) |
+
+Pairs of codons that differ at one or three positions are not affected. Against YN (a maximum-likelihood
+estimate, independent of both; measured with the gestimator flavour on the same alignments), the corrected dS is
+slightly closer (median absolute difference 7.68 to 7.53% for
+*A. thaliana*, 13.95 to 13.74% human / mouse, 25.97 to 25.47% yeast), and in a neutral simulation (kappa 2, 300
+codons, 300 pairs) its median error of dN against the true number is 2.0% (libsequence's: 2.3%) and of dS -2.1%
+(-3.0%).
+
+### Small site classes (`--comeron-min-sites`)
+
+A class's correction needs 1 - 2P - Q > 0 and 1 - 2Q > 0 with P and Q per site of that class. The 2-fold class
+whose synonymous change is a transversion (L2V) is tiny in short alignments (a median of 1.75 sites at 30 codons,
+3 at 50, 6 at 100), and one change there makes its correction undefined. gestimator sets such a logarithm to 0;
+the default flavour used to return `NA`. Now a class with fewer than `--comeron-min-sites` sites (default 3)
+cannot make dN or dS `NA`: its undefined logarithm is set to 0, as gestimator does, and the row has status
+`warning` and the note `Ka: a site class with fewer than 3 sites has an undefined correction (its logarithm set
+to 0)` (or `Ks:`). A value that is not `NA` otherwise never changes; `--comeron-min-sites 0` restores the previous
+rule. In the gestimator flavour the value is gestimator's either way, and the option only chooses the note (the
+note above instead of `Ka: correction undefined, gestimator's value`), which tells orthologr that the row is not
+saturated.
+
+Simulated neutral pairs (kappa 2, 10-35% of codons differing, 600 pairs per length; the truth is the substitutions
+applied): at 30 codons, dN is `NA` in 22 pairs (3.7%) with the previous rule and in none with the default; the
+recovered values' mean absolute error is 8.8%, against 11.2% for all 30-codon pairs (50 codons: 2 pairs, 4.3%; 100
+codons: 2 pairs; 300 codons: none). dS at 30 codons is `NA` in 58 pairs (9.7%) under every rule: that comes from
+the pooled transversion term Bs, which has no class. Real data: *A. thaliana* 0 rows change, human / mouse 3,
+yeast 14. Comeron (like every method) is unreliable below about 50-100 codons; no length cut-off is applied
+(`--min-codons` flags short pairs).
 
 ### Validation of Comeron and Li
 
@@ -984,7 +1039,6 @@ profile of 2026-10-29, about 0.5 %); alignment dominates.
   tables could be built for any code, seqinr's site classes are written out for the standard code).
 - Comeron with `maxHits` 1 or 2 (libsequence's option to leave out codons that differ at several positions;
   orthologr always uses 3).
-- A corrected two-substitution count for Comeron (see "Comeron and Li": both flavours keep libsequence's).
 - Standard input.
 - A Python API: the commands are reachable from `coal`, and an in-process binding is planned with the R/Python
   bindings work.

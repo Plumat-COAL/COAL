@@ -2,6 +2,13 @@
 
 First version. In-process bindings (Rcpp) to the C++ core of COAL 0.6:
 
+- Comeron: new arguments `comeron_twosubs` and `comeron_min_sites` in `coal_kaks()`, `coal_dnds_pairs()` and
+  `coal_dnds_clusters()` (the command line's `--comeron-twosubs`, `--comeron-min-sites`). By default Comeron
+  now counts Comeron's two pathways for codons that differ at two positions (libsequence's branches made the
+  estimate depend on which sequence is first; `comeron_twosubs = "libsequence"`, the default with
+  `comeron_flavour = "gestimator"`, keeps them), and a site class with fewer than 3 sites can no longer make dN
+  or dS `NA` (`comeron_min_sites = 0` restores that). Numbers: COAL's CHANGELOG.
+
 - `preset = "pwalign"` now returns the protein alignment `pwalign::pairwiseAlignment()` returns, not only one
   with the same score: pwalign's choice among co-optimal alignments (`tie_break = "pwalign"`, the preset's
   default). Before, 49% (A. thaliana) to 76% (yeast) of orthologr's protein alignments differed from COAL's
