@@ -1573,6 +1573,22 @@ int main(int argc, char** argv) {
         if (a == "--") break;
         if (a == "--batch" || a.compare(0, 8, "--batch=") == 0) return usage_error(BATCH_ERROR);
     }
+    // NCBI codes that no longer exist (merged into 4 and 1): the code to use, as cli.py merged_code_error() says it
+    // (new-user audit 2026-11-14, U21), before the parser's "invalid choice"
+    for (size_t k = 0; k < o.argv.size(); ++k) {
+        const std::string& a = o.argv[k];
+        for (const std::string flag : {"-codontable", "--codontable"}) {
+            std::string val;
+            if (a == flag && k + 1 < o.argv.size()) val = o.argv[k + 1];
+            else if (flag[1] == '-' && a.compare(0, flag.size() + 1, flag + "=") == 0) val = a.substr(flag.size() + 1);
+            else continue;
+            const size_t b = val.find_first_not_of(" \t\n\r\f\v"), e = val.find_last_not_of(" \t\n\r\f\v");
+            const std::string v = b == std::string::npos ? "" : val.substr(b, e - b + 1);
+            if (v == "7" || v == "8")
+                return usage_error(flag + " " + v + ": NCBI genetic code " + v + " no longer exists (NCBI merged code 7 "
+                                   "into 4 and code 8 into 1): use " + flag + " " + (v == "7" ? "4" : "1"));
+        }
+    }
     coal::args::Result args = ap.parse(o.argv);
     if (args.exit) {
         std::cout << args.out << std::flush;

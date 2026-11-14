@@ -15,10 +15,10 @@ any of them. Everything here is grounded in [kaks.md](../kaks.md), which has the
 
 | Situation | Use | Why |
 |---|---|---|
-| Anything, unless you have a reason | **YN** (the default) | models transition/transversion bias and codon frequencies; recovers a known omega within about 10% in COAL's simulations; standard errors; the numbers of KaKs_Calculator and PAML yn00 |
-| Transition rates that differ between purines and pyrimidines, or a second opinion on YN | **MYN** | YN with TN93; similar accuracy in the simulations; saturates and fails to converge a little more often |
+| Anything, unless you have a reason | **YN** (the default) | models transition/transversion bias and codon frequencies; in COAL's simulations unbiased up to dS about 0.5, then dN/dS 10 to 40% too low by dS 1 to 2; standard errors; the numbers of KaKs_Calculator and PAML yn00 |
+| Transition rates that differ between purines and pyrimidines, or a second opinion on YN | **MYN** | YN with TN93; the same accuracy in the simulations; flagged `saturated` slightly less often and `not_converged` slightly more often |
 | Reproducing or continuing an orthologr analysis | **Comeron** (orthologr's default), with `--comeron-flavour gestimator` for orthologr 0.4.3's exact numbers | same numbers as orthologr's gestimator; no standard errors |
-| Comparing with older work that used them | **NG**, **LWL**, **LPB** (and MLWL, MLPB) | counting methods: fast, simple, biased low for dN/dS at high divergence and high omega |
+| Comparing with older work that used them | **NG**, **LWL**, **LPB** (and MLWL, MLPB) | counting methods: fast, simple; they count sites without codon frequencies, so codon-usage bias biases their dN/dS, in either direction (with skewed usage, as in section 1, too high) |
 | Positive selection at sites or on branches | none of these | pairwise whole-gene dN/dS averages over sites and time; use codon models (codeml, HyPhy) on the codon alignments |
 
 Whatever you choose, filter first ([tutorial 2](02-pairs-dnds.md#5-filter-then-interpret)), use one method for
@@ -35,7 +35,7 @@ coal dnds ecsa_filtered/codon_alignments.fasta --pairs consecutive \
 ```
 
 ```
-coal dnds: 3142 pair(s), 5 method(s): 14671 ok, 15 warning, 23 not_converged, 1001 saturated, 0 no_data, 0 error
+coal dnds: 3142 pair(s), 5 method(s): 14624 ok, 21 warning, 23 not_converged, 1042 saturated, 0 no_data, 0 error
 coal dnds: warning: 23 result(s): the YN/MYN iteration did not converge, so there is no estimate: Ka and Ks are NA (status not_converged; the note has the last round)
 ```
 
@@ -53,15 +53,15 @@ statuses per method:
   LWL               2999             3           140             0             0             0
   YN                2973             3           155            11             0             0
   MYN               2853             3           274            12             0             0
-  Comeron           2922             3           217             0             0             0
+  Comeron           2875             9           258             0             0             0
 
-2706 pairs have a dN/dS from every method; median dS / median dN/dS, by YN's dS:
+2695 pairs have a dN/dS from every method; median dS / median dN/dS, by YN's dS:
   YN dS      pairs                NG               LWL                YN               MYN           Comeron
   0-0.5        222    0.331 / 0.0418    0.343 / 0.0410    0.294 / 0.0452    0.289 / 0.0445    0.301 / 0.0478
-  0.5-1        639    0.809 / 0.0390    0.793 / 0.0408    0.795 / 0.0371    0.871 / 0.0332    0.703 / 0.0433
-  1-1.5        988    1.216 / 0.0446    1.123 / 0.0509    1.282 / 0.0408    1.435 / 0.0355    1.024 / 0.0520
-  1.5-2        543    1.528 / 0.0488    1.326 / 0.0601    1.687 / 0.0410    1.790 / 0.0380    1.266 / 0.0578
-  >= 2         314    1.509 / 0.0478    1.304 / 0.0607    2.388 / 0.0277    1.728 / 0.0382    1.196 / 0.0587
+  0.5-1        639    0.809 / 0.0390    0.793 / 0.0408    0.795 / 0.0371    0.871 / 0.0332    0.710 / 0.0412
+  1-1.5        985    1.216 / 0.0444    1.123 / 0.0507    1.280 / 0.0408    1.436 / 0.0355    1.043 / 0.0489
+  1.5-2        538    1.525 / 0.0486    1.321 / 0.0599    1.686 / 0.0410    1.778 / 0.0380    1.303 / 0.0535
+  >= 2         311    1.504 / 0.0480    1.303 / 0.0607    2.381 / 0.0267    1.722 / 0.0382    1.232 / 0.0549
 
 YN, pairs with status ok and 0.5 <= dS <= 1.5: median relative standard error, by compared codons:
   0-100     codons:   107 pairs   SE_dS/dS 0.31   SE_dN/dN 0.32
@@ -74,22 +74,25 @@ How to read it:
 
 - **At low divergence the methods agree.** Below a YN dS of 0.5, the five medians of dS lie between 0.29 and
   0.34 and those of dN/dS between 0.041 and 0.048. For close species any method gives the same picture.
-- **As dS grows, they part, and always in the same direction.** At YN dS 1.5 to 2, Comeron's median dS is 1.27
-  and LWL's 1.33 against YN's 1.69 and MYN's 1.79; their dN/dS is accordingly 40 to 50% higher (0.058 and 0.060
-  against 0.041). The counting methods (NG, LWL, Comeron) correct less for multiple hits at synonymous sites
-  than YN / MYN, which model the transition/transversion bias and codon usage. In COAL's simulations
-  ([kaks.md, "Recovering a known omega"](../kaks.md#recovering-a-known-omega-simulated-data)) YN and MYN recover
-  the true omega within about 10%, while NG and LWL come out low at high divergence and high omega, the bias
-  that Yang & Nielsen (2000) describe; the ranking here is the same.
-- **Above YN dS 2, nobody is right.** YN's median dS jumps to 2.39 while the others stay at 1.2 to 1.7: the
+- **As dS grows, they part, and always in the same direction.** At YN dS 1.5 to 2, Comeron's median dS is 1.30
+  and LWL's 1.32 against YN's 1.69 and MYN's 1.78; their dN/dS is accordingly 30 to 45% higher (0.054 and 0.060
+  against 0.041). The counting methods (NG, LWL, Comeron) count sites without the codon
+  frequencies, so codon-usage bias shifts their dN/dS; with skewed usage, as here, upwards. In COAL's simulations
+  the gap is there already at dS 0.03, so it is not only a weaker multiple-hit correction. YN and MYN model codon
+  usage and the transition/transversion bias, but they are not exact at this distance either: they recover the
+  true omega within about 10% only up to dS about 0.5, and at dS 1 to 2 their dN/dS is 10 to 40% too low. At YN
+  dS 1.5 to 2 the true value most likely lies between the two groups, and no method here is accurate
+  ([kaks.md, "accuracy vs simulated truth"](../kaks.md)).
+- **Above YN dS 2, nobody is right.** YN's median dS jumps to 2.38 while the others stay at 1.2 to 1.7: the
   counting methods cannot exceed their saturation ceiling, YN can, and neither number is reliable. These are the
-  pairs that tutorial 2 filters out with `dS <= 2`.
+  pairs that tutorial 2 filters out with `dS <= 2`. That is an outer bound only: for conclusions about single
+  genes, cut at dS 1 (`--max-ds 1`; about 0.5 with strong codon-usage bias).
 - **The statuses differ too.** For the same 3,142 pairs, from 140 (LWL) to 274 (MYN) are `saturated`. A method
   that saturates less is not more accurate there: it gives a number where the correction is about to break down.
   Only YN and MYN iterate, so only they have `not_converged`.
 - **Short genes are noisy whatever the method.** For pairs of the same divergence, the relative standard error of
   YN's dS falls from 31% under 100 codons to 13% over 400. A gene of 80 codons with dN/dS 0.06 ± a third is
-  compatible with a wide range of selective regimes; this is why the filters start at 50 codons and why single
+  compatible with a wide range of selective regimes; this is why 50 codons is the bare minimum (about 100 for ratios gene by gene) and why single
   short genes with dN/dS > 1 (tutorial 2's *yqgC*) are not evidence of anything.
 
 Choose the method before looking at the result, and do not switch methods to make a gene cross 1.
@@ -127,9 +130,9 @@ on one pair and not on the others. The NG numbers are not wrong in the arithmeti
 reliability**: these genes are AT-rich and far apart, the synonymous sites have turned over more than once, and
 NG's Jukes-Cantor correction has not run out of room yet. One *M. gallisepticum* pair gets a smaller NG dS
 (1.45) than the much closer *M. genitalium* / *M. pneumoniae* pair (1.87; compare their dN, 0.33 and 0.20): a sign
-that the numbers no longer measure distance. Treat any dS above about 1 to 2 as saturated whatever the status says
-([kaks.md, "Filtering before interpretation"](../kaks.md#filtering-before-interpretation)), and for such
-distances:
+that the numbers no longer measure distance. Treat dS above about 1 (about 0.5 with strong codon-usage bias) as unreliable and above 2 as saturated,
+whatever the status says ([kaks.md, "Filtering before interpretation"](../kaks.md#filtering-before-interpretation)),
+and for such distances:
 
 - report dN and protein identity, which are still measurable;
 - compare closer species if dS is what you need ([tutorial 3](03-clusters.md#3-split-the-pairs-by-species-before-reading-them)
@@ -142,8 +145,9 @@ distances:
 The opposite end has its own trap. Between the two *C. trachomatis* strains of tutorial 3 (median dS 0.0098), dS
 rests on a few synonymous differences per gene and dN/dS is high (median 0.29) for reasons that have nothing to do
 with the method: slightly deleterious variation that selection has not yet removed. The methods agree at low
-divergence (section 1), so changing the method does not change this. `dNdS` is `NA` only when dS is below 1e-6; a `dS >= 0.01` filter, or comparing
-like with like (strains with strains, species with species), is the remedy.
+divergence (section 1), so changing the method does not change this. `dNdS` is `NA` only when dS is below 1e-6; a floor on dS (about 0.05 for ratios gene by
+gene; tutorial 2's 0.01 removes only the nearly identical pairs), or comparing like with like (strains with
+strains, species with species), is the remedy.
 
 ## 4. Reproducing other programs
 

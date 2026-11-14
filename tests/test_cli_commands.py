@@ -132,15 +132,18 @@ class Commands(unittest.TestCase):
                     self.assertEqual(r.returncode, 0, (name, r.stderr))
                     self.assertEqual(r.stdout, HELP[name], name)
                     self.assertIn("note: this command cannot run here: coal-cpp was not found", r.stderr)
-                    self.assertIn("platform wheels", r.stderr)
+                    self.assertIn("coal-cpp", r.stderr)
+                    self.assertIn("docs/install.md", r.stderr)
             # running it says what this install is and how to get the other one
             aln = Path(t) / "a.fasta"
             aln.write_text(">a\nATGAAA\n>b\nATGAAG\n", encoding="utf-8")
             r = coal("dnds", aln, env=env)
             self.assertEqual(r.returncode, 1)
+            # (a development version names the build from the checkout, a release the platform wheel:
+            # tests/test_new_user_ux.py checks both texts)
+            from coal.cli import needs_cpp_text
             for must in ("coal dnds: needs coal-cpp, which was not found", "this install has the Python engine only",
-                         "codon alignments", "coal_align-<version>-py3-none-<platform>.whl",
-                         "https://github.com/plumat-coal/COAL/releases/latest", "docs/install.md"):
+                         "codon alignments", needs_cpp_text(), "docs/install.md"):
                 self.assertIn(must, r.stderr)
             self.assertNotIn("pip install coal-align", r.stderr.replace("python -m pip install` that file", ""))
             r = coal("pipeline", "pairs", "--query", aln, "--subject", aln, "-o", Path(t) / "o", env=env)

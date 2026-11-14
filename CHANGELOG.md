@@ -666,6 +666,27 @@ entry under "Added", not under "Fixed".
   letters only (the mismatch outlines, frameshift hatching and the key's mark entries stay): for colour-blind
   readers who prefer no tints, and for printing. On by default; saved with the other settings.
 
+- **First-use messages (new-user audit of 2026-11-14).** `coal pipeline`: a `--pairs` file none of whose pairs
+  names a record of `--query` and of `--subject` (other columns, swapped columns, another ID type) stops with exit
+  1 before any alignment, naming the IDs it looked for and the records' style, or saying that the columns look
+  swapped (it ran to a table of `error` rows, exit 2); a `--clusters` file without one known member likewise; a
+  first line of `--pairs` whose two fields are records of neither file, while later lines are, is read as a header
+  (a notice says so); a CSV `--pairs` file gets "expected two tab-separated columns ... is this a CSV file?". A
+  genome, chromosome or contigs given as coding sequences gets a warning (NCBI's `*_cds_from_genomic.fna` is what
+  it needs). `--matrix` is checked when the command line is read (a typo came after the DIAMOND search, as a
+  failure of `coal-cpp codon-dnds`). The first unusable record and its reason are on stderr, not only in
+  failed.tsv. After Ctrl-C the line names `--resume`. `-o` onto a folder with an earlier run's results says that
+  they are replaced. A Windows path on Linux / macOS names its WSL form, and paths are shown as typed (no doubled
+  backslashes). `-codontable N` is accepted as `-c N`; orthologr's and DIAMOND's option names
+  (`--sensitivity-mode`, `--comp-cores`, `--threads`) and close typos of an option get a suggestion. `coal
+  translate` warns when most genes have internal stop codons, with the first one and, as the pipeline does, the
+  genetic code under which they have none. `coal dnds` / `coal kaks` on an input without any pair (an empty file,
+  blank or comment lines only) exit 2 with one line, as docs/kaks.md's exit rule says (fuzz finding K05; it was 0).
+  `coal-gui --check` reports coal-cpp and DIAMOND. In a development version (0.6.0.dev0) the coal-cpp-missing
+  message names the build from the checkout, not the latest release (0.5.0 makes codon alignments only); README,
+  docs/install.md and docs/tutorials/README.md say so at the top, and install.md's "from source" builds coal-cpp
+  and says how to keep `COAL_CPP`.
+
 ### Changed
 
 - **MAFFT and Clustal Omega are installed as one exact package per platform** (decision D6b of 2026-11-14). A
@@ -857,6 +878,10 @@ entry under "Added", not under "Fixed".
 
 ### Fixed
 
+- **`coal`: a genetic code that NCBI merged into another (7 into 4, 8 into 1) names the code to use** instead of
+  only "invalid choice: '7'"; and the summary of a run that stopped no longer adds "(kept in the alignment)" to
+  "N of M sequences have codons that do not match their amino acid" next to "no output was written" (both
+  engines; new-user audit 2026-11-14, U20, U21).
 - **The summary of a `coal` run that stopped no longer says that a probably-wrong gene "was written to the
   output"** (both engines; found by the tutorial writers, docs/tutorials/01-codon-alignment.md step 5). With
   sequences paired by order, one gene flagged as probably wrong and another that stops the run (exit 1), the

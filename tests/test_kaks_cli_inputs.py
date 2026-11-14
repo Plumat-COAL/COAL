@@ -97,11 +97,18 @@ class NoEstimate(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn(r.stdout.splitlines()[1].split("\t")[13], ("saturated", "ok", "warning"))
 
-    def test_empty_table_is_not_an_input_failure(self):
-        p = self.tmp / "empty.axt"
-        p.write_text("\n", encoding="utf-8")
-        r = cpp("dnds", p)
-        self.assertEqual(r.returncode, 0, r.stderr)
+    def test_an_input_without_pairs_exits_2(self):
+        """No pair at all (an empty file, blank or comment lines only): no result, so exit 2 with one line, also
+        with -q (docs/kaks.md "Exit status"; fuzz finding K05: it was 0, and a truncated input looked like
+        success)."""
+        for text in ("", "\n", "\n\n\n", "# only a comment\n"):
+            p = self.tmp / "empty.axt"
+            p.write_text(text, encoding="utf-8")
+            for sub, extra in (("dnds", ()), ("kaks", ("-o", self.tmp / "out.kaks")), ("dnds", ("-q",))):
+                args = [sub, *(["-i"] if sub == "kaks" else []), p, *extra]
+                r = cpp(*args)
+                self.assertEqual(r.returncode, 2, (text, args, r.stderr))
+                self.assertIn(f"coal {sub}: error: the input holds no pair of sequences", r.stderr)
 
 
 @needs_cpp

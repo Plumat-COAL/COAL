@@ -45,12 +45,48 @@ COMMANDS_EPILOG = (
     "\n"
     "Every option in detail: README.md (https://github.com/plumat-coal/COAL).")
 # What an install without coal-cpp is, and how to get one with it (the same words in `coal pipeline`)
-NEEDS_CPP = ("this install has the Python engine only, which makes codon alignments (`coal PEP_ALN NUC_FASTA`); "
-             "Ka/Ks (`coal kaks`, `coal dnds`) and `coal pipeline` need the C++ engine coal-cpp. It is inside the "
-             "platform wheels (Linux, macOS, Windows): download coal_align-<version>-py3-none-<platform>.whl from "
-             "https://github.com/plumat-coal/COAL/releases/latest and `python -m pip install` that file (the "
-             "source package coal_src.tar.gz and the py3-none-any wheel do not have it); or build it from a "
-             "checkout (docs/cpp-engine.md) and set COAL_CPP. Details: docs/install.md")
+def needs_cpp_text(version: str = __version__) -> str:
+    """The message of `coal kaks|dnds|translate|codon-dnds|pipeline` without coal-cpp. A development version
+    (0.6.0.dev0) has commands that no release has yet: its message does not send the user to the latest release,
+    whose wheels make codon alignments only (new-user audit 2026-11-14, U01), but to a build from the checkout."""
+    head = ("this install has the Python engine only, which makes codon alignments (`coal PEP_ALN NUC_FASTA`); "
+            "Ka/Ks (`coal kaks`, `coal dnds`), `coal translate` and `coal pipeline` need the C++ engine coal-cpp. ")
+    if ".dev" in version:
+        return head + (f"This is the development version {version}: these commands are not in any release yet "
+                       "(0.5.0 and earlier make codon alignments only, so their wheels do not have them). Build "
+                       "coal-cpp in this checkout (cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build "
+                       "build; docs/cpp-engine.md) and set COAL_CPP to build/coal-cpp, or copy build/coal-cpp next "
+                       "to your Python (`coal --cpp-path` shows where COAL looks). Details: docs/install.md")
+    return head + ("It is inside the platform wheels (Linux, macOS, Windows): download "
+                   "coal_align-<version>-py3-none-<platform>.whl from "
+                   "https://github.com/plumat-coal/COAL/releases/latest and `python -m pip install` that file (the source package coal_src.tar.gz and the py3-none-any "
+                   "wheel do not have it); or build it from a checkout (docs/cpp-engine.md) and set COAL_CPP. "
+                   "Details: docs/install.md")
+
+
+NEEDS_CPP = needs_cpp_text()
+# NCBI codes that no longer exist: merged into another (NCBI's list of genetic codes)
+MERGED_CODES = {7: 4, 8: 1}
+
+
+def merged_code_error(argv, flags) -> str | None:
+    """The error for a genetic code that NCBI merged into another (7 into 4, 8 into 1), naming the code to use
+    (new-user audit 2026-11-14, U21: "invalid choice: '7'" did not say why). flags: the options that take a code."""
+    for k, arg in enumerate(argv):
+        for flag in flags:
+            if arg == flag and k + 1 < len(argv):
+                val = argv[k + 1]
+            elif arg.startswith(flag + "=") and flag.startswith("--"):
+                val = arg[len(flag) + 1:]
+            else:
+                continue
+            if val.strip() in ("7", "8"):
+                c = int(val)
+                return (f"{arg.split('=')[0]} {c}: NCBI genetic code {c} no longer exists (NCBI merged code 7 into 4 "
+                        f"and code 8 into 1): use {arg.split('=')[0]} {MERGED_CODES[c]}")
+    return None
+
+
 MAX_WARNINGS = 20  # default --max-warnings
 # The same words in coal-cpp (main.cpp, std::bad_alloc)
 OUT_OF_MEMORY = ("out of memory: this run needs more memory than is free on this machine; run with -j 1 (fewer worker processes), split the input, or use a machine with more memory")
@@ -344,6 +380,27 @@ def kaks_main(argv) -> int:
     except (OSError, EOFError, ValueError) as e:
         print(f"coal {argv[0]}: error: {e}", file=sys.stderr)
         return 1
+    hint = _translate_hint_plan(argv) if argv[0] == "translate" else None
+    if hint is not None:   # `coal translate`: a child, then a look at the genes table for a genetic-code hint
+        import tempfile
+        if tmp is None:
+            tmp = tempfile.mkdtemp(prefix="coal_translate_")
+        inputs, code, genes = hint
+        run_argv = list(argv) if genes else [*argv, "--genes", os.path.join(tmp, "genes.tsv")]
+
+        def after(rc: int) -> None:
+            if rc != 0:
+                return
+            from .dnds_pipeline import translate_hint
+            try:
+                text = translate_hint(inputs, genes or os.path.join(tmp, "genes.tsv"), code, genes)
+            except (OSError, ValueError):
+                return
+            if text:
+                for copy, orig in _GUNZIPPED.items():
+                    text = text.replace(copy, orig)
+                print(f"coal translate: warning: {text}", file=sys.stderr)
+        return _run_cpp_child(path, run_argv, tmp, after)
     if tmp is not None:   # coal-cpp as a child, so that the decompressed copies can be removed when it ends
         return _run_cpp_child(path, argv, tmp)
     rc = dispatch.run_cpp(path, argv)
@@ -434,9 +491,47 @@ def _gunzip_inputs(argv) -> tuple[list[str], str | None]:
     return out, tmp
 
 
-def _run_cpp_child(path: str, argv, tmp: str) -> int:
+def _translate_hint_plan(argv) -> tuple[list[str], int, str | None] | None:
+    """`coal translate ...` (after decompression): (the CDS files, the genetic code, the --genes file or None) when
+    the run can be followed by translate_hint(); None for -q, help, standard input, or a command line this does
+    not read (coal-cpp then says what is wrong with it)."""
+    ins, code, genes = [], 1, None
+    words = list(argv[1:])
+    k = 0
+    while k < len(words):
+        w = words[k]
+        name, eq, val = w.partition("=") if w.startswith("--") else (w, "", "")
+        if name in ("-q", "--quiet", "-h", "--help") or w == "-":
+            return None
+        if name in ("-o", "--out", "--genes", "-c", "--codontable", "-codontable"):
+            if not eq:
+                if k + 1 >= len(words):
+                    return None
+                k += 1
+                val = words[k]
+        elif w[:2] in ("-o", "-c") and len(w) > 2 and not w.startswith("--"):
+            name, val = w[:2], w[2:]
+        elif w.startswith("-") and len(w) > 1:
+            return None
+        else:
+            ins.append(w)
+            k += 1
+            continue
+        if name == "--genes":
+            genes = val
+        elif name in ("-c", "--codontable", "-codontable"):
+            try:
+                code = int(val)
+            except ValueError:
+                return None
+        k += 1
+    return (ins, code, genes) if ins else None
+
+
+def _run_cpp_child(path: str, argv, tmp: str, after=None) -> int:
     """Run coal-cpp as a child process (the same standard streams), remove the folder tmp when it has ended, and
-    return its exit status (128 + signal number when a signal ended it)."""
+    return its exit status (128 + signal number when a signal ended it). after: called with that status first,
+    while tmp still exists."""
     import shutil
     import subprocess
     for stream in (sys.stdout, sys.stderr):
@@ -490,7 +585,10 @@ def _run_cpp_child(path: str, argv, tmp: str) -> int:
                 continue
         if relay is not None:
             relay.join(timeout=30)
-        return rc if rc >= 0 else 128 - rc
+        rc = rc if rc >= 0 else 128 - rc
+        if after is not None:
+            after(rc)
+        return rc
     finally:
         if old is not None:
             try:
@@ -555,6 +653,9 @@ def main(argv=None) -> int:
         return 1
     batch = wants_batch(argv)
     ap = build_parser(batch=batch)
+    why = merged_code_error(argv, ("-codontable", "--codontable"))
+    if why:
+        ap.error(why)
     args = ap.parse_args(argv)
     if batch:  # never handed to coal-cpp: the batch driver runs every job in this process
         from .batch import main as batch_main
