@@ -93,6 +93,81 @@ class HintRules(unittest.TestCase):
         h = self.hint([cds(self.rng, avoid=("AGA", "AGG"), start=s) for s in starts], nuclear=200)
         self.assertEqual(h["codes"], [2])
 
+    # Q02 (rule 2)
+    def test_a_molecule_counts_its_records_with_one_stop(self):
+        """Mycoplasma and K12 in one file: 376 of the Mycoplasma's 524 records have internal stops, but only 253
+        two or more; the molecule was left out (2 x 253 < 524) and the hint was silent."""
+        rng = self.rng
+        recs = [(f"lcl|NC_N.1_cds_N{k}_{k}", cds(rng, stops=())) for k in range(300)]
+        myco = [(f"lcl|NC_M.1_cds_A{k}_{k}", cds(rng, start="ATG")) for k in range(40)]
+        single = [(f"lcl|NC_M.1_cds_B{k}_{k}", cds(rng, stops=("TGA",))) for k in range(20)]
+        clean = [(f"lcl|NC_M.1_cds_C{k}_{k}", cds(rng, stops=())) for k in range(40)]
+        path = write_fasta(self.tmp / "two.fa", recs + myco + single + clean)
+        flagged = {r: 0 for r, _ in myco}
+        usable = {r for r, _ in recs + single + clean}
+        n = len(recs) + 100
+        genes, bg, reps = P._hint_inputs([str(path)], flagged, usable)          # (without the count: as before)
+        self.assertIsNone(P.suggest_genetic_code(11, genes, bg, n, 60, reps))
+        stopped = {r for r, _ in myco + single}
+        genes, bg, reps = P._hint_inputs([str(path)], flagged, usable, stopped)
+        self.assertEqual(reps["with_stops"]["NC_M.1"], 60)
+        h = P.suggest_genetic_code(11, genes, bg, n, 60, reps)
+        self.assertEqual(len(h["genes"]), 40)
+        self.assertIn(4, h["codes"])
+
+
+@needs_cpp
+class PerFileHint(PipelineCase):
+    """Q02: clusters mode, one hint per --cds file."""
+
+    def setUp(self):
+        super().setUp()
+        self.rng = random.Random(7)
+
+    def run_files(self, files, **options):
+        ids = [ln[1:].split()[0] for f in files for ln in Path(f).read_text().splitlines() if ln.startswith(">")]
+        cl = self.tmp / "cl.tsv"
+        cl.write_text(f"{ids[0]}\t{ids[1]}\n", encoding="utf-8")
+        res, err = run(P.run_clusters, files, self.tmp / "out", clusters=cl, **options)
+        validate(res.report, SCHEMA)
+        return res.report.get("genetic_code_hints", []), err
+
+    def test_a_mycoplasma_among_bacteria(self):
+        rng = self.rng
+        starts = ["ATG"] * 17 + ["GTG", "TTG", "TTG"]
+        myco = [(f"lcl|NC_000908.2_cds_N{k}_{k}", cds(rng, stops=())) for k in range(60)]
+        myco += [(f"lcl|NC_000908.2_cds_O{k}_{60 + k}", cds(rng, start=starts[k % 20])) for k in range(140)]
+        coli = [(f"lcl|NC_000913.3_cds_E{k}_{k}", cds(rng, stops=())) for k in range(400)]
+        m = write_fasta(self.tmp / "myco.fa", myco)
+        e = write_fasta(self.tmp / "coli.fa", coli)
+        hints, err = self.run_files([m, e], codontable=11)
+        self.assertEqual(len(hints), 1)
+        h = hints[0]
+        self.assertEqual((h["set"], h["file"], h["whole_set"], h["candidates"], h["records"]),
+                         ("cds", str(m), True, [4], 200))
+        self.assertIn(f"cds {m}: most genes (140 of the 200) have internal stop codons under genetic code 11", err)
+        self.assertIn("Run again with -c 4", err)
+        self.assertNotIn(str(e) + ":", err)
+
+    def test_yeast_and_human_mitochondria_get_their_own_codes(self):
+        rng = self.rng
+        scer = [(f"lcl|NC_001133.9_cds_Y{k}_{k}", cds(rng, stops=())) for k in range(300)]
+        scer += [(f"lcl|NC_001224.1_cds_M{k}_{300 + k}", cds(rng, avoid=("CGA", "CGC"))) for k in range(8)]
+        human = [(f"ENST0000036{k:04d}", cds(rng, avoid=("AGA", "AGG"), start=("ATG", "ATA", "ATT")[k % 3]))
+                 for k in range(13)]
+        y = write_fasta(self.tmp / "scer.fa", scer)
+        hs = write_fasta(self.tmp / "hs_mt.fa", human)
+        hints, err = self.run_files([y, hs])
+        got = {h["file"]: (h["candidates"], h["whole_set"]) for h in hints}
+        self.assertEqual(got, {str(y): ([3], False), str(hs): ([2], True)})
+        self.assertIn(f"cds {y}: 8 of the 8 genes with internal stop codons", err)
+        self.assertIn(f"take them out of {y} into a file of their own", err)
+        self.assertIn(f"cds {hs}: most genes (13 of the 13)", err)
+        # one file: the warning as before ("cds: ..."), the report names the file
+        hints, err = self.run_files([y])
+        self.assertEqual([(h["file"], h["candidates"]) for h in hints], [(str(y), [3])])
+        self.assertIn("cds: 8 of the 8 genes", err)
+
 
 if __name__ == "__main__":
     unittest.main()

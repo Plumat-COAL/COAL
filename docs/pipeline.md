@@ -136,8 +136,9 @@ codons and stops are those of the standard code (only start codons differ), so t
   for yeast mitochondria and for frameshifted pseudogenes and code 4 for human mitochondria). Only genes that
   look complete count: not marked as pseudogenes (`[pseudo=true]`, a `*pseudogene` biotype), and with a length
   that is a multiple of 3 or ends in the `T` / `TA` of an incomplete stop codon. When every header names its
-  molecule (NCBI `lcl|NC_..._cds_`, Ensembl `chromosome:GRCh38:MT:`), only genes on a molecule whose records are
-  at least half flagged count (the mitochondrial chromosome, not nuclear genes here and there). Of the codes under
+  molecule (NCBI `lcl|NC_..._cds_`, Ensembl `chromosome:GRCh38:MT:`), only genes on a molecule of which at least
+  half the records have internal stops count (the mitochondrial chromosome, not nuclear genes here and there).
+  Of the codes under
   which the genes are clean, the one wins whose extra stop codons or unused codons the genes avoid where the
   set's other genes use them: AGA / AGG (stops in code 2) for vertebrate mitochondria, CGA / CGC (unused in code
   3) for yeast mitochondria; then the one that reassigns no stop codon the genes do not need (code 14 also reads
@@ -163,6 +164,10 @@ codons and stops are those of the standard code (only start codons differ), so t
   their records shuffled): code 6; human Ensembl with `-c 2`: codes 1, 11 or 12 (nothing in the sequences tells
   them apart); a file of yeast mitochondrial genes alone with `-c 1`: code 3. `report.json` marks such a hint
   `whole_set: true`.
+- **`pipeline clusters` judges each `--cds` file on its own** (each is one species): one hint per file, naming
+  it (`cds sp_two.fa: most genes ...`), and `file` in `report.json`. A *Mycoplasma* among other bacteria gets
+  code 4, a ciliate among animals code 6, and yeast and human mitochondrial genes get codes 3 and 2, each in its
+  own file (judged over all files together, these got no hint or codes that fit neither).
 - **The two-run recipe.** Take the organelle genes out of both CDS files and run them on their own:
 
   ```
