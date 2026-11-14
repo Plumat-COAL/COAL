@@ -357,7 +357,7 @@ class MissingInputs(PipelineCase):
         for k, files in enumerate(([gz, missing], [missing, gz])):
             res, err = run(P.run_clusters, files, self.tmp / f"o{k}", clusters=FAM_CLUSTERS)
             self.assertEqual(res.exit_code, 1)
-            self.assertIn(f"error: cannot open {str(missing)!r}: no such file", err)
+            self.assertIn(f"error: cannot open '{missing}': no such file", err)   # (as typed, not repr: U17)
             self.assertNotIn("decompressed", err)
             self.assertFalse((self.tmp / f"o{k}" / "work" / "inputs").exists())
             validate(res.report, SCHEMA)
@@ -367,7 +367,7 @@ class MissingInputs(PipelineCase):
         missing = self.tmp / "x.fa"
         res, err = run(P.run_pairs, gz, missing, self.tmp / "o")
         self.assertEqual(res.exit_code, 1)
-        self.assertIn(f"error: cannot open {str(missing)!r}: no such file", err)
+        self.assertIn(f"error: cannot open '{missing}': no such file", err)   # (as typed, not repr: U17)
         self.assertNotIn("decompressed", err)
         self.assertFalse((self.tmp / "o" / "work" / "inputs").exists())
         self.assertEqual([r["option"] for r in res.report["inputs"]], ["--query", "--subject"])

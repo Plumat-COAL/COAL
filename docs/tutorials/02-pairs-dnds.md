@@ -195,7 +195,9 @@ How to read it:
 - **The biggest filter is dS ≤ 2** (448 pairs). The median dS of what is left is 1.22: on average every
   synonymous site of these genes has changed about once since the split. That is the upper end of what a
   pairwise method can measure, so treat dS (and the ratio) of individual genes with care; the *distribution*
-  is robust, single values less so. A lower cut (`--max-ds 1`) is defensible too; state which you used.
+  is robust, single values less so. For conclusions about single genes a lower cut is safer (`--max-ds 1`; about
+  0.5 with strong codon-usage bias: [tutorial 5](05-choosing-a-method.md#1-five-methods-on-the-same-pairs)); state
+  which you used.
 - **dN/dS is low almost everywhere**: median 0.04, 75% of genes below 0.07. Most proteins are under strong
   purifying selection, which is the expected picture for bacterial core genes.
 - **The "top hits" are a lesson, not a finding.** The three pairs above 1 are short (54 to 81 codons), poorly
@@ -299,7 +301,7 @@ Rows never depend on `-j` either. With the same COAL and DIAMOND versions and in
 checksum; another DIAMOND version can find slightly different hits.
 
 **Change the method without searching again:** `--pairs ecoli_vs_salmonella/orthologs.tsv` skips DIAMOND and
-uses those pairs; `--resume` in the *same* output folder reuses the translation and the search when the inputs
+uses those pairs; `--resume` in an output folder of an earlier run reuses the translation and the search when the inputs
 and search options are unchanged (the report's `stages` then say `cached: true`). Adding a method changes
 neither:
 
@@ -318,7 +320,9 @@ coal pipeline: summary: 8,872 records (0 not usable); 3,142 pairs: NG 2,924 ok, 
 coal pipeline: summary: decompress_inputs 0.0 s, translate_query 0.0 s (reused), translate_subject 0.0 s (reused), diamond_search 0.0 s (reused), orthologs 0.0 s, align_codon_kaks 7.0 s
 ```
 
-(`--resume` reuses `work/` of the same folder: a copied or renamed folder starts again.) Which method to pick,
+(`--resume` reuses what `work/` of the output folder holds; where the folder is does not count, so a renamed or
+moved folder, or a copy that keeps the files' times (`cp -a`), is resumed too, while a copy with new times
+(`cp -r`) redoes the stages after the translation; [pipeline.md](../pipeline.md) has the rule.) Which method to pick,
 and why NG saturates more often here: [tutorial 5](05-choosing-a-method.md).
 
 **What to cite** is in the report too:

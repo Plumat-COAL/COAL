@@ -963,7 +963,6 @@ class TestKnownBugs(PropertyBase):
         self.assertFalse(crashed(r), r.err)
         return cases, rows
 
-    @unittest.expectedFailure
     def test_K05_an_input_without_pairs_exits_2(self):
         """docs/kaks.md, Exit status: 2 when no pair has an estimate because of the input."""
         d = Path(tempfile.mkdtemp(dir=self.tmp))

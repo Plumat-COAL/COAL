@@ -167,8 +167,9 @@ from `orthologr::deepclust()` works the same way.
 ## 4. orthologr: `dNdS(engine = "coal")`
 
 orthologr's `dNdS()` does the search itself (DIAMOND reciprocal best hits) and, with `engine = "coal"`, hands
-all pairs to coalr at once. orthologr's default search is `sensitivity_mode = "fast"`; `"default"` matches
-`coal pipeline`:
+all pairs to coalr at once. orthologr 0.5.0 searches with DIAMOND's default mode (`sensitivity_mode =
+"default"`), as `coal pipeline` does; 0.4.3 used `"fast"` (DIAMOND `--fast`, for hits above 90% identity), which
+`orthologr_legacy_options()` restores. The call below names it anyway:
 
 ```r
 library(orthologr)

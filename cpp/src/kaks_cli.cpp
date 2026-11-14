@@ -746,6 +746,14 @@ int kaks_main(const std::string& sub, const std::vector<std::string>& argv) {
             "Ka/Ks needs a codon alignment (aligned coding DNA): make one from a protein alignment and the coding "
             "sequences with `coal PROTEIN_ALN CDS.fasta -o codon.fasta`, or start from the coding sequences with "
             "`coal pipeline`";
+        if (n_pairs == 0) {
+            // an empty file, blank lines or comment lines only: no pair, so no result either. Exit status 2 as for
+            // an input without any estimate (docs/kaks.md "Exit status"; fuzz finding K05: it was 0), so a script
+            // does not take a truncated or empty input for a result
+            std::cerr << prog << ": error: the input holds no pair of sequences (no record: an empty file, or "
+                      << "blank or comment lines only), so there is no result. " << codon_hint << "\n";
+            return 2;
+        }
         if (nothing) {
             std::cerr << prog << ": error: none of the " << n_pairs << " pair(s) has an estimate (" << n_status[5]
                       << " result(s) error, " << n_status[4] << " no_data). ";
