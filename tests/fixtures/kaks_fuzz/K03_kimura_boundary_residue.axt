@@ -1,0 +1,13 @@
+# bug=K03 code=1 methods=LWL,MLWL,LPB,MLPB,Comeron
+# Three 4-fold sites with one transition and one transversion: P = Q = 1/3, so 1 - 2P - Q = 0 and Kimura's
+# correction is undefined (saturated). In floating point 1 - 2/3 - 1/3 = 5.6e-17, and LWL, MLWL, LPB, MLPB and
+# Comeron print dS = 18.99 with status ok. With four sites (P = 1/4, Q = 1/2, exact in binary) the same methods
+# say saturated, as they should.
+b3
+GCTGCTGCT
+GCCGCAGCT
+
+b4
+GCTGCTGCTGCT
+GCCGCAGCGGCT
+
