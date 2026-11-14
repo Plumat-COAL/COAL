@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to build, e.g. v0.3.0"
+        description: "Existing tag to build, e.g. v0.3.0 (with publish off also a branch or commit, e.g. main: a dry run of the development version)"
         required: true
         type: string
       publish:
@@ -49,7 +49,29 @@ jobs:
           python-version: "3.12"
       - name: Tag matches the version in the source
         id: v
-        run: python scripts/release_version.py "$TAG" --github-output
+        # A dry run (dispatched with publish off) of a branch or commit, e.g. main between releases, builds the
+        # development version (0.6.0.dev0) the source carries: release_version.py rejects it as a tag, and nothing is
+        # published, but the six places must still agree. Anything that can publish goes through the tag check.
+        env:
+          PUBLISH: ${{ inputs.publish }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ "$PUBLISH" != true ] && [[ ! "$TAG" =~ ^v[0-9] ]]; then
+            python - <<'PY'
+          import os, sys
+          sys.path.insert(0, "scripts")
+          import release_version as r
+          init, proj = r.source_versions()
+          app, pin = r.app_versions()
+          cpp = r.cpp_versions()
+          if len({init, proj, app, pin, *cpp}) != 1:
+              sys.exit(f"dry run: the versions disagree: {init}, {proj}, app {app} pinning {pin}, coal-cpp {cpp}")
+          print(f"dry run of {os.environ['TAG']}: version {init}")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"version={init}\nprerelease=true\n")
+          PY
+          else
+            python scripts/release_version.py "$TAG" --github-output
+          fi
       - name: Build wheels and sdists
         run: |
           python -m pip install build==1.2.2.post1
@@ -237,7 +259,30 @@ jobs:
           python-version: "3.12"
       - name: Tag matches the version in the source
         id: v
-        run: python scripts/release_version.py $env:TAG --github-output
+        shell: bash
+        # A dry run (dispatched with publish off) of a branch or commit, e.g. main between releases, builds the
+        # development version (0.6.0.dev0) the source carries: release_version.py rejects it as a tag, and nothing is
+        # published, but the six places must still agree. Anything that can publish goes through the tag check.
+        env:
+          PUBLISH: ${{ inputs.publish }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ "$PUBLISH" != true ] && [[ ! "$TAG" =~ ^v[0-9] ]]; then
+            python - <<'PY'
+          import os, sys
+          sys.path.insert(0, "scripts")
+          import release_version as r
+          init, proj = r.source_versions()
+          app, pin = r.app_versions()
+          cpp = r.cpp_versions()
+          if len({init, proj, app, pin, *cpp}) != 1:
+              sys.exit(f"dry run: the versions disagree: {init}, {proj}, app {app} pinning {pin}, coal-cpp {cpp}")
+          print(f"dry run of {os.environ['TAG']}: version {init}")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"version={init}\nprerelease=true\n")
+          PY
+          else
+            python scripts/release_version.py "$TAG" --github-output
+          fi
       - name: Install Inno Setup (pinned)
         run: |
           # 6.7.1 is the newest approved Chocolatey InnoSetup package (6.3+ is required by desktop/installer.iss).
