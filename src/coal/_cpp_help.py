@@ -97,8 +97,10 @@ HELP = {
         'Protein alignment -> codon alignment -> Ka/Ks for groups of coding sequences (the engine of\n'
         '`coal pipeline`, docs/pipeline.md). GROUPS (a file, or standard input when -i is - or absent) is\n'
         'tab-separated, one group after the other:\n'
-        '  G <group id> <all|rep|list> [nocodon]  start of a group; which pairs: all, member 1 against the others,\n'
-        "                                  P lines; nocodon: do not write this group's codon (or protein) alignment\n"
+        '  G <group id> <all|rep|list> [nocodon] [swap]  start of a group; which pairs: all, member 1 against the\n'
+        "                                  others, P lines; nocodon: do not write this group's codon (or protein)\n"
+        '                                  alignment; swap: two members aligned here are aligned as member 2 against\n'
+        '                                  member 1 (the rows come out in member order)\n'
         '  M <id> <CDS> [<protein row>]    a member; rows (when given, for every member) are the protein alignment\n'
         '  F <id> <reason>                 a member already known to be unusable (its pairs get status error)\n'
         '  H <qstart> <qend> <sstart> <send> <qseq_gapped> <sseq_gapped>   2 members: use this DIAMOND hit\n'

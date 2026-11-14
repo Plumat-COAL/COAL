@@ -311,6 +311,9 @@ Rcpp::List coalr_dnds(SEXP cds, SEXP member_ids, Rcpp::IntegerVector members, SE
                     if (have_rows && !is_na(rows, k)) mem.row = str_at(rows, k);
                 }
             }
+            // a pair aligned here is aligned in input order (the earlier CDS first: dnds.hpp Group::swap_pair)
+            if (b - a == 2 && members[a] != NA_INTEGER && members[a + 1] != NA_INTEGER && members[a + 1] < members[a])
+                it.g.swap_pair = true;
             const int mode = unit_pairs[(R_xlen_t)u];
             if (mode == 1) {
                 it.g.pairs = dnds::Pairs::representative;

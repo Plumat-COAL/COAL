@@ -208,3 +208,96 @@ def _fixture_pair_ids():
 
 if __name__ == "__main__":
     unittest.main()
+
+
+SENSE = [a + b + c for a in "TCAG" for b in "TCAG" for c in "TCAG" if a + b + c not in ("TAA", "TAG", "TGA")]
+
+
+def related_cds(rng, n_pairs=12):
+    """Pairs of related CDS with substitutions and indels in repeats: co-optimal protein alignments, and Comeron
+    values that depend on which gene is first."""
+    out = []
+    for k in range(n_pairs):
+        unit = [rng.choice(SENSE) for _ in range(2)]
+        a = ["ATG"] + [rng.choice(SENSE) if rng.random() < 0.7 else unit[rng.random() < 0.5] for _ in range(150)]
+        b = list(a)
+        for i in range(1, len(b)):
+            if rng.random() < 0.2:
+                b[i] = rng.choice(SENSE)
+        del b[40:40 + 1 + k % 3]
+        b[90:90] = [unit[0]] * (1 + k % 2)
+        out.append(("".join(a) + "TAA", "".join(b) + "TGA"))
+    return out
+
+
+@needs_cpp
+class C02InputOrder(PipelineCase):
+    """A pair is computed in input order (the gene of the earlier --cds file, then the earlier record, first) in
+    every route: `pipeline clusters` lists the representative first but aligns and estimates the pair as the
+    pairs route and orthologr do."""
+
+    def files(self):
+        import random
+        rng = random.Random(7)
+        pairs = related_cds(rng)
+        f1 = self.tmp / "sp1.fa"
+        f2 = self.tmp / "sp2.fa"
+        f1.write_text("".join(f">y{k}\n{b}\n" for k, (_, b) in enumerate(pairs)), encoding="utf-8")
+        f2.write_text("".join(f">x{k}\n{a}\n" for k, (a, _) in enumerate(pairs)), encoding="utf-8")
+        cl = self.tmp / "clusters.tsv"   # the representative (x, from the second file) first
+        cl.write_text("".join(f"x{k}\tx{k}\nx{k}\ty{k}\n" for k in range(len(pairs))), encoding="utf-8")
+        return f1, f2, cl, len(pairs)
+
+    @staticmethod
+    def values(path, key_cols=("seq1", "seq2")):
+        import csv
+        with open(path, encoding="utf-8") as fh:
+            return {(frozenset((r["seq1"], r["seq2"])), r["method"]): (r["dN"], r["dS"], r["status"])
+                    for r in csv.DictReader(fh, delimiter="\t")}
+
+    def test_clusters_equal_pairs_in_input_order(self):
+        f1, f2, cl, n = self.files()
+        methods = ["YN", "LWL", "Comeron"]
+        for preset in ("needle", "pwalign"):
+            clu = P.run_clusters([f1, f2], self.tmp / f"clu_{preset}", clusters=cl, method=methods, jobs=1,
+                                 quiet=True, preset=preset)
+            self.assertIn(clu.exit_code, (0, 2))
+            rows = (self.tmp / f"clu_{preset}" / "dnds.tsv").read_text(encoding="utf-8").splitlines()[1:]
+            self.assertTrue(all(r.split("\t")[1].startswith("x") for r in rows))   # still the representative first
+            pp = self.pairs_file([(f"y{k}", f"x{k}") for k in range(n)])
+            pr = P.run_pairs(f1, f2, self.tmp / f"pairs_{preset}", pairs=str(pp), method=methods, jobs=1, quiet=True,
+                             preset=preset)
+            self.assertIn(pr.exit_code, (0, 2))
+            c, p = self.values(clu.outputs["dnds"]), self.values(pr.outputs["dnds"])
+            self.assertEqual(len(p), 3 * n)
+            self.assertEqual(c, p, preset)
+            # the other input order: the representative's file first, no exchange, the pairs route with x first
+            clu2 = P.run_clusters([f2, f1], self.tmp / f"clu2_{preset}", clusters=cl, method=methods, jobs=1,
+                                  quiet=True, preset=preset)
+            pp2 = self.pairs_file([(f"x{k}", f"y{k}") for k in range(n)])
+            pr2 = P.run_pairs(f2, f1, self.tmp / f"pairs2_{preset}", pairs=str(pp2), method=methods, jobs=1,
+                              quiet=True, preset=preset)
+            c2, p2 = self.values(clu2.outputs["dnds"]), self.values(pr2.outputs["dnds"])
+            self.assertEqual(c2, p2, preset)
+            # the test can tell: Comeron depends on which gene is first
+            self.assertTrue(any(c[k] != c2[k] for k in c if k[1] == "Comeron"))
+
+    def test_engine_swap_field(self):
+        f1, f2, cl, n = self.files()
+        x = f2.read_text(encoding="utf-8").split()[1]
+        y = f1.read_text(encoding="utf-8").split()[1]
+
+        def run(text):
+            out = self.tmp / "o.tsv"
+            r = subprocess.run([str(CPP), "codon-dnds", "-o", str(out), "-m", "YN", "-m", "Comeron", "-q"],
+                               input=text, capture_output=True, text=True, timeout=TIMEOUT)
+            return r, (out.read_text(encoding="utf-8").splitlines()[1:] if r.returncode in (0, 2) else [])
+        _, swapped = run(f"G\tg\tall\tswap\nM\tx\t{x}\nM\ty\t{y}\nE\n")
+        _, yx = run(f"G\tg\tall\nM\ty\t{y}\nM\tx\t{x}\nE\n")
+        _, plain = run(f"G\tg\tall\tnocodon\nM\tx\t{x}\nM\ty\t{y}\nE\n")
+        self.assertEqual([r.split("\t")[:2] for r in swapped], [["x", "y"]] * 2)
+        self.assertEqual([r.split("\t")[2:] for r in swapped], [r.split("\t")[2:] for r in yx])
+        self.assertNotEqual(swapped, plain)
+        bad, _ = run(f"G\tg\tall\tswapped\nM\tx\t{x}\nM\ty\t{y}\nE\n")
+        self.assertNotEqual(bad.returncode, 0)
+        self.assertIn("nocodon or swap", bad.stderr)

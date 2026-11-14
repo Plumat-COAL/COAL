@@ -2886,10 +2886,16 @@ def _clusters_mode(run: _Run) -> None:
                 ok.append(m)
         return ok
 
+    def first_in_input(x: str, y: str) -> bool:
+        """y comes before x in the input (--cds files in order, then records): a pair is aligned in input order
+        (dnds.hpp Group::swap_pair; docs/pipeline.md, "Which gene is aligned first")."""
+        return cds_idx.pos[y][:2] < cds_idx.pos[x][:2]
+
     def emit_pairwise(write, cid: str, ids: list[str], pairs) -> None:
         """Each pair as a two-member group of its own (aligned pairwise by the engine)."""
         cache: dict[int, bytes] = {}
         head = b"G\t" + cid.encode() + b"\tall\tnocodon\n"
+        head_swap = b"G\t" + cid.encode() + b"\tall\tnocodon\tswap\n"
         for i, j in pairs:
             if len(cache) > 256:   # a bounded cache of member lines (member 0, the representative, stays)
                 keep = cache.get(0)
@@ -2899,7 +2905,7 @@ def _clusters_mode(run: _Run) -> None:
             for k in (i, j):
                 if k not in cache:
                     cache[k] = b"M\t" + ids[k].encode() + b"\t" + cds_idx.get(ids[k]) + b"\n"
-            write(b"".join((head, cache[i], cache[j], b"E\n")))
+            write(b"".join((head_swap if first_in_input(ids[i], ids[j]) else head, cache[i], cache[j], b"E\n")))
 
     def feed(write) -> dict:
         pending: list[tuple[dict, list[str]]] = []   # clusters waiting for their MSA, in order
@@ -2932,7 +2938,8 @@ def _clusters_mode(run: _Run) -> None:
                     emit_pairwise(write, cid, ids, p.pop("_pairs"))
                     continue
                 rows = [x[1].encode() for x in r.rows] if r is not None else [b""] * len(ids)
-                buf = [b"G\t", cid.encode(), b"\tall\n"]
+                swap = r is None and len(ids) == 2 and first_in_input(ids[0], ids[1])
+                buf = [b"G\t", cid.encode(), b"\tall\tswap\n" if swap else b"\tall\n"]
                 for m, row in zip(ids, rows):
                     buf += [b"M\t", m.encode(), b"\t", cds_idx.get(m), b"\t" if row else b"", row, b"\n"]
                 buf.append(b"E\n")
