@@ -676,7 +676,9 @@ class TestCiJobs(unittest.TestCase):
                      "pip install -e . biopython psutil", "run: python scripts/fetch_pal2nal.py",
                      'COAL_REQUIRE_CPP: "1"', "COAL_REQUIRE_DIAMOND=1", "-DCOAL_TEST_HOOKS=ON"):
             self.assertIn(need, job, need)
-        self.assertIn("sudo --preserve-env", root)
+        # sudo-rs ignores --preserve-env: what the tests need is passed by name, and TestDiskFull fails without coal-cpp
+        self.assertNotRegex(root, r"(?m)^\s*sudo\b.*--preserve-env")
+        self.assertIn('sudo env "PATH=$PATH" "COAL_CPP_BIN=$COAL_CPP_BIN" COAL_REQUIRE_CPP=1 COAL_IMPL=cpp', root)
         self.assertIn("tests.test_robustness.TestDiskFull", root)
         self.assertTrue(NEVER_RUN)   # the gaps that stay are named, with their reasons
         for what, why in NEVER_RUN.items():

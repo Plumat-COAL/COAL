@@ -149,6 +149,11 @@ class TestOptionMessages(unittest.TestCase):
         self.assertEqual(msg, "cannot open 'C:\\Users\\me\\a.fasta': no such file. This is a Windows path; under WSL "
                               "(Windows Subsystem for Linux) the same file is /mnt/c/Users/me/a.fasta")
         self.assertEqual(P._cannot_open("/x/y.fa"), "cannot open '/x/y.fa': no such file")
+        # normalised as seqio / coal-cpp (#88): 'C:\\' is /mnt/c, doubled or mixed separators collapse (follow-up audit)
+        for path, wsl in (("C:\\", "/mnt/c"), ("C:\\\\data\\\\x.fa", "/mnt/c/data/x.fa"),
+                          ("D:/a//b\\", "/mnt/d/a/b")):
+            self.assertEqual(P._cannot_open(path), f"cannot open '{path}': no such file. This is a Windows path; under "
+                                                   f"WSL (Windows Subsystem for Linux) the same file is {wsl}")
 
     def test_interrupt_says_how_to_go_on(self):
         with mock.patch.object(P, "_execute", side_effect=KeyboardInterrupt):
