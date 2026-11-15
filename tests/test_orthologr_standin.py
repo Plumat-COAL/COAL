@@ -16,6 +16,12 @@ PERL = shutil.which("perl")
 
 
 def _bin_dir():
+    """Where pip put the console scripts: next to python on Linux and macOS, Scripts\\ on Windows (sysconfig)."""
+    import sysconfig
+    name = "pal2nal.exe" if os.name == "nt" else "pal2nal"
+    for d in (sysconfig.get_path("scripts"), str(Path(sys.executable).parent)):
+        if d and (Path(d) / name).exists():
+            return d
     return str(Path(sys.executable).parent)
 
 
