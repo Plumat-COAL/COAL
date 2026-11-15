@@ -169,7 +169,9 @@ class TestAgainstKaKsCalculator(KaKsBase):
                         if abs(num(y) - num(x) - p_observed(sd, nd, S, N)) <= 1e-6 * num(y):
                             why = "p-obs"
                     elif i == 5 and y == "NA" and num(x) is not None:
-                        if float(of[7]) < float(of[11]) or float(of[8]) < float(of[12]):
+                        # (S, N, Sd, Nd; NA on a saturated side of the LWL family, difference 19)
+                        s_, n_, sd_, nd_ = (num(of[j]) for j in (7, 8, 11, 12))
+                        if None not in (s_, n_, sd_, nd_) and (s_ < sd_ or n_ < nd_):
                             why = "p-neg"
                     if why is None and y == "NA" and st == "saturated":
                         why = st
@@ -390,6 +392,61 @@ class TestMultiPositionCodons(KaKsBase):
             f = read_rows(self.run_cpp("kaks", "-i", axt, "-q", "-m", "MYN", "--digits", "15").stdout)[("p682", "MYN")]
         self.assertEqual((f[3], f[5]), ("NA", "0"), f)                  # Ks saturated; p of the degenerate table
         self.assertTrue(close(float(f[11]), float(f[7]), 1e-12), f)     # Sd = S
+
+
+class TestSaturatedLwlCounts(KaKsBase):
+    """docs/kaks.md, difference 19: in LWL, MLWL, LPB and MLPB a saturated class has A = B = K = 0 (the number that
+    stands for the undefined correction), so Sd with Ks saturated, Nd with Ka saturated, and LPB / MLPB's S = Sd /
+    Ks and N = Nd / Ka would be made from those zeros: NA, and Fisher's p with them. LWL / MLWL's site counts and
+    the raw per-class differences stay. (The pair of the review of 2026-11-15: code 11, 11 codons; LPB had S 11.5
+    and N 31, 42.5 sites, and LWL Sd 3.33 beside Ks NA.)"""
+    PAIR = ("AATATAATTTTA---ATATATATTATTATAAATATATGA", "TATATGGCCTTACATGCTTGTATCAAAGGAAGTGCATGA")
+    LWL = ["LWL", "MLWL", "LPB", "MLPB"]
+
+    def test_review_pair(self):
+        with tempfile.TemporaryDirectory() as td:
+            axt = Path(td) / "c468.axt"
+            axt.write_text("c468\n%s\n%s\n\n" % self.PAIR)
+            mf = sum((["-m", m] for m in self.LWL), [])
+            d = self.dnds(axt, "-c", "11", *mf)
+            k = read_rows(self.run_cpp("kaks", "-i", axt, "-q", "--digits", "15", "-c", "11", *mf).stdout)
+        rows = {m: d[("c468", m)] for m in self.LWL}
+        for m, f in rows.items():
+            self.assertEqual(f[13], "saturated", m)
+            self.assertIn("Ks saturated", f[14], m)
+            self.assertEqual(f[11], "NA", m)                  # Sd
+            kr = k[("c468", m)]
+            self.assertEqual((kr[5], kr[11]), ("NA", "NA"), m)  # Fisher's p, S-Substitutions
+            self.assertNotEqual(kr[13], "NA", m)              # Fold-S-Substitutions: the raw differences
+        # Ka saturated in LWL and LPB only; MLWL / MLPB keep Nd and their Ka
+        self.assertEqual([rows[m][10] == "NA" for m in self.LWL], [True, False, True, False])
+        self.assertEqual([("Ka saturated" in rows[m][14]) for m in self.LWL], [True, False, True, False])
+        # LWL / MLWL: the fold-class site counts (33 = 11 codons x 3); LPB / MLPB: no S = Sd / Ks, N = Nd / Ka
+        for m in ("LWL", "MLWL"):
+            self.assertAlmostEqual(float(rows[m][8]) + float(rows[m][9]), 33, places=6)
+        self.assertEqual((rows["LPB"][8], rows["LPB"][9]), ("NA", "NA"))
+        self.assertEqual(rows["MLPB"][9], "NA")
+        self.assertNotEqual(rows["MLPB"][8], "NA")
+
+    def test_rule_on_the_fixture_sets(self):
+        """Every LWL-family row: Sd is NA exactly when Ks is saturated (or there is nothing at all to count), Nd
+        likewise with Ka, and LPB / MLPB's S / N are never a number beside a saturated side."""
+        seen = 0
+        for name in ("edge_cases", "sim_small"):
+            for (pair, m), f in self.dnds(KDIR / f"{name}.axt", *sum((["-m", x] for x in self.LWL), [])).items():
+                note = f[14]
+                for col, side in ((11, "Ks saturated"), (10, "Ka saturated")):
+                    if side in note:
+                        seen += 1
+                        self.assertEqual(f[col], "NA", (name, pair, m, col))
+                    elif f[13] not in ("error",) and int(f[12]) > 0:
+                        self.assertNotEqual(f[col], "NA", (name, pair, m, col))
+                if m in ("LPB", "MLPB"):
+                    if "Ks saturated" in note:
+                        self.assertEqual(f[9], "NA", (name, pair, m))
+                    if "Ka saturated" in note:
+                        self.assertEqual(f[8], "NA", (name, pair, m))
+        self.assertGreater(seen, 0)
 
 
 class TestAgainstPAML(KaKsBase):

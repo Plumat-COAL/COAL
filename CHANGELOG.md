@@ -175,6 +175,17 @@ entry under "Added", not under "Fixed".
     *C. glabrata* p2754: Ka 0.249535 -> 0.256528, Ks 1.81172 -> 1.65011, S 64.667 -> 71, the values KaKs_Calculator
     prints for 38 of 40 random orders of its columns); 10 of the 3,000 random short pairs with independent codons
     (docs/kaks.md, difference 18).
+  - **Ka/Ks, LWL family: no substitution counts from a saturated correction** (review of 2026-11-15, M1). In a
+    saturated class A, B and K are the 0 that stands for the undefined correction, and Sd / Nd were summed with
+    those zeros, LPB / MLPB's S = Sd / Ks and N = Nd / Ka divided them (a code-11 pair of 11 codons: LPB S + N =
+    42.5 sites). Now Sd (`S-Substitutions`) is `NA` when Ks is saturated and Nd when Ka is, and so are LPB /
+    MLPB's S and N on that side and Fisher's p; LWL / MLWL's fold-class site counts, the Fold-S/N-Substitutions
+    and the other side's count are kept (docs/kaks.md, difference 19; difference 5 no longer says that
+    KaKs_Calculator prints `-nan` for a saturated Ks: it prints the quotient). All 9 methods at 17 digits, both
+    formats: *Salmonella* / *Shigella* 530 of 25,758 rows change (LWL 129, LPB 129, MLWL 136, MLPB 136: every
+    saturated row of the four methods, nothing else), *S. cerevisiae* / *C. glabrata* 8,694 of 39,492. coalr:
+    re-synced; `coal_info()$features` gains `"lwl_saturated_counts_na"` and, for two earlier vendored changes that
+    had no name, `"myn_kappa_inf_saturated"` and `"mlwl_exact_kappa"`.
   - **Ka/Ks: a multiple-hit correction whose argument is 0 in exact arithmetic is `saturated`** whatever the
     rounding (an argument at or below 1e-10 counts as 0): a rounding residue printed dN or dS of 19 to 28 as an
     estimate (fuzz finding K03; NG, the LWL family, the YN/MYN distances, default Comeron and Li; the kappa
@@ -1102,6 +1113,18 @@ In commands that 0.5.0 has (both engines unless said):
   MLWL's kappa-based sites make a genuine dS of 15.6 (513 CAG / CAA pairs at kappa 1, seed 4243) or 162.7 (kappa
   0.5031) possible, as KaKs_Calculator prints. `benchmarks/kaks/random_short_pairs.py` classes difference 18.
   Unused imports removed (coal/codon.py, coal/align.py). New tests: `tests/test_engine_review_fixes.py`.
+
+- **Review of 2026-11-15, M2: the reference fuzz's classifier knows differences 16, 18 and 19.**
+  `tests/fuzz_kaks_vs_reference.py` reported about 190 documented differences as "unexplained": the LWL family
+  with genetic codes other than the standard one (difference 16; now explained only where a codon column of the
+  pair has a step that KaKs_Calculator's hard-coded standard-code rules and COAL's rules for the code count
+  differently, checked by reimplementing both), MLWL at kappa exactly 2 or 0.5 (difference 18, with
+  `random_short_pairs.py`'s rule: the sites must be the two formulas) and the counts of difference 19. It also
+  compares the LWL family's S- and N-Substitutions now, and an LPB S-Sites (N-Sites) `NA` is explained only when
+  Ks (Ka) is saturated or `NA`. New `tests/test_fuzz_classifier.py`: one fixture per difference of docs/kaks.md
+  (the list is read from the docs, so a new difference fails until it has one), and fixtures that must stay
+  unexplained. Seed 77115 x 500 pairs (the generator's codes) and seed 990017 x 1,500 (`--codes 1,4,11`): 0
+  unexplained against the 15-digit and the corrected KaKs_Calculator and against yn00 (weighting 1 and 0).
 
 - **Follow-up audit (2026-11-15), the low findings.** nightly.yml's `cpp-extras` root step passes `PATH`,
   `COAL_CPP_BIN`, `COAL_REQUIRE_CPP=1` and `COAL_IMPL=cpp` through `sudo env` by name: sudo-rs (Ubuntu 26) ignores

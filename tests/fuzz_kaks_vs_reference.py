@@ -5,7 +5,12 @@ tests/test_kaks_properties.py (1 to 2,000 codons, divergence 0 to 100 %, gaps, N
 Every field where COAL and the reference print different values is put in a class. The classes of
 benchmarks/kaks/random_short_pairs.py are the documented ones for KaKs_Calculator (docs/kaks.md, differences 1
 and 5 to 13: nan -> NA, saturated, not converged, sites of one kind only, a NaN in the reference's row, the
-saturated kind's other path); for yn00 the same documented policy is applied (saturated: yn00's capped value,
+saturated kind's other path), and differences 16 (the LWL family's special cases with another genetic code: only
+where a codon column of the pair has a step that KaKs_Calculator's standard-code rules and COAL's rules for the
+code count differently), 18 (MLWL at kappa exactly 2 or 0.5: only where the site counts are the two formulas) and
+19 (the LWL family's Sd / Nd, and LPB / MLPB's sites, NA on a saturated side); the LWL family's S- and
+N-Substitutions are compared too. tests/test_fuzz_classifier.py holds one fixture per difference. For yn00 the
+same documented policy is applied (saturated: yn00's capped value,
 COAL NA; not converged: COAL NA; one kind of site: yn00 nan; dN/dS when dN = 0: yn00's floor 1e-5). Anything
 else is "unexplained" and fails the run; the pair is written to the --keep folder.
 
@@ -40,7 +45,11 @@ KK_METHODS = P.KK_METHODS
 # NCBI table -> PAML's icode (PAML's codeml.ctl: 0 universal, 1 vertebrate mt, 2 yeast mt, 3 mold mt,
 # 4 invertebrate mt, 5 ciliate, 6 echinoderm mt, 7 euplotid, 8 alternative yeast, 9 ascidian mt, 10 blepharisma)
 PAML_ICODE = {1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 9: 6, 10: 7, 12: 8, 13: 9, 15: 10}
-KFIELDS = {2: "Ka", 3: "Ks", 4: "Ka/Ks", 7: "S-Sites", 8: "N-Sites"}
+KFIELDS = {2: "Ka", 3: "Ks", 4: "Ka/Ks", 7: "S-Sites", 8: "N-Sites", 11: "S-Substitutions", 12: "N-Substitutions"}
+LWL_FAMILY = {"LWL", "MLWL", "LPB", "MLPB"}
+# S-Substitutions and N-Substitutions (Sd, Nd) are compared for the LWL family only: YN / MYN's are the weighted
+# counts of the iteration (differences 11 to 13 and 17 move them) and NG's are plain counts
+SUBST_FIELDS = {"S-Substitutions", "N-Substitutions"}
 # K03 (a rounding residue printed as an estimate; tests/test_kaks_properties.py) was a known bug, counted in its
 # own class and not failed; it is fixed (2026-11-14, docs/kaks.md "Differences", 14), so such a value fails again
 KNOWN_K03_OK = False
@@ -129,6 +138,143 @@ def one_sequence_without_synonymous_sites(case) -> bool:
     return bool(cols) and (all(nosyn(x) for x, _ in cols) or all(nosyn(y) for _, y in cols))
 
 
+# ------------------------------------------------------------------ the LWL family's special cases (difference 16)
+
+def _kk_step_lwl(code: int, modified: bool, x: str, y: str, pos: int):
+    """One step x -> y at pos as KaKs_Calculator 2.0 counts it (LWL85.cpp / MLWL85::TransitionTransversion): the
+    hard-coded rules of the standard code, applied with every code. (si, vi): (class of x, class of y, kind)."""
+    arg = pos == 0 and {x, y} in ({"CGA", "AGA"}, {"CGG", "AGG"})
+    c1, c2 = _fold(code, x, pos), _fold(code, y, pos)
+    if not modified:
+        if arg:
+            return (("s", c1), ("v", c2))     # half a transition, half a transversion
+        syn = None
+    else:
+        syn = None
+        if pos == 2 and {x, y} == {"ATA", "ATG"}:
+            syn = False
+        if pos == 2 and "ATA" in (x, y) and ({x, y} - {"ATA"}) <= {"ATC", "ATT"} and x != y:
+            syn = True
+        if arg:
+            syn = True
+    if syn is None:
+        syn = {x[pos], y[pos]} in ({"T", "C"}, {"A", "G"})
+    k = "s" if syn else "v"
+    return ((k, c1), (k, c2))
+
+
+def _coal_step_lwl(code: int, modified: bool, x: str, y: str, pos: int):
+    """The same step as COAL counts it (cpp/src/kaks.cpp lwl_step): the special cases where the code says so."""
+    aa = P.AA[code]
+    same = aa[x] != "*" and aa[y] != "*" and aa[x] == aa[y]
+    c1, c2 = _fold(code, x, pos), _fold(code, y, pos)
+    syn = None
+    if not modified:
+        if pos == 0 and {x, y} in ({"CGA", "AGA"}, {"CGG", "AGG"}) and same:
+            return (("s", c1), ("v", c2))
+    else:
+        if c1 == 1 and c2 == 1:
+            syn = same
+        elif pos == 2 and {x, y} == {"ATA", "ATG"} and not same:
+            syn = False
+    if syn is None:
+        syn = {x[pos], y[pos]} in ({"T", "C"}, {"A", "G"})
+    k = "s" if syn else "v"
+    return ((k, c1), (k, c2))
+
+
+def _fold(code: int, c: str, pos: int) -> int:
+    """0, 1 (2-fold) or 2 (4-fold): how many of the other three bases at pos keep the amino acid."""
+    aa = P.AA[code]
+    k = sum(1 for b in "TCAG" if b != c[pos] and aa[c[:pos] + b + c[pos + 1:]] != "*"
+            and aa[c[:pos] + b + c[pos + 1:]] == aa[c])
+    return 0 if k == 0 else 2 if k == 3 else 1
+
+
+def _paths(code: int, x: str, y: str):
+    """The pathways from x to y that avoid stop codons, as lists of (from, to, position) steps."""
+    import itertools
+    diff = [i for i in range(3) if x[i] != y[i]]
+    out = []
+    for order in itertools.permutations(diff):
+        cur, steps, ok = x, [], True
+        for i in order:
+            nxt = cur[:i] + y[i] + cur[i + 1:]
+            if nxt != y and P.AA[code][nxt] == "*":
+                ok = False
+                break
+            steps.append((cur, nxt, i))
+            cur = nxt
+        if ok:
+            out.append(steps)
+    return out
+
+
+def lwl_code_special_case(case, method: str) -> bool:
+    """docs/kaks.md, difference 16: the pair has a codon column with a step (on a pathway without stop codons)
+    that KaKs_Calculator's hard-coded standard-code rules count otherwise than COAL's rules for the pair's code.
+    Never true for code 1, where the two sets of rules are the same."""
+    if case is None or method not in LWL_FAMILY or case.code == 1:
+        return False
+    modified = method in ("MLWL", "MLPB")
+    for x, y in P.compared_columns(case):
+        if x == y:
+            continue
+        for steps in _paths(case.code, x, y):
+            for a, b, pos in steps:
+                if _kk_step_lwl(case.code, modified, a, b, pos) != _coal_step_lwl(case.code, modified, a, b, pos):
+                    return True
+    return False
+
+
+def _mlwl_sites(fold: str, kappa: float, formula: str):
+    """MLWL's (S, N) from a Fold-Sites field "L0:L2:L4" with one of its three site formulas (cpp/src/kaks.cpp
+    run_lwl): "above2" (kappa > 2), "above_half" (0.5 < kappa <= 2), "third" (kappa <= 0.5). None if unreadable."""
+    try:
+        l0, l2, l4 = (float(v) for v in fold.split(":"))
+    except ValueError:
+        return None
+    if formula == "above2":
+        return (kappa - 1) * l2 / (kappa + 1) + l4, l0 + 2 * l2 / (kappa + 1)
+    if formula == "above_half":
+        return (kappa - 0.5) * l2 / (kappa + 1.5) + l4, l0 + 2 * l2 / (kappa + 1.5)
+    return l2 / 3 + l4, l0 + 2 * l2 / 3
+
+
+def mlwl_boundary(rf: list, of: list) -> bool:
+    """docs/kaks.md, difference 18 (as benchmarks/kaks/random_short_pairs.py): an MLWL row whose kappa (COAL's
+    printed rate ratio) is exactly 2 or 0.5, whose S-Sites / N-Sites are, in COAL, the site formula of that exact
+    kappa and, in KaKs_Calculator, the formula on the other side of the threshold (its kappa rounded just above
+    it), and where the two formulas give different sites."""
+    if len(of) < 17 or len(rf) < 17:
+        return False
+    k = of[16].split(":")[0]
+    if k not in ("2", "0.5"):
+        return False
+    kappa = float(k)
+    exact, other = ("above_half", "above2") if k == "2" else ("third", "above_half")
+    want_ours, want_ref = _mlwl_sites(of[9], kappa, exact), _mlwl_sites(rf[9], kappa, other)
+    if want_ours is None or want_ref is None:
+        return False
+
+    def same(got, want) -> bool:
+        return all(g is not None and abs(g - w) <= 1e-9 * max(1.0, abs(w)) for g, w in zip(got, want))
+    ours_sn, ref_sn = (num(of[7]), num(of[8])), (num(rf[7]), num(rf[8]))
+    return same(ours_sn, want_ours) and same(ref_sn, want_ref) and not same(want_ours, want_ref)
+
+
+def saturated_side_na(method: str, name: str, note: str) -> bool:
+    """docs/kaks.md, difference 19: in the LWL family, Sd (S-Substitutions) is NA when COAL's Ks is saturated and
+    Nd when Ka is, and so are LPB / MLPB's S-Sites (Sd / Ks) and N-Sites (Nd / Ka)."""
+    if method not in LWL_FAMILY:
+        return False
+    if name == "S-Substitutions" or (name == "S-Sites" and method in ("LPB", "MLPB")):
+        return "Ks saturated" in note
+    if name == "N-Substitutions" or (name == "N-Sites" and method in ("LPB", "MLPB")):
+        return "Ka saturated" in note
+    return False
+
+
 def classify_kk(ref: dict, ours: dict, tidy: dict, tol: float, cases=None):
     """Field by field, KaKs_Calculator against COAL (the classes of random_short_pairs.classify, generalised to
     any length and to the tolerance of the reference's digits)."""
@@ -152,7 +298,10 @@ def classify_kk(ref: dict, ours: dict, tidy: dict, tol: float, cases=None):
             ref_nan = True
         if one_sequence_without_synonymous_sites((cases or {}).get(key[0])) and st in P.ESTIMATE:
             ref_nan = True   # the reference's NaN is printed as NA there, and its iteration lost codons (11)
+        special16 = lwl_code_special_case((cases or {}).get(key[0]), key[1])
         for i, name in KFIELDS.items():
+            if name in SUBST_FIELDS and key[1] not in LWL_FAMILY:
+                continue
             x, y = rf[i], of[i]
             if x == y:
                 continue
@@ -163,7 +312,11 @@ def classify_kk(ref: dict, ours: dict, tidy: dict, tol: float, cases=None):
                 rel = abs(nx - ny) / max(1.0, abs(nx), abs(ny))
                 if rel <= tol:
                     continue
-                if st == "no_data":
+                if key[1] == "MLWL" and mlwl_boundary(rf, of):
+                    kind = "number != number: MLWL kappa exactly 2 or 0.5 (difference 18)"
+                elif special16:
+                    kind = "number != number: LWL-family special case of another genetic code (difference 16)"
+                elif st == "no_data":
                     kind = "number != number: one kind of site (difference 11)"
                 elif st == "saturated" and rel <= 1e-6:
                     kind = "number != number: saturated, other path (difference 13)"
@@ -174,8 +327,21 @@ def classify_kk(ref: dict, ours: dict, tidy: dict, tol: float, cases=None):
             elif nx is not None:
                 if st == "not_converged" and name in ("Ka", "Ks", "Ka/Ks"):
                     kind = "number -> NA: not converged (difference 12)"
+                elif name in SUBST_FIELDS or (name in ("S-Sites", "N-Sites") and key[1] in LWL_FAMILY):
+                    # only where the side the value is made from is saturated (difference 19)
+                    kind = ("number -> NA: from a saturated correction (difference 19)"
+                            if st == "saturated" and saturated_side_na(key[1], name, note) else
+                            "number -> NA: LPB sites from an NA estimate (difference 5)"
+                            if name in ("S-Sites", "N-Sites") and key[1] in ("LPB", "MLPB")
+                            and num(of[3 if name == "S-Sites" else 2]) is None else
+                            "number -> NA: LWL-family special case of another genetic code (difference 16)"
+                            if special16 else "number -> NA: unexplained")
                 elif st == "saturated":
                     kind = "number -> NA: saturated (difference 1)"
+                elif special16 and st in P.ESTIMATE:
+                    # under the code's own rules COAL's Ka (or Ks) is 0, printed NA (below 1e-6, as KaKs_Calculator
+                    # prints its own), and Ka/Ks with it
+                    kind = "number -> NA: LWL-family special case of another genetic code (difference 16)"
                 elif abs(nx) < 1e-6 and name in ("Ka", "Ks", "Ka/Ks"):
                     kind = "number -> NA: below 1e-6"
                 elif name in ("S-Sites", "N-Sites") and key[1] in ("LPB", "MLPB"):

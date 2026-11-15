@@ -443,7 +443,8 @@ give a number.
 Fisher's p-values agree to 7e-12 (2.4e-12 on the orthologr pairs, 6.7e-12 on the simulated ones) apart from the
 two documented cases below (`p-obs`, `p-neg`). On the 4,000 random short pairs with one changed position per
 codon, no value that both tools print differs by more than 1e-9 (Ka, Ks, Ka/Ks and the site counts, all seven
-methods), apart from 7 LPB / MLPB site counts of `saturated` rows (difference 14, since 2026-11-14). **That is not true for short pairs in general:** on the 3,000 pairs with codons drawn independently,
+methods; from 2026-11-14 to 15, 7 LPB / MLPB site counts of `saturated` rows, difference 14, which are `NA`
+since difference 19). **That is not true for short pairs in general:** on the 3,000 pairs with codons drawn independently,
 YN and MYN print different numbers in 23 fields (Ka, Ks or Ka/Ks), which belong to differences 11 and 13 below,
 MLWL in 36 fields of 10 pairs whose kappa is exactly 2 or 0.5 (difference 18, since 2026-11-15; NG, LWL, LPB and
 MLPB in none), and in 210 rows (123 YN, 87 MYN) COAL prints no estimate at all because
@@ -490,8 +491,8 @@ the categories are explained in the next section.
 
 Differences 1 to 10 are deliberate and were each checked against the references. Differences 11 to 13 are about
 short or saturated pairs on which the two programs print different numbers; for each, the text says which
-program is right, or that neither number is an estimate. Differences 14 to 18 are boundaries, an infinite kappa and
-genetic codes other than the standard one (the section before 14).
+program is right, or that neither number is an estimate. Differences 14 to 19 are boundaries, an infinite kappa,
+genetic codes other than the standard one and the counts of a saturated LWL-family row (the section before 14).
 
 1. **`saturated`.** KaKs_Calculator replaces an undefined correction with a number. YN and MYN (when TN93 fails)
    report JC69's capped distance: when P >= 0.75, P is set to 0.75(n-1)/n, or t to 99 when P + Q > 1. The LWL
@@ -511,8 +512,10 @@ genetic codes other than the standard one (the section before 14).
 4. **`-0`.** KaKs_Calculator prints Ka/Ks = `-0` when Ka is a negative zero. COAL prints `0`.
 5. **`nan`.** Where KaKs_Calculator prints `nan` or `-nan`, COAL prints `NA`. This includes the `S-Sites` and
    `N-Sites` columns of LPB and MLPB: these methods have no site count of their own, KaKs_Calculator derives
-   S = Sd/Ks and N = Nd/Ka for the output, and prints `-nan` when the divisor is 0 or NA (identical sequences,
-   Ka = 0, a saturated Ks); COAL prints `NA` there. It also covers pairs with nothing to compare.
+   S = Sd/Ks and N = Nd/Ka for the output, and prints `-nan` when the divisor is 0 (identical sequences, Ka = 0,
+   or a Ks of 0 because the classes it is made from are saturated and their K set to 0); COAL prints `NA` there.
+   Where a saturated class leaves Ks (Ka) a number, KaKs_Calculator prints the quotient, and COAL `NA`
+   (difference 19). It also covers pairs with nothing to compare.
 6. **RNA and lower case.** KaKs_Calculator's NG and LWL family compare codon letters, so `U` in one sequence
    against `T` in the other counts as a difference; its YN and MYN read U as T. KaKs_Calculator's GC column counts
    upper-case G and C only. COAL reads U as T and ignores case everywhere (edge case `lowercase_rna`).
@@ -553,7 +556,7 @@ base at their sites), which is why the tables above have no `nan` for YN and MYN
 one changed position per codon KaKs_Calculator's MYN prints `nan` for the sites of about a quarter of the pairs.
 A KaKs_Calculator built with two lines changed (the mean over the classes of non-zero weight; "TN93 fails" when
 either product is 0), called "the corrected reference" below, gives COAL's numbers for every one of those 4,000
-pairs where it prints a number (0 differences above 1e-9, apart from the 7 site counts of difference 14). On the 3,000 pairs with codons drawn independently it
+pairs where it prints a number (0 differences above 1e-9). On the 3,000 pairs with codons drawn independently it
 does not: see the table under difference 13.
 
 #### Short and saturated pairs: where the two programs print different numbers
@@ -622,7 +625,7 @@ per process:
 | 11, a NaN in the reference's row (its Ka or Ks is `nan` / `NA`) | 12 | 0 | COAL (= the corrected reference) |
 | 12, iteration not converged | 0 | 0 | nothing to compare: COAL prints NA. The reference prints its last round in 493 (corrected: 578) of these fields |
 | 13, saturated kind, other path | 5 | 5 | the same value within the iteration's tolerance |
-| 14, LPB / MLPB S-Sites or N-Sites of a `saturated` row beside a class at an exact boundary (since 2026-11-14) | 21 | 21 | COAL (the reference's quotient comes from a rounding residue) |
+| 14, LPB / MLPB S-Sites or N-Sites of a `saturated` row beside a class at an exact boundary (2026-11-14 to 15: 21 and 21; since then `NA`, difference 19) | 0 | 0 | COAL (the reference's quotient comes from a rounding residue) |
 | 18, MLWL with kappa exactly 2 or 0.5: the other site formula (10 pairs; since 2026-11-15) | 36 | 36 | COAL (the formula of the exact kappa; the reference's choice follows the rounding of its column-order sums) |
 | unexplained | 0 | 0 | |
 
@@ -643,7 +646,7 @@ row alone, in any order and with any number of threads (`tests/test_kaks.py`, `t
 
 #### Boundaries, an infinite kappa and other genetic codes (2026-11-14)
 
-Differences 14 to 17 (and 18, 2026-11-15) came out of the property-based fuzz of the engine (`tests/test_kaks_properties.py`, findings
+Differences 14 to 17 (and 18, 2026-11-15; 19 is from the review of that day) came out of the property-based fuzz of the engine (`tests/test_kaks_properties.py`, findings
 K01 to K06; the minimal pairs are in `tests/fixtures/kaks_fuzz/`) and of the simulation study above. With the
 standard code they change only rows at an exact boundary of a correction, MYN rows with an infinite kappa and
 the difference counts of YN / MYN rows without any estimate; every other row is byte-identical
@@ -680,7 +683,7 @@ pairs of "Validation" (no row changed), 4,000 pairs of the simulation study and 
     (`benchmarks/kaks/random_short_pairs.py`, 2026-11-14): 193 (one change per codon) and 231 (codons drawn
     independently) more fields where it prints a number and COAL `NA`, all with status `saturated`, and 7 and 21
     LPB / MLPB site counts of `saturated` rows that differ (S = Sd / Ks with the residue's class in Sd); no
-    unexplained difference.
+    unexplained difference. (Since 2026-11-15 those LPB / MLPB site counts are `NA`, difference 19.)
 15. **MYN: kappa_TC or kappa_AG infinite.** MYN estimates the two kappas with TN93 at the non-degenerate and the
     four-fold sites. When the A-G (T-C) term of one class is exactly at its limit, 1 - R P1 / (2 piA piG) -
     Q / (2 R) = 0 (P1 = 3/25, Q = 12/25 with A and G equally frequent), its logarithm is -inf and kappa_AG is
@@ -751,6 +754,23 @@ pairs of "Validation" (no row changed), 4,000 pairs of the simulation study and 
     code in a separate run; every such row has kappa exactly 2 or 0.5. No other method changes.
     `tests/test_engine_review_fixes.py` (`TestMlwlKappaBoundary`: 40 orders of each pair of
     `tests/kaks/mlwl_kappa_boundary.axt`).
+19. **LWL family: no substitution counts from a saturated correction** (review of 2026-11-15). In a saturated
+    class KaKs_Calculator, and COAL with it, sets A, B and K to 0, and Sd = L2 A2 + L4 K4, Nd = L0 K0 + L2 B2
+    were summed with those zeros: numbers that look like estimates of substitutions and are not, and LPB / MLPB's
+    S = Sd / Ks and N = Nd / Ka quotients of them (`TAT...` code 11, 11 codons: LPB S 11.5 and N 31, 42.5 sites;
+    NP_459032.1 of the *Salmonella* / *Shigella* pairs: LPB N 537.72 beside Nd 245.54). COAL now prints `NA` for
+    Sd (`S-Substitutions`) when Ks is saturated and for Nd (`N-Substitutions`) when Ka is, for LPB / MLPB's
+    S-Sites and N-Sites under the same conditions, and so for Fisher's p, which needs them; KaKs_Calculator
+    prints the numbers. Kept: LWL / MLWL's S and N (counts of the fold classes, with MLWL's kappa from the raw
+    transitions and transversions: not estimates, as for a row that is not saturated), the Fold-S- and
+    Fold-N-Substitutions (the raw differences per class), Sd or Nd on the side that is not saturated, and every
+    row that is not `saturated`. It is the LWL family's counterpart of difference 17. All 9 methods at 17 digits,
+    dnds and kaks formats: *Salmonella* / *Shigella* 530 of 25,758 rows change (LWL 129, LPB 129, MLWL 136, MLPB
+    136: every saturated row of the four methods, and nothing else), *S. cerevisiae* / *C. glabrata* 8,694 of
+    39,492 (2,079, 2,079, 2,268, 2,268; likewise). Against KaKs_Calculator these are fields where it prints a
+    number and COAL `NA`; `tests/fuzz_kaks_vs_reference.py` classes them as difference 19 (405 fields of 500
+    pairs, seed 77115; 1,242 of 1,500 pairs with codes 1, 4 and 11, seed 990017). `tests/test_kaks.py`
+    (`TestSaturatedLwlCounts`), `tests/kaks/golden/edge_cases.coal.*`.
 
 `tests/test_kaks.py` holds the cases (`TestOneKindOfSite`, `TestMynNan`, `TestMultiPositionCodons`), and its
 comparison with KaKs_Calculator's stored output does not accept a difference because of the status alone: a

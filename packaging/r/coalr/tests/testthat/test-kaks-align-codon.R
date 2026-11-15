@@ -174,6 +174,24 @@ test_that("an iteration that does not converge gives no estimate", {
   expect_false(coal_kaks("AAA", "ATG", yn_flavour = "paml", yn_weighting = FALSE)$status == "not_converged")
 })
 
+test_that("LWL family: no substitution counts or LPB sites from a saturated correction", {
+  # COAL docs/kaks.md, difference 19 (coal_info()$features "lwl_saturated_counts_na"). Code 11, 11 codons; Ks
+  # saturated in all four methods, Ka also in LWL and LPB. Sd / Nd were sums with the zeros of the undefined
+  # correction in them and LPB's S_sites + N_sites came to 42.5 for 11 codons.
+  a <- "AATATAATTTTA---ATATATATTATTATAAATATATGA"
+  b <- "TATATGGCCTTACATGCTTGTATCAAAGGAAGTGCATGA"
+  r <- coal_kaks(a, b, method = c("LWL", "MLWL", "LPB", "MLPB"), code = 11L, details = TRUE)
+  expect_true("lwl_saturated_counts_na" %in% coal_info()$features)
+  expect_identical(r$status, rep("saturated", 4))
+  expect_true(all(is.na(r$Sd)))
+  expect_true(all(is.na(r$p_fisher)))
+  expect_identical(is.na(r$Nd), c(TRUE, FALSE, TRUE, FALSE))       # Ka is an estimate in MLWL and MLPB
+  expect_identical(is.na(r$S_sites), c(FALSE, FALSE, TRUE, TRUE))  # LWL / MLWL sites are fold-class counts
+  expect_identical(is.na(r$N_sites), c(FALSE, FALSE, TRUE, FALSE))
+  expect_equal(r$S_sites[1] + r$N_sites[1], 33)
+  expect_true(all(c("myn_kappa_inf_saturated", "mlwl_exact_kappa") %in% coal_info()$features))
+})
+
 test_that("preset pwalign returns pwalign::pairwiseAlignment's alignment among co-optimal ones", {
   # each pair has several alignments with the best score; COAL's own tie-break puts the gaps leftmost
   a <- c("MKTAYIAKQRQISFVKSHFSRQ", "MAAAKAAA", "MKVLAAGG", "GGGGAGGG", "MSTNPKPQRKTKRNTNRRPQDVKFPGG")

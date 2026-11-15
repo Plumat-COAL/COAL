@@ -936,7 +936,13 @@ Rcpp::List coalr_info() {
                               // Behaviour that callers (orthologr) cannot tell from the version string of a
                               // development build: add a name when such a change is vendored, never remove one.
                               // comeron_min_sites_positive: COAL #76 (D9), the min-sites rule only where it gives a
-                              // distance > 0 (a 0 from a small class stays NA).
+                              // distance > 0 (a 0 from a small class stays NA). myn_kappa_inf_saturated: MYN with
+                              // kappa_TC or kappa_AG infinite is `saturated`, not `no_data` (docs/kaks.md, difference
+                              // 15; the rate ratio, NA in coal-cpp kaks's format, is not part of coalr's output).
+                              // mlwl_exact_kappa: MLWL picks its site formula on the exact kappa (difference 18).
+                              // lwl_saturated_counts_na: LWL family, Sd (Nd) NA with Ks (Ka) saturated, and LPB /
+                              // MLPB's S_sites (N_sites) and Fisher's p with them (difference 19).
                               Rcpp::_["features"] = to_r(std::vector<std::string>{
-                                  "comeron_twosubs", "comeron_min_sites", "comeron_min_sites_positive"}));
+                                  "comeron_twosubs", "comeron_min_sites", "comeron_min_sites_positive",
+                                  "myn_kappa_inf_saturated", "mlwl_exact_kappa", "lwl_saturated_counts_na"}));
 }

@@ -76,8 +76,13 @@
 #'   `hardware_threads` and `features`: names of behaviours that a development build's version number does not
 #'   tell, for packages that call coalr (such as orthologr). `"comeron_twosubs"` and `"comeron_min_sites"`: the
 #'   arguments of that name; `"comeron_min_sites_positive"`: `comeron_min_sites` applies only where it gives a
-#'   positive distance, so a 0 caused by a small site class stays `NA` (COAL #76). Names are only ever added; a
-#'   coalr without `features` (`NULL`) predates them all.
+#'   positive distance, so a 0 caused by a small site class stays `NA` (COAL #76); `"myn_kappa_inf_saturated"`: MYN
+#'   with an infinite kappa is `saturated`, not `no_data`; `"mlwl_exact_kappa"`: MLWL picks its site formula on the
+#'   exact kappa, so the order of the codon columns does not matter; `"lwl_saturated_counts_na"`: in LWL, MLWL, LPB
+#'   and MLPB, `Sd` is `NA` when Ks is saturated and `Nd` when Ka is (and with them LPB / MLPB's `S_sites` /
+#'   `N_sites` and `p_fisher`), instead of numbers made from the zeros of the undefined correction (COAL's
+#'   docs/kaks.md, differences 15, 18 and 19). Names are only ever added; a coalr without `features` (`NULL`)
+#'   predates them all.
 #' @examples
 #' coal_info()$methods
 #' "comeron_min_sites_positive" %in% coal_info()$features

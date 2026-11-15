@@ -12,8 +12,13 @@ A list: \code{coalr} (package version), \code{coal_version} (the COAL release th
 \code{hardware_threads} and \code{features}: names of behaviours that a development build's version number does not
 tell, for packages that call coalr (such as orthologr). \code{"comeron_twosubs"} and \code{"comeron_min_sites"}: the
 arguments of that name; \code{"comeron_min_sites_positive"}: \code{comeron_min_sites} applies only where it gives a
-positive distance, so a 0 caused by a small site class stays \code{NA} (COAL #76). Names are only ever added; a
-coalr without \code{features} (\code{NULL}) predates them all.
+positive distance, so a 0 caused by a small site class stays \code{NA} (COAL #76); \code{"myn_kappa_inf_saturated"}: MYN
+with an infinite kappa is \code{saturated}, not \code{no_data}; \code{"mlwl_exact_kappa"}: MLWL picks its site formula on the
+exact kappa, so the order of the codon columns does not matter; \code{"lwl_saturated_counts_na"}: in LWL, MLWL, LPB
+and MLPB, \code{Sd} is \code{NA} when Ks is saturated and \code{Nd} when Ka is (and with them LPB / MLPB's \code{S_sites} /
+\code{N_sites} and \code{p_fisher}), instead of numbers made from the zeros of the undefined correction (COAL's
+docs/kaks.md, differences 15, 18 and 19). Names are only ever added; a coalr without \code{features} (\code{NULL})
+predates them all.
 }
 \description{
 Versions and capabilities of the engine
