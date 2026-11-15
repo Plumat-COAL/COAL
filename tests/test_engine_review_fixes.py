@@ -9,7 +9,10 @@ have the code path:
 - `coal-cpp codon-dnds` (the native step of `coal pipeline`) accepts the testing flags --kaks-baseline and
   --kaks-isa of `dnds` / `kaks`, without showing them in its help, and --kaks-baseline gives the same bytes;
 - `coal-cpp kaks`, MYN with kappa_TC (or kappa_AG) estimated as infinite: the Substitution-Rate-Ratio field is NA
-  (KaKs_Calculator prints `inf`; COAL's output has no nan / inf), the rest of the row and the dnds table unchanged.
+  (KaKs_Calculator prints `inf`; COAL's output has no nan / inf), the rest of the row and the dnds table unchanged;
+- MLWL at kappa exactly 2 or 0.5 (2 ts / tv, ts and tv sums of thirds and halves of a difference): the site formula
+  is chosen in exact arithmetic, so permuting the codon columns no longer moves a pair into the other formula
+  (property fuzz P6, seed 4242: FIXCI-B2; KaKs_Calculator has the same order dependence).
 
 The Python halves run in-process; the C++ halves skip if coal-cpp is not built (COAL_CPP_BIN, default
 ./build/coal-cpp).
@@ -263,6 +266,53 @@ class TestMynInfiniteKappaRateRatio(unittest.TestCase):
             self.assertEqual(r.stdout.decode().splitlines()[1].split("\t")[13:],
                              ["saturated", "MYN: kappa_TC estimated as infinite (TN93 transition correction undefined "
                                            "in a class of sites): no site counts, Ka and Ks NA"])
+
+
+
+@unittest.skipUnless(cpp_binary(), "coal-cpp not built (COAL_CPP_BIN)")
+class TestMlwlKappaBoundary(unittest.TestCase):
+    """tests/kaks/mlwl_kappa_boundary.axt: pairs whose MLWL kappa = 2 ts / tv is exactly 0.5 or 2. The doubles ts
+    and tv are summed in column order and came out as 0.50000000000000011 or 2.0000000000000004 for some orders of
+    the same codon pairs, which chose another site formula (N and S a whole site or more apart). c1359_code13: the
+    property fuzz's pair (seed 4242; ambiguous base and gap codon, code 13), kappa 0.5 (N / S were 13.67 / 4.33 or
+    15 / 3 by the order); mlwl_order_code1: a random pair, code 1, kappa 2 (N / S were 79 / 26 or 83.5 / 21.5 by the
+    order; KaKs_Calculator prints 83.5 / 21.5 for the order of the file); mlwl_kappa2_code1: code 1, kappa 2, the
+    same in every order before too (13.67 / 4.33, as KaKs_Calculator prints it), now 13.29 / 4.71, the formula of
+    kappa = 2 exactly, as in every other case."""
+    AXT = ROOT / "tests" / "kaks" / "mlwl_kappa_boundary.axt"
+    EXPECT = {"c1359_code13": (13, ("13.6666666667", "4.33333333333")),
+              "mlwl_order_code1": (1, ("79", "26")),
+              "mlwl_kappa2_code1": (1, ("13.2857142857", "4.71428571429"))}
+
+    def test_every_order_of_the_codon_columns_gives_the_same_sites(self):
+        import random
+        recs = {}
+        for block in self.AXT.read_text(encoding="utf-8").split("\n\n"):
+            lines = block.split()
+            if lines:
+                recs[lines[0]] = lines[1], lines[2]
+        self.assertEqual(sorted(recs), sorted(self.EXPECT))
+        rng = random.Random(4242)
+        with tempfile.TemporaryDirectory() as tmp:
+            for name, (code, sites) in self.EXPECT.items():
+                with self.subTest(pair=name):
+                    a, b = recs[name]
+                    ca, cb = [a[i:i + 3] for i in range(0, len(a), 3)], [b[i:i + 3] for i in range(0, len(b), 3)]
+                    text = []
+                    for k in range(40):
+                        order = list(range(len(ca)))
+                        if k:
+                            rng.shuffle(order)
+                        text.append(f"o{k}\n{''.join(ca[i] for i in order)}\n{''.join(cb[i] for i in order)}\n")
+                    path = Path(tmp) / f"{name}.axt"
+                    path.write_text("\n".join(text), encoding="utf-8")
+                    r = subprocess.run([str(cpp_binary()), "dnds", str(path), "-c", str(code), "-m", "MLWL", "-q",
+                                        "--digits", "12"], capture_output=True, timeout=120)
+                    self.assertEqual(r.returncode, 0, r.stderr)
+                    rows = [ln.split("\t") for ln in r.stdout.decode().splitlines()[1:]]
+                    self.assertEqual(len(rows), 40)
+                    self.assertEqual({(x[8], x[9]) for x in rows}, {sites})
+                    self.assertEqual(len({(x[3], x[4]) for x in rows}), 1)   # dN, dS (12 digits)
 
 
 if __name__ == "__main__":
