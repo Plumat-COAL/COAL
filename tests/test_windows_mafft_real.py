@@ -17,6 +17,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import locale
 import os
 import shutil
 import subprocess
@@ -104,9 +105,12 @@ class TestRealMafftWindowsPackage(unittest.TestCase):
         process, with the platform taken to be x86-64 Windows and the version not read (nothing runs)."""
         if WINDOWS:
             r = subprocess.run([sys.executable, "-m", "coal", "pipeline", "install", "mafft"], capture_output=True,
-                               text=True, env=cls.env, timeout=900, stdin=subprocess.DEVNULL, encoding="utf-8",
-                               errors="backslashreplace", cwd=cls.cwd)
-            return r.returncode, r.stdout, r.stderr
+                               env=cls.env, timeout=900, stdin=subprocess.DEVNULL, cwd=cls.cwd)
+            # Python writes a pipe in the ANSI code page (cp1252 on the runner), not UTF-8: the path printed on
+            # standard output, with its non-ASCII letters, is read back in that encoding
+            enc = locale.getpreferredencoding(False)
+            return (r.returncode, r.stdout.decode(enc, "backslashreplace").replace("\r\n", "\n"),
+                    r.stderr.decode(enc, "backslashreplace").replace("\r\n", "\n"))
         out, err = io.StringIO(), io.StringIO()
         with mock.patch.dict(os.environ, {"COAL_CACHE_DIR": cls.cache}), \
                 mock.patch.object(msa, "_platform", return_value=("Windows", "AMD64")), \
