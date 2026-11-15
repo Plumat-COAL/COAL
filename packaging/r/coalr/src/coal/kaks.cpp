@@ -521,13 +521,20 @@ Result run_lwl(const Prepared& p, const GeneticCode& g, Method m, Result r) {
     } else {  // LPB, MLPB
         ks = (L[1] + L[2]) > 0 ? B[2] + (L[1] * A[1] + L[2] * A[2]) / (L[1] + L[2]) : NA;
         ka = (L[0] + L[1]) > 0 ? A[0] + (L[0] * B[0] + L[1] * B[1]) / (L[0] + L[1]) : NA;
-        r.S = (std::isfinite(ks) && ks > 0) ? Sd / ks : NA;  // KaKs_Calculator: S = Sd/Ks, N = Nd/Ka
-        r.N = (std::isfinite(ka) && ka > 0) ? Nd / ka : NA;
+        // KaKs_Calculator: S = Sd/Ks, N = Nd/Ka. Not from a saturated side (both quotients of zeros, below).
+        r.S = (!ks_sat && std::isfinite(ks) && ks > 0) ? Sd / ks : NA;
+        r.N = (!ka_sat && std::isfinite(ka) && ka > 0) ? Nd / ka : NA;
         const double lt = L[0] + L[1] + L[2];
         if (lt > 0 && !sat[0] && !sat[1] && !sat[2]) r.divergence = (L[0] * K[0] + L[1] * K[1] + L[2] * K[2]) / lt;
     }
-    r.Sd = Sd;
-    r.Nd = Nd;
+    // Sd and Nd are the corrected (estimated) substitutions L A + L K of the classes. In a saturated class A, B and
+    // K are the 0 that KaKs_Calculator substitutes for the undefined correction, so Sd (with Ks saturated) or Nd
+    // (with Ka saturated) would be a sum with zeros in it, and LPB / MLPB's S = Sd / Ks, N = Nd / Ka a quotient of
+    // them (42.5 "sites" for 11 codons): NA, as Ks / Ka are (docs/kaks.md, difference 19). The site counts of
+    // LWL and MLWL (from the fold classes and kappa) and the Fold-S/N-Substitutions (the raw differences) are not
+    // estimates and stay. KaKs_Calculator prints the numbers.
+    r.Sd = ks_sat ? NA : Sd;
+    r.Nd = ka_sat ? NA : Nd;
     if (ks_sat) {
         mark_saturated(r, "Ks");
         ks = NA;

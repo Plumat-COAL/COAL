@@ -24,6 +24,12 @@ First version. In-process bindings (Rcpp) to the C++ core of COAL 0.6:
 - `coal_dnds_clusters()`: the pairs of a cluster with `msa` rows or an `aligner` are computed in input order
   (the earlier gene of `cds` first), as `coal pipeline clusters` does since COAL's PR #71. Changes only Comeron
   with `comeron_twosubs = "libsequence"` (the default of `comeron_flavour = "gestimator"`).
+- LWL, MLWL, LPB and MLPB (COAL, vendored): `Sd` is `NA` when Ks is saturated and `Nd` when Ka is, and so are
+  LPB / MLPB's `S_sites` / `N_sites` (Sd / Ks, Nd / Ka) and `p_fisher`; they were numbers made from the zeros
+  that stand for the undefined correction (LPB: 42.5 sites for 11 codons). LWL / MLWL's site counts are unchanged.
+  `coal_info()$features` gains `"lwl_saturated_counts_na"`, and names for two earlier vendored changes that had
+  none: `"myn_kappa_inf_saturated"` (below) and `"mlwl_exact_kappa"` (MLWL's site formula on the exact kappa, so
+  the order of the codon columns does not change N and S).
 - Ka/Ks engine fixes of COAL (vendored; numbers in COAL's CHANGELOG): MYN with an infinite kappa is `saturated`
   (it was `no_data`); a multiple-hit correction at an exact boundary is `saturated`, not a rounding residue
   printed as an estimate; the special cases of LWL, LPB, MLWL and MLPB follow the genetic code; YN/MYN rows

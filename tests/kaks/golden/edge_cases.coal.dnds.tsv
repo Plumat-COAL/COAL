@@ -21,10 +21,10 @@ typical	NA	MLPB	0.083710147	0.0077078417	10.860387	NA	NA	277.6449	132	23.241695	
 typical	NA	YN	0.085291479	0.011569657	7.3719974	0.018467023	0.011592232	272.89863	87.10137	22	1	120	ok	
 typical	NA	MYN	0.087913603	0.010729	8.1940164	0.019056533	0.010837275	265.36009	94.639907	22	1	120	ok	
 saturated_unrelated	NA	NG	NA	NA	NA	NA	NA	269.01099	90.989011	206.25	68.75	120	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
-saturated_unrelated	NA	LWL	NA	NA	NA	NA	NA	274.5	85.5	0	0	120	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
-saturated_unrelated	NA	MLWL	NA	NA	NA	NA	NA	282.16299	77.83701	93.696829	57.204969	120	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
-saturated_unrelated	NA	LPB	NA	NA	NA	NA	NA	NA	NA	0	0	120	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
-saturated_unrelated	NA	MLPB	NA	NA	NA	NA	NA	298.5	133.5	93.696829	57.204969	120	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+saturated_unrelated	NA	LWL	NA	NA	NA	NA	NA	274.5	85.5	NA	NA	120	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+saturated_unrelated	NA	MLWL	NA	NA	NA	NA	NA	282.16299	77.83701	NA	NA	120	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+saturated_unrelated	NA	LPB	NA	NA	NA	NA	NA	NA	NA	NA	NA	120	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+saturated_unrelated	NA	MLPB	NA	NA	NA	NA	NA	NA	NA	NA	NA	120	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
 saturated_unrelated	NA	YN	NA	2.4067151	NA	NA	2.3648929	258.15033	101.84967	205.61308	69.386917	120	saturated	Ka saturated (multiple-hit correction undefined)
 saturated_unrelated	NA	MYN	NA	2.406702	NA	NA	2.3648353	258.15033	101.84967	205.61312	69.386879	120	saturated	Ka saturated (multiple-hit correction undefined)
 gaps	NA	NG	0.052673067	0.025289047	2.0828411	0.014744171	0.017959399	255.57355	80.426448	13	2	112	ok	
@@ -98,24 +98,24 @@ multi_hit_codons	NA	MLPB	0.025566014	0.13388294	0.19095796	NA	NA	367.5	163.5	9.3
 multi_hit_codons	NA	YN	0.029765915	0.18109984	0.1643619	0.0099998494	0.045266576	309.19404	113.80596	9	18	141	ok	
 multi_hit_codons	NA	MYN	0.030079489	0.18690044	0.16093856	0.0102184	0.049204468	309.19404	113.80596	9	18	141	ok	
 short_one_codon	NA	NG	0	NA	NA	0	NA	5.6470588	0.35294118	0	1	2	saturated	Ks saturated (multiple-hit correction undefined)
-short_one_codon	NA	LWL	NA	NA	NA	NA	NA	5.6666667	0.33333333	0	0	2	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
-short_one_codon	NA	MLWL	NA	NA	NA	NA	NA	5.8	0.2	0	0	2	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
-short_one_codon	NA	LPB	NA	NA	NA	NA	NA	NA	NA	0	0	2	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
-short_one_codon	NA	MLPB	NA	NA	NA	NA	NA	NA	NA	0	0	2	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+short_one_codon	NA	LWL	NA	NA	NA	NA	NA	5.6666667	0.33333333	NA	NA	2	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+short_one_codon	NA	MLWL	NA	NA	NA	NA	NA	5.8	0.2	NA	NA	2	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+short_one_codon	NA	LPB	NA	NA	NA	NA	NA	NA	NA	NA	NA	2	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+short_one_codon	NA	MLPB	NA	NA	NA	NA	NA	NA	NA	NA	NA	2	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
 short_one_codon	NA	YN	0	0.75573038	0	0	0.94401765	3.9	2.1	0	1	2	ok	
 short_one_codon	NA	MYN	0	0.75573038	0	0	0.94401765	3.9	2.1	0	1	2	ok	
 no_nonsyn_sites_one_codon	NA	NG	0	NA	NA	0	NA	2	1	0	1	1	saturated	Ks saturated (multiple-hit correction undefined)
-no_nonsyn_sites_one_codon	NA	LWL	0	NA	NA	NA	NA	2	1	0	0	1	saturated	Ks saturated (multiple-hit correction undefined)
-no_nonsyn_sites_one_codon	NA	MLWL	0	NA	NA	NA	NA	2	1	0	0	1	saturated	Ks saturated (multiple-hit correction undefined)
-no_nonsyn_sites_one_codon	NA	LPB	0	NA	NA	NA	NA	NA	NA	0	0	1	saturated	Ks saturated (multiple-hit correction undefined)
-no_nonsyn_sites_one_codon	NA	MLPB	0	NA	NA	NA	NA	NA	NA	0	0	1	saturated	Ks saturated (multiple-hit correction undefined)
+no_nonsyn_sites_one_codon	NA	LWL	0	NA	NA	NA	NA	2	1	0	NA	1	saturated	Ks saturated (multiple-hit correction undefined)
+no_nonsyn_sites_one_codon	NA	MLWL	0	NA	NA	NA	NA	2	1	0	NA	1	saturated	Ks saturated (multiple-hit correction undefined)
+no_nonsyn_sites_one_codon	NA	LPB	0	NA	NA	NA	NA	NA	NA	0	NA	1	saturated	Ks saturated (multiple-hit correction undefined)
+no_nonsyn_sites_one_codon	NA	MLPB	0	NA	NA	NA	NA	NA	NA	0	NA	1	saturated	Ks saturated (multiple-hit correction undefined)
 no_nonsyn_sites_one_codon	NA	YN	NA	0.47738563	NA	NA	0.61237244	0	3	0	1	1	no_data	no nonsynonymous sites
 no_nonsyn_sites_one_codon	NA	MYN	NA	0.47738563	NA	NA	0.61237244	0	3	0	1	1	no_data	no nonsynonymous sites
 no_nonsyn_sites	NA	NG	0	NA	NA	0	NA	525	75	0	200	200	saturated	Ks saturated (multiple-hit correction undefined)
-no_nonsyn_sites	NA	LWL	NA	NA	NA	NA	NA	533.33333	66.666667	0	0	200	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
-no_nonsyn_sites	NA	MLWL	NA	NA	NA	NA	NA	560	40	0	0	200	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
-no_nonsyn_sites	NA	LPB	NA	NA	NA	NA	NA	NA	NA	0	0	200	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
-no_nonsyn_sites	NA	MLPB	NA	NA	NA	NA	NA	NA	NA	0	0	200	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+no_nonsyn_sites	NA	LWL	NA	NA	NA	NA	NA	533.33333	66.666667	NA	NA	200	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+no_nonsyn_sites	NA	MLWL	NA	NA	NA	NA	NA	560	40	NA	NA	200	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+no_nonsyn_sites	NA	LPB	NA	NA	NA	NA	NA	NA	NA	NA	NA	200	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+no_nonsyn_sites	NA	MLPB	NA	NA	NA	NA	NA	NA	NA	NA	NA	200	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
 no_nonsyn_sites	NA	YN	NA	0.44084	NA	NA	0.034641016	0	600	0	200	200	no_data	no nonsynonymous sites
 no_nonsyn_sites	NA	MYN	NA	0.44084	NA	NA	0.034641016	0	600	0	200	200	no_data	no nonsynonymous sites
 no_syn_sites_single_step	NA	NG	0.71663358	0	NA	0.62264943	0	4.3333333	1.6666667	2	0	2	ok	
@@ -133,10 +133,10 @@ no_syn_sites_multi_step	NA	MLPB	0.34657359	NA	NA	NA	NA	12	NA	4.1588831	0	4	no_da
 no_syn_sites_multi_step	NA	YN	0.51334589	NA	NA	0.35721725	NA	12	0	4	0	4	no_data	no synonymous sites
 no_syn_sites_multi_step	NA	MYN	0.51334589	NA	NA	0.35721725	NA	12	0	4	0	4	no_data	no synonymous sites
 myn_tn93_zero_division	NA	NG	0	NA	NA	0	NA	11.162791	3.8372093	0	5	5	saturated	Ks saturated (multiple-hit correction undefined)
-myn_tn93_zero_division	NA	LWL	NA	NA	NA	NA	NA	11.333333	3.6666667	0	0	5	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
-myn_tn93_zero_division	NA	MLWL	NA	NA	NA	NA	NA	11	4	0	0	5	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
-myn_tn93_zero_division	NA	LPB	NA	NA	NA	NA	NA	NA	NA	0	0	5	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
-myn_tn93_zero_division	NA	MLPB	NA	NA	NA	NA	NA	NA	NA	0	0	5	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+myn_tn93_zero_division	NA	LWL	NA	NA	NA	NA	NA	11.333333	3.6666667	NA	NA	5	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+myn_tn93_zero_division	NA	MLWL	NA	NA	NA	NA	NA	11	4	NA	NA	5	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+myn_tn93_zero_division	NA	LPB	NA	NA	NA	NA	NA	NA	NA	NA	NA	5	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
+myn_tn93_zero_division	NA	MLPB	NA	NA	NA	NA	NA	NA	NA	NA	NA	5	saturated	Ks saturated (multiple-hit correction undefined); Ka saturated (multiple-hit correction undefined)
 myn_tn93_zero_division	NA	YN	0	1.5162877	0	0	1.2987173	7.3157203	7.6842797	0	5	5	ok	
 myn_tn93_zero_division	NA	MYN	0	1.5162877	0	0	1.2987173	7.3157203	7.6842797	0	5	5	ok	
 myn_nan_kappa	NA	NG	0.12761327	0.64174958	0.19885212	0.092416056	0.4418148	17.043478	6.9565217	2	3	8	ok	
