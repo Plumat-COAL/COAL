@@ -454,6 +454,12 @@ class TestMlwlLargeDsIsGenuine(unittest.TestCase):
                 lwl = tkp.lwl_sites(case)
                 fake = dict(m, dS="60", Sd=repr(30 * (lwl[1] / 3 + lwl[2])))
                 self.assertTrue(any(x.startswith("P10: dS") for x in tkp.check_row(case, "MLWL", fake, {})))
+                # MLWL's own dS at most 10 (or NA) does not exempt it: an LWL-scale value just above 10 is flagged
+                # (MLWL's sites can be 9/7 of LWL's for dS, 1.5 for dN; follow-up audit 2026-11-15)
+                for own in ("9.5", "NA"):
+                    fake = dict(m, dS=own, Sd=repr(10.5 * (lwl[1] / 3 + lwl[2])))
+                    self.assertTrue(any(x.startswith("P10: dS") and "LWL's sites = 10.5" in x
+                                        for x in tkp.check_row(case, "MLWL", fake, {})), own)
                 # LWL is judged on its own dS
                 self.assertTrue(any(x.startswith("P10: dS") for x in
                                     tkp.check_row(case, "LWL", dict(rows[("p", "LWL")], dS="15.6"), {})))
