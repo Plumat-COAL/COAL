@@ -12,7 +12,9 @@ have the code path:
   (KaKs_Calculator prints `inf`; COAL's output has no nan / inf), the rest of the row and the dnds table unchanged;
 - MLWL at kappa exactly 2 or 0.5 (2 ts / tv, ts and tv sums of thirds and halves of a difference): the site formula
   is chosen in exact arithmetic, so permuting the codon columns no longer moves a pair into the other formula
-  (property fuzz P6, seed 4242: FIXCI-B2; KaKs_Calculator has the same order dependence).
+  (property fuzz P6, seed 4242: FIXCI-B2; KaKs_Calculator has the same order dependence);
+- MLWL dS above 10 without a rounding residue (property fuzz P10, seed 4243: FIXCI-B3): a genuine value of the
+  method, 5 times LWL's correction at kappa = 1 when there is no 4-fold site; KNOWN M01 in test_kaks_properties.py.
 
 The Python halves run in-process; the C++ halves skip if coal-cpp is not built (COAL_CPP_BIN, default
 ./build/coal-cpp).
@@ -313,6 +315,43 @@ class TestMlwlKappaBoundary(unittest.TestCase):
                     self.assertEqual(len(rows), 40)
                     self.assertEqual({(x[8], x[9]) for x in rows}, {sites})
                     self.assertEqual(len({(x[3], x[4]) for x in rows}), 1)   # dN, dS (12 digits)
+
+
+
+@unittest.skipUnless(cpp_binary(), "coal-cpp not built (COAL_CPP_BIN)")
+class TestMlwlLargeDsIsGenuine(unittest.TestCase):
+    """FIXCI-B3 (seed 4243, c1370): 513 Gln codon pairs CAG / CAA (256 of them differ, all transitions at the third
+    position, 2-fold sites only) and a final TAG. 1 - 2P = 1 - 512/513 = 1/513 exactly: no rounding residue. LWL:
+    S = L2 / 3 = 171, dS = 3 A2 = 1.5 ln 513; MLWL (kappa = 1: no transversion): S = L2 / 5 = 102.6, dS = 5 A2 =
+    2.5 ln 513 = 15.6007, as KaKs_Calculator 2.0 prints. The same with code 1 and code 14."""
+
+    def test_values(self):
+        import math
+        a = ["CAG"] * 215 + ["CAG"] * 210 + ["CAA"] * 47 + ["CAA"] * 41 + ["TAG"]
+        b = ["CAA"] * 215 + ["CAG"] * 210 + ["CAA"] * 47 + ["CAG"] * 41 + ["TAG"]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "c1370.axt"
+            path.write_text(f"c1370\n{''.join(a)}\n{''.join(b)}\n", encoding="utf-8")
+            for code in (1, 14):
+                with self.subTest(code=code):
+                    r = subprocess.run([str(cpp_binary()), "dnds", str(path), "-c", str(code), "-m", "LWL", "-m",
+                                        "MLWL", "--digits", "17", "-q"], capture_output=True, timeout=120)
+                    self.assertEqual(r.returncode, 0, r.stderr)
+                    rows = {x.split("\t")[2]: x.split("\t") for x in r.stdout.decode().splitlines()[1:]}
+                    for m, k, s in (("LWL", 1.5, "171"), ("MLWL", 2.5, "102.59999999999999")):
+                        row = rows[m]
+                        self.assertEqual((row[3], row[9], row[13]), ("0", s, "ok"), m)
+                        self.assertAlmostEqual(float(row[4]) / (k * math.log(513)), 1, delta=1e-13)
+
+    def test_the_property_fuzz_excludes_it_and_nothing_larger(self):
+        import test_kaks_properties as tkp
+        case = tkp.Case("c1370", "CAG" * 514, "CAA" * 514, 14)
+        f = tkp.Finding("P10", case, "MLWL", "P10: dS = 15.600689612926853 with status ok: a rounding residue")
+        self.assertEqual(tkp.known(f), "M01")
+        for other in (tkp.Finding("P10", case, "MLWL", "P10: dS = 60.1 with status ok: a rounding residue"),
+                      tkp.Finding("P10", case, "LWL", "P10: dS = 15.6 with status ok: a rounding residue"),
+                      tkp.Finding("P10", case, "MLWL", "P10: dN = 15.6 with status ok: a rounding residue")):
+            self.assertEqual(tkp.known(other), "", other.detail)
 
 
 if __name__ == "__main__":

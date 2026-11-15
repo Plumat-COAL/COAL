@@ -771,6 +771,15 @@ KNOWN = {
     # K01, K02, K03 and K06 were fixed on 2026-11-14 (branch fix/kaks-accuracy; docs/kaks.md "Differences", 14 to
     # 17): their reproducers in TestKnownBugs pass, and the random tests check every row again. Add an entry here
     # (id -> predicate on a Finding) for a bug that is found and not yet fixed.
+    #
+    # M01 is not a bug but a limit of P10 (FIXCI-B3, seed 4243: c1370, 513 codons CAG / CAA, code 14 or any other):
+    # MLWL's dS is Sd / S with S = (kappa - 0.5) L2 / (kappa + 1.5) + L4, a fifth of the 2-fold sites at kappa = 1,
+    # so a genuine correction gives up to 5 times LWL's distance: there 1 - 2P = 1/513 exactly (no residue), A2 =
+    # ln(513) / 2, and dS = 5 A2 = 15.6007, as KaKs_Calculator prints (LWL: 3 A2 = 9.36). A genuine correction of n
+    # codons is at most about ln(3 n) (x >= 1 / (3 n)), so an MLWL dS up to 5 ln(3 n) is excluded here; a residue
+    # (x <= 1e-7 or so, A >= 8) stays a finding above that, and P10's sites < 1 exception covers kappa near 0.5.
+    "M01": lambda f: (f.prop == "P10" and f.method == "MLWL" and f.detail.startswith("P10: dS = ")
+                      and float(f.detail.split()[3]) <= 5 * math.log(max(3, len(f.case.s1)))),
 }
 
 
