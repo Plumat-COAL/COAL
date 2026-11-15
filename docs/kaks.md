@@ -2,10 +2,12 @@
 
 COAL estimates Ka (dN) and Ks (dS) for pairs of aligned coding sequences in process, with a C++ engine
 (`cpp/src/kaks.cpp`, `kaks_comeron.cpp`, `kaks_li.cpp`) derived from KaKs_Calculator 2.0, PAML's yn00,
-libsequence and seqinr (see "Where the code comes from" below). No external program runs. It has two commands:
+libsequence and seqinr (see "Where the code comes from" below), and with a maximum-likelihood method of its own
+(`kaks_gy.cpp`: `GY`, the codon model of Goldman & Yang 1994 as PAML's codeml fits it to a pair). No external
+program runs. It has two commands:
 
-- **`coal kaks`** does the job of `KaKs_Calculator -i IN.axt -o OUT.kaks -m METHOD` for seven of KaKs_Calculator's
-  methods (NG, LWL, MLWL, LPB, MLPB, YN, MYN). It takes KaKs_Calculator's `-i`, `-o`, `-m` and `-c` and writes its
+- **`coal kaks`** does the job of `KaKs_Calculator -i IN.axt -o OUT.kaks -m METHOD` for eight of KaKs_Calculator's
+  methods (NG, LWL, MLWL, LPB, MLPB, GY, YN, MYN). It takes KaKs_Calculator's `-i`, `-o`, `-m` and `-c` and writes its
   tab-separated format: the same 22 columns, the same NA rules and 6 significant digits. It is not a drop-in for
   every KaKs_Calculator command line: the other methods are refused, and without `-m` it computes YN, where
   KaKs_Calculator computes MA (model averaging). It also has two methods that KaKs_Calculator does not have,
@@ -21,6 +23,7 @@ coal dnds codon_aln.fasta -o dnds.tsv                    # every pair of an alig
 coal dnds pairs.fasta --pairs consecutive -m YN -m NG -j 8 -c 2
 coal dnds codon_aln.fasta -m Comeron -m Li               # Comeron (1995) and Li (1993), COAL's policy
 coal dnds codon_aln.fasta -m Comeron --comeron-flavour gestimator   # the numbers of orthologr's gestimator
+coal dnds codon_aln.fasta -m GY --ml-columns             # maximum likelihood (GY94), with kappa, t and lnL
 ```
 
 Both commands are subcommands of `coal-cpp`, and `coal` (Python) hands them to the `coal-cpp` of its own version
@@ -38,6 +41,7 @@ install has no Ka/Ks engine; `coal kaks` then says so and exits 1.
 | `LPB` | Li (1993); Pamilo & Bianchi (1993) | J Mol Evol 36:96-99; Mol Biol Evol 10:271-281 | NA |
 | `MLPB` | LPB with Tzeng et al.'s (2004) Ile/Arg rules | Mol Biol Evol 21:2290-2298 | NA |
 | `MYN` | Zhang, Li & Yu (2006): YN00 with separate transition rates for purines and pyrimidines (TN93) | BMC Evol Biol 6:44 | yes (TN93 variance; F84 fallback) |
+| `GY` (aliases `GY-HKY`, `GY94`) | Goldman & Yang (1994) by maximum likelihood: the branch length t, kappa and omega are estimated from the codon pairs with F3x4 codon frequencies, as PAML's codeml does for a pair (`runmode = -2`); dN and dS as Yang & Nielsen (2000) define them. Any genetic code. Slower than YN, and the method that stays accurate at high dS (see "GY: maximum likelihood") | Mol Biol Evol 11:725-736 | NA |
 | `Comeron` (alias `C95`) | Comeron (1995) as libsequence's `gestimator` computes it (the default method of the R package orthologr): non-degenerate, transitional and transversional 2-fold and 4-fold sites, Kimura's two-parameter correction per class, pathways weighted by Grantham's distance | J Mol Evol 41:1152-1159 | NA |
 | `Li` | Li (1993) as `seqinr::kaks()` computes it (orthologr's `"Li"`): 0-, 2- and 4-fold sites, pathways weighted by an amino-acid similarity table | J Mol Evol 36:96-99 | yes (seqinr's variance formulas) |
 
@@ -53,14 +57,14 @@ all three positions without that rescaling, and its dS differs: by up to about 0
 do not mix NG values of COAL / KaKs_Calculator with NG86 values of other programs.
 
 The other KaKs_Calculator methods are refused with exit status 2 and the message "COAL does not implement
-natively". These are `GY` (maximum likelihood), `MS` and `MA` (model selection and averaging), `NONE`, the gamma
+natively". These are `MS` and `MA` (model selection and averaging), `NONE`, the gamma
 variants `GNG GLWL GLPB GMLWL GMLPB GYN GMYN`, and `ALL`. KaKs_Calculator's default method is MA. COAL's default is
 YN, so `coal kaks` without `-m` gives YN rows.
 
 `Comeron` and `Li` are not KaKs_Calculator methods. Their names are orthologr's, they are read in any case
-(`-m comeron`), their rows come after KaKs_Calculator's seven, and they are implemented for the standard genetic
-code only, as their references are (`-c` other than 1 with them is refused with exit status 2). `Li` is not
-`LPB`: the two implement the same formulas of Li (1993) with different site and pathway counting, and give
+(`-m comeron`), their rows come after those of KaKs_Calculator's methods, and they are implemented for the
+standard genetic code only, as their references are (`-c` other than 1 with them is refused with exit status 2).
+`Li` is not `LPB`: the two implement the same formulas of Li (1993) with different site and pathway counting, and give
 different numbers (see "Comeron and Li").
 
 **Where the code comes from.** The engine is not an independent implementation: `cpp/src/kaks.cpp` is derived
@@ -94,6 +98,8 @@ COAL applies the same rules to every pair and every method. When a pair cannot b
 | Stop codon anywhere else (internal) in either sequence | that column is skipped; the note gives the number | `warning` |
 | YN or MYN: the iteration reaches its round limit (10 or 100) without converging (short or nearly saturated pairs; "Differences", 12) | no estimate: Ka, Ks, Ka/Ks, the standard errors and the weighted difference counts (Sd, Nd) are NA. The site counts stay. The note gives the last round's Ka and Ks, which are not estimates ("Platform reproducibility") | `not_converged` |
 | Multiple-hit correction undefined (log of a number that is not above 1e-10, so that an argument which is 0 in exact arithmetic counts as 0 whatever the rounding: "Differences", 14; for YN00/MYN, F84, K80 and JC69 all fail, or P + Q > 1) | that estimate is NA; the note says which (Ka, Ks). A YN or MYN row in which neither Ka nor Ks has an estimate has NA also in Sd and Nd when the pathways were weighted ("Differences", 17) | `saturated` |
+| GY: the estimate of dS (or dN) is above 10 substitutions per site; this includes every pair whose branch length ends at its upper bound, 50 substitutions per codon ("GY: maximum likelihood") | that estimate and Ka/Ks are NA; the other one is kept. The note gives the estimate that was left out | `saturated` |
+| GY: the optimiser does not converge (not seen in validation; a pair that does not settle because it is saturated is `saturated`) | no estimate: Ka, Ks and Ka/Ks are NA; the note has the last point | `not_converged` |
 | MYN: kappa_TC or kappa_AG estimated as infinite (the TN93 transition term of a class of sites exactly at its limit) | nothing is estimated: Ka, Ks and the site counts are NA, and so is `coal kaks`'s rate ratio (Substitution-Rate-Ratio); the note names the kappa ("Differences", 15) | `saturated` |
 | No codon column left | nothing is estimated | `no_data` |
 | No synonymous site (e.g. Met/Trp codons only), or no nonsynonymous site (e.g. `GCT` against `GCA`; 200 × `AAA` against `AAG`) | that estimate (Ks, or Ka) and Ka/Ks are NA; **the other one is still estimated**. The note says which sites are missing | `no_data` |
@@ -126,7 +132,13 @@ allows academic use only, and it has no public repository). Values follow KaKs_C
 - Substitution-Rate-Ratio is `kappa:kappa:1:1:1:1`. For MYN it is `kappa_TC:kappa_AG:1:1:1:1`, and for NG
   `1:1:1:1:1:1`. It is `NA` when a kappa is infinite (MYN, "Differences", 15): COAL's output has no `nan` or `inf`.
 - `GC` is computed over both rows as given, with gaps included in the length.
-- ML-Score, AICc, Akaike-Weight and Model are `NA`; they belong to the GY, MS and MA methods.
+- ML-Score, AICc and Model are filled for `GY` rows: the maximised log-likelihood, KaKs_Calculator's AICc
+  (-2 lnL + 2 K n / (n - K - 1) with K = 3 parameters and n codons; `NA` when n is 4 or less) and `HKY`, the name
+  KaKs_Calculator gives the model of its GY. For a GY row, Substitution-Rate-Ratio holds the estimated kappa,
+  Divergence-Time is t / 3 (as for every method: (S Ks + N Ka) / (S + N)), and S-Substitutions / N-Substitutions
+  are S Ks and N Ka scaled to the observed number of nucleotide differences, as KaKs_Calculator's GY prints them.
+  The Method column says `GY` (KaKs_Calculator writes `GY-HKY`). For the other methods these columns are `NA`, and
+  Akaike-Weight (model averaging, MA) always is.
 
 For `Comeron` and `Li` the same 22 columns are written with what the method defines: Ka, Ks, Ka/Ks, Length,
 Substitutions (nucleotide differences in the compared codons) and GC; for `Li` also `Fold-Sites(0:2:4)` (its
@@ -134,7 +146,7 @@ L0:L2:L4) and the two `Fold-*-Substitutions` columns (its transitional and trans
 class). The other columns are `NA` (there are no S / N counts, so no Fisher test), and the rate-ratio column is
 `1:1:1:1:1:1`, as for NG. The Method column says `Comeron` or `Li`.
 
-Rows come per pair in KaKs_Calculator's method order (NG, LWL, MLWL, LPB, MLPB, YN, MYN), then Comeron, then
+Rows come per pair in KaKs_Calculator's method order (NG, LWL, MLWL, LPB, MLPB, GY, YN, MYN), then Comeron, then
 Li. Pairs with status
 `error` are left out, as KaKs_Calculator leaves out pairs it cannot read, and the summary on stderr counts them.
 This format has no status column. A YN or MYN row whose iteration did not converge has `NA` in Ka, Ks, Ka/Ks,
@@ -152,7 +164,8 @@ of pairs the p-values need a correction for multiple testing. The counts are est
 (KaKs_Calculator's convention, kept; "Differences" below says how the tails are summed), so read it as
 KaKs_Calculator's statistic, comparable with its output, more than as an exact test. It is in the `coal kaks`
 format only; `coal dnds` does not print it. **Standard errors** are given by the methods that have a variance
-formula: `NG`, `YN`, `MYN` and `Li` (`SE_dN`, `SE_dS` in `coal dnds`; `NA` for LWL, MLWL, LPB, MLPB and Comeron).
+formula: `NG`, `YN`, `MYN` and `Li` (`SE_dN`, `SE_dS` in `coal dnds`; `NA` for LWL, MLWL, LPB, MLPB, Comeron and
+GY, whose standard errors would come from the curvature of the likelihood and are not computed yet).
 They are the standard errors **of dN and of dS, each on its own**. No method here gives a standard error or a
 confidence interval for dN/dS itself: the ratio of two estimates has no simple variance, and dividing the two
 SEs is not one. For an interval on the ratio use a likelihood method (PAML's codeml, HyPhy) on the codon
@@ -163,13 +176,14 @@ alignment, or bootstrap the codon columns.
 | Column | Meaning |
 |---|---|
 | `seq1`, `seq2` | the two IDs. For FASTA input, the record IDs. For AXT, the name line split at the first `&`; when there is no `&`, seq1 is the whole name line and seq2 is `NA` |
-| `method` | NG, LWL, MLWL, LPB, MLPB, YN, MYN, Comeron or Li |
+| `method` | NG, LWL, MLWL, LPB, MLPB, GY, YN, MYN, Comeron or Li |
 | `dN`, `dS`, `dNdS` | Ka, Ks, Ka/Ks. `NA` when not available; dNdS is `NA` when dS < 1e-6. Zeros print as 0 |
 | `SE_dN`, `SE_dS` | standard errors of dN and of dS (YN, MYN, NG, Li); `NA` elsewhere. There is none for the ratio (below) |
 | `N_sites`, `S_sites` | nonsynonymous and synonymous sites (`NA` for Comeron and Li, which count sites by degeneracy class, not as S and N) |
 | `Nd`, `Sd` | nonsynonymous and synonymous differences (`NA` for Comeron and Li) |
 | `codons_compared` | codon columns used after the policy |
 | `status`, `note` | see Policy: `ok`, `warning`, `not_converged`, `saturated`, `no_data`, `error` |
+| `kappa`, `t`, `lnL` | only with `--ml-columns`, after `note`: the transition / transversion rate ratio (GY: the estimate; YN: the kappa it used; MYN: kappa from TN93), and GY's branch length t (expected substitutions per codon) and maximised log-likelihood; `NA` where a method has none |
 
 **Input.** The format is detected from the first non-blank character (`>` means FASTA, anything else AXT), or set
 with `--format`.
@@ -239,6 +253,7 @@ aligner. A paper should cite the methods and programs its numbers come from, wit
 | Ka/Ks, method MLPB | Li 1993; Pamilo & Bianchi 1993; Tzeng, Pan & Li 2004; Wang et al. 2010 (KaKs_Calculator 2.0) |
 | Ka/Ks, method YN (the default) | Yang & Nielsen 2000; Wang et al. 2010 (KaKs_Calculator 2.0); Yang 2007 (PAML 4) |
 | Ka/Ks, method MYN | Zhang, Li & Yu 2006; Yang & Nielsen 2000; Wang et al. 2010 (KaKs_Calculator 2.0); Yang 2007 (PAML 4) |
+| Ka/Ks, method GY (maximum likelihood) | Goldman & Yang 1994; Yang & Nielsen 2000; Yang 2007 (PAML 4) |
 | Ka/Ks, method Comeron | Comeron 1995; Thornton 2003 (libsequence) |
 | Ka/Ks, method Li | Li 1993; Charif & Lobry 2007 (seqinr) |
 | `coal pipeline pairs` with DIAMOND (orthologs) | Buchfink et al. 2021 (DIAMOND) |
@@ -256,6 +271,7 @@ those of one pipeline run, whose report lists the keys as `cite`.
 - Li W-H (1993). Unbiased estimation of the rates of synonymous and nonsynonymous substitution. Journal of Molecular Evolution 36:96-99. <https://doi.org/10.1007/BF02407308>
 - Pamilo P, Bianchi NO (1993). Evolution of the Zfx and Zfy genes: rates and interdependence between the genes. Molecular Biology and Evolution 10:271-281. <https://doi.org/10.1093/oxfordjournals.molbev.a040003>
 - Tzeng Y-H, Pan R, Li W-H (2004). Comparison of three methods for estimating rates of synonymous and nonsynonymous nucleotide substitutions. Molecular Biology and Evolution 21:2290-2298. <https://doi.org/10.1093/molbev/msh242>
+- Goldman N, Yang Z (1994). A codon-based model of nucleotide substitution for protein-coding DNA sequences. Molecular Biology and Evolution 11:725-736. <https://doi.org/10.1093/oxfordjournals.molbev.a040153>
 - Yang Z, Nielsen R (2000). Estimating synonymous and nonsynonymous substitution rates under realistic evolutionary models. Molecular Biology and Evolution 17:32-43. <https://doi.org/10.1093/oxfordjournals.molbev.a026236>
 - Zhang Z, Li J, Yu J (2006). Computing Ka and Ks with a consideration of unequal transitional substitutions. BMC Evolutionary Biology 6:44. <https://doi.org/10.1186/1471-2148-6-44>
 - Comeron JM (1995). A method for estimating the numbers of synonymous and nonsynonymous substitutions per site. Journal of Molecular Evolution 41:1152-1159. <https://doi.org/10.1007/BF00173196>
@@ -352,7 +368,7 @@ coal::kaks::Prepared p = coal::kaks::prepare(row1, row2, *code);
 for (auto m : {coal::kaks::Method::YN, coal::kaks::Method::NG}) use(coal::kaks::compute(p, m, *code));
 
 coal::kaks::Method m; std::string why;
-if (!coal::kaks::parse_method("GY", m, why)) { /* why: "... does not implement natively ..." */ }
+if (!coal::kaks::parse_method("MA", m, why)) { /* why: "... does not implement natively ..." */ }
 ```
 
 `Options{yn_flavour, yn_weighting, comeron_flavour, li_flavour}` is the fourth argument (the defaults follow
@@ -365,6 +381,8 @@ function-local statics (thread-safe initialisation), so the statement about glob
 `substitutions` and `length`. It also has the policy counts (`gap_codons`, `ambiguous_codons`, `internal_stops`,
 `terminal_stop_dropped`) and, for YN/MYN, `iterations`, `converged` and, when the iteration did not converge
 (`ka` and `ks` are then NaN), `last_ka` and `last_ks`: the last round's values, for inspection only.
+`Method::GY` fills `lnl`, `t` and `omega` as well (NaN for the other methods), puts its estimate of kappa in
+`kappa`, and counts the optimiser's steps in `iterations`.
 
 ## Validation
 
@@ -971,8 +989,8 @@ standard errors are about 25 % too large.
 strong codon-usage bias, and 2 only as an outer bound; at least 100 codons and a dS of at least about 0.05 for a
 ratio. YN stays the default (NG is better only with even codon usage and kappa near 1); Comeron's
 `--comeron-min-sites 3` is supported (at 30 codons it cuts dN `NA` from 18 to 45 % to 1 to 2 % at dS 1 to 2 with
-the same median error and RMSE; 10 is supported as well). A GY94 maximum-likelihood method ("Not done") would
-remove the YN00 bias.
+the same median error and RMSE; 10 is supported as well). The maximum-likelihood method `GY` does not have the
+YN00 bias ("GY: maximum likelihood" below has its numbers on pairs simulated the same way).
 
 **`--yn-weighting 0`** (equal pathway weights, one round: PAML yn00's default) is less biased than the default
 weighting at omega below 1 and dS 1 to 1.5: kappa 1, 2 and 4, both codon usages, 1,000 codons, omega 0.2, dS 1:
@@ -988,6 +1006,149 @@ differ by more than 1e-5, the median dN/dS by 2 %).
 (`gen.py`, fixed seeds; about 500 MB), the runs (`run_coal.sh`) and the tables and figures (`analyze.py`,
 `perpair.py`, `make_tables.py`, `make_figs.py`); `run_coal.sh` lists the order. The comparisons with
 KaKs_Calculator, yn00, codeml and orthologr of the study are not part of it.
+
+## GY: maximum likelihood
+
+`-m GY` estimates dN and dS by maximum likelihood under the codon model of Goldman & Yang (1994), the estimate
+PAML's codeml gives for a pair of sequences (`runmode = -2`) and the model of KaKs_Calculator's `GY` (GY-HKY).
+The approximate methods above count differences and correct them for multiple hits; GY fits the substitution
+process itself, so it has no multiple-hit formula that fails and no YN00 approximation that drifts at high
+divergence. It is the method to use when dS is above about 0.5 (see "Validation of GY" below), and it is slower:
+about 15 to 25 times YN's time per pair.
+
+```
+coal dnds codon_aln.fasta -m GY --ml-columns -o dnds.tsv     # dN, dS, dN/dS, and kappa, t, lnL
+coal kaks -i pairs.axt -m GY -o pairs.kaks                   # KaKs_Calculator's format (ML-Score, AICc, Model)
+coal pipeline pairs --query a.fna --subject b.fna -m GY -o out
+```
+
+**Model.** Codon i changes to codon j, one nucleotide apart, at the rate pi_j, times kappa for a transition,
+times omega for a nonsynonymous change; changes of two or three nucleotides at once and changes to or from a
+stop codon of the genetic code have rate 0. The rate matrix is scaled to one expected substitution per codon,
+so the branch length t between the two sequences is in substitutions per codon. The codon frequencies pi are
+**F3x4**: the products of the base frequencies at the three codon positions, counted over both sequences in the
+compared codons, with the stop codons removed (the frequencies YN uses; codeml's `CodonFreq = 2`, the value of
+codeml's own control file). The log-likelihood is the sum over the compared codon columns of
+log(pi_i P_ij(t)), and t, kappa and omega are the values that maximise it.
+
+**What is reported.** dN and dS are those of Yang & Nielsen (2000), as codeml prints them: with rhoS and rhoN
+the synonymous and nonsynonymous proportions of the rate at the estimates, and rhoS1, rhoN1 the same at
+omega = 1, S = 3 L rhoS1 and N = 3 L rhoN1 are the sites (L codons), dS = t rhoS / (3 rhoS1) and
+dN = t rhoN / (3 rhoN1). So dN/dS is omega. `coal dnds` prints dN, dS, dN/dS, the sites S and N, and as `Sd` and
+`Nd` the expected differences S dS and N dN scaled to the observed number of nucleotide differences
+(KaKs_Calculator's convention for its GY); `--ml-columns` adds kappa, t and lnL. `coal kaks` puts lnL in
+ML-Score (see "Output"). There are no standard errors yet (`NA`).
+
+**How it is computed.** The code is COAL's own (`cpp/src/kaks_gy.cpp`); only the symmetric eigen solver is
+shared with YN. The rate matrix is symmetrised with pi and decomposed once per (kappa, omega); with the
+decomposition the likelihood and its derivatives in t are cheap, so t is maximised out by a safeguarded Newton
+iteration, and log kappa and log omega are found by a BFGS iteration with the exact gradient, inside the
+bounds. Nothing is random: the same pair gives the same numbers in every run and with any number of threads,
+and, because the likelihood depends only on the counts of unordered codon pairs, also when the two sequences
+are swapped or the codon columns reordered (the same bytes at 17 digits; `tests/test_kaks_properties.py`).
+The likelihood of a diverged pair can have two maxima, one at a moderate t and one on the "ridge" of saturation
+(t at its bound, omega small); which is higher depends on the pair, and codeml reports whichever its random
+start reaches. COAL starts a pair whose first maximum has t of 1 or more from three further points (one of them
+on the ridge) and reports the highest maximum. On 4,388 *S. cerevisiae* / *C. glabrata* pairs the starts
+disagreed for 22 pairs, all with t above 2.
+
+**Bounds.** t from 1e-6 to 50; kappa and omega from 1e-6 to 999 (codeml: t 1e-5 to 50, kappa 0.4 to 999, omega
+0.001 to 99; KaKs_Calculator: t up to 3, kappa 0.01 to 30, omega 0.001 to 50). An omega at 1e-6 says that the
+data support no nonsynonymous change (dN is then 1e-6 dS, where the counting methods print 0), and an omega at
+999 that they support no synonymous change (dS is dN / 999; read dN/dS = 999 as "not estimable", as `NA` is for
+the other methods when dS is 0).
+
+**Statuses.** The policy for gaps, ambiguity letters and stop codons is that of every method ("Policy").
+
+| Situation | What GY gives | Status |
+|---|---|---|
+| Identical sequences | dN = dS = 0, t = 0, lnL = the sum of log pi_i; dN/dS, kappa and the site counts are `NA` (they have no estimate without a difference) | `ok` |
+| The estimate of dS (or dN) is above 10 substitutions per site. Every pair whose t ends at its bound of 50 is such a pair (t / 3 is the mean of dS and dN over the sites) | that estimate and dN/dS are `NA`; the other estimate, the sites, kappa, t and lnL are kept. The note gives the estimate left out and says when t is at its bound | `saturated` |
+| No synonymous site, or no nonsynonymous site (under F3x4: e.g. Met and Trp codons only) | omega cancels in the scaled model, so t and kappa are estimated and the one distance that exists is given, as for YN | `no_data` |
+| The optimiser ends without a maximum, away from the bound of t | no estimate; the note has the last point. Not seen in the validation runs (11,000 pairs) | `not_converged` |
+
+10 substitutions per site is far beyond what a pairwise comparison can resolve (the likelihood is flat there, and
+an estimate of 15 or of 60 says the same thing: saturated); it is also the bound that the property tests put on
+every method (P10). A dS of 3 to 10 with status `ok` is a legitimate maximum-likelihood estimate with a wide
+error; `--max-ds` flags what you consider too high.
+
+### Differences from codeml and KaKs_Calculator
+
+1. **Deterministic and multi-start.** codeml draws its starting values at random (from the clock unless a seed
+   is set) and stops at the maximum it reaches; COAL's starts are fixed, and a diverged pair gets four. Where the
+   two differ, COAL's likelihood is the higher one (below).
+2. **Wider bounds** (above). A pair with omega below 0.001 or kappa below 0.4 has those estimates in COAL and
+   the bound in codeml, with a slightly higher likelihood in COAL.
+3. **Saturation is a status.** codeml prints dS = 59.9 for a pair with t at 50; COAL prints `NA` and
+   `saturated` for an estimate above 10.
+4. **Identical sequences** have dN = dS = 0 and no kappa or omega; codeml prints the values its optimiser
+   happened to stop at.
+5. **Gaps and ambiguity.** COAL skips a codon column with a gap, an ambiguous base or a stop codon in either
+   sequence and counts the F3x4 frequencies over the columns it compares; codeml's pairwise deletion
+   (`cleandata = 0`) does the same for gaps and ambiguity, and refuses a file with a stop codon.
+6. **Against KaKs_Calculator's GY**: the same model and definitions, but KaKs_Calculator bounds t at 3
+   substitutions per codon (so its dS cannot exceed about 4), starts t at the proportion of differences and
+   uses a random start for kappa and omega; its numbers were not reproduced (in the simulation study it took
+   more than 20 minutes per file of 1,000-codon pairs and was run on 3 of 8 files). COAL writes `GY` in the
+   Method column, KaKs_Calculator `GY-HKY` (accepted as a name by `-m`).
+7. **Not there:** standard errors (codeml's `getSE`), F1x4 / F61 / Fequal frequencies, a fixed kappa or omega.
+
+### Validation of GY
+
+`benchmarks/kaks/validate_gy.py` compares `coal dnds -m GY` with codeml (PAML 4.10.10, `runmode = -2`,
+`CodonFreq = 2`, one data set per pair) and with simulated truth (2026-11-15, a shared 2-core machine).
+
+| Data | Pairs | COAL lnL below codeml's by more than 1e-4 | COAL higher by more than 1e-4 | Same maximum, codeml inside its bounds | Largest relative difference there: dS / dN/dS / kappa / t |
+|---|---:|---:|---:|---:|---|
+| Simulated (dS 0.1 to 3, omega 0.2 and 1, kappa 2 and 4, even and GC3-skewed usage, 300 codons) | 320 | 0 | 8 | 299 | 1.0e-3 / 5.3e-5 / 5.7e-6 / 4.6e-5 |
+| *S. cerevisiae* / *C. glabrata* (median 417 codons) | 160 | 0 | 10 | 62 | 3.2e-4 / 6.1e-4 / 3.9e-5 / 3.0e-4 |
+| *Salmonella* / *Shigella* (median 297 codons) | 159 | 0 | 1 | 149 | 7.6e-4 / 2.7e-4 / 4.1e-5 / 1.3e-4 |
+
+codeml prints lnL with six decimals and the estimates with four or five, and the differences in the last
+column are of that size (the medians are 2e-5 for dS, 5e-5 for dN/dS, 2e-6 for kappa); the median difference in
+lnL is below 1e-6. COAL's likelihood is never the lower one. Where it is higher, codeml is at one of its bounds
+(the 8 simulated pairs: by 16 to 28 log units in the four where codeml ends with kappa at 0.4 and omega at 99,
+by less than 2 where its t is at 50; 66 of the yeast pairs have t = 50 in both programs, with the same
+likelihood to 1e-4 in 60 of them) or stopped at a lower maximum (3 yeast pairs, by up to 0.53; one
+*Salmonella* / *Shigella* pair, by 0.003). Which pairs these are changes from one codeml run to
+the next, since its starting values are random. The golden test `tests/test_kaks_gy.py` holds 20 of these
+pairs with codeml's output, three of them under the vertebrate mitochondrial code (`-c 2`, codeml `icode = 1`).
+
+**Against simulated truth** (the pairs of "Accuracy against simulated truth": GY94 with F3x4, truth in Yang &
+Nielsen's definition; 300 codons, omega 0.2 and 1, kappa 2 and 4, 100 pairs per cell, 800 per column and codon
+usage). Median relative error of dS / of dN/dS, and the share of pairs with status `ok`:
+
+| Method | usage | dS 0.1 | dS 0.5 | dS 1 | dS 1.5 | dS 2 | dS 2.5 | dS 3 |
+|---|---|---|---|---|---|---|---|---|
+| GY | even | -2% / +1% (100%) | +1% / +1% (100%) | +3% / +0% (100%) | +6% / -0% (100%) | +3% / -0% (94%) | -0% / +1% (83%) | +2% / +0% (75%) |
+| YN | even | -3% / +2% (100%) | +0% / +2% (100%) | +2% / -2% (100%) | -3% / +6% (95%) | -17% / +23% (89%) | -28% / +41% (80%) | -37% / +62% (69%) |
+| GY | skewed | +0% / +1% (100%) | +0% / +3% (100%) | +3% / -2% (100%) | +3% / +1% (99%) | +2% / +1% (100%) | +4% / -1% (93%) | +6% / -3% (88%) |
+| YN | skewed | -1% / +0% (100%) | +2% / -10% (100%) | +27% / -31% (97%) | +22% / -35% (81%) | +4% / -27% (53%) | -12% / -28% (29%) | -22% / -27% (19%) |
+
+GY's medians are within 6 % of the truth at every dS up to 3 with both codon usages, where YN is off by 20 to
+40 % from dS 1 to 2; this is the "within 8 %" that the simulation study measured for codeml. What rises with dS
+is the scatter, not the bias: at dS 3 and 300 codons, 18 % of the pairs are `saturated` (an estimate above
+10), against YN's 56 % without an estimate.
+
+**Speed** (CPU seconds per 1,000 pairs, `-j 1`, the same shared machine; codeml: wall time of one run with one
+data set per pair):
+
+| Data | GY | YN | codeml |
+|---|---:|---:|---:|
+| Simulated, 300 codons, dS 0.1 to 3 (1,600 pairs) | 31.6 | 1.9 | 81 |
+| *Salmonella* / *Shigella*, median 297 codons (159 pairs) | 24.8 | 1.8 | 93 |
+| *S. cerevisiae* / *C. glabrata*, median 417 codons, 97 of 160 saturated | 45.7 | 2.0 | 176 |
+
+A pair costs 6 to 10 optimiser steps per start, each with one or two 61 x 61 symmetric eigendecompositions for
+the likelihood and about as much work again for the gradient; a pair with t of 1 or more is started four times.
+GY takes 15 to 25 times YN's time and is about 3 times faster than codeml on the same pairs; with `-j` the pairs
+run in parallel as for every method.
+
+**Reproducibility.** The optimiser stops at a tolerance (a gradient of 1e-5 per unit of log kappa or log omega),
+so GY's numbers agree between platforms to about 1e-6 relative, not to the last bit as the counting methods do
+(another C library's `exp` moves the last digits). The tests compare GY with tolerances; within one build the
+output is the same bytes in every run. A pair at the edge of a status (an estimate of 9.99 or 10.01) can be
+`ok` on one platform and `saturated` on another.
 
 ## Comeron and Li
 
@@ -1307,7 +1468,8 @@ profile of 2026-10-29, about 0.5 %); alignment dominates.
 
 ## Not done (yet)
 
-- GY94 maximum likelihood, model selection and averaging (MS, MA), and the gamma variants.
+- Model selection and averaging (MS, MA) and the gamma variants. For GY: standard errors (from the curvature of
+  the likelihood, as codeml's `getSE`), codon frequencies other than F3x4 (F1x4, F61) and a fixed kappa or omega.
 - Comeron and Li for genetic codes other than the standard one (their references have no other; Comeron's
   tables could be built for any code, seqinr's site classes are written out for the standard code).
 - Comeron with `maxHits` 1 or 2 (libsequence's option to leave out codons that differ at several positions;

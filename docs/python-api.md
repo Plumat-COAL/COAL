@@ -250,7 +250,7 @@ more. The R package's `coal_pipeline_pairs()` / `coal_pipeline_clusters()` call 
 | `PipelineError` | `RuntimeError`: raised by `codon_dnds`, `install_diamond`; a failed `run_pairs` / `run_clusters` does **not** raise it (below) |
 | `codon_dnds(groups, out_tsv, method=("YN",), codontable=1, jobs=0, group_column=None, codon_out=None, kaks_out=None, failures=None, extra_args=(), cpp=None) -> int` | the engine step alone, for groups held in Python: protein alignment, codon alignment and Ka/Ks in one `coal-cpp codon-dnds` process; returns the number of groups sent |
 | `PAIR_COLUMNS`, `SUMMARY_COLUMNS`, `FAILED_COLUMNS` | tuples: the columns of `dnds.tsv`, `cluster_summary.tsv` and `failed.tsv`, in order |
-| `METHODS` | the Ka/Ks method names: `("NG", "LWL", "MLWL", "LPB", "MLPB", "YN", "MYN", "Comeron", "Li")` |
+| `METHODS` | the Ka/Ks method names: `("NG", "LWL", "MLWL", "LPB", "MLPB", "GY", "YN", "MYN", "Comeron", "Li")` |
 | `SCHEMA` | `"coal.pipeline/1"`, the `schema` of the report ([pipeline.schema.json](pipeline.schema.json)) |
 | `find_diamond() -> str \| None` | the DIAMOND the pipeline would use: `$COAL_DIAMOND`, `PATH`, COAL's cache |
 | `install_diamond(method="auto", version=DIAMOND_VERSION, force=False, quiet=False, timeout=1800, sha256=None, allow_unverified=False) -> str` | fetch DIAMOND into COAL's cache (checksum verified); returns its path; `PipelineError` when it cannot |
@@ -327,7 +327,7 @@ TypeError: unknown option 'metod' (the options are those of `coal pipeline pairs
 >>> P.run_pairs("a.fa", "b.fa", "out3", method=["XX"])
 Traceback (most recent call last):
   ...
-ValueError: method 'XX': choose from NG, LWL, MLWL, LPB, MLPB, YN, MYN, Comeron, Li
+ValueError: method 'XX': choose from NG, LWL, MLWL, LPB, MLPB, GY, YN, MYN, Comeron, Li
 ```
 
 ### What to cite, and the aligners

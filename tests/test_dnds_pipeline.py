@@ -443,7 +443,7 @@ class Units(unittest.TestCase):
 
     def test_command_line_errors(self):
         for argv in ([], ["pairs", "-o", "x"], ["clusters", "--cds", "a", "-o", "x", "--max-cluster-size", "0"],
-                     ["pairs", "--query", "a", "--subject", "b", "-o", "x", "-m", "GY"]):
+                     ["pairs", "--query", "a", "--subject", "b", "-o", "x", "-m", "MA"]):
             with self.assertRaises(SystemExit) as cm, redirect_stderr(io.StringIO()):
                 raise SystemExit(P.main(argv))
             self.assertEqual(cm.exception.code, 2, argv)
@@ -668,7 +668,7 @@ class CodonDnds(PipelineCase):
             self.assertEqual(r.returncode, 1, broken)
             self.assertIn(why, r.stderr)
         self.assertEqual(run_cpp("codon-dnds", stdin=b"").returncode, 2)                      # no -o
-        self.assertEqual(run_cpp("codon-dnds", "-o", self.tmp / "x", "-m", "GY", stdin=b"").returncode, 2)
+        self.assertEqual(run_cpp("codon-dnds", "-o", self.tmp / "x", "-m", "MA", stdin=b"").returncode, 2)
         self.assertEqual(run_cpp("codon-dnds", "-o", self.tmp / "x", "--gap-open", "1", "--gap-extend", "2",
                                  stdin=b"").returncode, 2)
 
@@ -776,7 +776,7 @@ class PairsGiven(PipelineCase):
         with self.assertRaises(TypeError):
             P.run_pairs(Q, S, self.tmp / "o", no_such_option=1)
         with self.assertRaises(ValueError):
-            P.run_pairs(Q, S, self.tmp / "o", method=["GY"])
+            P.run_pairs(Q, S, self.tmp / "o", method=["MA"])
 
     def test_command_line(self):
         r = subprocess.run([sys.executable, "-m", "coal", "pipeline", "pairs", "--query", str(Q), "--subject",

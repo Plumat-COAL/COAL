@@ -550,7 +550,7 @@ class TestDndsMcpTools(_PrivateRuns):
         res = structured or json.loads(text)
         self.assertTrue(res["all_estimated"])
         self.assertEqual(res["counts"]["total"], 12)
-        for bad in ({"codon_alignment_path": fa, "methods": ["GY"]},
+        for bad in ({"codon_alignment_path": fa, "methods": ["MA"]},
                     {"codon_alignment_path": fa, "methods": ["Li"], "codontable": 2},
                     {"codon_alignment_path": "/no/such.fasta"},
                     {"codon_alignment_path": fa, "pairs": "some"}):

@@ -296,7 +296,7 @@ def explain_report(
 
 # ---------------------------------------------------------------- Ka/Ks and the dN/dS pipeline (dnds.py)
 
-KaksMethod = Literal["YN", "NG", "LWL", "MLWL", "LPB", "MLPB", "MYN", "Comeron", "Li"]
+KaksMethod = Literal["YN", "NG", "LWL", "MLWL", "LPB", "MLPB", "MYN", "GY", "Comeron", "Li"]
 MAX_ROWS = 20       # result rows returned in full; the table file has them all
 MAX_FLAGGED = 10    # rows with a status other than ok, listed with their note
 
@@ -420,7 +420,8 @@ def dnds_pairs(
                     "compares records 1+2, 3+4, ... AXT files are read pair by pair.")] = "all",
     methods: Annotated[list[KaksMethod], Field(
         description="Ka/Ks methods, one result row per pair and method: YN (Yang & Nielsen 2000, the default), "
-                    "NG, LWL, MLWL, LPB, MLPB, MYN, Comeron, Li (Comeron and Li: genetic code 1 only).")]
+                    "NG, LWL, MLWL, LPB, MLPB, MYN, GY (maximum likelihood, slower), Comeron, Li (Comeron and "
+                    "Li: genetic code 1 only).")]
     = ["YN"],  # noqa: B006 - never mutated
     codontable: Annotated[GeneticCode, Field(
         description="NCBI genetic code: 1 standard, 2 vertebrate mitochondrial, 11 bacteria and plastids, ...")]
@@ -446,7 +447,7 @@ def dnds_pairs(
     Args:
         codon_alignment_path: Absolute path to an aligned codon FASTA or an AXT file (at most 100 MB).
         pairs: "all" (every pair of a FASTA) or "consecutive" (records 1+2, 3+4, ...). Ignored for AXT.
-        methods: Ka/Ks methods, default ["YN"]. Also NG, LWL, MLWL, LPB, MLPB, MYN, Comeron, Li.
+        methods: Ka/Ks methods, default ["YN"]. Also NG, LWL, MLWL, LPB, MLPB, MYN, GY, Comeron, Li.
         codontable: NCBI genetic code number (1 standard, 2 vertebrate mitochondrial, 11 bacteria/plastids, ...).
         min_codons: Flag estimates from fewer compared codons than this (status warning). 0: off.
         max_ds: Flag estimates with dS above this (status warning). 0: off.
@@ -577,7 +578,7 @@ def pipeline_pairs(
     subject_cds_path: Annotated[str, Field(
         description="Absolute path to the coding sequences of the second species. Up to 500 MB.")],
     methods: Annotated[list[KaksMethod], Field(
-        description="Ka/Ks methods: YN (default), NG, LWL, MLWL, LPB, MLPB, MYN, Comeron, Li.")]
+        description="Ka/Ks methods: YN (default), NG, LWL, MLWL, LPB, MLPB, MYN, GY, Comeron, Li.")]
     = ["YN"],  # noqa: B006 - never mutated
     codontable: Annotated[GeneticCode, Field(
         description="NCBI genetic code for translation, the codon alignment and Ka/Ks (1 standard, 11 bacteria).")]

@@ -28,6 +28,13 @@ AXT record with one sequence line (that record's error). The 999-pair orthologr 
 pairs. The engine is checked for data races by running `coal-cpp kaks -j 4` in a ThreadSanitizer build
 (`-DCMAKE_CXX_FLAGS="-fsanitize=thread -g -O1"`; not part of the nightly jobs yet).
 
+Method GY (maximum likelihood, docs/kaks.md "GY: maximum likelihood"): `tests/test_kaks_gy.py` compares it with PAML
+codeml's output stored in `tests/kaks/golden/gy_cases.codeml.tsv` (20 pairs, three under the mitochondrial code;
+`python tests/kaks/make_gy_fixtures.py` remakes them and needs codeml), recomputes the likelihood from the model's
+definition, and covers the edge cases, the statuses and the output formats, with tolerances (GY is an optimiser:
+its numbers agree between platforms to about 1e-6, not to the last bit). `tests/test_kaks_properties.py` runs GY
+with the other methods. `benchmarks/kaks/validate_gy.py` is the larger comparison with codeml and simulated truth.
+
 One-step pipeline (`coal pipeline`, docs/pipeline.md): `tests/test_dnds_pipeline.py` runs pair mode and cluster mode
 on synthetic fixtures (`tests/fixtures/pipeline/`, remade by `python tests/tools/make_pipeline_fixture.py`) and
 compares them with the same steps done one by one, with statistics recomputed in the test, and with the report's

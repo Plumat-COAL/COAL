@@ -30,7 +30,7 @@ from . import core
 
 # The Ka/Ks methods, in the engine's row order (coal.dnds_pipeline.METHODS; a test keeps them equal). YN is the
 # default, as in `coal dnds`.
-METHODS = ("NG", "LWL", "MLWL", "LPB", "MLPB", "YN", "MYN", "Comeron", "Li")
+METHODS = ("NG", "LWL", "MLWL", "LPB", "MLPB", "GY", "YN", "MYN", "Comeron", "Li")
 DEFAULT_METHODS = ("YN",)
 CODE1_ONLY = ("Comeron", "Li")   # implemented for the standard genetic code only (docs/kaks.md)
 METHOD_NAMES = {
@@ -41,6 +41,7 @@ METHOD_NAMES = {
     "LPB": "LPB: Li 1993; Pamilo & Bianchi 1993",
     "MLPB": "MLPB: modified LPB (Tzeng et al. 2004)",
     "MYN": "MYN: modified YN (Zhang et al. 2006)",
+    "GY": "GY: maximum likelihood (Goldman & Yang 1994; slower, for high dS)",
     "Comeron": "Comeron 1995 (orthologr's default)",
     "Li": "Li 1993 as seqinr::kaks",
 }
@@ -51,8 +52,8 @@ STATUS_TEXT = {
     "ok": "Estimated. Gaps, ambiguous bases and a stop codon at the very end were skipped, as usual.",
     "warning": "Estimated, but read the note: internal stop codons were skipped, or a filter you set (fewer than "
                "the minimum codons compared, dS above the maximum, low protein identity) flags the pair.",
-    "not_converged": "YN or MYN only: the iteration did not settle (short or nearly saturated pairs), so there is "
-                     "no estimate; dN and dS are NA. Try NG or LWL for this pair, or leave it out.",
+    "not_converged": "YN, MYN or GY only: the iteration did not settle (short or nearly saturated pairs), so "
+                     "there is no estimate; dN and dS are NA. Try NG or LWL for this pair, or leave it out.",
     "saturated": "Too many differences for the correction: dN or dS (see the note) is NA because the "
                  "multiple-hit correction is undefined. The sequences are too divergent for this method.",
     "no_data": "Nothing to compare: no codon column was left, or the pair has no synonymous (or no nonsynonymous) "

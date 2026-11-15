@@ -1510,6 +1510,10 @@ Result run_myn(const Prepared& p, const GeneticCode& g, const Options& opt, Resu
 
 }  // namespace
 
+namespace detail {
+void eigen_sym_rows(double* Z, int n, double* d, double* e) { eigen_sym(Z, n, d, e); }
+}  // namespace detail
+
 const char* pmat_isa(const Options& opt) {
 #if COAL_KAKS_AVX2
     if (!opt.baseline_isa && kaks_cpu_has_avx2()) return "avx2";
@@ -1530,14 +1534,15 @@ const char* method_name(Method m) {
         case Method::MYN: return "MYN";
         case Method::Comeron: return "Comeron";
         case Method::Li: return "Li";
+        case Method::GY: return "GY";
     }
     return "?";
 }
 
 const std::vector<Method>& output_order() {
-    // KaKs_Calculator's order, then the two methods it does not have
-    static const std::vector<Method> o = {Method::NG,  Method::LWL, Method::MLWL,    Method::LPB, Method::MLPB,
-                                          Method::YN,  Method::MYN, Method::Comeron, Method::Li};
+    // KaKs_Calculator's order (its GY comes after MLPB), then the two methods it does not have
+    static const std::vector<Method> o = {Method::NG, Method::LWL, Method::MLWL, Method::LPB,     Method::MLPB,
+                                          Method::GY, Method::YN,  Method::MYN,  Method::Comeron, Method::Li};
     return o;
 }
 
@@ -1556,15 +1561,19 @@ bool parse_method(const std::string& name, Method& out, std::string& why) {
         out = Method::Comeron;
         return true;
     }
-    static const char* const known[] = {"GY",   "MS",    "MA",    "NONE", "GNG", "GLWL",
-                                        "GLPB", "GMLWL", "GMLPB", "GYN",  "GMYN", "ALL"};
+    if (u == "GY-HKY" || u == "GY94") {   // KaKs_Calculator's name of its GY rows; the model's usual name
+        out = Method::GY;
+        return true;
+    }
+    static const char* const known[] = {"MS",   "MA",    "NONE",  "GNG", "GLWL",
+                                        "GLPB", "GMLWL", "GMLPB", "GYN", "GMYN", "ALL"};
     for (const char* k : known)
         if (u == k) {
             why = "method " + u + " is a KaKs_Calculator method that COAL does not implement natively "
-                  "(available: NG, LWL, MLWL, LPB, MLPB, YN, MYN, Comeron, Li)";
+                  "(available: NG, LWL, MLWL, LPB, MLPB, GY, YN, MYN, Comeron, Li)";
             return false;
         }
-    why = "unknown method '" + name + "' (available: NG, LWL, MLWL, LPB, MLPB, YN, MYN, Comeron, Li)";
+    why = "unknown method '" + name + "' (available: NG, LWL, MLWL, LPB, MLPB, GY, YN, MYN, Comeron, Li)";
     return false;
 }
 
@@ -1766,6 +1775,7 @@ Result compute(const Prepared& p, Method m, const GeneticCode& code, const Optio
         case Method::MLPB: r = run_lwl(p, code, m, r); break;
         case Method::YN: r = run_yn(p, code, opt, r); break;
         case Method::MYN: r = run_myn(p, code, opt, r); break;
+        case Method::GY: r = detail::run_gy(p, code, opt, r); break;
         case Method::Comeron:
         case Method::Li: break;  // handled above
     }

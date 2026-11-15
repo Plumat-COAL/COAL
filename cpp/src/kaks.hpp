@@ -37,12 +37,16 @@ namespace kaks {
 // have, under the names the R package orthologr uses for them: Comeron (Comeron 1995, as libsequence's gestimator
 // computes it; alias C95) and Li (Li 1993, as seqinr::kaks computes it). Both are for the standard genetic code
 // only (as their references): with another code the result has status `error`.
-enum class Method { NG, LWL, MLWL, LPB, MLPB, YN, MYN, Comeron, Li };
+// GY: maximum likelihood under the codon model of Goldman & Yang (1994), as PAML's codeml estimates it for a pair
+// (runmode = -2, F3x4) and as KaKs_Calculator's GY (its row name: GY-HKY, accepted as an alias); any genetic code.
+// kaks_gy.cpp; docs/kaks.md "GY: maximum likelihood".
+// (The enumerators are in output order: output_order().)
+enum class Method { NG, LWL, MLWL, LPB, MLPB, GY, YN, MYN, Comeron, Li };
 
 // The KaKs_Calculator name ("NG", "YN", ...), or "Comeron" / "Li".
 const char* method_name(Method m);
 // Case-insensitive name -> Method ("C95" is Comeron). False for a name that is not a method, or one this engine
-// does not implement natively (GY, MS, MA, NONE, the gamma variants G*); `why` then says which.
+// does not implement natively (MS, MA, NONE, the gamma variants G*); `why` then says which.
 bool parse_method(const std::string& name, Method& out, std::string& why);
 // The order KaKs_Calculator writes its methods in for each pair (whatever the order of -m on its command line).
 const std::vector<Method>& output_order();
@@ -115,6 +119,10 @@ struct Options {
 
 constexpr double NA = std::numeric_limits<double>::quiet_NaN();
 
+// GY: an estimate of dN or dS above this many substitutions per site is NA with status `saturated` (as is every
+// estimate of a pair whose branch length ends at its upper bound, t = 50 substitutions per codon).
+constexpr double GY_MAX_DISTANCE = 10.0;
+
 struct Result {
     Method method = Method::YN;
     Status status = Status::ok;
@@ -145,6 +153,11 @@ struct Result {
     bool converged = true;                // YN00 / MYN: the iteration met its tolerance
     double last_ka = NA, last_ks = NA;    // not converged: Ka and Ks of the last round (NaN: saturated there or
                                           // no such sites). Not estimates, and not the same on every platform
+    // GY only (NaN for every other method): the maximised log-likelihood, the branch length t (expected
+    // substitutions per codon) and the estimate of omega (NaN when it has none: identical sequences, one kind
+    // of site only, a saturated pair; 1e-6 or 999 when it is at a bound). ka_ks is ka / ks as for every method,
+    // which is omega. kappa is in `kappa`; iterations counts the optimiser's steps.
+    double lnl = NA, t = NA, omega = NA;
 };
 
 // A pair after the policy (docs/kaks.md "Policy"): the codon columns to compare, as codon indices 0..63
@@ -177,6 +190,10 @@ Result compute(const std::string& row1, const std::string& row2, Method m, const
 namespace detail {
 Result run_comeron(const Prepared& p, const GeneticCode& code, const Options& opt, Result r);
 Result run_li(const Prepared& p, const GeneticCode& code, const Options& opt, Result r);
+Result run_gy(const Prepared& p, const GeneticCode& code, const Options& opt, Result r);
+// kaks.cpp's symmetric eigen solver (the baseline copy of the one YN / MYN use), for kaks_gy.cpp. Z: the symmetric
+// n x n matrix, replaced by the eigenvectors, one per row; d: eigenvalues; e: scratch of n values.
+void eigen_sym_rows(double* Z, int n, double* d, double* e);
 }  // namespace detail
 
 }  // namespace kaks

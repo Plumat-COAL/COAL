@@ -11,14 +11,16 @@ HELP = {
         '                 [--comeron-min-sites N] [--li-flavour coal|seqinr]\n'
         '\n'
         "Ka/Ks for pairs of aligned coding sequences, written in KaKs_Calculator 2.0's tab-separated format.\n"
-        "Takes KaKs_Calculator's -i -o -m -c for the seven KaKs_Calculator methods below (the default is YN;\n"
+        "Takes KaKs_Calculator's -i -o -m -c for the eight KaKs_Calculator methods below (the default is YN;\n"
         "KaKs_Calculator's is MA), and has Comeron (1995) and Li (1993) as the R package orthologr computes them.\n"
         'The engine is derived from KaKs_Calculator 2.0, PAML yn00, libsequence and seqinr (GPL); see docs/kaks.md.\n'
         '\n'
         '  -i IN          AXT (name line, two aligned sequences, blank line) or aligned FASTA\n'
         "  -o OUT         output file ('-' or none: standard output)\n"
-        "  -m METHOD      NG, LWL, MLWL, LPB, MLPB, YN (default), MYN; repeat for several. KaKs_Calculator's\n"
-        '                 GY, MS, MA, NONE and gamma (G*) methods are not implemented natively and are refused.\n'
+        "  -m METHOD      NG, LWL, MLWL, LPB, MLPB, GY, YN (default), MYN; repeat for several. KaKs_Calculator's\n"
+        '                 MS, MA, NONE and gamma (G*) methods are not implemented natively and are refused.\n'
+        '                 GY: maximum likelihood (Goldman & Yang 1994, F3x4; t, kappa and omega estimated as\n'
+        '                 PAML codeml does for a pair); its rows have ML-Score (lnL), AICc and Model (HKY)\n'
         "                 Comeron (alias C95): Comeron 1995 as libsequence's gestimator; Li: Li 1993 as\n"
         "                 seqinr::kaks (both: standard genetic code only; rows come after KaKs_Calculator's)\n"
         "  -c TABLE       NCBI genetic code (default 1), the tables COAL's --codontable accepts\n"
@@ -44,16 +46,19 @@ HELP = {
         '                 [--format auto|axt|fasta] [--digits N] [--yn-flavour kaks|paml] [--yn-weighting 0|1]\n'
         '                 [--comeron-flavour coal|gestimator] [--comeron-twosubs comeron|libsequence]\n'
         '                 [--comeron-min-sites N] [--li-flavour coal|seqinr] [--min-codons N] [--max-ds X]\n'
+        '                 [--ml-columns]\n'
         '\n'
         'dN/dS for pairs of aligned coding sequences as a tidy TSV, one row per pair and method:\n'
         'seq1 seq2 method dN dS dNdS SE_dN SE_dS N_sites S_sites Nd Sd codons_compared status note\n'
-        'status: ok, warning (internal stop codons skipped), not_converged (YN/MYN iteration: no estimate,\n'
-        'dN and dS NA), saturated (dN or dS NA), no_data, error.\n'
+        'status: ok, warning (internal stop codons skipped), not_converged (YN/MYN iteration or GY\n'
+        'optimisation: no estimate, dN and dS NA), saturated (dN or dS NA), no_data, error.\n'
         '\n'
         '  IN             aligned FASTA or AXT file (or -i IN)\n'
         '  -o OUT         output file (default: standard output)\n'
-        '  -m METHOD      YN (default), NG, LWL, MLWL, LPB, MLPB, MYN, Comeron (alias C95), Li; repeat for\n'
-        '                 several (Comeron and Li: standard genetic code only; SE for YN, MYN, NG and Li)\n'
+        '  -m METHOD      YN (default), NG, LWL, MLWL, LPB, MLPB, MYN, GY, Comeron (alias C95), Li; repeat for\n'
+        '                 several (Comeron and Li: standard genetic code only; SE for YN, MYN, NG and Li).\n'
+        '                 GY: maximum likelihood under the codon model of Goldman & Yang (1994) with F3x4\n'
+        "                 codon frequencies, as PAML codeml's pairwise estimate (slower; accurate at high dS)\n"
         '  -c, --codontable TABLE  NCBI genetic code (default 1)\n'
         '  -j, --jobs N   threads (default: all hardware threads)\n'
         '  --pairs P      FASTA input: all (every pair, default) or consecutive (records 1+2, 3+4, ...)\n'
@@ -75,6 +80,8 @@ HELP = {
         '                 "fewer than N codons compared" (default 0: off). No row is dropped, no number changes\n'
         '  --max-ds X     flag estimates with dS above X (saturation): status warning and the note "dS above X"\n'
         '                 (default: off). See docs/kaks.md, "Filtering before interpretation"\n'
+        '  --ml-columns   three more columns after note: kappa, t (substitutions per codon) and lnL, the\n'
+        '                 quantities GY estimates (kappa also for YN and MYN; NA where a method has none)\n'
         '  -q, --quiet    no summary on stderr\n'
         '\n'
         'Exit status: 0 done; 1 the input cannot be read or the output cannot be written; 2 command-line error,\n'
@@ -126,8 +133,8 @@ HELP = {
         '  -o FILE          the pair table: [NAME] seq1 seq2 method dN dS dNdS SE_dN SE_dS N_sites S_sites Nd Sd\n'
         '                   codons_compared prot_aln_length prot_identity status note\n'
         '  --group-column NAME  write the group id as a first column called NAME\n'
-        '  -m METHOD        YN (default), NG, LWL, MLWL, LPB, MLPB, MYN, Comeron (alias C95), Li; repeat for\n'
-        '                   several (Comeron and Li: genetic code 1 only)\n'
+        '  -m METHOD        YN (default), NG, LWL, MLWL, LPB, MLPB, MYN, GY, Comeron (alias C95), Li; repeat for\n'
+        '                   several (Comeron and Li: genetic code 1 only; GY: maximum likelihood, slower)\n'
         '  --tie-break T    which of several protein alignments with the best score: leftmost (gaps as far left\n'
         '                   as possible; the default) or pwalign (the one pwalign::pairwiseAlignment returns)\n'
         '  --comeron-flavour F, --li-flavour F  as in `coal dnds` (coal, the default; gestimator; seqinr)\n'

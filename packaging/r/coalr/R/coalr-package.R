@@ -81,8 +81,9 @@
 #'   exact kappa, so the order of the codon columns does not matter; `"lwl_saturated_counts_na"`: in LWL, MLWL, LPB
 #'   and MLPB, `Sd` is `NA` when Ks is saturated and `Nd` when Ka is (and with them LPB / MLPB's `S_sites` /
 #'   `N_sites` and `p_fisher`), instead of numbers made from the zeros of the undefined correction (COAL's
-#'   docs/kaks.md, differences 15, 18 and 19). Names are only ever added; a coalr without `features` (`NULL`)
-#'   predates them all.
+#'   docs/kaks.md, differences 15, 18 and 19); `"gy94_ml"`: the method `"GY"` (maximum likelihood under Goldman &
+#'   Yang 1994, as PAML codeml's pairwise estimate) exists. Names are only ever added; a coalr without `features`
+#'   (`NULL`) predates them all.
 #' @examples
 #' coal_info()$methods
 #' "comeron_min_sites_positive" %in% coal_info()$features
