@@ -25,6 +25,32 @@ entry under "Added", not under "Fixed".
 
 ### Added
 
+- **MAFFT on native Windows: `coal pipeline install mafft` installs it** (x86-64; also `--install-tools` and
+  `coal.msa.install_mafft()`). It downloads MAFFT's own Windows package, the "all-in-one"
+  `mafft-7.526-win64-signed.zip` from mafft.cbrc.jp (MAFFT 7.526, the version COAL pins elsewhere), pinned by size
+  (27,476,513 bytes) and SHA-256 (`7c3a508c8512af04007d68019c6fbd4ff00d891244b58f87ec9aa0e53fbae8a7`; MAFFT
+  publishes no checksum: computed on 2026-11-15 from two identical downloads), both checked before anything is
+  unpacked. Every member name is checked first (one folder `mafft-win/`; no absolute, drive, `..`, backslash or
+  link member; the DIAMOND zip's rules for each part of a name; no two names that differ only in case); the tree
+  goes into a new folder that replaces the old install, and its manifest records the hash of every file and the
+  package (it is unpacked from the same open file whose size and hash were checked). `find_mafft()` then gives
+  `<cache>\tools\mafft\mafft-win\mafft.bat`, but a run does not start that batch file: `mafft.bat` expands its
+  folder, the current folder, `TMP` and `PATH` again unquoted inside `cmd.exe`, where `&` or `^` in a path would
+  run as a command (independent audit of this change). COAL starts the package's `bash.exe` with
+  `/usr/bin/mafft` directly, with what the batch file sets (`PATH`, `MAFFT_BINARIES`, a temporary folder of the
+  run's own as `TMPDIR` / `TMP` / `TEMP` and as the current folder, the input given by its name there; a run
+  folder or install on a network (UNC) path is refused, as MSYS2 misreads such paths), with no standard input,
+  and ends its whole
+  process tree (`taskkill /T`) on a timeout or interrupt. A `.bat` of your own in `COAL_MAFFT` still runs
+  through `cmd.exe`, with a command line COAL builds (`coal.msa.batch_command_line`: the program's full path and
+  any argument that is not plain in quotes; `%`, `!`, `"` and a trailing backslash refused), and is refused while
+  its folder, the current folder or `TMP` / `TEMP` has one of `& | < > ^ % ! "` in its path. An interrupted
+  install's leftovers are removed by the next one, and a failed swap puts the old install back. MAFFT is BSD; the package bundles MSYS2 components and
+  MAFFT's page gives GPL for the package; COAL does not redistribute it. CI's Windows C++ job downloads it
+  (`tests/test_windows_mafft_real.py`, `COAL_TEST_REAL_MAFFT=1`) with the cache folder, the current folder and
+  `TMP` / `TEMP` in paths with spaces, `&`, `^` and `( )`, and runs `coal pipeline clusters --aligner mafft`
+  on `examples/dnds`. Clustal Omega on Windows is unchanged (no automatic install; the message's MAFFT option now
+  names this install); MAFFT on Windows machines that are not x86-64 gets the message of what works there.
 - **Ka/Ks (dN/dS) engine: `coal kaks` and `coal dnds`.** In-process C++ (no external program runs), **derived
   from the source code of KaKs_Calculator 2.0 and of PAML's yn00** (both GPL version 3; attribution in
   `cpp/src/kaks.cpp`, `NOTICE` and docs/kaks.md; this is why COAL is GPL-3.0-only from this release). Methods:

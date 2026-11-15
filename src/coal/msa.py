@@ -9,11 +9,13 @@ Neither tool is bundled with COAL (docs/alignment.md "Licences": COAL is GPL-3.0
 GPL-2.0-or-later, so bundling would be licence-compatible, but it is not done).
 install_clustalo() puts one into COAL's cache folder (cache_dir()), like orthologr's diamond_install(): through
 conda / mamba / micromamba from Bioconda (micromamba itself is one pinned release fetched from GitHub and kept only
-if its SHA-256 is the pinned one, if no conda is installed). That is the only route, on Linux and macOS: the
-pre-compiled binaries that the Clustal site used to serve are gone (CLUSTAL_ORG_GONE), and the conda channels have no
-Windows packages, so there is no automatic install on Windows (NO_WINDOWS_CLUSTALO and NO_WINDOWS_MAFFT name what
-works there: WSL, MSYS2's Clustal Omega, MAFFT's own Windows package). No downloaded file is run before its SHA-256
-was checked.
+if its SHA-256 is the pinned one, if no conda is installed). That is the only route for Clustal Omega, on Linux and
+macOS: the pre-compiled binaries that the Clustal site used to serve are gone (CLUSTAL_ORG_GONE), and the conda
+channels have no Windows packages, so there is no automatic Clustal Omega install on Windows (NO_WINDOWS_CLUSTALO
+names what works there: WSL, MSYS2's Clustal Omega, MAFFT). install_mafft() does the same on Linux and macOS
+(conda-forge); on x86-64 Windows it installs MAFFT's own Windows package, one zip pinned by size and SHA-256
+(MAFFT_WINDOWS), and find_mafft() then gives its mafft.bat; run_msa starts that package's bash.exe directly, not
+the batch file (mafft_package_root; "MAFFT's Windows package, and batch files" below). No downloaded file is unpacked or run before its SHA-256 was checked.
 
 Stop codons: '*' at the end of a sequence is removed before aligning and given back as a last column of its own
 ('*' in the rows that had one, '-' in the others); an internal '*' is aligned as X and put back afterwards. (Clustal
@@ -39,6 +41,8 @@ import tempfile
 import threading
 import time
 import urllib.request
+import zipfile
+import zlib
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Iterable, Mapping, Sequence
@@ -48,7 +52,7 @@ from . import __version__
 __all__ = ["cache_dir", "find_clustalo", "find_mafft", "install_clustalo", "install_mafft", "tool_version", "pin_note",
            "package_pin", "installed_package",
            "run_msa", "align_clusters", "MsaResult", "MsaError", "CLUSTALO_VERSION", "MAFFT_VERSION",
-           "MICROMAMBA_VERSION",
+           "MICROMAMBA_VERSION", "MAFFT_WINDOWS", "is_batch_file", "batch_command_line",
            "CLUSTAL_ORG_GONE", "NO_WINDOWS_CLUSTALO", "NO_WINDOWS_MAFFT"]
 
 CLUSTALO_VERSION = "1.2.4"
@@ -129,10 +133,8 @@ CLUSTAL_ORG_GONE = ("the pre-compiled Clustal Omega binaries are gone: the site 
                     "'micromamba'; Linux and macOS)")
 # Windows (checked 2026-11-14): neither Bioconda nor conda-forge has a win-64 package of clustalo or mafft (their
 # win-64 repodata), so the conda route does not exist there. Clustal Omega 1.2.4 is packaged for Windows by MSYS2
-# (mingw-w64-ucrt-x86_64-clustal-omega 1.2.4-4; pacman checks its signature), and MAFFT publishes its own Windows
-# package (the "all-in-one" zip of each version; 7.526 is mafft-7.526-win64-signed.zip). COAL downloads neither:
-# a download is added only with a SHA-256 computed from the file itself (MAFFT publishes no checksum), and neither
-# file could be fetched from where COAL is developed. The messages below name them as installs of your own.
+# (mingw-w64-ucrt-x86_64-clustal-omega 1.2.4-4; pacman checks its signature); COAL does not download it. MAFFT
+# publishes its own Windows package, the "all-in-one" zip of each version, and COAL installs that one (below).
 NO_WINDOWS_CLUSTALO = (
     "there is no automatic Clustal Omega install on Windows: Bioconda and conda-forge have no Windows package, and "
     "the Clustal authors' site no longer serves its pre-compiled Windows build. What works: "
@@ -140,16 +142,48 @@ NO_WINDOWS_CLUSTALO = (
     "with MSYS2 (https://www.msys2.org), which packages Clustal Omega 1.2.4: in an MSYS2 shell `pacman -S "
     "mingw-w64-ucrt-x86_64-clustal-omega`, then set COAL_CLUSTALO to C:\\msys64\\ucrt64\\bin\\clustalo.exe (or "
     "put that folder on PATH); or put another clustalo.exe you trust on PATH or in COAL_CLUSTALO; (3) use MAFFT "
-    "instead (`--aligner mafft`) with MAFFT's own Windows package (set COAL_MAFFT to its mafft.bat). COAL does "
-    "not download or check these Windows builds, and they are not tested with COAL")
+    "instead (`--aligner mafft`): `coal pipeline install mafft` installs MAFFT's own Windows package (x86-64; "
+    "pinned, SHA-256 checked), or set COAL_MAFFT to a mafft.bat of your own. COAL does not download or check "
+    "those Clustal Omega builds, and they are not tested with COAL")
+
+
+# MAFFT's own Windows package (x86-64): the "all-in-one" zip of MAFFT_VERSION from MAFFT's page
+# https://mafft.cbrc.jp/alignment/software/windows_without_cygwin.html. MAFFT publishes no checksum for it: the size
+# and SHA-256 below were computed on 2026-11-15 from the file as served at `url` (two identical downloads, in a
+# browser; Last-Modified Mon, 13 May 2024 07:53:11 GMT). The zip holds 114 entries under one folder, mafft-win/:
+# the entry point mafft-win/mafft.bat, the mafft script (mafft-win/usr/bin/mafft), MAFFT's programs
+# (mafft-win/usr/lib/mafft/*.exe) and the MSYS2 runtime and tools they run on (bash, msys-2.0.dll, ...).
+# Licences: MAFFT is BSD; the package bundles MSYS2 components, and MAFFT's page gives GPL for the package as a
+# whole. COAL does not redistribute it: each user's install downloads it from MAFFT's site.
+@dataclass(frozen=True)
+class WindowsPackage:
+    url: str
+    filename: str
+    size: int
+    sha256: str
+    top: str        # the one top folder of the zip
+    entry: str      # the program inside `top` that find_mafft() gives
+
+    def describe(self) -> str:
+        return f"{self.url} ({self.size:,} bytes, SHA-256 {self.sha256})"
+
+
+MAFFT_WINDOWS = WindowsPackage(
+    url=f"https://mafft.cbrc.jp/alignment/software/mafft-{MAFFT_VERSION}-win64-signed.zip",
+    filename=f"mafft-{MAFFT_VERSION}-win64-signed.zip", size=27_476_513,
+    sha256="7c3a508c8512af04007d68019c6fbd4ff00d891244b58f87ec9aa0e53fbae8a7", top="mafft-win", entry="mafft.bat")
+# What an unpacked zip may hold at most (bytes, members): far above the pinned package (its SHA-256 fixes the
+# contents anyway), so that only an archive nobody pinned could reach it.
+_ZIP_LIMITS = (1 << 30, 5000)
+
 NO_WINDOWS_MAFFT = (
-    f"there is no automatic MAFFT install on Windows: Bioconda and conda-forge have no Windows package, and COAL "
-    f"pins no SHA-256 for MAFFT's own Windows package (its site publishes none), so it does not download it. "
-    f"Install that yourself: the \"all-in-one\" mafft-{MAFFT_VERSION}-win64-signed.zip from "
+    f"there is no automatic MAFFT install for this Windows machine: Bioconda and conda-forge have no Windows "
+    f"package, and MAFFT's own Windows package, which `coal pipeline install mafft` installs (pinned, SHA-256 "
+    f"checked), is for x86-64 (AMD64) Windows only. Install MAFFT yourself: MAFFT's Windows packages are on "
     f"https://mafft.cbrc.jp/alignment/software/windows_without_cygwin.html (MAFFT {MAFFT_VERSION} is the version "
-    f"COAL pins elsewhere); extract it, keeping its LF line ends, and set COAL_MAFFT to the full path of "
-    f"mafft-win\\mafft.bat (not tested with COAL). Or run COAL under WSL, where `coal pipeline install mafft` "
-    f"works")
+    f"COAL pins); extract one, keeping its LF line ends, and set COAL_MAFFT to the full path of its "
+    f"mafft-win\\mafft.bat (an install of your own, not checked by COAL). Or run COAL under WSL, where `coal "
+    f"pipeline install mafft` works")
 # micromamba (static, BSD-3-Clause) from https://github.com/mamba-org/micromamba-releases: one fixed release, not
 # "latest", with the SHA-256 of each asset (computed from the downloads on 2026-11-12; each equals the
 # <asset>.sha256 file the release publishes).
@@ -197,8 +231,16 @@ def cache_dir() -> str:
 def _cached(tool: str) -> list[str]:
     root = cache_dir()
     sub = "Library/bin" if os.name == "nt" else "bin"
-    return [os.path.join(root, "tools", tool, tool + _EXE), os.path.join(root, "envs", tool, *sub.split("/"),
-                                                                          tool + _EXE)]
+    out = [os.path.join(root, "tools", tool, tool + _EXE), os.path.join(root, "envs", tool, *sub.split("/"),
+                                                                         tool + _EXE)]
+    if tool == "mafft" and _platform()[0] == "Windows":
+        out.append(_mafft_windows_entry())
+    return out
+
+
+def _mafft_windows_entry() -> str:
+    """Where install_mafft() puts MAFFT's Windows package: <cache>/tools/mafft/mafft-win/mafft.bat."""
+    return os.path.join(cache_dir(), "tools", "mafft", MAFFT_WINDOWS.top, MAFFT_WINDOWS.entry)
 
 
 # Every binary COAL installs into its cache gets a manifest next to it (<binary>.coal-manifest.json) with the
@@ -214,7 +256,15 @@ _trust_told: set = set()    # paths whose "not used" note was printed
 
 def _write_manifest(exe: str, source: str, verified: str, also: Sequence[str] = (),
                     package: dict | None = None) -> None:
-    files = {os.path.basename(f): _sha256(f) for f in (exe, *also)}
+    """The record of an install: `also` are the files that come with `exe`, in its folder or below it (a name in
+    the record is relative to that folder, with '/': "msys-2.0.dll", "usr/lib/mafft/disttbfast.exe")."""
+    folder = os.path.dirname(os.path.abspath(exe))
+    files = {}
+    for f in (exe, *also):
+        rel = os.path.relpath(os.path.abspath(f), folder).replace(os.sep, "/")
+        if not _manifest_name_ok(rel):
+            raise MsaError(f"{f} is not in the folder of {exe}")
+        files[rel] = _sha256(f)
     tmp = exe + MANIFEST_SUFFIX + f".{os.getpid()}.tmp"
     rec = {"tool": os.path.basename(exe), "files": files, "source": source, "verified": verified,
            "coal_version": __version__, "installed": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
@@ -248,13 +298,20 @@ def _cache_state(exe: str) -> str:
             files = json.load(fh)["files"]
         if isinstance(files, dict) and os.path.basename(exe) in files:
             folder = os.path.dirname(exe)
-            if all(isinstance(n, str) and os.path.basename(n) == n and isinstance(h, str)
-                   and _sha256(os.path.join(folder, n)) == h.lower() for n, h in files.items()):
+            if all(isinstance(n, str) and _manifest_name_ok(n) and isinstance(h, str)
+                   and _sha256(os.path.join(folder, *n.split("/"))) == h.lower() for n, h in files.items()):
                 state = "ok"
     except (OSError, ValueError, KeyError, TypeError):
         state = "changed"
     _trust_seen[key] = state
     return state
+
+
+def _manifest_name_ok(name: str) -> bool:
+    """A file name of a manifest: a file in the binary's folder, or below it ('/' between the parts); never an
+    absolute path, a drive, '.' or '..'."""
+    parts = name.split("/")
+    return all(p and p not in (".", "..") and "\\" not in p and ":" not in p for p in parts)
 
 
 def _trusted_cached(tool: str, exe: str) -> bool:
@@ -372,29 +429,202 @@ def installed_package(tool: str, exe: str) -> dict | None:
 
 
 def tool_version(exe: str, timeout: float = 60) -> str:
-    """The first line `exe --version` prints ('' if it does not run)."""
+    """The first line `exe --version` prints ('' if it does not run). MAFFT's Windows package and other batch
+    files are started as run_msa starts them (_launch), with no standard input, and their first line with a MAFFT
+    version (v7.526 ...) is taken, from standard output or error."""
     try:
+        return _read_version(exe, timeout)
+    except (OSError, subprocess.SubprocessError, MsaError):
+        return ""
+
+
+def _read_version(exe: str, timeout: float = 60) -> str:
+    """tool_version(), but a command COAL refuses to start (an unsafe path for a batch file: MsaError) or one that
+    cannot start (OSError) is raised, so that the install can say why."""
+    if not is_batch_file(exe):
         r = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=timeout,
                            encoding="utf-8", errors="backslashreplace")
-    except (OSError, subprocess.SubprocessError):
-        return ""
-    out = (r.stdout or r.stderr).strip().splitlines()
-    return out[0].strip() if out else ""
+        out = (r.stdout.strip() if r.stdout else "") or (r.stderr or "").strip()
+        out = out.splitlines()
+        return out[0].strip() if out else ""
+    with tempfile.TemporaryDirectory(prefix="coal_version_") as wd:
+        args, extra = _launch([exe, "--version"], wd)
+        extra.pop("_tree", None)
+        r = subprocess.run(args, capture_output=True, text=True, timeout=timeout,
+                           encoding="utf-8", errors="backslashreplace", **extra)
+    # mafft.bat prints lines of its own first ("Active code page: 65001" from its `chcp 65001`, in the language of
+    # Windows; "Preparing environment to run MAFFT on Windows."): the version is MAFFT's line
+    lines = [x.strip() for x in (r.stdout or "").splitlines() + (r.stderr or "").splitlines() if x.strip()]
+    found = next((x for x in lines if re.search(r"\bv\d+\.\d+", x)), None)
+    return found if found is not None else (lines[0] if lines else "")
 
 
-def _download(url: str, dest: str, quiet: bool) -> tuple[str, str]:
+# ---- MAFFT's Windows package, and batch files ------------------------------------------------------------------
+# Windows starts a .bat / .cmd through cmd.exe (CreateProcess runs `cmd.exe /c "<command line>"`), whatever
+# subprocess is given: shell=False does not keep cmd.exe out, and cmd.exe reads the command line by its own rules
+# (Python's documentation of subprocess on Windows; CVE-2024-24576, "BatBadBut"). Quoting the arguments is not
+# enough for MAFFT's mafft.bat either: it expands paths again, unquoted, inside cmd.exe (`set ROOTDIR=%~d0%~p0`,
+# `set TMPDIR=%TMP%`, `set PATH=/usr/bin/:%PATH%`, and the current folder through `for /f ... (`cd`)` and
+# `pushd "%mafft_working_dir%"` with its quotes doubled), so an `&` or `^` in the install folder, the current
+# folder or TMP would be read as a command there (independent audit of PR #91, 2026-11-15).
+#
+# So COAL does not run the mafft.bat of MAFFT's Windows package at all (mafft_package_root(): a mafft.bat next
+# to usr\bin\bash.exe and usr\bin\mafft). It starts what the batch file starts, the package's bash.exe with
+# argv ["/usr/bin/mafft", ...] and no shell, with what the batch file sets, chosen by COAL instead of expanded by
+# cmd.exe: PATH with the package's usr\bin first (Windows form: bash.exe finds its DLLs there, and MSYS2 turns
+# it into /usr/bin), MAFFT_BINARIES=/usr/lib/mafft, TMPDIR / MAFFT_TMPDIR / TMP / TEMP a folder of the run's
+# own, and the run's folder as the current folder. MSYS2 finds its root (/) from its own DLL, so /usr/bin/mafft
+# is the package's. The input FASTA is given by its name, relative to the run's folder: MSYS2 reads the command
+# line by its own rules and turns the leading two backslashes of a UNC path into one (CI, 2026-11-15), so no path of the
+# user's is passed, and a run folder or install on a network path is refused with a message. The batch file's
+# `chcp 65001` and messages are left out: they print only. find_mafft() still
+# gives the mafft.bat path (it names the install, and COAL_MAFFT may name one).
+#
+# Any other batch file (COAL_MAFFT naming a .bat that is not MAFFT's package) is still run through cmd.exe, with
+# the command line COAL builds (batch_command_line: the program's full path always in double quotes, every other
+# argument with anything but letters, digits and `_ - . : \ / + @` in quotes; `%`, `!`, `"`, control characters
+# and a trailing backslash refused, since cmd.exe changes them even in quotes), and only when the batch file's
+# folder, the current folder, the run's folder and TMP / TEMP have none of & | < > ^ % ! " in them (a batch file
+# may expand them unquoted, as mafft.bat does); it runs in the run's folder.
+#
+# Either way the aligner gets no standard input (no "Terminate batch job (Y/N)?" or `pause` can wait on it), and
+# stopping it ends its whole process tree (taskkill /T): ending cmd.exe or bash.exe alone would leave MAFFT's
+# programs running and holding the pipes.
+_BATCH_SAFE = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.:\\/+@")
+_BATCH_NEVER = frozenset('%!"')
+_CMD_SPECIAL = frozenset('&|<>^%!"')
+
+
+def is_batch_file(exe: str) -> bool:
+    """Whether `exe` is a Windows batch file (.bat, .cmd), which Windows runs through cmd.exe."""
+    return os.path.splitext(str(exe))[1].lower() in (".bat", ".cmd")
+
+
+def mafft_package_root(exe: str) -> str | None:
+    """The folder of MAFFT's Windows package when `exe` is its mafft.bat (usr\\bin\\bash.exe and usr\\bin\\mafft
+    next to it), else None. COAL runs that package's bash.exe instead of the batch file (above)."""
+    if os.path.basename(str(exe)).lower() != "mafft.bat":
+        return None
+    root = os.path.dirname(os.path.abspath(str(exe)))
+    ok = all(os.path.isfile(os.path.join(root, "usr", "bin", n)) for n in ("bash.exe", "mafft"))
+    return root if ok else None
+
+
+def _refuse_for_batch(what: str, path: str, exe: str) -> None:
+    raise MsaError(
+        f"cannot run the batch file {exe}: {what} ({path}) has one of the characters & | < > ^ % ! \" in its "
+        f"path, which a batch file may read as a command (cmd.exe runs every .bat). Use folders without them: "
+        f"for the temporary files, TMP / TEMP; start COAL from another folder; or set COAL_MAFFT to the mafft.bat "
+        f"of MAFFT's own Windows package (`coal pipeline install mafft` installs it), which COAL runs without "
+        f"cmd.exe. Or run COAL under WSL")
+
+
+def _is_unc(path: str) -> bool:
+    """A Windows network path (\\\\server\\share\\..., //server/share/..., \\\\?\\UNC\\...)."""
+    p = str(path).replace("/", "\\")
+    return p.startswith("\\\\") and not p.startswith("\\\\?\\") or p.upper().startswith("\\\\?\\UNC\\")
+
+
+def batch_command_line(argv: Sequence[str]) -> str:
+    """The command line COAL starts a batch file with (argv[0] the .bat): argv[0] as a full path in double quotes;
+    every other argument as it is when it holds only letters, digits and `_ - . : \\ / + @`, else in double
+    quotes. MsaError for an argument cmd.exe would change even in quotes (`%`, `!`, `"`, a control character, a
+    trailing backslash): the message names it and what to do."""
+    out = []
+    for k, arg in enumerate(argv):
+        arg = str(arg)
+        if k == 0:
+            arg = os.path.normpath(os.path.abspath(arg))
+        bad = sorted({c for c in arg if c in _BATCH_NEVER or ord(c) < 32 or ord(c) == 127})
+        if bad or not arg or arg.endswith("\\"):
+            what = ("the characters " + " ".join(repr(c) for c in bad) if bad else
+                    "an empty argument" if not arg else "a backslash at its end")
+            raise MsaError(
+                f"cannot pass '{arg}' to the batch file {argv[0]}: it holds {what}, which cmd.exe (Windows runs "
+                f"every .bat through it) would not pass on as it is. Use folders whose paths have no % ! or \" "
+                f"in them: for the temporary files, TMP / TEMP; for the install, COAL_CACHE_DIR (or COAL_MAFFT for "
+                f"a MAFFT of your own). Or run COAL under WSL")
+        out.append(f'"{arg}"' if k == 0 or not all(c in _BATCH_SAFE for c in arg) else arg)
+    return " ".join(out)
+
+
+def _launch(cmd: Sequence[str], workdir: str | None = None) -> tuple:
+    """(what to give subprocess, extra keywords) for the command `cmd`: as it is, except for a batch file (above):
+    MAFFT's Windows package runs as its bash.exe with the environment mafft.bat would set; another batch file
+    through cmd.exe with the command line of batch_command_line(), after the checks of its folders. `workdir`: a
+    folder of the run's own (required for a batch file): the current folder and the temporary folder of the
+    aligner. Checked on every system, so that what Windows would refuse is refused in the tests too; the batch
+    file's command line is a string on Windows only."""
+    cmd = [str(c) for c in cmd]
+    if not is_batch_file(cmd[0]):
+        return cmd, {}
+    if workdir is None:
+        raise ValueError("a batch file is run in a folder of its own: give workdir")
+    workdir = os.path.abspath(workdir)
+    tmp = os.path.join(workdir, "tmp")
+    os.makedirs(tmp, exist_ok=True)
+    root = mafft_package_root(cmd[0])
+    if root is not None:
+        for what, path in (("MAFFT's folder", root), ("the run's folder (in TMP / TEMP)", workdir)):
+            if _is_unc(path):
+                raise MsaError(
+                    f"cannot run MAFFT's Windows package with {what} on a network path ({path}): MSYS2, which "
+                    f"MAFFT runs on, does not read such a path as given (it reads \\\\server\\share as "
+                    f"\\server\\share). Use a folder on a drive: TMP / TEMP for the temporary files, COAL_CACHE_DIR "
+                    f"for the install")
+        usr_bin = os.path.join(root, "usr", "bin")
+        # a file of the run's folder (the input FASTA) is given by its name, relative to that folder, the current
+        # folder: no path of the user's reaches MSYS2's reading of the command line
+        rest = [os.path.basename(a) if os.path.isabs(a) and os.path.dirname(os.path.abspath(a)) == workdir else a
+                for a in cmd[1:]]
+        env = dict(os.environ)
+        env["PATH"] = usr_bin + os.pathsep + env.get("PATH", "")
+        env.update(MAFFT_BINARIES="/usr/lib/mafft", TMPDIR=tmp, MAFFT_TMPDIR=tmp, TMP=tmp, TEMP=tmp)
+        return ([os.path.join(usr_bin, "bash.exe"), "/usr/bin/mafft", *rest],
+                {"stdin": subprocess.DEVNULL, "cwd": workdir, "env": env, "_tree": True})
+    for what, path in (("its folder", os.path.dirname(os.path.abspath(cmd[0]))), ("the current folder", os.getcwd()),
+                       ("the run's folder", workdir), *(((f"{v}", os.environ[v]) for v in ("TMP", "TEMP")
+                                                         if os.environ.get(v)))):
+        if any(c in _CMD_SPECIAL for c in path):
+            _refuse_for_batch(what, path, cmd[0])
+    line = batch_command_line(cmd)
+    return (line if os.name == "nt" else cmd), {"stdin": subprocess.DEVNULL, "cwd": workdir, "_tree": True}
+
+
+def _end(proc) -> None:
+    """Kill an aligner process; for a batch file or MAFFT's package on Windows its whole process tree (cmd.exe or
+    bash, MAFFT's programs), which TerminateProcess of the first process alone would leave running."""
+    if os.name == "nt" and getattr(proc, "_coal_tree", False) and proc.poll() is None:
+        try:
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], stdin=subprocess.DEVNULL,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
+        except (OSError, subprocess.SubprocessError):
+            pass
+    try:
+        proc.kill()
+    except OSError:
+        pass
+
+
+def _download(url: str, dest: str, quiet: bool, limit: int | None = None) -> tuple[str, str]:
     """Fetch url into a new file of its own next to dest (dest itself is not touched) and return (that file's
     path, the SHA-256 of the bytes that are in it). The file is created exclusively under a random name
     (tempfile.mkstemp): two installs never share it, and a file or link someone put at a known name
     (`<dest>.part`, as it used to be) is not written through. The hash is taken from the file on disk, the bytes
-    that will be unpacked or run, not from the stream."""
+    that will be unpacked or run, not from the stream. limit: the most bytes to accept (the pinned size of the
+    file): a download that grows past it is stopped and deleted (MsaError)."""
     if not quiet:
         print(f"coal: downloading {url}", file=sys.stderr)
     fd, tmp = tempfile.mkstemp(dir=os.path.dirname(os.path.abspath(dest)), prefix=os.path.basename(dest) + ".",
                                suffix=".part")
     try:
         with os.fdopen(fd, "wb") as fh, urllib.request.urlopen(url, timeout=600) as r:  # noqa: S310 (fixed URLs)
+            got = 0
             for chunk in iter(lambda: r.read(1 << 20), b""):
+                got += len(chunk)
+                if limit is not None and got > limit:
+                    raise MsaError(f"{url} is larger than the {limit:,} bytes COAL pins for it; the download was "
+                                   "stopped and deleted, and nothing was installed")
                 fh.write(chunk)
         return tmp, _sha256(tmp)
     except BaseException:
@@ -423,11 +653,13 @@ def _check_hash_argument(sha256: str | None) -> str | None:
 
 
 def _fetch_verified(urls: Sequence[str], dest: str, quiet: bool, pinned: str | None, sha256: str | None = None,
-                    allow_unverified: bool = False, what: str = "the file", hint: str = "") -> str:
+                    allow_unverified: bool = False, what: str = "the file", hint: str = "",
+                    size: int | None = None) -> str:
     """Download one file (the first of `urls` that answers; https before http) to `dest`, and keep it only if its
     SHA-256 is the expected one: `pinned` (COAL's own table) or else `sha256` (the caller's). With neither, the
     download is refused before anything is fetched, unless allow_unverified is True; then the file is kept, a
-    warning names its hash, and the caller has accepted that nobody checked it. Returns the SHA-256.
+    warning names its hash, and the caller has accepted that nobody checked it. Returns the SHA-256. size: the
+    pinned size in bytes as well (checked first; a larger download is stopped as it arrives).
 
     Raises MsaError: no hash and no permission, every URL failed, or the hash does not match (the file is deleted,
     never moved to `dest`, never run)."""
@@ -446,12 +678,17 @@ def _fetch_verified(urls: Sequence[str], dest: str, quiet: bool, pinned: str | N
     errors, got, tmp = [], None, None
     for url in urls:
         try:
-            tmp, got = _download(url, dest, quiet)
+            tmp, got = (_download(url, dest, quiet, size) if size is not None else _download(url, dest, quiet))
             break
         except (OSError, ValueError, EOFError, http.client.HTTPException) as e:   # URLError, HTTPError: OSErrors
             errors.append(f"{url}: {e}")
     if got is None:
         raise MsaError("download failed (" + "; ".join(errors) + ")")
+    if size is not None and os.path.getsize(tmp) != size:
+        n = os.path.getsize(tmp)
+        os.remove(tmp)
+        raise MsaError(f"{what} is {n:,} bytes, not the {size:,} bytes COAL pins for it, and was deleted ({url}); "
+                       "nothing was installed")
     if want is not None and got != want:
         os.remove(tmp)
         raise MsaError(f"{what} failed its SHA-256 check and was deleted: expected {want}, got {got} ({url})")
@@ -629,18 +866,24 @@ def install_clustalo(method: str = "auto", force: bool = False, quiet: bool = Fa
 
 
 def install_mafft(method: str = "auto", force: bool = False, quiet: bool = False, timeout: float = 1800) -> str:
-    """Install MAFFT (BSD licence) into cache_dir() through conda / mamba / micromamba (conda-forge). Not on
-    Windows: conda-forge and Bioconda have no Windows package, and COAL pins no hash for MAFFT's own Windows
-    package, so it does not download it; MsaError names that package (NO_WINDOWS_MAFFT: install it yourself and
-    set COAL_MAFFT; untested with COAL)."""
+    """Install MAFFT (BSD licence) into cache_dir() and return its path (an existing one when force is False).
+
+    Linux and macOS: through conda / mamba / micromamba (conda-forge; method "auto", "conda" or "micromamba"),
+    one exact package per platform ("Exact builds", docs/alignment.md). x86-64 Windows (method "auto" or
+    "official"): MAFFT's own Windows package (MAFFT_WINDOWS), downloaded from MAFFT's site and kept only if its size
+    and SHA-256 are the pinned ones, then unpacked into <cache>/tools/mafft/mafft-win/; the path returned is its
+    mafft.bat. Other Windows machines: MsaError (NO_WINDOWS_MAFFT says what works there)."""
+    if _platform()[0] == "Windows":
+        return _install_mafft_windows(method, force, quiet, timeout)
+    if method == "official":
+        raise MsaError("method='official' (MAFFT's own Windows package) is for Windows; on this system MAFFT is "
+                       "installed from conda-forge (method='auto', 'conda' or 'micromamba')")
     c = _cached("mafft")[1]
     if not force and _trusted_cached("mafft", c):
         note = pin_note("mafft", c)
         if note and not quiet:
             print(f"coal: note: {note}", file=sys.stderr)
         return c
-    if _platform()[0] == "Windows":
-        raise MsaError(NO_WINDOWS_MAFFT)
     with _install_lock("mafft", timeout):
         if not force and _trusted_cached("mafft", c):    # another install finished while this one waited
             return c
@@ -656,6 +899,186 @@ def install_mafft(method: str = "auto", force: bool = False, quiet: bool = False
         if not quiet:
             print(f"coal: MAFFT {MAFFT_VERSION} installed: {exe}", file=sys.stderr)
         return exe
+
+
+def _install_mafft_windows(method: str, force: bool, quiet: bool, timeout: float) -> str:
+    if method not in ("auto", "official", "conda", "micromamba"):
+        raise ValueError("method: 'auto', 'official', 'conda' or 'micromamba'")
+    if method in ("conda", "micromamba"):
+        raise MsaError(f"method={method!r}: Bioconda and conda-forge have no Windows package of MAFFT; on Windows "
+                       "COAL installs MAFFT's own Windows package (method='auto' or 'official')")
+    if _platform() != ("Windows", "AMD64"):
+        raise MsaError(NO_WINDOWS_MAFFT)
+    pkg = MAFFT_WINDOWS
+    entry = _mafft_windows_entry()
+
+    def have() -> bool:
+        return _trusted_cached("mafft", entry)
+    if not force and have():
+        note = pin_note("mafft", entry)
+        if note and not quiet:
+            print(f"coal: note: {note}", file=sys.stderr)
+        return entry
+    with _install_lock("mafft", timeout):
+        if not force and have():    # another install finished while this one waited
+            return entry
+        folder = os.path.join(cache_dir(), "tools", "mafft")
+        os.makedirs(folder, exist_ok=True)
+        _remove_leftovers(folder, pkg)
+        archive = os.path.join(folder, pkg.filename)
+        try:
+            # size and SHA-256 are checked before anything is unpacked (the file is deleted if either differs)
+            _fetch_verified([pkg.url], archive, quiet, pkg.sha256, what=f"MAFFT {MAFFT_VERSION} for Windows "
+                            f"({pkg.filename})", size=pkg.size)
+            try:
+                with open(archive, "rb") as fh:
+                    # unpacked from this open file, whose bytes are checked again here: what was checked is what
+                    # is unpacked, even if the file at that name were replaced in between
+                    _check_open_file(fh, pkg)
+                    _unpack_windows_package(fh, folder, pkg, quiet)
+            except (OSError, zipfile.BadZipFile) as e:   # (a folder in use, a full disk, ...)
+                raise MsaError(f"could not unpack {pkg.filename} into {folder}: {e}") from None
+        finally:
+            with contextlib.suppress(OSError):
+                os.remove(archive)
+        try:
+            v = _read_version(entry)
+        except (OSError, subprocess.SubprocessError) as e:
+            raise MsaError(f"{entry} does not run: {e}") from None
+        if not re.search(r"\bv" + re.escape(MAFFT_VERSION) + r"\b", v):
+            raise MsaError(f"{entry} does not run or is not MAFFT {MAFFT_VERSION} ({v or 'no output'})")
+        if not quiet:
+            print(f"coal: MAFFT {MAFFT_VERSION} installed: {entry}", file=sys.stderr)
+        return entry
+
+
+_WINDOWS_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{k}" for k in range(1, 10)), *(f"LPT{k}" for k in range(1, 10))}
+
+
+def _safe_name_part(part: str) -> bool:
+    """Whether one part of an archive member's name is safe to create on any system: letters, digits, `.`, `_`,
+    `+`, `-` only, not starting or ending with a dot, not a reserved Windows device name (CON, NUL, COM1, ...)."""
+    return (bool(part) and all(c.isascii() and (c.isalnum() or c in "._+-") for c in part)
+            and not part.startswith(".") and not part.endswith(".")
+            and part.split(".")[0].upper() not in _WINDOWS_RESERVED)
+
+
+def _member_parts(info: zipfile.ZipInfo, asset: str, top: str) -> list[str]:
+    """The parts of a zip member's path under which it is unpacked (the top folder first), or MsaError: an
+    absolute name, a drive or `:`, a `..` or `.` part, a backslash, a part that is not _safe_name_part, a link,
+    or a member outside the one top folder `top` is refused. The name checked is the one in the archive
+    (orig_filename): on Windows zipfile turns a backslash into '/' when it reads one."""
+    name = info.orig_filename
+    if info.filename != name.replace(os.sep, "/") and info.filename != name:
+        raise MsaError(f"{asset} holds a member with an unsafe name ({name!r}); nothing was installed")
+    parts = name.rstrip("/").split("/") if name.endswith("/") else name.split("/")
+    mode = (info.external_attr >> 16) & 0o170000
+    ok = (not name.startswith("/") and "\\" not in name and ":" not in name and parts and parts[0] == top
+          and all(_safe_name_part(p) for p in parts) and mode not in (stat.S_IFLNK, stat.S_IFCHR, stat.S_IFBLK,
+                                                                      stat.S_IFIFO, stat.S_IFSOCK))
+    if not ok:
+        raise MsaError(f"{asset} holds a member with an unsafe name or type ({name!r}); nothing was installed")
+    return parts
+
+
+def _check_open_file(fh, pkg: WindowsPackage) -> None:
+    """MsaError unless the open file `fh` has the pinned size and SHA-256 (read from the handle; left at 0)."""
+    h, n = hashlib.sha256(), 0
+    fh.seek(0)
+    for chunk in iter(lambda: fh.read(1 << 20), b""):
+        h.update(chunk)
+        n += len(chunk)
+    fh.seek(0)
+    if n != pkg.size or h.hexdigest() != pkg.sha256:
+        raise MsaError(f"{pkg.filename} changed after its check ({n:,} bytes, SHA-256 {h.hexdigest()}); nothing "
+                       "was installed")
+
+
+def _remove_leftovers(folder: str, pkg: WindowsPackage) -> None:
+    """What an install that was cut short left in `folder` (under the install lock): half-unpacked folders
+    (unpack-*), a replaced install not yet deleted (old-*), downloads (<file>.*.part)."""
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return
+    for n in names:
+        p = os.path.join(folder, n)
+        if n.startswith(("unpack-", "old-")) and os.path.isdir(p) and not os.path.islink(p):
+            shutil.rmtree(p, ignore_errors=True)
+        elif n.startswith(pkg.filename + ".") and n.endswith(".part") and os.path.isfile(p):
+            with contextlib.suppress(OSError):
+                os.remove(p)
+
+
+def _unpack_windows_package(archive, folder: str, pkg: WindowsPackage, quiet: bool) -> str:
+    """Unpack the verified zip `archive` (a path or an open file) into folder/<pkg.top>, with the record of every file it holds
+    (<entry>.coal-manifest.json), and return the entry point. Every member name is checked first
+    (_member_parts) and nothing is written if one fails; the files are written into a new folder of their own
+    (each created exclusively, so nothing is written through a link) that then replaces the old install, if any."""
+    with zipfile.ZipFile(archive) as zf:
+        infos = zf.infolist()
+        plan, seen, total = [], set(), 0
+        for info in infos:
+            parts = _member_parts(info, pkg.filename, pkg.top)
+            key = "/".join(parts).casefold()     # Windows' names ignore case: two such members would collide
+            if key in seen:
+                raise MsaError(f"{pkg.filename} holds {info.filename!r} twice (letter case aside); nothing was "
+                               "installed")
+            seen.add(key)
+            total += info.file_size
+            plan.append((info, parts))
+        if len(plan) > _ZIP_LIMITS[1] or total > _ZIP_LIMITS[0]:
+            raise MsaError(f"{pkg.filename} holds {len(plan)} members, {total:,} bytes: more than COAL unpacks; "
+                           "nothing was installed")
+        files = {"/".join(p) for i, p in plan if not i.is_dir()}
+        if f"{pkg.top}/{pkg.entry}" not in files:
+            raise MsaError(f"{pkg.filename} holds no {pkg.top}/{pkg.entry}; nothing was installed")
+        if any("/".join(p[:k]) in files for _, p in plan for k in range(1, len(p))):
+            raise MsaError(f"{pkg.filename} holds a file that is also a folder; nothing was installed")
+        staging = tempfile.mkdtemp(dir=folder, prefix="unpack-")
+        try:
+            written = []
+            for info, parts in plan:
+                target = os.path.join(staging, *parts)
+                if info.is_dir():
+                    os.makedirs(target, exist_ok=True)
+                    continue
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                try:
+                    with zf.open(info) as src, open(target, "xb") as dst:   # (zipfile checks each CRC)
+                        shutil.copyfileobj(src, dst)
+                except (EOFError, zlib.error, zipfile.BadZipFile) as e:
+                    raise MsaError(f"{pkg.filename}: {info.filename} cannot be unpacked ({type(e).__name__}: "
+                                   f"{e}); nothing was installed") from None
+                written.append(target)
+            new = os.path.join(staging, pkg.top)
+            entry = os.path.join(new, pkg.entry)
+            if os.name != "nt":   # (a batch file runs on Windows only; this keeps the cache check the same)
+                os.chmod(entry, 0o755)
+            _write_manifest(entry, pkg.url, "pinned size and SHA-256 of the archive",
+                            also=[w for w in written if w != entry],
+                            package={"spec": pkg.url, "channel": "mafft.cbrc.jp", "subdir": "win-64",
+                                     "filename": pkg.filename, "sha256": pkg.sha256, "size": pkg.size,
+                                     "pinned": True})
+            final = os.path.join(folder, pkg.top)
+            old = None
+            if os.path.lexists(final):
+                old = tempfile.mkdtemp(dir=folder, prefix="old-")
+                os.replace(final, os.path.join(old, pkg.top))
+            try:
+                os.replace(new, final)
+            except BaseException:
+                if old is not None:      # the old install comes back where it was
+                    os.replace(os.path.join(old, pkg.top), final)
+                    shutil.rmtree(old, ignore_errors=True)
+                raise
+            if old is not None:
+                shutil.rmtree(old, ignore_errors=True)
+        finally:
+            shutil.rmtree(staging, ignore_errors=True)
+    if not quiet:
+        print(f"coal: unpacked {len(written)} files of {pkg.filename} into {final}", file=sys.stderr)
+    return os.path.join(final, pkg.entry)
 
 
 # ---------------------------------------------------------------- running
@@ -731,33 +1154,41 @@ def _interrupt_count() -> int:
         return _interrupts
 
 
-def _run_tracked(cmd, timeout, begun: int | None = None, **kw) -> subprocess.CompletedProcess:
+def _run_tracked(cmd, timeout, begun: int | None = None, workdir: str | None = None,
+                 **kw) -> subprocess.CompletedProcess:
     """subprocess.run(cmd, timeout=..., **kw) with the process registered in _running while it runs.
 
     Starting and registering happen under _running_lock, the lock kill_running() takes: an aligner is either not
     started yet (and then never is: MsaError("interrupted") when kill_running() was called since `begun`, the
     value of _interrupt_count() when the caller's work began) or it is in _running where kill_running() finds it.
     Before, the process was started first and registered afterwards, and an interrupt in between left an aligner
-    running that nothing knew about."""
+    running that nothing knew about. workdir: the run's folder (for a batch file / MAFFT's Windows package:
+    _launch)."""
     proc = None
+    args, extra = _launch(cmd, workdir)   # MAFFT's Windows package: its bash.exe; another batch file: cmd.exe
+    tree = bool(extra.pop("_tree", False))
+    for k, v in extra.items():
+        kw.setdefault(k, v)
     with _running_lock:
         if begun is not None and begun != _interrupts:
             raise MsaError("interrupted")
         try:
-            proc = subprocess.Popen(cmd, **kw)
+            proc = subprocess.Popen(args, **kw)
+            with contextlib.suppress(AttributeError):
+                proc._coal_tree = tree
             if _after_start is not None:
                 _after_start(proc)
             _running.add(proc)
         except BaseException:   # (an interrupt delivered to this very thread while it starts the process)
             if proc is not None:
-                proc.kill()
+                _end(proc)
                 proc.wait()
             raise
     try:
         try:
             out, err = proc.communicate(timeout=timeout)
         except BaseException:   # the timeout, or an interrupt: never leave the aligner behind
-            proc.kill()
+            _end(proc)
             proc.communicate()
             raise
     finally:
@@ -777,11 +1208,8 @@ def kill_running() -> int:
         _interrupts += 1
         for proc in list(_running):
             if proc.poll() is None:
-                try:
-                    proc.kill()
-                    n += 1
-                except OSError:
-                    pass
+                _end(proc)
+                n += 1
     return n
 
 
@@ -813,12 +1241,12 @@ def run_msa(records: Sequence[tuple[str, str]], tool: str = "clustalo", threads:
                 fh.write(f">s{k}\n{s}\n")
         cmd = command_line(tool, exe, threads, extra_args, inp, outp)
         if tool == "clustalo":
-            r = _run_tracked(cmd, timeout, begun, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            r = _run_tracked(cmd, timeout, begun, tmp, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                              encoding="utf-8", errors="backslashreplace")
         else:
             with open(outp, "wb") as fh:
-                r = _run_tracked(cmd, timeout, begun, stdout=fh, stderr=subprocess.PIPE, text=True, encoding="utf-8",
-                                 errors="backslashreplace")
+                r = _run_tracked(cmd, timeout, begun, tmp, stdout=fh, stderr=subprocess.PIPE, text=True,
+                                 encoding="utf-8", errors="backslashreplace")
         if r.returncode != 0:
             raise MsaError(f"{tool} failed ({exit_text(r.returncode)}): {(r.stderr or '').strip()[-800:]}")
         got = _read_fasta(outp)
