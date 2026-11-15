@@ -22,8 +22,8 @@
 `coal kaks`, `coal dnds`, `coal translate`, `coal codon-dnds` and `coal pipeline` are run by the C++ engine
 `coal-cpp`, which the platform wheels contain and the source package does not ([install.md](install.md)); their
 `--help` works in every install. The pipeline also needs DIAMOND, and Clustal Omega or MAFFT for clusters
-(`coal pipeline install diamond clustalo`; on Windows only DIAMOND installs that way, and the command says what
-works for the other two: [install.md](install.md#clustal-omega-and-mafft-on-windows)). `coal translate` prints one warning
+(`coal pipeline install diamond clustalo`; on Windows DIAMOND and, on x86-64, MAFFT install that way, and for
+Clustal Omega the command says what works: [install.md](install.md#clustal-omega-and-mafft-on-windows)). `coal translate` prints one warning
 when most genes have internal stop codons, or when the genes with stops have none under another genetic code; it
 names the first such gene and that code (for example "translate it again with -c 4"), as the pipeline's
 genetic-code hint does. A small example of each, with the files in `examples/dnds`:

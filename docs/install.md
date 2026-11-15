@@ -27,9 +27,9 @@ installs them into the cache, checksum-verified, with
 coal pipeline install diamond clustalo
 ```
 
-(or `--install-tools` on a run; `conda install -c bioconda diamond clustalo` works as well). On Windows only
-DIAMOND installs that way: for Clustal Omega and MAFFT see
-[below](#clustal-omega-and-mafft-on-windows). Pair mode needs DIAMOND only.
+(or `--install-tools` on a run; `conda install -c bioconda diamond clustalo` works as well). On Windows
+DIAMOND and, on x86-64, MAFFT (`coal pipeline install diamond mafft`) install that way, Clustal Omega does not:
+see [below](#clustal-omega-and-mafft-on-windows). Pair mode needs DIAMOND only.
 
 ## Option 1: download the app from the website (recommended)
 

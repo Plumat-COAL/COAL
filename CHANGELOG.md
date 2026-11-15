@@ -17,6 +17,8 @@
   orthologr fork's `dNdS(engine = "coal")` uses it.
 - **App:** the web GUI and the Windows app have **Ka/Ks** and **dN/dS pipeline** tabs; the MCP server has the tools
   `dnds_pairs` and `pipeline_pairs`.
+- **Windows:** `coal pipeline install mafft` (x86-64) installs MAFFT's own Windows package, pinned by its
+  SHA-256, so `coal pipeline clusters --aligner mafft` runs on native Windows.
 - **Tutorials** on real, small, public genomes, from coding sequences to an interpreted dN/dS table
   (docs/tutorials/); CI reruns four of them.
 - **Licence: GPL-3.0-only from this release** (0.5.0 and earlier stay MIT), because the Ka/Ks engine is derived
@@ -1041,8 +1043,9 @@ entry under "Added", not under "Fixed".
     `--aligner mafft` with MAFFT's own Windows package, the "all-in-one" `mafft-7.526-win64-signed.zip`, in
     `COAL_MAFFT`). Neither Bioconda nor conda-forge has a Windows package of Clustal Omega or MAFFT (checked
     2026-11-14), and COAL adds a download only with a SHA-256 computed from the file itself, which could not be
-    done for either Windows build, so neither is downloaded; the MAFFT message names the package and its page, and
-    docs/install.md "Clustal Omega and MAFFT on Windows" has the steps. Bundling a self-built `clustalo.exe` is
+    done for Clustal Omega's, so it is not downloaded; MAFFT's package is now pinned by its own SHA-256 and
+    installed by `coal pipeline install mafft` (see "Added"), and docs/install.md "Clustal Omega and MAFFT on
+    Windows" has the steps. Bundling a self-built `clustalo.exe` is
     another way to support Windows and is not done yet (docs/alignment.md, "Licences").
 - **`pal2nal` without arguments is a usage error:** the usage text goes to standard error with exit 1 (as the
   drop-in's help says and as PAL2NAL's own usage goes to stderr), not to standard output with exit 0, so a pipeline
