@@ -311,7 +311,11 @@ class TestNightlyWorkflow(unittest.TestCase):
 
     def test_tsan_job(self):
         job = self._job("tsan")
-        self.assertIn('-DCMAKE_CXX_FLAGS="-fsanitize=thread -g -O1"', job)
+        self.assertIn('-DCMAKE_CXX_FLAGS="-fsanitize=thread -g -O1 -Wno-error=free-nonheap-object"', job)
+        # GCC 15's false positive under -fsanitize=thread: waived in this job only, and only that one warning
+        everywhere = "\n".join(x for x in (self.wf + self.ci).splitlines() if not x.lstrip().startswith("#"))
+        self.assertEqual(everywhere.count("-Wno-error="), 1)
+        self.assertNotRegex(everywhere, r"-Wno-(?!error=free-nonheap-object)[\w-]+")
         self.assertIn('-DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread"', job)
         self.assertIn("-DCOAL_WARNINGS_AS_ERRORS=ON", job)
         self.assertIn("test -x build-tsan/coal-cpp-align", job)

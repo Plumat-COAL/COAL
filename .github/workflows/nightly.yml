@@ -340,8 +340,13 @@ jobs:
           # ThreadSanitizer maps its shadow memory at fixed addresses; the runner's kernel randomises more address
           # bits than older TSan runtimes accept ("unexpected memory mapping"): fewer bits for this job
           sudo sysctl vm.mmap_rnd_bits=28 || true
+          # -Wno-error=free-nonheap-object: GCC 15 (ubuntu-latest from Ubuntu 26) with -fsanitize=thread warns
+          # free-nonheap-object on a std::vector<std::string> destructor in cpp/src/kaks_cli.cpp (parse()), a known
+          # false positive of GCC with the sanitizers' instrumentation; it stays a warning here, in this job only
+          # (every other build keeps it an error under COAL_WARNINGS_AS_ERRORS)
           cmake -S . -B build-tsan -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCOAL_WARNINGS_AS_ERRORS=ON -DCOAL_BUILD_TOOLS=OFF \
-            -DCMAKE_CXX_FLAGS="-fsanitize=thread -g -O1" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread"
+            -DCMAKE_CXX_FLAGS="-fsanitize=thread -g -O1 -Wno-error=free-nonheap-object" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread"
           cmake --build build-tsan -j 2
           test -x build-tsan/coal-cpp
           test -x build-tsan/coal-cpp-align
