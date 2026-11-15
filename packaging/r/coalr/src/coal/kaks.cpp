@@ -71,13 +71,17 @@
 #include <initializer_list>
 #include <memory>
 
-// x86 with GCC / Clang: the transition-probability matrix of YN / MYN (pmat_codon, with its eigendecomposition) is
+// x86-64 with GCC / Clang: the transition-probability matrix of YN / MYN (pmat_codon, with its eigendecomposition) is
 // compiled twice, for the baseline (SSE2) and for AVX2, and the AVX2 copy is used when the CPU has it (checked
 // once), as align.cpp does for its row loops. Both copies compute the same numbers: the floating-point operations
 // are the ones written, in the order written (no contraction, see above; no fast-math), and the vector width only
-// changes how many independent ones run at once. COAL_KAKS_BASELINE: the baseline
-// only, at build time; Options::baseline_isa (`--kaks-baseline`): the baseline for one run (tests).
-#if (defined(__GNUC__) || defined(__clang__)) && (defined(__x86_64__) || defined(__i386__)) && \
+// changes how many independent ones run at once. That holds only where the baseline does its double arithmetic in
+// SSE2 registers too: x86-64 (__SSE2_MATH__, which -mfpmath=387 turns off). 32-bit x86 does it on the x87 unit by
+// default (80-bit intermediates), so its two copies would round differently: there only the baseline is compiled
+// (audit 2026-11-15, AUDIT-85 L1; align.cpp's row loops are integer arithmetic and keep their 32-bit AVX2 copy).
+// COAL_KAKS_BASELINE: the baseline only, at build time; Options::baseline_isa (`--kaks-baseline`): the baseline for
+// one run (tests).
+#if (defined(__GNUC__) || defined(__clang__)) && defined(__x86_64__) && defined(__SSE2_MATH__) && \
     !defined(COAL_KAKS_BASELINE)
 #define COAL_KAKS_AVX2 1
 #else
@@ -354,6 +358,14 @@ constexpr int ATA = cod(A_, T_, A_), ATG = cod(A_, T_, G_);
 struct LwlAcc {
     double L[3] = {0, 0, 0}, Si[3] = {0, 0, 0}, Vi[3] = {0, 0, 0};
     double snp = 0;
+    // The transitions and transversions summed exactly, in units of 1/120: a column adds j / 2 / d to a class
+    // (j half-differences over d = 1 to 6 pathways), an integer number of units because d divides 60. MLWL
+    // picks its site formula by comparing kappa = 2 ts / tv with 2 and 0.5, and the doubles above are summed in
+    // the order of the columns, so a kappa that is exactly 0.5 or 2 (ts = 2, tv = 8 from thirds of a difference)
+    // came out as 0.50000000000000011 for some orders of the same codon pairs and moved the pair into the other
+    // formula (N and S changed by a whole site; property fuzz P6, seed 4242, FIXCI-B2). The comparison is made on
+    // these exact sums; the values printed are the doubles, as before.
+    long long ts_u = 0, tv_u = 0;
 };
 
 // x and y code for the same amino acid in g (neither is a stop codon)
@@ -436,6 +448,8 @@ LwlAcc lwl_count(const Prepared& p, const GeneticCode& g, bool modified) {
             for (int k = 0; k < 3; ++k) {
                 acc.Si[k] += si[k] / (paths - stop);
                 acc.Vi[k] += vi[k] / (paths - stop);
+                acc.ts_u += std::llround(2 * si[k]) * (60 / (paths - stop));   // (2 si, 2 vi: integers)
+                acc.tv_u += std::llround(2 * vi[k]) * (60 / (paths - stop));
             }
     }
     for (double& l : acc.L) l /= 2;
@@ -466,8 +480,12 @@ Result run_lwl(const Prepared& p, const GeneticCode& g, Method m, Result r) {
     }
     const double* L = acc.L;
     double kappa;
+    bool kappa_above_2 = false, kappa_above_half = false;   // MLWL's choice of site formula (LwlAcc::ts_u)
     if (m == Method::MLWL) {
-        kappa = (ts < SMALL || tv < SMALL) ? 1.0 : 2.0 * ts / tv;
+        const bool fixed = ts < SMALL || tv < SMALL;
+        kappa = fixed ? 1.0 : 2.0 * ts / tv;
+        kappa_above_2 = fixed ? kappa > 2.0 : acc.ts_u > acc.tv_u;            // 2 ts / tv > 2
+        kappa_above_half = fixed ? kappa > 0.5 : 4 * acc.ts_u > acc.tv_u;     // 2 ts / tv > 0.5
     } else {
         kappa = tv > 0 ? 2 * ts / tv : 2.0;
     }
@@ -485,10 +503,10 @@ Result run_lwl(const Prepared& p, const GeneticCode& g, Method m, Result r) {
     double Nd = L[0] * K[0] + L[1] * B[1];
     double S, N, ks, ka;
     if (m == Method::LWL || m == Method::MLWL) {
-        if (m == Method::MLWL && kappa > 2.0) {
+        if (m == Method::MLWL && kappa_above_2) {
             S = (kappa - 1) * L[1] / (kappa + 1) + L[2];
             N = L[0] + 2 * L[1] / (kappa + 1);
-        } else if (m == Method::MLWL && kappa > 0.5) {
+        } else if (m == Method::MLWL && kappa_above_half) {
             S = (kappa - 0.5) * L[1] / (kappa + 1.5) + L[2];
             N = L[0] + 2 * L[1] / (kappa + 1.5);
         } else {
@@ -537,7 +555,7 @@ Result run_lwl(const Prepared& p, const GeneticCode& g, Method m, Result r) {
 // operands in the same order as in the textbook loops (each sum in its own order; nothing reassociated, nothing
 // fused into an FMA). tred2's accumulation of the transformations takes four columns at a time: the columns are
 // independent of each other, and four sums side by side share the loads of the column they are made from instead
-// of waiting on one chain of additions. On x86 the routine is also compiled for AVX2 (wider vectors for the
+// of waiting on one chain of additions. On x86-64 the routine is also compiled for AVX2 (wider vectors for the
 // element-wise loops, which give the same numbers) and that copy is used when the CPU has it (pmat_codon below).
 // tests/test_kaks_dispatch.py compares the two copies to the bit; the golden files of tests/kaks hold the numbers.
 COAL_KAKS_INLINE void eigen_sym(double* const Z, const int n, double* const d, double* const e) {

@@ -345,9 +345,14 @@ std::string compat_row(const std::string& name, const Result& r, int dg) {
         add("NA");
     add(pos(r.divergence));
     {
+        // MYN with kappa_TC or kappa_AG estimated as infinite (status saturated, docs/kaks.md "Differences", 15):
+        // the rate ratio is undefined and the field is NA, as Fold-Sites and GC are when undefined.
+        // KaKs_Calculator prints `inf` for that kappa; COAL's output has no nan / inf (AUDIT-85).
+        bool finite = true;
+        for (double x : r.rates) finite = finite && std::isfinite(x);
         std::string s;
-        for (int i = 0; i < 6; ++i) s += (i ? ":" : "") + num(r.rates[i], dg);
-        add(s);
+        for (int i = 0; i < 6 && finite; ++i) s += (i ? ":" : "") + num(r.rates[i], dg);
+        add(finite ? s : "NA");
     }
     if (std::isnan(r.gc[0]))
         add("NA");

@@ -71,7 +71,11 @@ entry under "Added", not under "Fixed".
   - **gzip-compressed input** (recognised by its first bytes): the `coal` command decompresses it for
     `coal kaks`, `coal dnds` and `coal translate`; `coal-cpp` itself says "is gzip-compressed: decompress it first
     (gunzip -k FILE)" instead of "control character". Write errors name the file and the cause
-    (`write error on 'out.tsv': No space left on device`).
+    (`write error on 'out.tsv': No space left on device`). The codon alignment (`coal PEP DNA` with either
+    engine, `coal-cpp PEP DNA`, the `pal2nal` drop-in) does not decompress: a gzip-compressed protein alignment,
+    DNA file or standard input is "`d.fa.gz is gzip-compressed: decompress it first (zcat FILE.gz > FILE, or pipe
+    it: zcat FILE.gz | coal ... -): sequence files must be plain text`" (`input_format`; the same bytes in both
+    engines) instead of "control character" (protein) or "sequence data before the first '>' header" (DNA).
   - **YN and MYN are faster on close sequences, with the same bits.** The transition-probability matrix is not
     computed for a pair in which no codon differs at two or three positions (nothing reads it then): checked
     byte for byte at 17 digits on the validation sets with GCC and Clang; about half the CPU time on a set of
@@ -153,7 +157,18 @@ entry under "Added", not under "Fixed".
     `no_data` ("no synonymous sites; no nonsynonymous sites"), and `coal kaks` on such pairs alone exited 2,
     suggesting that the input was not a codon alignment. Now `saturated`, with a note naming the kappa;
     Substitutions keeps its count (docs/kaks.md, difference 15). 79 of 240,000 simulated pairs, 3 real pairs among
-    the deep test's genomes.
+    the deep test's genomes. In `coal kaks`'s format the Substitution-Rate-Ratio of such a row is `NA`
+    (KaKs_Calculator prints `inf` for the infinite kappa, e.g. `2.30174:inf:1:1:1:1`; COAL's output has no nan /
+    inf: property fuzz P3, seed 8585); the dnds table, the C++ API (`Result::rates` keeps the inf) and every other
+    field are unchanged. One *Salmonella* / *Shigella* MYN row of the deep test changes (p2067).
+  - **Ka/Ks, MLWL: the site formula at kappa exactly 2 or 0.5 no longer depends on the order of the codon
+    columns.** kappa = 2 ts / tv is often exactly at MLWL's thresholds, and the floating-point sums put it on
+    either side according to the column order, a site or more of N and S apart (property fuzz P6, seed 4242;
+    KaKs_Calculator does the same). The comparison is now made on exact sums (exact kappa 2 is "not above 2"); the
+    printed values are the same doubles. One MLWL row of the deep test's real genes changes (*S. cerevisiae* /
+    *C. glabrata* p2754: Ka 0.249535 -> 0.256528, Ks 1.81172 -> 1.65011, S 64.667 -> 71, the values KaKs_Calculator
+    prints for 38 of 40 random orders of its columns); 10 of the 3,000 random short pairs with independent codons
+    (docs/kaks.md, difference 18).
   - **Ka/Ks: a multiple-hit correction whose argument is 0 in exact arithmetic is `saturated`** whatever the
     rounding (an argument at or below 1e-10 counts as 0): a rounding residue printed dN or dS of 19 to 28 as an
     estimate (fuzz finding K03; NG, the LWL family, the YN/MYN distances, default Comeron and Li; the kappa
@@ -789,7 +804,8 @@ entry under "Added", not under "Fixed".
   they are replaced. A Windows path on Linux / macOS names its WSL form (in the pipeline's messages and in
   those of `coal` itself, with either engine, and of `coal-cpp` run directly: "cannot open 'C:\Users\me\p.fa': no
   such file. This is a Windows path; under WSL (Windows Subsystem for Linux) the same file is
-  /mnt/c/Users/me/p.fa"; the same words in both engines, compared by tests/test_engine_ux.py), and paths are shown as typed (no doubled backslashes). `-codontable N` is accepted as `-c N`; orthologr's and DIAMOND's option names
+  /mnt/c/Users/me/p.fa"; the same words in both engines, compared by tests/test_engine_ux.py; one `/` between the
+  parts and none at the end, so `C:\` is `/mnt/c` and `C:\\data\\x.fa` with doubled backslashes `/mnt/c/data/x.fa`), and paths are shown as typed (no doubled backslashes). `-codontable N` is accepted as `-c N`; orthologr's and DIAMOND's option names
   (`--sensitivity-mode`, `--comp-cores`, `--threads`) and close typos of an option get a suggestion. `coal
   translate` warns when most genes have internal stop codons, with the first one and, as the pipeline does, the
   genetic code under which they have none. `coal dnds` / `coal kaks` on an input without any pair (an empty file,
@@ -1064,6 +1080,16 @@ In commands that 0.5.0 has (both engines unless said):
   duplicate tab bar no longer holds focusable buttons (axe `aria-hidden-focus`).
 
 ### Internal
+
+- **Engine review (2026-11-15).** The AVX2 copy of YN / MYN's transition-probability code is compiled on x86-64
+  only (GCC / Clang, and only with SSE2 floating point, `__SSE2_MATH__`): on 32-bit x86 the baseline does its
+  double arithmetic on the x87 unit by default, so the two copies could round differently; a 32-bit build has
+  the baseline copy only. align.cpp's AVX2 row loops (integer DP) stay on 32-bit x86. `coal-cpp codon-dnds` (the
+  native step of `coal pipeline`) accepts the testing flags `--kaks-baseline` and `--kaks-isa` of `dnds` /
+  `kaks`, not in its help. The Ka/Ks property fuzz's P10 judges MLWL on LWL's scale (its Sd over L2 / 3 + L4):
+  MLWL's kappa-based sites make a genuine dS of 15.6 (513 CAG / CAA pairs at kappa 1, seed 4243) or 162.7 (kappa
+  0.5031) possible, as KaKs_Calculator prints. `benchmarks/kaks/random_short_pairs.py` classes difference 18.
+  Unused imports removed (coal/codon.py, coal/align.py). New tests: `tests/test_engine_review_fixes.py`.
 
 - **Bioconda recipe (packaging/bioconda), second review.** The test line for `pal2nal` without arguments expected
   exit 0 and the usage on stdout and would have failed the first build: it now tests what the command does (exit

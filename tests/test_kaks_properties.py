@@ -375,6 +375,23 @@ class Finding:
         return (self.prop, self.method, self.detail.split(":")[0])
 
 
+def lwl_sites(case: Case) -> tuple[float, float, float]:
+    """L0, L2, L4 of the LWL family (cpp/src/kaks.cpp lwl_count) over the codon columns COAL compares: both codons
+    A / C / G / T (U, lower case read as such) and not a stop codon of the pair's code."""
+    aa = AA[case.code]
+    a, b = case.s1.upper().replace("U", "T"), case.s2.upper().replace("U", "T")
+    L = [0, 0, 0]
+    for i in range(0, min(len(a), len(b)) - 2, 3):
+        x, y = a[i:i + 3], b[i:i + 3]
+        if x not in aa or y not in aa or aa[x] == "*" or aa[y] == "*":
+            continue
+        for c in (x, y):
+            for pos in range(3):
+                k = sum(1 for n in "TCAG" if n != c[pos] and aa[c[:pos] + n + c[pos + 1:]] == aa[c])
+                L[0 if k == 0 else 2 if k == 3 else 1] += 1
+    return L[0] / 2, L[1] / 2, L[2] / 2
+
+
 def check_row(case: Case, method: str, d: dict, flavour: dict) -> list[str]:
     """P2-P4 on one dnds row; returns the violated properties as 'Pn: text'."""
     bad = []
@@ -449,14 +466,24 @@ def check_row(case: Case, method: str, d: dict, flavour: dict) -> list[str]:
                 bad.append(f"P9: synonymous changes only, but {c} = {d[c]}")
     # P10: a multiple-hit correction (Jukes-Cantor, Kimura, F84 / TN93) of a pair of at most a million sites
     # cannot exceed about 8 unless the argument of its logarithm is a rounding residue of an exact 0 (p = 3/4,
-    # 2P + Q = 1): such a value is not an estimate, whatever the status of the row. Two exceptions: the gestimator
-    # flavour reproduces gestimator's number, residue included (docs/kaks.md "Differences", 14), and LWL / MLWL
-    # divide Sd (Nd) by S (N), which with MLWL's kappa-based sites can be a small fraction of a site
+    # 2P + Q = 1): such a value is not an estimate, whatever the status of the row. Exceptions: the gestimator
+    # flavour reproduces gestimator's number, residue included (docs/kaks.md "Differences", 14); LWL divides Sd
+    # (Nd) by S (N), which can be a small fraction of a site; and MLWL is judged on LWL's scale: its S and N are
+    # kappa-based (S = (kappa - 0.5) L2 / (kappa + 1.5) + L4 between 0.5 and 2, a fifth of the 2-fold sites at
+    # kappa = 1 and next to nothing as kappa -> 0.5), so a genuine correction can give any dS. Its Sd (Nd) over
+    # LWL's sites, L2 / 3 + L4 (L0 + 2 L2 / 3), is what LWL's distance would be (FIXCI-B3, seed 4243: 513 CAG / CAA
+    # pairs, dS = 5 ln(513) / 2 = 15.60; the audit's 2,000-codon pair at kappa 0.5031, dS 162.70: both genuine).
+    lwl = lwl_sites(case) if method == "MLWL" else None
     for c in ("dN", "dS"):
         v = num(d[c])
         sites = num(d["S_sites" if c == "dS" else "N_sites"])
-        if gest or (method in ("LWL", "MLWL") and sites is not None and sites < 1):
+        if gest or (method == "LWL" and sites is not None and sites < 1):
             continue
+        if lwl is not None and v is not None and v > 10:
+            diffs = num(d["Sd" if c == "dS" else "Nd"])
+            scale = lwl[1] / 3 + lwl[2] if c == "dS" else lwl[0] + 2 * lwl[1] / 3
+            if diffs is not None and (scale < 1 or diffs / scale <= 10):
+                continue
         if v is not None and v > 10:
             bad.append(f"P10: {c} = {d[c]} with status {st}: a rounding residue at the boundary of the correction")
     cc = num(d["codons_compared"])

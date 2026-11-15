@@ -98,7 +98,9 @@ class TestMynKappaInfinite(unittest.TestCase):
             for c in ("Ka", "Ks", "Ka/Ks", "P-Value(Fisher)", "S-Sites", "N-Sites", "S-Substitutions",
                       "N-Substitutions", "Divergence-Time"):
                 self.assertEqual(x[c], "NA", f"{n} {c}")
-            self.assertEqual(x["Substitution-Rate-Ratio(rTC:rAG:rTA:rCG:rTG:rCA/rCA)"], KC_RATES[n], n)
+            # KaKs_Calculator prints KC_RATES[n] (an `inf`); COAL's output has no inf: the field is NA (AUDIT-85)
+            self.assertIn(":inf:", KC_RATES[n])
+            self.assertEqual(x["Substitution-Rate-Ratio(rTC:rAG:rTA:rCG:rTG:rCA/rCA)"], "NA", n)
             self.assertEqual(x["Substitutions"], SUBSTITUTIONS[n], n)
             self.assertEqual(x["Length"], "300")
 

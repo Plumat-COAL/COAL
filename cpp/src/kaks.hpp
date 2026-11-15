@@ -165,7 +165,7 @@ struct Prepared {
 
 // Rows: aligned coding DNA of equal length (A C G T U, any case; '-' or '.' gaps; other letters ambiguous).
 Prepared prepare(const std::string& row1, const std::string& row2, const GeneticCode& code);
-// Which copy of YN / MYN's transition-probability code a computation with these options runs: "avx2" (x86 with
+// Which copy of YN / MYN's transition-probability code a computation with these options runs: "avx2" (x86-64 with
 // GCC / Clang, a CPU with AVX2, and not Options::baseline_isa) or "baseline". The numbers are the same bits either
 // way; this is for the tests (`coal-cpp dnds --kaks-isa`, testing only).
 const char* pmat_isa(const Options& opt = {});

@@ -632,6 +632,7 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
     const char* prog = "codon-dnds";
     Cli c;
     std::vector<Method> methods;
+    bool print_isa = false;   // --kaks-isa (testing)
     ArgIter it(argv, "iomcj", "q");
     while (it.next()) {
         const std::string& s = it.opt;
@@ -725,11 +726,19 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
         } else if (s == "--min-codons" || s == "--max-ds" || s == "--min-identity") {
             std::string why;
             if (!it.value(v) || !c.flags.parse(s, v, why)) return usage(prog, why.empty() ? s + ": expected a number" : why);
+        } else if (s == "--kaks-baseline") {   // testing (kaks.hpp Options::baseline_isa), as kaks / dnds; not in the help
+            c.opt.kaks.baseline_isa = true;
+        } else if (s == "--kaks-isa") {   // testing (kaks.hpp pmat_isa): print avx2 or baseline, as kaks / dnds; not in the help
+            print_isa = true;
         } else if (s == "-q" || s == "--quiet") {
             c.quiet = true;
         } else {
             return usage(prog, "unrecognized argument: " + s);
         }
+    }
+    if (print_isa) {   // (before the checks of the other arguments, as kaks / dnds)
+        std::cout << kaks::pmat_isa(c.opt.kaks) << '\n';
+        return 0;
     }
     if (c.out.empty()) return usage(prog, "-o PAIRS.tsv is required");
     if (!methods.empty()) c.opt.methods = methods;
