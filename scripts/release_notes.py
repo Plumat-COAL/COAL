@@ -8,8 +8,8 @@ Exit status 0 when a CHANGELOG section was found, 3 when not (the workflow then 
 notes from the merged pull requests). Any other status is an error.
 
 GitHub refuses a release body over 125,000 characters (`gh release create` fails, after every file is built). A
-section that would not fit (0.6.0's is about 127,000) is cut to its summary, the text before its first "### "
-heading, with a link to the whole section in CHANGELOG.md at the tag.
+section that would not fit (0.6.0's does not) is cut to its summary, the text before its first "### " heading,
+with a link to the whole section in CHANGELOG.md at the tag.
 """
 import os
 import re

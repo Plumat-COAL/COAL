@@ -522,7 +522,9 @@ class TestBatchFiles(unittest.TestCase):
         self.assertEqual(msa._launch(["/usr/bin/mafft", "--auto"], self.tmp), (["/usr/bin/mafft", "--auto"], {}))
         bat = os.path.join(self.tmp, "my.bat")
         args, extra = msa._launch([bat, "--auto", "C:\\a b\\in.fasta"], self.tmp)
+        env = extra.pop("env")
         self.assertEqual(extra, {"stdin": subprocess.DEVNULL, "cwd": self.tmp, "_tree": True})
+        self.assertEqual(env, {k: v for k, v in os.environ.items() if k and not k.startswith("=")})
         if os.name == "nt":
             self.assertEqual(args, f'"{bat}" --auto "C:\\a b\\in.fasta"')
         with self.assertRaises(ValueError):
@@ -586,12 +588,16 @@ class TestBatchFiles(unittest.TestCase):
                     msa._launch(kw["cmd"], kw["workdir"])
                 self.assertIn(f"{what} ({odd})", str(cm.exception))
                 self.assertIn("& | < > ^ % ! \"", str(cm.exception))
+            # COAL's own current folder never reaches the batch file (it runs in the run's folder, with no
+            # per-drive current folders in its environment): not refused (review of 2026-11-15)
             here = os.getcwd()
             os.chdir(odd)
             try:
-                with self.subTest(c=c, what="cwd"), self.assertRaises(msa.MsaError) as cm:
-                    msa._launch([os.path.join(self.tmp, "m.bat")], self.tmp)
-                self.assertIn("the current folder", str(cm.exception))
+                hidden = {**os.environ, "=C:": "C:\\" + odd}   # (Windows' per-drive current folder of COAL)
+                with self.subTest(c=c, what="cwd"), mock.patch.object(msa.os, "environ", hidden):
+                    _, extra = msa._launch([os.path.join(self.tmp, "m.bat")], self.tmp)
+                    self.assertEqual(extra["cwd"], self.tmp)
+                    self.assertFalse([k for k in extra["env"] if not k or k.startswith("=")])
             finally:
                 os.chdir(here)
 

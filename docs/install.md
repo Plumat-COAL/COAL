@@ -157,9 +157,17 @@ COAL's CI downloads and runs it on its Windows runner, including one `coal pipel
   `(` and `)`. Not on a network path: MSYS2, which MAFFT's package runs on, reads `\\server\share` as
   `\server\share` (seen in CI), so a `TMP` / `TEMP` or `COAL_CACHE_DIR` on a UNC path is refused with a message.
 - **A MAFFT batch file of your own** (`COAL_MAFFT` naming a `.bat` that is not `mafft-win\mafft.bat` of MAFFT's
-  package) runs through `cmd.exe`, so COAL refuses to start it, with a message, while its folder, the current
-  folder or `TMP` / `TEMP` has one of `& | < > ^ % ! "` in its path. Spaces and `( )` are fine there (tested in
-  CI with a stand-in batch file).
+  package) runs through `cmd.exe`, so COAL refuses to start it, with a message, while its folder, the run's
+  temporary folder or `TMP` / `TEMP` has one of `& | < > ^ % ! "` in its path. Spaces and `( )` are fine there
+  (tested in CI with a stand-in batch file). The folder you start COAL from does not matter: the batch file runs
+  in the run's folder, with an environment that does not carry Windows' per-drive current folders.
+- **Which MAFFT is used:** `COAL_MAFFT`, else `mafft` on `PATH`, else COAL's cache. One exception on Windows: a
+  `mafft` on `PATH` that is a batch file other than MAFFT's package (so it would go through `cmd.exe`) is passed
+  over for the pinned package in COAL's cache when that is installed and unchanged, with a note naming both; set
+  `COAL_MAFFT` to your batch file to use it anyway.
+- **Install folder names:** spaces, `& ^ ( )` and non-ASCII letters are fine (COAL's CI installs and runs the
+  package under such a folder). A `;` is not: it separates the folders of `PATH` on Windows, and MSYS2 would not
+  find the package's programs, so COAL refuses to run it there and says so; pick another `COAL_CACHE_DIR`.
 - Windows on ARM: the package is for x86-64; there the command says what works (below).
 
 **Clustal Omega: no automatic install on Windows.** The pre-compiled Clustal Omega binaries of its authors' site

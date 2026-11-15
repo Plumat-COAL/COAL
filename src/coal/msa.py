@@ -375,8 +375,25 @@ def find_clustalo() -> str | None:
 
 
 def find_mafft() -> str | None:
-    """MAFFT: $COAL_MAFFT, else `mafft` on PATH, else the one install_mafft() put in cache_dir()."""
-    return _find("mafft", "COAL_MAFFT")
+    """MAFFT: $COAL_MAFFT, else `mafft` on PATH, else the one install_mafft() put in cache_dir(). On Windows, a
+    batch file found on PATH that is not MAFFT's own package (mafft_package_root(): a .bat COAL would have to run
+    through cmd.exe) is passed over for the pinned package in COAL's cache when that is installed and intact, with
+    a note once; COAL_MAFFT names a batch file of your own to use it anyway."""
+    found = _find("mafft", "COAL_MAFFT")
+    if (found and not os.environ.get("COAL_MAFFT") and _platform()[0] == "Windows" and is_batch_file(found)
+            and mafft_package_root(found) is None):
+        pinned = _mafft_windows_entry()
+        if os.path.normcase(os.path.abspath(found)) != os.path.normcase(pinned) and _trusted_cached("mafft", pinned):
+            if found not in _path_bat_told:
+                _path_bat_told.add(found)
+                print(f"coal: note: {found} (mafft on PATH) is a batch file of your own, which Windows runs through "
+                      f"cmd.exe; COAL uses the pinned MAFFT package in its cache instead ({pinned}). To use yours, "
+                      f"set COAL_MAFFT to it", file=sys.stderr)
+            return pinned
+    return found
+
+
+_path_bat_told: set = set()   # the PATH batch files find_mafft() passed over (named once each)
 
 
 _PINNED = {"mafft": ("MAFFT", MAFFT_VERSION), "clustalo": ("Clustal Omega", CLUSTALO_VERSION)}
@@ -484,8 +501,11 @@ def _read_version(exe: str, timeout: float = 60) -> str:
 # the command line COAL builds (batch_command_line: the program's full path always in double quotes, every other
 # argument with anything but letters, digits and `_ - . : \ / + @` in quotes; `%`, `!`, `"`, control characters
 # and a trailing backslash refused, since cmd.exe changes them even in quotes), and only when the batch file's
-# folder, the current folder, the run's folder and TMP / TEMP have none of & | < > ^ % ! " in them (a batch file
-# may expand them unquoted, as mafft.bat does); it runs in the run's folder.
+# folder, the run's folder and TMP / TEMP have none of & | < > ^ % ! " in them (a batch file may expand them
+# unquoted, as mafft.bat does); it runs in the run's folder, with COAL's environment less Windows' hidden per-drive
+# current folders, so COAL's own current folder never reaches it and is not checked. MAFFT's package in a folder
+# whose path has a ';' is refused (PATH would split it). On PATH, a batch file that is not MAFFT's package is passed
+# over for the pinned package in COAL's cache when that is installed (find_mafft; COAL_MAFFT still picks any).
 #
 # Either way the aligner gets no standard input (no "Terminate batch job (Y/N)?" or `pause` can wait on it), and
 # stopping it ends its whole process tree (taskkill /T): ending cmd.exe or bash.exe alone would leave MAFFT's
@@ -514,7 +534,7 @@ def _refuse_for_batch(what: str, path: str, exe: str) -> None:
     raise MsaError(
         f"cannot run the batch file {exe}: {what} ({path}) has one of the characters & | < > ^ % ! \" in its "
         f"path, which a batch file may read as a command (cmd.exe runs every .bat). Use folders without them: "
-        f"for the temporary files, TMP / TEMP; start COAL from another folder; or set COAL_MAFFT to the mafft.bat "
+        f"for the temporary files, TMP / TEMP; for the batch file, another folder; or set COAL_MAFFT to the mafft.bat "
         f"of MAFFT's own Windows package (`coal pipeline install mafft` installs it), which COAL runs without "
         f"cmd.exe. Or run COAL under WSL")
 
@@ -572,6 +592,13 @@ def _launch(cmd: Sequence[str], workdir: str | None = None) -> tuple:
                     f"MAFFT runs on, does not read such a path as given (it reads \\\\server\\share as "
                     f"\\server\\share). Use a folder on a drive: TMP / TEMP for the temporary files, COAL_CACHE_DIR "
                     f"for the install")
+        if ";" in root:
+            # PATH holds the package's usr\bin (MSYS2 finds /usr/bin's programs by it), and ';' separates PATH's
+            # folders on Windows: the folder would be read as two, neither of them the package's
+            raise MsaError(
+                f"cannot run MAFFT's Windows package in {root}: its folder has a ';' in its path, which separates "
+                f"the folders of PATH on Windows, so MSYS2 (which MAFFT runs on) would not find the package's "
+                f"programs. Install it where the path has no ';' (COAL_CACHE_DIR), or point COAL_MAFFT there")
         usr_bin = os.path.join(root, "usr", "bin")
         # a file of the run's folder (the input FASTA) is given by its name, relative to that folder, the current
         # folder: no path of the user's reaches MSYS2's reading of the command line
@@ -582,13 +609,18 @@ def _launch(cmd: Sequence[str], workdir: str | None = None) -> tuple:
         env.update(MAFFT_BINARIES="/usr/lib/mafft", TMPDIR=tmp, MAFFT_TMPDIR=tmp, TMP=tmp, TEMP=tmp)
         return ([os.path.join(usr_bin, "bash.exe"), "/usr/bin/mafft", *rest],
                 {"stdin": subprocess.DEVNULL, "cwd": workdir, "env": env, "_tree": True})
-    for what, path in (("its folder", os.path.dirname(os.path.abspath(cmd[0]))), ("the current folder", os.getcwd()),
-                       ("the run's folder", workdir), *(((f"{v}", os.environ[v]) for v in ("TMP", "TEMP")
-                                                         if os.environ.get(v)))):
+    # COAL's own current folder is not checked: the batch file runs in the run's folder (cwd), and gets an
+    # environment without Windows' hidden per-drive current folders ("=C:=C:\..."), so neither %CD% nor a `cd`
+    # to another drive can show it the folder COAL was started from (review of 2026-11-15: a current folder with
+    # one of the characters was refused, though it never reached the batch file)
+    for what, path in (("its folder", os.path.dirname(os.path.abspath(cmd[0]))), ("the run's folder", workdir),
+                       *(((f"{v}", os.environ[v]) for v in ("TMP", "TEMP") if os.environ.get(v)))):
         if any(c in _CMD_SPECIAL for c in path):
             _refuse_for_batch(what, path, cmd[0])
     line = batch_command_line(cmd)
-    return (line if os.name == "nt" else cmd), {"stdin": subprocess.DEVNULL, "cwd": workdir, "_tree": True}
+    env = {k: v for k, v in os.environ.items() if k and not k.startswith("=")}
+    return (line if os.name == "nt" else cmd), {"stdin": subprocess.DEVNULL, "cwd": workdir, "env": env,
+                                                 "_tree": True}
 
 
 def _end(proc) -> None:

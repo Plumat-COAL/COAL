@@ -629,6 +629,21 @@ std::string PairFlags::summary() const {
 }
 
 const char* kaks_compat_header() { return COMPAT_HEADER; }
+// A gzip-compressed -i: the message names the Python commands that decompress it for this engine (`coal kaks`,
+// `coal dnds`); seqio's refuse_gzip names those of the codon alignment (review of 2026-11-15, L5).
+static void refuse_gzip_kaks(const std::string& path) {
+    std::FILE* f = std::fopen(path.c_str(), "rb");
+    if (!f) return;  // (the reader reports a file that cannot be opened)
+    unsigned char magic[2] = {0, 0};
+    const size_t n = std::fread(magic, 1, 2, f);
+    std::fclose(f);
+    if (n == 2 && magic[0] == 0x1f && magic[1] == 0x8b)
+        throw InputError("'" + path + "' is gzip-compressed: decompress it first (gunzip -k '" + path +
+                             "'). coal-cpp reads plain text only; the Python package's `coal kaks` and `coal dnds` "
+                             "decompress .gz inputs themselves",
+                         "input_format");
+}
+
 std::string kaks_compat_row(const std::string& name, const kaks::Result& r, int digits) {
     return compat_row(name, r, digits);
 }
@@ -649,7 +664,7 @@ int kaks_main(const std::string& sub, const std::vector<std::string>& argv) {
             if (x == m) methods.push_back(m);
     const char* prog = c.compat ? "coal kaks" : "coal dnds";
     try {
-        refuse_gzip(c.in);
+        refuse_gzip_kaks(c.in);
         std::string fmt = c.format == "auto" ? sniff(c.in) : c.format;
         std::unique_ptr<AxtReader> axt;
         std::vector<FastaRec> recs;
