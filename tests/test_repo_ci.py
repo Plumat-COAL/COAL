@@ -357,7 +357,7 @@ class TestNightlySteps(unittest.TestCase):
                     "test_cpp_pool", "test_stdin", "test_robustness", "test_cpp_error_precedence", "test_batch",
                     "test_kaks", "test_kaks_comeron_li", "test_align", "test_msa", "test_dnds_pipeline",
                     "test_short_options", "test_output_lock", "test_pair_table", "test_kaks_cli_inputs",
-                    "test_kaks_yn_shortcut", "test_kaks_dispatch", "test_dnds_flags", "test_pipeline_order",
+                    "test_kaks_yn_shortcut", "test_kaks_dispatch", "test_engine_ux", "test_dnds_flags", "test_pipeline_order",
                     "test_pipeline_robustness",
                     "test_pipeline_provenance", "test_pipeline_isoforms", "test_pipeline_atomic", "test_citations",
                     "test_cli_commands",
