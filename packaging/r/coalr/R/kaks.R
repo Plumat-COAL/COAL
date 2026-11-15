@@ -12,7 +12,9 @@
 #'   Alternatively give one alignment in `aligned1` (two or more rows) and leave `aligned2` out: every pair of its
 #'   rows is computed (1-2, 1-3, ..., 2-3, ...).
 #' @param method One or more of `"YN"`, `"NG"`, `"LWL"`, `"MLWL"`, `"LPB"`, `"MLPB"`, `"MYN"` (or `"ALL"` for
-#'   these seven), `"Comeron"` (alias `"C95"`) and `"Li"`; see [coal_dnds_pairs()].
+#'   these seven), `"GY"` (maximum likelihood, Goldman & Yang 1994; with `details = TRUE` its `kappa` is the
+#'   estimate and `divergence` is the branch length t / 3), `"Comeron"` (alias `"C95"`) and `"Li"`; see
+#'   [coal_dnds_pairs()].
 #' @param methods The same as `method` (the name [coal_dnds_pairs()] uses); give one of the two.
 #' @param comeron_flavour,li_flavour Which reading of the pair `"Comeron"` and `"Li"` follow: COAL's policy
 #'   (`"coal"`, the default) or the reference program's (`"gestimator"`, `"seqinr"`); see [coal_dnds_pairs()].
@@ -24,9 +26,9 @@
 #' @return A data frame, one row per pair and method: `seq1`, `seq2` (the names, or the positions), `method`,
 #'   `dN`, `dS`, `dNdS`, `SE_dN`, `SE_dS`, `N_sites`, `S_sites`, `Nd`, `Sd`, `codons_compared`, `status`, `note`.
 #'   `status` is `ok`, `warning` (estimated; see `note`), `not_converged` (YN / MYN: the iteration did not
-#'   converge, so there is no estimate: `dN`, `dS`, `dNdS`, the SEs, `Nd` and `Sd` are `NA`, and `note` has the
-#'   last round's values, which can differ between platforms), `saturated` (`dN` or `dS` is `NA`), `no_data` or
-#'   `error`.
+#'   converge, or GY: the optimisation did not; there is then no estimate: `dN`, `dS`, `dNdS`, the SEs, `Nd` and
+#'   `Sd` are `NA`, and `note` has the last round's values, which can differ between platforms), `saturated`
+#'   (`dN` or `dS` is `NA`), `no_data` or `error`.
 #' @examples
 #' coal_kaks("ATGGCTAAAGGTCTGGAACGT", "ATGGCGAAAGGCCTGGATCGT")
 #' coal_kaks(c(a = "ATGGCTAAAGGTCTGGAACGT", b = "ATGGCGAAAGGCCTGGATCGT", c = "ATGGCTAAGGGT---GAACGA"),

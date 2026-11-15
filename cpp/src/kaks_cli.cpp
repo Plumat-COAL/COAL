@@ -48,14 +48,16 @@ const char* KAKS_HELP =
     "                 [--comeron-min-sites N] [--li-flavour coal|seqinr]\n"
     "\n"
     "Ka/Ks for pairs of aligned coding sequences, written in KaKs_Calculator 2.0's tab-separated format.\n"
-    "Takes KaKs_Calculator's -i -o -m -c for the seven KaKs_Calculator methods below (the default is YN;\n"
+    "Takes KaKs_Calculator's -i -o -m -c for the eight KaKs_Calculator methods below (the default is YN;\n"
     "KaKs_Calculator's is MA), and has Comeron (1995) and Li (1993) as the R package orthologr computes them.\n"
     "The engine is derived from KaKs_Calculator 2.0, PAML yn00, libsequence and seqinr (GPL); see docs/kaks.md.\n"
     "\n"
     "  -i IN          AXT (name line, two aligned sequences, blank line) or aligned FASTA\n"
     "  -o OUT         output file ('-' or none: standard output)\n"
-    "  -m METHOD      NG, LWL, MLWL, LPB, MLPB, YN (default), MYN; repeat for several. KaKs_Calculator's\n"
-    "                 GY, MS, MA, NONE and gamma (G*) methods are not implemented natively and are refused.\n"
+    "  -m METHOD      NG, LWL, MLWL, LPB, MLPB, GY, YN (default), MYN; repeat for several. KaKs_Calculator's\n"
+    "                 MS, MA, NONE and gamma (G*) methods are not implemented natively and are refused.\n"
+    "                 GY: maximum likelihood (Goldman & Yang 1994, F3x4; t, kappa and omega estimated as\n"
+    "                 PAML codeml does for a pair); its rows have ML-Score (lnL), AICc and Model (HKY)\n"
     "                 Comeron (alias C95): Comeron 1995 as libsequence's gestimator; Li: Li 1993 as\n"
     "                 seqinr::kaks (both: standard genetic code only; rows come after KaKs_Calculator's)\n"
     "  -c TABLE       NCBI genetic code (default 1), the tables COAL's --codontable accepts\n"
@@ -81,16 +83,19 @@ const char* DNDS_HELP =
     "                 [--format auto|axt|fasta] [--digits N] [--yn-flavour kaks|paml] [--yn-weighting 0|1]\n"
     "                 [--comeron-flavour coal|gestimator] [--comeron-twosubs comeron|libsequence]\n"
     "                 [--comeron-min-sites N] [--li-flavour coal|seqinr] [--min-codons N] [--max-ds X]\n"
+    "                 [--ml-columns]\n"
     "\n"
     "dN/dS for pairs of aligned coding sequences as a tidy TSV, one row per pair and method:\n"
     "seq1 seq2 method dN dS dNdS SE_dN SE_dS N_sites S_sites Nd Sd codons_compared status note\n"
-    "status: ok, warning (internal stop codons skipped), not_converged (YN/MYN iteration: no estimate,\n"
-    "dN and dS NA), saturated (dN or dS NA), no_data, error.\n"
+    "status: ok, warning (internal stop codons skipped), not_converged (YN/MYN iteration or GY\n"
+    "optimisation: no estimate, dN and dS NA), saturated (dN or dS NA), no_data, error.\n"
     "\n"
     "  IN             aligned FASTA or AXT file (or -i IN)\n"
     "  -o OUT         output file (default: standard output)\n"
-    "  -m METHOD      YN (default), NG, LWL, MLWL, LPB, MLPB, MYN, Comeron (alias C95), Li; repeat for\n"
-    "                 several (Comeron and Li: standard genetic code only; SE for YN, MYN, NG and Li)\n"
+    "  -m METHOD      YN (default), NG, LWL, MLWL, LPB, MLPB, MYN, GY, Comeron (alias C95), Li; repeat for\n"
+    "                 several (Comeron and Li: standard genetic code only; SE for YN, MYN, NG, Li, GY).\n"
+    "                 GY: maximum likelihood under the codon model of Goldman & Yang (1994) with F3x4\n"
+    "                 codon frequencies, as PAML codeml's pairwise estimate (slower; accurate at high dS)\n"
     "  -c, --codontable TABLE  NCBI genetic code (default 1)\n"
     "  -j, --jobs N   threads (default: all hardware threads)\n"
     "  --pairs P      FASTA input: all (every pair, default) or consecutive (records 1+2, 3+4, ...)\n"
@@ -112,6 +117,8 @@ const char* DNDS_HELP =
     "                 \"fewer than N codons compared\" (default 0: off). No row is dropped, no number changes\n"
     "  --max-ds X     flag estimates with dS above X (saturation): status warning and the note \"dS above X\"\n"
     "                 (default: off). See docs/kaks.md, \"Filtering before interpretation\"\n"
+    "  --ml-columns   three more columns after note: kappa, t (substitutions per codon) and lnL, the\n"
+    "                 quantities GY estimates (kappa also for YN and MYN; NA where a method has none)\n"
     "  -q, --quiet    no summary on stderr\n"
     "\n"
     "Exit status: 0 done; 1 the input cannot be read or the output cannot be written; 2 command-line error,\n"
@@ -131,6 +138,7 @@ struct Cli {
     PairFlags flags;
     bool quiet = false;
     bool print_isa = false;   // --kaks-isa (testing)
+    bool ml_columns = false;  // dnds --ml-columns: kappa, t and lnL after the note
 };
 
 int usage(const Cli& c, const std::string& msg) {
@@ -358,10 +366,15 @@ std::string compat_row(const std::string& name, const Result& r, int dg) {
         add("NA");
     else
         add(num(r.gc[0], dg) + "(" + num(r.gc[1], dg) + ":" + num(r.gc[2], dg) + ":" + num(r.gc[3], dg) + ")");
-    add("NA");  // ML-Score
-    add("NA");  // AICc
+    // GY (maximum likelihood): the log-likelihood, KaKs_Calculator's AICc (-2 lnL + 2 K n / (n - K - 1), K = 3
+    // parameters, n = codons; NA when n <= K + 1) and the model's name as KaKs_Calculator prints it. NA for every
+    // other method, as there. Akaike-Weight belongs to model averaging (MA), which COAL does not have.
+    const bool ml = r.method == Method::GY && std::isfinite(r.lnl);
+    const double ncod = (double)r.codons_compared;
+    add(ml ? num(r.lnl, dg) : "NA");  // ML-Score
+    add(ml && ncod > 4 ? num(-2 * r.lnl + 2.0 * 3 * ncod / (ncod - 3 - 1), dg) : "NA");  // AICc
     add("NA");  // Akaike-Weight
-    add("NA", '\n');  // Model
+    add(ml ? "HKY" : "NA", '\n');  // Model
     return o;
 }
 
@@ -375,7 +388,9 @@ std::string clean_note(const std::string& s) {
     return o.empty() ? "" : o;
 }
 
-std::string tidy_row(const Pair& p, const Result& r, int dg) {
+const char* TIDY_ML_HEADER = "\tkappa\tt\tlnL";
+
+std::string tidy_row(const Pair& p, const Result& r, int dg, bool ml_columns) {
     std::string o;
     auto add = [&](const std::string& s, char end = '\t') {
         o += s;
@@ -395,7 +410,14 @@ std::string tidy_row(const Pair& p, const Result& r, int dg) {
     add(num(r.Sd, dg));
     add(std::to_string(r.codons_compared));
     add(kaks::status_name(r.status));
-    add(clean_note(r.note), '\n');
+    if (ml_columns) {
+        add(clean_note(r.note));
+        add(num(r.kappa, dg));
+        add(num(r.t, dg));
+        add(num(r.lnl, dg), '\n');
+    } else {
+        add(clean_note(r.note), '\n');
+    }
     return o;
 }
 
@@ -500,6 +522,8 @@ int parse(const std::vector<std::string>& args, Cli& c) {
         } else if ((u == "--min-codons" || u == "--max-ds") && !c.compat) {
             std::string why;
             if (!need(v) || !c.flags.parse(u, v, why)) return usage(c, why.empty() ? u + ": expected a number" : why);
+        } else if (u == "--ml-columns" && !c.compat) {
+            c.ml_columns = true;
         } else if (u == "-q" || u == "--quiet") {
             c.quiet = true;
         } else if (u == "-D" && c.compat) {
@@ -649,8 +673,15 @@ int kaks_main(const std::string& sub, const std::vector<std::string>& argv) {
         if (c.out.empty()) _setmode(_fileno(stdout), _O_BINARY);  // \n line ends, as KaKs_Calculator's files
 #endif
         std::ostream& os = c.out.empty() ? std::cout : fout;
-        os << (c.compat ? COMPAT_HEADER : TIDY_HEADER);
+        if (c.compat || !c.ml_columns) {
+            os << (c.compat ? COMPAT_HEADER : TIDY_HEADER);
+        } else {
+            std::string head = TIDY_HEADER;
+            head.pop_back();
+            os << head << TIDY_ML_HEADER << '\n';
+        }
         long n_pairs = 0, n_status[kaks::STATUS_COUNT] = {}, n_unconverged = 0, n_unequal = 0, n_protein_like = 0;
+        long n_unconverged_gy = 0;
         std::string first_error;
         auto read_batch = [&](std::vector<Pair>& b) {
             size_t nt = 0;
@@ -715,12 +746,12 @@ int kaks_main(const std::string& sub, const std::vector<std::string>& argv) {
                 for (Result& r : p.res) {
                     if (c.flags.on()) c.flags.apply(r.status, r.note, (long)r.codons_compared, r.ks);
                     ++n_status[(int)r.status];
-                    if (!r.converged) ++n_unconverged;
+                    if (!r.converged) ++(r.method == Method::GY ? n_unconverged_gy : n_unconverged);
                     if (r.status == Status::error) {
                         if (first_error.empty()) first_error = p.name + ": " + r.note;
                         if (c.compat) continue;  // KaKs_Calculator leaves invalid pairs out
                     }
-                    buf += c.compat ? compat_row(p.name, r, c.digits) : tidy_row(p, r, c.digits);
+                    buf += c.compat ? compat_row(p.name, r, c.digits) : tidy_row(p, r, c.digits, c.ml_columns);
                 }
             }
             os << buf;
@@ -745,6 +776,10 @@ int kaks_main(const std::string& sub, const std::vector<std::string>& argv) {
                                          "the last round)"
                                        : " (status not_converged; the note has the last round)")
                           << "\n";
+            if (n_unconverged_gy > 0)
+                std::cerr << prog << ": warning: " << n_unconverged_gy << " result(s): the likelihood optimisation "
+                          << "of GY did not converge, so there is no estimate: Ka and Ks are NA"
+                          << (c.compat ? "" : " (status not_converged; the note has the last point)") << "\n";
             if (n_status[5] > 0)
                 std::cerr << prog << ": warning: " << n_status[5] << " result(s) could not be computed"
                           << (c.compat ? " and were left out" : " (status error)") << "; first: " << first_error

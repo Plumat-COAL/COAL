@@ -74,8 +74,8 @@ DIAMOND_VERSION = "2.2.8"   # the version install_diamond() fetches and the one 
 # version has been tested). Ubuntu 22.04's package is 2.0.14.
 DIAMOND_MIN_VERSION = (2, 1, 0)
 # KaKs_Calculator's order, then the two methods it does not have (docs/kaks.md): the order of the rows
-METHODS = ("NG", "LWL", "MLWL", "LPB", "MLPB", "YN", "MYN", "Comeron", "Li")
-_METHOD_NAMES = {**{m.upper(): m for m in METHODS}, "C95": "Comeron"}
+METHODS = ("NG", "LWL", "MLWL", "LPB", "MLPB", "GY", "YN", "MYN", "Comeron", "Li")
+_METHOD_NAMES = {**{m.upper(): m for m in METHODS}, "C95": "Comeron", "GY-HKY": "GY", "GY94": "GY"}
 
 
 def _method_name(name: str) -> str:
@@ -3580,8 +3580,9 @@ def build_parser() -> argparse.ArgumentParser:
                         "them whatever their share; map: use --gene-map only, read nothing from headers or IDs")
     g = common.add_argument_group("Ka/Ks")
     g.add_argument("-m", "--method", action="append", metavar="METHOD", type=_method_name, choices=METHODS,
-                   help="YN (default), NG, LWL, MLWL, LPB, MLPB, MYN, Comeron (alias C95), Li; repeat for several "
-                        "(Comeron and Li: genetic code 1 only)")
+                   help="YN (default), NG, LWL, MLWL, LPB, MLPB, MYN, GY, Comeron (alias C95), Li; repeat for "
+                        "several (Comeron and Li: genetic code 1 only; GY: maximum likelihood, Goldman & Yang "
+                        "1994 as PAML codeml's pairwise estimate, slower and accurate at high dS)")
     g.add_argument("-c", "--codontable", "-codontable", type=int, default=1, choices=SUPPORTED, metavar="N",
                    help="NCBI genetic code for translation, the codon alignment and Ka/Ks (default 1)")
     g.add_argument("--yn-flavour", "--yn-flavor", default="kaks", choices=("kaks", "paml"),

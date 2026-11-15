@@ -80,7 +80,7 @@ class TestInputsAndLimits(RunsDirCase):
         # engine order, any case, the C95 alias, duplicates once
         self.assertEqual(dnds.validate_methods(["yn", "NG", "c95", "YN"], 1), ["NG", "YN", "Comeron"])
         self.assertEqual(dnds.validate_methods("MYN", 11), ["MYN"])
-        for bad, code, words in (([], 1, "at least one"), (["GY"], 1, "unknown Ka/Ks method"),
+        for bad, code, words in (([], 1, "at least one"), (["MA"], 1, "unknown Ka/Ks method"),
                                  (["Comeron"], 2, "standard genetic code"), (["Li", "Comeron"], 11, "are defined"),
                                  (["YN"], 7, "unknown genetic code")):
             with self.subTest(bad=bad, code=code), self.assertRaises(ValueError) as cm:
@@ -520,7 +520,7 @@ class TestDndsTools(RunsDirCase):
         self.assertEqual(r["flagged"][0]["status"], "error")
         self.assertIn("error", [s["status"] for s in r["statuses"]])
         self.assertIn("flagged", r["next_step"])
-        for kw, words in (({"methods": ["GY"]}, "unknown Ka/Ks method"),
+        for kw, words in (({"methods": ["MA"]}, "unknown Ka/Ks method"),
                           ({"methods": ["Comeron"], "codontable": 2}, "standard genetic code"),
                           ({"codontable": 8}, "unknown genetic code"),
                           ({"pairs": "every"}, "'all' or 'consecutive'"),

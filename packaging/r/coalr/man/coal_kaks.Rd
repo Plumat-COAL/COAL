@@ -29,7 +29,9 @@ Alternatively give one alignment in \code{aligned1} (two or more rows) and leave
 rows is computed (1-2, 1-3, ..., 2-3, ...).}
 
 \item{method}{One or more of \code{"YN"}, \code{"NG"}, \code{"LWL"}, \code{"MLWL"}, \code{"LPB"}, \code{"MLPB"}, \code{"MYN"} (or \code{"ALL"} for
-these seven), \code{"Comeron"} (alias \code{"C95"}) and \code{"Li"}; see \code{\link[=coal_dnds_pairs]{coal_dnds_pairs()}}.}
+these seven), \code{"GY"} (maximum likelihood, Goldman & Yang 1994; with \code{details = TRUE} its \code{kappa} is the
+estimate and \code{divergence} is the branch length t / 3), \code{"Comeron"} (alias \code{"C95"}) and \code{"Li"}; see
+\code{\link[=coal_dnds_pairs]{coal_dnds_pairs()}}.}
 
 \item{code}{NCBI genetic code number (1 = standard), used for translation, codon threading and Ka/Ks.}
 
@@ -60,9 +62,9 @@ and the smallest site class that can make \code{dN} or \code{dS} \code{NA}; see 
 A data frame, one row per pair and method: \code{seq1}, \code{seq2} (the names, or the positions), \code{method},
 \code{dN}, \code{dS}, \code{dNdS}, \code{SE_dN}, \code{SE_dS}, \code{N_sites}, \code{S_sites}, \code{Nd}, \code{Sd}, \code{codons_compared}, \code{status}, \code{note}.
 \code{status} is \code{ok}, \code{warning} (estimated; see \code{note}), \code{not_converged} (YN / MYN: the iteration did not
-converge, so there is no estimate: \code{dN}, \code{dS}, \code{dNdS}, the SEs, \code{Nd} and \code{Sd} are \code{NA}, and \code{note} has the
-last round's values, which can differ between platforms), \code{saturated} (\code{dN} or \code{dS} is \code{NA}), \code{no_data} or
-\code{error}.
+converge, or GY: the optimisation did not; there is then no estimate: \code{dN}, \code{dS}, \code{dNdS}, the SEs, \code{Nd} and
+\code{Sd} are \code{NA}, and \code{note} has the last round's values, which can differ between platforms), \code{saturated}
+(\code{dN} or \code{dS} is \code{NA}), \code{no_data} or \code{error}.
 }
 \description{
 Estimates dN (Ka), dS (Ks) and dN/dS for pairs of sequences that are already aligned codon by codon (for

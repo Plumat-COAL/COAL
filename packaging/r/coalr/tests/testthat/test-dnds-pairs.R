@@ -144,7 +144,7 @@ test_that("alignments are returned when asked for, and are consistent", {
 test_that("arguments are checked", {
   expect_error(coal_dnds_pairs(q, s[1:3]), "same length")
   expect_error(coal_dnds_pairs(unname(q), s, orthologs()), "needs names")
-  expect_error(coal_dnds_pairs(q, s, orthologs(), methods = "GY"), "not one COAL computes")
+  expect_error(coal_dnds_pairs(q, s, orthologs(), methods = "MA"), "not one COAL computes")
   expect_error(coal_dnds_pairs(q, s, orthologs(), code = 7), "genetic code 7 is not supported")
   expect_error(coal_dnds_pairs(q, s, orthologs(), matrix = "BLOSUM99"), "BLOSUM99")
   expect_error(coal_dnds_pairs(q, s, orthologs(), gap_open = 1, gap_extend = 5))

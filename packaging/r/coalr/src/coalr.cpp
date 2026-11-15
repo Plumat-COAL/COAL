@@ -469,7 +469,7 @@ Rcpp::List coalr_dnds(SEXP cds, SEXP member_ids, Rcpp::IntegerVector members, SE
     for (kaks::Method m : kaks::output_order()) method_names.push_back(kaks::method_name(m));
     for (int s = 0; s < kaks::STATUS_COUNT; ++s)   // the codes index status_names
         status_names.push_back(kaks::status_name((kaks::Status)s));
-    // Method's enumerators are in output order (NG, LWL, MLWL, LPB, MLPB, YN, MYN, Comeron, Li): the codes index
+    // Method's enumerators are in output order (NG, LWL, MLWL, LPB, MLPB, GY, YN, MYN, Comeron, Li): the codes index
     // method_names.
     std::vector<std::string> enum_names(method_names.size());
     for (kaks::Method m : kaks::output_order()) enum_names[(size_t)(int)m] = kaks::method_name(m);
@@ -944,5 +944,6 @@ Rcpp::List coalr_info() {
                               // MLPB's S_sites (N_sites) and Fisher's p with them (difference 19).
                               Rcpp::_["features"] = to_r(std::vector<std::string>{
                                   "comeron_twosubs", "comeron_min_sites", "comeron_min_sites_positive",
-                                  "myn_kappa_inf_saturated", "mlwl_exact_kappa", "lwl_saturated_counts_na"}));
+                                  "myn_kappa_inf_saturated", "mlwl_exact_kappa", "lwl_saturated_counts_na",
+                                  "gy94_ml"}));
 }

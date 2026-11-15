@@ -25,6 +25,37 @@ entry under "Added", not under "Fixed".
 
 ### Added
 
+- **Ka/Ks method `GY`: maximum likelihood under the codon model of Goldman & Yang (1994)** (`coal kaks -m GY`,
+  `coal dnds -m GY`, `coal pipeline ... -m GY`, coalr `methods = "GY"`; aliases `GY-HKY`, KaKs_Calculator's name
+  of its GY rows, and `GY94`). The branch length t, kappa and omega are estimated from the codon pairs with F3x4
+  codon frequencies, as PAML's codeml does for a pair (`runmode = -2`, `CodonFreq = 2`), and dN and dS are those
+  of Yang & Nielsen (2000), so dN/dS is omega; every genetic code. The simulation study of 2026-11-14 showed YN
+  and MYN biased by 10 to 40 % from a dS of about 1 while codeml's likelihood stayed within 8 %: `GY` is that
+  estimate, in process. COAL's own code (`cpp/src/kaks_gy.cpp`; only the symmetric eigen solver is shared with
+  YN): the rate matrix is decomposed once per (kappa, omega), t is maximised out by Newton steps, and kappa and
+  omega by a BFGS iteration with the exact gradient, from fixed starting points (four for a diverged pair, one
+  of them on the ridge of saturation), so the result is deterministic, independent of the thread count, of the
+  order of the two sequences and of the order of the columns. **Validation** (`benchmarks/kaks/validate_gy.py`,
+  docs/kaks.md "GY: maximum likelihood"): on 639 pairs (320 simulated, 160 yeast, 159 *Salmonella* /
+  *Shigella*) COAL's log-likelihood is never below codeml's (beyond 1e-4) and is higher for 20 (codeml at
+  a bound or at a lower maximum); where both are at the same maximum, dN, dS, omega, kappa and t are codeml's to
+  its printed precision. Against simulated truth (6,400 pairs of 300 codons) the median error of dS and of dN/dS
+  is within 6 % at every dS from 0.1 to 3, and dS ± 1.96 SE holds the truth for 91 to 97 % of the pairs. **Output:** `coal dnds --ml-columns` (new) adds the columns `kappa`,
+  `t` and `lnL` after `note`; `coal kaks` fills ML-Score, AICc and Model (`HKY`) for GY rows, which come after
+  MLPB as in KaKs_Calculator. **Standard errors** of dN and dS from the observed information and the delta
+  method (codeml's `getSE = 1`; checked to five digits against an independent numpy computation, and within
+  about 15 % of codeml's own, whose Hessian is cruder); `NA` for a saturated pair and for the distance that an
+  omega at its bound makes 0. **Statuses:** an estimate of dS or dN above 10
+  substitutions per site (always the case when t ends at its bound of 50) is `NA` with status `saturated`, and
+  the other estimate is kept; a pair whose likelihood is flat in t up to the bound (one codon, every site
+  different) is `saturated` without an estimate; identical sequences give dN = dS = 0. **Speed:** 23 to 47 CPU seconds per 1,000 pairs of 300 to 400 codons, 15 to 25 times YN's time and 3 to 4
+  times faster than codeml. No other method's
+  output changes (byte-identical at `--digits 17`, both output formats, all nine methods, on 4,388 yeast and
+  3,685 *E. coli* pairs). `-m GY` used to be refused ("does not implement natively"); MS, MA and the gamma
+  variants still are. `coal cite` lists Goldman & Yang (1994) for it. Tests: `tests/test_kaks_gy.py` (20 pairs
+  with codeml's stored output, three under the mitochondrial code; the likelihood recomputed from the model's
+  definition; the standard errors against an independent numpy computation; edge cases; formats), `tests/test_kaks_properties.py` (GY in the property tests: P1 to P8 and
+  P10), coalr `test-gy.R`.
 - **MAFFT on native Windows: `coal pipeline install mafft` installs it** (x86-64; also `--install-tools` and
   `coal.msa.install_mafft()`). It downloads MAFFT's own Windows package, the "all-in-one"
   `mafft-7.526-win64-signed.zip` from mafft.cbrc.jp (MAFFT 7.526, the version COAL pins elsewhere), pinned by size

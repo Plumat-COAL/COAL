@@ -22,10 +22,14 @@
 #'   it. (The command line never pairs two CDS files by position: `coal pipeline pairs` finds the pairs, or takes
 #'   them from `--pairs`.)
 #' @param methods Ka/Ks methods: any of `"YN"` (Yang & Nielsen 2000, the default), `"NG"`, `"LWL"`, `"MLWL"`,
-#'   `"LPB"`, `"MLPB"`, `"MYN"` (KaKs_Calculator's methods; `"ALL"` for these seven), `"Comeron"` (Comeron 1995
+#'   `"LPB"`, `"MLPB"`, `"MYN"` (KaKs_Calculator's methods; `"ALL"` for these seven), `"GY"` (maximum likelihood
+#'   under the codon model of Goldman & Yang 1994 with F3x4 codon frequencies, as PAML codeml estimates dN and dS
+#'   for a pair: slower, and the method to use when dS is above about 0.5; standard errors from the curvature of
+#'   the likelihood; a `dN` or `dS` above 10 is `NA` with status `saturated`; not part of `"ALL"`), `"Comeron"`
+#'   (Comeron 1995
 #'   as libsequence's gestimator computes it, the default method of the R package orthologr; alias `"C95"`) and
 #'   `"Li"` (Li 1993 as `seqinr::kaks()` computes it). Names are read in any case. With several methods a pair's
-#'   rows come in the order NG, LWL, MLWL, LPB, MLPB, YN, MYN, Comeron, Li. Comeron and Li are implemented for
+#'   rows come in the order NG, LWL, MLWL, LPB, MLPB, GY, YN, MYN, Comeron, Li. Comeron and Li are implemented for
 #'   the standard genetic code only (`code = 1`).
 #' @param code NCBI genetic code number (1 = standard), used for translation, codon threading and Ka/Ks.
 #' @param threads Worker threads; `0` = one per hardware thread. Default `getOption("coalr.threads", 1L)`.
@@ -90,7 +94,8 @@
 #'   `SE_dS`, `N_sites`, `S_sites`, `Nd`, `Sd`, `codons_compared`, `prot_aln_length`, `prot_identity`, `status`
 #'   (`ok`, `warning`, `not_converged`, `saturated`, `no_data`, `error`) and `note`. Values that are not available
 #'   are `NA` (`dNdS` is `NA` when dS is below 1e-6). `not_converged`: the YN / MYN iteration ended at its round
-#'   limit without settling, which happens with very short or nearly saturated pairs; there is no estimate (`dN`,
+#'   limit without settling (or the optimisation of GY did not converge), which happens with very short or nearly
+#'   saturated pairs; there is no estimate (`dN`,
 #'   `dS`, `dNdS`, the SEs, `Nd` and `Sd` are `NA`), and `note` has the values of the last round, which are not
 #'   estimates and can differ between platforms. Rows are in the order of `pairs`. Attribute `"seconds"`: time spent in
 #'   alignment + codon threading and in Ka/Ks.

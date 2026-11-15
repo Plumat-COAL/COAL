@@ -3,7 +3,8 @@ docs/kaks.md). A seeded generator (standard library only, so that the tests need
 random pairs of aligned coding sequences of 1 to 2,000 codons, divergence 0 to 100 %, with gaps (whole and split
 codons, `-` and `.`), internal and terminal stop codons, N / IUPAC / X, lower case, U, every genetic code COAL
 supports, and a few malformed pairs (rows of different length, a length that is not a multiple of 3). For every
-pair and method (NG, LWL, MLWL, LPB, MLPB, YN, MYN, Comeron, Li; the reference flavours too):
+pair and method (NG, LWL, MLWL, LPB, MLPB, GY, YN, MYN, Comeron, Li; the reference flavours too; GY, the
+maximum-likelihood method, which no flavour option changes and which is the slowest, with the default flavour):
 
 P1  no crash, no hang, no sanitizer report: the exit status is 0 or 2 (2 only when no pair has an estimate)
 P2  status is one of ok, warning, saturated, not_converged, no_data, error
@@ -58,14 +59,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = ROOT / "tests" / "fixtures" / "kaks_fuzz"
 
-METHODS = ["NG", "LWL", "MLWL", "LPB", "MLPB", "YN", "MYN", "Comeron", "Li"]
-KK_METHODS = METHODS[:7]                    # the methods that run with every genetic code
+METHODS = ["NG", "LWL", "MLWL", "LPB", "MLPB", "GY", "YN", "MYN", "Comeron", "Li"]
+KK_METHODS = METHODS[:8]                    # the methods that run with every genetic code
 STATUSES = {"ok", "warning", "saturated", "not_converged", "no_data", "error"}
 ESTIMATE = {"ok", "warning"}
 COLS = ["seq1", "seq2", "method", "dN", "dS", "dNdS", "SE_dN", "SE_dS", "N_sites", "S_sites", "Nd", "Sd",
         "codons_compared", "status", "note"]
 VALUE_COLS = COLS[3:13]
-SE_METHODS = {"NG", "YN", "MYN", "Li"}
+SE_METHODS = {"NG", "YN", "MYN", "Li", "GY"}
 COUNT_METHODS = {"NG", "LWL", "MLWL", "LPB", "MLPB", "Comeron", "Li"}
 CODES = (1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 16, 21, 22, 23)
 BASES = "TCAG"
@@ -441,7 +442,7 @@ def check_row(case: Case, method: str, d: dict, flavour: dict) -> list[str]:
             bad.append(f"P3: {c} = {d[c]} for a method without a variance")
     if st == "not_converged" and (dn is not None or ds is not None):
         bad.append("P3: not_converged with a value")
-    if st == "not_converged" and method not in ("YN", "MYN"):
+    if st == "not_converged" and method not in ("YN", "MYN", "GY"):
         bad.append("P2: not_converged for a method without iteration")
     if "identical" in case.tags and not (case.tags & {"stop", "gap", "ambiguous", "rna", "lower", "unequal",
                                                      "not_triplet"}):
@@ -548,6 +549,8 @@ def has_stop(case: Case) -> bool:
 # Swapping the rows changes the order of some floating-point sums, so the last digits of a 17-digit value may
 # change (counted, not failed); beyond these relative tolerances it is a finding. The YN / MYN iteration
 # amplifies such a difference (it stops at a tolerance of 5e-4 / 5e-8 on t; docs/kaks.md difference 12).
+# GY (maximum likelihood) is a function of the counts of unordered codon pairs, which neither a swap nor a
+# permutation of the columns changes: its rows are the same bytes (the tolerance is never needed).
 SWAP_TOL = {m: 1e-9 for m in METHODS} | {"YN": 1e-6, "MYN": 1e-6}
 
 # The flavours whose output depends on which sequence is first (docs/kaks.md, "Two-position codon differences").
@@ -608,14 +611,16 @@ class Harness:
             for extra, fl in flavours:
                 if fl and code != 1 and any(k in fl for k in ("comeron", "li")):
                     continue
-                r, rows = self.dnds(group, code, extra)
+                # GY has no flavour: once, with the defaults
+                ms = [m for m in methods_for(code) if m != "GY" or not fl]
+                r, rows = self.dnds(group, code, extra, methods=ms)
                 self.counts["rows"] += len(rows)
-                self.findings += check_batch(group, rows, lambda c: methods_for(c.code), fl)
+                self.findings += check_batch(group, rows, lambda c: ms, fl)
                 for d in rows.values():
                     self.counts[f"status {d['status']}"] += 1
                 if not swap:
                     continue
-                r2, rows2 = self.dnds([c.swapped() for c in group], code, extra)
+                r2, rows2 = self.dnds([c.swapped() for c in group], code, extra, methods=ms)
                 dependent = any(" ".join(extra).find(x) >= 0 for x in ORDER_DEPENDENT)
                 for c in group:
                     for m in methods_for(code):

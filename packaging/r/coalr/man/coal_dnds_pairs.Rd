@@ -48,10 +48,14 @@ it. (The command line never pairs two CDS files by position: \verb{coal pipeline
 them from \code{--pairs}.)}
 
 \item{methods}{Ka/Ks methods: any of \code{"YN"} (Yang & Nielsen 2000, the default), \code{"NG"}, \code{"LWL"}, \code{"MLWL"},
-\code{"LPB"}, \code{"MLPB"}, \code{"MYN"} (KaKs_Calculator's methods; \code{"ALL"} for these seven), \code{"Comeron"} (Comeron 1995
+\code{"LPB"}, \code{"MLPB"}, \code{"MYN"} (KaKs_Calculator's methods; \code{"ALL"} for these seven), \code{"GY"} (maximum likelihood
+under the codon model of Goldman & Yang 1994 with F3x4 codon frequencies, as PAML codeml estimates dN and dS
+for a pair: slower, and the method to use when dS is above about 0.5; standard errors from the curvature of
+the likelihood; a \code{dN} or \code{dS} above 10 is \code{NA} with status \code{saturated}; not part of \code{"ALL"}), \code{"Comeron"}
+(Comeron 1995
 as libsequence's gestimator computes it, the default method of the R package orthologr; alias \code{"C95"}) and
 \code{"Li"} (Li 1993 as \code{seqinr::kaks()} computes it). Names are read in any case. With several methods a pair's
-rows come in the order NG, LWL, MLWL, LPB, MLPB, YN, MYN, Comeron, Li. Comeron and Li are implemented for
+rows come in the order NG, LWL, MLWL, LPB, MLPB, GY, YN, MYN, Comeron, Li. Comeron and Li are implemented for
 the standard genetic code only (\code{code = 1}).}
 
 \item{code}{NCBI genetic code number (1 = standard), used for translation, codon threading and Ka/Ks.}
@@ -135,7 +139,8 @@ A data frame with one row per pair and method: \code{seq1}, \code{seq2}, \code{m
 \code{SE_dS}, \code{N_sites}, \code{S_sites}, \code{Nd}, \code{Sd}, \code{codons_compared}, \code{prot_aln_length}, \code{prot_identity}, \code{status}
 (\code{ok}, \code{warning}, \code{not_converged}, \code{saturated}, \code{no_data}, \code{error}) and \code{note}. Values that are not available
 are \code{NA} (\code{dNdS} is \code{NA} when dS is below 1e-6). \code{not_converged}: the YN / MYN iteration ended at its round
-limit without settling, which happens with very short or nearly saturated pairs; there is no estimate (\code{dN},
+limit without settling (or the optimisation of GY did not converge), which happens with very short or nearly
+saturated pairs; there is no estimate (\code{dN},
 \code{dS}, \code{dNdS}, the SEs, \code{Nd} and \code{Sd} are \code{NA}), and \code{note} has the values of the last round, which are not
 estimates and can differ between platforms. Rows are in the order of \code{pairs}. Attribute \code{"seconds"}: time spent in
 alignment + codon threading and in Ka/Ks.

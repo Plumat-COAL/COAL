@@ -34,6 +34,8 @@ REFERENCES: dict[str, str] = {
                   "between the genes. Molecular Biology and Evolution 10:271-281.",
     "tzeng2004": "Tzeng Y-H, Pan R, Li W-H (2004). Comparison of three methods for estimating rates of synonymous "
                  "and nonsynonymous nucleotide substitutions. Molecular Biology and Evolution 21:2290-2298.",
+    "goldman1994": "Goldman N, Yang Z (1994). A codon-based model of nucleotide substitution for protein-coding "
+                   "DNA sequences. Molecular Biology and Evolution 11:725-736.",
     "yang2000": "Yang Z, Nielsen R (2000). Estimating synonymous and nonsynonymous substitution rates under "
                 "realistic evolutionary models. Molecular Biology and Evolution 17:32-43.",
     "zhang2006": "Zhang Z, Li J, Yu J (2006). Computing Ka and Ks with a consideration of unequal transitional "
@@ -77,6 +79,7 @@ DOIS: dict[str, str] = {
     "li1993": "10.1007/BF02407308",
     "pamilo1993": "10.1093/oxfordjournals.molbev.a040003",
     "tzeng2004": "10.1093/molbev/msh242",
+    "goldman1994": "10.1093/oxfordjournals.molbev.a040153",
     "yang2000": "10.1093/oxfordjournals.molbev.a026236",
     "zhang2006": "10.1186/1471-2148-6-44",
     "comeron1995": "10.1007/BF00173196",
@@ -126,7 +129,8 @@ def current(keys: Iterable[str]) -> list[str]:
 LABELS: dict[str, str] = {
     "coal": "COAL", "suyama2006": "Suyama et al. 2006 (PAL2NAL)", "nei1986": "Nei & Gojobori 1986",
     "li1985": "Li, Wu & Luo 1985", "li1993": "Li 1993", "pamilo1993": "Pamilo & Bianchi 1993",
-    "tzeng2004": "Tzeng, Pan & Li 2004", "yang2000": "Yang & Nielsen 2000", "zhang2006": "Zhang, Li & Yu 2006",
+    "tzeng2004": "Tzeng, Pan & Li 2004", "yang2000": "Yang & Nielsen 2000", "goldman1994": "Goldman & Yang 1994",
+    "zhang2006": "Zhang, Li & Yu 2006",
     "comeron1995": "Comeron 1995", "wang2010": "Wang et al. 2010 (KaKs_Calculator 2.0)",
     "yang2007": "Yang 2007 (PAML 4)", "thornton2003": "Thornton 2003 (libsequence)",
     "charif2007": "Charif & Lobry 2007 (seqinr)", "buchfink2021": "Buchfink et al. 2021 (DIAMOND)",
@@ -163,6 +167,7 @@ METHOD_KEYS: dict[str, tuple[str, ...]] = {
     "MLPB": ("li1993", "pamilo1993", "tzeng2004", "wang2010"),
     "YN": ("yang2000", "wang2010", "yang2007"),
     "MYN": ("zhang2006", "yang2000", "wang2010", "yang2007"),
+    "GY": ("goldman1994", "yang2000", "yang2007"),
     "Comeron": ("comeron1995", "thornton2003"),
     "Li": ("li1993", "charif2007"),
 }
@@ -178,6 +183,7 @@ TABLE: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Ka/Ks, method MLPB", METHOD_KEYS["MLPB"]),
     ("Ka/Ks, method YN (the default)", METHOD_KEYS["YN"]),
     ("Ka/Ks, method MYN", METHOD_KEYS["MYN"]),
+    ("Ka/Ks, method GY (maximum likelihood)", METHOD_KEYS["GY"]),
     ("Ka/Ks, method Comeron", METHOD_KEYS["Comeron"]),
     ("Ka/Ks, method Li", METHOD_KEYS["Li"]),
     ("`coal pipeline pairs` with DIAMOND (orthologs)", ("buchfink2021",)),
