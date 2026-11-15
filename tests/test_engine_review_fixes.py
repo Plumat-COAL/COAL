@@ -217,7 +217,9 @@ class TestCodonDndsIsaFlags(unittest.TestCase):
         shutil.rmtree(self.d, ignore_errors=True)
 
     def run_cpp(self, *args, stdin: bytes | None = None):
-        return subprocess.run([self.bin, *map(str, args)], input=stdin, capture_output=True, timeout=600)
+        r = subprocess.run([self.bin, *map(str, args)], input=stdin, capture_output=True, timeout=600)
+        r.stdout = r.stdout.replace(b"\r\n", b"\n")   # (Windows: standard output in text mode)
+        return r
 
     def test_isa_is_printed_as_dnds_prints_it(self):
         for args in ((), ("--kaks-baseline",)):
