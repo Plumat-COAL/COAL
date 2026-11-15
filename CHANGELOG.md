@@ -5,8 +5,10 @@
 **In short.** This release makes COAL more than a PAL2NAL replacement, and changes its licence.
 
 - **Ka/Ks (dN/dS) built in:** `coal dnds` (a tidy table with standard errors and a status per pair) and
-  `coal kaks` (KaKs_Calculator's format), with nine methods: YN00 (default), NG86, LWL85, MLWL, LPB93, MLPB, MYN,
-  Comeron and Li. Derived from KaKs_Calculator 2.0 and PAML's yn00 and checked against both (docs/kaks.md).
+  `coal kaks` (KaKs_Calculator's format), with ten methods: YN00 (default), NG86, LWL85, MLWL, LPB93, MLPB, MYN,
+  Comeron, Li, and GY, the maximum-likelihood estimate of Goldman & Yang (1994) as PAML codeml computes it for a
+  pair (`coal dnds --ml-columns` adds kappa, t and lnL). Checked against KaKs_Calculator 2.0, PAML's yn00 and
+  codeml, and against simulated truth (docs/kaks.md).
 - **One step from coding sequences to a dN/dS table:** `coal pipeline pairs` (the orthologs of two species, found
   with DIAMOND) and `coal pipeline clusters` (gene families: DIAMOND DeepClust, then Clustal Omega or MAFFT), with
   a JSON report, `coal pipeline install` for the external tools, and `coal cite` for what to cite
@@ -100,7 +102,7 @@ entry under "Added", not under "Fixed".
   YN00 (default), NG86, LWL85, MLWL, LPB93, MLPB and MYN, for AXT or aligned FASTA (every pair of an MSA, or
   consecutive pairs), any of COAL's genetic codes, on all threads. `coal kaks -i in.axt -o out.kaks -m YN` takes
   KaKs_Calculator 2.0's `-i -o -m -c` and writes its format (22 columns, NA rules) for these seven methods; it is
-  not a drop-in for every KaKs_Calculator call: GY94 ML, MS/MA and the gamma variants are refused, and the default
+  not a drop-in for every KaKs_Calculator call: MS/MA and the gamma variants are refused (GY: its own entry above), and the default
   method is YN where KaKs_Calculator's is MA. `coal dnds` writes a tidy TSV with standard errors and a per-pair
   status (ok, warning for internal stop codons, saturated, no_data, error), so one bad pair never stops a run.
   NG is KaKs_Calculator's NG, whose site counting is not the textbook Nei-Gojobori one (docs/kaks.md).
