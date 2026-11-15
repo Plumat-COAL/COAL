@@ -132,7 +132,7 @@ coal_align_pairs(prot_a, prot_b)                     # global NW, BLOSUM62, full
 coal_codon_align(protein_rows, cds)                  # PAL2NAL's job: protein alignment + DNA -> codon alignment
 coal_kaks(codon_row_1, codon_row_2, method = "YN")   # Ka/Ks of aligned codon sequences (KaKs_Calculator's numbers)
 coal_kaks(codon_msa, method = c("NG", "YN"))         # every pair of one alignment
-coal_info()                                          # versions, methods, genetic codes, matrices
+coal_info()                                          # versions, methods, genetic codes, matrices, features
 ```
 
 `coal_codon_align()` takes `nogap`, `nomismatch` and `strict` (PAL2NAL's `-nogap`, `-nomismatch`; COAL's

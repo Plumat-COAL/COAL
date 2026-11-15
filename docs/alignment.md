@@ -236,14 +236,18 @@ msa.find_mafft(); msa.install_mafft(); msa.cache_dir(); msa.tool_version(exe)
   come from the Clustal authors, so COAL holds no address of that site. `method="official"` is refused with this
   explanation, and `sha256=` / `allow_unverified=True` (`--sha256`, `--allow-unverified`) do not bring it back:
   with Clustal Omega they are an error.
-- **Windows: there is no automatic Clustal Omega install.** Bioconda has no Windows package and the only
-  pre-compiled Windows build was the one of that site. `install_clustalo()`, `coal pipeline install clustalo` and
-  `--install-tools` say so and name what works:
+- **Windows: there is no automatic Clustal Omega install.** Neither Bioconda nor conda-forge has a Windows
+  package (checked 2026-11-14) and the only pre-compiled Windows build was the one of that site.
+  `install_clustalo()`, `coal pipeline install clustalo` and `--install-tools` say so and name what works
+  ([install.md](install.md#clustal-omega-and-mafft-on-windows) has the steps):
   1. run COAL under WSL, where `coal pipeline install clustalo` installs it from Bioconda;
-  2. use a `clustalo.exe` you obtained and trust: put it on `PATH` or set `COAL_CLUSTALO`;
-  3. use MAFFT (`--aligner mafft`) with a MAFFT you installed yourself (`COAL_MAFFT`). COAL has no verified
-     MAFFT download for Windows either (Bioconda has no Windows package; no hash is pinned for the Windows
-     package of mafft.cbrc.jp, so it is not fetched), and MAFFT on Windows is not tested with COAL.
+  2. install Clustal Omega with MSYS2 (`pacman -S mingw-w64-ucrt-x86_64-clustal-omega`; Clustal Omega 1.2.4,
+     pacman checks the package's signature) and set `COAL_CLUSTALO` to its `clustalo.exe` (or put it on `PATH`);
+     any other `clustalo.exe` you trust works the same way;
+  3. use MAFFT (`--aligner mafft`) with MAFFT's own Windows package (the "all-in-one"
+     `mafft-7.526-win64-signed.zip` of mafft.cbrc.jp), `COAL_MAFFT` = `mafft-win\mafft.bat`. COAL pins no
+     SHA-256 for it (the site publishes none, and the file could not be fetched where COAL is developed), so it
+     is not downloaded, and MAFFT on Windows is not tested with COAL.
 
   Pair mode needs neither tool (COAL's own aligner), and clusters of two members do not either.
 
@@ -457,8 +461,8 @@ r dN/dS for DIAMOND split by hit coverage:
 - There is no alignment-only subcommand in `coal`/`coal-cpp`. `coal pipeline` ([pipeline.md](pipeline.md)) runs
   the aligner as one of its steps; alone, it is the `coal-cpp-align` tool and the library and Python APIs.
 - **No Clustal Omega (or MAFFT) install on Windows** (see "Install"): cluster mode with clusters of three or more
-  needs WSL or a tool the user provides. On Linux and macOS the install is Bioconda's, through conda / mamba /
-  micromamba.
+  needs WSL or a tool the user provides ([install.md](install.md#clustal-omega-and-mafft-on-windows)). On Linux
+  and macOS the install is Bioconda's, through conda / mamba / micromamba.
 - The AVX2 path is x86 only. ARM (Apple Silicon, Linux aarch64) gets the compiler-vectorised baseline and the scalar
   scan, and was not measured.
 - No linear-space (Hirschberg) fallback: memory is `n·m/2` bytes per pair in flight, times `-j`.

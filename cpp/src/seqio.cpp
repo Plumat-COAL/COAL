@@ -39,6 +39,25 @@ std::string duplicate_message(const std::string& where, const std::string& rid) 
     return where + ": duplicate sequence ID " + py_repr(short_id(rid)) + ": every sequence needs its own ID";
 }
 
+// For a Windows path (C:\... or C:/...) that is missing on Linux or macOS, e.g. typed under WSL: ". This is a
+// Windows path; under WSL (Windows Subsystem for Linux) the same file is /mnt/c/...". "" otherwise, and always on
+// Windows. The same words as src/coal/seqio.py windows_path_hint (new-user audit 2026-11-14, U17).
+static std::string windows_path_hint(const std::string& path) {
+#ifdef _WIN32
+    (void)path;
+    return "";
+#else
+    const char d = path.empty() ? '\0' : path[0];
+    const bool letter = (d >= 'A' && d <= 'Z') || (d >= 'a' && d <= 'z');  // ASCII only, as the regex [A-Za-z]
+    if (!letter || path.size() < 3 || path[1] != ':' || (path[2] != '\\' && path[2] != '/')) return "";
+    std::string rest = path.substr(3);
+    std::replace(rest.begin(), rest.end(), '\\', '/');
+    const char lower = (d >= 'A' && d <= 'Z') ? (char)(d - 'A' + 'a') : d;
+    return ". This is a Windows path; under WSL (Windows Subsystem for Linux) the same file is /mnt/" +
+           std::string(1, lower) + "/" + rest;
+#endif
+}
+
 std::string open_error(const std::string& path) {
     std::error_code ec;
     std::string why;
@@ -49,7 +68,7 @@ std::string open_error(const std::string& path) {
         std::FILE* f = std::fopen(path.c_str(), "rb");
         int e = errno;
         if (f) std::fclose(f);
-        if (!f && e == ENOENT) why = "no such file";
+        if (!f && e == ENOENT) why = "no such file" + windows_path_hint(path);
         else if (!f && (e == EACCES || e == EPERM)) why = "permission denied";
         else why = std::strerror(e ? e : EIO);
     }
