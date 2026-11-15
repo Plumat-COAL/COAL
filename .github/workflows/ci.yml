@@ -275,12 +275,16 @@ jobs:
           fi
 
   cpp:
-    # Builds the C++ engine (its CMakeLists.txt is at the repository root) on all three systems with
-    # warnings as errors and runs every C++ test (goldens with COAL_IMPL=cpp, C++ vs Python, CLI, readers, tables,
-    # thread pool); a skipped test fails the job, except tests.test_cpp_cli's live comparison with the Python CLI, which
-    # depends on argparse's exact messages (Python 3.13's; it runs here on 3.13 and skips on interpreters whose
-    # argparse differs), and the platform skips (Linux-only peak-memory test, POSIX signals/pipes on Windows).
-    # "not built" skips still fail.
+    # Builds the C++ engine (its CMakeLists.txt is at the repository root) on all three systems with warnings as
+    # errors and runs every module in tests/ against it (discover, with COAL_IMPL=cpp, COAL_CPP_BIN and
+    # COAL_REQUIRE_CPP / COAL_REQUIRE_ALIGN / COAL_REQUIRE_DIAMOND): the goldens with coal-cpp, C++ vs Python, the
+    # CLI, readers, tables, thread pool, the Ka/Ks engine, the alignment layer, the pipeline, and every other module
+    # whose coal-cpp tests skip without the binary (they skip in the Python jobs, which build none).
+    # .github/ci_cpp_tests.py fails the job on a skip that says a binary is "not built", anywhere, and on any skip
+    # in the core C++ modules (--no-skip) but the platform skips of that system (matrix.allow: none on Linux; the
+    # Linux-only peak-memory test on macOS; that and the POSIX signals / pipes / hard links on Windows). On Linux
+    # tests.test_kaks_dispatch is a core module too (x86 with GCC: the AVX2 copy must run and match the baseline).
+    # tests/test_repo_ci.py checks that every module with a coal-cpp skip runs here.
     name: C++ engine on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
@@ -288,6 +292,16 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            allow: ""
+            no_skip_extra: ",test_kaks_dispatch"
+          - os: macos-latest
+            allow: "peak memory read with getrusage"
+            no_skip_extra: ""
+          - os: windows-latest
+            allow: "peak memory read with getrusage|POSIX (signals|pipes|hard links)"
+            no_skip_extra: ""
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
@@ -323,29 +337,15 @@ jobs:
         run: |
           if [ -f build/Release/coal-cpp.exe ]; then b="$PWD/build/Release/coal-cpp.exe"; else b="$PWD/build/coal-cpp"; fi
           echo "COAL_CPP_BIN=$b" >> "$GITHUB_ENV"
-      - name: Install the engine (and build + wheel, for tests/test_wheels.py)
-        run: python -m pip install -e . build wheel
-      - name: C++ tests (must not skip)
-        # tests.test_wheels: the platform wheel with this coal-cpp inside installs and `coal` runs it
-        shell: bash
-        env:
-          COAL_IMPL: cpp
-        run: |
-          # Not `... | tee f` + PIPESTATUS: under the runner's `bash -eo pipefail` a failing pipeline ends the script
-          # right there, before any diagnostics below run.
-          status=0
-          python -m unittest -v tests.test_differential tests.test_cpp_vs_python tests.test_cpp_cli \
-            tests.test_cpp_readers tests.test_cpp_tables tests.test_cpp_pool tests.test_wheels > cpp_tests.txt 2>&1 || status=$?
-          cat cpp_tests.txt
-          if [ "$status" -ne 0 ]; then
-            # The raw log is not always readable from the checks API: name the failed tests as annotations
-            grep -E "^(FAIL|ERROR):|Error:|^Ran |^FAILED" cpp_tests.txt | head -30 | while IFS= read -r line; do echo "::error::$line"; done
-            tail -60 cpp_tests.txt | while IFS= read -r line; do echo "::warning::$line"; done
-            exit "$status"
+          # x86 Linux with GCC: the AVX2 copy of YN / MYN's matrix code is compiled and the runner's CPU has AVX2
+          if [ "$RUNNER_OS" = Linux ]; then
+            test "$("$b" dnds --kaks-isa)" = avx2 \
+              || { echo "::error::coal-cpp runs the baseline Ka/Ks copy on x86_64 Linux ($("$b" dnds --kaks-isa))"; exit 1; }
           fi
-          if grep -iE "\.\.\. skipped" cpp_tests.txt | grep -viqE "live comparison needs Python|peak memory read with getrusage|POSIX"; then
-            echo "::error::C++ tests were skipped, so the C++ engine was not fully exercised"; exit 1
-          fi
+      # psutil: tests/test_robustness.py and tests/test_stress_findings.py watch the worker processes and memory of
+      # the runs (test-only, as in the Python jobs)
+      - name: Install the engine (and build + wheel, for tests/test_wheels.py, and psutil)
+        run: python -m pip install -e . build wheel psutil
       # DIAMOND for the pipeline's default route (reciprocal best hits, the DIAMOND alignment, DeepClust), with COAL's
       # own installer: the pinned release from DIAMOND's GitHub releases, unpacked only after its SHA-256 matched the
       # one in src/coal/dnds_pipeline.py. On all three systems: Linux and Windows have a pre-compiled binary each,
@@ -368,37 +368,28 @@ jobs:
         run: |
           python -m coal pipeline install clustalo mafft \
             || { echo "::warning::Clustal Omega / MAFFT were not installed: the MSA tests of this job will skip"; exit 1; }
-      - name: Ka/Ks engine, alignment layer and pipeline tests (coal-cpp and coal-cpp-align required)
-        # Biopython, EMBOSS needle, Clustal Omega and MAFFT are optional here (their live checks skip; the stored
-        # Biopython / needle optima in tests/fixtures/align are always checked); coal-cpp and coal-cpp-align are
-        # not (COAL_REQUIRE_CPP, COAL_REQUIRE_ALIGN: a missing binary fails), nor is DIAMOND where the step above
-        # installed it (COAL_REQUIRE_DIAMOND). tests.test_kaks: the Ka/Ks engine against the KaKs_Calculator and
-        # PAML goldens, which needs the binary and so skips in the Python jobs. tests.test_kaks_comeron_li: the
-        # methods Comeron and Li against the stored references of gestimator and seqinr::kaks.
-        # tests.test_short_options: attached option values in the small command lines. tests.test_output_lock:
-        # the C++ engine's -o lock (race loop, Python and C++ honouring each other's locks). The modules of the
-        # second and third line (the pair-table header, inputs that cannot work, the YN shortcut against the full
-        # computation, the flags, order invariance, robustness, provenance, isoforms, citations, the command list
-        # and the dnds example) need the binary for most of their tests too. tests.test_retest2_findings: the
-        # genetic-code hint per --cds file, the copy and repeated-file checks (retest Q01-Q05).
-        # tests.test_cleanup1_findings: signals while the lock is taken or released (both engines), codes COAL
-        # does not support in the hint, copies with the same records, missing inputs (final retest P01-P05).
-        # tests.test_kaks_properties: the property-based fuzz of the Ka/Ks engine on a fixed seed (160 pairs, all
-        # methods and flavours, swap / permutation / format invariance; the reproducers of K01-K06), about 30 s;
-        # nightly.yml runs it with a new seed and more pairs. tests.test_kaks_myn_kappa_inf: MYN with an
-        # infinite kappa (status saturated; also through the C++ API where a compiler and libcoal_core are found).
+      - name: C++ engine tests, every module in tests/ (must not skip for want of coal-cpp)
+        # One discover run of tests/ with the binary: the modules that need coal-cpp test it (a "not built" skip
+        # fails, in any module), and the core C++ modules may skip only for the platform reasons above. Optional
+        # here (their live checks skip): Biopython, EMBOSS needle, PAL2NAL (the pal2nal-fuzz job runs it), PyYAML
+        # (the gui job runs the docs tests), Chromium (the explainer job), and Clustal Omega / MAFFT on Windows and
+        # macOS (Linux installs them above, best effort). Required: coal-cpp and coal-cpp-align (COAL_REQUIRE_CPP,
+        # COAL_REQUIRE_ALIGN) and DIAMOND (COAL_REQUIRE_DIAMOND, from the step above). COAL_IMPL=cpp: the goldens
+        # (tests.test_differential) and the real-data checks run coal-cpp. tests.test_wheels: the platform wheel
+        # with this coal-cpp inside installs and `coal` runs it. tests.test_kaks_properties: the property fuzz of
+        # the Ka/Ks engine on a fixed seed (about 30 s; nightly.yml runs it with a new seed and more pairs).
         shell: bash
         env:
+          COAL_IMPL: cpp
           COAL_REQUIRE_ALIGN: "1"
           COAL_REQUIRE_CPP: "1"
+          CPP_ALLOW: ${{ matrix.allow }}
+          CPP_NO_SKIP_EXTRA: ${{ matrix.no_skip_extra }}
         run: |
-          python -m unittest -v tests.test_kaks tests.test_kaks_comeron_li tests.test_align tests.test_msa \
-            tests.test_dnds_pipeline tests.test_short_options tests.test_output_lock \
-            tests.test_pair_table tests.test_kaks_cli_inputs tests.test_kaks_yn_shortcut tests.test_kaks_dispatch \
-            tests.test_engine_ux tests.test_dnds_flags tests.test_pipeline_order tests.test_pipeline_robustness tests.test_pipeline_provenance \
-            tests.test_pipeline_isoforms tests.test_pipeline_atomic tests.test_citations tests.test_cli_commands tests.test_examples \
-            tests.test_retest2_findings tests.test_cleanup1_findings tests.test_kaks_properties \
-            tests.test_kaks_myn_kappa_inf
+          python .github/ci_cpp_tests.py \
+            --no-skip "test_differential,test_cpp_vs_python,test_cpp_cli,test_cpp_readers,test_cpp_tables,test_cpp_pool,test_wheels$CPP_NO_SKIP_EXTRA" \
+            --allow "$CPP_ALLOW" \
+            discover -s tests
       # The release's Linux wheels are built inside the manylinux_2_28 container (GCC 14, -Werror): build there on
       # every change too, so a warning that only that compiler raises fails CI, not the release (v0.5.0rc1 did).
       - name: Build inside the manylinux_2_28 container, as the release does (Linux)
@@ -436,6 +427,47 @@ jobs:
           printf '>human\nATGAAAGTT---GCTCTG\n>mouse\nATGAAGGTCTCAGCACTA\n' > "$e/want.txt"
           "$e/coal-embed-example" > "$e/got.txt"
           diff "$e/want.txt" "$e/got.txt"
+
+  cpp-macos-x86:
+    # x86_64 macOS with AppleClang: the one compiler and system where cpp/src/kaks.cpp's AVX2 copy of YN / MYN's
+    # transition-probability code (COAL_KAKS_AVX2: __attribute__((target("avx2")))) is compiled and no other job
+    # runs it (macos-latest is arm64, where the copy is not compiled; Windows builds with MSVC, which has none).
+    # The build with warnings as errors, then the dispatch test, which must not skip (the AVX2 copy runs and gives
+    # the baseline's bytes), the Ka/Ks goldens and the PAL2NAL goldens with coal-cpp. macos-15-intel is GitHub's
+    # last x86_64 macOS image (until the macOS 15 image is retired, fall 2027): then this job goes.
+    name: "C++ engine on x86_64 macOS (AppleClang, the AVX2 Ka/Ks copy)"
+    runs-on: macos-15-intel
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            apps/coal-app/pyproject.toml
+            apps/coal-app/desktop/requirements.txt
+      - name: Build coal-cpp and coal-cpp-align (x86_64, AppleClang)
+        shell: bash
+        run: |
+          uname -m; c++ --version; sysctl -n machdep.cpu.brand_string machdep.cpu.leaf7_features || true
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCOAL_WARNINGS_AS_ERRORS=ON
+          cmake --build build -j 3 --target coal-cpp coal-cpp-align
+          test "$(./build/coal-cpp dnds --kaks-isa)" = avx2 \
+            || { echo "::error::coal-cpp runs the baseline Ka/Ks copy on x86_64 macOS ($(./build/coal-cpp dnds --kaks-isa))"; exit 1; }
+          echo "COAL_CPP_BIN=$PWD/build/coal-cpp" >> "$GITHUB_ENV"
+      - name: Install the engine
+        run: python -m pip install -e .
+      - name: Dispatch, Ka/Ks and golden tests with coal-cpp (must not skip)
+        shell: bash
+        env:
+          COAL_IMPL: cpp
+          COAL_REQUIRE_CPP: "1"
+          COAL_REQUIRE_ALIGN: "1"
+        run: |
+          python .github/ci_cpp_tests.py --no-skip test_kaks_dispatch,test_kaks,test_differential \
+            tests.test_kaks_dispatch tests.test_kaks tests.test_differential
 
   # The tutorials as tests (scripts/run_tutorials.py): runs the shell commands of docs/tutorials/01, 02, 03 and 05 in
   # order, on the tutorials' own NCBI data (their download scripts check every SHA-256), with the versions the
