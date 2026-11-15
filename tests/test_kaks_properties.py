@@ -66,7 +66,7 @@ ESTIMATE = {"ok", "warning"}
 COLS = ["seq1", "seq2", "method", "dN", "dS", "dNdS", "SE_dN", "SE_dS", "N_sites", "S_sites", "Nd", "Sd",
         "codons_compared", "status", "note"]
 VALUE_COLS = COLS[3:13]
-SE_METHODS = {"NG", "YN", "MYN", "Li"}
+SE_METHODS = {"NG", "YN", "MYN", "Li", "GY"}
 COUNT_METHODS = {"NG", "LWL", "MLWL", "LPB", "MLPB", "Comeron", "Li"}
 CODES = (1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 16, 21, 22, 23)
 BASES = "TCAG"

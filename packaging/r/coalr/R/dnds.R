@@ -24,8 +24,9 @@
 #' @param methods Ka/Ks methods: any of `"YN"` (Yang & Nielsen 2000, the default), `"NG"`, `"LWL"`, `"MLWL"`,
 #'   `"LPB"`, `"MLPB"`, `"MYN"` (KaKs_Calculator's methods; `"ALL"` for these seven), `"GY"` (maximum likelihood
 #'   under the codon model of Goldman & Yang 1994 with F3x4 codon frequencies, as PAML codeml estimates dN and dS
-#'   for a pair: slower, and the method to use when dS is above about 0.5; no standard errors; a `dN` or `dS`
-#'   above 10 is `NA` with status `saturated`; not part of `"ALL"`), `"Comeron"` (Comeron 1995
+#'   for a pair: slower, and the method to use when dS is above about 0.5; standard errors from the curvature of
+#'   the likelihood; a `dN` or `dS` above 10 is `NA` with status `saturated`; not part of `"ALL"`), `"Comeron"`
+#'   (Comeron 1995
 #'   as libsequence's gestimator computes it, the default method of the R package orthologr; alias `"C95"`) and
 #'   `"Li"` (Li 1993 as `seqinr::kaks()` computes it). Names are read in any case. With several methods a pair's
 #'   rows come in the order NG, LWL, MLWL, LPB, MLPB, GY, YN, MYN, Comeron, Li. Comeron and Li are implemented for

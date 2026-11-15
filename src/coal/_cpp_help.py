@@ -56,7 +56,7 @@ HELP = {
         '  IN             aligned FASTA or AXT file (or -i IN)\n'
         '  -o OUT         output file (default: standard output)\n'
         '  -m METHOD      YN (default), NG, LWL, MLWL, LPB, MLPB, MYN, GY, Comeron (alias C95), Li; repeat for\n'
-        '                 several (Comeron and Li: standard genetic code only; SE for YN, MYN, NG and Li).\n'
+        '                 several (Comeron and Li: standard genetic code only; SE for YN, MYN, NG, Li, GY).\n'
         '                 GY: maximum likelihood under the codon model of Goldman & Yang (1994) with F3x4\n'
         "                 codon frequencies, as PAML codeml's pairwise estimate (slower; accurate at high dS)\n"
         '  -c, --codontable TABLE  NCBI genetic code (default 1)\n'

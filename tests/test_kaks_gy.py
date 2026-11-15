@@ -119,11 +119,12 @@ class TestAgainstCodeml(GyBase):
         gold = {}
         for line in (GOLD / "gy_cases.codeml.tsv").read_text(encoding="utf-8").splitlines()[1:]:
             f = line.split("\t")
-            gold[f[0]] = dict(zip(("icode", "lnL", "t", "kappa", "omega", "dN", "dS", "S", "N"), map(float, f[1:])))
+            gold[f[0]] = dict(zip(("icode", "lnL", "t", "kappa", "omega", "dN", "dS", "S", "N", "SE_dN", "SE_dS"),
+                                  map(float, f[1:])))
         pairs = read_axt(KDIR / "gy_cases.axt")
         self.assertEqual(len(pairs), len(gold))
         self.assertGreaterEqual(len(pairs), 20)
-        same = 0
+        same = n_se = 0
         for icode, table in ((0, "1"), (1, "2")):
             sub = [p for p in pairs if gold[p[0].split("&")[0]]["icode"] == icode]
             rows = self.gy("".join(f"{n}\n{a}\n{b}\n\n" for n, a, b in sub), "-c", table)
@@ -140,21 +141,31 @@ class TestAgainstCodeml(GyBase):
                     if at_bound or lnl > g["lnL"] + 1e-3:
                         continue   # codeml stopped at one of its bounds or at a lower maximum
                     same += 1
-                    self.assertAlmostEqual(val(r["t"]), g["t"], delta=2e-5 + 1e-4 * g["t"])
-                    self.assertAlmostEqual(val(r["kappa"]), g["kappa"], delta=2e-5 + 1e-4 * g["kappa"])
                     self.assertAlmostEqual(val(r["S_sites"]), g["S"], delta=0.051)
                     self.assertAlmostEqual(val(r["N_sites"]), g["N"], delta=0.051)
                     if r["status"] == "saturated":
-                        # COAL gives no dS above 10 (codeml prints it); dN is still codeml's
+                        # COAL gives no dS above 10 (codeml prints it); dN is still codeml's. The likelihood is
+                        # nearly flat in t there (codeml's own t moves in the fourth digit from run to run)
                         self.assertGreater(g["dS"], 10)
                         self.assertEqual(r["dS"], "NA")
-                        self.assertAlmostEqual(val(r["dN"]), g["dN"], delta=6e-5 + 1e-4 * g["dN"])
+                        self.assertAlmostEqual(val(r["dN"]), g["dN"], delta=6e-5 + 1e-3 * g["dN"])
+                        self.assertAlmostEqual(val(r["t"]), g["t"], delta=1e-3 * g["t"])
                         continue
+                    self.assertAlmostEqual(val(r["t"]), g["t"], delta=2e-5 + 1e-4 * g["t"])
+                    self.assertAlmostEqual(val(r["kappa"]), g["kappa"], delta=2e-5 + 1e-4 * g["kappa"])
                     self.assertEqual(r["status"], "ok")
                     self.assertAlmostEqual(val(r["dN"]), g["dN"], delta=6e-5 + 1e-4 * g["dN"])
                     self.assertAlmostEqual(val(r["dS"]), g["dS"], delta=6e-5 + 1e-4 * g["dS"])
                     self.assertAlmostEqual(val(r["dNdS"]), g["omega"], delta=6e-6 + 1e-4 * g["omega"])
+                    # standard errors: codeml's Hessian is made by differences of the likelihood and its SEs
+                    # are good to about 15 % (measured: up to 16 % from the independent reference of
+                    # test_standard_errors below, which COAL matches to four digits)
+                    if 0.001 < g["omega"] < 99 and g["kappa"] > 0.4:
+                        for c in ("SE_dN", "SE_dS"):
+                            self.assertAlmostEqual(val(r[c]), g[c], delta=2e-5 + 0.25 * g[c], msg=c)
+                            n_se += 1
         self.assertGreaterEqual(same, 14)   # (most pairs are compared number by number)
+        self.assertGreaterEqual(n_se, 20)
 
     def test_likelihood_is_the_models(self):
         """lnL is the log-likelihood of the reported t, kappa and omega (recomputed from the definition), dN / dS
@@ -180,6 +191,38 @@ class TestAgainstCodeml(GyBase):
         self.assertAlmostEqual(val(r["S_sites"]) + val(r["N_sites"]), 120, delta=1e-8)
         self.assertAlmostEqual((val(r["S_sites"]) * val(r["dS"]) + val(r["N_sites"]) * val(r["dN"])) / 120, t / 3,
                                delta=1e-9)
+
+
+class TestStandardErrors(GyBase):
+    def test_standard_errors(self):
+        """SE_dN and SE_dS against an independent computation (tests/kaks/make_gy_se_reference.py: the likelihood
+        rebuilt with numpy, its Hessian by second differences of the likelihood, the delta method)."""
+        ref = {}
+        for line in (GOLD / "gy_cases.se_reference.tsv").read_text(encoding="utf-8").splitlines()[1:]:
+            f = line.split("\t")
+            ref[f[0]] = tuple(map(float, f[1:]))
+        self.assertGreaterEqual(len(ref), 12)
+        pairs = [p for p in read_axt(KDIR / "gy_cases.axt") if p[0].split("&")[0] in ref]
+        rows = self.gy("".join(f"{n}\n{a}\n{b}\n\n" for n, a, b in pairs))
+        for (name, _, _), r in zip(pairs, rows):
+            lnl, se_n, se_s = ref[name.split("&")[0]]
+            with self.subTest(pair=name):
+                self.assertAlmostEqual(val(r["lnL"]), lnl, delta=2e-6)
+                self.assertAlmostEqual(val(r["SE_dN"]), se_n, delta=1e-3 * se_n)
+                self.assertAlmostEqual(val(r["SE_dS"]), se_s, delta=1e-3 * se_s)
+
+    def test_no_standard_error_at_a_bound_or_when_saturated(self):
+        pairs = {n.split("&")[0]: (a, b) for n, a, b in read_axt(KDIR / "gy_cases.axt")}
+        # no nonsynonymous difference: omega at its lower bound; dS has an SE (about dS / sqrt(4 differences))
+        r = self.one(*pairs["real0_7"])
+        self.assertEqual((r["status"], r["SE_dN"]), ("ok", "NA"))
+        self.assertLess(val(r["dNdS"]), 1e-4)
+        self.assertTrue(0.3 * val(r["dS"]) < val(r["SE_dS"]) < val(r["dS"]))
+        for name in ("real1_2", "real1_12", "sim60"):
+            r = self.one(*pairs[name])
+            self.assertEqual((r["status"], r["SE_dN"], r["SE_dS"]), ("saturated", "NA", "NA"))
+        r = self.one("ATGGCTAAAGGTCCC", "ATGGCTAAAGGTCCC")
+        self.assertEqual((r["SE_dN"], r["SE_dS"]), ("NA", "NA"))
 
 
 class TestEdgeCases(GyBase):
@@ -307,9 +350,12 @@ class TestCliAndFormats(GyBase):
         for alias in ("GY-HKY", "gy94"):
             a = self.run_cpp("dnds", KDIR / "gy_cases.axt", "-m", alias, "-q").stdout
             self.assertEqual(a, self.run_cpp("dnds", KDIR / "gy_cases.axt", "-m", "GY", "-q").stdout)
-        # standard errors are not computed for GY
-        row = self.run_cpp("dnds", KDIR / "gy_cases.axt", "-m", "GY", "-q").stdout.splitlines()[1].split("\t")
-        self.assertEqual(row[6:8], ["NA", "NA"])
+        # standard errors: for an estimate inside the bounds, NA for a saturated pair
+        rows = [ln.split("\t") for ln in self.run_cpp("dnds", KDIR / "gy_cases.axt", "-m", "GY", "-q").stdout.splitlines()[1:]]
+        self.assertTrue(0 < float(rows[0][6]) < float(rows[0][3]) and 0 < float(rows[0][7]) < float(rows[0][4]))
+        for row in rows:
+            if row[13] == "saturated":
+                self.assertEqual(row[6:8], ["NA", "NA"], row[0])
 
     def test_kaks_format(self):
         r = self.run_cpp("kaks", "-i", KDIR / "gy_cases.axt", "-m", "GY", "-m", "YN", "-q", "--digits", "10")

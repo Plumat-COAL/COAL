@@ -27,7 +27,9 @@ test_that("GY gives PAML codeml's numbers", {
   expect_equal(g$divergence * 3, 0.37388, tolerance = 1e-4)
   expect_equal(g$S_sites, 28.4, tolerance = 2e-3)
   expect_equal(g$N_sites, 52.6, tolerance = 2e-3)
-  expect_true(is.na(g$SE_dN) && is.na(g$SE_dS))
+  # standard errors (codeml getSE = 1: dN +- 0.03493, dS +- 0.12889; its Hessian is cruder, so a few per cent off)
+  expect_equal(g$SE_dN, 0.03457, tolerance = 1e-3)
+  expect_equal(g$SE_dS, 0.12907, tolerance = 1e-3)
   # names in any case, and KaKs_Calculator's name of its GY rows
   expect_identical(coal_kaks(gy_a, gy_b, method = "gy")$dS, g$dS)
 })

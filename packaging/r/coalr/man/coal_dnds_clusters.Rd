@@ -53,8 +53,9 @@ rows. Called in the main R session, one cluster at a time.}
 \item{methods}{Ka/Ks methods: any of \code{"YN"} (Yang & Nielsen 2000, the default), \code{"NG"}, \code{"LWL"}, \code{"MLWL"},
 \code{"LPB"}, \code{"MLPB"}, \code{"MYN"} (KaKs_Calculator's methods; \code{"ALL"} for these seven), \code{"GY"} (maximum likelihood
 under the codon model of Goldman & Yang 1994 with F3x4 codon frequencies, as PAML codeml estimates dN and dS
-for a pair: slower, and the method to use when dS is above about 0.5; no standard errors; a \code{dN} or \code{dS}
-above 10 is \code{NA} with status \code{saturated}; not part of \code{"ALL"}), \code{"Comeron"} (Comeron 1995
+for a pair: slower, and the method to use when dS is above about 0.5; standard errors from the curvature of
+the likelihood; a \code{dN} or \code{dS} above 10 is \code{NA} with status \code{saturated}; not part of \code{"ALL"}), \code{"Comeron"}
+(Comeron 1995
 as libsequence's gestimator computes it, the default method of the R package orthologr; alias \code{"C95"}) and
 \code{"Li"} (Li 1993 as \code{seqinr::kaks()} computes it). Names are read in any case. With several methods a pair's
 rows come in the order NG, LWL, MLWL, LPB, MLPB, GY, YN, MYN, Comeron, Li. Comeron and Li are implemented for

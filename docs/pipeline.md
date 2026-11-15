@@ -301,7 +301,7 @@ coal pipeline clusters --cds all_cds.fa --clusters deepclust.tsv -o out --max-cl
 | Option | Meaning | Default |
 |---|---|---|
 | `-o DIR` | output folder | required |
-| `-m METHOD` | Ka/Ks method, repeatable: YN, NG, LWL, MLWL, LPB, MLPB, MYN, Comeron (alias C95), Li ([kaks.md](kaks.md)); names are read in any case; Comeron and Li need `-c 1` | YN |
+| `-m METHOD` | Ka/Ks method, repeatable: YN, NG, LWL, MLWL, LPB, MLPB, MYN, GY (maximum likelihood), Comeron (alias C95), Li ([kaks.md](kaks.md)); names are read in any case; Comeron and Li need `-c 1` | YN |
 | `-c N` | NCBI genetic code, used for translation, the codon alignment and Ka/Ks | 1 |
 | `-j N` | threads of DIAMOND and of the engine, and MSA processes at a time. The default is one per CPU the process may use (its affinity: `taskset`, a SLURM or cgroup allocation), not one per CPU of the machine; a larger `-j` is cut to that number for every program, with a warning, and `report.json` `threads` has what was asked and used | one per usable CPU |
 | `--kaks-format` | also write `dnds.kaks` in KaKs_Calculator's 22-column format | off |

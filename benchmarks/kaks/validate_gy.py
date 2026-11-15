@@ -99,11 +99,12 @@ def run_coal(coal, pairs, workdir, methods=("GY",), table=1, jobs=1):
 
 CTL = ("seqfile = seq.phy\noutfile = mlc\nnoisy = 0\nverbose = 0\nrunmode = -2\nseqtype = 1\nCodonFreq = 2\n"
        "model = 0\nNSsites = 0\nicode = 0\nfix_kappa = 0\nkappa = 2\nfix_omega = 0\nomega = 0.4\ncleandata = 0\n"
-       "ndata = {n}\n")
+       "getSE = 1\nndata = {n}\n")
 NUM = r"(-?[0-9.]+(?:e[-+]?[0-9]+)?|-?nan|-?inf)"
 PAT_LNL = re.compile(r"lnL\s*=\s*" + NUM + r"\s*\n\s*" + NUM + r"\s+" + NUM + r"\s+" + NUM)
 PAT_D = re.compile(r"t=\s*" + NUM + r"\s+S=\s*" + NUM + r"\s+N=\s*" + NUM + r"\s+dN/dS=\s*" + NUM + r"\s+dN\s*=\s*" +
                    NUM + r"\s+dS\s*=\s*" + NUM)
+PAT_SE = re.compile(r"dN\s*=\s*" + NUM + r"\s*\+-\s*" + NUM + r"\s+dS\s*=\s*" + NUM + r"\s*\+-\s*" + NUM)
 
 
 def run_codeml(codeml, pairs, workdir):
@@ -128,9 +129,12 @@ def run_codeml(codeml, pairs, workdir):
         if not (m1 and m2):
             out.append(None)
             continue
+        m3 = PAT_SE.search(b)
         out.append(dict(lnL=float(m1.group(1)), t=float(m1.group(2)), kappa=float(m1.group(3)),
                         omega=float(m1.group(4)), S=float(m2.group(2)), N=float(m2.group(3)),
-                        dN=float(m2.group(5)), dS=float(m2.group(6))))
+                        dN=float(m2.group(5)), dS=float(m2.group(6)),
+                        se_dN=float(m3.group(2)) if m3 else float("nan"),
+                        se_dS=float(m3.group(4)) if m3 else float("nan")))
     out += [None] * (len(pairs) - len(out))
     return out[:len(pairs)], dt
 
@@ -151,7 +155,7 @@ def compare(tag, pairs, coal_rows, cm, out):
     1e-3) and codeml is not at one of its bounds (t 50, kappa 0.4 / 999, omega 0.001 / 99): at a bound the two
     optimise over different regions, and where COAL's likelihood is higher codeml stopped at a lower maximum."""
     n = both = worse = bound = other = 0
-    dl, rels = [], {k: [] for k in ("dN", "dS", "omega", "kappa", "t")}
+    dl, rels = [], {k: [] for k in ("dN", "dS", "omega", "kappa", "t", "SE_dN", "SE_dS")}
     with open(os.path.join(out, f"{tag}_vs_codeml.tsv"), "w") as fh:
         fh.write("pair\tstatus\tlnL_coal\tlnL_codeml\tdiff\tdN_coal\tdN_codeml\tdS_coal\tdS_codeml\tw_coal\tw_codeml"
                  "\tkappa_coal\tkappa_codeml\tt_coal\tt_codeml\tcodeml_at_bound\n")
@@ -185,6 +189,10 @@ def compare(tag, pairs, coal_rows, cm, out):
                             ("omega", fl(r["dNdS"]), c["omega"]), ("kappa", fl(r["kappa"]), c["kappa"]),
                             ("t", fl(r["t"]), c["t"])):
                 if a == a and b >= 0.01:
+                    rels[k].append(rel(a, b))
+            # standard errors: both from a numerical Hessian (codeml: differences of the likelihood)
+            for k, a, b in (("SE_dN", fl(r["SE_dN"]), c["se_dN"]), ("SE_dS", fl(r["SE_dS"]), c["se_dS"])):
+                if a == a and b == b and b >= 0.001:
                     rels[k].append(rel(a, b))
     print(f"{tag}: {n} pairs, {both} with lnL from both; COAL - codeml lnL: min {min(dl):.3g} median "
           f"{statistics.median(dl):.3g} max {max(dl):.3g}; COAL worse by > 1e-4: {worse}; COAL better by > 1e-4: "
@@ -223,14 +231,15 @@ def cmd_sim(a):
     print(f"speed (1 thread, {a.codons} codons): GY {1000 * dt_gy / len(pairs):.1f} s per 1,000 pairs, "
           f"YN {1000 * dt_yn / len(pairs):.2f} s per 1,000 pairs")
     # truth
-    print("accuracy against the truth: median relative error of dS / of dN/dS [fraction of pairs with status ok]")
+    print("accuracy against the truth: median relative error of dS / of dN/dS [fraction of pairs with status ok]"
+          " cov: share of the pairs with an SE whose dS +- 1.96 SE holds the true dS")
     with open(os.path.join(a.out, "sim_truth.tsv"), "w") as fh:
         fh.write("method\tusage\tdS\tn\tok\tmedian_err_dS\tmedian_err_dNdS\tmedian_err_dN\n")
         for usage in ("equal", "skewed", "all"):
             for meth in ("GY", "YN"):
                 line = []
                 for d in DS:
-                    eS, eW, eN, nall = [], [], [], 0
+                    eS, eW, eN, nall, cov, nse = [], [], [], 0, 0, 0
                     for mt, r in zip(meta, res[meth]):
                         if mt["dS"] != d or (usage != "all" and mt["f"] != usage):
                             continue
@@ -238,6 +247,9 @@ def cmd_sim(a):
                         if r["status"] != "ok":
                             continue
                         eS.append(fl(r["dS"]) / d - 1)
+                        if fl(r["SE_dS"]) == fl(r["SE_dS"]):
+                            nse += 1
+                            cov += abs(fl(r["dS"]) - d) <= 1.96 * fl(r["SE_dS"])
                         eN.append(fl(r["dN"]) / mt["dN"] - 1)
                         if fl(r["dNdS"]) == fl(r["dNdS"]):
                             eW.append(fl(r["dNdS"]) / mt["w"] - 1)
@@ -245,7 +257,8 @@ def cmd_sim(a):
                     mw = statistics.median(eW) if eW else float("nan")
                     mn = statistics.median(eN) if eN else float("nan")
                     fh.write(f"{meth}\t{usage}\t{d:g}\t{nall}\t{len(eS)}\t{ms:.4f}\t{mw:.4f}\t{mn:.4f}\n")
-                    line.append(f"{100 * ms:+.0f}% / {100 * mw:+.0f}% [{len(eS) / nall:.2f}]")
+                    line.append(f"{100 * ms:+.0f}% / {100 * mw:+.0f}% [{len(eS) / nall:.2f}]"
+                                f" cov {cov / nse if nse else float('nan'):.2f}")
                 print(f"  {meth:3s} {usage:7s} " + " | ".join(line))
     print("  (columns: dS " + ", ".join(f"{d:g}" for d in DS) + ")")
     st = {}

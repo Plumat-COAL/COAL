@@ -93,7 +93,7 @@ const char* DNDS_HELP =
     "  IN             aligned FASTA or AXT file (or -i IN)\n"
     "  -o OUT         output file (default: standard output)\n"
     "  -m METHOD      YN (default), NG, LWL, MLWL, LPB, MLPB, MYN, GY, Comeron (alias C95), Li; repeat for\n"
-    "                 several (Comeron and Li: standard genetic code only; SE for YN, MYN, NG and Li).\n"
+    "                 several (Comeron and Li: standard genetic code only; SE for YN, MYN, NG, Li, GY).\n"
     "                 GY: maximum likelihood under the codon model of Goldman & Yang (1994) with F3x4\n"
     "                 codon frequencies, as PAML codeml's pairwise estimate (slower; accurate at high dS)\n"
     "  -c, --codontable TABLE  NCBI genetic code (default 1)\n"
@@ -681,6 +681,7 @@ int kaks_main(const std::string& sub, const std::vector<std::string>& argv) {
             os << head << TIDY_ML_HEADER << '\n';
         }
         long n_pairs = 0, n_status[kaks::STATUS_COUNT] = {}, n_unconverged = 0, n_unequal = 0, n_protein_like = 0;
+        long n_unconverged_gy = 0;
         std::string first_error;
         auto read_batch = [&](std::vector<Pair>& b) {
             size_t nt = 0;
@@ -745,7 +746,7 @@ int kaks_main(const std::string& sub, const std::vector<std::string>& argv) {
                 for (Result& r : p.res) {
                     if (c.flags.on()) c.flags.apply(r.status, r.note, (long)r.codons_compared, r.ks);
                     ++n_status[(int)r.status];
-                    if (!r.converged) ++n_unconverged;
+                    if (!r.converged) ++(r.method == Method::GY ? n_unconverged_gy : n_unconverged);
                     if (r.status == Status::error) {
                         if (first_error.empty()) first_error = p.name + ": " + r.note;
                         if (c.compat) continue;  // KaKs_Calculator leaves invalid pairs out
@@ -769,12 +770,16 @@ int kaks_main(const std::string& sub, const std::vector<std::string>& argv) {
                       << " saturated, " << n_status[4] << " no_data, " << n_status[5] << " error\n";
             if (c.flags.on()) std::cerr << prog << ": " << c.flags.summary() << "\n";
             if (n_unconverged > 0)
-                std::cerr << prog << ": warning: " << n_unconverged << " result(s): the YN/MYN iteration (or the GY "
-                          << "optimisation) did not converge, so there is no estimate: Ka and Ks are NA"
+                std::cerr << prog << ": warning: " << n_unconverged << " result(s): the YN/MYN iteration did not "
+                          << "converge, so there is no estimate: Ka and Ks are NA"
                           << (c.compat ? " (`coal dnds` names the pairs: status not_converged, and the note has "
                                          "the last round)"
                                        : " (status not_converged; the note has the last round)")
                           << "\n";
+            if (n_unconverged_gy > 0)
+                std::cerr << prog << ": warning: " << n_unconverged_gy << " result(s): the likelihood optimisation "
+                          << "of GY did not converge, so there is no estimate: Ka and Ks are NA"
+                          << (c.compat ? "" : " (status not_converged; the note has the last point)") << "\n";
             if (n_status[5] > 0)
                 std::cerr << prog << ": warning: " << n_status[5] << " result(s) could not be computed"
                           << (c.compat ? " and were left out" : " (status error)") << "; first: " << first_error

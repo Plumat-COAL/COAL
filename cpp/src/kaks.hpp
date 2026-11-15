@@ -129,7 +129,7 @@ struct Result {
     std::string note;                // why the status is not ok ("" when ok)
 
     double ka = NA, ks = NA, ka_ks = NA;  // dN, dS, dN/dS (NaN = not available)
-    double se_ka = NA, se_ks = NA;        // standard errors where the method defines one (NG86, YN00, MYN, Li)
+    double se_ka = NA, se_ks = NA;        // standard errors where the method has one (NG86, YN00, MYN, Li, GY)
     double S = NA, N = NA;                // synonymous / nonsynonymous sites
     double Sd = NA, Nd = NA;              // synonymous / nonsynonymous differences
     double substitutions = 0;             // nucleotide differences in the compared codons

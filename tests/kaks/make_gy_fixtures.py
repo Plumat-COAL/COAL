@@ -8,7 +8,8 @@ are taken (fixed positions), cleaned to the codon columns COAL compares, and giv
 CodonFreq = 2 (F3x4), one data set per pair; PAML 4.10.10 made the stored file). Writes
 
     tests/kaks/gy_cases.axt                    the pairs
-    tests/kaks/golden/gy_cases.codeml.tsv      name, icode, lnL, t, kappa, omega, dN, dS, S, N as codeml prints them
+    tests/kaks/golden/gy_cases.codeml.tsv      name, icode, lnL, t, kappa, omega, dN, dS, S, N and the standard
+                                               errors of dN and dS (getSE = 1), as codeml prints them
 
 The last pairs are run a second time under the vertebrate mitochondrial code (codeml icode = 1, COAL -c 2), with
 the columns that hold one of its stop codons (AGA, AGG) removed first: rows with icode 1.
@@ -59,13 +60,14 @@ def main():
         for nm, x, y in pairs + mito:
             fh.write(f"{nm}&ref\n{x}\n{y}\n\n")
     with open(os.path.join(HERE, "golden", "gy_cases.codeml.tsv"), "w", newline="\n") as fh:
-        fh.write("name\ticode\tlnL\tt\tkappa\tomega\tdN\tdS\tS\tN\n")
+        fh.write("name\ticode\tlnL\tt\tkappa\tomega\tdN\tdS\tS\tN\tSE_dN\tSE_dS\n")
         for icode, ps, rs in ((0, pairs, std), (1, mito, mt)):
             for (nm, _, _), r in zip(ps, rs):
                 if r is None:
                     raise SystemExit(f"codeml printed nothing for {nm}")
                 fh.write(f"{nm}\t{icode}\t{r['lnL']:.6f}\t{r['t']:.5f}\t{r['kappa']:.5f}\t{r['omega']:.5f}\t"
-                         f"{r['dN']:.4f}\t{r['dS']:.4f}\t{r['S']:.1f}\t{r['N']:.1f}\n")
+                         f"{r['dN']:.4f}\t{r['dS']:.4f}\t{r['S']:.1f}\t{r['N']:.1f}\t{r['se_dN']:.5f}\t"
+                         f"{r['se_dS']:.5f}\n")
     print(len(pairs), "pairs,", len(mito), "under the mitochondrial code")
 
 

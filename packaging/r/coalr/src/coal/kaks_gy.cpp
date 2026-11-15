@@ -293,6 +293,7 @@ struct GyModel {
 
 constexpr double T_MIN = 1e-6, T_MAX = 50;
 constexpr double PAR_MIN = 1e-6, PAR_MAX = 999;   // kappa and omega
+constexpr double SE_PAR_MIN = 1e-4, SE_PAR_MAX = 99;   // between these, kappa or omega counts as estimated (SE)
 
 // max over t in [T_MIN, T_MAX] of lnl(t), by Newton steps in u = log t inside a bracket; t: start and result.
 double profile_t(GyModel& m, double& t, double* slope = nullptr) {
@@ -489,6 +490,96 @@ Fit optimise(GyModel& m, double kappa0, double omega0, double t0, bool fix_omega
     return fit;
 }
 
+// SE of dN and dS at the maximum `fit` into r.se_ka / r.se_ks: the inverse of the observed information (minus
+// the Hessian of the log-likelihood, by central differences of the exact gradient) of the parameters that are
+// estimated inside their bounds, and the delta method. use[0..2]: t, log kappa, log omega take part; a parameter
+// at a bound is held fixed there (the caller then gives no SE to the distance that the bound makes 0). Left NaN
+// when the information is not positive definite (a flat maximum: no standard error to give).
+void standard_errors(GyModel& m, const Fit& fit, const bool use[3], Result& r, bool want_s, bool want_n) {
+    const double x0[3] = {fit.t, std::log(fit.kappa), std::log(fit.omega)};
+    const double h[3] = {1e-4 * fit.t, 1e-4, 1e-4};
+    int id[3], n = 0;
+    for (int i = 0; i < 3; ++i)
+        if (use[i]) id[n++] = i;
+    auto grad3 = [&](const double* x, double* g) {
+        m.build(std::exp(x[1]), std::exp(x[2]));
+        double slope = 0, gl[2];
+        m.lnl(x[0], &slope);
+        m.gradient(x[0], slope, gl);
+        g[0] = slope;
+        g[1] = gl[0];
+        g[2] = gl[1];
+    };
+    double I[3][3];   // minus the Hessian, of the parameters in id[]
+    for (int b = 0; b < n; ++b) {
+        const int j = id[b];
+        double xp[3] = {x0[0], x0[1], x0[2]}, xm[3] = {x0[0], x0[1], x0[2]}, gp[3], gm[3];
+        xp[j] += h[j];
+        xm[j] -= h[j];
+        grad3(xp, gp);
+        grad3(xm, gm);
+        for (int a = 0; a < n; ++a) I[a][b] = -(gp[id[a]] - gm[id[a]]) / (2 * h[j]);
+    }
+    for (int a = 0; a < n; ++a)
+        for (int b = 0; b < a; ++b) I[a][b] = I[b][a] = 0.5 * (I[a][b] + I[b][a]);
+    // Cholesky I = L L' (fails unless positive definite), then V = I^-1 through L^-1
+    double L[3][3] = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
+    for (int a = 0; a < n; ++a)
+        for (int b = 0; b <= a; ++b) {
+            double sum = I[a][b];
+            for (int k = 0; k < b; ++k) sum -= L[a][k] * L[b][k];
+            if (a == b) {
+                if (!(I[a][a] > 0) || !(sum > 1e-10 * I[a][a])) return;
+                L[a][a] = std::sqrt(sum);
+            } else {
+                L[a][b] = sum / L[b][b];
+            }
+        }
+    double Li[3][3] = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
+    for (int a = 0; a < n; ++a) {
+        Li[a][a] = 1 / L[a][a];
+        for (int b = 0; b < a; ++b) {
+            double sum = 0;
+            for (int k = b; k < a; ++k) sum -= L[a][k] * Li[k][b];
+            Li[a][b] = sum / L[a][a];
+        }
+    }
+    double V[3][3];
+    for (int a = 0; a < n; ++a)
+        for (int b = 0; b < n; ++b) {
+            double sum = 0;
+            for (int k = 0; k < n; ++k) sum += Li[k][a] * Li[k][b];
+            V[a][b] = sum;
+        }
+    // dS = t (syn + non0) / (3 (syn + omega non0)), dN = omega dS: the Jacobian in the same parameters
+    auto dsdn = [&](const double* x, double& dS, double& dN) {
+        double syn, non0;
+        m.rates(std::exp(x[1]), syn, non0);
+        const double w = std::exp(x[2]);
+        dS = x[0] * (syn + non0) / (3 * (syn + w * non0));
+        dN = w * dS;
+    };
+    double JS[3], JN[3];
+    for (int b = 0; b < n; ++b) {
+        const int j = id[b];
+        double xp[3] = {x0[0], x0[1], x0[2]}, xm[3] = {x0[0], x0[1], x0[2]}, sp, np, sm, nm;
+        xp[j] += h[j];
+        xm[j] -= h[j];
+        dsdn(xp, sp, np);
+        dsdn(xm, sm, nm);
+        JS[b] = (sp - sm) / (2 * h[j]);
+        JN[b] = (np - nm) / (2 * h[j]);
+    }
+    double vS = 0, vN = 0;
+    for (int a = 0; a < n; ++a)
+        for (int b = 0; b < n; ++b) {
+            vS += JS[a] * V[a][b] * JS[b];
+            vN += JN[a] * V[a][b] * JN[b];
+        }
+    if (want_s && vS > 0 && std::isfinite(vS)) r.se_ks = std::sqrt(vS);
+    if (want_n && vN > 0 && std::isfinite(vN)) r.se_ka = std::sqrt(vN);
+}
+
 std::string fmt6(double v) {
     char buf[40];
     std::snprintf(buf, sizeof buf, "%.6g", v);
@@ -626,6 +717,17 @@ Result run_gy(const Prepared& p, const GeneticCode& g, const Options& opt, Resul
         // one kind of site only: every difference is of that kind
         if (hasS) r.Sd = (double)snp;
         if (hasN) r.Nd = (double)snp;
+    }
+    // Standard errors of dN and dS, as codeml's getSE = 1 gives them (there with a Hessian by differences of the
+    // likelihood): from the observed information of the parameters estimated inside their bounds. A kappa or an
+    // omega near a bound (below 1e-4 or above 99; the bounds are 1e-6 and 999) is the bound in all but name: the
+    // likelihood has no curvature to speak of in it, and it is held fixed; with omega there, the distance that the bound makes 0 (dN at the lower bound, dS at the upper one)
+    // has no standard error. None either for a saturated pair, or with one kind of site only.
+    if (!fix_omega && !satS && !satN && std::isfinite(r.ks) && std::isfinite(r.ka) && best.t > T_MIN) {
+        const bool k_in = best.kappa > SE_PAR_MIN && best.kappa < SE_PAR_MAX;
+        const bool w_low = best.omega <= SE_PAR_MIN, w_high = best.omega >= SE_PAR_MAX;
+        const bool use[3] = {true, k_in, !w_low && !w_high};
+        standard_errors(m, best, use, r, !w_high, !w_low);
     }
     return r;
 }

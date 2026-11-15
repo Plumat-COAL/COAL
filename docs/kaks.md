@@ -41,7 +41,7 @@ install has no Ka/Ks engine; `coal kaks` then says so and exits 1.
 | `LPB` | Li (1993); Pamilo & Bianchi (1993) | J Mol Evol 36:96-99; Mol Biol Evol 10:271-281 | NA |
 | `MLPB` | LPB with Tzeng et al.'s (2004) Ile/Arg rules | Mol Biol Evol 21:2290-2298 | NA |
 | `MYN` | Zhang, Li & Yu (2006): YN00 with separate transition rates for purines and pyrimidines (TN93) | BMC Evol Biol 6:44 | yes (TN93 variance; F84 fallback) |
-| `GY` (aliases `GY-HKY`, `GY94`) | Goldman & Yang (1994) by maximum likelihood: the branch length t, kappa and omega are estimated from the codon pairs with F3x4 codon frequencies, as PAML's codeml does for a pair (`runmode = -2`); dN and dS as Yang & Nielsen (2000) define them. Any genetic code. Slower than YN, and the method that stays accurate at high dS (see "GY: maximum likelihood") | Mol Biol Evol 11:725-736 | NA |
+| `GY` (aliases `GY-HKY`, `GY94`) | Goldman & Yang (1994) by maximum likelihood: the branch length t, kappa and omega are estimated from the codon pairs with F3x4 codon frequencies, as PAML's codeml does for a pair (`runmode = -2`); dN and dS as Yang & Nielsen (2000) define them. Any genetic code. Slower than YN, and the method that stays accurate at high dS (see "GY: maximum likelihood") | Mol Biol Evol 11:725-736 | yes (observed information and the delta method, as codeml's `getSE`) |
 | `Comeron` (alias `C95`) | Comeron (1995) as libsequence's `gestimator` computes it (the default method of the R package orthologr): non-degenerate, transitional and transversional 2-fold and 4-fold sites, Kimura's two-parameter correction per class, pathways weighted by Grantham's distance | J Mol Evol 41:1152-1159 | NA |
 | `Li` | Li (1993) as `seqinr::kaks()` computes it (orthologr's `"Li"`): 0-, 2- and 4-fold sites, pathways weighted by an amino-acid similarity table | J Mol Evol 36:96-99 | yes (seqinr's variance formulas) |
 
@@ -164,8 +164,8 @@ of pairs the p-values need a correction for multiple testing. The counts are est
 (KaKs_Calculator's convention, kept; "Differences" below says how the tails are summed), so read it as
 KaKs_Calculator's statistic, comparable with its output, more than as an exact test. It is in the `coal kaks`
 format only; `coal dnds` does not print it. **Standard errors** are given by the methods that have a variance
-formula: `NG`, `YN`, `MYN` and `Li` (`SE_dN`, `SE_dS` in `coal dnds`; `NA` for LWL, MLWL, LPB, MLPB, Comeron and
-GY, whose standard errors would come from the curvature of the likelihood and are not computed yet).
+formula: `NG`, `YN`, `MYN` and `Li`, and by `GY` from the curvature of its likelihood (`SE_dN`, `SE_dS` in
+`coal dnds`; `NA` for LWL, MLWL, LPB, MLPB and Comeron).
 They are the standard errors **of dN and of dS, each on its own**. No method here gives a standard error or a
 confidence interval for dN/dS itself: the ratio of two estimates has no simple variance, and dividing the two
 SEs is not one. For an interval on the ratio use a likelihood method (PAML's codeml, HyPhy) on the codon
@@ -178,7 +178,7 @@ alignment, or bootstrap the codon columns.
 | `seq1`, `seq2` | the two IDs. For FASTA input, the record IDs. For AXT, the name line split at the first `&`; when there is no `&`, seq1 is the whole name line and seq2 is `NA` |
 | `method` | NG, LWL, MLWL, LPB, MLPB, GY, YN, MYN, Comeron or Li |
 | `dN`, `dS`, `dNdS` | Ka, Ks, Ka/Ks. `NA` when not available; dNdS is `NA` when dS < 1e-6. Zeros print as 0 |
-| `SE_dN`, `SE_dS` | standard errors of dN and of dS (YN, MYN, NG, Li); `NA` elsewhere. There is none for the ratio (below) |
+| `SE_dN`, `SE_dS` | standard errors of dN and of dS (YN, MYN, NG, Li, GY); `NA` elsewhere. There is none for the ratio (below) |
 | `N_sites`, `S_sites` | nonsynonymous and synonymous sites (`NA` for Comeron and Li, which count sites by degeneracy class, not as S and N) |
 | `Nd`, `Sd` | nonsynonymous and synonymous differences (`NA` for Comeron and Li) |
 | `codons_compared` | codon columns used after the policy |
@@ -1037,7 +1037,20 @@ omega = 1, S = 3 L rhoS1 and N = 3 L rhoN1 are the sites (L codons), dS = t rhoS
 dN = t rhoN / (3 rhoN1). So dN/dS is omega. `coal dnds` prints dN, dS, dN/dS, the sites S and N, and as `Sd` and
 `Nd` the expected differences S dS and N dN scaled to the observed number of nucleotide differences
 (KaKs_Calculator's convention for its GY); `--ml-columns` adds kappa, t and lnL. `coal kaks` puts lnL in
-ML-Score (see "Output"). There are no standard errors yet (`NA`).
+ML-Score (see "Output").
+
+**Standard errors.** `SE_dN` and `SE_dS` come from the observed information: minus the matrix of second
+derivatives of the log-likelihood in (t, log kappa, log omega) at the maximum (taken by central differences of
+the exact gradient) is inverted, and the variances of dS and dN follow by the delta method. This is what
+codeml's `getSE = 1` reports, computed more accurately (below). They are given where the parameters are
+estimated inside their bounds. A kappa or an omega below 1e-4 or above 99 is at its bound in all but name and is
+held fixed; with omega there, the distance that the bound makes 0 has no standard error (`SE_dN` is `NA` for a
+pair without nonsynonymous change, whose `SE_dS` is that of the synonymous changes alone). A saturated pair,
+identical sequences and a pair with one kind of site have none. As for the other methods, they are standard
+errors of dN and of dS, not of the ratio, and they describe the curvature at the maximum: for dS above about 2
+the likelihood is skewed and a symmetric interval is a rough guide. In the simulations below the interval
+dS ± 1.96 SE holds the true dS for 91 to 97 % of the pairs at every dS from 0.1 to 3 (95 % is the target), where
+YN's interval holds it for 41 to 69 % from dS 2 with even codon usage.
 
 **How it is computed.** The code is COAL's own (`cpp/src/kaks_gy.cpp`); only the symmetric eigen solver is
 shared with YN. The rate matrix is symmetrised with pi and decomposed once per (kappa, omega); with the
@@ -1091,7 +1104,14 @@ error; `--max-ds` flags what you consider too high.
    uses a random start for kappa and omega; its numbers were not reproduced (in the simulation study it took
    more than 20 minutes per file of 1,000-codon pairs and was run on 3 of 8 files). COAL writes `GY` in the
    Method column, KaKs_Calculator `GY-HKY` (accepted as a name by `-m`).
-7. **Not there:** standard errors (codeml's `getSE`), F1x4 / F61 / Fequal frequencies, a fixed kappa or omega.
+7. **Standard errors** differ from codeml's `getSE = 1` by 0.3 to 8 % in the median (the three data sets below;
+   95 % of the pairs within 2 to 14 %, single pairs by more), and the difference is codeml's: it builds its
+   Hessian from differences of the likelihood. COAL's were checked against a third computation (the likelihood
+   rebuilt with numpy, the Hessian by five-point second differences, `tests/kaks/make_gy_se_reference.py`): the
+   same to five digits on the 12 pairs of the test. Where omega is at codeml's bound (no nonsynonymous
+   difference), codeml prints an SE of dS that is too small (0.0033 for a dS of 0.023 resting on four
+   synonymous differences, where COAL gives 0.012).
+8. **Not there:** F1x4 / F61 / Fequal frequencies, a fixed kappa or omega.
 
 ### Validation of GY
 
@@ -1100,49 +1120,50 @@ error; `--max-ds` flags what you consider too high.
 
 | Data | Pairs | COAL lnL below codeml's by more than 1e-4 | COAL higher by more than 1e-4 | Same maximum, codeml inside its bounds | Largest relative difference there: dS / dN/dS / kappa / t |
 |---|---:|---:|---:|---:|---|
-| Simulated (dS 0.1 to 3, omega 0.2 and 1, kappa 2 and 4, even and GC3-skewed usage, 300 codons) | 320 | 0 | 8 | 299 | 1.0e-3 / 5.3e-5 / 5.7e-6 / 4.6e-5 |
-| *S. cerevisiae* / *C. glabrata* (median 417 codons) | 160 | 0 | 10 | 62 | 3.2e-4 / 6.1e-4 / 3.9e-5 / 3.0e-4 |
-| *Salmonella* / *Shigella* (median 297 codons) | 159 | 0 | 1 | 149 | 7.6e-4 / 2.7e-4 / 4.1e-5 / 1.3e-4 |
+| Simulated (dS 0.1 to 3, omega 0.2 and 1, kappa 2 and 4, even and GC3-skewed usage, 300 codons) | 320 | 0 | 9 | 298 | 1.0e-3 / 5.3e-5 / 5.7e-6 / 4.6e-5 |
+| *S. cerevisiae* / *C. glabrata* (median 417 codons) | 160 | 0 | 10 | 62 | 2.5e-4 / 4.7e-4 / 4.6e-5 / 2.5e-4 |
+| *Salmonella* / *Shigella* (median 297 codons) | 159 | 0 | 1 | 149 | 7.6e-4 / 2.7e-4 / 5.3e-5 / 8.3e-5 |
 
 codeml prints lnL with six decimals and the estimates with four or five, and the differences in the last
 column are of that size (the medians are 2e-5 for dS, 5e-5 for dN/dS, 2e-6 for kappa); the median difference in
 lnL is below 1e-6. COAL's likelihood is never the lower one. Where it is higher, codeml is at one of its bounds
-(the 8 simulated pairs: by 16 to 28 log units in the four where codeml ends with kappa at 0.4 and omega at 99,
+(7 of the 9 simulated pairs: by 12 and 17 log units in the two where codeml ends with kappa at its bound of 0.4,
 by less than 2 where its t is at 50; 66 of the yeast pairs have t = 50 in both programs, with the same
-likelihood to 1e-4 in 60 of them) or stopped at a lower maximum (3 yeast pairs, by up to 0.53; one
-*Salmonella* / *Shigella* pair, by 0.003). Which pairs these are changes from one codeml run to
-the next, since its starting values are random. The golden test `tests/test_kaks_gy.py` holds 20 of these
+likelihood to 1e-4 in 60 of them) or stopped at a lower maximum (2 simulated pairs, by up to 0.13; 3 yeast
+pairs, by up to 0.53; one *Salmonella* / *Shigella* pair, by 0.002). Which pairs these are changes from one
+codeml run to the next, since its starting values are random. The golden test `tests/test_kaks_gy.py` holds 20 of these
 pairs with codeml's output, three of them under the vertebrate mitochondrial code (`-c 2`, codeml `icode = 1`).
 
 **Against simulated truth** (the pairs of "Accuracy against simulated truth": GY94 with F3x4, truth in Yang &
 Nielsen's definition; 300 codons, omega 0.2 and 1, kappa 2 and 4, 100 pairs per cell, 800 per column and codon
-usage). Median relative error of dS / of dN/dS, and the share of pairs with status `ok`:
+usage). Median relative error of dS / of dN/dS; in brackets the share of pairs with status `ok`, and the share
+of those whose interval dS ± 1.96 SE holds the true dS (95 % if the standard errors are right):
 
 | Method | usage | dS 0.1 | dS 0.5 | dS 1 | dS 1.5 | dS 2 | dS 2.5 | dS 3 |
 |---|---|---|---|---|---|---|---|---|
-| GY | even | -2% / +1% (100%) | +1% / +1% (100%) | +3% / +0% (100%) | +6% / -0% (100%) | +3% / -0% (94%) | -0% / +1% (83%) | +2% / +0% (75%) |
-| YN | even | -3% / +2% (100%) | +0% / +2% (100%) | +2% / -2% (100%) | -3% / +6% (95%) | -17% / +23% (89%) | -28% / +41% (80%) | -37% / +62% (69%) |
-| GY | skewed | +0% / +1% (100%) | +0% / +3% (100%) | +3% / -2% (100%) | +3% / +1% (99%) | +2% / +1% (100%) | +4% / -1% (93%) | +6% / -3% (88%) |
-| YN | skewed | -1% / +0% (100%) | +2% / -10% (100%) | +27% / -31% (97%) | +22% / -35% (81%) | +4% / -27% (53%) | -12% / -28% (29%) | -22% / -27% (19%) |
+| GY | even | -2% / +1% (100%; 92%) | +1% / +1% (100%; 96%) | +3% / +0% (100%; 97%) | +6% / -0% (100%; 96%) | +3% / -0% (94%; 94%) | -0% / +1% (83%; 94%) | +2% / +0% (75%; 91%) |
+| YN | even | -3% / +2% (100%; 92%) | +0% / +2% (100%; 93%) | +2% / -2% (100%; 93%) | -3% / +6% (95%; 86%) | -17% / +23% (89%; 69%) | -28% / +41% (80%; 50%) | -37% / +62% (69%; 41%) |
+| GY | skewed | +0% / +1% (100%; 93%) | +0% / +3% (100%; 94%) | +3% / -2% (100%; 94%) | +3% / +1% (99%; 94%) | +2% / +1% (100%; 94%) | +4% / -1% (93%; 95%) | +6% / -3% (88%; 94%) |
+| YN | skewed | -1% / +0% (100%; 92%) | +2% / -10% (100%; 94%) | +27% / -31% (97%; 95%) | +22% / -35% (81%; 98%) | +4% / -27% (53%; 96%) | -12% / -28% (29%; 80%) | -22% / -27% (19%; 89%) |
 
 GY's medians are within 6 % of the truth at every dS up to 3 with both codon usages, where YN is off by 20 to
 40 % from dS 1 to 2; this is the "within 8 %" that the simulation study measured for codeml. What rises with dS
 is the scatter, not the bias: at dS 3 and 300 codons, 18 % of the pairs are `saturated` (an estimate above
-10), against YN's 56 % without an estimate.
+10), against YN's 56 % without an estimate. GY's standard errors are calibrated over the whole range.
 
 **Speed** (CPU seconds per 1,000 pairs, `-j 1`, the same shared machine; codeml: wall time of one run with one
 data set per pair):
 
 | Data | GY | YN | codeml |
 |---|---:|---:|---:|
-| Simulated, 300 codons, dS 0.1 to 3 (1,600 pairs) | 31.6 | 1.9 | 81 |
-| *Salmonella* / *Shigella*, median 297 codons (159 pairs) | 24.8 | 1.8 | 93 |
-| *S. cerevisiae* / *C. glabrata*, median 417 codons, 97 of 160 saturated | 45.7 | 2.0 | 176 |
+| Simulated, 300 codons, dS 0.1 to 3 (1,600 pairs) | 32.5 | 1.6 | 82 |
+| *Salmonella* / *Shigella*, median 297 codons (159 pairs) | 22.6 | 1.3 | 91 |
+| *S. cerevisiae* / *C. glabrata*, median 417 codons, 97 of 160 saturated | 46.5 | 2.0 | 194 |
 
 A pair costs 6 to 10 optimiser steps per start, each with one or two 61 x 61 symmetric eigendecompositions for
 the likelihood and about as much work again for the gradient; a pair with t of 1 or more is started four times.
-GY takes 15 to 25 times YN's time and is about 3 times faster than codeml on the same pairs; with `-j` the pairs
-run in parallel as for every method.
+GY takes 15 to 25 times YN's time and is about 3 to 4 times faster than codeml on the same pairs (the standard
+errors, six more decompositions, are included); with `-j` the pairs run in parallel as for every method.
 
 **Reproducibility.** The optimiser stops at a tolerance (a gradient of 1e-5 per unit of log kappa or log omega),
 so GY's numbers agree between platforms to about 1e-6 relative, not to the last bit as the counting methods do
@@ -1468,8 +1489,8 @@ profile of 2026-10-29, about 0.5 %); alignment dominates.
 
 ## Not done (yet)
 
-- Model selection and averaging (MS, MA) and the gamma variants. For GY: standard errors (from the curvature of
-  the likelihood, as codeml's `getSE`), codon frequencies other than F3x4 (F1x4, F61) and a fixed kappa or omega.
+- Model selection and averaging (MS, MA) and the gamma variants. For GY: codon frequencies other than F3x4
+  (F1x4, F61) and a fixed kappa or omega.
 - Comeron and Li for genetic codes other than the standard one (their references have no other; Comeron's
   tables could be built for any code, seqinr's site classes are written out for the standard code).
 - Comeron with `maxHits` 1 or 2 (libsequence's option to leave out codons that differ at several positions;
