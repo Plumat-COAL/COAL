@@ -218,13 +218,14 @@ jobs:
           retention-days: 30
 
   sanitizers:
-    # coal-cpp under AddressSanitizer (leaks included) and UndefinedBehaviorSanitizer: ci.yml's C++ test set plus
-    # the stdin, robustness, error-precedence and batch tests, then 300 generator cases. Any sanitizer report in
-    # the captured stderr fails the job, whatever the tests said. Peak-memory tests are skipped
-    # (COAL_SKIP_MEMORY_TESTS: ASan's shadow memory makes them meaningless); "not built" skips still fail.
+    # coal-cpp under AddressSanitizer (leaks included) and UndefinedBehaviorSanitizer: ci.yml's C++ test set (every
+    # module in tests/, through .github/ci_cpp_tests.py, but tests.test_wheels), then 300 generator cases and 300
+    # Ka/Ks property pairs. Any sanitizer report in the captured stderr fails the job, whatever the tests said.
+    # Peak-memory tests are skipped (COAL_SKIP_MEMORY_TESTS: ASan's shadow memory makes them meaningless); "not
+    # built" skips still fail, and so does any other skip in the core C++ modules but the platform ones.
     name: "coal-cpp under ASan + UBSan"
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90   # the whole of tests/ under ASan (about 15 to 25 minutes) and the two campaigns
     env:
       ASAN_OPTIONS: detect_leaks=1
       UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
@@ -239,8 +240,9 @@ jobs:
             pyproject.toml
             apps/coal-app/pyproject.toml
             apps/coal-app/desktop/requirements.txt
-      - name: Install COAL
-        run: python -m pip install -e .
+      # psutil: the tests that kill and interrupt runs watch the worker processes with it (test-only)
+      - name: Install COAL (and psutil)
+        run: python -m pip install -e . psutil
       - name: Build coal-cpp with sanitizers
         shell: bash
         run: |
@@ -252,31 +254,33 @@ jobs:
           cmake --build build-asan -j 2
           test -x build-asan/coal-cpp
           echo "COAL_CPP_BIN=$PWD/build-asan/coal-cpp" >> "$GITHUB_ENV"
+      # DIAMOND, as ci.yml's C++ job installs it (pinned release, SHA-256 verified by coal): the pipeline's DIAMOND
+      # routes and the alignment layer's DIAMOND hits run under the sanitizers too (a missing DIAMOND fails them)
+      - name: Install DIAMOND (pinned release, SHA-256 verified by coal)
+        run: python -c "import os; from coal import dnds_pipeline as P; p = P.install_diamond(method='official'); open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8', newline='\n').write('COAL_DIAMOND=' + p + '\nCOAL_TEST_DIAMOND=' + p + '\nCOAL_REQUIRE_DIAMOND=1\n')"
+      # Clustal Omega and MAFFT (Bioconda, by coal, as ci.yml's C++ job on Linux): cluster mode's MSA route under
+      # the sanitizers. Required here: a failed install fails the night rather than skipping those tests.
+      - name: Install Clustal Omega and MAFFT (Bioconda, by coal)
+        timeout-minutes: 10
+        run: python -m coal pipeline install clustalo mafft
       - name: C++ tests under the sanitizers
         shell: bash
         env:
           COAL_IMPL: cpp
         run: |
-          python -m unittest -v tests.test_differential tests.test_cpp_vs_python tests.test_cpp_cli \
-            tests.test_cpp_readers tests.test_cpp_tables tests.test_cpp_pool \
-            tests.test_stdin tests.test_robustness tests.test_cpp_error_precedence tests.test_batch \
-            tests.test_kaks tests.test_kaks_comeron_li tests.test_align tests.test_msa tests.test_dnds_pipeline \
-            tests.test_short_options tests.test_output_lock \
-            tests.test_pair_table tests.test_kaks_cli_inputs tests.test_kaks_yn_shortcut tests.test_kaks_dispatch \
-            tests.test_engine_ux tests.test_dnds_flags \
-            tests.test_pipeline_order tests.test_pipeline_robustness tests.test_pipeline_provenance \
-            tests.test_pipeline_isoforms tests.test_pipeline_atomic tests.test_citations tests.test_cli_commands tests.test_examples \
-            tests.test_retest2_findings tests.test_cleanup1_findings tests.test_kaks_properties \
-            tests.test_kaks_myn_kappa_inf \
+          # Every module in tests/ as ci.yml's C++ job runs it (tests/test_repo_ci.py keeps the two the same), but
+          # tests.test_wheels (packaging: builds and installs the platform wheel; nothing for the sanitizers).
+          python .github/ci_cpp_tests.py \
+            --no-skip test_differential,test_cpp_vs_python,test_cpp_cli,test_cpp_readers,test_cpp_tables,test_cpp_pool \
+            --allow "peak memory read with getrusage" \
+            --exclude test_wheels \
+            discover -s tests \
             2>&1 | tee san-tests.txt
           status=${PIPESTATUS[0]}
           if grep -qE "AddressSanitizer|LeakSanitizer|runtime error" san-tests.txt; then
             echo "::error::a sanitizer reported during the C++ tests (see san-tests.txt)"; exit 1
           fi
-          test "$status" -eq 0
-          if grep -iE "\.\.\. skipped" san-tests.txt | grep -qi "not built"; then
-            echo "::error::C++ tests were skipped as 'not built', so the sanitizer build was not exercised"; exit 1
-          fi
+          test "$status" -eq 0   # (ci_cpp_tests.py fails on a "not built" skip: the sanitizer build not exercised)
       - name: Engine generator under the sanitizers (300 cases)
         if: ${{ !cancelled() }}
         shell: bash
@@ -342,11 +346,20 @@ jobs:
           # ThreadSanitizer maps its shadow memory at fixed addresses; the runner's kernel randomises more address
           # bits than older TSan runtimes accept ("unexpected memory mapping"): fewer bits for this job
           sudo sysctl vm.mmap_rnd_bits=28 || true
+          # -Wno-error=free-nonheap-object: GCC 15 (ubuntu-latest from Ubuntu 26) with -fsanitize=thread warns
+          # free-nonheap-object on a std::vector<std::string> destructor in cpp/src/kaks_cli.cpp (parse()), a known
+          # false positive of GCC with the sanitizers' instrumentation; it stays a warning here, in this job only
+          # (every other build keeps it an error under COAL_WARNINGS_AS_ERRORS)
           cmake -S . -B build-tsan -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCOAL_WARNINGS_AS_ERRORS=ON -DCOAL_BUILD_TOOLS=OFF \
-            -DCMAKE_CXX_FLAGS="-fsanitize=thread -g -O1" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread"
+            -DCMAKE_CXX_FLAGS="-fsanitize=thread -g -O1 -Wno-error=free-nonheap-object" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread"
           cmake --build build-tsan -j 2
           test -x build-tsan/coal-cpp
           test -x build-tsan/coal-cpp-align
+          # a positive control: both binaries carry the ThreadSanitizer runtime (a build without it reports nothing)
+          nm build-tsan/coal-cpp | grep -q __tsan_init || { echo "::error::build-tsan/coal-cpp has no TSan runtime"; exit 1; }
+          nm build-tsan/coal-cpp-align | grep -q __tsan_init \
+            || { echo "::error::build-tsan/coal-cpp-align has no TSan runtime"; exit 1; }
           build-tsan/coal-cpp --version
       - name: Threaded commands under ThreadSanitizer
         shell: bash
@@ -368,6 +381,74 @@ jobs:
           path: |
             tsan-keep/
             tsan.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+  cpp-extras:
+    # The coal-cpp tests that skip in ci.yml's C++ job for want of something other than the binary, run here with
+    # it (Linux, a Release build with the test hooks; tests/test_repo_ci.py RUN_NIGHTLY names them):
+    #   tests.test_cpp_vs_reference: the fuzz against the real PAL2NAL v14 (PAL2NAL, scripts/fetch_pal2nal.py;
+    #     FUZZ_N 1000, tonight's seed) and the hookless-build test (COAL_CPP_NOHOOKS: a second build, no hooks)
+    #   tests.test_stress_findings: the COAL_SLOW tests (linear time in gene length, peak memory of 20,000 genes)
+    #   tests.test_align: the live comparison with Biopython's PairwiseAligner (pip install biopython)
+    #   tests.test_robustness.TestDiskFull: the output and temporary folder on a full 1 MB tmpfs, as root (sudo)
+    # Every one of these must run: ci_cpp_tests.py --no-skip.
+    name: "coal-cpp tests that need PAL2NAL, a hookless build, COAL_SLOW, Biopython or root"
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            apps/coal-app/pyproject.toml
+            apps/coal-app/desktop/requirements.txt
+      - name: Install COAL, Biopython and psutil
+        run: python -m pip install -e . biopython psutil
+      - name: Fetch PAL2NAL v14 (checksum-verified, not committed)
+        run: python scripts/fetch_pal2nal.py
+      - name: Build coal-cpp with the test hooks, and once more without them
+        shell: bash
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCOAL_WARNINGS_AS_ERRORS=ON -DCOAL_TEST_HOOKS=ON
+          cmake --build build -j 2
+          cmake -S . -B build-nohooks -DCMAKE_BUILD_TYPE=Release -DCOAL_WARNINGS_AS_ERRORS=ON
+          cmake --build build-nohooks -j 2 --target coal-cpp
+          test -x build/coal-cpp && test -x build/coal-cpp-align && test -x build-nohooks/coal-cpp
+          echo "COAL_CPP_BIN=$PWD/build/coal-cpp" >> "$GITHUB_ENV"
+          echo "COAL_CPP_NOHOOKS=$PWD/build-nohooks/coal-cpp" >> "$GITHUB_ENV"
+      - name: Install DIAMOND (pinned release, SHA-256 verified by coal)
+        run: python -c "import os; from coal import dnds_pipeline as P; p = P.install_diamond(method='official'); open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8', newline='\n').write('COAL_DIAMOND=' + p + '\nCOAL_TEST_DIAMOND=' + p + '\nCOAL_REQUIRE_DIAMOND=1\n')"
+      - name: PAL2NAL fuzz, hookless build, COAL_SLOW and Biopython tests (must not skip)
+        shell: bash
+        env:
+          COAL_IMPL: cpp
+          COAL_REQUIRE_CPP: "1"
+          COAL_REQUIRE_ALIGN: "1"
+          COAL_SLOW: "1"
+          PAL2NAL: PAL2NAL/pal2nal.v14/pal2nal.pl
+        run: |
+          python .github/ci_cpp_tests.py --no-skip test_cpp_vs_reference,test_stress_findings,test_align \
+            tests.test_cpp_vs_reference tests.test_stress_findings tests.test_align 2>&1 | tee cpp-extras.txt
+          test "${PIPESTATUS[0]}" -eq 0
+      - name: Full file system tests as root (must not skip)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          sudo --preserve-env env "PATH=$PATH" python .github/ci_cpp_tests.py --no-skip test_robustness \
+            tests.test_robustness.TestDiskFull 2>&1 | tee cpp-extras-root.txt
+          test "${PIPESTATUS[0]}" -eq 0
+      - name: Upload the test logs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: cpp-extras-seed-${{ env.FUZZ_SEED }}
+          path: |
+            cpp-extras.txt
+            cpp-extras-root.txt
           if-no-files-found: warn
           retention-days: 30
 

@@ -29,7 +29,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 from coal import __version__  # noqa: E402
 from coal import cli  # noqa: E402
 from coal import dnds_pipeline as P  # noqa: E402
-from test_dnds_pipeline import CPP, FAM, FAM_CLUSTERS, PLAIN, Q, S, needs_cpp  # noqa: E402
+from test_dnds_pipeline import CLUSTALO, CPP, FAM, FAM_CLUSTERS, PLAIN, Q, S, needs_cpp  # noqa: E402
 
 BANNER_FILES = [ROOT / "README.md", ROOT / "docs" / "install.md", ROOT / "docs" / "tutorials" / "README.md"]
 BANNER_MARK = "dev-version banner"
@@ -218,8 +218,10 @@ class TestPipelineMessages(unittest.TestCase):
         self.assertIn("none of the 3 IDs of --clusters", err)
         self.assertIn("is a record of --cds, so nothing was computed", err)
         self.assertIn("e.g. 'rep1' in clusters.tsv", err)
+        if not CLUSTALO:   # (the clusters route aligns each cluster with Clustal Omega: none on Windows / macOS CI)
+            self.skipTest("the run with clusters that name records needs Clustal Omega")
         rc, err = self.run_main("clusters", "--cds", FAM, "-o", self.tmp / "ok", "--clusters", FAM_CLUSTERS, "-q")
-        self.assertIn(rc, (0, 2))
+        self.assertIn(rc, (0, 2), err)
 
     def test_the_first_unusable_record_is_named(self):
         text = Q.read_text(encoding="utf-8")

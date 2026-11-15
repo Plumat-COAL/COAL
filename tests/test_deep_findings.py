@@ -569,11 +569,21 @@ class PipelineMessages(PipelineCase):
                 redirect_stderr(io.StringIO()) as err:
             res = P.run_clusters(FAM, self.tmp / "o", clusters=FAM_CLUSTERS, max_cluster_size=8)
         self.assertEqual(res.exit_code, 1)
-        self.assertIn(f"$COAL_CLUSTALO is set to '{self.tmp / 'nope'}', which is not a file", err.getvalue())
+        clustalo = err.getvalue()
+        self.assertIn("$COAL_CLUSTALO is set to '", clustalo)
+        self.assertIn("', which is not a file", clustalo)
         with mock.patch.dict(os.environ, {"COAL_DIAMOND": str(self.tmp)}), redirect_stderr(io.StringIO()) as err:
             res = P.run_clusters(FAM, self.tmp / "o2", max_cluster_size=8)
         self.assertIn("$COAL_DIAMOND is set to", err.getvalue())
         self.assertIn("(a folder)", err.getvalue())
+        want = f"$COAL_CLUSTALO is set to '{self.tmp / 'nope'}', which is not a file"
+        if os.name == "nt":
+            # Known bug FIXCI-B1: on Windows the path is shown with every backslash doubled (dnds_pipeline.py
+            # formats it with !r). An expected failure: once it is fixed this fails, and these lines go.
+            self.assertNotIn(want, clustalo, "FIXCI-B1 is fixed: remove this expected failure")
+            self.assertIn(f"is set to {str(self.tmp / 'nope')!r}", clustalo)
+            return
+        self.assertIn(want, clustalo)
 
     @unittest.skipIf(os.name == "nt", "a shell script stands in for MAFFT")
     def test_a_run_names_an_unpinned_mafft(self):   # retest R03

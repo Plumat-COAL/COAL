@@ -725,6 +725,71 @@ def _peak_rss_of(cmd, cwd, env):
     return p.returncode, peak
 
 
+def _win_peak_working_set(handle) -> int:
+    """PeakWorkingSetSize of a Windows process handle (also after the process ended, while the handle is open)."""
+    import ctypes
+    from ctypes import wintypes
+
+    class Counters(ctypes.Structure):
+        _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD),
+                    ("PeakWorkingSetSize", ctypes.c_size_t), ("WorkingSetSize", ctypes.c_size_t),
+                    ("QuotaPeakPagedPoolUsage", ctypes.c_size_t), ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t), ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                    ("PagefileUsage", ctypes.c_size_t), ("PeakPagefileUsage", ctypes.c_size_t)]
+    c = Counters()
+    c.cb = ctypes.sizeof(c)
+    fn = ctypes.windll.kernel32.K32GetProcessMemoryInfo
+    fn.argtypes = [wintypes.HANDLE, ctypes.POINTER(Counters), wintypes.DWORD]
+    if not fn(wintypes.HANDLE(int(handle)), ctypes.byref(c), c.cb):
+        raise OSError(ctypes.get_last_error(), "K32GetProcessMemoryInfo failed")
+    return c.PeakWorkingSetSize
+
+
+def own_peak_rss() -> int:
+    """This (test) process's own peak resident set size in bytes."""
+    if os.name == "nt":
+        import ctypes
+        return _win_peak_working_set(ctypes.windll.kernel32.GetCurrentProcess())
+    import resource
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    return peak if sys.platform == "darwin" else peak * 1024
+
+
+def _process_peak_rss_of(cmd, cwd, env):
+    """Run one process (no children) and return (rc, its own peak resident set size in bytes, how it was read).
+
+    Not wait4's ru_maxrss on Linux: there a child's is floored at the RSS of the process it was forked from (the
+    mm it replaced at exec), so from a test process of 140 MB every child reads 140 MB. Linux: the process's own
+    VmHWM (/proc/<pid>/status; per address space, and monotonic, so polling misses only what grows after the last
+    read: within 1-2 % of the exact peak for these runs). macOS: wait4's ru_maxrss (bytes). Windows: the
+    process's PeakWorkingSetSize, read from its handle after it ended (exact)."""
+    p = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if sys.platform.startswith("linux"):
+        peak, reads, status = 0, 0, f"/proc/{p.pid}/status"
+        while p.poll() is None:
+            try:
+                with open(status, encoding="ascii", errors="replace") as fh:
+                    for line in fh:
+                        if line.startswith("VmHWM:"):
+                            peak, reads = max(peak, int(line.split()[1]) * 1024), reads + 1
+                            break
+            except (OSError, ValueError):
+                pass
+            time.sleep(0.001)
+        if not reads:
+            raise AssertionError(f"{cmd[0]} ended before its VmHWM could be read once")
+        return p.returncode, peak, f"VmHWM, {reads} reads"
+    if sys.platform == "darwin":
+        _, st, usage = os.wait4(p.pid, 0)
+        p.returncode = os.waitstatus_to_exitcode(st)
+        return p.returncode, usage.ru_maxrss, "wait4 ru_maxrss"
+    if os.name == "nt":
+        p.wait()
+        return p.returncode, _win_peak_working_set(p._handle), "PeakWorkingSetSize"
+    rc, peak = _peak_rss_of(cmd, cwd, env)
+    return rc, peak, "psutil sampling"
+
+
 def clean_case(d: Path, n, ncod):
     """`n` clean genes of `ncod` codons: the same sizes as unrelated_case(d, n, ncod), without the warnings."""
     rng = random.Random(101)
@@ -775,20 +840,26 @@ class ReportKeepsCounts(unittest.TestCase):
         self.assertLess((peaks[3000] - peaks[1000]) / 2000, 1000, peaks)
 
     @unittest.skipUnless(HAVE_CPP, "build/coal-cpp not built")
+    @unittest.skipIf(os.environ.get("COAL_SKIP_MEMORY_TESTS"),
+                     "COAL_SKIP_MEMORY_TESTS set: peak memory is meaningless under a sanitizer")
     def test_cpp_engine_default_mode_memory_is_flat(self):
-        try:
-            import psutil  # noqa: F401
-        except ImportError:
-            self.skipTest("psutil not installed")
-        peaks = {}
+        peaks, how = {}, {}
         env = dict(ENV, COAL_BATCH_NT="20000")
         for name, gen in (("clean", clean_case), ("unrelated", unrelated_case)):
             with tempfile.TemporaryDirectory() as tmp:
                 d = Path(tmp)
                 gen(d, 2 * self.N, self.NCOD)
-                rc, peaks[name] = _peak_rss_of([CPP, "pep.fasta", "nuc.fasta", "-o", "out.fa", "-j", "1"], tmp, env)
+                rc, peaks[name], how[name] = _process_peak_rss_of(
+                    [CPP, "pep.fasta", "nuc.fasta", "-o", "out.fa", "-j", "1"], tmp, env)
                 self.assertEqual(rc, 0)
                 self.assertEqual(sorted(x.name for x in d.iterdir()), ["nuc.fasta", "out.fa", "pep.fasta"])
+        mine = own_peak_rss()
+        print(f"\ncoal-cpp peak RSS: clean {peaks['clean'] // 1024} KB ({how['clean']}), unrelated "
+              f"{peaks['unrelated'] // 1024} KB ({how['unrelated']}); this test process {mine // 1024} KB",
+              file=sys.stderr)
+        # a reading floored at this process's own peak (as wait4 gives on Linux) would compare two equal floors
+        for name, peak in peaks.items():
+            self.assertLess(peak, mine, f"{name}: the reading is not coal-cpp's own peak ({peaks}, test {mine})")
         self.assertLess(peaks["unrelated"] / peaks["clean"], 1.5, peaks)
 
     def test_report_from_resume_entries_file_equals_temp_file_report(self):

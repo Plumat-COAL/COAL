@@ -532,13 +532,12 @@ class TestStderrPrefixes(_Tmp):
 class TestEngines(_Tmp):
     """--batch never leaves the Python engine; coal-cpp refuses it."""
 
-    @unittest.skipIf(os.name == "nt", "uses a POSIX shell wrapper to see whether coal-cpp ran")
     @unittest.skipIf(cpp_binary() is None, "coal-cpp not built (set COAL_CPP_BIN)")
     def test_nothing_is_dispatched_to_cpp(self):
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from cpp_wrapper import write_wrapper   # (sh, or a .cmd on Windows)
         mark = self.tmp / "cpp_ran"
-        wrapper = self.tmp / "coal-cpp"
-        wrapper.write_text(f'#!/bin/sh\ntouch "{mark}"\nexec "{cpp_binary()}" "$@"\n')
-        wrapper.chmod(0o755)
+        wrapper = write_wrapper(self.tmp / "coal-cpp", cpp_binary(), touch=mark)
         env = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "COAL_CPP": str(wrapper), "COAL_ENGINE": "cpp"}
         name = self.jobs([f"{CLEAN[0]} {CLEAN[1]} -o a.fa", f"{TABLE2[0]} {TABLE2[1]} -o b.fa -codontable 2"])
         r = subprocess.run([sys.executable, "-m", "coal", "--batch", name], cwd=self.tmp, env=env,

@@ -64,13 +64,12 @@ class TestEngineFuzzTool(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout[-2000:] + r.stderr[-2000:])
         self.assertIn("sanitizer run (coal-cpp only), seed 3: 5 cases", r.stdout)
 
-    @unittest.skipIf(os.name == "nt", "uses a POSIX shell wrapper around coal-cpp")
     def test_difference_and_sanitizer_report_fail_and_keep_the_case(self):
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from cpp_wrapper import write_wrapper   # (sh, or a .cmd on Windows)
         with tempfile.TemporaryDirectory() as t:
             # a coal-cpp whose stderr carries a UBSan line: a difference from Python and a sanitizer report
-            wrapper = Path(t) / "coal-cpp"
-            wrapper.write_text(f'#!/bin/sh\necho "core.cpp:1:1: runtime error: fake" >&2\nexec "{CPP}" "$@"\n')
-            wrapper.chmod(wrapper.stat().st_mode | stat.S_IEXEC)
+            wrapper = write_wrapper(Path(t) / "coal-cpp", CPP, stderr_line="core.cpp:1:1: runtime error: fake")
             keep = Path(t) / "keep"
             r = run_tool("--n", "2", "--seed", "1", "--cpp", str(wrapper), "--keep", str(keep))
             self.assertEqual(r.returncode, 1, r.stdout[-2000:] + r.stderr[-2000:])
