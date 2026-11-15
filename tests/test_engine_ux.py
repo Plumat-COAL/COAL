@@ -120,6 +120,14 @@ CASES["frameshift_near"] = ({"p.fa": FS_PEP, "d.fa": FS_NUC}, ["p.fa", "d.fa"],
                             ["coal: summary: s: Frameshift near column 22: there are four extra bases in the DNA"])
 CASES["no_false_location"] = ({"p.fa": f">g\n{DUP_ROW}\n", "d.fa": f">g\n{DUP_DNA}\n"}, ["p.fa", "d.fa"],
                               ["coal: summary: The run stopped at g, so no output was written.\n"])
+if os.name != "nt":  # U17: a Windows path missing on Linux / macOS names its WSL form (on Windows it is just a path)
+    CASES["windows_path"] = ({"d.fa": D}, ["C:\\Users\\me\\p.fa", "d.fa"],
+                             ["coal: error: cannot open 'C:\\Users\\me\\p.fa': no such file. This is a Windows path; "
+                              "under WSL (Windows Subsystem for Linux) the same file is /mnt/c/Users/me/p.fa\n"])
+    CASES["windows_path_slash"] = ({"p.fa": P}, ["p.fa", "D:/data/x y/n.fa"],
+                                   ["coal: error: cannot open 'D:/data/x y/n.fa': no such file. This is a Windows "
+                                    "path; under WSL (Windows Subsystem for Linux) the same file is "
+                                    "/mnt/d/data/x y/n.fa\n"])
 if sys.platform.startswith("linux") and os.path.isdir("/proc"):
     CASES["out_proc"] = ({"p.fa": P, "d.fa": D}, ["p.fa", "d.fa", "-o", "/proc/coal-x.fa"],
                          ["coal: error: cannot write /proc/coal-x.fa: no such file or directory\n"])  # folder exists

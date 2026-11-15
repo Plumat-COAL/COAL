@@ -932,5 +932,11 @@ Rcpp::List coalr_info() {
                               Rcpp::_["genetic_codes"] = Rcpp::IntegerVector(supported_tables().begin(),
                                                                              supported_tables().end()),
                               Rcpp::_["matrices"] = to_r(substitution_matrix_names()),
-                              Rcpp::_["hardware_threads"] = (int)std::thread::hardware_concurrency());
+                              Rcpp::_["hardware_threads"] = (int)std::thread::hardware_concurrency(),
+                              // Behaviour that callers (orthologr) cannot tell from the version string of a
+                              // development build: add a name when such a change is vendored, never remove one.
+                              // comeron_min_sites_positive: COAL #76 (D9), the min-sites rule only where it gives a
+                              // distance > 0 (a 0 from a small class stays NA).
+                              Rcpp::_["features"] = to_r(std::vector<std::string>{
+                                  "comeron_twosubs", "comeron_min_sites", "comeron_min_sites_positive"}));
 }

@@ -148,7 +148,8 @@ class TestPipelineOnWindows(WindowsCase):
 
 class TestWindowsPathHint(unittest.TestCase):
     """U17 for `coal PEP NUC` (the pipeline had it already): a Windows path missing on Linux / macOS names its WSL
-    form. Python engine; coal-cpp's own message is unchanged (a proposal for its owner)."""
+    form. Python engine here; coal-cpp says the same (cpp/src/seqio.cpp open_error), compared byte for byte by
+    tests/test_engine_ux.py (cases windows_path, windows_path_slash)."""
 
     def enoent(self, path):
         return OSError(errno.ENOENT, "No such file or directory", path)

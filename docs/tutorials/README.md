@@ -16,7 +16,8 @@
 > To keep `COAL_CPP` in new shells, and for what each install gives: [install.md, Option 3](../install.md#option-3-from-source).
 
 Worked examples on real, small, public data: from coding sequences to an interpreted dN/dS table. Every command
-was run as written, and the outputs shown are the real ones (COAL 0.6.0.dev0, commit 009bdd5, Linux x86_64).
+was run as written, and the outputs shown are the real ones (COAL 0.6.0.dev0, Linux x86_64); CI reruns tutorials
+1, 2, 3 and 5 and compares their outputs with the text (`scripts/run_tutorials.py`).
 
 | # | Tutorial | Data | Runtime (1 thread) |
 |---|---|---|---|

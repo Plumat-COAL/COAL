@@ -1179,7 +1179,11 @@ reciprocal-best-hit search is not in COAL's figure.
 4. Li: coalr already returns `NA` where seqinr returns 9.999999, and flags a negative value with status
    `warning` (orthologr turns it into `NA`);
 5. values are doubles, where gestimator's file has 4 significant digits: `signif(x, 4)` gives orthologr's
-   printed values.
+   printed values;
+6. a development coalr keeps its version (0.6.0.9000) when behaviour changes, so test
+   `coalr::coal_info()$features` instead: `"comeron_twosubs"` and `"comeron_min_sites"` (the arguments) and
+   `"comeron_min_sites_positive"` (the min-sites rule only where it gives a distance above 0, COAL #76; a coalr
+   without it can give dS = 0 where the native engine gives `NA`). A coalr without `features` predates all three.
 
 ## Benchmark
 

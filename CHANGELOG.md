@@ -644,6 +644,11 @@ entry under "Added", not under "Fixed".
     <working folder>)". `R CMD check --as-cran`: 0 errors, 0 warnings; the tests use at most two threads unless
     `NOT_CRAN=true`. `coal_pipeline_pairs()` / `coal_pipeline_clusters()` without COAL's Python pipeline name,
     in a development coalr (0.6.0.9000), the build from a COAL checkout instead of the latest release.
+  - **coalr: `coal_info()$features`** names behaviours that a development build's version number does not tell,
+    so that orthologr can recognise an older coalr of the same version (0.6.0.9000) and warn:
+    `"comeron_twosubs"`, `"comeron_min_sites"` and `"comeron_min_sites_positive"` (the D9 refinement of #76: the
+    min-sites rule only where it gives a distance above 0). Names are only added; a coalr without `features`
+    predates all three. No number changes.
 - **`coal --batch --batch-parallel N`: N jobs at a time.** Worker processes each import COAL once and take jobs
   from a queue (`0` = one per CPU core; the default is still one job after the other), every job's output
   byte-identical to running it alone; a job's messages are printed together when it ends, so the lines of two
@@ -748,7 +753,9 @@ entry under "Added", not under "Fixed".
   failure of `coal-cpp codon-dnds`). The first unusable record and its reason are on stderr, not only in
   failed.tsv. After Ctrl-C the line names `--resume`. `-o` onto a folder with an earlier run's results says that
   they are replaced. A Windows path on Linux / macOS names its WSL form (in the pipeline's messages and in
-  those of `coal` itself with the Python engine), and paths are shown as typed (no doubled backslashes). `-codontable N` is accepted as `-c N`; orthologr's and DIAMOND's option names
+  those of `coal` itself, with either engine, and of `coal-cpp` run directly: "cannot open 'C:\Users\me\p.fa': no
+  such file. This is a Windows path; under WSL (Windows Subsystem for Linux) the same file is
+  /mnt/c/Users/me/p.fa"; the same words in both engines, compared by tests/test_engine_ux.py), and paths are shown as typed (no doubled backslashes). `-codontable N` is accepted as `-c N`; orthologr's and DIAMOND's option names
   (`--sensitivity-mode`, `--comp-cores`, `--threads`) and close typos of an option get a suggestion. `coal
   translate` warns when most genes have internal stop codons, with the first one and, as the pipeline does, the
   genetic code under which they have none. `coal dnds` / `coal kaks` on an input without any pair (an empty file,
@@ -1120,7 +1127,10 @@ Documentation, tests, continuous integration and packaging:
   what `coal translate` warns about; docs/pipeline.md describes the first-use messages of the new-user audit (a
   `--pairs` / `--clusters` file that names no record stops with exit 1, the header line, CSV, genome-like inputs,
   the earlier-results notice, option suggestions) and the Windows routes; the release checklist
-  (docs/development.md) removes the dev-version banner.
+  (docs/development.md) removes the dev-version banner (#81, #83). docs/alignment.md's Windows install advice
+  names the same routes as install.md (MSYS2's Clustal Omega 1.2.4, MAFFT's own Windows package, why COAL
+  downloads neither). The tutorials' "Tested with" lines no longer name an old commit: CI reruns tutorials 1, 2,
+  3 and 5 and compares their outputs with the text.
 - **Tests added with the review of 2026-11-13:** the pair-table header is the same in `dnds_cli.cpp`,
   `kaks_cli.cpp`, `dnds_pipeline.py` and coalr (`tests/test_pair_table.py`); a `coal-cpp` built without test hooks
   makes the reference-shim resume tests skip instead of fail; five fixed sleeps in the lock, MSA and pipeline

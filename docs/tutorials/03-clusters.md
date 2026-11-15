@@ -9,7 +9,7 @@ family alignments, and what happens to very large families.
 | Data | four *Chlamydia* genomes (3,738 CDS): *C. trachomatis* D/UW-3/CX and L2/434/Bu (two strains of one species), *C. muridarum* Nigg (its sister species, from mouse) and *C. pneumoniae* CWL029 (distant), NCBI RefSeq |
 | Needs | the platform wheel (`coal-cpp`), DIAMOND 2.1.0 or later, Clustal Omega (`coal pipeline install diamond clustalo`); MAFFT for one step |
 | Runtime | about 85 s per run with one thread (DeepClust 10 s, 814 Clustal Omega alignments 58 s, Ka/Ks the rest); the MAFFT run 6.3 min |
-| Tested with | COAL 0.6.0.dev0 (commit 009bdd5), DIAMOND 2.2.8, Clustal Omega 1.2.4, MAFFT 7.526, Linux x86_64 |
+| Tested with | COAL 0.6.0.dev0 (its outputs are checked in CI by `scripts/run_tutorials.py`), DIAMOND 2.2.8, Clustal Omega 1.2.4, MAFFT 7.526, Linux x86_64 |
 
 Four genomes at three distances, on purpose: two strains that differ at about 1% of synonymous sites, a sister
 species at about 1.3 substitutions per synonymous site, and an outgroup beyond what pairwise dS can measure.

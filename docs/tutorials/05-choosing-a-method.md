@@ -9,7 +9,7 @@ any of them. Everything here is grounded in [kaks.md](../kaks.md), which has the
 | Data | the 3,142 *E. coli* K-12 / *S. enterica* LT2 ortholog pairs of tutorial 2 (`ecsa_filtered/`); the *glpK* alignment of tutorial 1 (`t01/`); run from the scratch folder `coal-tutorials/` |
 | Needs | the platform wheel (`coal-cpp`), Python 3 for the comparison script |
 | Runtime | 16 s for five methods on 3,142 pairs with one thread (YN and MYN take most of it) |
-| Tested with | COAL 0.6.0.dev0 (commit 009bdd5), Linux x86_64 |
+| Tested with | COAL 0.6.0.dev0 (its outputs are checked in CI by `scripts/run_tutorials.py`), Linux x86_64 |
 
 ## The short answer
 
