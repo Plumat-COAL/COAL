@@ -4,7 +4,7 @@ CI's C++ job sets COAL_TEST_REAL_MAFFT=1 on its Windows runner. There `coal pipe
 pinned package into a new cache folder, and every run here has the cache folder, the current folder and TMP / TEMP
 in paths with spaces, `&`, `^` and `( )` (cmd.exe's special characters: COAL runs the package's bash.exe, not
 mafft.bat, so they are only text). The tests check the record of the install, that a second install downloads
-nothing, that MAFFT runs (--version, an alignment, an input given by a UNC path), and one `coal pipeline clusters
+nothing, that MAFFT runs (--version, an alignment, the paths MSYS2 reads), and one `coal pipeline clusters
 --aligner mafft` run on examples/dnds, end to end with coal-cpp (COAL_CPP_BIN), with the numbers of before. On another system the download is checked and unpacked the same way, with the
 platform taken to be x86-64 Windows (nothing of it is run there).
 
@@ -144,25 +144,28 @@ class TestRealMafftWindowsPackage(unittest.TestCase):
         print(f"\n[real MAFFT] {msa.tool_version(self.entry)}: " + " ".join(r for _, r in rows), file=sys.stderr)
 
     @unittest.skipUnless(WINDOWS, "MAFFT's package runs on Windows")
-    def test_an_input_given_by_a_unc_path(self):
-        """MSYS2 (the package's bash and MAFFT's script) reads a quoted UNC path (\\\\localhost\\C$\\...) and a
-        drive path with '/' given as an argument."""
-        work = tempfile.mkdtemp(prefix="unc & ^ ", dir=self.temp)
+    def test_paths_msys2_reads(self):
+        """Audit note 6: a drive path with '/' as an argument is read; a UNC path (\\\\localhost\\C$\\...) is not
+        (MSYS2 turns its two leading backslashes into one: seen in CI, 2026-11-15), so COAL never passes a path of
+        the user's (the input is given relative to the run's folder) and refuses a run folder on a network path."""
+        work = tempfile.mkdtemp(prefix="paths & ^ ", dir=self.temp)
         inp = os.path.join(work, "in.fasta")
         Path(inp).write_text(">s0\nMKVLAAGIV\n>s1\nMKVLSAGIV\n>s2\nMRVAAGIV\n", encoding="utf-8", newline="\n")
-        drive, rest = os.path.splitdrive(os.path.abspath(inp))
+        args, extra = msa._launch([self.entry, "--auto", "--amino", "--anysymbol", "--quiet",
+                                   os.path.abspath(inp).replace("\\", "/")], work)
+        extra.pop("_tree")
+        r = subprocess.run(args, capture_output=True, text=True, timeout=300, **extra)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual([x[1:].strip() for x in r.stdout.splitlines() if x.startswith(">")], ["s0", "s1", "s2"],
+                         r.stdout + r.stderr)
+        drive, rest = os.path.splitdrive(os.path.abspath(self.temp))
         unc = "\\\\localhost\\" + drive[0] + "$" + rest
-        if not os.path.isfile(unc):
+        if not os.path.isdir(unc):
             self.skipTest(f"the administrative share of {drive} is not reachable here ({unc})")
-        for given in (unc, os.path.abspath(inp).replace("\\", "/")):
-            with self.subTest(given=given):
-                args, extra = msa._launch([self.entry, "--auto", "--amino", "--anysymbol", "--quiet", given], work)
-                extra.pop("_tree")
-                r = subprocess.run(args, capture_output=True, text=True, timeout=300, **extra)
-                self.assertEqual(r.returncode, 0, r.stderr)
-                names = [x[1:].strip() for x in r.stdout.splitlines() if x.startswith(">")]
-                self.assertEqual(names, ["s0", "s1", "s2"], r.stdout + r.stderr)
-        print(f"\n[real MAFFT] input by UNC path {unc}: ok", file=sys.stderr)
+        with mock.patch.object(msa.tempfile, "tempdir", unc), self.assertRaises(msa.MsaError) as cm:
+            msa.run_msa([("a", "MKV"), ("b", "MKI"), ("c", "MRV")], "mafft", exe=self.entry)
+        self.assertIn("on a network path", str(cm.exception))
+        print(f"\n[real MAFFT] drive path with '/': read; run folder {unc}: refused", file=sys.stderr)
 
     @unittest.skipUnless(WINDOWS, "mafft.bat runs on Windows")
     def test_pipeline_clusters_with_mafft(self):

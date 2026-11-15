@@ -474,7 +474,10 @@ def _read_version(exe: str, timeout: float = 60) -> str:
 # cmd.exe: PATH with the package's usr\bin first (Windows form: bash.exe finds its DLLs there, and MSYS2 turns
 # it into /usr/bin), MAFFT_BINARIES=/usr/lib/mafft, TMPDIR / MAFFT_TMPDIR / TMP / TEMP a folder of the run's
 # own, and the run's folder as the current folder. MSYS2 finds its root (/) from its own DLL, so /usr/bin/mafft
-# is the package's. The batch file's `chcp 65001` and messages are left out: they print only. find_mafft() still
+# is the package's. The input FASTA is given by its name, relative to the run's folder: MSYS2 reads the command
+# line by its own rules and turns the leading two backslashes of a UNC path into one (CI, 2026-11-15), so no path of the
+# user's is passed, and a run folder or install on a network path is refused with a message. The batch file's
+# `chcp 65001` and messages are left out: they print only. find_mafft() still
 # gives the mafft.bat path (it names the install, and COAL_MAFFT may name one).
 #
 # Any other batch file (COAL_MAFFT naming a .bat that is not MAFFT's package) is still run through cmd.exe, with
@@ -514,6 +517,12 @@ def _refuse_for_batch(what: str, path: str, exe: str) -> None:
         f"for the temporary files, TMP / TEMP; start COAL from another folder; or set COAL_MAFFT to the mafft.bat "
         f"of MAFFT's own Windows package (`coal pipeline install mafft` installs it), which COAL runs without "
         f"cmd.exe. Or run COAL under WSL")
+
+
+def _is_unc(path: str) -> bool:
+    """A Windows network path (\\\\server\\share\\..., //server/share/..., \\\\?\\UNC\\...)."""
+    p = str(path).replace("/", "\\")
+    return p.startswith("\\\\") and not p.startswith("\\\\?\\") or p.upper().startswith("\\\\?\\UNC\\")
 
 
 def batch_command_line(argv: Sequence[str]) -> str:
@@ -556,11 +565,22 @@ def _launch(cmd: Sequence[str], workdir: str | None = None) -> tuple:
     os.makedirs(tmp, exist_ok=True)
     root = mafft_package_root(cmd[0])
     if root is not None:
+        for what, path in (("MAFFT's folder", root), ("the run's folder (in TMP / TEMP)", workdir)):
+            if _is_unc(path):
+                raise MsaError(
+                    f"cannot run MAFFT's Windows package with {what} on a network path ({path}): MSYS2, which "
+                    f"MAFFT runs on, does not read such a path as given (it reads \\\\server\\share as "
+                    f"\\server\\share). Use a folder on a drive: TMP / TEMP for the temporary files, COAL_CACHE_DIR "
+                    f"for the install")
         usr_bin = os.path.join(root, "usr", "bin")
+        # a file of the run's folder (the input FASTA) is given by its name, relative to that folder, the current
+        # folder: no path of the user's reaches MSYS2's reading of the command line
+        rest = [os.path.basename(a) if os.path.isabs(a) and os.path.dirname(os.path.abspath(a)) == workdir else a
+                for a in cmd[1:]]
         env = dict(os.environ)
         env["PATH"] = usr_bin + os.pathsep + env.get("PATH", "")
         env.update(MAFFT_BINARIES="/usr/lib/mafft", TMPDIR=tmp, MAFFT_TMPDIR=tmp, TMP=tmp, TEMP=tmp)
-        return ([os.path.join(usr_bin, "bash.exe"), "/usr/bin/mafft", *cmd[1:]],
+        return ([os.path.join(usr_bin, "bash.exe"), "/usr/bin/mafft", *rest],
                 {"stdin": subprocess.DEVNULL, "cwd": workdir, "env": env, "_tree": True})
     for what, path in (("its folder", os.path.dirname(os.path.abspath(cmd[0]))), ("the current folder", os.getcwd()),
                        ("the run's folder", workdir), *(((f"{v}", os.environ[v]) for v in ("TMP", "TEMP")

@@ -166,8 +166,10 @@ COAL's CI downloads and runs it on its Windows runner, including one `coal pipel
   `cmd.exe` (its own folder, the current folder, `TMP`, `PATH`), so a path with `&` or `^` in it would be read as
   a command there. COAL starts what the batch file starts, the package's `usr\bin\bash.exe` with MAFFT's script
   `/usr/bin/mafft`, with no shell and with the settings `mafft.bat` makes (`PATH`, `MAFFT_BINARIES`, a temporary
-  folder of the run's own). Paths are then only text: COAL's CI runs it with the cache folder, the current folder
-  and `TMP` / `TEMP` all in paths with spaces, `&`, `^`, `(` and `)`, and with an input given by a UNC path.
+  folder of the run's own; the input file is given by its name in that folder). Paths are then only text: COAL's
+  CI runs it with the cache folder, the current folder and `TMP` / `TEMP` all in paths with spaces, `&`, `^`,
+  `(` and `)`. Not on a network path: MSYS2, which MAFFT's package runs on, reads `\\server\share` as
+  `\server\share` (seen in CI), so a `TMP` / `TEMP` or `COAL_CACHE_DIR` on a UNC path is refused with a message.
 - **A MAFFT batch file of your own** (`COAL_MAFFT` naming a `.bat` that is not `mafft-win\mafft.bat` of MAFFT's
   package) runs through `cmd.exe`, so COAL refuses to start it, with a message, while its folder, the current
   folder or `TMP` / `TEMP` has one of `& | < > ^ % ! "` in its path. Spaces and `( )` are fine there (tested in

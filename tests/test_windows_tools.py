@@ -549,8 +549,8 @@ class TestBatchFiles(unittest.TestCase):
         with mock.patch.dict(os.environ, {"TMP": odd, "TEMP": odd, "PATH": "C:\\a&b;C:\\Windows"}):
             args, extra = msa._launch([bat, "--auto", "--quiet", os.path.join(work, "in.fasta")], work)
         usr_bin = os.path.join(root, "usr", "bin")
-        self.assertEqual(args, [os.path.join(usr_bin, "bash.exe"), "/usr/bin/mafft", "--auto", "--quiet",
-                                os.path.join(work, "in.fasta")])
+        # the input in the run's folder is given by its name (no user path reaches MSYS2's command line)
+        self.assertEqual(args, [os.path.join(usr_bin, "bash.exe"), "/usr/bin/mafft", "--auto", "--quiet", "in.fasta"])
         env = extra.pop("env")
         self.assertEqual(extra, {"stdin": subprocess.DEVNULL, "cwd": work, "_tree": True})
         self.assertEqual(env["PATH"], usr_bin + os.pathsep + "C:\\a&b;C:\\Windows")
@@ -558,6 +558,17 @@ class TestBatchFiles(unittest.TestCase):
         for v in ("TMPDIR", "MAFFT_TMPDIR", "TMP", "TEMP"):
             self.assertEqual(env[v], os.path.join(work, "tmp"), v)
         self.assertTrue(os.path.isdir(os.path.join(work, "tmp")))
+
+    def test_mafft_package_on_a_network_path_is_refused(self):
+        bat = self.fake_package(self.tmp)
+        for work in ("\\\\server\\share\\tmp\\coal_msa_x", "//server/share/tmp/coal_msa_x"):
+            with self.subTest(work=work), mock.patch.object(msa.os, "makedirs"), \
+                    mock.patch.object(msa.os.path, "abspath", lambda p: p), self.assertRaises(msa.MsaError) as cm:
+                msa._launch([bat, "--auto"], work)
+            self.assertIn("on a network path", str(cm.exception))
+            self.assertIn("TMP / TEMP", str(cm.exception))
+        self.assertTrue(msa._is_unc("\\\\?\\UNC\\srv\\x"))
+        self.assertFalse(msa._is_unc("\\\\?\\C:\\x") or msa._is_unc("C:\\x") or msa._is_unc("/tmp/x"))
 
     def test_another_batch_file_needs_plain_folders(self):
         for c in "&|<>^%!\"":

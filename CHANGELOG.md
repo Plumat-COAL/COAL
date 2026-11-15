@@ -38,7 +38,9 @@ entry under "Added", not under "Fixed".
   folder, the current folder, `TMP` and `PATH` again unquoted inside `cmd.exe`, where `&` or `^` in a path would
   run as a command (independent audit of this change). COAL starts the package's `bash.exe` with
   `/usr/bin/mafft` directly, with what the batch file sets (`PATH`, `MAFFT_BINARIES`, a temporary folder of the
-  run's own as `TMPDIR` / `TMP` / `TEMP` and as the current folder), with no standard input, and ends its whole
+  run's own as `TMPDIR` / `TMP` / `TEMP` and as the current folder, the input given by its name there; a run
+  folder or install on a network (UNC) path is refused, as MSYS2 misreads such paths), with no standard input,
+  and ends its whole
   process tree (`taskkill /T`) on a timeout or interrupt. A `.bat` of your own in `COAL_MAFFT` still runs
   through `cmd.exe`, with a command line COAL builds (`coal.msa.batch_command_line`: the program's full path and
   any argument that is not plain in quotes; `%`, `!`, `"` and a trailing backslash refused), and is refused while

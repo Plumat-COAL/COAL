@@ -256,7 +256,8 @@ msa.find_mafft(); msa.install_mafft(); msa.cache_dir(); msa.tool_version(exe)
   one of them would run as a command. It starts the package's `usr\bin\bash.exe` with `/usr/bin/mafft` and the
   arguments (no shell), with what the batch file sets (`PATH` with the package's `usr\bin` first,
   `MAFFT_BINARIES=/usr/lib/mafft`, `TMPDIR` / `TMP` / `TEMP` a folder of the run's own, that run's folder as the
-  current folder; `msa.mafft_package_root`), gives it no standard input, and ends the whole process tree on a
+  current folder, the input given by its name there; a network (UNC) run folder or install refused, since
+  MSYS2 reads `\\server` as `\server`; `msa.mafft_package_root`), gives it no standard input, and ends the whole process tree on a
   timeout or interrupt. A batch file of your own (`COAL_MAFFT`) goes through `cmd.exe` with a command line COAL
   builds (`msa.batch_command_line`: the program's full path and any argument that is not plain in quotes; `%`,
   `!`, `"` and a trailing backslash refused), and only while its folder, the current folder and `TMP` / `TEMP`
