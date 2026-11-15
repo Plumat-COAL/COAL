@@ -974,9 +974,11 @@ machine is still to be done.
   pinned by size (27,476,513 bytes) and SHA-256 (MAFFT publishes none; computed 2026-11-15), both checked before
   anything is unpacked, into COAL's cache, where the run finds its `mafft-win\mafft.bat`: use `--aligner mafft`.
   MAFFT is BSD-licensed; the package bundles MSYS2 components and is GPL as a whole (MAFFT's page); COAL does not
-  redistribute it. A temporary or cache folder whose path has `%`, `!` or `"` is refused (cmd.exe runs the batch
-  file and would change them). COAL's CI runs it on Windows, one `coal pipeline clusters --aligner mafft`
-  included. Clustal Omega: the pre-compiled binaries of the Clustal site are gone (the address serves an unrelated
+  redistribute it. COAL runs the package's `bash.exe` directly (with what `mafft.bat` would set), not
+  `mafft.bat`, which re-expands paths unquoted in `cmd.exe`; so spaces, `&`, `^` and `( )` in the cache folder,
+  the current folder and `TMP` / `TEMP` are fine (COAL's CI runs it with all three in such paths, one `coal
+  pipeline clusters --aligner mafft` included). A `.bat` of your own in `COAL_MAFFT` runs through `cmd.exe` and is
+  refused while one of those folders has `& | < > ^ % ! "` in its path. Clustal Omega: the pre-compiled binaries of the Clustal site are gone (the address serves an unrelated
   site since 2026-11) and neither Bioconda nor conda-forge has Windows packages, so `coal pipeline install
   clustalo` cannot install one there and says what works: `--aligner mafft`; run COAL under WSL; or install
   Clustal Omega 1.2.4 with MSYS2 (`pacman -S mingw-w64-ucrt-x86_64-clustal-omega`, then `COAL_CLUSTALO` =

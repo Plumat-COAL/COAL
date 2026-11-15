@@ -1,10 +1,11 @@
 """MAFFT's real Windows package, downloaded (COAL_TEST_REAL_MAFFT=1; 27 MB from mafft.cbrc.jp).
 
 CI's C++ job sets COAL_TEST_REAL_MAFFT=1 on its Windows runner. There `coal pipeline install mafft` installs the
-pinned package into a new cache folder whose path has a space in it; the tests check the record of the install, that
-a second install downloads nothing, that mafft.bat runs (--version, an alignment in a folder whose path has spaces
-and cmd.exe's special characters), and one `coal pipeline clusters --aligner mafft` run on examples/dnds, end to
-end with coal-cpp (COAL_CPP_BIN). On another system the download is checked and unpacked the same way, with the
+pinned package into a new cache folder, and every run here has the cache folder, the current folder and TMP / TEMP
+in paths with spaces, `&`, `^` and `( )` (cmd.exe's special characters: COAL runs the package's bash.exe, not
+mafft.bat, so they are only text). The tests check the record of the install, that a second install downloads
+nothing, that MAFFT runs (--version, an alignment, an input given by a UNC path), and one `coal pipeline clusters
+--aligner mafft` run on examples/dnds, end to end with coal-cpp (COAL_CPP_BIN), with the numbers of before. On another system the download is checked and unpacked the same way, with the
 platform taken to be x86-64 Windows (nothing of it is run there).
 
 A download that cannot be made (the site cannot be reached) is a skip that says so; a file that is not the pinned
@@ -55,9 +56,13 @@ def unreachable(text: str) -> bool:
 class TestRealMafftWindowsPackage(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.tmp = tempfile.mkdtemp(prefix="coal real mafft ")
-        cls.cache = os.path.join(cls.tmp, "cache dir")
-        cls.env = {**os.environ, "COAL_CACHE_DIR": cls.cache,
+        cls.tmp = tempfile.mkdtemp(prefix="coal real & ^ mafft ")
+        cls.cache = os.path.join(cls.tmp, "cache & ^ (x) dir")
+        cls.cwd = os.path.join(cls.tmp, "work & ^ (x)")          # the current folder of every run
+        cls.temp = os.path.join(cls.tmp, "temp & ^ (x)")         # TMP / TEMP of every run
+        for d in (cls.cwd, cls.temp):
+            os.makedirs(d)
+        cls.env = {**os.environ, "COAL_CACHE_DIR": cls.cache, "TMP": cls.temp, "TEMP": cls.temp,
                    "PYTHONPATH": str(ROOT / "src") + os.pathsep + os.environ.get("PYTHONPATH", "")}
         cls.env.pop("COAL_MAFFT", None)
         cls.first = cls.install()
@@ -73,7 +78,7 @@ class TestRealMafftWindowsPackage(unittest.TestCase):
         if WINDOWS:
             r = subprocess.run([sys.executable, "-m", "coal", "pipeline", "install", "mafft"], capture_output=True,
                                text=True, env=cls.env, timeout=900, stdin=subprocess.DEVNULL, encoding="utf-8",
-                               errors="backslashreplace")
+                               errors="backslashreplace", cwd=cls.cwd)
             return r.returncode, r.stdout, r.stderr
         out, err = io.StringIO(), io.StringIO()
         with mock.patch.dict(os.environ, {"COAL_CACHE_DIR": cls.cache}), \
@@ -124,16 +129,40 @@ class TestRealMafftWindowsPackage(unittest.TestCase):
     def test_mafft_bat_runs(self):
         print("\n[real MAFFT] mafft.bat:\n" + Path(self.entry).read_text(encoding="utf-8", errors="replace"),
               file=sys.stderr)
-        self.assertIn(msa.MAFFT_VERSION, msa.tool_version(self.entry))
-        odd = tempfile.mkdtemp(prefix="coal msa & (x) ^ ", dir=self.tmp)
+        here = os.getcwd()
+        os.chdir(self.cwd)
+        self.addCleanup(os.chdir, here)
         recs = [("a", "MKVLAAGIVGLLLAQ*"), ("b", "MKVLSAGIVGLLAQ"), ("c", "MRVLAAGIIGLLLAQ"), ("d", "MKVAAGIVGLLLAQ")]
-        with mock.patch.object(msa.tempfile, "tempdir", odd):
+        with mock.patch.dict(os.environ, {"TMP": self.temp, "TEMP": self.temp}), \
+                mock.patch.object(msa.tempfile, "tempdir", self.temp):
+            self.assertEqual(msa.tool_version(self.entry), f"v{msa.MAFFT_VERSION} (2024/Apr/26)")
             rows = msa.run_msa(recs, "mafft", exe=self.entry, threads=2)
         self.assertEqual([r[0] for r in rows], ["a", "b", "c", "d"])
         self.assertEqual(len({len(r[1]) for r in rows}), 1)
         for (_, s), (_, row) in zip(recs, rows):
             self.assertEqual(row.replace("-", ""), s)
         print(f"\n[real MAFFT] {msa.tool_version(self.entry)}: " + " ".join(r for _, r in rows), file=sys.stderr)
+
+    @unittest.skipUnless(WINDOWS, "MAFFT's package runs on Windows")
+    def test_an_input_given_by_a_unc_path(self):
+        """MSYS2 (the package's bash and MAFFT's script) reads a quoted UNC path (\\\\localhost\\C$\\...) and a
+        drive path with '/' given as an argument."""
+        work = tempfile.mkdtemp(prefix="unc & ^ ", dir=self.temp)
+        inp = os.path.join(work, "in.fasta")
+        Path(inp).write_text(">s0\nMKVLAAGIV\n>s1\nMKVLSAGIV\n>s2\nMRVAAGIV\n", encoding="utf-8", newline="\n")
+        drive, rest = os.path.splitdrive(os.path.abspath(inp))
+        unc = "\\\\localhost\\" + drive[0] + "$" + rest
+        if not os.path.isfile(unc):
+            self.skipTest(f"the administrative share of {drive} is not reachable here ({unc})")
+        for given in (unc, os.path.abspath(inp).replace("\\", "/")):
+            with self.subTest(given=given):
+                args, extra = msa._launch([self.entry, "--auto", "--amino", "--anysymbol", "--quiet", given], work)
+                extra.pop("_tree")
+                r = subprocess.run(args, capture_output=True, text=True, timeout=300, **extra)
+                self.assertEqual(r.returncode, 0, r.stderr)
+                names = [x[1:].strip() for x in r.stdout.splitlines() if x.startswith(">")]
+                self.assertEqual(names, ["s0", "s1", "s2"], r.stdout + r.stderr)
+        print(f"\n[real MAFFT] input by UNC path {unc}: ok", file=sys.stderr)
 
     @unittest.skipUnless(WINDOWS, "mafft.bat runs on Windows")
     def test_pipeline_clusters_with_mafft(self):
@@ -152,13 +181,13 @@ class TestRealMafftWindowsPackage(unittest.TestCase):
             for g, h in groups:
                 for m in (f"spA_g{g}", f"spB_g{g}", f"spA_g{h}", f"spB_g{h}"):
                     fh.write(f"spA_g{g}\t{m}\n")
-        out = work / "out"
+        out = Path(self.cwd) / "out & ^"
         env = {**self.env, "COAL_CPP": str(cpp)}
         env.pop("COAL_CLUSTALO", None)
         r = subprocess.run([sys.executable, "-m", "coal", "pipeline", "clusters", "--cds", str(EX / "species_a_cds.fasta"),
                             str(EX / "species_b_cds.fasta"), "--clusters", str(tsv), "--aligner", "mafft", "-o",
                             str(out)], capture_output=True, text=True, env=env, timeout=900,
-                           stdin=subprocess.DEVNULL, encoding="utf-8", errors="backslashreplace")
+                           stdin=subprocess.DEVNULL, encoding="utf-8", errors="backslashreplace", cwd=self.cwd)
         self.assertEqual(r.returncode, 0, r.stderr)
         with open(out / "cluster_summary.tsv", encoding="utf-8") as fh:
             summary = list(csv.DictReader(fh, delimiter="\t"))
@@ -174,6 +203,8 @@ class TestRealMafftWindowsPackage(unittest.TestCase):
             for k in (g, h):
                 rows = [p for p in pairs if {p["seq1"], p["seq2"]} == {f"spA_g{k}", f"spB_g{k}"}]
                 self.assertTrue(rows and all(p["status"] == "ok" for p in rows), rows)
+        g01 = [p for p in pairs if {p["seq1"], p["seq2"]} == {"spA_g01", "spB_g01"}]
+        self.assertEqual([p["dNdS"] for p in g01], ["0.025483147"])     # as in the run through mafft.bat
         report = json.loads((out / "report.json").read_text(encoding="utf-8"))
         tool = json.dumps(report.get("tools", report))
         self.assertIn("mafft.bat", tool)

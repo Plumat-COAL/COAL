@@ -162,9 +162,16 @@ COAL's CI downloads and runs it on its Windows runner, including one `coal pipel
 - **Licence:** MAFFT is BSD-licensed; the Windows package also bundles MSYS2 components (bash and its runtime),
   and MAFFT's page gives the GPL for the package as a whole. COAL does not redistribute it: each install
   downloads it from MAFFT's site.
-- **Paths:** Windows runs `mafft.bat` through `cmd.exe`, which reads `%`, `!` and `"` in a path as something
-  else even inside quotes. So a run refuses, with a message, a temporary folder (`TMP` / `TEMP`) or cache folder
-  (`COAL_CACHE_DIR`) whose path has one of them. Spaces, `&`, `(`, `)` and `^` are fine.
+- **How it runs:** COAL does not run `mafft.bat`. That batch file expands paths again, unquoted, inside
+  `cmd.exe` (its own folder, the current folder, `TMP`, `PATH`), so a path with `&` or `^` in it would be read as
+  a command there. COAL starts what the batch file starts, the package's `usr\bin\bash.exe` with MAFFT's script
+  `/usr/bin/mafft`, with no shell and with the settings `mafft.bat` makes (`PATH`, `MAFFT_BINARIES`, a temporary
+  folder of the run's own). Paths are then only text: COAL's CI runs it with the cache folder, the current folder
+  and `TMP` / `TEMP` all in paths with spaces, `&`, `^`, `(` and `)`, and with an input given by a UNC path.
+- **A MAFFT batch file of your own** (`COAL_MAFFT` naming a `.bat` that is not `mafft-win\mafft.bat` of MAFFT's
+  package) runs through `cmd.exe`, so COAL refuses to start it, with a message, while its folder, the current
+  folder or `TMP` / `TEMP` has one of `& | < > ^ % ! "` in its path. Spaces and `( )` are fine there (tested in
+  CI with a stand-in batch file).
 - Windows on ARM: the package is for x86-64; there the command says what works (below).
 
 **Clustal Omega: no automatic install on Windows.** The pre-compiled Clustal Omega binaries of its authors' site

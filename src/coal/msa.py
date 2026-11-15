@@ -14,8 +14,8 @@ macOS: the pre-compiled binaries that the Clustal site used to serve are gone (C
 channels have no Windows packages, so there is no automatic Clustal Omega install on Windows (NO_WINDOWS_CLUSTALO
 names what works there: WSL, MSYS2's Clustal Omega, MAFFT). install_mafft() does the same on Linux and macOS
 (conda-forge); on x86-64 Windows it installs MAFFT's own Windows package, one zip pinned by size and SHA-256
-(MAFFT_WINDOWS), and find_mafft() then gives its mafft.bat (run_msa runs a batch file safely: see
-batch_command_line). No downloaded file is unpacked or run before its SHA-256 was checked.
+(MAFFT_WINDOWS), and find_mafft() then gives its mafft.bat; run_msa starts that package's bash.exe directly, not
+the batch file (mafft_package_root; "MAFFT's Windows package, and batch files" below). No downloaded file is unpacked or run before its SHA-256 was checked.
 
 Stop codons: '*' at the end of a sequence is removed before aligning and given back as a last column of its own
 ('*' in the rows that had one, '-' in the others); an internal '*' is aligned as X and put back afterwards. (Clustal
@@ -429,41 +429,67 @@ def installed_package(tool: str, exe: str) -> dict | None:
 
 
 def tool_version(exe: str, timeout: float = 60) -> str:
-    """The first line `exe --version` prints ('' if it does not run). A batch file (MAFFT's mafft.bat) is started
-    as run_msa starts it (batch_command_line), with no standard input, and its first line with a version number
-    (d.d) is taken, from standard output or error."""
+    """The first line `exe --version` prints ('' if it does not run). MAFFT's Windows package and other batch
+    files are started as run_msa starts them (_launch), with no standard input, and their first line with a MAFFT
+    version (v7.526 ...) is taken, from standard output or error."""
     try:
-        args, extra = _launch([exe, "--version"])
-        r = subprocess.run(args, capture_output=True, text=True, timeout=timeout,
-                           encoding="utf-8", errors="backslashreplace", **extra)
+        return _read_version(exe, timeout)
     except (OSError, subprocess.SubprocessError, MsaError):
         return ""
-    if extra:
-        # a batch file may print lines of its own first: MAFFT's mafft.bat runs `chcp 65001`, which prints "Active
-        # code page: 65001" (in the language of Windows) on standard output; the version is MAFFT's line
-        lines = [x.strip() for x in (r.stdout or "").splitlines() + (r.stderr or "").splitlines() if x.strip()]
-        found = next((x for x in lines if re.search(r"\d+\.\d+", x)), None)
-        return found if found is not None else (lines[0] if lines else "")
-    out = (r.stdout.strip() if r.stdout else "") or (r.stderr or "").strip()
-    out = out.splitlines()
-    return out[0].strip() if out else ""
 
 
-# ---- Batch files (MAFFT's Windows package runs through mafft.bat) ------------------------------------------------
+def _read_version(exe: str, timeout: float = 60) -> str:
+    """tool_version(), but a command COAL refuses to start (an unsafe path for a batch file: MsaError) or one that
+    cannot start (OSError) is raised, so that the install can say why."""
+    if not is_batch_file(exe):
+        r = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=timeout,
+                           encoding="utf-8", errors="backslashreplace")
+        out = (r.stdout.strip() if r.stdout else "") or (r.stderr or "").strip()
+        out = out.splitlines()
+        return out[0].strip() if out else ""
+    with tempfile.TemporaryDirectory(prefix="coal_version_") as wd:
+        args, extra = _launch([exe, "--version"], wd)
+        extra.pop("_tree", None)
+        r = subprocess.run(args, capture_output=True, text=True, timeout=timeout,
+                           encoding="utf-8", errors="backslashreplace", **extra)
+    # mafft.bat prints lines of its own first ("Active code page: 65001" from its `chcp 65001`, in the language of
+    # Windows; "Preparing environment to run MAFFT on Windows."): the version is MAFFT's line
+    lines = [x.strip() for x in (r.stdout or "").splitlines() + (r.stderr or "").splitlines() if x.strip()]
+    found = next((x for x in lines if re.search(r"\bv\d+\.\d+", x)), None)
+    return found if found is not None else (lines[0] if lines else "")
+
+
+# ---- MAFFT's Windows package, and batch files ------------------------------------------------------------------
 # Windows starts a .bat / .cmd through cmd.exe (CreateProcess runs `cmd.exe /c "<command line>"`), whatever
-# subprocess is given: shell=False does not keep cmd.exe out, and cmd.exe reads the command line by its own rules,
-# not by the C runtime's that subprocess.list2cmdline quotes for (Python's documentation of subprocess on Windows;
-# CVE-2024-24576, "BatBadBut"). So for a batch file COAL builds the command line itself (batch_command_line):
-# every argument with anything but letters, digits and `_ - . : \ / + @` in it is put in double quotes (cmd.exe
-# then reads & | < > ( ) ^ , ; = and spaces in it as text), and an argument that cmd.exe would change even inside
-# quotes is refused: `%` (variables), `!` (delayed expansion, which mafft.bat may turn on), `"`, control
-# characters, and a final backslash (it would escape the closing quote). The arguments COAL passes are fixed
-# options and the path of a temporary FASTA file (in TMP / TEMP), so in practice this is about that folder and the
-# path of COAL's cache. The aligner is also started with no standard input (no "Terminate batch job (Y/N)?" and no
-# `pause` can wait on it), and stopping it ends its whole process tree (taskkill /T): ending cmd.exe alone would
-# leave MAFFT running and holding its pipes.
+# subprocess is given: shell=False does not keep cmd.exe out, and cmd.exe reads the command line by its own rules
+# (Python's documentation of subprocess on Windows; CVE-2024-24576, "BatBadBut"). Quoting the arguments is not
+# enough for MAFFT's mafft.bat either: it expands paths again, unquoted, inside cmd.exe (`set ROOTDIR=%~d0%~p0`,
+# `set TMPDIR=%TMP%`, `set PATH=/usr/bin/:%PATH%`, and the current folder through `for /f ... (`cd`)` and
+# `pushd "%mafft_working_dir%"` with its quotes doubled), so an `&` or `^` in the install folder, the current
+# folder or TMP would be read as a command there (independent audit of PR #91, 2026-11-15).
+#
+# So COAL does not run the mafft.bat of MAFFT's Windows package at all (mafft_package_root(): a mafft.bat next
+# to usr\bin\bash.exe and usr\bin\mafft). It starts what the batch file starts, the package's bash.exe with
+# argv ["/usr/bin/mafft", ...] and no shell, with what the batch file sets, chosen by COAL instead of expanded by
+# cmd.exe: PATH with the package's usr\bin first (Windows form: bash.exe finds its DLLs there, and MSYS2 turns
+# it into /usr/bin), MAFFT_BINARIES=/usr/lib/mafft, TMPDIR / MAFFT_TMPDIR / TMP / TEMP a folder of the run's
+# own, and the run's folder as the current folder. MSYS2 finds its root (/) from its own DLL, so /usr/bin/mafft
+# is the package's. The batch file's `chcp 65001` and messages are left out: they print only. find_mafft() still
+# gives the mafft.bat path (it names the install, and COAL_MAFFT may name one).
+#
+# Any other batch file (COAL_MAFFT naming a .bat that is not MAFFT's package) is still run through cmd.exe, with
+# the command line COAL builds (batch_command_line: the program's full path always in double quotes, every other
+# argument with anything but letters, digits and `_ - . : \ / + @` in quotes; `%`, `!`, `"`, control characters
+# and a trailing backslash refused, since cmd.exe changes them even in quotes), and only when the batch file's
+# folder, the current folder, the run's folder and TMP / TEMP have none of & | < > ^ % ! " in them (a batch file
+# may expand them unquoted, as mafft.bat does); it runs in the run's folder.
+#
+# Either way the aligner gets no standard input (no "Terminate batch job (Y/N)?" or `pause` can wait on it), and
+# stopping it ends its whole process tree (taskkill /T): ending cmd.exe or bash.exe alone would leave MAFFT's
+# programs running and holding the pipes.
 _BATCH_SAFE = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.:\\/+@")
 _BATCH_NEVER = frozenset('%!"')
+_CMD_SPECIAL = frozenset('&|<>^%!"')
 
 
 def is_batch_file(exe: str) -> bool:
@@ -471,14 +497,35 @@ def is_batch_file(exe: str) -> bool:
     return os.path.splitext(str(exe))[1].lower() in (".bat", ".cmd")
 
 
+def mafft_package_root(exe: str) -> str | None:
+    """The folder of MAFFT's Windows package when `exe` is its mafft.bat (usr\\bin\\bash.exe and usr\\bin\\mafft
+    next to it), else None. COAL runs that package's bash.exe instead of the batch file (above)."""
+    if os.path.basename(str(exe)).lower() != "mafft.bat":
+        return None
+    root = os.path.dirname(os.path.abspath(str(exe)))
+    ok = all(os.path.isfile(os.path.join(root, "usr", "bin", n)) for n in ("bash.exe", "mafft"))
+    return root if ok else None
+
+
+def _refuse_for_batch(what: str, path: str, exe: str) -> None:
+    raise MsaError(
+        f"cannot run the batch file {exe}: {what} ({path}) has one of the characters & | < > ^ % ! \" in its "
+        f"path, which a batch file may read as a command (cmd.exe runs every .bat). Use folders without them: "
+        f"for the temporary files, TMP / TEMP; start COAL from another folder; or set COAL_MAFFT to the mafft.bat "
+        f"of MAFFT's own Windows package (`coal pipeline install mafft` installs it), which COAL runs without "
+        f"cmd.exe. Or run COAL under WSL")
+
+
 def batch_command_line(argv: Sequence[str]) -> str:
-    """The command line COAL starts a batch file with (argv[0] the .bat): each argument as it is when it holds
-    only letters, digits and `_ - . : \\ / + @`, else in double quotes. MsaError for an argument cmd.exe would
-    change even in quotes (`%`, `!`, `"`, a control character, a trailing backslash): the message names it and
-    what to do."""
+    """The command line COAL starts a batch file with (argv[0] the .bat): argv[0] as a full path in double quotes;
+    every other argument as it is when it holds only letters, digits and `_ - . : \\ / + @`, else in double
+    quotes. MsaError for an argument cmd.exe would change even in quotes (`%`, `!`, `"`, a control character, a
+    trailing backslash): the message names it and what to do."""
     out = []
-    for arg in argv:
+    for k, arg in enumerate(argv):
         arg = str(arg)
+        if k == 0:
+            arg = os.path.normpath(os.path.abspath(arg))
         bad = sorted({c for c in arg if c in _BATCH_NEVER or ord(c) < 32 or ord(c) == 127})
         if bad or not arg or arg.endswith("\\"):
             what = ("the characters " + " ".join(repr(c) for c in bad) if bad else
@@ -488,25 +535,46 @@ def batch_command_line(argv: Sequence[str]) -> str:
                 f"every .bat through it) would not pass on as it is. Use folders whose paths have no % ! or \" "
                 f"in them: for the temporary files, TMP / TEMP; for the install, COAL_CACHE_DIR (or COAL_MAFFT for "
                 f"a MAFFT of your own). Or run COAL under WSL")
-        out.append(arg if all(c in _BATCH_SAFE for c in arg) else f'"{arg}"')
+        out.append(f'"{arg}"' if k == 0 or not all(c in _BATCH_SAFE for c in arg) else arg)
     return " ".join(out)
 
 
-def _launch(cmd: Sequence[str]) -> tuple:
-    """(what to give subprocess, extra keywords) for the command `cmd`: as it is, but for a batch file on Windows
-    the command line of batch_command_line() and no standard input (above). The command line is checked on every
-    system, so that a path Windows would refuse is refused in the tests too."""
-    cmd = list(cmd)
+def _launch(cmd: Sequence[str], workdir: str | None = None) -> tuple:
+    """(what to give subprocess, extra keywords) for the command `cmd`: as it is, except for a batch file (above):
+    MAFFT's Windows package runs as its bash.exe with the environment mafft.bat would set; another batch file
+    through cmd.exe with the command line of batch_command_line(), after the checks of its folders. `workdir`: a
+    folder of the run's own (required for a batch file): the current folder and the temporary folder of the
+    aligner. Checked on every system, so that what Windows would refuse is refused in the tests too; the batch
+    file's command line is a string on Windows only."""
+    cmd = [str(c) for c in cmd]
     if not is_batch_file(cmd[0]):
         return cmd, {}
+    if workdir is None:
+        raise ValueError("a batch file is run in a folder of its own: give workdir")
+    workdir = os.path.abspath(workdir)
+    tmp = os.path.join(workdir, "tmp")
+    os.makedirs(tmp, exist_ok=True)
+    root = mafft_package_root(cmd[0])
+    if root is not None:
+        usr_bin = os.path.join(root, "usr", "bin")
+        env = dict(os.environ)
+        env["PATH"] = usr_bin + os.pathsep + env.get("PATH", "")
+        env.update(MAFFT_BINARIES="/usr/lib/mafft", TMPDIR=tmp, MAFFT_TMPDIR=tmp, TMP=tmp, TEMP=tmp)
+        return ([os.path.join(usr_bin, "bash.exe"), "/usr/bin/mafft", *cmd[1:]],
+                {"stdin": subprocess.DEVNULL, "cwd": workdir, "env": env, "_tree": True})
+    for what, path in (("its folder", os.path.dirname(os.path.abspath(cmd[0]))), ("the current folder", os.getcwd()),
+                       ("the run's folder", workdir), *(((f"{v}", os.environ[v]) for v in ("TMP", "TEMP")
+                                                         if os.environ.get(v)))):
+        if any(c in _CMD_SPECIAL for c in path):
+            _refuse_for_batch(what, path, cmd[0])
     line = batch_command_line(cmd)
-    return (line if os.name == "nt" else cmd), {"stdin": subprocess.DEVNULL}
+    return (line if os.name == "nt" else cmd), {"stdin": subprocess.DEVNULL, "cwd": workdir, "_tree": True}
 
 
 def _end(proc) -> None:
-    """Kill an aligner process; for a batch file on Windows its whole process tree (cmd.exe, bash, MAFFT's
-    programs), which TerminateProcess of cmd.exe alone would leave running."""
-    if os.name == "nt" and getattr(proc, "_coal_batch", False) and proc.poll() is None:
+    """Kill an aligner process; for a batch file or MAFFT's package on Windows its whole process tree (cmd.exe or
+    bash, MAFFT's programs), which TerminateProcess of the first process alone would leave running."""
+    if os.name == "nt" and getattr(proc, "_coal_tree", False) and proc.poll() is None:
         try:
             subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], stdin=subprocess.DEVNULL,
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
@@ -836,20 +904,28 @@ def _install_mafft_windows(method: str, force: bool, quiet: bool, timeout: float
             return entry
         folder = os.path.join(cache_dir(), "tools", "mafft")
         os.makedirs(folder, exist_ok=True)
+        _remove_leftovers(folder, pkg)
         archive = os.path.join(folder, pkg.filename)
         try:
             # size and SHA-256 are checked before anything is unpacked (the file is deleted if either differs)
             _fetch_verified([pkg.url], archive, quiet, pkg.sha256, what=f"MAFFT {MAFFT_VERSION} for Windows "
                             f"({pkg.filename})", size=pkg.size)
             try:
-                _unpack_windows_package(archive, folder, pkg, quiet)
+                with open(archive, "rb") as fh:
+                    # unpacked from this open file, whose bytes are checked again here: what was checked is what
+                    # is unpacked, even if the file at that name were replaced in between
+                    _check_open_file(fh, pkg)
+                    _unpack_windows_package(fh, folder, pkg, quiet)
             except (OSError, zipfile.BadZipFile) as e:   # (a folder in use, a full disk, ...)
                 raise MsaError(f"could not unpack {pkg.filename} into {folder}: {e}") from None
         finally:
             with contextlib.suppress(OSError):
                 os.remove(archive)
-        v = tool_version(entry)
-        if MAFFT_VERSION not in v:
+        try:
+            v = _read_version(entry)
+        except (OSError, subprocess.SubprocessError) as e:
+            raise MsaError(f"{entry} does not run: {e}") from None
+        if not re.search(r"\bv" + re.escape(MAFFT_VERSION) + r"\b", v):
             raise MsaError(f"{entry} does not run or is not MAFFT {MAFFT_VERSION} ({v or 'no output'})")
         if not quiet:
             print(f"coal: MAFFT {MAFFT_VERSION} installed: {entry}", file=sys.stderr)
@@ -885,8 +961,37 @@ def _member_parts(info: zipfile.ZipInfo, asset: str, top: str) -> list[str]:
     return parts
 
 
-def _unpack_windows_package(archive: str, folder: str, pkg: WindowsPackage, quiet: bool) -> str:
-    """Unpack the verified zip `archive` into folder/<pkg.top>, with the record of every file it holds
+def _check_open_file(fh, pkg: WindowsPackage) -> None:
+    """MsaError unless the open file `fh` has the pinned size and SHA-256 (read from the handle; left at 0)."""
+    h, n = hashlib.sha256(), 0
+    fh.seek(0)
+    for chunk in iter(lambda: fh.read(1 << 20), b""):
+        h.update(chunk)
+        n += len(chunk)
+    fh.seek(0)
+    if n != pkg.size or h.hexdigest() != pkg.sha256:
+        raise MsaError(f"{pkg.filename} changed after its check ({n:,} bytes, SHA-256 {h.hexdigest()}); nothing "
+                       "was installed")
+
+
+def _remove_leftovers(folder: str, pkg: WindowsPackage) -> None:
+    """What an install that was cut short left in `folder` (under the install lock): half-unpacked folders
+    (unpack-*), a replaced install not yet deleted (old-*), downloads (<file>.*.part)."""
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return
+    for n in names:
+        p = os.path.join(folder, n)
+        if n.startswith(("unpack-", "old-")) and os.path.isdir(p) and not os.path.islink(p):
+            shutil.rmtree(p, ignore_errors=True)
+        elif n.startswith(pkg.filename + ".") and n.endswith(".part") and os.path.isfile(p):
+            with contextlib.suppress(OSError):
+                os.remove(p)
+
+
+def _unpack_windows_package(archive, folder: str, pkg: WindowsPackage, quiet: bool) -> str:
+    """Unpack the verified zip `archive` (a path or an open file) into folder/<pkg.top>, with the record of every file it holds
     (<entry>.coal-manifest.json), and return the entry point. Every member name is checked first
     (_member_parts) and nothing is written if one fails; the files are written into a new folder of their own
     (each created exclusively, so nothing is written through a link) that then replaces the old install, if any."""
@@ -940,7 +1045,13 @@ def _unpack_windows_package(archive: str, folder: str, pkg: WindowsPackage, quie
             if os.path.lexists(final):
                 old = tempfile.mkdtemp(dir=folder, prefix="old-")
                 os.replace(final, os.path.join(old, pkg.top))
-            os.replace(new, final)
+            try:
+                os.replace(new, final)
+            except BaseException:
+                if old is not None:      # the old install comes back where it was
+                    os.replace(os.path.join(old, pkg.top), final)
+                    shutil.rmtree(old, ignore_errors=True)
+                raise
             if old is not None:
                 shutil.rmtree(old, ignore_errors=True)
         finally:
@@ -1023,16 +1134,19 @@ def _interrupt_count() -> int:
         return _interrupts
 
 
-def _run_tracked(cmd, timeout, begun: int | None = None, **kw) -> subprocess.CompletedProcess:
+def _run_tracked(cmd, timeout, begun: int | None = None, workdir: str | None = None,
+                 **kw) -> subprocess.CompletedProcess:
     """subprocess.run(cmd, timeout=..., **kw) with the process registered in _running while it runs.
 
     Starting and registering happen under _running_lock, the lock kill_running() takes: an aligner is either not
     started yet (and then never is: MsaError("interrupted") when kill_running() was called since `begun`, the
     value of _interrupt_count() when the caller's work began) or it is in _running where kill_running() finds it.
     Before, the process was started first and registered afterwards, and an interrupt in between left an aligner
-    running that nothing knew about."""
+    running that nothing knew about. workdir: the run's folder (for a batch file / MAFFT's Windows package:
+    _launch)."""
     proc = None
-    args, extra = _launch(cmd)   # a batch file (MAFFT's mafft.bat): its own command line, no stdin
+    args, extra = _launch(cmd, workdir)   # MAFFT's Windows package: its bash.exe; another batch file: cmd.exe
+    tree = bool(extra.pop("_tree", False))
     for k, v in extra.items():
         kw.setdefault(k, v)
     with _running_lock:
@@ -1041,7 +1155,7 @@ def _run_tracked(cmd, timeout, begun: int | None = None, **kw) -> subprocess.Com
         try:
             proc = subprocess.Popen(args, **kw)
             with contextlib.suppress(AttributeError):
-                proc._coal_batch = bool(extra)
+                proc._coal_tree = tree
             if _after_start is not None:
                 _after_start(proc)
             _running.add(proc)
@@ -1107,12 +1221,12 @@ def run_msa(records: Sequence[tuple[str, str]], tool: str = "clustalo", threads:
                 fh.write(f">s{k}\n{s}\n")
         cmd = command_line(tool, exe, threads, extra_args, inp, outp)
         if tool == "clustalo":
-            r = _run_tracked(cmd, timeout, begun, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            r = _run_tracked(cmd, timeout, begun, tmp, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                              encoding="utf-8", errors="backslashreplace")
         else:
             with open(outp, "wb") as fh:
-                r = _run_tracked(cmd, timeout, begun, stdout=fh, stderr=subprocess.PIPE, text=True, encoding="utf-8",
-                                 errors="backslashreplace")
+                r = _run_tracked(cmd, timeout, begun, tmp, stdout=fh, stderr=subprocess.PIPE, text=True,
+                                 encoding="utf-8", errors="backslashreplace")
         if r.returncode != 0:
             raise MsaError(f"{tool} failed ({exit_text(r.returncode)}): {(r.stderr or '').strip()[-800:]}")
         got = _read_fasta(outp)

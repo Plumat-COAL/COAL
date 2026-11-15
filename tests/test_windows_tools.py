@@ -199,6 +199,7 @@ def make_zip(members) -> bytes:
 
 GOOD = [("mafft-win/", None), ("mafft-win/mafft.bat", b"@echo off\n\"%~dp0usr\\bin\\bash\" /usr/bin/mafft %*\n"),
         ("mafft-win/usr/", None), ("mafft-win/usr/bin/mafft", b"#!/bin/bash\necho MAFFT\n"),
+        ("mafft-win/usr/bin/bash.exe", b"MZ bash"),
         ("mafft-win/usr/bin/msys-2.0.dll", b"MZ dll"), ("mafft-win/usr/lib/mafft/disttbfast.exe", b"MZ exe"),
         ("mafft-win/license.txt", b"BSD; the package: GPL\n")]
 
@@ -241,6 +242,7 @@ class TestMafftWindowsInstall(WindowsCase):
         for p in (mock.patch.object(msa.urllib.request, "urlopen", self.served),
                   mock.patch.object(msa, "_download", ORIG_DOWNLOAD),   # (WindowsCase refuses it)
                   mock.patch.object(msa, "tool_version", version),
+                  mock.patch.object(msa, "_read_version", version),
                   mock.patch.object(msa, "_unpack_windows_package", unpack),
                   mock.patch.object(msa.shutil, "which", return_value=None),
                   mock.patch.dict(os.environ, {"COAL_MAFFT": ""})):
@@ -286,8 +288,9 @@ class TestMafftWindowsInstall(WindowsCase):
             self.assertTrue(f.is_dir() if data is None else f.read_bytes() == data, name)
         self.assertEqual(sorted(p.name for p in self.folder.iterdir()), ["mafft-win"])   # the archive is gone
         rec = json.loads(Path(path + msa.MANIFEST_SUFFIX).read_text(encoding="utf-8"))
-        self.assertEqual(sorted(rec["files"]), ["license.txt", "mafft.bat", "usr/bin/mafft", "usr/bin/msys-2.0.dll",
-                                                "usr/lib/mafft/disttbfast.exe"])
+        self.assertEqual(sorted(rec["files"]), ["license.txt", "mafft.bat", "usr/bin/bash.exe", "usr/bin/mafft",
+                                                "usr/bin/msys-2.0.dll", "usr/lib/mafft/disttbfast.exe"])
+        self.assertEqual(msa.mafft_package_root(path), str(self.folder / "mafft-win"))   # run as its bash.exe
         self.assertEqual(rec["source"], msa.MAFFT_WINDOWS.url)
         self.assertEqual(rec["verified"], "pinned size and SHA-256 of the archive")
         pkg = msa.installed_package("mafft", path)
@@ -401,6 +404,41 @@ class TestMafftWindowsInstall(WindowsCase):
         self.assertEqual(len(self.served.urls), 2)
         self.assertEqual(msa.find_mafft(), path)
 
+    def test_what_was_checked_is_what_is_unpacked(self):
+        """L3: the archive is checked again from the open file it is unpacked from."""
+        real_fetch = msa._fetch_verified
+        def fetch(*a, **k):
+            got = real_fetch(*a, **k)
+            Path(a[1]).write_bytes(make_zip(GOOD + [("mafft-win/swapped", b"x")]))   # replaced after the check
+            return got
+        with mock.patch.object(msa, "_fetch_verified", fetch), self.assertRaises(msa.MsaError) as cm:
+            self.install()
+        self.assertIn("changed after its check", str(cm.exception))
+        self.assert_nothing_installed()
+
+    def test_a_failed_swap_keeps_the_old_install(self):
+        """L4: if the new folder cannot be put in place, the old install is put back."""
+        path = self.install()
+        real_replace = os.replace
+        def replace(src, dst):
+            if os.path.basename(os.path.dirname(src)).startswith("unpack-"):
+                raise PermissionError(13, "in use", dst)
+            return real_replace(src, dst)
+        with mock.patch.object(msa.os, "replace", replace), self.assertRaises(msa.MsaError) as cm:
+            self.install(force=True)
+        self.assertIn("could not unpack", str(cm.exception))
+        self.assertEqual(msa._cache_state(path), "ok")
+        self.assertEqual(sorted(p.name for p in self.folder.iterdir()), ["mafft-win"])
+
+    def test_leftovers_of_an_interrupted_install_are_removed(self):
+        self.folder.mkdir(parents=True)
+        for d in ("unpack-abc", "old-def"):
+            (self.folder / d / "mafft-win").mkdir(parents=True)
+        (self.folder / (msa.MAFFT_WINDOWS.filename + ".x1.part")).write_bytes(b"half")
+        (self.folder / "keep.txt").write_text("not COAL's leftover", encoding="utf-8")
+        self.install()
+        self.assertEqual(sorted(p.name for p in self.folder.iterdir()), ["keep.txt", "mafft-win"])
+
     def test_a_version_that_does_not_run_fails(self):
         self.version_line = ""
         with self.assertRaises(msa.MsaError) as cm:
@@ -454,12 +492,14 @@ class TestBatchFiles(unittest.TestCase):
     """mafft.bat: Windows runs a batch file through cmd.exe, which reads its command line by its own rules."""
 
     def test_quoting(self):
-        line = msa.batch_command_line(["C:\\Users\\A B\\mafft-win\\mafft.bat", "--auto", "--thread", "2",
-                                       "C:\\T\\R&D (x)\\in.fasta", "a^b", "a,b;c=d", "caf\u00e9"])
-        self.assertEqual(line, '"C:\\Users\\A B\\mafft-win\\mafft.bat" --auto --thread 2 "C:\\T\\R&D (x)\\in.fasta" '
-                               '"a^b" "a,b;c=d" "caf\u00e9"')
+        bat = "C:\\Users\\A B\\mafft-win\\mafft.bat"
+        full = os.path.normpath(os.path.abspath(bat))     # (the program as a full path, always in quotes: L2)
+        line = msa.batch_command_line([bat, "--auto", "--thread", "2", "C:\\T\\R&D (x)\\in.fasta", "a^b", "a,b;c=d",
+                                       "caf\u00e9"])
+        self.assertEqual(line, f'"{full}" --auto --thread 2 "C:\\T\\R&D (x)\\in.fasta" "a^b" "a,b;c=d" "caf\u00e9"')
+        plain = os.path.normpath(os.path.abspath("C:\\m\\mafft.bat"))
         self.assertEqual(msa.batch_command_line(["C:\\m\\mafft.bat", "C:/t/in.fasta", "-x+1@y"]),
-                         "C:\\m\\mafft.bat C:/t/in.fasta -x+1@y")
+                         f'"{plain}" C:/t/in.fasta -x+1@y')
 
     def test_refused(self):
         for arg, said in (("C:\\T\\%USERNAME%\\in.fasta", "'%'"), ("C:\\T\\Hi!\\in.fasta", "'!'"),
@@ -471,14 +511,78 @@ class TestBatchFiles(unittest.TestCase):
             self.assertIn("cmd.exe", str(cm.exception))
             self.assertIn("TMP / TEMP", str(cm.exception))
 
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+
     def test_launch(self):
         self.assertTrue(msa.is_batch_file("C:\\x\\MAFFT.BAT") and msa.is_batch_file("a.cmd"))
         self.assertFalse(msa.is_batch_file("/usr/bin/mafft") or msa.is_batch_file("mafft.exe"))
         self.assertEqual(msa._launch(["/usr/bin/mafft", "--auto"]), (["/usr/bin/mafft", "--auto"], {}))
-        args, extra = msa._launch(["C:\\m\\mafft.bat", "--auto", "C:\\a b\\in.fasta"])
-        self.assertEqual(extra, {"stdin": subprocess.DEVNULL})
+        self.assertEqual(msa._launch(["/usr/bin/mafft", "--auto"], self.tmp), (["/usr/bin/mafft", "--auto"], {}))
+        bat = os.path.join(self.tmp, "my.bat")
+        args, extra = msa._launch([bat, "--auto", "C:\\a b\\in.fasta"], self.tmp)
+        self.assertEqual(extra, {"stdin": subprocess.DEVNULL, "cwd": self.tmp, "_tree": True})
         if os.name == "nt":
-            self.assertEqual(args, 'C:\\m\\mafft.bat --auto "C:\\a b\\in.fasta"')
+            self.assertEqual(args, f'"{bat}" --auto "C:\\a b\\in.fasta"')
+        with self.assertRaises(ValueError):
+            msa._launch([bat, "--auto"])                # a batch file needs a folder of the run's own
+
+    def fake_package(self, where: str) -> str:
+        """The layout of MAFFT's Windows package (empty files): mafft.bat, usr/bin/bash.exe, usr/bin/mafft."""
+        for f in ("mafft.bat", "usr/bin/bash.exe", "usr/bin/mafft"):
+            p = Path(where, "mafft-win", f)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(b"")
+        return str(Path(where, "mafft-win", "mafft.bat"))
+
+    def test_mafft_package_runs_as_its_bash(self):
+        """MAFFT's package: its bash.exe with argv /usr/bin/mafft ..., no cmd.exe, so & ^ % ! and spaces in the
+        install folder, the run's folder, TMP and the current folder are only text (audit of PR #91)."""
+        odd = os.path.join(self.tmp, "R&D ^x %y% !z (1)")
+        bat = self.fake_package(os.path.join(odd, "cache"))
+        work = os.path.join(odd, "run")
+        os.makedirs(work)
+        root = os.path.join(odd, "cache", "mafft-win")
+        self.assertEqual(msa.mafft_package_root(bat), root)
+        self.assertIsNone(msa.mafft_package_root(os.path.join(self.tmp, "mafft.bat")))
+        with mock.patch.dict(os.environ, {"TMP": odd, "TEMP": odd, "PATH": "C:\\a&b;C:\\Windows"}):
+            args, extra = msa._launch([bat, "--auto", "--quiet", os.path.join(work, "in.fasta")], work)
+        usr_bin = os.path.join(root, "usr", "bin")
+        self.assertEqual(args, [os.path.join(usr_bin, "bash.exe"), "/usr/bin/mafft", "--auto", "--quiet",
+                                os.path.join(work, "in.fasta")])
+        env = extra.pop("env")
+        self.assertEqual(extra, {"stdin": subprocess.DEVNULL, "cwd": work, "_tree": True})
+        self.assertEqual(env["PATH"], usr_bin + os.pathsep + "C:\\a&b;C:\\Windows")
+        self.assertEqual(env["MAFFT_BINARIES"], "/usr/lib/mafft")
+        for v in ("TMPDIR", "MAFFT_TMPDIR", "TMP", "TEMP"):
+            self.assertEqual(env[v], os.path.join(work, "tmp"), v)
+        self.assertTrue(os.path.isdir(os.path.join(work, "tmp")))
+
+    def test_another_batch_file_needs_plain_folders(self):
+        for c in "&|<>^%!\"":
+            if c in '<>|"' and os.name == "nt":
+                continue                                 # (not in a Windows file name)
+            odd = os.path.join(self.tmp, f"a{c}b")
+            os.makedirs(odd, exist_ok=True)
+            bat = os.path.join(odd, "my.bat")
+            for what, kw, env in (("its folder", dict(cmd=[bat, "x"], workdir=self.tmp), {}),
+                                  ("the run's folder", dict(cmd=[os.path.join(self.tmp, "m.bat")], workdir=odd), {}),
+                                  ("TMP", dict(cmd=[os.path.join(self.tmp, "m.bat")], workdir=self.tmp),
+                                   {"TMP": odd})):
+                with self.subTest(c=c, what=what), mock.patch.dict(os.environ, env), \
+                        self.assertRaises(msa.MsaError) as cm:
+                    msa._launch(kw["cmd"], kw["workdir"])
+                self.assertIn(f"{what} ({odd})", str(cm.exception))
+                self.assertIn("& | < > ^ % ! \"", str(cm.exception))
+            here = os.getcwd()
+            os.chdir(odd)
+            try:
+                with self.subTest(c=c, what="cwd"), self.assertRaises(msa.MsaError) as cm:
+                    msa._launch([os.path.join(self.tmp, "m.bat")], self.tmp)
+                self.assertIn("the current folder", str(cm.exception))
+            finally:
+                os.chdir(here)
 
     def test_run_msa_refuses_before_starting(self):
         with mock.patch.object(msa.subprocess, "Popen", side_effect=AssertionError("started")), \
@@ -487,8 +591,10 @@ class TestBatchFiles(unittest.TestCase):
             d = tempfile.mkdtemp(suffix="%x%")
             self.addCleanup(shutil.rmtree, d, True)
             with mock.patch.object(msa.tempfile, "tempdir", d), self.assertRaises(msa.MsaError) as cm:
-                msa.run_msa([("a", "MKV"), ("b", "MKI"), ("c", "MRV")], "mafft", exe="C:\\m\\mafft.bat")
-        self.assertIn("cannot pass", str(cm.exception))
+                msa.run_msa([("a", "MKV"), ("b", "MKI"), ("c", "MRV")], "mafft",
+                            exe=os.path.join(self.tmp, "mafft.bat"))
+        self.assertIn("cannot run the batch file", str(cm.exception))
+        self.assertIn("the run's folder", str(cm.exception))
         self.assertEqual(msa.tool_version("C:\\m\\%x%\\mafft.bat"), "")
 
     def test_version_of_a_batch_file(self):
@@ -497,22 +603,27 @@ class TestBatchFiles(unittest.TestCase):
             return subprocess.CompletedProcess(args, 0, "Active code page: 65001\n", "v7.526 (2024/Apr/26)\n")
         with mock.patch.object(msa.subprocess, "run", run):
             self.assertEqual(msa.tool_version("C:\\m\\mafft.bat"), "v7.526 (2024/Apr/26)")
+        # a refusal is said by the install, not hidden behind "no output" (L4)
+        with self.assertRaises(msa.MsaError):
+            msa._read_version(os.path.join(self.tmp, "a&b", "mafft.bat"))
         with mock.patch.object(msa.subprocess, "run",
-                               lambda a, **k: subprocess.CompletedProcess(a, 0, "Aktive Codepage: 65001.\n", "")):
-            self.assertEqual(msa.tool_version("C:\\m\\mafft.bat"), "Aktive Codepage: 65001.")   # no version
+                               lambda a, **k: subprocess.CompletedProcess(a, 0, "Aktive Codepage: 65001.\n"
+                                                                          "Preparing 1.5 environment\n", "")):
+            # no MAFFT version line (v7.526): the first line, which the install then names
+            self.assertEqual(msa.tool_version("C:\\m\\mafft.bat"), "Aktive Codepage: 65001.")
         with mock.patch.object(msa.subprocess, "run",
                                lambda a, **k: subprocess.CompletedProcess(a, 0, " \n", "2.2.8\n")):
             self.assertEqual(msa.tool_version("/x/diamond"), "2.2.8")     # whitespace-only stdout: stderr's line
 
     def test_stopping_a_batch_file_ends_its_tree(self):
-        proc = mock.Mock(pid=4242, _coal_batch=True)
+        proc = mock.Mock(pid=4242, _coal_tree=True)
         proc.poll.return_value = None
         with mock.patch.object(msa.os, "name", "nt"), mock.patch.object(msa.subprocess, "run") as run:
             msa._end(proc)
         self.assertEqual(run.call_args[0][0], ["taskkill", "/F", "/T", "/PID", "4242"])
         proc.kill.assert_called_once_with()
-        plain = mock.Mock(pid=1, _coal_batch=False)
-        with mock.patch.object(msa.subprocess, "run") as run:
+        plain = mock.Mock(pid=1, _coal_tree=False)
+        with mock.patch.object(msa.os, "name", "nt"), mock.patch.object(msa.subprocess, "run") as run:
             msa._end(plain)
         run.assert_not_called()
         plain.kill.assert_called_once_with()
@@ -542,7 +653,7 @@ class TestRealBatchFile(unittest.TestCase):
     path has spaces and cmd.exe's special characters, and stopping it ends what it started."""
 
     def setUp(self):
-        self.tmp = tempfile.mkdtemp(prefix="coal bat & (x) ^ ")
+        self.tmp = tempfile.mkdtemp(prefix="coal bat (x) ")    # spaces and parentheses: fine for any .bat
         self.addCleanup(shutil.rmtree, self.tmp, True)
 
     def bat(self, script: str, name: str) -> str:
@@ -557,7 +668,9 @@ class TestRealBatchFile(unittest.TestCase):
         out = os.path.join(self.tmp, "args.json")
         args = [out, "--auto", "--thread", "2", os.path.join(self.tmp, "in.fasta"), "a&b", "x(1)", "p^q", "s;c,e=1",
                 "C:/fwd/slash", "caf\u00e9"]
-        cmd, extra = msa._launch([bat, *args])
+        work = tempfile.mkdtemp(dir=self.tmp)
+        cmd, extra = msa._launch([bat, *args], work)
+        self.assertTrue(extra.pop("_tree"))
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=120, **extra)
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(json.loads(Path(out).read_text(encoding="utf-8")), args[1:])
@@ -565,9 +678,16 @@ class TestRealBatchFile(unittest.TestCase):
     def test_run_msa_and_version_through_a_batch_file(self):
         bat = self.bat(FAKE_MAFFT, "mafft")
         self.assertEqual(msa.tool_version(bat), "v7.526 (2024/Apr/26)")
-        with mock.patch.object(msa.tempfile, "tempdir", self.tmp):     # the input FASTA's folder: spaces, & ( ) ^
+        with mock.patch.object(msa.tempfile, "tempdir", self.tmp):     # the input FASTA's folder: spaces, ( )
             rows = msa.run_msa([("a", "MKV"), ("b", "MKI"), ("c", "MRV")], "mafft", exe=bat)
         self.assertEqual(rows, [("a", "MKV"), ("b", "MKI"), ("c", "MRV")])
+
+    def test_an_odd_folder_is_refused_for_another_batch_file(self):
+        odd = tempfile.mkdtemp(prefix="R&D ^ ", dir=self.tmp)
+        bat = self.bat(FAKE_MAFFT, "mafft")
+        with mock.patch.object(msa.tempfile, "tempdir", odd), self.assertRaises(msa.MsaError) as cm:
+            msa.run_msa([("a", "MKV"), ("b", "MKI"), ("c", "MRV")], "mafft", exe=bat)
+        self.assertIn("cannot run the batch file", str(cm.exception))
 
     def test_a_timeout_ends_the_whole_tree(self):
         bat = self.bat(FAKE_MAFFT, "mafft")
