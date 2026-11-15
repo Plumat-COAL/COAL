@@ -65,6 +65,25 @@
 #include <cstdio>
 #include <cstring>
 #include <initializer_list>
+#include <memory>
+
+// x86 with GCC / Clang: the transition-probability matrix of YN / MYN (pmat_codon, with its eigendecomposition) is
+// compiled twice, for the baseline (SSE2) and for AVX2, and the AVX2 copy is used when the CPU has it (checked
+// once), as align.cpp does for its row loops. Both copies compute the same numbers: the floating-point operations
+// are the ones written, in the order written (no contraction, see above; no fast-math), and the vector width only
+// changes how many independent ones run at once. COAL_KAKS_BASELINE: the baseline
+// only, at build time; Options::baseline_isa (`--kaks-baseline`): the baseline for one run (tests).
+#if (defined(__GNUC__) || defined(__clang__)) && (defined(__x86_64__) || defined(__i386__)) && \
+    !defined(COAL_KAKS_BASELINE)
+#define COAL_KAKS_AVX2 1
+#else
+#define COAL_KAKS_AVX2 0
+#endif
+#if defined(__GNUC__) || defined(__clang__)
+#define COAL_KAKS_INLINE inline __attribute__((always_inline))
+#else
+#define COAL_KAKS_INLINE inline
+#endif
 
 namespace coal {
 namespace kaks {
@@ -504,15 +523,25 @@ Result run_lwl(const Prepared& p, const GeneticCode& g, Method m, Result r) {
 
 // ---------------------------------------------------------------------------------------------------------
 // Symmetric eigen solver (Householder tridiagonalisation + implicit QL; the classical EISPACK tred2/tql2
-// algorithm). V: the symmetric n x n matrix, replaced by the eigenvectors, one per ROW (V[k*n + i] = component i
-// of eigenvector k); d: eigenvalues. The algorithm is written for eigenvectors in columns, v(i, j); it runs on the
-// transposed storage so that its inner loops (over the first index) walk memory contiguously.
-void eigen_sym(std::vector<double>& V, int n, std::vector<double>& d) {
-    std::vector<double> e((size_t)n, 0.0);
-    d.assign((size_t)n, 0.0);
-    double* const Z = V.data();
+// algorithm). Z: the symmetric n x n matrix, replaced by the eigenvectors, one per ROW (Z[k*n + i] = component i
+// of eigenvector k); d: eigenvalues; e: scratch of n values. The algorithm is written for eigenvectors in columns,
+// v(i, j); it runs on the transposed storage so that its inner loops (over the first index) walk memory
+// contiguously.
+//
+// This decomposition (61 x 61, once per round of the iteration) is most of the time of YN and MYN. It is arranged
+// for speed without changing a bit of the result: every number is computed by the same operations on the same
+// operands in the same order as in the textbook loops (each sum in its own order; nothing reassociated, nothing
+// fused into an FMA). tred2's accumulation of the transformations takes four columns at a time: the columns are
+// independent of each other, and four sums side by side share the loads of the column they are made from instead
+// of waiting on one chain of additions. On x86 the routine is also compiled for AVX2 (wider vectors for the
+// element-wise loops, which give the same numbers) and that copy is used when the CPU has it (pmat_codon below).
+// tests/test_kaks_dispatch.py compares the two copies to the bit; the golden files of tests/kaks hold the numbers.
+COAL_KAKS_INLINE void eigen_sym(double* const Z, const int n, double* const d, double* const e) {
     auto v = [Z, n](int i, int j) -> double& { return Z[(size_t)j * n + i]; };
-    for (int j = 0; j < n; ++j) d[j] = v(n - 1, j);
+    for (int j = 0; j < n; ++j) {
+        e[j] = 0;
+        d[j] = v(n - 1, j);
+    }
     for (int i = n - 1; i > 0; --i) {
         double scale = 0, h = 0;
         for (int k = 0; k < i; ++k) scale += std::fabs(d[k]);
@@ -566,11 +595,37 @@ void eigen_sym(std::vector<double>& V, int n, std::vector<double>& d) {
         v(i, i) = 1;
         double h = d[i + 1];
         if (h != 0) {
-            for (int k = 0; k <= i; ++k) d[k] = v(k, i + 1) / h;
-            for (int j = 0; j <= i; ++j) {
+            const double* const zi = Z + (size_t)(i + 1) * n;   // column i + 1, read only below
+            for (int k = 0; k <= i; ++k) d[k] = zi[k] / h;
+            // For each column j <= i: g = sum over k of v(k, i+1) v(k, j), then v(k, j) -= g d[k]. The columns do
+            // not depend on each other: four at a time.
+            int j = 0;
+            for (; j + 3 <= i; j += 4) {
+                double* const z0 = Z + (size_t)j * n;
+                double* const z1 = z0 + n;
+                double* const z2 = z1 + n;
+                double* const z3 = z2 + n;
+                double g0 = 0, g1 = 0, g2 = 0, g3 = 0;
+                for (int k = 0; k <= i; ++k) {
+                    const double x = zi[k];
+                    g0 += x * z0[k];
+                    g1 += x * z1[k];
+                    g2 += x * z2[k];
+                    g3 += x * z3[k];
+                }
+                for (int k = 0; k <= i; ++k) {
+                    const double dk = d[k];
+                    z0[k] -= g0 * dk;
+                    z1[k] -= g1 * dk;
+                    z2[k] -= g2 * dk;
+                    z3[k] -= g3 * dk;
+                }
+            }
+            for (; j <= i; ++j) {
+                double* const zj = Z + (size_t)j * n;
                 double g = 0;
-                for (int k = 0; k <= i; ++k) g += v(k, i + 1) * v(k, j);
-                for (int k = 0; k <= i; ++k) v(k, j) -= g * d[k];
+                for (int k = 0; k <= i; ++k) g += zi[k] * zj[k];
+                for (int k = 0; k <= i; ++k) zj[k] -= g * d[k];
             }
         }
         for (int k = 0; k <= i; ++k) v(k, i + 1) = 0;
@@ -645,8 +700,14 @@ struct PMat {
     double p[64][64];
 };
 
-void pmat_codon(const GeneticCode& g, const double pi[64], double kappa_tc, double kappa_ag, double omega,
-                double t, PMat& out) {
+// Scratch of pmat_codon, allocated once per pair and reused by every round of the iteration.
+struct PMatWork {
+    double A[64 * 64], U[64 * 64];
+    double d[64], e[64];
+};
+
+COAL_KAKS_INLINE void pmat_body(const GeneticCode& g, const double pi[64], double kappa_tc, double kappa_ag,
+                                double omega, double t, PMat& out, PMatWork& w) {
     int idx[64], ns = 0, back[64];
     for (int c = 0; c < 64; ++c) {
         back[c] = -1;
@@ -655,16 +716,16 @@ void pmat_codon(const GeneticCode& g, const double pi[64], double kappa_tc, doub
             idx[ns++] = c;
         }
     }
-    // rate scaling factor over all codons
-    double mr = 0;
-    std::vector<double> A((size_t)ns * ns, 0.0);
-    double s[64][64];  // symmetric exchangeabilities
-    for (int i = 0; i < 64; ++i)
-        for (int j = 0; j < 64; ++j) s[i][j] = 0;
+    // The exchangeabilities s(i, j) of codons one substitution apart (every other pair, and a stop codon: 0), each
+    // codon's neighbours in increasing order. A sum over all 64 codons j of s(i, j) pi_j is the same number as the
+    // sum over the neighbours, in the same order: each left-out term is +0, and every term is >= 0.
+    int nb[64][9], nnb[64];
+    double sq[64][9];
     for (int i = 0; i < 64; ++i) {
+        nnb[i] = 0;
         if (is_stop(g, i)) continue;
-        for (int j = 0; j < i; ++j) {
-            if (is_stop(g, j)) continue;
+        for (int j = 0; j < 64; ++j) {
+            if (j == i || is_stop(g, j)) continue;
             int nd = 0, pos = 0;
             for (int k = 0; k < 3; ++k)
                 if (base_at(i, k) != base_at(j, k)) {
@@ -679,31 +740,36 @@ void pmat_codon(const GeneticCode& g, const double pi[64], double kappa_tc, doub
             else if (x + y == 5)
                 q *= kappa_ag;
             if (g.aa[i] != g.aa[j]) q *= omega;
-            s[i][j] = s[j][i] = q;
+            nb[i][nnb[i]] = j;
+            sq[i][nnb[i]++] = q;
         }
     }
+    // rate scaling factor over all codons
+    double mr = 0, rowsum[64];
     for (int i = 0; i < 64; ++i) {
         double row = 0;
-        for (int j = 0; j < 64; ++j) row += s[i][j] * pi[j];
+        for (int k = 0; k < nnb[i]; ++k) row += sq[i][k] * pi[nb[i][k]];
+        rowsum[i] = row;
         mr += pi[i] * row;
     }
+    double* const A = w.A;
+    std::fill(A, A + (size_t)ns * ns, 0.0);
     for (int a = 0; a < ns; ++a) {
         const int i = idx[a];
-        double row = 0;
-        for (int j = 0; j < 64; ++j) row += s[i][j] * pi[j];
-        A[(size_t)a * ns + a] = -row;
-        for (int b = 0; b < a; ++b) {
-            const int j = idx[b];
-            const double v = s[i][j] * std::sqrt(pi[i] * pi[j]);
+        A[(size_t)a * ns + a] = -rowsum[i];
+        for (int k = 0; k < nnb[i]; ++k) {
+            const int j = nb[i][k];
+            const int b = back[j];
+            if (b < 0 || b >= a) continue;
+            const double v = sq[i][k] * std::sqrt(pi[i] * pi[j]);
             A[(size_t)a * ns + b] = A[(size_t)b * ns + a] = v;
         }
     }
-    std::vector<double> d;
-    eigen_sym(A, ns, d);  // A: eigenvector k in row k
+    eigen_sym(A, ns, w.d, w.e);  // A: eigenvector k in row k
     // U[a][k] = R[a][k] * exp(t d_k / (2 mr)), so that sum_k R_ak R_bk exp(t d_k / mr) = U[a] . U[b]
-    std::vector<double> U((size_t)ns * ns);
+    double* const U = w.U;
     for (int k = 0; k < ns; ++k) {
-        const double h = std::exp(t * d[k] / (2 * mr));
+        const double h = std::exp(t * w.d[k] / (2 * mr));
         const double* rk = &A[(size_t)k * ns];
         for (int a = 0; a < ns; ++a) U[(size_t)a * ns + k] = rk[a] * h;
     }
@@ -726,6 +792,34 @@ void pmat_codon(const GeneticCode& g, const double pi[64], double kappa_tc, doub
                 out.p[i][j] = v < 0 ? 0 : v;
             }
     }
+}
+
+void pmat_base(const GeneticCode& g, const double pi[64], double kappa_tc, double kappa_ag, double omega, double t,
+               PMat& out, PMatWork& w) {
+    pmat_body(g, pi, kappa_tc, kappa_ag, omega, t, out, w);
+}
+#if COAL_KAKS_AVX2
+__attribute__((target("avx2"))) void pmat_avx2(const GeneticCode& g, const double pi[64], double kappa_tc,
+                                               double kappa_ag, double omega, double t, PMat& out, PMatWork& w) {
+    pmat_body(g, pi, kappa_tc, kappa_ag, omega, t, out, w);
+}
+bool kaks_cpu_has_avx2() {
+    static const bool yes = [] {
+        __builtin_cpu_init();
+        return __builtin_cpu_supports("avx2") != 0;
+    }();
+    return yes;
+}
+#endif
+
+void pmat_codon(const GeneticCode& g, const double pi[64], double kappa_tc, double kappa_ag, double omega, double t,
+                PMat& out, PMatWork& w, bool baseline) {
+#if COAL_KAKS_AVX2
+    if (!baseline && kaks_cpu_has_avx2()) return pmat_avx2(g, pi, kappa_tc, kappa_ag, omega, t, out, w);
+#else
+    (void)baseline;
+#endif
+    pmat_base(g, pi, kappa_tc, kappa_ag, omega, t, out, w);
 }
 
 // Distance from the proportions of transitional (P) and transversional (Q) differences under F84, falling back
@@ -1147,8 +1241,9 @@ Result run_yn(const Prepared& p, const GeneticCode& g, const Options& opt, Resul
     Diffs D;
     int ir;
     const bool weights = P && (opt.yn_always_pmat || needs_pathway_weights(p));   // (else P(t) is never read)
+    std::unique_ptr<PMatWork> work(weights ? new PMatWork : nullptr);   // (its contents are set by each round)
     for (ir = 0; ir < nround; ++ir) {
-        if (weights) pmat_codon(g, pi, kappa, kappa, omega, t, *P);
+        if (weights) pmat_codon(g, pi, kappa, kappa, omega, t, *P, *work, opt.baseline_isa);
         D = count_diffs(p, g, weights ? P : nullptr, false);
         const double Sdts = D.sts1 + D.sts2, Sdtv = D.stv, Ndts = D.nts1 + D.nts2, Ndtv = D.ntv;
         if (hasS) os = distance_f84(S, Sdts / S, Sdtv / S, fbS, cap, capset, LOG_ARG_TOL);
@@ -1331,8 +1426,9 @@ Result run_myn(const Prepared& p, const GeneticCode& g, const Options& opt, Resu
     Diffs D;
     int ir;
     const bool weights = opt.yn_always_pmat || needs_pathway_weights(p);   // (else P(t) is never read)
+    std::unique_ptr<PMatWork> work(weights ? new PMatWork : nullptr);
     for (ir = 0; ir < nround; ++ir) {
-        if (weights) pmat_codon(g, pi, ktc, kag, omega, t, P);
+        if (weights) pmat_codon(g, pi, ktc, kag, omega, t, P, *work, opt.baseline_isa);
         D = count_diffs(p, g, weights ? &P : nullptr, true);   // (without weights no codon has several pathways)
         double Sd = D.sts1 + D.sts2 + D.stv, Nd = D.nts1 + D.nts2 + D.ntv;
         double s1 = D.sts1, s2 = D.sts2, sv = D.stv, n1 = D.nts1, n2 = D.nts2, nv = D.ntv;
@@ -1388,6 +1484,15 @@ Result run_myn(const Prepared& p, const GeneticCode& g, const Options& opt, Resu
 }
 
 }  // namespace
+
+const char* pmat_isa(const Options& opt) {
+#if COAL_KAKS_AVX2
+    if (!opt.baseline_isa && kaks_cpu_has_avx2()) return "avx2";
+#else
+    (void)opt;
+#endif
+    return "baseline";
+}
 
 const char* method_name(Method m) {
     switch (m) {

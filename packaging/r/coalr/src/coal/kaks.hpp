@@ -107,6 +107,10 @@ struct Options {
     // which no codon differs at two or three positions, where nothing reads it (kaks.cpp needs_pathway_weights).
     // The results are the same bits either way; the tests compare the two (`--yn-always-pmat`).
     bool yn_always_pmat = false;
+    // Testing only: compute YN / MYN's transition-probability matrix with the baseline (SSE2) copy of its code even
+    // where the CPU has AVX2 and the AVX2 copy would be used (kaks.cpp pmat_codon). The results are the same bits
+    // either way; tests/test_kaks_dispatch.py compares the two (`--kaks-baseline`).
+    bool baseline_isa = false;
     ComeronFlavour comeron_flavour = ComeronFlavour::coal;
     ComeronTwoSubs comeron_twosubs = ComeronTwoSubs::by_flavour;
     double comeron_min_sites = COMERON_MIN_SITES_DEFAULT;
@@ -165,6 +169,10 @@ struct Prepared {
 
 // Rows: aligned coding DNA of equal length (A C G T U, any case; '-' or '.' gaps; other letters ambiguous).
 Prepared prepare(const std::string& row1, const std::string& row2, const GeneticCode& code);
+// Which copy of YN / MYN's transition-probability code a computation with these options runs: "avx2" (x86 with
+// GCC / Clang, a CPU with AVX2, and not Options::baseline_isa) or "baseline". The numbers are the same bits either
+// way; this is for the tests (`coal-cpp dnds --kaks-isa`, testing only).
+const char* pmat_isa(const Options& opt = {});
 Result compute(const Prepared& p, Method m, const GeneticCode& code, const Options& opt = {});
 Result compute(const std::string& row1, const std::string& row2, Method m, const GeneticCode& code,
                const Options& opt = {});
