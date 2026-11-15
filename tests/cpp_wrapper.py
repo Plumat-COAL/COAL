@@ -1,7 +1,20 @@
 """A stand-in for coal-cpp that does one thing first, then runs the real binary with the same arguments, stdin and
 exit status: how a test sees whether (and how) coal handed a run to coal-cpp. A POSIX sh script, or on Windows a
 .cmd batch file (CreateProcess runs those through cmd.exe), so the tests that use it run on all three systems.
-The arguments the tests pass are plain (file names, options): cmd.exe's own metacharacters are not escaped."""
+
+Limits (it is a test helper, not a launcher to ship):
+
+* No escaping. The .cmd file passes its arguments on with `%*` and puts `target`, `touch` and `stderr_line` into
+  the batch text as they are: cmd.exe's metacharacters (`&`, `|`, `<`, `>`, `^`, `%`, `!`, and `"` inside a
+  word) in any of them change what the batch file does. The sh script quotes `"$@"`, but `target`, `touch` and
+  `stderr_line` go inside double quotes, so `"`, `$`, `` ` `` and `\\` in them are the shell's. The tests pass plain
+  file names and options only.
+* On Windows, killing it does not kill the real coal-cpp. (On POSIX the script `exec`s coal-cpp, so the process is
+  replaced, same PID, and a signal reaches coal-cpp.) On Windows cmd.exe stays the parent: TerminateProcess on the wrapper (Popen.kill,
+  a subprocess timeout) ends cmd.exe only and leaves the real coal-cpp running (and holding its files) until it
+  finishes; a test that kills a run must kill the process tree (taskkill /T) or not use the wrapper.
+* On Windows the exit status is the one `exit /b %ERRORLEVEL%` passes on, and Ctrl+C prompts "Terminate batch
+  job (Y/N)?" when a console is attached."""
 from __future__ import annotations
 
 import os

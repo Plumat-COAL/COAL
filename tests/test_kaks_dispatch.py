@@ -69,7 +69,13 @@ def build_info(binary) -> tuple[str | None, bool]:
     From the CMake build tree the binary sits in (or, for a multi-config generator's Release/ or Debug/, the one
     above it; only a tree whose CMakeCache.txt names itself), else from marks the compilers leave in the binary.
     clang-cl is "Clang" in both (CMake's id; "clang version" in the binary, looked for before MSVC's Rich header):
-    it has the target attribute, so its builds have the copy."""
+    it has the target attribute, so its builds have the copy.
+
+    Unverified: the binary-marks branch for a clang-cl build away from its build tree. No CI job builds with
+    clang-cl, and whether a clang-cl (lld-link or link.exe) executable keeps the "clang version" string, and has a
+    Rich header that would read as MSVC if it does not, has not been checked on a real build; such a binary may
+    come out as "MSVC" here (then the tests treat it as having no AVX2 copy). Inside its CMake tree it is read from
+    CMakeCXXCompiler.cmake and is "Clang"."""
     binary = Path(binary).resolve()
     trees = [binary.parent] + ([binary.parent.parent] if binary.parent.name in CONFIGS else [])
     for tree in trees:
