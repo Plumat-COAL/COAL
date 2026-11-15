@@ -725,6 +725,19 @@ def _peak_rss_of(cmd, cwd, env):
     return p.returncode, peak
 
 
+def _max_rss_of(cmd, cwd, env):
+    """Run one process (no children) and return (rc, its peak resident set size in bytes) as the kernel counted it
+    (wait4's ru_maxrss: KB on Linux, bytes on macOS); elsewhere (Windows) sampled, as _peak_rss_of does. Sampling
+    can miss most of a run that lasts a few milliseconds (on macOS it read a clean coal-cpp run as 3.7 MB, a third
+    of its peak), which made a ratio of two peaks meaningless there."""
+    if not hasattr(os, "wait4"):
+        return _peak_rss_of(cmd, cwd, env)
+    p = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    _, status, usage = os.wait4(p.pid, 0)
+    p.returncode = os.waitstatus_to_exitcode(status)
+    return p.returncode, usage.ru_maxrss * (1 if sys.platform == "darwin" else 1024)
+
+
 def clean_case(d: Path, n, ncod):
     """`n` clean genes of `ncod` codons: the same sizes as unrelated_case(d, n, ncod), without the warnings."""
     rng = random.Random(101)
@@ -788,7 +801,7 @@ class ReportKeepsCounts(unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmp:
                 d = Path(tmp)
                 gen(d, 2 * self.N, self.NCOD)
-                rc, peaks[name] = _peak_rss_of([CPP, "pep.fasta", "nuc.fasta", "-o", "out.fa", "-j", "1"], tmp, env)
+                rc, peaks[name] = _max_rss_of([CPP, "pep.fasta", "nuc.fasta", "-o", "out.fa", "-j", "1"], tmp, env)
                 self.assertEqual(rc, 0)
                 self.assertEqual(sorted(x.name for x in d.iterdir()), ["nuc.fasta", "out.fa", "pep.fasta"])
         self.assertLess(peaks["unrelated"] / peaks["clean"], 1.5, peaks)
