@@ -559,7 +559,25 @@ flags.
 the sequence files, one line says so with an example from each side (`12 of the 12 query IDs of --pairs p.tsv are
 not in the query sequence file(s): e.g. 'AT1G01010' in p.tsv, while the sequences are named like 'AT1G01010.1'`)
 and, when that is what it looks like, that the IDs differ by a version or transcript suffix. Every pair still gets
-its row with status `error` (pair mode) and its line in `failed.tsv`, and the exit code is 2 as before.
+its row with status `error` (pair mode) and its line in `failed.tsv`, and the exit code is 2. When **no** pair of
+`--pairs` names a record of `--query` and one of `--subject` (other columns, another ID type), the run stops with
+exit 1 before any alignment and names the IDs it looked for and the records' style; when the first ID of most
+pairs is a subject record and the second a query record, it says that the columns look swapped. A `--clusters`
+file without a single member that is a record of `--cds` stops the same way. A first line of `--pairs` whose two
+fields are records of neither file, while later lines are, is read as a column header (a notice says so). A
+`--pairs` or `--clusters` line that is not two tab-separated columns is an error naming the line; a line with
+commas asks whether it is a CSV file and how to convert it (`tr ',' '\t'`).
+
+**Other first-use messages.** A `--query`, `--subject` or `--cds` file that looks like a genome, chromosomes or
+contigs rather than coding sequences (a record of 100 kb or more with 20 or more internal stops, or most records
+with 20 or more stops and more than one per 30 codons) gets one warning naming NCBI's `*_cds_from_genomic.fna`
+and Ensembl's `*.cds.all.fa`; the genetic-code hint is not given for that set. The first unusable record and its
+reason are printed on stderr, not only listed in `failed.tsv`. `-o` onto a folder with an earlier run's results
+gives a notice that they are replaced (not with `--resume`); after Ctrl-C the last line names `--resume`.
+`-codontable N` is accepted as `-c N`; codes 7 and 8, which NCBI merged into 4 and 1, name the code to use; the
+option names of orthologr and DIAMOND (`--sensitivity-mode`, `--comp-cores`, `--threads`, ...) and close typos
+of an option get a suggestion. A missing input given as a Windows path on Linux or macOS (`C:\Users\...`)
+names its WSL form (`/mnt/c/Users/...`).
 
 **Inputs that cannot work are reported before the long steps.** When a CDS file has no usable gene at all, the
 run stops after translation, before DIAMOND or an aligner is started, and says why: "does not hold coding DNA ...
@@ -603,16 +621,18 @@ UTF-8 byte order mark (Windows Notepad writes one), which is skipped, and may ha
 that they are informative. [kaks.md](kaks.md#filtering-before-interpretation) explains what to check and why; in
 short, for a pipeline table:
 
-- **Short alignments**: `codons_compared` below about 50. A handful of substitutions decides the ratio.
+- **Short alignments**: `codons_compared` below about 50, and below 100 for anything read gene by gene (dN/dS
+  included). A handful of substitutions decides the ratio.
 - **Low coverage or identity**: `codons_compared` well below `prot_aln_length` (under half), or `prot_identity`
   below 30 to 40%. Reciprocal best hits are not always orthologs over their whole length, and cluster members
   need not be alignable at all.
-- **Saturation**: dS above about 2 (1 to be strict). `saturated` marks only the pairs without any value; a pair
+- **Saturation**: dS above about 1 (0.5 with strong codon-usage bias); 2 is only an outer bound beyond which
+  nothing is usable. `saturated` marks only the pairs without any value; a pair
   with dS 4 and status `ok` is no better. When more than 30% of a run's pairs (of at least 20) are `saturated` or
   `not_converged`, the run says so in one warning that points here (*S. cerevisiae* / *C. glabrata*: 86%). Default DeepClust clusters hold many such pairs
   ([above](#cluster-mode-input-order-and-what-a-default-cluster-is)).
 - **Tiny dS**: dN/dS is a ratio, and with dS near 0 (very close sequences) it is unstable and often large for no
-  biological reason; `dNdS` is `NA` only when dS is below 1e-6.
+  biological reason; `dNdS` is `NA` only when dS is below 1e-6. For a ratio, dS of at least about 0.05.
 
 These thresholds are conventions, with the usual caveat: report the ones you use, and check that the result does
 not hinge on them. `--min-codons N`, `--max-ds X` and `--min-identity P` flag such rows (status `warning`, notes
@@ -622,10 +642,11 @@ off by default. `--min-identity` compares the column `prot_identity` (identical 
 protein alignment's columns, gap columns included) with P.
 
 ```
-coal pipeline pairs --query q_cds.fa --subject s_cds.fa -o out --min-codons 50 --max-ds 2 --min-identity 30
+coal pipeline pairs --query q_cds.fa --subject s_cds.fa -o out --min-codons 100 --max-ds 1 --min-identity 30
 ```
 
-Tutorial 2 applies these filters step by step
+Tutorial 2 applies these filters step by step, first with the outer bounds (to read the distribution of a
+genome comparison) and then with the stricter values for single genes
 ([docs/tutorials/02-pairs-dnds.md#5-filter-then-interpret](tutorials/02-pairs-dnds.md#5-filter-then-interpret)).
 
 **A cluster can hold pairs that are not related.** Clustering puts a sequence with a representative it matches;
@@ -909,9 +930,12 @@ machine is still to be done.
   system libraries), so the same pinned file serves Intel and Apple-silicon Macs without Rosetta (read from the
   2.2.8 archive, 2026-11-13; COAL's CI installs and requires it on the arm64 macOS runner).
 - **Windows: no automatic Clustal Omega or MAFFT install.** The pre-compiled Clustal Omega binaries of the
-  Clustal site are gone (the address serves an unrelated site since 2026-11) and Bioconda has no Windows packages,
-  so `--install-tools` and `coal pipeline install clustalo` cannot install one there and say what works: run COAL
-  under WSL; or put a `clustalo.exe` you trust on `PATH` (or set `COAL_CLUSTALO`); or `--aligner mafft` with a
-  MAFFT you installed yourself (`COAL_MAFFT`; not tested on Windows). Pair mode and DIAMOND are not affected
+  Clustal site are gone (the address serves an unrelated site since 2026-11) and neither Bioconda nor conda-forge
+  has Windows packages, so `--install-tools` and `coal pipeline install clustalo` / `mafft` cannot install one
+  there and say what works: run COAL under WSL; or install Clustal Omega 1.2.4 with MSYS2 (`pacman -S
+  mingw-w64-ucrt-x86_64-clustal-omega`, then `COAL_CLUSTALO` = `C:\msys64\ucrt64\bin\clustalo.exe`) or put
+  another `clustalo.exe` you trust on `PATH`; or `--aligner mafft` with MAFFT's own Windows package
+  (`mafft-7.526-win64-signed.zip`, `COAL_MAFFT` = its `mafft-win\mafft.bat`). COAL neither downloads nor tests
+  these ([install.md](install.md#clustal-omega-and-mafft-on-windows)). Pair mode and DIAMOND are not affected
   (DIAMOND's Windows release is pinned). [alignment.md](alignment.md#clusters-clustal-omega-and-mafft-coalmsa).
 - Thread scaling beyond 2 cores and whole-proteome wall times are to be measured on the 16-thread desktop.

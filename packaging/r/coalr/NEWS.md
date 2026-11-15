@@ -20,6 +20,12 @@ First version. In-process bindings (Rcpp) to the C++ core of COAL 0.6:
 - `coal_dnds_clusters()`: the pairs of a cluster with `msa` rows or an `aligner` are computed in input order
   (the earlier gene of `cds` first), as `coal pipeline clusters` does since COAL's PR #71. Changes only Comeron
   with `comeron_twosubs = "libsequence"` (the default of `comeron_flavour = "gestimator"`).
+- Ka/Ks engine fixes of COAL (vendored; numbers in COAL's CHANGELOG): MYN with an infinite kappa is `saturated`
+  (it was `no_data`); a multiple-hit correction at an exact boundary is `saturated`, not a rounding residue
+  printed as an estimate; the special cases of LWL, LPB, MLWL and MLPB follow the genetic code; YN/MYN rows
+  without an estimate no longer have `Sd` / `Nd` that depend on the order of the sequences. Without
+  COAL's Python pipeline, `coal_pipeline_pairs()` / `coal_pipeline_clusters()` of a development coalr name the
+  build from a COAL checkout instead of the latest release.
 
 - Comeron: new arguments `comeron_twosubs` and `comeron_min_sites` in `coal_kaks()`, `coal_dnds_pairs()` and
   `coal_dnds_clusters()` (the command line's `--comeron-twosubs`, `--comeron-min-sites`). By default Comeron

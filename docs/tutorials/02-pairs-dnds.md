@@ -226,7 +226,39 @@ How to read it:
   Median dS 0.08 against 1.22 for all genes; dN/dS about the same. This is why dS is a poor molecular clock
   across genes of different expression, and why comparing dN/dS between gene classes needs care.
 
-The same filters are one line in R (from kaks.md) or awk:
+**Why this step uses dS ≤ 2, dS ≥ 0.01 and 50 codons.** They are the outer bounds of
+[kaks.md](../kaks.md#filtering-before-interpretation): enough to read the *distribution* of a genome comparison
+whose median dS is 1.2, which a cut at dS 1 would mostly remove. For reading genes one by one, kaks.md's
+thresholds are stricter: at least 100 compared codons, dS at most 1 (0.5 with strong codon-usage bias), and dS at
+least about 0.05 for the ratio (in COAL's simulations YN underestimates dN/dS by 10 to 40% at dS 1 to 2). The
+same script with those:
+
+```bash
+python3 $T/scripts/dnds_summary.py ecoli_vs_salmonella/dnds.tsv --min-codons 100 --max-ds 1 --min-ds 0.05 --top 3
+```
+
+```text
+ecoli_vs_salmonella/dnds.tsv: 3142 rows of method YN
+...
+  codons_compared >= 100                           2747  (-229)
+  codons_compared / prot_aln_length >= 0.5         2741  (-6)
+  prot_identity >= 40                              2711  (-30)
+  dS <= 1.0                                         742  (-1969)
+  dS >= 0.05                                        738  (-4)
+quartiles over the 738 rows kept (25% / median / 75%):
+  dN    0.0147 / 0.0244 / 0.0403
+  dS    0.5421 / 0.7413 / 0.8839
+  dNdS  0.0234 / 0.0368 / 0.0600
+  dN/dS > 1: 0 of 738
+...
+```
+
+Only 738 of the 2,711 long, well-aligned pairs are left, and they are not a random sample: the genes with the
+least synonymous change (highly expressed ones, such as the ribosomal proteins below) are over-represented, and
+none of the three "top hits" above remains. Their median dN/dS (0.037) is close to that of the wider set (0.041),
+so the genome-wide picture holds; a statement about one gene should come from this stricter set.
+
+The same filters as the first run are one line in R (from kaks.md) or awk:
 
 ```bash
 awk -F'\t' 'NR==1 || ($16=="ok" || $16=="warning") && $13>=50 && $13>=0.5*$14 && $15>=40 && $5!="NA" && $5<=2 && $5>=0.01' \
@@ -241,15 +273,15 @@ numbers unchanged.
 ```bash
 coal pipeline pairs --query coal-tutorial-data/ecoli_K12_MG1655.cds.fna.gz \
     --subject coal-tutorial-data/styphimurium_LT2.cds.fna.gz -o ecsa_filtered -j 1 \
-    --longest-isoform --min-codons 50 --max-ds 2 --min-identity 40 --keep-alignments
+    --longest-isoform --min-codons 100 --max-ds 1 --min-identity 40 --keep-alignments
 ```
 
 ```text
 coal pipeline: --longest-isoform: query: 10 of 4,318 records dropped, 4,308 genes (from header field [locus_tag=); subject: 0 of 4,554 records dropped, 4,554 genes (from header field [locus_tag=); 10 in all, listed in genes.tsv with status dropped
 coal pipeline: 3,142 pairs (rbh)
-coal pipeline: summary: 8,872 records (0 not usable, 10 dropped by --longest-isoform: 8,862 genes); 3,142 pairs: 2,465 ok, 511 warning, 11 not_converged, 155 saturated, 0 no_data, 0 error
+coal pipeline: summary: 8,872 records (0 not usable, 10 dropped by --longest-isoform: 8,862 genes); 3,142 pairs: 739 ok, 2,237 warning, 11 not_converged, 155 saturated, 0 no_data, 0 error
 ...
-coal pipeline: summary: flagged (status warning, numbers unchanged): 23 pair(s) with fewer than 50 codons compared, 472 with dS above 2, 38 with protein identity below 40%
+coal pipeline: summary: flagged (status warning, numbers unchanged): 229 pair(s) with fewer than 100 codons compared, 2,109 with dS above 1, 38 with protein identity below 40%
 ```
 
 `report.json` has the same counts (`counts.flagged`), `genes.tsv` lists the 10 dropped records with the record

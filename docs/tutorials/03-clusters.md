@@ -150,7 +150,10 @@ This table is the key to the run. Reading it line by line:
   dN/dS** between close bacterial genomes (Rocha et al. 2006): slightly deleterious nonsynonymous changes have
   not yet been removed by selection. It is a property of the comparison, not a sign of positive selection, and
   the `dS >= 0.01` filter removes about half of these pairs for that reason (all 458 pairs it removes are D x L2
-  pairs).
+  pairs). The script's defaults are tutorial 2's outer bounds (dS 0.01 to 2, 50 codons), kept here to show this
+  effect; for ratios read gene by gene, [kaks.md](../kaks.md#filtering-before-interpretation) suggests dS of at
+  least about 0.05, at most 1, and 100 codons (`--min-ds 0.05 --max-ds 1 --min-codons 100`), which leaves 43 of
+  the 1,029 D x L2 pairs.
 - ***C. muridarum* x *C. trachomatis*** (about 1,020 pairs each): median dS 1.3, median dN/dS 0.05. This is the
   informative comparison: far enough apart for selection to have acted, close enough to measure (84% of the
   pairs have an estimate).

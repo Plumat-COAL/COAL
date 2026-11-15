@@ -135,6 +135,31 @@ entry under "Added", not under "Fixed".
     number of sites (Sd = S = 2, or 2.0000000000000004), the test was made or left out by the last bit (p = 0 or
     NA, by platform). The cell now counts as zero (p = 0, as KaKs_Calculator prints). No row of the real-gene sets
     changes.
+  - **Ka/Ks, MYN: an infinite kappa is `saturated`, not `no_data`.** A pair whose kappa_TC or kappa_AG is
+    estimated as infinite (TN93's transition term of one class of sites exactly at its limit) had status
+    `no_data` ("no synonymous sites; no nonsynonymous sites"), and `coal kaks` on such pairs alone exited 2,
+    suggesting that the input was not a codon alignment. Now `saturated`, with a note naming the kappa;
+    Substitutions keeps its count (docs/kaks.md, difference 15). 79 of 240,000 simulated pairs, 3 real pairs among
+    the deep test's genomes.
+  - **Ka/Ks: a multiple-hit correction whose argument is 0 in exact arithmetic is `saturated`** whatever the
+    rounding (an argument at or below 1e-10 counts as 0): a rounding residue printed dN or dS of 19 to 28 as an
+    estimate (fuzz finding K03; NG, the LWL family, the YN/MYN distances, default Comeron and Li; the kappa
+    estimates and the gestimator / seqinr flavours keep their references' tests). Comeron's "fewer than
+    `--comeron-min-sites` sites" no longer depends on the order of the codon columns (difference 14). Standard
+    code: 22 rows of 4,388 S. cerevisiae / C. glabrata pairs and 2 Comeron rows of the Salmonella / Shigella pairs
+    change; nothing else.
+  - **Ka/Ks, genetic codes other than the standard one:** LWL/LPB's Arg special case and MLWL/MLPB's Ile/Arg rules
+    follow the selected code (K01, K02; with code 2, ATA to ATG is synonymous). Standard code unchanged.
+  - **Ka/Ks, YN/MYN: a row without any estimate no longer prints `Sd` / `Nd` that depend on the order of the
+    sequences** (now `NA` where the pathways were weighted; K06).
+  - **Accuracy against simulated truth, and filtering advice from it** (docs/kaks.md "Accuracy against simulated
+    truth"; `benchmarks/kaks/sim_truth/` reproduces it). YN/MYN are unbiased up to dS about 0.5 and 10 to 40% off
+    beyond; the counting methods are biased in both directions by codon usage; reliability limits by gene length,
+    and how well the standard errors are calibrated. The filtering advice is now `--max-ds 1` (0.5 with strong
+    codon bias; 2 only as an outer bound), at least 100 codons for genes read one by one, and dS of at least about
+    0.05 for ratios; docs/pipeline.md and the tutorials follow it (tutorial 2 shows both the outer bounds and the
+    stricter values, and its `--min-codons` / `--max-ds` example uses 100 and 1). `--yn-weighting 0` is less
+    biased at omega below 1 and dS 1 to 1.5 (the default is unchanged).
   - **`coal kaks -j1`, `coal dnds -j1`: attached values of one-letter options are read**, as the main command
     does (`-j4`, `-j=4`, `-mYN`, `-ofile`, chained flags `-qj4`), in `coal kaks`, `coal dnds`, `coal translate`,
     `coal codon-dnds` and `coal-cpp-align` (which also takes `--jobs=4` now). They were "unrecognized argument"
@@ -1080,13 +1105,22 @@ Documentation, tests, continuous integration and packaging:
   statuses only, no nan/inf, invariance to row swap, codon-column order, `-j` and input format, `python -m coal`
   equal to `coal-cpp`; a fast subset by default, `COAL_SLOW=1` for more) and `tests/fuzz_kaks_vs_reference.py`
   (random pairs against KaKs_Calculator 2.0 and PAML yn00, every difference classified by the documented ones;
-  skipped unless the references are given). The findings that are still open are expected failures in
-  `TestKnownBugs`.
+  skipped unless the references are given). K01, K02, K03, K05 and K06 are fixed and their `TestKnownBugs`
+  tests pass; `tests/test_kaks_myn_kappa_inf.py` (and `tests/cpp/kaks_myn_kappa_inf.cpp` through the C++ API)
+  covers the infinite kappa. ci.yml's C++ job runs `tests.test_kaks_properties` and the MYN test; the nightly run
+  has a job `kaks-properties` (COAL_SLOW unit tests and a 1,500-pair campaign) and runs 300 property pairs under
+  the sanitizers.
+- **CI: the tutorials every night.** nightly.yml has a job `tutorials`: ci.yml's tutorials job without its paths
+  filter, so drift that comes from a new tool pin or from NCBI's files is caught too (CONTRIBUTING.md "Nightly
+  checks" lists all six nightly jobs).
 - **Docs:** docs/mcp.md describes the four MCP tools, their arguments, results, errors and limits; docs/install.md,
   the Claude skill (`.claude/skills/coal/SKILL.md`) and the MCP stage demo (`demo/mcp_demo.md`) no longer say the
   app or its MCP server has two tools or covers alignment only. docs/install.md has a section "Clustal Omega and
   MAFFT on Windows"; docs/r.md describes coalr's positional-pairing and all-failed warnings; docs/usage.md says
-  what `coal translate` warns about; the release checklist (docs/development.md) removes the dev-version banner.
+  what `coal translate` warns about; docs/pipeline.md describes the first-use messages of the new-user audit (a
+  `--pairs` / `--clusters` file that names no record stops with exit 1, the header line, CSV, genome-like inputs,
+  the earlier-results notice, option suggestions) and the Windows routes; the release checklist
+  (docs/development.md) removes the dev-version banner.
 - **Tests added with the review of 2026-11-13:** the pair-table header is the same in `dnds_cli.cpp`,
   `kaks_cli.cpp`, `dnds_pipeline.py` and coalr (`tests/test_pair_table.py`); a `coal-cpp` built without test hooks
   makes the reference-shim resume tests skip instead of fail; five fixed sleeps in the lock, MSA and pipeline

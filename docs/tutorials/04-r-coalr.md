@@ -74,7 +74,9 @@ identical(signif(res$dS, 8), signif(cli$dS, 8))    # the TSV has 8 significant d
 [1] TRUE
 ```
 
-The filters of tutorial 2, in R (the line in [kaks.md](../kaks.md#filtering-before-interpretation)):
+The filters of tutorial 2's first summary, in R (the line in [kaks.md](../kaks.md#filtering-before-interpretation);
+for genes read one by one use its stricter values, as tutorial 2 does next: `res$codons_compared >= 100`,
+`res$dS >= 0.05 & res$dS <= 1`):
 
 ```r
 keep <- res$status %in% c("ok", "warning") & res$codons_compared >= 50 &

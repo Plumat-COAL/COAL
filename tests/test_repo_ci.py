@@ -194,7 +194,7 @@ class TestNightlyWorkflow(unittest.TestCase):
 
     def test_every_job_has_a_timeout_and_no_write_permission(self):
         jobs = self._jobs()
-        self.assertEqual(sorted(jobs), ["engine-fuzz", "kaks-properties", "pal2nal-fuzz", "sanitizers", "tsan"])
+        self.assertEqual(sorted(jobs), ["engine-fuzz", "kaks-properties", "pal2nal-fuzz", "sanitizers", "tsan", "tutorials"])
         for j in jobs:
             job = self._job(j)
             self.assertRegex(job, r"(?m)^    timeout-minutes: \d+", j)
@@ -278,6 +278,21 @@ class TestNightlyWorkflow(unittest.TestCase):
         for word in ('"Comeron", "Li"', '"kaks"', '"dnds"', '"codon-dnds"', "coal-cpp-align", '"gestimator"',
                      '"seqinr"', '"@J"'):
             self.assertIn(word, tool, word)
+
+    def test_tutorials_job_is_cis_without_the_paths_filter(self):
+        """The nightly tutorials job runs ci.yml's tutorials steps (the same scripts, step for step) every night,
+        without the first step that skips the job when nothing under the tutorials' paths changed."""
+        job = self._job("tutorials")
+        self.assertNotIn("steps.changes", job)
+        self.assertNotIn("if: github.event_name", job)
+        steps = ("Install the engine, build coal-cpp and coal-cpp-align", "Install DIAMOND, Clustal Omega, MAFFT and PAL2NAL v14",
+                 "Download the tutorial data (NCBI, SHA-256 checked)", "Run the tutorials and compare with what they show")
+        for step in steps:
+            self.assertEqual(step_script("tutorials", step, "nightly.yml"), step_script("tutorials", step), step)
+        self.assertIn("scripts/run_tutorials.py --full", job)
+        self.assertIn("key: tutorial-data-${{ hashFiles('docs/tutorials/data/*.sh') }}", job)
+        self.assertIn("if: failure()", job)
+        self.assertIn("retention-days:", job)
 
     def test_the_ci_cpp_test_set_is_the_nightly_one(self):
         """ci.yml's C++ job and the sanitizer job run the same core modules (the nightly adds four)."""
