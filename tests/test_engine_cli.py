@@ -324,7 +324,6 @@ class TestHelpGroups(unittest.TestCase):
                     self.assertEqual(c.returncode, 0, c.stderr)
 
 
-@unittest.skipIf(os.name == "nt", "uses a POSIX shell wrapper to see which engine ran")
 @unittest.skipIf(cpp_binary() is None, "coal-cpp not built (set COAL_CPP_BIN)")
 class TestAutomaticCppDispatch(unittest.TestCase):
     """IMP-E-A: `coal` runs coal-cpp for large inputs, with the same stdout, stderr, report and exit code."""
@@ -338,10 +337,9 @@ class TestAutomaticCppDispatch(unittest.TestCase):
         assert sum(os.path.getsize(p) for p in cls.big) >= dispatch.CPP_MIN_BYTES
         assert sum(os.path.getsize(p) for p in cls.small) < dispatch.CPP_MIN_BYTES
         cls.mark = cls.tmp / "cpp_ran"
-        cls.wrapper = cls.tmp / "coal-cpp"
-        cls.wrapper.write_text(f'#!/bin/sh\ncase "$1" in --version) ;; *) touch "{cls.mark}" ;; esac\n'
-                               f'exec "{cpp_binary()}" "$@"\n')
-        cls.wrapper.chmod(0o755)
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from cpp_wrapper import write_wrapper   # (sh, or a .cmd on Windows)
+        cls.wrapper = write_wrapper(cls.tmp / "coal-cpp", cpp_binary(), touch=cls.mark, unless_version=True)
 
     @classmethod
     def tearDownClass(cls):
@@ -401,6 +399,7 @@ class TestAutomaticCppDispatch(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn(b"COAL_ENGINE='fast'", err)
 
+    @unittest.skipIf(os.name == "nt", "a sh script stands in for a stale coal-cpp (POSIX)")
     def test_cpp_that_cannot_start_falls_back_with_one_notice(self):
         broken = self.tmp / "broken-coal-cpp"
         broken.write_text("not a program\n")
@@ -442,6 +441,7 @@ class TestAutomaticCppDispatch(unittest.TestCase):
         self.assertTrue(self.mark.exists(), "the app's `python -m coal` did not run coal-cpp")
         self.assertEqual([h["suggested_codontable"] for h in r.report["hints"] if h["code"] == "genetic_code"], [1])
 
+    @unittest.skipIf(os.name == "nt", "the lookup skips files without the execute bit, which Windows does not have (POSIX)")
     def test_binary_lookup_order(self):
         from coal import dispatch
         with mock.patch.dict(os.environ, {"COAL_CPP": str(self.wrapper)}):
@@ -478,6 +478,7 @@ class TestAutomaticCppDispatch(unittest.TestCase):
                     mock.patch.dict(os.environ, {"PATH": str(self.tmp)}):
                 self.assertEqual(dispatch.find_cpp(), str(self.tmp / "coal-cpp"))  # then PATH
 
+    @unittest.skipIf(os.name == "nt", "a sh script stands in for a stale coal-cpp (POSIX)")
     def test_cpp_path_flag(self):
         """`coal --cpp-path` prints the coal-cpp that coal would use, or says why not (exit 1)."""
         env = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "COAL_CPP": str(self.wrapper)}
