@@ -576,14 +576,8 @@ class PipelineMessages(PipelineCase):
             res = P.run_clusters(FAM, self.tmp / "o2", max_cluster_size=8)
         self.assertIn("$COAL_DIAMOND is set to", err.getvalue())
         self.assertIn("(a folder)", err.getvalue())
-        want = f"$COAL_CLUSTALO is set to '{self.tmp / 'nope'}', which is not a file"
-        if os.name == "nt":
-            # Known bug FIXCI-B1: on Windows the path is shown with every backslash doubled (dnds_pipeline.py
-            # formats it with !r). An expected failure: once it is fixed this fails, and these lines go.
-            self.assertNotIn(want, clustalo, "FIXCI-B1 is fixed: remove this expected failure")
-            self.assertIn(f"is set to {str(self.tmp / 'nope')!r}", clustalo)
-            return
-        self.assertIn(want, clustalo)
+        # the path as set, on Windows too (FIXCI-B1: it was shown with every backslash doubled)
+        self.assertIn(f"$COAL_CLUSTALO is set to '{self.tmp / 'nope'}', which is not a file", clustalo)
 
     @unittest.skipIf(os.name == "nt", "a shell script stands in for MAFFT")
     def test_a_run_names_an_unpinned_mafft(self):   # retest R03

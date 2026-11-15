@@ -1129,11 +1129,14 @@ Documentation, tests, continuous integration and packaging:
 - **CI: `tests.test_engine_ux` runs in the C++ job** (and the nightly sanitizer job); it was skipped in every
   job before (#85).
 - **CI: every coal-cpp test runs on every push** (#86). The C++ engine job runs every module in `tests/` against
-  coal-cpp on Linux, Windows and macOS (`.github/ci_cpp_tests.py`: a "not built" skip fails anywhere), so the 77
-  coal-cpp tests of 16 modules that ran in no workflow now run; a new x86_64 macOS job (AppleClang) runs the AVX2
-  Ka/Ks copy; the nightly sanitizer job runs the same set under ASan / UBSan, and its TSan build works again
-  (GCC 15's false `-Werror=free-nonheap-object` under sanitizers is a warning in that job only);
-  `tests/test_kaks_dispatch.py` tells a build without the AVX2 copy by the build, not by the OS.
+  coal-cpp on Linux, Windows and macOS, with DIAMOND, Clustal Omega and MAFFT installed (`.github/ci_cpp_tests.py`:
+  a "not built" skip fails anywhere), so the 77 coal-cpp tests of 16 modules that ran in no workflow now run, and
+  `tests/test_repo_ci.py` checks that every module with a coal-cpp skip is in that job and the sanitizer job; a
+  new x86_64 macOS job (`cpp-macos-x86`, AppleClang) runs the AVX2 Ka/Ks copy; the nightly sanitizer job runs the
+  same set (less `test_wheels`) under ASan / UBSan, a new nightly job `cpp-extras` runs the tests that need more
+  than the binary, and the TSan build works again (GCC 15's false `-Werror=free-nonheap-object` under sanitizers
+  is a warning in that job only); `tests/test_kaks_dispatch.py` tells a build without the AVX2 copy by the build,
+  not by the OS.
 - **CI: the tutorials run as tests.** `scripts/run_tutorials.py` runs the commands of `docs/tutorials/` (01, 02,
   03, 05) on their real NCBI data, one bash session per tutorial, and fails when a documented output line, an exit
   status or one of 15 numbers in the prose no longer matches what the code prints; documented lines that are known
