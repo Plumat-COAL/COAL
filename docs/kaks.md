@@ -1085,7 +1085,8 @@ the other methods when dS is 0).
 |---|---|---|
 | Identical sequences | dN = dS = 0, t = 0, lnL = the sum of log pi_i; dN/dS, kappa and the site counts are `NA` (they have no estimate without a difference) | `ok` |
 | The estimate of dS (or dN) is above 10 substitutions per site. Every pair whose t ends at its bound of 50 is such a pair (t / 3 is the mean of dS and dN over the sites) | that estimate and dN/dS are `NA`; the other estimate, the sites, kappa, t and lnL are kept. The note gives the estimate left out and says when t is at its bound | `saturated` |
-| No synonymous site, or no nonsynonymous site (under F3x4: e.g. Met and Trp codons only) | omega cancels in the scaled model, so t and kappa are estimated and the one distance that exists is given, as for YN | `no_data` |
+| The likelihood is flat in t from the optimiser's stopping point to the bound (within 1e-6 log units): one codon, or every site different, so that the data put no upper limit on the distance | no estimate of either distance (`NA`); t is reported at its bound, 50. The note says so. (Without this rule the value would be wherever the optimiser's tolerance stopped it: 4.6 for `AAA` against `AAG`) | `saturated` |
+| No synonymous site, or no nonsynonymous site (under F3x4: e.g. Met and Trp codons only) | omega cancels in the scaled model, so t and kappa are estimated and the one distance that exists is given, as for YN (if it is not saturated: the note then has both reasons) | `no_data` |
 | The optimiser ends without a maximum, away from the bound of t | no estimate; the note has the last point. Not seen in the validation runs (11,000 pairs) | `not_converged` |
 
 10 substitutions per site is far beyond what a pairwise comparison can resolve (the likelihood is flat there, and

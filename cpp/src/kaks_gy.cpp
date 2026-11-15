@@ -652,6 +652,15 @@ Result run_gy(const Prepared& p, const GeneticCode& g, const Options& opt, Resul
     }
     r.iterations = best.iterations;
     m.build(best.kappa, best.omega);
+    // A likelihood that is flat in t from the estimate to the bound (within 1e-6: one codon, one kind of change,
+    // every site different) has its maximum at the bound as much as anywhere: the optimiser stops where the slope
+    // falls below its tolerance, which is not an estimate of t. Such a pair is saturated, with t at the bound.
+    bool flat = false;
+    if (best.converged && best.t < T_MAX * (1 - 1e-3) && m.lnl(T_MAX) >= best.lnl - 1e-6) {
+        flat = true;
+        best.t = T_MAX;
+        best.lnl = m.lnl(T_MAX);
+    }
     r.kappa = best.kappa;
     r.rates[0] = r.rates[1] = best.kappa;
     r.S = L3 * m.rhoS1;
@@ -679,14 +688,18 @@ Result run_gy(const Prepared& p, const GeneticCode& g, const Options& opt, Resul
     if (!fix_omega) r.omega = best.omega;
     // Saturation: an estimate above GY_MAX_DISTANCE substitutions per site is NA (t at its bound of 50 per codon
     // always has one: the mean of dS and dN over the sites is t / 3). The other estimate is kept, as for the other
-    // methods, unless the optimiser did not settle on the ridge, where nothing is an estimate.
-    const bool unsettled = !best.converged;   // (then t is at its bound: see above)
+    // methods, unless the optimiser did not settle on the ridge or the likelihood is flat in t, where nothing is
+    // an estimate.
+    const bool unsettled = !best.converged || flat;   // (then t is at its bound: see above)
     const bool satS = hasS && (unsettled || dS > GY_MAX_DISTANCE);
     const bool satN = hasN && (unsettled || dN > GY_MAX_DISTANCE);
     if (satS || satN) {
         if (r.status != Status::no_data && r.status != Status::error) r.status = Status::saturated;
         char val[32];
         auto why = [&](double v) {
+            if (flat)
+                return std::string("the likelihood is flat in the branch length up to its upper bound, t = 50: the "
+                                   "data put no upper limit on the distance");
             if (!(v > GY_MAX_DISTANCE)) return std::string("the branch length is at its upper bound, t = 50");
             std::snprintf(val, sizeof val, "%.3g", v);
             return std::string("the maximum-likelihood estimate, ") + val + ", is above 10 substitutions per site" +

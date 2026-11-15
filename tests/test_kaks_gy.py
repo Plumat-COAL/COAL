@@ -255,6 +255,15 @@ class TestEdgeCases(GyBase):
         # Met / Trp codons only: no synonymous site, as for YN
         self.assertEqual((rows[2]["status"], rows[2]["dS"]), ("no_data", "NA"))
         self.assertIn("no synonymous sites", rows[2]["note"])
+        # One codon with one synonymous change: every site of the one kind there is differs, the likelihood is
+        # flat in t up to its bound and there is no estimate (not the 4.6 at which the optimiser's tolerance
+        # would stop); t is reported at the bound
+        r = rows[0]
+        self.assertEqual((r["status"], r["dN"], r["dS"], r["t"]), ("no_data", "NA", "NA", "50"))
+        self.assertIn("the likelihood is flat in the branch length", r["note"])
+        # ... and a pair that is not flat keeps its estimate, with the standard error that says how little it is
+        self.assertEqual(rows[7]["status"], "ok")
+        self.assertGreater(val(rows[7]["SE_dS"]), 0.5 * val(rows[7]["dS"]))
 
     def test_synonymous_changes_only(self):
         b = self.codonwise({"GCT": "GCA", "GGT": "GGC", "CCC": "CCA", "CTG": "CTA"})

@@ -47,7 +47,8 @@ entry under "Added", not under "Fixed".
   about 15 % of codeml's own, whose Hessian is cruder); `NA` for a saturated pair and for the distance that an
   omega at its bound makes 0. **Statuses:** an estimate of dS or dN above 10
   substitutions per site (always the case when t ends at its bound of 50) is `NA` with status `saturated`, and
-  the other estimate is kept; identical sequences give dN = dS = 0. **Speed:** 23 to 47 CPU seconds per 1,000 pairs of 300 to 400 codons, 15 to 25 times YN's time and 3 to 4
+  the other estimate is kept; a pair whose likelihood is flat in t up to the bound (one codon, every site
+  different) is `saturated` without an estimate; identical sequences give dN = dS = 0. **Speed:** 23 to 47 CPU seconds per 1,000 pairs of 300 to 400 codons, 15 to 25 times YN's time and 3 to 4
   times faster than codeml. No other method's
   output changes (byte-identical at `--digits 17`, both output formats, all nine methods, on 4,388 yeast and
   3,685 *E. coli* pairs). `-m GY` used to be refused ("does not implement natively"); MS, MA and the gamma
