@@ -244,10 +244,26 @@ msa.find_mafft(); msa.install_mafft(); msa.cache_dir(); msa.tool_version(exe)
   2. install Clustal Omega with MSYS2 (`pacman -S mingw-w64-ucrt-x86_64-clustal-omega`; Clustal Omega 1.2.4,
      pacman checks the package's signature) and set `COAL_CLUSTALO` to its `clustalo.exe` (or put it on `PATH`);
      any other `clustalo.exe` you trust works the same way;
-  3. use MAFFT (`--aligner mafft`) with MAFFT's own Windows package (the "all-in-one"
-     `mafft-7.526-win64-signed.zip` of mafft.cbrc.jp), `COAL_MAFFT` = `mafft-win\mafft.bat`. COAL pins no
-     SHA-256 for it (the site publishes none, and the file could not be fetched where COAL is developed), so it
-     is not downloaded, and MAFFT on Windows is not tested with COAL.
+  3. use MAFFT (`--aligner mafft`), which COAL installs on x86-64 Windows (next item).
+- **Windows: MAFFT is installed from MAFFT's own Windows package.** On x86-64 Windows `install_mafft()`, `coal
+  pipeline install mafft` and `--install-tools` download the "all-in-one" `mafft-7.526-win64-signed.zip` from
+  mafft.cbrc.jp (`msa.MAFFT_WINDOWS`), keep it only if it has the pinned size (27,476,513 bytes) and SHA-256
+  (`7c3a508c...`; MAFFT publishes none: computed on 2026-11-15 from two identical downloads), check every name
+  in it (one folder `mafft-win/`; no absolute, drive, `..` or link member), and unpack it into
+  `<cache>/tools/mafft/mafft-win/`; `find_mafft()` then gives its `mafft.bat`. The manifest records the hash of
+  every file. `run_msa` does not run that `mafft.bat`: Windows runs every batch file through `cmd.exe`, and
+  `mafft.bat` expands its own folder, the current folder, `TMP` and `PATH` again unquoted there, so `&` or `^` in
+  one of them would run as a command. It starts the package's `usr\bin\bash.exe` with `/usr/bin/mafft` and the
+  arguments (no shell), with what the batch file sets (`PATH` with the package's `usr\bin` first,
+  `MAFFT_BINARIES=/usr/lib/mafft`, `TMPDIR` / `TMP` / `TEMP` a folder of the run's own, that run's folder as the
+  current folder, the input given by its name there; a network (UNC) run folder or install refused, since
+  MSYS2 reads `\\server` as `\server`; `msa.mafft_package_root`), gives it no standard input, and ends the whole process tree on a
+  timeout or interrupt. A batch file of your own (`COAL_MAFFT`) goes through `cmd.exe` with a command line COAL
+  builds (`msa.batch_command_line`: the program's full path and any argument that is not plain in quotes; `%`,
+  `!`, `"` and a trailing backslash refused), and only while its folder, the current folder and `TMP` / `TEMP`
+  have none of `& | < > ^ % ! "`. MAFFT is BSD; the
+  package bundles MSYS2 components and MAFFT's page gives GPL for the package; COAL does not redistribute it.
+  COAL's CI installs and runs it on Windows. Other Windows machines (ARM): the message says what works.
 
   Pair mode needs neither tool (COAL's own aligner), and clusters of two members do not either.
 
@@ -256,6 +272,7 @@ msa.find_mafft(); msa.install_mafft(); msa.cache_dir(); msa.tool_version(exe)
 | Download | How it is verified |
 |---|---|
 | micromamba | one fixed release (`msa.MICROMAMBA_VERSION`, 2.10.0-0; not "latest") over HTTPS, kept only if its SHA-256 is the one pinned in `src/coal/msa.py` (four assets; each equals the `.sha256` file of that release) |
+| MAFFT on x86-64 Windows (MAFFT's own Windows package) | one fixed file (`msa.MAFFT_WINDOWS`: `mafft-7.526-win64-signed.zip` from mafft.cbrc.jp over HTTPS), kept only if its size and SHA-256 are the ones pinned in `src/coal/msa.py`; checked before anything is unpacked, and every member name is checked before a file is written |
 | Clustal Omega, MAFFT through conda / mamba / micromamba | one exact package per platform (channel, version, build string), and the install is kept only if the package conda recorded has the SHA-256 pinned in `src/coal/msa.py` ("Exact builds" below); conda itself checks each package against the channel index |
 | DIAMOND through conda / mamba / micromamba | conda's own: HTTPS, each package checked against the channel index |
 | DIAMOND release archive (`coal pipeline install diamond`) | HTTPS, kept and unpacked only if its SHA-256 is the one pinned in `src/coal/dnds_pipeline.py` for DIAMOND 2.2.8 (Linux, macOS, Windows). DIAMOND publishes no checksums: the pinned values are those of the files downloaded on 2026-11-12. Another version needs `sha256=` or `allow_unverified=True` |
@@ -280,6 +297,9 @@ hash is taken from that file as it is on disk, and binaries are put in place by 
 runs at a time (`<cache>/tools/<tool>.install.coal-lock`): a second one waits and then finds the tool installed.
 A zip archive (DIAMOND for Windows) is unpacked flat, and a member whose name has a `:` (drive letter, alternate
 data stream), is absolute, has a `..` component or is a reserved device name is refused with the whole archive.
+MAFFT's Windows zip is a folder tree (`mafft.bat` starts `usr\bin\bash`), so it is unpacked as a tree, under the
+same rules for each part of a name, and also refused for a link, a member outside its one folder `mafft-win/` or
+two names that differ only in letter case; it is unpacked into a new folder that then replaces the old install.
 
 - Tested here: the micromamba route end to end with the pinned release (Clustal Omega 1.2.4 installed in 30 s),
   and the pinned DIAMOND 2.2.8 archive for Linux.
@@ -293,7 +313,7 @@ the pinned 7.526 ...; it is used as it is. To install 7.526: coal pipeline insta
 in the report's `warnings`; the same for a Clustal Omega in the cache that is not 1.2.4). A MAFFT of your own (on
 PATH or in `COAL_MAFFT`) is not checked against the pin. The report's `tools` give the version of the MAFFT a run
 used. On
-Windows it installs nothing (see above): install MAFFT's own Windows package yourself and set `COAL_MAFFT`.
+x86-64 Windows it installs MAFFT's own Windows package instead, pinned by size and SHA-256 (see above).
 
 **Exact builds** (2026-11-14). A version pin is not one file: conda channels rebuild a version under the same
 number (conda-forge has three linux-64 builds of mafft 7.526, Bioconda twelve of clustalo 1.2.4), so two
@@ -460,9 +480,10 @@ r dN/dS for DIAMOND split by hit coverage:
   wheels ship it next to `coal-cpp` (from the release after 0.5.0).
 - There is no alignment-only subcommand in `coal`/`coal-cpp`. `coal pipeline` ([pipeline.md](pipeline.md)) runs
   the aligner as one of its steps; alone, it is the `coal-cpp-align` tool and the library and Python APIs.
-- **No Clustal Omega (or MAFFT) install on Windows** (see "Install"): cluster mode with clusters of three or more
-  needs WSL or a tool the user provides ([install.md](install.md#clustal-omega-and-mafft-on-windows)). On Linux
-  and macOS the install is Bioconda's, through conda / mamba / micromamba.
+- **No Clustal Omega install on Windows** (see "Install"): cluster mode with clusters of three or more uses MAFFT
+  there (installed by COAL on x86-64 Windows), WSL or a Clustal Omega the user provides
+  ([install.md](install.md#clustal-omega-and-mafft-on-windows)). On Linux and macOS the install is Bioconda's,
+  through conda / mamba / micromamba.
 - The AVX2 path is x86 only. ARM (Apple Silicon, Linux aarch64) gets the compiler-vectorised baseline and the scalar
   scan, and was not measured.
 - No linear-space (Hirschberg) fallback: memory is `n·m/2` bytes per pair in flight, times `-j`.

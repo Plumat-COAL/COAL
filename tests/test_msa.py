@@ -606,10 +606,12 @@ class ClustalSiteGone(unittest.TestCase):
                 self.assertIn("no automatic Clustal Omega install on Windows", text)
                 for option in ("WSL", "COAL_CLUSTALO", "--aligner mafft", "COAL_MAFFT", "not tested"):
                     self.assertIn(option, text)
-        with mock.patch.object(msa.platform, "system", return_value="Windows"):
+        # MAFFT: x86-64 Windows gets MAFFT's own package (tests/test_windows_tools.py); any other Windows machine
+        # is told what works
+        with mock.patch.object(msa, "_platform", return_value=("Windows", "ARM64")):
             with self.assertRaises(msa.MsaError) as cm:
                 msa.install_mafft(quiet=True)
-        self.assertIn("no automatic MAFFT install on Windows", str(cm.exception))
+        self.assertIn("no automatic MAFFT install for this Windows machine", str(cm.exception))
         self.assertIn("COAL_MAFFT", str(cm.exception))
         self.assertEqual(self.calls, [])
 
