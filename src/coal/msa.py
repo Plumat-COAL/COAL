@@ -430,13 +430,20 @@ def installed_package(tool: str, exe: str) -> dict | None:
 
 def tool_version(exe: str, timeout: float = 60) -> str:
     """The first line `exe --version` prints ('' if it does not run). A batch file (MAFFT's mafft.bat) is started
-    as run_msa starts it (batch_command_line), with no standard input."""
+    as run_msa starts it (batch_command_line), with no standard input, and its first line with a version number
+    (d.d) is taken, from standard output or error."""
     try:
         args, extra = _launch([exe, "--version"])
         r = subprocess.run(args, capture_output=True, text=True, timeout=timeout,
                            encoding="utf-8", errors="backslashreplace", **extra)
     except (OSError, subprocess.SubprocessError, MsaError):
         return ""
+    if extra:
+        # a batch file may print lines of its own first: MAFFT's mafft.bat runs `chcp 65001`, which prints "Active
+        # code page: 65001" (in the language of Windows) on standard output; the version is MAFFT's line
+        lines = [x.strip() for x in (r.stdout or "").splitlines() + (r.stderr or "").splitlines() if x.strip()]
+        found = next((x for x in lines if re.search(r"\d+\.\d+", x)), None)
+        return found if found is not None else (lines[0] if lines else "")
     out = (r.stdout.strip() if r.stdout else "") or (r.stderr or "").strip()
     out = out.splitlines()
     return out[0].strip() if out else ""
@@ -863,8 +870,11 @@ def _safe_name_part(part: str) -> bool:
 def _member_parts(info: zipfile.ZipInfo, asset: str, top: str) -> list[str]:
     """The parts of a zip member's path under which it is unpacked (the top folder first), or MsaError: an
     absolute name, a drive or `:`, a `..` or `.` part, a backslash, a part that is not _safe_name_part, a link,
-    or a member outside the one top folder `top` is refused."""
-    name = info.filename
+    or a member outside the one top folder `top` is refused. The name checked is the one in the archive
+    (orig_filename): on Windows zipfile turns a backslash into '/' when it reads one."""
+    name = info.orig_filename
+    if info.filename != name.replace(os.sep, "/") and info.filename != name:
+        raise MsaError(f"{asset} holds a member with an unsafe name ({name!r}); nothing was installed")
     parts = name.rstrip("/").split("/") if name.endswith("/") else name.split("/")
     mode = (info.external_attr >> 16) & 0o170000
     ok = (not name.startswith("/") and "\\" not in name and ":" not in name and parts and parts[0] == top

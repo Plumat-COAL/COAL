@@ -122,6 +122,8 @@ class TestRealMafftWindowsPackage(unittest.TestCase):
 
     @unittest.skipUnless(WINDOWS, "mafft.bat runs on Windows")
     def test_mafft_bat_runs(self):
+        print("\n[real MAFFT] mafft.bat:\n" + Path(self.entry).read_text(encoding="utf-8", errors="replace"),
+              file=sys.stderr)
         self.assertIn(msa.MAFFT_VERSION, msa.tool_version(self.entry))
         odd = tempfile.mkdtemp(prefix="coal msa & (x) ^ ", dir=self.tmp)
         recs = [("a", "MKVLAAGIVGLLLAQ*"), ("b", "MKVLSAGIVGLLAQ"), ("c", "MRVLAAGIIGLLLAQ"), ("d", "MKVAAGIVGLLLAQ")]

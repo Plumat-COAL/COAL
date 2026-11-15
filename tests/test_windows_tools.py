@@ -176,19 +176,24 @@ class TestWhatTheMessagesSay(unittest.TestCase):
 
 
 def make_zip(members) -> bytes:
-    """A zip of (name, data) members; data None: a folder entry; ("link", target): a symbolic link."""
+    """A zip of (name, data) members; data None: a folder entry; ("link", target): a symbolic link. The names go
+    into the archive as given (zipfile would turn a backslash into '/' on Windows when it makes the entry)."""
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for name, data in members:
-            if data is None:
-                zf.writestr(zipfile.ZipInfo(name), b"")
-            elif isinstance(data, tuple):
-                info = zipfile.ZipInfo(name)
+            info = zipfile.ZipInfo("placeholder")
+            info.filename = info.orig_filename = name
+            info.compress_type = zipfile.ZIP_DEFLATED
+            if isinstance(data, tuple):
                 info.create_system = 3
                 info.external_attr = (stat.S_IFLNK | 0o777) << 16
-                zf.writestr(info, data[1])
+                data = data[1]
+            elif data is None:
+                info.external_attr = 0o40755 << 16 | 0x10
+                data = b""
             else:
-                zf.writestr(name, data)
+                info.external_attr = 0o644 << 16
+            zf.writestr(info, data)
     return buf.getvalue()
 
 
@@ -335,6 +340,7 @@ class TestMafftWindowsInstall(WindowsCase):
                "mafft-win/caf\u00e9"]
         for name in bad:
             with self.subTest(name=name):
+                shutil.rmtree(self.folder, ignore_errors=True)   # (one subtest's install cannot hide the next)
                 self.serve(GOOD + [(name, b"x")])
                 with self.assertRaises(msa.MsaError) as cm:
                     self.install()
@@ -346,11 +352,13 @@ class TestMafftWindowsInstall(WindowsCase):
                               ([("mafft-win/MAFFT.BAT", b"x")], "twice (letter case aside)"),
                               ([("mafft-win/license.txt/x", b"x")], "a file that is also a folder")):
             with self.subTest(members=members):
+                shutil.rmtree(self.folder, ignore_errors=True)
                 self.serve(GOOD + members)
                 with self.assertRaises(msa.MsaError) as cm:
                     self.install()
                 self.assertIn(said, str(cm.exception))
                 self.assert_nothing_installed()
+        shutil.rmtree(self.folder, ignore_errors=True)
         self.serve([m for m in GOOD if m[0] != "mafft-win/mafft.bat"])
         with self.assertRaises(msa.MsaError) as cm:
             self.install()
@@ -483,6 +491,19 @@ class TestBatchFiles(unittest.TestCase):
         self.assertIn("cannot pass", str(cm.exception))
         self.assertEqual(msa.tool_version("C:\\m\\%x%\\mafft.bat"), "")
 
+    def test_version_of_a_batch_file(self):
+        def run(args, **kw):
+            self.assertEqual(kw.get("stdin"), subprocess.DEVNULL)
+            return subprocess.CompletedProcess(args, 0, "Active code page: 65001\n", "v7.526 (2024/Apr/26)\n")
+        with mock.patch.object(msa.subprocess, "run", run):
+            self.assertEqual(msa.tool_version("C:\\m\\mafft.bat"), "v7.526 (2024/Apr/26)")
+        with mock.patch.object(msa.subprocess, "run",
+                               lambda a, **k: subprocess.CompletedProcess(a, 0, "Aktive Codepage: 65001.\n", "")):
+            self.assertEqual(msa.tool_version("C:\\m\\mafft.bat"), "Aktive Codepage: 65001.")   # no version
+        with mock.patch.object(msa.subprocess, "run",
+                               lambda a, **k: subprocess.CompletedProcess(a, 0, " \n", "2.2.8\n")):
+            self.assertEqual(msa.tool_version("/x/diamond"), "2.2.8")     # whitespace-only stdout: stderr's line
+
     def test_stopping_a_batch_file_ends_its_tree(self):
         proc = mock.Mock(pid=4242, _coal_batch=True)
         proc.poll.return_value = None
@@ -505,6 +526,7 @@ with open(out, "w", encoding="utf-8") as fh:
 FAKE_MAFFT = """import sys, time
 args = sys.argv[1:]
 if args == ["--version"]:
+    print("Active code page: 65001")           # as mafft.bat's `chcp 65001` prints first
     sys.stderr.write("v7.526 (2024/Apr/26)\\n")
     sys.exit(0)
 if "--sleep" in args:
