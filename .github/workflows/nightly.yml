@@ -218,10 +218,11 @@ jobs:
           retention-days: 30
 
   sanitizers:
-    # coal-cpp under AddressSanitizer (leaks included) and UndefinedBehaviorSanitizer: ci.yml's C++ test set plus
-    # the stdin, robustness, error-precedence and batch tests, then 300 generator cases. Any sanitizer report in
-    # the captured stderr fails the job, whatever the tests said. Peak-memory tests are skipped
-    # (COAL_SKIP_MEMORY_TESTS: ASan's shadow memory makes them meaningless); "not built" skips still fail.
+    # coal-cpp under AddressSanitizer (leaks included) and UndefinedBehaviorSanitizer: ci.yml's C++ test set (every
+    # module in tests/, through .github/ci_cpp_tests.py, but tests.test_wheels), then 300 generator cases and 300
+    # Ka/Ks property pairs. Any sanitizer report in the captured stderr fails the job, whatever the tests said.
+    # Peak-memory tests are skipped (COAL_SKIP_MEMORY_TESTS: ASan's shadow memory makes them meaningless); "not
+    # built" skips still fail, and so does any other skip in the core C++ modules but the platform ones.
     name: "coal-cpp under ASan + UBSan"
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -257,26 +258,19 @@ jobs:
         env:
           COAL_IMPL: cpp
         run: |
-          python -m unittest -v tests.test_differential tests.test_cpp_vs_python tests.test_cpp_cli \
-            tests.test_cpp_readers tests.test_cpp_tables tests.test_cpp_pool \
-            tests.test_stdin tests.test_robustness tests.test_cpp_error_precedence tests.test_batch \
-            tests.test_kaks tests.test_kaks_comeron_li tests.test_align tests.test_msa tests.test_dnds_pipeline \
-            tests.test_short_options tests.test_output_lock \
-            tests.test_pair_table tests.test_kaks_cli_inputs tests.test_kaks_yn_shortcut tests.test_kaks_dispatch \
-            tests.test_engine_ux tests.test_dnds_flags \
-            tests.test_pipeline_order tests.test_pipeline_robustness tests.test_pipeline_provenance \
-            tests.test_pipeline_isoforms tests.test_pipeline_atomic tests.test_citations tests.test_cli_commands tests.test_examples \
-            tests.test_retest2_findings tests.test_cleanup1_findings tests.test_kaks_properties \
-            tests.test_kaks_myn_kappa_inf \
+          # Every module in tests/ as ci.yml's C++ job runs it (tests/test_repo_ci.py keeps the two the same), but
+          # tests.test_wheels (packaging: builds and installs the platform wheel; nothing for the sanitizers).
+          python .github/ci_cpp_tests.py \
+            --no-skip test_differential,test_cpp_vs_python,test_cpp_cli,test_cpp_readers,test_cpp_tables,test_cpp_pool \
+            --allow "live comparison needs Python|peak memory read with getrusage|POSIX" \
+            --exclude test_wheels \
+            discover -s tests \
             2>&1 | tee san-tests.txt
           status=${PIPESTATUS[0]}
           if grep -qE "AddressSanitizer|LeakSanitizer|runtime error" san-tests.txt; then
             echo "::error::a sanitizer reported during the C++ tests (see san-tests.txt)"; exit 1
           fi
-          test "$status" -eq 0
-          if grep -iE "\.\.\. skipped" san-tests.txt | grep -qi "not built"; then
-            echo "::error::C++ tests were skipped as 'not built', so the sanitizer build was not exercised"; exit 1
-          fi
+          test "$status" -eq 0   # (ci_cpp_tests.py fails on a "not built" skip: the sanitizer build not exercised)
       - name: Engine generator under the sanitizers (300 cases)
         if: ${{ !cancelled() }}
         shell: bash
