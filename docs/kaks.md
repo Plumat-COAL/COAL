@@ -736,6 +736,12 @@ about it, what was measured, and what is not guaranteed.
   flavours) can change, because sums are formed in another order, and the YN / MYN iteration can carry that to
   about 3e-10 relative (70 of 1,593 rows of 300 random pairs at 17 digits, none at 8 or 6; fuzz finding K04).
 - An iteration that did not converge prints no value (difference 12).
+- On x86 with GCC or Clang, YN / MYN's transition-probability matrix is computed by an AVX2 copy of the code
+  where the CPU has AVX2 (chosen at run time; the baseline copy elsewhere and on ARM and MSVC builds). It performs
+  the same operations in the same order as the baseline copy (no FMA, no reassociation), so the numbers are the
+  same bits: `tests/test_kaks_dispatch.py` compares the two copies byte for byte (the testing options
+  `--kaks-baseline`, which forces the baseline copy, and `--kaks-isa`, which prints `avx2` or `baseline` and
+  exits; not in the help, like `--yn-always-pmat`).
 
 With that, builds that use the same math library print the same bytes. Measured on 2026-11-13 on x86-64 Linux
 with GCC 13 (`-O2`, `-O3`, `-O3 -march=x86-64-v3`), GCC 16, Clang 18 (`-O3`, `-O3 -march=x86-64-v3`) and two
@@ -1202,6 +1208,11 @@ taken on a 16-thread desktop. KaKs_Calculator is single-threaded. Each figure is
 | MLWL | 0.70 | 0.09 | 1,431 | 11,706 | 8.2x |
 | LPB | 0.67 | 0.09 | 1,484 | 11,654 | 7.9x |
 | MLPB | 0.81 | 0.09 | 1,236 | 11,435 | 9.2x |
+
+The YN and MYN times of this table predate the faster eigendecomposition of 2026-11-15 (four columns at a time,
+neighbour-only sums, the AVX2 copy above): on 2,862 *Salmonella* / *Shigella* pairs that took 12% (YN) and 14%
+(MYN) less CPU time on the AVX2 path and 2 to 6% less on the baseline path (`-j 1`, a shared 2-core machine;
+`benchmarks/perf/bench_pipeline.py`), with the same bits.
 
 `Comeron` and `Li` are table look-ups per codon column: 0.08 CPU s each for the 999 pairs on the same machine
 (2026-11-13; about 13,000 pairs per CPU-second, the same as NG and the LWL family; gestimator's code compiled

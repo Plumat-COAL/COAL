@@ -224,6 +224,12 @@ coal pipeline pairs --query q.fa --subject s.fa -o out --pairs my_orthologs.tsv 
   rule), `--evalue` / `-e` (use `--evalue`), `--quiet`, a sensitivity such as `--very-sensitive` (use
   `--sensitivity`), and with `--aligner diamond` also `--masking`. Before, `--diamond-args '--out x.tsv'` sent
   the hits elsewhere and the run ended with an unrelated error.
+  **Short options:** `--diamond-args '-c 1 -b 4'` works as written: the word after `--diamond-args`,
+  `--deepclust-args` or `--realign-args` is that option's string even when it starts with `-` and one of COAL's
+  own short options (`-c`, `-o`, `-j`, `-m`, `-q`), which made it fail with "expected one argument" before. The
+  `=` form, `--diamond-args='-c 1 -b 4'`, is the same. Quote the string: unquoted, only its first word is the
+  value. An ARGS option with no value, or followed by exactly one of `coal pipeline`'s own option names
+  (`--diamond-args --resume`), is a command-line error (exit 2) that shows both forms.
 - **`--pairs TSV`** takes the pairs from a file (query ID, subject ID; a header line `query subject` is skipped)
   and DIAMOND is not run. `out/orthologs.tsv` of an earlier run can be given, also with the same `-o out`: the
   file is then read and left exactly as it is (not written again).
@@ -301,6 +307,7 @@ coal pipeline clusters --cds all_cds.fa --clusters deepclust.tsv -o out --max-cl
 | `--install-tools` | install a missing DIAMOND / Clustal Omega / MAFFT into COAL's cache | off |
 | `--diamond PATH` | the DIAMOND to run | found automatically |
 | `--report FILE` | the JSON report | `DIR/report.json` |
+| `--overwrite` | replace files in `DIR` that have the names of this run's outputs but that no COAL run wrote there (your own `genes.tsv`, `dnds.tsv`, `report.json`, `clusters.tsv`, ...); without it such a run is refused with exit 2 before anything changes ([Output](#output)). The files of an earlier COAL run in `DIR` are replaced either way | off |
 | `--hash-inputs auto\|always\|never` | SHA-256 of the input files in the report: files up to 2 GiB, every file, or none | `auto` |
 | `--msa-timeout S` | give up on one Clustal Omega / MAFFT run after S seconds | none |
 | `--longest-isoform`, `--gene-map TSV` | keep the longest CDS per gene; the genes from a map where it names the record, else from the headers and IDs ([One record is one gene](#one-record-is-one-gene)) | off |
@@ -372,7 +379,22 @@ of the table above that an earlier COAL run wrote into the folder are removed (a
 removes only what a run is known to have written: each run lists the files it may write in `work/outputs.json`
 before it writes the first one (for a folder of a version without that list, the outputs named in its
 `report.json`). A file with one of those names that no run wrote (your own `clusters.tsv`, your own files in
-`codon_alignments/` or `protein_alignments/`) stays, files with other names are not touched, and `work/` is kept for `--resume`.
+`codon_alignments/` or `protein_alignments/`) is not removed, files with other names are not touched, and `work/` is kept for `--resume`.
+
+**A file COAL did not write is never replaced without `--overwrite`.** When a file that this run would write
+(`genes.tsv`, `dnds.tsv`, `failed.tsv`, `report.json`, `orthologs.tsv`, `unpaired.tsv`, `clusters.tsv`,
+`cluster_summary.tsv`, `realign.tsv`, and `dnds.kaks`, `codon_alignments.fasta`, `protein_alignments.fasta` when
+asked for) already exists in `DIR` and no COAL run recorded it there (in `work/outputs.json`, or in the
+`report.json` of an older run), the run is refused with exit 2 before anything in the folder changes, and the
+message names the files: `out already holds genes.tsv, dnds.tsv and report.json, which this run would replace and
+which no COAL run wrote there ... Use a new -o folder, or add --overwrite to replace them`. Before, they were
+replaced without a word (also by `-o examples/dnds`, whose `orthologs.tsv` is part of the repository). A symbolic
+link with such a name counts as such a file; a file with an output name that this run does not write (a `dnds.kaks`
+without `--kaks-format`, a `clusters.tsv` in pair mode, the `.tmp` names) is no reason to refuse and is left as
+it is. `--overwrite` replaces them (what every run did before). A run into a folder of an earlier COAL run, with
+or without `--resume`, is not affected, and neither is `--pairs DIR/orthologs.tsv` or `--clusters DIR/clusters.tsv`
+of an earlier run, which is read in place: `work/outputs.json` lists it under `read_in_place` (so no later run
+removes it at its start, edited or not), and a later run that writes it again is not refused.
 
 **Inputs are never removed or written.** A file given as `--query`, `--subject`, `--pairs`, `--cds`, `--clusters`
 or `--diamond` is recognised under any name (a link, another spelling of the path). If the run would write a file
@@ -524,7 +546,7 @@ One bad gene, pair or cluster never stops a run.
 | Exit code | Meaning |
 |---|---|
 | 0 | finished, nothing failed |
-| 2 | finished, but `failed.tsv` has entries (as `coal --keep-going` and `coal-cpp-align`); also a command-line error |
+| 2 | finished, but `failed.tsv` has entries (as `coal --keep-going` and `coal-cpp-align`); also a command-line error, and an output folder that holds files of the run's names that COAL did not write (nothing is changed; [`--overwrite`](#output)) |
 | 1 | the run could not be done: an input cannot be read, a tool is missing or failed, the folder cannot be written (a full disk included) |
 | 130 | interrupted by Ctrl-C (SIGINT); 143 for SIGTERM, 129 for SIGHUP (128 + the signal's number) |
 
@@ -573,7 +595,8 @@ contigs rather than coding sequences (a record of 100 kb or more with 20 or more
 with 20 or more stops and more than one per 30 codons) gets one warning naming NCBI's `*_cds_from_genomic.fna`
 and Ensembl's `*.cds.all.fa`; the genetic-code hint is not given for that set. The first unusable record and its
 reason are printed on stderr, not only listed in `failed.tsv`. `-o` onto a folder with an earlier run's results
-gives a notice that they are replaced (not with `--resume`); after Ctrl-C the last line names `--resume`.
+gives a notice that they are replaced (not with `--resume`), and onto a folder with files of those names that COAL
+did not write, an error that names them (exit 2, `--overwrite`); after Ctrl-C the last line names `--resume`.
 `-codontable N` is accepted as `-c N`; codes 7 and 8, which NCBI merged into 4 and 1, name the code to use; the
 option names of orthologr and DIAMOND (`--sensitivity-mode`, `--comp-cores`, `--threads`, ...) and close typos
 of an option get a suggestion. A missing input given as a Windows path on Linux or macOS (`C:\Users\...`)
