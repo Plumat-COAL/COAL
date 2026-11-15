@@ -248,3 +248,18 @@ test_that("Comeron's two-position pathways (comeron_twosubs) and the minimum cla
   expect_error(coal_dnds_pairs(q, s, pairs = orthologs(), methods = "Comeron", comeron_min_sites = NA),
                "comeron_min_sites")
 })
+
+test_that("coal_info()$features names the Comeron behaviours that a development version number does not tell", {
+  f <- coal_info()$features
+  expect_type(f, "character")
+  expect_true(all(c("comeron_twosubs", "comeron_min_sites", "comeron_min_sites_positive") %in% f))
+  expect_false(anyDuplicated(f) > 0)
+  # the arguments are there
+  for (fun in list(coal_kaks, coal_dnds_pairs, coal_dnds_clusters)) {
+    expect_true(all(c("comeron_twosubs", "comeron_min_sites") %in% names(formals(fun))))
+  }
+  # comeron_min_sites_positive (COAL #76): the min-sites rule only where it gives a distance > 0. orthologr's
+  # behavioural probe: a 0 that a small class causes stays NA (a coalr without the refinement gave dS = 0)
+  d <- coal_kaks("ATGGCTAAA", "ATGGCCAAA", method = "Comeron")
+  expect_true(is.na(d$dS))
+})

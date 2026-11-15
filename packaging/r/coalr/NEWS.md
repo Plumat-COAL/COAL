@@ -17,6 +17,10 @@ First version. In-process bindings (Rcpp) to the C++ core of COAL 0.6:
   `coal-cpp` and DIAMOND) use the shipped data; the tests use at most two threads unless `NOT_CRAN=true`.
 - Comeron: `comeron_min_sites` applies only where it gives a positive distance; a 0 caused by a small class
   stays `NA` (`saturated`). Numbers: COAL's CHANGELOG (D9, Refined).
+- `coal_info()$features`: names of behaviours that the version number of a development build does not tell
+  (`"comeron_twosubs"`, `"comeron_min_sites"`, `"comeron_min_sites_positive"`, the refinement above), so that
+  orthologr can tell an older coalr build with the same version (0.6.0.9000) and warn. A coalr without
+  `features` predates all three.
 - `coal_dnds_clusters()`: the pairs of a cluster with `msa` rows or an `aligner` are computed in input order
   (the earlier gene of `cds` first), as `coal pipeline clusters` does since COAL's PR #71. Changes only Comeron
   with `comeron_twosubs = "libsequence"` (the default of `comeron_flavour = "gestimator"`).

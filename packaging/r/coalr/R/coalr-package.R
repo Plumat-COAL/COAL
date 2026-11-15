@@ -72,10 +72,15 @@
 #' Versions and capabilities of the engine
 #'
 #' @return A list: `coalr` (package version), `coal_version` (the COAL release the C++ sources come from),
-#'   `methods` (Ka/Ks methods), `genetic_codes` (NCBI table numbers), `matrices` (substitution matrices) and
-#'   `hardware_threads`.
+#'   `methods` (Ka/Ks methods), `genetic_codes` (NCBI table numbers), `matrices` (substitution matrices),
+#'   `hardware_threads` and `features`: names of behaviours that a development build's version number does not
+#'   tell, for packages that call coalr (such as orthologr). `"comeron_twosubs"` and `"comeron_min_sites"`: the
+#'   arguments of that name; `"comeron_min_sites_positive"`: `comeron_min_sites` applies only where it gives a
+#'   positive distance, so a 0 caused by a small site class stays `NA` (COAL #76). Names are only ever added; a
+#'   coalr without `features` (`NULL`) predates them all.
 #' @examples
 #' coal_info()$methods
+#' "comeron_min_sites_positive" %in% coal_info()$features
 #' @export
 coal_info <- function() {
   c(list(coalr = as.character(utils::packageVersion("coalr"))), coalr_info())

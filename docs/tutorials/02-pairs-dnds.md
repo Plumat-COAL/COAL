@@ -8,7 +8,7 @@ orthologs, and learn to read it: the statuses, saturation, what to filter, and h
 | Data | *Escherichia coli* K-12 MG1655 (4,318 CDS) and *Salmonella enterica* serovar Typhimurium LT2 (4,554 CDS), NCBI RefSeq |
 | Needs | the platform wheel (`coal-cpp`), DIAMOND 2.1.0 or later (`coal pipeline install diamond`), Python 3 for the summary script |
 | Runtime | about 16 s with one thread (`-j 1`): DIAMOND 6 s, alignment + Ka/Ks 10 s; more threads are faster |
-| Tested with | COAL 0.6.0.dev0 (commit 009bdd5), DIAMOND 2.2.8, Linux x86_64 |
+| Tested with | COAL 0.6.0.dev0 (its outputs are checked in CI by `scripts/run_tutorials.py`), DIAMOND 2.2.8, Linux x86_64 |
 
 *E. coli* and *Salmonella* split more than 100 million years ago, and this pair has been a textbook case for
 synonymous and nonsynonymous divergence since the 1980s: their genes are close enough to align over their whole

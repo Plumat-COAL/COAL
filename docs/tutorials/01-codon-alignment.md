@@ -9,7 +9,7 @@ the three ways that real data usually breaks it, and fix it.
 | Data | glycerol kinase (*glpK*) of *Mycoplasmoides genitalium* G37, *M. pneumoniae* M129 and *M. gallisepticum* R(low) (NCBI RefSeq) |
 | Needs | `coal` (any install for the codon alignment; the platform wheel for `coal translate` and `coal dnds`), Clustal Omega or MAFFT |
 | Runtime | under 5 seconds for everything after the download (about 0.7 MB) |
-| Tested with | COAL 0.6.0.dev0 (commit 009bdd5), Clustal Omega 1.2.4, PAL2NAL v14, Linux x86_64 |
+| Tested with | COAL 0.6.0.dev0 (its outputs are checked in CI by `scripts/run_tutorials.py`), Clustal Omega 1.2.4, PAL2NAL v14, Linux x86_64 |
 
 These bacteria were chosen on purpose: mycoplasmas read **TGA as tryptophan** (NCBI genetic code 4), not as a
 stop codon. That is the most common reason a codon alignment "does not match" (vertebrate mitochondria, code 2,

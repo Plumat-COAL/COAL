@@ -8,12 +8,17 @@ coal_info()
 }
 \value{
 A list: \code{coalr} (package version), \code{coal_version} (the COAL release the C++ sources come from),
-\code{methods} (Ka/Ks methods), \code{genetic_codes} (NCBI table numbers), \code{matrices} (substitution matrices) and
-\code{hardware_threads}.
+\code{methods} (Ka/Ks methods), \code{genetic_codes} (NCBI table numbers), \code{matrices} (substitution matrices),
+\code{hardware_threads} and \code{features}: names of behaviours that a development build's version number does not
+tell, for packages that call coalr (such as orthologr). \code{"comeron_twosubs"} and \code{"comeron_min_sites"}: the
+arguments of that name; \code{"comeron_min_sites_positive"}: \code{comeron_min_sites} applies only where it gives a
+positive distance, so a 0 caused by a small site class stays \code{NA} (COAL #76). Names are only ever added; a
+coalr without \code{features} (\code{NULL}) predates them all.
 }
 \description{
 Versions and capabilities of the engine
 }
 \examples{
 coal_info()$methods
+"comeron_min_sites_positive" \%in\% coal_info()$features
 }
