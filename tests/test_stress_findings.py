@@ -606,8 +606,12 @@ GOLDEN_CASES = {
 def _normalised_report(text: bytes):
     import json
     rep = json.loads(text)
+    version = rep.get("coal_version")
     for k in VOLATILE:
         rep.pop(k, None)
+    # the methods paragraph names the version too ("built with COAL v0.6.0 (...)"): a release is not a change
+    if version and isinstance(rep.get("methods_text"), str):
+        rep["methods_text"] = rep["methods_text"].replace(f"COAL v{version} ", "COAL v<version> ")
     return rep
 
 
