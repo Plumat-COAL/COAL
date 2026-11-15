@@ -40,7 +40,8 @@ _CONTROL_BYTES = re.compile(rb"[\x00-\x08\x0e-\x1f]")
 # codon-alignment reader (coal-cpp uses the standard library only), and read as text it gave "control character" or
 # "sequence data before the first '>' header". `coal kaks|dnds|translate|codon-dnds|pipeline` decompress .gz inputs
 # themselves (cli.py _gunzip_inputs, dnds_pipeline.py). The same words in coal-cpp (seqio.cpp GZIP_INPUT).
-GZIP_INPUT = "is gzip-compressed: decompress it first (e.g. with gunzip -k or zcat): sequence files must be plain text"
+GZIP_INPUT = ("is gzip-compressed: decompress it first (zcat FILE.gz > FILE, or pipe it: zcat FILE.gz | coal ... -): "
+              "sequence files must be plain text")
 _GZIP_MAGIC = b"\x1f\x8b"
 EMPTY_HEADER = "empty FASTA header: a '>' line without a sequence ID (every record needs a name after '>')"
 _BEFORE = "sequence data before the first '>' header: not a FASTA file? (each FASTA record starts with a '>name' line"

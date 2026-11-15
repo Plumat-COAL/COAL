@@ -14,7 +14,8 @@ have the code path:
   is chosen in exact arithmetic, so permuting the codon columns no longer moves a pair into the other formula
   (property fuzz P6, seed 4242: FIXCI-B2; KaKs_Calculator has the same order dependence);
 - MLWL dS above 10 without a rounding residue (property fuzz P10, seed 4243: FIXCI-B3): a genuine value of the
-  method, 5 times LWL's correction at kappa = 1 when there is no 4-fold site; KNOWN M01 in test_kaks_properties.py.
+  method (5 times LWL's distance at kappa = 1 without 4-fold sites, any size as kappa -> 0.5): P10 judges MLWL
+  on LWL's scale (Sd / (L2 / 3 + L4)).
 
 The Python halves run in-process; the C++ halves skip if coal-cpp is not built (COAL_CPP_BIN, default
 ./build/coal-cpp).
@@ -89,6 +90,9 @@ class TestGzipInputPython(unittest.TestCase):
 
     def test_message_wording(self):
         self.assertTrue(GZIP_INPUT.startswith("is gzip-compressed: decompress it first"))
+        # the same words name a file and standard input: no `gunzip -k`, which needs a file (audit of #88, LOW-2)
+        self.assertNotIn("gunzip", GZIP_INPUT)
+        self.assertIn("zcat FILE.gz | coal ... -", GZIP_INPUT)
 
     def test_report_error_code(self):
         make(self.d, {"p.fa": P, "d.fa.gz": GZ_D})
@@ -343,16 +347,48 @@ class TestMlwlLargeDsIsGenuine(unittest.TestCase):
                         self.assertEqual((row[3], row[9], row[13]), ("0", s, "ok"), m)
                         self.assertAlmostEqual(float(row[4]) / (k * math.log(513)), 1, delta=1e-13)
 
-    def test_the_property_fuzz_excludes_it_and_nothing_larger(self):
+    def dnds(self, a: str, b: str, code: int = 1) -> dict:
         import test_kaks_properties as tkp
-        case = tkp.Case("c1370", "CAG" * 514, "CAA" * 514, 14)
-        f = tkp.Finding("P10", case, "MLWL", "P10: dS = 15.600689612926853 with status ok: a rounding residue")
-        self.assertEqual(tkp.known(f), "M01")
-        for other in (tkp.Finding("P10", case, "MLWL", "P10: dS = 60.1 with status ok: a rounding residue"),
-                      tkp.Finding("P10", case, "LWL", "P10: dS = 15.6 with status ok: a rounding residue"),
-                      tkp.Finding("P10", case, "MLWL", "P10: dN = 15.6 with status ok: a rounding residue")):
-            self.assertEqual(tkp.known(other), "", other.detail)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "p.axt"
+            path.write_text(f"p\n{a}\n{b}\n", encoding="utf-8")
+            r = subprocess.run([str(cpp_binary()), "dnds", str(path), "-c", str(code), "-m", "LWL", "-m", "MLWL",
+                                "--digits", "17", "-q"], capture_output=True, timeout=120)
+            self.assertEqual(r.returncode, 0, r.stderr)
+        return tkp.parse_dnds(r.stdout.decode())
 
+    def test_kappa_near_half(self):
+        """The audit's pair: 400 CAG / CAA, 1,590 CAA / AAA, 10 CAA / CAA. kappa = 0.5031 (just above 0.5), so
+        MLWL's S is 3.14 sites and dS 162.70, a genuine value (KaKs_Calculator 2.0: 162.697961169468)."""
+        rows = self.dnds("CAG" * 400 + "CAA" * 1600, "CAA" * 400 + "AAA" * 1590 + "CAA" * 10)
+        m = rows[("p", "MLWL")]
+        self.assertEqual(m["status"], "ok")
+        self.assertAlmostEqual(float(m["dS"]) / 162.697961169468, 1, delta=1e-12)
+        self.assertAlmostEqual(float(m["S_sites"]) / 3.13971742543171, 1, delta=1e-12)
+
+    def test_the_property_fuzz_judges_mlwl_on_lwl_scale(self):
+        """P10 (tests/test_kaks_properties.py check_row): MLWL's dS over 10 is a finding only when its Sd over
+        LWL's sites (L2 / 3 + L4) is over 10 too, as LWL's would be. The two genuine pairs pass; the same rows with
+        a residue-sized correction, and LWL itself, do not."""
+        import test_kaks_properties as tkp
+        pairs = {"c1370": ("CAG" * 425 + "CAA" * 88 + "TAG", "CAA" * 215 + "CAG" * 210 + "CAA" * 47 + "CAG" * 41
+                           + "TAG", 14),
+                 "audit": ("CAG" * 400 + "CAA" * 1600, "CAA" * 400 + "AAA" * 1590 + "CAA" * 10, 1)}
+        for name, (a, b, code) in pairs.items():
+            with self.subTest(pair=name):
+                case = tkp.Case(name, a, b, code)
+                rows = self.dnds(a, b, code)
+                m = rows[("p", "MLWL")]
+                self.assertGreater(float(m["dS"]), 10)
+                self.assertEqual([x for x in tkp.check_row(case, "MLWL", m, {}) if x.startswith("P10")], [])
+                # a correction of about 30 per LWL site: a residue, flagged
+                lwl = tkp.lwl_sites(case)
+                fake = dict(m, dS="60", Sd=repr(30 * (lwl[1] / 3 + lwl[2])))
+                self.assertTrue(any(x.startswith("P10: dS") for x in tkp.check_row(case, "MLWL", fake, {})))
+                # LWL is judged on its own dS
+                self.assertTrue(any(x.startswith("P10: dS") for x in
+                                    tkp.check_row(case, "LWL", dict(rows[("p", "LWL")], dS="15.6"), {})))
+        self.assertEqual(tkp.KNOWN, {})   # (no known-bug entry is needed for these)
 
 if __name__ == "__main__":
     unittest.main()

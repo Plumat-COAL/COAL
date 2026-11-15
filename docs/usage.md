@@ -44,9 +44,13 @@ The rest of this page is about the codon-alignment command.
   empty file among several is fine). Non-letters in the DNA (gaps, digits, spaces) are ignored, as in PAL2NAL.
   Files must be plain ASCII text: a non-ASCII byte, or a control byte such as NUL (a binary file, UTF-16 text),
   is an error naming the file and line (`nuc.fa:2: control character: sequence files must be plain text (is this a
-  binary or word-processor file?)`); tab, LF, VT, FF and CR are whitespace. IDs longer than 200 characters are
-  shortened in stderr messages to their first 100 and last 20 characters (`...` between); the output and the run
-  report keep them whole.
+  binary or word-processor file?)`); tab, LF, VT, FF and CR are whitespace. A gzip-compressed input (recognised by
+  its first two bytes, whatever its name) is not decompressed by the codon alignment: `d.fa.gz is gzip-compressed:
+  decompress it first (zcat FILE.gz > FILE, or pipe it: zcat FILE.gz | coal ... -): sequence files must be plain
+  text` (both engines; for `-`, `standard input is gzip-compressed: ...`), so `zcat nuc.fa.gz | coal pep.aln -`
+  reads it. `coal kaks`, `coal dnds`, `coal translate` and `coal pipeline` decompress `.gz` inputs themselves.
+  IDs longer than 200 characters are shortened in stderr messages to their first 100 and last 20 characters
+  (`...` between); the output and the run report keep them whole.
   `-` as an input path reads standard input, for the protein alignment or for one DNA file (`cat pep.aln | coal -
   nuc.fasta`, `zcat nuc.fa.gz | coal pep.aln -`); the same in `coal`, `coal-cpp` and the `pal2nal` drop-in, on every
   system (Windows too). Standard input is read as bytes into a temporary file first, as pipes, FIFOs and

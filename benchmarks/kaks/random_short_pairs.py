@@ -38,6 +38,9 @@ Every field (Ka, Ks, Ka/Ks, S-Sites, N-Sites) where the two outputs differ is pu
       saturated, derived site count beside a boundary class
                             LPB / MLPB S-Sites or N-Sites (Sd / Ks, Nd / Ka) of a saturated row whose class was
                             at an exact boundary of its correction, which COAL counts as 0 (difference 14)
+      MLWL kappa exactly 2 or 0.5
+                            MLWL's site formula at kappa = 2 ts / tv exactly 2 or 0.5: COAL compares the exact
+                            sums, KaKs_Calculator doubles whose rounding depends on the column order (difference 18)
       unexplained           anything else: the script exits 1
 
 With --kaks-fixed (the same source with the two corrected lines of docs/kaks.md) the same table is made against
@@ -167,6 +170,10 @@ def classify(ref: dict, ours: dict, status: dict, seqs: dict, yn00: str | None):
                     continue
                 if "did not converge" in note:      # cannot happen: such a row has no numbers in these fields
                     kind = "number != number: unexplained (not converged, but COAL prints a number)"
+                elif key[1] == "MLWL" and of[16].split(":")[0] in ("2", "0.5"):
+                    # kappa = 2 ts / tv exactly at one of MLWL's thresholds: COAL decides on the exact sums,
+                    # KaKs_Calculator on doubles summed in column order (difference 18)
+                    kind = "number != number: MLWL kappa exactly 2 or 0.5"
                 elif st == "no_data":
                     kind = "number != number: one kind of site"
                     if yn00 and name in ("Ka", "Ks"):

@@ -25,7 +25,8 @@ const char* const CONTROL_CHAR =
 // decompressor (the standard library only), and read as text it gave "control character" or "sequence data before
 // the first '>' header". The same words as src/coal/seqio.py GZIP_INPUT.
 const char* const GZIP_INPUT =
-    "is gzip-compressed: decompress it first (e.g. with gunzip -k or zcat): sequence files must be plain text";
+    "is gzip-compressed: decompress it first (zcat FILE.gz > FILE, or pipe it: zcat FILE.gz | coal ... -): "
+    "sequence files must be plain text";
 static inline bool gzip_magic(const char* b, size_t n) {
     return n >= 2 && (unsigned char)b[0] == 0x1f && (unsigned char)b[1] == 0x8b;
 }

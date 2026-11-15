@@ -94,7 +94,7 @@ COAL applies the same rules to every pair and every method. When a pair cannot b
 | Stop codon anywhere else (internal) in either sequence | that column is skipped; the note gives the number | `warning` |
 | YN or MYN: the iteration reaches its round limit (10 or 100) without converging (short or nearly saturated pairs; "Differences", 12) | no estimate: Ka, Ks, Ka/Ks, the standard errors and the weighted difference counts (Sd, Nd) are NA. The site counts stay. The note gives the last round's Ka and Ks, which are not estimates ("Platform reproducibility") | `not_converged` |
 | Multiple-hit correction undefined (log of a number that is not above 1e-10, so that an argument which is 0 in exact arithmetic counts as 0 whatever the rounding: "Differences", 14; for YN00/MYN, F84, K80 and JC69 all fail, or P + Q > 1) | that estimate is NA; the note says which (Ka, Ks). A YN or MYN row in which neither Ka nor Ks has an estimate has NA also in Sd and Nd when the pathways were weighted ("Differences", 17) | `saturated` |
-| MYN: kappa_TC or kappa_AG estimated as infinite (the TN93 transition term of a class of sites exactly at its limit) | nothing is estimated: Ka, Ks and the site counts are NA; the rate ratio shows `inf`; the note names the kappa ("Differences", 15) | `saturated` |
+| MYN: kappa_TC or kappa_AG estimated as infinite (the TN93 transition term of a class of sites exactly at its limit) | nothing is estimated: Ka, Ks and the site counts are NA, and so is `coal kaks`'s rate ratio (Substitution-Rate-Ratio); the note names the kappa ("Differences", 15) | `saturated` |
 | No codon column left | nothing is estimated | `no_data` |
 | No synonymous site (e.g. Met/Trp codons only), or no nonsynonymous site (e.g. `GCT` against `GCA`; 200 × `AAA` against `AAG`) | that estimate (Ks, or Ka) and Ka/Ks are NA; **the other one is still estimated**. The note says which sites are missing | `no_data` |
 | Rows of different length, or a length that is not a multiple of 3 | nothing is estimated | `error` |
@@ -124,7 +124,7 @@ allows academic use only, and it has no public repository). Values follow KaKs_C
 - `Length` is the number of nucleotides compared.
 - `Fold-*` are given for the LWL family only.
 - Substitution-Rate-Ratio is `kappa:kappa:1:1:1:1`. For MYN it is `kappa_TC:kappa_AG:1:1:1:1`, and for NG
-  `1:1:1:1:1:1`.
+  `1:1:1:1:1:1`. It is `NA` when a kappa is infinite (MYN, "Differences", 15): COAL's output has no `nan` or `inf`.
 - `GC` is computed over both rows as given, with gaps included in the length.
 - ML-Score, AICc, Akaike-Weight and Model are `NA`; they belong to the GY, MS and MA methods.
 
@@ -444,8 +444,9 @@ Fisher's p-values agree to 7e-12 (2.4e-12 on the orthologr pairs, 6.7e-12 on the
 two documented cases below (`p-obs`, `p-neg`). On the 4,000 random short pairs with one changed position per
 codon, no value that both tools print differs by more than 1e-9 (Ka, Ks, Ka/Ks and the site counts, all seven
 methods), apart from 7 LPB / MLPB site counts of `saturated` rows (difference 14, since 2026-11-14). **That is not true for short pairs in general:** on the 3,000 pairs with codons drawn independently,
-YN and MYN print different numbers in 23 fields (Ka, Ks or Ka/Ks; NG and the LWL / LPB family in none), which
-belong to differences 11 and 13 below, and in 210 rows (123 YN, 87 MYN) COAL prints no estimate at all because
+YN and MYN print different numbers in 23 fields (Ka, Ks or Ka/Ks), which belong to differences 11 and 13 below,
+MLWL in 36 fields of 10 pairs whose kappa is exactly 2 or 0.5 (difference 18, since 2026-11-15; NG, LWL, LPB and
+MLPB in none), and in 210 rows (123 YN, 87 MYN) COAL prints no estimate at all because
 the iteration did not converge (difference 12), where KaKs_Calculator prints its last round.
 
 **COAL `--yn-flavour paml` compared with PAML yn00, 12 significant digits.** The result is the same for
@@ -489,7 +490,8 @@ the categories are explained in the next section.
 
 Differences 1 to 10 are deliberate and were each checked against the references. Differences 11 to 13 are about
 short or saturated pairs on which the two programs print different numbers; for each, the text says which
-program is right, or that neither number is an estimate.
+program is right, or that neither number is an estimate. Differences 14 to 18 are boundaries, an infinite kappa and
+genetic codes other than the standard one (the section before 14).
 
 1. **`saturated`.** KaKs_Calculator replaces an undefined correction with a number. YN and MYN (when TN93 fails)
    report JC69's capped distance: when P >= 0.75, P is set to 0.75(n-1)/n, or t to 99 when P + Q > 1. The LWL
@@ -621,13 +623,15 @@ per process:
 | 12, iteration not converged | 0 | 0 | nothing to compare: COAL prints NA. The reference prints its last round in 493 (corrected: 578) of these fields |
 | 13, saturated kind, other path | 5 | 5 | the same value within the iteration's tolerance |
 | 14, LPB / MLPB S-Sites or N-Sites of a `saturated` row beside a class at an exact boundary (since 2026-11-14) | 21 | 21 | COAL (the reference's quotient comes from a rounding residue) |
+| 18, MLWL with kappa exactly 2 or 0.5: the other site formula (10 pairs; since 2026-11-15) | 36 | 36 | COAL (the formula of the exact kappa; the reference's choice follows the rounding of its column-order sums) |
 | unexplained | 0 | 0 | |
 
 So "the corrected reference gives COAL's numbers" holds for the 4,000 pairs with one changed position per codon
 and for the second row of the 3,000; it says nothing where the iteration does not converge (COAL has no number
 there; the corrected reference prints more last rounds than the unpatched one, because it prints numbers where
 the unpatched one prints `nan`), and it does not hold for pairs without a site of one kind, which the corrected
-lines do not touch. NG, LWL, MLWL, LPB and MLPB have no difference between two numbers on either random set.
+lines do not touch. NG, LWL, LPB and MLPB have no difference between two numbers on either random set; MLWL has
+the 36 fields of difference 18 on the second (10 pairs with kappa exactly 2 or 0.5) and none on the first.
 
 **KaKs_Calculator's MYN depends on the order of the pairs in a file.** It carries state from one pair to the
 next: run once over the 3,000 pairs, 49 MYN rows differ (Ka, Ks or Ka/Ks) from the same pairs run one per process
@@ -639,7 +643,7 @@ row alone, in any order and with any number of threads (`tests/test_kaks.py`, `t
 
 #### Boundaries, an infinite kappa and other genetic codes (2026-11-14)
 
-Differences 14 to 17 came out of the property-based fuzz of the engine (`tests/test_kaks_properties.py`, findings
+Differences 14 to 17 (and 18, 2026-11-15) came out of the property-based fuzz of the engine (`tests/test_kaks_properties.py`, findings
 K01 to K06; the minimal pairs are in `tests/fixtures/kaks_fuzz/`) and of the simulation study above. With the
 standard code they change only rows at an exact boundary of a correction, MYN rows with an infinite kappa and
 the difference counts of YN / MYN rows without any estimate; every other row is byte-identical
@@ -664,7 +668,12 @@ pairs of "Validation" (no row changed), 4,000 pairs of the simulation study and 
     `--comeron-min-sites` sites" is tested with a margin of 1e-9, because a class of exactly 3 sites can sum to
     2.9999999999999996 in one column order and 3 in another. What changed: of the 1,830 one-codon pairs of sense
     codons, 355 rows had a dN or dS above 10 (36 of them `ok`); one remains (MLWL, whose dS divides by 0.12 kappa-
-    based sites: a real value of the method). Real genes: 22 rows of the 4,388 *S. cerevisiae* / *C. glabrata*
+    based sites: a real value of the method). In general MLWL's dS can be several times LWL's for the same pair
+    without any residue, because its synonymous sites are kappa-based: with no transversion kappa is 1 and S is a
+    fifth of the 2-fold sites (plus the 4-fold sites), so 513 Gln codon pairs CAG / CAA with 256 differences and
+    no 4-fold site give dS = 5 x ln(513) / 2 = 15.60 (LWL 9.36), and as kappa approaches 0.5 S approaches the
+    4-fold sites alone (400 CAG / CAA, 1,590 CAA / AAA and 10 CAA / CAA: kappa 0.5031, S 3.14, dS 162.70); both
+    are what KaKs_Calculator prints (property fuzz seed 4243, FIXCI-B3, and the audit of 2026-11-15). Real genes: 22 rows of the 4,388 *S. cerevisiae* / *C. glabrata*
     pairs (LWL family; dS 12 to 23 with status `ok` before, or a Ka beside a class with the residue) and two
     Comeron rows of the *Salmonella* / *Shigella* pairs (a 3-site class: `NA`, `saturated`, as with 3 sites in any
     order); none in the other genomes. Against KaKs_Calculator on the random short pairs
@@ -680,7 +689,13 @@ pairs of "Validation" (no row changed), 4,000 pairs of the simulation study and 
     2 and suggested that the input might not be a codon alignment. The status is now `saturated`, with the note
     `MYN: kappa_AG estimated as infinite (TN93 transition correction undefined in a class of sites): no site
     counts, Ka and Ks NA`, and the Substitutions column keeps the number of differences. KaKs_Calculator prints
-    `nan` for Ka, Ks, Ka/Ks and the site counts, and the same rate ratio, `kappa_TC:inf:1:1:1:1`. In the simulation
+    `nan` for Ka, Ks, Ka/Ks and the site counts, and the rate ratio with `inf` for that kappa
+    (`kappa_TC:inf:1:1:1:1`). COAL prints `NA` for all of them, the rate ratio included, as it prints an undefined
+    Fold-Sites or GC field: the whole field `NA`, because its output has no `nan` or `inf` (since 2026-11-15; before,
+    the rate ratio showed the `inf` as KaKs_Calculator does. The property fuzz's P3 found it, seed 8585, on a pair
+    whose kappa_TC is infinite: `inf:0.994949:1:1:1:1`, now `tests/kaks/myn_kappa_tc_inf.axt`; among the deep
+    test's genomes it is one *Salmonella* / *Shigella* row, p2067). The C++ API keeps the infinite value in
+    `Result::rates`. In the simulation
     study 79 of 240,000 MYN rows (dS 0.5 to 3, all lengths); among real genes one *Salmonella* / *Shigella* and
     two *S. cerevisiae* / *C. glabrata* pairs. `tests/test_kaks_myn_kappa_inf.py` (and, through the C++ API,
     `tests/cpp/kaks_myn_kappa_inf.cpp`). A residue instead of the exact 0 gives a very large but finite kappa and
@@ -708,6 +723,35 @@ pairs of "Validation" (no row changed), 4,000 pairs of the simulation study and 
     (and so is Fisher's p, which needs them). Without codons that differ at several positions, and with
     `--yn-weighting 0`, the counts do not depend on t and are printed as before.
 
+18. **MLWL at kappa exactly 2 or 0.5.** MLWL (Tzeng et al. 2004) picks its formula for the synonymous and
+    nonsynonymous sites by comparing kappa = 2 ts / tv with 2 and with 0.5: S = (kappa - 1) L2 / (kappa + 1) + L4
+    above 2, (kappa - 0.5) L2 / (kappa + 1.5) + L4 above 0.5, L2 / 3 + L4 otherwise (N likewise), and the formulas
+    do not meet at the thresholds (at kappa = 2 the first gives L2 / 3, the second 3 L2 / 7). ts and tv are sums
+    of halves and thirds of a difference per codon column, so kappa is often exactly 2 or 0.5, and exact kappa = 2
+    is "not above 2": the middle formula. Summed in floating point in the order of the columns, kappa came out as 2
+    or as 2.0000000000000004 (0.5 or 0.50000000000000011) according to that order, and KaKs_Calculator's choice of
+    formula, like COAL's before, depended on it: permuting the codon columns of a pair could change N and S by a
+    site or more, and dN and dS with them (property fuzz P6, seed 4242, FIXCI-B2: `SATACGTGCGTG---TCCAACCTA` /
+    `AATACGTGACCTGGGAGACACATG`, code 13, N / S 13.67 / 4.33 or 15 / 3 by the order). COAL now sums ts and tv
+    exactly as well (in integer units of 1/120 of a difference: a column adds j / 2 / d, d = 1 to 6 pathways) and
+    makes the two comparisons on those sums, so every order of the columns takes the formula of the exact kappa;
+    the numbers printed (kappa, the Fold-* counts) are the same doubles as before. Where the rounding goes the same
+    way in every order, KaKs_Calculator's number is then not COAL's: `mlwl_kappa2_code1` of
+    `tests/kaks/mlwl_kappa_boundary.axt` (code 1, ts = tv = 3.5, kappa = 2) has N / S 13.67 / 4.33 in
+    KaKs_Calculator in every order of its columns, and 13.29 / 4.71 in COAL. In real genes: *S. cerevisiae* /
+    *C. glabrata* pair p2754 of the deep test (code 1; L0 : L2 : L4 = 188 : 66.5 : 42.5, ts = tv = 49 exactly, tv
+    summed as 48.99999999999999 in the file's order) had S 64.667, N 232.333, Ka 0.249535, Ks 1.81172, as
+    KaKs_Calculator prints for that order; with the middle formula S = 3 x 66.5 / 7 + 42.5 = 71 and N = 188 +
+    2 x 66.5 / 3.5 = 226, so Ka 0.256528 and Ks 1.65011, which is also what KaKs_Calculator prints for 38 of 40
+    random orders of the same codon columns. It is the only MLWL row that changes in the deep test's genomes (none
+    in *A. thaliana* / *A. lyrata*, human / mouse, *E. coli* K-12 / Sakai, *Salmonella* / *Shigella*), and none of
+    the 999 orthologr and 600 simulated pairs of the tables above changes. Among random short pairs: none of the
+    4,000 with one changed position per codon, 10 of the 3,000 with codons drawn independently (36 fields:
+    `random_short_pairs.py` classes them as "MLWL kappa exactly 2 or 0.5"), and 10 to 22 of 20,000 per genetic
+    code in a separate run; every such row has kappa exactly 2 or 0.5. No other method changes.
+    `tests/test_engine_review_fixes.py` (`TestMlwlKappaBoundary`: 40 orders of each pair of
+    `tests/kaks/mlwl_kappa_boundary.axt`).
+
 `tests/test_kaks.py` holds the cases (`TestOneKindOfSite`, `TestMynNan`, `TestMultiPositionCodons`), and its
 comparison with KaKs_Calculator's stored output does not accept a difference because of the status alone: a
 number that KaKs_Calculator prints and COAL does not is a failure unless the status is `saturated`
@@ -716,7 +760,8 @@ number that KaKs_Calculator prints and COAL does not is a failure unless the sta
 The categories, tolerances and checks are those of `tests/test_kaks.py`, `benchmarks/kaks/validate_kaks.py` and
 `benchmarks/kaks/random_short_pairs.py`. On the real-gene sets (999 + 600 pairs) and on the 4,000 random pairs
 with one changed position per codon, all fields agree to 1e-9 apart from differences 1 to 10 and 14. On short
-pairs whose codons differ at several positions they do not: differences 11 to 14.
+pairs whose codons differ at several positions they do not: differences 11 to 14 and 18. On real genes MLWL can
+differ at an exact kappa of 2 or 0.5 (difference 18: one *S. cerevisiae* / *C. glabrata* pair).
 
 ### Platform reproducibility
 
@@ -732,7 +777,7 @@ about it, what was measured, and what is not guaranteed.
   this a macOS build and a Linux build would differ in the last digits of nearly every YN / MYN value.
 - No dependence on the number of threads, on the order of the pairs, or on the locale.
 - Swapping the two sequences of a pair, or permuting its codon columns, gave the same statuses and the same
-  numbers at the default digits in every pair of the fuzz campaigns; at `--digits 17` the last one or two digits of NG, YN, MYN and Comeron (default
+  numbers at the default digits in every pair of the fuzz campaigns (MLWL since 2026-11-15: difference 18); at `--digits 17` the last one or two digits of NG, YN, MYN and Comeron (default
   flavours) can change, because sums are formed in another order, and the YN / MYN iteration can carry that to
   about 3e-10 relative (70 of 1,593 rows of 300 random pairs at 17 digits, none at 8 or 6; fuzz finding K04).
 - An iteration that did not converge prints no value (difference 12).
