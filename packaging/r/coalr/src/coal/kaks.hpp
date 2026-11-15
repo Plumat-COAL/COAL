@@ -107,6 +107,10 @@ struct Options {
     // which no codon differs at two or three positions, where nothing reads it (kaks.cpp needs_pathway_weights).
     // The results are the same bits either way; the tests compare the two (`--yn-always-pmat`).
     bool yn_always_pmat = false;
+    // Testing only: compute YN / MYN's transition-probability matrix with the baseline (SSE2) copy of its code even
+    // where the CPU has AVX2 and the AVX2 copy would be used (kaks.cpp pmat_codon). The results are the same bits
+    // either way; tests/test_kaks_dispatch.py compares the two (`--kaks-baseline`).
+    bool baseline_isa = false;
     ComeronFlavour comeron_flavour = ComeronFlavour::coal;
     ComeronTwoSubs comeron_twosubs = ComeronTwoSubs::by_flavour;
     double comeron_min_sites = COMERON_MIN_SITES_DEFAULT;

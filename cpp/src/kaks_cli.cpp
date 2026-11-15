@@ -465,6 +465,8 @@ int parse(const std::vector<std::string>& args, Cli& c) {
             c.opt.yn_flavour = v == "kaks" ? kaks::Flavour::kaks_calculator : kaks::Flavour::paml;
         } else if (u == "--yn-always-pmat") {   // testing (kaks.hpp Options::yn_always_pmat); not in the help
             c.opt.yn_always_pmat = true;
+        } else if (u == "--kaks-baseline") {   // testing (kaks.hpp Options::baseline_isa); not in the help
+            c.opt.baseline_isa = true;
         } else if (u == "--yn-weighting") {
             if (!need(v) || (v != "0" && v != "1")) return usage(c, "--yn-weighting: expected 0 or 1");
             c.opt.yn_weighting = v == "1";
