@@ -2,7 +2,7 @@
 (review of 2026-11-15, L1 and L3; docs/pipeline.md "Outputs" and "Options").
 
   * A planned output name (genes.tsv, dnds.tsv, report.json, orthologs.tsv, clusters.tsv, ...) that exists in -o DIR
-    and that no COAL run recorded there (work/outputs.json, or an older report.json) is refused with exit 2 before
+    and that no COAL run recorded there (work/outputs.json, or an older report.json) is refused with exit 1 before
     anything in the folder changes; --overwrite replaces it. Re-runs into COAL's own folder, --resume, and
     `--pairs DIR/orthologs.tsv` followed by a run that searches again, go on as before.
   * `--diamond-args '-c 1 -b 4'` (a value that starts with one of COAL's own short options) is the string of
@@ -73,18 +73,18 @@ class ForeignFiles(PipelineCase):
         out = self.tmp / "mine"
         before = self.mine(out, "genes.tsv", "dnds.tsv", "report.json", "notes.txt")
         res, err = run(P.run_pairs, q, s, out, pairs=pf)
-        self.assertEqual(res.exit_code, 2, err)
+        self.assertEqual(res.exit_code, 1, err)
         self.assertEqual(res.report["status"], "failed")
-        self.assertEqual(res.report["exit_code"], 2)
+        self.assertEqual(res.report["exit_code"], 1)
         self.assertIn("already holds genes.tsv, dnds.tsv and report.json", err)
         self.assertIn("no COAL run wrote there", err)
         self.assertIn("Use a new -o folder, or add --overwrite", err)
         self.assertIn("Nothing was changed", err)
         self.assertEqual(snapshot(out), before)            # no work/, no report, the files as they were
         self.assertFalse(Path(str(out) + ".coal-lock").exists())
-        # the command line: exit 2, one error line
+        # the command line: exit 1, one error line
         code, err = cli("pairs", "--query", q, "--subject", s, "--pairs", pf, "-o", out)
-        self.assertEqual(code, 2, err)
+        self.assertEqual(code, 1, err)
         self.assertEqual(err.count("error:"), 1, err)
         self.assertEqual(snapshot(out), before)
 
@@ -101,7 +101,7 @@ class ForeignFiles(PipelineCase):
         except OSError:
             self.skipTest("cannot create symbolic links here")
         res, err = run(P.run_pairs, q, s, out, pairs=pf)
-        self.assertEqual(res.exit_code, 2, err)
+        self.assertEqual(res.exit_code, 1, err)
         self.assertIn("already holds dnds.tsv,", err)
 
     def test_overwrite_replaces_them(self):
@@ -133,7 +133,7 @@ class ForeignFiles(PipelineCase):
         for n in ("dnds.kaks", "clusters.tsv", "cluster_summary.tsv", "unpaired.tsv"):
             self.assertEqual((out / n).read_text(encoding="utf-8"), f"the user's own {n}\n", n)
         res, err = run(P.run_pairs, q, s, out, pairs=pf, kaks_format=True)   # now dnds.kaks is planned
-        self.assertEqual(res.exit_code, 2, err)
+        self.assertEqual(res.exit_code, 1, err)
         self.assertIn("already holds dnds.kaks,", err)
 
     def test_the_repository_example_folder(self):
@@ -143,7 +143,7 @@ class ForeignFiles(PipelineCase):
         before = snapshot(ex)
         code, err = cli("pairs", "--query", ex / "species_a_cds.fasta", "--subject", ex / "species_b_cds.fasta",
                         "-o", ex)
-        self.assertEqual(code, 2, err)
+        self.assertEqual(code, 1, err)
         self.assertIn("orthologs.tsv", err)
         self.assertEqual(snapshot(ex), before)
 
@@ -195,19 +195,100 @@ class ForeignFiles(PipelineCase):
         res, err = run(P.run_pairs, q, s, own, pairs=own / "orthologs.tsv")
         self.assertEqual(res.exit_code, 0, err)
         res, err = run(P.run_pairs, q, s, own, pairs=pf)
-        self.assertEqual(res.exit_code, 2, err)
+        self.assertEqual(res.exit_code, 1, err)
         self.assertIn("already holds orthologs.tsv,", err)
         self.assertEqual((own / "orthologs.tsv").read_bytes(), pf.read_bytes())
+
+    def test_report_option_naming_the_default_path(self):
+        """Audit of #87, M1: `--report DIR/report.json` is the planned report.json: recorded (the next run is not
+        refused), and a report.json of the user's there is refused as without --report."""
+        q, s, pf = self.small()
+        out = self.tmp / "out"
+        res, err = run(P.run_pairs, q, s, out, pairs=pf, report=str(out / "report.json"))
+        self.assertEqual(res.exit_code, 0, err)
+        rec = json.loads((out / "work" / "outputs.json").read_text(encoding="utf-8"))
+        self.assertIn("report.json", rec["files"])
+        for kw in ({}, {"report": str(out / "." / "report.json")}):
+            res, err = run(P.run_pairs, q, s, out, pairs=pf, **kw)
+            self.assertEqual(res.exit_code, 0, (kw, err))
+        mine = self.tmp / "mine"
+        before = self.mine(mine, "report.json")
+        res, err = run(P.run_pairs, q, s, mine, pairs=pf, report=str(mine / "report.json"))
+        self.assertEqual(res.exit_code, 1, err)
+        self.assertIn("already holds report.json,", err)
+        self.assertEqual(snapshot(mine), before)
+
+    def test_report_elsewhere_and_work_deleted(self):
+        """Audit of #87, M2: with work/ gone, the --report file of an earlier run into this folder (COAL's schema,
+        its out_dir this folder) says what that run wrote."""
+        q, s, pf = self.small()
+        out, rep = self.tmp / "out", self.tmp / "elsewhere.json"
+        self.assertEqual(run(P.run_pairs, q, s, out, pairs=pf, report=str(rep))[0].exit_code, 0)
+        shutil.rmtree(out / "work")
+        res, err = run(P.run_pairs, q, s, out, pairs=pf, report=str(rep))
+        self.assertEqual(res.exit_code, 0, err)
+        # a report of another folder is no evidence for this one
+        other = self.tmp / "other"
+        self.assertEqual(run(P.run_pairs, q, s, other, pairs=pf, report=str(rep))[0].exit_code, 0)
+        shutil.rmtree(out / "work")
+        res, err = run(P.run_pairs, q, s, out, pairs=pf, report=str(rep))
+        self.assertEqual(res.exit_code, 1, err)
+        self.assertIn("already holds", err)
+
+    def test_read_in_place_survives_a_run_that_does_not_touch_it(self):
+        """Audit of #87, M3a: pairs -> --pairs DIR/orthologs.tsv -> a cluster run -> pairs again."""
+        q, s, pf = self.small()
+        out = self.tmp / "b"
+        self.assertEqual(run(P.run_pairs, q, s, out, pairs=pf)[0].exit_code, 0)
+        self.assertEqual(run(P.run_pairs, q, s, out, pairs=out / "orthologs.tsv")[0].exit_code, 0)
+        cl = self.tmp / "cl.tsv"
+        cl.write_text("".join(f"{a}\t{a}\n{a}\t{b}\n" for a, b in PLAIN[:3]), encoding="utf-8")
+        both = self.tmp / "both.fa"
+        both.write_bytes(q.read_bytes() + s.read_bytes())
+        res, err = run(P.run_clusters, both, out, clusters=cl)
+        self.assertIn(res.exit_code, (0, 2), err)
+        rec = json.loads((out / "work" / "outputs.json").read_text(encoding="utf-8"))
+        self.assertEqual(rec["read_in_place"], ["orthologs.tsv"])
+        self.assertTrue((out / "orthologs.tsv").is_file())
+        res, err = run(P.run_pairs, q, s, out, pairs=pf)
+        self.assertEqual(res.exit_code, 0, err)
+
+    def test_a_record_without_read_in_place(self):
+        """Audit of #87, M3b: a folder of a development build (work/outputs.json without read_in_place) after
+        `--pairs DIR/orthologs.tsv`: the names its COAL report.json lists are COAL's."""
+        q, s, pf = self.small()
+        out = self.tmp / "b"
+        self.assertEqual(run(P.run_pairs, q, s, out, pairs=pf)[0].exit_code, 0)
+        self.assertEqual(run(P.run_pairs, q, s, out, pairs=out / "orthologs.tsv")[0].exit_code, 0)
+        rp = out / "work" / "outputs.json"
+        rec = json.loads(rp.read_text(encoding="utf-8"))
+        del rec["read_in_place"]
+        rp.write_text(json.dumps(rec), encoding="utf-8")
+        self.assertIn("orthologs.tsv", json.loads((out / "report.json").read_text(encoding="utf-8"))["outputs"].values())
+        res, err = run(P.run_pairs, q, s, out, pairs=pf)
+        self.assertEqual(res.exit_code, 0, err)
+
+    def test_a_foreign_alignment_folder_is_refused_alike(self):
+        """Audit of #87, L1: the older refusal (a codon_alignments/ that is not COAL's, cluster mode) has the same
+        exit code, and --overwrite does not cover it (its help says so)."""
+        out = self.tmp / "c"
+        (out / "codon_alignments").mkdir(parents=True)
+        (out / "codon_alignments" / "mine.fasta").write_text(">x\nATG\n", encoding="utf-8")
+        for kw in ({}, {"overwrite": True}):
+            res, err = run(P.run_clusters, FAM, out, keep_alignments=True, **kw)
+            self.assertEqual(res.exit_code, 1, err)
+            self.assertIn("--overwrite does not apply to a folder", err)
+        self.assertEqual(sorted(p.name for p in out.rglob("*")), ["codon_alignments", "mine.fasta"])
 
     def test_cluster_mode_clusters_tsv(self):
         out = self.tmp / "c"
         before = self.mine(out, "clusters.tsv")
         res, err = run(P.run_clusters, FAM, out)
-        self.assertEqual(res.exit_code, 2, err)
+        self.assertEqual(res.exit_code, 1, err)
         self.assertIn("already holds clusters.tsv,", err)
         self.assertEqual(snapshot(out), before)
         code, err = cli("clusters", "--cds", FAM, "-o", out)
-        self.assertEqual(code, 2, err)
+        self.assertEqual(code, 1, err)
         self.assertEqual(snapshot(out), before)
         # the user's clusters.tsv given as --clusters: read, never written; no refusal
         res, err = run(P.run_clusters, FAM, out, clusters=out / "clusters.tsv")
@@ -251,13 +332,44 @@ class ArgsStrings(PipelineCase):
         self.assertEqual(b(["pairs", "--diamond-args", "--ultra-fast-thing"], ap)[0],
                          ["pairs", "--diamond-args=--ultra-fast-thing"])
         self.assertEqual(b(["pairs", "--diamond-args", "block-size 4"], ap)[0],
-                         ["pairs", "--diamond-args", "block-size 4"])          # argparse takes it as it is
+                         ["pairs", "--diamond-args=block-size 4"])             # the same as argparse's reading
         self.assertEqual(b(["pairs", "--diamond-args=-c 1"], ap)[0], ["pairs", "--diamond-args=-c 1"])
         self.assertEqual(b(["pairs", "--", "--diamond-args", "-c 1"], ap)[0], ["pairs", "--", "--diamond-args", "-c 1"])
         for argv in (["pairs", "--diamond-args"], ["pairs", "--diamond-args", "--resume"],
                      ["pairs", "--diamond-args", "-c"], ["clusters", "--realign-args", "-o", "x"]):
             self.assertIn("needs a value", b(argv, ap)[1], argv)
-            self.assertIn("='-c 1 -b 4'", b(argv, ap)[1], argv)
+            self.assertIn('="-c 1 -b 4"', b(argv, ap)[1], argv)
+
+    def test_abbreviations_repeats_and_unquoted_words(self):
+        """Audit of #87, L2 / L4 / L6 / L3 / L7."""
+        ap = P.build_parser()
+        b = P._bind_args_values
+        # an abbreviation argparse accepts is bound too (it used to fail as the full name did)
+        self.assertEqual(b(["pairs", "--diamond-arg", "-c 1 -b 4"], ap), (["pairs", "--diamond-args=-c 1 -b 4"], None))
+        self.assertEqual(b(["clusters", "--deepc", "-o x"], ap), (["clusters", "--deepclust-args=-o x"], None))
+        self.assertEqual(b(["pairs", "--diamond-ar=-c 1"], ap), (["pairs", "--diamond-args=-c 1"], None))
+        # ambiguous or exact other options are left to argparse
+        self.assertEqual(b(["clusters", "--real", "x"], ap)[0], ["clusters", "--real", "x"])
+        self.assertEqual(b(["pairs", "--diamond", "/bin/d"], ap)[0], ["pairs", "--diamond", "/bin/d"])
+        # a value that is an abbreviation of one of COAL's options: the value was forgotten
+        for v in ("--resum", "--quer", "--overw", "-j"):
+            why = b(["pairs", "--diamond-args", v, "x"], ap)[1]
+            self.assertIn("needs a value", why or "", v)
+            self.assertIn(f"{v} is an option of coal pipeline itself", why, v)
+        self.assertIsNone(b(["pairs", "--diamond-args", "--block-size=4"], ap)[1])
+        self.assertIsNone(b(["pairs", "--diamond-args", "--resume 1"], ap)[1])   # a quoted string: DIAMOND's
+        # given twice: an error, not the last one silently
+        for argv in (["pairs", "--diamond-args", "-c 1", "--diamond-args", "-b 4"],
+                     ["pairs", "--diamond-args=-c 1", "--diamond-arg=-b 4"]):
+            why = b(argv, ap)[1]
+            self.assertIn("--diamond-args is given twice", why or "", argv)
+            self.assertIn("into one string", why)
+        # unquoted: `--diamond-args -b 4` gives -b alone and leaves 4: the hint shows the quoted form
+        why = b(["pairs", "--diamond-args", "-b", "4", "-q"], ap)[1]
+        self.assertIn('--diamond-args="-b 4"', why or "")
+        why = b(["clusters", "--realign-args", "--tmpdir", "/scratch"], ap)[1]
+        self.assertIn('--realign-args="--tmpdir /scratch"', why or "")
+        self.assertIsNone(b(["pairs", "--diamond-args", "-b4", "-q"], ap)[1])
 
     def test_space_form_on_the_command_line(self):
         """A value starting with one of COAL's short options reaches the ARGS check (before: "expected one
@@ -274,7 +386,7 @@ class ArgsStrings(PipelineCase):
             code, err = cli(mode, *req, "-o", self.tmp / "never", *extra, opt, "-c", timeout=60)
             self.assertEqual(code, 2, err)
             self.assertIn(f"{opt} needs a value", err)
-            self.assertIn(f"{opt}='-c 1 -b 4'", err)
+            self.assertIn(f'{opt}="-c 1 -b 4"', err)
         self.assertFalse((self.tmp / "never").exists())
 
     def test_help_and_docs(self):

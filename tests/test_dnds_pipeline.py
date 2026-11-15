@@ -845,7 +845,7 @@ class Robustness(PipelineCase):
         (out / "dnds.kaks").write_text("whose?\n", encoding="utf-8")
         (out / "report.json").write_text("{not json", encoding="utf-8")
         with redirect_stderr(io.StringIO()) as err:
-            self.assertEqual(P.run_pairs(q, s, out, pairs=pf, quiet=True).exit_code, 2)
+            self.assertEqual(P.run_pairs(q, s, out, pairs=pf, quiet=True).exit_code, 1)
         self.assertIn("already holds failed.tsv, genes.tsv, dnds.tsv, report.json and orthologs.tsv", err.getvalue())
         self.assertEqual((out / "report.json").read_text(encoding="utf-8"), "{not json")
         self.assertEqual(P.run_pairs(q, s, out, pairs=pf, quiet=True, overwrite=True).exit_code, 0)
@@ -980,7 +980,7 @@ class Robustness(PipelineCase):
         # report.json is in no COAL record (a real run writes work/outputs.json first): refused without --overwrite
         with redirect_stderr(io.StringIO()) as err:
             res = P.run_pairs(q, s, out, pairs=pf, quiet=True)
-        self.assertEqual(res.exit_code, 2, err.getvalue())
+        self.assertEqual(res.exit_code, 1, err.getvalue())
         self.assertFalse(lock.exists())
         res = P.run_pairs(q, s, out, pairs=pf, quiet=True, overwrite=True)
         self.assertEqual(res.exit_code, 0)

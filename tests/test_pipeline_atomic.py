@@ -179,7 +179,7 @@ class Pipeline(PipelineCase):
             symlink(victim, out / name, self)
         # links with output names that no COAL run made are the user's: refused unless --overwrite (L1, 2026-11-15)
         res, err = run(P.run_pairs, Q, S, out, pairs=self.pairs_file(PLAIN), **KEEP)
-        self.assertEqual((res.exit_code, res.report["status"]), (2, "failed"), err)
+        self.assertEqual((res.exit_code, res.report["status"]), (1, "failed"), err)
         self.assertIn("--overwrite", err)
         self.assertTrue(all((out / name).is_symlink() for name in names))
         res, err = run(P.run_pairs, Q, S, out, pairs=self.pairs_file(PLAIN), overwrite=True, **KEEP)

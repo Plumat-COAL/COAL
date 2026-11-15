@@ -150,8 +150,9 @@ cl$summary
 Further arguments are the options of `coal pipeline` with underscores (`ortho = "bh"`, `aligner = "diamond"`,
 `pairs = "pairs.tsv"`, `codontable = 2L`, `install_tools = TRUE`, `resume = TRUE`, ...). Without `out_dir` the
 run's folder is temporary and removed. Exit code 2 (finished, something is listed in `failed`) is returned, not
-raised; a run that could not be done (exit code 1: an unreadable input, a missing tool) is an R error with the
-pipeline's message. Without reticulate or a Python that has `coal-align`, both functions stop with a message that
+raised; a run that could not be done (exit code 1: an unreadable input, a missing tool, an `out_dir` that holds
+files of the run's names that no COAL run wrote) is an R error with the pipeline's message. `overwrite = TRUE`
+(passed on to `coal pipeline` like the other options) replaces such files. Without reticulate or a Python that has `coal-align`, both functions stop with a message that
 says what to install; nothing else in the package needs Python.
 
 ## Command line and R arguments

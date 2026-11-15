@@ -1210,9 +1210,10 @@ taken on a 16-thread desktop. KaKs_Calculator is single-threaded. Each figure is
 | MLPB | 0.81 | 0.09 | 1,236 | 11,435 | 9.2x |
 
 The YN and MYN times of this table predate the faster eigendecomposition of 2026-11-15 (four columns at a time,
-neighbour-only sums, the AVX2 copy above): on 2,862 *Salmonella* / *Shigella* pairs that took 12% (YN) and 14%
-(MYN) less CPU time on the AVX2 path and 2 to 6% less on the baseline path (`-j 1`, a shared 2-core machine;
-`benchmarks/perf/bench_pipeline.py`), with the same bits.
+neighbour-only sums, the AVX2 copy above): about 10 to 14% less CPU time (YN, MYN) on the AVX2 path on 2,862
+*Salmonella* / *Shigella* pairs and 2 to 6% less on the baseline path (`-j 1`, a shared 2-core machine;
+`benchmarks/perf/bench_pipeline.py`); 5 to 9% for a `coal pipeline pairs` run across three data sets; less on
+other data. The numbers are the same bits.
 
 `Comeron` and `Li` are table look-ups per codon column: 0.08 CPU s each for the 999 pairs on the same machine
 (2026-11-13; about 13,000 pairs per CPU-second, the same as NG and the LWL family; gestimator's code compiled

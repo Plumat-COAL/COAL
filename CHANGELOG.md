@@ -76,15 +76,16 @@ entry under "Added", not under "Fixed".
     computed for a pair in which no codon differs at two or three positions (nothing reads it then): checked
     byte for byte at 17 digits on the validation sets with GCC and Clang; about half the CPU time on a set of
     closely related pairs, 10 to 20% (YN) on the 999 orthologr pairs (docs/kaks.md "Benchmark").
-  - **YN and MYN are faster on every pair, with the same bits** (profiling of 2026-11-15, #85). The 61 × 61
+  - **YN and MYN are faster for every pair, with the same bits** (profiling of 2026-11-15, #85). The 61 × 61
     eigendecomposition behind their pathway weighting (most of their time) runs four independent columns at a
     time, sums only over each codon's neighbours (the terms left out are exactly +0) and reuses one workspace per
     pair; on x86 with GCC or Clang it also has an AVX2 copy (`target("avx2")`) chosen at run time when the CPU has
     AVX2, as the aligner's row loops already were, with the baseline code as the fallback. Both copies perform the
     same operations in the same order (no FMA, no reassociation), so the numbers are the same bits. No build flag
-    changed: the wheels, coalr and the Bioconda recipe stay baseline x86-64 / generic aarch64. On 2,862
-    *Salmonella* / *Shigella* pairs (`-j 1`, CPU time, a shared 2-core machine) YN took 12% and MYN 14% less on the
-    AVX2 path, 2 to 6% less on the baseline path; a `coal pipeline pairs` run 5 to 9% less. Every output of the
+    changed: the wheels, coalr and the Bioconda recipe stay baseline x86-64 / generic aarch64. CPU time: about 10
+    to 14% less (YN, MYN) on the AVX2 path on 2,862 *Salmonella* / *Shigella* pairs (`-j 1`, a shared 2-core
+    machine), 2 to 6% less on the baseline path; 5 to 9% for a `coal pipeline pairs` run across three data sets;
+    less on other data. Every output of the
     pipeline (all nine methods, `--digits 17`, both aligners' alignment files) was byte-identical before and after
     on five data sets. `tests/test_kaks_dispatch.py` checks that the AVX2 copy runs where the CPU has it and that
     both copies give the same bytes (testing options `--kaks-baseline`, `--kaks-isa`, not in the help).
@@ -600,17 +601,24 @@ entry under "Added", not under "Fixed".
   - **Review of 2026-11-15.** **A file in `-o DIR` that COAL did not write is not replaced without
     `--overwrite`.** When a file the run would write (`genes.tsv`, `dnds.tsv`, `failed.tsv`, `report.json`,
     `orthologs.tsv`, `unpaired.tsv`, `clusters.tsv`, `cluster_summary.tsv`, `realign.tsv`, and the optional
-    outputs asked for) exists in the folder and no COAL run recorded it there (`work/outputs.json`, or an older
-    `report.json`), the run stops with exit 2 before anything changes and names the files; before, a folder with
-    the user's own `genes.tsv`, `dnds.tsv` and `report.json` was overwritten with exit 0 and no word, and
-    `-o examples/dnds` replaced the repository's `orthologs.tsv`. New option `--overwrite` (`overwrite=True` from
-    Python) replaces them as before. Runs into a folder of an earlier COAL run, `--resume`, and
+    outputs asked for) exists in the folder and no COAL run recorded it there (`work/outputs.json`; without it the
+    outputs of `DIR/report.json`, or of the `--report` file when that is a COAL report of this folder), the run
+    stops with exit 1, like the other refusals before a run starts, before anything changes and names the files;
+    before, a folder with the user's own `genes.tsv`, `dnds.tsv` and `report.json` was overwritten with exit 0 and
+    no word, and `-o examples/dnds` replaced the repository's `orthologs.tsv`. New option `--overwrite`
+    (`overwrite=True` from Python, `overwrite = TRUE` in coalr) replaces them as before; it does not cover a
+    foreign `codon_alignments/` / `protein_alignments/` folder, which stays refused. Runs into a folder of an
+    earlier COAL run, `--resume`, `--report DIR/report.json` (the default spelled out), and
     `--pairs DIR/orthologs.tsv` / `--clusters DIR/clusters.tsv` of an earlier run (now listed under
-    `read_in_place` in `work/outputs.json`, so a later run may write the file again) behave as before.
+    `read_in_place` in `work/outputs.json`, kept by the runs that neither read nor write the file, so a later run
+    may write it again) behave as before. The check is made when the run starts.
     **`--diamond-args '-c 1 -b 4'` works**: a value of `--diamond-args`, `--deepclust-args` or `--realign-args`
     that starts with one of COAL's own short options (`-c`, `-o`, ...) failed with "expected one argument"; the
-    word after the option is now its value, and an ARGS option without a value names the
-    `--diamond-args='-c 1 -b 4'` form. report.json's `command` is the command line as typed.
+    word after the option (or an abbreviation argparse accepts, `--diamond-arg`) is now its value. Usage errors
+    (exit 2) that show the `--diamond-args="-c 1 -b 4"` form: no value, a value that is one of COAL's options or
+    an abbreviation of one (`--resum`), an unquoted string (`--diamond-args -b 4`), and the option given twice
+    (argparse kept the last string without a word). report.json's `command` is the command line as typed.
+    `$COAL_<TOOL> is set to '...'` shows the path as set (Windows: no doubled backslashes).
 - **Protein alignment for the codon step (docs/alignment.md).** `<coal/align.hpp>` and the `coal-cpp-align` tool: a
   global Needleman-Wunsch/Gotoh aligner (BLOSUM62/45/80, PAM250, affine gaps; EMBOSS needle defaults, a pwalign
   preset), full length (overhangs gapped, never cut off), AVX2 row loops picked at run time, multithreaded; optimal
