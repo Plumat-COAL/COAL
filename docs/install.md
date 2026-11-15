@@ -146,12 +146,30 @@ the extras (`"apps/coal-app[gui]"`): some shells (zsh, PowerShell) treat bare br
 
 ## Clustal Omega and MAFFT on Windows
 
-Cluster mode (`coal pipeline clusters`) aligns clusters of three or more genes with Clustal Omega or MAFFT. On
-Windows, `coal pipeline install clustalo` / `mafft` (and `--install-tools`) install nothing: neither Bioconda nor
-conda-forge has a Windows package of either program (their package indexes, checked 2026-11-14), and the
-pre-compiled Clustal Omega binaries of its authors' site are gone ([alignment.md](alignment.md)). COAL downloads a
-program only with a SHA-256 pinned in its source and computed from the file itself, and none is pinned for the
-Windows packages below. The commands say what works instead:
+Cluster mode (`coal pipeline clusters`) aligns clusters of three or more genes with Clustal Omega or MAFFT. Neither
+Bioconda nor conda-forge has a Windows package of either program (their package indexes, checked 2026-11-14).
+
+**MAFFT: `coal pipeline install mafft` works on x86-64 Windows** (and `--install-tools` during a run). It installs
+MAFFT's own Windows package, the "all-in-one" `mafft-7.526-win64-signed.zip` (MAFFT 7.526, the version COAL pins
+elsewhere) from https://mafft.cbrc.jp/alignment/software/windows_without_cygwin.html, into COAL's cache
+(`%LOCALAPPDATA%\coal\Cache\tools\mafft\mafft-win\`). MAFFT publishes no checksum, so COAL pins the file
+itself: 27,476,513 bytes, SHA-256 `7c3a508c8512af04007d68019c6fbd4ff00d891244b58f87ec9aa0e53fbae8a7` (computed
+on 2026-11-15 from two identical downloads). A download of another size or hash is deleted before anything is
+unpacked, every name in the zip is checked before a file is written, and the install is recorded with the hash
+of each file, as for the other tools. COAL then finds `mafft-win\mafft.bat` there; run with `--aligner mafft`.
+COAL's CI downloads and runs it on its Windows runner, including one `coal pipeline clusters --aligner mafft`.
+
+- **Licence:** MAFFT is BSD-licensed; the Windows package also bundles MSYS2 components (bash and its runtime),
+  and MAFFT's page gives the GPL for the package as a whole. COAL does not redistribute it: each install
+  downloads it from MAFFT's site.
+- **Paths:** Windows runs `mafft.bat` through `cmd.exe`, which reads `%`, `!` and `"` in a path as something
+  else even inside quotes. So a run refuses, with a message, a temporary folder (`TMP` / `TEMP`) or cache folder
+  (`COAL_CACHE_DIR`) whose path has one of them. Spaces, `&`, `(`, `)` and `^` are fine.
+- Windows on ARM: the package is for x86-64; there the command says what works (below).
+
+**Clustal Omega: no automatic install on Windows.** The pre-compiled Clustal Omega binaries of its authors' site
+are gone ([alignment.md](alignment.md)), and COAL downloads a program only with a SHA-256 pinned in its source and
+computed from the file itself. `coal pipeline install clustalo` says what works instead:
 
 1. **WSL** (Windows Subsystem for Linux): run COAL there, and `coal pipeline install clustalo mafft` installs the
    pinned Bioconda / conda-forge builds as on Linux (the route COAL's CI tests, on Linux).
@@ -165,13 +183,12 @@ Windows packages below. The commands say what works instead:
 
    then set `COAL_CLUSTALO` to `C:\msys64\ucrt64\bin\clustalo.exe` (MSYS2's default folder), or put
    `C:\msys64\ucrt64\bin` on `PATH`. Any other `clustalo.exe` you trust works the same way.
-3. **MAFFT's own Windows package**: the "all-in-one" `mafft-7.526-win64-signed.zip` (MAFFT 7.526, the version COAL
-   pins elsewhere) from https://mafft.cbrc.jp/alignment/software/windows_without_cygwin.html. Extract it (keep its
-   LF line ends; MAFFT's page warns that some unzip tools convert them), set `COAL_MAFFT` to the full path of
-   `mafft-win\mafft.bat`, and run with `--aligner mafft`. MAFFT's site publishes no checksum for it.
+3. **MAFFT instead** (`--aligner mafft`), installed as above. A MAFFT Windows package you extracted yourself
+   (keep its LF line ends; MAFFT's page warns that some unzip tools convert them) works too: set `COAL_MAFFT` to
+   the full path of its `mafft-win\mafft.bat`.
 
-Routes 2 and 3 are installs of your own: COAL neither downloads nor checks them, uses them as they are (no version
-note, as for any program on `PATH`), and they are not tested with COAL.
+Route 2, and a MAFFT of your own, are installs of your own: COAL neither downloads nor checks them, uses them as
+they are (no version note, as for any program on `PATH`), and they are not tested with COAL.
 
 ## Ways to use COAL
 

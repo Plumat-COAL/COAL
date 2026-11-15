@@ -963,18 +963,24 @@ machine is still to be done.
 - **Installers verify what they download** ([alignment.md](alignment.md#clusters-clustal-omega-and-mafft-coalmsa),
   "Verification"). The DIAMOND 2.2.8 release archives (Linux x86_64, macOS, Windows x64) and micromamba are pinned
   by SHA-256 in COAL's source; DIAMOND publishes no checksums, so those hashes are the ones of the files as
-  downloaded on 2026-11-12. Clustal Omega and MAFFT come from Bioconda (conda / mamba / micromamba; Linux and
-  macOS); `--install-tools` during a run never installs an unverified file. DIAMOND's macOS archive is one
+  downloaded on 2026-11-12. Clustal Omega and MAFFT come from Bioconda / conda-forge (conda / mamba / micromamba;
+  Linux and macOS), and MAFFT on x86-64 Windows from MAFFT's own Windows package, pinned by size and SHA-256
+  (next item); `--install-tools` during a run never installs an unverified file. DIAMOND's macOS archive is one
   universal binary (an x86_64 slice for macOS 10.15 and later, an arm64 slice for macOS 11 and later that carries a code signature; only
   system libraries), so the same pinned file serves Intel and Apple-silicon Macs without Rosetta (read from the
   2.2.8 archive, 2026-11-13; COAL's CI installs and requires it on the arm64 macOS runner).
-- **Windows: no automatic Clustal Omega or MAFFT install.** The pre-compiled Clustal Omega binaries of the
-  Clustal site are gone (the address serves an unrelated site since 2026-11) and neither Bioconda nor conda-forge
-  has Windows packages, so `--install-tools` and `coal pipeline install clustalo` / `mafft` cannot install one
-  there and say what works: run COAL under WSL; or install Clustal Omega 1.2.4 with MSYS2 (`pacman -S
-  mingw-w64-ucrt-x86_64-clustal-omega`, then `COAL_CLUSTALO` = `C:\msys64\ucrt64\bin\clustalo.exe`) or put
-  another `clustalo.exe` you trust on `PATH`; or `--aligner mafft` with MAFFT's own Windows package
-  (`mafft-7.526-win64-signed.zip`, `COAL_MAFFT` = its `mafft-win\mafft.bat`). COAL neither downloads nor tests
-  these ([install.md](install.md#clustal-omega-and-mafft-on-windows)). Pair mode and DIAMOND are not affected
+- **Windows: MAFFT is installed, Clustal Omega is not.** On x86-64 Windows `coal pipeline install mafft` (and
+  `--install-tools`) installs MAFFT's own Windows package, `mafft-7.526-win64-signed.zip` from mafft.cbrc.jp,
+  pinned by size (27,476,513 bytes) and SHA-256 (MAFFT publishes none; computed 2026-11-15), both checked before
+  anything is unpacked, into COAL's cache, where the run finds its `mafft-win\mafft.bat`: use `--aligner mafft`.
+  MAFFT is BSD-licensed; the package bundles MSYS2 components and is GPL as a whole (MAFFT's page); COAL does not
+  redistribute it. A temporary or cache folder whose path has `%`, `!` or `"` is refused (cmd.exe runs the batch
+  file and would change them). COAL's CI runs it on Windows, one `coal pipeline clusters --aligner mafft`
+  included. Clustal Omega: the pre-compiled binaries of the Clustal site are gone (the address serves an unrelated
+  site since 2026-11) and neither Bioconda nor conda-forge has Windows packages, so `coal pipeline install
+  clustalo` cannot install one there and says what works: `--aligner mafft`; run COAL under WSL; or install
+  Clustal Omega 1.2.4 with MSYS2 (`pacman -S mingw-w64-ucrt-x86_64-clustal-omega`, then `COAL_CLUSTALO` =
+  `C:\msys64\ucrt64\bin\clustalo.exe`) or put another `clustalo.exe` you trust on `PATH`
+  ([install.md](install.md#clustal-omega-and-mafft-on-windows)). Pair mode and DIAMOND are not affected
   (DIAMOND's Windows release is pinned). [alignment.md](alignment.md#clusters-clustal-omega-and-mafft-coalmsa).
 - Thread scaling beyond 2 cores and whole-proteome wall times are to be measured on the 16-thread desktop.

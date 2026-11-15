@@ -25,6 +25,23 @@ entry under "Added", not under "Fixed".
 
 ### Added
 
+- **MAFFT on native Windows: `coal pipeline install mafft` installs it** (x86-64; also `--install-tools` and
+  `coal.msa.install_mafft()`). It downloads MAFFT's own Windows package, the "all-in-one"
+  `mafft-7.526-win64-signed.zip` from mafft.cbrc.jp (MAFFT 7.526, the version COAL pins elsewhere), pinned by size
+  (27,476,513 bytes) and SHA-256 (`7c3a508c8512af04007d68019c6fbd4ff00d891244b58f87ec9aa0e53fbae8a7`; MAFFT
+  publishes no checksum: computed on 2026-11-15 from two identical downloads), both checked before anything is
+  unpacked. Every member name is checked first (one folder `mafft-win/`; no absolute, drive, `..`, backslash or
+  link member; the DIAMOND zip's rules for each part of a name; no two names that differ only in case); the tree
+  goes into a new folder that replaces the old install, and its manifest records the hash of every file and the
+  package. `find_mafft()` then gives `<cache>\tools\mafft\mafft-win\mafft.bat`. Windows runs a batch file
+  through `cmd.exe` whatever `subprocess` is given, so COAL builds that command line itself
+  (`coal.msa.batch_command_line`: arguments quoted; `%`, `!`, `"` and a trailing backslash refused with a
+  message, since cmd.exe would change them even in quotes), starts it with no standard input, and ends its whole
+  process tree (`taskkill /T`) on a timeout or interrupt. MAFFT is BSD; the package bundles MSYS2 components and
+  MAFFT's page gives GPL for the package; COAL does not redistribute it. CI's Windows C++ job downloads it
+  (`tests/test_windows_mafft_real.py`, `COAL_TEST_REAL_MAFFT=1`) and runs `coal pipeline clusters --aligner mafft`
+  on `examples/dnds`. Clustal Omega on Windows is unchanged (no automatic install; the message's MAFFT option now
+  names this install); MAFFT on Windows machines that are not x86-64 gets the message of what works there.
 - **Ka/Ks (dN/dS) engine: `coal kaks` and `coal dnds`.** In-process C++ (no external program runs), **derived
   from the source code of KaKs_Calculator 2.0 and of PAML's yn00** (both GPL version 3; attribution in
   `cpp/src/kaks.cpp`, `NOTICE` and docs/kaks.md; this is why COAL is GPL-3.0-only from this release). Methods:
