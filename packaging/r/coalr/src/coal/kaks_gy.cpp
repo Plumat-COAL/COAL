@@ -62,6 +62,9 @@ struct GyModel {
     std::vector<double> A, d, e, C, mu, E;
     std::vector<double> T, W, U, Vt;   // scratch of gradient()
     double sq[64][9];              // the exchangeabilities of the neighbours at the current (kappa, omega)
+    // the symmetrised, unscaled rate matrix B in sparse form, for series(): off-diagonal entries per neighbour,
+    // minus the diagonal, and the parts of the diagonal that carry kappa (transitions) and omega (nonsynonymous)
+    double bo[64][9], bdiag[64], bdiag_ts[64], bdiag_non[64], lambda = 0;
     double mr = 1, mr_ts = 0, rhoS = 0, rhoN = 0, rhoS1 = 0, rhoN1 = 0;
     long neval = 0;
 
@@ -169,17 +172,25 @@ struct GyModel {
         rhoN1 = non0 / (syn + non0);
         std::fill(A.begin(), A.end(), 0.0);
         mr_ts = 0;
+        lambda = 0;
         for (int a = 0; a < ns; ++a) {
-            double row = 0;
+            double row = 0, row_ts = 0, row_non = 0;
             for (int k = 0; k < nnb[a]; ++k) {
                 const int b = nb[a][k];
                 const double s = (nb_ts[a][k] ? kappa : 1.0) * (nb_non[a][k] ? omega : 1.0);
                 sq[a][k] = s;
+                bo[a][k] = s * std::sqrt(pi[idx[a]] * pi[idx[b]]);
                 if (nb_ts[a][k]) mr_ts += pi[idx[a]] * s * pi[idx[b]];
+                if (nb_ts[a][k]) row_ts += s * pi[idx[b]];
+                if (nb_non[a][k]) row_non += s * pi[idx[b]];
                 row += s * pi[idx[b]];
                 if (b < a) A[(size_t)a * ns + b] = A[(size_t)b * ns + a] = s * std::sqrt(pi[idx[a]] * pi[idx[b]]);
             }
             A[(size_t)a * ns + a] = -row;
+            bdiag[a] = row;
+            bdiag_ts[a] = row_ts;
+            bdiag_non[a] = row_non;
+            lambda = std::max(lambda, row);
         }
         detail::eigen_sym_rows(A.data(), ns, d.data(), e.data());  // eigenvector k in row k
         for (int k = 0; k < ns; ++k) mu[k] = d[k] / mr;
@@ -191,11 +202,88 @@ struct GyModel {
         }
     }
 
+    // Row a of M = exp(B tau) (tau = t / mr) without cancellation, for the entries the eigen sum cannot give:
+    // sum_k R_ak R_bk e^(d_k tau) carries an absolute error of about 1e-16, which is the whole value of a
+    // probability below that (codons two or three substitutions apart at a small t: t^2, t^3) and a relative
+    // error of 1e-8 at 1e-8. Uniformisation: B = lambda (R - I) with R = I + B / lambda >= 0 entry by entry, so
+    // exp(B tau) = e^(-x) sum_k x^k / k! R^k (x = lambda tau) is a sum of non-negative terms, exact to rounding in
+    // every entry however small. Only the row is needed: v_k = R v_(k-1) from the unit vector, with the sparse R.
+    // M: the row; M1, M2: its first and second derivative in t; Gk, Gw: its derivatives in log kappa and log
+    // omega at fixed tau (tangent vectors of the same recursion; lambda is a constant of the method).
+    // False when x is too large for the series (the caller keeps the eigen value).
+    struct Row {
+        double M[64], M1[64], M2[64], Gk[64], Gw[64];
+    };
+    bool series(int a, double t, Row& r, bool with_grad) const {
+        const double tau = t / mr, x = lambda * tau;
+        if (!(x < 600) || !(lambda > 0)) return false;
+        const int K = (int)(x + 12 * std::sqrt(x) + 30);
+        double v[64], w[64], vk[64], wk[64], vw[64], ww[64];
+        for (int b = 0; b < ns; ++b) {
+            v[b] = b == a ? 1.0 : 0.0;
+            vk[b] = vw[b] = 0;
+            r.M[b] = r.M1[b] = r.M2[b] = r.Gk[b] = r.Gw[b] = 0;
+        }
+        double p = std::exp(-x), p1 = 0, p2 = 0;   // p_k, p_(k-1), p_(k-2): e^-x x^k / k!
+        const double il = 1 / lambda;
+        for (int k = 0;; ++k) {
+            const double c1 = (p1 - p) * lambda / mr, c2 = (p2 - 2 * p1 + p) * lambda * lambda / (mr * mr);
+            for (int b = 0; b < ns; ++b) {
+                r.M[b] += p * v[b];
+                r.M1[b] += c1 * v[b];
+                r.M2[b] += c2 * v[b];
+            }
+            if (with_grad)
+                for (int b = 0; b < ns; ++b) {
+                    r.Gk[b] += p * vk[b];
+                    r.Gw[b] += p * vw[b];
+                }
+            if (k >= K) break;
+            // next power: v <- R v, and the tangents dv <- dR v + R dv
+            for (int b = 0; b < ns; ++b) {
+                double s = 0, sk = 0, sw = 0, tk = 0, tw = 0;
+                for (int j = 0; j < nnb[b]; ++j) {
+                    const int c = nb[b][j];
+                    const double q = bo[b][j];
+                    s += q * v[c];
+                    if (with_grad) {
+                        tk += q * vk[c];
+                        tw += q * vw[c];
+                        if (nb_ts[b][j]) sk += q * v[c];
+                        if (nb_non[b][j]) sw += q * v[c];
+                    }
+                }
+                const double keep = 1 - bdiag[b] * il;
+                w[b] = keep * v[b] + s * il;
+                if (with_grad) {
+                    wk[b] = keep * vk[b] + (tk + sk - bdiag_ts[b] * v[b]) * il;
+                    ww[b] = keep * vw[b] + (tw + sw - bdiag_non[b] * v[b]) * il;
+                }
+            }
+            for (int b = 0; b < ns; ++b) {
+                v[b] = w[b];
+                if (with_grad) {
+                    vk[b] = wk[b];
+                    vw[b] = ww[b];
+                }
+            }
+            p2 = p1;
+            p1 = p;
+            p *= x / (k + 1);
+        }
+        return true;
+    }
+    // below this the eigen sum is replaced by series() (its relative error there is 1e-8 and more)
+    static constexpr double TINY_PROB = 1e-8;
+
     // log-likelihood at t with the current decomposition; g1, g2: first and second derivative in t
     double lnl(double t, double* g1 = nullptr, double* g2 = nullptr) {
         for (int k = 0; k < ns; ++k) E[k] = std::exp(mu[k] * t);
         double f = lconst, d1 = 0, d2 = 0;
         const size_t np = pa.size();
+        Row row;
+        int row_of = -1;   // the source codon `row` holds (patterns come sorted by pa)
+        bool row_ok = false;
         for (size_t h = 0; h < np; ++h) {
             const double* c = &C[h * ns];
             double s0 = 0, s1 = 0, s2 = 0;
@@ -204,6 +292,17 @@ struct GyModel {
                 s0 += x;
                 s1 += x * mu[k];
                 s2 += x * mu[k] * mu[k];
+            }
+            if (!(s0 > TINY_PROB)) {
+                if (row_of != pa[h]) {
+                    row_ok = series(pa[h], t, row, false);
+                    row_of = pa[h];
+                }
+                if (row_ok) {
+                    s0 = row.M[pb[h]];
+                    s1 = row.M1[pb[h]];
+                    s2 = row.M2[pb[h]];
+                }
             }
             // a probability lost in rounding (codons two or three substitutions apart at a t far below the data's)
             if (!(s0 > 1e-300)) {
@@ -231,13 +330,31 @@ struct GyModel {
         const double tau = t / mr;
         for (int k = 0; k < ns; ++k) E[k] = std::exp(mu[k] * t);
         std::fill(T.begin(), T.end(), 0.0);
+        Row row;
+        int row_of = -1;
+        bool row_ok = false;
+        double gk_tiny = 0, gw_tiny = 0;
         for (size_t h = 0; h < np; ++h) {
             const double* c = &C[h * n];
             double s0 = 0;
             for (int k = 0; k < ns; ++k) s0 += c[k] * E[k];
+            const int a = pa[h], b = pb[h];
+            if (!(s0 > TINY_PROB)) {
+                // a probability the eigen sum cannot give (lnl): its derivative from the series as well
+                if (row_of != a) {
+                    row_ok = series(a, t, row, true);
+                    row_of = a;
+                }
+                if (row_ok) {
+                    if (row.M[b] > 1e-300) {
+                        gk_tiny += pn[h] * row.Gk[b] / row.M[b];
+                        gw_tiny += pn[h] * row.Gw[b] / row.M[b];
+                    }
+                    continue;
+                }
+            }
             if (!(s0 > 1e-300)) continue;
             const double w = pn[h] / s0;
-            const int a = pa[h], b = pb[h];
             for (size_t k = 0; k < n; ++k) T[k * n + b] += w * A[k * n + a];
         }
         // W = T V' (as sums of rows of V', so that no sum waits on the one before), times F (symmetric)
@@ -288,8 +405,8 @@ struct GyModel {
                 if (nb_non[a][k]) gw += v;
             }
         }
-        grad[0] = gk - t * (mr_ts / mr) * slope_t;
-        grad[1] = gw - t * rhoN * slope_t;
+        grad[0] = gk + gk_tiny - t * (mr_ts / mr) * slope_t;
+        grad[1] = gw + gw_tiny - t * rhoN * slope_t;
     }
 };
 
