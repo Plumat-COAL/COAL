@@ -2,6 +2,7 @@
 
   python3 benchmarks/kaks/validate_gy.py sim  --coal build/coal-cpp --codeml codeml --out work/gy
   python3 benchmarks/kaks/validate_gy.py grid --coal build/coal-cpp --out work/gy --codons 1000 [--reps 50]
+  python3 benchmarks/kaks/validate_gy.py codes --coal build/coal-cpp --out work/gy [--codeml codeml]
   python3 benchmarks/kaks/validate_gy.py real --coal build/coal-cpp --codeml codeml --out work/gy \
         --pairs name=in.axt[:N] [--pairs name=codon.fasta[:N]] ...
 
@@ -10,6 +11,8 @@ sim: pairs simulated under GY94 / F3x4 (sim_truth/codonsim.py; truth is the mode
 The first --codeml-reps replicates of each cell go to codeml as well (runmode = -2, CodonFreq = 2, one data set
 per pair); all --reps replicates are compared with the truth, for GY and YN.
 grid: the 30 combinations of docs/kaks.md's accuracy table (no codeml): GY and YN against the truth.
+codes: every genetic code COAL has: GY against the likelihood recomputed with numpy under that code, and against
+codeml (its icode) for the eleven tables codeml has.
 real: pairs of a real data set (AXT, or an aligned FASTA of consecutive pairs). codeml gets the columns COAL
 compares (no gap, no ambiguous base, no stop codon), COAL gets the rows as they are.
 
@@ -321,6 +324,143 @@ def cmd_grid(a):
     return 0
 
 
+# codeml's icode -> the NCBI table it is
+ICODE_NCBI = {0: 1, 1: 2, 2: 3, 3: 4, 4: 5, 5: 6, 6: 9, 7: 10, 8: 12, 9: 13, 10: 15}
+
+
+def cmd_codes(a):
+    """Every genetic code COAL has (NCBI 1-6, 9-16, 21-23): random pairs of sense codons of the code, GY with
+    `-c CODE`, and (1) the likelihood of GY's estimates recomputed with numpy from the model's definition under
+    that code (stop codons of the code out of the state space and of F3x4), the sites and distances from the
+    rates, and that no parameter moved by 3 % has a higher likelihood; (2) codeml with the icode of that table,
+    for the eleven tables codeml has."""
+    import random
+
+    import numpy as np
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(HERE)), "tests"))
+    import test_kaks_properties as tp   # the NCBI tables
+    os.makedirs(a.out, exist_ok=True)
+    bases = "TCAG"
+    codons = [x + y + z for x in bases for y in bases for z in bases]
+
+    def make_pair(rng, code, n, div, keep):
+        aa = tp.AA[code]
+        s1 = [rng.choice(tp.SENSE[code]) for _ in range(n)]
+        s2 = []
+        for c in s1:
+            d = c
+            for _ in range(3):
+                if rng.random() < div:
+                    p = rng.randrange(3)
+                    e = d[:p] + rng.choice(bases) + d[p + 1:]
+                    if aa[e] == "*" or (aa[e] != aa[d] and rng.random() > keep):
+                        continue
+                    d = e
+            s2.append(d)
+        return "".join(s1), "".join(s2)
+
+    def model(s1, s2, aas):
+        cod = [(s1[i:i + 3], s2[i:i + 3]) for i in range(0, len(s1), 3)]
+        f = np.zeros((3, 4))
+        for x, y in cod:
+            for p in range(3):
+                f[p][bases.index(x[p])] += 1
+                f[p][bases.index(y[p])] += 1
+        f /= 2 * len(cod)
+        fr = [f[0][c // 16] * f[1][(c // 4) % 4] * f[2][c % 4] for c in range(64)]
+        sense = [c for c in range(64) if aas[c] != "*" and fr[c] > 0]
+        pi = np.array([fr[c] for c in sense])
+        pi /= pi.sum()
+        n = len(sense)
+        ts, non, adj = np.zeros((n, n)), np.zeros((n, n)), np.zeros((n, n))
+        for i, ci in enumerate(sense):
+            for j, cj in enumerate(sense):
+                d = [(codons[ci][p], codons[cj][p]) for p in range(3) if codons[ci][p] != codons[cj][p]]
+                if len(d) != 1:
+                    continue
+                adj[i, j] = 1
+                ts[i, j] = set(d[0]) in ({"T", "C"}, {"A", "G"})
+                non[i, j] = aas[ci] != aas[cj]
+        idx = {codons[c]: i for i, c in enumerate(sense)}
+        cnt = np.zeros((n, n))
+        for x, y in cod:
+            cnt[idx[x], idx[y]] += 1
+        return pi, adj, ts, non, cnt, len(cod)
+
+    def lnl(m, t, k, w):
+        pi, adj, ts, non, cnt, _ = m
+        q = adj * np.where(ts > 0, k, 1.0) * np.where(non > 0, w, 1.0) * pi[None, :]
+        np.fill_diagonal(q, -q.sum(1))
+        q /= -(pi * np.diag(q)).sum()
+        sq = np.sqrt(pi)
+        sym = sq[:, None] * q / sq[None, :]
+        d, v = np.linalg.eigh((sym + sym.T) / 2)
+        p = (v * np.exp(d * t)) @ v.T * sq[None, :] / sq[:, None]
+        return (cnt * np.log(np.maximum(pi[:, None] * p, 1e-300)))[cnt > 0].sum()
+
+    def rates(m, t, k, w):
+        pi, adj, ts, non, _, n = m
+        r = adj * np.where(ts > 0, k, 1.0) * pi[None, :] * pi[:, None]
+        syn, non0 = (r * (1 - non)).sum(), (r * non).sum()
+        ds = t * (syn + non0) / (3 * (syn + w * non0))
+        return 3 * n * syn / (syn + non0), ds, w * ds
+
+    bad = 0
+    base_ctl = globals()["CTL"]
+    for code in tp.CODES:
+        rng = random.Random(1000 + code)
+        pairs = [("p",) + make_pair(rng, code, rng.choice([40, 120, 300]), rng.choice([0.03, 0.1, 0.25, 0.5]),
+                                    rng.choice([0.1, 0.4, 1.0])) for _ in range(a.pairs)]
+        rows, _ = run_coal(a.coal, pairs, a.out, table=code)
+        rows = rows["GY"]
+        checked = notmax = 0
+        dl = dv = 0.0
+        for (_, s1, s2), r in zip(pairs, rows):
+            if "NA" in (r["lnL"], r["kappa"], r["dNdS"]):
+                continue
+            m = model(s1, s2, tp._AAS[code])
+            t, k, w = fl(r["t"]), fl(r["kappa"]), fl(r["dNdS"])
+            ref = lnl(m, t, k, w)
+            dl = max(dl, abs(ref - fl(r["lnL"])) / max(1.0, abs(ref)))
+            s_sites, ds, dn = rates(m, t, k, w)
+            dv = max(dv, rel(fl(r["S_sites"]), s_sites), rel(fl(r["dS"]), ds),
+                     rel(fl(r["dN"]), dn) if dn > 1e-9 else 0.0)
+            if 1e-5 < w < 900 and 1e-5 < k < 900:
+                notmax += any(lnl(m, t * x, k * y, w * z) > ref + 1e-7
+                              for x, y, z in ((1.03, 1, 1), (0.97, 1, 1), (1, 1.03, 1), (1, 0.97, 1), (1, 1, 1.03),
+                                              (1, 1, 0.97)))
+            checked += 1
+        line = (f"code {code:2d} ({tp._AAS[code].count('*')} stop codons): {checked} of {len(pairs)} pairs checked; "
+                f"max rel |lnL - reference| {dl:.1e}; max rel difference of S, dS, dN {dv:.1e}; not a maximum: "
+                f"{notmax}")
+        bad += notmax + (dl > 1e-9) + (dv > 1e-9)
+        icode = [i for i, n in ICODE_NCBI.items() if n == code]
+        if icode and a.codeml:
+            globals()["CTL"] = base_ctl.replace("icode = 0", f"icode = {icode[0]}")
+            sub = [p for p in pairs if len(p[1]) >= 360][:a.codeml_pairs]
+            cm, _ = run_codeml(a.codeml, sub, a.out)
+            globals()["CTL"] = base_ctl
+            crow, _ = run_coal(a.coal, sub, a.out, table=code)
+            worse = same = 0
+            mx = 0.0
+            for r, c in zip(crow["GY"], cm):
+                if c is None or r["lnL"] == "NA":
+                    continue
+                d = fl(r["lnL"]) - c["lnL"]
+                worse += d < -1e-4
+                atb = c["t"] >= 49.99 or c["kappa"] <= 0.4001 or c["omega"] <= 0.00101 or c["omega"] >= 98.99
+                if atb or d > 1e-3 or r["status"] != "ok":
+                    continue
+                same += 1
+                mx = max([mx] + [rel(fl(r[x]), c[y]) for x, y in (("dNdS", "omega"), ("kappa", "kappa"), ("t", "t"))
+                                 if c[y] >= 0.01])
+            bad += worse
+            line += (f"; codeml icode {icode[0]}: {len(sub)} pairs, COAL lnL lower by > 1e-4: {worse}, same maximum "
+                     f"{same}, max rel difference of omega, kappa, t {mx:.1e}")
+        print(line)
+    return bad
+
+
 def cmd_real(a):
     os.makedirs(a.out, exist_ok=True)
     worse = 0
@@ -356,10 +496,10 @@ def cmd_real(a):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for nm in ("sim", "real", "grid"):
+    for nm in ("sim", "real", "grid", "codes"):
         p = sub.add_parser(nm)
         p.add_argument("--coal", required=True)
-        p.add_argument("--codeml", required=nm != "grid")
+        p.add_argument("--codeml", required=nm not in ("grid", "codes"))
         p.add_argument("--out", required=True)
         p.add_argument("--jobs", type=int, default=1)
     s = sub.choices["sim"]
@@ -369,11 +509,14 @@ def main():
     g = sub.choices["grid"]
     g.add_argument("--reps", type=int, default=50)
     g.add_argument("--codons", type=int, default=300)
+    c = sub.choices["codes"]
+    c.add_argument("--pairs", type=int, default=40)
+    c.add_argument("--codeml-pairs", type=int, default=12)
     r = sub.choices["real"]
     r.add_argument("--pairs", action="append", required=True)
     r.add_argument("--min-codons", type=int, default=30)
     a = ap.parse_args()
-    worse = {"sim": cmd_sim, "real": cmd_real, "grid": cmd_grid}[a.cmd](a)
+    worse = {"sim": cmd_sim, "real": cmd_real, "grid": cmd_grid, "codes": cmd_codes}[a.cmd](a)
     sys.exit(1 if worse else 0)
 
 
