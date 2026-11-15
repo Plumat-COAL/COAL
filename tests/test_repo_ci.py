@@ -289,6 +289,10 @@ class TestNightlyWorkflow(unittest.TestCase):
         for mod in CORE_CPP + ("test_stdin", "test_robustness", "test_cpp_error_precedence", "test_batch"):
             self.assertIn(mod, san, mod)
         self.assertIn("--no-skip " + ",".join(CORE_CPP) + " ", job)
+        # DIAMOND installed as in ci.yml's C++ job, before the tests (its tests must not skip there either)
+        install = re.search(r"(?m)^        run: python -c .*install_diamond.*$", job).group(0)
+        self.assertIn(install, _ci())
+        self.assertLess(job.index(install), job.index(f"- name: {SAN_STEP}"))
         self.assertIn('engine_fuzz.py --n 300 --seed "$FUZZ_SEED" --sanitizer', job)
         self.assertIn('tests/test_kaks_properties.py --cpp build-asan/coal-cpp --n 300 --seed "$FUZZ_SEED"', job)
         self.assertEqual(job.count('grep -qE "AddressSanitizer|LeakSanitizer|runtime error"'), 3)

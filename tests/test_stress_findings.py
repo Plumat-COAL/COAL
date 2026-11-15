@@ -775,6 +775,8 @@ class ReportKeepsCounts(unittest.TestCase):
         self.assertLess((peaks[3000] - peaks[1000]) / 2000, 1000, peaks)
 
     @unittest.skipUnless(HAVE_CPP, "build/coal-cpp not built")
+    @unittest.skipIf(os.environ.get("COAL_SKIP_MEMORY_TESTS"),
+                     "COAL_SKIP_MEMORY_TESTS set: peak memory is meaningless under a sanitizer")
     def test_cpp_engine_default_mode_memory_is_flat(self):
         try:
             import psutil  # noqa: F401

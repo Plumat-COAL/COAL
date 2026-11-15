@@ -225,7 +225,7 @@ jobs:
     # built" skips still fail, and so does any other skip in the core C++ modules but the platform ones.
     name: "coal-cpp under ASan + UBSan"
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90   # the whole of tests/ under ASan (about 15 to 25 minutes) and the two campaigns
     env:
       ASAN_OPTIONS: detect_leaks=1
       UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
@@ -253,6 +253,10 @@ jobs:
           cmake --build build-asan -j 2
           test -x build-asan/coal-cpp
           echo "COAL_CPP_BIN=$PWD/build-asan/coal-cpp" >> "$GITHUB_ENV"
+      # DIAMOND, as ci.yml's C++ job installs it (pinned release, SHA-256 verified by coal): the pipeline's DIAMOND
+      # routes and the alignment layer's DIAMOND hits run under the sanitizers too (a missing DIAMOND fails them)
+      - name: Install DIAMOND (pinned release, SHA-256 verified by coal)
+        run: python -c "import os; from coal import dnds_pipeline as P; p = P.install_diamond(method='official'); open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8', newline='\n').write('COAL_DIAMOND=' + p + '\nCOAL_TEST_DIAMOND=' + p + '\nCOAL_REQUIRE_DIAMOND=1\n')"
       - name: C++ tests under the sanitizers
         shell: bash
         env:
