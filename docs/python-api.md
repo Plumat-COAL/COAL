@@ -268,8 +268,10 @@ reference; the R package's arguments are the same names ([r.md](r.md)).
 **What is returned, and what is raised.**
 
 - A run that **fails returns**, it does not raise: an unreadable input, a missing tool, a full disk, an output
-  folder another run holds give `PipelineResult(exit_code=1, ...)` with `report["status"] == "failed"` and the
-  reason in `report["error"]` (the same line is printed on stderr, as the command prints it). `exit_code` 2: the
+  folder another run holds, an output folder that holds files of the run's names that no COAL run wrote (your own
+  `dnds.tsv`; nothing is changed, `overwrite=True` replaces them, as `--overwrite` does) give
+  `PipelineResult(exit_code=1, ...)` with `report["status"] == "failed"` and the reason in `report["error"]` (the
+  same line is printed on stderr, as the command prints it). `exit_code` 2: the
   run finished and some genes, pairs or clusters could not be used; they are in `outputs["failed"]` and
   `report["failures"]`. `exit_code` 0: nothing failed. Check `exit_code`, not an exception.
 - `TypeError` for an option that does not exist (`metod=`), `ValueError` for a value that is not allowed (an

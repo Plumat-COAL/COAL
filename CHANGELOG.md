@@ -76,6 +76,19 @@ entry under "Added", not under "Fixed".
     computed for a pair in which no codon differs at two or three positions (nothing reads it then): checked
     byte for byte at 17 digits on the validation sets with GCC and Clang; about half the CPU time on a set of
     closely related pairs, 10 to 20% (YN) on the 999 orthologr pairs (docs/kaks.md "Benchmark").
+  - **YN and MYN are faster for every pair, with the same bits** (profiling of 2026-11-15, #85). The 61 × 61
+    eigendecomposition behind their pathway weighting (most of their time) runs four independent columns at a
+    time, sums only over each codon's neighbours (the terms left out are exactly +0) and reuses one workspace per
+    pair; on x86 with GCC or Clang it also has an AVX2 copy (`target("avx2")`) chosen at run time when the CPU has
+    AVX2, as the aligner's row loops already were, with the baseline code as the fallback. Both copies perform the
+    same operations in the same order (no FMA, no reassociation), so the numbers are the same bits. No build flag
+    changed: the wheels, coalr and the Bioconda recipe stay baseline x86-64 / generic aarch64. CPU time: about 10
+    to 14% less (YN, MYN) on the AVX2 path on 2,862 *Salmonella* / *Shigella* pairs (`-j 1`, a shared 2-core
+    machine), 2 to 6% less on the baseline path; 5 to 9% for a `coal pipeline pairs` run across three data sets;
+    less on other data. Every output of the
+    pipeline (all nine methods, `--digits 17`, both aligners' alignment files) was byte-identical before and after
+    on five data sets. `tests/test_kaks_dispatch.py` checks that the AVX2 copy runs where the CPU has it and that
+    both copies give the same bytes (testing options `--kaks-baseline`, `--kaks-isa`, not in the help).
   - **Attribution corrected.** The documentation said the Ka/Ks engine was an independent implementation with no
     copied code. It is derived from KaKs_Calculator 2.0 and PAML's yn00 (GPL v3). The sources, `NOTICE`, the R
     package and docs/kaks.md now say so, with the upstream copyright notices and the list of changes; COAL's licence
@@ -585,6 +598,27 @@ entry under "Added", not under "Fixed".
     members) is `ok` in cluster_summary.tsv with `n_pairs` 0 (nothing failed; no estimate: filter on `n_ok` > 0;
     the value is unchanged), and links tutorials 2 and 3. **coalr: `preset = "pwalign"` takes pwalign's copy of
     the matrix named** (`matrix = "BLOSUM45"` → `BLOSUM45-PWALIGN`), as `coal pipeline` does.
+  - **Review of 2026-11-15.** **A file in `-o DIR` that COAL did not write is not replaced without
+    `--overwrite`.** When a file the run would write (`genes.tsv`, `dnds.tsv`, `failed.tsv`, `report.json`,
+    `orthologs.tsv`, `unpaired.tsv`, `clusters.tsv`, `cluster_summary.tsv`, `realign.tsv`, and the optional
+    outputs asked for) exists in the folder and no COAL run recorded it there (`work/outputs.json`; without it the
+    outputs of `DIR/report.json`, or of the `--report` file when that is a COAL report of this folder), the run
+    stops with exit 1, like the other refusals before a run starts, before anything changes and names the files;
+    before, a folder with the user's own `genes.tsv`, `dnds.tsv` and `report.json` was overwritten with exit 0 and
+    no word, and `-o examples/dnds` replaced the repository's `orthologs.tsv`. New option `--overwrite`
+    (`overwrite=True` from Python, `overwrite = TRUE` in coalr) replaces them as before; it does not cover a
+    foreign `codon_alignments/` / `protein_alignments/` folder, which stays refused. Runs into a folder of an
+    earlier COAL run, `--resume`, `--report DIR/report.json` (the default spelled out), and
+    `--pairs DIR/orthologs.tsv` / `--clusters DIR/clusters.tsv` of an earlier run (now listed under
+    `read_in_place` in `work/outputs.json`, kept by the runs that neither read nor write the file, so a later run
+    may write it again) behave as before. The check is made when the run starts.
+    **`--diamond-args '-c 1 -b 4'` works**: a value of `--diamond-args`, `--deepclust-args` or `--realign-args`
+    that starts with one of COAL's own short options (`-c`, `-o`, ...) failed with "expected one argument"; the
+    word after the option (or an abbreviation argparse accepts, `--diamond-arg`) is now its value. Usage errors
+    (exit 2) that show the `--diamond-args="-c 1 -b 4"` form: no value, a value that is one of COAL's options or
+    an abbreviation of one (`--resum`), an unquoted string (`--diamond-args -b 4`), and the option given twice
+    (argparse kept the last string without a word). report.json's `command` is the command line as typed.
+    `$COAL_<TOOL> is set to '...'` shows the path as set (Windows: no doubled backslashes).
 - **Protein alignment for the codon step (docs/alignment.md).** `<coal/align.hpp>` and the `coal-cpp-align` tool: a
   global Needleman-Wunsch/Gotoh aligner (BLOSUM62/45/80, PAM250, affine gaps; EMBOSS needle defaults, a pwalign
   preset), full length (overhangs gapped, never cut off), AVX2 row loops picked at run time, multithreaded; optimal
@@ -1092,6 +1126,17 @@ Documentation, tests, continuous integration and packaging:
 - `tests/tools/stress_*.py`: the stress-test generator, harness and helpers; `tests/test_stress_findings.py`.
 - **CI: the app's real-engine tests.** The GUI and MCP app jobs build coal-cpp and install DIAMOND, and run the
   app's real-engine Ka/Ks and pipeline tests (`TestRealEngine`) on Linux and Windows.
+- **CI: `tests.test_engine_ux` runs in the C++ job** (and the nightly sanitizer job); it was skipped in every
+  job before (#85).
+- **CI: every coal-cpp test runs on every push** (#86). The C++ engine job runs every module in `tests/` against
+  coal-cpp on Linux, Windows and macOS, with DIAMOND, Clustal Omega and MAFFT installed (`.github/ci_cpp_tests.py`:
+  a "not built" skip fails anywhere), so the 77 coal-cpp tests of 16 modules that ran in no workflow now run, and
+  `tests/test_repo_ci.py` checks that every module with a coal-cpp skip is in that job and the sanitizer job; a
+  new x86_64 macOS job (`cpp-macos-x86`, AppleClang) runs the AVX2 Ka/Ks copy; the nightly sanitizer job runs the
+  same set (less `test_wheels`) under ASan / UBSan, a new nightly job `cpp-extras` runs the tests that need more
+  than the binary, and the TSan build works again (GCC 15's false `-Werror=free-nonheap-object` under sanitizers
+  is a warning in that job only); `tests/test_kaks_dispatch.py` tells a build without the AVX2 copy by the build,
+  not by the OS.
 - **CI: the tutorials run as tests.** `scripts/run_tutorials.py` runs the commands of `docs/tutorials/` (01, 02,
   03, 05) on their real NCBI data, one bash session per tutorial, and fails when a documented output line, an exit
   status or one of 15 numbers in the prose no longer matches what the code prints; documented lines that are known
@@ -1129,8 +1174,9 @@ Documentation, tests, continuous integration and packaging:
   the earlier-results notice, option suggestions) and the Windows routes; the release checklist
   (docs/development.md) removes the dev-version banner (#81, #83). docs/alignment.md's Windows install advice
   names the same routes as install.md (MSYS2's Clustal Omega 1.2.4, MAFFT's own Windows package, why COAL
-  downloads neither). The tutorials' "Tested with" lines no longer name an old commit: CI reruns tutorials 1, 2,
-  3 and 5 and compares their outputs with the text.
+  downloads neither). The "Tested with" lines of tutorials 1, 2, 3 and 5 no longer name an old commit: CI reruns
+  those four and compares their outputs with the text. Tutorial 4 (R: coalr and orthologr) is not run by CI; its
+  line names the commit it was run with (009bdd5) and says that it is not rerun.
 - **Tests added with the review of 2026-11-13:** the pair-table header is the same in `dnds_cli.cpp`,
   `kaks_cli.cpp`, `dnds_pipeline.py` and coalr (`tests/test_pair_table.py`); a `coal-cpp` built without test hooks
   makes the reference-shim resume tests skip instead of fail; five fixed sleeps in the lock, MSA and pipeline
