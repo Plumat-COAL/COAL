@@ -1128,6 +1128,12 @@ Documentation, tests, continuous integration and packaging:
   app's real-engine Ka/Ks and pipeline tests (`TestRealEngine`) on Linux and Windows.
 - **CI: `tests.test_engine_ux` runs in the C++ job** (and the nightly sanitizer job); it was skipped in every
   job before (#85).
+- **CI: every coal-cpp test runs on every push** (#86). The C++ engine job runs every module in `tests/` against
+  coal-cpp on Linux, Windows and macOS (`.github/ci_cpp_tests.py`: a "not built" skip fails anywhere), so the 77
+  coal-cpp tests of 16 modules that ran in no workflow now run; a new x86_64 macOS job (AppleClang) runs the AVX2
+  Ka/Ks copy; the nightly sanitizer job runs the same set under ASan / UBSan, and its TSan build works again
+  (GCC 15's false `-Werror=free-nonheap-object` under sanitizers is a warning in that job only);
+  `tests/test_kaks_dispatch.py` tells a build without the AVX2 copy by the build, not by the OS.
 - **CI: the tutorials run as tests.** `scripts/run_tutorials.py` runs the commands of `docs/tutorials/` (01, 02,
   03, 05) on their real NCBI data, one bash session per tutorial, and fails when a documented output line, an exit
   status or one of 15 numbers in the prose no longer matches what the code prints; documented lines that are known
