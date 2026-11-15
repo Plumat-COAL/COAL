@@ -2,21 +2,6 @@
 
 **Website:** [plumat-coal.github.io/COAL](https://plumat-coal.github.io/COAL/) · [Install](https://plumat-coal.github.io/COAL/install.html) · [Guide](https://plumat-coal.github.io/COAL/guide.html)
 
-<!-- dev-version banner (tests/test_new_user_ux.py): remove it when 0.6.0 is released -->
-> **These pages describe the development version, 0.6.0.dev0.** The latest release, 0.5.0, makes codon
-> alignments only: `coal dnds`, `coal kaks`, `coal translate` and `coal pipeline` are not in it (its wheels answer
-> `unrecognized arguments` or `cannot open 'pipeline'`). Until 0.6.0 is released, install from a checkout (Python
-> 3.10+, a C++17 compiler, CMake 3.16+; about a minute):
->
-> ```
-> git clone https://github.com/plumat-coal/COAL && cd COAL
-> python -m pip install -e .
-> cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release
-> export COAL_CPP=$PWD/build/coal-cpp     # for this shell
-> ```
->
-> To keep `COAL_CPP` in new shells, and for what each install gives: [docs/install.md, Option 3](docs/install.md#option-3-from-source).
-
 **Codon alignments from a protein alignment and its coding DNA, Ka/Ks (dN/dS) for pairs, and one step from coding
 sequences to a dN/dS table.** COAL is a fast, open-source alternative to
 [PAL2NAL](https://www.bork.embl.de/pal2nal/): it maps unaligned coding DNA onto an existing protein multiple sequence
@@ -56,9 +41,9 @@ estimates Ka/Ks itself and runs the whole route from two CDS files to dN/dS.
 ## Install
 
 Needs Python 3.10+. The package is called `coal-align` (the name `coal` on PyPI belongs to another project); the
-command and the Python module are both `coal`. **Publication on PyPI is pending**, so install from a release (until
-0.6.0 is released, that is 0.5.0, with codon alignment only: see the note at the top). There are two routes, and
-they do not give the same thing:
+command and the Python module are both `coal`. **Publication on PyPI is pending**, so install from a
+[GitHub release](https://github.com/plumat-coal/COAL/releases/latest) (Ka/Ks and `coal pipeline` are in 0.6.0 and
+later). There are two routes, and they do not give the same thing:
 
 | Route | What you get |
 |---|---|

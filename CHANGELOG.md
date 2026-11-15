@@ -1,13 +1,24 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 — 2026-11-15
 
 **In short.** This release makes COAL more than a PAL2NAL replacement, and changes its licence.
 
-- **New scope.** Next to codon alignments, COAL now estimates Ka/Ks (dN/dS) itself (`coal kaks` in
-  KaKs_Calculator's format, `coal dnds` as a tidy table; nine methods), runs the whole way from coding sequences to
-  a dN/dS table in one step (`coal pipeline pairs` / `clusters`, with DIAMOND and Clustal Omega / MAFFT), aligns
-  proteins (`coal-cpp-align`) and has an R package (`coalr`).
+- **Ka/Ks (dN/dS) built in:** `coal dnds` (a tidy table with standard errors and a status per pair) and
+  `coal kaks` (KaKs_Calculator's format), with nine methods: YN00 (default), NG86, LWL85, MLWL, LPB93, MLPB, MYN,
+  Comeron and Li. Derived from KaKs_Calculator 2.0 and PAML's yn00 and checked against both (docs/kaks.md).
+- **One step from coding sequences to a dN/dS table:** `coal pipeline pairs` (the orthologs of two species, found
+  with DIAMOND) and `coal pipeline clusters` (gene families: DIAMOND DeepClust, then Clustal Omega or MAFFT), with
+  a JSON report, `coal pipeline install` for the external tools, and `coal cite` for what to cite
+  (docs/pipeline.md). Also `coal translate`, and COAL's own protein aligner `coal-cpp-align`, which the platform
+  wheels ship next to `coal-cpp`.
+- **R package `coalr` 0.6.0** (packaging/r/coalr, docs/r.md): COAL's C++ core inside R (Ka/Ks, codon alignment,
+  the pair and cluster steps of the pipeline; no Python needed), and the whole pipeline through reticulate. The
+  orthologr fork's `dNdS(engine = "coal")` uses it.
+- **App:** the web GUI and the Windows app have **Ka/Ks** and **dN/dS pipeline** tabs; the MCP server has the tools
+  `dnds_pairs` and `pipeline_pairs`.
+- **Tutorials** on real, small, public genomes, from coding sequences to an interpreted dN/dS table
+  (docs/tutorials/); CI reruns four of them.
 - **Licence: GPL-3.0-only from this release** (0.5.0 and earlier stay MIT), because the Ka/Ks engine is derived
   from GPL-3 code. Running COAL puts no condition on your data or scripts; see the first entry under "Changed".
 - **For users of 0.5.0, the existing commands behave as before** except for what "Changed" lists: the `-o` lock
@@ -16,7 +27,6 @@
   ends with the list of the other commands.
 - **What each install gives:** the platform wheels have everything; the source package has the Python engine
   only (codon alignment), and `coal kaks`, `coal dnds` and `coal pipeline` say so there (docs/install.md).
-- The version of the development tree is `0.6.0.dev0`, so that no GPL build reports 0.5.0.
 
 Much of what follows was found by the stress test of 2026-10-23, the full verification of 2026-10-24, two
 independent reviews (2026-11-12 and 13), the first CI runs on Windows and macOS, and a review of the project as a

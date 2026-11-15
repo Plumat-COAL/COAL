@@ -1,20 +1,5 @@
 # COAL tutorials
 
-<!-- dev-version banner (tests/test_new_user_ux.py): remove it when 0.6.0 is released -->
-> **These pages describe the development version, 0.6.0.dev0.** The latest release, 0.5.0, makes codon
-> alignments only: `coal dnds`, `coal kaks`, `coal translate` and `coal pipeline` are not in it (its wheels answer
-> `unrecognized arguments` or `cannot open 'pipeline'`). Until 0.6.0 is released, install from a checkout (Python
-> 3.10+, a C++17 compiler, CMake 3.16+; about a minute):
->
-> ```
-> git clone https://github.com/plumat-coal/COAL && cd COAL
-> python -m pip install -e .
-> cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release
-> export COAL_CPP=$PWD/build/coal-cpp     # for this shell
-> ```
->
-> To keep `COAL_CPP` in new shells, and for what each install gives: [install.md, Option 3](../install.md#option-3-from-source).
-
 Worked examples on real, small, public data: from coding sequences to an interpreted dN/dS table. Every command
 was run as written, and the outputs shown are the real ones (COAL 0.6.0.dev0, Linux x86_64); CI reruns tutorials
 1, 2, 3 and 5 and compares their outputs with the text (`scripts/run_tutorials.py`).
@@ -33,8 +18,9 @@ outputs of 1 and 2.
 ## Setup
 
 1. **COAL with its C++ engine.** Tutorial 1's codon alignment works with any install; everything else needs
-   `coal-cpp`: until 0.6.0 is released, a source build with `COAL_CPP` set (the note at the top;
-   [install.md](../install.md#option-3-from-source)); from 0.6.0 on, also the platform wheel of a release.
+   `coal-cpp`: the platform wheel of a release (0.6.0 or later;
+   [install.md](../install.md#the-c-engine-comes-with-the-wheel)) or a source build with `COAL_CPP` set
+   ([install.md, Option 3](../install.md#option-3-from-source)).
    `coal --cpp-path` prints where it is.
 2. **External programs:** DIAMOND 2.1.0 or later (tutorials 2-4), Clustal Omega (3, 4), MAFFT (one step of 3).
    They can be on `PATH`, or installed into COAL's cache, checksum-verified:

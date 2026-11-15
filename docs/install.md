@@ -1,20 +1,5 @@
 # Installing COAL
 
-<!-- dev-version banner (tests/test_new_user_ux.py): remove it when 0.6.0 is released -->
-> **These pages describe the development version, 0.6.0.dev0.** The latest release, 0.5.0, makes codon
-> alignments only: `coal dnds`, `coal kaks`, `coal translate` and `coal pipeline` are not in it (its wheels answer
-> `unrecognized arguments` or `cannot open 'pipeline'`). Until 0.6.0 is released, install from a checkout (Python
-> 3.10+, a C++17 compiler, CMake 3.16+; about a minute):
->
-> ```
-> git clone https://github.com/plumat-coal/COAL && cd COAL
-> python -m pip install -e .
-> cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release
-> export COAL_CPP=$PWD/build/coal-cpp     # for this shell
-> ```
->
-> To keep `COAL_CPP` in new shells, and for what each install gives: [Option 3](#option-3-from-source) below.
-
 **What each install gives.** COAL does three things (codon alignments; Ka/Ks for pairs: `coal kaks`, `coal dnds`;
 the one-step `coal pipeline` from coding sequences to dN/dS), and not every install has all three:
 
@@ -23,14 +8,15 @@ the one-step `coal pipeline` from coding sequences to dN/dS), and not every inst
 | **Platform wheel** (`coal_align-<version>-py3-none-<platform>.whl`; [below](#the-c-engine-comes-with-the-wheel)) | yes, both engines | yes | yes, with DIAMOND (and Clustal Omega or MAFFT for clusters) |
 | Source package (`coal_src.tar.gz`, the pip commands on this page), the `py3-none-any` wheel | yes, the Python engine | no | no |
 | A checkout with `coal-cpp` built and `COAL_CPP` set ([Option 3](#option-3-from-source)) | yes, both engines | yes | yes, with DIAMOND |
-| The Windows app, the web GUI | yes | no (the command line of the same install has what its wheel has) | no |
+| The Windows app | yes | yes, in its Ka/Ks tab (`coal-cpp` is inside the app) | pairs, in its dN/dS pipeline tab, with DIAMOND |
+| The web GUI (`coal-align-app`) | yes | yes, in its Ka/Ks tab, where the engine install has `coal-cpp` (the platform wheel) | pairs, likewise, with DIAMOND |
 | R package `coalr` | yes | yes, in process | pairs and clusters you give, in process; the search and clustering through Python (reticulate) |
 
 An install without `coal-cpp` has the Python engine only: it makes codon alignments, and `coal kaks`, `coal dnds`
 and `coal pipeline` stop with a message that says so and names the platform wheel. `coal --cpp-path` tells which
 kind an install is (it prints the path of `coal-cpp`, or exits 1). `coal-align` is **not on PyPI yet**
-(publication is pending): every command on this page installs from a GitHub release, which until 0.6.0 is
-released means 0.5.0, codon alignment only (the note at the top).
+(publication is pending): every command on this page installs from a GitHub release. Ka/Ks and `coal pipeline`
+are in 0.6.0 and later; 0.5.0 and earlier make codon alignments only.
 
 **DIAMOND and the aligners** are separate programs that only `coal pipeline` uses: DIAMOND 2.1.0 or later for the
 ortholog search and the clustering (tested with 2.2.8), and Clustal Omega (or MAFFT) for clusters of three or more.

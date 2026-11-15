@@ -115,6 +115,24 @@ class TestReleaseScripts(unittest.TestCase):
             self.assertIsNone(rn.changelog_section("1.2", p))
             self.assertIsNone(rn.changelog_section("1.2.3", os.path.join(t, "missing.md")))
 
+    def test_notes_fit_a_github_release(self):
+        """GitHub refuses a release body over 125,000 characters, which 0.6.0's whole CHANGELOG section is: the
+        notes then carry its summary and a link to CHANGELOG.md at the tag."""
+        rn = _load("release_notes")
+        s = rn.summary_of("**In short.** Big.\n\n- one\n\n### Added\n\n- x\n", "1.2.3")
+        self.assertTrue(s.startswith("**In short.** Big.\n\n- one\n\nThe full list"), s)
+        self.assertNotIn("### Added", s)
+        self.assertIn("https://github.com/plumat-coal/COAL/blob/v1.2.3/CHANGELOG.md", s)
+        v = _load("release_version").base_version(_load("release_version").source_versions()[0])
+        with tempfile.TemporaryDirectory() as t:
+            out = os.path.join(t, "notes.md")
+            rc = rn.main([v, out])
+            text = open(out, encoding="utf-8").read()
+        self.assertIn(rc, (0, rn.NO_CHANGELOG))
+        self.assertLess(len(text), 125_000)
+        if rc == 0:
+            self.assertIn(f"## Changes in {v}", text)
+
 
 class TestReleaseWorkflow(unittest.TestCase):
     def test_parses_and_triggers(self):
