@@ -216,6 +216,7 @@ and seqinr, and `coal pipeline` runs DIAMOND and an aligner. Please cite what yo
 | Ka/Ks, method MLPB | Li 1993; Pamilo & Bianchi 1993; Tzeng, Pan & Li 2004; Wang et al. 2010 (KaKs_Calculator 2.0) |
 | Ka/Ks, method YN (the default) | Yang & Nielsen 2000; Wang et al. 2010 (KaKs_Calculator 2.0); Yang 2007 (PAML 4) |
 | Ka/Ks, method MYN | Zhang, Li & Yu 2006; Yang & Nielsen 2000; Wang et al. 2010 (KaKs_Calculator 2.0); Yang 2007 (PAML 4) |
+| Ka/Ks, method GY (maximum likelihood) | Goldman & Yang 1994; Yang & Nielsen 2000; Yang 2007 (PAML 4) |
 | Ka/Ks, method Comeron | Comeron 1995; Thornton 2003 (libsequence) |
 | Ka/Ks, method Li | Li 1993; Charif & Lobry 2007 (seqinr) |
 | `coal pipeline pairs` with DIAMOND (orthologs) | Buchfink et al. 2021 (DIAMOND) |

@@ -17,8 +17,9 @@ with an infinite kappa is \code{saturated}, not \code{no_data}; \code{"mlwl_exac
 exact kappa, so the order of the codon columns does not matter; \code{"lwl_saturated_counts_na"}: in LWL, MLWL, LPB
 and MLPB, \code{Sd} is \code{NA} when Ks is saturated and \code{Nd} when Ka is (and with them LPB / MLPB's \code{S_sites} /
 \code{N_sites} and \code{p_fisher}), instead of numbers made from the zeros of the undefined correction (COAL's
-docs/kaks.md, differences 15, 18 and 19). Names are only ever added; a coalr without \code{features} (\code{NULL})
-predates them all.
+docs/kaks.md, differences 15, 18 and 19); \code{"gy94_ml"}: the method \code{"GY"} (maximum likelihood under Goldman &
+Yang 1994, as PAML codeml's pairwise estimate) exists. Names are only ever added; a coalr without \code{features}
+(\code{NULL}) predates them all.
 }
 \description{
 Versions and capabilities of the engine

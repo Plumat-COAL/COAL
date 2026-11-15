@@ -2,6 +2,16 @@
 
 First version. In-process bindings (Rcpp) to the C++ core of COAL 0.6:
 
+- New Ka/Ks method `"GY"` (COAL, vendored: `src/coal/kaks_gy.cpp`): maximum likelihood under the codon model of
+  Goldman & Yang (1994) with F3x4 codon frequencies; the branch length t, kappa and omega are estimated as PAML's
+  codeml does for a pair (`runmode = -2`), and dN and dS are those of Yang & Nielsen (2000). It is the accurate
+  method for diverged pairs (dS above about 0.5, where YN is biased), works with every genetic code, and is about
+  ten times slower than YN. `coal_kaks()`, `coal_dnds_pairs()` and `coal_dnds_clusters()` take it by name
+  (`methods = "GY"`; it is not part of `"ALL"`); its rows come after MLPB. `SE_dN` and `SE_dS` come from the
+  curvature of the likelihood (the observed information and the delta method, as codeml's `getSE`). A `dN` or
+  `dS` above 10 substitutions per site is `NA` with status `saturated`. With `coal_kaks(details = TRUE)`, `kappa`
+  is the estimate and `divergence` is t / 3. `coal_info()$features` gains `"gy94_ml"`. No other method's numbers
+  change. COAL's docs/kaks.md, "GY: maximum likelihood", has the validation against codeml and simulated truth.
 - `coal_dnds_pairs()` without `pairs` still pairs the i-th query with the i-th subject, but now warns when both
   inputs have IDs and the i-th IDs differ: how many pairs differ (with an example) and how many of them have a
   protein identity below 20%, as unrelated genes do. Two CDS files are rarely in ortholog order, and such pairs

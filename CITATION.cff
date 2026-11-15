@@ -105,6 +105,20 @@ references:
     end: 2298
     year: 2004
     doi: "10.1093/molbev/msh242"
+  # goldman1994: Goldman & Yang 1994
+  - type: article
+    authors:
+      - family-names: Goldman
+        given-names: "N."
+      - family-names: Yang
+        given-names: "Z."
+    title: "A codon-based model of nucleotide substitution for protein-coding DNA sequences"
+    journal: "Molecular Biology and Evolution"
+    volume: 11
+    start: 725
+    end: 736
+    year: 1994
+    doi: "10.1093/oxfordjournals.molbev.a040153"
   # yang2000: Yang & Nielsen 2000
   - type: article
     authors:

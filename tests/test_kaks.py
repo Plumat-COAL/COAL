@@ -558,7 +558,7 @@ class TestCli(KaKsBase):
             self.assertEqual(methods[:2], ["NG", "YN"])  # KaKs_Calculator's order, one row per method and pair
 
     def test_unimplemented_methods(self):
-        for m in ("GY", "MA", "MS", "GYN", "GMYN", "NONE", "ALL"):
+        for m in ("MA", "MS", "GYN", "GMYN", "NONE", "ALL"):
             r = self.run_cpp("kaks", "-i", KDIR / "edge_cases.axt", "-m", m, check=False)
             self.assertEqual(r.returncode, 2)
             self.assertIn("does not implement natively", r.stderr)
