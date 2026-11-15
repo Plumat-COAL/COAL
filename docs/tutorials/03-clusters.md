@@ -17,7 +17,7 @@ Reading the result means telling these apart.
 
 ## 0. Set up
 
-```
+```bash
 export T=/path/to/COAL/docs/tutorials
 cd coal-tutorials
 bash $T/data/get_chlamydia.sh
@@ -25,7 +25,7 @@ D=coal-tutorial-data
 CDS="$D/ctrachomatis_D.cds.fna.gz $D/ctrachomatis_L2.cds.fna.gz $D/cmuridarum_Nigg.cds.fna.gz $D/cpneumoniae_CWL029.cds.fna.gz"
 ```
 
-```
+```text
 ok                 coal-tutorial-data/ctrachomatis_D.cds.fna.gz
 ok                 coal-tutorial-data/ctrachomatis_L2.cds.fna.gz
 ok                 coal-tutorial-data/cmuridarum_Nigg.cds.fna.gz
@@ -39,11 +39,11 @@ files. With files whose IDs repeat across species (`gene1`, `g1.t1` in each), CO
 
 ## 1. Run it
 
-```
+```bash
 coal pipeline clusters --cds $CDS -o chlamydia -j 1
 ```
 
-```
+```text
 coal pipeline: 4 gzip-compressed input file(s) decompressed into .../chlamydia/work/inputs
 coal pipeline: translated 3,738 records (0 not usable)
 coal pipeline: 1,074 clusters, 3,738 sequences
@@ -65,12 +65,12 @@ over these four genomes give. Steps 3 and 4 show where those pairs come from and
 
 ## 2. The per-cluster summary
 
-```
+```bash
 ls chlamydia
 cut -f3 chlamydia/cluster_summary.tsv | tail -n +2 | sort -n | uniq -c
 ```
 
-```
+```text
 cluster_summary.tsv  clusters.tsv  dnds.tsv  failed.tsv  genes.tsv  report.json  work
     221 1
      39 2
@@ -93,11 +93,11 @@ families with paralogs, and one cluster has 40 members.
 
 The first cluster, column by column (abridged):
 
-```
+```bash
 head -2 chlamydia/cluster_summary.tsv | cut -f3-13,20,26,33
 ```
 
-```
+```text
 n_members	n_used	method	pair_selection	aligner	n_pairs	n_ok	n_not_converged	n_saturated	n_no_data	n_failed	dS_median	dNdS_median	status
 4	4	YN	all	clustalo	6	3	0	3	0	0	1.4807088	0.011209224	ok
 ```
@@ -114,11 +114,11 @@ other columns are in [pipeline.md](../pipeline.md#cluster_summarytsv).
 Every row of `dnds.tsv` has `cluster_id`, `seq1` and `seq2`. The summary script groups the rows by the files the
 two genes come from (`--by-species`):
 
-```
+```bash
 python3 $T/scripts/dnds_summary.py chlamydia/dnds.tsv --cds $CDS --by-species --top 5
 ```
 
-```
+```text
 chlamydia/dnds.tsv: 6873 rows of method YN
 status: ok 3386, saturated 3290, not_converged 105, no_data 58, warning 34
 by species pair: rows, with an estimate, saturated + not_converged, median dS, median dN/dS (rows with an estimate)
@@ -150,7 +150,10 @@ This table is the key to the run. Reading it line by line:
   dN/dS** between close bacterial genomes (Rocha et al. 2006): slightly deleterious nonsynonymous changes have
   not yet been removed by selection. It is a property of the comparison, not a sign of positive selection, and
   the `dS >= 0.01` filter removes about half of these pairs for that reason (all 458 pairs it removes are D x L2
-  pairs).
+  pairs). The script's defaults are tutorial 2's outer bounds (dS 0.01 to 2, 50 codons), kept here to show this
+  effect; for ratios read gene by gene, [kaks.md](../kaks.md#filtering-before-interpretation) suggests dS of at
+  least about 0.05, at most 1, and 100 codons (`--min-ds 0.05 --max-ds 1 --min-codons 100`), which leaves 43 of
+  the 1,029 D x L2 pairs.
 - ***C. muridarum* x *C. trachomatis*** (about 1,020 pairs each): median dS 1.3, median dN/dS 0.05. This is the
   informative comparison: far enough apart for selection to have acted, close enough to measure (84% of the
   pairs have an estimate).
@@ -164,13 +167,13 @@ This table is the key to the run. Reading it line by line:
 To keep only one species pair, filter on the accessions at the start of the IDs, for example *C. trachomatis* D
 (`NC_000117`) against *C. muridarum* (`NC_002620`):
 
-```
+```bash
 awk -F'\t' 'NR==1 || ($2 ~ /NC_000117/ && $3 ~ /NC_002620/) || ($2 ~ /NC_002620/ && $3 ~ /NC_000117/)' \
     chlamydia/dnds.tsv > ct_vs_cm.tsv
 python3 $T/scripts/dnds_summary.py ct_vs_cm.tsv --cds $CDS --top 3
 ```
 
-```
+```text
 ct_vs_cm.tsv: 1026 rows of method YN
 status: ok 860, saturated 145, not_converged 14, warning 4, no_data 3
 ...
@@ -196,11 +199,11 @@ DeepClust's defaults put distant paralogs in one cluster ([pipeline.md](../pipel
 For dN/dS within families of orthologs or recent duplicates, ask for more identity and coverage of both
 sequences:
 
-```
+```bash
 coal pipeline clusters --cds $CDS -o chlamydia_tight --approx-id 60 --mutual-cover 80 -j 1
 ```
 
-```
+```text
 coal pipeline: 1,526 clusters, 3,738 sequences
 coal pipeline: warning: 1,325 of the 4,074 pairs (33%) are saturated or not_converged: ...
 coal pipeline: summary: 3,738 records (0 not usable); 4,074 pairs: 2,731 ok, 18 warning, 27 not_converged, 1,298 saturated, 0 no_data, 0 error
@@ -208,11 +211,11 @@ coal pipeline: summary: 1,526 clusters: 879 with every pair, 647 without a pair,
 coal pipeline: summary: decompress_inputs 0.0 s, translate_proteins 0.1 s, deepclust 10.3 s, align_codon_kaks 65.5 s, cluster_summary 0.0 s
 ```
 
-```
+```bash
 python3 $T/scripts/dnds_summary.py chlamydia_tight/dnds.tsv --cds $CDS --by-species --top 0
 ```
 
-```
+```text
 by species pair: rows, with an estimate, saturated + not_converged, median dS, median dN/dS (rows with an estimate)
   cmuridarum_Nigg x cmuridarum_Nigg: 2, 2, 0, 1.0058, 0.4891
   cmuridarum_Nigg x cpneumoniae_CWL029: 528, 88, 440, 2.3951, 0.0629
@@ -237,11 +240,11 @@ as here, and say in the methods what you used (`report.json` records it).
 **`no_data` pairs share no codon.** The 58 `no_data` pairs of the default run come from a few clusters. One of
 them:
 
-```
+```bash
 grep NP_219847.1_344 chlamydia/cluster_summary.tsv | cut -f3-13
 ```
 
-```
+```text
 12	12	YN	all	clustalo	66	9	0	41	16	0
 ```
 
@@ -258,12 +261,12 @@ others): 780 pairs, 672 of them saturated. Clusters above `--max-cluster-size` (
 one MSA; `--large-clusters` decides which pairs are computed (`representative`, the default: n − 1 pairs;
 `sample`; `skip`). With a cap of 20, reusing the clusters of the first run (`--clusters` skips DeepClust):
 
-```
+```bash
 coal pipeline clusters --cds $CDS --clusters chlamydia/clusters.tsv -o chlamydia_cap --max-cluster-size 20 -j 1
 awk -F'\t' '$3==40' chlamydia_cap/cluster_summary.tsv | cut -f3-13,33,34
 ```
 
-```
+```text
 40	40	YN	representative	nw_pairwise	39	1	0	38	0	0	ok	40 members: above --max-cluster-size 20
 ```
 
@@ -275,11 +278,11 @@ The representative against each of the other 39 members, aligned pairwise; the n
 Clusters of 3 or more are aligned by Clustal Omega by default; `--aligner mafft` uses MAFFT (`mafft --auto`,
 which picks its accurate L-INS-i mode for small families). Same clusters, other aligner:
 
-```
+```bash
 coal pipeline clusters --cds $CDS --clusters chlamydia/clusters.tsv -o chlamydia_mafft --aligner mafft -j 1
 ```
 
-```
+```text
 coal pipeline: summary: 3,738 records (0 not usable); 6,873 pairs: 3,377 ok, 33 warning, 82 not_converged, 3,358 saturated, 23 no_data, 0 error
 coal pipeline: summary: decompress_inputs 0.0 s, translate_proteins 0.1 s, clusters 0.0 s, align_codon_kaks 377.3 s, cluster_summary 0.0 s
 ```
@@ -287,7 +290,7 @@ coal pipeline: summary: decompress_inputs 0.0 s, translate_proteins 0.1 s, clust
 MAFFT took 359 s for the 814 alignments, Clustal Omega 58 s. Compare the two `dnds.tsv` files pair by pair,
 by protein identity:
 
-```
+```bash
 python3 - <<'EOF'
 import csv
 def load(d):
@@ -304,7 +307,7 @@ for lo, hi in ((90, 101), (70, 90), (50, 70), (0, 50)):
 EOF
 ```
 
-```
+```text
 3262 pairs with an estimate in both
 identity 90-101: 1488 pairs, dS not identical 49, more than 10% apart 14
 identity 70-90: 1092 pairs, dS not identical 276, more than 10% apart 75
@@ -332,7 +335,7 @@ largest uncertainty. That is one more reason to filter on identity and to name t
 
 Tutorial 4 uses `chlamydia/`; once you are done with it:
 
-```
+```bash
 rm -rf chlamydia chlamydia_tight chlamydia_cap chlamydia_mafft ct_vs_cm.tsv
 ```
 

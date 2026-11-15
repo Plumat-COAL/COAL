@@ -76,25 +76,29 @@ python tests/test_cpp_cli.py --write-help          # rewrites cpp/src/help_text.
 
 `.github/workflows/nightly.yml` runs every night at 03:17 UTC (and from Actions > Nightly > Run workflow, with an
 optional `seed`) the random campaign that found real bugs, with a new seed each night (the run number; the seed is
-in the run's title). Four jobs, each one of the commands below, so a failing night can be replayed on a laptop with
-the same seed:
+in the run's title), and the tutorials on their real data. Six jobs, each one of the commands below, so a failing
+night can be replayed on a laptop with the same seed:
 
 | Job | What | Locally (after `python scripts/fetch_pal2nal.py` and `cmake -S . -B build && cmake --build build`) |
 |---|---|---|
 | `pal2nal-fuzz` | 3,000 random cases x 4 formats against the real PAL2NAL v14, once with the Python engine and once with `coal-cpp` | `PAL2NAL=PAL2NAL/pal2nal.v14/pal2nal.pl FUZZ_N=3000 FUZZ_SEED=<seed> FUZZ_KEEP=fuzz-keep python tests/fuzz_vs_pal2nal.py -v`, then the same with `COAL_FUZZ_ENGINE=cpp COAL_CPP_BIN=build/coal-cpp` |
 | `engine-fuzz` (Linux, macOS) | `coal-cpp` vs the Python engine on 1,500 cases of `tests/tools/engine_fuzz.py`'s wider input space (malformed files, every option, reports, `-o`, `--json`), bytes compared | `COAL_CPP_BIN=build/coal-cpp python tests/tools/engine_fuzz.py --n 1500 --seed <seed> --keep engine-fuzz-keep` |
-| `sanitizers` | `coal-cpp` built with ASan (leaks included) and UBSan, warnings as errors: the C++ test set plus `test_stdin`, `test_robustness`, `test_cpp_error_precedence`, `test_batch`, then 300 generator cases; any sanitizer report fails | `cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug -DCOAL_WARNINGS_AS_ERRORS=ON -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -O1 -g" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined" && cmake --build build-asan`, then `ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 COAL_SKIP_MEMORY_TESTS=1 COAL_IMPL=cpp COAL_CPP_BIN=$PWD/build-asan/coal-cpp python -m unittest tests.test_differential tests.test_cpp_vs_python tests.test_cpp_cli tests.test_cpp_readers tests.test_cpp_tables tests.test_cpp_pool tests.test_stdin tests.test_robustness tests.test_cpp_error_precedence tests.test_batch` and `python tests/tools/engine_fuzz.py --n 300 --seed <seed> --sanitizer` with the same `COAL_CPP_BIN` |
+| `kaks-properties` | the Ka/Ks engine's property fuzz (`tests/test_kaks_properties.py`): the unit tests with `COAL_SLOW=1` (1,500 pairs) and a 1,500-pair campaign (properties, swap / permutation invariance, both formats, the Python command, determinism); a finding that is not a known bug (`KNOWN`) fails, and the shrunk cases are uploaded (`kaks-properties-seed-<seed>`) | `COAL_CPP_BIN=build/coal-cpp COAL_SLOW=1 KAKS_FUZZ_SEED=<seed> python -m unittest tests.test_kaks_properties` and `python tests/test_kaks_properties.py --n 1500 --seed <seed> --keep kaks-props-keep` |
+| `sanitizers` | `coal-cpp` built with ASan (leaks included) and UBSan, warnings as errors: the C++ test set plus `test_stdin`, `test_robustness`, `test_cpp_error_precedence`, `test_batch`, then 300 generator cases and 300 Ka/Ks property pairs (`python tests/test_kaks_properties.py --cpp build-asan/coal-cpp --n 300 --seed <seed> --max-codons 1000`); any sanitizer report fails | `cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug -DCOAL_WARNINGS_AS_ERRORS=ON -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -O1 -g" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined" && cmake --build build-asan`, then `ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 COAL_SKIP_MEMORY_TESTS=1 COAL_IMPL=cpp COAL_CPP_BIN=$PWD/build-asan/coal-cpp python -m unittest tests.test_differential tests.test_cpp_vs_python tests.test_cpp_cli tests.test_cpp_readers tests.test_cpp_tables tests.test_cpp_pool tests.test_stdin tests.test_robustness tests.test_cpp_error_precedence tests.test_batch` and `python tests/tools/engine_fuzz.py --n 300 --seed <seed> --sanitizer` with the same `COAL_CPP_BIN` |
 | `tsan` | `coal-cpp` and `coal-cpp-align` built with ThreadSanitizer: `coal-cpp kaks`, `dnds` and `codon-dnds -j 4` with all nine methods (Comeron and Li included) in the default and the reference flavours, and the aligner with `-j 4`; a ThreadSanitizer report fails, and so does an output that differs from the same command's with `-j 1` | `cmake -S . -B build-tsan -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCOAL_WARNINGS_AS_ERRORS=ON -DCMAKE_CXX_FLAGS="-fsanitize=thread -g -O1" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread" && cmake --build build-tsan`, then `python tests/tools/tsan_threads.py --build build-tsan --seed <seed>` (about 15 minutes on two cores; if ThreadSanitizer stops with "unexpected memory mapping", `sudo sysctl vm.mmap_rnd_bits=28`) |
+| `tutorials` | ci.yml's tutorials job without its paths filter: the commands of `docs/tutorials/` 01, 02, 03 and 05 on their real NCBI data (with tutorial 3's MAFFT run), compared with the outputs, exit statuses and numbers the tutorials show; catches drift from a new tool pin or from NCBI's files. Not seeded | `python scripts/run_tutorials.py --full --jobs 4` (needs `COAL_CPP`, DIAMOND, Clustal Omega and MAFFT: `coal pipeline install diamond clustalo mafft`; PAL2NAL v14 optional) |
 
 `COAL_SKIP_MEMORY_TESTS=1` skips the peak-memory test (`tests/test_cpp_vs_python.py` `TestCppMemory`), which is
 meaningless under ASan's shadow memory. The engine generator has its own quick test, `tests/test_engine_fuzz.py`
 (20 cases; skips without `coal-cpp`), so the tool cannot rot between nights.
 
 **Reading a failure.** A failed fuzz job uploads an artifact (`pal2nal-fuzz-seed-<seed>`,
-`engine-fuzz-<os>-seed-<seed>`, `sanitizers-seed-<seed>`, `tsan-seed-<seed>`; kept 30 days) with the step's full log (`fuzz-*.txt`,
+`engine-fuzz-<os>-seed-<seed>`, `kaks-properties-seed-<seed>`, `sanitizers-seed-<seed>`, `tsan-seed-<seed>`,
+`tutorials-nightly`; kept 30 days) with the step's full log (`fuzz-*.txt`,
 `engine-fuzz.txt`, `san-*.txt`: the `DIFF #n` / `SANITIZER #n` lines say what differed and show both outputs) and
 one folder per differing case: `fuzz-keep/python/c<n>/` or `fuzz-keep/cpp/c<n>/` (PAL2NAL fuzz; `ref*/` inside are
-the neutralised reference copies), `engine-fuzz-keep/c<n>/` (generator), `san-keep/san<n>/` (sanitizer hit). Each
+the neutralised reference copies), `engine-fuzz-keep/c<n>/` (generator), `san-keep/san<n>/` and `san-kaks-keep/` (sanitizer hit),
+`kaks-props-keep/` (Ka/Ks property finding), and the tutorials' `report.json` and logs. Each
 folder holds the input files and `args.txt`, the command line that was run: `cd` into it and run
 `pal2nal $(cat args.txt)` / `perl .../pal2nal.pl $(cat args.txt)` (PAL2NAL fuzz) or `coal $(cat args.txt)` and
 `coal-cpp $(cat args.txt)` (generator) to reproduce. An unexplained difference is a bug in COAL (or a missing entry

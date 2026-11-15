@@ -29,12 +29,12 @@ everything you compare, and name it (`coal cite` gives the references).
 Take the codon alignments that tutorial 2 kept (`--keep-alignments` in its step 5) and compute five methods with
 `coal dnds`; records 1+2, 3+4, ... are the pairs:
 
-```
+```bash
 coal dnds ecsa_filtered/codon_alignments.fasta --pairs consecutive \
     -m YN -m NG -m LWL -m MYN -m Comeron -j 1 -o methods.tsv
 ```
 
-```
+```text
 coal dnds: 3142 pair(s), 5 method(s): 14623 ok, 20 warning, 23 not_converged, 1044 saturated, 0 no_data, 0 error
 coal dnds: warning: 23 result(s): the YN/MYN iteration did not converge, so there is no estimate: Ka and Ks are NA (status not_converged; the note has the last round)
 ```
@@ -42,11 +42,11 @@ coal dnds: warning: 23 result(s): the YN/MYN iteration did not converge, so ther
 (The same as `coal pipeline pairs ... --pairs ecoli_vs_salmonella/orthologs.tsv -m YN -m NG -m LWL -m MYN -m
 Comeron`: the numbers are identical, because both routes use the same engine on the same alignments.)
 
-```
+```bash
 python3 $T/scripts/compare_methods.py methods.tsv
 ```
 
-```
+```text
 statuses per method:
   method              ok       warning     saturated not_converged       no_data         error
   NG                2924             3           215             0             0             0
@@ -101,21 +101,21 @@ Choose the method before looking at the result, and do not switch methods to mak
 
 Tutorial 1's *glpK* of three mycoplasmas, with YN and with NG / LWL:
 
-```
+```bash
 cd t01
 coal dnds glpK.codon.fasta -c 4 -j 1 | cut -f1-6,13-15
 coal dnds glpK.codon.fasta -c 4 -j 1 -m NG -m LWL | cut -f1-6,13-15
 cd ..
 ```
 
-```
+```text
 seq1	seq2	method	dN	dS	dNdS	codons_compared	status	note
 Mgen_glpK	Mpne_glpK	YN	0.17381333	NA	NA	508	saturated	Ks saturated (multiple-hit correction undefined)
 Mgen_glpK	Mgal_glpK	YN	0.27543137	NA	NA	504	saturated	Ks saturated (multiple-hit correction undefined)
 Mpne_glpK	Mgal_glpK	YN	0.25845413	NA	NA	504	saturated	Ks saturated (multiple-hit correction undefined)
 ```
 
-```
+```text
 seq1	seq2	method	dN	dS	dNdS	codons_compared	status	note
 Mgen_glpK	Mpne_glpK	NG	0.19610998	1.8710231	0.1048143	508	ok	
 Mgen_glpK	Mpne_glpK	LWL	0.2043005	1.4556418	0.14035081	508	ok	
@@ -161,11 +161,11 @@ strains, species with species), is the remedy.
 
 ## 5. Cite what you used
 
-```
+```bash
 coal cite YN NG LWL MYN Comeron
 ```
 
-```
+```text
 [coal] Newton C, Murati K (2026). COAL: codon alignments from protein alignments, version 0.6.0.dev0. https://github.com/plumat-coal/COAL
 [suyama2006] Suyama M, Torrents D, Bork P (2006). PAL2NAL: robust conversion of protein sequence alignments into the corresponding codon alignments. Nucleic Acids Research 34:W609-W612. https://doi.org/10.1093/nar/gkl315
 [yang2000] Yang Z, Nielsen R (2000). Estimating synonymous and nonsynonymous substitution rates under realistic evolutionary models. Molecular Biology and Evolution 17:32-43. https://doi.org/10.1093/oxfordjournals.molbev.a026236
@@ -182,6 +182,6 @@ coal cite YN NG LWL MYN Comeron
 
 ## Clean up
 
-```
+```bash
 rm -f methods.tsv
 ```

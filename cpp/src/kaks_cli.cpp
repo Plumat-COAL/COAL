@@ -71,7 +71,7 @@ const char* KAKS_HELP =
     "                 Comeron 1995; default with --comeron-flavour coal) or libsequence (the branches\n"
     "                 libsequence counts, which depend on which sequence is first; default with gestimator)\n"
     "  --comeron-min-sites N  Comeron, coal flavour: a site class with fewer than N sites cannot make dN or\n"
-    "                 dS NA (its undefined logarithm is 0, status warning; default 3; 0: any class can)\n"
+    "                 dS NA unless it is then 0 (its logarithm is 0, status warning; default 3; 0: any can)\n"
     "  --li-flavour F Li: coal (default: COAL's stop-codon policy) or seqinr (stop codons compared, as\n"
     "                 seqinr::kaks); seqinr's sentinel 9.999999 is NA in both\n"
     "  -q, --quiet    no summary on stderr\n";
@@ -105,7 +105,7 @@ const char* DNDS_HELP =
     "                 Comeron 1995; default with --comeron-flavour coal) or libsequence (the branches\n"
     "                 libsequence counts, which depend on which sequence is first; default with gestimator)\n"
     "  --comeron-min-sites N  Comeron, coal flavour: a site class with fewer than N sites cannot make dN or\n"
-    "                 dS NA (its undefined logarithm is 0, status warning; default 3; 0: any class can)\n"
+    "                 dS NA unless it is then 0 (its logarithm is 0, status warning; default 3; 0: any can)\n"
     "  --li-flavour F Li: coal (default: COAL's stop-codon policy) or seqinr (stop codons compared, as\n"
     "                 seqinr::kaks); seqinr's sentinel 9.999999 is NA in both\n"
     "  --min-codons N flag estimates from fewer than N compared codons: status warning and the note\n"

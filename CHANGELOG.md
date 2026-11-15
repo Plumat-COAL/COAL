@@ -135,6 +135,31 @@ entry under "Added", not under "Fixed".
     number of sites (Sd = S = 2, or 2.0000000000000004), the test was made or left out by the last bit (p = 0 or
     NA, by platform). The cell now counts as zero (p = 0, as KaKs_Calculator prints). No row of the real-gene sets
     changes.
+  - **Ka/Ks, MYN: an infinite kappa is `saturated`, not `no_data`.** A pair whose kappa_TC or kappa_AG is
+    estimated as infinite (TN93's transition term of one class of sites exactly at its limit) had status
+    `no_data` ("no synonymous sites; no nonsynonymous sites"), and `coal kaks` on such pairs alone exited 2,
+    suggesting that the input was not a codon alignment. Now `saturated`, with a note naming the kappa;
+    Substitutions keeps its count (docs/kaks.md, difference 15). 79 of 240,000 simulated pairs, 3 real pairs among
+    the deep test's genomes.
+  - **Ka/Ks: a multiple-hit correction whose argument is 0 in exact arithmetic is `saturated`** whatever the
+    rounding (an argument at or below 1e-10 counts as 0): a rounding residue printed dN or dS of 19 to 28 as an
+    estimate (fuzz finding K03; NG, the LWL family, the YN/MYN distances, default Comeron and Li; the kappa
+    estimates and the gestimator / seqinr flavours keep their references' tests). Comeron's "fewer than
+    `--comeron-min-sites` sites" no longer depends on the order of the codon columns (difference 14). Standard
+    code: 22 rows of 4,388 S. cerevisiae / C. glabrata pairs and 2 Comeron rows of the Salmonella / Shigella pairs
+    change; nothing else.
+  - **Ka/Ks, genetic codes other than the standard one:** LWL/LPB's Arg special case and MLWL/MLPB's Ile/Arg rules
+    follow the selected code (K01, K02; with code 2, ATA to ATG is synonymous). Standard code unchanged.
+  - **Ka/Ks, YN/MYN: a row without any estimate no longer prints `Sd` / `Nd` that depend on the order of the
+    sequences** (now `NA` where the pathways were weighted; K06).
+  - **Accuracy against simulated truth, and filtering advice from it** (docs/kaks.md "Accuracy against simulated
+    truth"; `benchmarks/kaks/sim_truth/` reproduces it). YN/MYN are unbiased up to dS about 0.5 and 10 to 40% off
+    beyond; the counting methods are biased in both directions by codon usage; reliability limits by gene length,
+    and how well the standard errors are calibrated. The filtering advice is now `--max-ds 1` (0.5 with strong
+    codon bias; 2 only as an outer bound), at least 100 codons for genes read one by one, and dS of at least about
+    0.05 for ratios; docs/pipeline.md and the tutorials follow it (tutorial 2 shows both the outer bounds and the
+    stricter values, and its `--min-codons` / `--max-ds` example uses 100 and 1). `--yn-weighting 0` is less
+    biased at omega below 1 and dS 1 to 1.5 (the default is unchanged).
   - **`coal kaks -j1`, `coal dnds -j1`: attached values of one-letter options are read**, as the main command
     does (`-j4`, `-j=4`, `-mYN`, `-ofile`, chained flags `-qj4`), in `coal kaks`, `coal dnds`, `coal translate`,
     `coal codon-dnds` and `coal-cpp-align` (which also takes `--jobs=4` now). They were "unrecognized argument"
@@ -610,6 +635,15 @@ entry under "Added", not under "Fixed".
   - Version 0.6.0 (0.6.0.9000 in the development tree); `min_codons` / `max_ds` in `coal_dnds_pairs()`,
     `coal_dnds_clusters()` and `coal_kaks()`; its messages name COAL 0.6 and the release wheel (not PyPI).
   - **coalr: a path-like string that names no file is the error "file not found"**, not a sequence (docs/r.md).
+  - **coalr: warnings where a call silently did the wrong thing** (new-user audit 2026-11-14, U02, U18, U22).
+    `coal_dnds_pairs()` without `pairs` pairs the i-th query with the i-th subject, as before, and now warns when
+    the IDs of such pairs differ, with how many of them have a protein identity below 20% (`pairs = "position"`
+    asks for that pairing without the warning). When every pair fails, one warning names the common cause (the
+    columns of `pairs` are not the IDs or are the other way round, protein given as CDS). A mistyped upper-case
+    file name (`"CDS.FASTA"`), which is read as a sequence, gets an error that ends "it does not exist (looked in
+    <working folder>)". `R CMD check --as-cran`: 0 errors, 0 warnings; the tests use at most two threads unless
+    `NOT_CRAN=true`. `coal_pipeline_pairs()` / `coal_pipeline_clusters()` without COAL's Python pipeline name,
+    in a development coalr (0.6.0.9000), the build from a COAL checkout instead of the latest release.
 - **`coal --batch --batch-parallel N`: N jobs at a time.** Worker processes each import COAL once and take jobs
   from a queue (`0` = one per CPU core; the default is still one job after the other), every job's output
   byte-identical to running it alone; a job's messages are printed together when it ends, so the lines of two
@@ -665,6 +699,43 @@ entry under "Added", not under "Fixed".
 - **GUI: a "Colour residues by class" setting.** Off, the alignment view and its downloadable page show the
   letters only (the mismatch outlines, frameshift hatching and the key's mark entries stay): for colour-blind
   readers who prefer no tints, and for printing. On by default; saved with the other settings.
+- **App: Ka/Ks and dN/dS pipeline tabs, and the MCP tools `dnds_pairs` and `pipeline_pairs`.** The web GUI
+  (`coal-gui`, `python -m coal_app`, the Windows app) now has four tabs: Align (unchanged), **Ka/Ks**, **dN/dS
+  pipeline** and Settings.
+  - **Ka/Ks** runs `coal dnds` on an uploaded or pasted aligned codon FASTA (every pair, or consecutive records)
+    or a KaKs_Calculator AXT file: methods YN (default), NG, LWL, MLWL, LPB, MLPB, MYN, Comeron and Li (Comeron and
+    Li: genetic code 1 only), any of COAL's genetic codes, and the optional flags "fewer codons than" /
+    "dS above" (`--min-codons` / `--max-ds`: status `warning`, nothing dropped). It shows the counts per status,
+    the table (first 300 rows; the TSV download has all), what each status in the run means, the equivalent
+    command and what to cite; an example button loads `examples/dnds/codon.fasta`.
+  - **dN/dS pipeline** runs `coal pipeline pairs` on two CDS FASTA files, one per species (gzip accepted):
+    methods, genetic code, one transcript per gene (the longest), ortholog pairs by DIAMOND reciprocal best hits
+    (`rbh`) or best hits (`bh`), the same flags, and optionally the codon alignments. It shows the four stages
+    and the pipeline's progress lines while it runs, has a Stop button, and offers `dnds.tsv`, `report.json` and a
+    zip of all result files. It runs only when `coal-cpp` and DIAMOND are found; otherwise the tab says how to
+    install DIAMOND (`coal pipeline install diamond`) and "Check again" re-checks.
+  - **MCP:** the stdio server (`python -m coal_app --mcp`, mcp 2.x and 1.x) and the GUI's MCP endpoint now have
+    four tools: `codon_align`, `explain_report`, **`dnds_pairs`** (Ka/Ks for pairs of an aligned codon FASTA or an
+    AXT file; arguments `pairs`, `methods`, `codontable`, `min_codons`, `max_ds`, `save_as`) and
+    **`pipeline_pairs`** (two species' coding sequences -> ortholog pairs -> dN/dS per pair; `pairs_path` takes a
+    table of given pairs, so DIAMOND is not needed, and `out_dir` a new or empty folder). Both return
+    `completed`, the status counts, the first 20 rows, the rows that are not `ok` with their note, what each status
+    means, `next_step`, the equivalent `coal` command, what to cite and the limits that applied; a problem the
+    caller can fix before the run (missing file, unknown method or code, too large an input, no `coal-cpp` or
+    DIAMOND) is a tool error. The server's instructions say to call `codon_align` first and then `dnds_pairs` on
+    its `output_path` for dN/dS from a protein alignment and DNA. docs/mcp.md describes all four tools.
+  - **Needs `coal-cpp`:** Ka/Ks and the pipeline (tabs and tools) need COAL's C++ engine, which the platform
+    wheels and the Windows app include; an install with the Python engine only makes codon alignments, and the
+    tabs and tools say so (in a development version such as 0.6.0.dev0 they name the build from the checkout,
+    not the latest release, as `coal` does).
+  - **Limits** (checked before the engine starts): Ka/Ks up to 100 MB and 500,000 results (pairs x methods) and
+    one hour, in the GUI and over MCP; the pipeline up to 1,000 MB per file in the GUI (one run at a time, Stop
+    button) and 500 MB per file and one hour over MCP. On a shared server (`COAL_HOSTED=1`, the Hugging Face
+    Space): Ka/Ks up to 5 MB and 20,000 results, only the bundled examples, the run folder or uploads, no
+    `save_as`; the pipeline is refused. The GUI's new tabs read only uploads, pasted text and the bundled examples
+    (no typed paths). Results go to the run folder that is deleted after 24 hours (or `out_dir` / `save_as`); the
+    pipeline's `work` folder is removed after every run, also after Stop. Larger runs belong on the command line
+    (`coal dnds`, `coal pipeline pairs`); the pipeline's cluster mode and `coal kaks` stay command-line only.
 
 - **First-use messages (new-user audit of 2026-11-14).** `coal pipeline`: a `--pairs` file none of whose pairs
   names a record of `--query` and of `--subject` (other columns, swapped columns, another ID type) stops with exit
@@ -676,8 +747,8 @@ entry under "Added", not under "Fixed".
   it needs). `--matrix` is checked when the command line is read (a typo came after the DIAMOND search, as a
   failure of `coal-cpp codon-dnds`). The first unusable record and its reason are on stderr, not only in
   failed.tsv. After Ctrl-C the line names `--resume`. `-o` onto a folder with an earlier run's results says that
-  they are replaced. A Windows path on Linux / macOS names its WSL form, and paths are shown as typed (no doubled
-  backslashes). `-codontable N` is accepted as `-c N`; orthologr's and DIAMOND's option names
+  they are replaced. A Windows path on Linux / macOS names its WSL form (in the pipeline's messages and in
+  those of `coal` itself with the Python engine), and paths are shown as typed (no doubled backslashes). `-codontable N` is accepted as `-c N`; orthologr's and DIAMOND's option names
   (`--sensitivity-mode`, `--comp-cores`, `--threads`) and close typos of an option get a suggestion. `coal
   translate` warns when most genes have internal stop codons, with the first one and, as the pipeline does, the
   genetic code under which they have none. `coal dnds` / `coal kaks` on an input without any pair (an empty file,
@@ -745,12 +816,8 @@ entry under "Added", not under "Fixed".
   hand-made test cases: 17 rows (15 dS, 4 dN values), all with at most 4 codons compared. `coal pipeline pairs`
   on *A. thaliana* / *A. lyrata* (1,000 genes) and on yeast mitochondria writes byte-identical output files,
   also with `-m Comeron` in both flavours; in the real data of D9 none of the 17 small-class rows is 0 (re-check).
-
-- **The app and its MCP server say that they cover codon alignment only.** The app's README, the GUI's About
-  section and the MCP server's instructions now state that Ka/Ks (dN/dS) and the pipeline are in the `coal` command
-  line (`coal dnds`, `coal kaks`, `coal pipeline`), so that neither a person nor an AI agent looks for them in
-  the app. No tool changed. docs/mcp.md has the proposal for the MCP tools `dnds_pairs` and `pipeline_pairs`
-  (planned, not built).
+  The help of `--comeron-min-sites` (`coal dnds`, `coal kaks`, both engines) says so: a small class "cannot make
+  dN or dS NA unless it is then 0".
 
 - **Licence: GPL-3.0-only from the next release.** COAL (the Python and C++ engines, the `pal2nal` drop-in, the app
   and everything else in this repository) is now under the GNU General Public License, version 3 only (`LICENSE`,
@@ -853,10 +920,14 @@ entry under "Added", not under "Fixed".
     "official")` is refused with this explanation, and `sha256=` / `allow_unverified=True` (`--sha256`,
     `--allow-unverified`) cannot bring it back (with Clustal Omega they are an error). Linux and macOS install it
     from Bioconda (conda / mamba / the pinned micromamba) as before. **On Windows there is now no automatic Clustal
-    Omega install**: the message names what works (WSL; a `clustalo.exe` of your own on `PATH` or in
-    `COAL_CLUSTALO`; `--aligner mafft` with a MAFFT you installed, for which COAL has no verified Windows download
-    either). Bundling a self-built `clustalo.exe` is the realistic way to support Windows and is not done yet
-    (docs/alignment.md, "Licences").
+    Omega install**: the message names what works (WSL; MSYS2's package of Clustal Omega 1.2.4, `pacman -S
+    mingw-w64-ucrt-x86_64-clustal-omega`, or another `clustalo.exe` you trust, on `PATH` or in `COAL_CLUSTALO`;
+    `--aligner mafft` with MAFFT's own Windows package, the "all-in-one" `mafft-7.526-win64-signed.zip`, in
+    `COAL_MAFFT`). Neither Bioconda nor conda-forge has a Windows package of Clustal Omega or MAFFT (checked
+    2026-11-14), and COAL adds a download only with a SHA-256 computed from the file itself, which could not be
+    done for either Windows build, so neither is downloaded; the MAFFT message names the package and its page, and
+    docs/install.md "Clustal Omega and MAFFT on Windows" has the steps. Bundling a self-built `clustalo.exe` is
+    another way to support Windows and is not done yet (docs/alignment.md, "Licences").
 - **`pal2nal` without arguments is a usage error:** the usage text goes to standard error with exit 1 (as the
   drop-in's help says and as PAL2NAL's own usage goes to stderr), not to standard output with exit 0, so a pipeline
   step that forgot its files no longer gets the usage text as its "alignment". `pal2nal -h` is unchanged (stdout, 0).
@@ -1012,6 +1083,44 @@ Documentation, tests, continuous integration and packaging:
   Windows with the reason: its shim runs coal-cpp as a child process there, so the reference tests that interrupt
   a run watch the wrong process (before, the test errored on the symlink privilege before getting that far).
 - `tests/tools/stress_*.py`: the stress-test generator, harness and helpers; `tests/test_stress_findings.py`.
+- **CI: the app's real-engine tests.** The GUI and MCP app jobs build coal-cpp and install DIAMOND, and run the
+  app's real-engine Ka/Ks and pipeline tests (`TestRealEngine`) on Linux and Windows.
+- **CI: the tutorials run as tests.** `scripts/run_tutorials.py` runs the commands of `docs/tutorials/` (01, 02,
+  03, 05) on their real NCBI data, one bash session per tutorial, and fails when a documented output line, an exit
+  status or one of 15 numbers in the prose no longer matches what the code prints; documented lines that are known
+  to differ are listed in `tests/fixtures/tutorials/known_drift.json` (empty now) and reported as warnings
+  (`--strict-known` fails on them too). The CI job `tutorials` (not a required check) runs it when the tutorials,
+  `src/coal/`, `cpp/` or the runner change; `tests/test_tutorials.py` tests the runner offline. The tutorials'
+  code blocks are tagged `bash` (commands) and `text` (outputs), as the runner reads them. The app's two timeout
+  tests force `COAL_ENGINE=python`, so they no longer fail when coal-cpp is found.
+- **CI: release dry run and smoke test.** `release.yml` can be dispatched on a branch with `publish=false` (a dry
+  run of every build job, nothing published; before, it required a release tag, so main could not be built before
+  tagging). `release-smoke.yml` (dispatch only, read-only token) installs the files of a release.yml run on Linux
+  x86_64 and arm64, macOS and Windows with Python 3.10 and 3.13 (the platform wheel, the pure wheel and the sdist,
+  each in a fresh environment), runs them (alignments with both engines, `coal dnds`, `coal pipeline pairs
+  --pairs`, the app's `--check`, the Windows app's portable zip and silent install), and requires every file
+  written with `-o` to be byte-identical across systems, Pythons and install kinds.
+- **Tests: property-based and differential fuzz tests of the Ka/Ks engine.** `tests/test_kaks_properties.py`
+  (seeded random pairs, 1 to 2,000 codons, all nine methods, all genetic codes: no crash or hang, documented
+  statuses only, no nan/inf, invariance to row swap, codon-column order, `-j` and input format, `python -m coal`
+  equal to `coal-cpp`; a fast subset by default, `COAL_SLOW=1` for more) and `tests/fuzz_kaks_vs_reference.py`
+  (random pairs against KaKs_Calculator 2.0 and PAML yn00, every difference classified by the documented ones;
+  skipped unless the references are given). K01, K02, K03, K05 and K06 are fixed and their `TestKnownBugs`
+  tests pass; `tests/test_kaks_myn_kappa_inf.py` (and `tests/cpp/kaks_myn_kappa_inf.cpp` through the C++ API)
+  covers the infinite kappa. ci.yml's C++ job runs `tests.test_kaks_properties` and the MYN test; the nightly run
+  has a job `kaks-properties` (COAL_SLOW unit tests and a 1,500-pair campaign) and runs 300 property pairs under
+  the sanitizers.
+- **CI: the tutorials every night.** nightly.yml has a job `tutorials`: ci.yml's tutorials job without its paths
+  filter, so drift that comes from a new tool pin or from NCBI's files is caught too (CONTRIBUTING.md "Nightly
+  checks" lists all six nightly jobs).
+- **Docs:** docs/mcp.md describes the four MCP tools, their arguments, results, errors and limits; docs/install.md,
+  the Claude skill (`.claude/skills/coal/SKILL.md`) and the MCP stage demo (`demo/mcp_demo.md`) no longer say the
+  app or its MCP server has two tools or covers alignment only. docs/install.md has a section "Clustal Omega and
+  MAFFT on Windows"; docs/r.md describes coalr's positional-pairing and all-failed warnings; docs/usage.md says
+  what `coal translate` warns about; docs/pipeline.md describes the first-use messages of the new-user audit (a
+  `--pairs` / `--clusters` file that names no record stops with exit 1, the header line, CSV, genome-like inputs,
+  the earlier-results notice, option suggestions) and the Windows routes; the release checklist
+  (docs/development.md) removes the dev-version banner.
 - **Tests added with the review of 2026-11-13:** the pair-table header is the same in `dnds_cli.cpp`,
   `kaks_cli.cpp`, `dnds_pipeline.py` and coalr (`tests/test_pair_table.py`); a `coal-cpp` built without test hooks
   makes the reference-shim resume tests skip instead of fail; five fixed sleeps in the lock, MSA and pipeline

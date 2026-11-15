@@ -177,7 +177,7 @@ class TestReleaseWorkflow(unittest.TestCase):
         self.assertEqual(wf["permissions"], {"contents": "read"})
         self.assertIn("group", wf["concurrency"])
         self.assertEqual(wf["env"]["FUZZ_SEED"], "${{ inputs.seed || github.run_number }}")
-        self.assertEqual(set(wf["jobs"]), {"pal2nal-fuzz", "engine-fuzz", "kaks-properties", "sanitizers", "tsan"})
+        self.assertEqual(set(wf["jobs"]), {"pal2nal-fuzz", "engine-fuzz", "kaks-properties", "sanitizers", "tsan", "tutorials"})
         for name, job in wf["jobs"].items():
             self.assertIsInstance(job.get("timeout-minutes"), int, name)
             self.assertNotIn("permissions", job, name)

@@ -16,13 +16,13 @@ length, and their synonymous sites are far enough apart to show what saturation 
 
 ## 0. Set up
 
-```
+```bash
 export T=/path/to/COAL/docs/tutorials        # see the README of this folder
 cd coal-tutorials                             # the scratch folder of tutorial 1, or a new one
 bash $T/data/get_enterobacteria.sh
 ```
 
-```
+```text
 ok                 coal-tutorial-data/ecoli_K12_MG1655.cds.fna.gz
 ok                 coal-tutorial-data/styphimurium_LT2.cds.fna.gz
 ```
@@ -32,14 +32,14 @@ gzip-compressed FASTA as it is.
 
 ## 1. Run it
 
-```
+```bash
 coal pipeline pairs \
     --query   coal-tutorial-data/ecoli_K12_MG1655.cds.fna.gz \
     --subject coal-tutorial-data/styphimurium_LT2.cds.fna.gz \
     -o ecoli_vs_salmonella -j 1
 ```
 
-```
+```text
 coal pipeline: 2 gzip-compressed input file(s) decompressed into .../ecoli_vs_salmonella/work/inputs
 coal pipeline: translated 4,318 query and 4,554 subject records (0 not usable)
 coal pipeline: warning: the input has several CDS records per gene (isoforms or alternative start sites; query: 4,318 records of 4,308 genes, 9 genes with several records (e.g. b0149: lcl|NC_000913.3_cds_NP_414691.1_149, lcl|NC_000913.3_cds_YP_010051172.1_150), read from the header field [locus_tag=). The pipeline treats each record as a gene: such a gene is compared once per record, and its reciprocal best hits are split between its records. Use --longest-isoform to keep the longest CDS of each gene (with --gene-map TSV if the genes are not in the headers), or give one sequence per gene
@@ -63,11 +63,11 @@ one record per gene (step 6).
 
 ## 2. What is in the folder
 
-```
+```bash
 ls ecoli_vs_salmonella
 ```
 
-```
+```text
 dnds.tsv  failed.tsv  genes.tsv  orthologs.tsv  report.json  unpaired.tsv  work
 ```
 
@@ -87,11 +87,11 @@ paralogous families, where the best hit of A is B but B's best hit is A's paralo
 
 ## 3. The table
 
-```
+```bash
 head -3 ecoli_vs_salmonella/dnds.tsv | cut -f1-6,13-16
 ```
 
-```
+```text
 seq1	seq2	method	dN	dS	dNdS	codons_compared	prot_aln_length	prot_identity	status
 lcl|NC_000913.3_cds_NP_414543.1_2	lcl|NC_003197.2_cds_NP_459007.1_2	YN	0.031469968	1.9097809	0.016478313	820	820	94.51	ok
 lcl|NC_000913.3_cds_NP_414544.1_3	lcl|NC_003197.2_cds_NP_459008.1_3	YN	0.035680572	2.0166797	0.017692731	309	310	92.90	ok
@@ -107,11 +107,11 @@ The other columns (`SE_dN`, `SE_dS`, `N_sites`, `S_sites`, `Nd`, `Sd`, `note`) a
 
 Count them:
 
-```
+```bash
 cut -f16 ecoli_vs_salmonella/dnds.tsv | sort | uniq -c
 ```
 
-```
+```text
      11 not_converged
    2973 ok
     155 saturated
@@ -129,11 +129,11 @@ cut -f16 ecoli_vs_salmonella/dnds.tsv | sort | uniq -c
 
 **The three warnings are selenoproteins**, a nice example of why a warning should be read:
 
-```
+```bash
 awk -F'\t' '$16=="warning"' ecoli_vs_salmonella/dnds.tsv | cut -f1,17
 ```
 
-```
+```text
 lcl|NC_000913.3_cds_NP_415991.1_1460	1 codon column(s) with an internal stop codon skipped; seq1: 1 internal stop codon in the CDS; seq2: 1 internal stop codon in the CDS
 lcl|NC_000913.3_cds_NP_418330.1_3826	1 codon column(s) with an internal stop codon skipped; seq1: 1 internal stop codon in the CDS; seq2: 1 internal stop codon in the CDS
 lcl|NC_000913.3_cds_NP_418503.1_3999	1 codon column(s) with an internal stop codon skipped; seq1: 1 internal stop codon in the CDS; seq2: 1 internal stop codon in the CDS
@@ -154,13 +154,13 @@ A status of `ok` only says that the method produced numbers. [kaks.md, "Filterin
 interpretation"](../kaks.md#filtering-before-interpretation) gives four checks and starting thresholds. The
 summary script of this folder applies them in order and says what each removes:
 
-```
+```bash
 python3 $T/scripts/dnds_summary.py ecoli_vs_salmonella/dnds.tsv \
     --cds coal-tutorial-data/ecoli_K12_MG1655.cds.fna.gz coal-tutorial-data/styphimurium_LT2.cds.fna.gz \
     --write-kept kept.tsv
 ```
 
-```
+```text
 ecoli_vs_salmonella/dnds.tsv: 3142 rows of method YN
 status: ok 2973, saturated 155, not_converged 11, warning 3
 filters (each applied to what the previous ones kept):
@@ -208,13 +208,13 @@ How to read it:
   (Sharp & Li 1987): highly expressed genes use a restricted set of codons, which constrains synonymous change.
   Check it with the script's `--only-ids`:
 
-  ```
+  ```bash
   zcat coal-tutorial-data/ecoli_K12_MG1655.cds.fna.gz | grep -E '\[protein=(30S|50S) ribosomal' \
       | sed 's/^>//; s/ .*//' > ribo.ids
   python3 $T/scripts/dnds_summary.py ecoli_vs_salmonella/dnds.tsv --only-ids ribo.ids --top 0
   ```
 
-  ```
+  ```text
   ecoli_vs_salmonella/dnds.tsv: 61 rows of method YN (only the IDs in ribo.ids)
   ...
   quartiles over the 57 rows kept (25% / median / 75%):
@@ -226,9 +226,41 @@ How to read it:
   Median dS 0.08 against 1.22 for all genes; dN/dS about the same. This is why dS is a poor molecular clock
   across genes of different expression, and why comparing dN/dS between gene classes needs care.
 
-The same filters are one line in R (from kaks.md) or awk:
+**Why this step uses dS ≤ 2, dS ≥ 0.01 and 50 codons.** They are the outer bounds of
+[kaks.md](../kaks.md#filtering-before-interpretation): enough to read the *distribution* of a genome comparison
+whose median dS is 1.2, which a cut at dS 1 would mostly remove. For reading genes one by one, kaks.md's
+thresholds are stricter: at least 100 compared codons, dS at most 1 (0.5 with strong codon-usage bias), and dS at
+least about 0.05 for the ratio (in COAL's simulations YN underestimates dN/dS by 10 to 40% at dS 1 to 2). The
+same script with those:
 
+```bash
+python3 $T/scripts/dnds_summary.py ecoli_vs_salmonella/dnds.tsv --min-codons 100 --max-ds 1 --min-ds 0.05 --top 3
 ```
+
+```text
+ecoli_vs_salmonella/dnds.tsv: 3142 rows of method YN
+...
+  codons_compared >= 100                           2747  (-229)
+  codons_compared / prot_aln_length >= 0.5         2741  (-6)
+  prot_identity >= 40                              2711  (-30)
+  dS <= 1.0                                         742  (-1969)
+  dS >= 0.05                                        738  (-4)
+quartiles over the 738 rows kept (25% / median / 75%):
+  dN    0.0147 / 0.0244 / 0.0403
+  dS    0.5421 / 0.7413 / 0.8839
+  dNdS  0.0234 / 0.0368 / 0.0600
+  dN/dS > 1: 0 of 738
+...
+```
+
+Only 738 of the 2,711 long, well-aligned pairs are left, and they are not a random sample: the genes with the
+least synonymous change (highly expressed ones, such as the ribosomal proteins below) are over-represented, and
+none of the three "top hits" above remains. Their median dN/dS (0.037) is close to that of the wider set (0.041),
+so the genome-wide picture holds; a statement about one gene should come from this stricter set.
+
+The same filters as the first run are one line in R (from kaks.md) or awk:
+
+```bash
 awk -F'\t' 'NR==1 || ($16=="ok" || $16=="warning") && $13>=50 && $13>=0.5*$14 && $15>=40 && $5!="NA" && $5<=2 && $5>=0.01' \
     ecoli_vs_salmonella/dnds.tsv > kept_awk.tsv
 ```
@@ -238,18 +270,18 @@ awk -F'\t' 'NR==1 || ($16=="ok" || $16=="warning") && $13>=50 && $13>=0.5*$14 &&
 `--min-codons`, `--max-ds` and `--min-identity` mark rows instead of removing them: status `warning`, a note,
 numbers unchanged.
 
-```
+```bash
 coal pipeline pairs --query coal-tutorial-data/ecoli_K12_MG1655.cds.fna.gz \
     --subject coal-tutorial-data/styphimurium_LT2.cds.fna.gz -o ecsa_filtered -j 1 \
-    --longest-isoform --min-codons 50 --max-ds 2 --min-identity 40 --keep-alignments
+    --longest-isoform --min-codons 100 --max-ds 1 --min-identity 40 --keep-alignments
 ```
 
-```
+```text
 coal pipeline: --longest-isoform: query: 10 of 4,318 records dropped, 4,308 genes (from header field [locus_tag=); subject: 0 of 4,554 records dropped, 4,554 genes (from header field [locus_tag=); 10 in all, listed in genes.tsv with status dropped
 coal pipeline: 3,142 pairs (rbh)
-coal pipeline: summary: 8,872 records (0 not usable, 10 dropped by --longest-isoform: 8,862 genes); 3,142 pairs: 2,465 ok, 511 warning, 11 not_converged, 155 saturated, 0 no_data, 0 error
+coal pipeline: summary: 8,872 records (0 not usable, 10 dropped by --longest-isoform: 8,862 genes); 3,142 pairs: 739 ok, 2,237 warning, 11 not_converged, 155 saturated, 0 no_data, 0 error
 ...
-coal pipeline: summary: flagged (status warning, numbers unchanged): 23 pair(s) with fewer than 50 codons compared, 472 with dS above 2, 38 with protein identity below 40%
+coal pipeline: summary: flagged (status warning, numbers unchanged): 229 pair(s) with fewer than 100 codons compared, 2,109 with dS above 1, 38 with protein identity below 40%
 ```
 
 `report.json` has the same counts (`counts.flagged`), `genes.tsv` lists the 10 dropped records with the record
@@ -260,7 +292,7 @@ kept for each gene, and `codon_alignments.fasta` has the 3,142 codon alignments 
 
 `report.json` records what is needed to describe and repeat the run:
 
-```
+```bash
 python3 - <<'EOF'
 import json
 r = json.load(open("ecoli_vs_salmonella/report.json"))
@@ -273,7 +305,7 @@ for name, t in r["tools"].items():
 EOF
 ```
 
-```
+```text
 completed 0 0.6.0.dev0 2026-11-14T14:57:54Z
 coal pipeline pairs --query coal-tutorial-data/ecoli_K12_MG1655.cds.fna.gz --subject coal-tutorial-data/styphimurium_LT2.cds.fna.gz -o ecoli_vs_salmonella -j 1
 --query 8b7b48b7b905313082141db4b77807b7aafebca7a5c40bbd42832baacd1cfd9b
@@ -286,13 +318,13 @@ The input checksums are those of the download script, so anyone can check they h
 has every option with the value used (defaults included), `tools.*.commands` the exact DIAMOND and engine
 command lines, `platform` and `threads` the machine. Running the same command again gives the same bytes:
 
-```
+```bash
 coal pipeline pairs --query coal-tutorial-data/ecoli_K12_MG1655.cds.fna.gz \
     --subject coal-tutorial-data/styphimurium_LT2.cds.fna.gz -o ecsa_rerun -j 1 -q
 sha256sum ecoli_vs_salmonella/dnds.tsv ecsa_rerun/dnds.tsv
 ```
 
-```
+```text
 7ed75371df946874b4270a0c17e08e496ba75f04ba3ef5d91678a11092e1b8e8  ecoli_vs_salmonella/dnds.tsv
 7ed75371df946874b4270a0c17e08e496ba75f04ba3ef5d91678a11092e1b8e8  ecsa_rerun/dnds.tsv
 ```
@@ -305,12 +337,12 @@ uses those pairs; `--resume` in an output folder of an earlier run reuses the tr
 and search options are unchanged (the report's `stages` then say `cached: true`). Adding a method changes
 neither:
 
-```
+```bash
 coal pipeline pairs --query coal-tutorial-data/ecoli_K12_MG1655.cds.fna.gz \
     --subject coal-tutorial-data/styphimurium_LT2.cds.fna.gz -o ecsa_rerun -j 1 --resume -m YN -m NG
 ```
 
-```
+```text
 coal pipeline: translate_query: reused from the earlier run (--resume)
 coal pipeline: translate_subject: reused from the earlier run (--resume)
 ...
@@ -327,11 +359,11 @@ and why NG saturates more often here: [tutorial 5](05-choosing-a-method.md).
 
 **What to cite** is in the report too:
 
-```
+```bash
 coal cite ecoli_vs_salmonella/report.json
 ```
 
-```
+```text
 [coal] Newton C, Murati K (2026). COAL: codon alignments from protein alignments, version 0.6.0.dev0. https://github.com/plumat-coal/COAL
 [suyama2006] Suyama M, Torrents D, Bork P (2006). PAL2NAL: robust conversion of protein sequence alignments into the corresponding codon alignments. Nucleic Acids Research 34:W609-W612. https://doi.org/10.1093/nar/gkl315
 [yang2000] Yang Z, Nielsen R (2000). Estimating synonymous and nonsynonymous substitution rates under realistic evolutionary models. Molecular Biology and Evolution 17:32-43. https://doi.org/10.1093/oxfordjournals.molbev.a026236
@@ -356,7 +388,7 @@ Built from the report, for this run:
 
 Tutorials 4 and 5 use `ecoli_vs_salmonella/` and `ecsa_filtered/`; once you are done with them:
 
-```
+```bash
 rm -rf ecoli_vs_salmonella ecsa_filtered ecsa_rerun kept.tsv kept_awk.tsv ribo.ids
 ```
 

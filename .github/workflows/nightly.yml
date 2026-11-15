@@ -1,7 +1,7 @@
 name: Nightly
 
 # The test campaign that finds the bugs the per-push CI does not: a fresh random seed every night (the run number,
-# or the `seed` input of a manual run), so the random comparisons keep covering new inputs. Five independent jobs:
+# or the `seed` input of a manual run), so the random comparisons keep covering new inputs. Six independent jobs:
 #   pal2nal-fuzz   COAL vs the real PAL2NAL v14 (3,000 random cases x 4 formats), the Python engine and coal-cpp
 #   engine-fuzz    coal-cpp vs the Python engine on tests/tools/engine_fuzz.py's wider input space (1,500 cases)
 #   kaks-properties the Ka/Ks engine's property-based fuzz (tests/test_kaks_properties.py): COAL_SLOW unit tests and
@@ -10,6 +10,7 @@ name: Nightly
 #   sanitizers     coal-cpp built with ASan + UBSan: the C++ test set, 300 generator cases and 300 Ka/Ks pairs
 #   tsan           coal-cpp and coal-cpp-align built with ThreadSanitizer: kaks / dnds / codon-dnds -j 4 (all
 #                  methods, Comeron and Li included) and the aligner, each also compared with its -j 1 output
+#   tutorials      ci.yml's tutorials job (docs/tutorials run on their real NCBI data) without its paths filter
 # A failing fuzz job uploads the differing cases as an artifact (each case folder holds its inputs and args.txt).
 # How to read one and how to run each job locally: CONTRIBUTING.md, "Nightly checks".
 
@@ -367,4 +368,77 @@ jobs:
             tsan-keep/
             tsan.txt
           if-no-files-found: warn
+          retention-days: 30
+
+  tutorials:
+    # ci.yml's tutorials job (scripts/run_tutorials.py: the commands of docs/tutorials/01, 02, 03 and 05 on their real
+    # NCBI data, compared with what the tutorials show), every night and without its paths filter, so drift that does
+    # not come from a change under docs/tutorials/, src/coal/ or cpp/ is caught too: a new DIAMOND / Clustal Omega /
+    # MAFFT pin, NCBI's files or their availability. With --full (tutorial 3's MAFFT run, as ci.yml). The data and
+    # COAL's tool cache are cached as in ci.yml. The seed is not used: the tutorials are deterministic.
+    name: "Tutorials as tests (docs/tutorials on real data, nightly)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            apps/coal-app/pyproject.toml
+            apps/coal-app/desktop/requirements.txt
+      - name: Cache the tutorial data
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: tutorial-data
+          key: tutorial-data-${{ hashFiles('docs/tutorials/data/*.sh') }}
+      - name: Cache COAL's tools
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ~/.cache/coal
+          key: coal-tools-${{ runner.os }}-${{ hashFiles('src/coal/msa.py', 'src/coal/dnds_pipeline.py') }}
+      - name: Install the engine, build coal-cpp and coal-cpp-align
+        shell: bash
+        run: |
+          python -m pip install -e .
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel 4 --target coal-cpp coal-cpp-align
+          echo "COAL_CPP=$PWD/build/coal-cpp" >> "$GITHUB_ENV"
+      - name: Install DIAMOND, Clustal Omega, MAFFT and PAL2NAL v14
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          python -m coal pipeline install diamond clustalo mafft
+          d=$(python -c "from coal import msa; import os; print(os.path.dirname(msa.find_clustalo()))")
+          echo "$d" >> "$GITHUB_PATH"
+          python scripts/fetch_pal2nal.py
+          echo "PAL2NAL=$PWD/PAL2NAL/pal2nal.v14/pal2nal.pl" >> "$GITHUB_ENV"
+      - name: Download the tutorial data (NCBI, SHA-256 checked)
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          for s in mycoplasma enterobacteria chlamydia; do
+            for attempt in 1 2 3; do
+              bash docs/tutorials/data/get_$s.sh tutorial-data && break
+              [ "$attempt" = 3 ] && { echo "::error::could not download the data of get_$s.sh from NCBI"; exit 1; }
+              echo "attempt $attempt failed; retrying in 30 s"; sleep 30
+            done
+          done
+      - name: Run the tutorials and compare with what they show
+        shell: bash
+        run: |
+          coal --cpp-path
+          python scripts/run_tutorials.py --full --data-cache tutorial-data --jobs 4 --workdir "$RUNNER_TEMP/tutorials" \
+            --report "$RUNNER_TEMP/tutorials/report.json" --summary "$GITHUB_STEP_SUMMARY"
+      - name: Keep the outputs of a failed run
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: tutorials-nightly
+          path: |
+            ${{ runner.temp }}/tutorials/report.json
+            ${{ runner.temp }}/tutorials/logs
+          if-no-files-found: ignore
           retention-days: 30

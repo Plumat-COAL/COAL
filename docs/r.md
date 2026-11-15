@@ -69,11 +69,15 @@ res <- coal_dnds_pairs("thaliana_cds.fasta", "lyrata_cds.fasta",
   (`"cds.fasta"`, `"genes.fa.gz"`). Any other single string is one sequence. An aligned row is therefore never
   "file not found" because of what it ends in or contains: `"MKV..LFA.FA"`, `"ACGT.NT"`, `"MK/VL"`, `"~~MKV"`
   are sequences (the first rule of 2026-11-12 called them missing files). The rule cannot tell everything apart:
-  a mistyped file name in upper case (`"CDS.FASTA"`) is taken as a sequence, and a lower-case row whose only gap
-  is one dot just before `fa`, `aa`, `nt`, ... or that uses `/` is taken as a file name. Name a single sequence
-  (`c(id = "...")`) and it is always a sequence.
+  a mistyped file name in upper case (`"CDS.FASTA"`) is taken as a sequence (the error that follows says that no
+  such file exists in the working folder), and a lower-case row whose only gap is one dot just before `fa`, `aa`,
+  `nt`, ... or that uses `/` is taken as a file name. Name a single sequence (`c(id = "...")`) and it is always a
+  sequence.
 - `pairs`: two columns, query ID and subject ID (for example `orthologr::diamond_rec()`'s first two columns).
-  Without it, the i-th query goes with the i-th subject.
+  Without it (`NULL`), the i-th query goes with the i-th subject, and when the IDs of such pairs differ a warning
+  says how many differ and how many of them have a protein identity below 20%; `pairs = "position"` asks for that
+  pairing without the warning. When every pair fails, a warning gives the common cause (`pairs` columns that are
+  not the IDs or are the other way round, protein given as CDS).
 - Result: a data frame with the columns of [`dnds.tsv`](pipeline.md#dndstsv): `seq1 seq2 method dN dS dNdS SE_dN
   SE_dS N_sites S_sites Nd Sd codons_compared prot_aln_length prot_identity status note`, rows in the order of
   `pairs`, `NA` for a value that is not available. A gene that cannot be used, an unknown ID or a pair that cannot

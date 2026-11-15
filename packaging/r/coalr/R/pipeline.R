@@ -52,14 +52,27 @@ py_required_coal <- function() {
   any(grepl("^coal[-_]align", req))
 }
 
+# How to get COAL's Python pipeline. A development version of coalr (0.6.0.9000) goes with a development COAL whose
+# pipeline is in no release yet (0.5.0 makes codon alignments only), so it is not sent to the latest release but to
+# a build from the checkout, as `coal` itself says (new-user audit 2026-11-14, U01: cli.needs_cpp_text).
+python_install_hint <- function(version = utils::packageVersion("coalr")) {
+  v <- unlist(unclass(package_version(version)))
+  if (length(v) >= 4L && v[[4L]] >= 9000L) {
+    return(paste0("this is a development version of coalr, and the matching COAL pipeline is not in any release ",
+                  "yet (0.5.0 makes codon alignments only): in a checkout of COAL, python -m pip install -e . ",
+                  "and build coal-cpp (cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build), ",
+                  "then set COAL_CPP to build/coal-cpp (docs/install.md);"))
+  }
+  paste0("python -m pip install <the platform wheel coal_align-<version>-py3-none-<platform>.whl from ",
+         "https://github.com/plumat-coal/COAL/releases/latest> (the source package has no coal-cpp),")
+}
+
 py_pipeline <- function(python = NULL) {
   ok <- coal_python_available(python)
   if (!ok) {
     stop("COAL's Python pipeline is not available: ", attr(ok, "reason"),
          "\nUse coal_dnds_pairs() / coal_dnds_clusters() (no Python needed), or install it: ",
-         "python -m pip install <the platform wheel coal_align-<version>-py3-none-<platform>.whl from ",
-         "https://github.com/plumat-coal/COAL/releases/latest> (the source package has no coal-cpp), then ",
-         "reticulate::use_python() / use_virtualenv().", call. = FALSE)
+         python_install_hint(), " then reticulate::use_python() / use_virtualenv().", call. = FALSE)
   }
   reticulate::import("coal.dnds_pipeline", convert = TRUE, delay_load = FALSE)
 }

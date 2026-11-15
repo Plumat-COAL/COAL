@@ -138,11 +138,34 @@ def install_command() -> str:
     return INSTALL_DIAMOND
 
 
-NEEDS_CPP = ("Ka/Ks and the dN/dS pipeline need COAL's C++ engine (coal-cpp), which this install does not have "
-             "(it has the Python engine only, which makes codon alignments). The platform wheels and the Windows "
-             "app include it: install coal_align-<version>-py3-none-<platform>.whl from "
-             "https://github.com/plumat-coal/COAL/releases/latest, or build it (docs/cpp-engine.md) and set COAL_CPP. "
-             "`coal --cpp-path` shows where COAL looks.")
+def _engine_version() -> str:
+    try:
+        from coal import __version__
+        return str(__version__)
+    except ImportError:  # pragma: no cover
+        return ""
+
+
+def needs_cpp_text(version: str | None = None) -> str:
+    """What the Ka/Ks and pipeline tabs and MCP tools say without coal-cpp. As coal.cli.needs_cpp_text: in a
+    development version of COAL (0.6.0.dev0) Ka/Ks and the pipeline are in no release yet, so the text does not
+    send the user to the latest release, whose wheels make codon alignments only (new-user audit 2026-11-14,
+    U01), but to a build from the checkout."""
+    version = _engine_version() if version is None else version
+    head = ("Ka/Ks and the dN/dS pipeline need COAL's C++ engine (coal-cpp), which this install does not have "
+            "(it has the Python engine only, which makes codon alignments). ")
+    if ".dev" in version:
+        return head + (f"This is the development version {version} of COAL: Ka/Ks and the pipeline are not in any "
+                       "release yet (0.5.0 and earlier make codon alignments only). Build coal-cpp in the COAL "
+                       "checkout (docs/cpp-engine.md) and set COAL_CPP to build/coal-cpp. "
+                       "`coal --cpp-path` shows where COAL looks.")
+    return head + ("The platform wheels and the Windows app include it: install "
+                   "coal_align-<version>-py3-none-<platform>.whl from "
+                   "https://github.com/plumat-coal/COAL/releases/latest, or build it (docs/cpp-engine.md) and set "
+                   "COAL_CPP. `coal --cpp-path` shows where COAL looks.")
+
+
+NEEDS_CPP = needs_cpp_text()
 NEEDS_DIAMOND = ("The pipeline searches for orthologs with DIAMOND, which was not found (COAL looks at "
                  "$COAL_DIAMOND, then PATH, then its own cache). Install it into COAL's cache with "
                  f"`{install_command()}` (or put DIAMOND 2.x on PATH), then check again.")
