@@ -432,13 +432,25 @@ jobs:
           PAL2NAL: PAL2NAL/pal2nal.v14/pal2nal.pl
         run: |
           python .github/ci_cpp_tests.py --no-skip test_cpp_vs_reference,test_stress_findings,test_align \
-            tests.test_cpp_vs_reference tests.test_stress_findings tests.test_align
+            tests.test_cpp_vs_reference tests.test_stress_findings tests.test_align 2>&1 | tee cpp-extras.txt
+          test "${PIPESTATUS[0]}" -eq 0
       - name: Full file system tests as root (must not skip)
         if: ${{ !cancelled() }}
         shell: bash
         run: |
           sudo --preserve-env env "PATH=$PATH" python .github/ci_cpp_tests.py --no-skip test_robustness \
-            tests.test_robustness.TestDiskFull
+            tests.test_robustness.TestDiskFull 2>&1 | tee cpp-extras-root.txt
+          test "${PIPESTATUS[0]}" -eq 0
+      - name: Upload the test logs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: cpp-extras-seed-${{ env.FUZZ_SEED }}
+          path: |
+            cpp-extras.txt
+            cpp-extras-root.txt
+          if-no-files-found: warn
+          retention-days: 30
 
   tutorials:
     # ci.yml's tutorials job (scripts/run_tutorials.py: the commands of docs/tutorials/01, 02, 03 and 05 on their real

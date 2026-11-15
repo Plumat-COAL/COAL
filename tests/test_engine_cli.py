@@ -399,6 +399,7 @@ class TestAutomaticCppDispatch(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn(b"COAL_ENGINE='fast'", err)
 
+    @unittest.skipIf(os.name == "nt", "a sh script stands in for a stale coal-cpp (POSIX)")
     def test_cpp_that_cannot_start_falls_back_with_one_notice(self):
         broken = self.tmp / "broken-coal-cpp"
         broken.write_text("not a program\n")
@@ -440,6 +441,7 @@ class TestAutomaticCppDispatch(unittest.TestCase):
         self.assertTrue(self.mark.exists(), "the app's `python -m coal` did not run coal-cpp")
         self.assertEqual([h["suggested_codontable"] for h in r.report["hints"] if h["code"] == "genetic_code"], [1])
 
+    @unittest.skipIf(os.name == "nt", "the lookup skips files without the execute bit, which Windows does not have (POSIX)")
     def test_binary_lookup_order(self):
         from coal import dispatch
         with mock.patch.dict(os.environ, {"COAL_CPP": str(self.wrapper)}):
@@ -476,6 +478,7 @@ class TestAutomaticCppDispatch(unittest.TestCase):
                     mock.patch.dict(os.environ, {"PATH": str(self.tmp)}):
                 self.assertEqual(dispatch.find_cpp(), str(self.tmp / "coal-cpp"))  # then PATH
 
+    @unittest.skipIf(os.name == "nt", "a sh script stands in for a stale coal-cpp (POSIX)")
     def test_cpp_path_flag(self):
         """`coal --cpp-path` prints the coal-cpp that coal would use, or says why not (exit 1)."""
         env = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "COAL_CPP": str(self.wrapper)}
