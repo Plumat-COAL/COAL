@@ -21,6 +21,15 @@ const char* const NON_ASCII_ID =
 const char* const CONTROL_CHAR =
     "control character: sequence files must be plain text (is this a binary or word-processor file?)";
 
+// A file that starts with the gzip magic bytes (1f 8b), whatever its name: the codon-alignment readers have no
+// decompressor (the standard library only), and read as text it gave "control character" or "sequence data before
+// the first '>' header". The same words as src/coal/seqio.py GZIP_INPUT.
+const char* const GZIP_INPUT =
+    "is gzip-compressed: decompress it first (e.g. with gunzip -k or zcat): sequence files must be plain text";
+static inline bool gzip_magic(const char* b, size_t n) {
+    return n >= 2 && (unsigned char)b[0] == 0x1f && (unsigned char)b[1] == 0x8b;
+}
+
 // NUL and the other C0 control bytes, except tab, LF, VT, FF and CR (seqio.py _CONTROL)
 static inline bool control_byte(unsigned char c) { return c < 0x20 && !(c >= 0x09 && c <= 0x0d); }
 const char* const EMPTY_HEADER =
@@ -50,11 +59,22 @@ static std::string windows_path_hint(const std::string& path) {
     const char d = path.empty() ? '\0' : path[0];
     const bool letter = (d >= 'A' && d <= 'Z') || (d >= 'a' && d <= 'z');  // ASCII only, as the regex [A-Za-z]
     if (!letter || path.size() < 3 || path[1] != ':' || (path[2] != '\\' && path[2] != '/')) return "";
-    std::string rest = path.substr(3);
-    std::replace(rest.begin(), rest.end(), '\\', '/');
+    // one '/' between the parts and none at the end, as the path would be typed: 'C:\' is /mnt/c and 'C:\\a\\b.fa'
+    // (backslashes doubled) is /mnt/c/a/b.fa, not /mnt/c/ and /mnt/c//a//b.fa
     const char lower = (d >= 'A' && d <= 'Z') ? (char)(d - 'A' + 'a') : d;
-    return ". This is a Windows path; under WSL (Windows Subsystem for Linux) the same file is /mnt/" +
-           std::string(1, lower) + "/" + rest;
+    std::string wsl = "/mnt/" + std::string(1, lower);
+    bool sep = true;
+    for (size_t i = 3; i < path.size(); ++i) {
+        const char c = path[i];
+        if (c == '\\' || c == '/') {
+            sep = true;
+            continue;
+        }
+        if (sep) wsl += '/';
+        sep = false;
+        wsl += c;
+    }
+    return ". This is a Windows path; under WSL (Windows Subsystem for Linux) the same file is " + wsl;
 #endif
 }
 
@@ -177,7 +197,8 @@ static void check_ascii(std::string& s, const std::string& path, long long linen
 LineReader::LineReader(const std::string& path, bool keep_bad_ids)
     : path_(path), in_(path, std::ios::binary), buf_(1 << 16), keep_bad_ids_(keep_bad_ids) {
     if (!in_) throw InputError(open_error(path), "file_error");
-    if (fill() && len_ >= 3 && (unsigned char)buf_[0] == 0xEF && (unsigned char)buf_[1] == 0xBB &&
+    if (fill() && gzip_magic(buf_.data(), len_)) throw InputError(path + " " + GZIP_INPUT);
+    if (len_ >= 3 && (unsigned char)buf_[0] == 0xEF && (unsigned char)buf_[1] == 0xBB &&
         (unsigned char)buf_[2] == 0xBF)
         pos_ = 3;  // UTF-8 byte-order mark
 }
@@ -427,6 +448,7 @@ void DnaIndex::scan(int fno, const std::string& path) {
     {  // UTF-8 byte-order mark
         char bom[3] = {};
         in.read(bom, 3);
+        if (gzip_magic(bom, (size_t)in.gcount())) throw InputError(path + " " + GZIP_INPUT);
         if (in.gcount() == 3 && (unsigned char)bom[0] == 0xEF && (unsigned char)bom[1] == 0xBB &&
             (unsigned char)bom[2] == 0xBF)
             offset = 3;

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import codecs
 import errno
+import io
 import os
 import re
 from array import array
@@ -35,6 +36,12 @@ NON_ASCII_ID = "non-ASCII character in the sequence ID: use only ASCII letters, 
 CONTROL_CHAR = "control character: sequence files must be plain text (is this a binary or word-processor file?)"
 _CONTROL = re.compile(r"[\x00-\x08\x0e-\x1f]")
 _CONTROL_BYTES = re.compile(rb"[\x00-\x08\x0e-\x1f]")
+# A file that starts with the gzip magic bytes (1f 8b), whatever its name: neither engine has a decompressor in the
+# codon-alignment reader (coal-cpp uses the standard library only), and read as text it gave "control character" or
+# "sequence data before the first '>' header". `coal kaks|dnds|translate|codon-dnds|pipeline` decompress .gz inputs
+# themselves (cli.py _gunzip_inputs, dnds_pipeline.py). The same words in coal-cpp (seqio.cpp GZIP_INPUT).
+GZIP_INPUT = "is gzip-compressed: decompress it first (e.g. with gunzip -k or zcat): sequence files must be plain text"
+_GZIP_MAGIC = b"\x1f\x8b"
 EMPTY_HEADER = "empty FASTA header: a '>' line without a sequence ID (every record needs a name after '>')"
 _BEFORE = "sequence data before the first '>' header: not a FASTA file? (each FASTA record starts with a '>name' line"
 BEFORE_HEADER_PROTEIN = _BEFORE + "; a CLUSTAL file must start with 'CLUSTAL')"
@@ -78,8 +85,11 @@ def windows_path_hint(path) -> str:
     m = re.match(r"^([A-Za-z]):[\\/]", path) if os.name != "nt" else None
     if not m:
         return ""
+    # one '/' between the parts and none at the end, as the path would be typed: 'C:\' is /mnt/c and 'C:\\a\\b.fa'
+    # (backslashes doubled) is /mnt/c/a/b.fa, not /mnt/c/ and /mnt/c//a//b.fa; the same in coal-cpp (seqio.cpp)
+    parts = [p for p in re.split(r"[\\/]+", path[3:]) if p]
     return (". This is a Windows path; under WSL (Windows Subsystem for Linux) the same file is "
-            f"/mnt/{m.group(1).lower()}/{path[3:].replace(chr(92), '/')}")
+            f"/mnt/{m.group(1).lower()}" + "".join("/" + p for p in parts))
 
 
 # Text inputs: a UTF-8 BOM is skipped and other non-ASCII input is an InputFormatError naming the file.
@@ -88,7 +98,16 @@ def _text(path):
     """Lines of a text input: BOM skipped; \\n, \\r\\n and \\r all end a line."""
     # Not errors="strict": that fails the decoder on its 8 kB chunk before the line is counted ("near line 1").
     # Bad bytes become surrogates instead, so the line check names the right line.
-    fh = open(path, encoding="utf-8-sig", errors="surrogateescape")
+    raw = open(path, "rb")
+    try:
+        gz = raw.peek(2)[:2] == _GZIP_MAGIC
+    except BaseException:
+        raw.close()
+        raise
+    if gz:
+        raw.close()
+        raise InputFormatError(f"{path} {GZIP_INPUT}")
+    fh = io.TextIOWrapper(raw, encoding="utf-8-sig", errors="surrogateescape")
     try:
         yield _ascii_lines(fh, path)
     finally:
@@ -342,7 +361,10 @@ class DnaIndex:
         # skipped (as read_fasta does).
         with open(path, "rb") as fh:
             offset, start = 0, None
-            if fh.read(len(codecs.BOM_UTF8)) == codecs.BOM_UTF8:
+            first = fh.read(len(codecs.BOM_UTF8))
+            if first[:2] == _GZIP_MAGIC:
+                raise InputFormatError(f"{path} {GZIP_INPUT}")
+            if first == codecs.BOM_UTF8:
                 offset = len(codecs.BOM_UTF8)
             else:
                 fh.seek(0)

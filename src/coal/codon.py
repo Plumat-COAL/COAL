@@ -7,7 +7,6 @@ DNA is normalised to upper case with U->T before any of these are used.
 from __future__ import annotations
 
 from functools import lru_cache
-from itertools import product
 
 from .tables import get_code
 

@@ -33,7 +33,9 @@
 
 // x86 with GCC / Clang: the row loops are compiled twice, for the baseline (SSE2) and for AVX2, and the AVX2 copy is
 // used when the CPU has it (checked once). Elsewhere (MSVC, ARM) only the baseline, which the compiler vectorises
-// for its target. COAL_ALIGN_SCALAR: baseline only, everywhere (for benchmarks and tests of that path).
+// for its target. Also on 32-bit x86 (unlike kaks.cpp's AVX2 copy, which is x86-64 only): the DP is integer
+// arithmetic, so the two copies give the same numbers whatever unit does floating point. COAL_ALIGN_SCALAR:
+// baseline only, everywhere (for benchmarks and tests of that path).
 #if (defined(__GNUC__) || defined(__clang__)) && (defined(__x86_64__) || defined(__i386__)) && \
     !defined(COAL_ALIGN_SCALAR)
 #define COAL_ALIGN_AVX2 1

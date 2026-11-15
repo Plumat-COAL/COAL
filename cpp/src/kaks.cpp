@@ -67,13 +67,17 @@
 #include <initializer_list>
 #include <memory>
 
-// x86 with GCC / Clang: the transition-probability matrix of YN / MYN (pmat_codon, with its eigendecomposition) is
+// x86-64 with GCC / Clang: the transition-probability matrix of YN / MYN (pmat_codon, with its eigendecomposition) is
 // compiled twice, for the baseline (SSE2) and for AVX2, and the AVX2 copy is used when the CPU has it (checked
 // once), as align.cpp does for its row loops. Both copies compute the same numbers: the floating-point operations
 // are the ones written, in the order written (no contraction, see above; no fast-math), and the vector width only
-// changes how many independent ones run at once. COAL_KAKS_BASELINE: the baseline
-// only, at build time; Options::baseline_isa (`--kaks-baseline`): the baseline for one run (tests).
-#if (defined(__GNUC__) || defined(__clang__)) && (defined(__x86_64__) || defined(__i386__)) && \
+// changes how many independent ones run at once. That holds only where the baseline does its double arithmetic in
+// SSE2 registers too: x86-64 (__SSE2_MATH__, which -mfpmath=387 turns off). 32-bit x86 does it on the x87 unit by
+// default (80-bit intermediates), so its two copies would round differently: there only the baseline is compiled
+// (audit 2026-11-15, AUDIT-85 L1; align.cpp's row loops are integer arithmetic and keep their 32-bit AVX2 copy).
+// COAL_KAKS_BASELINE: the baseline only, at build time; Options::baseline_isa (`--kaks-baseline`): the baseline for
+// one run (tests).
+#if (defined(__GNUC__) || defined(__clang__)) && defined(__x86_64__) && defined(__SSE2_MATH__) && \
     !defined(COAL_KAKS_BASELINE)
 #define COAL_KAKS_AVX2 1
 #else
@@ -533,7 +537,7 @@ Result run_lwl(const Prepared& p, const GeneticCode& g, Method m, Result r) {
 // operands in the same order as in the textbook loops (each sum in its own order; nothing reassociated, nothing
 // fused into an FMA). tred2's accumulation of the transformations takes four columns at a time: the columns are
 // independent of each other, and four sums side by side share the loads of the column they are made from instead
-// of waiting on one chain of additions. On x86 the routine is also compiled for AVX2 (wider vectors for the
+// of waiting on one chain of additions. On x86-64 the routine is also compiled for AVX2 (wider vectors for the
 // element-wise loops, which give the same numbers) and that copy is used when the CPU has it (pmat_codon below).
 // tests/test_kaks_dispatch.py compares the two copies to the bit; the golden files of tests/kaks hold the numbers.
 COAL_KAKS_INLINE void eigen_sym(double* const Z, const int n, double* const d, double* const e) {
