@@ -1102,25 +1102,40 @@ error; `--max-ds` flags what you consider too high.
 2. **Wider bounds** (above). A pair with omega below 0.001 or kappa below 0.4 has those estimates in COAL and
    the bound in codeml, with a slightly higher likelihood in COAL.
 3. **Saturation is a status.** codeml prints dS = 59.9 for a pair with t at 50; COAL prints `NA` and
-   `saturated` for an estimate above 10.
-4. **Identical sequences** have dN = dS = 0 and no kappa or omega; codeml prints the values its optimiser
+   `saturated` for an estimate above 10. Together with point 1 this means that COAL can report `saturated`
+   for a pair to which codeml gives a finite, moderate dS: where the likelihood has two maxima and the one on
+   the ridge of saturation is the higher, COAL finds it and codeml, from most of its starts, stops at the lower,
+   finite one (3 of the 160 yeast pairs below: codeml dS 7.7 to 9.4 with a likelihood 0.12 to 0.53 lower). The
+   finite value is then not the maximum-likelihood estimate; the pair's lnL in `--ml-columns` can be compared
+   with codeml's to see which case it is.
+4. **Small probabilities are computed without cancellation.** The eigen decomposition gives each transition
+   probability with an absolute error of about 1e-16, which is all of a probability that small: two codons two
+   or three substitutions apart at a t below about 5e-4, as in thousands of nearly identical codons with one
+   multiply changed codon. codeml (and COAL before 0.6.0's release) then maximises rounding noise: for 60,000
+   codons with one codon changed at all three positions codeml reports lnL -246993.32 at its lower bound of t,
+   where the likelihood recomputed independently is -247000.10, and its dN is 100 times below NG's. COAL
+   replaces every pattern probability below 1e-8 by a series whose terms are all non-negative (uniformisation:
+   exp(B tau) = e^(-x) sum x^k / k! R^k with R = I + B / lambda), likelihood, derivatives and gradient alike,
+   and agrees with an independent matrix exponential to 1e-13 relative there (that pair: lnL -246996.12 at
+   t = 5.0e-5, dN 2.4e-5 against NG's 2.0e-5). Probabilities above 1e-8 are computed as before.
+5. **Identical sequences** have dN = dS = 0 and no kappa or omega; codeml prints the values its optimiser
    happened to stop at.
-5. **Gaps and ambiguity.** COAL skips a codon column with a gap, an ambiguous base or a stop codon in either
+6. **Gaps and ambiguity.** COAL skips a codon column with a gap, an ambiguous base or a stop codon in either
    sequence and counts the F3x4 frequencies over the columns it compares; codeml's pairwise deletion
    (`cleandata = 0`) does the same for gaps and ambiguity, and refuses a file with a stop codon.
-6. **Against KaKs_Calculator's GY**: the same model and definitions, but KaKs_Calculator bounds t at 3
+7. **Against KaKs_Calculator's GY**: the same model and definitions, but KaKs_Calculator bounds t at 3
    substitutions per codon (so its dS cannot exceed about 4), starts t at the proportion of differences and
    uses a random start for kappa and omega; its numbers were not reproduced (in the simulation study it took
    more than 20 minutes per file of 1,000-codon pairs and was run on 3 of 8 files). COAL writes `GY` in the
    Method column, KaKs_Calculator `GY-HKY` (accepted as a name by `-m`).
-7. **Standard errors** differ from codeml's `getSE = 1` by 0.3 to 8 % in the median (the three data sets below;
+8. **Standard errors** differ from codeml's `getSE = 1` by 0.3 to 8 % in the median (the three data sets below;
    95 % of the pairs within 2 to 14 %, single pairs by more), and the difference is codeml's: it builds its
    Hessian from differences of the likelihood. COAL's were checked against a third computation (the likelihood
    rebuilt with numpy, the Hessian by five-point second differences, `tests/kaks/make_gy_se_reference.py`): the
    same to five digits on the 12 pairs of the test. Where omega is at codeml's bound (no nonsynonymous
    difference), codeml prints an SE of dS that is too small (0.0033 for a dS of 0.023 resting on four
    synonymous differences, where COAL gives 0.012).
-8. **Not there:** F1x4 / F61 / Fequal frequencies, a fixed kappa or omega.
+9. **Not there:** F1x4 / F61 / Fequal frequencies, a fixed kappa or omega.
 
 ### Validation of GY
 
