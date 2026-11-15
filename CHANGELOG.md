@@ -7,8 +7,8 @@
 - **Ka/Ks (dN/dS) built in:** `coal dnds` (a tidy table with standard errors and a status per pair) and
   `coal kaks` (KaKs_Calculator's format), with ten methods: YN00 (default), NG86, LWL85, MLWL, LPB93, MLPB, MYN,
   Comeron, Li, and GY, the maximum-likelihood estimate of Goldman & Yang (1994) as PAML codeml computes it for a
-  pair (`coal dnds --ml-columns` adds kappa, t and lnL). Checked against KaKs_Calculator 2.0, PAML's yn00 and
-  codeml, and against simulated truth (docs/kaks.md).
+  pair (`coal dnds --ml-columns` adds kappa, t and lnL; in coalr `methods = "GY"`, feature `gy94_ml`). Checked
+  against KaKs_Calculator 2.0, PAML's yn00 and codeml, and against simulated truth (docs/kaks.md).
 - **One step from coding sequences to a dN/dS table:** `coal pipeline pairs` (the orthologs of two species, found
   with DIAMOND) and `coal pipeline clusters` (gene families: DIAMOND DeepClust, then Clustal Omega or MAFFT), with
   a JSON report, `coal pipeline install` for the external tools, and `coal cite` for what to cite
@@ -75,7 +75,7 @@ entry under "Added", not under "Fixed".
   codon) is computed by a series of non-negative terms (uniformisation) instead of the eigen sum, whose absolute
   error of 1e-16 was the whole value there: such a pair got status `ok` at the lower bound of t with a dN 100
   times too low (60,000 codons, one triple change: dN 2.0e-7; now 2.4e-5, NG 2.0e-5, and the likelihood equals
-  an independent matrix exponential to 1e-13 relative, where codeml's own is rounding noise).
+  an independent matrix exponential to about 1e-12 relative, where codeml's own is rounding noise).
 - **MAFFT on native Windows: `coal pipeline install mafft` installs it** (x86-64; also `--install-tools` and
   `coal.msa.install_mafft()`). It downloads MAFFT's own Windows package, the "all-in-one"
   `mafft-7.526-win64-signed.zip` from mafft.cbrc.jp (MAFFT 7.526, the version COAL pins elsewhere), pinned by size
