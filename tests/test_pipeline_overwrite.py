@@ -371,9 +371,9 @@ class ArgsStrings(PipelineCase):
         self.assertIn('--realign-args="--tmpdir /scratch"', why or "")
         self.assertIsNone(b(["pairs", "--diamond-args", "-b4", "-q"], ap)[1])
         # double quotes the shell left in the words (cmd.exe `\"-c 1\"`): not doubled in the hint (follow-up audit)
-        for words in (['"-c', '1"'], ['"-c', '1'], ['-c', '"1"']):
+        for words in (['"-b', '4"'], ['"-b', '4'], ['-b', '"4"']):
             why = b(["pairs", "--diamond-args", *words, "-q"], ap)[1]
-            self.assertIn('--diamond-args="-c 1" (here ', why or "", words)
+            self.assertIn('--diamond-args="-b 4" (here ', why or "", words)
 
     def test_space_form_on_the_command_line(self):
         """A value starting with one of COAL's short options reaches the ARGS check (before: "expected one
