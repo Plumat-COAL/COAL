@@ -14,7 +14,7 @@ underscore) is internal. The package is typed (py.typed).
 """
 from .core import CoalError, codon_align
 
-__version__ = "0.6.0.dev0"
+__version__ = "0.6.0"
 
 from .pipeline import run as align_files  # noqa: E402  (pipeline needs __version__)
 

@@ -6,6 +6,10 @@ Notes = a fixed part (what to download, "not code-signed" with the SmartScreen /
 alternative, how to check SHA256SUMS.txt) + the "## <version>" section of CHANGELOG.md if there is one.
 Exit status 0 when a CHANGELOG section was found, 3 when not (the workflow then also asks GitHub to generate
 notes from the merged pull requests). Any other status is an error.
+
+GitHub refuses a release body over 125,000 characters (`gh release create` fails, after every file is built). A
+section that would not fit (0.6.0's is about 127,000) is cut to its summary, the text before its first "### "
+heading, with a link to the whole section in CHANGELOG.md at the tag.
 """
 import os
 import re
@@ -16,6 +20,8 @@ REPO = "https://github.com/plumat-coal/COAL"
 # the engine wheels with coal-cpp inside that release.yml builds (job cpp-wheels), in its order
 PLATFORM_TAGS = ("manylinux_2_28_x86_64", "manylinux_2_28_aarch64", "macosx_11_0_universal2", "win_amd64")
 NO_CHANGELOG = 3
+# GitHub's limit for a release body is 125,000 characters; keep a margin
+MAX_BODY = 120_000
 
 
 def changelog_section(version, path=os.path.join(ROOT, "CHANGELOG.md")):
@@ -33,12 +39,22 @@ def changelog_section(version, path=os.path.join(ROOT, "CHANGELOG.md")):
     return body or None
 
 
+def summary_of(section, version):
+    """A CHANGELOG section too long for a release body: its text before the first "### " heading, then a link to
+    the whole section in CHANGELOG.md at the tag."""
+    m = re.compile(r"(?m)^###\s").search(section)
+    head = (section[:m.start()] if m else section[:MAX_BODY // 2]).rstrip()
+    return (f"{head}\n\nThe full list of changes (Added, Changed, Fixed) is too long for this page: see "
+            f"[CHANGELOG.md]({REPO}/blob/v{version}/CHANGELOG.md).")
+
+
 def fixed_part(version):
     wheel = f"coal_align-{version}-py3-none-any.whl"
     app_wheel = f"coal_align_app-{version}-py3-none-any.whl"
     platform_wheels = ", ".join(f"`coal_align-{version}-py3-none-{t}.whl`" for t in PLATFORM_TAGS)
     return f"""COAL {version}: turns a protein alignment plus the matching coding DNA into a codon alignment
-(for dN/dS and DNA phylogenies). A fast, free (GPL-3.0-only) replacement for PAL2NAL.
+(for dN/dS and DNA phylogenies), and from 0.6.0 also estimates Ka/Ks (dN/dS) and runs the whole way from coding
+sequences to a dN/dS table. A fast, free (GPL-3.0-only) replacement for PAL2NAL.
 
 Website and install steps: https://plumat-coal.github.io/COAL/
 
@@ -82,7 +98,8 @@ coal --help     # the command line
 For the command line alone (pipelines), install only the first package, `coal-align`: it has no dependencies.
 To get the C++ engine with it, install the wheel for your platform from the table above instead of the
 `.tar.gz` (download it, then `python -m pip install coal_align-{version}-py3-none-<platform>.whl`); `coal --cpp-path`
-then prints where `coal-cpp` is. On PyPI, `python -m pip install coal-align` chooses that wheel by itself.
+then prints where `coal-cpp` is. Once COAL is on PyPI, `python -m pip install coal-align` will choose that wheel
+by itself.
 A plain `pip install coal` installs a different project.
 
 ## Check a download
@@ -103,7 +120,10 @@ def main(argv):
     section = changelog_section(version)
     text = fixed_part(version)
     if section:
-        text += f"\n## Changes in {version}\n\n{section}\n"
+        changes = f"\n## Changes in {version}\n\n{section}\n"
+        if len(text) + len(changes) > MAX_BODY:
+            changes = f"\n## Changes in {version}\n\n{summary_of(section, version)}\n"
+        text += changes
     with open(out, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(text)
     return 0 if section else NO_CHANGELOG

@@ -1111,13 +1111,14 @@ error; `--max-ds` flags what you consider too high.
 4. **Small probabilities are computed without cancellation.** The eigen decomposition gives each transition
    probability with an absolute error of about 1e-16, which is all of a probability that small: two codons two
    or three substitutions apart at a t below about 5e-4, as in thousands of nearly identical codons with one
-   multiply changed codon. codeml (and COAL before 0.6.0's release) then maximises rounding noise: for 60,000
-   codons with one codon changed at all three positions codeml reports lnL -246993.32 at its lower bound of t,
-   where the likelihood recomputed independently is -247000.10, and its dN is 100 times below NG's. COAL
-   replaces every pattern probability below 1e-8 by a series whose terms are all non-negative (uniformisation:
-   exp(B tau) = e^(-x) sum x^k / k! R^k with R = I + B / lambda), likelihood, derivatives and gradient alike,
-   and agrees with an independent matrix exponential to 1e-13 relative there (that pair: lnL -246996.12 at
-   t = 5.0e-5, dN 2.4e-5 against NG's 2.0e-5). Probabilities above 1e-8 are computed as before.
+   multiply changed codon. codeml then maximises rounding noise. One pair shows it: `t60000` of `e2.axt`
+   (60,000 codons, one codon changed at all three positions). codeml reports lnL -246993.32 at its lower bound
+   of t, but the likelihood recomputed independently at codeml's printed point is about -246999.7, and codeml's
+   dN is 100 times below NG's. COAL replaces every pattern probability below 1e-8 by a series whose terms are
+   all non-negative (uniformisation: exp(B tau) = e^(-x) sum x^k / k! R^k with R = I + B / lambda), likelihood,
+   derivatives and gradient alike, and agrees with an independent matrix exponential to about 1e-12 relative
+   there. For that pair COAL's maximum is lnL -246996.12 at t = 5.0e-5, with dN 2.4e-5 against NG's 2.0e-5.
+   Probabilities above 1e-8 are computed as before.
 5. **Identical sequences** have dN = dS = 0 and no kappa or omega; codeml prints the values its optimiser
    happened to stop at.
 6. **Gaps and ambiguity.** COAL skips a codon column with a gap, an ambiguous base or a stop codon in either

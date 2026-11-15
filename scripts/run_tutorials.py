@@ -205,10 +205,10 @@ def normalise(line: str, coal_version: str = "", doc_version: str = "", scratch:
     s = line.replace("\r", "")
     if scratch:
         s = s.replace(scratch + "/", ".../").replace(scratch, "...")
-    if coal_version:
-        s = s.replace(coal_version, "<COAL_VERSION>")
-    if doc_version:
-        s = s.replace(doc_version, "<COAL_VERSION>")
+    # the longer version first: a release (0.6.0) checked against a page run with its development version
+    # (0.6.0.dev0) would otherwise turn the page's "0.6.0.dev0" into "<COAL_VERSION>.dev0"
+    for v in sorted({coal_version, doc_version} - {""}, key=len, reverse=True):
+        s = s.replace(v, "<COAL_VERSION>")
     s = re.sub(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(Z|[+-]\d\d:?\d\d)?", "<TIME>", s)
     s = re.sub(r"\b\d+\.\d+ s\b", "<T> s", s)                  # stage timings: "diamond_search 6.0 s"
     s = re.sub(r"^ok \(already here\)\s+", "ok ", s.strip())   # the download scripts, with a cached file

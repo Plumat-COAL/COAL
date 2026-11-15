@@ -1,13 +1,28 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 — 2026-11-15
 
 **In short.** This release makes COAL more than a PAL2NAL replacement, and changes its licence.
 
-- **New scope.** Next to codon alignments, COAL now estimates Ka/Ks (dN/dS) itself (`coal kaks` in
-  KaKs_Calculator's format, `coal dnds` as a tidy table; nine methods), runs the whole way from coding sequences to
-  a dN/dS table in one step (`coal pipeline pairs` / `clusters`, with DIAMOND and Clustal Omega / MAFFT), aligns
-  proteins (`coal-cpp-align`) and has an R package (`coalr`).
+- **Ka/Ks (dN/dS) built in:** `coal dnds` (a tidy table with standard errors and a status per pair) and
+  `coal kaks` (KaKs_Calculator's format), with ten methods: YN00 (default), NG86, LWL85, MLWL, LPB93, MLPB, MYN,
+  Comeron, Li, and GY, the maximum-likelihood estimate of Goldman & Yang (1994) as PAML codeml computes it for a
+  pair (`coal dnds --ml-columns` adds kappa, t and lnL; in coalr `methods = "GY"`, feature `gy94_ml`). Checked
+  against KaKs_Calculator 2.0, PAML's yn00 and codeml, and against simulated truth (docs/kaks.md).
+- **One step from coding sequences to a dN/dS table:** `coal pipeline pairs` (the orthologs of two species, found
+  with DIAMOND) and `coal pipeline clusters` (gene families: DIAMOND DeepClust, then Clustal Omega or MAFFT), with
+  a JSON report, `coal pipeline install` for the external tools, and `coal cite` for what to cite
+  (docs/pipeline.md). Also `coal translate`, and COAL's own protein aligner `coal-cpp-align`, which the platform
+  wheels ship next to `coal-cpp`.
+- **R package `coalr` 0.6.0** (packaging/r/coalr, docs/r.md): COAL's C++ core inside R (Ka/Ks, codon alignment,
+  the pair and cluster steps of the pipeline; no Python needed), and the whole pipeline through reticulate. The
+  orthologr fork's `dNdS(engine = "coal")` uses it.
+- **App:** the web GUI and the Windows app have **Ka/Ks** and **dN/dS pipeline** tabs; the MCP server has the tools
+  `dnds_pairs` and `pipeline_pairs`.
+- **Windows:** `coal pipeline install mafft` (x86-64) installs MAFFT's own Windows package, pinned by its
+  SHA-256, so `coal pipeline clusters --aligner mafft` runs on native Windows.
+- **Tutorials** on real, small, public genomes, from coding sequences to an interpreted dN/dS table
+  (docs/tutorials/); CI reruns four of them.
 - **Licence: GPL-3.0-only from this release** (0.5.0 and earlier stay MIT), because the Ka/Ks engine is derived
   from GPL-3 code. Running COAL puts no condition on your data or scripts; see the first entry under "Changed".
 - **For users of 0.5.0, the existing commands behave as before** except for what "Changed" lists: the `-o` lock
@@ -16,7 +31,6 @@
   ends with the list of the other commands.
 - **What each install gives:** the platform wheels have everything; the source package has the Python engine
   only (codon alignment), and `coal kaks`, `coal dnds` and `coal pipeline` say so there (docs/install.md).
-- The version of the development tree is `0.6.0.dev0`, so that no GPL build reports 0.5.0.
 
 Much of what follows was found by the stress test of 2026-10-23, the full verification of 2026-10-24, two
 independent reviews (2026-11-12 and 13), the first CI runs on Windows and macOS, and a review of the project as a
@@ -61,7 +75,7 @@ entry under "Added", not under "Fixed".
   codon) is computed by a series of non-negative terms (uniformisation) instead of the eigen sum, whose absolute
   error of 1e-16 was the whole value there: such a pair got status `ok` at the lower bound of t with a dN 100
   times too low (60,000 codons, one triple change: dN 2.0e-7; now 2.4e-5, NG 2.0e-5, and the likelihood equals
-  an independent matrix exponential to 1e-13 relative, where codeml's own is rounding noise).
+  an independent matrix exponential to about 1e-12 relative, where codeml's own is rounding noise).
 - **MAFFT on native Windows: `coal pipeline install mafft` installs it** (x86-64; also `--install-tools` and
   `coal.msa.install_mafft()`). It downloads MAFFT's own Windows package, the "all-in-one"
   `mafft-7.526-win64-signed.zip` from mafft.cbrc.jp (MAFFT 7.526, the version COAL pins elsewhere), pinned by size
@@ -94,7 +108,7 @@ entry under "Added", not under "Fixed".
   YN00 (default), NG86, LWL85, MLWL, LPB93, MLPB and MYN, for AXT or aligned FASTA (every pair of an MSA, or
   consecutive pairs), any of COAL's genetic codes, on all threads. `coal kaks -i in.axt -o out.kaks -m YN` takes
   KaKs_Calculator 2.0's `-i -o -m -c` and writes its format (22 columns, NA rules) for these seven methods; it is
-  not a drop-in for every KaKs_Calculator call: GY94 ML, MS/MA and the gamma variants are refused, and the default
+  not a drop-in for every KaKs_Calculator call: MS/MA and the gamma variants are refused (GY: its own entry above), and the default
   method is YN where KaKs_Calculator's is MA. `coal dnds` writes a tidy TSV with standard errors and a per-pair
   status (ok, warning for internal stop codons, saturated, no_data, error), so one bad pair never stops a run.
   NG is KaKs_Calculator's NG, whose site counting is not the textbook Nei-Gojobori one (docs/kaks.md).
@@ -1068,8 +1082,9 @@ entry under "Added", not under "Fixed".
     `--aligner mafft` with MAFFT's own Windows package, the "all-in-one" `mafft-7.526-win64-signed.zip`, in
     `COAL_MAFFT`). Neither Bioconda nor conda-forge has a Windows package of Clustal Omega or MAFFT (checked
     2026-11-14), and COAL adds a download only with a SHA-256 computed from the file itself, which could not be
-    done for either Windows build, so neither is downloaded; the MAFFT message names the package and its page, and
-    docs/install.md "Clustal Omega and MAFFT on Windows" has the steps. Bundling a self-built `clustalo.exe` is
+    done for Clustal Omega's, so it is not downloaded; MAFFT's package is now pinned by its own SHA-256 and
+    installed by `coal pipeline install mafft` (see "Added"), and docs/install.md "Clustal Omega and MAFFT on
+    Windows" has the steps. Bundling a self-built `clustalo.exe` is
     another way to support Windows and is not done yet (docs/alignment.md, "Licences").
 - **`pal2nal` without arguments is a usage error:** the usage text goes to standard error with exit 1 (as the
   drop-in's help says and as PAL2NAL's own usage goes to stderr), not to standard output with exit 0, so a pipeline

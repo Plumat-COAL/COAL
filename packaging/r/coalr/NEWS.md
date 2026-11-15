@@ -1,4 +1,4 @@
-# coalr 0.6.0 (in development: 0.6.0.9000)
+# coalr 0.6.0
 
 First version. In-process bindings (Rcpp) to the C++ core of COAL 0.6:
 
