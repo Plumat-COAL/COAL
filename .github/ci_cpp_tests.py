@@ -12,7 +12,8 @@ unittest's own result (failures and errors fail, each also printed as a GitHub A
   job built the binaries, so such a skip means a test lost track of them;
 * in the --no-skip modules (the core C++ comparisons) every skip fails unless its reason matches --allow (the
   platform skips);
-* each --no-skip module must have run at least one test (a renamed module cannot drop out unnoticed);
+* each --no-skip module must have run at least one test (a renamed module cannot drop out unnoticed), and a run in
+  which no test ran at all fails;
 * --exclude drops whole modules from the run (named in the workflow, with the reason there).
 
 The skips are read from the unittest result (test id and reason), not from the log, so a test that prints while it
@@ -76,10 +77,17 @@ def check(result: unittest.TestResult, ran: dict[str, int], no_skip: list[str], 
     for mod in no_skip:
         if not ran.get(mod):
             problems.append(f"{mod}: no test of this module ran (is it still in tests/?)")
+    if not result.testsRun:
+        problems.append("no test ran at all")
     return problems
 
 
 def main(argv: list[str]) -> int:
+    for stream in (sys.stdout, sys.stderr):   # a test id or reason the console's code page cannot show (Windows)
+        try:
+            stream.reconfigure(errors="backslashreplace")
+        except (AttributeError, ValueError):
+            pass
     ap = argparse.ArgumentParser(prog="ci_cpp_tests", allow_abbrev=False)
     ap.add_argument("--no-skip", default="", help="comma-separated modules in which every skip fails (but --allow)")
     ap.add_argument("--allow", default=None, help="regex: skip reasons allowed in the --no-skip modules")

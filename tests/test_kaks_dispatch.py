@@ -8,9 +8,9 @@ run use the baseline copy, and `--kaks-isa` (testing only too) prints which copy
 checks that the AVX2 copy is the one used (where the CPU has AVX2 and the build has the copy), then compares the two
 at 17 significant digits: both output formats, both YN flavours and weightings, several genetic codes. Where there
 is no AVX2 copy to compare the comparison is skipped with that reason, so a pass always means both paths ran: an ARM
-CPU (the copy is not compiled there), an MSVC build (no target attribute), a build with -DCOAL_KAKS_BASELINE (the
-baseline only, at build time), a CPU without AVX2. Which compiler built coal-cpp, and whether with
-COAL_KAKS_BASELINE, is read from its CMake build tree (CMakeFiles/<version>/CMakeCXXCompiler.cmake and
+CPU or a 32-bit x86 build (the copy is compiled for x86-64 only), an MSVC build (no target attribute), a build with
+-DCOAL_KAKS_BASELINE (the baseline only, at build time), a CPU without AVX2. Which compiler built coal-cpp, and
+whether with COAL_KAKS_BASELINE, is read from its CMake build tree (CMakeFiles/<version>/CMakeCXXCompiler.cmake and
 CMakeCache.txt, in the binary's folder or the one above it for build/Release/coal-cpp.exe), else from the binary
 itself (GCC's "GCC: (" and Clang's "clang version" strings; the Rich header of an MSVC-linked .exe), not from the
 operating system: a MinGW / Rtools GCC build on Windows must have the copy, and one without it fails. A
@@ -36,6 +36,8 @@ from test_kaks_yn_shortcut import low_divergence_pairs, multi_difference  # noqa
 
 KAKS = ROOT / "tests" / "kaks"
 X86 = ("x86_64", "amd64", "i386", "i686", "x86")
+X86_64 = ("x86_64", "amd64")   # the AVX2 copy is compiled for x86-64 only (__x86_64__ with SSE2 maths)
+CONFIGS = ("Release", "Debug", "RelWithDebInfo", "MinSizeRel")   # a multi-config generator's output folders
 
 
 def cpu_has_avx2() -> bool | None:
@@ -64,14 +66,20 @@ def cpu_has_avx2() -> bool | None:
 def build_info(binary) -> tuple[str | None, bool]:
     """(compiler, COAL_KAKS_BASELINE) of the build a coal-cpp comes from: the compiler as CMake names it ("GNU",
     "Clang", "AppleClang", "MSVC", ...; None when nothing says), and whether the build defined COAL_KAKS_BASELINE.
-    From the CMake build tree the binary sits in (or, for a multi-config generator's Release/, the one above it),
-    else from marks the compilers leave in the binary."""
-    binary = Path(binary)
-    for tree in (binary.parent, binary.parent.parent):
+    From the CMake build tree the binary sits in (or, for a multi-config generator's Release/ or Debug/, the one
+    above it; only a tree whose CMakeCache.txt names itself), else from marks the compilers leave in the binary.
+    clang-cl is "Clang" in both (CMake's id; "clang version" in the binary, looked for before MSVC's Rich header):
+    it has the target attribute, so its builds have the copy."""
+    binary = Path(binary).resolve()
+    trees = [binary.parent] + ([binary.parent.parent] if binary.parent.name in CONFIGS else [])
+    for tree in trees:
         cache = tree / "CMakeCache.txt"
         if not cache.is_file():
             continue
         text = cache.read_text(encoding="utf-8", errors="replace")
+        home = re.search(r"(?m)^CMAKE_CACHEFILE_DIR:INTERNAL=(.*)$", text)
+        if home and Path(home.group(1).strip()).resolve() != tree.resolve():
+            continue   # a CMakeCache.txt copied there, not this binary's build tree
         flags = " ".join(m.group(1) for m in re.finditer(r"(?m)^CMAKE_CXX_FLAGS[\w]*:STRING=(.*)$", text))
         baseline = "COAL_KAKS_BASELINE" in flags
         for f in sorted(tree.glob("CMakeFiles/*/CMakeCXXCompiler.cmake")):
@@ -90,6 +98,25 @@ def build_info(binary) -> tuple[str | None, bool]:
     if data[:2] == b"MZ" and b"Rich" in data[:1024]:   # the Rich header: written by Microsoft's linker only
         return "MSVC", False
     return None, False
+
+
+def binary_machine(binary) -> str | None:
+    """"x86_64", "x86" (32-bit), "arm64" or None: what the executable itself is built for (ELF, PE; a Mach-O,
+    which may hold several, gives None), not what the operating system runs on."""
+    try:
+        with open(binary, "rb") as fh:
+            head = fh.read(4096)
+    except OSError:
+        return None
+    if head[:4] == b"\x7fELF" and len(head) > 20:
+        machine = int.from_bytes(head[18:20], "little" if head[5] == 1 else "big")
+        return {62: "x86_64", 3: "x86", 183: "arm64"}.get(machine)
+    if head[:2] == b"MZ" and len(head) > 0x40:
+        pe = int.from_bytes(head[0x3C:0x40], "little")
+        if head[pe:pe + 4] == b"PE\0\0":
+            machine = int.from_bytes(head[pe + 4:pe + 6], "little")
+            return {0x8664: "x86_64", 0x14C: "x86", 0xAA64: "arm64"}.get(machine)
+    return None
 
 
 @needs_cpp
@@ -115,6 +142,8 @@ class Dispatch(unittest.TestCase):
         self.assertEqual(isa, "baseline")
         if platform.machine().lower() not in X86:
             self.skipTest(f"not an x86 CPU ({platform.machine()}): no AVX2 copy is compiled, only the baseline runs")
+        if platform.machine().lower() not in X86_64 or binary_machine(CPP) == "x86":
+            self.skipTest("a 32-bit x86 build: the AVX2 copy is compiled for x86-64 only, only the baseline runs")
         compiler, baseline = build_info(CPP)
         if compiler == "MSVC":
             self.skipTest("this build has no AVX2 copy (MSVC has no target attribute; cpp/src/kaks.cpp COAL_KAKS_AVX2)")

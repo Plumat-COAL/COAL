@@ -62,15 +62,48 @@ def modules_needing_cpp() -> set[str]:
 
 
 def modules_run_by(script: str) -> set[str]:
-    """The test modules a step's command runs: every module discover collects for `discover -s tests` without -p
-    (less ci_cpp_tests.py's --exclude), else the tests.test_* modules it names."""
+    """The test modules a step's command runs: for `discover -s tests`, every module discover collects with its
+    pattern (-p / --pattern, default test*.py), less ci_cpp_tests.py's --exclude; else the tests.test_* modules it
+    names. A -k filter (or --k / -k=) selects tests by name, so which modules still run cannot be told from here:
+    none is counted (the guards then fail, as they should)."""
+    import fnmatch
     cmd = script.replace("\\\n", " ")
     line = next((x for x in cmd.splitlines() if "ci_cpp_tests.py" in x or "-m unittest" in x), "")
+    if re.search(r"(^|\s)(-k|--k)(\s|=)|\s-k\S", line):
+        return set()
     excluded = {m.strip().removeprefix("tests.") for e in re.findall(r"--exclude[ =]['\"]?([\w.,]+)", line)
                 for m in e.split(",") if m.strip()}
-    if re.search(r"\bdiscover -s tests(\s|$)", line) and not re.search(r"\s-p\s", line):
-        return set(discovered_modules()) - excluded
-    return {m.split(".", 1)[1] for m in re.findall(r"\btests\.test_\w+", line)} - excluded
+    if re.search(r"\bdiscover -s tests(\s|$)", line):
+        pat = re.search(r"(?:\s-p\s*|\s--pattern[ =])['\"]?([^\s'\"]+)", line)
+        pattern = pat.group(1) if pat else "test*.py"
+        files = sorted(f for f in os.listdir(os.path.join(ROOT, "tests")) if fnmatch.fnmatch(f, pattern))
+        return {f[:-3] for f in files if f.endswith(".py")} & set(discovered_modules()) - excluded
+    return {m.split(".", 1)[1].split(".")[0] for m in re.findall(r"\btests\.test_[\w.]+", line)} - excluded
+
+
+def uncommented(text: str) -> str:
+    """A workflow without its comment lines (a module named only in a comment is run nowhere)."""
+    return "\n".join(x for x in text.splitlines() if not x.lstrip().startswith("#"))
+
+
+# Files of tests/ with a "not built" skip that discover does not collect and no workflow runs, and why
+RUN_BY_HAND = {
+    "fuzz_kaks_vs_reference.py": "needs KaKs_Calculator 2.0 and PAML yn00 builds that print 12+ significant digits "
+                                 "(docs/kaks.md \"Validation\"), which CI does not build",
+}
+# coal-cpp tests that skip in ci.yml's C++ job for want of something other than the binary, and the nightly job
+# that runs them with it (nightly.yml cpp-extras): module -> what it needs
+RUN_NIGHTLY = {
+    "test_cpp_vs_reference": "PAL2NAL (TestCppVsPal2nalFuzz) and COAL_CPP_NOHOOKS (the hookless-build test)",
+    "test_stress_findings": "COAL_SLOW (QuadraticExactFitScan, UnrelatedTwentyThousand)",
+    "test_align": "Biopython (LiveBiopython)",
+    "test_robustness": "root, for a 1 MB tmpfs (TestDiskFull)",
+}
+# coal-cpp tests that run in no job at all, and why (keep this short: each is a gap)
+NEVER_RUN = {
+    "test_kaks_myn_kappa_inf: the C++ API part on Windows": "the MSVC build has coal_core.lib, not libcoal_core.a "
+                                                          "(it runs on Linux and macOS)",
+}
 
 
 @unittest.skipUnless(BASH and os.name != "nt", "needs a POSIX bash (the step runs on ubuntu-latest)")
@@ -237,7 +270,8 @@ class TestNightlyWorkflow(unittest.TestCase):
 
     def test_every_job_has_a_timeout_and_no_write_permission(self):
         jobs = self._jobs()
-        self.assertEqual(sorted(jobs), ["engine-fuzz", "kaks-properties", "pal2nal-fuzz", "sanitizers", "tsan", "tutorials"])
+        self.assertEqual(sorted(jobs), ["cpp-extras", "engine-fuzz", "kaks-properties", "pal2nal-fuzz", "sanitizers", "tsan",
+                                        "tutorials"])
         for j in jobs:
             job = self._job(j)
             self.assertRegex(job, r"(?m)^    timeout-minutes: \d+", j)
@@ -319,6 +353,8 @@ class TestNightlyWorkflow(unittest.TestCase):
         self.assertIn('-DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread"', job)
         self.assertIn("-DCOAL_WARNINGS_AS_ERRORS=ON", job)
         self.assertIn("test -x build-tsan/coal-cpp-align", job)
+        self.assertIn("nm build-tsan/coal-cpp | grep -q __tsan_init", job)       # a positive control
+        self.assertIn("nm build-tsan/coal-cpp-align | grep -q __tsan_init", job)
         self.assertIn('tests/tools/tsan_threads.py --build build-tsan --seed "$FUZZ_SEED" --jobs 4', job)
         self.assertIn('grep -q "ThreadSanitizer" tsan.txt', job)
         self.assertIn("if: failure()", job)
@@ -478,6 +514,8 @@ class TestCppTestStep(unittest.TestCase):
     a test's own output surrounds is still seen."""
 
     OK = "import unittest\nclass T(unittest.TestCase):\n    def test_x(self):\n        pass\n"
+    # the Windows job's matrix.allow (the widest of the three)
+    allow = re.search(r"- os: windows-latest\n\s+allow: \"([^\"]*)\"", _ci()).group(1)
 
     @staticmethod
     def skipping(reason, noisy=False):
@@ -496,7 +534,8 @@ class TestCppTestStep(unittest.TestCase):
             os.makedirs(os.path.dirname(os.path.join(d, name)), exist_ok=True)
             with open(os.path.join(d, name), "w", encoding="utf-8") as fh:
                 fh.write(text)
-        env = dict(os.environ, GITHUB_STEP_SUMMARY=os.path.join(d, "summary.md"))
+        env = dict(os.environ, GITHUB_STEP_SUMMARY=os.path.join(d, "summary.md"), CPP_ALLOW=self.allow,
+                   CPP_NO_SKIP_EXTRA="")
         script = re.sub(r"(?m)^python ", __import__("sys").executable + " ", step_script("cpp", CPP_STEP))
         r = subprocess.run([BASH, "--noprofile", "--norc", "-eo", "pipefail", "-c", script], cwd=d, env=env,
                            capture_output=True, text=True, timeout=120)
@@ -521,8 +560,9 @@ class TestCppTestStep(unittest.TestCase):
         self.assertEqual(r.returncode, 0, out)
 
     def test_core_module_skips_fail_but_the_platform_ones(self):
-        for reason, rc in (("POSIX signals", 0), ("live comparison needs Python 3.13's argparse", 0),
-                           ("COAL_SKIP_MEMORY_TESTS set: peak memory read with getrusage is meaningless", 0),
+        for reason, rc in (("POSIX signals", 0), ("POSIX hard links and signals", 0),
+                           ("peak memory read with getrusage (Linux: KB)", 0),
+                           ("live comparison needs Python 3.13's argparse", 1), ("POSIX shell stand-in", 1),
                            ("set PAL2NAL=/path/to/pal2nal.pl", 1)):
             for mod in ("test_cpp_cli", "test_wheels"):
                 with self.subTest(reason=reason, mod=mod):
@@ -535,6 +575,12 @@ class TestCppTestStep(unittest.TestCase):
         r, out = self.run_step({"tests/test_cpp_pool.py": "# no tests\n"})
         self.assertEqual(r.returncode, 1, out)
         self.assertIn("test_cpp_pool: no test of this module ran", out)
+
+    def test_a_run_of_no_tests_fails(self):
+        files = {f"tests/{m}.py": "# no tests\n" for m in CORE_CPP + ("test_wheels",)}
+        r, out = self.run_step(files)
+        self.assertEqual(r.returncode, 1, out)
+        self.assertIn("no test ran at all", out)
 
     def test_a_failing_test_fails_with_an_annotation(self):
         r, out = self.run_step({"tests/test_pipeline_x.py": self.OK.replace("pass", "self.fail('boom')")})
@@ -585,7 +631,8 @@ class TestCiJobs(unittest.TestCase):
             self.assertIn(mod, run, mod)
             self.assertIn(mod, needing | {"test_msa"}, mod)
             self.assertTrue(os.path.isfile(os.path.join(ROOT, "tests", mod + ".py")), mod)
-        self.assertIn("--no-skip " + ",".join(CORE_CPP) + ",test_wheels ", script.replace("\\\n", " "))
+        self.assertIn('--no-skip "' + ",".join(CORE_CPP) + ',test_wheels$CPP_NO_SKIP_EXTRA" ', script.replace("\\\n", " "))
+        self.assertIn('--allow "$CPP_ALLOW"', script)
         order = [m.group(1) for m in re.finditer(r"(?m)^      - name: (.*)$", cpp)]
         diamond = next(i for i, n in enumerate(order) if n.startswith("Install DIAMOND (pinned release"))
         self.assertLess(diamond, order.index(CPP_STEP))     # COAL_REQUIRE_DIAMOND reaches the tests
@@ -597,6 +644,50 @@ class TestCiJobs(unittest.TestCase):
         self.assertIn("COAL_REQUIRE_DIAMOND=1", d.group(1))
         self.assertIn("--align-binary build-manylinux/coal-cpp-align", cpp)
         self.assertIn("packaging/wheels/check_wheel_binaries.py", cpp)
+
+    def test_allowed_skips_are_per_system(self):
+        """The skips allowed in the core modules are each system's own (matrix.allow): none on Linux, the
+        Linux-only peak-memory test on macOS, that and POSIX signals / pipes / hard links on Windows; nothing for
+        an argparse that differs (the job runs Python 3.13, where the live comparison runs). On Linux the dispatch
+        test is a core module too, and the AVX2 copy must be the one that runs."""
+        cpp = self._job("cpp")
+        rows = dict(re.findall(r"- os: ([\w-]+)\n\s+allow: \"([^\"]*)\"", cpp))
+        self.assertEqual(rows, {"ubuntu-latest": "", "macos-latest": "peak memory read with getrusage",
+                                "windows-latest": "peak memory read with getrusage|POSIX (signals|pipes|hard links)"})
+        self.assertRegex(cpp, r"- os: ubuntu-latest\n\s+allow: \"\"\n\s+no_skip_extra: \",test_kaks_dispatch\"")
+        self.assertEqual(len(re.findall(r"no_skip_extra: \"\"", cpp)), 2)
+        self.assertNotIn("live comparison", uncommented(_ci() + _ci("nightly.yml")))
+        self.assertIn('test "$("$b" dnds --kaks-isa)" = avx2', step_script("cpp", "Point the tests at the binary"))
+        self.assertIn('--allow "peak memory read with getrusage"', step_script("sanitizers", SAN_STEP, "nightly.yml"))
+
+    def test_the_nightly_runs_the_cpp_tests_ci_cannot(self):
+        """RUN_NIGHTLY: the coal-cpp tests that skip in the C++ job for want of PAL2NAL, a hookless build, COAL_SLOW,
+        Biopython or root run in nightly.yml's cpp-extras job, with what they need, and must not skip there."""
+        wf = _ci("nightly.yml")
+        job = re.search(r"^  cpp-extras:\n(.*?)(?=^  [\w-]+:\n|\Z)", wf, re.S | re.M).group(1)
+        main = step_script("cpp-extras", "PAL2NAL fuzz, hookless build, COAL_SLOW and Biopython tests (must not skip)",
+                           "nightly.yml")
+        root = step_script("cpp-extras", "Full file system tests as root (must not skip)", "nightly.yml")
+        run = modules_run_by(main) | modules_run_by(root)
+        self.assertEqual(set(RUN_NIGHTLY) - run, set())
+        for mod in RUN_NIGHTLY:
+            self.assertRegex(main + root, rf"--no-skip [\w,]*{mod}\b", mod)
+        for need in ('COAL_SLOW: "1"', "PAL2NAL: PAL2NAL/pal2nal.v14/pal2nal.pl", "COAL_CPP_NOHOOKS=",
+                     "pip install -e . biopython psutil", "run: python scripts/fetch_pal2nal.py",
+                     'COAL_REQUIRE_CPP: "1"', "COAL_REQUIRE_DIAMOND=1", "-DCOAL_TEST_HOOKS=ON"):
+            self.assertIn(need, job, need)
+        self.assertIn("sudo --preserve-env", root)
+        self.assertIn("tests.test_robustness.TestDiskFull", root)
+        self.assertTrue(NEVER_RUN)   # the gaps that stay are named, with their reasons
+        for what, why in NEVER_RUN.items():
+            self.assertTrue(why, what)
+
+    def test_sanitizer_job_has_psutil_and_the_msa_tools(self):
+        job = re.search(r"^  sanitizers:\n(.*?)(?=^  [\w-]+:\n|\Z)", _ci("nightly.yml"), re.S | re.M).group(1)
+        self.assertIn("run: python -m pip install -e . psutil", job)
+        steps = [m.group(1) for m in re.finditer(r"(?m)^      - name: (.*)$", job)]
+        self.assertLess(steps.index("Install Clustal Omega and MAFFT (Bioconda, by coal)"), steps.index(SAN_STEP))
+        self.assertIn("run: python -m coal pipeline install clustalo mafft", job)
 
     def test_engine_ux_runs_in_the_cpp_job(self):
         """tests.test_engine_ux (the C++ engine's messages) needs coal-cpp: it runs in the C++ job and in the
@@ -618,13 +709,20 @@ class TestCiJobs(unittest.TestCase):
     def test_files_with_cpp_skips_outside_discover_run_somewhere(self):
         """A file of tests/ with a "not built" skip that discover does not collect (the fuzz scripts) is run by
         some workflow."""
-        wf = _ci() + _ci("nightly.yml")
+        wf = uncommented(_ci() + "\n" + _ci("nightly.yml"))
+        seen = set()
         for f in sorted(os.listdir(os.path.join(ROOT, "tests"))):
             if not f.endswith(".py") or re.fullmatch(r"test\w*\.py", f):
                 continue
             with open(os.path.join(ROOT, "tests", f), encoding="utf-8") as fh:
-                if "not built" in fh.read():
-                    self.assertIn(f"tests/{f}", wf, f)
+                if "not built" not in fh.read():
+                    continue
+            seen.add(f)
+            if f in RUN_BY_HAND:
+                self.assertNotIn(f"tests/{f}", wf, f"{f} runs in a workflow now: take it off RUN_BY_HAND")
+            else:
+                self.assertIn(f"tests/{f}", wf, f"{f}: run by no workflow (or add it to RUN_BY_HAND with a reason)")
+        self.assertLessEqual(set(RUN_BY_HAND), seen)
 
     def test_test_hooks_only_in_test_builds(self):
         """coal-cpp's COAL_TEST_* hooks are a CMake option (default OFF): on in the builds the tests run against,
@@ -672,7 +770,7 @@ class TestCiJobs(unittest.TestCase):
         self.assertIn("test_differential", modules_run_by(step_script("cpp", CPP_STEP)))
         self.assertIn("tests/test_cpp_vs_python.py", cpp)
         self.assertIn("python .github/ci_cpp_tests.py", cpp)
-        self.assertIn("--no-skip test_differential,", cpp)
+        self.assertIn('--no-skip "test_differential,', cpp)
         self.assertNotIn("not applicable", cpp.lower())
 
     def test_require_switch_turns_skips_into_failures(self):

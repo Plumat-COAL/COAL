@@ -281,9 +281,9 @@ jobs:
     # CLI, readers, tables, thread pool, the Ka/Ks engine, the alignment layer, the pipeline, and every other module
     # whose coal-cpp tests skip without the binary (they skip in the Python jobs, which build none).
     # .github/ci_cpp_tests.py fails the job on a skip that says a binary is "not built", anywhere, and on any skip
-    # in the core C++ modules (--no-skip) except tests.test_cpp_cli's live comparison with the Python CLI, which
-    # depends on argparse's exact messages (Python 3.13's; it runs here on 3.13 and skips on interpreters whose
-    # argparse differs), and the platform skips (Linux-only peak-memory test, POSIX signals/pipes on Windows).
+    # in the core C++ modules (--no-skip) but the platform skips of that system (matrix.allow: none on Linux; the
+    # Linux-only peak-memory test on macOS; that and the POSIX signals / pipes / hard links on Windows). On Linux
+    # tests.test_kaks_dispatch is a core module too (x86 with GCC: the AVX2 copy must run and match the baseline).
     # tests/test_repo_ci.py checks that every module with a coal-cpp skip runs here.
     name: C++ engine on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -292,6 +292,16 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            allow: ""
+            no_skip_extra: ",test_kaks_dispatch"
+          - os: macos-latest
+            allow: "peak memory read with getrusage"
+            no_skip_extra: ""
+          - os: windows-latest
+            allow: "peak memory read with getrusage|POSIX (signals|pipes|hard links)"
+            no_skip_extra: ""
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
@@ -327,6 +337,11 @@ jobs:
         run: |
           if [ -f build/Release/coal-cpp.exe ]; then b="$PWD/build/Release/coal-cpp.exe"; else b="$PWD/build/coal-cpp"; fi
           echo "COAL_CPP_BIN=$b" >> "$GITHUB_ENV"
+          # x86 Linux with GCC: the AVX2 copy of YN / MYN's matrix code is compiled and the runner's CPU has AVX2
+          if [ "$RUNNER_OS" = Linux ]; then
+            test "$("$b" dnds --kaks-isa)" = avx2 \
+              || { echo "::error::coal-cpp runs the baseline Ka/Ks copy on x86_64 Linux ($("$b" dnds --kaks-isa))"; exit 1; }
+          fi
       # psutil: tests/test_robustness.py and tests/test_stress_findings.py watch the worker processes and memory of
       # the runs (test-only, as in the Python jobs)
       - name: Install the engine (and build + wheel, for tests/test_wheels.py, and psutil)
@@ -368,10 +383,12 @@ jobs:
           COAL_IMPL: cpp
           COAL_REQUIRE_ALIGN: "1"
           COAL_REQUIRE_CPP: "1"
+          CPP_ALLOW: ${{ matrix.allow }}
+          CPP_NO_SKIP_EXTRA: ${{ matrix.no_skip_extra }}
         run: |
           python .github/ci_cpp_tests.py \
-            --no-skip test_differential,test_cpp_vs_python,test_cpp_cli,test_cpp_readers,test_cpp_tables,test_cpp_pool,test_wheels \
-            --allow "live comparison needs Python|peak memory read with getrusage|POSIX" \
+            --no-skip "test_differential,test_cpp_vs_python,test_cpp_cli,test_cpp_readers,test_cpp_tables,test_cpp_pool,test_wheels$CPP_NO_SKIP_EXTRA" \
+            --allow "$CPP_ALLOW" \
             discover -s tests
       # The release's Linux wheels are built inside the manylinux_2_28 container (GCC 14, -Werror): build there on
       # every change too, so a warning that only that compiler raises fails CI, not the release (v0.5.0rc1 did).
