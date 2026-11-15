@@ -140,6 +140,10 @@ class TestCompare(unittest.TestCase):
         self.assertEqual(n("coal pipeline: summary: diamond_search 6.0 s, orthologs 0.0 s"),
                          n("coal pipeline: summary: diamond_search 12.3 s, orthologs 0.1 s"))
         self.assertEqual(n("completed 0 0.6.0.dev0 2026-11-14T14:57:54Z"), n("completed 0 0.7.0 2027-01-02T03:04:05Z"))
+        # the release of the development version the page was run with: 0.6.0 is a prefix of 0.6.0.dev0
+        rel = dict(self.NORM, coal_version="0.6.0")
+        self.assertEqual(rt.normalise("coal-cpp 0.6.0.dev0", **rel), "coal-cpp <COAL_VERSION>")
+        self.assertEqual(rt.normalise("coal-cpp 0.6.0", **rel), "coal-cpp <COAL_VERSION>")
         self.assertEqual(n("ok (already here)  coal-tutorial-data/a.gz"), n("ok                 coal-tutorial-data/a.gz"))
         self.assertEqual(n("     11 not_converged"), "11 not_converged")
         self.assertEqual(n("results in /tmp/x/coal-tutorials/out/dnds.tsv"), "results in .../out/dnds.tsv")
