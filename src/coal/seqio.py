@@ -42,7 +42,32 @@ _CONTROL_BYTES = re.compile(rb"[\x00-\x08\x0e-\x1f]")
 # themselves (cli.py _gunzip_inputs, dnds_pipeline.py). The same words in coal-cpp (seqio.cpp GZIP_INPUT).
 GZIP_INPUT = ("is gzip-compressed: decompress it first (zcat FILE.gz > FILE, or pipe it: zcat FILE.gz | coal ... -): "
               "sequence files must be plain text")
+# bzip2 and xz the same way (follow-up audit 2026-11-15), and each of the three also after a UTF-8 BOM
+BZIP2_INPUT = ("is bzip2-compressed: decompress it first (bzcat FILE.bz2 > FILE, or pipe it: bzcat FILE.bz2 | coal ... "
+               "-): sequence files must be plain text")
+XZ_INPUT = ("is xz-compressed: decompress it first (xzcat FILE.xz > FILE, or pipe it: xzcat FILE.xz | coal ... -): "
+            "sequence files must be plain text")
 _GZIP_MAGIC = b"\x1f\x8b"
+# bzip2: "BZh", the block size '1'-'9', then the magic of the first block (pi) or of the end of stream (an empty
+# file), so a text that happens to start with "BZh" is not taken for one; xz: its six-byte header magic
+_BZIP2 = re.compile(rb"BZh[1-9](?:\x31\x41\x59\x26\x53\x59|\x17\x72\x45\x38\x50\x90)")
+_XZ_MAGIC = b"\xfd7zXZ\x00"
+_HEAD = 3 + 10   # the bytes compressed_input() looks at: a BOM and the longest magic
+
+
+def compressed_input(head: bytes) -> str | None:
+    """The message (GZIP_INPUT, BZIP2_INPUT, XZ_INPUT) for a file whose first bytes `head` (at least _HEAD of them,
+    or the whole file) are those of a gzip, bzip2 or xz file, also after a UTF-8 BOM; None for anything else.
+    coal-cpp: seqio.cpp compressed_input."""
+    if head.startswith(codecs.BOM_UTF8):
+        head = head[len(codecs.BOM_UTF8):]
+    if head.startswith(_GZIP_MAGIC):
+        return GZIP_INPUT
+    if _BZIP2.match(head):
+        return BZIP2_INPUT
+    if head.startswith(_XZ_MAGIC):
+        return XZ_INPUT
+    return None
 EMPTY_HEADER = "empty FASTA header: a '>' line without a sequence ID (every record needs a name after '>')"
 _BEFORE = "sequence data before the first '>' header: not a FASTA file? (each FASTA record starts with a '>name' line"
 BEFORE_HEADER_PROTEIN = _BEFORE + "; a CLUSTAL file must start with 'CLUSTAL')"
@@ -101,13 +126,13 @@ def _text(path):
     # Bad bytes become surrogates instead, so the line check names the right line.
     raw = open(path, "rb")
     try:
-        gz = raw.peek(2)[:2] == _GZIP_MAGIC
+        packed = compressed_input(raw.peek(_HEAD)[:_HEAD])
     except BaseException:
         raw.close()
         raise
-    if gz:
+    if packed:
         raw.close()
-        raise InputFormatError(f"{path} {GZIP_INPUT}")
+        raise InputFormatError(f"{path} {packed}")
     fh = io.TextIOWrapper(raw, encoding="utf-8-sig", errors="surrogateescape")
     try:
         yield _ascii_lines(fh, path)
@@ -362,13 +387,13 @@ class DnaIndex:
         # skipped (as read_fasta does).
         with open(path, "rb") as fh:
             offset, start = 0, None
-            first = fh.read(len(codecs.BOM_UTF8))
-            if first[:2] == _GZIP_MAGIC:
-                raise InputFormatError(f"{path} {GZIP_INPUT}")
-            if first == codecs.BOM_UTF8:
+            first = fh.read(_HEAD)
+            packed = compressed_input(first)
+            if packed:
+                raise InputFormatError(f"{path} {packed}")
+            if first.startswith(codecs.BOM_UTF8):
                 offset = len(codecs.BOM_UTF8)
-            else:
-                fh.seek(0)
+            fh.seek(offset)
             # Errors are "<file>:<line>: ..." as for protein files.
             for lineno, line in enumerate(_any_newline_lines(fh), 1):
                 if line.startswith(b">"):

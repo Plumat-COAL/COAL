@@ -438,7 +438,10 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: |
-          sudo --preserve-env env "PATH=$PATH" python .github/ci_cpp_tests.py --no-skip test_robustness \
+          # sudo-rs (Ubuntu 26) ignores --preserve-env ("preserving the entire environment is not supported"): the
+          # variables the tests need are passed by name
+          sudo env "PATH=$PATH" "COAL_CPP_BIN=$COAL_CPP_BIN" COAL_REQUIRE_CPP=1 COAL_IMPL=cpp \
+            python .github/ci_cpp_tests.py --no-skip test_robustness \
             tests.test_robustness.TestDiskFull 2>&1 | tee cpp-extras-root.txt
           test "${PIPESTATUS[0]}" -eq 0
       - name: Upload the test logs

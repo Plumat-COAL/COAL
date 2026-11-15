@@ -27,8 +27,34 @@ const char* const CONTROL_CHAR =
 const char* const GZIP_INPUT =
     "is gzip-compressed: decompress it first (zcat FILE.gz > FILE, or pipe it: zcat FILE.gz | coal ... -): "
     "sequence files must be plain text";
-static inline bool gzip_magic(const char* b, size_t n) {
-    return n >= 2 && (unsigned char)b[0] == 0x1f && (unsigned char)b[1] == 0x8b;
+// bzip2 and xz the same way, and each of the three also after a UTF-8 BOM (follow-up audit 2026-11-15)
+const char* const BZIP2_INPUT =
+    "is bzip2-compressed: decompress it first (bzcat FILE.bz2 > FILE, or pipe it: bzcat FILE.bz2 | coal ... -): "
+    "sequence files must be plain text";
+const char* const XZ_INPUT =
+    "is xz-compressed: decompress it first (xzcat FILE.xz > FILE, or pipe it: xzcat FILE.xz | coal ... -): "
+    "sequence files must be plain text";
+constexpr size_t COMPRESSED_HEAD = 3 + 10;  // the bytes compressed_input looks at: a BOM and the longest magic
+
+// The message for a file whose first n bytes (at least COMPRESSED_HEAD, or the whole file) are those of a gzip,
+// bzip2 or xz file, also after a UTF-8 BOM; nullptr for anything else. bzip2: "BZh", the block size '1'-'9' and the
+// magic of the first block (pi) or of the end of stream, so a text that starts with "BZh" is not taken for one.
+// The same test as src/coal/seqio.py compressed_input.
+static const char* compressed_input(const char* b, size_t n) {
+    const auto* u = reinterpret_cast<const unsigned char*>(b);
+    if (n >= 3 && u[0] == 0xEF && u[1] == 0xBB && u[2] == 0xBF) {
+        u += 3;
+        n -= 3;
+    }
+    if (n >= 2 && u[0] == 0x1f && u[1] == 0x8b) return GZIP_INPUT;
+    static const unsigned char block[6] = {0x31, 0x41, 0x59, 0x26, 0x53, 0x59};  // pi: a block
+    static const unsigned char eos[6] = {0x17, 0x72, 0x45, 0x38, 0x50, 0x90};    // sqrt(pi): end of stream
+    if (n >= 10 && u[0] == 'B' && u[1] == 'Z' && u[2] == 'h' && u[3] >= '1' && u[3] <= '9' &&
+        (std::memcmp(u + 4, block, 6) == 0 || std::memcmp(u + 4, eos, 6) == 0))
+        return BZIP2_INPUT;
+    static const unsigned char xz[6] = {0xFD, '7', 'z', 'X', 'Z', 0x00};
+    if (n >= 6 && std::memcmp(u, xz, 6) == 0) return XZ_INPUT;
+    return nullptr;
 }
 
 // NUL and the other C0 control bytes, except tab, LF, VT, FF and CR (seqio.py _CONTROL)
@@ -198,7 +224,8 @@ static void check_ascii(std::string& s, const std::string& path, long long linen
 LineReader::LineReader(const std::string& path, bool keep_bad_ids)
     : path_(path), in_(path, std::ios::binary), buf_(1 << 16), keep_bad_ids_(keep_bad_ids) {
     if (!in_) throw InputError(open_error(path), "file_error");
-    if (fill() && gzip_magic(buf_.data(), len_)) throw InputError(path + " " + GZIP_INPUT);
+    if (fill())
+        if (const char* packed = compressed_input(buf_.data(), len_)) throw InputError(path + " " + packed);
     if (len_ >= 3 && (unsigned char)buf_[0] == 0xEF && (unsigned char)buf_[1] == 0xBB &&
         (unsigned char)buf_[2] == 0xBF)
         pos_ = 3;  // UTF-8 byte-order mark
@@ -446,12 +473,13 @@ void DnaIndex::scan(int fno, const std::string& path) {
     std::ifstream in(path, std::ios::binary);
     if (!in) throw InputError(open_error(path), "file_error");
     long long offset = 0;
-    {  // UTF-8 byte-order mark
-        char bom[3] = {};
-        in.read(bom, 3);
-        if (gzip_magic(bom, (size_t)in.gcount())) throw InputError(path + " " + GZIP_INPUT);
-        if (in.gcount() == 3 && (unsigned char)bom[0] == 0xEF && (unsigned char)bom[1] == 0xBB &&
-            (unsigned char)bom[2] == 0xBF)
+    {  // a compressed file; the UTF-8 byte-order mark
+        char head[COMPRESSED_HEAD] = {};
+        in.read(head, COMPRESSED_HEAD);
+        const size_t got = (size_t)in.gcount();
+        if (const char* packed = compressed_input(head, got)) throw InputError(path + " " + packed);
+        if (got >= 3 && (unsigned char)head[0] == 0xEF && (unsigned char)head[1] == 0xBB &&
+            (unsigned char)head[2] == 0xBF)
             offset = 3;
         in.clear();
         in.seekg(offset);

@@ -4,6 +4,7 @@ have the code path:
 - a gzip-compressed input of the codon alignment (`coal PEP DNA`): "X is gzip-compressed: decompress it first",
   not "control character" / "sequence data before the first '>' header"; coal-cpp says it byte for byte the same
   (stderr, exit code, the report's error code), for the protein alignment, any DNA file and standard input;
+  bzip2 and xz files, and each of the three after a UTF-8 BOM, are named the same way (follow-up audit);
 - the WSL hint of a missing Windows path: one '/' between the parts and none at the end ('C:\\' is /mnt/c,
   'C:\\\\double\\\\x.fa' is /mnt/c/double/x.fa), the same in both engines;
 - `coal-cpp codon-dnds` (the native step of `coal pipeline`) accepts the testing flags --kaks-baseline and
@@ -22,8 +23,10 @@ The Python halves run in-process; the C++ halves skip if coal-cpp is not built (
 """
 from __future__ import annotations
 
+import bz2
 import gzip
 import json
+import lzma
 import os
 import shutil
 import subprocess
@@ -35,7 +38,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "tests"))
-from coal.seqio import GZIP_INPUT, InputFormatError, read_alignment, read_dna, windows_path_hint  # noqa: E402
+from coal.seqio import (BZIP2_INPUT, GZIP_INPUT, XZ_INPUT, InputFormatError, read_alignment, read_dna,  # noqa: E402
+                        windows_path_hint)
 from test_engine_ux import D, P, make, run_py  # noqa: E402
 from test_differential import cpp_binary  # noqa: E402
 
@@ -53,6 +57,29 @@ GZIP_CASES = {
                        f"coal: error: d.fa.gz {GZIP_INPUT}\n"),
     # the errors before reading are unchanged: a missing file is named first
     "missing_first": ({"d.fa.gz": GZ_D}, ["nope.fa", "d.fa.gz"], "coal: error: cannot open 'nope.fa': no such file\n"),
+}
+# bzip2, xz, and a compressed file after a UTF-8 BOM (follow-up audit 2026-11-15): the same message shape
+BOM = b"\xef\xbb\xbf"
+OTHER_COMPRESSED = {
+    "bzip2_protein": ({"p.fa.bz2": bz2.compress(P.encode()), "d.fa": D}, ["p.fa.bz2", "d.fa"],
+                      f"coal: error: p.fa.bz2 {BZIP2_INPUT}\n"),
+    "bzip2_dna": ({"p.fa": P, "d.fa.bz2": bz2.compress(D.encode())}, ["p.fa", "d.fa.bz2"],
+                  f"coal: error: d.fa.bz2 {BZIP2_INPUT}\n"),
+    "bzip2_empty": ({"p.fa": P, "d.bz2": bz2.compress(b"")}, ["p.fa", "d.bz2"], f"coal: error: d.bz2 {BZIP2_INPUT}\n"),
+    "xz_protein": ({"p.fa.xz": lzma.compress(P.encode()), "d.fa": D}, ["p.fa.xz", "d.fa"],
+                   f"coal: error: p.fa.xz {XZ_INPUT}\n"),
+    "xz_dna": ({"p.fa": P, "d.fa.xz": lzma.compress(D.encode())}, ["p.fa", "d.fa.xz"],
+               f"coal: error: d.fa.xz {XZ_INPUT}\n"),
+    "bom_gzip_protein": ({"p.fa.gz": BOM + GZ_P, "d.fa": D}, ["p.fa.gz", "d.fa"], f"coal: error: p.fa.gz {GZIP_INPUT}\n"),
+    "bom_gzip_dna": ({"p.fa": P, "d.fa.gz": BOM + GZ_D}, ["p.fa", "d.fa.gz"], f"coal: error: d.fa.gz {GZIP_INPUT}\n"),
+    "bom_xz_dna": ({"p.fa": P, "d.fa.xz": BOM + lzma.compress(D.encode())}, ["p.fa", "d.fa.xz"],
+                   f"coal: error: d.fa.xz {XZ_INPUT}\n"),
+}
+# text that only starts like one of them: the reader's usual message (compared between the engines, not here)
+NOT_COMPRESSED = {
+    "BZh_text_protein": ({"p.fa": "BZh9 not bzip2\n" + P, "d.fa": D}, ["p.fa", "d.fa"]),
+    "BZh_text_dna": ({"p.fa": P, "d.fa": "BZh91AY&SX\n" + D}, ["p.fa", "d.fa"]),
+    "bom_text_dna": ({"p.fa": P, "d.fa": BOM + D.encode()}, ["p.fa", "d.fa"]),
 }
 # Missing Windows paths (U17): argument -> its WSL form in the hint
 WSL = {
@@ -87,6 +114,24 @@ class TestGzipInputPython(unittest.TestCase):
                 rc, out, err = run_py(d, args)
                 self.assertEqual((rc, out, err), (1, "", line))
                 self.assertNotIn("control character", err)
+
+    def test_other_compressors(self):
+        for name, (files, args, line) in OTHER_COMPRESSED.items():
+            with self.subTest(case=name):
+                d = self.d / name
+                d.mkdir()
+                make(d, files)
+                self.assertEqual(run_py(d, args), (1, "", line))
+        for name, (files, args) in NOT_COMPRESSED.items():
+            with self.subTest(case=name):
+                d = self.d / name
+                d.mkdir()
+                make(d, files)
+                self.assertNotIn("compressed", run_py(d, args)[2])
+        self.assertTrue(BZIP2_INPUT.startswith("is bzip2-compressed: decompress it first (bzcat FILE.bz2"))
+        self.assertTrue(XZ_INPUT.startswith("is xz-compressed: decompress it first (xzcat FILE.xz"))
+        for m in (BZIP2_INPUT, XZ_INPUT):
+            self.assertTrue(m.endswith(GZIP_INPUT[GZIP_INPUT.index("):"):]), m)
 
     def test_message_wording(self):
         self.assertTrue(GZIP_INPUT.startswith("is gzip-compressed: decompress it first"))
@@ -163,6 +208,28 @@ class TestCppSaysTheSame(unittest.TestCase):
                 py = run_py(d, args)
                 self.assertEqual(self.cpp(d, args), py)
                 self.assertEqual(py[2], line)
+
+    def test_other_compressors(self):
+        for name, (files, args, line) in OTHER_COMPRESSED.items():
+            with self.subTest(case=name):
+                d = self.d / name
+                d.mkdir()
+                make(d, files)
+                py = run_py(d, args)
+                self.assertEqual(self.cpp(d, args), py)
+                self.assertEqual(py[2], line)
+        for name, (files, args) in NOT_COMPRESSED.items():
+            with self.subTest(case=name):
+                d = self.d / name
+                d.mkdir()
+                make(d, files)
+                py = run_py(d, args)
+                self.assertEqual(self.cpp(d, args), py)
+                self.assertNotIn("compressed", py[2])
+        make(self.d, {"p.fa": P})
+        for blob, msg in ((bz2.compress(D.encode()), BZIP2_INPUT), (lzma.compress(D.encode()), XZ_INPUT),
+                          (BOM + GZ_D, GZIP_INPUT)):
+            self.assertEqual(self.cpp(self.d, ["p.fa", "-"], stdin=blob), (1, "", f"coal: error: standard input {msg}\n"))
 
     def test_gzip_report(self):
         make(self.d, {"p.fa.gz": GZ_P, "d.fa": D})
@@ -387,6 +454,12 @@ class TestMlwlLargeDsIsGenuine(unittest.TestCase):
                 lwl = tkp.lwl_sites(case)
                 fake = dict(m, dS="60", Sd=repr(30 * (lwl[1] / 3 + lwl[2])))
                 self.assertTrue(any(x.startswith("P10: dS") for x in tkp.check_row(case, "MLWL", fake, {})))
+                # MLWL's own dS at most 10 (or NA) does not exempt it: an LWL-scale value just above 10 is flagged
+                # (MLWL's sites can be 9/7 of LWL's for dS, 1.5 for dN; follow-up audit 2026-11-15)
+                for own in ("9.5", "NA"):
+                    fake = dict(m, dS=own, Sd=repr(10.5 * (lwl[1] / 3 + lwl[2])))
+                    self.assertTrue(any(x.startswith("P10: dS") and "LWL's sites = 10.5" in x
+                                        for x in tkp.check_row(case, "MLWL", fake, {})), own)
                 # LWL is judged on its own dS
                 self.assertTrue(any(x.startswith("P10: dS") for x in
                                     tkp.check_row(case, "LWL", dict(rows[("p", "LWL")], dS="15.6"), {})))

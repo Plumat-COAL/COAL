@@ -741,6 +741,14 @@ class TestDiskFull(unittest.TestCase):
             subprocess.run(["umount", str(cls.full)], capture_output=True, timeout=30)
         cls._td.cleanup()
 
+    def setUp(self):
+        # run_both compares the engines only when coal-cpp is found: where the binary is required (nightly.yml's
+        # cpp-extras runs this class as root, with COAL_REQUIRE_CPP passed through sudo by name) a missing one fails
+        # instead of leaving the Python engine alone without a word (follow-up audit 2026-11-15)
+        if CPP is None and os.environ.get("COAL_REQUIRE_CPP"):
+            self.fail(f"coal-cpp not found ({os.environ.get('COAL_CPP_BIN') or ROOT / 'build' / 'coal-cpp'}; "
+                      "COAL_REQUIRE_CPP is set)")
+
     def run_both(self, args, stdin=subprocess.DEVNULL, **env_extra):
         results = {}
         for name, cmd in engines():

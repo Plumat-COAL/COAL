@@ -415,15 +415,11 @@ def _bad_tool_variable(var: str, name: str, other: str = "") -> None:
 
 def _cannot_open(path, why: str = "no such file") -> str:
     """The message "cannot open 'PATH': WHY", with the path as typed (not Python's repr, which doubles backslashes), with a hint when
-    a Windows path is given on Linux or macOS, e.g. under WSL (new-user audit 2026-11-14, U17)."""
+    a Windows path is given on Linux or macOS, e.g. under WSL (new-user audit 2026-11-14, U17). The hint is seqio's, so
+    it is normalised as in the alignment's messages and coal-cpp ('C:\\' is /mnt/c, doubled backslashes collapse)."""
+    from .seqio import windows_path_hint
     path = os.fspath(path)
-    text = f"cannot open '{path}': {why}"
-    m = re.match(r"^([A-Za-z]):[\\/]", path) if os.name != "nt" else None
-    if m:
-        rest = path[3:].replace("\\", "/")
-        text += (f". This is a Windows path; under WSL (Windows Subsystem for Linux) the same file is "
-                 f"/mnt/{m.group(1).lower()}/{rest}")
-    return text
+    return f"cannot open '{path}': {why}" + windows_path_hint(path)
 
 
 def _find_cpp() -> str:
@@ -4171,7 +4167,10 @@ def _bind_args_values(argv: list[str], parser: argparse.ArgumentParser) -> tuple
                           + (f"; {v} is an option of coal pipeline itself" if v not in (None, "--") else ""))
         after = argv[k + 2] if k + 2 < len(argv) else None
         if after is not None and not after.startswith("-") and not any(c.isspace() for c in v):
-            return argv, (f"{w} takes the DIAMOND options as one quoted string: {opt}=\"{v} {after}\" (here {v} "
+            # the quoted form without double quotes the shell left in the words (`\"-c 1\"` in cmd.exe gives "-c and
+            # 1"; the hint was --diamond-args=""-c 1"")
+            joined = f"{v.strip(chr(34))} {after.strip(chr(34))}"
+            return argv, (f"{w} takes the DIAMOND options as one quoted string: {opt}=\"{joined}\" (here {v} "
                           f"is its value and {after} would be read as an argument of coal pipeline)")
         out.append(f"{opt}={v}")
         k += 2

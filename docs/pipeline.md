@@ -399,8 +399,11 @@ it is. `--overwrite` replaces them (what every run did before). A run into a fol
 or without `--resume`, is not affected, and neither is `--pairs DIR/orthologs.tsv` or `--clusters DIR/clusters.tsv`
 of an earlier run, which is read in place: `work/outputs.json` lists it under `read_in_place` (so no later run
 removes it at its start, edited or not; the entry is kept by later runs that neither read nor write it, as long
-as the file is there), and a later run that writes it again is not refused. Where COAL looks for what a run
-wrote: `work/outputs.json`; without it (an older version, or `work/` deleted) the outputs `DIR/report.json` lists,
+as the file is there), and a later run that writes it again is not refused. If `work/` is then deleted, that
+record is gone and COAL goes by `DIR/report.json`, whose outputs list the `orthologs.tsv` it read: a later run
+that runs DIAMOND into `DIR` then replaces your own `DIR/orthologs.tsv` without a word (keep a pairs file you
+wrote yourself outside `DIR`, or a copy of it). Where COAL looks for what a run wrote: `work/outputs.json`;
+without it (an older version, or `work/` deleted) the outputs `DIR/report.json` lists,
 or those of the `--report FILE` given now when that file is a COAL report of this same folder (an earlier run with
 the same `--report` elsewhere; a report of another folder does not count, and a folder whose earlier run wrote
 its report elsewhere, with `work/` deleted and no `--report` now, is refused until you give that `--report` or

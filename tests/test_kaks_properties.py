@@ -473,16 +473,22 @@ def check_row(case: Case, method: str, d: dict, flavour: dict) -> list[str]:
     # kappa = 1 and next to nothing as kappa -> 0.5), so a genuine correction can give any dS. Its Sd (Nd) over
     # LWL's sites, L2 / 3 + L4 (L0 + 2 L2 / 3), is what LWL's distance would be (FIXCI-B3, seed 4243: 513 CAG / CAA
     # pairs, dS = 5 ln(513) / 2 = 15.60; the audit's 2,000-codon pair at kappa 0.5031, dS 162.70: both genuine).
+    # MLWL's LWL-scale value is checked whatever MLWL's own dN / dS (also when that is at most 10, or NA): its sites
+    # can be up to 1.5 (dN) or 9/7 (dS) times LWL's, so a residue could give an LWL-scale value just above 10 with
+    # MLWL's own below (follow-up audit 2026-11-15).
     lwl = lwl_sites(case) if method == "MLWL" else None
     for c in ("dN", "dS"):
         v = num(d[c])
         sites = num(d["S_sites" if c == "dS" else "N_sites"])
         if gest or (method == "LWL" and sites is not None and sites < 1):
             continue
-        if lwl is not None and v is not None and v > 10:
+        if lwl is not None:
             diffs = num(d["Sd" if c == "dS" else "Nd"])
             scale = lwl[1] / 3 + lwl[2] if c == "dS" else lwl[0] + 2 * lwl[1] / 3
-            if diffs is not None and (scale < 1 or diffs / scale <= 10):
+            if diffs is not None:
+                if scale >= 1 and diffs / scale > 10:
+                    bad.append(f"P10: {c} = {d[c]} with status {st}, {'Sd' if c == 'dS' else 'Nd'} / LWL's sites "
+                               f"= {diffs / scale:.6g}: a rounding residue at the boundary of the correction")
                 continue
         if v is not None and v > 10:
             bad.append(f"P10: {c} = {d[c]} with status {st}: a rounding residue at the boundary of the correction")

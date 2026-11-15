@@ -40,7 +40,12 @@ Every field (Ka, Ks, Ka/Ks, S-Sites, N-Sites) where the two outputs differ is pu
                             at an exact boundary of its correction, which COAL counts as 0 (difference 14)
       MLWL kappa exactly 2 or 0.5
                             MLWL's site formula at kappa = 2 ts / tv exactly 2 or 0.5: COAL compares the exact
-                            sums, KaKs_Calculator doubles whose rounding depends on the column order (difference 18)
+                            sums, KaKs_Calculator doubles whose rounding depends on the column order (difference 18).
+                            Only where that is what happened: COAL's S-Sites and N-Sites are the formula of the
+                            exact kappa (kappa = 2: (kappa - 0.5) / (kappa + 1.5); 0.5: one third) on the row's
+                            Fold-Sites, KaKs_Calculator's those of the next formula up (kappa > 2: (kappa - 1) /
+                            (kappa + 1); kappa > 0.5: (kappa - 0.5) / (kappa + 1.5)) on its own, and the two
+                            differ (some 2-fold sites); anything else on such a row is unexplained
       unexplained           anything else: the script exits 1
 
 With --kaks-fixed (the same source with the two corrected lines of docs/kaks.md) the same table is made against
@@ -154,6 +159,39 @@ def yn00_w0(yn00: str, s1: str, s2: str):
     return yn00_one(yn00, s1, s2, 0)
 
 
+def mlwl_sites(fold: str, kappa: float, formula: str):
+    """MLWL's (S, N) from a Fold-Sites field "L0:L2:L4" with one of its three site formulas (cpp/src/kaks.cpp
+    run_lwl): "above2" (kappa > 2), "above_half" (0.5 < kappa <= 2), "third" (kappa <= 0.5). None if unreadable."""
+    try:
+        l0, l2, l4 = (float(v) for v in fold.split(":"))
+    except ValueError:
+        return None
+    if formula == "above2":
+        return (kappa - 1) * l2 / (kappa + 1) + l4, l0 + 2 * l2 / (kappa + 1)
+    if formula == "above_half":
+        return (kappa - 0.5) * l2 / (kappa + 1.5) + l4, l0 + 2 * l2 / (kappa + 1.5)
+    return l2 / 3 + l4, l0 + 2 * l2 / 3
+
+
+def mlwl_boundary(rf: list, of: list) -> bool:
+    """An MLWL row whose difference is difference 18 and nothing else: COAL's printed kappa is exactly 2 or 0.5,
+    COAL's S-Sites / N-Sites are the site formula of that exact kappa, KaKs_Calculator's are the formula on the
+    other side of the threshold (its kappa rounded just above it), and the two formulas give different sites."""
+    k = of[16].split(":")[0]
+    if k not in ("2", "0.5"):
+        return False
+    kappa = float(k)
+    exact, other = ("above_half", "above2") if k == "2" else ("third", "above_half")
+    want_ours, want_ref = mlwl_sites(of[9], kappa, exact), mlwl_sites(rf[9], kappa, other)
+    if want_ours is None or want_ref is None:
+        return False
+
+    def same(got, want) -> bool:
+        return all(g is not None and abs(g - w) <= 1e-9 * max(1.0, abs(w)) for g, w in zip(got, want))
+    ours_sn, ref_sn = (num(of[7]), num(of[8])), (num(rf[7]), num(rf[8]))
+    return same(ours_sn, want_ours) and same(ref_sn, want_ref) and not same(want_ours, want_ref)
+
+
 def classify(ref: dict, ours: dict, status: dict, seqs: dict, yn00: str | None):
     counts, example, bad = Counter(), {}, []
     for key, rf in ref.items():
@@ -172,8 +210,11 @@ def classify(ref: dict, ours: dict, status: dict, seqs: dict, yn00: str | None):
                     kind = "number != number: unexplained (not converged, but COAL prints a number)"
                 elif key[1] == "MLWL" and of[16].split(":")[0] in ("2", "0.5"):
                     # kappa = 2 ts / tv exactly at one of MLWL's thresholds: COAL decides on the exact sums,
-                    # KaKs_Calculator on doubles summed in column order (difference 18)
-                    kind = "number != number: MLWL kappa exactly 2 or 0.5"
+                    # KaKs_Calculator on doubles summed in column order (difference 18); only if the site counts
+                    # show that the two took the formulas on either side of the threshold
+                    kind = ("number != number: MLWL kappa exactly 2 or 0.5" if mlwl_boundary(rf, of) else
+                            "number != number: unexplained (MLWL kappa exactly 2 or 0.5, but not the other site "
+                            "formula)")
                 elif st == "no_data":
                     kind = "number != number: one kind of site"
                     if yn00 and name in ("Ka", "Ks"):
