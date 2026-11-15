@@ -1116,7 +1116,9 @@ In commands that 0.5.0 has (both engines unless said):
   any difference on such a row); both random sets give 0 unexplained against the 15-digit and the corrected
   KaKs_Calculator (single: none of the class; multi: 36 fields in 10 pairs, all of them the other formula). The
   property fuzz's P10 checks MLWL's LWL-scale value (Sd / (L2 / 3 + L4), Nd / (L0 + 2 L2 / 3)) whatever MLWL's own
-  dN / dS (it was looked at only above 10, so an LWL-scale value just above 10 with MLWL's own below passed).
+  dN / dS (it was looked at only above 10, so an LWL-scale value just above 10 with MLWL's own below passed);
+  KNOWN stays empty, and 3 seeds x 1,500 pairs (all methods) and 3 x 5,000 MLWL-only pairs (all genetic codes)
+  have no finding.
 
 - **Bioconda recipe (packaging/bioconda), second review.** The test line for `pal2nal` without arguments expected
   exit 0 and the usage on stdout and would have failed the first build: it now tests what the command does (exit
