@@ -408,7 +408,7 @@ def _bad_tool_variable(var: str, name: str, other: str = "") -> None:
     cache)" misled (deep test 2026-11-14, D06)."""
     v = os.environ.get(var)
     if v and not os.path.isfile(v):
-        raise PipelineError(f"${var} is set to {v!r}, which is not a file ({'a folder' if os.path.isdir(v) else 'no such file'}). "
+        raise PipelineError(f"${var} is set to '{v}', which is not a file ({'a folder' if os.path.isdir(v) else 'no such file'}). "
                             f"While {var} is set, {name} is looked for there only, not on PATH or in COAL's cache: "
                             f"set it to the {name} program, or unset it" + (f" (or give {other})" if other else ""))
 
@@ -946,7 +946,7 @@ def translate_hint(paths: list[str], genes_path: str, chosen: int, genes_shown: 
                      "translate it again with the -c of its organism (and organelle)")
         else:
             text += (" They look like genes of another genetic code (mitochondrial or plastid genes?): translate "
-                     f"them on their own with " + (f"-c {codes[0]}" if len(codes) == 1 else "the -c of their "
+                     "them on their own with " + (f"-c {codes[0]}" if len(codes) == 1 else "the -c of their "
                                                    "organism and organelle"))
     else:
         text += (": their proteins have '*' inside (the wrong reading frame, pseudogenes, sequences that are not "
@@ -1184,6 +1184,8 @@ class _Run:
         self.lock = None        # <out_dir>.coal-lock while this run owns the output folder
         self._inputs: list[tuple[str, str]] = []
         self._earlier: tuple[set, set] = (set(), set())
+        self._earlier_read: set = set()   # outputs of an earlier COAL run that a later one read in place (below)
+        self._listed: set = set()         # the outputs a COAL report.json of this folder lists (_earlier_outputs)
         self.pairs_in_place = False   # --pairs is DIR/orthologs.tsv itself: read, not written again
         self._engine = None     # the running coal-cpp codon-dnds (killed if the run is interrupted)
         self.started = _utc_now()
@@ -1218,6 +1220,7 @@ class _Run:
         try:
             self._check_inputs()
             self._earlier = self._earlier_outputs()
+            self._check_foreign_outputs()
         except PipelineError:
             # nothing is written into the folder (no report either: report.json could be the input itself)
             self.release()
@@ -1452,7 +1455,7 @@ class _Run:
         """Names (in the output folder) of the files this run may write, temporary ones included."""
         a = self.a
         names = ["failed.tsv", "genes.tsv", "dnds.tsv"]
-        if not a.report:
+        if not a.report or self._report_is_default():
             names += ["report.json"]
         if a.kaks_format:
             names.append("dnds.kaks")
@@ -1472,6 +1475,19 @@ class _Run:
                     names += ["realign.tsv", "realign.tsv.body"]
         return names + [n + ".tmp" for n in names if not n.endswith(".body")]
 
+    def _report_is_default(self) -> bool:
+        """--report names DIR/report.json itself (the default spelled out, by any name): it is then the planned
+        report.json, recorded and checked as without --report (audit of #87, M1)."""
+        if not self.a.report:
+            return False
+        mine = self.path("report.json")
+        try:
+            if os.path.samefile(self.a.report, mine):
+                return True
+        except OSError:
+            pass
+        return os.path.realpath(self.a.report) == os.path.realpath(mine)
+
     def _check_inputs(self) -> None:
         """Refuse, before anything in the folder is removed or written, a run that would write onto one of its
         own inputs. The one exception is the documented `--pairs DIR/orthologs.tsv` (the pairs of an earlier
@@ -1479,7 +1495,7 @@ class _Run:
         self._inputs = self._input_paths()
         self.pairs_in_place = False
         planned = [self.path(n) for n in self._planned_outputs()]
-        if self.a.report:
+        if self.a.report and not self._report_is_default():
             planned.append(os.path.abspath(self.a.report))
         for p in planned:
             opt = self._is_input(p)
@@ -1511,24 +1527,48 @@ class _Run:
         names: set = set()
         dirs: set = set()
         codon_dir = False
+        # The reports of earlier runs into this folder: DIR/report.json, and the --report file of this run when it
+        # is a COAL report of this very folder (an earlier run with the same --report elsewhere). What they list
+        # is COAL's for _check_foreign_outputs when work/outputs.json is gone (work/ deleted, an older version) or
+        # has no read_in_place (a development build's record).
+        reports = []
+        for path, here_only in ((self.path("report.json"), False), (self.a.report, True)):
+            if not path or (here_only and self._report_is_default()):
+                continue
+            try:
+                with open(path, encoding="utf-8", errors="backslashreplace") as fh:
+                    rep = json.load(fh)
+            except (OSError, ValueError):
+                continue
+            if not (isinstance(rep, dict) and rep.get("schema") == SCHEMA and isinstance(rep.get("outputs"), dict)):
+                continue
+            if here_only and not (isinstance(rep.get("out_dir"), str)
+                                  and os.path.realpath(rep["out_dir"]) == os.path.realpath(self.out)):
+                continue
+            reports.append((rep, not here_only))
+        self._listed = {v for rep, _ in reports for v in rep["outputs"].values()
+                        if isinstance(v, str) and v in _RUN_TABLES}
         try:
             with open(self.wpath("outputs.json"), encoding="utf-8", errors="backslashreplace") as fh:
                 rec = json.load(fh)
             names = {n for n in rec["files"] if isinstance(n, str)}
+            read = rec.get("read_in_place")
+            if isinstance(read, list):
+                self._earlier_read = {n for n in read if isinstance(n, str)}
+                # this record says what was read in place: a report's list is not needed (and would make a
+                # user's own file read in place, which its report lists, look like COAL's)
+                self._listed = set()
             codon_dir = rec.get("codon_alignments_dir") is True
             if rec.get("protein_alignments_dir") is True:
                 dirs.add("protein_alignments")
         except (OSError, ValueError, KeyError, TypeError):
-            try:
-                with open(self.path("report.json"), encoding="utf-8", errors="backslashreplace") as fh:
-                    rep = json.load(fh)
-                if isinstance(rep, dict) and rep.get("schema") == SCHEMA and isinstance(rep.get("outputs"), dict):
-                    names = {v for v in rep["outputs"].values() if isinstance(v, str)}
-                    names |= {"report.json", "failed.tsv"}
-                    codon_dir = rep.get("mode") == "clusters" and "codon_alignments" in names
-                    names |= {n + ".tmp" for n in list(names)}
-            except (OSError, ValueError):
-                pass
+            # no record (a version without it, or work/ deleted): the outputs the first of those reports lists
+            if reports:
+                rep, in_folder = reports[0]
+                names = {v for v in rep["outputs"].values() if isinstance(v, str)}
+                names |= {"report.json", "failed.tsv"} if in_folder else {"failed.tsv"}
+                codon_dir = rep.get("mode") == "clusters" and "codon_alignments" in names
+                names |= {n + ".tmp" for n in list(names)}
         if codon_dir:
             dirs.add("codon_alignments")
         for name, opt in self._ALIGNMENT_DIRS.items():
@@ -1540,8 +1580,35 @@ class _Run:
                 if not os.path.isdir(d) or os.path.islink(d) or os.listdir(d):
                     raise PipelineError(f"{d} exists and was not written by a COAL run: --{opt.replace('_', '-')} "
                                         "writes one file per cluster there and would mix with (or replace) what "
-                                        "it holds. Nothing was changed: move it away or use another output folder")
+                                        "it holds. Nothing was changed: move it away or use another output folder "
+                                        "(--overwrite does not apply to a folder)")
         return {n for n in names if n in _RUN_OUTPUTS}, dirs
+
+    def _check_foreign_outputs(self) -> None:
+        """Refuse, before anything in the folder is removed or written, a run whose outputs would replace files
+        that no COAL run wrote there: a genes.tsv, dnds.tsv, report.json or clusters.tsv of the user's own (review
+        of 2026-11-15, L1: they were replaced without a word, also by `-o examples/dnds`, whose orthologs.tsv is
+        part of the repository). A file an earlier run recorded (work/outputs.json, or the outputs of its
+        report.json) is that run's and is replaced as before; so is everything with --overwrite. Temporary names
+        (NAME.tmp) are COAL's own and not checked."""
+        if getattr(self.a, "overwrite", False):
+            return
+        known, _ = self._earlier
+        known = known | self._earlier_read | self._listed
+        foreign = []
+        for name in self._planned_outputs():
+            if name.endswith((".tmp", ".body")) or name in known:
+                continue
+            if name == "orthologs.tsv" and self.pairs_in_place:
+                continue    # --pairs DIR/orthologs.tsv: read and kept as it is
+            if os.path.lexists(self.path(name)):
+                foreign.append(name)
+        if foreign:
+            raise PipelineError(
+                f"{self.out} already holds {_and(foreign)}, which this run would replace and which no COAL run "
+                f"wrote there (work/outputs.json does not list {'it' if len(foreign) == 1 else 'them'}). Nothing "
+                "was changed. Use a new -o folder, or add --overwrite to replace "
+                f"{'it' if len(foreign) == 1 else 'them'}")
 
     def _replaced_notice(self) -> None:
         """One notice when the output folder holds the results of an earlier run, which this run replaces (new-user
@@ -1597,9 +1664,17 @@ class _Run:
         """work/outputs.json: the names this run may write, for the next run's clean-up. Written before the first
         output, so that what a killed run left is known too."""
         planned = [n for n in self._planned_outputs() if not (n == "orthologs.tsv" and self.pairs_in_place)]
+        # An earlier COAL run's output that this run reads where it is (`--pairs DIR/orthologs.tsv`, `--clusters
+        # DIR/clusters.tsv`): not in "files", so that no later run removes it at its start (it may have been edited),
+        # but still COAL's for _check_foreign_outputs, so that a later run may write it again.
+        # Carried forward from run to run while the file is there and no run writes it (a run that neither reads
+        # nor writes it keeps the entry: audit of #87, M3). After _clear_earlier_outputs, an earlier output that
+        # this run does not write is still there only when it is one of this run's inputs, or was read in place.
+        known = self._earlier[0] | self._earlier_read | self._listed
+        read = sorted(n for n in known if n in _RUN_TABLES and n not in planned and os.path.isfile(self.path(n)))
         tmp = self.wpath("outputs.json.tmp")
         with open(tmp, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as fh:
-            json.dump({"coal_version": __version__, "files": sorted(planned),
+            json.dump({"coal_version": __version__, "files": sorted(planned), "read_in_place": read,
                        "codon_alignments_dir": bool(self.a.keep_alignments and self.mode == "clusters"),
                        "protein_alignments_dir": bool(self.a.keep_protein_alignments and self.mode == "clusters")},
                       fh)
@@ -3469,6 +3544,12 @@ def build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     g = common.add_argument_group("Output")
     g.add_argument("-o", "--out-dir", required=True, metavar="DIR", help="output folder (created if missing)")
+    g.add_argument("--overwrite", action="store_true",
+                   help="replace files in DIR with the names of this run's outputs (genes.tsv, dnds.tsv, "
+                        "report.json, clusters.tsv, ...) that no COAL run wrote there; without it such a run is "
+                        "refused (exit 1) before anything is changed. The files of an earlier COAL run in DIR are "
+                        "replaced either way. Not for a codon_alignments/ or protein_alignments/ folder that is not "
+                        "COAL's (cluster mode): that is always refused")
     g.add_argument("--kaks-format", action="store_true",
                    help="also write DIR/dnds.kaks in KaKs_Calculator's format")
     g.add_argument("--keep-alignments", action="store_true",
@@ -3589,7 +3670,9 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--sensitivity", choices=SENSITIVITIES, default="default",
                    help="DIAMOND sensitivity mode (default: DIAMOND's default)")
     g.add_argument("--diamond-args", metavar="'ARGS'",
-                   help="further arguments for `diamond blastp`, in one string (e.g. '--block-size 4 --tmpdir /scratch'); "
+                   help="further arguments for `diamond blastp`, in one quoted string (e.g. '--block-size 4 --tmpdir "
+                        "/scratch', or '-c 1 -b 4': short options are DIAMOND's here; --diamond-args=\"-c 1 -b 4\" works in "
+                        "every shell); give it once; "
                         "the options COAL sets itself (--query, --db, --out, --outfmt, --threads, --max-target-seqs, "
                         "--evalue, a sensitivity) are refused")
 
@@ -3624,12 +3707,14 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--mutual-cover", type=float, default=None, metavar="PCT", help="DeepClust --mutual-cover")
     g.add_argument("--cluster-evalue", type=float, default=None, metavar="E", help="DeepClust --evalue")
     g.add_argument("--deepclust-args", metavar="'ARGS'",
-                   help="further arguments for `diamond deepclust`, in one string (e.g. '--memory-limit 12G'); the "
+                   help="further arguments for `diamond deepclust`, in one quoted string (e.g. '--memory-limit 12G'; "
+                        "a short option in it is DIAMOND's); the "
                         "options COAL sets itself (--db, --out, --threads) are refused")
     g.add_argument("--realign", action="store_true",
                    help="also run `diamond realign` (members against their representatives) into DIR/realign.tsv")
     g.add_argument("--realign-args", metavar="'ARGS'",
-                   help="with --realign: further arguments for `diamond realign`, in one string; the options COAL "
+                   help="with --realign: further arguments for `diamond realign`, in one quoted string (a short "
+                        "option in it is DIAMOND's); the options COAL "
                         "sets itself (--db, --clusters, --out, --outfmt, --threads) are refused")
 
     p = sub.add_parser("install", help="install DIAMOND, Clustal Omega or MAFFT into COAL's cache",
@@ -4017,6 +4102,82 @@ def _unknown_option_hint(extra: list[str], parser: argparse.ArgumentParser) -> s
     return f" ({'; '.join(hints)})" if hints else ""
 
 
+# The options whose value is a string of DIAMOND options. `--diamond-args '-c 1 -b 4'` was refused by argparse
+# ("expected one argument", review of 2026-11-15, L3): a value that starts with a short option COAL has itself
+# (-c, -o, -j, -m, -q) is taken for that option. _bind_args_values() gives the value to its option before argparse
+# sees it, for the abbreviations argparse accepts too (`--diamond-arg`), and refuses what would be misread.
+_ARGS_STRING_OPTIONS = ("--diamond-args", "--deepclust-args", "--realign-args")
+
+
+def _bind_args_values(argv: list[str], parser: argparse.ArgumentParser) -> tuple[list[str], str | None]:
+    """argv with `--diamond-args VALUE` (and --deepclust-args, --realign-args, and an abbreviation argparse would
+    accept for one of them) written as `--diamond-args=VALUE`, so a VALUE that starts with '-' is the string of
+    DIAMOND options and not one of COAL's options; nothing after `--` is changed. Second value: the usage error, or
+    None. Errors: no value, or a value that is one of COAL's own options or an abbreviation of one
+    (`--diamond-args --resum`: the value was forgotten); the option given twice (argparse would keep the last
+    string without a word); a single word followed by a word that is no option (`--diamond-args -b 4`, unquoted)."""
+    own = {o for act in parser._actions for o in act.option_strings}
+    subs: dict = {}
+    for act in parser._actions:   # the subcommands' options too
+        if isinstance(act, argparse._SubParsersAction):
+            subs = act.choices
+            for sp in subs.values():
+                own |= {o for x in sp._actions for o in x.option_strings}
+    mode_ap = subs.get(argv[0]) if argv else None
+    longs = sorted({o for x in (mode_ap or parser)._actions for o in x.option_strings if o.startswith("--")})
+
+    def full(name: str) -> str | None:
+        """The option argparse reads `name` as: itself, or the one option it abbreviates."""
+        if name in longs:
+            return name
+        hits = [o for o in longs if o.startswith(name)] if name.startswith("--") and len(name) > 2 else []
+        return hits[0] if len(hits) == 1 else None
+
+    def coal_option(v: str) -> bool:
+        if v == "--":
+            return True
+        if any(c.isspace() for c in v):
+            return False    # a quoted string of several words is DIAMOND's
+        name = v.split("=", 1)[0]
+        return name in own or full(name) is not None
+
+    example = '="-c 1 -b 4"'
+    out: list[str] = []
+    seen: dict[str, str] = {}
+    k = 0
+    while k < len(argv):
+        w = argv[k]
+        if w == "--":
+            out += argv[k:]
+            break
+        name, eq, val = w.partition("=")
+        opt = full(name) if name.startswith("--") else None
+        if opt not in _ARGS_STRING_OPTIONS:
+            out.append(w)
+            k += 1
+            continue
+        if opt in seen:
+            return argv, (f"{opt} is given twice ({seen[opt]} and {name}): put all the DIAMOND options into one "
+                          f"string, e.g. {opt}{example}")
+        seen[opt] = name
+        if eq:
+            out.append(f"{opt}={val}")
+            k += 1
+            continue
+        v = argv[k + 1] if k + 1 < len(argv) else None
+        if v is None or coal_option(v):
+            return argv, (f"{w} needs a value: one string of DIAMOND options, e.g. {opt}{example} (or "
+                          f"{opt} '-c 1 -b 4' in a POSIX shell)"
+                          + (f"; {v} is an option of coal pipeline itself" if v not in (None, "--") else ""))
+        after = argv[k + 2] if k + 2 < len(argv) else None
+        if after is not None and not after.startswith("-") and not any(c.isspace() for c in v):
+            return argv, (f"{w} takes the DIAMOND options as one quoted string: {opt}=\"{v} {after}\" (here {v} "
+                          f"is its value and {after} would be read as an argument of coal pipeline)")
+        out.append(f"{opt}={v}")
+        k += 2
+    return out, None
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """`coal pipeline ...`. Exit codes: 0 done and nothing failed; 2 done, but some genes, pairs or clusters failed
     (failed.tsv, report.json), or a command-line error; 1 the run could not be done."""
@@ -4024,12 +4185,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap = build_parser()
     modes = next(x for x in ap._actions if isinstance(x, argparse._SubParsersAction)).choices
     mode_ap = modes.get(argv[0]) if argv else None
+    parsed, why = _bind_args_values(argv, ap)   # argv itself is what report.json records as the command
+    if why:
+        (mode_ap or ap).error(why)
     if mode_ap is not None and argv[0] != "install":
         from .cli import merged_code_error
-        why = merged_code_error(argv[1:], ("-c", "--codontable", "-codontable"))
+        why = merged_code_error(parsed[1:], ("-c", "--codontable", "-codontable"))
         if why:
             mode_ap.error(why)
-    a, extra = ap.parse_known_args(argv)
+    a, extra = ap.parse_known_args(parsed)
     if extra:
         (mode_ap or ap).error("unrecognized arguments: " + " ".join(extra) + _unknown_option_hint(extra, mode_ap or ap))
     if a.mode is None:

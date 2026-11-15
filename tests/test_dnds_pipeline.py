@@ -839,11 +839,16 @@ class Robustness(PipelineCase):
         self.assertEqual(P.run_pairs(q, s, out, pairs=pf, quiet=True).exit_code, 0)
         self.assertFalse((out / "dnds.kaks").exists())
         self.assertTrue((out / "unpaired.tsv").is_file())
-        # a report that cannot be read names nothing: nothing is removed
+        # a report that cannot be read names nothing: nothing is removed, and the files this run would write are
+        # nobody's (review of 2026-11-15, L1): refused without --overwrite, before anything changes
         (out / "work" / "outputs.json").unlink()
         (out / "dnds.kaks").write_text("whose?\n", encoding="utf-8")
         (out / "report.json").write_text("{not json", encoding="utf-8")
-        self.assertEqual(P.run_pairs(q, s, out, pairs=pf, quiet=True).exit_code, 0)
+        with redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(P.run_pairs(q, s, out, pairs=pf, quiet=True).exit_code, 1)
+        self.assertIn("already holds failed.tsv, genes.tsv, dnds.tsv, report.json and orthologs.tsv", err.getvalue())
+        self.assertEqual((out / "report.json").read_text(encoding="utf-8"), "{not json")
+        self.assertEqual(P.run_pairs(q, s, out, pairs=pf, quiet=True, overwrite=True).exit_code, 0)
         self.assertEqual((out / "dnds.kaks").read_text(encoding="utf-8"), "whose?\n")
 
     def test_the_pairs_of_an_earlier_run_can_be_the_input(self):
@@ -971,8 +976,13 @@ class Robustness(PipelineCase):
         finally:
             other.kill()
             other.wait()
-        # the lock of a process that is gone is replaced, and a finished run leaves none
-        res = P.run_pairs(q, s, out, pairs=pf, quiet=True)
+        # the lock of a process that is gone is replaced, and a finished run leaves none. The stand-in's
+        # report.json is in no COAL record (a real run writes work/outputs.json first): refused without --overwrite
+        with redirect_stderr(io.StringIO()) as err:
+            res = P.run_pairs(q, s, out, pairs=pf, quiet=True)
+        self.assertEqual(res.exit_code, 1, err.getvalue())
+        self.assertFalse(lock.exists())
+        res = P.run_pairs(q, s, out, pairs=pf, quiet=True, overwrite=True)
         self.assertEqual(res.exit_code, 0)
         self.assertFalse(lock.exists())
         self.assertEqual(res.report["status"], "completed")

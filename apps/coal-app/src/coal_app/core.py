@@ -511,7 +511,7 @@ def _parse_warning(line: str) -> tuple[str, dict] | None:
         what = {"U": "selenocysteine", "O": "pyrrolysine", "B": "D or N", "Z": "E or Q", "J": "I or L"}.get(aa)
         return sid, {"code": "unknown_aa", "column": int(col), "residue": aa,
                      "text": (f"Column {col}: '{aa}'" + (f" ({what})" if what else "") + " is not one of the 20 "
-                              f"standard amino acids, so COAL did not check its codon (any codon accepted).")}
+                              "standard amino acids, so COAL did not check its codon (any codon accepted).")}
     m = _WARN_UNRELATED.match(line)
     # the --strict advice also names the app's option (the GUI and the MCP tool have it)
     if m:
@@ -1771,7 +1771,6 @@ def explain(report: dict) -> str:
     lines = [summary_sentence(report)]
     if s.get("pairing") in _PAIRING_TEXT:
         lines.append(_PAIRING_TEXT[s["pairing"]])
-    code = report.get("exit_code")
     out = report.get("output")
     if out:
         lines.append(f"The codon alignment was written to {out.get('path')} ({out.get('format')} format).")

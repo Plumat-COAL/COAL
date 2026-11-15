@@ -8,7 +8,7 @@ Python), and with the fork of orthologr that has COAL built in; and check that e
 | Data | the files of tutorials 2 and 3 (`get_enterobacteria.sh`, `get_chlamydia.sh`) and their `orthologs.tsv` / `clusters.tsv` |
 | Needs | R 4.1 or later with a C++17 compiler and `Rcpp`; `reticulate` and the COAL platform wheel for the Python route; Clustal Omega for clusters; DIAMOND and `remotes` for orthologr |
 | Runtime | in-process pairs 7 s; the pipeline through Python 14 s; in-process clusters with Clustal Omega 71 s; orthologr 20 s (one thread each) |
-| Tested with | R 4.5.3, coalr 0.6.0.9000 (COAL commit 009bdd5), orthologr 0.5.0 of Plumat-COAL/orthologr `integration/all` (df3ea87), DIAMOND 2.2.8, Clustal Omega 1.2.4, Linux x86_64 |
+| Tested with | R 4.5.3, coalr 0.6.0.9000 built from COAL commit 009bdd5 (2026-11-14), orthologr 0.5.0 of Plumat-COAL/orthologr `integration/all` (df3ea87), DIAMOND 2.2.8, Clustal Omega 1.2.4, Linux x86_64. Unlike tutorials 1, 2, 3 and 5, this one is not rerun by CI (it needs R, coalr and orthologr), so the outputs shown are those of that commit and later commits are not checked against them |
 
 Run the R code from the scratch folder of the earlier tutorials (`coal-tutorials/`), after tutorials 2 and 3 have
 written `ecoli_vs_salmonella/` and `chlamydia/` (skip their clean-up steps, or run them again).

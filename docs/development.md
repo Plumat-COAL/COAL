@@ -56,6 +56,12 @@ notice. The other Python hooks are module attributes that only a test in the sam
 **Variables that are not hooks.** `COAL_TEST_DIAMOND` (the DIAMOND binary the tests use), `COAL_TEST_SLOW_FACTOR`
 (longer time limits in the app's tests) and `COAL_LOCK_RACE_TRIALS` are read by the tests only, not by COAL.
 
+**Testing options of `coal-cpp kaks` / `coal-cpp dnds`.** Not in the help and not an interface (they may change
+without notice), in every build: `--yn-always-pmat` computes YN / MYN's transition-probability matrix also for a
+pair that does not need it (`tests/test_kaks_yn_shortcut.py`); `--kaks-baseline` uses the baseline copy of that
+matrix's code instead of the AVX2 copy, and `--kaks-isa` prints which copy a run would use (`avx2` or `baseline`)
+and exits (`tests/test_kaks_dispatch.py`; docs/kaks.md "Platform reproducibility").
+
 **Tests and binaries without hooks.** A test that needs a hook asks the binary first (`tests/cpp_hooks.py`). With a
 `coal-cpp` that has none it is skipped with that reason; when `COAL_REQUIRE_CPP` is set (CI) it fails instead, so
 a test build without the option cannot pass unnoticed. `COAL_ALLOW_NO_TEST_HOOKS=1` turns that failure back into

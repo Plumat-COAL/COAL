@@ -116,7 +116,11 @@ about:
   doc_url: https://plumat-coal.github.io/COAL/
 
 extra:
-  # The C++ engine is plain C++17 without architecture-specific code: also built for ARM Linux and Apple silicon.
+  # The C++ engine is C++17 with the standard library only and needs no architecture-specific build flags: on x86
+  # with GCC / Clang two kernels (the aligner's row loops in align.cpp, YN / MYN's matrix in kaks.cpp) also have an
+  # AVX2 copy (target("avx2")) that is chosen at run time when the CPU has AVX2, with the baseline code as the
+  # fallback, so one build runs on every x86-64 CPU. Elsewhere only the baseline is compiled: also built for ARM
+  # Linux and Apple silicon.
   additional-platforms:
     - linux-aarch64
     - osx-arm64
