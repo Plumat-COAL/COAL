@@ -324,7 +324,6 @@ class TestHelpGroups(unittest.TestCase):
                     self.assertEqual(c.returncode, 0, c.stderr)
 
 
-@unittest.skipIf(os.name == "nt", "uses a POSIX shell wrapper to see which engine ran")
 @unittest.skipIf(cpp_binary() is None, "coal-cpp not built (set COAL_CPP_BIN)")
 class TestAutomaticCppDispatch(unittest.TestCase):
     """IMP-E-A: `coal` runs coal-cpp for large inputs, with the same stdout, stderr, report and exit code."""
@@ -338,10 +337,9 @@ class TestAutomaticCppDispatch(unittest.TestCase):
         assert sum(os.path.getsize(p) for p in cls.big) >= dispatch.CPP_MIN_BYTES
         assert sum(os.path.getsize(p) for p in cls.small) < dispatch.CPP_MIN_BYTES
         cls.mark = cls.tmp / "cpp_ran"
-        cls.wrapper = cls.tmp / "coal-cpp"
-        cls.wrapper.write_text(f'#!/bin/sh\ncase "$1" in --version) ;; *) touch "{cls.mark}" ;; esac\n'
-                               f'exec "{cpp_binary()}" "$@"\n')
-        cls.wrapper.chmod(0o755)
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from cpp_wrapper import write_wrapper   # (sh, or a .cmd on Windows)
+        cls.wrapper = write_wrapper(cls.tmp / "coal-cpp", cpp_binary(), touch=cls.mark, unless_version=True)
 
     @classmethod
     def tearDownClass(cls):
