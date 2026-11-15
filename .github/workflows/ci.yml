@@ -358,8 +358,9 @@ jobs:
         run: python -c "import os; from coal import dnds_pipeline as P; p = P.install_diamond(method='official'); open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8', newline='\n').write('COAL_DIAMOND=' + p + '\nCOAL_TEST_DIAMOND=' + p + '\nCOAL_REQUIRE_DIAMOND=1\n')"
       # Clustal Omega and MAFFT for cluster mode's MSA route, with COAL's own installer (Bioconda through the pinned
       # micromamba, into COAL's cache, where the tests find them). Linux only: one system is enough to run those
-      # tests, and there is no install for Windows (docs/alignment.md). Best effort: if the channel cannot be
-      # reached the step says so and the MSA tests skip, as they do on Windows and macOS.
+      # tests, and there is no Clustal Omega install for Windows (docs/alignment.md; MAFFT's Windows package is
+      # tested by tests.test_windows_mafft_real, below). Best effort: if the channel cannot be reached the step
+      # says so and the MSA tests skip, as they do on Windows and macOS.
       - name: Install Clustal Omega and MAFFT (Bioconda, by coal; Linux)
         if: runner.os == 'Linux'
         timeout-minutes: 10
@@ -378,11 +379,16 @@ jobs:
         # (tests.test_differential) and the real-data checks run coal-cpp. tests.test_wheels: the platform wheel
         # with this coal-cpp inside installs and `coal` runs it. tests.test_kaks_properties: the property fuzz of
         # the Ka/Ks engine on a fixed seed (about 30 s; nightly.yml runs it with a new seed and more pairs).
+        # COAL_TEST_REAL_MAFFT (Windows): tests.test_windows_mafft_real downloads MAFFT's pinned Windows package
+        # (27 MB, size and SHA-256 checked by coal) into a cache folder of its own, runs mafft.bat and one
+        # `coal pipeline clusters --aligner mafft` on examples/dnds; it skips, saying so, if mafft.cbrc.jp cannot
+        # be reached, and fails if the file there is not the pinned one.
         shell: bash
         env:
           COAL_IMPL: cpp
           COAL_REQUIRE_ALIGN: "1"
           COAL_REQUIRE_CPP: "1"
+          COAL_TEST_REAL_MAFFT: ${{ runner.os == 'Windows' && '1' || '' }}
           CPP_ALLOW: ${{ matrix.allow }}
           CPP_NO_SKIP_EXTRA: ${{ matrix.no_skip_extra }}
         run: |

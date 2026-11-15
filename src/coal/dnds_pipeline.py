@@ -383,7 +383,7 @@ def _install_diamond_official(version: str, quiet: bool, sha256: str | None = No
     return exe
 
 
-_WINDOWS_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{k}" for k in range(1, 10)), *(f"LPT{k}" for k in range(1, 10))}
+_WINDOWS_RESERVED = _msa._WINDOWS_RESERVED
 
 
 def _safe_member_name(name: str, asset: str) -> str:
@@ -393,10 +393,8 @@ def _safe_member_name(name: str, asset: str) -> str:
     device name, a trailing dot or space, anything outside letters, digits, `.`, `_`, `+`, `-`)."""
     parts = name.replace("\\", "/").split("/")
     base = parts[-1]
-    ok = (bool(base) and not name.startswith(("/", "\\")) and ".." not in parts and ":" not in name
-          and all(c.isascii() and (c.isalnum() or c in "._+-") for c in base)
-          and not base.startswith(".") and not base.endswith(".")
-          and base.split(".")[0].upper() not in _WINDOWS_RESERVED)
+    ok = (not name.startswith(("/", "\\")) and ".." not in parts and ":" not in name
+          and _msa._safe_name_part(base))   # (the rules of MAFFT's Windows package, coal.msa, per part)
     if not ok:
         raise _msa.MsaError(f"{asset} holds a member with an unsafe name ({name!r}); nothing was installed")
     return base
@@ -1844,7 +1842,8 @@ class _Run:
                 raise PipelineError(str(e)) from None
         if exe is None:
             name = "Clustal Omega" if tool == "clustalo" else "MAFFT"
-            if platform.system() == "Windows":   # nothing to install it from there: say what works instead
+            if platform.system() == "Windows" and (tool == "clustalo" or _msa._platform() != ("Windows", "AMD64")):
+                # nothing to install it from there: say what works instead (MAFFT: x86-64 Windows has its package)
                 raise PipelineError(
                     f"{name} was not found (PATH, $COAL_{tool.upper()}), and " + (_msa.NO_WINDOWS_CLUSTALO
                     if tool == "clustalo" else _msa.NO_WINDOWS_MAFFT))
@@ -3716,9 +3715,10 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("install", help="install DIAMOND, Clustal Omega or MAFFT into COAL's cache",
                        description="Install the external tools into COAL's cache folder (they are not bundled: "
                                    "docs/alignment.md \"Licences\"). DIAMOND: Linux, macOS and Windows. Clustal "
-                                   "Omega and MAFFT: Linux and macOS (conda packages); on Windows the command says "
-                                   "what works there instead (WSL, MSYS2's Clustal Omega, MAFFT's own Windows "
-                                   "package).")
+                                   "Omega and MAFFT: Linux and macOS (conda packages). MAFFT on x86-64 Windows: "
+                                   "MAFFT's own Windows package (mafft-" + _msa.MAFFT_VERSION + "-win64-signed.zip "
+                                   "from mafft.cbrc.jp, pinned by size and SHA-256). Clustal Omega on Windows: the "
+                                   "command says what works there instead (WSL, MSYS2's Clustal Omega, MAFFT).")
     p.add_argument("tools", nargs="+", choices=("diamond", "clustalo", "mafft"))
     p.add_argument("--force", action="store_true", help="install again even if one is there")
     p.add_argument("--sha256", metavar="HEX",
@@ -3728,7 +3728,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--allow-unverified", action="store_true",
                    help="accept a download that nobody can verify (no pinned hash, no --sha256): it is kept and "
                         "run as it arrives, and its SHA-256 is printed. Without this such a download is refused. "
-                        "It does not apply to clustalo or mafft (conda packages only)")
+                        "It does not apply to clustalo or mafft (conda packages, and MAFFT's pinned Windows "
+                        "package)")
     p.add_argument("-q", "--quiet", action="store_true")
     return ap
 
