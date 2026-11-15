@@ -112,7 +112,8 @@ class TestGzipInputPython(unittest.TestCase):
         env = dict(os.environ, PYTHONPATH=str(ROOT / "src"), COAL_ENGINE="python")
         r = subprocess.run([sys.executable, "-m", "coal", "p.fa", "-"], cwd=self.d, input=GZ_D, capture_output=True,
                            env=env, timeout=120)
-        self.assertEqual((r.returncode, r.stderr.decode()), (1, f"coal: error: standard input {GZIP_INPUT}\n"))
+        err = r.stderr.decode().replace("\r\n", "\n")   # (Windows: CRLF)
+        self.assertEqual((r.returncode, err), (1, f"coal: error: standard input {GZIP_INPUT}\n"))
 
 
 @unittest.skipIf(os.name == "nt", "the WSL hint is given on Linux and macOS only")
@@ -175,7 +176,8 @@ class TestCppSaysTheSame(unittest.TestCase):
         env = dict(os.environ, PYTHONPATH=str(ROOT / "src"), COAL_ENGINE="cpp", COAL_CPP=self.bin)
         r = subprocess.run([sys.executable, "-m", "coal", "p.fa", "d.fa.gz"], cwd=self.d, capture_output=True,
                            env=env, timeout=120)
-        self.assertEqual((r.returncode, r.stderr.decode()), (1, f"coal: error: d.fa.gz {GZIP_INPUT}\n"))
+        err = r.stderr.decode().replace("\r\n", "\n")   # (Windows: CRLF)
+        self.assertEqual((r.returncode, err), (1, f"coal: error: d.fa.gz {GZIP_INPUT}\n"))
 
     def test_kaks_commands_keep_their_message(self):
         # coal-cpp kaks / dnds refuse a gzip input with their own words (they name the `coal` command, which
