@@ -1485,6 +1485,15 @@ Result run_myn(const Prepared& p, const GeneticCode& g, const Options& opt, Resu
 
 }  // namespace
 
+const char* pmat_isa(const Options& opt) {
+#if COAL_KAKS_AVX2
+    if (!opt.baseline_isa && kaks_cpu_has_avx2()) return "avx2";
+#else
+    (void)opt;
+#endif
+    return "baseline";
+}
+
 const char* method_name(Method m) {
     switch (m) {
         case Method::NG: return "NG";

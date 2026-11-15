@@ -130,6 +130,7 @@ struct Cli {
     kaks::Options opt;
     PairFlags flags;
     bool quiet = false;
+    bool print_isa = false;   // --kaks-isa (testing)
 };
 
 int usage(const Cli& c, const std::string& msg) {
@@ -467,6 +468,8 @@ int parse(const std::vector<std::string>& args, Cli& c) {
             c.opt.yn_always_pmat = true;
         } else if (u == "--kaks-baseline") {   // testing (kaks.hpp Options::baseline_isa); not in the help
             c.opt.baseline_isa = true;
+        } else if (u == "--kaks-isa") {   // testing (kaks.hpp pmat_isa): print avx2 or baseline; not in the help
+            c.print_isa = true;
         } else if (u == "--yn-weighting") {
             if (!need(v) || (v != "0" && v != "1")) return usage(c, "--yn-weighting: expected 0 or 1");
             c.opt.yn_weighting = v == "1";
@@ -504,6 +507,10 @@ int parse(const std::vector<std::string>& args, Cli& c) {
         } else {
             pos.push_back(s);
         }
+    }
+    if (c.print_isa) {
+        std::cout << kaks::pmat_isa(c.opt) << '\n';
+        return 0;
     }
     if (!pos.empty()) {
         if (c.compat) return usage(c, "unrecognized argument: " + pos[0] + " (the input is given with -i)");
