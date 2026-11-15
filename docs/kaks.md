@@ -1073,6 +1073,19 @@ start reaches. COAL starts a pair whose first maximum has t of 1 or more from th
 on the ridge) and reports the highest maximum. On 4,388 *S. cerevisiae* / *C. glabrata* pairs the starts
 disagreed for 22 pairs, all with t above 2.
 
+**Genetic codes.** `-c` sets the code for GY as for every method, and all 17 tables work (NCBI 1 to 6, 9 to 16,
+21 to 23). The code enters the model in three places, each taken from the table: its stop codons are not states
+of the chain (61 sense codons in the standard code, 60 in the vertebrate mitochondrial code, 63 in the ciliate
+code) and are left out of the F3x4 frequencies before these are renormalised; a change is synonymous or
+nonsynonymous by that code's translation; and a compared column with a stop codon of that code is skipped (TGA
+is compared under codes 2 and 4, where it is Trp; AGA is skipped under code 2). Checked for every table
+(`benchmarks/kaks/validate_gy.py codes`, 2026-11-15): on 40 random pairs per code the reported lnL is the
+likelihood of the reported t, kappa and omega recomputed with numpy from the model's definition under that code
+(to 1e-11 relative; S, dS and dN from the rates to the same; no parameter moved by 3 % has a higher likelihood),
+and for the eleven tables codeml has (its `icode` 0 to 10: NCBI 1, 2, 3, 4, 5, 6, 9, 10, 12, 13, 15) COAL's lnL is
+never below codeml's on 132 pairs, with omega, kappa and t the same to 3e-4 relative at most (codeml's printed
+digits) in the 121 where both are at the same maximum inside codeml's bounds. Nothing had to be changed.
+
 **Bounds.** t from 1e-6 to 50; kappa and omega from 1e-6 to 999 (codeml: t 1e-5 to 50, kappa 0.4 to 999, omega
 0.001 to 99; KaKs_Calculator: t up to 3, kappa 0.01 to 30, omega 0.001 to 50). An omega at 1e-6 says that the
 data support no nonsynonymous change (dN is then 1e-6 dS, where the counting methods print 0), and an omega at
@@ -1087,7 +1100,7 @@ the other methods when dS is 0).
 | The estimate of dS (or dN) is above 10 substitutions per site. Every pair whose t ends at its bound of 50 is such a pair (t / 3 is the mean of dS and dN over the sites) | that estimate and dN/dS are `NA`; the other estimate, the sites, kappa, t and lnL are kept. The note gives the estimate left out and says when t is at its bound | `saturated` |
 | The likelihood is flat in t from the optimiser's stopping point to the bound (within 1e-6 log units): one codon, or every site different, so that the data put no upper limit on the distance | no estimate of either distance (`NA`); t is reported at its bound, 50. The note says so. (Without this rule the value would be wherever the optimiser's tolerance stopped it: 4.6 for `AAA` against `AAG`) | `saturated` |
 | No synonymous site, or no nonsynonymous site (under F3x4: e.g. Met and Trp codons only) | omega cancels in the scaled model, so t and kappa are estimated and the one distance that exists is given, as for YN (if it is not saturated: the note then has both reasons) | `no_data` |
-| The optimiser ends without a maximum, away from the bound of t | no estimate; the note has the last point. Not seen in the validation runs (11,000 pairs) | `not_converged` |
+| The optimiser ends without a maximum, away from the bound of t | no estimate; the note has the last point. A start that uses up its 100 steps without converging (a nearly flat likelihood, on which steps of the gradient's size crawl: two random codons with every site different) is first run again with lengthened steps, and that run is taken if it converges with a likelihood that is not lower; `not_converged` is what remains after that. Not seen in the validation runs on real and simulated genes (14,600 pairs); of 208 random pairs of 2 to 40 codons, none after the second run (one before it) | `not_converged` |
 
 10 substitutions per site is far beyond what a pairwise comparison can resolve (the likelihood is flat there, and
 an estimate of 15 or of 60 says the same thing: saturated); it is also the bound that the property tests put on
@@ -1157,7 +1170,9 @@ by less than 2 where its t is at 50; 66 of the yeast pairs have t = 50 in both p
 likelihood to 1e-4 in 60 of them) or stopped at a lower maximum (2 simulated pairs, by up to 0.13; 3 yeast
 pairs, by up to 0.53; one *Salmonella* / *Shigella* pair, by 0.002). Which pairs these are changes from one
 codeml run to the next, since its starting values are random. The golden test `tests/test_kaks_gy.py` holds 20 of these
-pairs with codeml's output, three of them under the vertebrate mitochondrial code (`-c 2`, codeml `icode = 1`).
+pairs with codeml's output, three of them under the vertebrate mitochondrial code (`-c 2`, codeml `icode = 1`),
+and 20 more pairs under the ten other tables codeml has; the tables it does not have (11, 14, 16, 21, 22, 23) are
+tested against the likelihood recomputed from the definition.
 
 **Against simulated truth** (the pairs of "Accuracy against simulated truth": GY94 with F3x4, truth in Yang &
 Nielsen's definition; 300 codons, omega 0.2 and 1, kappa 2 and 4, 100 pairs per cell, 800 per column and codon
