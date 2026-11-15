@@ -20,9 +20,11 @@
 // definitions are theirs): Q is symmetrised with pi and decomposed once per (kappa, omega) (kaks.cpp's symmetric
 // eigen solver), which makes the likelihood and its two derivatives in t cheap; t is profiled out by a safeguarded
 // Newton iteration and (log kappa, log omega) are found by a projected BFGS iteration with the exact gradient,
-// from fixed starting points (one for a close pair, four for a diverged one). Nothing is random and nothing depends
-// on the thread: the same pair gives the same numbers in any run. docs/kaks.md, "GY: maximum likelihood", has the statuses, the bounds, the validation against
-// codeml and the differences from codeml and KaKs_Calculator.
+// from fixed starting points (one for a close pair, four for a diverged one). Standard errors come from the
+// observed information (central differences of that gradient) and the delta method. Nothing is random and
+// nothing depends on the thread: the same pair gives the same numbers in any run. docs/kaks.md, "GY: maximum
+// likelihood", has the statuses, the bounds, the validation against codeml and the differences from codeml and
+// KaKs_Calculator.
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -717,8 +719,9 @@ Result run_gy(const Prepared& p, const GeneticCode& g, const Options& opt, Resul
     // Standard errors of dN and dS, as codeml's getSE = 1 gives them (there with a Hessian by differences of the
     // likelihood): from the observed information of the parameters estimated inside their bounds. A kappa or an
     // omega near a bound (below 1e-4 or above 99; the bounds are 1e-6 and 999) is the bound in all but name: the
-    // likelihood has no curvature to speak of in it, and it is held fixed; with omega there, the distance that the bound makes 0 (dN at the lower bound, dS at the upper one)
-    // has no standard error. None either for a saturated pair, or with one kind of site only.
+    // likelihood has no curvature to speak of in it, and it is held fixed; with omega there, the distance that the
+    // bound makes 0 (dN at the lower bound, dS at the upper one) has no standard error. None either for a
+    // saturated pair, or with one kind of site only.
     if (!fix_omega && !satS && !satN && std::isfinite(r.ks) && std::isfinite(r.ka) && best.t > T_MIN) {
         const bool k_in = best.kappa > SE_PAR_MIN && best.kappa < SE_PAR_MAX;
         const bool w_low = best.omega <= SE_PAR_MIN, w_high = best.omega >= SE_PAR_MAX;

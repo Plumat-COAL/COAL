@@ -351,7 +351,8 @@ class TestCliAndFormats(GyBase):
             a = self.run_cpp("dnds", KDIR / "gy_cases.axt", "-m", alias, "-q").stdout
             self.assertEqual(a, self.run_cpp("dnds", KDIR / "gy_cases.axt", "-m", "GY", "-q").stdout)
         # standard errors: for an estimate inside the bounds, NA for a saturated pair
-        rows = [ln.split("\t") for ln in self.run_cpp("dnds", KDIR / "gy_cases.axt", "-m", "GY", "-q").stdout.splitlines()[1:]]
+        out = self.run_cpp("dnds", KDIR / "gy_cases.axt", "-m", "GY", "-q").stdout
+        rows = [ln.split("\t") for ln in out.splitlines()[1:]]
         self.assertTrue(0 < float(rows[0][6]) < float(rows[0][3]) and 0 < float(rows[0][7]) < float(rows[0][4]))
         for row in rows:
             if row[13] == "saturated":

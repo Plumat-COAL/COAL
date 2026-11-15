@@ -1,6 +1,7 @@
 """Validate COAL's method GY (maximum likelihood, Goldman & Yang 1994) against PAML's codeml and simulated truth.
 
   python3 benchmarks/kaks/validate_gy.py sim  --coal build/coal-cpp --codeml codeml --out work/gy
+  python3 benchmarks/kaks/validate_gy.py grid --coal build/coal-cpp --out work/gy --codons 1000 [--reps 50]
   python3 benchmarks/kaks/validate_gy.py real --coal build/coal-cpp --codeml codeml --out work/gy \
         --pairs name=in.axt[:N] [--pairs name=codon.fasta[:N]] ...
 
@@ -8,6 +9,7 @@ sim: pairs simulated under GY94 / F3x4 (sim_truth/codonsim.py; truth is the mode
 2000 define them): dS 0.1 ... 3, omega 0.2 / 1, kappa 2 / 4, equal and GC3-skewed codon usage, 300 codons.
 The first --codeml-reps replicates of each cell go to codeml as well (runmode = -2, CodonFreq = 2, one data set
 per pair); all --reps replicates are compared with the truth, for GY and YN.
+grid: the 30 combinations of docs/kaks.md's accuracy table (no codeml): GY and YN against the truth.
 real: pairs of a real data set (AXT, or an aligned FASTA of consecutive pairs). codeml gets the columns COAL
 compares (no gap, no ambiguous base, no stop codon), COAL gets the rows as they are.
 
@@ -273,6 +275,52 @@ def cmd_sim(a):
     return compare("sim", sp, [res["GY"][i] for i in sub], cm, a.out)
 
 
+def cmd_grid(a):
+    """The grid of docs/kaks.md "Accuracy against simulated truth" (2 codon usages x kappa 1, 2, 4 x omega 0.05,
+    0.2, 0.5, 1, 2 = 30 combinations) at dS 0.1, 0.5, 1, 2, 3: per dS the median over the combinations of the
+    cells' median relative error of dS and of dN/dS, as that section's table gives it for the other methods."""
+    import numpy as np
+    sys.path.insert(0, os.path.join(HERE, "sim_truth"))
+    from codonsim import FREQS, CodonModel, sample_pair_P, to_str
+    os.makedirs(a.out, exist_ok=True)
+    DS = [0.1, 0.5, 1.0, 2.0, 3.0]
+    pairs, meta = [], []
+    for fi, f in enumerate(("equal", "skewed")):
+        for ki, k in enumerate((1.0, 2.0, 4.0)):
+            for wi, w in enumerate((0.05, 0.2, 0.5, 1.0, 2.0)):
+                m = CodonModel(k, w, FREQS[f])
+                rng = np.random.default_rng([20261115, 7, fi, ki, wi, a.codons])
+                for d in DS:
+                    t = m.t_for_dS(d)
+                    for rep in range(a.reps):
+                        x, y = sample_pair_P(m, t, a.codons, rng)
+                        pairs.append((f"{f}_k{k:g}_w{w:g}_d{d:g}_r{rep}", to_str(x), to_str(y)))
+                        meta.append((f, k, w, d))
+    print(f"grid: {len(pairs)} pairs of {a.codons} codons, {a.reps} per cell")
+    res, dt = run_coal(a.coal, pairs, a.out, methods=("GY", "YN"), jobs=a.jobs)
+    for meth in ("GY", "YN"):
+        line = []
+        for d in DS:
+            cells = {}
+            for mt, r in zip(meta, res[meth]):
+                if mt[3] == d:
+                    cells.setdefault(mt[:3], []).append(r)
+            mS, mW, ok = [], [], []
+            for key, rows in cells.items():
+                good = [r for r in rows if r["status"] == "ok"]
+                ok.append(len(good) / len(rows))
+                if good:
+                    mS.append(statistics.median(fl(r["dS"]) / d - 1 for r in good))
+                    w = [fl(r["dNdS"]) / key[2] - 1 for r in good if fl(r["dNdS"]) == fl(r["dNdS"])]
+                    if w:
+                        mW.append(statistics.median(w))
+            line.append(f"dS {d:g}: {100 * statistics.median(mS):+.0f}% [{100 * min(mS):+.0f}%, {100 * max(mS):+.0f}%]"
+                        f" / {100 * statistics.median(mW):+.0f}% [{100 * min(mW):+.0f}%, {100 * max(mW):+.0f}%]"
+                        f" ok {min(ok):.2f}-{max(ok):.2f}")
+        print(f"  {meth}: " + " | ".join(line))
+    return 0
+
+
 def cmd_real(a):
     os.makedirs(a.out, exist_ok=True)
     worse = 0
@@ -308,21 +356,24 @@ def cmd_real(a):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for nm in ("sim", "real"):
+    for nm in ("sim", "real", "grid"):
         p = sub.add_parser(nm)
         p.add_argument("--coal", required=True)
-        p.add_argument("--codeml", required=True)
+        p.add_argument("--codeml", required=nm != "grid")
         p.add_argument("--out", required=True)
         p.add_argument("--jobs", type=int, default=1)
     s = sub.choices["sim"]
     s.add_argument("--reps", type=int, default=50)
     s.add_argument("--codeml-reps", type=int, default=6)
     s.add_argument("--codons", type=int, default=300)
+    g = sub.choices["grid"]
+    g.add_argument("--reps", type=int, default=50)
+    g.add_argument("--codons", type=int, default=300)
     r = sub.choices["real"]
     r.add_argument("--pairs", action="append", required=True)
     r.add_argument("--min-codons", type=int, default=30)
     a = ap.parse_args()
-    worse = cmd_sim(a) if a.cmd == "sim" else cmd_real(a)
+    worse = {"sim": cmd_sim, "real": cmd_real, "grid": cmd_grid}[a.cmd](a)
     sys.exit(1 if worse else 0)
 
 

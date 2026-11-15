@@ -949,12 +949,20 @@ cell medians; dS / dN/dS):
 | LPB | 1,000 | -11% / +23% | -6% / +18% | -8% / +16% | -11% / +20% | -30% / +32% |
 | Comeron | 1,000 | -0% / -1% | +6% / -8% | +8% / -11% | +8% / -16% | -24% / +15% |
 | Li | 1,000 | -7% / +8% | -0% / -1% | -0% / -1% | -2% / -3% | -20% / +8% |
+| GY | 1,000 | -0% / +0% | +1% / +0% | +1% / +0% | +2% / +0% | +3% / -2% |
 | YN | 300 | -2% / +0% | +4% / -7% | +16% / -20% | +7% / -21% | -19% / +0% |
 | MYN | 300 | -3% / +1% | +4% / -7% | +18% / -22% | +4% / -15% | -21% / +8% |
 | NG | 300 | -11% / +15% | -12% / +4% | -17% / +4% | -24% / +6% | -36% / +18% |
 | LPB | 300 | -11% / +27% | -7% / +18% | -7% / +13% | -18% / +25% | -36% / +43% |
 | Comeron | 300 | -0% / +0% | +5% / -10% | +8% / -12% | +1% / -12% | -30% / +14% |
 | Li | 300 | -8% / +10% | -1% / -2% | +0% / -1% | -8% / -1% | -30% / +17% |
+| GY | 300 | -0% / -1% | +1% / +0% | +3% / -0% | +4% / -1% | +4% / -3% |
+
+The `GY` rows (maximum likelihood, added 2026-11-15) are from the same 30 combinations simulated again with 50
+pairs per cell (`benchmarks/kaks/validate_gy.py grid`; YN on those pairs gives the numbers of its rows above to
+within a few points): the estimator the simulation was checked with, now in COAL, without the bias of the YN00
+approximation. Over the single combinations GY's cell medians stay within about 10 % up to dS 1 and within about
+25 % at dS 2 to 3 for dS (cells of 50 pairs scatter that much), where YN's reach +95 %.
 
 The medians hide the spread for the counting methods, whose error depends on the codon usage and kappa in both
 directions. With skewed usage every counting method has dS 20 to 35 % too low and dN/dS 30 to 90 % too high
