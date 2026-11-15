@@ -225,6 +225,95 @@ class TestStandardErrors(GyBase):
         self.assertEqual((r["SE_dN"], r["SE_dS"]), ("NA", "NA"))
 
 
+class TestGeneticCodes(GyBase):
+    """GY under the genetic codes other than the standard one: the stop codons of the code are left out of the
+    model (and of the F3x4 frequencies), synonymous / nonsynonymous follows the code's translation."""
+
+    def test_against_codeml_for_the_codes_codeml_has(self):
+        """Ten NCBI tables (2, 3, 4, 5, 6, 9, 10, 12, 13, 15 = codeml's icode 1 to 10), two pairs each, with
+        codeml's stored output (tests/kaks/make_gy_code_fixtures.py)."""
+        gold = {}
+        for line in (GOLD / "gy_codes.codeml.tsv").read_text(encoding="utf-8").splitlines()[1:]:
+            f = line.split("\t")
+            gold[f[0]] = dict(zip(("ncbi", "icode", "lnL", "t", "kappa", "omega", "dN", "dS", "S", "N", "SE_dN",
+                                   "SE_dS"), map(float, f[1:])))
+        pairs = read_axt(KDIR / "gy_codes.axt")
+        self.assertEqual(len(pairs), len(gold))
+        codes = sorted({int(g["ncbi"]) for g in gold.values()})
+        self.assertEqual(codes, [2, 3, 4, 5, 6, 9, 10, 12, 13, 15])
+        compared = 0
+        for code in codes:
+            sub = [p for p in pairs if gold[p[0].split("&")[0]]["ncbi"] == code]
+            rows = self.gy("".join(f"{n}\n{a}\n{b}\n\n" for n, a, b in sub), "-c", str(code))
+            for (name, _, _), r in zip(sub, rows):
+                g = gold[name.split("&")[0]]
+                with self.subTest(code=code, pair=name):
+                    self.assertEqual(r["status"], "ok")
+                    self.assertEqual(r["codons_compared"], "150")     # no codon of the pair is a stop in its code
+                    self.assertGreaterEqual(val(r["lnL"]), g["lnL"] - 1e-4)
+                    if g["kappa"] <= 0.4001 or g["omega"] <= 0.00101 or val(r["lnL"]) > g["lnL"] + 1e-3:
+                        continue   # codeml at one of its bounds, or at a lower maximum
+                    compared += 1
+                    self.assertAlmostEqual(val(r["S_sites"]), g["S"], delta=0.051)
+                    self.assertAlmostEqual(val(r["N_sites"]), g["N"], delta=0.051)
+                    self.assertAlmostEqual(val(r["t"]), g["t"], delta=2e-5 + 1e-4 * g["t"])
+                    self.assertAlmostEqual(val(r["kappa"]), g["kappa"], delta=2e-5 + 1e-4 * g["kappa"])
+                    self.assertAlmostEqual(val(r["dN"]), g["dN"], delta=6e-5 + 1e-4 * g["dN"])
+                    self.assertAlmostEqual(val(r["dS"]), g["dS"], delta=6e-5 + 1e-4 * g["dS"])
+                    self.assertAlmostEqual(val(r["dNdS"]), g["omega"], delta=6e-6 + 1e-4 * g["omega"])
+        self.assertGreaterEqual(compared, 18)
+
+    def test_likelihood_is_the_models_under_other_codes(self):
+        """Codes codeml does not have as well (11, 14, 16, 21, 22, 23): lnL is the likelihood of the reported
+        estimates under that code, recomputed here from the definition, and a maximum."""
+        import test_kaks_properties as tp   # the NCBI tables
+        for code in (2, 4, 11, 12, 14, 16, 21, 22, 23):
+            aa = tp._AAS[code]
+            rng = random.Random(40 + code)
+            sense = tp.SENSE[code]
+            a, b = [], []
+            for _ in range(36):
+                c = rng.choice(sense)
+                d = c
+                if rng.random() < 0.45:
+                    p = rng.randrange(3)
+                    e = c[:p] + rng.choice(BASES) + c[p + 1:]
+                    d = e if tp.AA[code][e] != "*" else c
+                a.append(c)
+                b.append(d)
+            a, b = "".join(a), "".join(b)
+            r = self.one(a, b, "-c", str(code))
+            with self.subTest(code=code):
+                self.assertEqual((r["status"], r["codons_compared"]), ("ok", "36"))
+                t, k, w, lnl = val(r["t"]), val(r["kappa"]), val(r["dNdS"]), val(r["lnL"])
+                self.assertAlmostEqual(lnl_reference(a, b, t, k, w, aa), lnl, delta=1e-7)
+                if 1e-5 < w < 900 and 1e-5 < k < 900:
+                    for dt, dk, dw in ((1.03, 1, 1), (0.97, 1, 1), (1, 1.03, 1), (1, 0.97, 1), (1, 1, 1.03),
+                                       (1, 1, 0.97)):
+                        self.assertLess(lnl_reference(a, b, t * dt, k * dk, w * dw, aa), lnl + 1e-9)
+                self.assertAlmostEqual(val(r["S_sites"]) + val(r["N_sites"]), 108, delta=1e-8)
+                # the same pair read with the standard code is another model (other stops, other synonyms)
+                self.assertNotEqual(self.one(a, b, "-c", "1")["lnL"] if code != 11 else "", r["lnL"])
+
+    def test_stop_codons_of_the_code(self):
+        """TGA is a stop codon in code 1 and Trp in codes 2 and 4; AGA is Arg in codes 1 and 4 and a stop in code
+        2: the column is skipped (status warning) exactly where its codon is a stop, and compared elsewhere."""
+        g = TestEdgeCases.GENE
+        h = "".join({"GCT": "GCA", "GAA": "GTA", "GGT": "GGC"}.get(g[i:i + 3], g[i:i + 3]) for i in range(0, len(g), 3))
+        tga = (g + "TGAGCT", h + "TGGGCT")
+        aga = (g + "AGAGCT", h + "AGGGCT")
+        want = {(1, "tga"): ("warning", "28"), (2, "tga"): ("ok", "29"), (4, "tga"): ("ok", "29"),
+                (1, "aga"): ("ok", "29"), (2, "aga"): ("warning", "28"), (4, "aga"): ("ok", "29")}
+        got = {}
+        for (code, which), exp in want.items():
+            r = self.one(*(tga if which == "tga" else aga), "-c", str(code))
+            got[(code, which)] = r
+            self.assertEqual((r["status"], r["codons_compared"]), exp, (code, which))
+        # a compared TGA / TGG column is a synonymous change (Trp) in codes 2 and 4: more dS than without it
+        self.assertGreater(val(got[(2, "tga")]["dS"]), val(got[(1, "tga")]["dS"]))
+        self.assertEqual(got[(2, "tga")]["dN"] == got[(1, "tga")]["dN"], False)
+
+
 class TestTinyProbabilities(GyBase):
     def test_one_triple_change_among_thousands_of_identical_codons(self):
         """A probability below the rounding error of the eigen sum (codons three substitutions apart at t about
@@ -302,6 +391,17 @@ class TestEdgeCases(GyBase):
         # ... and a pair that is not flat keeps its estimate, with the standard error that says how little it is
         self.assertEqual(rows[7]["status"], "ok")
         self.assertGreater(val(rows[7]["SE_dS"]), 0.5 * val(rows[7]["dS"]))
+
+    def test_two_random_codons_are_saturated_not_unconverged(self):
+        """AAC TGG against GGT ACA: every site differs and the likelihood is nearly flat everywhere (0.03 log
+        units between the start and the best point). The iteration used to crawl with steps of the gradient's
+        size to its limit of 100 steps (`not_converged`); a start that ends so is run again with lengthened
+        steps and converges, at t = 50: the pair is saturated."""
+        r = self.one("AACTGG", "GGTACA")
+        self.assertEqual(r["status"], "saturated")
+        self.assertEqual((r["dN"], r["dNdS"], r["SE_dN"], r["SE_dS"]), ("NA", "NA", "NA", "NA"))
+        self.assertIn("Ka saturated", r["note"])
+        self.assertGreater(val(r["lnL"]), -13.59)   # (the crawl stopped at -13.6046)
 
     def test_synonymous_changes_only(self):
         b = self.codonwise({"GCT": "GCA", "GGT": "GGC", "CCC": "CCA", "CTG": "CTA"})

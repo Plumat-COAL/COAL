@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **GY: a start of the optimiser that crawled to its step limit is run again with longer steps.** On a nearly flat
+  likelihood (two random codons with every site different: `AACTGG` against `GGTACA`) the first steps have the
+  gradient's own size, 1e-4 in log kappa and log omega, and no curvature for the BFGS update to scale them with, so
+  the iteration used its 100 steps to gain 3e-7 log units and the pair was `not_converged`. Such a start (limit
+  reached, not converged, t not at its bound) is now run a second time with these steps lengthened while the
+  likelihood improves, and the second run is taken if it converges with a likelihood that is not lower. That pair is
+  now `saturated` (t at its bound, lnL -13.5807 where the crawl stopped at -13.6046). Every start that converges or
+  ends on the ridge of saturation is computed exactly as before: same bytes at 12 digits for the 20 codeml fixtures,
+  128 simulated pairs, the test sets, and 4,388 yeast, 3,685 *E. coli* and 159 *Salmonella* / *Shigella* pairs; of the
+  audit's 568 random and high-divergence pairs, 5 rows change (the pair above, and four saturated pairs whose third or
+  fourth start had crawled: lnL equal to 1e-8, one dS in the fifth digit). The nine other methods are byte-identical.
+
+### Added
+
+- **GY is validated on every genetic code** (NCBI 1 to 6, 9 to 16, 21 to 23; the audits of 0.6.0 covered the
+  standard code and three pairs of code 2). No change was needed: per code, the stop codons are out of the
+  chain's states and of the F3x4 frequencies, synonymous / nonsynonymous follows the code, and columns with a
+  stop codon of the code are skipped. `benchmarks/kaks/validate_gy.py codes`: on 40 random pairs per code (680)
+  the reported lnL equals the likelihood recomputed with numpy from the model's definition under that code to
+  1e-11 relative, with S, dS, dN from the rates, and is a maximum; against codeml with the matching `icode`
+  (the eleven tables codeml has), COAL's lnL is never lower on 132 pairs and omega, kappa and t agree to codeml's
+  printed digits. Tests: `tests/test_kaks_gy.py::TestGeneticCodes` (20 pairs under ten non-standard codes with
+  codeml's stored output, `tests/kaks/make_gy_code_fixtures.py`; the likelihood from the definition under
+  codes 2, 4, 11, 12, 14, 16, 21, 22, 23; the stop codons of codes 1, 2 and 4). docs/kaks.md, "Genetic codes".
+
 ## 0.6.0 — 2026-11-15
 
 **In short.** This release makes COAL more than a PAL2NAL replacement, and changes its licence.

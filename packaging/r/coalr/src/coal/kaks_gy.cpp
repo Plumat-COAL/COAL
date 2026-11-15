@@ -462,13 +462,15 @@ double profile_t(GyModel& m, double& t, double* slope = nullptr) {
 struct Fit {
     double lnl = -1e300, t = NA, kappa = NA, omega = NA;
     bool converged = false;
+    bool at_limit = false;   // the iteration used all its steps
     int iterations = 0;
 };
 
 // Maximise over (log kappa, log omega) (omega fixed when fix_omega) the likelihood profiled over t: a projected
 // BFGS iteration with the analytic gradient (at the maximum in t the gradient of the profile is the partial
 // gradient; at a bound of t the term in the slope accounts for the scaling of the rate matrix).
-Fit optimise(GyModel& m, double kappa0, double omega0, double t0, bool fix_omega) {
+// lengthen: see optimise() below and the comment at the line search.
+Fit optimise_run(GyModel& m, double kappa0, double omega0, double t0, bool fix_omega, bool lengthen) {
     const double lo = std::log(PAR_MIN), hi = std::log(PAR_MAX);
     const int nfree = fix_omega ? 1 : 2;
     double x[2] = {std::log(kappa0), std::log(omega0)};
@@ -496,6 +498,7 @@ Fit optimise(GyModel& m, double kappa0, double omega0, double t0, bool fix_omega
     bool restarted = false;
     int small_steps = 0;   // successive steps that changed the likelihood by less than 1e-9
     int at_tmax = 0;       // successive iterates with t at its upper bound
+    bool curvature = false;   // a BFGS update has been made (H holds curvature of this surface)
     for (; it < maxit; ++it) {
         bool act[2];
         double pg[2];
@@ -551,6 +554,35 @@ Fit optimise(GyModel& m, double kappa0, double omega0, double t0, bool fix_omega
             }
             alpha *= 0.5;
         }
+        // (Only in the second run of optimise().) A step of the gradient's own size (no curvature seen since the
+        // start: H is the first identity) on a nearly flat surface: a gradient of 1e-4 moves 1e-4 per step (in
+        // log kappa, log omega), and with next to no curvature the BFGS update never gets a scale, so the
+        // iteration would crawl to its limit (two random codons, every site different: 100 steps, 3e-7 gained,
+        // `not_converged`). Lengthen such a step while the likelihood keeps improving, up to the step limit: the
+        // iteration then reaches the curvature or the bounds, where it can converge. Steps with a larger
+        // gradient, or after the first BFGS update, are not touched.
+        if (lengthen && ok && alpha == 1 && dmax < 1e-2 && !curvature) {
+            double a2 = 2, xa[2], fa = fn;
+            bool stale = false;   // the model's state is that of a rejected trial
+            while (a2 * dmax <= 2.0) {
+                for (int i = 0; i < 2; ++i) xa[i] = std::min(hi, std::max(lo, x[i] + a2 * dir[i]));
+                double ta = tn;
+                const double ft = eval(xa, ta, nullptr);
+                if (!(ft < fa + 1e-4 * (a2 - alpha) * slope)) {
+                    stale = true;
+                    break;
+                }
+                stale = false;
+                alpha = a2;
+                fa = ft;
+                fn = ft;
+                tn = ta;
+                xn[0] = xa[0];
+                xn[1] = xa[1];
+                a2 *= 2;
+            }
+            if (stale) fn = eval(xn, tn, nullptr);
+        }
         if (!ok) {
             // no descent along this direction: once more from the plain gradient, then accept the point
             if (!restarted && (H[0][0] != 1 || H[1][1] != 1 || H[0][1] != 0)) {
@@ -581,6 +613,7 @@ Fit optimise(GyModel& m, double kappa0, double omega0, double t0, bool fix_omega
                 const double yy = y[0] * y[0] + y[1] * y[1];
                 if (yy > 0) H[0][0] = H[1][1] = sy / yy;
             }
+            curvature = true;
             // BFGS update of the inverse Hessian
             const double Hy[2] = {H[0][0] * y[0] + H[0][1] * y[1], H[1][0] * y[0] + H[1][1] * y[1]};
             const double yHy = y[0] * Hy[0] + y[1] * Hy[1];
@@ -606,6 +639,23 @@ Fit optimise(GyModel& m, double kappa0, double omega0, double t0, bool fix_omega
     if (x[0] >= hi) fit.kappa = PAR_MAX;
     if (x[1] <= lo) fit.omega = PAR_MIN;
     if (x[1] >= hi) fit.omega = PAR_MAX;
+    fit.at_limit = it >= maxit;
+    return fit;
+}
+
+// One start. An iteration that ends at its limit of steps without converging, away from the bound of t, has
+// crawled over a nearly flat surface with steps of the gradient's size (two random codons with every site
+// different: 100 steps, 3e-7 gained). It is run once more with such steps lengthened; that run is taken if it
+// converges and its likelihood is not lower. Every start that converges, or ends on the ridge of saturation, is
+// exactly what it was without this second run.
+Fit optimise(GyModel& m, double kappa0, double omega0, double t0, bool fix_omega) {
+    Fit fit = optimise_run(m, kappa0, omega0, t0, fix_omega, false);
+    if (!fit.converged && fit.at_limit && fit.t < T_MAX * (1 - 1e-3)) {
+        Fit again = optimise_run(m, kappa0, omega0, t0, fix_omega, true);
+        const int its = fit.iterations + again.iterations;
+        if (again.converged && again.lnl >= fit.lnl - 1e-7) fit = again;
+        fit.iterations = its;
+    }
     return fit;
 }
 
