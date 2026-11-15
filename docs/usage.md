@@ -48,7 +48,8 @@ The rest of this page is about the codon-alignment command.
   its first two bytes, whatever its name) is not decompressed by the codon alignment: `d.fa.gz is gzip-compressed:
   decompress it first (zcat FILE.gz > FILE, or pipe it: zcat FILE.gz | coal ... -): sequence files must be plain
   text` (both engines; for `-`, `standard input is gzip-compressed: ...`), so `zcat nuc.fa.gz | coal pep.aln -`
-  reads it. `coal kaks`, `coal dnds`, `coal translate` and `coal pipeline` decompress `.gz` inputs themselves.
+  reads it. A bzip2 or xz file is named the same way (`is bzip2-compressed: decompress it first (bzcat ...`,
+  `is xz-compressed: ... (xzcat ...`), and so is any of the three after a UTF-8 byte-order mark. `coal kaks`, `coal dnds`, `coal translate` and `coal pipeline` decompress `.gz` inputs themselves.
   IDs longer than 200 characters are shortened in stderr messages to their first 100 and last 20 characters
   (`...` between); the output and the run report keep them whole.
   `-` as an input path reads standard input, for the protein alignment or for one DNA file (`cat pep.aln | coal -

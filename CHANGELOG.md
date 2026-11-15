@@ -76,6 +76,12 @@ entry under "Added", not under "Fixed".
     DNA file or standard input is "`d.fa.gz is gzip-compressed: decompress it first (zcat FILE.gz > FILE, or pipe
     it: zcat FILE.gz | coal ... -): sequence files must be plain text`" (`input_format`; the same bytes in both
     engines) instead of "control character" (protein) or "sequence data before the first '>' header" (DNA).
+    bzip2 and xz files are named the same way ("`d.fa.bz2 is bzip2-compressed: decompress it first (bzcat
+    FILE.bz2 > FILE, or pipe it: bzcat FILE.bz2 | coal ... -): ...`", "`is xz-compressed`" with `xzcat`), and
+    each of the three also after a UTF-8 byte-order mark; bzip2 by `BZh`, the block size and the magic of its first
+    block (or of an empty stream), so a text that starts with "BZh" is not taken for one (both engines, the same
+    bytes, tests/test_engine_review_fixes.py; follow-up audit 2026-11-15). `coal-cpp kaks` / `dnds` refuse gzip
+    only, with their own words, as before.
   - **YN and MYN are faster on close sequences, with the same bits.** The transition-probability matrix is not
     computed for a pair in which no codon differs at two or three positions (nothing reads it then): checked
     byte for byte at 17 digits on the validation sets with GCC and Clang; about half the CPU time on a set of
@@ -626,13 +632,17 @@ entry under "Added", not under "Fixed".
     earlier COAL run, `--resume`, `--report DIR/report.json` (the default spelled out), and
     `--pairs DIR/orthologs.tsv` / `--clusters DIR/clusters.tsv` of an earlier run (now listed under
     `read_in_place` in `work/outputs.json`, kept by the runs that neither read nor write the file, so a later run
-    may write it again) behave as before. The check is made when the run starts.
+    may write it again) behave as before. The check is made when the run starts. If `work/` is deleted after such
+    a run, COAL goes by `DIR/report.json`, whose outputs list the `orthologs.tsv` it read, so a later DIAMOND run
+    into `DIR` replaces a pairs file of your own there (docs/pipeline.md; keep your own file outside `DIR`).
     **`--diamond-args '-c 1 -b 4'` works**: a value of `--diamond-args`, `--deepclust-args` or `--realign-args`
     that starts with one of COAL's own short options (`-c`, `-o`, ...) failed with "expected one argument"; the
     word after the option (or an abbreviation argparse accepts, `--diamond-arg`) is now its value. Usage errors
     (exit 2) that show the `--diamond-args="-c 1 -b 4"` form: no value, a value that is one of COAL's options or
     an abbreviation of one (`--resum`), an unquoted string (`--diamond-args -b 4`), and the option given twice
-    (argparse kept the last string without a word). report.json's `command` is the command line as typed.
+    (argparse kept the last string without a word). Double quotes that the shell left in the words (cmd.exe
+    `\"-c 1\"` gives `"-c` and `1"`) are not doubled in the quoted form shown: `--diamond-args="-c 1"`, not
+    `--diamond-args=""-c 1""` (follow-up audit 2026-11-15). report.json's `command` is the command line as typed.
     `$COAL_<TOOL> is set to '...'` shows the path as set (Windows: no doubled backslashes).
 - **Protein alignment for the codon step (docs/alignment.md).** `<coal/align.hpp>` and the `coal-cpp-align` tool: a
   global Needleman-Wunsch/Gotoh aligner (BLOSUM62/45/80, PAM250, affine gaps; EMBOSS needle defaults, a pwalign
@@ -805,7 +815,9 @@ entry under "Added", not under "Fixed".
   those of `coal` itself, with either engine, and of `coal-cpp` run directly: "cannot open 'C:\Users\me\p.fa': no
   such file. This is a Windows path; under WSL (Windows Subsystem for Linux) the same file is
   /mnt/c/Users/me/p.fa"; the same words in both engines, compared by tests/test_engine_ux.py; one `/` between the
-  parts and none at the end, so `C:\` is `/mnt/c` and `C:\\data\\x.fa` with doubled backslashes `/mnt/c/data/x.fa`), and paths are shown as typed (no doubled backslashes). `-codontable N` is accepted as `-c N`; orthologr's and DIAMOND's option names
+  parts and none at the end, so `C:\` is `/mnt/c` and `C:\\data\\x.fa` with doubled backslashes `/mnt/c/data/x.fa`,
+  in all three: the pipeline's messages had a copy of the hint of their own that still gave `/mnt/c/` and
+  `/mnt/c//data//x.fa` and now use the alignment's, follow-up audit 2026-11-15), and paths are shown as typed (no doubled backslashes). `-codontable N` is accepted as `-c N`; orthologr's and DIAMOND's option names
   (`--sensitivity-mode`, `--comp-cores`, `--threads`) and close typos of an option get a suggestion. `coal
   translate` warns when most genes have internal stop codons, with the first one and, as the pipeline does, the
   genetic code under which they have none. `coal dnds` / `coal kaks` on an input without any pair (an empty file,
@@ -1090,6 +1102,21 @@ In commands that 0.5.0 has (both engines unless said):
   MLWL's kappa-based sites make a genuine dS of 15.6 (513 CAG / CAA pairs at kappa 1, seed 4243) or 162.7 (kappa
   0.5031) possible, as KaKs_Calculator prints. `benchmarks/kaks/random_short_pairs.py` classes difference 18.
   Unused imports removed (coal/codon.py, coal/align.py). New tests: `tests/test_engine_review_fixes.py`.
+
+- **Follow-up audit (2026-11-15), the low findings.** nightly.yml's `cpp-extras` root step passes `PATH`,
+  `COAL_CPP_BIN`, `COAL_REQUIRE_CPP=1` and `COAL_IMPL=cpp` through `sudo env` by name: sudo-rs (Ubuntu 26) ignores
+  `--preserve-env` ("preserving the entire environment is not supported"), so `tests.test_robustness.TestDiskFull`
+  ran without them; that class now fails, instead of comparing nothing with the Python engine alone, when
+  `COAL_REQUIRE_CPP` is set and coal-cpp is not found (tests/test_repo_ci.py pins the step).
+  `tests/cpp_wrapper.py` says what the coal-cpp stand-in does not do (escape cmd.exe's metacharacters; on
+  Windows, pass a kill on to the real coal-cpp), and tests/test_kaks_dispatch.py that its clang-cl detection away
+  from a build tree has not been checked on a real clang-cl build. `benchmarks/kaks/random_short_pairs.py`
+  explains an MLWL difference at kappa exactly 2 or 0.5 (difference 18) only when COAL's S-Sites / N-Sites are
+  the site formula of the exact kappa and KaKs_Calculator's those of the formula on the other side (it accepted
+  any difference on such a row); both random sets give 0 unexplained against the 15-digit and the corrected
+  KaKs_Calculator (single: none of the class; multi: 36 fields in 10 pairs, all of them the other formula). The
+  property fuzz's P10 checks MLWL's LWL-scale value (Sd / (L2 / 3 + L4), Nd / (L0 + 2 L2 / 3)) whatever MLWL's own
+  dN / dS (it was looked at only above 10, so an LWL-scale value just above 10 with MLWL's own below passed).
 
 - **Bioconda recipe (packaging/bioconda), second review.** The test line for `pal2nal` without arguments expected
   exit 0 and the usage on stdout and would have failed the first build: it now tests what the command does (exit
