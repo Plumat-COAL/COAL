@@ -27,11 +27,12 @@ from test_dnds_pipeline import needs_cpp, run_cpp  # noqa: E402
 from test_kaks_yn_shortcut import low_divergence_pairs, multi_difference  # noqa: E402
 
 KAKS = ROOT / "tests" / "kaks"
+X86 = ("x86_64", "amd64", "i386", "i686", "x86")
 
 
 def cpu_has_avx2() -> bool | None:
     """True / False where the operating system says, None where this cannot tell."""
-    if platform.machine().lower() not in ("x86_64", "amd64", "i386", "i686", "x86"):
+    if platform.machine().lower() not in X86:
         return False
     try:
         if sys.platform.startswith("linux"):
@@ -69,12 +70,14 @@ class Dispatch(unittest.TestCase):
             self.assertNotEqual(avx2, False, "the AVX2 copy runs on a CPU said to have no AVX2")
             return
         self.assertEqual(isa, "baseline")
+        if platform.machine().lower() not in X86:
+            self.skipTest(f"not an x86 CPU ({platform.machine()}): no AVX2 copy is compiled, only the baseline runs")
+        if os.name == "nt":
+            self.skipTest("this build has no AVX2 copy (MSVC has no target attribute; cpp/src/kaks.cpp COAL_KAKS_AVX2)")
         if avx2 is False:
             self.skipTest("this CPU has no AVX2: only the baseline copy can run")
         if avx2 is None:
             self.skipTest("cannot tell whether this CPU has AVX2, and the build runs the baseline copy")
-        if os.name == "nt":
-            self.skipTest("this build has no AVX2 copy (MSVC has no target attribute; cpp/src/kaks.cpp COAL_KAKS_AVX2)")
         self.fail("the CPU has AVX2 but coal-cpp runs the baseline copy: the AVX2 copy is missing from this "
                   "GCC / Clang build on x86 (cpp/src/kaks.cpp COAL_KAKS_AVX2)")
 
