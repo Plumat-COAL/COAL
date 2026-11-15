@@ -54,8 +54,9 @@ STATUS_TEXT = {
                "the minimum codons compared, dS above the maximum, low protein identity) flags the pair.",
     "not_converged": "YN, MYN or GY only: the iteration did not settle (short or nearly saturated pairs), so "
                      "there is no estimate; dN and dS are NA. Try NG or LWL for this pair, or leave it out.",
-    "saturated": "Too many differences for the correction: dN or dS (see the note) is NA because the "
-                 "multiple-hit correction is undefined. The sequences are too divergent for this method.",
+    "saturated": "Too many differences: dN or dS (see the note) is NA because the multiple-hit correction is "
+                 "undefined or, for GY, because the maximum-likelihood estimate is above 10 substitutions per "
+                 "site (no upper limit from the data). The sequences are too divergent for this method.",
     "no_data": "Nothing to compare: no codon column was left, or the pair has no synonymous (or no nonsynonymous) "
                "site, so that estimate and dN/dS are NA.",
     "error": "The pair could not be read: the two rows differ in length or are not a multiple of 3 long (the "

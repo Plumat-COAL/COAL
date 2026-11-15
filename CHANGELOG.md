@@ -56,6 +56,12 @@ entry under "Added", not under "Fixed".
   with codeml's stored output, three under the mitochondrial code; the likelihood recomputed from the model's
   definition; the standard errors against an independent numpy computation; edge cases; formats), `tests/test_kaks_properties.py` (GY in the property tests: P1 to P8 and
   P10), coalr `test-gy.R`.
+  **Small probabilities** (audit of #92, MEDIUM-1): a pattern probability below 1e-8 (codons two or three
+  substitutions apart at a t below about 5e-4: thousands of nearly identical codons with one multiply changed
+  codon) is computed by a series of non-negative terms (uniformisation) instead of the eigen sum, whose absolute
+  error of 1e-16 was the whole value there: such a pair got status `ok` at the lower bound of t with a dN 100
+  times too low (60,000 codons, one triple change: dN 2.0e-7; now 2.4e-5, NG 2.0e-5, and the likelihood equals
+  an independent matrix exponential to 1e-13 relative, where codeml's own is rounding noise).
 - **MAFFT on native Windows: `coal pipeline install mafft` installs it** (x86-64; also `--install-tools` and
   `coal.msa.install_mafft()`). It downloads MAFFT's own Windows package, the "all-in-one"
   `mafft-7.526-win64-signed.zip` from mafft.cbrc.jp (MAFFT 7.526, the version COAL pins elsewhere), pinned by size

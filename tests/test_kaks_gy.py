@@ -225,6 +225,44 @@ class TestStandardErrors(GyBase):
         self.assertEqual((r["SE_dN"], r["SE_dS"]), ("NA", "NA"))
 
 
+class TestTinyProbabilities(GyBase):
+    def test_one_triple_change_among_thousands_of_identical_codons(self):
+        """A probability below the rounding error of the eigen sum (codons three substitutions apart at t about
+        1e-4: 1e-13 and less) is computed by the series of non-negative terms: the likelihood is the model's
+        (recomputed here from the definition), t is not at its lower bound, and dN is NG's size. Before the fix
+        this pair had t = 1e-6 (the bound) and a dN 100 times too low, with status ok (audit of #92, MEDIUM-1)."""
+        rng = random.Random(8)
+        sense = [c for c in CODONS if AA1[CODONS.index(c)] != "*"]
+        a = [rng.choice(sense) for _ in range(20000)]
+        b = list(a)
+        k = next(i for i, c in enumerate(a) if c == "AAA")
+        b[k] = "CCC"                      # three substitutions (Lys -> Pro)
+        j = next(i for i, c in enumerate(a) if c == "GCT")
+        b[j] = "GCC"                      # and one synonymous change
+        a, b = "".join(a), "".join(b)
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "in.axt"
+            p.write_text(f"x&y\n{a}\n{b}\n\n", encoding="utf-8", newline="\n")
+            out = self.run_cpp("dnds", p, "-m", "GY", "-m", "NG", "--ml-columns", "--digits", "12", "-q").stdout
+            swapped = Path(td) / "sw.axt"
+            swapped.write_text(f"x&y\n{b}\n{a}\n\n", encoding="utf-8", newline="\n")
+            out2 = self.run_cpp("dnds", swapped, "-m", "GY", "-m", "NG", "--ml-columns", "--digits", "12", "-q").stdout
+        self.assertEqual(out, out2)
+        rows = {ln.split("\t")[2]: dict(zip(COLS, ln.split("\t"))) for ln in out.splitlines()[1:]}
+        gy, ng = rows["GY"], rows["NG"]
+        self.assertEqual(gy["status"], "ok")
+        t, kappa, lnl = val(gy["t"]), val(gy["kappa"]), val(gy["lnL"])
+        self.assertGreater(t, 5e-5)       # (4 substitutions in 20,000 codons: 2e-4; the lower bound is 1e-6)
+        self.assertLess(t, 1e-3)
+        self.assertTrue(0.5 < val(gy["dN"]) / val(ng["dN"]) < 2, (gy["dN"], ng["dN"]))
+        omega = val(gy["dNdS"])
+        ref = lnl_reference(a, b, t, kappa, omega)
+        self.assertAlmostEqual(ref, lnl, delta=1e-6 * abs(ref) * 1e-3)
+        # and it is a maximum of the true likelihood in t
+        for f in (0.8, 1.25):
+            self.assertLess(lnl_reference(a, b, t * f, kappa, omega), ref)
+
+
 class TestEdgeCases(GyBase):
     GENE = "ATGGCTAAAGGTCCCGAACTGTTTACCGGCGTTGTGCCGATTCTGGTTGAACTGGATGGCGATGTTAACGGCCACAAATTC"
 
