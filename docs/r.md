@@ -30,7 +30,7 @@ install.packages("https://github.com/Plumat-COAL/COAL/releases/download/v0.6.1/c
 remotes::install_github("Plumat-COAL/COAL@v0.6.1", subdir = "packaging/r/coalr")
 ```
 
-**Development version** (`main`, a `coalr` of R's development form, e.g. 0.6.1.9000; it can change at any time):
+**Development version** (`main`, a `coalr` of R's development form, e.g. 0.6.2.9000; it can change at any time):
 
 ```r
 remotes::install_github("Plumat-COAL/COAL", subdir = "packaging/r/coalr")   # development version

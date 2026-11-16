@@ -1,5 +1,20 @@
 # Installing COAL
 
+<!-- dev-version banner (tests/test_new_user_ux.py): remove it when 0.6.2 is released -->
+> **These pages describe the development version, 0.6.2.dev0.** The latest release is
+> [0.6.1](https://github.com/plumat-coal/COAL/releases/tag/v0.6.1); what has changed since is under "Unreleased" in
+> [CHANGELOG.md](../CHANGELOG.md), and the `coalr` install lines install 0.6.1. To use the development version now,
+> install from a checkout (Python 3.10+, a C++17 compiler, CMake 3.16+; about a minute):
+>
+> ```
+> git clone https://github.com/plumat-coal/COAL && cd COAL
+> python -m pip install -e .
+> cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release
+> export COAL_CPP=$PWD/build/coal-cpp     # for this shell
+> ```
+>
+> To keep `COAL_CPP` in new shells, and for what each install gives: [Option 3](#option-3-from-source) below.
+
 **What each install gives.** COAL does three things (codon alignments; Ka/Ks for pairs: `coal kaks`, `coal dnds`;
 the one-step `coal pipeline` from coding sequences to dN/dS), and not every install has all three:
 

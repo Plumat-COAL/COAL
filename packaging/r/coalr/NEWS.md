@@ -1,3 +1,5 @@
+# coalr (development version)
+
 # coalr 0.6.1
 
 - `coal_dnds_pairs()` and `coal_dnds_clusters()` return the protein-alignment scoring they used as attribute
