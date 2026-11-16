@@ -466,17 +466,18 @@ struct Fit {
     // (the result itself when they were not): what later starts are seeded from, so that none begins on a bound
     double seed_kappa = NA, seed_omega = NA;
     int iterations = 0;
-    // optimise(): the first run's stop when the second (lengthened) run replaced it
-    bool has_alt = false;
-    double alt_kappa = NA, alt_omega = NA, alt_t = NA;
+    // optimise(): where the first run stopped (its seed_kappa, seed_omega and t) when the second (lengthened) run
+    // replaced it
+    bool has_first_run_stop = false;
+    double first_run_stop_kappa = NA, first_run_stop_omega = NA, first_run_stop_t = NA;
 };
 
 // -lnl at y = (log kappa, log omega), profiled over t (tt: start and result), and, with g, its gradient. The model
-// is left decomposed at y.
+// is left decomposed at y (an evaluation changes the model's state, so it is not a const operation).
 struct ProfileEval {
     GyModel& m;
     int nfree;   // 1: omega is fixed, and its gradient is reported as 0
-    double operator()(const double* y, double& tt, double* g, double* dt = nullptr) const {
+    double operator()(const double* y, double& tt, double* g, double* dt = nullptr) {
         m.build(std::exp(y[0]), std::exp(y[1]));
         double slope = 0;
         const double f = -profile_t(m, tt, &slope);
@@ -503,7 +504,7 @@ struct ProfileEval {
 // iteration then goes on from the better one: true is returned and x, f, t, g (and H, reset at the inner edge) are
 // those of that point. Twice per parameter at most (probes). A stop outside the zones is final (false).
 // Before the first probe of a run, the point where the iteration stopped by itself goes to fit.seed_* (seeded).
-bool probe_zone_ends(const ProfileEval& eval, double x[2], double& f, double& t, double g[2], double H[2][2],
+bool probe_zone_ends(ProfileEval& eval, double x[2], double& f, double& t, double g[2], double H[2][2],
                      int probes[2], Fit& fit, bool& seeded) {
     const double lo = std::log(PAR_MIN), hi = std::log(PAR_MAX);
     const int nfree = eval.nfree;
@@ -566,10 +567,10 @@ bool probe_zone_ends(const ProfileEval& eval, double x[2], double& f, double& t,
 // branch length tn). The factor is doubled while the likelihood keeps improving, up to a step of 2 log units;
 // alpha, xn, fn, tn and sn (the slope in t) are those of the last accepted trial, and the model is left decomposed
 // at xn.
-void lengthen_step(const ProfileEval& eval, const double x[2], const double dir[2], double dmax, double slope,
+void lengthen_step(ProfileEval& eval, const double x[2], const double dir[2], double dmax, double slope,
                    double& alpha, double xn[2], double& fn, double& tn, double& sn) {
     const double lo = std::log(PAR_MIN), hi = std::log(PAR_MAX);
-    double a2 = 2, xa[2], fa = fn;
+    double a2 = 2, xa[2];
     bool stale = false;   // the model's state is that of a rejected trial
     // (up to 2 log units, the limit of every later step, also for the first step: its limit of 0.5 is
     // there for the unscaled gradient of an ordinary pair, hundreds per log unit, and every doubling here
@@ -578,13 +579,12 @@ void lengthen_step(const ProfileEval& eval, const double x[2], const double dir[
         for (int i = 0; i < 2; ++i) xa[i] = std::min(hi, std::max(lo, x[i] + a2 * dir[i]));
         double ta = tn, sa = 0;
         const double ft = eval(xa, ta, nullptr, &sa);
-        if (!(ft < fa + 1e-4 * (a2 - alpha) * slope)) {
+        if (!(ft < fn + 1e-4 * (a2 - alpha) * slope)) {
             stale = true;
             break;
         }
         stale = false;
         alpha = a2;
-        fa = ft;
         fn = ft;
         tn = ta;
         sn = sa;
@@ -604,7 +604,7 @@ Fit optimise_run(GyModel& m, double kappa0, double omega0, double t0, bool fix_o
     const int nfree = fix_omega ? 1 : 2;
     double x[2] = {std::log(kappa0), std::log(omega0)};
     double t = t0;
-    const ProfileEval eval{m, nfree};
+    ProfileEval eval{m, nfree};
     double g[2];
     double f = eval(x, t, g);
     double H[2][2] = {{1, 0}, {0, 1}};
@@ -774,10 +774,10 @@ Fit optimise(GyModel& m, double kappa0, double omega0, double t0, bool fix_omega
         Fit again = optimise_run(m, kappa0, omega0, t0, fix_omega, true);
         const int its = fit.iterations + again.iterations;
         if (again.converged && again.lnl >= fit.lnl - LNL_TIE) {
-            again.has_alt = true;
-            again.alt_kappa = fit.seed_kappa;
-            again.alt_omega = fit.seed_omega;
-            again.alt_t = fit.t;
+            again.has_first_run_stop = true;
+            again.first_run_stop_kappa = fit.seed_kappa;
+            again.first_run_stop_omega = fit.seed_omega;
+            again.first_run_stop_t = fit.t;
             fit = again;
         }
         fit.iterations = its;
@@ -881,6 +881,12 @@ std::string fmt6(double v) {
     return buf;
 }
 
+// omega of a start on the ridge of saturation (t at T_MAX) from a point (omega, t): omega * t, about dN, kept
+// (within [PAR_MIN, 1])
+double ridge_omega(double omega, double t) {
+    return std::min(std::max(omega * t / T_MAX, PAR_MIN), 1.0);
+}
+
 // Which of the starts of run_gy is reported (the indices of Choice are into `fits`, the starts in the order in
 // which they were run; -1: none).
 //
@@ -923,6 +929,28 @@ Choice choose_start(const std::vector<Fit>& fits) {
     return c;
 }
 
+// The continuation that choose_start asks for (go_on): the iteration of the best start that is not usable is run
+// again from where it stopped (cont(from): the start's result), twice at most. Before each continuation the
+// starts that are not usable are dropped (only the best of them is continued, and the continuation takes its
+// place). A continuation that ends lower than the point it started from, without becoming usable, is replaced by
+// that point, and there is no further one (it would repeat the same run). Returns the final choice; the
+// continuations' iterations are added to `iterations`.
+template <class Cont>
+Choice continue_starts(std::vector<Fit>& fits, Choice ch, Cont&& cont, int& iterations) {
+    for (int c = 0; c < 2 && ch.go_on; ++c) {
+        const Fit from = fits[(size_t)ch.cand];
+        fits.erase(std::remove_if(fits.begin(), fits.end(), [](const Fit& f) { return !usable_start(f); }),
+                   fits.end());
+        const Fit next = cont(from);
+        iterations += next.iterations;
+        const bool lower = !usable_start(next) && next.lnl < from.lnl;
+        fits.push_back(lower ? from : next);
+        ch = choose_start(fits);
+        if (lower) break;
+    }
+    return ch;
+}
+
 // Saturation: an estimate above GY_MAX_DISTANCE substitutions per site is NA (t at its bound of 50 per codon
 // always has one: the mean of dS and dN over the sites is t / 3). The other estimate is kept, as for the other
 // methods, unless the optimiser did not settle on the ridge or the likelihood is flat in t, where nothing is an
@@ -955,8 +983,14 @@ void apply_saturation(Result& r, bool satS, bool satN, double dS, double dN, boo
 
 namespace detail {
 
-// Test hook (tests/cpp/kaks_gy_choose_start.cpp, which declares it): choose_start for n starts given by their
-// likelihood, branch length and convergence. out: best, cand, report, go_on.
+// Test hooks (tests/cpp/kaks_gy_choose_start.cpp, which declares them; no header has them). They are compiled into
+// every build of the library, not only with COAL_TEST_HOOKS: that option is for coal-cpp's environment-driven
+// hooks and applies to the coal-cpp target alone, and no CI job builds a hooked library, so behind it the test
+// would run nowhere. They are pure functions of their arguments, read nothing from the environment and are not
+// reached from the engine.
+//
+// gy_choose_start: choose_start for n starts given by their likelihood, branch length and convergence. out: best,
+// cand, report, go_on.
 void gy_choose_start(const double* lnl, const double* t, const int* converged, int n, int out[4]);
 void gy_choose_start(const double* lnl, const double* t, const int* converged, int n, int out[4]) {
     std::vector<Fit> fits((size_t)n);
@@ -970,6 +1004,43 @@ void gy_choose_start(const double* lnl, const double* t, const int* converged, i
     out[1] = c.cand;
     out[2] = c.report;
     out[3] = c.go_on ? 1 : 0;
+}
+
+// gy_continue_starts: choose_start and continue_starts for n starts as above, the continuations scripted: the
+// k-th continuation returns start k of the script (lnl, t, converged), whatever it starts from (past the end of
+// the script: an unconverged start at -1e300). out: continuations made, the start reported (an index into the
+// final list of starts), the number of starts in that list, go_on of the final choice; lnl_out: the likelihood
+// of the start reported (-1e300: none).
+void gy_continue_starts(const double* lnl, const double* t, const int* converged, int n, const double* s_lnl,
+                        const double* s_t, const int* s_converged, int ns, int out[4], double* lnl_out);
+void gy_continue_starts(const double* lnl, const double* t, const int* converged, int n, const double* s_lnl,
+                        const double* s_t, const int* s_converged, int ns, int out[4], double* lnl_out) {
+    std::vector<Fit> fits((size_t)n);
+    for (int i = 0; i < n; ++i) {
+        fits[(size_t)i].lnl = lnl[i];
+        fits[(size_t)i].t = t[i];
+        fits[(size_t)i].converged = converged[i] != 0;
+    }
+    int calls = 0, iterations = 0;
+    const Choice c = continue_starts(
+        fits, choose_start(fits),
+        [&](const Fit&) {
+            Fit f;
+            if (calls < ns) {
+                f.lnl = s_lnl[calls];
+                f.t = s_t[calls];
+                f.converged = s_converged[calls] != 0;
+            }
+            f.iterations = 1;
+            ++calls;
+            return f;
+        },
+        iterations);
+    out[0] = calls;
+    out[1] = c.report;
+    out[2] = (int)fits.size();
+    out[3] = c.go_on ? 1 : 0;
+    *lnl_out = c.report >= 0 ? fits[(size_t)c.report].lnl : -1e300;
 }
 
 Result run_gy(const Prepared& p, const GeneticCode& g, const Options&, Result r) {
@@ -1033,29 +1104,22 @@ Result run_gy(const Prepared& p, const GeneticCode& g, const Options&, Result r)
         // the ridge start: t at its bound, omega such that omega * t (about dN) is that of the first maximum
         // (from where the first iteration stopped by itself, not from a bound it was then moved to: at a bound
         // the gradient in the logarithm is 0 in both directions and a start would stall)
-        const double w_ridge = std::min(std::max(first.seed_omega * first.t / T_MAX, PAR_MIN), 1.0);
+        const double w_ridge = ridge_omega(first.seed_omega, first.t);
         const double start[3][3] = {{6.0, 1.5, t0}, {2.0, 0.02, 10.0}, {first.seed_kappa, w_ridge, T_MAX}};
         for (const double* st : start) offer(optimise(m, st[0], fix_omega ? 1.0 : st[1], st[2], fix_omega));
-        if (first.has_alt) {
-            const double w2 = std::min(std::max(first.alt_omega * first.alt_t / T_MAX, PAR_MIN), 1.0);
-            offer(optimise(m, first.alt_kappa, fix_omega ? 1.0 : w2, T_MAX, fix_omega));
+        // a second ridge start from where the first run of the first start stopped, when its second run replaced
+        // it (PR #101): from the second run's stop the ridge start can end lower on the ridge. Not made where it
+        // would be the ridge start above once more.
+        if (first.has_first_run_stop) {
+            const double w2 = ridge_omega(first.first_run_stop_omega, first.first_run_stop_t);
+            if (first.first_run_stop_kappa != first.seed_kappa || w2 != w_ridge)
+                offer(optimise(m, first.first_run_stop_kappa, fix_omega ? 1.0 : w2, T_MAX, fix_omega));
         }
     }
-    Choice ch = choose_start(fits);
-    for (int c = 0; c < 2 && ch.go_on; ++c) {
-        const Fit from = fits[ch.cand];
-        // (the starts that are not usable end here: only the best of them is continued)
-        fits.erase(std::remove_if(fits.begin(), fits.end(), [](const Fit& f) { return !usable_start(f); }),
-                   fits.end());
-        const Fit cont = optimise(m, from.kappa, fix_omega ? 1.0 : from.omega, from.t, fix_omega);
-        iterations += cont.iterations;
-        // it ended lower: keep the point it started from, and stop (continuing from there again would repeat
-        // the same run)
-        const bool lower = !usable_start(cont) && cont.lnl < from.lnl;
-        fits.push_back(lower ? from : cont);
-        ch = choose_start(fits);
-        if (lower) break;
-    }
+    const Choice ch = continue_starts(
+        fits, choose_start(fits),
+        [&](const Fit& from) { return optimise(m, from.kappa, fix_omega ? 1.0 : from.omega, from.t, fix_omega); },
+        iterations);
     Fit best = fits[ch.report];
     best.iterations = iterations;
     r.iterations = best.iterations;

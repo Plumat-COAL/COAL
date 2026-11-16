@@ -625,7 +625,9 @@ class TestChooseStart(unittest.TestCase):
     def test_which_start_is_reported(self):
         """The policy among a pair's starts, with made-up starts (tests/cpp/kaks_gy_choose_start.cpp): ties, an
         unconverged start on the ridge, and the displacement of a usable start by an unconverged one that is
-        higher by more than 1e-4, which no pair found so far reaches."""
+        higher by more than 1e-4, which no pair found so far reaches; and the continuation of a start that is not
+        usable, with scripted continuations (at most two, the other unusable starts dropped, a continuation that
+        ends lower replaced by its start)."""
         cxx, lib, flags = _core_library()
         with tempfile.TemporaryDirectory() as td:
             exe = Path(td) / "kaks_gy_choose_start"
