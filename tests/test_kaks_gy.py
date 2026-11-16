@@ -371,7 +371,8 @@ class TestEdgeCases(GyBase):
         self.assertEqual((r["status"], r["dN"], r["dS"], r["dNdS"], r["Nd"], r["Sd"], r["t"]),
                          ("ok", "0", "0", "NA", "0", "0", "0"))
         self.assertEqual(r["kappa"], "NA")   # no change: nothing to estimate kappa from
-        self.assertLess(val(r["lnL"]), 0)
+        # the likelihood at t = 0: sum log pi of the codons (0.6.0 printed twice that)
+        self.assertAlmostEqual(val(r["lnL"]), lnl_reference(self.GENE, self.GENE, 1e-12, 2, 0.3), places=8)
 
     def test_one_to_five_codons(self):
         cases = [("AAA", "AAG"), ("ATG", "ATG"), ("ATG", "TGG"), ("GCT", "GCA"), ("AAAGCT", "AAGGCA"),
@@ -465,6 +466,52 @@ class TestEdgeCases(GyBase):
             with self.subTest(pair=a):
                 self.assertNotEqual(r["status"], "not_converged")
                 self.assertGreater(val(r["lnL"]), least)
+
+    def test_coarse_scan(self):
+        """Pairs whose maximum none of the ordinary starts reaches, and that the coarse scan of (kappa, omega) finds
+        (tests/kaks/gy_scan.axt; the code is in the name). The bound is 1e-3 below the global maximum found by an
+        independent likelihood (numpy, the codes from COAL's Python tables) and a bounded search from a 13 x 13
+        grid; in brackets 0.6.1-rc's result.
+        - f1, GTGGACAAC / TCCGGGAAG, code 11: -16.5761 at t 7.96, kappa 1e-6 (saturated at -17.3590: every start
+          ended on the ridge);
+        - s11_c22_656, 2 codons, and s4242_c11_176, 4 codons: maxima the scan's two best points lead to although
+          neither is higher than the best start (saturated -8.6564; ok -18.8604), so a small pair is started from
+          them whatever their likelihood;
+        - s1_c4_330, 3 codons: -12.9846 (ok, t 0.90, -13.5591: the first start's maximum, t below 1, so no other
+          start was made);
+        - s2_c14_188, 20 codons: reached from the second best point of the scan only (-154.2312 on the ridge, kappa
+          1e-6; saturated -154.2366);
+        - s11_c1_73, 35 codons (so a smaller cutoff for small pairs would miss it), 0.107 lnL per codon above the
+          plateau of saturation (so not scanned for that reason): -277.3324 on the ridge, kappa 26 (warning,
+          t 5.02, -277.7419);
+        - b13 and b87, 200 random codons each, more than SCAN_SMALL_PAIR: scanned because the best start ended on
+          the ridge next to its plateau, started from a point of the scan higher than it (saturated, 0.18 and 1.49
+          lower). Which pairs are scanned is held exactly by tests/cpp/kaks_gy_choose_start.cpp (scan_wanted)."""
+        best = {"f1": -16.576072, "s11_c22_656": -8.648831, "s4242_c11_176": -18.773624,
+                "s1_c4_330": -12.984563, "s2_c14_188": -154.231177, "s11_c1_73": -277.332427, "b13": -1611.770170, "b87": -1543.709337}
+        for name, a, b in read_axt(KDIR / "gy_scan.axt"):
+            key, code = name.split("&")[0].rsplit("_c", 1)
+            r = self.one(a, b, "-c", code)
+            with self.subTest(pair=key):
+                self.assertNotEqual(r["status"], "not_converged")
+                self.assertGreater(val(r["lnL"]), best[key] - 1e-3)
+
+    def test_scan_after_the_continuation(self):
+        """The scan comes after the choice among the ordinary starts and its continuation: a new start that is
+        usable and higher than an unconverged start would otherwise stop that start's continuation, which can lead
+        higher still. GTCGGGCTCTCCTAC / CGCTGGATGTAAGCA under code 6: the continuation reaches the ridge at
+        -35.81001 (the global maximum of the independent search); with the scan first, the scan's maximum,
+        -35.81142 at t 5.9, was reported."""
+        r = self.one("GTCGGGCTCTCCTAC", "CGCTGGATGTAAGCA", "-c", "6")
+        self.assertGreater(val(r["lnL"]), -35.8105)
+
+    def test_scan_taken_only_if_higher_after_the_flat_rule(self):
+        """A scan start is taken only if the likelihood reported for it, after the flat-likelihood rule, is higher
+        than without it. TAACCGGTAGAA / CCTCTCCGCTCC under code 11 (AUDIT-103): saturated at -19.974297045 on the
+        ridge (kappa 0.82); a converged scan start within 1e-7 of it replaced it, and the flat rule then reported
+        the bound at -19.974297157 (kappa 1)."""
+        r = self.one("TAACCGGTAGAA", "CCTCTCCGCTCC", "-c", "11", "--digits", "14")
+        self.assertGreater(val(r["lnL"]), -19.97429705)
 
     def test_synonymous_changes_only(self):
         b = self.codonwise({"GCT": "GCA", "GGT": "GGC", "CCC": "CCA", "CTG": "CTA"})
@@ -625,7 +672,9 @@ class TestChooseStart(unittest.TestCase):
     def test_which_start_is_reported(self):
         """The policy among a pair's starts, with made-up starts (tests/cpp/kaks_gy_choose_start.cpp): ties, an
         unconverged start on the ridge, and the displacement of a usable start by an unconverged one that is
-        higher by more than 1e-4, which no pair found so far reaches."""
+        higher by more than 1e-4, which no pair found so far reaches; and the continuation of a start that is not
+        usable, with scripted continuations (at most two, the other unusable starts dropped, a continuation that
+        ends lower replaced by its start)."""
         cxx, lib, flags = _core_library()
         with tempfile.TemporaryDirectory() as td:
             exe = Path(td) / "kaks_gy_choose_start"
