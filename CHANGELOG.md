@@ -1,5 +1,7 @@
 # Changelog
 
+## Unreleased
+
 ## 0.6.1 — 2026-11-16
 
 **In short.** Fixes and hardening of 0.6.0's Ka/Ks and pipeline; no new commands.

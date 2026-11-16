@@ -20,7 +20,7 @@ underscore, ...) is internal and may change in any release. The package is typed
 functions below have type hints that mypy accepts for the calls shown here). The `coal.report.RunReport` class is documented below because `align_files` takes one to
 produce the run report; only the parts named there are covered by the promise.
 
-The examples on this page are for COAL 0.6.1 (and its development versions, 0.6.1.devN); `tests/test_python_api.py` runs them on every change.
+The examples on this page are for COAL 0.6.2 (and its development versions, 0.6.2.devN); `tests/test_python_api.py` runs them on every change.
 
 ## `codon_align`
 

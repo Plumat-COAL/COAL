@@ -8,8 +8,10 @@ installer's "Connect COAL to Claude Desktop" box while the button gave 0.4.1. .g
 the copy it deploys (never on site/ itself) with the latest release's version:
 
 - the version shown (`<span id="version" data-version=...>`, `<span data-version-ref>`) becomes that version;
-- an element marked `data-since="X.Y.Z"` (an `<li>`, `<p>`, `<div>` or `<section>`, not nested in one of the same
-  kind) is removed when the release is older than X.Y.Z, so the page never describes a feature the download lacks.
+- an element marked `data-since="X.Y.Z"` (an `<li>`, `<p>`, `<div>`, `<section>` or `<tr>`, not nested in one of
+  the same kind: tests/test_docs_site.py checks the pages) is removed when the release is older than X.Y.Z, so the
+  page never describes a feature the download lacks. Marked elements may be nested in marked elements of another
+  kind (a `<p data-since="0.6.1">` in a `<section data-since="0.6.0">`): each is handled on its own.
 
 Running it twice changes nothing more. With the same version as main, only the data-since markers go.
 Rollback: delete the "Match the site to the latest release" step in pages.yml (or revert the WEB-18 commit).
@@ -31,11 +33,25 @@ def rewrite(html: str, version: str) -> str:
                   lambda m: f"{m.group(1)}{version}{m.group(2)}{version}{m.group(3)}", html)
     html = re.sub(r"(<span data-version-ref>)[^<]*(</span>)", lambda m: f"{m.group(1)}{version}{m.group(2)}", html)
 
-    def since(m: re.Match) -> str:
-        return "" if key(version) < key(m.group(2)) else m.group(0).replace(f' data-since="{m.group(2)}"', "", 1)
+    return _since(html, version)
 
-    return re.sub(r'[ \t]*<(li|p|div|section)\b[^>]*?\sdata-since="([\d.]+)"[^>]*>.*?</\1>(?:[ \t]*\n)?', since, html,
-                  flags=re.S)
+
+# the elements data-since can mark; each is matched up to its first closing tag, so one must not be nested in another
+# of the same kind (tests/test_docs_site.py checks the pages)
+SINCE_TAGS = ("li", "p", "div", "section", "tr")
+SINCE = re.compile(r'[ \t]*<(' + "|".join(SINCE_TAGS) + r')\b[^>]*?\sdata-since="([\d.]+)"[^>]*>.*?</\1>(?:[ \t]*\n)?',
+                   re.S)
+
+
+def _since(html: str, version: str) -> str:
+    def since(m: re.Match) -> str:
+        if key(version) < key(m.group(2)):
+            return ""
+        # kept: drop its marker, then handle the marked elements inside it (AUDIT-107 LOW-1: the match of a marked
+        # <section> took its marked <p> with it, which was never handled)
+        return _since(m.group(0).replace(f' data-since="{m.group(2)}"', "", 1), version)
+
+    return SINCE.sub(since, html)
 
 
 def main(argv=None) -> int:
