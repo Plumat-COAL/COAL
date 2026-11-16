@@ -427,6 +427,18 @@ class TestEdgeCases(GyBase):
         self.assertNotEqual(r["status"], "not_converged")
         self.assertGreater(val(r["lnL"]), -11.0903573)
 
+    def test_a_crawled_first_start_does_not_cost_the_ridge_start(self):
+        """When the first start crawls and its second (lengthened) run replaces it, the ridge start is seeded
+        from where the second run stopped, which can be another basin than the one the crawl was in. One more
+        ridge start is made from the crawl's own stop (PR #99). GCTGATCCC / GATGCCGCG under code 4: -12.5748
+        (0.6.0 and now) against -12.5851 without it; GTTAAGTAC / GGTAATGAG under code 6: ok at -15.3300 against
+        saturated at -15.8668 (0.6.0 too)."""
+        for a, b, code, least in (("GCTGATCCC", "GATGCCGCG", 4, -12.5800), ("GTTAAGTAC", "GGTAATGAG", 6, -15.4000)):
+            r = self.one(a, b, "-c", str(code))
+            with self.subTest(pair=a):
+                self.assertNotEqual(r["status"], "not_converged")
+                self.assertGreater(val(r["lnL"]), least)
+
     def test_bound_zone(self):
         """When the iteration stops with kappa or omega near a bound, both ends of that zone are tried (the
         gradient in the logarithm fades there in both directions), and later starts are seeded from where the
@@ -436,13 +448,17 @@ class TestEdgeCases(GyBase):
           -140.0684 at kappa 0.0075;
         - the bound is taken only if the likelihood there is not lower (taken always: -13.9772);
         - the inner edge of the zone is tried (not tried: saturated at -7.7946);
-        - the ridge start is seeded from the first stop, not from the bound (from the bound: -36.8438)."""
+        - the ridge start is seeded from the first stop, not from the bound (from the bound: -36.8438);
+        - the inner edge is taken only if the likelihood there is higher (taken always: -9.6934 for GACCTC /
+          TTTCAT, and ATGCTA / TTGCAG, saturated at -8.3861, becomes not_converged)."""
         for a, b, code, least in (
                 ("GTGTGTACCGTTCTAGTCAGATTGGGGCTGAAATCAGTTCGCCACACAGGCTCATCAATC",
                  "GTGCGGACGGCGGTGTTCCTATGTTGAATATGGAGTAATACGTCAGCATTCAGGACGTTC", 2, -140.0690),
                 ("CATCTTGTC", "CCCCTTCGT", 22, -13.9400),
                 ("GGACAG", "CGACAC", 4, -7.4000),
-                ("CCACGGTTACTGCTC", "GATGTTACACCATCC", 22, -36.8330)):
+                ("CCACGGTTACTGCTC", "GATGTTACACCATCC", 22, -36.8330),
+                ("GACCTC", "TTTCAT", 1, -9.6500),
+                ("ATGCTA", "TTGCAG", 1, -8.3900)):
             r = self.one(a, b, "-c", str(code))
             with self.subTest(pair=a):
                 self.assertNotEqual(r["status"], "not_converged")

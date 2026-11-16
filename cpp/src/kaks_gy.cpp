@@ -466,6 +466,9 @@ struct Fit {
     // (the result itself when they were not): what later starts are seeded from, so that none begins on a bound
     double seed_kappa = NA, seed_omega = NA;
     int iterations = 0;
+    // optimise(): the first run's stop when the second (lengthened) run replaced it
+    bool has_alt = false;
+    double alt_kappa = NA, alt_omega = NA, alt_t = NA;
 };
 
 // Maximise over (log kappa, log omega) (omega fixed when fix_omega) the likelihood profiled over t: a projected
@@ -740,7 +743,13 @@ Fit optimise(GyModel& m, double kappa0, double omega0, double t0, bool fix_omega
     if (!fit.converged && fit.at_limit && fit.crawled && fit.t < T_MAX * (1 - 1e-3)) {
         Fit again = optimise_run(m, kappa0, omega0, t0, fix_omega, true);
         const int its = fit.iterations + again.iterations;
-        if (again.converged && again.lnl >= fit.lnl - LNL_TIE) fit = again;
+        if (again.converged && again.lnl >= fit.lnl - LNL_TIE) {
+            again.has_alt = true;
+            again.alt_kappa = fit.seed_kappa;
+            again.alt_omega = fit.seed_omega;
+            again.alt_t = fit.t;
+            fit = again;
+        }
         fit.iterations = its;
     }
     return fit;
@@ -928,6 +937,10 @@ Result run_gy(const Prepared& p, const GeneticCode& g, const Options& opt, Resul
         const double w_ridge = std::min(std::max(first.seed_omega * first.t / T_MAX, PAR_MIN), 1.0);
         const double start[3][3] = {{6.0, 1.5, t0}, {2.0, 0.02, 10.0}, {first.seed_kappa, w_ridge, T_MAX}};
         for (const double* st : start) offer(optimise(m, st[0], fix_omega ? 1.0 : st[1], st[2], fix_omega));
+        if (first.has_alt) {
+            const double w2 = std::min(std::max(first.alt_omega * first.alt_t / T_MAX, PAR_MIN), 1.0);
+            offer(optimise(m, first.alt_kappa, fix_omega ? 1.0 : w2, T_MAX, fix_omega));
+        }
     }
     for (int c = 0; c < 2 && have_cand && (!have || cand.lnl > best.lnl + LNL_TIE); ++c) {
         const Fit from = cand;
