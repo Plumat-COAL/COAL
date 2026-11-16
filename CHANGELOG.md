@@ -33,6 +33,11 @@
   (`open(dest, "xb")`), so a dangling symbolic link at that name is not written through and a file that takes
   the name between the check and the copy is not overwritten; the two tools share the one copy function.
   (Final review of 2026-11-16, Q3.)
+- **Authors in the Python packages**: `coal-align` and `coal-align-app` declare their authors, Chloe Newton and
+  Keanu Murati (their metadata named none, so `pip show` listed no author), as `CITATION.cff`, coalr's
+  DESCRIPTION, NOTICE and the website already did; README.md has an Authors section and `CITATION.cff` gives each
+  author's GitHub profile (`alias`, `website`), so the credit links to both. `tests/test_authors.py` keeps the places
+  in step.
 - **The development tree is 0.6.1.dev0** (coalr 0.6.1.9000): `main` still said 0.6.0 after the changes below
   were merged, so a build of it reported, and `coal` accepted as, the published release. The six version places,
   CMake, coalr's DESCRIPTION, the vendored `coal_version.h`, `CITATION.cff` (no `date-released` in a development
