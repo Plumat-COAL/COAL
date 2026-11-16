@@ -364,7 +364,9 @@ DIAMOND write there are created anew, a link (or a hard link) with such a name i
 `work/diamond_search.staging`), whose files are then renamed into place, so they never open a name a link could
 have been put at. The folder is made anew for the stage (whatever had its name is removed first, a link unlinked,
 never followed; then it is created with mode 0700, which fails rather than follow a link put there in between) and
-removed after it; the next run removes one that a killed run left. The command lines in `report.json` and the logs
+removed after it; the next run removes one that a killed run left (only these names: `translate_query`,
+`translate_subject`, `translate_proteins`, `diamond_search`, `deepclust`, `realign` with `.staging`; nothing else
+in `work/` is touched). The command lines in `report.json` and the logs
 name these folders: to run one again by hand, make the folder first. (Someone who can write `DIR/work` while a run
 is going could still swap the staging folder for a link during the stage, and could change the run's results
 anyway: not guarded against.) A

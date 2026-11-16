@@ -775,15 +775,15 @@ class Staging(Folder):
 
     def test_made_anew_and_removed(self):
         work = self.out / "work"
-        (work / "x.staging" / "sub").mkdir(parents=True)          # a killed run's folder
-        (work / "x.staging" / "old.dmnd").write_text("big", encoding="utf-8")
-        with R.staging(str(work), "x") as d:
-            self.assertEqual(d, str(work / "x.staging"))
+        (work / "deepclust.staging" / "sub").mkdir(parents=True)          # a killed run's folder
+        (work / "deepclust.staging" / "old.dmnd").write_text("big", encoding="utf-8")
+        with R.staging(str(work), "deepclust") as d:
+            self.assertEqual(d, str(work / "deepclust.staging"))
             self.assertEqual(os.listdir(d), [])
             if os.name == "posix":
                 self.assertEqual(os.stat(d).st_mode & 0o777, 0o700)
             Path(d, "out.tsv").write_text("x", encoding="utf-8")
-        self.assertFalse(os.path.lexists(work / "x.staging"))
+        self.assertFalse(os.path.lexists(work / "deepclust.staging"))
 
     def test_a_link_at_the_name_is_removed_never_followed(self):
         work = self.out / "work"
@@ -791,8 +791,8 @@ class Staging(Folder):
         elsewhere = self.tmp / "elsewhere"
         elsewhere.mkdir()
         (elsewhere / "keep.txt").write_text("keep me\n", encoding="utf-8")
-        self.symlink(elsewhere, work / "x.staging")
-        with R.staging(str(work), "x") as d:
+        self.symlink(elsewhere, work / "deepclust.staging")
+        with R.staging(str(work), "deepclust") as d:
             self.assertFalse(os.path.islink(d))
         self.assertEqual(os.listdir(elsewhere), ["keep.txt"])
         # a link put back between the removal and os.mkdir: FileExistsError, nothing written there
@@ -802,27 +802,44 @@ class Staging(Folder):
             real(path)
             os.symlink(elsewhere, path)
         with mock.patch.object(R, "remove_entry", remove_then_link), self.assertRaises(FileExistsError):
-            with R.staging(str(work), "x"):
+            with R.staging(str(work), "deepclust"):
                 pass
         self.assertEqual(os.listdir(elsewhere), ["keep.txt"])
 
     def test_clear_staging(self):
+        """Exactly COAL's stage names with .staging (or a development build's .staging-XXXXXXXX) go; anything else
+        in work/ stays, whatever it is called (a user's work/ written into with --overwrite)."""
         work = self.out / "work"
-        for n in ("a.staging", "b.staging-k3j4h5g6"):
+        for n in ("deepclust.staging", "translate_query.staging-k3j4h5g6", "translate_proteins.staging"):
             (work / n).mkdir(parents=True)
             (work / n / "f").write_text("x", encoding="utf-8")
-        (work / "c.staging-file").write_text("x", encoding="utf-8")
+        (work / "diamond_search.staging").write_text("x", encoding="utf-8")         # (a file of that name too)
+        users = ["backup.staging", "notes.staging-2024.txt", "deepclust.staging.bak", "translate_query.staging-1",
+                 "realign.staging-ABCDEFGH", "xdeepclust.staging", "translate_.staging"]
+        for n in users:
+            if n == "backup.staging":
+                (work / n).mkdir()
+                (work / n / "mine.txt").write_text("mine\n", encoding="utf-8")
+            else:
+                (work / n).write_text("mine\n", encoding="utf-8")
         (work / "logs").mkdir()
         (work / "state.json").write_text("{}", encoding="utf-8")
         elsewhere = self.tmp / "elsewhere"
         elsewhere.mkdir()
         (elsewhere / "keep.txt").write_text("keep me\n", encoding="utf-8")
-        self.symlink(elsewhere, work / "d.staging")
+        self.symlink(elsewhere, work / "realign.staging")
         R.clear_staging(str(work))
-        self.assertEqual(sorted(os.listdir(work)), ["logs", "state.json"])
+        self.assertEqual(sorted(os.listdir(work)), sorted(["logs", "state.json", *users]))
+        self.assertEqual((work / "backup.staging" / "mine.txt").read_text(encoding="utf-8"), "mine\n")
         self.assertEqual(os.listdir(elsewhere), ["keep.txt"])
         R.clear_staging(str(self.out / "missing"))
 
+    def test_only_the_stages_names(self):
+        with self.assertRaises(ValueError):
+            with R.staging(str(self.out), "backup"):
+                pass
+        self.assertEqual(os.listdir(self.out), [])
+        self.assertFalse(R.remove_entry(str(self.out / "missing")))     # (a plain function: returns None)
 
 if __name__ == "__main__":
     unittest.main()

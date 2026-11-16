@@ -1223,7 +1223,14 @@ class _Run:
         self._clear_earlier_outputs()
         try:
             self.make_folder(self.work)
+        except OSError as e:
+            raise PipelineError(f"cannot create the output folder {self.out!r}: {e.strerror or e}") from None
+        try:
             clear_staging(self.work)   # (what a killed run left: it can be large, DIAMOND's databases)
+        except OSError as e:
+            raise PipelineError(f"cannot remove {e.filename or 'a staging folder'}, the staging folder of an earlier "
+                                f"run in {self.work}: {e.strerror or e}. Remove it, then run again") from None
+        try:
             self.make_folder(self.wpath("logs"))
             self._record_outputs()
         except OSError as e:

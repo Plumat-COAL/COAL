@@ -350,6 +350,43 @@ class StagingFolders(PipelineCase):
             self.assertEqual((elsewhere / "keep.txt").read_text(encoding="utf-8"), "keep me\n")
             self.assertTrue((out / "clusters.tsv").is_file())
 
+    def test_a_users_staging_names_survive_overwrite(self):
+        """--overwrite into a user's work/: only COAL's stage names are staging folders (AUDIT-102 round 3, L1:
+        backup.staging/ and notes.staging-2024.txt were removed); COAL's leftovers still go."""
+        pf = self.tmp / "pairs.tsv"
+        pf.write_text("".join(f"{a}\t{b}\n" for a, b in PLAIN[:4]), encoding="utf-8")
+        out = self.tmp / "o"
+        (out / "work" / "backup.staging").mkdir(parents=True)
+        (out / "work" / "backup.staging" / "mine.txt").write_text("mine\n", encoding="utf-8")
+        (out / "work" / "notes.staging-2024.txt").write_text("notes\n", encoding="utf-8")
+        (out / "work" / "diamond_search.staging").mkdir()               # a killed run's
+        (out / "work" / "diamond_search.staging" / "subject.dmnd").write_text("big", encoding="utf-8")
+        res, err = run(P.run_pairs, Q, S, out, pairs=pf, overwrite=True)
+        self.assertIn(res.exit_code, (0, 2), err)
+        self.assertEqual((out / "work" / "backup.staging" / "mine.txt").read_text(encoding="utf-8"), "mine\n")
+        self.assertEqual((out / "work" / "notes.staging-2024.txt").read_text(encoding="utf-8"), "notes\n")
+        self.assertFalse((out / "work" / "diamond_search.staging").exists())
+
+    def test_a_staging_folder_that_cannot_be_removed_is_named(self):
+        pf = self.tmp / "pairs.tsv"
+        pf.write_text("".join(f"{a}\t{b}\n" for a, b in PLAIN[:4]), encoding="utf-8")
+        out = self.tmp / "o"
+        res, err = run(P.run_pairs, Q, S, out, pairs=pf)
+        self.assertIn(res.exit_code, (0, 2), err)
+        left = out / "work" / "deepclust.staging"          # what a killed run left
+        left.mkdir()
+        import errno
+        from coal import outputs_record as R
+
+        def refuse(path):
+            raise PermissionError(errno.EACCES, "Permission denied", path)
+        with mock.patch.object(R, "remove_entry", refuse):
+            res, err = run(P.run_pairs, Q, S, out, pairs=pf)
+        self.assertEqual(res.exit_code, 1, err)
+        self.assertIn(f"cannot remove {left}, the staging folder of an earlier run in {out / 'work'}: "
+                      "Permission denied. Remove it, then run again", err)
+        self.assertNotIn("cannot create the output folder", err)
+
     def test_the_recorded_commands_are_the_same_in_every_run(self):
         self.stand_in()
         reports = []
