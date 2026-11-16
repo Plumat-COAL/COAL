@@ -934,21 +934,25 @@ Choice choose_start(const std::vector<Fit>& fits) {
 }
 
 // The coarse scan of run_gy (see there): the likelihood, maximised over t from t0, at each point of a grid in kappa and
-// omega (kappa alone when omega is fixed), highest first (ties in the order of the grid). The grid avoids the
-// bounds (an iteration started on a bound sees no gradient in the logarithm and stalls) and spans their zones'
-// inner edges, 1e-3 and 99.
-constexpr double SCAN_VALUES[] = {1e-3, 1e-2, 0.1, 1, 10, 99};
-constexpr size_t SCAN_SMALL_PAIR = 100;   // codons compared: every such pair is scanned
-constexpr int SCAN_STARTS = 2;            // starts from the highest points of the scan
+// omega (kappa alone when omega is fixed), highest first (ties in the order of the grid). The grids avoid the
+// bounds (an iteration started on a bound sees no gradient in the logarithm and stalls) and span their zones'
+// inner edges, 1e-3 and 99: 6 x 6 points for a small pair, 3 x 3 for a larger one on the ridge (whose cost the
+// scan would otherwise add to every saturated pair of a real data set: 9 points find all but one of the 14
+// random pairs of 60 to 200 codons that 36 find).
+constexpr double SCAN_SMALL[] = {1e-3, 1e-2, 0.1, 1, 10, 99};
+constexpr double SCAN_LARGE[] = {1e-3, 1, 99};
+constexpr size_t SCAN_SMALL_PAIR = 40;   // codons compared: every such pair is scanned, on the finer grid
+constexpr int SCAN_STARTS = 2;           // starts from the highest points of the scan
 
 struct ScanPoint {
     double lnl, kappa, omega, t;
 };
 
-std::vector<ScanPoint> scan_grid(GyModel& m, double t0, bool fix_omega) {
+template <size_t N>
+std::vector<ScanPoint> scan_grid(GyModel& m, double t0, bool fix_omega, const double (&values)[N]) {
     std::vector<ScanPoint> pts;
-    for (const double k : SCAN_VALUES)
-        for (const double w : SCAN_VALUES) {
+    for (const double k : values)
+        for (const double w : values) {
             const double omega = fix_omega ? 1.0 : w;
             m.build(k, omega);
             double t = t0;
@@ -1157,10 +1161,11 @@ Result run_gy(const Prepared& p, const GeneticCode& g, const Options&, Result r)
     // stops on a plateau (at t = 50 the likelihood barely depends on kappa and omega), where it cannot see a higher
     // maximum at a moderate t or with another kappa (GTGGACAAC / TCCGGGAAG under code 11: every start ended on
     // the ridge, at lnL -17.3590 or below; the maximum is -16.5761 at t 7.96, kappa 1e-6). So a pair of
-    // SCAN_SMALL_PAIR (100) codons or fewer, and a pair whose result so far is on the ridge or did not converge,
-    // has its likelihood evaluated on a grid of 36 points in (kappa, omega), each maximised over t (scan_grid),
-    // and is started once more from the two highest points: a small pair always, any other pair only from a point
-    // higher than its result so far (there the extra starts would only repeat what the starts found). The scan
+    // SCAN_SMALL_PAIR (40) codons or fewer, and a pair whose result so far is on the ridge or did not converge,
+    // has its likelihood evaluated on a grid in (kappa, omega), each point maximised over t (scan_grid: 36 points
+    // for a small pair, 9 for another), and is started once more from the two highest points: a small pair
+    // always, any other pair only from a point higher than its result so far (there the extra starts would only
+    // repeat what the starts found; on the three real data sets of docs/kaks.md none is made). The scan
     // comes after the choice among the starts above and its continuation, which are as they were without it; the
     // new starts then join that choice (and a continuation, if one of them asks for it), so the likelihood
     // reported can only be higher (by more than LNL_TIE; within it a converged start can still replace an
@@ -1171,7 +1176,8 @@ Result run_gy(const Prepared& p, const GeneticCode& g, const Options&, Result r)
         const bool unsettled = !now.converged || now.t >= T_MAX * (1 - 1e-3);
         if (small || unsettled) {
             const double bar = now.lnl;
-            const std::vector<ScanPoint> pts = scan_grid(m, t0, fix_omega);
+            const std::vector<ScanPoint> pts =
+                small ? scan_grid(m, t0, fix_omega, SCAN_SMALL) : scan_grid(m, t0, fix_omega, SCAN_LARGE);
             bool offered = false;
             for (int i = 0; i < SCAN_STARTS && i < (int)pts.size(); ++i) {
                 if (!small && !(pts[(size_t)i].lnl > bar + LNL_TIE)) break;
