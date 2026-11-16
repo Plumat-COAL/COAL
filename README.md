@@ -254,3 +254,12 @@ for testing and is not redistributed here.
 
 COAL was started by Chloe Newton and Keanu Murati at the Reinvent the Wheel AI × Science Tool-building Hackathon,
 London, October 2026.
+
+## Authors
+
+COAL is written and maintained by its two authors, who share its copyright:
+
+- **Chloe Newton** ([@chloe-newt](https://github.com/chloe-newt))
+- **Keanu Murati** ([@Keanu-MUR](https://github.com/Keanu-MUR))
+
+To cite COAL, use [CITATION.cff](CITATION.cff) (GitHub's "Cite this repository" button) or `coal cite`.
