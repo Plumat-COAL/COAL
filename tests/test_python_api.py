@@ -40,9 +40,9 @@ class TestExports(unittest.TestCase):
         for name in coal.__all__:
             self.assertIn(f"coal.{name}", text, f"docs/python-api.md does not document coal.{name}")
         # a development tree (0.6.1.dev0) names the release it becomes (0.6.1), as CITATION.cff and the website do
-        # (scripts/release_version.py); tests/test_user_files_and_lows.py keeps a .devN out of the page
-        dev = re.match(r"^(\d+(?:\.\d+)+)\.dev\d+$", coal.__version__)
-        shown = dev.group(1) if dev else coal.__version__
+        # (scripts/release_version.py); tests/test_user_files_and_lows.py keeps a .devN out of the page. A
+        # prerelease (0.6.1rc1) is a candidate of 0.6.1: the page names 0.6.1 then too.
+        shown = re.sub(r"(\.dev\d+|(a|b|rc)\d+)$", "", coal.__version__)
         self.assertIn(f"for COAL {shown} ", text, "docs/python-api.md names another version than the package")
 
 

@@ -581,7 +581,10 @@ class TestSiteFiles(unittest.TestCase):
     def test_version_is_current(self):
         """The page names the current version; it must match the package."""
         init = re.search(r'__version__ = "([^"]+)"', _read("src", "coal", "__init__.py")).group(1)
-        init = _load("release_version").base_version(init)   # a development tree shows the release it becomes
+        # a development tree shows the release it becomes; a prerelease (0.6.1rc1) shows itself, as
+        # tests/test_feature_combinations.py and CITATION.cff have it (docs/development.md "Releasing COAL")
+        rv = _load("release_version")
+        init = rv.base_version(init) if rv.DEV_RE.match(init) else init
         shown = re.search(r'<span id="version" data-version="([^"]+)">([^<]+)</span>', self.index)
         self.assertIsNotNone(shown, "version span missing")
         self.assertEqual(shown.group(1), shown.group(2))
