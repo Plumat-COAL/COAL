@@ -471,17 +471,12 @@ struct Fit {
     double alt_kappa = NA, alt_omega = NA, alt_t = NA;
 };
 
-// Maximise over (log kappa, log omega) (omega fixed when fix_omega) the likelihood profiled over t: a projected
-// BFGS iteration with the analytic gradient (at the maximum in t the gradient of the profile is the partial
-// gradient; at a bound of t the term in the slope accounts for the scaling of the rate matrix).
-// lengthen: see optimise() below and the comment at the line search.
-Fit optimise_run(GyModel& m, double kappa0, double omega0, double t0, bool fix_omega, bool lengthen) {
-    const double lo = std::log(PAR_MIN), hi = std::log(PAR_MAX);
-    const int nfree = fix_omega ? 1 : 2;
-    double x[2] = {std::log(kappa0), std::log(omega0)};
-    double t = t0;
-    // -lnl at y, profiled over t (tt: start and result), and its gradient
-    auto eval = [&](const double* y, double& tt, double* g) -> double {
+// -lnl at y = (log kappa, log omega), profiled over t (tt: start and result), and, with g, its gradient. The model
+// is left decomposed at y.
+struct ProfileEval {
+    GyModel& m;
+    int nfree;   // 1: omega is fixed, and its gradient is reported as 0
+    double operator()(const double* y, double& tt, double* g) const {
         m.build(std::exp(y[0]), std::exp(y[1]));
         double slope = 0;
         const double f = -profile_t(m, tt, &slope);
@@ -492,7 +487,121 @@ Fit optimise_run(GyModel& m, double kappa0, double omega0, double t0, bool fix_o
             g[1] = nfree > 1 ? -gl[1] : 0.0;
         }
         return f;
-    };
+    }
+};
+
+// The stopping rule of optimise_run near a bound. A small gradient in log kappa and log omega means a maximum only
+// inside the bounds. Where the data want kappa or omega at 0 the likelihood is linear in the parameter itself, so
+// its gradient in the logarithm is the parameter times a constant: it falls below the tolerance at about 1e-5, a
+// factor 10 short of the bound and up to 1e-5 in lnL below the value there, at a point that depends on the path.
+// And it fades in the other direction as well: an iteration that is near or on the bound sees no gradient towards
+// a maximum that lies further inside (a start on the bound "converged" there, 6.6e-3 below a maximum at kappa
+// 0.0075: PR #97). So when the iteration stops with a parameter in the zone of a bound (below 1e-3, above 99), the
+// two ends of the zone are tried: the bound itself, taken if the likelihood there is not lower, and the inner edge
+// (1e-3 or 99), where the logarithmic gradient is alive again, taken if the likelihood there is higher. The
+// iteration then goes on from the better one: true is returned and x, f, t, g (and H, reset at the inner edge) are
+// those of that point. Twice per parameter at most (probes). A stop outside the zones is final (false).
+// Before the first probe of a run, the point where the iteration stopped by itself goes to fit.seed_* (seeded).
+bool probe_zone_ends(const ProfileEval& eval, double x[2], double& f, double& t, double g[2], double H[2][2],
+                     int probes[2], Fit& fit, bool& seeded) {
+    const double lo = std::log(PAR_MIN), hi = std::log(PAR_MAX);
+    const int nfree = eval.nfree;
+    bool moved = false;
+    for (int i = 0; i < nfree && !moved; ++i) {
+        const bool low = x[i] < lo + BOUND_ZONE_LOW, high = x[i] > hi - BOUND_ZONE_HIGH;
+        if (probes[i] >= 2 || !(low || high)) continue;
+        if (probes[0] + probes[1] == 0) {   // where the iteration stopped by itself: the seed of later starts
+            fit.seed_kappa = std::exp(x[0]);
+            fit.seed_omega = std::exp(x[1]);
+            seeded = true;
+        }
+        ++probes[i];
+        const double bound = low ? lo : hi, edge = low ? lo + BOUND_ZONE_LOW : hi - BOUND_ZONE_HIGH;
+        double fb = f, tb = t, gb[2] = {g[0], g[1]}, xb[2] = {x[0], x[1]};
+        bool take = false;
+        if (x[i] != bound) {
+            double xs[2] = {x[0], x[1]}, gs[2], ts = t;
+            xs[i] = bound;
+            const double fs = eval(xs, ts, gs);
+            if (fs <= fb) {
+                take = true;
+                fb = fs;
+                tb = ts;
+                xb[i] = bound;
+                gb[0] = gs[0];
+                gb[1] = gs[1];
+            }
+        }
+        {
+            double xs[2] = {x[0], x[1]}, gs[2], ts = t;
+            xs[i] = edge;
+            const double fs = eval(xs, ts, gs);
+            if (fs < fb - 1e-9) {
+                take = true;
+                fb = fs;
+                tb = ts;
+                xb[i] = edge;
+                gb[0] = gs[0];
+                gb[1] = gs[1];
+                H[0][0] = H[1][1] = 1;   // (what was learnt near the bound says nothing here)
+                H[0][1] = H[1][0] = 0;
+            }
+        }
+        if (take) {
+            x[0] = xb[0];
+            x[1] = xb[1];
+            f = fb;
+            t = tb;
+            g[0] = gb[0];
+            g[1] = gb[1];
+            moved = true;
+        }
+    }
+    return moved;
+}
+
+// A step of optimise_run that the second run of optimise() lengthens (see there and at the call): from x along
+// dir (largest component dmax, directional derivative `slope`), accepted with factor alpha at xn (likelihood fn,
+// branch length tn). The factor is doubled while the likelihood keeps improving, up to a step of 2 log units;
+// alpha, xn, fn and tn are those of the last accepted trial, and the model is left decomposed at xn.
+void lengthen_step(const ProfileEval& eval, const double x[2], const double dir[2], double dmax, double slope,
+                   double& alpha, double xn[2], double& fn, double& tn) {
+    const double lo = std::log(PAR_MIN), hi = std::log(PAR_MAX);
+    double a2 = 2, xa[2], fa = fn;
+    bool stale = false;   // the model's state is that of a rejected trial
+    // (up to 2 log units, the limit of every later step, also for the first step: its limit of 0.5 is
+    // there for the unscaled gradient of an ordinary pair, hundreds per log unit, and every doubling here
+    // has to improve the likelihood to be kept)
+    while (a2 * dmax <= 2.0) {
+        for (int i = 0; i < 2; ++i) xa[i] = std::min(hi, std::max(lo, x[i] + a2 * dir[i]));
+        double ta = tn;
+        const double ft = eval(xa, ta, nullptr);
+        if (!(ft < fa + 1e-4 * (a2 - alpha) * slope)) {
+            stale = true;
+            break;
+        }
+        stale = false;
+        alpha = a2;
+        fa = ft;
+        fn = ft;
+        tn = ta;
+        xn[0] = xa[0];
+        xn[1] = xa[1];
+        a2 *= 2;
+    }
+    if (stale) fn = eval(xn, tn, nullptr);
+}
+
+// Maximise over (log kappa, log omega) (omega fixed when fix_omega) the likelihood profiled over t: a projected
+// BFGS iteration with the analytic gradient (at the maximum in t the gradient of the profile is the partial
+// gradient; at a bound of t the term in the slope accounts for the scaling of the rate matrix).
+// lengthen: see optimise() below and the comment at the line search.
+Fit optimise_run(GyModel& m, double kappa0, double omega0, double t0, bool fix_omega, bool lengthen) {
+    const double lo = std::log(PAR_MIN), hi = std::log(PAR_MAX);
+    const int nfree = fix_omega ? 1 : 2;
+    double x[2] = {std::log(kappa0), std::log(omega0)};
+    double t = t0;
+    const ProfileEval eval{m, nfree};
     double g[2];
     double f = eval(x, t, g);
     double H[2][2] = {{1, 0}, {0, 1}};
@@ -519,70 +628,11 @@ Fit optimise_run(GyModel& m, double kappa0, double omega0, double t0, bool fix_o
         // curvatures of real pairs, a distance of 1e-6 or less from the maximum and 1e-11 in lnL; the rounding of
         // the likelihood sits just below)
         if (gmax < 1e-5 || (small_steps >= 2 && gmax < 1e-3)) {
-            // Not so near a bound. Where the data want kappa or omega at 0 the likelihood is linear in the
-            // parameter itself, so its gradient in the logarithm is the parameter times a constant: it falls below
-            // the tolerance at about 1e-5, a factor 10 short of the bound and up to 1e-5 in lnL below the value
-            // there, at a point that depends on the path. And it fades in the other direction as well: an
-            // iteration that is near or on the bound sees no gradient towards a maximum that lies further inside
-            // (a start on the bound "converged" there, 6.6e-3 below a maximum at kappa 0.0075: audit of #97). So
-            // when the iteration stops with a parameter in the zone of a bound (below 1e-3, above 99), the two
-            // ends of the zone are tried: the bound itself, taken if the likelihood there is not lower, and the
-            // inner edge (1e-3 or 99), where the logarithmic gradient is alive again, taken if the likelihood
-            // there is higher. The iteration then goes on from the better one. Twice per parameter at most. A
-            // stop outside the zones is final as before.
-            bool moved = false;
-            for (int i = 0; i < nfree && !moved; ++i) {
-                const bool low = x[i] < lo + BOUND_ZONE_LOW, high = x[i] > hi - BOUND_ZONE_HIGH;
-                if (probes[i] >= 2 || !(low || high)) continue;
-                if (probes[0] + probes[1] == 0) {   // where the iteration stopped by itself: the seed of later starts
-                    fit.seed_kappa = std::exp(x[0]);
-                    fit.seed_omega = std::exp(x[1]);
-                    seeded = true;
-                }
-                ++probes[i];
-                const double bound = low ? lo : hi, edge = low ? lo + BOUND_ZONE_LOW : hi - BOUND_ZONE_HIGH;
-                double fb = f, tb = t, gb[2] = {g[0], g[1]}, xb[2] = {x[0], x[1]};
-                bool take = false;
-                if (x[i] != bound) {
-                    double xs[2] = {x[0], x[1]}, gs[2], ts = t;
-                    xs[i] = bound;
-                    const double fs = eval(xs, ts, gs);
-                    if (fs <= fb) {
-                        take = true;
-                        fb = fs;
-                        tb = ts;
-                        xb[i] = bound;
-                        gb[0] = gs[0];
-                        gb[1] = gs[1];
-                    }
-                }
-                {
-                    double xs[2] = {x[0], x[1]}, gs[2], ts = t;
-                    xs[i] = edge;
-                    const double fs = eval(xs, ts, gs);
-                    if (fs < fb - 1e-9) {
-                        take = true;
-                        fb = fs;
-                        tb = ts;
-                        xb[i] = edge;
-                        gb[0] = gs[0];
-                        gb[1] = gs[1];
-                        H[0][0] = H[1][1] = 1;   // (what was learnt near the bound says nothing here)
-                        H[0][1] = H[1][0] = 0;
-                    }
-                }
-                if (take) {
-                    x[0] = xb[0];
-                    x[1] = xb[1];
-                    f = fb;
-                    t = tb;
-                    g[0] = gb[0];
-                    g[1] = gb[1];
-                    small_steps = 0;
-                    moved = true;
-                }
+            // (not so near a bound: probe_zone_ends)
+            if (probe_zone_ends(eval, x, f, t, g, H, probes, fit, seeded)) {
+                small_steps = 0;
+                continue;
             }
-            if (moved) continue;
             fit.converged = true;
             break;
         }
@@ -635,31 +685,7 @@ Fit optimise_run(GyModel& m, double kappa0, double omega0, double t0, bool fix_o
         // gradient, or after the first BFGS update, are not touched.
         const bool crawling = ok && alpha == 1 && dmax < 1e-2 && !curvature;
         if (crawling) fit.crawled = true;
-        if (lengthen && crawling) {
-            double a2 = 2, xa[2], fa = fn;
-            bool stale = false;   // the model's state is that of a rejected trial
-            // (up to 2 log units, the limit of every later step, also for the first step: its limit of 0.5 is
-            // there for the unscaled gradient of an ordinary pair, hundreds per log unit, and every doubling here
-            // has to improve the likelihood to be kept)
-            while (a2 * dmax <= 2.0) {
-                for (int i = 0; i < 2; ++i) xa[i] = std::min(hi, std::max(lo, x[i] + a2 * dir[i]));
-                double ta = tn;
-                const double ft = eval(xa, ta, nullptr);
-                if (!(ft < fa + 1e-4 * (a2 - alpha) * slope)) {
-                    stale = true;
-                    break;
-                }
-                stale = false;
-                alpha = a2;
-                fa = ft;
-                fn = ft;
-                tn = ta;
-                xn[0] = xa[0];
-                xn[1] = xa[1];
-                a2 *= 2;
-            }
-            if (stale) fn = eval(xn, tn, nullptr);
-        }
+        if (lengthen && crawling) lengthen_step(eval, x, dir, dmax, slope, alpha, xn, fn, tn);
         if (!ok) {
             // no descent along this direction: once more from the plain gradient, then accept the point
             if (!restarted && (H[0][0] != 1 || H[1][1] != 1 || H[0][1] != 0)) {
