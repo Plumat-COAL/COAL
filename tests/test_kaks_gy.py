@@ -235,8 +235,8 @@ class TestGeneticCodes(GyBase):
         gold = {}
         for line in (GOLD / "gy_codes.codeml.tsv").read_text(encoding="utf-8").splitlines()[1:]:
             f = line.split("\t")
-            gold[f[0]] = dict(zip(("ncbi", "icode", "lnL", "t", "kappa", "omega", "dN", "dS", "S", "N", "SE_dN",
-                                   "SE_dS"), map(float, f[1:])))
+            gold[f[0]] = dict(zip(("ncbi", "icode", "lnL", "t", "kappa", "omega", "dN", "dS", "S", "N"),
+                                  map(float, f[1:])))
         pairs = read_axt(KDIR / "gy_codes.axt")
         self.assertEqual(len(pairs), len(gold))
         codes = sorted({int(g["ncbi"]) for g in gold.values()})
@@ -292,8 +292,14 @@ class TestGeneticCodes(GyBase):
                                        (1, 1, 0.97)):
                         self.assertLess(lnl_reference(a, b, t * dt, k * dk, w * dw, aa), lnl + 1e-9)
                 self.assertAlmostEqual(val(r["S_sites"]) + val(r["N_sites"]), 108, delta=1e-8)
-                # the same pair read with the standard code is another model (other stops, other synonyms)
-                self.assertNotEqual(self.one(a, b, "-c", "1")["lnL"] if code != 11 else "", r["lnL"])
+                # The same pair read with the standard code is another model (other stops, other synonyms), except
+                # for code 11, whose translation is the standard code's (it differs in start codons only): there
+                # the two rows are the same bytes.
+                std = self.one(a, b, "-c", "1")
+                if code == 11:
+                    self.assertEqual(std, r)
+                else:
+                    self.assertNotEqual(std["lnL"], r["lnL"])
 
     def test_stop_codons_of_the_code(self):
         """TGA is a stop codon in code 1 and Trp in codes 2 and 4; AGA is Arg in codes 1 and 4 and a stop in code
@@ -403,13 +409,55 @@ class TestEdgeCases(GyBase):
         self.assertIn("Ka saturated", r["note"])
         self.assertGreater(val(r["lnL"]), -13.59)   # (the crawl stopped at -13.6046)
 
+    def test_a_converged_maximum_is_not_displaced_by_an_unconverged_start(self):
+        """TGGTTACGCTTT / TACAGCTTTCGC: three starts converge on the ridge (saturated, lnL -24.1755) and the
+        ridge start runs out of steps at a higher likelihood. That start must not turn the pair into
+        `not_converged` (0.6.1 before this fix); it is continued, converges (-24.0821) and wins."""
+        r = self.one("TGGTTACGCTTT", "TACAGCTTTCGC")
+        self.assertIn(r["status"], ("saturated", "ok"))
+        self.assertGreater(val(r["lnL"]), -24.1754656 - 1e-6)
+        self.assertGreater(val(r["lnL"]), -24.09)   # (the continued start's maximum)
+
+    def test_a_second_run_that_converges_lower_is_refused(self):
+        """GACATT / GCGAAA under code 23: the first start crawls to its step limit; its second run (lengthened
+        steps) converges at a likelihood 1.07e-5 below the point the crawl had reached, more than the tie
+        tolerance of 1e-7, and is refused. (Taking it gives a saturated row with lnL -11.0903657; the crawl's
+        point, continued, converges at -11.0903490.)"""
+        r = self.one("GACATT", "GCGAAA", "-c", "23")
+        self.assertNotEqual(r["status"], "not_converged")
+        self.assertGreater(val(r["lnL"]), -11.0903573)
+
+    def test_bound_zone(self):
+        """When the iteration stops with kappa or omega near a bound, both ends of that zone are tried (the
+        gradient in the logarithm fades there in both directions), and later starts are seeded from where the
+        first one stopped by itself. Random pairs on which each part decides the result (audit of #97; the
+        likelihood a build without that part reports is given):
+        - a start must not begin on the kappa bound: 0.6.1-rc reported -140.0750 (kappa 2.5e-6), the maximum is
+          -140.0684 at kappa 0.0075;
+        - the bound is taken only if the likelihood there is not lower (taken always: -13.9772);
+        - the inner edge of the zone is tried (not tried: saturated at -7.7946);
+        - the ridge start is seeded from the first stop, not from the bound (from the bound: -36.8438)."""
+        for a, b, code, least in (
+                ("GTGTGTACCGTTCTAGTCAGATTGGGGCTGAAATCAGTTCGCCACACAGGCTCATCAATC",
+                 "GTGCGGACGGCGGTGTTCCTATGTTGAATATGGAGTAATACGTCAGCATTCAGGACGTTC", 2, -140.0690),
+                ("CATCTTGTC", "CCCCTTCGT", 22, -13.9400),
+                ("GGACAG", "CGACAC", 4, -7.4000),
+                ("CCACGGTTACTGCTC", "GATGTTACACCATCC", 22, -36.8330)):
+            r = self.one(a, b, "-c", str(code))
+            with self.subTest(pair=a):
+                self.assertNotEqual(r["status"], "not_converged")
+                self.assertGreater(val(r["lnL"]), least)
+
     def test_synonymous_changes_only(self):
         b = self.codonwise({"GCT": "GCA", "GGT": "GGC", "CCC": "CCA", "CTG": "CTA"})
         r = self.one(self.GENE, b)
         self.assertEqual(r["status"], "ok")
         self.assertGreater(val(r["dS"]), 0.05)
         self.assertLess(val(r["dN"]), 1e-5)       # omega at its lower bound, 1e-6
-        self.assertLess(val(r["dNdS"]), 1.1e-6)
+        self.assertEqual(r["dNdS"], "1e-06")      # the bound itself, not a point short of it (the stopping rule)
+        # the same for a real pair without a nonsynonymous difference (0.6.0 stopped at 1.143e-06)
+        pairs = {n.split("&")[0]: (a, b) for n, a, b in read_axt(KDIR / "gy_cases.axt")}
+        self.assertEqual(self.one(*pairs["real0_8"])["dNdS"], "1e-06")
 
     def test_nonsynonymous_changes_only(self):
         b = self.codonwise({"AAA": "ACA", "GAA": "GTA", "GAT": "GCT"})

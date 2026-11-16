@@ -9,7 +9,9 @@ codeml's icode and the NCBI table it is: 1 = 2 (vertebrate mitochondrial), 2 = 3
 yeast nuclear), 9 = 13 (ascidian mt), 10 = 15 (blepharisma nuclear). Two pairs per code: random sense codons of
 that code (so that the codons whose meaning differs from the standard code occur: TGA, AGA / AGG, ATA, CTN, TAA /
 TAG, AAA, CTG where they are sense codons), changed at random positions, never into a stop codon of the code.
-codeml: runmode = -2, CodonFreq = 2, getSE = 1 (PAML 4.10.10 made the stored file). The NCBI tables codeml does not
+codeml: runmode = -2, CodonFreq = 2 (PAML 4.10.10 made the stored file). codeml's standard errors are not stored:
+they come from a Hessian by differences taken from a random start, and change in the third digit from run to run
+(the estimates and lnL are the same to the printed digits in every run). The NCBI tables codeml does not
 have (11, 14, 16, 21, 22, 23) are checked in the test against the likelihood recomputed from the model.
 """
 import argparse
@@ -64,13 +66,12 @@ def main():
                     raise SystemExit(f"codeml printed nothing for {nm}")
                 pairs_all.append((nm, x, y))
                 rows.append(f"{nm}\t{ncbi}\t{icode}\t{r['lnL']:.6f}\t{r['t']:.5f}\t{r['kappa']:.5f}\t{r['omega']:.5f}\t"
-                            f"{r['dN']:.4f}\t{r['dS']:.4f}\t{r['S']:.1f}\t{r['N']:.1f}\t{r['se_dN']:.5f}\t"
-                            f"{r['se_dS']:.5f}")
+                            f"{r['dN']:.4f}\t{r['dS']:.4f}\t{r['S']:.1f}\t{r['N']:.1f}")
     with open(os.path.join(HERE, "gy_codes.axt"), "w", newline="\n") as fh:
         for nm, x, y in pairs_all:
             fh.write(f"{nm}&ref\n{x}\n{y}\n\n")
     with open(os.path.join(HERE, "golden", "gy_codes.codeml.tsv"), "w", newline="\n") as fh:
-        fh.write("name\tncbi\ticode\tlnL\tt\tkappa\tomega\tdN\tdS\tS\tN\tSE_dN\tSE_dS\n" + "\n".join(rows) + "\n")
+        fh.write("name\tncbi\ticode\tlnL\tt\tkappa\tomega\tdN\tdS\tS\tN\n" + "\n".join(rows) + "\n")
     print(len(rows), "pairs")
 
 
