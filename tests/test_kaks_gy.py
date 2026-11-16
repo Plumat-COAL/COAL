@@ -482,7 +482,8 @@ class TestEdgeCases(GyBase):
         - s2_c14_188, 20 codons: reached from the second best point of the scan only (-154.2312 on the ridge, kappa
           1e-6; saturated -154.2366);
         - b13 and b87, 200 random codons each, more than SCAN_SMALL_PAIR: scanned because the best start ended on
-          the ridge, started from a point of the scan higher than it (saturated, 0.18 and 1.49 lower)."""
+          the ridge next to its plateau, started from a point of the scan higher than it (saturated, 0.18 and 1.49
+          lower)."""
         best = {"f1": -16.576072, "s11_c22_656": -8.648831, "s4242_c11_176": -18.773624,
                 "s1_c4_330": -12.984563, "s2_c14_188": -154.231177, "b13": -1611.770170, "b87": -1543.709337}
         for name, a, b in read_axt(KDIR / "gy_scan.axt"):
