@@ -1,18 +1,40 @@
 # Changelog
 
-## Unreleased
+## 0.6.1 — 2026-11-16
+
+**In short.** Fixes and hardening of 0.6.0's Ka/Ks and pipeline; no new commands.
+
+- **GY (maximum likelihood) finds better maxima:** a coarse scan of kappa and omega for small pairs and pairs next
+  to the plateau of saturation, a second run with longer steps for a start that crawled, both ends tried near a
+  bound of kappa or omega, and a converged maximum is never displaced by a start that ran out of steps. Of 25,200
+  random pairs none is `not_converged` (0.6.0: 103) and none has a likelihood lower than in 0.6.0 by more than
+  1e-4; on real gene sets GY rows change only where kappa or omega is now exactly at its bound (in the last
+  digits) and for identical pairs, whose lnL was printed twice too low. GY is validated on every genetic code. The
+  other nine methods give the same numbers as 0.6.0.
+- **Your files are safe in `coal pipeline`:** a `.fasta` of yours in an alignment folder, a `work/` folder or a
+  `--report` file that COAL did not make are kept (or the run is refused before anything changes), and nothing is
+  written through a symbolic link in `DIR/work/`.
+- **Inputs:** a blank line lost between two AXT records is an error for that record instead of a wrong pair (one
+  rare case remains, under "Fixed"); a pipe, FIFO or process substitution (`<(...)`), or a folder, as the input of
+  `coal kaks` / `coal dnds` is refused with a message instead of being read as an empty file.
+- **Interrupts:** Ctrl-C in `coal pipeline` no longer ends in a traceback, and an interrupted `codon_dnds()`
+  (Python API) stops the engine and removes only the output files it created.
+- **coalr is a release file** (`coalr_0.6.1.tar.gz`), and the install lines name this release.
+- **Release discipline:** the development tree carries a development version, and a tag is refused unless the
+  seven version places, the CHANGELOG, coalr's DESCRIPTION and NEWS agree (`scripts/release_version.py`).
+- The Python packages name their authors, Chloe Newton and Keanu Murati.
 
 ### Fixed
 
 - **`coal kaks` / `coal dnds`: a blank line lost between two AXT records is an error instead of a wrong pair (but
   for one rare case, below).** The two records were read as one of five lines, joined and cut in half: the first
-  gene was compared with part of the second gene's lines, and the second gene was missing without a word. A record of more than two sequence lines
-  is still joined and halved (wrapped sequences, as KaKs_Calculator reads them) when the half falls at the end of
-  a line and every line holds only letters and `- . ? * ~ !`; otherwise it is that record's error (status `error`
-  in `coal dnds`, left out with a warning in `coal kaks`), and the other records are computed. A lost blank line
-  before a name made only of letters (such as `Sample` or `ACGTAC`) can still be read as a wrapped record when the
-  lengths happen to put the half at the end of a line, so a record can still be mis-paired in that rare case.
-  docs/kaks.md "Input". (Final review of 2026-11-16, M1; audit of #106.)
+  gene was compared with part of the second gene's lines, and the second gene was missing without a word. A record
+  of more than two sequence lines is still joined and halved (wrapped sequences, as KaKs_Calculator reads them) when
+  the half falls at the end of a line and every line holds only letters and `- . ? * ~ !`; otherwise it is that
+  record's error (status `error` in `coal dnds`, left out with a warning in `coal kaks`), and the other records are
+  computed. A lost blank line before a name made only of letters (such as `Sample` or `ACGTAC`) can still be read as
+  a wrapped record when the lengths happen to put the half at the end of a line, so a record can still be mis-paired
+  in that rare case. docs/kaks.md "Input". (Final review of 2026-11-16, M1; audit of #106.)
 - `coal kaks` / `coal dnds`: a FIFO or a process substitution (`-i <(zcat x.axt.gz)`) as the input is refused
   (exit 2) as standard input is, with "reading a pipe or device ... is not supported: give a file": the input is
   opened more than once, so it was read as an empty file, or a named FIFO made the command wait for ever. The
@@ -230,6 +252,11 @@
   anything changes, also with `--overwrite` (it was written through: `O_NOFOLLOW` guards only the last part of a
   path); to keep the working files elsewhere, give `-o` a folder there. The programs' command lines in `report.json`
   name those staging folders (the same paths in every run). (Found by the audits of #99 and #102.)
+- Website and README, for 0.6.1: the home page names the ten Ka/Ks methods (GY among them) and the Windows app's
+  Ka/Ks and dN/dS pipeline tabs, and says that the platform wheels have `coal-cpp` inside (it said to build it
+  with any pip install); the install page has an R section (`coalr` from `coalr_src.tar.gz` of the latest
+  release), the coalr file in its list of files and the platform wheels in the wheels row; the licence lines say
+  "from 0.6.0". README's Ka/Ks list names GY. `scripts/site_without_release.py` also rewrites coalr's line.
 
 ### Added
 

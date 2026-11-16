@@ -1,4 +1,4 @@
-# coalr (development version)
+# coalr 0.6.1
 
 - `coal_dnds_pairs()` and `coal_dnds_clusters()` return the protein-alignment scoring they used as attribute
   `"alignment"` (`matrix`, `gap_open`, `gap_extend`, `end_gaps`, `tie_break`), next to `"seconds"`. Their help

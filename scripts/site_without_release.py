@@ -5,7 +5,7 @@
 Every `releases/latest/download/...` link would give a 404 until the first GitHub Release is published, so
 .github/workflows/pages.yml runs this on the copy it deploys (never on site/ itself) when `gh release view` finds no
 published release: download links become a "first release coming soon" note, the pip commands install from the
-repository instead, and a short notice goes at the top of the page. Running it twice changes nothing more.
+repository instead (coalr's install line too), and a short notice goes at the top of the page. Running it twice changes nothing more.
 Takes any number of pages; a page with no release download link
 (the guide, the cite page, the explainer) is left exactly as it is.
 """
@@ -17,6 +17,7 @@ import sys
 REPO = "https://github.com/plumat-coal/COAL"
 PIP = (f'pip install "coal-align @ git+{REPO}" '
        f'"coal-align-app[gui] @ git+{REPO}#subdirectory=apps/coal-app"')
+R_INSTALL = 'remotes::install_github("Plumat-COAL/COAL", subdir = "packaging/r/coalr")'
 NOTE = "First release coming soon"
 BANNER = (f'<p class="note" role="status" id="no-release">{NOTE}: there is nothing to download yet. Install from '
           f'source instead (Python 3.10 or newer): <code>{PIP}</code></p>')
@@ -30,6 +31,9 @@ def rewrite(html: str) -> str:
     html = re.sub(re.escape(REPO) + r"/releases/(?:latest/)?download/coal_app_src\.tar\.gz",
                   "git+" + REPO + "#subdirectory=apps/coal-app", html)
     html = re.sub(re.escape(REPO) + r"/releases/(?:latest/)?download/coal_src\.tar\.gz", "git+" + REPO, html)
+    # coalr (install.html "R"): the package from the repository instead of the release file
+    html = re.sub(r'install\.packages\("' + re.escape(REPO) + r'/releases/(?:latest/)?download/coalr_src\.tar\.gz"'
+                  r', repos = NULL, type = "source"\)', R_INSTALL, html)
     if 'id="no-release"' not in html:
         html = re.sub(r'(<main\b[^>]*>)', lambda m: m.group(1) + "\n" + BANNER, html, count=1)
     return html

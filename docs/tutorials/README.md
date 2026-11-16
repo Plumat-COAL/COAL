@@ -1,20 +1,5 @@
 # COAL tutorials
 
-<!-- dev-version banner (tests/test_new_user_ux.py): remove it when 0.6.1 is released -->
-> **These pages describe the development version, 0.6.1.dev0.** The latest release is
-> [0.6.0](https://github.com/plumat-coal/COAL/releases/tag/v0.6.0); what has changed since is under "Unreleased" in
-> [CHANGELOG.md](../../CHANGELOG.md), and the `coalr` install lines pinned to v0.6.1 work once 0.6.1 is published. To use
-> the development version now, install from a checkout (Python 3.10+, a C++17 compiler, CMake 3.16+; about a minute):
->
-> ```
-> git clone https://github.com/plumat-coal/COAL && cd COAL
-> python -m pip install -e .
-> cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release
-> export COAL_CPP=$PWD/build/coal-cpp     # for this shell
-> ```
->
-> To keep `COAL_CPP` in new shells, and for what each install gives: [install.md, Option 3](../install.md#option-3-from-source).
-
 Worked examples on real, small, public data: from coding sequences to an interpreted dN/dS table. Every command
 was run as written, and the outputs shown are the real ones (COAL 0.6.0.dev0, Linux x86_64); CI reruns tutorials
 1, 2, 3 and 5 and compares their outputs with the text (`scripts/run_tutorials.py`).

@@ -30,10 +30,6 @@ install.packages("https://github.com/Plumat-COAL/COAL/releases/download/v0.6.1/c
 remotes::install_github("Plumat-COAL/COAL@v0.6.1", subdir = "packaging/r/coalr")
 ```
 
-<!-- until 0.6.1 is published (tests/test_docs_site.py): remove this note at the release -->
-Until 0.6.1 is published, there is no v0.6.1 for these lines to install. 0.6.0 has no `coalr` file; its package
-is installed from its tag: `remotes::install_github("Plumat-COAL/COAL@v0.6.0", subdir = "packaging/r/coalr")`.
-
 **Development version** (`main`, a `coalr` of R's development form, e.g. 0.6.1.9000; it can change at any time):
 
 ```r

@@ -56,10 +56,6 @@ dNdS(q, s, dnds_est.method = "YN", engine = "coal", comp_cores = 8)         # al
 dNdS_clusters(c(q, s), aa_aln_tool = "clustalo")                            # every pair of each DeepClust cluster
 ```
 
-<!-- until 0.6.1 is published (tests/test_docs_site.py): remove this note at the release -->
-Until 0.6.1 is published, there is no v0.6.1 to install: use
-`remotes::install_github("Plumat-COAL/COAL@v0.6.0", subdir = "packaging/r/coalr")`.
-
 - `codon_aln_tool = "coal"` gives the same codon alignments as `"pal2nal"` (so the same dN/dS), one pair at a
   time; the gain is robustness (no Perl, no length limit, a checked result). It is the fork's default when `coalr`
   is installed (`"pal2nal"` otherwise).

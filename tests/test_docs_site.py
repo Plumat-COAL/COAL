@@ -778,6 +778,8 @@ class TestSiteWithoutRelease(unittest.TestCase):
         with open(os.path.join(ROOT, "site", "index.html"), encoding="utf-8") as fh:
             self.assertIn('pip install "coal-align @ git+https://github.com/plumat-coal/COAL" "coal-align-app[gui] @ '
                           'git+https://github.com/plumat-coal/COAL#subdirectory=apps/coal-app"', m.rewrite(fh.read()))
+        with open(os.path.join(ROOT, "site", "install.html"), encoding="utf-8") as fh:   # coalr's line (0.6.1)
+            self.assertIn('remotes::install_github("Plumat-COAL/COAL", subdir = "packaging/r/coalr")', m.rewrite(fh.read()))
 
     def test_script_rewrites_every_page_given(self):
         import shutil

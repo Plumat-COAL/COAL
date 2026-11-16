@@ -1,13 +1,13 @@
 # COAL website and releases
 
 `site/` is the website at **https://plumat-coal.github.io/COAL/**: plain HTML, CSS and JavaScript, no build
-step, nothing loaded from other sites (no CDNs, font services, trackers or analytics). About 390 KB in all
+step, nothing loaded from other sites (no CDNs, font services, trackers or analytics). About 395 KB in all
 (budget 400 KB, and 200 KB without images: `tests/test_docs_site.py`).
 
 | File | What it is |
 |---|---|
 | `index.html` | home: what COAL is, the downloads, a short example, why use it, how to get the C++ engine, a cite pointer |
-| `install.html` | install steps for Windows (SmartScreen, Smart App Control), macOS, Linux, the command line; files and checksums |
+| `install.html` | install steps for Windows (SmartScreen, Smart App Control), macOS, Linux, the command line, R (`coalr`, from 0.6.1); files and checksums |
 | `guide.html` | the explainer animation inline (an iframe of `explainer.html`), an example run, warnings and errors, from coding sequences to dN/dS (0.6.0), the C++ engine, help |
 | `differences.html` | "Why use it" in the menu: the reasons, the differences from PAL2NAL v14 (the test counts) and the speed table |
 | `cite.html` | how to cite COAL and PAL2NAL (the version is in a `data-version-ref` span); what to cite for what was run, each cited paper's title a link to its DOI (the table and list follow `src/coal/citations.py`; `tests/test_citations.py` compares them). COAL itself has no DOI |
