@@ -45,7 +45,6 @@ import re
 import shlex
 import shutil
 import signal
-import stat
 import subprocess
 import sys
 import tarfile
@@ -60,6 +59,11 @@ from . import __version__
 from . import align as _align
 from . import msa as _msa
 from .core import CoalError
+from .outputs_record import RUN_OUTPUTS as _RUN_OUTPUTS  # noqa: F401  (these four: the names they had here)
+from .outputs_record import RUN_TABLES as _RUN_TABLES  # noqa: F401
+from .outputs_record import OutputsRecord, OutputsRefused, check_report_path
+from .outputs_record import is_coal_report as _is_coal_report  # noqa: F401
+from .outputs_record import starts_like_coal_record as _starts_like_coal_record  # noqa: F401
 from .pipeline import release_output_lock, take_output_lock
 from .tables import SUPPORTED
 
@@ -101,17 +105,6 @@ _CLUSTER_HEADERS = {("centroid", "member"), ("representative", "member"), ("repr
 _EXE = ".exe" if os.name == "nt" else ""
 
 
-# Files and folders a run writes into the output folder (besides work/): whatever an earlier run left of them is
-# removed when a run starts, so that the folder never mixes two runs (a dnds.kaks or codon_alignments.fasta of a
-# run with other options, the dnds.tsv.tmp of a killed run).
-# Every table and alignment file is written as NAME.tmp and renamed when it is complete (_atomic, and the engine's
-# --new-files), so the .tmp names are a run's files too: a run that was killed leaves them, the next one removes them.
-_RUN_TABLES = ("dnds.tsv", "dnds.kaks", "codon_alignments.fasta", "protein_alignments.fasta", "cluster_summary.tsv",
-               "genes.tsv", "orthologs.tsv", "unpaired.tsv", "clusters.tsv", "realign.tsv", "failed.tsv",
-               "report.json")
-_RUN_OUTPUTS = _RUN_TABLES + tuple(n + ".tmp" for n in _RUN_TABLES) + ("realign.tsv.body",)
-
-
 def _open_new(path: str):
     """A text file created anew for writing: whatever has this name (a leftover, or a symbolic link, which is
     removed and never followed) goes first, then the file is created with O_CREAT | O_EXCL | O_NOFOLLOW (where
@@ -145,36 +138,6 @@ def _atomic(path: str):
         except OSError:
             pass
         raise
-
-
-def _starts_like_coal_record(path: str) -> bool:
-    """A work/outputs.json that json cannot read but that begins as COAL writes it ({"coal_version": ...: written
-    through a temporary file and renamed, so it is cut short only by a damaged disk or an edit): COAL's mark on
-    work/. Any other file of that name is not (#98)."""
-    try:
-        if not os.path.isfile(path):
-            return False
-        with open(path, "rb") as fh:
-            return fh.read(16) == b'{"coal_version":'
-    except OSError:
-        return False
-
-
-def _is_coal_report(path: str) -> bool:
-    """True when `path` is a JSON report that COAL wrote (a `coal pipeline` report, or `coal --report`'s: its
-    "schema" is coal.<name>/<n>); what `--report FILE` may replace without --overwrite. A marker, not a
-    validation: a JSON object with such a "schema" counts, whatever else it holds (the question is only whose file
-    it is, and a report that COAL cut short, {"schema": ..., "report_truncated": true}, is COAL's too). A file
-    larger than any report (256 MiB) is not read."""
-    try:
-        if not os.path.isfile(path) or os.path.getsize(path) > 256 << 20:
-            return False
-        with open(path, encoding="utf-8", errors="backslashreplace") as fh:
-            rep = json.load(fh)
-    except (OSError, ValueError):
-        return False
-    schema = rep.get("schema") if isinstance(rep, dict) else None
-    return isinstance(schema, str) and re.fullmatch(r"coal\.[a-z_]+/\d+", schema) is not None
 
 
 class _Terminated(SystemExit):
@@ -1208,14 +1171,9 @@ class _Run:
         self.gene_failures: dict = {}
         self.lock = None        # <out_dir>.coal-lock while this run owns the output folder
         self._inputs: list[tuple[str, str]] = []
-        self._earlier: tuple[set, set] = (set(), set())
-        self._earlier_read: set = set()   # outputs of an earlier COAL run that a later one read in place (below)
-        self._listed: set = set()         # the outputs a COAL report.json of this folder lists (_earlier_outputs)
-        # the .fasta names an earlier run recorded for its codon_alignments/ / protein_alignments/ (None: no list,
-        # a run of 0.6.0 or one killed while it wrote them; every .fasta there is then that run's)
-        self._dir_files: dict = {}
-        self._work_is_coal = False        # DIR/work exists and an earlier COAL run made it (_earlier_outputs)
-        self._record: dict = {}           # what _record_outputs wrote into work/outputs.json
+        # whose files are in the output folder: what earlier COAL runs wrote there, and this run's record of what
+        # it writes (work/outputs.json; coal/outputs_record.py)
+        self.owned = OutputsRecord(self.out, SCHEMA)
         self.pairs_in_place = False   # --pairs is DIR/orthologs.tsv itself: read, not written again
         self._engine = None     # the running coal-cpp codon-dnds (killed if the run is interrupted)
         self.started = _utc_now()
@@ -1248,10 +1206,18 @@ class _Run:
         except CoalError as e:
             raise PipelineError(str(e).replace("write to another file", "use another output folder")) from None
         try:
-            self._check_report_path()
-            self._check_inputs()
-            self._earlier = self._earlier_outputs()
-            self._check_foreign_outputs()
+            try:
+                # (in this order: the first refusal is the one a run gets)
+                check_report_path(self.a.report)    # --report a folder, a named pipe, a device: always refused
+                self._check_inputs()
+                # what earlier COAL runs wrote here; an alignment folder this run writes that holds what no run
+                # wrote there, an output name, a work/ or a --report FILE that is not COAL's: refused
+                self.owned.read_earlier(self.a.report, self._report_is_default(), self._writes_alignment_folders())
+                self.owned.check_foreign(self._planned_outputs(), overwrite=getattr(self.a, "overwrite", False),
+                                         pairs_in_place=self.pairs_in_place, report=self.a.report,
+                                         report_is_default=self._report_is_default())
+            except OutputsRefused as e:
+                raise PipelineError(str(e)) from None
         except PipelineError:
             # nothing is written into the folder (no report either: report.json could be the input itself)
             self.release()
@@ -1550,189 +1516,19 @@ class _Run:
     # the folders of per-cluster alignment files (cluster mode): name -> the option that writes it
     _ALIGNMENT_DIRS = {"codon_alignments": "keep_alignments", "protein_alignments": "keep_protein_alignments"}
 
-    def _earlier_outputs(self) -> tuple[set, set]:
-        """What an earlier run is known to have written here: the names in work/outputs.json (written when a
-        run starts, so a killed run counts), or, for a run of a version without that file, the outputs its
-        report.json lists. Second value: the folders (codon_alignments, protein_alignments) whose .fasta files
-        are that run's (a cluster run with --keep-alignments / --keep-protein-alignments)."""
-        names: set = set()
-        dirs: set = set()
-        codon_dir = False
-        # The reports of earlier runs into this folder: DIR/report.json, and the --report file of this run when it
-        # is a COAL report of this very folder (an earlier run with the same --report elsewhere). What they list
-        # is COAL's for _check_foreign_outputs when work/outputs.json is gone (work/ deleted, an older version) or
-        # has no read_in_place (a development build's record).
-        reports = []
-        for path, here_only in ((self.path("report.json"), False), (self.a.report, True)):
-            if not path or (here_only and self._report_is_default()) or not os.path.isfile(path):
-                continue   # (not a regular file: a named pipe would block open(); #98)
-            try:
-                with open(path, encoding="utf-8", errors="backslashreplace") as fh:
-                    rep = json.load(fh)
-            except (OSError, ValueError):
-                continue
-            if not (isinstance(rep, dict) and rep.get("schema") == SCHEMA and isinstance(rep.get("outputs"), dict)):
-                continue
-            if here_only and not (isinstance(rep.get("out_dir"), str)
-                                  and os.path.realpath(rep["out_dir"]) == os.path.realpath(self.out)):
-                continue
-            reports.append((rep, not here_only))
-        self._listed = {v for rep, _ in reports for v in rep["outputs"].values()
-                        if isinstance(v, str) and v in _RUN_TABLES}
-        try:
-            if not os.path.isfile(self.wpath("outputs.json")):
-                raise FileNotFoundError(self.wpath("outputs.json"))
-            with open(self.wpath("outputs.json"), encoding="utf-8", errors="backslashreplace") as fh:
-                rec = json.load(fh)
-            names = {n for n in rec["files"] if isinstance(n, str)}
-            read = rec.get("read_in_place")
-            if isinstance(read, list):
-                self._earlier_read = {n for n in read if isinstance(n, str)}
-                # this record says what was read in place: a report's list is not needed (and would make a
-                # user's own file read in place, which its report lists, look like COAL's)
-                self._listed = set()
-            codon_dir = rec.get("codon_alignments_dir") is True
-            if rec.get("protein_alignments_dir") is True:
-                dirs.add("protein_alignments")
-            for name in self._ALIGNMENT_DIRS:
-                listed = rec.get(name + "_files")
-                if isinstance(listed, list):
-                    self._dir_files[name] = {n for n in listed if isinstance(n, str)}
-            self._work_is_coal = True
-        except (OSError, ValueError, KeyError, TypeError):
-            # A work/outputs.json that cannot be read (cut short, edited) is still COAL's mark on work/ (COAL writes
-            # it through a temporary file; a user's work/ has none), and so is a work/ that holds only an empty
-            # logs/ (a run killed between making work/logs and writing the record): #98
-            w = self.work
-            try:
-                self._work_is_coal = (_starts_like_coal_record(self.wpath("outputs.json"))
-                                      or (os.listdir(w) == ["logs"] and os.path.isdir(self.wpath("logs"))
-                                          and not os.path.islink(self.wpath("logs"))
-                                          and not os.listdir(self.wpath("logs"))))
-            except OSError:
-                pass
-            # no record (a version without it, or work/ deleted): the outputs the first of those reports lists
-            if reports:
-                rep, in_folder = reports[0]
-                names = {v for v in rep["outputs"].values() if isinstance(v, str)}
-                names |= {"report.json", "failed.tsv"} if in_folder else {"failed.tsv"}
-                codon_dir = rep.get("mode") == "clusters" and "codon_alignments" in names
-                names |= {n + ".tmp" for n in list(names)}
-                # work/ of a version without work/outputs.json: the folder's own report.json says a COAL run was here
-                self._work_is_coal = self._work_is_coal or in_folder
-        if codon_dir:
-            dirs.add("codon_alignments")
-        for name, opt in self._ALIGNMENT_DIRS.items():
-            d = self.path(name)
-            if not (os.path.isdir(d) and not os.path.islink(d)):
-                dirs.discard(name)
-            if not (getattr(self.a, opt) and self.mode == "clusters" and os.path.lexists(d)):
-                continue
-            if name not in dirs:
-                # not COAL's: the engine would write its files among (or over) what the folder holds
-                if not os.path.isdir(d) or os.path.islink(d) or os.listdir(d):
-                    raise PipelineError(f"{d} exists and was not written by a COAL run: --{opt.replace('_', '-')} "
-                                        "writes one file per cluster there and would mix with (or replace) what "
-                                        "it holds. Nothing was changed: move it away or use another output folder "
-                                        "(--overwrite does not apply to a folder)")
-                continue
-            mine = self._foreign_alignment_files(name)
-            if mine:
-                # COAL's folder, with .fasta files of the user's among the earlier run's: kept at the start, but
-                # this run writes a file per cluster there and one may have the same name (#96)
-                listed = ", ".join(mine[:3]) + (f" and {len(mine) - 3:,} more" if len(mine) > 3 else "")
-                raise PipelineError(f"{d} holds {listed}, which no COAL run wrote there: --{opt.replace('_', '-')} "
-                                    "writes one file per cluster there and could replace "
-                                    f"{'it' if len(mine) == 1 else 'them'}. Nothing was changed: move "
-                                    f"{'it' if len(mine) == 1 else 'them'} out of {d}, or use another output "
-                                    "folder (--overwrite does not apply to a folder)")
-        return {n for n in names if n in _RUN_OUTPUTS}, dirs
+    def _writes_alignment_folders(self) -> list[str]:
+        """The per-cluster alignment folders this run writes (cluster mode, --keep-alignments /
+        --keep-protein-alignments)."""
+        return [name for name, opt in self._ALIGNMENT_DIRS.items() if getattr(self.a, opt) and self.mode == "clusters"]
 
-    def _foreign_alignment_files(self, name: str) -> list[str]:
-        """The .fasta files in the alignment folder `name` (COAL's) that the earlier run's record does not list: the
-        user's own. A folder recorded without a list (0.6.0, or work/ deleted: report.json names the folder only)
-        has none but those whose .fasta is not in the engine's lower case."""
-        listed = self._dir_files.get(name)
-        d = self.path(name)
-        if not os.path.isdir(d) or os.path.islink(d):
-            return []
-        # .fasta in any case (X.FASTA): on a case-insensitive file system the engine's X.fasta would replace it
-        # (#98). Without a list the earlier run's are the files with the engine's own .fasta.
-        return sorted(n for n in os.listdir(d) if n.lower().endswith(".fasta")
-                      and (n not in listed if listed is not None else not n.endswith(".fasta")))
-
-    def _check_report_path(self) -> None:
-        """--report naming something that is not a regular file (also through a link): a folder, a named pipe, a
-        device such as /dev/null. Refused before anything opens it (a named pipe would block the run:
-        #98) and whatever --overwrite says (the report is written through FILE.tmp and renamed onto FILE)."""
-        rp = self.a.report
-        if not rp:
-            return
-        try:
-            st = os.stat(rp)
-        except OSError:
-            return          # (missing, or a broken link: written as a new file)
-        if stat.S_ISREG(st.st_mode):
-            return
-        if stat.S_ISDIR(st.st_mode):
-            raise PipelineError(f"--report {rp} is a folder: the report is written as a file of that name. Nothing "
-                                f"was changed: name a file, e.g. {os.path.join(rp, 'report.json')}")
-        raise PipelineError(f"--report {rp} is not a regular file (a device or a named pipe): the report is written "
-                            "as a new file and renamed onto that name. Nothing was changed: name a regular file "
-                            "(without --report it is DIR/report.json)")
-
-    def _check_foreign_outputs(self) -> None:
-        """Refuse, before anything in the folder is removed or written, a run whose outputs would replace files
-        that no COAL run wrote there: a genes.tsv, dnds.tsv, report.json or clusters.tsv of the user's own (#87:
-        they were replaced without a word, also by `-o examples/dnds`, whose orthologs.tsv is
-        part of the repository). A file an earlier run recorded (work/outputs.json, or the outputs of its
-        report.json) is that run's and is replaced as before; so is everything with --overwrite. Temporary names
-        (NAME.tmp) are COAL's own and not checked. Then, the same way (#96): a --report
-        FILE that exists and is not a COAL report, and a DIR/work/ that no COAL run made (not empty, no
-        work/outputs.json, no COAL report.json in DIR); a `work` that is not a folder is refused always."""
-        w = self.work
-        if os.path.lexists(w) and not os.path.isdir(w):
-            # (a file or a broken link: COAL never removes it, so --overwrite cannot help)
-            raise PipelineError(f"{w} exists and is not a folder: the run keeps its working files in DIR/work. "
-                                "Nothing was changed: move it away or use another output folder")
-        if getattr(self.a, "overwrite", False):
-            return
-        known, _ = self._earlier
-        known = known | self._earlier_read | self._listed
-        foreign = []
-        for name in self._planned_outputs():
-            if name.endswith((".tmp", ".body")) or name in known:
-                continue
-            if name == "orthologs.tsv" and self.pairs_in_place:
-                continue    # --pairs DIR/orthologs.tsv: read and kept as it is
-            if os.path.lexists(self.path(name)):
-                foreign.append(name)
-        if foreign:
-            raise PipelineError(
-                f"{self.out} already holds {_and(foreign)}, which this run would replace and which no COAL run "
-                f"wrote there (work/outputs.json does not list {'it' if len(foreign) == 1 else 'them'}). Nothing "
-                "was changed. Use a new -o folder, or add --overwrite to replace "
-                f"{'it' if len(foreign) == 1 else 'them'}")
-        rp = self.a.report
-        if rp and not self._report_is_default() and os.path.lexists(rp) and not _is_coal_report(rp):
-            # --report onto a file of the user's, in DIR or anywhere (#96)
-            raise PipelineError(f"--report {rp} already exists and is not a COAL report: this run would replace "
-                                "it. Nothing was changed. Name another --report file, or add --overwrite to "
-                                "replace it")
-        if os.path.isdir(w) and not self._work_is_coal and os.listdir(w):
-            # a work/ of the user's (#96): the run would write its logs, state and copies there
-            raise PipelineError(f"{w} exists and no COAL run made it (it has no work/outputs.json): this run keeps "
-                                "its working files there (logs, state.json, decompressed inputs) and would mix them "
-                                "with what it holds. Nothing was changed. Use a new -o folder, move it away, or add "
-                                "--overwrite to write into it (files there with COAL's own names are replaced; "
-                                "nothing else is touched)")
-
+    # The output folder's ownership record (coal/outputs_record.py has the rules; start() makes its checks): _Run
+    # says what this run plans to write and when the engine starts and ends.
     def _replaced_notice(self) -> None:
         """One notice when the output folder holds the results of an earlier run, which this run replaces (#81:
         they were replaced without a word). Not with --resume, which means to go on there."""
         if self.a.resume:
             return
-        known, _ = self._earlier
+        known = self.owned.known
         if "dnds.tsv" not in known or not os.path.isfile(self.path("dnds.tsv")):
             return   # (a run that failed early left no results: its report and failed.tsv go without a word)
         when = ""
@@ -1749,98 +1545,47 @@ class _Run:
                  "Use another -o to keep them")
 
     def _clear_earlier_outputs(self) -> None:
-        """Remove the files an earlier COAL run wrote into this folder, so the folder holds this run's results
-        only. Only files a run is known to have written are removed (_earlier_outputs), never one of this run's
-        inputs, and never a file COAL has no record of: a `clusters.tsv` or a codon_alignments/ (or
-        protein_alignments/) folder that was the user's stays. --resume keeps the stage outputs it can reuse (clusters.tsv, realign.tsv; everything
-        under work/ is kept anyway)."""
+        """Remove the files an earlier COAL run wrote into this folder (OutputsRecord.clear), so the folder holds
+        this run's results only; never one of this run's inputs. --resume keeps the stage outputs it can reuse
+        (clusters.tsv, realign.tsv; everything under work/ is kept anyway)."""
         a = self.a
         keep = set()
         if a.resume and self.mode == "clusters" and not a.clusters:
             keep.add("clusters.tsv")
             if a.realign:
                 keep.add("realign.tsv")
-        known, dirs = self._earlier
         try:
-            for name in sorted(known):
-                p = self.path(name)
-                if name not in keep and (os.path.isfile(p) or os.path.islink(p)) and self._is_input(p) is None:
-                    os.remove(p)
-            for d in (self.path(name) for name in sorted(dirs)):
-                if not os.path.isdir(d) or os.path.islink(d):
-                    continue
-                listed = self._dir_files.get(os.path.basename(d))
-                for n in os.listdir(d):
-                    p = os.path.join(d, n)
-                    # a .fasta the earlier run recorded (every .fasta when it recorded none), and the .fasta.tmp
-                    # files a run that was killed left; a user's own .fasta in the folder stays (#96)
-                    theirs = n.endswith(".fasta.tmp") or (n.endswith(".fasta") and (listed is None or n in listed))
-                    if theirs and self._is_input(p) is None:
-                        os.remove(p)
-                if not os.listdir(d):
-                    os.rmdir(d)
+            self.owned.clear(keep, lambda p: self._is_input(p) is not None)
         except OSError as e:
             raise PipelineError(f"cannot remove the earlier run's {e.filename or 'outputs'} in {self.out!r}: "
                                 f"{e.strerror or e}") from None
 
     def _record_outputs(self) -> None:
-        """work/outputs.json: the names this run may write, for the next run's clean-up. Written before the first
-        output, so that what a killed run left is known too."""
+        """work/outputs.json: the names this run may write, for the next run's clean-up (OutputsRecord.new_record).
+        Written before the first output, so that what a killed run left is known too."""
         planned = [n for n in self._planned_outputs() if not (n == "orthologs.tsv" and self.pairs_in_place)]
-        # An earlier COAL run's output that this run reads where it is (`--pairs DIR/orthologs.tsv`, `--clusters
-        # DIR/clusters.tsv`): not in "files", so that no later run removes it at its start (it may have been edited),
-        # but still COAL's for _check_foreign_outputs, so that a later run may write it again.
-        # Carried forward from run to run while the file is there and no run writes it (a run that neither reads
-        # nor writes it keeps the entry: #87). After _clear_earlier_outputs, an earlier output that
-        # this run does not write is still there only when it is one of this run's inputs, or was read in place.
-        known = self._earlier[0] | self._earlier_read | self._listed
-        read = sorted(n for n in known if n in _RUN_TABLES and n not in planned and os.path.isfile(self.path(n)))
-        self._record = {"coal_version": __version__, "files": sorted(planned), "read_in_place": read,
-                        "codon_alignments_dir": bool(self.a.keep_alignments and self.mode == "clusters"),
-                        "protein_alignments_dir": bool(self.a.keep_protein_alignments and self.mode == "clusters")}
-        # The alignment folders this run writes hold no .fasta now (the earlier run's were removed, and one of
-        # anyone else's refused the run): an empty list, so that a run that fails before its engine makes no file
-        # there the run's (#98). engine_starts() drops the list just before the engine writes there
-        # (a run killed while it writes then left files COAL cannot name: all of them are the run's, as in 0.6.0),
-        # and record_alignment_files() lists what the engine wrote when it ends in any way but SIGKILL.
-        for name, opt in self._ALIGNMENT_DIRS.items():
-            if self._record[name + "_dir"]:
-                self._record[name + "_files"] = []
+        self.owned.new_record(planned, self._writes_alignment_folders())
         self._write_record()
 
+    @property
+    def _record(self) -> dict:
+        """This run's record, as _write_record() puts it into work/outputs.json."""
+        return self.owned.record
+
     def _write_record(self) -> None:
-        tmp = self.wpath("outputs.json.tmp")
-        with open(tmp, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as fh:
-            json.dump(self._record, fh)
-            fh.write("\n")
-        os.replace(tmp, self.wpath("outputs.json"))
+        self.owned.write()
 
     def engine_starts(self) -> None:
-        """Cluster mode, just before coal-cpp starts writing the per-cluster files: the record of the folders it
-        writes has no list from now until record_alignment_files() writes one, so that what a run killed meanwhile
-        (SIGKILL, out of memory, power loss) wrote counts as the run's, every .fasta of the folder, as for a
-        folder of 0.6.0: the next run removes them, and `--resume --keep-alignments` goes on (#98).
-        The folders hold nothing of anyone else's at this point (_earlier_outputs refused that)."""
-        dropped = False
-        for name in self._ALIGNMENT_DIRS:
-            if self._record.pop(name + "_files", None) is not None:
-                dropped = True
-        if dropped:
+        """Cluster mode, just before coal-cpp starts writing the per-cluster files: the alignment folders' lists
+        are dropped from the record until record_alignment_files() (OutputsRecord.engine_starts)."""
+        if self.owned.engine_starts():
             self._write_record()
 
     def record_alignment_files(self) -> None:
-        """Cluster mode, after the engine: the .fasta files this run wrote into codon_alignments/ and
-        protein_alignments/, by name, into work/outputs.json, so that the next run removes those and no others (a
-        file of the user's put there later stays: #96). The folder held no .fasta of anyone
-        else's when the engine started (_earlier_outputs refuses that), so what it holds now is this run's."""
-        changed = False
+        """Cluster mode, after the engine (whatever its end): the .fasta files it wrote, by name, into
+        work/outputs.json (OutputsRecord.list_alignment_files)."""
         try:
-            for name, opt in self._ALIGNMENT_DIRS.items():
-                d = self.path(name)
-                if getattr(self.a, opt) and os.path.isdir(d) and not os.path.islink(d):
-                    self._record[name + "_files"] = sorted(n for n in os.listdir(d) if n.endswith(".fasta"))
-                    changed = True
-            if changed:
+            if self.owned.list_alignment_files():
                 self._write_record()
         except OSError as e:
             # (never a traceback for a run whose results are there: the next run then keeps those files, as not
