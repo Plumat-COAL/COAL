@@ -1071,7 +1071,11 @@ The likelihood of a diverged pair can have two maxima, one at a moderate t and o
 (t at its bound, omega small); which is higher depends on the pair, and codeml reports whichever its random
 start reaches. COAL starts a pair whose first maximum has t of 1 or more from three further points (one of them
 on the ridge) and reports the highest maximum. On 4,388 *S. cerevisiae* / *C. glabrata* pairs the starts
-disagreed for 22 pairs, all with t above 2.
+disagreed for 22 pairs, all with t above 2. The ridge start takes its kappa and its omega t from where the first
+start stopped. Where the first start had to be run a second time with lengthened steps ("Statuses", the row
+`not_converged`), that is the second run's stop, which can lead the ridge start to a lower part of the ridge than
+the first run's stop does (`GCTGATCCC` against `GATGCCGCG` under code 4: lnL -12.5851 from the one, -12.5748
+from the other); such a pair gets a ridge start from each.
 
 **Genetic codes.** `-c` sets the code for GY as for every method, and all 17 tables work (NCBI 1 to 6, 9 to 16,
 21 to 23). The code enters the model in three places, each taken from the table: its stop codons are not states
@@ -1127,8 +1131,8 @@ error; `--max-ds` flags what you consider too high.
 ### Differences from codeml and KaKs_Calculator
 
 1. **Deterministic and multi-start.** codeml draws its starting values at random (from the clock unless a seed
-   is set) and stops at the maximum it reaches; COAL's starts are fixed, and a diverged pair gets four. Where the
-   two differ, COAL's likelihood is the higher one (below).
+   is set) and stops at the maximum it reaches; COAL's starts are fixed, and a diverged pair gets four (some
+   five: above). Where the two differ, COAL's likelihood is the higher one (below).
 2. **Wider bounds** (above). A pair with omega below 0.001 or kappa below 0.4 has those estimates in COAL and
    the bound in codeml, with a slightly higher likelihood in COAL.
 3. **Saturation is a status.** codeml prints dS = 59.9 for a pair with t at 50; COAL prints `NA` and

@@ -46,6 +46,23 @@
 - Texts: `CITATION.cff` has `date-released: 2026-11-15` for 0.6.0; `docs/python-api.md` no longer says its
   examples were run with 0.6.0.dev0; coalr's NEWS no longer lists a development-version note for 0.6.0;
   `scripts/release_notes.py` no longer gives a wrong size for the 0.6.0 section.
+- **GY: a ridge start from each of the first start's two runs** (review of main after #97, M1). The ridge start of a
+  diverged pair (t at its bound) takes kappa and omega t from where the first start stopped. Since the first start
+  can be run a second time with longer steps (below), that was the second run's stop, and from there the ridge
+  start could reach a lower part of the ridge than from the first run's stop, which 0.6.0 used: `GCTGATCCC` against
+  `GATGCCGCG` under code 4 had lnL -12.5851 (kappa 17) where 0.6.0 had -12.5748 (kappa 1e-6). A pair whose first
+  start was replaced by its second run now gets a ridge start from each stop. That pair is back at -12.5748, and
+  `GTTAAGTAC` against `GGTAATGAG` under code 6, `saturated` with lnL -15.8668 in 0.6.0 and since, is `ok` with lnL
+  -15.3300. Nothing else changes: at 17 digits no GY row of 4,388 yeast, 2,862 *Salmonella* / *Shigella* and 3,142
+  *E. coli* / *Salmonella* pairs differs, and of the 25,200 random pairs four do, each with a higher likelihood (by
+  0.010 to 0.24; two go from `saturated` to `ok`, none to `not_converged`, of which there are still none). Against
+  0.6.0 no pair of the 25,200 has a likelihood lower by more than 1e-4 any more.
+- GY, inside: the optimiser's stopping rule near a bound, the lengthening of a step and the choice among the starts
+  are functions of their own (`probe_zone_ends`, `lengthen_step`, `choose_start`, `apply_saturation`), and the
+  choice among the starts has a test with made-up starts (`tests/cpp/kaks_gy_choose_start.cpp`): the rule that an
+  unconverged start displaces a usable one only when it is more than 1e-4 higher, which no pair found so far
+  reaches, is now held in place. The same bytes at 17 digits as before this change on the fixtures, the three sets
+  above and the 25,200 random pairs.
 - **GY: a start of the optimiser that crawled to its step limit is run again with longer steps.** On a nearly flat
   likelihood (two random codons with every site different: `AACTGG` against `GGTACA`) the first steps have the
   gradient's own size, 1e-4 in log kappa and log omega, and no curvature for the BFGS update to scale them with, so
@@ -86,8 +103,9 @@
   six digits, no status change); one of the 20 codeml fixtures (`real0_8`: omega 1.143e-6 to 1e-6). On the 25,200
   random pairs, against the change above: no likelihood lower by more than 1e-4 (three flat pairs lower by 1.4e-7 to
   1.8e-7, the tolerance of the flat-likelihood rule, which now calls them `saturated`); 39 flat pairs of 2 to 4 codons
-  go from `ok` or `warning` to `saturated` and one back. Against 0.6.0 one pair of the 25,200 has a lower likelihood
-  (3 codons, saturated in both, 0.010 lower since the change above).
+  go from `ok` or `warning` to `saturated` and one back. Against 0.6.0 one pair of the 25,200 had a lower likelihood
+  (3 codons, saturated in both, 0.010 lower since the change above): `GCTGATCCC` / `GATGCCGCG`, put right by the
+  ridge start from each run (above).
 - `coal pipeline clusters --keep-protein-alignments` (or `--keep-alignments`): when the engine step ends while an
   alignment folder it writes is not there (`os.makedirs` failed: permission denied, disk full), the run now records
   an empty list of files for it in `work/outputs.json`. It recorded none, which means "every `.fasta` here is the
