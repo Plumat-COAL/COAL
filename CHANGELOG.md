@@ -109,11 +109,11 @@
   in the real sets below is within 0.18 per codon of the plateau (the smallest: 0.182, yeast), so the scan leaves
   them alone and GY's CPU time there is the same as before (two intermediate versions cost 8 to 12 %). Against main
   at 17 digits: of 37,800 random pairs (seeds 1, 2, 97, 98, 11, 4242; nine codes) 6,837 have a higher likelihood (up
-  to 3.4), none is lower by more than 1e-7 (two by 5e-12 and 5e-13: flat in kappa), none is `not_converged`; 1,099
-  go from `saturated` to `ok`, 363 to `warning`, 281 from `ok` and 138 from `warning` to `saturated`. No GY row of
-  the 4,388 yeast, 2,862 *Salmonella* / *Shigella* and 3,142 *E. coli* / *Salmonella* pairs changes except the
-  identical pairs (next). docs/kaks.md no longer says that COAL's likelihood is the higher one against codeml as if
-  guaranteed: it is on every pair compared, and the search is local.
+  to 3.4), none is lower, none is `not_converged`; 1,099 go from `saturated` to `ok`, 363 to `warning`, 281 from
+  `ok` and 138 from `warning` to `saturated`. No GY row of the 4,388 yeast, 2,862 *Salmonella* / *Shigella* and
+  3,142 *E. coli* / *Salmonella* pairs changes except the identical pairs (next). docs/kaks.md no longer says that
+  COAL's likelihood is the higher one against codeml as if guaranteed: it is on every pair compared, and the search
+  is local.
 - **GY: the likelihood of identical sequences** is the sum of log pi over the codons (the likelihood at t = 0); it
   was printed twice that (for 4 codons about 10 too low). Only the lnL column of `--ml-columns` changes: 665 of
   the 37,800 random pairs and 5 of the real pairs above.
