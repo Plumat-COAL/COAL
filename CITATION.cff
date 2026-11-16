@@ -5,8 +5,12 @@ type: software
 authors:
   - given-names: Chloe
     family-names: Newton
+    alias: chloe-newt
+    website: "https://github.com/chloe-newt"
   - given-names: Keanu
     family-names: Murati
+    alias: Keanu-MUR
+    website: "https://github.com/Keanu-MUR"
 # The development tree (X.Y.Z.devN, GPL-3.0-only) names the release it becomes and has no date-released (the
 # release commit adds it; docs/development.md "Releasing COAL"); cite the version `coal --version` prints. COAL 0.5.0
 # and earlier were released under the MIT License.
