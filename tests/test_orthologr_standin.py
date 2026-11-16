@@ -10,6 +10,9 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tests"))
+from subprocess_env import absolute_pythonpath, python_env  # noqa: E402
+
 STANDIN = ROOT / "packaging" / "orthologr" / "pal2nal.pl"
 EX = ROOT / "examples" / "clean"
 PERL = shutil.which("perl")
@@ -28,7 +31,7 @@ def _bin_dir():
 @unittest.skipUnless(PERL, "perl is not installed")
 class TestStandIn(unittest.TestCase):
     def run_standin(self, args, env_extra=None):
-        env = dict(os.environ, PATH=_bin_dir() + os.pathsep + os.environ.get("PATH", ""))
+        env = python_env({"PATH": _bin_dir() + os.pathsep + os.environ.get("PATH", "")})   # runs in examples/clean
         env.pop("COAL_PAL2NAL", None)
         env.update(env_extra or {})
         return subprocess.run([PERL, str(STANDIN), *args], capture_output=True, cwd=EX, env=env, timeout=120,
@@ -36,7 +39,8 @@ class TestStandIn(unittest.TestCase):
 
     def test_same_output_as_coal_pal2nal(self):
         want = subprocess.run([sys.executable, "-m", "coal_compat", "protein.aln.fasta", "dna.fasta", "-output",
-                               "fasta"], capture_output=True, cwd=EX, timeout=120, stdin=subprocess.DEVNULL)
+                               "fasta"], capture_output=True, cwd=EX, timeout=120, stdin=subprocess.DEVNULL,
+                              env=python_env())
         self.assertEqual(want.returncode, 0, want.stderr)
         pal2nal = Path(_bin_dir()) / ("pal2nal.exe" if os.name == "nt" else "pal2nal")
         if not pal2nal.exists():
@@ -111,6 +115,29 @@ class TestStandIn(unittest.TestCase):
         self.assertIn(b"cannot run", got.stderr)
         self.assertIn(b"pip install coal-align", got.stderr)
         self.assertNotIn(b"Can't exec", got.stderr)  # Perl's own warning is silenced
+
+
+class TestSubprocessEnv(unittest.TestCase):
+    """tests/subprocess_env.py: a relative PYTHONPATH (PYTHONPATH=src) is made absolute, src/ first, so a
+    subprocess in another folder imports this checkout (REVIEW-COAL-3 L4)."""
+
+    def test_relative_entries_become_absolute(self):
+        sep = os.pathsep
+        self.assertEqual(absolute_pythonpath(None), str(ROOT / "src"))
+        self.assertEqual(absolute_pythonpath("src", base=str(ROOT)), str(ROOT / "src"))   # no second copy
+        got = absolute_pythonpath(sep.join(["", "lib", str(ROOT / "x")]), base=str(ROOT))
+        self.assertEqual(got.split(sep), [str(ROOT / "src"), str(ROOT / "lib"), str(ROOT / "x")])
+        env = python_env({"A": "1"}, base={"PYTHONPATH": "src", "PATH": "/bin"})
+        self.assertEqual(env["A"], "1")
+        self.assertEqual(env["PATH"], "/bin")
+        self.assertTrue(all(os.path.isabs(p) for p in env["PYTHONPATH"].split(sep)), env["PYTHONPATH"])
+
+    def test_a_subprocess_in_another_folder_imports_this_checkout(self):
+        r = subprocess.run([sys.executable, "-c", "import coal, coal_compat; print(coal.__file__)"],
+                           capture_output=True, text=True, cwd=EX, timeout=60, stdin=subprocess.DEVNULL,
+                           env=python_env(base={**os.environ, "PYTHONPATH": "src"}))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertTrue(Path(r.stdout.strip()).resolve().is_relative_to((ROOT / "src").resolve()), r.stdout)
 
 
 if __name__ == "__main__":

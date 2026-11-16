@@ -264,3 +264,23 @@ test_that("the shipped example and the vignette's steps", {
   expect_true(all(attr(f, "flagged") > 0))            # the vignette shows each of the three flags
   expect_true(any(f$status == "ok"))
 })
+
+test_that("attr(, \"alignment\") records the protein-alignment scoring (needle's by default, pwalign's on request)", {
+  want_needle <- list(matrix = "BLOSUM62", gap_open = 10, gap_extend = 0.5, end_gaps = "free", tie_break = "leftmost")
+  want_pwalign <- list(matrix = "BLOSUM62-PWALIGN", gap_open = 14, gap_extend = 4, end_gaps = "penalized",
+                       tie_break = "pwalign")
+  d <- coal_dnds_pairs(q, s, pairs = orthologs())
+  expect_identical(attr(d, "alignment"), want_needle)
+  expect_true(is.numeric(attr(d, "seconds")))
+  p <- coal_dnds_pairs(q, s, pairs = orthologs(), preset = "pwalign")
+  expect_identical(attr(p, "alignment"), want_pwalign)
+  # the arguments one by one give the same record, and what a call asked for is what it says
+  own <- coal_dnds_pairs(q, s, pairs = orthologs(), matrix = "PAM250", gap_open = 11, gap_extend = 1,
+                         end_gaps = "penalized", tie_break = "pwalign")
+  expect_identical(attr(own, "alignment"), list(matrix = "PAM250", gap_open = 11, gap_extend = 1,
+                                                end_gaps = "penalized", tie_break = "pwalign"))
+  cds <- c(a = "ATGGCTAAAGGTCTGGAACGTTAA", b = "ATGGCGAAAGGCCTGGATCGTTAA", c = "ATGGCTAAGGGTCTGGAACGATAA")
+  cl <- data.frame(representative = c("a", "a", "a"), member = c("a", "b", "c"))
+  expect_identical(attr(coal_dnds_clusters(cds, cl), "alignment"), want_needle)
+  expect_identical(attr(coal_dnds_clusters(cds, cl, preset = "pwalign"), "alignment"), want_pwalign)
+})

@@ -734,9 +734,12 @@ class Texts(unittest.TestCase):
         self.assertGreater(n, release_notes.MAX_BODY)      # the docstring's "0.6.0's does not [fit]"
 
     def test_changelog_unreleased_names_the_fixes(self):
+        # the changes since 0.6.0: under "## Unreleased" now, under "## 0.6.1 — <date>" once the release commit has
+        # renamed it (docs/development.md "Releasing COAL"), and below newer sections after that
         log = self.read("CHANGELOG.md")
-        self.assertLess(log.index("## Unreleased"), log.index("## 0.6.0"))
-        head = log[log.index("## Unreleased"):log.index("## 0.6.0")]
+        first = re.search(r"(?m)^## ", log).start()
+        self.assertLess(first, log.index("## 0.6.0"))
+        head = log[first:log.index("## 0.6.0")]
         for words in ("codon_alignments/", "work/", "--report", "--digits", "gzip", "mafft.bat", "date-released"):
             self.assertIn(words, head, words)
 

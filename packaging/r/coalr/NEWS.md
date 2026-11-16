@@ -1,3 +1,15 @@
+# coalr (development version)
+
+- `coal_dnds_pairs()` and `coal_dnds_clusters()` return the protein-alignment scoring they used as attribute
+  `"alignment"` (`matrix`, `gap_open`, `gap_extend`, `end_gaps`, `tie_break`), next to `"seconds"`. Their help
+  pages (Details) and COAL's docs/r.md say that the default scoring is EMBOSS needle's, as in `coal pipeline`, and
+  that `preset = "pwalign"` gives the alignments orthologr uses: for some pairs the two differ and dS with them
+  (by more than 10% for 118 of 2,958 pairs in COAL's tutorial 4). No number changes.
+- Releases: from COAL 0.6.1 every COAL release has the package as `coalr_<version>.tar.gz` (built, installed and
+  run by COAL's release workflow), and the install instructions name a release (`install.packages()` of that file,
+  or `remotes::install_github("Plumat-COAL/COAL@v<version>", subdir = "packaging/r/coalr")`); the unpinned
+  `install_github()` is the development version. A prerelease (0.6.1rc1) has no coalr file.
+
 # coalr 0.6.0
 
 First version. In-process bindings (Rcpp) to the C++ core of COAL 0.6:

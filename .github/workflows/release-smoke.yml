@@ -1,12 +1,13 @@
 # Release smoke test: install the files of a release.yml run as a user would, on Linux (x86_64, aarch64), macOS and
 # Windows with the oldest and newest supported Python, and run them. Nothing here publishes: it only downloads the
-# workflow artifacts of that run (dist-python, dist-wheel-<tag>, dist-windows), so it works on a dry run
+# workflow artifacts of that run (dist-python, dist-wheel-<tag>, dist-windows, dist-coalr), so it works on a dry run
 # (release.yml dispatched with publish off) before anything is tagged.
 #
 #   gh workflow run release-smoke.yml -f run-id=<database id of a release.yml run>
 #
-# files:   the release job's own two checks (SHA256SUMS.txt, the exact list of files) on the merged artifacts, read
-#          from release.yml at the commit of that run, plus the wheels' tags and contents and the sdists' contents;
+# files:   release.yml's own two checks (SHA256SUMS.txt, the exact list of files) on the merged artifacts, read
+#          from release.yml at the commit of that run, plus the wheels' tags and contents, the sdists' contents and
+#          coalr's tarballs (DESCRIPTION, the vendored sources);
 # smoke:   no checkout (the source tree is never on the path); three fresh venvs (the platform wheel, the pure wheel,
 #          the version-free sdist coal_src.tar.gz) each run `coal --version`, codon alignments of the sdist's
 #          examples (Python and C++ engines byte-identical), `coal cite`, `coal pipeline pairs --help`; the platform
@@ -65,14 +66,19 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.12"
-      - name: The release job's checks (SHA256SUMS.txt, the file list), from release.yml at that commit
+      - name: The release workflow's checks (SHA256SUMS.txt, the file list), from release.yml at that commit
         run: |
           python -m pip install pyyaml==6.0.2
           V=$(cd release && ls coal_align-*-py3-none-any.whl | sed -E 's/^coal_align-(.+)-py3-none-any\.whl$/\1/')
-          echo "version: $V"; echo "V=$V" >> "$GITHUB_ENV"; export V
+          # coalr's version (R's form; none for a prerelease): from its versioned tarball
+          R_V=$(cd release && ls coalr_*.tar.gz 2> /dev/null | sed -nE 's/^coalr_([0-9][0-9.]*)\.tar\.gz$/\1/p')
+          echo "version: $V, coalr: ${R_V:-none}"; echo "V=$V" >> "$GITHUB_ENV"; echo "R_V=$R_V" >> "$GITHUB_ENV"
+          export V R_V
+          # the steps are in the files job (in the release job of runs before 0.6.1)
           python -I - src/.github/workflows/release.yml "$RUNNER_TEMP" <<'PY'
           import sys, yaml
-          steps = {s.get("name"): s for s in yaml.safe_load(open(sys.argv[1]))["jobs"]["release"]["steps"]}
+          jobs = yaml.safe_load(open(sys.argv[1]))["jobs"]
+          steps = {s.get("name"): s for j in ("release", "files") if j in jobs for s in jobs[j]["steps"]}
           for key, name in (("sums", "SHA-256 of every file"), ("names", "Check the release files")):
               open(f"{sys.argv[2]}/{key}.sh", "w").write(steps[name]["run"])
           PY
@@ -81,12 +87,25 @@ jobs:
           echo "SHA256SUMS.txt verifies and the files are exactly the release job's list"
       - name: Wheel tags and contents, sdist contents
         run: |
-          python -I - release "$V" <<'PY'
+          python -I - release "$V" "$R_V" <<'PY'
           import os, re, sys, tarfile, zipfile
-          rel, v = sys.argv[1], sys.argv[2]
+          rel, v, r_v = sys.argv[1], sys.argv[2], sys.argv[3]
           bad = []
           for f in sorted(os.listdir(rel)):
               p = os.path.join(rel, f)
+              if f.startswith("coalr_") and f.endswith(".tar.gz"):
+                  # R CMD build's tarball: coalr/ with DESCRIPTION of this version, the vendored core, the vignette
+                  with tarfile.open(p) as t:
+                      names = t.getnames()
+                      desc = t.extractfile("coalr/DESCRIPTION").read().decode() if "coalr/DESCRIPTION" in names else ""
+                  if not re.search(r"(?m)^Package: coalr$", desc) or not re.search(rf"(?m)^Version: {re.escape(r_v)}$", desc):
+                      bad.append(f"{f}: DESCRIPTION is not Package: coalr, Version: {r_v}")
+                  for need in ("coalr/NAMESPACE", "coalr/src/coal/VENDORED.txt", "coalr/src/coal/core.cpp",
+                               "coalr/inst/COPYRIGHTS", "coalr/build/vignette.rds"):
+                      if need not in names:
+                          bad.append(f"{f}: no {need}")
+                  print(f"{f}: coalr {r_v}, {len(names)} entries")
+                  continue
               if f.endswith(".whl"):
                   m = re.fullmatch(r"(coal_align(?:_app)?)-(.+)-py3-none-(.+)\.whl", f)
                   if not m or m.group(2) != v:

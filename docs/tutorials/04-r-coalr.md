@@ -16,9 +16,15 @@ written `ecoli_vs_salmonella/` and `chlamydia/` (skip their clean-up steps, or r
 ## 0. Install
 
 ```r
-install.packages(c("remotes", "Rcpp"))
-remotes::install_github("Plumat-COAL/COAL", subdir = "packaging/r/coalr")
+install.packages("Rcpp")
+install.packages("https://github.com/Plumat-COAL/COAL/releases/download/v0.6.1/coalr_0.6.1.tar.gz", repos = NULL, type = "source")
 ```
+
+or the same version from its tag, `remotes::install_github("Plumat-COAL/COAL@v0.6.1", subdir = "packaging/r/coalr")`
+([r.md](../r.md#install); the development version is the same line without `@v0.6.1`).
+<!-- until 0.6.1 is published (tests/test_docs_site.py): remove this note at the release -->
+Until 0.6.1 is published, there is no v0.6.1 to install: use
+`remotes::install_github("Plumat-COAL/COAL@v0.6.0", subdir = "packaging/r/coalr")`.
 
 That is all the in-process functions need: COAL's C++ core is compiled into the package, so no Python, no
 `coal-cpp` and no external program (apart from Clustal Omega or MAFFT, if you want them for clusters).

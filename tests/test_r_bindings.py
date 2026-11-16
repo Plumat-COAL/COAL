@@ -10,6 +10,15 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PKG = os.path.join(ROOT, "packaging", "r", "coalr")
 
 
+def release_version():
+    """scripts/release_version.py as a module (its r_version() is the rule for coalr's version)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("release_version", os.path.join(ROOT, "scripts", "release_version.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def read(*parts):
     with open(os.path.join(*parts), encoding="utf-8") as fh:
         return fh.read()
@@ -85,10 +94,11 @@ class RBindings(unittest.TestCase):
 
     def test_version_is_coals(self):
         version = re.search(r'^version\s*=\s*"([^"]+)"', read(ROOT, "pyproject.toml"), re.M).group(1)
-        # a development version in R's form (scripts/release_version.py r_version): 0.6.0.dev0 -> 0.6.0.9000
-        dev = re.match(r"^(\d+(?:\.\d+)+)\.dev(\d+)$", version)
-        r_version = f"{dev.group(1)}.{9000 + int(dev.group(2))}" if dev else version
-        self.assertRegex(read(PKG, "DESCRIPTION"), rf"(?m)^Version: {re.escape(r_version)}$")
+        # R's form of it (scripts/release_version.py r_version): 0.6.0.dev0 -> 0.6.0.9000, 0.6.1 -> 0.6.1; none for a
+        # prerelease (0.6.1rc1), whose commit leaves DESCRIPTION at the development form and ships no coalr
+        r_version = release_version().r_version(version)
+        if r_version is not None:
+            self.assertRegex(read(PKG, "DESCRIPTION"), rf"(?m)^Version: {re.escape(r_version)}$")
         self.assertIn(f'"{version}"', read(PKG, "src", "coal", "coal_version.h"))
 
     def test_makevars_compile_every_vendored_source(self):
