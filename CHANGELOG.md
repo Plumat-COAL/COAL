@@ -12,7 +12,8 @@
   0.6.0 (no list) is cleared as before. (Final review of 2026-11-15, L3.)
 - `coal pipeline`: a `DIR/work/` folder that no COAL run made (not empty, no `work/outputs.json`, no COAL
   `report.json` of an older version) is no longer written into: the run is refused with exit 1 and a message
-  before anything changes; `--overwrite` writes into it (and removes nothing there). A `work` that is a file is
+  before anything changes; `--overwrite` writes into it (files there with COAL's own names are replaced; nothing
+  else is touched). A `work` that is a file is
   refused, also with `--overwrite`. (L2.)
 - `coal pipeline --report FILE`: an existing `FILE` (outside `DIR` or in it) that is not a COAL report is no longer
   replaced without a word: exit 1 before anything changes, unless `--overwrite`. A COAL report there (`"schema":
@@ -32,6 +33,14 @@
   (which would split `PATH`) is refused with a message; non-ASCII letters in its folder are tested, mocked and in
   CI's real download (now under a cache folder with such letters). When that real-download test cannot reach
   mafft.cbrc.jp, its skip is shown as a warning on the CI run and in the job summary, with the reason.
+- `coal pipeline`, follow-ups of the audit of #96: the list of a cluster run's alignment files is written when the
+  run starts (empty) and again when the engine ends in any way but SIGKILL, so a run that failed or was
+  interrupted no longer leaves a folder whose every `.fasta` counts as COAL's; an error writing that list is a
+  warning, not a traceback. A `.FASTA` (any case but the engine's `.fasta`) in such a folder counts as yours. A
+  `work/` with only an empty `logs/`, or with a `work/outputs.json` that cannot be read, is COAL's (it was
+  refused). `--report` naming a folder is refused before the run (it failed at its end). report.json
+  `parameters` has `kaks_digits` (the digits of `dnds.kaks`). docs/pipeline.md says what a deleted `work/` means
+  for the alignment folders; docs/alignment.md no longer lists the current folder among a batch file's checks.
 - Texts: `CITATION.cff` has `date-released: 2026-11-15` for 0.6.0; `docs/python-api.md` no longer says its
   examples were run with 0.6.0.dev0; coalr's NEWS no longer lists a development-version note for 0.6.0;
   `scripts/release_notes.py` no longer gives a wrong size for the 0.6.0 section.

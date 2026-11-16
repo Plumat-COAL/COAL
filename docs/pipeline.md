@@ -386,16 +386,25 @@ before it writes the first one (for a folder of a version without that list, the
 `codon_alignments/` or `protein_alignments/`) is not removed, files with other names are not touched, and `work/` is kept for `--resume`.
 For the per-cluster folders a run records the names of the `.fasta` files it wrote (`codon_alignments_files`,
 `protein_alignments_files` in `work/outputs.json`), and the next run removes those and no others: a `.fasta` of your
-own put into `codon_alignments/` stays (a folder recorded by 0.6.0, or by a run killed while it wrote the folder,
-has no list, and all its `.fasta` files are that run's). A run with `--keep-alignments` (or
+own put into `codon_alignments/` stays. The list is written when the run starts (empty: the folder holds no `.fasta`
+then) and again when the engine ends, with success, an error or an interrupt; a run killed with SIGKILL while the
+engine writes leaves the empty list, so the next run keeps the files it wrote, as not COAL's (remove them yourself).
+Two cases have no list: a folder recorded by 0.6.0, and a folder whose `work/` was deleted (COAL then goes by
+`report.json`, which names the folder only); there every `.fasta` with the engine's lower-case `.fasta` is the
+earlier run's and is removed, so keep files of your own elsewhere if you delete `work/`. A `.FASTA` (any other case)
+is never COAL's. A run with `--keep-alignments` (or
 `--keep-protein-alignments`) into such a folder that holds a `.fasta` of yours is refused with exit 1 before anything
 changes, since one of its per-cluster files could have that name: `out/codon_alignments holds mine.fasta, which no
 COAL run wrote there ... move it out of out/codon_alignments, or use another output folder`.
 
 **`work/` and `--report` are checked the same way.** A `DIR/work/` that is not empty and that no COAL run made (no
 `work/outputs.json`, and no COAL `report.json` in `DIR` from an older version) is refused with exit 1 before
-anything changes: the run would put its logs, `state.json` and decompressed inputs among your files. `--overwrite`
-writes into it (nothing in it is removed). A `work` that is a file is always refused. `--report FILE` (in `DIR` or
+anything changes: the run would put its logs, `state.json` and decompressed inputs among your files. A `work/` with
+only an empty `logs/` folder (a run killed as it started), or with a `work/outputs.json` COAL cannot read, is
+COAL's. `--overwrite` writes into it: files there with COAL's own names (`logs/`, `state.json`, `outputs.json`,
+`inputs/`, the stage files such as `query.faa` and `query_vs_subject.tsv`, and DIAMOND's `subject.dmnd` / `query.dmnd`, which are removed
+after the search) are replaced; nothing else is touched. A `work` that is a file is always refused, and so is a
+`--report` that names a folder. `--report FILE` (in `DIR` or
 anywhere else) onto an existing file that is not a COAL report (a JSON file whose `schema` is `coal.<name>/<n>`, as
 `coal pipeline` and `coal --report` write) is refused the same way, `--overwrite` replaces it; a COAL report there is
 replaced as before. Before, both were written into or replaced without a word.

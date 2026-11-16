@@ -148,8 +148,10 @@ def _atomic(path: str):
 
 def _is_coal_report(path: str) -> bool:
     """True when `path` is a JSON report that COAL wrote (a `coal pipeline` report, or `coal --report`'s: its
-    "schema" is coal.<name>/<n>); what `--report FILE` may replace without --overwrite. A file larger than any
-    report (256 MiB) is not read."""
+    "schema" is coal.<name>/<n>); what `--report FILE` may replace without --overwrite. A marker, not a
+    validation: a JSON object with such a "schema" counts, whatever else it holds (the question is only whose file
+    it is, and a report that COAL cut short, {"schema": ..., "report_truncated": true}, is COAL's too). A file
+    larger than any report (256 MiB) is not read."""
     try:
         if not os.path.isfile(path) or os.path.getsize(path) > 256 << 20:
             return False
@@ -1581,6 +1583,17 @@ class _Run:
                     self._dir_files[name] = {n for n in listed if isinstance(n, str)}
             self._work_is_coal = True
         except (OSError, ValueError, KeyError, TypeError):
+            # A work/outputs.json that cannot be read (cut short, edited) is still COAL's mark on work/ (COAL writes
+            # it through a temporary file; a user's work/ has none), and so is a work/ that holds only an empty
+            # logs/ (a run killed between making work/logs and writing the record): audit of #96, L4
+            w = self.work
+            try:
+                self._work_is_coal = (os.path.isfile(self.wpath("outputs.json"))
+                                      or (os.listdir(w) == ["logs"] and os.path.isdir(self.wpath("logs"))
+                                          and not os.path.islink(self.wpath("logs"))
+                                          and not os.listdir(self.wpath("logs"))))
+            except OSError:
+                pass
             # no record (a version without it, or work/ deleted): the outputs the first of those reports lists
             if reports:
                 rep, in_folder = reports[0]
@@ -1589,7 +1602,7 @@ class _Run:
                 codon_dir = rep.get("mode") == "clusters" and "codon_alignments" in names
                 names |= {n + ".tmp" for n in list(names)}
                 # work/ of a version without work/outputs.json: the folder's own report.json says a COAL run was here
-                self._work_is_coal = in_folder
+                self._work_is_coal = self._work_is_coal or in_folder
         if codon_dir:
             dirs.add("codon_alignments")
         for name, opt in self._ALIGNMENT_DIRS.items():
@@ -1620,12 +1633,16 @@ class _Run:
 
     def _foreign_alignment_files(self, name: str) -> list[str]:
         """The .fasta files in the alignment folder `name` (COAL's) that the earlier run's record does not list: the
-        user's own. A folder recorded without a list (0.6.0, or a run killed while it wrote the folder) has none."""
+        user's own. A folder recorded without a list (0.6.0, or work/ deleted: report.json names the folder only)
+        has none but those whose .fasta is not in the engine's lower case."""
         listed = self._dir_files.get(name)
         d = self.path(name)
-        if listed is None or not os.path.isdir(d) or os.path.islink(d):
+        if not os.path.isdir(d) or os.path.islink(d):
             return []
-        return sorted(n for n in os.listdir(d) if n.endswith(".fasta") and n not in listed)
+        # .fasta in any case (X.FASTA): on a case-insensitive file system the engine's X.fasta would replace it
+        # (audit of #96, L5). Without a list the earlier run's are the files with the engine's own .fasta.
+        return sorted(n for n in os.listdir(d) if n.lower().endswith(".fasta")
+                      and (n not in listed if listed is not None else not n.endswith(".fasta")))
 
     def _check_foreign_outputs(self) -> None:
         """Refuse, before anything in the folder is removed or written, a run whose outputs would replace files
@@ -1636,6 +1653,12 @@ class _Run:
         (NAME.tmp) are COAL's own and not checked. Then, the same way (review of 2026-11-15, L1 and L2): a --report
         FILE that exists and is not a COAL report, and a DIR/work/ that no COAL run made (not empty, no
         work/outputs.json, no COAL report.json in DIR); a `work` that is not a folder is refused always."""
+        rp = self.a.report
+        if rp and os.path.lexists(rp) and not os.path.islink(rp) and not os.path.isfile(rp):
+            # a folder (or a device, a pipe): the report could only fail at the end of the run, --overwrite or not
+            raise PipelineError(f"--report {rp} exists and is not a file (a folder?): the report is written as a "
+                                "file of that name. Nothing was changed: name a file, e.g. "
+                                f"{os.path.join(rp, 'report.json')}")
         w = self.work
         if os.path.lexists(w) and not os.path.isdir(w):
             # (a file or a broken link: COAL never removes it, so --overwrite cannot help)
@@ -1670,7 +1693,8 @@ class _Run:
             raise PipelineError(f"{w} exists and no COAL run made it (it has no work/outputs.json): this run keeps "
                                 "its working files there (logs, state.json, decompressed inputs) and would mix them "
                                 "with what it holds. Nothing was changed. Use a new -o folder, move it away, or add "
-                                "--overwrite to write into it (nothing in it is removed)")
+                                "--overwrite to write into it (files there with COAL's own names are replaced; "
+                                "nothing else is touched)")
 
     def _replaced_notice(self) -> None:
         """One notice when the output folder holds the results of an earlier run, which this run replaces (new-user
@@ -1741,6 +1765,13 @@ class _Run:
         self._record = {"coal_version": __version__, "files": sorted(planned), "read_in_place": read,
                         "codon_alignments_dir": bool(self.a.keep_alignments and self.mode == "clusters"),
                         "protein_alignments_dir": bool(self.a.keep_protein_alignments and self.mode == "clusters")}
+        # The alignment folders this run writes hold no .fasta now (the earlier run's were removed, and one of
+        # anyone else's refused the run): an empty list, so that a run that fails before its engine (or a list
+        # that is never updated) makes no file there the run's. record_alignment_files() then lists what the
+        # engine wrote, after it ended in any way but SIGKILL (audit of #96, L1)
+        for name, opt in self._ALIGNMENT_DIRS.items():
+            if self._record[name + "_dir"]:
+                self._record[name + "_files"] = []
         self._write_record()
 
     def _write_record(self) -> None:
@@ -1756,13 +1787,19 @@ class _Run:
         file of the user's put there later stays: review of 2026-11-15, L3). The folder held no .fasta of anyone
         else's when the engine started (_earlier_outputs refuses that), so what it holds now is this run's."""
         changed = False
-        for name, opt in self._ALIGNMENT_DIRS.items():
-            d = self.path(name)
-            if getattr(self.a, opt) and os.path.isdir(d) and not os.path.islink(d):
-                self._record[name + "_files"] = sorted(n for n in os.listdir(d) if n.endswith(".fasta"))
-                changed = True
-        if changed:
-            self._write_record()
+        try:
+            for name, opt in self._ALIGNMENT_DIRS.items():
+                d = self.path(name)
+                if getattr(self.a, opt) and os.path.isdir(d) and not os.path.islink(d):
+                    self._record[name + "_files"] = sorted(n for n in os.listdir(d) if n.endswith(".fasta"))
+                    changed = True
+            if changed:
+                self._write_record()
+        except OSError as e:
+            # (never a traceback for a run whose results are there: the next run then keeps those files, as not
+            # COAL's, and a run that writes the folder again names them)
+            self.warn(f"could not record the alignment files in {self.wpath('outputs.json')}: {e.strerror or e}; "
+                      "the next run into this folder keeps them")
 
     def remove_temporaries(self) -> None:
         """Remove what is left of this run's NAME.tmp files (a stage that failed or was interrupted while it was
@@ -2560,7 +2597,7 @@ class _Run:
             self._engine_files.append(("kaks", self.path("dnds.kaks")))
             cmd += ["--kaks-out", self.path("dnds.kaks") + ".tmp"]
             if getattr(a, "_digits_given", False):   # (else KaKs_Calculator's 6, as `coal kaks`: review L6)
-                cmd += ["--kaks-digits", str(a.digits)]
+                cmd += ["--kaks-digits", str(a.kaks_digits)]
         if a.keep_alignments:
             if self.mode == "pairs":
                 self._engine_files.append(("codon_alignments", self.path("codon_alignments.fasta")))
@@ -3446,8 +3483,10 @@ def _clusters_mode(run: _Run) -> None:
         flush()
         return {}
 
-    detail = run.run_engine("cluster_id", feed)
-    run.record_alignment_files()
+    try:
+        detail = run.run_engine("cluster_id", feed)
+    finally:   # also when the engine failed or was interrupted: the files it did write are the run's (L1)
+        run.record_alignment_files()
     cds_idx.close()
     prot_idx.close()
     run.stages.append({"name": "align_codon_kaks", "seconds": round(time.perf_counter() - t0, 3), "cached": False,
@@ -3954,6 +3993,7 @@ def _finish_args(a: argparse.Namespace) -> None:
         a._digits_given = a.digits is not None
     if a.digits is None:
         a.digits = 8
+    a.kaks_digits = a.digits if a._digits_given else 6   # (report.json "parameters": the digits of dnds.kaks)
 
 
 def _on_signals(handler):

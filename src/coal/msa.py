@@ -383,6 +383,8 @@ def find_mafft() -> str | None:
     if (found and not os.environ.get("COAL_MAFFT") and _platform()[0] == "Windows" and is_batch_file(found)
             and mafft_package_root(found) is None):
         pinned = _mafft_windows_entry()
+        # (_trusted_cached hashes the package's files once per process: _cache_state keeps the answer by size and
+        # modification time, so a find_mafft() per cluster costs a few stat calls)
         if os.path.normcase(os.path.abspath(found)) != os.path.normcase(pinned) and _trusted_cached("mafft", pinned):
             if found not in _path_bat_told:
                 _path_bat_told.add(found)

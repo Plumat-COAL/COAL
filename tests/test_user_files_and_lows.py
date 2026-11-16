@@ -36,6 +36,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 from coal import __version__, msa  # noqa: E402
 from coal import dnds_pipeline as P  # noqa: E402
 from test_dnds_pipeline import CPP, FAM, PLAIN, Q, S, PipelineCase, needs_cpp, read_fasta  # noqa: E402
+import cpp_hooks  # noqa: E402
 
 
 # a cluster run on the fixture ends with exit 2: one of its records is not usable (listed in failed.tsv)
@@ -290,6 +291,154 @@ class UserFilesInTheOutputFolder(PipelineCase):
                            input="", capture_output=True, text=True, check=False)
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("--kaks-digits: expected 1 to 17", r.stderr)
+
+
+@needs_cpp
+class AuditOf96(PipelineCase):
+    """The lows of the audit of #96 (L1, L3, L4, L5) and its code-quality notes."""
+    pairs_inputs = UserFilesInTheOutputFolder.pairs_inputs
+    two_member_clusters = UserFilesInTheOutputFolder.two_member_clusters
+
+    def record(self, out: Path) -> dict:
+        return json.loads((out / "work" / "outputs.json").read_text(encoding="utf-8"))
+
+    def test_a_failed_engine_still_records_its_files(self):
+        """L1: an engine that fails after writing some per-cluster files lists them; a .fasta put there afterwards
+        is the user's, and the next run keeps it."""
+        cpp_hooks.need_test_hooks(self, CPP)
+        tsv = self.two_member_clusters()
+        out = self.tmp / "c"
+        with mock.patch.dict(os.environ, {"COAL_TEST_HOOKS": "1", "COAL_TEST_DNDS_FAIL_AFTER_GROUPS": "2"}):
+            res, err = run(P.run_clusters, FAM, out, clusters=tsv, keep_alignments=True)
+        self.assertEqual(res.exit_code, 1, err)
+        written = sorted(p.name for p in (out / "codon_alignments").iterdir())
+        self.assertTrue(written, "the hook let two groups be written")
+        self.assertEqual(self.record(out)["codon_alignments_files"], written)
+        (out / "codon_alignments" / "mine.fasta").write_text(">mine\nATG\n", encoding="utf-8")
+        res, err = run(P.run_clusters, FAM, out, clusters=tsv)
+        self.assertEqual(res.exit_code, OK, err)
+        self.assertEqual(sorted(p.name for p in (out / "codon_alignments").iterdir()), ["mine.fasta"])
+
+    def test_the_list_is_empty_from_the_start(self):
+        """L1: a run that ends before its engine (here: the engine never starts, and nothing updates the list)
+        leaves an empty list, not none: no .fasta there becomes COAL's."""
+        tsv = self.two_member_clusters()
+        out = self.tmp / "c"
+
+        def boom(self, *a, **k):
+            raise P.PipelineError("the engine did not start (test)")
+        with mock.patch.object(P._Run, "run_engine", boom), \
+                mock.patch.object(P._Run, "record_alignment_files", lambda self: None):
+            res, err = run(P.run_clusters, FAM, out, clusters=tsv, keep_alignments=True, keep_protein_alignments=True)
+        self.assertEqual(res.exit_code, 1, err)
+        rec = self.record(out)
+        self.assertEqual((rec["codon_alignments_files"], rec["protein_alignments_files"]), ([], []))
+        self.assertNotIn("codon_alignments_files", self.record(self.pairs_run()))
+
+    def pairs_run(self) -> Path:
+        q, s, pf = self.pairs_inputs()
+        out = self.tmp / "pairs"
+        res, err = run(P.run_pairs, q, s, out, pairs=pf, keep_alignments=True)
+        self.assertEqual(res.exit_code, 0, err)
+        return out
+
+    def test_recording_the_list_cannot_end_in_a_traceback(self):
+        tsv = self.two_member_clusters()
+        out = self.tmp / "c"
+        real = P._Run._write_record
+
+        def fail_with_a_list(self):
+            if self._record.get("codon_alignments_files"):
+                raise OSError(28, "No space left on device")
+            real(self)
+        with mock.patch.object(P._Run, "_write_record", fail_with_a_list):
+            res, err = run(P.run_clusters, FAM, out, clusters=tsv, keep_alignments=True)
+        self.assertEqual(res.exit_code, OK, err)
+        self.assertIn("could not record the alignment files", err)
+        self.assertIn("No space left on device", err)
+        self.assertIn("could not record the alignment files", " ".join(res.report.get("warnings", [])))
+
+    def test_fasta_in_another_case_is_the_users(self):
+        """L5: X.FASTA is not the engine's X.fasta, but on a case-insensitive file system it would be replaced."""
+        tsv = self.two_member_clusters()
+        out = self.tmp / "c"
+        res, err = run(P.run_clusters, FAM, out, clusters=tsv, keep_alignments=True)
+        self.assertEqual(res.exit_code, OK, err)
+        (out / "codon_alignments" / "Mine.FASTA").write_text(">mine\nATG\n", encoding="utf-8")
+        res, err = run(P.run_clusters, FAM, out, clusters=tsv, keep_alignments=True)
+        self.assertEqual(res.exit_code, 1, err)
+        self.assertIn("holds Mine.FASTA, which no COAL run wrote there", err)
+        # without a list (0.6.0, or work/ deleted): the engine's lower-case .fasta are the run's, Mine.FASTA is not
+        rec = self.record(out)
+        del rec["codon_alignments_files"]
+        (out / "work" / "outputs.json").write_text(json.dumps(rec), encoding="utf-8")
+        res, err = run(P.run_clusters, FAM, out, clusters=tsv, keep_alignments=True)
+        self.assertEqual(res.exit_code, 1, err)
+        self.assertIn("holds Mine.FASTA", err)
+        res, err = run(P.run_clusters, FAM, out, clusters=tsv)
+        self.assertEqual(res.exit_code, OK, err)
+        self.assertEqual(sorted(p.name for p in (out / "codon_alignments").iterdir()), ["Mine.FASTA"])
+
+    def test_work_with_only_an_empty_logs_folder_or_a_broken_record_is_coals(self):
+        """L4: a run killed between making work/logs and writing work/outputs.json; a record cut short."""
+        q, s, pf = self.pairs_inputs()
+        out = self.tmp / "o"
+        (out / "work" / "logs").mkdir(parents=True)
+        res, err = run(P.run_pairs, q, s, out, pairs=pf)
+        self.assertEqual(res.exit_code, 0, err)
+        out2 = self.tmp / "o2"
+        (out2 / "work").mkdir(parents=True)
+        (out2 / "work" / "outputs.json").write_text('{"coal_version": "0.6', encoding="utf-8")
+        res, err = run(P.run_pairs, q, s, out2, pairs=pf)
+        self.assertEqual(res.exit_code, 0, err)
+        # an empty logs/ next to a file of the user's, or a logs/ with files: not COAL's mark
+        for extra in ("notes.txt", "logs/mine.log"):
+            out3 = self.tmp / ("o3" + extra.replace("/", "_"))
+            (out3 / "work" / "logs").mkdir(parents=True)
+            (out3 / "work" / extra).write_text("mine\n", encoding="utf-8")
+            res, err = run(P.run_pairs, q, s, out3, pairs=pf)
+            self.assertEqual(res.exit_code, 1, (extra, err))
+            self.assertIn("files there with COAL's own names are replaced; nothing else is touched", err)
+
+    def test_overwrite_into_a_users_work_touches_only_coals_names(self):
+        """L3: --overwrite writes COAL's own names in a user's work/ and leaves every other file as it was."""
+        q, s, pf = self.pairs_inputs()
+        out = self.tmp / "o"
+        (out / "work" / "sub").mkdir(parents=True)
+        mine = {"notes.txt": "mine\n", "sub/data.tsv": "a\tb\n", "query.dmnd.bak": "x\n"}
+        for n, t in mine.items():
+            (out / "work" / n).write_text(t, encoding="utf-8")
+        res, err = run(P.run_pairs, q, s, out, pairs=pf, overwrite=True)
+        self.assertEqual(res.exit_code, 0, err)
+        for n, t in mine.items():
+            self.assertEqual((out / "work" / n).read_text(encoding="utf-8"), t, n)
+
+    def test_report_naming_a_folder(self):
+        q, s, pf = self.pairs_inputs()
+        d = self.tmp / "reports"
+        d.mkdir()
+        for kw in ({}, {"overwrite": True}):
+            res, err = run(P.run_pairs, q, s, self.tmp / "o", pairs=pf, report=str(d), **kw)
+            self.assertEqual(res.exit_code, 1, (kw, err))
+            self.assertIn(f"--report {d} exists and is not a file (a folder?)", err)
+            self.assertIn(os.path.join(str(d), "report.json"), err)
+            self.assertFalse((self.tmp / "o" / "work").exists())
+
+    def test_kaks_digits_in_the_report(self):
+        q, s, pf = self.pairs_inputs()
+        for kw, want in (({}, 6), ({"digits": 4}, 4), ({"digits": 8}, 8)):
+            res, err = run(P.run_pairs, q, s, self.tmp / f"d{want}", pairs=pf, kaks_format=True, **kw)
+            self.assertEqual(res.exit_code, 0, err)
+            self.assertEqual(res.report["parameters"]["kaks_digits"], want, kw)
+            self.assertEqual(res.report["parameters"]["digits"], kw.get("digits", 8))
+        with self.assertRaises(TypeError):
+            P.run_pairs(q, s, self.tmp / "x", pairs=pf, kaks_digits=3)    # not an option: --digits sets it
+
+    def test_is_coal_report_is_a_marker(self):
+        rp = self.tmp / "r.json"
+        rp.write_text(json.dumps({"schema": "coal.pipeline/1", "report_truncated": True}), encoding="utf-8")
+        self.assertTrue(P._is_coal_report(str(rp)))
+        self.assertIn("A marker, not a", P._is_coal_report.__doc__)
 
 
 @needs_cpp

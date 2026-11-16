@@ -260,8 +260,9 @@ msa.find_mafft(); msa.install_mafft(); msa.cache_dir(); msa.tool_version(exe)
   MSYS2 reads `\\server` as `\server`; `msa.mafft_package_root`), gives it no standard input, and ends the whole process tree on a
   timeout or interrupt. A batch file of your own (`COAL_MAFFT`) goes through `cmd.exe` with a command line COAL
   builds (`msa.batch_command_line`: the program's full path and any argument that is not plain in quotes; `%`,
-  `!`, `"` and a trailing backslash refused), and only while its folder, the current folder and `TMP` / `TEMP`
-  have none of `& | < > ^ % ! "`. MAFFT is BSD; the
+  `!`, `"` and a trailing backslash refused), and only while its folder, the run's folder and `TMP` / `TEMP`
+  have none of `& | < > ^ % ! "` (it runs in the run's folder, with an environment without Windows' per-drive
+  current folders, so the folder COAL is started from does not reach it). MAFFT is BSD; the
   package bundles MSYS2 components and MAFFT's page gives GPL for the package; COAL does not redistribute it.
   COAL's CI installs and runs it on Windows. Other Windows machines (ARM): the message says what works.
 
