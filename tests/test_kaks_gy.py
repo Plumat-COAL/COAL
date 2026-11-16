@@ -466,6 +466,31 @@ class TestEdgeCases(GyBase):
                 self.assertNotEqual(r["status"], "not_converged")
                 self.assertGreater(val(r["lnL"]), least)
 
+    def test_coarse_scan(self):
+        """Pairs whose maximum none of the ordinary starts reaches, and that the coarse scan of (kappa, omega) finds
+        (tests/kaks/gy_scan.axt; the code is in the name). The bound is 1e-3 below the global maximum found by an
+        independent likelihood (numpy, the codes from COAL's Python tables) and a bounded search from a 13 x 13
+        grid; in brackets 0.6.1-rc's result.
+        - f1, GTGGACAAC / TCCGGGAAG, code 11: -16.5761 at t 7.96, kappa 1e-6 (saturated at -17.3590: every start
+          ended on the ridge);
+        - s11_c22_656, 2 codons, and s4242_c11_176, 4 codons: maxima the scan's two best points lead to although
+          neither is higher than the best start (saturated -8.6564; ok -18.8604), so a small pair is started from
+          them whatever their likelihood;
+        - s1_c4_330, 3 codons: -12.9846 (ok, t 0.90, -13.5591: the first start's maximum, t below 1, so no other
+          start was made);
+        - s2_c14_188, 20 codons: reached from the second best point of the scan only (-154.2312 on the ridge, kappa
+          1e-6; saturated -154.2366);
+        - b13 and b87, 200 random codons each, more than SCAN_SMALL_PAIR: scanned because the best start ended on
+          the ridge, started from a point of the scan higher than it (saturated, 0.18 and 1.49 lower)."""
+        best = {"f1": -16.576072, "s11_c22_656": -8.648831, "s4242_c11_176": -18.773624,
+                "s1_c4_330": -12.984563, "s2_c14_188": -154.231177, "b13": -1611.770170, "b87": -1543.709337}
+        for name, a, b in read_axt(KDIR / "gy_scan.axt"):
+            key, code = name.split("&")[0].rsplit("_c", 1)
+            r = self.one(a, b, "-c", code)
+            with self.subTest(pair=key):
+                self.assertNotEqual(r["status"], "not_converged")
+                self.assertGreater(val(r["lnL"]), best[key] - 1e-3)
+
     def test_synonymous_changes_only(self):
         b = self.codonwise({"GCT": "GCA", "GGT": "GGC", "CCC": "CCA", "CTG": "CTA"})
         r = self.one(self.GENE, b)
