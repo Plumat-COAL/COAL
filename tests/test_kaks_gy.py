@@ -18,6 +18,8 @@ from __future__ import annotations
 import math
 import os
 import random
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -325,7 +327,7 @@ class TestTinyProbabilities(GyBase):
         """A probability below the rounding error of the eigen sum (codons three substitutions apart at t about
         1e-4: 1e-13 and less) is computed by the series of non-negative terms: the likelihood is the model's
         (recomputed here from the definition), t is not at its lower bound, and dN is NG's size. Before the fix
-        this pair had t = 1e-6 (the bound) and a dN 100 times too low, with status ok (audit of #92, MEDIUM-1)."""
+        this pair had t = 1e-6 (the bound) and a dN 100 times too low, with status ok (PR #94)."""
         rng = random.Random(8)
         sense = [c for c in CODONS if AA1[CODONS.index(c)] != "*"]
         a = [rng.choice(sense) for _ in range(20000)]
@@ -427,22 +429,38 @@ class TestEdgeCases(GyBase):
         self.assertNotEqual(r["status"], "not_converged")
         self.assertGreater(val(r["lnL"]), -11.0903573)
 
+    def test_a_crawled_first_start_does_not_cost_the_ridge_start(self):
+        """When the first start crawls and its second (lengthened) run replaces it, the ridge start is seeded
+        from where the second run stopped, which can be another basin than the one the crawl was in. One more
+        ridge start is made from the crawl's own stop (PR #101). GCTGATCCC / GATGCCGCG under code 4: -12.5748
+        (0.6.0 and now) against -12.5851 without it; GTTAAGTAC / GGTAATGAG under code 6: ok at -15.3300 against
+        saturated at -15.8668 (0.6.0 too)."""
+        for a, b, code, least in (("GCTGATCCC", "GATGCCGCG", 4, -12.5800), ("GTTAAGTAC", "GGTAATGAG", 6, -15.4000)):
+            r = self.one(a, b, "-c", str(code))
+            with self.subTest(pair=a):
+                self.assertNotEqual(r["status"], "not_converged")
+                self.assertGreater(val(r["lnL"]), least)
+
     def test_bound_zone(self):
         """When the iteration stops with kappa or omega near a bound, both ends of that zone are tried (the
         gradient in the logarithm fades there in both directions), and later starts are seeded from where the
-        first one stopped by itself. Random pairs on which each part decides the result (audit of #97; the
+        first one stopped by itself. Random pairs on which each part decides the result (PR #97; the
         likelihood a build without that part reports is given):
         - a start must not begin on the kappa bound: 0.6.1-rc reported -140.0750 (kappa 2.5e-6), the maximum is
           -140.0684 at kappa 0.0075;
         - the bound is taken only if the likelihood there is not lower (taken always: -13.9772);
         - the inner edge of the zone is tried (not tried: saturated at -7.7946);
-        - the ridge start is seeded from the first stop, not from the bound (from the bound: -36.8438)."""
+        - the ridge start is seeded from the first stop, not from the bound (from the bound: -36.8438);
+        - the inner edge is taken only if the likelihood there is higher (taken always: -9.7041 for GACCTC /
+          TTTCAT, and ATGCTA / TTGCAG, saturated at -8.3861, becomes not_converged)."""
         for a, b, code, least in (
                 ("GTGTGTACCGTTCTAGTCAGATTGGGGCTGAAATCAGTTCGCCACACAGGCTCATCAATC",
                  "GTGCGGACGGCGGTGTTCCTATGTTGAATATGGAGTAATACGTCAGCATTCAGGACGTTC", 2, -140.0690),
                 ("CATCTTGTC", "CCCCTTCGT", 22, -13.9400),
                 ("GGACAG", "CGACAC", 4, -7.4000),
-                ("CCACGGTTACTGCTC", "GATGTTACACCATCC", 22, -36.8330)):
+                ("CCACGGTTACTGCTC", "GATGTTACACCATCC", 22, -36.8330),
+                ("GACCTC", "TTTCAT", 1, -9.6500),
+                ("ATGCTA", "TTGCAG", 1, -8.3900)):
             r = self.one(a, b, "-c", str(code))
             with self.subTest(pair=a):
                 self.assertNotEqual(r["status"], "not_converged")
@@ -581,6 +599,42 @@ class TestCliAndFormats(GyBase):
         self.assertNotEqual(rows[1]["kappa"], "NA")
         # the option belongs to `coal dnds`
         self.assertEqual(self.run_cpp("kaks", "-i", KDIR / "gy_cases.axt", "--ml-columns", check=False).returncode, 2)
+
+
+def _core_library():
+    """(compiler, library, the build's compile flags) for tests/cpp/kaks_gy_choose_start.cpp, or None."""
+    cpp = tk.cpp_bin()
+    if cpp is None:
+        return None
+    build = Path(cpp).resolve().parent
+    lib = build / "libcoal_core.a"
+    cxx = os.environ.get("CXX") or shutil.which("c++") or shutil.which("g++") or shutil.which("clang++")
+    if not lib.exists() or cxx is None:
+        return None
+    flags = []   # (a sanitizer build's library needs -fsanitize=... at link time too)
+    cache = build / "CMakeCache.txt"
+    if cache.exists():
+        for line in cache.read_text(encoding="utf-8", errors="replace").splitlines():
+            if line.startswith("CMAKE_CXX_FLAGS:"):
+                flags = line.split("=", 1)[1].split()
+    return cxx, lib, flags
+
+
+@unittest.skipUnless(_core_library(), "needs a C++ compiler and the build's libcoal_core.a")
+class TestChooseStart(unittest.TestCase):
+    def test_which_start_is_reported(self):
+        """The policy among a pair's starts, with made-up starts (tests/cpp/kaks_gy_choose_start.cpp): ties, an
+        unconverged start on the ridge, and the displacement of a usable start by an unconverged one that is
+        higher by more than 1e-4, which no pair found so far reaches."""
+        cxx, lib, flags = _core_library()
+        with tempfile.TemporaryDirectory() as td:
+            exe = Path(td) / "kaks_gy_choose_start"
+            src = tk.ROOT / "tests" / "cpp" / "kaks_gy_choose_start.cpp"
+            r = subprocess.run([cxx, "-std=c++17", "-O1", *flags, "-Wall", "-Wextra", str(src), str(lib), "-o",
+                                str(exe), "-pthread"], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            p = subprocess.run([str(exe)], capture_output=True, text=True)
+            self.assertEqual((p.returncode, p.stdout.strip()), (0, "ok"), p.stderr)
 
 
 if __name__ == "__main__":
