@@ -95,6 +95,15 @@
   now they are yours (kept, and a run writing that folder is refused as for any file of yours there). The warning
   for a list that could not be written now says what follows: the next run takes every `.fasta` file there for this
   run's (it said the next run keeps them).
+- `coal pipeline` no longer writes through a symbolic link in `DIR/work/`. `work/outputs.json.tmp` (the record),
+  `state.json.tmp`, `inputs/sources.json.tmp`, the logs (`work/logs/*.log`), the decompressed and `--prefix-ids`
+  copies of the inputs, `proteins.sorted.faa.tmp`, `*.kept.faa.tmp`, and the files `coal-cpp translate` and DIAMOND
+  write there (`*.faa`, `*.genes.tsv`, the hit tables, `subject.dmnd` / `query.dmnd`) were opened as they were
+  found: a link planted with such a name made the next run write into its target, outside `DIR` (the record, the
+  logs, the proteins), and the renamed record became that link. They are now created anew like the tables in
+  `DIR` (a link or hard link with the name is removed, never followed; `O_CREAT | O_EXCL | O_NOFOLLOW`), a log is
+  appended to only when it is no link and has no other name, and `--resume` no longer reuses a stage whose output
+  is a link. (Found by the audit of #99.)
 
 ### Added
 

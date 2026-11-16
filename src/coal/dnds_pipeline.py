@@ -61,7 +61,7 @@ from . import msa as _msa
 from .core import CoalError
 from .outputs_record import RUN_OUTPUTS as _RUN_OUTPUTS  # noqa: F401  (these four: the names they had here)
 from .outputs_record import RUN_TABLES as _RUN_TABLES  # noqa: F401
-from .outputs_record import OutputsRecord, OutputsRefused, check_report_path
+from .outputs_record import OutputsRecord, OutputsRefused, check_report_path, open_append, open_new, remove_file
 from .outputs_record import is_coal_report as _is_coal_report  # noqa: F401
 from .outputs_record import starts_like_coal_record as _starts_like_coal_record  # noqa: F401
 from .pipeline import release_output_lock, take_output_lock
@@ -105,25 +105,12 @@ _CLUSTER_HEADERS = {("centroid", "member"), ("representative", "member"), ("repr
 _EXE = ".exe" if os.name == "nt" else ""
 
 
-def _open_new(path: str):
-    """A text file created anew for writing: whatever has this name (a leftover, or a symbolic link, which is
-    removed and never followed) goes first, then the file is created with O_CREAT | O_EXCL | O_NOFOLLOW (where
-    the system has it). COAL writes its tables to NAME.tmp this way and renames them when they are complete."""
-    try:
-        os.remove(path)
-    except FileNotFoundError:
-        pass
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
-    return open(path, "w", encoding="utf-8", errors="backslashreplace", newline="\n",
-                opener=lambda p, _flags: os.open(p, flags, 0o666))
-
-
 @contextlib.contextmanager
 def _atomic(path: str):
     """Write the table `path` through `path`.tmp: it appears under its name when it is complete (os.replace: a
     symbolic link at `path` is replaced, not followed), and nothing is left under either name when writing fails."""
     tmp = path + ".tmp"
-    fh = _open_new(tmp)
+    fh = open_new(tmp)
     try:
         yield fh
         fh.close()
@@ -603,7 +590,7 @@ def write_prefixed_fasta(src: str, dst: str, prefix: bytes) -> int:
     header and the sequence lines as they are; line ends as \\n). Returns the number of records."""
     n = 0
     tag = b">" + prefix + ID_PREFIX_SEP.encode()
-    with open(src, "rb") as fh, open(dst + ".tmp", "wb") as out:
+    with open(src, "rb") as fh, open_new(dst + ".tmp", binary=True) as out:
         for _off, line in fasta_lines(fh):
             body = line.rstrip(b"\r\n")
             if body[:1] == b">":
@@ -634,7 +621,7 @@ def sort_fasta_by_id(src: str, dst: str) -> int:
         if cur is not None:
             recs.append((*cur, off))
         recs.sort(key=lambda r: (r[0], r[1]))
-        with open(dst + ".tmp", "wb") as out:
+        with open_new(dst + ".tmp", binary=True) as out:
             for _rid, _k, a, b in recs:
                 fh.seek(a)
                 block = fh.read(b - a)
@@ -1240,7 +1227,7 @@ class _Run:
                 self.state = {}
         self.outputs["failed"] = os.path.join(self.out, "failed.tsv")
         # failed.tsv.tmp while the run goes on; finish() gives it its name, for a failed run too (it is complete)
-        self._failed_fh = _open_new(self.outputs["failed"] + ".tmp")
+        self._failed_fh = open_new(self.outputs["failed"] + ".tmp")
         self._failed_fh.write("\t".join(FAILED_COLUMNS) + "\n")
         if self.jobs_clamped:
             self.warn(f"-j {self.jobs_requested} is more than the {self.cpus} CPU(s) this process may use: "
@@ -1397,9 +1384,10 @@ class _Run:
             sig = [os.path.abspath(p), st.st_size, st.st_mtime_ns]
             key = os.path.basename(dst)   # (not the full path: a moved output folder keeps its copies)
             old = record.get(key)
-            if isinstance(old, list) and old[:3] == sig and os.path.isfile(dst):
+            if isinstance(old, list) and old[:3] == sig and os.path.isfile(dst) and not os.path.islink(dst):
                 digest = old[3] if len(old) > 3 else None    # (a copy made by an earlier version has none)
             else:
+                remove_file(dst)    # (gunzip_to writes a new file: never through a link of that name)
                 try:
                     digest = gunzip_to(p, dst)
                 except ValueError as e:
@@ -1411,7 +1399,7 @@ class _Run:
             self._plain_sha256[os.path.abspath(p)] = digest
             n_bytes += os.path.getsize(dst)
         tmp = record_path + ".tmp"
-        with open(tmp, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as fh:
+        with open_new(tmp) as fh:
             json.dump(record, fh)
         os.replace(tmp, record_path)
         self.stages.append({"name": "decompress_inputs", "seconds": round(time.perf_counter() - t, 3),
@@ -1677,12 +1665,15 @@ class _Run:
         """Run fn() -> detail dict, or reuse the outputs of an earlier run (--resume) made with the same inputs
         and options (sig)."""
         old = self.state.get(name)
-        if self.a.resume and old and old.get("sig") == sig and all(os.path.isfile(p) for p in outputs):
+        if self.a.resume and old and old.get("sig") == sig and all(os.path.isfile(p) and not os.path.islink(p)
+                                                                   for p in outputs):
             rec = {"name": name, "seconds": 0.0, "cached": True, **(old.get("detail") or {})}
             self.say(f"{name}: reused from the earlier run (--resume)")
         else:
             t = time.perf_counter()
             self._commands = []
+            for p in outputs:   # (the stage's programs write them anew: never through a link left with the name)
+                remove_file(p)
             detail = fn() or {}
             if self._commands:   # the argv of every program the stage ran (kept for --resume: a reused stage
                 detail = {**detail, "commands": self._commands}   # still says how its files were made)
@@ -1695,7 +1686,7 @@ class _Run:
 
     def _save_state(self) -> None:
         tmp = self.wpath("state.json.tmp")
-        with open(tmp, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as fh:
+        with open_new(tmp) as fh:
             json.dump(self.state, fh)
         os.replace(tmp, self.wpath("state.json"))
 
@@ -1703,7 +1694,7 @@ class _Run:
         """One external program, no shell, its output appended to work/logs/<log>.log; PipelineError if it fails."""
         logp = self.wpath("logs", log + ".log")
         self._commands.append([str(c) for c in cmd])
-        with open(logp, "ab") as fh:
+        with open_append(logp) as fh:
             fh.write(("$ " + " ".join(shlex.quote(c) for c in cmd) + "\n").encode())
             fh.flush()
             try:
@@ -2262,7 +2253,7 @@ class _Run:
         if not dropped:
             return faa
         out = self.wpath(f"{name}.kept.faa")
-        with open(faa, "rb") as src, open(out + ".tmp", "wb") as dst:
+        with open(faa, "rb") as src, open_new(out + ".tmp", binary=True) as dst:
             keep = True
             for line in src:
                 if line[:1] == b">":
@@ -2413,7 +2404,7 @@ class _Run:
         its failures. feed may return a dict of details for the report."""
         cmd, out, fail = self.engine_cmd(group_column)
         logp = self.wpath("logs", "codon-dnds.log")
-        with open(logp, "wb") as log:
+        with open_new(logp, binary=True) as log:
             try:
                 proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=log)
             except OSError as e:
@@ -2933,6 +2924,8 @@ def _search(run: _Run, q_faa: str, s_faa: str, q_order: dict, s_order: dict, ort
     both = a.ortho == "rbh"
 
     def go():
+        for d in ("subject.dmnd", "query.dmnd"):   # (written by makedb: never through a link of that name)
+            remove_file(run.wpath(d))
         run.run_tool([dmd, "makedb", "--in", s_faa, "-d", run.wpath("subject"), "--threads", str(run.threads),
                       "--quiet"], "diamond", "diamond makedb")
         cols = _HIT_COLS + (["qseq_gapped", "sseq_gapped"] if gapped else [])

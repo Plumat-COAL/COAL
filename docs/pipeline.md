@@ -357,8 +357,10 @@ there, the report lists only the files that are, and the `.tmp` files are remove
 removed by the next run into the folder, which knows the names from `work/outputs.json`). The temporary files are
 created anew (`O_EXCL`, and `O_NOFOLLOW` where the system has it), and the rename replaces whatever has the final
 name: **a symbolic link in the output folder is replaced, never written through** (an output name that is a link
-to another file leaves that file untouched). `report.json` shows the engine's command line with the `.tmp` names
-and `--new-files`, as it ran.
+to another file leaves that file untouched). The same holds in `work/`: the record `outputs.json`, `state.json`,
+the logs, the decompressed and `--prefix-ids` copies of the inputs, and the files that `coal-cpp translate` and
+DIAMOND write there are created anew, a link (or a hard link) with such a name is removed first, never followed.
+`report.json` shows the engine's command line with the `.tmp` names and `--new-files`, as it ran.
 
 **One run per folder, and one run's files only.** A run takes the lock `<out_dir>.coal-lock` (next to the real
 folder: a symbolic link to the folder and the folder are one output; COAL's convention for `-o` files) and a

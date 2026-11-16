@@ -52,6 +52,53 @@ class OutputsRefused(Exception):
     """A run that would replace or mix with files that are not COAL's: nothing in the folder was changed."""
 
 
+# -- writing into the output folder without following links
+# A name in DIR or DIR/work may be a symbolic link (or a hard link) to a file elsewhere, planted or left there:
+# COAL never writes through it. A file it writes is created anew (whatever has the name is removed first, then
+# O_CREAT | O_EXCL | O_NOFOLLOW where the system has it), a log it appends to is never a link or a file with other
+# names, and the files an external program writes are removed before it runs. Removing a link removes the link,
+# never what it points to.
+_NEW_FILE = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+_APPEND_FILE = os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+
+
+def remove_file(path: str) -> None:
+    """Remove whatever has the name `path` but a folder (a file, a symbolic link, also a broken one); nothing when
+    there is nothing. Before a program writes `path`: what it writes is then a new file, not a link's target."""
+    try:
+        if not stat.S_ISDIR(os.lstat(path).st_mode):
+            os.remove(path)
+    except FileNotFoundError:
+        pass
+
+
+def open_new(path: str, binary: bool = False):
+    """A file created anew for writing (UTF-8 text with \\n line ends, or bytes): whatever has this name (a
+    leftover, a symbolic or hard link) is removed first and never written through, then the file is created with
+    O_CREAT | O_EXCL | O_NOFOLLOW (where the system has it), so a link put there in between makes the open fail
+    instead of being followed. COAL writes its tables, records and copies to NAME.tmp this way and renames them
+    when they are complete."""
+    remove_file(path)
+
+    def opener(p, _flags):
+        return os.open(p, _NEW_FILE, 0o666)
+    if binary:
+        return open(path, "wb", opener=opener)
+    return open(path, "w", encoding="utf-8", errors="backslashreplace", newline="\n", opener=opener)
+
+
+def open_append(path: str):
+    """A log opened for appending (bytes): a symbolic link of that name, or a file that has other names too (a
+    hard link), is removed first, so only a log of this folder's own grows; O_NOFOLLOW where the system has it."""
+    try:
+        st = os.lstat(path)
+        if stat.S_ISLNK(st.st_mode) or (stat.S_ISREG(st.st_mode) and st.st_nlink > 1):
+            os.remove(path)
+    except FileNotFoundError:
+        pass
+    return open(path, "ab", opener=lambda p, _flags: os.open(p, _APPEND_FILE, 0o666))
+
+
 def starts_like_coal_record(path: str) -> bool:
     """True when `path` is a regular file that begins as COAL writes work/outputs.json ({"coal_version":). Used when
     json could not read that file: COAL writes it through a temporary file and renames it, so only a damaged disk or
@@ -358,9 +405,10 @@ class OutputsRecord:
         return self.record
 
     def write(self) -> None:
-        """Put the record into work/outputs.json (through outputs.json.tmp, renamed: never cut short)."""
+        """Put the record into work/outputs.json (through outputs.json.tmp, created anew and renamed: never cut
+        short, never written through a link)."""
         tmp = self.wpath("outputs.json.tmp")
-        with open(tmp, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as fh:
+        with open_new(tmp) as fh:      # (a link planted at outputs.json.tmp is removed, never written through)
             json.dump(self.record, fh)
             fh.write("\n")
         os.replace(tmp, self.wpath("outputs.json"))

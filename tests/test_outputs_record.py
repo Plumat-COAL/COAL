@@ -38,12 +38,11 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "tests"))
-from test_dnds_pipeline import FAM, PipelineCase, needs_cpp, read_fasta  # noqa: E402
-
 from coal import __version__  # noqa: E402
 from coal import dnds_pipeline as P  # noqa: E402
 from coal import outputs_record as R  # noqa: E402
 from coal.outputs_record import OutputsRecord, OutputsRefused  # noqa: E402
+from test_dnds_pipeline import FAM, PipelineCase, needs_cpp, read_fasta  # noqa: E402
 
 SCHEMA = "coal.pipeline/1"
 CODON, PROT = "codon_alignments", "protein_alignments"
@@ -590,6 +589,86 @@ class AlignmentFolderNotMade(PipelineCase):
             res = P.run_clusters(FAM, out, clusters=tsv)
         self.assertEqual(res.exit_code, 2, err.getvalue())     # (one record of the fixture is not usable)
         self.assertEqual(sorted(os.listdir(out / PROT)), ["mine.fasta"])
+
+
+class NoLinkIsWrittenThrough(Folder):
+    """L1 of AUDIT-99: work/outputs.json.tmp was opened with open(..., "w"), which follows a symbolic link: a link
+    planted there made the next run write its record into the link's target, outside the folder. Every file COAL
+    writes in the folder is now created anew (open_new), a log is appended to only when it is no link
+    (open_append), and what a program writes is removed before it runs (remove_file)."""
+
+    def victim(self, name="victim.txt") -> Path:
+        v = self.tmp / name
+        v.write_text("keep me\n", encoding="utf-8")
+        return v
+
+    def test_the_record_is_not_written_through_a_link(self):
+        v = self.victim()
+        owned = self.start()
+        self.symlink(v, self.out / "work" / "outputs.json.tmp")
+        owned.write()
+        self.assertEqual(v.read_text(encoding="utf-8"), "keep me\n")
+        self.assertFalse(os.path.islink(self.out / "work" / "outputs.json"))
+        self.assertEqual(self.record_on_disk(), owned.record)
+        os.link(v, self.out / "work" / "outputs.json.tmp")   # a hard link: removed, not written into
+        owned.write()
+        self.assertEqual(v.read_text(encoding="utf-8"), "keep me\n")
+
+    def test_open_new(self):
+        v = self.victim()
+        p = self.out / "t.tmp"
+        for make in (lambda: self.symlink(v, p), lambda: self.symlink(self.tmp / "nowhere", p),
+                     lambda: os.link(v, p), lambda: p.write_text("old\n", encoding="utf-8")):
+            make()
+            with R.open_new(str(p)) as fh:
+                fh.write("new\n")
+            self.assertFalse(os.path.islink(p))
+            self.assertEqual(p.read_bytes(), b"new\n")
+            self.assertEqual(v.read_text(encoding="utf-8"), "keep me\n")
+            p.unlink()
+        with R.open_new(str(p), binary=True) as fh:
+            fh.write(b"\x00\xff")
+        self.assertEqual(p.read_bytes(), b"\x00\xff")
+
+    def test_a_link_made_after_the_removal_is_not_followed(self):
+        """O_EXCL (and O_NOFOLLOW): a link that appears between the removal and the open makes the open fail."""
+        v = self.victim()
+        p = self.out / "t.tmp"
+        self.symlink(v, p)
+        with mock.patch.object(R, "remove_file", lambda path: None), self.assertRaises(FileExistsError):
+            R.open_new(str(p))
+        self.assertEqual(v.read_text(encoding="utf-8"), "keep me\n")
+
+    def test_open_append(self):
+        v = self.victim()
+        log = self.out / "work" / "logs" / "tool.log"
+        log.parent.mkdir(parents=True)
+        for k in range(2):                                 # a log of the folder's own grows
+            with R.open_append(str(log)) as fh:
+                fh.write(b"line %d\n" % k)
+        self.assertEqual(log.read_bytes(), b"line 0\nline 1\n")
+        log.unlink()
+        for make in (lambda: self.symlink(v, log), lambda: os.link(v, log)):
+            make()
+            with R.open_append(str(log)) as fh:
+                fh.write(b"mine\n")
+            self.assertEqual(log.read_bytes(), b"mine\n")
+            self.assertEqual(v.read_text(encoding="utf-8"), "keep me\n")
+            log.unlink()
+
+    def test_remove_file(self):
+        v = self.victim()
+        for make in (lambda p: self.symlink(v, p), lambda p: self.symlink(self.tmp / "nowhere", p),
+                     lambda p: p.write_text("x", encoding="utf-8")):
+            p = self.out / "x.tsv"
+            make(p)
+            R.remove_file(str(p))
+            self.assertFalse(os.path.lexists(p))
+        R.remove_file(str(self.out / "missing"))
+        (self.out / "d").mkdir()
+        R.remove_file(str(self.out / "d"))                 # a folder stays
+        self.assertTrue((self.out / "d").is_dir())
+        self.assertEqual(v.read_text(encoding="utf-8"), "keep me\n")
 
 
 if __name__ == "__main__":
