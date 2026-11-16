@@ -22,6 +22,8 @@ PLATFORM_TAGS = ("manylinux_2_28_x86_64", "manylinux_2_28_aarch64", "macosx_11_0
 NO_CHANGELOG = 3
 # GitHub's limit for a release body is 125,000 characters; keep a margin
 MAX_BODY = 120_000
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from release_version import r_version  # noqa: E402  (coalr's version: the same rule as release.yml's coalr job)
 
 
 def changelog_section(version, path=os.path.join(ROOT, "CHANGELOG.md")):
@@ -52,6 +54,12 @@ def fixed_part(version):
     wheel = f"coal_align-{version}-py3-none-any.whl"
     app_wheel = f"coal_align_app-{version}-py3-none-any.whl"
     platform_wheels = ", ".join(f"`coal_align-{version}-py3-none-{t}.whl`" for t in PLATFORM_TAGS)
+    r_v = r_version(version)
+    # a prerelease has no coalr file (release.yml skips the coalr job)
+    coalr = (f"| `coalr_{r_v}.tar.gz` (same file: `coalr_src.tar.gz`) | R package `coalr` (COAL's C++ core inside R: "
+             f"Ka/Ks, codon alignment, dN/dS of pairs and clusters), source: `install.packages(\"{REPO}/releases/"
+             f"download/v{version}/coalr_{r_v}.tar.gz\", repos = NULL, type = \"source\")` (with `Rcpp` installed) |\n"
+             if r_v else "")
     return f"""COAL {version}: turns a protein alignment plus the matching coding DNA into a codon alignment
 (for dN/dS and DNA phylogenies), and from 0.6.0 also estimates Ka/Ks (dN/dS) and runs the whole way from coding
 sequences to a dN/dS table. A fast, free (GPL-3.0-only) replacement for PAL2NAL.
@@ -69,7 +77,7 @@ Website and install steps: https://plumat-coal.github.io/COAL/
 | `coal_align-{version}.tar.gz` (same file: `coal_src.tar.gz`) | Python source distribution of the engine |
 | `{app_wheel}` | Python wheel of the app, `coal-align-app` (web GUI and MCP server; needs the engine wheel) |
 | `coal_align_app-{version}.tar.gz` (same file: `coal_app_src.tar.gz`) | Python source distribution of the app |
-| `SHA256SUMS.txt` | SHA-256 checksums of every file above |
+{coalr}| `SHA256SUMS.txt` | SHA-256 checksums of every file above |
 
 The version-free names always point at the newest release through
 `{REPO}/releases/latest/download/<name>`, which is what the website links to.

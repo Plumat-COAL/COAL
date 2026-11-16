@@ -7,7 +7,8 @@
     ... --github-output   also appends version=, prerelease=true|false and r_version= to $GITHUB_OUTPUT
 
 A release (not a dry run) is also refused while CHANGELOG.md has entries under "## Unreleased" (the release commit
-moves them into "## X.Y.Z") or while coalr's DESCRIPTION does not carry r_version(X.Y.Z). r_version is empty for a
+moves them into "## X.Y.Z"), while coalr's DESCRIPTION does not carry r_version(X.Y.Z) or while coalr's NEWS.md
+does not start with "# coalr X.Y.Z". r_version is empty for a
 prerelease (a1, b1, rc1: not a valid R package version), whose release has no coalr asset; a dry run is reported
 as a prerelease.
 
@@ -67,6 +68,19 @@ def description_version(root=ROOT):
     except OSError:
         return None
     return m.group(1) if m else None
+
+
+NEWS = os.path.join("packaging", "r", "coalr", "NEWS.md")
+
+
+def news_heading(root=ROOT):
+    """The first "# " heading of coalr's NEWS.md ("" when the file is missing or has none)."""
+    try:
+        with open(os.path.join(root, NEWS), encoding="utf-8") as fh:
+            m = re.search(r"(?m)^# (.+?)\s*$", fh.read())
+    except OSError:
+        return ""
+    return m.group(1) if m else ""
 
 
 def unreleased_text(root=ROOT):
@@ -139,6 +153,9 @@ def check(tag, root=ROOT):
     if want_r is not None and description_version(root) != want_r:
         raise ValueError(f"{DESCRIPTION.replace(os.sep, '/')} says Version: {description_version(root)}, not {want_r} "
                          f"(r_version of {version}): set it, run scripts/sync_r_sources.py, commit, then tag")
+    if want_r is not None and news_heading(root) != f"coalr {want_r}":
+        raise ValueError(f"{NEWS.replace(os.sep, '/')} starts with \"# {news_heading(root)}\", not \"# coalr {want_r}\": "
+                         f"the release's coalr tarball ships it")
     return version, pre
 
 

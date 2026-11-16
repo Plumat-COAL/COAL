@@ -1,10 +1,11 @@
 {% set name = "coal-align" %}
-# RELEASE-TIME PLACEHOLDERS (two lines): this recipe is written for the next release, 0.6.0, the first under
-# GPL-3.0-only and the first with Ka/Ks (`coal kaks`, `coal dnds`), `coal pipeline` and coal-cpp-align. The v0.6.0 tag
-# does not exist yet, so the sha256 below is a marker, not a checksum: when the release is tagged, set `version` to
-# the tag (without the v) and `sha256` to the checksum of its tarball (packaging/bioconda/README.md, "The sha256
-# step"). Do not submit the recipe with the marker, and do not submit it for 0.5.0 or earlier (MIT, no Ka/Ks).
-{% set version = "0.6.0" %}                                                             # PLACEHOLDER until v0.6.0 is tagged
+# SUBMISSION-TIME PLACEHOLDERS (two lines): this recipe is written for 0.6.0 (released 2026-11-15), the first release
+# under GPL-3.0-only and the first with Ka/Ks (`coal kaks`, `coal dnds`), `coal pipeline` and coal-cpp-align, and fits
+# the releases after it. It has not been submitted, so the sha256 below is a marker, not a checksum: at submission set
+# `version` to the release submitted (0.6.0, or a later tag without the v) and `sha256` to the checksum of that tag's
+# tarball (packaging/bioconda/README.md, "The sha256 step"). Do not submit the recipe with the marker, and do not
+# submit it for 0.5.0 or earlier (MIT, no Ka/Ks).
+{% set version = "0.6.0" %}                                                             # PLACEHOLDER: the release submitted
 {% set sha256 = "0000000000000000000000000000000000000000000000000000000000000000" %}  # PLACEHOLDER: not a checksum
 
 package:

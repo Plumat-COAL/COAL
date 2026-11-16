@@ -33,11 +33,12 @@ Windows app and `coal-cpp.exe` come from [GitHub Releases](https://github.com/pl
 
 ## Which release the recipe fits
 
-The recipe is written for the **next release, 0.6.0**: the first under GPL-3.0-only and the first that has Ka/Ks
-(`coal kaks`, `coal dnds`), `coal pipeline` and the second binary `coal-cpp-align`, all of which the recipe's tests
-run. That tag does not exist yet, so `meta.yaml` carries two **placeholders, marked `PLACEHOLDER`**: `version`
-(`0.6.0`) and `sha256` (64 zeros, which is not a checksum; `conda build` fails on it by design). At release time set
-both (below, "The sha256 step") and nothing else needs to change.
+The recipe is written for **0.6.0** (released 2026-11-15) and the releases after it: 0.6.0 is the first under
+GPL-3.0-only and the first that has Ka/Ks (`coal kaks`, `coal dnds`), `coal pipeline` and the second binary
+`coal-cpp-align`, all of which the recipe's tests run. It has not been submitted yet, so `meta.yaml` carries two
+**placeholders, marked `PLACEHOLDER`**: `version` (`0.6.0`; set it to the release you submit) and `sha256` (64 zeros,
+which is not a checksum; `conda build` fails on it by design). At submission set both (below, "The sha256 step")
+and nothing else needs to change.
 
 `build.sh` builds the C++ programs and copies `coal-cpp` **and** `coal-cpp-align` into `$PREFIX/bin` (nothing
 else of the C++ build: see "What the package is" below), then runs `pip install .` for the Python package. The

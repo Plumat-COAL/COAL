@@ -140,7 +140,14 @@ corresponding codon alignments. *Nucleic Acids Res.* 34:W609–W612.
    - `CHANGELOG.md`: rename `## Unreleased` to `## <version> — <date>` (with a short summary). The tag is refused,
      and `tests/test_feature_combinations.py` fails, while a release version has entries under `## Unreleased`.
    - `CITATION.cff`: add `date-released: <date>` (a development tree has none; `version:` already names the
-     release).
+     release). The same `version:` goes into the `id="version"` span of `site/index.html` and the
+     `data-version-ref` span of `site/cite.html` (they too name the release already).
+   - `tests/report_example.json` and its copy under "Complete example" in `docs/report-schema.md`: the two version
+     strings (`"coal_version"` and "built with COAL v<version>" in `methods_text`) become the release's
+     (`tests/test_report_schema.py` compares the example with a fresh report; docs/report-schema.md says how to
+     regenerate it after other changes).
+   - `packaging/r/coalr/NEWS.md`: the heading `# coalr (development version)` becomes `# coalr <version>` (the
+     tarball ships it; `scripts/release_version.py` refuses the tag otherwise).
    - The dev-version banner at the top of `README.md`, `docs/install.md` and `docs/tutorials/README.md` (the block
      that starts with the `<!-- dev-version banner ... -->` comment): remove it (`tests/test_new_user_ux.py` fails
      while a release version still has it). The website hides newer sections with `data-since` and needs no change.
@@ -148,6 +155,11 @@ corresponding codon alignments. *Nucleic Acids Res.* 34:W609–W612.
      `docs/tutorials/04-r-coalr.md`, `packaging/orthologr/README.md`): every `releases/download/v<version>/coalr_<version>.tar.gz`
      and `install_github("Plumat-COAL/COAL@v<version>", ...)` names this version, and the notes that start with
      `<!-- until <version> is published` are removed (`tests/test_docs_site.py` `TestCoalrInstallLines`).
+   **A prerelease** (`X.Y.Zrc1`, also `a1`, `b1`) is the same commit with these differences: the six places,
+   `COAL_VERSION_FULL`, `CITATION.cff`'s `version:` and the website's spans carry `X.Y.Zrc1` (CMake's
+   `project(VERSION)` stays `X.Y.Z`); the CHANGELOG section is `## X.Y.Zrc1`; coalr's DESCRIPTION and its NEWS
+   heading stay at the development form (R has no form of `rc1`: `r_version()` is empty, the release has no coalr
+   file, and the coalr install lines and their notes stay as they are). The banners are removed as for a release.
 2. Tag that commit: `git tag vX.Y.Z && git push origin vX.Y.Z` (or publish the release on GitHub's "new release"
    page with a new tag at that commit).
 3. `.github/workflows/release.yml` checks the tag against the source version (`scripts/release_version.py`),

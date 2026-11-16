@@ -21,6 +21,17 @@
   inline Python in two jobs, and a release that already exists (a re-run, or one made on GitHub's release page)
   gets the prerelease flag of a new one (`gh release edit --prerelease=<true|false>`; it kept whatever it had).
   (Final review of 2026-11-16, L5.)
+- The release checklist is one list (docs/development.md "Releasing COAL"; CONTRIBUTING.md points to it) and a
+  release commit made by it passes the tests: `tests/test_user_files_and_lows.py` finds the post-0.6.0 entries
+  under the first section, whatever it is called; the list names the report example's version strings, coalr's
+  NEWS heading (`scripts/release_version.py` also refuses a tag whose NEWS.md does not start with
+  `# coalr <version>`) and what a prerelease (`rc1`) sets: COAL's places, `CITATION.cff` and the site at
+  `X.Y.Zrc1`, coalr left at its development version, which `tests/test_r_bindings.py` and coalr's own test accept
+  for a prerelease. Checked by making the 0.6.1 and 0.6.1rc1 commits on a copy and running both test suites.
+  The release notes list `coalr_<version>.tar.gz` / `coalr_src.tar.gz` (not for a prerelease), and the `files`
+  job fails a release (not a prerelease) without coalr. (Audit of #100.)
+- The Bioconda recipe's notes no longer call 0.6.0 the next release. `ClustersMsa.test_mafft` no longer skips
+  with "needs coal-cpp and Clustal Omega" where MAFFT is installed and Clustal Omega is not. (Audit of #100.)
 - `tests/test_orthologr_standin.py` gives its subprocesses an absolute `PYTHONPATH` (`tests/subprocess_env.py`):
   with `PYTHONPATH=src` its run in `examples/clean` failed with "No module named coal_compat". (L4.)
 - `coal pipeline`: a `.fasta` file of your own in `DIR/codon_alignments/` or `DIR/protein_alignments/` is no longer

@@ -434,7 +434,10 @@ jobs:
         env:
           V: ${{ needs.python.outputs.version }}
           R_V: ${{ needs.python.outputs.r_version }}
+          PRE: ${{ needs.python.outputs.prerelease }}
         run: |
+          # only a prerelease (or a dry run) may come without coalr
+          if [ "$PRE" = false ] && [ -z "$R_V" ]; then echo "::error::release $V has no coalr version"; exit 1; fi
           expected=(
             "COAL-Setup-${V}.exe"
             "COAL-Setup-windows-x64.exe"

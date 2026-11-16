@@ -112,7 +112,8 @@ class TestReleaseScripts(unittest.TestCase):
                 self.assertEqual(fh.read(), f"version={init}\nprerelease=true\nr_version={rv.r_version(init) or ''}\n")
             # a copy of the tree's version files at release 1.2.3, then each thing the check refuses
             for rel in ("src/coal/__init__.py", "pyproject.toml", "apps/coal-app/pyproject.toml", "cpp/src/main.cpp",
-                        "cpp/src/report.cpp", "CHANGELOG.md", "packaging/r/coalr/DESCRIPTION"):
+                        "cpp/src/report.cpp", "CHANGELOG.md", "packaging/r/coalr/DESCRIPTION",
+                        "packaging/r/coalr/NEWS.md"):
                 dst = os.path.join(t, "tree", *rel.split("/"))
                 os.makedirs(os.path.dirname(dst), exist_ok=True)
                 with open(os.path.join(ROOT, *rel.split("/")), encoding="utf-8") as fh:
@@ -121,6 +122,8 @@ class TestReleaseScripts(unittest.TestCase):
                     text = "# Changelog\n\n## Unreleased\n\n## 1.2.3\n\n- x\n"
                 if rel.endswith("DESCRIPTION"):
                     text = re.sub(r"(?m)^Version: .*$", "Version: 1.2.3", text)
+                if rel.endswith("NEWS.md"):
+                    text = "# coalr 1.2.3\n\n- x\n\n# coalr 1.2.2\n"
                 with open(dst, "w", encoding="utf-8") as fh:
                     fh.write(text)
             tree = os.path.join(t, "tree")
@@ -141,6 +144,18 @@ class TestReleaseScripts(unittest.TestCase):
                 fh.write(text.replace("Version: 1.2.3", "Version: 1.2.2.9000"))
             with self.assertRaisesRegex(ValueError, "DESCRIPTION says Version: 1.2.2.9000, not 1.2.3"):
                 rv.check("v1.2.3", tree)
+            with open(desc, "w", encoding="utf-8") as fh:
+                fh.write(text)
+            news = os.path.join(tree, "packaging", "r", "coalr", "NEWS.md")
+            with open(news, "w", encoding="utf-8") as fh:
+                fh.write("# coalr (development version)\n\n- y\n\n# coalr 1.2.2\n")
+            with self.assertRaisesRegex(ValueError, 'NEWS.md starts with "# coalr \\(development version\\)", not "# coalr 1.2.3"'):
+                rv.check("v1.2.3", tree)
+            with open(news, "w", encoding="utf-8") as fh:
+                fh.write("# coalr 1.2.3\n")
+            self.assertEqual(rv.check("v1.2.3", tree), ("1.2.3", False))
+            with open(desc, "w", encoding="utf-8") as fh:
+                fh.write(text.replace("Version: 1.2.3", "Version: 1.2.2.9000"))
             with open(os.path.join(tree, "src", "coal", "__init__.py"), "a", encoding="utf-8") as fh:
                 fh.write('__version__ = "1.2.4"\n')   # the last assignment is not read: the first one is
             with open(os.path.join(tree, "pyproject.toml"), encoding="utf-8") as fh:
@@ -168,6 +183,15 @@ class TestReleaseScripts(unittest.TestCase):
         self.assertGreaterEqual(len(found), 6)
         for f in found:
             self.assertIn(f, names)
+        # and every file of the list is in the notes' Downloads table, coalr's too (none for a prerelease)
+        for version in ("1.2.3", "1.2.3rc1"):
+            notes = rn.fixed_part(version)
+            table = notes[notes.index("## Downloads"):notes.index("The version-free names")]
+            names = release_file_names(version)
+            for f in names:
+                self.assertIn(f"`{f}`", table, f"{version}: the release notes do not list {f}")
+            self.assertEqual("coalr_" in table, version == "1.2.3", version)
+        self.assertIn("releases/download/v1.2.3/coalr_1.2.3.tar.gz", rn.fixed_part("1.2.3"))
 
     def test_changelog_section(self):
         rn = _load("release_notes")
@@ -240,6 +264,9 @@ class TestReleaseWorkflow(unittest.TestCase):
         self.assertIn("coalr_src.tar.gz", release_file_names("1.2.3"))
         self.assertIn("coalr_1.2.3.9000.tar.gz", release_file_names("1.2.3.dev0"))
         self.assertFalse([n for n in release_file_names("1.2.3rc1") if n.startswith("coalr")])
+        check = _steps(wf, "files")["Check the release files"]
+        self.assertEqual(check["env"]["PRE"], "${{ needs.python.outputs.prerelease }}")
+        self.assertIn('if [ "$PRE" = false ] && [ -z "$R_V" ]; then', check["run"])   # a release needs coalr
 
     def test_bash_steps_parse(self):
         """Every bash step of release.yml and release-smoke.yml is valid shell (bash -n): a quote inside the R
