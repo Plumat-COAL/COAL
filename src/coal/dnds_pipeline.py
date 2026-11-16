@@ -2466,8 +2466,15 @@ class _Run:
             except BaseException:
                 # An interrupt (Ctrl-C, SIGTERM) or an error while feeding: the engine must not be left running.
                 # Closing its input would only make it finish the pairs it has and write its files, as an orphan
-                # of a run that no longer exists; it is killed, and what it wrote so far is removed.
+                # of a run that no longer exists; it is killed, and what it wrote so far is removed. Its input is
+                # closed once it is gone: a write cut short leaves bytes in the buffer, whose flush when the pipe
+                # object is collected would print an "Exception ignored ... BrokenPipeError" traceback (final review
+                # of 2026-11-16, L1).
                 self.kill_children()
+                try:
+                    proc.stdin.close()
+                except OSError:
+                    pass
                 self.remove_temporaries()
                 raise
             finally:
@@ -3412,7 +3419,10 @@ def codon_dnds(groups: Iterable[Sequence[Any]], out_tsv: _Path, method: Sequence
     process. groups: an iterable of (group_id, members[, pairs]) with members = [(id, cds)] or [(id, cds,
     protein_row)]: two members without rows are aligned here; three or more need rows. pairs: "all" (default),
     "rep" or a list of (i, j). Writes out_tsv (PAIR_COLUMNS, with group_column first when given); returns the
-    number of groups sent. Raises PipelineError when coal-cpp is missing or fails."""
+    number of groups sent. Raises PipelineError when coal-cpp is missing or fails. When anything else ends the
+    call (an exception raised by groups, Ctrl-C), coal-cpp is killed and waited for, and the output files that did
+    not exist before the call (out_tsv, codon_out, kaks_out, failures: a table with its header only, or part of
+    the groups) are removed; a file that was there before is never removed. Then the exception is raised again."""
     cpp = cpp or _find_cpp()
     if isinstance(method, str):
         method = [method]
@@ -3424,6 +3434,9 @@ def codon_dnds(groups: Iterable[Sequence[Any]], out_tsv: _Path, method: Sequence
         if v:
             cmd += [flag, os.fspath(v)]
     cmd += [str(x) for x in extra_args]
+    # the outputs this call creates (removed if it is interrupted); a file already there is never removed
+    new_files = [os.fspath(f) for f in (out_tsv, codon_out, kaks_out, failures)
+                 if f and not os.path.lexists(os.fspath(f))]
     try:
         proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     except OSError as e:
@@ -3444,14 +3457,38 @@ def codon_dnds(groups: Iterable[Sequence[Any]], out_tsv: _Path, method: Sequence
             if mode == "list":
                 buf += [f"P\t{i}\t{j}\n" for i, j in pairs]
             buf.append("E\n")
-            proc.stdin.write("".join(buf).encode())
+            try:
+                proc.stdin.write("".join(buf).encode())
+            except OSError:   # (BrokenPipeError among them) coal-cpp ended early: its status and message follow
+                break
             n += 1
-        proc.stdin.close()
-    except (BrokenPipeError, OSError):
-        pass
-    rc = proc.wait()
-    reader.join()
-    proc.stderr.close()
+        try:
+            proc.stdin.close()
+        except OSError:
+            pass
+        rc = proc.wait()
+        reader.join()
+        proc.stderr.close()
+    except BaseException:
+        # an exception raised by groups (an OSError of its own included), or an interrupt: the engine must not go
+        # on as an orphan, nor be waited for while its input is still open (final review of 2026-11-16, L2)
+        try:
+            proc.kill()
+        except OSError:
+            pass
+        proc.wait()
+        for pipe in (proc.stdin, proc.stderr):
+            try:
+                pipe.close()
+            except OSError:
+                pass
+        reader.join(timeout=5)
+        for f in new_files:
+            try:
+                os.remove(f)
+            except OSError:
+                pass
+        raise
     if rc != 0:
         raise PipelineError(f"coal-cpp codon-dnds failed ({_msa.exit_text(rc)}): "
                             f"{b''.join(err).decode('utf-8', 'backslashreplace').strip()[-800:]}")

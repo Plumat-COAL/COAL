@@ -189,14 +189,17 @@ alignment, or bootstrap the codon columns.
 with `--format`.
 
 - **AXT** is KaKs_Calculator's format: a name line, the two aligned sequences, then a blank line. When a record
-  has more than two sequence lines, they are joined and split in half, as KaKs_Calculator does. A record with
-  **one** sequence line (the second sequence is missing) is an error for that record: `coal dnds` gives it status
-  `error`, `coal kaks` leaves it out with a warning, and the other records are computed. (KaKs_Calculator would
-  cut the one line in half and compare the halves.) Lines starting with `#` before a record are skipped.
+  has more than two sequence lines (wrapped sequences), they are joined and split in half, as KaKs_Calculator
+  does, provided the half falls at the end of a line and every line holds only letters and the gap / missing
+  symbols `- . ? * ~ !`. A record with **one** sequence line (the second sequence is missing), or with more lines
+  that break either rule (how a blank line lost between two records shows: the next record's name line and
+  sequences are joined to this one), is an error for that record: `coal dnds` gives it status `error`, `coal kaks`
+  leaves it out with a warning, and the other records are computed. (KaKs_Calculator would cut the line, or the
+  joined records, in half and compare the halves.) Lines starting with `#` before a record are skipped.
 - **Aligned FASTA**: `--pairs all` (the default) compares every pair of the alignment in AXTConvertor's order
   (1-2, 1-3, ... 2-3, ...). `--pairs consecutive` compares records 1 and 2, 3 and 4, and so on. In `coal kaks`, a
   FASTA pair is named `id1&id2`, as KaKs_Calculator's AXTConvertor names it.
-- Standard input (`-`) is not read; give a file.
+- Standard input (`-`) is not read, nor a pipe, FIFO or process substitution (`<(...)`); give a file.
 - **The output must not be the input.** `-o` naming the input file (by any spelling: `./x`, a symbolic or hard
   link) is refused with exit status 2 before anything is written; the output is opened while the input is still
   being read, so the input would be destroyed. The same holds for `coal translate` and `coal codon-dnds`.
@@ -1093,7 +1096,10 @@ audit's, each with its own search): of random pairs of 1 to 40 codons (nine code
 Most of the remaining maxima have omega or kappa at a bound, on the ridge or near it, but not all (one pair of 39
 codons has its maximum at kappa 2.0, omega 2.2, 0.055 above COAL's). No pair of more than 40 codons in the three
 real data sets below is within 0.18 per codon of the plateau, so the scan does not touch them, and GY's time is
-the same. COAL's likelihood is the highest of its starts, not a proven global maximum.
+the same. COAL's likelihood is the highest of its starts, not a proven global maximum. In particular, t is
+maximised as if the likelihood over t had one peak, and for a pair of very few codons it can have two, so the
+reported t can be a local maximum (`GAGCTTTCT` against `AAGCTTTCT`, code 1: t 0.384 with lnL -12.765 is reported,
+where t 10.12 has lnL -12.609, kappa and omega at 999 in both).
 
 **Genetic codes.** `-c` sets the code for GY as for every method, and all 17 tables work (NCBI 1 to 6, 9 to 16,
 21 to 23). The code enters the model in three places, each taken from the table: its stop codons are not states

@@ -671,6 +671,89 @@ class TestCli(KaKsBase):
             self.assertEqual([l.split("\t")[0] for l in k.stdout.splitlines()[1:]], ["a&b", "wrapped", "c&d"])
             self.assertIn("one: record has one sequence line", k.stderr)
 
+    def test_axt_blank_line_lost_between_records(self):
+        """A blank line lost between two records joins them into one record of five lines. Halving that would
+        compare the first gene with the second gene's lines and drop the second gene without a word (final review
+        of 2026-11-16, M1): the record is an error, in `coal dnds` and in `coal kaks`, and the others are computed."""
+        a1, a2 = "ATGGCTAAAGGTCTGGAACGT", "ATGGCGAAAGGCCTGGATCGT"
+        b1, b2 = "ATGAAACCCGGGTTTCAGAAA", "ATGAAGCCAGGGTTCCAGAAG"
+        cases = {
+            # the reviewer's file: the name line gene_b is not sequence (and the half is inside a line)
+            "name": f"gene_a\n{a1}\n{a2}\ngene_b\n{b1}\n{b2}\n\ngene_c\nATGCCCAAAGGG\nATGCCGAAGGGA\n",
+            # a name of letters only: the half (44 of 88) falls inside a line
+            "half": f"gene_a\n{a1}\n{a2}\ngene\n{b1}\n{b2}\n\ngene_c\nATGCCCAAAGGG\nATGCCGAAGGGA\n",
+            # the half falls at a line end (24 + 24 = 6 + 21 + 21): only the name line's '_' shows it
+            "end": f"gene_a\n{a1}CCC\n{a2}CCC\ngene_b\n{b1}\n{b2}\n\ngene_c\nATGCCCAAAGGG\nATGCCGAAGGGA\n",
+        }
+        with tempfile.TemporaryDirectory() as td:
+            for case, text in cases.items():
+                axt = Path(td) / f"{case}.axt"
+                axt.write_text(text, encoding="utf-8")
+                r = self.run_cpp("dnds", axt, "-m", "NG")
+                rows = [l.split("\t") for l in r.stdout.splitlines()[1:]]
+                self.assertEqual([f[0] for f in rows], ["gene_a", "gene_c"], case)
+                self.assertEqual(rows[0][13], "error", (case, rows[0]))
+                self.assertIn("blank line", rows[0][14], case)
+                self.assertEqual(rows[0][3:6], ["NA", "NA", "NA"], case)
+                self.assertNotEqual(rows[1][13], "error", case)
+                self.assertIn("1 error", r.stderr, case)
+                k = self.run_cpp("kaks", "-i", axt, "-m", "NG")
+                self.assertEqual([l.split("\t")[0] for l in k.stdout.splitlines()[1:]], ["gene_c"], case)
+                self.assertIn("gene_a: record has 5 sequence lines", k.stderr, case)
+            self.assertIn("('gene_b') is not sequence", k.stderr)
+
+    def test_axt_wrapped_sequences(self):
+        """Wrapped sequences (KaKs_Calculator joins the lines and halves them) give the same numbers as one line
+        each: lines of 60, a second sequence wrapped differently from the first, gaps and lower case."""
+        rng = random.Random(11)
+        s1 = "".join(rng.choice("ACGT") for _ in range(150)).replace("TAA", "TCA").replace("TAG", "TCG") \
+            .replace("TGA", "TCA")
+        s2 = list(s1)
+        for i in range(2, 150, 7):
+            s2[i] = "ACGT"[("ACGT".index(s2[i]) + 1) % 4]
+        s2 = "".join(s2[:30]) + "---" + "".join(s2[33:])
+        s1 = s1[:120] + s1[120:].lower()
+
+        def wrap(s, w):
+            return "\n".join(s[i:i + w] for i in range(0, len(s), w))
+        text = (f"one&line\n{s1}\n{s2}\n\n"
+                f"w60&w60\n{wrap(s1, 60)}\n{wrap(s2, 60)}\n\n"
+                f"w50&w75\n{wrap(s1, 50)}\n{wrap(s2, 75)}\n\n"
+                f"w150&w30\n{s1}\n{wrap(s2, 30)}\n")
+        with tempfile.TemporaryDirectory() as td:
+            axt = Path(td) / "wrapped.axt"
+            axt.write_text(text, encoding="utf-8")
+            r = self.run_cpp("dnds", axt, "-m", "NG", "-m", "YN", "--digits", "15")
+            rows = [l.split("\t") for l in r.stdout.splitlines()[1:]]
+            self.assertEqual(len(rows), 8)
+            for f in rows:
+                self.assertIn(f[13], ("ok", "warning"), f)
+            base = {f[2]: f[3:] for f in rows[:2]}
+            for f in rows[2:]:
+                self.assertEqual(f[3:], base[f[2]], f)
+            k = self.run_cpp("kaks", "-i", axt, "-m", "NG", "-m", "YN")
+            krows = [l.split("\t") for l in k.stdout.splitlines()[1:]]
+            self.assertEqual(len(krows), 8)
+            for f in krows[2:]:
+                self.assertEqual(f[1:], krows[0 if f[1] == krows[0][1] else 1][1:], f)
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "needs FIFOs")
+    def test_fifo_input_is_refused(self):
+        """The input is opened more than once (gzip check, format check, reader): a FIFO or a process substitution
+        is refused as standard input is, never read empty or waited on (final review of 2026-11-16, L3); also
+        through the Python command, whose gzip check must not open the FIFO."""
+        with tempfile.TemporaryDirectory() as td:
+            fifo = Path(td) / "in.axt"
+            os.mkfifo(fifo)
+            env = dict(os.environ, COAL_CPP=str(self.bin), PYTHONPATH=str(ROOT / "src"))
+            for cmd in ([str(self.bin), "kaks", "-i", str(fifo)], [str(self.bin), "dnds", str(fifo)],
+                        [sys.executable, "-m", "coal", "kaks", "-i", str(fifo)],
+                        [sys.executable, "-m", "coal", "dnds", str(fifo)]):
+                r = subprocess.run(cmd, capture_output=True, text=True, timeout=60, env=env)
+                self.assertEqual(r.returncode, 2, (cmd, r.stderr))
+                self.assertIn("is not a regular file) is not supported: give a file", r.stderr, cmd)
+                self.assertEqual(r.stdout, "", cmd)
+
     def test_python_hands_over(self):
         env = dict(os.environ, COAL_CPP=str(self.bin), PYTHONPATH=str(ROOT / "src"))
         r = subprocess.run([sys.executable, "-m", "coal", "dnds", str(KDIR / "edge_cases.axt"), "-q"],

@@ -3,7 +3,7 @@
     python scripts/release_version.py v0.4.0      -> prints 0.4.0, exit 0
     python scripts/release_version.py v0.5.0      -> error (source says 0.4.0), exit 1
     python scripts/release_version.py --dry-run main   -> prints the source's version (e.g. 0.6.1.dev0), exit 0 when
-                                                     the six places agree; for a build that publishes nothing
+                                                     the seven places agree; for a build that publishes nothing
     ... --github-output   also appends version=, prerelease=true|false and r_version= to $GITHUB_OUTPUT
 
 A release (not a dry run) is also refused while CHANGELOG.md has entries under "## Unreleased" (the release commit
@@ -14,12 +14,13 @@ as a prerelease.
 
 The tag must be "v" + the one version of both packages: src/coal/__init__.py and pyproject.toml (the engine,
 coal-align), apps/coal-app/pyproject.toml (the app, coal-align-app) together with the coal-align version that the app
-pins (coal-align==<version>), and the C++ engine's VERSION in cpp/src/main.cpp and cpp/src/report.cpp (`coal`
+pins (coal-align==<version>), and the C++ engine's VERSION in cpp/src/main.cpp and cpp/src/report.cpp and
+COAL_VERSION_FULL in CMakeLists.txt (the COAL_VERSION_STRING of the installed C++ library's version.hpp) (`coal`
 hands work to a `coal-cpp` of its own version only, so a stale one would silently never be used). So a release can
 never ship files whose names, metadata, dependency, `coal --version` and `coal-cpp --version` disagree. Prints `prerelease=true|false` too with --github-output.
 
 Between releases the source carries a development version, X.Y.Z.devN (PEP 440: 0.6.0.dev0 is the tree that becomes
-0.6.0), in those six places, so that no build of the development tree reports the version of a published release.
+0.6.0), in those seven places, so that no build of the development tree reports the version of a published release.
 A development version cannot be tagged (TAG_RE has no .dev): the release commit sets X.Y.Z everywhere first. The
 places that take digits only or describe the release carry the base version X.Y.Z (base_version): CMake's
 project(VERSION), CITATION.cff, the website's version spans; coalr's DESCRIPTION has R's form of it
@@ -113,15 +114,20 @@ def app_versions(root=ROOT):
     return app, (pin.group(1) if pin else None)
 
 
-CPP_SOURCES = (os.path.join("cpp", "src", "main.cpp"), os.path.join("cpp", "src", "report.cpp"))
+CPP_SOURCES = (os.path.join("cpp", "src", "main.cpp"), os.path.join("cpp", "src", "report.cpp"), "CMakeLists.txt")
+# what each of CPP_SOURCES holds the version in
+_CPP_VERSION_RE = (r'static const char\* VERSION = "([^"]+)";', r'static const char\* VERSION = "([^"]+)";',
+                   r'(?m)^\s*set\(\s*COAL_VERSION_FULL\s+"([^"]+)"\s*\)')
 
 
 def cpp_versions(root=ROOT):
-    """The C++ engine's VERSION string in each of CPP_SOURCES (what `coal-cpp --version` and its reports say)."""
+    """The C++ engine's version in each of CPP_SOURCES: VERSION in main.cpp and report.cpp (what `coal-cpp --version`
+    and its reports say), and CMakeLists.txt's COAL_VERSION_FULL (COAL_VERSION_STRING of the installed library's
+    version.hpp; final review of 2026-11-16, Q1). None where it is not found."""
     out = []
-    for rel in CPP_SOURCES:
+    for rel, pattern in zip(CPP_SOURCES, _CPP_VERSION_RE):
         with open(os.path.join(root, rel), encoding="utf-8") as fh:
-            m = re.search(r'static const char\* VERSION = "([^"]+)";', fh.read())
+            m = re.search(pattern, fh.read())
         out.append(m.group(1) if m else None)
     return tuple(out)
 
@@ -138,13 +144,13 @@ def check(tag, root=ROOT):
     if not (version == init == proj == app == pin) or any(c != version for c in cpp):
         if DEV_RE.match(init or ""):
             raise ValueError(f"the source is the development version {init}: a release is tagged from a commit that "
-                             f"sets {base_version(init)} (tag {tag} says {version}) in all six places (bump all six: "
+                             f"sets {base_version(init)} (tag {tag} says {version}) in all seven places (bump all seven: "
                              f"src/coal/__init__.py, pyproject.toml, {APP_PYPROJECT.replace(os.sep, '/')} twice, "
                              + ", ".join(rel.replace(os.sep, "/") for rel in CPP_SOURCES) + ")")
         cpp_says = ", ".join(f"{rel.replace(os.sep, '/')} says {c}" for rel, c in zip(CPP_SOURCES, cpp))
         raise ValueError(f"tag {tag} says {version}, but src/coal/__init__.py says {init}, pyproject.toml says "
                          f"{proj}, {APP_PYPROJECT.replace(os.sep, '/')} says {app} and pins coal-align=={pin}, "
-                         f"{cpp_says}: bump all six, commit, then tag that commit")
+                         f"{cpp_says}: bump all seven, commit, then tag that commit")
     pre = bool(PRE_RE.search(version))
     if unreleased_text(root):
         raise ValueError(f"CHANGELOG.md has entries under \"## Unreleased\": the release commit moves them into "
@@ -161,7 +167,7 @@ def check(tag, root=ROOT):
 
 def dry_run(root=ROOT):
     """For a build that publishes nothing (release.yml dispatched with publish off on a branch or commit, e.g. main
-    between releases): the source's version, which may be a development version, once the six places agree. Raises
+    between releases): the source's version, which may be a development version, once the seven places agree. Raises
     ValueError when they do not."""
     init, proj = source_versions(root)
     app, pin = app_versions(root)

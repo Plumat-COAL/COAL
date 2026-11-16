@@ -72,6 +72,44 @@ class TestTools(_PrivateRuns):
         with self.assertRaises(tools.CoalToolError):
             tools.codon_align(p, d, save_as=os.path.join(out, "no", "such", "x.fasta"))
 
+    def test_save_copy_creates_a_new_file_only(self):
+        """_save_copy creates the copy with open(dest, "xb"): a dangling symbolic link at the name is not written
+        through (its target is not created), and a file that takes the name after the check is not overwritten
+        (final review of 2026-11-16, Q3)."""
+        from contextlib import nullcontext
+        from unittest import mock
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        src = os.path.join(d, "result.tsv")
+        with open(src, "w", encoding="utf-8") as fh:
+            fh.write("the table\n")
+        self.assertEqual(tools._save_copy(src, os.path.join(d, "copy.tsv"), "table"), os.path.join(d, "copy.tsv"))
+        with open(os.path.join(d, "copy.tsv"), encoding="utf-8") as fh:
+            self.assertEqual(fh.read(), "the table\n")
+        theirs = os.path.join(d, "theirs.tsv")
+        with open(theirs, "w", encoding="utf-8") as fh:
+            fh.write("someone else's\n")
+        target = os.path.join(d, "elsewhere.tsv")
+        names = [theirs]
+        if hasattr(os, "symlink"):
+            try:
+                os.symlink(target, os.path.join(d, "link.tsv"))
+                names.append(os.path.join(d, "link.tsv"))
+            except OSError:   # (Windows without the symlink privilege)
+                pass
+        for dest in names:
+            for race in (False, True):   # race: the name is taken after the check
+                if race and dest != theirs and os.name == "nt":
+                    continue   # Windows: CREATE_NEW follows a symbolic link (no O_NOFOLLOW); the check covers it
+                with self.subTest(dest=os.path.basename(dest), race=race):
+                    with mock.patch.object(tools.os.path, "lexists", return_value=False) if race else nullcontext():
+                        with self.assertRaises(tools.CoalToolError) as cm:
+                            tools._save_copy(src, dest, "table")
+                    self.assertIn("already exists", str(cm.exception))
+                    self.assertFalse(os.path.lexists(target), "written through a symbolic link")
+                    with open(theirs, encoding="utf-8") as fh:
+                        self.assertEqual(fh.read(), "someone else's\n")
+
     def test_codon_align_mito_hint_then_rerun(self):
         p, d = core.example_paths("mito")
         r = tools.codon_align(p, d)

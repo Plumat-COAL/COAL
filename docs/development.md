@@ -155,8 +155,8 @@ corresponding codon alignments. *Nucleic Acids Res.* 34:W609–W612.
      `docs/tutorials/04-r-coalr.md`, `packaging/orthologr/README.md`): every `releases/download/v<version>/coalr_<version>.tar.gz`
      and `install_github("Plumat-COAL/COAL@v<version>", ...)` names this version, and the notes that start with
      `<!-- until <version> is published` are removed (`tests/test_docs_site.py` `TestCoalrInstallLines`).
-   **A prerelease** (`X.Y.Zrc1`, also `a1`, `b1`) is the same commit with these differences: the six places,
-   `COAL_VERSION_FULL`, `CITATION.cff`'s `version:` and the website's spans carry `X.Y.Zrc1` (CMake's
+   **A prerelease** (`X.Y.Zrc1`, also `a1`, `b1`) is the same commit with these differences: the seven places
+   (`COAL_VERSION_FULL` among them), `CITATION.cff`'s `version:` and the website's spans carry `X.Y.Zrc1` (CMake's
    `project(VERSION)` stays `X.Y.Z`, and `docs/python-api.md` keeps naming `X.Y.Z`); the CHANGELOG section is `## X.Y.Zrc1`; coalr's DESCRIPTION and its NEWS
    heading stay at the development form (R has no form of `rc1`: `r_version()` is empty, the release has no coalr
    file, and the coalr install lines and their notes stay as they are). The banners are removed as for a release.

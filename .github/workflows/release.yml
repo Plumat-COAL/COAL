@@ -53,7 +53,7 @@ jobs:
         id: v
         # A dry run (dispatched with publish off) of a branch or commit, e.g. main between releases, builds the
         # development version (0.6.1.dev0) the source carries: release_version.py rejects it as a tag, and nothing is
-        # published, but the six places must still agree (--dry-run). Anything that can publish goes through the tag
+        # published, but the seven places must still agree (--dry-run). Anything that can publish goes through the tag
         # check, which also refuses a CHANGELOG with entries under "Unreleased" and a coalr DESCRIPTION of another
         # version. Outputs: version, prerelease, r_version (coalr's version; empty for a prerelease).
         env:
@@ -254,7 +254,7 @@ jobs:
         shell: bash
         # A dry run (dispatched with publish off) of a branch or commit, e.g. main between releases, builds the
         # development version (0.6.1.dev0) the source carries: release_version.py rejects it as a tag, and nothing is
-        # published, but the six places must still agree (--dry-run). Anything that can publish goes through the tag
+        # published, but the seven places must still agree (--dry-run). Anything that can publish goes through the tag
         # check, which also refuses a CHANGELOG with entries under "Unreleased" and a coalr DESCRIPTION of another
         # version. Outputs: version, prerelease, r_version (coalr's version; empty for a prerelease).
         env:

@@ -23,6 +23,7 @@ import io
 import json
 import math
 import os
+import random
 import signal
 import stat
 import statistics
@@ -683,6 +684,54 @@ class CodonDnds(PipelineCase):
                          [("a", "g02", "NG", "ok"), ("b", "g03", "NG", "ok")])
 
 
+    def test_python_codon_dnds_when_groups_raise(self):
+        """An exception raised by the groups iterable (or Ctrl-C) ends coal-cpp, which is waited for, with its pipes
+        closed; the exception comes through; the output that the call created is removed, a file that was already
+        there is not (final review of 2026-11-16, L2). An OSError of the iterable is not taken for a broken pipe
+        (that left the engine waiting for the rest of its input, and the call waiting for the engine)."""
+        started = []
+        real_popen = subprocess.Popen
+
+        def popen(*a, **kw):
+            proc = real_popen(*a, **kw)
+            if "codon-dnds" in map(str, a[0] if a else kw["args"]):   # (not the version check of the lookup)
+                started.append(proc)
+            return proc
+
+        def groups(exc):
+            yield ("a", [("g02", self.q["g02"]), ("h02", self.s["h02"])])
+            raise exc
+
+        for exc in (ValueError("bad group"), KeyboardInterrupt(), FileNotFoundError(2, "gone")):
+            for existed in (False, True):
+                with self.subTest(exc=type(exc).__name__, existed=existed):
+                    out = self.tmp / f"raise_{type(exc).__name__}_{existed}.tsv"
+                    if existed:
+                        out.write_text("the user's file\n", encoding="utf-8")
+                    started.clear()
+                    box: list = []
+
+                    def call():
+                        try:
+                            P.codon_dnds(groups(exc), str(out), method=["NG"])
+                        except BaseException as e:   # noqa: B036 (KeyboardInterrupt is one of the cases)
+                            box.append(e)
+                    with mock.patch.object(P.subprocess, "Popen", popen):
+                        t = threading.Thread(target=call, daemon=True)
+                        t.start()
+                        t.join(60)
+                    if t.is_alive():
+                        for proc in started:
+                            proc.kill()
+                        self.fail("codon_dnds did not return")
+                    self.assertEqual(len(box), 1)
+                    self.assertIs(box[0], exc)
+                    self.assertEqual(len(started), 1)
+                    proc = started[0]
+                    self.assertIsNotNone(proc.returncode, "coal-cpp was left running")
+                    self.assertTrue(proc.stdin.closed and proc.stderr.closed)
+                    self.assertEqual(out.exists(), existed)
+
 # ---------------------------------------------------------------------------------------------- pair mode
 @needs_cpp
 class PairsGiven(PipelineCase):
@@ -1045,6 +1094,52 @@ class Robustness(PipelineCase):
                 self.assertFalse((out / "dnds.tsv.tmp").exists())
                 self.assertFalse((out / "dnds.tsv").exists())
                 self.assertFalse(Path(str(out) + ".coal-lock").exists())
+
+    @unittest.skipIf(os.name == "nt", "POSIX signals and a shell stand-in for the engine")
+    def test_interrupt_while_feeding_prints_no_traceback(self):
+        """The engine reads nothing and the groups fill its input pipe (more than 64 KiB), so the interrupt comes
+        while the pipeline waits in a write: the engine is killed and its input closed then, with no "Exception
+        ignored ... BrokenPipeError" traceback when the half-written buffer is dropped (final review of 2026-11-16,
+        L1)."""
+        rng = random.Random(3)
+        codons = [a + b + c for a in "ACGT" for b in "ACGT" for c in "ACGT" if a + b + c not in ("TAA", "TAG", "TGA")]
+        q, s = self.tmp / "big_q.fa", self.tmp / "big_s.fa"
+        genes = {f"g{i}": "ATG" + "".join(rng.choice(codons) for _ in range(600)) + "TAA" for i in range(80)}
+        q.write_text("".join(f">q{k}\n{v}\n" for k, v in genes.items()), encoding="utf-8")
+        s.write_text("".join(f">s{k}\n{v}\n" for k, v in genes.items()), encoding="utf-8")
+        pf = self.pairs_file([(f"q{k}", f"s{k}") for k in genes])
+        for signum, code, name in ((signal.SIGINT, 130, "SIGINT"), (signal.SIGTERM, 143, "SIGTERM")):
+            with self.subTest(signal=name):
+                out = self.tmp / f"feed_{name}"
+                pidfile = self.tmp / f"feed_engine_{name}.pid"
+                engine = self.tmp / f"coal-cpp-feed-{name}"
+                engine.write_text(f'#!/bin/sh\ncase "$1" in\n  codon-dnds) echo $$ > "{pidfile}"; exec sleep 120;;\n'
+                                  f'  *) exec "{CPP}" "$@";;\nesac\n', encoding="utf-8")
+                engine.chmod(0o755)
+                proc = subprocess.Popen([sys.executable, "-m", "coal", "pipeline", "pairs", "--query", str(q),
+                                         "--subject", str(s), "--pairs", str(pf), "-o", str(out)],
+                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                        env={**os.environ, "PYTHONPATH": str(ROOT / "src"), "COAL_CPP": str(engine)},
+                                        encoding="utf-8", start_new_session=True)
+                try:
+                    for _ in range(600):
+                        if pidfile.is_file() and pidfile.read_text(encoding="utf-8").strip():
+                            break
+                        time.sleep(0.05)
+                    else:
+                        self.fail("the engine step did not start")
+                    time.sleep(1.0)                   # the pipe fills; the feed waits in a write
+                    os.kill(proc.pid, signum)
+                    _, err = proc.communicate(timeout=60)
+                finally:
+                    if proc.poll() is None:
+                        proc.kill()
+                        proc.wait()
+                self.assertEqual(proc.returncode, code, err)
+                self.assertIn("interrupted", err)
+                self.assertNotIn("Traceback", err)
+                self.assertNotIn("Exception ignored", err)
+                self.assertNotIn("BrokenPipeError", err)
 
     def test_interrupted_msa_batch_ends_its_aligners(self):
         """coal.msa: an interrupt while a batch of clusters is aligned ends the running aligner processes and

@@ -73,7 +73,8 @@ class TestReleaseScripts(unittest.TestCase):
         app, pin = rv.app_versions()
         self.assertEqual(app, init, "apps/coal-app/pyproject.toml has another version than the engine")
         self.assertEqual(pin, init, "apps/coal-app/pyproject.toml must depend on coal-align==<the same version>")
-        self.assertEqual(rv.cpp_versions(), (init, init), "cpp/src/main.cpp and report.cpp VERSION must be the engine's")
+        self.assertEqual(rv.cpp_versions(), (init, init, init),
+                         "cpp/src/main.cpp and report.cpp VERSION and CMakeLists.txt COAL_VERSION_FULL must be the engine's")
         if rv.DEV_RE.match(init):   # a development tree (0.6.0.dev0) has no tag: the release commit sets 0.6.0 first
             for tag in ("v" + init, "v" + rv.base_version(init)):
                 with self.assertRaisesRegex(ValueError, "development version|is not v<major>", msg=tag):
@@ -90,7 +91,7 @@ class TestReleaseScripts(unittest.TestCase):
         r = subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "release_version.py"), "v9.9.9"],
                            capture_output=True, text=True, timeout=60)
         self.assertEqual(r.returncode, 1)
-        self.assertIn("bump all six", r.stderr)
+        self.assertIn("bump all seven", r.stderr)
         self.assertIn("cpp/src/main.cpp", r.stderr)
         self.assertIn("apps/coal-app/pyproject.toml", r.stderr)
 
@@ -112,7 +113,7 @@ class TestReleaseScripts(unittest.TestCase):
                 self.assertEqual(fh.read(), f"version={init}\nprerelease=true\nr_version={rv.r_version(init) or ''}\n")
             # a copy of the tree's version files at release 1.2.3, then each thing the check refuses
             for rel in ("src/coal/__init__.py", "pyproject.toml", "apps/coal-app/pyproject.toml", "cpp/src/main.cpp",
-                        "cpp/src/report.cpp", "CHANGELOG.md", "packaging/r/coalr/DESCRIPTION",
+                        "cpp/src/report.cpp", "CMakeLists.txt", "CHANGELOG.md", "packaging/r/coalr/DESCRIPTION",
                         "packaging/r/coalr/NEWS.md"):
                 dst = os.path.join(t, "tree", *rel.split("/"))
                 os.makedirs(os.path.dirname(dst), exist_ok=True)
@@ -153,6 +154,21 @@ class TestReleaseScripts(unittest.TestCase):
                 rv.check("v1.2.3", tree)
             with open(news, "w", encoding="utf-8") as fh:
                 fh.write("# coalr 1.2.3\n")
+            self.assertEqual(rv.check("v1.2.3", tree), ("1.2.3", False))
+            # CMake's COAL_VERSION_FULL (the installed library's COAL_VERSION_STRING) is checked with the others
+            # (final review of 2026-11-16, Q1)
+            cmake = os.path.join(tree, "CMakeLists.txt")
+            with open(cmake, encoding="utf-8") as fh:
+                cm = fh.read()
+            self.assertIn('set(COAL_VERSION_FULL "1.2.3")', cm)
+            with open(cmake, "w", encoding="utf-8") as fh:
+                fh.write(cm.replace('set(COAL_VERSION_FULL "1.2.3")', 'set(COAL_VERSION_FULL "1.2.2")'))
+            with self.assertRaisesRegex(ValueError, "CMakeLists.txt says 1.2.2: bump all seven"):
+                rv.check("v1.2.3", tree)
+            with self.assertRaisesRegex(ValueError, "dry run: the versions disagree"):
+                rv.dry_run(tree)
+            with open(cmake, "w", encoding="utf-8") as fh:
+                fh.write(cm)
             self.assertEqual(rv.check("v1.2.3", tree), ("1.2.3", False))
             with open(desc, "w", encoding="utf-8") as fh:
                 fh.write(text.replace("Version: 1.2.3", "Version: 1.2.2.9000"))
