@@ -95,21 +95,22 @@
   above and the 25,200 random pairs.
 - **GY: a coarse scan of kappa and omega for small pairs and for pairs whose result is on the ridge** (audit of
   #101, F1). Fixed starts are not a global search: `GTGGACAAC` against `TCCGGGAAG` under code 11 was `saturated`
-  with lnL -17.3590 (every start ended on the ridge of saturation, where the likelihood barely depends on kappa
-  and omega), and its maximum is -16.5761 at t 7.96, kappa 1e-6 (`ok` now). After the ordinary starts and their
-  continuation, which are as before, a pair of 100 codons or fewer and a pair whose result is on the ridge or not
-  converged has the likelihood, maximised over t, evaluated at 36 points of a grid in (kappa, omega), and is
-  started from the two highest (a pair of more than 100 codons only from a point higher than its result); a
-  scan start replaces the result only if it is higher. Against an independent likelihood with a bounded global
-  search, 67 of 600 random pairs of 1 to 40 codons were more than 1e-3 below the global maximum and 4 are (all
-  with the maximum on the ridge, kappa or omega near a bound); of 150 random pairs of 60 to 200 codons 14 were and
-  none is. Against main at 17 digits: of 37,800 random pairs (seeds 1, 2, 97, 98, 11, 4242; nine codes) 6,837
-  have a higher likelihood (up to 3.4), none is lower by more than 1e-7 (two by 5e-12 and 5e-13: flat in kappa),
-  none is `not_converged`; 1,099 go from `saturated` to `ok`, 363 to `warning`, 281 from `ok` and 138 from
-  `warning` to `saturated`. No GY row of the 4,388 yeast, 2,862 *Salmonella* / *Shigella* and 3,142 *E. coli* /
-  *Salmonella* pairs changes except the identical pairs (next). docs/kaks.md no longer says that COAL's
-  likelihood is the higher one against codeml as if guaranteed: it is on every pair compared, and the search is
-  local.
+  with lnL -17.3590 (every start ended on the ridge of saturation, where the likelihood barely depends on kappa and
+  omega), and its maximum is -16.5761 at t 7.96, kappa 1e-6 (`ok` now). After the ordinary starts and their
+  continuation, which are as before, a pair of 40 codons or fewer and a pair whose result is on the ridge or not
+  converged has the likelihood, maximised over t, evaluated on a grid in (kappa, omega) (36 points for a small pair,
+  9 for a larger one), and is started from the two highest (a pair of more than 40 codons only from a point higher
+  than its result); a scan start replaces the result only if it is higher. Against an independent likelihood with a
+  bounded global search, 67 of 600 random pairs of 1 to 40 codons were more than 1e-3 below the global maximum and 4
+  are (all with the maximum on the ridge, kappa or omega near a bound); of 150 random pairs of 60 to 200 codons 14
+  were and 1 is (0.013 below). GY's CPU time on the real sets below is the same as before (a first version, which
+  scanned every pair of up to 100 codons on 36 points, cost 8 to 12 %). Against main at 17 digits: of 37,800 random
+  pairs (seeds 1, 2, 97, 98, 11, 4242; nine codes) 6,837 have a higher likelihood (up to 3.4), none is lower by more
+  than 1e-7 (two by 5e-12 and 5e-13: flat in kappa), none is `not_converged`; 1,099 go from `saturated` to `ok`, 363
+  to `warning`, 281 from `ok` and 138 from `warning` to `saturated`. No GY row of the 4,388 yeast, 2,862
+  *Salmonella* / *Shigella* and 3,142 *E. coli* / *Salmonella* pairs changes except the identical pairs (next).
+  docs/kaks.md no longer says that COAL's likelihood is the higher one against codeml as if guaranteed: it is on
+  every pair compared, and the search is local.
 - **GY: the likelihood of identical sequences** is the sum of log pi over the codons (the likelihood at t = 0); it
   was printed twice that (for 4 codons about 10 too low). Only the lnL column of `--ml-columns` changes: 665 of
   the 37,800 random pairs and 5 of the real pairs above.
