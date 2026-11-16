@@ -26,6 +26,7 @@ import errno
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -58,6 +59,12 @@ def snapshot(folder: Path) -> dict:
 
 class Folder(unittest.TestCase):
     """An output folder in a temporary directory, and the steps of a run on it as _Run makes them."""
+
+    def symlink(self, target, link) -> None:
+        try:
+            os.symlink(target, link)
+        except (OSError, NotImplementedError) as e:     # (Windows without the privilege)
+            self.skipTest(f"cannot make a symbolic link: {e}")
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="coal-owned-"))
@@ -317,7 +324,7 @@ class WorkFolder(Folder):
             with self.assertRaisesRegex(OutputsRefused, "work exists and is not a folder"):
                 self.check(**kw)
         (self.out / "work").unlink()
-        os.symlink(self.tmp / "nowhere", self.out / "work")                      # a broken link
+        self.symlink(self.tmp / "nowhere", self.out / "work")                    # a broken link
         with self.assertRaisesRegex(OutputsRefused, "work exists and is not a folder"):
             self.check(overwrite=True)
 
@@ -326,7 +333,8 @@ class ReportFile(Folder):
     def test_a_report_that_is_not_coals_is_refused_unless_overwrite(self):
         for where in (self.tmp / "notes.json", self.out / "mine.json"):
             where.write_text('{"my": "data"}\n', encoding="utf-8")
-            with self.assertRaisesRegex(OutputsRefused, f"--report {where} already exists and is not a COAL report"):
+            with self.assertRaisesRegex(OutputsRefused,
+                                        re.escape(f"--report {where} already exists and is not a COAL report")):
                 self.earlier(report=str(where)).check_foreign(PLANNED, report=str(where))
             self.earlier().check_foreign(PLANNED, report=str(where), overwrite=True)
         rp = self.tmp / "coal.json"
@@ -347,14 +355,15 @@ class ReportFile(Folder):
     def test_a_report_that_is_not_a_regular_file_is_always_refused(self):
         d = self.tmp / "reports"
         d.mkdir()
-        with self.assertRaisesRegex(OutputsRefused, f"--report {d} is a folder: .*{d / 'report.json'}"):
+        with self.assertRaisesRegex(OutputsRefused, re.escape(f"--report {d} is a folder: ") + ".*"
+                                    + re.escape(str(d / "report.json"))):
             R.check_report_path(str(d))
-        targets = [Path(os.devnull)]
+        targets = [Path(os.devnull)] if os.name == "posix" else []   # (Windows: NUL is not stat-ed as a device)
         if hasattr(os, "mkfifo"):
             fifo = self.tmp / "pipe.json"
             os.mkfifo(fifo)
             link = self.tmp / "link.json"
-            link.symlink_to(fifo)
+            self.symlink(fifo, link)
             targets += [fifo, link]
             # a DIR/report.json that is a named pipe is not read (it would block) and so lists nothing
             os.mkfifo(self.out / "report.json")
@@ -393,7 +402,7 @@ class ForeignOutputs(Folder):
         self.assertIn(f"{self.out} already holds genes.tsv, dnds.tsv and report.json, which this run would replace "
                       "and which no COAL run wrote there (work/outputs.json does not list them)", str(cm.exception))
         self.earlier().check_foreign(PLANNED, overwrite=True)
-        os.symlink(self.tmp / "nowhere", self.out / "failed.tsv")       # a link counts as such a file
+        self.symlink(self.tmp / "nowhere", self.out / "failed.tsv")     # a link counts as such a file
         with self.assertRaisesRegex(OutputsRefused, "already holds failed.tsv, genes.tsv"):
             self.earlier().check_foreign(PLANNED)
 
@@ -455,14 +464,11 @@ class TamperedRecords(Folder):
     @unittest.skipUnless(hasattr(os, "symlink"), "symbolic links")
     def test_links_are_removed_never_followed(self):
         victims = self.outside()
-        try:
-            os.symlink(victims["victim.txt"], self.out / "dnds.tsv")
-        except OSError as e:     # (Windows without the privilege)
-            self.skipTest(f"cannot make a symbolic link: {e}")
+        self.symlink(victims["victim.txt"], self.out / "dnds.tsv")
         elsewhere = self.tmp / "elsewhere"
         elsewhere.mkdir()
         (elsewhere / "theirs.fasta").write_text("keep me\n", encoding="utf-8")
-        os.symlink(elsewhere, self.out / CODON)            # an alignment folder that is a link: never COAL's
+        self.symlink(elsewhere, self.out / CODON)          # an alignment folder that is a link: never COAL's
         self.write_record({"coal_version": "0.6.0", "files": ["dnds.tsv"], "read_in_place": [],
                            "codon_alignments_dir": True})
         owned = self.earlier()
