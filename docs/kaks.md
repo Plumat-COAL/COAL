@@ -1075,7 +1075,21 @@ disagreed for 22 pairs, all with t above 2. The ridge start takes its kappa and 
 start stopped. Where the first start had to be run a second time with lengthened steps ("Statuses", the row
 `not_converged`), that is the second run's stop, which can lead the ridge start to a lower part of the ridge than
 the first run's stop does (`GCTGATCCC` against `GATGCCGCG` under code 4: lnL -12.5851 from the one, -12.5748
-from the other); such a pair gets a ridge start from each.
+from the other); such a pair gets a ridge start from each. Fixed starts are not a global search, and two kinds of
+pair need more: on a pair of few codons the likelihood is flat and often has its maximum with kappa or omega at a
+bound, where no start may lead; and a start that ends on the ridge stops on a plateau (at t = 50 the likelihood
+hardly depends on kappa and omega) from which a higher maximum elsewhere is out of sight (`GTGGACAAC` against
+`TCCGGGAAG` under code 11: every start ended on the ridge at lnL -17.3590 or below; the maximum is -16.5761 at t
+7.96, kappa 1e-6). So after the starts above (and the continuation of an unconverged one, "Statuses"), a pair of
+100 codons or fewer, and a pair whose result is on the ridge or did not converge, is also scanned: the likelihood,
+maximised over t, at 36 points of a grid in kappa and omega (1e-3, 0.01, 0.1, 1, 10, 99 each), and the two highest
+points are started from (a pair of more than 100 codons only from a point higher than its result); a scan start
+replaces the result only if it is higher. Against an independent likelihood and a bounded global search, of 600
+random pairs of 1 to 40 codons (nine genetic codes) 67 were more than 1e-3 below the global maximum without the
+scan and 4 are with it, all four with the maximum on the ridge of saturation at kappa or omega near a bound (three
+of them `saturated` in COAL too, one `warning` with t 9.2 where the maximum has t at 50, 0.097 higher); of 150
+random pairs of 60 to 200 codons, 14 were and none is. COAL's likelihood is the highest of its starts, not a
+proven global maximum.
 
 **Genetic codes.** `-c` sets the code for GY as for every method, and all 17 tables work (NCBI 1 to 6, 9 to 16,
 21 to 23). The code enters the model in three places, each taken from the table: its stop codons are not states
@@ -1131,8 +1145,10 @@ error; `--max-ds` flags what you consider too high.
 ### Differences from codeml and KaKs_Calculator
 
 1. **Deterministic and multi-start.** codeml draws its starting values at random (from the clock unless a seed
-   is set) and stops at the maximum it reaches; COAL's starts are fixed, and a diverged pair gets four (some
-   five: above). Where the two differ, COAL's likelihood is the higher one (below).
+   is set) and stops at the maximum it reaches; COAL's starts are fixed, a diverged pair gets four (some
+   five), and small or saturated pairs are scanned (above). On every pair of the comparison below COAL's
+   likelihood is at least codeml's (lower by more than 1e-4 on none). That is what was measured, not a
+   guarantee: both programs search locally, and on very short pairs a maximum can be missed (above).
 2. **Wider bounds** (above). A pair with omega below 0.001 or kappa below 0.4 has those estimates in COAL and
    the bound in codeml, with a slightly higher likelihood in COAL.
 3. **Saturation is a status.** codeml prints dS = 59.9 for a pair with t at 50; COAL prints `NA` and
@@ -1153,8 +1169,9 @@ error; `--max-ds` flags what you consider too high.
    derivatives and gradient alike, and agrees with an independent matrix exponential to about 1e-12 relative
    there. For that pair COAL's maximum is lnL -246996.12 at t = 5.0e-5, with dN 2.4e-5 against NG's 2.0e-5.
    Probabilities above 1e-8 are computed as before.
-5. **Identical sequences** have dN = dS = 0 and no kappa or omega; codeml prints the values its optimiser
-   happened to stop at.
+5. **Identical sequences** have dN = dS = 0 and no kappa or omega, and lnL is the likelihood at t = 0, the sum
+   of log pi over the codons (0.6.0 printed twice that); codeml prints the values its optimiser happened to
+   stop at.
 6. **Gaps and ambiguity.** COAL skips a codon column with a gap, an ambiguous base or a stop codon in either
    sequence and counts the F3x4 frequencies over the columns it compares; codeml's pairwise deletion
    (`cleandata = 0`) does the same for gaps and ambiguity, and refuses a file with a stop codon.
