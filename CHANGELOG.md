@@ -33,12 +33,14 @@
   (which would split `PATH`) is refused with a message; non-ASCII letters in its folder are tested, mocked and in
   CI's real download (now under a cache folder with such letters). When that real-download test cannot reach
   mafft.cbrc.jp, its skip is shown as a warning on the CI run and in the job summary, with the reason.
-- `coal pipeline`, follow-ups of the audit of #96: the list of a cluster run's alignment files is written when the
-  run starts (empty) and again when the engine ends in any way but SIGKILL, so a run that failed or was
-  interrupted no longer leaves a folder whose every `.fasta` counts as COAL's; an error writing that list is a
-  warning, not a traceback. A `.FASTA` (any case but the engine's `.fasta`) in such a folder counts as yours. A
-  `work/` with only an empty `logs/`, or with a `work/outputs.json` that cannot be read, is COAL's (it was
-  refused). `--report` naming a folder is refused before the run (it failed at its end). report.json
+- `coal pipeline`, follow-ups of the audit of #96: a cluster run's list of alignment files is empty from its start
+  and written again when the engine ends with an error or an interrupt too, so such a run no longer leaves a
+  folder whose every `.fasta` counts as COAL's (while the engine writes there is no list, so a run killed then
+  is cleared and resumed as before); an error writing the list is a warning, not a traceback. A `.FASTA` (any
+  case but the engine's `.fasta`) in such a folder counts as yours. A `work/` with only an empty `logs/`, or
+  whose `work/outputs.json` begins as COAL writes it but cannot be read, is no longer refused as someone else's
+  `work/` (output-named files in `DIR` are still refused when no record or report names them). `--report` naming
+  a folder, a device or a named pipe is refused before the run (a folder failed at its end, a pipe blocked it). report.json
   `parameters` has `kaks_digits` (the digits of `dnds.kaks`). docs/pipeline.md says what a deleted `work/` means
   for the alignment folders; docs/alignment.md no longer lists the current folder among a batch file's checks.
 - Texts: `CITATION.cff` has `date-released: 2026-11-15` for 0.6.0; `docs/python-api.md` no longer says its

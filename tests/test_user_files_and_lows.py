@@ -320,15 +320,15 @@ class AuditOf96(PipelineCase):
         self.assertEqual(sorted(p.name for p in (out / "codon_alignments").iterdir()), ["mine.fasta"])
 
     def test_the_list_is_empty_from_the_start(self):
-        """L1: a run that ends before its engine (here: the engine never starts, and nothing updates the list)
-        leaves an empty list, not none: no .fasta there becomes COAL's."""
+        """L1: a run that ends before its engine starts leaves an empty list, not none: no .fasta there becomes
+        COAL's."""
         tsv = self.two_member_clusters()
         out = self.tmp / "c"
 
         def boom(self, *a, **k):
             raise P.PipelineError("the engine did not start (test)")
-        with mock.patch.object(P._Run, "run_engine", boom), \
-                mock.patch.object(P._Run, "record_alignment_files", lambda self: None):
+        # (a failure just before the engine starts: a stage before it, an input the engine step refuses)
+        with mock.patch.object(P._Run, "engine_starts", boom):
             res, err = run(P.run_clusters, FAM, out, clusters=tsv, keep_alignments=True, keep_protein_alignments=True)
         self.assertEqual(res.exit_code, 1, err)
         rec = self.record(out)
@@ -420,7 +420,7 @@ class AuditOf96(PipelineCase):
         for kw in ({}, {"overwrite": True}):
             res, err = run(P.run_pairs, q, s, self.tmp / "o", pairs=pf, report=str(d), **kw)
             self.assertEqual(res.exit_code, 1, (kw, err))
-            self.assertIn(f"--report {d} exists and is not a file (a folder?)", err)
+            self.assertIn(f"--report {d} is a folder", err)
             self.assertIn(os.path.join(str(d), "report.json"), err)
             self.assertFalse((self.tmp / "o" / "work").exists())
 
@@ -439,6 +439,141 @@ class AuditOf96(PipelineCase):
         rp.write_text(json.dumps({"schema": "coal.pipeline/1", "report_truncated": True}), encoding="utf-8")
         self.assertTrue(P._is_coal_report(str(rp)))
         self.assertIn("A marker, not a", P._is_coal_report.__doc__)
+
+
+@needs_cpp
+class AuditOf98(PipelineCase):
+    """The audit of #98: M1 (a run killed while the engine writes), L1 (a user's work/outputs.json), L2 (--report
+    onto a named pipe or a device)."""
+    pairs_inputs = UserFilesInTheOutputFolder.pairs_inputs
+
+    def many_clusters(self, n: int) -> tuple[Path, Path]:
+        import random
+        rnd = random.Random(7)
+        codons = [a + b + c for a in "ACGT" for b in "ACGT" for c in "ACGT" if a + b + c not in ("TAA", "TAG", "TGA")]
+        cds, tsv = self.tmp / "cds.fa", self.tmp / "clusters.tsv"
+        with open(cds, "w", encoding="utf-8") as f, open(tsv, "w", encoding="utf-8") as t:
+            for k in range(n):
+                s = [rnd.choice(codons) for _ in range(300)]
+                m = [c if rnd.random() > 0.1 else rnd.choice(codons) for c in s]
+                f.write(f">a{k}\nATG{''.join(s)}TAA\n>b{k}\nATG{''.join(m)}TAA\n")
+                t.write(f"a{k}\ta{k}\na{k}\tb{k}\n")
+        return cds, tsv
+
+    @unittest.skipUnless(os.name == "posix", "SIGKILL of a process group (POSIX)")
+    def test_a_run_killed_while_the_engine_writes_is_resumed_and_cleared(self):
+        """M1: kill -9 while coal-cpp writes the per-cluster files; the same command with --resume goes on (it was
+        refused: "... which no COAL run wrote there"), and a run without --keep-alignments removes them."""
+        import signal
+        import time
+        n = 1500
+        cds, tsv = self.many_clusters(n)
+        out = self.tmp / "o"
+        args = [sys.executable, "-m", "coal", "pipeline", "clusters", "--cds", str(cds), "--clusters", str(tsv),
+                "-o", str(out), "-j", "1", "-q", "--keep-alignments"]
+        killed_at = None
+        for attempt in range(3):
+            shutil.rmtree(out, ignore_errors=True)
+            Path(str(out) + ".coal-lock").unlink(missing_ok=True)
+            proc = subprocess.Popen(args, env=env(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.DEVNULL, start_new_session=True)
+            d = out / "codon_alignments"
+            t0 = time.monotonic()
+            while proc.poll() is None and time.monotonic() - t0 < 120:
+                try:
+                    k = sum(1 for x in os.listdir(d) if x.endswith(".fasta"))
+                except OSError:
+                    k = 0
+                if k >= 20:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                    killed_at = k
+                    break
+                time.sleep(0.005)
+            proc.wait(timeout=60)
+            if killed_at is not None:
+                break
+        if killed_at is None:
+            self.skipTest("the run ended before it could be killed while the engine wrote")
+        rec = json.loads((out / "work" / "outputs.json").read_text(encoding="utf-8"))
+        self.assertTrue(rec["codon_alignments_dir"])
+        self.assertNotIn("codon_alignments_files", rec)        # no list while the engine writes
+        left = sorted(x for x in os.listdir(out / "codon_alignments") if x.endswith(".fasta"))
+        self.assertGreaterEqual(len(left), 20)
+        self.assertLess(len(left), n)
+        r = subprocess.run([*args, "--resume"], env=env(), stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                           timeout=600, check=False)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(sum(1 for x in os.listdir(out / "codon_alignments") if x.endswith(".fasta")), n)
+        # killed again, then a run without --keep-alignments: the killed run's files go
+        rec = json.loads((out / "work" / "outputs.json").read_text(encoding="utf-8"))
+        rec.pop("codon_alignments_files")
+        (out / "work" / "outputs.json").write_text(json.dumps(rec), encoding="utf-8")
+        r = subprocess.run([a for a in args if a != "--keep-alignments"], env=env(), stdin=subprocess.DEVNULL,
+                           capture_output=True, text=True, timeout=600, check=False)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertFalse((out / "codon_alignments").exists())
+
+    def test_the_list_is_dropped_only_while_the_engine_runs(self):
+        """What a run records: [] from its start, none while the engine writes, the files when it ends."""
+        cds, tsv = self.many_clusters(4)
+        out = self.tmp / "o"
+        seen = []
+        real = P._Run.run_engine
+
+        def watch(run_self, *a, **k):
+            seen.append(json.loads((out / "work" / "outputs.json").read_text(encoding="utf-8")))
+            return real(run_self, *a, **k)
+        real_record = P._Run._record_outputs
+
+        def at_start(run_self):
+            real_record(run_self)
+            seen.append(json.loads((out / "work" / "outputs.json").read_text(encoding="utf-8")))
+        with mock.patch.object(P._Run, "run_engine", watch), mock.patch.object(P._Run, "_record_outputs", at_start):
+            res, err = run(P.run_clusters, cds, out, clusters=tsv, keep_alignments=True)
+        self.assertEqual(res.exit_code, 0, err)
+        self.assertEqual(seen[0]["codon_alignments_files"], [])
+        self.assertNotIn("codon_alignments_files", seen[1])
+        final = json.loads((out / "work" / "outputs.json").read_text(encoding="utf-8"))
+        self.assertEqual(final["codon_alignments_files"], sorted(os.listdir(out / "codon_alignments")))
+
+    def test_a_users_outputs_json_does_not_make_work_coals(self):
+        """L1: only a record that begins as COAL writes it ({"coal_version":) marks an unreadable work/ as COAL's."""
+        q, s, pf = self.pairs_inputs()
+        for k, text in enumerate(('{"my": "settings"}\n', "[1, 2]\n", "plain text\n", '{"coal_version" : 1')):
+            out = self.tmp / f"o{k}"
+            (out / "work").mkdir(parents=True)
+            (out / "work" / "outputs.json").write_text(text, encoding="utf-8")
+            res, err = run(P.run_pairs, q, s, out, pairs=pf)
+            self.assertEqual(res.exit_code, 1, (text, err))
+            self.assertIn("work exists and no COAL run made it", err)
+            self.assertEqual((out / "work" / "outputs.json").read_text(encoding="utf-8"), text)
+        self.assertTrue(P._starts_like_coal_record.__doc__)
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "named pipes (POSIX)")
+    def test_report_onto_a_named_pipe_or_a_device(self):
+        """L2: refused at once (a named pipe blocked the run in open()); /dev/null gets no folder-style hint."""
+        q, s, pf = self.pairs_inputs()
+        fifo = self.tmp / "pipe.json"
+        os.mkfifo(fifo)
+        link = self.tmp / "link.json"
+        link.symlink_to(fifo)
+        for target in (fifo, link, Path(os.devnull)):
+            code, err = cli("pairs", "--query", q, "--subject", s, "--pairs", pf, "-o", self.tmp / "o",
+                            "--report", target, "--overwrite", timeout=60)
+            self.assertEqual(code, 1, (target, err))
+            self.assertIn(f"--report {target} is not a regular file (a device or a named pipe)", err)
+            self.assertNotIn("report.json)", err.replace("(without --report it is DIR/report.json)", ""))
+            self.assertFalse((self.tmp / "o" / "work").exists())
+        # a DIR/report.json that is a named pipe: not read (it would block), and replaced only with --overwrite
+        out = self.tmp / "p"
+        out.mkdir()
+        os.mkfifo(out / "report.json")
+        code, err = cli("pairs", "--query", q, "--subject", s, "--pairs", pf, "-o", out, timeout=60)
+        self.assertEqual(code, 1, err)
+        self.assertIn("already holds report.json", err)
+        code, err = cli("pairs", "--query", q, "--subject", s, "--pairs", pf, "-o", out, "--overwrite", timeout=120)
+        self.assertEqual(code, 0, err)
+        self.assertTrue((out / "report.json").is_file())
 
 
 @needs_cpp

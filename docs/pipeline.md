@@ -387,9 +387,12 @@ before it writes the first one (for a folder of a version without that list, the
 For the per-cluster folders a run records the names of the `.fasta` files it wrote (`codon_alignments_files`,
 `protein_alignments_files` in `work/outputs.json`), and the next run removes those and no others: a `.fasta` of your
 own put into `codon_alignments/` stays. The list is written when the run starts (empty: the folder holds no `.fasta`
-then) and again when the engine ends, with success, an error or an interrupt; a run killed with SIGKILL while the
-engine writes leaves the empty list, so the next run keeps the files it wrote, as not COAL's (remove them yourself).
-Two cases have no list: a folder recorded by 0.6.0, and a folder whose `work/` was deleted (COAL then goes by
+then; a run that fails before its engine starts leaves it so), is dropped when the engine starts writing, and is
+written again when the engine ends, with success, an error or an interrupt. A run killed while the engine writes
+(SIGKILL, out of memory, power loss) leaves no list: everything with the engine's `.fasta` in the folder is that
+run's, the next run removes it, and the same command with `--resume` goes on (a file of your own put there while
+that run was going would count as its file too). Two more cases have no list: a folder recorded by 0.6.0, and a
+folder whose `work/` was deleted (COAL then goes by
 `report.json`, which names the folder only); there every `.fasta` with the engine's lower-case `.fasta` is the
 earlier run's and is removed, so keep files of your own elsewhere if you delete `work/`. A `.FASTA` (any other case)
 is never COAL's. A run with `--keep-alignments` (or
@@ -400,8 +403,10 @@ COAL run wrote there ... move it out of out/codon_alignments, or use another out
 **`work/` and `--report` are checked the same way.** A `DIR/work/` that is not empty and that no COAL run made (no
 `work/outputs.json`, and no COAL `report.json` in `DIR` from an older version) is refused with exit 1 before
 anything changes: the run would put its logs, `state.json` and decompressed inputs among your files. A `work/` with
-only an empty `logs/` folder (a run killed as it started), or with a `work/outputs.json` COAL cannot read, is
-COAL's. `--overwrite` writes into it: files there with COAL's own names (`logs/`, `state.json`, `outputs.json`,
+only an empty `logs/` folder (a run killed as it started), or whose `work/outputs.json` begins as COAL writes it
+(`{"coal_version":`) but cannot be read, is COAL's for this check; any other file named `outputs.json` is not.
+`--report` naming a folder, a device (`/dev/null`) or a named pipe is refused before anything is read, with or
+without `--overwrite`. `--overwrite` writes into it: files there with COAL's own names (`logs/`, `state.json`, `outputs.json`,
 `inputs/`, the stage files such as `query.faa` and `query_vs_subject.tsv`, and DIAMOND's `subject.dmnd` / `query.dmnd`, which are removed
 after the search) are replaced; nothing else is touched. A `work` that is a file is always refused, and so is a
 `--report` that names a folder. `--report FILE` (in `DIR` or
@@ -537,7 +542,8 @@ complete codon), `status`, `code`, `note`.
 
 Schema `coal.pipeline/1`: [pipeline.schema.json](pipeline.schema.json). It is written also when the run fails.
 
-- `mode`, `command`, `out_dir`, `parameters` (every option as used), `tools` (path and version of coal-cpp,
+- `mode`, `command`, `out_dir`, `parameters` (every option as used; `kaks_digits` is the significant digits of
+  `dnds.kaks`: 6, or N with `--digits N`), `tools` (path and version of coal-cpp,
   DIAMOND, Clustal Omega, MAFFT). `entry`: `cli`, `python-api` (`run_pairs()` / `run_clusters()`), or the caller
   that named itself (`coalr 0.6.0 coal_pipeline_pairs()`); for a run from Python or R, `command` is the equivalent
   `coal pipeline` command line of the call (the options given, with the values the run used).
