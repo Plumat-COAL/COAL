@@ -150,7 +150,7 @@ def _atomic(path: str):
 def _starts_like_coal_record(path: str) -> bool:
     """A work/outputs.json that json cannot read but that begins as COAL writes it ({"coal_version": ...: written
     through a temporary file and renamed, so it is cut short only by a damaged disk or an edit): COAL's mark on
-    work/. Any other file of that name is not (audit of #98, L1)."""
+    work/. Any other file of that name is not (#98)."""
     try:
         if not os.path.isfile(path):
             return False
@@ -434,7 +434,7 @@ def _safe_member_name(name: str, asset: str) -> str:
 def _bad_tool_variable(var: str, name: str, other: str = "") -> None:
     """PipelineError when the environment variable that names a tool is set to something that is not a file: the
     tool is then looked for there only (not on PATH or in COAL's cache), and "not found (PATH, $VAR, COAL's
-    cache)" misled (deep test 2026-11-14, D06)."""
+    cache)" misled (#60)."""
     v = os.environ.get(var)
     if v and not os.path.isfile(v):
         raise PipelineError(f"${var} is set to '{v}', which is not a file ({'a folder' if os.path.isdir(v) else 'no such file'}). "
@@ -444,7 +444,7 @@ def _bad_tool_variable(var: str, name: str, other: str = "") -> None:
 
 def _cannot_open(path, why: str = "no such file") -> str:
     """The message "cannot open 'PATH': WHY", with the path as typed (not Python's repr, which doubles backslashes), with a hint when
-    a Windows path is given on Linux or macOS, e.g. under WSL (new-user audit 2026-11-14, U17). The hint is seqio's, so
+    a Windows path is given on Linux or macOS, e.g. under WSL (#81). The hint is seqio's, so
     it is normalised as in the alignment's messages and coal-cpp ('C:\\' is /mnt/c, doubled backslashes collapse)."""
     from .seqio import windows_path_hint
     path = os.fspath(path)
@@ -766,7 +766,7 @@ GENETIC_CODE_NAMES = {1: "standard", 2: "vertebrate mitochondrial", 3: "yeast mi
                       15: "Blepharisma nuclear", 16: "chlorophycean mitochondrial", 21: "trematode mitochondrial",
                       22: "Scenedesmus obliquus mitochondrial", 23: "Thraustochytrium mitochondrial"}
 # NCBI genetic codes COAL does not support (no table, no -c), with the stop codons they read as amino acids, that
-# the hint names beside its candidates when the sequences fit them equally well (final retest of 2026-11-14, P02:
+# the hint names beside its candidates when the sequences fit them equally well (#63:
 # SR1 / Gracilibacteria bacteria, code 25, got "codes 4 and 10 ... run again with the -c of its organism", a list
 # without their code). The codes whose stops depend on the context (27, 28, 31) and 26 (the standard stops) are
 # left out. kind: "genome" (nuclear, bacterial) or "organelle".
@@ -899,7 +899,7 @@ def _code_hint_of(paths, genes_path: str, chosen: int, only: set | None = None, 
     if n_flagged < min_genes:
         return None, n_records, with_stops, n_flagged, flagged
     # the genes looked at: all, or CODE_HINT_MAX_GENES spread evenly over the set (the first ones of a
-    # record-shuffled ciliate set lay on many scaffolds, which rule 2 then left out: R01)
+    # record-shuffled ciliate set lay on many scaffolds, which rule 2 then left out: #61)
     take = min(n_flagged, max_genes)
     k = 0
     stopped: set[str] = set()
@@ -925,7 +925,7 @@ def _code_hint_of(paths, genes_path: str, chosen: int, only: set | None = None, 
 def translate_hint(paths: list[str], genes_path: str, chosen: int, genes_shown: str | None = None) -> str | None:
     """`coal translate`: one warning when most genes have internal stop codons, or when genes with internal stops
     look like another genetic code, with the first such gene and the code that explains them (the evidence of
-    `coal pipeline`'s hint, _code_hint_of). None when there is nothing to say. (New-user audit 2026-11-14, U10:
+    `coal pipeline`'s hint, _code_hint_of). None when there is nothing to say. (#81:
     the run said only "3 gene(s): 0 ok, 3 warning, 0 failed".) paths: the CDS files; genes_shown: the --genes file
     the user named (None: they named none)."""
     n = with_stops = 0
@@ -985,7 +985,7 @@ def suggest_genetic_code(chosen: int, genes: list[dict], background, n_records: 
     """Which genetic code explains genes that have internal stop codons under `chosen`, or None (no hint).
 
     genes: {id, seq (upper case DNA), header} of the genes with two or more internal stops. background: codon
-    counts of the set's other genes. The rules (deep test of 2026-11-14, finding D02: the old hint named the code
+    counts of the set's other genes. The rules (#60: the old hint named the code
     that made the most genes stop-free, and that was 14 for yeast mitochondria and frameshifted pseudogenes, 4
     for vertebrate mitochondria):
 
@@ -994,7 +994,7 @@ def suggest_genetic_code(chosen: int, genes: list[dict], background, n_records: 
        stop codon (vertebrate mitochondria); a frameshifted CDS has random stop codons that "fit" some code.
     2. When every header names its replicon, only genes on a replicon of which at least half the records have
        internal stops count (the mitochondrial chromosome; not scattered nuclear genes). The records with one or
-       more stops are counted when replicons has them ("with_stops"; retest of 2026-11-14, Q02: a Mycoplasma
+       more stops are counted when replicons has them ("with_stops"; #62: a Mycoplasma
        with other bacteria in one file has 376 such records of 524, but only 253 evidence genes); else the
        evidence genes.
     3. Genes are grouped by the codes under which they have no internal stop; the largest group decides. Of its
@@ -1004,19 +1004,19 @@ def suggest_genetic_code(chosen: int, genes: list[dict], background, n_records: 
     4. Codes that tie are all named (their sequences cannot tell 4, 5 and 13 apart), less those whose start
        codons do not fit at least two and a quarter of the genes when another candidate's do. A code that wins
        alone is named alone only if its start codons pass the same test against the other codes of the group;
-       if not, it and the codes the codons do not argue against are the candidates (retest Q01: C. elegans
+       if not, it and the codes the codons do not argue against are the candidates (#62: C. elegans
        mitochondria, code 5, avoid CGA / CGC as code 3's genes do, but most start with ATT / TTG, which code 3
        does not allow), and no hint when only it would be left.
     5. No hint unless at least min_genes genes and half of the evidence genes fit, and a code that reads TAA or
        TAG as an amino acid is suggested only when half the set has internal stops (the whole set's code).
     6. When at least half of all records have internal stops (with_stops of n_records), the question is the code
-       of the whole set (retest of 2026-11-14, R01: Mycoplasma read with -c 11 got no hint, because rule 2 left
+       of the whole set (#61: Mycoplasma read with -c 11 got no hint, because rule 2 left
        out its one chromosome, of which "only" 253 of 524 records were evidence): rule 2 does not apply; when a
        molecule has GENOME_MIN_RECORDS records or more (a genome, not an organelle) only the codes of whole
        genomes (GENOME_CODES) are candidates; and, for a genome-size set (such a molecule, or GENOME_MIN_GENES
        evidence genes), of codes that tie, those whose start codons do not fit at least two and a tenth of the
        genes when another candidate's do drop out (bacteria start 10-15 % of their genes with GTG / TTG: code 4,
-       not code 10, for Mycoplasma). A small set keeps the quarter of rule 4 (retest Q03: two odd start codons
+       not code 10, for Mycoplasma). A small set keeps the quarter of rule 4 (#62: two odd start codons
        of Ciona's 9 mitochondrial genes dropped its code 13).
 
     genes may be a sample of the flagged genes: fraction is the share looked at (for rule 2).
@@ -1024,7 +1024,7 @@ def suggest_genetic_code(chosen: int, genes: list[dict], background, n_records: 
     7. For the whole set, when the candidates are all departures from the standard stop codons, the codes COAL
        does not support (UNSUPPORTED_CODES; the genome codes for a genome-size set, else the organelle codes)
        under which these genes have no internal stop and that reassign no more stop codons than the candidates
-       do are named too ("unsupported"; final retest of 2026-11-14, P02: code 25 bacteria got codes 4 and 10).
+       do are named too ("unsupported"; #63: code 25 bacteria got codes 4 and 10).
 
     Returns {"codes": [...], "genes": [ids], "also": [codes that also fit these genes], "evidence": text,
     "whole_set": bool, "unsupported": [codes COAL does not support that fit as well]}."""
@@ -1061,7 +1061,7 @@ def suggest_genetic_code(chosen: int, genes: list[dict], background, n_records: 
         genome = max(replicons["records"].values(), default=0) >= GENOME_MIN_RECORDS
     elif replicons and all(g["id"] in replicons["of"] for g in ev):
         per = Counter(replicons["of"][g["id"]] for g in ev)
-        if "with_stops" in replicons:   # a molecule's records with one or more internal stops (Q02: Mycoplasma
+        if "with_stops" in replicons:   # a molecule's records with one or more internal stops (#62: Mycoplasma
             stopped = replicons["with_stops"]   # with K12 in one file: 376 of 524, but only 253 evidence genes)
             keep = {r for r in per if 2 * stopped.get(r, 0) >= replicons["records"].get(r, 0)}
         else:
@@ -1108,7 +1108,7 @@ def suggest_genetic_code(chosen: int, genes: list[dict], background, n_records: 
     W = sorted(t for t in sig if keys[t] == best)
     # the start-codon bar: a tenth of the genes for a genome-size set (bacteria start 10-15 % of their genes with
     # GTG / TTG), a quarter for a small one (two odd NCBI start annotations of Ciona's 9 mitochondrial genes
-    # dropped its code 13: retest of 2026-11-14, Q03)
+    # dropped its code 13: #62)
     bar = 10 if whole and (genome or len(G) >= GENOME_MIN_GENES) else 4
 
     def bad_starts(t, others):
@@ -1118,7 +1118,7 @@ def suggest_genetic_code(chosen: int, genes: list[dict], background, n_records: 
     if len(W) == 1 and len(sig) > 1:
         # one code wins on codons alone, but its start codons do not fit genes that another candidate's do (C.
         # elegans mitochondria, code 5: no CGA / CGC, as code 3, but 9 of 12 genes start with ATT / TTG, which
-        # code 3 does not allow: Q01). Not that code alone, then: it and the codes the codons do not argue against
+        # code 3 does not allow: #62). Not that code alone, then: it and the codes the codons do not argue against
         # are candidates, and the start codons below choose among them.
         n_bad = bad_starts(W[0], [u for u in sig if u != W[0]])
         if n_bad >= 2 and 4 * n_bad >= len(G):
@@ -1354,8 +1354,8 @@ class _Run:
 
     def _copy_warning(self) -> None:
         """--subject a byte copy of --query (another file, the same content; one of them compressed or both): the
-        same warning as for the same file (retest of 2026-11-14, Q04: every pair was a self-pair with dN = dS = 0,
-        without a word); or one with the same records (P04, below)."""
+        same warning as for the same file (#62: every pair was a self-pair with dN = dS = 0,
+        without a word); or one with the same records (#63, below)."""
         a = self.a
         if self.mode != "pairs" or getattr(a, "pairs", None):
             return
@@ -1380,8 +1380,8 @@ class _Run:
                 return
         except OSError:
             return
-        # Not a byte copy, but the same records: re-wrapped, upper / lower case, a record more or less (final
-        # retest of 2026-11-14, P04: 300 of 300 self-pairs without a word). Cheap: the first IDs of --subject are
+        # Not a byte copy, but the same records: re-wrapped, upper / lower case, a record more or less (#63:
+        # 300 of 300 self-pairs without a word). Cheap: the first IDs of --subject are
         # looked up among the IDs of --query first (a header scan), and only files that share them are hashed.
         try:
             got = _same_records(q, s)
@@ -1396,8 +1396,8 @@ class _Run:
                   "paralogs within one genome use `coal pipeline clusters`")
 
     def _inputs_exist(self) -> None:
-        """An input that does not exist is refused before any .gz input is decompressed (final retest of
-        2026-11-14, P05: the copies were made first, and stayed in work/inputs). The error is the one the stages
+        """An input that does not exist is refused before any .gz input is decompressed (#63:
+        the copies were made first, and stayed in work/inputs). The error is the one the stages
         gave; the report lists the inputs as before."""
         for opt, p in self._inputs:
             if opt != "--diamond" and not os.path.exists(p):
@@ -1508,7 +1508,7 @@ class _Run:
 
     def _report_is_default(self) -> bool:
         """--report names DIR/report.json itself (the default spelled out, by any name): it is then the planned
-        report.json, recorded and checked as without --report (audit of #87, M1)."""
+        report.json, recorded and checked as without --report (#87)."""
         if not self.a.report:
             return False
         mine = self.path("report.json")
@@ -1565,7 +1565,7 @@ class _Run:
         reports = []
         for path, here_only in ((self.path("report.json"), False), (self.a.report, True)):
             if not path or (here_only and self._report_is_default()) or not os.path.isfile(path):
-                continue   # (not a regular file: a named pipe would block open(); audit of #98, L2)
+                continue   # (not a regular file: a named pipe would block open(); #98)
             try:
                 with open(path, encoding="utf-8", errors="backslashreplace") as fh:
                     rep = json.load(fh)
@@ -1602,7 +1602,7 @@ class _Run:
         except (OSError, ValueError, KeyError, TypeError):
             # A work/outputs.json that cannot be read (cut short, edited) is still COAL's mark on work/ (COAL writes
             # it through a temporary file; a user's work/ has none), and so is a work/ that holds only an empty
-            # logs/ (a run killed between making work/logs and writing the record): audit of #96, L4
+            # logs/ (a run killed between making work/logs and writing the record): #98
             w = self.work
             try:
                 self._work_is_coal = (_starts_like_coal_record(self.wpath("outputs.json"))
@@ -1639,7 +1639,7 @@ class _Run:
             mine = self._foreign_alignment_files(name)
             if mine:
                 # COAL's folder, with .fasta files of the user's among the earlier run's: kept at the start, but
-                # this run writes a file per cluster there and one may have the same name (review of 2026-11-15, L3)
+                # this run writes a file per cluster there and one may have the same name (#96)
                 listed = ", ".join(mine[:3]) + (f" and {len(mine) - 3:,} more" if len(mine) > 3 else "")
                 raise PipelineError(f"{d} holds {listed}, which no COAL run wrote there: --{opt.replace('_', '-')} "
                                     "writes one file per cluster there and could replace "
@@ -1657,14 +1657,14 @@ class _Run:
         if not os.path.isdir(d) or os.path.islink(d):
             return []
         # .fasta in any case (X.FASTA): on a case-insensitive file system the engine's X.fasta would replace it
-        # (audit of #96, L5). Without a list the earlier run's are the files with the engine's own .fasta.
+        # (#98). Without a list the earlier run's are the files with the engine's own .fasta.
         return sorted(n for n in os.listdir(d) if n.lower().endswith(".fasta")
                       and (n not in listed if listed is not None else not n.endswith(".fasta")))
 
     def _check_report_path(self) -> None:
         """--report naming something that is not a regular file (also through a link): a folder, a named pipe, a
-        device such as /dev/null. Refused before anything opens it (a named pipe would block the run: audit of
-        #98, L2) and whatever --overwrite says (the report is written through FILE.tmp and renamed onto FILE)."""
+        device such as /dev/null. Refused before anything opens it (a named pipe would block the run:
+        #98) and whatever --overwrite says (the report is written through FILE.tmp and renamed onto FILE)."""
         rp = self.a.report
         if not rp:
             return
@@ -1683,11 +1683,11 @@ class _Run:
 
     def _check_foreign_outputs(self) -> None:
         """Refuse, before anything in the folder is removed or written, a run whose outputs would replace files
-        that no COAL run wrote there: a genes.tsv, dnds.tsv, report.json or clusters.tsv of the user's own (review
-        of 2026-11-15, L1: they were replaced without a word, also by `-o examples/dnds`, whose orthologs.tsv is
+        that no COAL run wrote there: a genes.tsv, dnds.tsv, report.json or clusters.tsv of the user's own (#87:
+        they were replaced without a word, also by `-o examples/dnds`, whose orthologs.tsv is
         part of the repository). A file an earlier run recorded (work/outputs.json, or the outputs of its
         report.json) is that run's and is replaced as before; so is everything with --overwrite. Temporary names
-        (NAME.tmp) are COAL's own and not checked. Then, the same way (review of 2026-11-15, L1 and L2): a --report
+        (NAME.tmp) are COAL's own and not checked. Then, the same way (#96): a --report
         FILE that exists and is not a COAL report, and a DIR/work/ that no COAL run made (not empty, no
         work/outputs.json, no COAL report.json in DIR); a `work` that is not a folder is refused always."""
         w = self.work
@@ -1715,12 +1715,12 @@ class _Run:
                 f"{'it' if len(foreign) == 1 else 'them'}")
         rp = self.a.report
         if rp and not self._report_is_default() and os.path.lexists(rp) and not _is_coal_report(rp):
-            # --report onto a file of the user's, in DIR or anywhere (review of 2026-11-15, L1)
+            # --report onto a file of the user's, in DIR or anywhere (#96)
             raise PipelineError(f"--report {rp} already exists and is not a COAL report: this run would replace "
                                 "it. Nothing was changed. Name another --report file, or add --overwrite to "
                                 "replace it")
         if os.path.isdir(w) and not self._work_is_coal and os.listdir(w):
-            # a work/ of the user's (review of 2026-11-15, L2): the run would write its logs, state and copies there
+            # a work/ of the user's (#96): the run would write its logs, state and copies there
             raise PipelineError(f"{w} exists and no COAL run made it (it has no work/outputs.json): this run keeps "
                                 "its working files there (logs, state.json, decompressed inputs) and would mix them "
                                 "with what it holds. Nothing was changed. Use a new -o folder, move it away, or add "
@@ -1728,8 +1728,8 @@ class _Run:
                                 "nothing else is touched)")
 
     def _replaced_notice(self) -> None:
-        """One notice when the output folder holds the results of an earlier run, which this run replaces (new-user
-        audit 2026-11-14, U16: they were replaced without a word). Not with --resume, which means to go on there."""
+        """One notice when the output folder holds the results of an earlier run, which this run replaces (#81:
+        they were replaced without a word). Not with --resume, which means to go on there."""
         if self.a.resume:
             return
         known, _ = self._earlier
@@ -1773,7 +1773,7 @@ class _Run:
                 for n in os.listdir(d):
                     p = os.path.join(d, n)
                     # a .fasta the earlier run recorded (every .fasta when it recorded none), and the .fasta.tmp
-                    # files a run that was killed left; a user's own .fasta in the folder stays (L3)
+                    # files a run that was killed left; a user's own .fasta in the folder stays (#96)
                     theirs = n.endswith(".fasta.tmp") or (n.endswith(".fasta") and (listed is None or n in listed))
                     if theirs and self._is_input(p) is None:
                         os.remove(p)
@@ -1791,7 +1791,7 @@ class _Run:
         # DIR/clusters.tsv`): not in "files", so that no later run removes it at its start (it may have been edited),
         # but still COAL's for _check_foreign_outputs, so that a later run may write it again.
         # Carried forward from run to run while the file is there and no run writes it (a run that neither reads
-        # nor writes it keeps the entry: audit of #87, M3). After _clear_earlier_outputs, an earlier output that
+        # nor writes it keeps the entry: #87). After _clear_earlier_outputs, an earlier output that
         # this run does not write is still there only when it is one of this run's inputs, or was read in place.
         known = self._earlier[0] | self._earlier_read | self._listed
         read = sorted(n for n in known if n in _RUN_TABLES and n not in planned and os.path.isfile(self.path(n)))
@@ -1800,7 +1800,7 @@ class _Run:
                         "protein_alignments_dir": bool(self.a.keep_protein_alignments and self.mode == "clusters")}
         # The alignment folders this run writes hold no .fasta now (the earlier run's were removed, and one of
         # anyone else's refused the run): an empty list, so that a run that fails before its engine makes no file
-        # there the run's (audit of #96, L1). engine_starts() drops the list just before the engine writes there
+        # there the run's (#98). engine_starts() drops the list just before the engine writes there
         # (a run killed while it writes then left files COAL cannot name: all of them are the run's, as in 0.6.0),
         # and record_alignment_files() lists what the engine wrote when it ends in any way but SIGKILL.
         for name, opt in self._ALIGNMENT_DIRS.items():
@@ -1819,7 +1819,7 @@ class _Run:
         """Cluster mode, just before coal-cpp starts writing the per-cluster files: the record of the folders it
         writes has no list from now until record_alignment_files() writes one, so that what a run killed meanwhile
         (SIGKILL, out of memory, power loss) wrote counts as the run's, every .fasta of the folder, as for a
-        folder of 0.6.0: the next run removes them, and `--resume --keep-alignments` goes on (audit of #98, M1).
+        folder of 0.6.0: the next run removes them, and `--resume --keep-alignments` goes on (#98).
         The folders hold nothing of anyone else's at this point (_earlier_outputs refused that)."""
         dropped = False
         for name in self._ALIGNMENT_DIRS:
@@ -1831,7 +1831,7 @@ class _Run:
     def record_alignment_files(self) -> None:
         """Cluster mode, after the engine: the .fasta files this run wrote into codon_alignments/ and
         protein_alignments/, by name, into work/outputs.json, so that the next run removes those and no others (a
-        file of the user's put there later stays: review of 2026-11-15, L3). The folder held no .fasta of anyone
+        file of the user's put there later stays: #96). The folder held no .fasta of anyone
         else's when the engine started (_earlier_outputs refuses that), so what it holds now is this run's."""
         changed = False
         try:
@@ -2024,7 +2024,7 @@ class _Run:
                                 f"--install-tools, or run `coal pipeline install {tool}`")
         self.tools[tool] = {"path": exe, "version": _msa.tool_version(exe)}
         pkg = _msa.installed_package(tool, exe)
-        if pkg:   # the conda package of COAL's cache copy (D6b: the pinned build and its SHA-256)
+        if pkg:   # the conda package of COAL's cache copy (#65: the pinned build and its SHA-256)
             self.tools[tool]["package"] = pkg
         note = _msa.pin_note(tool, exe, self.tools[tool]["version"])
         if note:
@@ -2052,10 +2052,10 @@ class _Run:
     # -- clusters: the IDs of several --cds files
     def _check_cds_twice(self) -> None:
         """The same --cds file named twice (by any name) is refused. Called before anything is written or
-        decompressed (retest R04; Q05: a .gz named twice was refused only after both copies were decompressed
+        decompressed (#61; #62: a .gz named twice was refused only after both copies were decompressed
         into work/inputs, and they stayed there)."""
         given: dict[str, str] = {}
-        for p in (getattr(self.a, "cds", None) or ()):   # (R04: "the ID occurs in two input files, A and A")
+        for p in (getattr(self.a, "cds", None) or ()):   # (#61: "the ID occurs in two input files, A and A")
             key = os.path.normcase(os.path.realpath(os.fspath(p)))
             if key in given:
                 twice = (f"{p} twice" if os.fspath(p) == given[key] else f"the same file twice: {given[key]} and {p}")
@@ -2065,7 +2065,7 @@ class _Run:
 
     def discard_new_inputs(self) -> None:
         """A run refused after its inputs were decompressed (IDs repeated across --cds files, a --prefix-ids file
-        name): the copies it made in work/inputs/ go (Q05). A folder an earlier run made stays (--resume)."""
+        name): the copies it made in work/inputs/ go (#62). A folder an earlier run made stays (--resume)."""
         if self._inputs_dir_new:
             shutil.rmtree(self.wpath("inputs"), ignore_errors=True)
             self._inputs_dir_new = False
@@ -2205,8 +2205,8 @@ class _Run:
     CODE_HINT_MAX_GENES = 5000   # genes looked at per set (spread evenly over the set when it has more)
 
     def code_hints_per_file(self, set_name: str, paths: list[str], genes_path: str) -> None:
-        """Clusters mode with several --cds files: one hint per file, judged on that file's genes (retest of
-        2026-11-14, Q02: judged over all files together, a Mycoplasma among other bacteria, or a ciliate among
+        """Clusters mode with several --cds files: one hint per file, judged on that file's genes (#62:
+        judged over all files together, a Mycoplasma among other bacteria, or a ciliate among
         other species, was not "most genes" and got no hint, and the organelle genes of two species got codes
         that fit neither). Each file is one species' genes, as docs/pipeline.md says."""
         if len(paths) < 2:
@@ -2363,7 +2363,7 @@ class _Run:
                     gm: dict[str, str] = {}
                     for r, g in self._gene_map.items():
                         x = r.split(ID_PREFIX_SEP, 1)[0] if ID_PREFIX_SEP in r else None
-                        if x in xs:   # a prefixed record: its gene is a gene of that species too (retest R02:
+                        if x in xs:   # a prefixed record: its gene is a gene of that species too (#61:
                             # 'q|gene0 G0' and 's|gene0 G0' made one gene G0 of two species, and
                             # --longest-isoform dropped one of them)
                             p = f"{x}{ID_PREFIX_SEP}"
@@ -2554,8 +2554,8 @@ class _Run:
 
     def not_usable_warning(self, sets: list[str]) -> None:
         """One line on stderr when records of these sets cannot be used (a non-ASCII or repeated ID, no coding
-        DNA): how many, and the first one with its reason, so the cause is not only in failed.tsv (new-user
-        audit 2026-11-14, U12: the run ended with exit 2 and "1 failure(s) listed in failed.tsv")."""
+        DNA): how many, and the first one with its reason, so the cause is not only in failed.tsv (#81:
+        the run ended with exit 2 and "1 failure(s) listed in failed.tsv")."""
         n = sum(self.n_records(s, "failed") for s in sets)
         if not n:
             return
@@ -2574,8 +2574,8 @@ class _Run:
 
     def genome_warning(self, option: str, paths: list[str], genes_path: str) -> bool:
         """One warning when a CDS input looks like a genome, chromosomes or contigs rather than one coding
-        sequence per gene: a record of 100 kb or more, or most records, with internal stops throughout (new-user
-        audit 2026-11-14, U04: a 4 Mb genome as --query ran to "no reciprocal best hit"). True when it warned."""
+        sequence per gene: a record of 100 kb or more, or most records, with internal stops throughout (#81:
+        a 4 Mb genome as --query ran to "no reciprocal best hit"). True when it warned."""
         n = like = 0
         longest = None   # (nt, id, stops) of the longest such record
         long_one = False
@@ -2643,7 +2643,7 @@ class _Run:
         if a.kaks_format:
             self._engine_files.append(("kaks", self.path("dnds.kaks")))
             cmd += ["--kaks-out", self.path("dnds.kaks") + ".tmp"]
-            if getattr(a, "_digits_given", False):   # (else KaKs_Calculator's 6, as `coal kaks`: review L6)
+            if getattr(a, "_digits_given", False):   # (else KaKs_Calculator's 6, as `coal kaks`: #96)
                 cmd += ["--kaks-digits", str(a.kaks_digits)]
         if a.keep_alignments:
             if self.mode == "pairs":
@@ -2862,7 +2862,7 @@ def _count_pairs(run: _Run, dnds_path: str, group_col: bool) -> None:
         msgs = {m for _, m in errs}
         if len(errs) == n_methods and len(msgs) == 1:   # the pair failed for every method (alignment, a gene)
             run.fail("pair", "pair_failed", errs[0][1], cluster=cl, seq1=s1, seq2=s2)
-        else:   # (integration pass 2026-11-14, C03: only the first method's error rows were listed)
+        else:   # (#64: only the first method's error rows were listed)
             for m, msg in errs:
                 run.fail("pair", "pair_failed", f"{m}: {msg}", cluster=cl, seq1=s1, seq2=s2)
     c = dict(by.get(first, zero))
@@ -2870,7 +2870,7 @@ def _count_pairs(run: _Run, dnds_path: str, group_col: bool) -> None:
     if first is not None and n_methods > 1:
         c["method"] = first
         run.counts["pairs_by_method"] = by
-    # (deep test 2026-11-14, D08: 85% of the yeast pairs ended NA without a word about why; C03: with several
+    # (#60: 85% of the yeast pairs ended NA without a word about why; #64: with several
     # methods, each method's share, named)
     lost = {m: v["saturated"] + v["not_converged"] for m, v in by.items()}
     hit = [m for m, v in by.items()
@@ -2964,7 +2964,7 @@ def _pairs_mode(run: _Run) -> None:
         pairs, hits = _search(run, q_faa, s_faa, q_order, s_order, orth)
     run.say(f"{len(pairs):,} pairs ({'given' if a.pairs else a.ortho})")
     run.counts["orthologs"] = len(pairs)
-    if not pairs:   # (deep test 2026-11-14, D06: an empty dnds.tsv and exit 0 read like a result)
+    if not pairs:   # (#60: an empty dnds.tsv and exit 0 read like a result)
         run.warn(f"no pairs: the --pairs file {a.pairs} names none, so dnds.tsv has its header only" if a.pairs
                  else f"no pairs: DIAMOND found no {'reciprocal best hit' if a.ortho == 'rbh' else 'hit'} between "
                  "the two sets (e-value " + f"{a.evalue:g}), so dnds.tsv has its header only. Are both files coding "
@@ -3098,14 +3098,14 @@ def _pairs_file_warnings(run: _Run, pairs, q_idx, s_idx, q_failed, s_failed) -> 
     except OSError:
         same = False
     selfp = [q for q, s in pairs if q == s] if same else []
-    if selfp:   # (retest R04: the "self-pairs" warning of pairs found by DIAMOND, only for the lines it is true of)
+    if selfp:   # (#61: the "self-pairs" warning of pairs found by DIAMOND, only for the lines it is true of)
         run.warn(f"{len(selfp):,} of the {len(pairs):,} pairs of --pairs {a.pairs} pair a gene with itself (e.g. "
                  f"{selfp[0]} {selfp[0]}; --query and --subject are the same file): their rows have dN = dS = 0")
 
 
 def _check_given_pairs(run: _Run, pairs: list, first_line: list, q_idx, s_idx, q_failed: dict,
                        s_failed: dict) -> list:
-    """--pairs, before any alignment (new-user audit 2026-11-14, U07): a first line whose two fields are records of
+    """--pairs, before any alignment (#81): a first line whose two fields are records of
     neither file, while other lines are, is a column header (a notice says so, and it is not computed); and a file
     none of whose pairs names a query record and a subject record (other columns, swapped columns, another ID
     type) stops the run with exit 1 instead of a table of errors.
@@ -3386,7 +3386,7 @@ def _clusters_mode(run: _Run) -> None:
     if a.clusters:
         ids = [m for mem in clusters.values() for m in mem]
         if ids and not any(m in cds_idx or m in failed for m in ids):
-            # (new-user audit 2026-11-14, U07: other columns ran to a table of errors)
+            # (#81: other columns ran to a table of errors)
             raise PipelineError(f"none of the {len(ids):,} IDs of --clusters {a.clusters} is a record of --cds, so "
                                 "nothing was computed. "
                                 + _unmatched_text("CDS", "--clusters", a.clusters, len(ids), len(ids), ids[0],
@@ -3533,7 +3533,7 @@ def _clusters_mode(run: _Run) -> None:
     try:
         run.engine_starts()
         detail = run.run_engine("cluster_id", feed)
-    finally:   # also when the engine failed or was interrupted: the files it did write are the run's (L1)
+    finally:   # also when the engine failed or was interrupted: the files it did write are the run's (#98)
         run.record_alignment_files()
     cds_idx.close()
     prot_idx.close()
@@ -3541,7 +3541,7 @@ def _clusters_mode(run: _Run) -> None:
                        "aligner": tool, "msa_seconds": round(t_msa[0], 3), **detail})
     t = time.perf_counter()
     _count_pairs(run, run.outputs["dnds"], True)
-    if not run.counts.get("pairs", {}).get("total"):   # (deep test 2026-11-14, D06)
+    if not run.counts.get("pairs", {}).get("total"):   # (#60)
         run.warn(f"no pairs: none of the {len(clusters):,} clusters has two usable members, so dnds.tsv has its "
                  "header only" + ("" if a.clusters else ". DeepClust put every protein in a cluster of its own: "
                                   "are the sequences related? --approx-id / --member-cover change what a cluster "
@@ -3613,7 +3613,7 @@ def _cluster_status(n: int, ok: int, saturated: int, no_data: int, not_converged
     """A cluster's status for one method, and its note: ok when a pair has an estimate; without one, the pairs'
     status (saturated, else no_data, else not_converged) unless a pair failed (failed), with a note that counts
     them when there is no other note. The rule of orthologr's dNdS_clusters() / dNdS_orthogroups()
-    (integration pass 2026-11-14, C06: such clusters were all "failed")."""
+    (#64: such clusters were all "failed")."""
     if ok or not n:
         return "ok", note
     status = "failed" if error else ("saturated" if saturated else "no_data" if no_data else "not_converged")
@@ -3693,7 +3693,7 @@ def _positive(kind):
 
 
 def _matrix_error(name) -> str | None:
-    """Why a --matrix value is not a matrix of COAL's aligner, or None (new-user audit 2026-11-14, U08: a typo was
+    """Why a --matrix value is not a matrix of COAL's aligner, or None (#81: a typo was
     reported after the translation and the DIAMOND search, as a failure of `coal-cpp codon-dnds`)."""
     if name is None or (isinstance(name, str) and name.upper() in _align.MATRICES):
         return None
@@ -4036,7 +4036,7 @@ def _finish_args(a: argparse.Namespace) -> None:
     if not hasattr(a, "flanks"):
         a.flanks = "align"
     # --digits N given (command line or Python): N digits in dnds.tsv and dnds.kaks; not given: 8 in dnds.tsv and
-    # KaKs_Calculator's 6 in dnds.kaks, as `coal dnds` and `coal kaks` (review of 2026-11-15, L6)
+    # KaKs_Calculator's 6 in dnds.kaks, as `coal dnds` and `coal kaks` (#96)
     if not hasattr(a, "_digits_given"):
         a._digits_given = a.digits is not None
     if a.digits is None:
@@ -4196,7 +4196,7 @@ def _namespace(mode: str, required: list[str], options: dict) -> argparse.Namesp
 
 def _equivalent_argv(mode: str, required: list[str], a: argparse.Namespace, options: dict) -> list[str]:
     """The `coal pipeline` command line of an API call: the required arguments, then the given options as flags
-    (their values as the run uses them). For report.json's "command" (integration pass 2026-11-14, C08: it was
+    (their values as the run uses them). For report.json's "command" (#64: it was
     null for runs from Python and R)."""
     ap = build_parser()
     sub = next(x for x in ap._actions if isinstance(x, argparse._SubParsersAction)).choices[mode]
@@ -4257,7 +4257,7 @@ def run_clusters(cds: _Path | Iterable[_Path], out_dir: _Path, clusters: _Path |
 
 
 # Option names that users bring from orthologr (its dNdS() arguments) or DIAMOND: the option of `coal pipeline`
-# that does the same (new-user audit 2026-11-14, U21)
+# that does the same (#81)
 _FOREIGN_OPTIONS = {
     "--sensitivity-mode": ("--sensitivity", "orthologr's sensitivity_mode"),
     "--sensitivity_mode": ("--sensitivity", "orthologr's sensitivity_mode"),
@@ -4292,7 +4292,7 @@ def _unknown_option_hint(extra: list[str], parser: argparse.ArgumentParser) -> s
 
 
 # The options whose value is a string of DIAMOND options. `--diamond-args '-c 1 -b 4'` was refused by argparse
-# ("expected one argument", review of 2026-11-15, L3): a value that starts with a short option COAL has itself
+# ("expected one argument"; #87): a value that starts with a short option COAL has itself
 # (-c, -o, -j, -m, -q) is taken for that option. _bind_args_values() gives the value to its option before argparse
 # sees it, for the abbreviations argparse accepts too (`--diamond-arg`), and refuses what would be misread.
 _ARGS_STRING_OPTIONS = ("--diamond-args", "--deepclust-args", "--realign-args")
@@ -4409,7 +4409,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 else:
                     path = _msa.install_mafft(force=a.force, quiet=a.quiet)
                 if t in ("clustalo", "mafft") and not a.quiet:
-                    # the exact package (D6b): what this copy was installed from, and what COAL pins here
+                    # the exact package (#65): what this copy was installed from, and what COAL pins here
                     name = "Clustal Omega" if t == "clustalo" else "MAFFT"
                     pkg, pin = _msa.installed_package(t, path), _msa.package_pin(t)
                     if pkg:
@@ -4434,7 +4434,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ap.error(why)
     if _method_code_error(a):
         ap.error(_method_code_error(a))
-    # (new-user audit 2026-11-14, U13: the line did not say how to go on; report.json did)
+    # (#81: the line did not say how to go on; report.json did)
     again = (f"the tables in {a.out_dir} are incomplete. Run the same command with --resume to reuse the finished "
              "stages (translation, the DIAMOND search or clustering); nothing is left running")
     try:
