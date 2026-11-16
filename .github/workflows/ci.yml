@@ -360,7 +360,8 @@ jobs:
       # micromamba, into COAL's cache, where the tests find them). Linux only: one system is enough to run those
       # tests, and there is no Clustal Omega install for Windows (docs/alignment.md; MAFFT's Windows package is
       # tested by tests.test_windows_mafft_real, below). Best effort: if the channel cannot be reached the step
-      # says so and the MSA tests skip, as they do on Windows and macOS.
+      # says so and the MSA tests skip, as they do on Windows and macOS; nightly.yml msa-tools installs them with no
+      # fallback and fails when an MSA test skips for want of them.
       - name: Install Clustal Omega and MAFFT (Bioconda, by coal; Linux)
         if: runner.os == 'Linux'
         timeout-minutes: 10

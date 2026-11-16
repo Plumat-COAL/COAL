@@ -46,7 +46,8 @@ the `coal-cpp` program when `coalr` is not installed). Not merged upstream. Its 
 orthologr 0.4.3, including changed defaults that change results.
 
 ```r
-remotes::install_github("Plumat-COAL/COAL", subdir = "packaging/r/coalr")
+install.packages("Rcpp"); install.packages("https://github.com/Plumat-COAL/COAL/releases/download/v0.6.1/coalr_0.6.1.tar.gz", repos = NULL, type = "source")
+#   or remotes::install_github("Plumat-COAL/COAL@v0.6.1", subdir = "packaging/r/coalr")   (docs/r.md, "Install")
 remotes::install_github("Plumat-COAL/orthologr", ref = "integration/all")
 
 dNdS(q, s, codon_aln_tool = "coal")                                         # PAL2NAL's step without Perl
@@ -54,6 +55,10 @@ dNdS(q, s, dnds_est.method = "YN", codon_aln_tool = "coal", kaks_tool = "coal") 
 dNdS(q, s, dnds_est.method = "YN", engine = "coal", comp_cores = 8)         # all pairs in one call to COAL
 dNdS_clusters(c(q, s), aa_aln_tool = "clustalo")                            # every pair of each DeepClust cluster
 ```
+
+<!-- until 0.6.1 is published (tests/test_docs_site.py): remove this note at the release -->
+Until 0.6.1 is published, there is no v0.6.1 to install: use
+`remotes::install_github("Plumat-COAL/COAL@v0.6.0", subdir = "packaging/r/coalr")`.
 
 - `codon_aln_tool = "coal"` gives the same codon alignments as `"pal2nal"` (so the same dN/dS), one pair at a
   time; the gain is robustness (no Perl, no length limit, a checked result). It is the fork's default when `coalr`

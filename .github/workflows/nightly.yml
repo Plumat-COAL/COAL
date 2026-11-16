@@ -455,6 +455,60 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+  msa-tools:
+    # Cluster mode's MSA route with the real Clustal Omega and MAFFT. ci.yml's C++ job installs them best effort (a
+    # Bioconda outage must not fail every change), so its MSA tests can skip without anyone seeing it (REVIEW-COAL-3
+    # L4); here the install must succeed and no test of the modules below may skip for want of Clustal Omega or
+    # MAFFT (ci_cpp_tests.py --no-skip, with every other skip reason allowed: Windows-only tests, optional live
+    # checks).
+    name: "Cluster-mode MSA tests with Clustal Omega and MAFFT (must not skip)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            apps/coal-app/pyproject.toml
+            apps/coal-app/desktop/requirements.txt
+      - name: Install COAL and psutil
+        run: python -m pip install -e . psutil
+      - name: Build coal-cpp with the test hooks
+        shell: bash
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCOAL_WARNINGS_AS_ERRORS=ON -DCOAL_TEST_HOOKS=ON
+          cmake --build build -j 2
+          test -x build/coal-cpp && test -x build/coal-cpp-align
+          echo "COAL_CPP_BIN=$PWD/build/coal-cpp" >> "$GITHUB_ENV"
+      - name: Install DIAMOND (pinned release, SHA-256 verified by coal)
+        run: python -c "import os; from coal import dnds_pipeline as P; p = P.install_diamond(method='official'); open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8', newline='\n').write('COAL_DIAMOND=' + p + '\nCOAL_TEST_DIAMOND=' + p + '\nCOAL_REQUIRE_DIAMOND=1\n')"
+      - name: Install Clustal Omega and MAFFT (Bioconda, by coal; must succeed)
+        run: |
+          python -m coal pipeline install clustalo mafft
+          python -c "from coal import msa; c, m = msa.find_clustalo(), msa.find_mafft(); print('clustalo:', c, '| mafft:', m); assert c and m, 'not found after the install'"
+      - name: MSA tests (no skip for want of Clustal Omega or MAFFT)
+        shell: bash
+        env:
+          COAL_IMPL: cpp
+          COAL_REQUIRE_CPP: "1"
+          COAL_REQUIRE_ALIGN: "1"
+        run: |
+          mods=test_msa,test_dnds_pipeline,test_pipeline_provenance,test_new_user_ux,test_deep_findings,test_pipeline_msgs
+          python .github/ci_cpp_tests.py --no-skip "$mods" --allow '^(?!.*(clustal|mafft|msa tool|aligner))' \
+            $(echo "$mods" | sed 's/[^,]*/tests.&/g; s/,/ /g') 2>&1 | tee msa-tools.txt
+          test "${PIPESTATUS[0]}" -eq 0
+      - name: Upload the test log
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: msa-tools-seed-${{ env.FUZZ_SEED }}
+          path: msa-tools.txt
+          if-no-files-found: warn
+          retention-days: 30
+
   tutorials:
     # ci.yml's tutorials job (scripts/run_tutorials.py: the commands of docs/tutorials/01, 02, 03 and 05 on their real
     # NCBI data, compared with what the tutorials show), every night and without its paths filter, so drift that does

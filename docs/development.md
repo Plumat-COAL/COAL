@@ -131,20 +131,38 @@ corresponding codon alignments. *Nucleic Acids Res.* 34:W609–W612.
 ## Releasing COAL
 
 1. Set the same version in `src/coal/__init__.py`, `pyproject.toml`, `apps/coal-app/pyproject.toml` (its
-   `version` and its `coal-align==` dependency) and the `id="version"` span in `site/index.html` (a test fails if
-   they differ; `scripts/release_version.py` refuses the tag), optionally add a `## <version>` section to
-   `CHANGELOG.md` for the release notes, and commit. With the first release of a development line (0.6.0 after
-   0.6.0.dev0), also remove the dev-version banner at the top of `README.md`, `docs/install.md` and
-   `docs/tutorials/README.md` (the block that starts with the `<!-- dev-version banner ... -->` comment):
-   `tests/test_new_user_ux.py` fails while a release version still has it. (The website hides its 0.6 sections
-   with `data-since` and needs no change.)
-2. Tag that commit: `git tag vX.Y.Z && git push origin vX.Y.Z`.
-3. `.github/workflows/release.yml` checks the tag against the source version, builds and checks both wheels and
-   sdists (engine and app) and the Windows app (`apps/coal-app/desktop/build.ps1`), writes `SHA256SUMS.txt` and
-   publishes the GitHub Release, with
-   version-free copies of the downloads. **Wait until it has published, then merge to `main`**, which redeploys the
-   website (https://plumat-coal.github.io/COAL/, from `site/`, via `.github/workflows/pages.yml`). The site links to
-   `releases/latest/download/<version-free name>`, so it offers the new release at once.
+   `version` and its `coal-align==` dependency), `CMakeLists.txt` (`COAL_VERSION_FULL`, and `project(VERSION)` if
+   the base version changes), `cpp/src/main.cpp` and `cpp/src/report.cpp`, and coalr's
+   `packaging/r/coalr/DESCRIPTION` (`Version:` is `scripts/release_version.py`'s `r_version`, COAL's own for a
+   release), then run `python scripts/sync_r_sources.py` (it writes the vendored `coal_version.h` and
+   `VENDORED.txt`). `tests/test_feature_combinations.py` checks every place, and `scripts/release_version.py`
+   refuses the tag while any of them differs. Also, in the same commit:
+   - `CHANGELOG.md`: rename `## Unreleased` to `## <version> — <date>` (with a short summary). The tag is refused,
+     and `tests/test_feature_combinations.py` fails, while a release version has entries under `## Unreleased`.
+   - `CITATION.cff`: add `date-released: <date>` (a development tree has none; `version:` already names the
+     release).
+   - The dev-version banner at the top of `README.md`, `docs/install.md` and `docs/tutorials/README.md` (the block
+     that starts with the `<!-- dev-version banner ... -->` comment): remove it (`tests/test_new_user_ux.py` fails
+     while a release version still has it). The website hides newer sections with `data-since` and needs no change.
+   - The coalr install lines (`docs/r.md`, `README.md`, `packaging/r/coalr/README.md`,
+     `docs/tutorials/04-r-coalr.md`, `packaging/orthologr/README.md`): every `releases/download/v<version>/coalr_<version>.tar.gz`
+     and `install_github("Plumat-COAL/COAL@v<version>", ...)` names this version, and the notes that start with
+     `<!-- until <version> is published` are removed (`tests/test_docs_site.py` `TestCoalrInstallLines`).
+2. Tag that commit: `git tag vX.Y.Z && git push origin vX.Y.Z` (or publish the release on GitHub's "new release"
+   page with a new tag at that commit).
+3. `.github/workflows/release.yml` checks the tag against the source version (`scripts/release_version.py`),
+   builds and checks both wheels and sdists (engine and app), the platform wheels, the Windows app
+   (`apps/coal-app/desktop/build.ps1`) and the R package (`R CMD build` of `packaging/r/coalr`, installed and run:
+   `coalr_<version>.tar.gz` and the version-free `coalr_src.tar.gz`; not for a prerelease, since `0.6.1rc1` is no
+   R version, so a prerelease has no coalr file), writes `SHA256SUMS.txt`, checks the exact file list and
+   publishes the GitHub Release, with version-free copies of the downloads. A run dispatched with `publish` off
+   (on a branch: `gh workflow run release.yml -f tag=<branch> -f publish=false`) builds and checks everything,
+   including the file list, and publishes nothing. **Wait until it has published, then merge to `main`**, which
+   redeploys the website (https://plumat-coal.github.io/COAL/, from `site/`, via `.github/workflows/pages.yml`).
+   The site links to `releases/latest/download/<version-free name>`, so it offers the new release at once.
+   Then, in the first change after the release, set the next development version (`X.Y.(Z+1).dev0`, coalr
+   `X.Y.(Z+1).9000`) in the same places, the base version in `CITATION.cff` and the site's version spans, an
+   empty `## Unreleased`, and the banners back, so that no build of `main` reports a published version.
 4. **PyPI** (`coal-align`, `coal-align-app`): the `pypi` job of the same workflow uploads the versioned wheels and
    sdists by [trusted publishing](https://docs.pypi.org/trusted-publishers/), after the GitHub Release exists. It
    runs only when the repository variable `PYPI_PUBLISH` is `true`. One-time setup: on PyPI, create both projects

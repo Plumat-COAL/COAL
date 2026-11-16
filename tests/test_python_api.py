@@ -5,6 +5,7 @@ ones. A change here is a change to the documented API: update docs/python-api.md
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -38,7 +39,11 @@ class TestExports(unittest.TestCase):
         text = DOC.read_text(encoding="utf-8")
         for name in coal.__all__:
             self.assertIn(f"coal.{name}", text, f"docs/python-api.md does not document coal.{name}")
-        self.assertIn(f"COAL {coal.__version__}", text, "docs/python-api.md names another version than the package")
+        # a development tree (0.6.1.dev0) names the release it becomes (0.6.1), as CITATION.cff and the website do
+        # (scripts/release_version.py); tests/test_user_files_and_lows.py keeps a .devN out of the page
+        dev = re.match(r"^(\d+(?:\.\d+)+)\.dev\d+$", coal.__version__)
+        shown = dev.group(1) if dev else coal.__version__
+        self.assertIn(f"for COAL {shown} ", text, "docs/python-api.md names another version than the package")
 
 
 class TestCodonAlignExamples(unittest.TestCase):

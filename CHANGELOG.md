@@ -4,6 +4,25 @@
 
 ### Fixed
 
+- **The development tree is 0.6.1.dev0** (coalr 0.6.1.9000): `main` still said 0.6.0 after the changes below
+  were merged, so a build of it reported, and `coal` accepted as, the published release. The six version places,
+  CMake, coalr's DESCRIPTION, the vendored `coal_version.h`, `CITATION.cff` (no `date-released` in a development
+  tree) and the website's version spans name the development version or the release it becomes, and the
+  dev-version banner is back at the top of README.md, docs/install.md and docs/tutorials/README.md. A release
+  version with entries under "Unreleased" now fails `tests/test_feature_combinations.py`, and
+  `scripts/release_version.py` refuses its tag (also when coalr's DESCRIPTION has another version).
+  (Final review of 2026-11-16, H1.)
+- **coalr install lines name a release**: docs/r.md, README.md, coalr's README, tutorial 4 and
+  packaging/orthologr/README.md install `coalr_0.6.1.tar.gz` of the v0.6.1 release (or `install_github()` at the
+  tag `v0.6.1`); the unpinned `install_github()` is shown only as the development version, and until 0.6.1 is
+  published a note gives the v0.6.0 tag. `tests/test_docs_site.py` keeps the lines at the release version.
+  (Final review of 2026-11-16, H1.)
+- `release.yml`: the dry-run version check is `scripts/release_version.py --dry-run` (tested) instead of the same
+  inline Python in two jobs, and a release that already exists (a re-run, or one made on GitHub's release page)
+  gets the prerelease flag of a new one (`gh release edit --prerelease=<true|false>`; it kept whatever it had).
+  (Final review of 2026-11-16, L5.)
+- `tests/test_orthologr_standin.py` gives its subprocesses an absolute `PYTHONPATH` (`tests/subprocess_env.py`):
+  with `PYTHONPATH=src` its run in `examples/clean` failed with "No module named coal_compat". (L4.)
 - `coal pipeline`: a `.fasta` file of your own in `DIR/codon_alignments/` or `DIR/protein_alignments/` is no longer
   deleted by the next run into `DIR`. A cluster run records the names of the per-cluster files it wrote
   (`codon_alignments_files` / `protein_alignments_files` in `work/outputs.json`) and the next run removes those
@@ -88,6 +107,24 @@
   1.8e-7, the tolerance of the flat-likelihood rule, which now calls them `saturated`); 39 flat pairs of 2 to 4 codons
   go from `ok` or `warning` to `saturated` and one back. Against 0.6.0 one pair of the 25,200 has a lower likelihood
   (3 codons, saturated in both, 0.010 lower since the change above).
+
+### Added
+
+- **coalr is a release asset**: `.github/workflows/release.yml` has a `coalr` job (`scripts/sync_r_sources.py
+  --check`, DESCRIPTION at the version, `R CMD build`, `R CMD INSTALL`, the installed package's version and one
+  example run) that adds `coalr_<version>.tar.gz` and the version-free `coalr_src.tar.gz` to the release; both
+  are in the release's exact file list, in `release-smoke.yml`'s check (with the tarball's DESCRIPTION and
+  contents) and in `tests/test_docs_site.py`. Not for a prerelease: `0.6.1rc1` is no R package version
+  (`scripts/release_version.py` `r_version()` is empty for it), so a prerelease has no coalr file.
+- The checksums and the exact file list are a job of their own (`files`), which runs on a dry run too
+  (dispatched with `publish` off), so a dry run shows the list a release would publish; the `release` job
+  publishes exactly the files that job checked.
+- `coal_dnds_pairs()` / `coal_dnds_clusters()` (coalr): attribute `"alignment"` with the protein-alignment scoring
+  used; docs/r.md, coalr's README and the help pages say that the default scoring is EMBOSS needle's (as in `coal
+  pipeline`) and that `preset = "pwalign"` gives orthologr's alignments, with which dS can differ by more than 10%
+  for some pairs (118 of 2,958 in tutorial 4). (Final review of 2026-11-16, L3.)
+- `nightly.yml` job `msa-tools`: Clustal Omega and MAFFT installed with no fallback, and the cluster-mode MSA tests
+  must not skip for want of them (ci.yml's install stays best effort). (Final review of 2026-11-16, L4.)
 
 ### Added
 

@@ -2,6 +2,14 @@
 
     python scripts/release_version.py v0.4.0      -> prints 0.4.0, exit 0
     python scripts/release_version.py v0.5.0      -> error (source says 0.4.0), exit 1
+    python scripts/release_version.py --dry-run main   -> prints the source's version (e.g. 0.6.1.dev0), exit 0 when
+                                                     the six places agree; for a build that publishes nothing
+    ... --github-output   also appends version=, prerelease=true|false and r_version= to $GITHUB_OUTPUT
+
+A release (not a dry run) is also refused while CHANGELOG.md has entries under "## Unreleased" (the release commit
+moves them into "## X.Y.Z") or while coalr's DESCRIPTION does not carry r_version(X.Y.Z). r_version is empty for a
+prerelease (a1, b1, rc1: not a valid R package version), whose release has no coalr asset; a dry run is reported
+as a prerelease.
 
 The tag must be "v" + the one version of both packages: src/coal/__init__.py and pyproject.toml (the engine,
 coal-align), apps/coal-app/pyproject.toml (the app, coal-align-app) together with the coal-align version that the app
@@ -34,11 +42,43 @@ def base_version(version):
     return m.group(1) if m else re.sub(r"(a|b|rc)\d+$", "", version)
 
 
+PRE_RE = re.compile(r"(a|b|rc)\d+$")
+
+
 def r_version(version):
     """The version of the R package coalr for a COAL version: the same, or for a development version R's
-    convention for one (a fourth component from 9000): 0.6.0.dev0 -> 0.6.0.9000, 0.6.0.dev3 -> 0.6.0.9003."""
+    convention for one (a fourth component from 9000): 0.6.0.dev0 -> 0.6.0.9000, 0.6.0.dev3 -> 0.6.0.9003.
+    None for a prerelease (0.6.1rc1): R has no form of it that sorts before 0.6.1, so a prerelease ships no coalr
+    (release.yml skips the coalr job) and its commit leaves DESCRIPTION at the development form."""
     m = DEV_RE.match(version)
-    return f"{m.group(1)}.{9000 + int(m.group(2))}" if m else version
+    if m:
+        return f"{m.group(1)}.{9000 + int(m.group(2))}"
+    return None if PRE_RE.search(version) else version
+
+
+DESCRIPTION = os.path.join("packaging", "r", "coalr", "DESCRIPTION")
+
+
+def description_version(root=ROOT):
+    """coalr's Version: in packaging/r/coalr/DESCRIPTION (None when the file or the field is missing)."""
+    try:
+        with open(os.path.join(root, DESCRIPTION), encoding="utf-8") as fh:
+            m = re.search(r"(?m)^Version:\s*(\S+)\s*$", fh.read())
+    except OSError:
+        return None
+    return m.group(1) if m else None
+
+
+def unreleased_text(root=ROOT):
+    """The text under CHANGELOG.md's "## Unreleased" heading up to the next "## " heading, stripped ("" when the
+    heading is missing or the section is empty). A release has none: the release commit renames the section."""
+    try:
+        with open(os.path.join(root, "CHANGELOG.md"), encoding="utf-8") as fh:
+            text = fh.read()
+    except OSError:
+        return ""
+    m = re.search(r"(?m)^## Unreleased[ \t]*\n(.*?)(?=^## |\Z)", text, re.S)
+    return m.group(1).strip() if m else ""
 
 
 def source_versions(root=ROOT):
@@ -91,23 +131,48 @@ def check(tag, root=ROOT):
         raise ValueError(f"tag {tag} says {version}, but src/coal/__init__.py says {init}, pyproject.toml says "
                          f"{proj}, {APP_PYPROJECT.replace(os.sep, '/')} says {app} and pins coal-align=={pin}, "
                          f"{cpp_says}: bump all six, commit, then tag that commit")
-    return version, bool(re.search(r"(a|b|rc)\d+$", version))
+    pre = bool(PRE_RE.search(version))
+    if unreleased_text(root):
+        raise ValueError(f"CHANGELOG.md has entries under \"## Unreleased\": the release commit moves them into "
+                         f"\"## {version}\" (docs/development.md \"Releasing COAL\")")
+    want_r = r_version(version)
+    if want_r is not None and description_version(root) != want_r:
+        raise ValueError(f"{DESCRIPTION.replace(os.sep, '/')} says Version: {description_version(root)}, not {want_r} "
+                         f"(r_version of {version}): set it, run scripts/sync_r_sources.py, commit, then tag")
+    return version, pre
+
+
+def dry_run(root=ROOT):
+    """For a build that publishes nothing (release.yml dispatched with publish off on a branch or commit, e.g. main
+    between releases): the source's version, which may be a development version, once the six places agree. Raises
+    ValueError when they do not."""
+    init, proj = source_versions(root)
+    app, pin = app_versions(root)
+    cpp = cpp_versions(root)
+    if len({init, proj, app, pin, *cpp}) != 1:
+        raise ValueError(f"dry run: the versions disagree: {init}, {proj}, app {app} pinning {pin}, coal-cpp {cpp}")
+    return init
 
 
 def main(argv):
-    args = [a for a in argv if a != "--github-output"]
+    flags = {"--github-output", "--dry-run"}
+    args = [a for a in argv if a not in flags]
     if len(args) != 1:
         print(__doc__.strip(), file=sys.stderr)
         return 2
     try:
-        version, pre = check(args[0])
+        if "--dry-run" in argv:
+            version, pre = dry_run(), True
+            print(f"dry run of {args[0]}: version {version}", file=sys.stderr)
+        else:
+            version, pre = check(args[0])
     except ValueError as e:
         print(f"release_version: {e}", file=sys.stderr)
         return 1
     print(version)
     if "--github-output" in argv and os.environ.get("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
-            fh.write(f"version={version}\nprerelease={'true' if pre else 'false'}\n")
+            fh.write(f"version={version}\nprerelease={'true' if pre else 'false'}\nr_version={r_version(version) or ''}\n")
     return 0
 
 
