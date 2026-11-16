@@ -144,8 +144,8 @@ An *unexplained* difference found by the fuzz is a bug in COAL until shown other
 ## Releasing
 
 The release checklist is in one place, [docs/development.md, "Releasing COAL"](docs/development.md#releasing-coal):
-the version in the six places `scripts/release_version.py` checks (and the others it lists), the CHANGELOG
+the version in the seven places `scripts/release_version.py` checks (and the others it lists), the CHANGELOG
 section, the generated files, the coalr install lines, the prerelease differences, the tag, and the next
 development version afterwards. `python scripts/release_version.py vX.Y.Z` checks a commit against a tag the way
-`.github/workflows/release.yml` does (exit 1 with the mismatch spelled out); `--dry-run` only checks that the six
+`.github/workflows/release.yml` does (exit 1 with the mismatch spelled out); `--dry-run` only checks that the seven
 places agree.

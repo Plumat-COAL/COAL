@@ -417,7 +417,10 @@ _CPP_OUTPUT_OPTIONS = ("-o", "-O", "--out", "--genes", "--failures", "--codon-ou
 
 
 def is_gzip(path) -> bool:
-    """True when the file starts with the gzip magic bytes (whatever its name is)."""
+    """True when the file starts with the gzip magic bytes (whatever its name is). False for anything that is not a
+    regular file: opening a FIFO would wait for a writer and take its first bytes (coal-cpp then refuses it)."""
+    if not os.path.isfile(path):
+        return False
     try:
         with open(path, "rb") as fh:
             return fh.read(2) == GZIP_MAGIC

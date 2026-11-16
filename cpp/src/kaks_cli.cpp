@@ -15,6 +15,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -186,7 +187,11 @@ std::string strip_ws(const std::string& s) {
 
 // AXT as KaKs_Calculator reads it: a name line, then sequence lines up to a blank line; with exactly two lines
 // they are the two sequences, with three or more the concatenation is split in half (wrapped sequences). One
-// line is an error for that record (KaKs_Calculator would split it in half as well).
+// line is an error for that record (KaKs_Calculator would split it in half as well). With three or more lines,
+// the half must fall at the end of a line, and every line must hold only letters and gap / missing symbols
+// (- . ? * ~ !); otherwise the record is an error: that is how a blank line lost between two records shows
+// (the next record's name and sequences joined to this one), which KaKs_Calculator would halve into a wrong
+// pair (final review of 2026-11-16, M1).
 class AxtReader {
 public:
     explicit AxtReader(const std::string& path) : lr_(path) {}
@@ -228,8 +233,17 @@ public:
         } else {
             std::string all;
             for (auto& r : rows) all += r;
-            if (rows.empty() || all.size() % 2 != 0)
+            if (rows.empty() || all.size() % 2 != 0) {
                 p.read_error = "record does not hold two sequences of equal length";
+            } else if (const std::string* bad = non_sequence_line(rows)) {
+                p.read_error = "record has " + std::to_string(rows.size()) + " sequence lines and one of them ('" +
+                               (bad->size() > 40 ? bad->substr(0, 40) + "..." : *bad) +
+                               "') is not sequence: is the blank line before a name line missing?";
+            } else if (!half_at_line_end(rows, all.size() / 2)) {
+                p.read_error = "record has " + std::to_string(rows.size()) +
+                               " sequence lines that do not split into two sequences of equal length at the end "
+                               "of a line: is the blank line between two records missing?";
+            }
             p.own1 = all.substr(0, all.size() / 2);
             p.own2 = all.substr(all.size() / 2);
         }
@@ -237,6 +251,27 @@ public:
     }
 
 private:
+    // The first line holding a character that is neither a letter nor a gap / missing symbol (a name line), or null.
+    static const std::string* non_sequence_line(const std::vector<std::string>& rows) {
+        for (const auto& r : rows)
+            for (char ch : r) {
+                const unsigned char u = (unsigned char)ch;
+                if (!((u >= 'A' && u <= 'Z') || (u >= 'a' && u <= 'z') || ch == '-' || ch == '.' || ch == '?' ||
+                      ch == '*' || ch == '~' || ch == '!'))
+                    return &r;
+            }
+        return nullptr;
+    }
+    // True when the first k lines hold exactly `half` characters for some k (the first sequence ends a line).
+    static bool half_at_line_end(const std::vector<std::string>& rows, size_t half) {
+        size_t n = 0;
+        for (const auto& r : rows) {
+            n += r.size();
+            if (n == half) return true;
+            if (n > half) return false;
+        }
+        return false;
+    }
     static std::string trim(const std::string& s) {
         size_t a = 0, b = s.size();
         while (a < b && py_space((unsigned char)s[a])) ++a;
@@ -555,6 +590,17 @@ int parse(const std::vector<std::string>& args, Cli& c) {
     if (c.digits < 0) c.digits = c.compat ? 6 : 8;
     if (c.out == "-") c.out.clear();
     if (c.in == "-") return usage(c, "reading standard input ('-') is not supported: give a file");
+    {
+        // The input is opened more than once (the gzip and format checks, then the reader): a FIFO or a process
+        // substitution <(...) would be read empty, or hang, after the first look. Refused as standard input is
+        // (final review of 2026-11-16, L3).
+        std::error_code ec;
+        const auto st = std::filesystem::status(c.in, ec);
+        if (!ec && std::filesystem::exists(st) && !std::filesystem::is_regular_file(st) &&
+            !std::filesystem::is_directory(st))
+            return usage(c, "reading a pipe or device ('" + c.in + "' is not a regular file) is not supported: give "
+                            "a file");
+    }
     // The output is opened (and emptied) before the input is read to the end, so writing onto the input would
     // destroy it: refused, whatever the spelling of the two paths (./x, a symbolic or hard link).
     if (!c.out.empty() && same_file(c.in, c.out))

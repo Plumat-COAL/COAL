@@ -249,23 +249,7 @@ def codon_align(
         raise CoalToolError(str(e)) from e
     result = dict(summarise(r))
     if save_as and result.get("output_path"):
-        dest = save_as
-        if os.path.isdir(dest):
-            dest = os.path.join(dest, os.path.basename(result["output_path"]))
-        if os.path.exists(dest):
-            raise CoalToolError(f"not saved: {dest} already exists (COAL never overwrites a file; choose another "
-                                f"name). The alignment is at {result['output_path']}")
-        parent = os.path.dirname(dest)
-        if not os.path.isdir(parent):
-            raise CoalToolError(f"not saved: the folder {parent} does not exist. The alignment is at "
-                                f"{result['output_path']}")
-        import shutil
-        try:
-            shutil.copyfile(result["output_path"], dest)
-        except OSError as e:
-            raise CoalToolError(f"not saved to {dest}: {e.strerror or e}. The alignment is at "
-                                f"{result['output_path']}") from e
-        result["output_path"] = dest
+        result["output_path"] = _save_copy(result["output_path"], save_as, "alignment")
     return result
 
 
@@ -515,19 +499,35 @@ def dnds_pairs(
 
 def _save_copy(path: str, save_as: str, what: str) -> str:
     """Copy `path` to `save_as` (a file path, or an existing folder to save in under the same name); never
-    overwrites. Returns the new path."""
+    overwrites. Returns the new path. The copy is created as a new file (open mode "x", O_CREAT | O_EXCL): a name
+    that something takes between the check and the copy, or a symbolic link (dangling or not), is never written
+    through (final review of 2026-11-16, Q3)."""
     import shutil
     dest = save_as
     if os.path.isdir(dest):
         dest = os.path.join(dest, os.path.basename(path))
-    if os.path.exists(dest):
-        raise CoalToolError(f"not saved: {dest} already exists (COAL never overwrites a file; choose another name). "
-                            f"The {what} is at {path}")
+    exists = (f"not saved: {dest} already exists (COAL never overwrites a file; choose another name). "
+              f"The {what} is at {path}")
+    if os.path.lexists(dest):
+        raise CoalToolError(exists)
     parent = os.path.dirname(dest)
     if not os.path.isdir(parent):
         raise CoalToolError(f"not saved: the folder {parent} does not exist. The {what} is at {path}")
     try:
-        shutil.copyfile(path, dest)
+        with open(path, "rb") as src:
+            try:
+                out = open(dest, "xb")
+            except FileExistsError:
+                raise CoalToolError(exists) from None
+            try:
+                with out:
+                    shutil.copyfileobj(src, out)
+            except BaseException:
+                try:
+                    os.remove(dest)   # the partial copy is this call's own file
+                except OSError:
+                    pass
+                raise
     except OSError as e:
         raise CoalToolError(f"not saved to {dest}: {e.strerror or e}. The {what} is at {path}") from e
     return dest
