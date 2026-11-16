@@ -1148,34 +1148,39 @@ Result run_gy(const Prepared& p, const GeneticCode& g, const Options&, Result r)
                 offer(optimise(m, first.first_run_stop_kappa, fix_omega ? 1.0 : w2, T_MAX, fix_omega));
         }
     }
+    const auto cont = [&](const Fit& from) {
+        return optimise(m, from.kappa, fix_omega ? 1.0 : from.omega, from.t, fix_omega);
+    };
+    Choice ch = continue_starts(fits, choose_start(fits), cont, iterations);
     // The coarse scan. On a pair of few codons the likelihood is flat and has several maxima, often with kappa or
     // omega at a bound, which none of the starts above may reach; and a start that ends on the ridge of saturation
     // stops on a plateau (at t = 50 the likelihood barely depends on kappa and omega), where it cannot see a higher
     // maximum at a moderate t or with another kappa (GTGGACAAC / TCCGGGAAG under code 11: every start ended on
     // the ridge, at lnL -17.3590 or below; the maximum is -16.5761 at t 7.96, kappa 1e-6). So a pair of
-    // SCAN_SMALL_PAIR (100) codons or fewer, and a pair whose best start ended on the ridge (or that has no usable
-    // start), has its likelihood evaluated on a grid of 36 points in (kappa, omega), each maximised over t
-    // (scan_grid), and is started once more from the two highest points: a small pair always, any other pair only
-    // from a point higher than its best start (there the extra starts would only repeat what the starts found).
-    // The new starts are offered to choose_start like the others, so the likelihood reported can only be higher
-    // (by more than LNL_TIE; within it a converged start can still replace an unconverged one on the ridge).
+    // SCAN_SMALL_PAIR (100) codons or fewer, and a pair whose result so far is on the ridge or did not converge,
+    // has its likelihood evaluated on a grid of 36 points in (kappa, omega), each maximised over t (scan_grid),
+    // and is started once more from the two highest points: a small pair always, any other pair only from a point
+    // higher than its result so far (there the extra starts would only repeat what the starts found). The scan
+    // comes after the choice among the starts above and its continuation, which are as they were without it; the
+    // new starts then join that choice (and a continuation, if one of them asks for it), so the likelihood
+    // reported can only be higher (by more than LNL_TIE; within it a converged start can still replace an
+    // unconverged one on the ridge).
     {
-        const Choice c0 = choose_start(fits);
+        const Fit now = fits[(size_t)ch.report];   // (a copy: offer() grows fits)
         const bool small = n <= SCAN_SMALL_PAIR;
-        const bool ridge = c0.best < 0 || fits[(size_t)c0.best].t >= T_MAX * (1 - 1e-3);
-        if (small || ridge) {
-            const double bar = c0.best >= 0 ? fits[(size_t)c0.best].lnl : -1e300;
+        const bool unsettled = !now.converged || now.t >= T_MAX * (1 - 1e-3);
+        if (small || unsettled) {
+            const double bar = now.lnl;
             const std::vector<ScanPoint> pts = scan_grid(m, t0, fix_omega);
+            bool offered = false;
             for (int i = 0; i < SCAN_STARTS && i < (int)pts.size(); ++i) {
                 if (!small && !(pts[(size_t)i].lnl > bar + LNL_TIE)) break;
                 offer(optimise(m, pts[(size_t)i].kappa, pts[(size_t)i].omega, pts[(size_t)i].t, fix_omega));
+                offered = true;
             }
+            if (offered) ch = continue_starts(fits, choose_start(fits), cont, iterations);
         }
     }
-    const Choice ch = continue_starts(
-        fits, choose_start(fits),
-        [&](const Fit& from) { return optimise(m, from.kappa, fix_omega ? 1.0 : from.omega, from.t, fix_omega); },
-        iterations);
     Fit best = fits[ch.report];
     best.iterations = iterations;
     r.iterations = best.iterations;

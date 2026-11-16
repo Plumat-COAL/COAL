@@ -492,6 +492,15 @@ class TestEdgeCases(GyBase):
                 self.assertNotEqual(r["status"], "not_converged")
                 self.assertGreater(val(r["lnL"]), best[key] - 1e-3)
 
+    def test_scan_after_the_continuation(self):
+        """The scan comes after the choice among the ordinary starts and its continuation: a new start that is
+        usable and higher than an unconverged start would otherwise stop that start's continuation, which can lead
+        higher still. GTCGGGCTCTCCTAC / CGCTGGATGTAAGCA under code 6: the continuation reaches the ridge at
+        -35.81001 (the global maximum of the independent search); with the scan first, the scan's maximum,
+        -35.81142 at t 5.9, was reported."""
+        r = self.one("GTCGGGCTCTCCTAC", "CGCTGGATGTAAGCA", "-c", "6")
+        self.assertGreater(val(r["lnL"]), -35.8105)
+
     def test_synonymous_changes_only(self):
         b = self.codonwise({"GCT": "GCA", "GGT": "GGC", "CCC": "CCA", "CTG": "CTA"})
         r = self.one(self.GENE, b)
