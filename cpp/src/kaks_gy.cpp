@@ -476,10 +476,11 @@ struct Fit {
 struct ProfileEval {
     GyModel& m;
     int nfree;   // 1: omega is fixed, and its gradient is reported as 0
-    double operator()(const double* y, double& tt, double* g) const {
+    double operator()(const double* y, double& tt, double* g, double* dt = nullptr) const {
         m.build(std::exp(y[0]), std::exp(y[1]));
         double slope = 0;
         const double f = -profile_t(m, tt, &slope);
+        if (dt) *dt = slope;   // d lnl / dt where the profile stopped
         if (g) {
             double gl[2];
             m.gradient(tt, slope, gl);
@@ -563,9 +564,10 @@ bool probe_zone_ends(const ProfileEval& eval, double x[2], double& f, double& t,
 // A step of optimise_run that the second run of optimise() lengthens (see there and at the call): from x along
 // dir (largest component dmax, directional derivative `slope`), accepted with factor alpha at xn (likelihood fn,
 // branch length tn). The factor is doubled while the likelihood keeps improving, up to a step of 2 log units;
-// alpha, xn, fn and tn are those of the last accepted trial, and the model is left decomposed at xn.
+// alpha, xn, fn, tn and sn (the slope in t) are those of the last accepted trial, and the model is left decomposed
+// at xn.
 void lengthen_step(const ProfileEval& eval, const double x[2], const double dir[2], double dmax, double slope,
-                   double& alpha, double xn[2], double& fn, double& tn) {
+                   double& alpha, double xn[2], double& fn, double& tn, double& sn) {
     const double lo = std::log(PAR_MIN), hi = std::log(PAR_MAX);
     double a2 = 2, xa[2], fa = fn;
     bool stale = false;   // the model's state is that of a rejected trial
@@ -574,8 +576,8 @@ void lengthen_step(const ProfileEval& eval, const double x[2], const double dir[
     // has to improve the likelihood to be kept)
     while (a2 * dmax <= 2.0) {
         for (int i = 0; i < 2; ++i) xa[i] = std::min(hi, std::max(lo, x[i] + a2 * dir[i]));
-        double ta = tn;
-        const double ft = eval(xa, ta, nullptr);
+        double ta = tn, sa = 0;
+        const double ft = eval(xa, ta, nullptr, &sa);
         if (!(ft < fa + 1e-4 * (a2 - alpha) * slope)) {
             stale = true;
             break;
@@ -585,11 +587,12 @@ void lengthen_step(const ProfileEval& eval, const double x[2], const double dir[
         fa = ft;
         fn = ft;
         tn = ta;
+        sn = sa;
         xn[0] = xa[0];
         xn[1] = xa[1];
         a2 *= 2;
     }
-    if (stale) fn = eval(xn, tn, nullptr);
+    if (stale) fn = eval(xn, tn, nullptr, &sn);
 }
 
 // Maximise over (log kappa, log omega) (omega fixed when fix_omega) the likelihood profiled over t: a projected
@@ -664,12 +667,12 @@ Fit optimise_run(GyModel& m, double kappa0, double omega0, double t0, bool fix_o
             dir[1] *= cap / dmax;
             slope *= cap / dmax;
         }
-        double alpha = 1, xn[2], fn = f, tn = t, gn[2];
+        double alpha = 1, xn[2], fn = f, tn = t, sn = 0, gn[2];
         bool ok = false;
         for (int ls = 0; ls < 20; ++ls) {
             for (int i = 0; i < 2; ++i) xn[i] = std::min(hi, std::max(lo, x[i] + alpha * dir[i]));
             tn = t;
-            fn = eval(xn, tn, nullptr);
+            fn = eval(xn, tn, nullptr, &sn);
             if (fn <= f + 1e-4 * alpha * slope) {
                 ok = true;
                 break;
@@ -685,7 +688,7 @@ Fit optimise_run(GyModel& m, double kappa0, double omega0, double t0, bool fix_o
         // gradient, or after the first BFGS update, are not touched.
         const bool crawling = ok && alpha == 1 && dmax < 1e-2 && !curvature;
         if (crawling) fit.crawled = true;
-        if (lengthen && crawling) lengthen_step(eval, x, dir, dmax, slope, alpha, xn, fn, tn);
+        if (lengthen && crawling) lengthen_step(eval, x, dir, dmax, slope, alpha, xn, fn, tn, sn);
         if (!ok) {
             // no descent along this direction: once more from the plain gradient, then accept the point
             if (!restarted && (H[0][0] != 1 || H[1][1] != 1 || H[0][1] != 0)) {
@@ -698,11 +701,12 @@ Fit optimise_run(GyModel& m, double kappa0, double omega0, double t0, bool fix_o
             break;
         }
         restarted = false;
-        {   // the gradient at the accepted point (the model's state is that of the last evaluation: xn)
+        {   // the gradient at the accepted point (the model's state and sn are those of the last evaluation: xn)
             double gl[2];
-            double sl = 0;
-            m.lnl(tn, &sl);
-            m.gradient(tn, sl, gl);
+            // (sn is the slope where the profile stopped; at a bound tn is the bound itself, which the exponential
+            // of its logarithm need not be to the last digit: there the slope is taken at tn)
+            if (tn <= T_MIN || tn >= T_MAX) m.lnl(tn, &sn);
+            m.gradient(tn, sn, gl);
             gn[0] = -gl[0];
             gn[1] = nfree > 1 ? -gl[1] : 0.0;
         }
@@ -877,12 +881,98 @@ std::string fmt6(double v) {
     return buf;
 }
 
+// Which of the starts of run_gy is reported (the indices of Choice are into `fits`, the starts in the order in
+// which they were run; -1: none).
+//
+// A start is usable if it converged or ended on the ridge (t at its bound: saturated whatever else). Among
+// the usable starts the highest likelihood wins, the earlier or the converged one within LNL_TIE (1e-7). A
+// start that is not usable (it ran out of steps somewhere else) never displaces a usable one by itself: if
+// its likelihood is higher than that of the best usable start (which may itself be an unconverged ridge
+// start), the iteration is continued from where it stopped (go_on; run_gy does that twice at most, and not
+// again once a continuation ends lower), and only if it still has not converged and is higher than the best
+// usable start by more than LNL_MATERIAL (1e-4) is the pair `not_converged`: the usable start is then known not
+// to be the highest point. (No pair of 25,200 random ones gets there: tests/cpp/kaks_gy_choose_start.cpp does,
+// with made-up starts.) Without a usable start the best point is reported, as `not_converged`, after the same
+// continuations.
+struct Choice {
+    int best = -1;     // the best usable start
+    int cand = -1;     // the best start that is not usable
+    int report = -1;   // the one of the two whose estimate is the result
+    bool go_on = false;   // continue the iteration of `cand` before reporting
+};
+
+bool usable_start(const Fit& f) {
+    return f.converged || f.t >= T_MAX * (1 - 1e-3);
+}
+
+Choice choose_start(const std::vector<Fit>& fits) {
+    Choice c;
+    for (int i = 0; i < (int)fits.size(); ++i) {
+        const Fit& f = fits[i];
+        if (usable_start(f)) {
+            if (c.best < 0 || f.lnl > fits[c.best].lnl + LNL_TIE ||
+                (!fits[c.best].converged && f.converged && f.lnl >= fits[c.best].lnl - LNL_TIE))
+                c.best = i;
+        } else if (c.cand < 0 || f.lnl > fits[c.cand].lnl) {
+            c.cand = i;
+        }
+    }
+    c.go_on = c.cand >= 0 && (c.best < 0 || fits[c.cand].lnl > fits[c.best].lnl + LNL_TIE);
+    const bool displaced = c.cand >= 0 && (c.best < 0 || fits[c.cand].lnl > fits[c.best].lnl + LNL_MATERIAL);
+    c.report = displaced ? c.cand : c.best;
+    return c;
+}
+
+// Saturation: an estimate above GY_MAX_DISTANCE substitutions per site is NA (t at its bound of 50 per codon
+// always has one: the mean of dS and dN over the sites is t / 3). The other estimate is kept, as for the other
+// methods, unless the optimiser did not settle on the ridge or the likelihood is flat in t, where nothing is an
+// estimate (the caller then sets both satS and satN, where the pair has such sites). Sets the status, the notes
+// and the NAs of a pair with satS or satN; dS and dN are the estimates.
+void apply_saturation(Result& r, bool satS, bool satN, double dS, double dN, bool flat, bool t_at_max) {
+    if (r.status != Status::no_data && r.status != Status::error) r.status = Status::saturated;
+    char val[32];
+    auto why = [&](double v) {
+        if (flat)
+            return std::string("the likelihood is flat in the branch length up to its upper bound, t = 50: the "
+                               "data put no upper limit on the distance");
+        if (!(v > GY_MAX_DISTANCE)) return std::string("the branch length is at its upper bound, t = 50");
+        std::snprintf(val, sizeof val, "%.3g", v);
+        return std::string("the maximum-likelihood estimate, ") + val + ", is above 10 substitutions per site" +
+               (t_at_max ? "; the branch length is at its upper bound, t = 50" : "");
+    };
+    if (satS) {
+        add_note(r, "Ks saturated (" + why(dS) + ")");
+        r.ks = NA;
+    }
+    if (satN) {
+        add_note(r, "Ka saturated (" + why(dN) + ")");
+        r.ka = NA;
+    }
+    r.omega = NA;
+}
+
 }  // namespace
 
 namespace detail {
 
-Result run_gy(const Prepared& p, const GeneticCode& g, const Options& opt, Result r) {
-    (void)opt;
+// Test hook (tests/cpp/kaks_gy_choose_start.cpp, which declares it): choose_start for n starts given by their
+// likelihood, branch length and convergence. out: best, cand, report, go_on.
+void gy_choose_start(const double* lnl, const double* t, const int* converged, int n, int out[4]);
+void gy_choose_start(const double* lnl, const double* t, const int* converged, int n, int out[4]) {
+    std::vector<Fit> fits((size_t)n);
+    for (int i = 0; i < n; ++i) {
+        fits[(size_t)i].lnl = lnl[i];
+        fits[(size_t)i].t = t[i];
+        fits[(size_t)i].converged = converged[i] != 0;
+    }
+    const Choice c = choose_start(fits);
+    out[0] = c.best;
+    out[1] = c.cand;
+    out[2] = c.report;
+    out[3] = c.go_on ? 1 : 0;
+}
+
+Result run_gy(const Prepared& p, const GeneticCode& g, const Options&, Result r) {
     const size_t n = p.c1.size();
     long snp = 0;
     for (size_t h = 0; h < n; ++h) {
@@ -930,29 +1020,12 @@ Result run_gy(const Prepared& p, const GeneticCode& g, const Options& opt, Resul
     // whose first maximum has t below 1 substitution per codon is done; any other pair is also started from
     // another (kappa, omega), from a small omega at t = 10, and from the ridge itself.
     //
-    // A start is usable if it converged or ended on the ridge (t at its bound: saturated whatever else). Among
-    // the usable starts the highest likelihood wins, the earlier or the converged one within LNL_TIE (1e-7). A
-    // start that is not usable (it ran out of steps somewhere else) never displaces a usable one by itself: if
-    // its likelihood is higher than that of the best usable start (which may itself be an unconverged ridge
-    // start), the iteration is continued from where it stopped (twice at most; not again once a continuation
-    // ends lower), and only if it still has not converged and is higher than the best usable start by more
-    // than LNL_MATERIAL (1e-4) is the pair `not_converged`: the usable start is then known not to be the
-    // highest point. (No pair of 25,200 random ones gets there; no test can reach this branch.) Without a
-    // usable start the best point is reported as `not_converged`, after the same continuations.
-    const auto usable = [](const Fit& f) { return f.converged || f.t >= T_MAX * (1 - 1e-3); };
-    Fit best, cand;   // the best usable start; the best start that is not usable
-    bool have = false, have_cand = false;
+    // Which start is reported: choose_start.
+    std::vector<Fit> fits;
     int iterations = 0;
     const auto offer = [&](const Fit& f) {
         iterations += f.iterations;
-        if (usable(f)) {
-            if (!have || f.lnl > best.lnl + LNL_TIE || (!best.converged && f.converged && f.lnl >= best.lnl - LNL_TIE))
-                best = f;
-            have = true;
-        } else if (!have_cand || f.lnl > cand.lnl) {
-            cand = f;
-            have_cand = true;
-        }
+        fits.push_back(f);
     };
     const Fit first = optimise(m, 2.0, fix_omega ? 1.0 : 0.3, t0, fix_omega);
     offer(first);
@@ -968,16 +1041,22 @@ Result run_gy(const Prepared& p, const GeneticCode& g, const Options& opt, Resul
             offer(optimise(m, first.alt_kappa, fix_omega ? 1.0 : w2, T_MAX, fix_omega));
         }
     }
-    for (int c = 0; c < 2 && have_cand && (!have || cand.lnl > best.lnl + LNL_TIE); ++c) {
-        const Fit from = cand;
-        have_cand = false;
-        offer(optimise(m, from.kappa, fix_omega ? 1.0 : from.omega, from.t, fix_omega));
-        if (have_cand && cand.lnl < from.lnl) {   // it ended lower: keep the point it started from, and stop
-            cand = from;                          // (continuing from there again would repeat the same run)
-            break;
-        }
+    Choice ch = choose_start(fits);
+    for (int c = 0; c < 2 && ch.go_on; ++c) {
+        const Fit from = fits[ch.cand];
+        // (the starts that are not usable end here: only the best of them is continued)
+        fits.erase(std::remove_if(fits.begin(), fits.end(), [](const Fit& f) { return !usable_start(f); }),
+                   fits.end());
+        const Fit cont = optimise(m, from.kappa, fix_omega ? 1.0 : from.omega, from.t, fix_omega);
+        iterations += cont.iterations;
+        // it ended lower: keep the point it started from, and stop (continuing from there again would repeat
+        // the same run)
+        const bool lower = !usable_start(cont) && cont.lnl < from.lnl;
+        fits.push_back(lower ? from : cont);
+        ch = choose_start(fits);
+        if (lower) break;
     }
-    if (!have || (have_cand && cand.lnl > best.lnl + LNL_MATERIAL)) best = cand;
+    Fit best = fits[ch.report];
     best.iterations = iterations;
     r.iterations = best.iterations;
     m.build(best.kappa, best.omega);
@@ -985,10 +1064,13 @@ Result run_gy(const Prepared& p, const GeneticCode& g, const Options& opt, Resul
     // every site different) has its maximum at the bound as much as anywhere: the optimiser stops where the slope
     // falls below its tolerance, which is not an estimate of t. Such a pair is saturated, with t at the bound.
     bool flat = false;
-    if (best.converged && best.t < T_MAX * (1 - 1e-3) && m.lnl(T_MAX) >= best.lnl - 1e-6) {
-        flat = true;
-        best.t = T_MAX;
-        best.lnl = m.lnl(T_MAX);
+    if (best.converged && best.t < T_MAX * (1 - 1e-3)) {
+        const double at_bound = m.lnl(T_MAX);
+        if (at_bound >= best.lnl - 1e-6) {
+            flat = true;
+            best.t = T_MAX;
+            best.lnl = at_bound;
+        }
     }
     r.kappa = best.kappa;
     r.rates[0] = r.rates[1] = best.kappa;
@@ -1015,35 +1097,10 @@ Result run_gy(const Prepared& p, const GeneticCode& g, const Options& opt, Resul
     // (dN / dS is computed from dN and dS as for every method, and equals omega; omega at a bound, 1e-6 or 999,
     // says that the data support no nonsynonymous, or no synonymous, change: docs/kaks.md)
     if (!fix_omega) r.omega = best.omega;
-    // Saturation: an estimate above GY_MAX_DISTANCE substitutions per site is NA (t at its bound of 50 per codon
-    // always has one: the mean of dS and dN over the sites is t / 3). The other estimate is kept, as for the other
-    // methods, unless the optimiser did not settle on the ridge or the likelihood is flat in t, where nothing is
-    // an estimate.
     const bool unsettled = !best.converged || flat;   // (then t is at its bound: see above)
     const bool satS = hasS && (unsettled || dS > GY_MAX_DISTANCE);
     const bool satN = hasN && (unsettled || dN > GY_MAX_DISTANCE);
-    if (satS || satN) {
-        if (r.status != Status::no_data && r.status != Status::error) r.status = Status::saturated;
-        char val[32];
-        auto why = [&](double v) {
-            if (flat)
-                return std::string("the likelihood is flat in the branch length up to its upper bound, t = 50: the "
-                                   "data put no upper limit on the distance");
-            if (!(v > GY_MAX_DISTANCE)) return std::string("the branch length is at its upper bound, t = 50");
-            std::snprintf(val, sizeof val, "%.3g", v);
-            return std::string("the maximum-likelihood estimate, ") + val + ", is above 10 substitutions per site" +
-                   (t_at_max ? "; the branch length is at its upper bound, t = 50" : "");
-        };
-        if (satS) {
-            add_note(r, "Ks saturated (" + why(dS) + ")");
-            r.ks = NA;
-        }
-        if (satN) {
-            add_note(r, "Ka saturated (" + why(dN) + ")");
-            r.ka = NA;
-        }
-        r.omega = NA;
-    }
+    if (satS || satN) apply_saturation(r, satS, satN, dS, dN, flat, t_at_max);
     if (std::isfinite(r.ks) && std::isfinite(r.ka)) {
         r.divergence = (r.S * r.ks + r.N * r.ka) / (r.S + r.N);   // = t / 3
         // differences as KaKs_Calculator's GY gives them: the expected numbers S dS and N dN, scaled to the
