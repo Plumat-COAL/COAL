@@ -360,8 +360,14 @@ name: **a symbolic link in the output folder is replaced, never written through*
 to another file leaves that file untouched). The same holds in `work/`: the record `outputs.json`, `state.json`,
 the logs, the decompressed and `--prefix-ids` copies of the inputs, and the files that `coal-cpp translate` and
 DIAMOND write there are created anew, a link (or a hard link) with such a name is removed first, never followed;
-`coal-cpp translate` and DIAMOND write into a new private folder in `work/` (`NAME.staging-XXXXXXXX`, removed after
-the stage) whose files are then renamed into place, so they never open a name a link could have been put at. A
+`coal-cpp translate` and DIAMOND write into a staging folder of their stage, `work/NAME.staging` (e.g.
+`work/diamond_search.staging`), whose files are then renamed into place, so they never open a name a link could
+have been put at. The folder is made anew for the stage (whatever had its name is removed first, a link unlinked,
+never followed; then it is created with mode 0700, which fails rather than follow a link put there in between) and
+removed after it; the next run removes one that a killed run left. The command lines in `report.json` and the logs
+name these folders: to run one again by hand, make the folder first. (Someone who can write `DIR/work` while a run
+is going could still swap the staging folder for a link during the stage, and could change the run's results
+anyway: not guarded against.) A
 folder COAL writes into that is a symbolic link (`DIR/work` itself, `work/logs`, `work/inputs`, or
 `codon_alignments/` / `protein_alignments/` for a run that writes them) is refused with exit 1 before anything
 changes, with or without `--overwrite`: `out/work is a symbolic link (to ...): COAL writes its files only into

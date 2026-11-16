@@ -33,7 +33,6 @@ import os
 import re
 import shutil
 import stat
-import tempfile
 from collections.abc import Callable, Iterable
 
 from . import __version__
@@ -60,8 +59,8 @@ class OutputsRefused(Exception):
 # A name in DIR or DIR/work may be a symbolic link (or a hard link) to a file elsewhere, planted or left there:
 # COAL never writes through it. A file it writes is created anew (whatever has the name is removed first, then
 # O_CREAT | O_EXCL | O_NOFOLLOW where the system has it), a log it appends to is never a link or a file with other
-# names, and an external program writes into a new private folder (staging) whose files are then renamed into
-# place. Removing a link removes the link, never what it points to. A folder COAL writes into (work/ and its
+# names, and an external program writes into a staging folder made anew (work/NAME.staging) whose files are
+# renamed into place. Removing a link removes the link, never what it points to. A folder COAL writes into (work/ and its
 # logs/ and inputs/, the alignment folders) is never a link: the run is refused (O_NOFOLLOW guards only the last
 # part of a path). Windows has no O_NOFOLLOW: there a dangling link put at a name between its removal and the
 # O_CREAT | O_EXCL open (which needs the privilege to make links, and winning that race) could make the file
@@ -103,14 +102,51 @@ def make_folder(path: str) -> None:
 
 
 @contextlib.contextmanager
+def remove_entry(path: str) -> None:
+    """Remove whatever has the name `path`: a symbolic link (also one to a folder) or a file is unlinked, never
+    followed; a real folder is removed with what it holds (shutil.rmtree, which follows no link inside). For names
+    in DIR/work only, which are COAL's while the run holds the folder's lock."""
+    try:
+        st = os.lstat(path)
+    except FileNotFoundError:
+        return
+    if stat.S_ISDIR(st.st_mode):
+        shutil.rmtree(path)
+    else:
+        os.remove(path)
+
+
+def clear_staging(work: str) -> None:
+    """Remove the staging folders a run left in `work` (killed or out of memory while a program wrote there; they
+    can hold DIAMOND's databases and temporary files): NAME.staging, and NAME.staging-XXXXXXXX of 0.6.1.dev
+    builds. Links are unlinked, never followed."""
+    try:
+        names = os.listdir(work)
+    except FileNotFoundError:
+        return
+    for n in names:
+        if n.endswith(".staging") or ".staging-" in n:
+            remove_entry(os.path.join(work, n))
+
+
+@contextlib.contextmanager
 def staging(folder: str, name: str):
-    """A new private folder inside `folder` (tempfile.mkdtemp: a name of its own, mode 0700) for an external program
-    to write its files into; place() renames them where they belong. Removed afterwards, whatever is left in it."""
-    d = tempfile.mkdtemp(prefix=name + ".staging-", dir=folder)
+    """The staging folder `folder`/NAME.staging, made anew for an external program to write its files into; place()
+    renames them where they belong. Whatever had the name is removed first (remove_entry), then os.mkdir(..., 0o700),
+    which never follows a link and fails (FileExistsError) if one was put there in between. A fixed name: the
+    commands a run records name a path that exists again after `mkdir` (and report.json is the same for the same
+    run), and a killed run's folder is removed by the next run (clear_staging, and here). Removed afterwards,
+    whatever is left in it.
+    A link put at the name while the program runs (by someone who can write DIR/work during the run, and so could
+    change its results anyway) would be followed by the program: not guarded against."""
+    d = os.path.join(folder, name + ".staging")
+    remove_entry(d)
+    os.mkdir(d, 0o700)
     try:
         yield d
     finally:
-        shutil.rmtree(d, ignore_errors=True)
+        with contextlib.suppress(OSError):
+            remove_entry(d)
 
 
 def place(src: str, dst: str) -> None:

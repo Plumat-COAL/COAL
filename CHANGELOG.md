@@ -151,13 +151,14 @@
   logs, the proteins), and the renamed record became that link. They are now created anew like the tables in
   `DIR` (a link or hard link with the name is removed, never followed; `O_CREAT | O_EXCL | O_NOFOLLOW`), a log is
   appended to only when it is no link and has no other name, and `--resume` no longer reuses a stage whose output
-  is a link. `coal-cpp translate` and DIAMOND write into a new private folder in `work/` and their files are
-  renamed into place (a link put at a name after COAL removed it, while DIAMOND searched, was followed); the
+  is a link. `coal-cpp translate` and DIAMOND write into a folder of their stage, `work/NAME.staging` (made anew
+  for the stage, mode 0700, removed after it and by the next run after a kill), and their files are renamed into
+  place (a link put at a name after COAL removed it, while DIAMOND searched, was followed); the
   decompressed copy of a `.gz` input is created with `O_EXCL | O_NOFOLLOW`. A folder COAL writes into that is a
   symbolic link (`DIR/work`, `work/logs`, `work/inputs`, an alignment folder) is refused with exit 1 before
   anything changes, also with `--overwrite` (it was written through: `O_NOFOLLOW` guards only the last part of a
-  path); to keep the working files elsewhere, give `-o` a folder there. `report.json` shows the programs' command
-  lines with the private folder's paths. (Found by the audits of #99 and #102.)
+  path); to keep the working files elsewhere, give `-o` a folder there. The programs' command lines in `report.json`
+  name those staging folders (the same paths in every run). (Found by the audits of #99 and #102.)
 
 ### Added
 

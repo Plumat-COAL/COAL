@@ -62,7 +62,16 @@ from .core import CoalError
 from .outputs_record import ALIGNMENT_DIRS as _ALIGNMENT_FLAGS
 from .outputs_record import RUN_OUTPUTS as _RUN_OUTPUTS  # noqa: F401  (these four: the names they had here)
 from .outputs_record import RUN_TABLES as _RUN_TABLES  # noqa: F401
-from .outputs_record import OutputsRecord, OutputsRefused, make_folder, open_append, open_new, place, remove_file
+from .outputs_record import (
+    OutputsRecord,
+    OutputsRefused,
+    clear_staging,
+    make_folder,
+    open_append,
+    open_new,
+    place,
+    remove_file,
+)
 from .outputs_record import is_coal_report as _is_coal_report  # noqa: F401
 from .outputs_record import staging as _staging
 from .outputs_record import starts_like_coal_record as _starts_like_coal_record  # noqa: F401
@@ -1214,6 +1223,7 @@ class _Run:
         self._clear_earlier_outputs()
         try:
             self.make_folder(self.work)
+            clear_staging(self.work)   # (what a killed run left: it can be large, DIAMOND's databases)
             self.make_folder(self.wpath("logs"))
             self._record_outputs()
         except OSError as e:
@@ -1657,7 +1667,7 @@ class _Run:
             raise PipelineError(str(e)) from None
 
     def staged(self, name: str):
-        """A new private folder in work/ for the files an external program writes (outputs_record.staging): the
+        """work/NAME.staging, made anew for the files an external program writes (outputs_record.staging): the
         program never opens a name that a link could have been put at; place() renames its files into place."""
         return _staging(self.work, name)
 
@@ -2946,7 +2956,7 @@ def _search(run: _Run, q_faa: str, s_faa: str, q_order: dict, s_order: dict, ort
     def go():
         for d in ("subject.dmnd", "query.dmnd"):   # (left by a version that made them in work/)
             remove_file(run.wpath(d))
-        # DIAMOND writes its databases and hit tables in a new private folder (they are removed with it; the hit
+        # DIAMOND writes its databases and hit tables in work/diamond_search.staging (removed with it; the hit
         # tables are renamed into work/ first): it never opens a name a link could have been put at
         with run.staged("diamond_search") as st:
             sdb, qdb = os.path.join(st, "subject"), os.path.join(st, "query")
@@ -3109,7 +3119,7 @@ def _clusters_mode(run: _Run) -> None:
         def go():
             n = sort_fasta_by_id(faa, sfaa)
             remove_file(cfile + ".tmp")   # (left by a version that wrote it in DIR)
-            with run.staged("deepclust") as st:   # (DIAMOND writes in a new private folder; renamed into DIR)
+            with run.staged("deepclust") as st:   # (DIAMOND writes in work/deepclust.staging; renamed into DIR)
                 out = os.path.join(st, "clusters.tsv")
                 run.run_tool([dmd, "deepclust", "--db", sfaa, "--out", out, "--threads", str(run.threads),
                               "--quiet", *opts, *extra], "diamond", "diamond deepclust")
@@ -3123,7 +3133,7 @@ def _clusters_mode(run: _Run) -> None:
 
             def go2():
                 remove_file(rfile + ".body")   # (left by a version that wrote it in DIR)
-                with run.staged("realign") as st:   # (DIAMOND writes in a new private folder)
+                with run.staged("realign") as st:   # (DIAMOND writes in work/realign.staging)
                     body_path = os.path.join(st, "realign.tsv.body")
                     run.run_tool([dmd, "realign", "--db", sfaa, "--clusters", cfile, "--out", body_path, "--threads",
                                   str(run.threads), "--quiet", "--outfmt", "6", "qseqid", "sseqid", "approx_pident",

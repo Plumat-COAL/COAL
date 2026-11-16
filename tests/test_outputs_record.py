@@ -770,5 +770,59 @@ class NoLinkIsWrittenThrough(Folder):
         self.assertEqual(v.read_text(encoding="utf-8"), "keep me\n")
 
 
+class Staging(Folder):
+    """outputs_record.staging(): work/NAME.staging made anew (AUDIT-102 re-audit, M2 / M3)."""
+
+    def test_made_anew_and_removed(self):
+        work = self.out / "work"
+        (work / "x.staging" / "sub").mkdir(parents=True)          # a killed run's folder
+        (work / "x.staging" / "old.dmnd").write_text("big", encoding="utf-8")
+        with R.staging(str(work), "x") as d:
+            self.assertEqual(d, str(work / "x.staging"))
+            self.assertEqual(os.listdir(d), [])
+            if os.name == "posix":
+                self.assertEqual(os.stat(d).st_mode & 0o777, 0o700)
+            Path(d, "out.tsv").write_text("x", encoding="utf-8")
+        self.assertFalse(os.path.lexists(work / "x.staging"))
+
+    def test_a_link_at_the_name_is_removed_never_followed(self):
+        work = self.out / "work"
+        work.mkdir()
+        elsewhere = self.tmp / "elsewhere"
+        elsewhere.mkdir()
+        (elsewhere / "keep.txt").write_text("keep me\n", encoding="utf-8")
+        self.symlink(elsewhere, work / "x.staging")
+        with R.staging(str(work), "x") as d:
+            self.assertFalse(os.path.islink(d))
+        self.assertEqual(os.listdir(elsewhere), ["keep.txt"])
+        # a link put back between the removal and os.mkdir: FileExistsError, nothing written there
+        real = R.remove_entry
+
+        def remove_then_link(path):
+            real(path)
+            os.symlink(elsewhere, path)
+        with mock.patch.object(R, "remove_entry", remove_then_link), self.assertRaises(FileExistsError):
+            with R.staging(str(work), "x"):
+                pass
+        self.assertEqual(os.listdir(elsewhere), ["keep.txt"])
+
+    def test_clear_staging(self):
+        work = self.out / "work"
+        for n in ("a.staging", "b.staging-k3j4h5g6"):
+            (work / n).mkdir(parents=True)
+            (work / n / "f").write_text("x", encoding="utf-8")
+        (work / "c.staging-file").write_text("x", encoding="utf-8")
+        (work / "logs").mkdir()
+        (work / "state.json").write_text("{}", encoding="utf-8")
+        elsewhere = self.tmp / "elsewhere"
+        elsewhere.mkdir()
+        (elsewhere / "keep.txt").write_text("keep me\n", encoding="utf-8")
+        self.symlink(elsewhere, work / "d.staging")
+        R.clear_staging(str(work))
+        self.assertEqual(sorted(os.listdir(work)), ["logs", "state.json"])
+        self.assertEqual(os.listdir(elsewhere), ["keep.txt"])
+        R.clear_staging(str(self.out / "missing"))
+
+
 if __name__ == "__main__":
     unittest.main()

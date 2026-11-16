@@ -226,7 +226,7 @@ class LinksMadeAfterTheRemoval(_Planting):
         for name in ("query.faa", "query.genes.tsv", "subject.faa", "subject.genes.tsv"):
             p = out / "work" / name
             self.assertTrue(str(p) in planted and p.is_file() and not p.is_symlink(), name)   # replaced, not followed
-        self.assertFalse([n for n in os.listdir(out / "work") if ".staging-" in n])         # staging folders gone
+        self.assertFalse([n for n in os.listdir(out / "work") if ".staging" in n])          # staging folders gone
 
     def test_a_late_link_at_the_decompressed_copy_stops_the_run(self):
         qgz = self.tmp / "q.fa.gz"
@@ -268,6 +268,102 @@ class ResumeNeverReusesALink(_Planting):
         for p, v in links.items():
             self.assertTrue(p.is_file() and not p.is_symlink(), p.name)
             self.assertEqual(v.stat().st_mtime_ns, stat_before[p], p.name)
+
+
+def masked_report(path: Path) -> dict:
+    """report.json without its times and durations, input modification times and resume signatures."""
+    import json
+
+    def mask(o, key=None):
+        if isinstance(o, dict):
+            return {k: ("<t>" if k in ("started", "finished", "seconds", "modified", "sig") or k.endswith("_seconds")
+                        else mask(v, k)) for k, v in o.items()}
+        if isinstance(o, list):
+            return [mask(v) for v in o]
+        return o
+    return mask(json.loads(path.read_text(encoding="utf-8")))
+
+
+@unittest.skipUnless(os.name == "posix", "symbolic links and a POSIX shell stand-in for DIAMOND")
+@needs_cpp
+class StagingFolders(PipelineCase):
+    """The folder an external program writes into is work/NAME.staging, made anew (AUDIT-102 re-audit, M2 and M3):
+    a killed run's folder (it can hold DIAMOND's databases) is removed by the next run, whatever its kind, and the
+    commands report.json records name the same paths in every run."""
+
+    def stand_in(self) -> Path:
+        """A DIAMOND that writes one cluster per sequence, and stalls inside `deepclust` (after writing part of its
+        output and a 'database') while the file STALL exists."""
+        fake = self.tmp / "diamond"
+        stall = self.tmp / "STALL"
+        fake.write_text(
+            "#!/bin/sh\n"
+            'if [ "$1" = version ]; then echo "diamond version 2.2.8"; exit 0; fi\n'
+            'db=; out=\n'
+            'while [ $# -gt 0 ]; do case "$1" in --db) db=$2; shift;; --out) out=$2; shift;; esac; shift; done\n'
+            'echo partial > "$out"; echo big > "$(dirname "$out")/tmp.dmnd"\n'
+            f'while [ -e "{stall}" ]; do sleep 0.1; done\n'
+            "grep '^>' \"$db\" | sed 's/^>//; s/[[:space:]].*//' | awk '{print $1 \"\\t\" $1}' > \"$out\"\n",
+            encoding="utf-8")
+        fake.chmod(0o755)
+        return fake
+
+    def cli(self, out: Path, *extra, wait=True):
+        import subprocess
+        from subprocess_env import python_env
+        args = [sys.executable, "-m", "coal", "pipeline", "clusters", "--cds", str(FAM), "-o", str(out), "-q",
+                "-j", "1", "--diamond", str(self.tmp / "diamond"), *extra]
+        if wait:
+            return subprocess.run(args, env=python_env(), stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                                  timeout=300, check=False)
+        return subprocess.Popen(args, env=python_env(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL, start_new_session=True)
+
+    def staging(self, out: Path) -> list[str]:
+        return sorted(n for n in os.listdir(out / "work") if ".staging" in n) if (out / "work").is_dir() else []
+
+    def test_a_killed_runs_staging_folder_is_removed_by_the_next_run(self):
+        import signal
+        import time
+        self.stand_in()
+        out = self.tmp / "o"
+        for again in (["--resume"], []):
+            (self.tmp / "STALL").write_text("x", encoding="utf-8")
+            proc = self.cli(out, wait=False)
+            t0 = time.monotonic()
+            while not (out / "work" / "deepclust.staging" / "tmp.dmnd").exists() and time.monotonic() - t0 < 120:
+                time.sleep(0.05)
+            os.killpg(proc.pid, signal.SIGKILL)
+            proc.wait(timeout=60)
+            (self.tmp / "STALL").unlink()
+            self.assertEqual(self.staging(out), ["deepclust.staging"])          # what a kill -9 leaves
+            # an old-style folder of a development build, and a link with a staging name, too
+            (out / "work" / "translate_proteins.staging-ab12cd34").mkdir()
+            elsewhere = self.tmp / f"elsewhere{len(again)}"
+            elsewhere.mkdir()
+            (elsewhere / "keep.txt").write_text("keep me\n", encoding="utf-8")
+            (out / "work" / "realign.staging").symlink_to(elsewhere, target_is_directory=True)
+            Path(str(out) + ".coal-lock").unlink(missing_ok=True)
+            r = self.cli(out, *again)
+            self.assertIn(r.returncode, (0, 2), r.stderr)
+            self.assertEqual(self.staging(out), [], again)
+            self.assertEqual((elsewhere / "keep.txt").read_text(encoding="utf-8"), "keep me\n")
+            self.assertTrue((out / "clusters.tsv").is_file())
+
+    def test_the_recorded_commands_are_the_same_in_every_run(self):
+        self.stand_in()
+        reports = []
+        for k in range(2):
+            r = self.cli(self.tmp / "o")
+            self.assertIn(r.returncode, (0, 2), r.stderr)
+            reports.append(masked_report(self.tmp / "o" / "report.json"))
+        self.assertEqual(reports[0], reports[1])
+        cmds = [c for st in reports[0]["stages"] for c in st.get("commands", ())]
+        dc = next(c for c in cmds if c[1:2] == ["deepclust"])
+        self.assertEqual(dc[dc.index("--out") + 1], str(self.tmp / "o" / "work" / "deepclust.staging" / "clusters.tsv"))
+        tr = next(c for c in cmds if c[1:2] == ["translate"])
+        self.assertEqual(tr[tr.index("-o") + 1],
+                         str(self.tmp / "o" / "work" / "translate_proteins.staging" / "proteins.faa"))
 
 
 @unittest.skipUnless(os.name == "posix", "symbolic links (POSIX)")
