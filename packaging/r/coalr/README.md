@@ -23,10 +23,6 @@ orthologr uses. For some pairs the two differ and dS with them (by more than 10%
 tutorial 4): use `preset = "pwalign"` to reproduce orthologr's numbers. `attr(res, "alignment")` says which scoring
 a result used.
 
-<!-- until 0.6.1 is published (tests/test_docs_site.py): remove this note at the release -->
-Until 0.6.1 is published, there is no v0.6.1 for the first two lines; 0.6.0 (no `coalr` file) installs from its tag,
-`remotes::install_github("Plumat-COAL/COAL@v0.6.0", subdir = "packaging/r/coalr")`.
-
 Documentation: [docs/r.md](https://github.com/Plumat-COAL/COAL/blob/main/docs/r.md) and the help pages
 (`?coal_dnds_pairs`). `src/coal/` is a copy of COAL's `cpp/src`, made by `scripts/sync_r_sources.py`; do not edit
 it here. Licence: GPL-3 (version 3 only), like COAL; copyright and third-party notices are in `inst/COPYRIGHTS`.

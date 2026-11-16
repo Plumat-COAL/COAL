@@ -40,6 +40,7 @@
     <li><a href="#macos">macOS</a></li>
     <li><a href="#linux">Linux</a></li>
     <li><a href="#cli">Command line</a></li>
+    <li data-since="0.6.1"><a href="#r">R</a></li>
     <li><a href="#files">Files and checksums</a></li>
   </ul>
 </div>
@@ -142,8 +143,8 @@
 <pre class="code"><code>coal protein.aln.fasta dna.fasta -o codon.aln.fasta
 coal protein.aln.fasta dna.fasta -codontable 2 -nogap -o codon.aln.fasta
 coal --help</code></pre>
-    <p>For the C++ engine, build it from the source: <a href="guide.html#cpp">the guide</a> has the three
-      commands.</p>
+    <p>For the C++ engine, install the wheel for your system (below), or build it from the source:
+      <a href="guide.html#cpp">the guide</a> has the three commands.</p>
     <p data-since="0.6.0"><strong>Ka/Ks and the pipeline.</strong> The pip command above installs the Python
       engine, which makes codon alignments only. <code>coal kaks</code>, <code>coal dnds</code> and
       <code>coal pipeline</code> need the C++ engine: download the wheel for your system,
@@ -153,6 +154,17 @@ coal --help</code></pre>
       shows it), or build it from the source. <code>coal pipeline</code> also runs DIAMOND, 2.1.0 or newer, and
       Clustal Omega for gene families: <code>coal pipeline install diamond clustalo</code> installs them for COAL.
       COAL is not on PyPI yet.</p>
+  </section>
+
+  <section class="sec" id="r" aria-labelledby="r-title" data-since="0.6.1">
+    <h2 id="r-title">R</h2>
+    <p>The R package <code>coalr</code> has COAL's C++ core inside: Ka/Ks, codon alignment, and dN/dS of pairs and
+      clusters, with no Python. It is a file in each release. You need a C++17 compiler (Rtools on Windows, the
+      Xcode command-line tools on macOS). In R:</p>
+<pre class="code"><code>install.packages("Rcpp")
+install.packages("https://github.com/plumat-coal/COAL/releases/latest/download/coalr_src.tar.gz", repos = NULL, type = "source")</code></pre>
+    <p>More, and the whole pipeline from R, in
+      <a href="https://github.com/plumat-coal/COAL/blob/main/docs/r.md">docs/r.md</a>.</p>
   </section>
 
 <section class="sec" id="files" aria-labelledby="downloads">
@@ -168,8 +180,9 @@ coal --help</code></pre>
         <tr><td><a href="https://github.com/plumat-coal/COAL/releases/latest/download/COAL-windows-x64.zip">COAL-windows-x64.zip</a></td><td>The same app without an installer. Unzip and run <code>COAL\COAL.exe</code>.</td></tr>
         <tr><td><a href="https://github.com/plumat-coal/COAL/releases/latest/download/coal_src.tar.gz">coal_src.tar.gz</a></td><td>Python source package of the engine (<code>coal-align</code>), used by the pip commands on this page</td></tr>
         <tr><td><a href="https://github.com/plumat-coal/COAL/releases/latest/download/coal_app_src.tar.gz">coal_app_src.tar.gz</a></td><td>Python source package of the app (<code>coal-align-app</code>: the app in your browser, and the connection for AI assistants), used by the pip commands on this page</td></tr>
+        <tr><td><a href="https://github.com/plumat-coal/COAL/releases/latest/download/coalr_src.tar.gz">coalr_src.tar.gz</a></td><td>The R package <code>coalr</code> (from 0.6.1), used by the R commands on this page</td></tr>
         <tr><td><a href="https://github.com/plumat-coal/COAL/releases/latest/download/SHA256SUMS.txt">SHA256SUMS.txt</a></td><td>SHA-256 of every file in the release</td></tr>
-        <tr><td><a href="https://github.com/plumat-coal/COAL/releases/latest">Python wheels</a></td><td>On the release page, one for the engine and one for the app. Their names contain the version, so they have no fixed link.</td></tr>
+        <tr><td><a href="https://github.com/plumat-coal/COAL/releases/latest">Python wheels</a></td><td>On the release page: the engine for each platform (Linux, macOS, Windows; <code>coal-cpp</code> inside), the engine for any platform (Python engine only), and the app. Their names contain the version, so they have no fixed link.</td></tr>
       </tbody>
     </table>
   </div>
@@ -193,7 +206,7 @@ coal --help</code></pre>
 <footer class="foot" id="credits">
   <div class="foot-text">
     <p>Developed by Chloe Newton and Keanu Murati.</p>
-    <p>Last updated <time datetime="2026-11-13">13 November 2026</time>.</p>
+    <p>Last updated <time datetime="2026-11-16">16 November 2026</time>.</p>
   </div>
   <div class="rail"><svg class="train" viewBox="140 204 1120 582" aria-hidden="true" focusable="false"><g class="ts" fill="#CFC8BE"><circle cx="304" cy="328" r="32"/><circle cx="368" cy="272" r="44"/><circle cx="456" cy="236" r="28"/></g><g class="tb" fill="#1E1E1E"><rect x="264" y="368" width="72" height="124" rx="12.4"/></g><g class="tbo" fill="#2A2A2A"><rect x="216" y="480" width="376" height="216" rx="40"/></g><g class="tb" fill="#1E1E1E"><path d="M216 600V696H144Z"/><rect x="568" y="316" width="200" height="380" rx="20"/><rect x="552" y="296" width="232" height="36" rx="12.4"/><rect x="792" y="496" width="464" height="200" rx="21"/><rect x="760" y="622" width="40" height="20" rx="0"/><circle cx="320" cy="720" r="52"/><circle cx="480" cy="720" r="52"/><circle cx="672" cy="712" r="64"/><circle cx="880" cy="732" r="40"/><circle cx="1024" cy="732" r="40"/><circle cx="1168" cy="732" r="40"/></g><g class="ta" fill="#FFC24B"><rect x="616" y="368" width="104" height="88" rx="12"/></g><g class="th" fill="#4A4744"><circle cx="320" cy="719.5" r="15.5"/><circle cx="480" cy="719.5" r="15.5"/><circle cx="672" cy="711.5" r="19.5"/><circle cx="880" cy="732" r="11"/><circle cx="1024" cy="732" r="11"/><circle cx="1168" cy="732" r="11"/></g><g class="tc" fill="#2A2A2A"><rect x="848" y="448" width="40" height="40" rx="8"/><rect x="878" y="400" width="40" height="40" rx="8"/><rect x="974" y="400" width="40" height="40" rx="8"/><rect x="1004" y="352" width="40" height="40" rx="8"/><rect x="1052" y="352" width="40" height="40" rx="8"/><rect x="1052" y="448" width="40" height="40" rx="8"/><rect x="1082" y="400" width="40" height="40" rx="8"/></g><g class="tsl" fill="#4A4744"><rect x="926" y="400" width="40" height="40" rx="8"/><rect x="956" y="352" width="40" height="40" rx="8"/></g><g class="te" fill="#FF6A13"><rect x="800" y="448" width="40" height="40" rx="8"/><rect x="896" y="448" width="40" height="40" rx="8"/><rect x="1004" y="448" width="40" height="40" rx="8"/><rect x="1034" y="400" width="40" height="40" rx="8"/><rect x="1112" y="448" width="40" height="40" rx="8"/><rect x="1208" y="448" width="40" height="40" rx="8"/></g><g class="ta" fill="#FFC24B"><rect x="956" y="448" width="40" height="40" rx="8"/><rect x="1130" y="400" width="40" height="40" rx="8"/><rect x="1160" y="448" width="40" height="40" rx="8"/></g></svg></div>
 </footer>

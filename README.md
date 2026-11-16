@@ -2,21 +2,6 @@
 
 **Website:** [plumat-coal.github.io/COAL](https://plumat-coal.github.io/COAL/) · [Install](https://plumat-coal.github.io/COAL/install.html) · [Guide](https://plumat-coal.github.io/COAL/guide.html)
 
-<!-- dev-version banner (tests/test_new_user_ux.py): remove it when 0.6.1 is released -->
-> **These pages describe the development version, 0.6.1.dev0.** The latest release is
-> [0.6.0](https://github.com/plumat-coal/COAL/releases/tag/v0.6.0); what has changed since is under "Unreleased" in
-> [CHANGELOG.md](CHANGELOG.md), and the `coalr` install lines pinned to v0.6.1 work once 0.6.1 is published. To use
-> the development version now, install from a checkout (Python 3.10+, a C++17 compiler, CMake 3.16+; about a minute):
->
-> ```
-> git clone https://github.com/plumat-coal/COAL && cd COAL
-> python -m pip install -e .
-> cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release
-> export COAL_CPP=$PWD/build/coal-cpp     # for this shell
-> ```
->
-> To keep `COAL_CPP` in new shells, and for what each install gives: [docs/install.md, Option 3](docs/install.md#option-3-from-source).
-
 **Codon alignments from a protein alignment and its coding DNA, Ka/Ks (dN/dS) for pairs, and one step from coding
 sequences to a dN/dS table.** COAL is a fast, open-source alternative to
 [PAL2NAL](https://www.bork.embl.de/pal2nal/): it maps unaligned coding DNA onto an existing protein multiple sequence
@@ -45,9 +30,10 @@ estimates Ka/Ks itself and runs the whole route from two CDS files to dN/dS.
   probably-wrong genes, a JSON run report, and a `pal2nal` command that accepts an unchanged PAL2NAL v14 command
   line.
 - **Tells you what went wrong:** warnings name the gene and position, with genetic-code suggestions.
-- **Ka/Ks without a second program:** `coal kaks` reads and writes KaKs_Calculator 2.0's formats (its methods NG,
-  LWL, MLWL, LPB, MLPB, YN, MYN), `coal dnds` writes a tidy table with standard errors and a status per pair, and
-  both have Comeron (1995) and Li (1993) as the R package orthologr computes them
+- **Ka/Ks without a second program:** ten methods. `coal kaks` reads and writes KaKs_Calculator 2.0's formats (its
+  methods NG, LWL, MLWL, LPB, MLPB, YN, MYN, and GY: maximum likelihood under the codon model of Goldman & Yang
+  (1994), as PAML's codeml fits it to a pair), `coal dnds` writes a tidy table with standard errors and a status per
+  pair, and both have Comeron (1995) and Li (1993) as the R package orthologr computes them
   ([docs/kaks.md](docs/kaks.md): what was validated against what).
 - **CDS to dN/dS in one step:** `coal pipeline` translates, finds orthologs (DIAMOND reciprocal best hits) or
   clusters (DIAMOND DeepClust), aligns the proteins, threads the codons and estimates Ka/Ks, with a report that
@@ -199,7 +185,7 @@ very small dS give numbers that mean little.
 | The run report's fields (`--report` / `--json`, schema `coal.report/1`) and its JSON Schema | [docs/report-schema.md](docs/report-schema.md), [docs/report.schema.json](docs/report.schema.json) |
 | How and why COAL's output differs from PAL2NAL v14 | [docs/differences.md](docs/differences.md) |
 | The C++ engine | [docs/cpp-engine.md](docs/cpp-engine.md) |
-| Ka/Ks (dN/dS): `coal kaks` (KaKs_Calculator's format, seven of its methods; Comeron 1995 and Li 1993 as the R package orthologr computes them), `coal dnds`, policy, validation, where the code comes from | [docs/kaks.md](docs/kaks.md) |
+| Ka/Ks (dN/dS): `coal kaks` (KaKs_Calculator's format, eight of its methods, GY maximum likelihood among them; Comeron 1995 and Li 1993 as the R package orthologr computes them), `coal dnds`, policy, validation, where the code comes from | [docs/kaks.md](docs/kaks.md) |
 | One step from CDS to dN/dS: `coal pipeline pairs` (DIAMOND reciprocal best hits) and `coal pipeline clusters` (DeepClust, per-cluster summary), output tables, validation, timings | [docs/pipeline.md](docs/pipeline.md), [docs/pipeline.schema.json](docs/pipeline.schema.json) |
 | R: the `coalr` package (in-process `coal_dnds_pairs()`, `coal_dnds_clusters()`, `coal_kaks()`, `coal_codon_align()`; the whole pipeline through reticulate), install, examples, when to use which | [docs/r.md](docs/r.md), [packaging/r/coalr](packaging/r/coalr) |
 | Protein alignment before the codon step: pairwise (BLOSUM62 NW), Clustal Omega / MAFFT for clusters, DIAMOND hits | [docs/alignment.md](docs/alignment.md) |

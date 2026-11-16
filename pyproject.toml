@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "coal-align"
-version = "0.6.1.dev0"
+version = "0.6.1"
 description = "Fast codon alignments (PAL2NAL alternative), Ka/Ks (dN/dS) for pairs, and a one-step pipeline from coding sequences to dN/dS"
 readme = "README.md"
 authors = [{ name = "Chloe Newton" }, { name = "Keanu Murati" }]

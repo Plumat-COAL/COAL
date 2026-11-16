@@ -188,6 +188,23 @@ class WriteErrors(unittest.TestCase):
         self.assertEqual(r.returncode, 1)
         self.assertIn("it is a folder, not a file", r.stderr)
 
+    def test_folder_as_input(self):
+        """A folder as the input is "it is a folder, not a file" (exit 1), as an input that cannot be opened: on
+        POSIX it opened as an empty file and was reported as one (audit of #106). No output file is made."""
+        out = self.tmp / "o.tsv"
+        for sub, args in (("dnds", [self.tmp, "-o", out]), ("kaks", ["-i", self.tmp, "-o", out]),
+                          ("kaks", ["-i", self.tmp])):
+            r = cpp(sub, *args)
+            self.assertEqual(r.returncode, 1, (sub, r.stderr))
+            self.assertIn(f"coal {sub}: error: cannot open '{self.tmp}': it is a folder, not a file", r.stderr)
+            self.assertNotIn("no pair", r.stderr)
+            self.assertEqual(r.stdout, "")
+            self.assertFalse(out.exists())
+        r = coal("dnds", self.tmp)   # through the Python command too
+        self.assertEqual(r.returncode, 1, r.stderr)
+        self.assertIn("it is a folder, not a file", r.stderr)
+        self.assertNotIn("Traceback", r.stderr)
+
     @unittest.skipUnless(os.path.exists("/dev/full"), "needs /dev/full (Linux)")
     def test_full_device_names_the_file_and_the_cause(self):
         for sub, args in (("dnds", [self.aln, "-o", "/dev/full"]), ("kaks", ["-i", self.aln, "-o", "/dev/full"])):
