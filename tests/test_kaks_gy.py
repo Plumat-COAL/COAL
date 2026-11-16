@@ -371,7 +371,8 @@ class TestEdgeCases(GyBase):
         self.assertEqual((r["status"], r["dN"], r["dS"], r["dNdS"], r["Nd"], r["Sd"], r["t"]),
                          ("ok", "0", "0", "NA", "0", "0", "0"))
         self.assertEqual(r["kappa"], "NA")   # no change: nothing to estimate kappa from
-        self.assertLess(val(r["lnL"]), 0)
+        # the likelihood at t = 0: sum log pi of the codons (0.6.0 printed twice that)
+        self.assertAlmostEqual(val(r["lnL"]), lnl_reference(self.GENE, self.GENE, 1e-12, 2, 0.3), places=8)
 
     def test_one_to_five_codons(self):
         cases = [("AAA", "AAG"), ("ATG", "ATG"), ("ATG", "TGG"), ("GCT", "GCA"), ("AAAGCT", "AAGGCA"),

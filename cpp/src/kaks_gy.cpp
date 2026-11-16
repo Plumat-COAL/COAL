@@ -1096,8 +1096,9 @@ Result run_gy(const Prepared& p, const GeneticCode& g, const Options&, Result r)
     if (!hasS && !hasN) return r;   // one codon, all its neighbours stop codons or of frequency 0
     if (snp == 0) {
         // Identical sequences: the likelihood is largest at t = 0, where it is sum n_i log pi_i whatever kappa
-        // and omega are. dN = dS = 0; kappa, omega and the site counts (which depend on kappa) have no estimate.
-        r.lnl = 2 * m.lconst;
+        // and omega are (lconst: with a = b, log sqrt(pi_a pi_b) is log pi_a; it was printed doubled before
+        // 0.6.1). dN = dS = 0; kappa, omega and the site counts (which depend on kappa) have no estimate.
+        r.lnl = m.lconst;
         r.t = 0;
         r.ks = hasS ? 0.0 : NA;
         r.ka = hasN ? 0.0 : NA;
