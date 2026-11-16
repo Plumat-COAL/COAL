@@ -14,10 +14,12 @@ from __future__ import annotations
 import gzip
 import io
 import os
+import shutil
 import sys
 import unittest
 from contextlib import redirect_stderr
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
@@ -32,6 +34,17 @@ EXTRA = ("work/outputs.json.tmp", "work/state.json.tmp", "work/inputs/sources.js
          "work/logs/diamond.log", "work/logs/codon-dnds.log", "work/subject.dmnd", "work/query.dmnd",
          "realign.tsv.body")
 VICTIM = b"keep me\n"
+
+
+def snapshot(folder: Path) -> dict:
+    """Every name under `folder` (links not followed) and the bytes of its files."""
+    got = {}
+    for dp, dn, fn in os.walk(folder):
+        for n in dn + fn:
+            p = Path(dp, n)
+            got[str(p.relative_to(folder))] = (os.readlink(p) if p.is_symlink() else
+                                               p.read_bytes() if p.is_file() else None)
+    return got
 
 
 def run(fn, *args, **kw):
@@ -107,6 +120,154 @@ class Planted(_Planting):
         for d in ("codon_alignments", "protein_alignments"):
             files = list((out / d).iterdir())
             self.assertTrue(files and all(p.is_file() and not p.is_symlink() for p in files), d)
+
+
+@unittest.skipUnless(os.name == "posix", "symbolic links (POSIX)")
+@needs_cpp
+class FolderLinks(_Planting):
+    """A folder COAL writes into that is a symbolic link (AUDIT-102, M1): os.makedirs(exist_ok=True) took it for a
+    folder and O_NOFOLLOW guards only the last part of a path, so work/logs or work/inputs linked elsewhere had the
+    logs, the decompressed copies and sources.json written there. DIR/work, work/logs, work/inputs and an
+    alignment folder that is a link are refused (exit 1) before anything changes, with --overwrite too."""
+
+    def inputs(self):
+        qgz = self.tmp / "q.fa.gz"
+        qgz.write_bytes(gzip.compress(Q.read_bytes()))
+        pf = self.tmp / "pairs.tsv"
+        pf.write_text("".join(f"{a}\t{b}\n" for a, b in PLAIN[:4]), encoding="utf-8")
+        return qgz, pf
+
+    def elsewhere(self, name: str) -> Path:
+        d = self.tmp / name
+        d.mkdir()
+        for f in ("translate.log", "codon-dnds.log", "0_q.fa", "sources.json", "outputs.json", "state.json"):
+            (d / f).write_bytes(VICTIM)
+        return d
+
+    def test_folder_links_in_work_are_refused(self):
+        qgz, pf = self.inputs()
+        out = self.tmp / "o"
+        res, err = run(P.run_pairs, qgz, S, out, pairs=pf)
+        self.assertIn(res.exit_code, (0, 2), err)
+        for sub in ("work/logs", "work/inputs", "work"):
+            target = self.elsewhere(sub.replace("/", "_"))
+            real = out / (sub + ".real")
+            (out / sub).rename(real)
+            (out / sub).symlink_to(target, target_is_directory=True)
+            for kw in ({}, {"overwrite": True}, {"resume": True}):
+                before = snapshot(out)
+                res, err = run(P.run_pairs, qgz, S, out, pairs=pf, **kw)
+                self.assertEqual(res.exit_code, 1, (sub, kw, err))
+                self.assertEqual(snapshot(out), before, (sub, kw))        # refused before anything changed
+                self.assertIn(f"{out / sub} is a symbolic link (to {target})", err)
+                self.assertIn("give -o a folder on that file system", err)
+                self.assertEqual(sorted(p.name for p in target.iterdir()),
+                                 ["0_q.fa", "codon-dnds.log", "outputs.json", "sources.json", "state.json",
+                                  "translate.log"], (sub, kw))
+                self.assertTrue(all(p.read_bytes() == VICTIM for p in target.iterdir()), (sub, kw))
+            (out / sub).unlink()
+            real.rename(out / sub)
+            res, err = run(P.run_pairs, qgz, S, out, pairs=pf)
+            self.assertIn(res.exit_code, (0, 2), (sub, err))
+
+    def test_a_folder_link_made_while_the_run_starts_is_refused(self):
+        """make_folder() checks again after os.makedirs: a link put at work/logs after the checks."""
+        qgz, pf = self.inputs()
+        out = self.tmp / "o"
+        target = self.elsewhere("late")
+        real = os.makedirs
+
+        def late(path, *a, **k):     # (the link appears while the folder is made)
+            if os.path.basename(os.fspath(path)) == "logs" and not os.path.lexists(path):
+                os.symlink(target, path)
+            return real(path, *a, **k)
+        with mock.patch.object(os, "makedirs", late):
+            res, err = run(P.run_pairs, qgz, S, out, pairs=pf)
+        self.assertEqual(res.exit_code, 1, err)
+        self.assertIn("logs is a symbolic link", err)
+        self.assertTrue(all(p.read_bytes() == VICTIM for p in target.iterdir()))
+
+
+@unittest.skipUnless(os.name == "posix", "symbolic links (POSIX)")
+@needs_cpp
+class LinksMadeAfterTheRemoval(_Planting):
+    """AUDIT-102, L1: a name COAL removed before a program wrote it could get a link again before the program
+    opened it (DIAMOND opens -o after its search). The programs now write into a new private folder in work/ whose
+    files are renamed into place; gunzip_to creates its copy with O_EXCL | O_NOFOLLOW. Simulated: every
+    remove_file() of the run puts a link to a victim at the name right after removing it."""
+
+    def run_with_late_links(self, fn, *args, **kw):
+        victims = self.tmp / "late-victims"
+        victims.mkdir(exist_ok=True)
+        planted = {}
+        real = P.remove_file
+
+        def remove_then_link(path):
+            real(path)
+            if os.path.isdir(os.path.dirname(path)):
+                v = victims / f"{len(planted)}_{os.path.basename(path)}"
+                v.write_bytes(VICTIM)
+                os.symlink(v, path)
+                planted[path] = v
+        with mock.patch.object(P, "remove_file", remove_then_link):
+            res, err = run(fn, *args, **kw)
+        self.assertTrue(planted)
+        self.assertEqual([p for p, v in planted.items() if v.read_bytes() != VICTIM], [], err)
+        return res, err, planted
+
+    def test_programs_never_write_through_a_late_link(self):
+        pf = self.tmp / "pairs.tsv"
+        pf.write_text("".join(f"{a}\t{b}\n" for a, b in PLAIN[:4]), encoding="utf-8")
+        out = self.tmp / "o"
+        res, err = run(P.run_pairs, Q, S, out, pairs=pf)
+        self.assertIn(res.exit_code, (0, 2), err)
+        res, err, planted = self.run_with_late_links(P.run_pairs, Q, S, out, pairs=pf)
+        self.assertIn(res.exit_code, (0, 2), err)
+        for name in ("query.faa", "query.genes.tsv", "subject.faa", "subject.genes.tsv"):
+            p = out / "work" / name
+            self.assertTrue(str(p) in planted and p.is_file() and not p.is_symlink(), name)   # replaced, not followed
+        self.assertFalse([n for n in os.listdir(out / "work") if ".staging-" in n])         # staging folders gone
+
+    def test_a_late_link_at_the_decompressed_copy_stops_the_run(self):
+        qgz = self.tmp / "q.fa.gz"
+        qgz.write_bytes(gzip.compress(Q.read_bytes()))
+        pf = self.tmp / "pairs.tsv"
+        pf.write_text("".join(f"{a}\t{b}\n" for a, b in PLAIN[:4]), encoding="utf-8")
+        res, err, planted = self.run_with_late_links(P.run_pairs, qgz, S, self.tmp / "o", pairs=pf)
+        self.assertEqual(res.exit_code, 1, err)          # gunzip_to's O_EXCL: "File exists", never followed
+        self.assertIn("File exists", err)
+
+
+@unittest.skipUnless(os.name == "posix", "symbolic links (POSIX)")
+@needs_cpp
+class ResumeNeverReusesALink(_Planting):
+    """--resume reuses a stage's output, or the decompressed copy of an input, only when it is a file of the
+    folder's own, not a link (AUDIT-102, S1: the other tests also link state.json, so nothing was reused there)."""
+
+    def test_a_linked_stage_output_or_copy_is_made_again(self):
+        qgz = self.tmp / "q.fa.gz"
+        qgz.write_bytes(gzip.compress(Q.read_bytes()))
+        pf = self.tmp / "pairs.tsv"
+        pf.write_text("".join(f"{a}\t{b}\n" for a, b in PLAIN[:4]), encoding="utf-8")
+        out = self.tmp / "o"
+        res, err = run(P.run_pairs, qgz, S, out, pairs=pf)
+        self.assertIn(res.exit_code, (0, 2), err)
+        copy = next(p for p in (out / "work" / "inputs").iterdir() if p.name.startswith("0_"))
+        links = {}
+        for p in (out / "work" / "subject.faa", copy):   # a link to a file with the same bytes (and times)
+            v = self.tmp / ("victim-" + p.name)
+            shutil.copy2(p, v)
+            p.unlink()
+            p.symlink_to(v)
+            links[p] = v
+        stat_before = {p: v.stat().st_mtime_ns for p, v in links.items()}
+        res, err = run(P.run_pairs, qgz, S, out, pairs=pf, resume=True)
+        self.assertIn(res.exit_code, (0, 2), err)
+        stages = {s["name"]: s for s in res.report["stages"]}
+        self.assertFalse(stages["translate_subject"]["cached"])     # its output was a link: made again
+        for p, v in links.items():
+            self.assertTrue(p.is_file() and not p.is_symlink(), p.name)
+            self.assertEqual(v.stat().st_mtime_ns, stat_before[p], p.name)
 
 
 @unittest.skipUnless(os.name == "posix", "symbolic links (POSIX)")

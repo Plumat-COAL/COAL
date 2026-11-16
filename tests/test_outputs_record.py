@@ -622,8 +622,8 @@ class Gaps(Folder):
         elsewhere.mkdir()
         self.symlink(elsewhere, self.out / "work" / "logs")      # work/ holds only "logs", an empty folder's link
         self.assertFalse(self.earlier().work_is_coal)
-        with self.assertRaisesRegex(OutputsRefused, "work exists and no COAL run made it"):
-            self.earlier().check_foreign(PLANNED)
+        with self.assertRaisesRegex(OutputsRefused, "logs is a symbolic link"):   # (and never written through)
+            self.earlier().check_foreign(PLANNED, overwrite=True)
 
     @unittest.skipUnless(hasattr(os, "mkfifo"), "named pipes (POSIX)")
     def test_a_named_pipe_is_never_opened(self):

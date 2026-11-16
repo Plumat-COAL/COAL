@@ -62,8 +62,9 @@ from .core import CoalError
 from .outputs_record import ALIGNMENT_DIRS as _ALIGNMENT_FLAGS
 from .outputs_record import RUN_OUTPUTS as _RUN_OUTPUTS  # noqa: F401  (these four: the names they had here)
 from .outputs_record import RUN_TABLES as _RUN_TABLES  # noqa: F401
-from .outputs_record import OutputsRecord, OutputsRefused, open_append, open_new, remove_file
+from .outputs_record import OutputsRecord, OutputsRefused, make_folder, open_append, open_new, place, remove_file
 from .outputs_record import is_coal_report as _is_coal_report  # noqa: F401
+from .outputs_record import staging as _staging
 from .outputs_record import starts_like_coal_record as _starts_like_coal_record  # noqa: F401
 from .pipeline import release_output_lock, take_output_lock
 from .tables import SUPPORTED
@@ -1212,7 +1213,8 @@ class _Run:
         self._replaced_notice()
         self._clear_earlier_outputs()
         try:
-            os.makedirs(os.path.join(self.work, "logs"), exist_ok=True)
+            self.make_folder(self.work)
+            self.make_folder(self.wpath("logs"))
             self._record_outputs()
         except OSError as e:
             raise PipelineError(f"cannot create the output folder {self.out!r}: {e.strerror or e}") from None
@@ -1367,7 +1369,7 @@ class _Run:
             return
         d = self.wpath("inputs")
         self._inputs_dir_new = self._inputs_dir_new or not os.path.isdir(d)
-        os.makedirs(d, exist_ok=True)
+        self.make_folder(d)
         record_path = os.path.join(d, "sources.json")
         try:
             with open(record_path, encoding="utf-8", errors="backslashreplace") as fh:
@@ -1646,6 +1648,19 @@ class _Run:
     def wpath(self, *parts) -> str:
         return os.path.join(self.work, *parts)
 
+    def make_folder(self, path: str) -> None:
+        """A folder the run writes into (in DIR or DIR/work): made if needed, refused if it is a symbolic link
+        (outputs_record.make_folder; OSError when it cannot be made)."""
+        try:
+            make_folder(path)
+        except OutputsRefused as e:
+            raise PipelineError(str(e)) from None
+
+    def staged(self, name: str):
+        """A new private folder in work/ for the files an external program writes (outputs_record.staging): the
+        program never opens a name that a link could have been put at; place() renames its files into place."""
+        return _staging(self.work, name)
+
     # -- failures
     def fail(self, level: str, code: str, message: str, cluster: str = "", seq1: str = "", seq2: str = "") -> None:
         self.n_failures += 1
@@ -1780,8 +1795,12 @@ class _Run:
         plain = [self.plain(p) for p in paths]
 
         def go():
-            self.run_tool([self.cpp, "translate", *plain, "-o", faa, "--genes", genes, "-c",
-                           str(self.a.codontable)], "translate", f"translating {paths[0]}")
+            with self.staged(f"translate_{name}") as st:
+                s_faa, s_genes = os.path.join(st, os.path.basename(faa)), os.path.join(st, os.path.basename(genes))
+                self.run_tool([self.cpp, "translate", *plain, "-o", s_faa, "--genes", s_genes, "-c",
+                               str(self.a.codontable)], "translate", f"translating {paths[0]}")
+                place(s_faa, faa)
+                place(s_genes, genes)
         self.stage(f"translate_{name}", _sig("translate", _file_sig(plain, self.out), self.a.codontable, __version__),
                    [faa, genes], go)
         return faa, genes, {}
@@ -1833,7 +1852,7 @@ class _Run:
                                         "file name without folder and suffix): rename one of them")
                 seen.setdefault(x, p)
             d = self.wpath("inputs")
-            os.makedirs(d, exist_ok=True)
+            self.make_folder(d)
             t = time.perf_counter()
             done: dict[str, str] = {}
             for k, (p, x) in enumerate(zip(paths, stems)):
@@ -2388,7 +2407,7 @@ class _Run:
                 cmd += ["--codon-out", self.path("codon_alignments.fasta") + ".tmp"]
             else:
                 d = self.outputs["codon_alignments"] = self.path("codon_alignments")
-                os.makedirs(d, exist_ok=True)   # (an earlier run's files were removed when this run started)
+                self.make_folder(d)   # (an earlier run's files were removed when this run started)
                 cmd += ["--codon-dir", d]
         if a.keep_protein_alignments:   # the protein alignments the codons were threaded on, in the same layout
             if self.mode == "pairs":
@@ -2396,7 +2415,7 @@ class _Run:
                 cmd += ["--protein-out", self.path("protein_alignments.fasta") + ".tmp"]
             else:
                 d = self.outputs["protein_alignments"] = self.path("protein_alignments")
-                os.makedirs(d, exist_ok=True)
+                self.make_folder(d)
                 cmd += ["--protein-dir", d]
         return cmd, out, fail
 
@@ -2925,21 +2944,26 @@ def _search(run: _Run, q_faa: str, s_faa: str, q_order: dict, s_order: dict, ort
     both = a.ortho == "rbh"
 
     def go():
-        for d in ("subject.dmnd", "query.dmnd"):   # (written by makedb: never through a link of that name)
+        for d in ("subject.dmnd", "query.dmnd"):   # (left by a version that made them in work/)
             remove_file(run.wpath(d))
-        run.run_tool([dmd, "makedb", "--in", s_faa, "-d", run.wpath("subject"), "--threads", str(run.threads),
-                      "--quiet"], "diamond", "diamond makedb")
-        cols = _HIT_COLS + (["qseq_gapped", "sseq_gapped"] if gapped else [])
-        run.run_tool([dmd, "blastp", "-q", q_faa, "-d", run.wpath("subject"), "-o", fwd, "--outfmt", "6", *cols,
-                      *common, *extra], "diamond", "diamond blastp (query against subject)")
-        if both:
-            run.run_tool([dmd, "makedb", "--in", q_faa, "-d", run.wpath("query"), "--threads", str(run.threads),
-                          "--quiet"], "diamond", "diamond makedb")
-            run.run_tool([dmd, "blastp", "-q", s_faa, "-d", run.wpath("query"), "-o", rev, "--outfmt", "6",
-                          *_HIT_COLS, *common, *extra], "diamond", "diamond blastp (subject against query)")
-        for d in ("subject.dmnd", "query.dmnd"):
-            if os.path.isfile(run.wpath(d)):
-                os.remove(run.wpath(d))
+        # DIAMOND writes its databases and hit tables in a new private folder (they are removed with it; the hit
+        # tables are renamed into work/ first): it never opens a name a link could have been put at
+        with run.staged("diamond_search") as st:
+            sdb, qdb = os.path.join(st, "subject"), os.path.join(st, "query")
+            s_fwd, s_rev = os.path.join(st, os.path.basename(fwd)), os.path.join(st, os.path.basename(rev))
+            run.run_tool([dmd, "makedb", "--in", s_faa, "-d", sdb, "--threads", str(run.threads), "--quiet"],
+                         "diamond", "diamond makedb")
+            cols = _HIT_COLS + (["qseq_gapped", "sseq_gapped"] if gapped else [])
+            run.run_tool([dmd, "blastp", "-q", q_faa, "-d", sdb, "-o", s_fwd, "--outfmt", "6", *cols,
+                          *common, *extra], "diamond", "diamond blastp (query against subject)")
+            if both:
+                run.run_tool([dmd, "makedb", "--in", q_faa, "-d", qdb, "--threads", str(run.threads), "--quiet"],
+                             "diamond", "diamond makedb")
+                run.run_tool([dmd, "blastp", "-q", s_faa, "-d", qdb, "-o", s_rev, "--outfmt", "6",
+                              *_HIT_COLS, *common, *extra], "diamond", "diamond blastp (subject against query)")
+            place(s_fwd, fwd)
+            if both:
+                place(s_rev, rev)
     run.stage("diamond_search", _sig("search", _file_sig([q_faa, s_faa], run.out), run.tools["diamond"]["version"],
                                      a.ortho, a.evalue, a.sensitivity, gapped, extra),
               [fwd] + ([rev] if both else []), go)
@@ -3084,13 +3108,12 @@ def _clusters_mode(run: _Run) -> None:
 
         def go():
             n = sort_fasta_by_id(faa, sfaa)
-            try:   # (a leftover or a symbolic link of that name is not written through)
-                os.remove(cfile + ".tmp")
-            except OSError:
-                pass
-            run.run_tool([dmd, "deepclust", "--db", sfaa, "--out", cfile + ".tmp", "--threads", str(run.threads),
-                          "--quiet", *opts, *extra], "diamond", "diamond deepclust")
-            os.replace(cfile + ".tmp", cfile)
+            remove_file(cfile + ".tmp")   # (left by a version that wrote it in DIR)
+            with run.staged("deepclust") as st:   # (DIAMOND writes in a new private folder; renamed into DIR)
+                out = os.path.join(st, "clusters.tsv")
+                run.run_tool([dmd, "deepclust", "--db", sfaa, "--out", out, "--threads", str(run.threads),
+                              "--quiet", *opts, *extra], "diamond", "diamond deepclust")
+                place(out, cfile)
             return {"input_order": "sorted by ID", "sequences": n}
         run.stage("deepclust", _sig("deepclust", "sorted-by-id", _file_sig([faa], run.out),
                                     run.tools["diamond"]["version"], opts, extra), [cfile, sfaa], go)
@@ -3099,19 +3122,17 @@ def _clusters_mode(run: _Run) -> None:
             rextra = shlex.split(a.realign_args) if a.realign_args else []
 
             def go2():
-                try:
-                    os.remove(rfile + ".body")
-                except OSError:
-                    pass
-                run.run_tool([dmd, "realign", "--db", sfaa, "--clusters", cfile, "--out", rfile + ".body", "--threads",
-                              str(run.threads), "--quiet", "--outfmt", "6", "qseqid", "sseqid", "approx_pident",
-                              "evalue", "bitscore", "qcovhsp", "scovhsp", *rextra], "diamond", "diamond realign")
-                with _atomic(rfile) as out, \
-                        open(rfile + ".body", encoding="utf-8", errors="backslashreplace") as body:
-                    # (the columns are fixed: --realign-args cannot change --outfmt)
-                    out.write("member\trepresentative\tapprox_pident\tevalue\tbitscore\tqcovhsp\tscovhsp\n")
-                    shutil.copyfileobj(body, out)
-                os.remove(rfile + ".body")
+                remove_file(rfile + ".body")   # (left by a version that wrote it in DIR)
+                with run.staged("realign") as st:   # (DIAMOND writes in a new private folder)
+                    body_path = os.path.join(st, "realign.tsv.body")
+                    run.run_tool([dmd, "realign", "--db", sfaa, "--clusters", cfile, "--out", body_path, "--threads",
+                                  str(run.threads), "--quiet", "--outfmt", "6", "qseqid", "sseqid", "approx_pident",
+                                  "evalue", "bitscore", "qcovhsp", "scovhsp", *rextra], "diamond", "diamond realign")
+                    with _atomic(rfile) as out, \
+                            open(body_path, encoding="utf-8", errors="backslashreplace") as body:
+                        # (the columns are fixed: --realign-args cannot change --outfmt)
+                        out.write("member\trepresentative\tapprox_pident\tevalue\tbitscore\tqcovhsp\tscovhsp\n")
+                        shutil.copyfileobj(body, out)
             run.stage("realign", _sig("realign", _file_sig([cfile], run.out), run.tools["diamond"]["version"], rextra),
                       [rfile], go2)
     t0 = time.perf_counter()

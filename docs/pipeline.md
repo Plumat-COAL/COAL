@@ -359,7 +359,16 @@ created anew (`O_EXCL`, and `O_NOFOLLOW` where the system has it), and the renam
 name: **a symbolic link in the output folder is replaced, never written through** (an output name that is a link
 to another file leaves that file untouched). The same holds in `work/`: the record `outputs.json`, `state.json`,
 the logs, the decompressed and `--prefix-ids` copies of the inputs, and the files that `coal-cpp translate` and
-DIAMOND write there are created anew, a link (or a hard link) with such a name is removed first, never followed.
+DIAMOND write there are created anew, a link (or a hard link) with such a name is removed first, never followed;
+`coal-cpp translate` and DIAMOND write into a new private folder in `work/` (`NAME.staging-XXXXXXXX`, removed after
+the stage) whose files are then renamed into place, so they never open a name a link could have been put at. A
+folder COAL writes into that is a symbolic link (`DIR/work` itself, `work/logs`, `work/inputs`, or
+`codon_alignments/` / `protein_alignments/` for a run that writes them) is refused with exit 1 before anything
+changes, with or without `--overwrite`: `out/work is a symbolic link (to ...): COAL writes its files only into
+folders inside the output folder, never through a link`. To keep the working files on another file system, give
+`-o` a folder on that file system (`DIR` itself may be a link). On Windows, which has no `O_NOFOLLOW`, a dangling
+link put at a name in the instant between its removal and the creation could still make the file appear at the
+link's target (created there, never an existing file overwritten).
 `report.json` shows the engine's command line with the `.tmp` names and `--new-files`, as it ran.
 
 **One run per folder, and one run's files only.** A run takes the lock `<out_dir>.coal-lock` (next to the real

@@ -26,10 +26,14 @@ and ends. Internal: not part of the supported Python API.
 """
 from __future__ import annotations
 
+import contextlib
+import errno
 import json
 import os
 import re
+import shutil
 import stat
+import tempfile
 from collections.abc import Callable, Iterable
 
 from . import __version__
@@ -56,8 +60,12 @@ class OutputsRefused(Exception):
 # A name in DIR or DIR/work may be a symbolic link (or a hard link) to a file elsewhere, planted or left there:
 # COAL never writes through it. A file it writes is created anew (whatever has the name is removed first, then
 # O_CREAT | O_EXCL | O_NOFOLLOW where the system has it), a log it appends to is never a link or a file with other
-# names, and the files an external program writes are removed before it runs. Removing a link removes the link,
-# never what it points to.
+# names, and an external program writes into a new private folder (staging) whose files are then renamed into
+# place. Removing a link removes the link, never what it points to. A folder COAL writes into (work/ and its
+# logs/ and inputs/, the alignment folders) is never a link: the run is refused (O_NOFOLLOW guards only the last
+# part of a path). Windows has no O_NOFOLLOW: there a dangling link put at a name between its removal and the
+# O_CREAT | O_EXCL open (which needs the privilege to make links, and winning that race) could make the file
+# appear at the link's target; it is created, never an existing file overwritten.
 _NEW_FILE = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
 _APPEND_FILE = os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
 
@@ -70,6 +78,47 @@ def remove_file(path: str) -> None:
             os.remove(path)
     except FileNotFoundError:
         pass
+
+
+# the folders inside DIR/work that a run makes and writes into
+WORK_FOLDERS = ("logs", "inputs")
+
+
+def link_refusal(path: str) -> str:
+    """The message for a folder COAL writes into that is a symbolic link."""
+    return (f"{path} is a symbolic link (to {os.readlink(path) if os.path.islink(path) else '?'}): COAL writes its "
+            "files only into folders inside the output folder, never through a link. Nothing was changed there: "
+            "remove the link (to keep the working files on another file system, give -o a folder on that file "
+            "system)")
+
+
+def make_folder(path: str) -> None:
+    """os.makedirs(path, exist_ok=True), and OutputsRefused when `path` is a symbolic link (which makedirs
+    accepts as a folder); OSError when it cannot be made."""
+    if os.path.islink(path):
+        raise OutputsRefused(link_refusal(path))
+    os.makedirs(path, exist_ok=True)
+    if os.path.islink(path):
+        raise OutputsRefused(link_refusal(path))
+
+
+@contextlib.contextmanager
+def staging(folder: str, name: str):
+    """A new private folder inside `folder` (tempfile.mkdtemp: a name of its own, mode 0700) for an external program
+    to write its files into; place() renames them where they belong. Removed afterwards, whatever is left in it."""
+    d = tempfile.mkdtemp(prefix=name + ".staging-", dir=folder)
+    try:
+        yield d
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def place(src: str, dst: str) -> None:
+    """Rename the finished file `src` onto `dst`: a file or symbolic link at `dst` is replaced, never followed; a
+    folder there is an error (IsADirectoryError)."""
+    if os.path.isdir(dst) and not os.path.islink(dst):
+        raise IsADirectoryError(errno.EISDIR, "is a folder", dst)
+    os.replace(src, dst)
 
 
 def open_new(path: str, binary: bool = False):
@@ -330,12 +379,16 @@ class OutputsRecord:
         (read_earlier) is that run's and is replaced as before; so is everything with --overwrite. Temporary names
         (NAME.tmp) are COAL's own and not checked. Then, the same way (#96): a --report FILE that exists and is not
         a COAL report, and a DIR/work/ that no COAL run made (not empty, no work/outputs.json, no COAL report.json
-        in DIR); a `work` that is not a folder is refused always."""
+        in DIR); a `work` that is not a folder, and a work/, work/logs or work/inputs that is a symbolic link (the
+        run would write through it: #102), are refused always."""
         w = self.work
         if os.path.lexists(w) and not os.path.isdir(w):
             # (a file or a broken link: COAL never removes it, so --overwrite cannot help)
             raise OutputsRefused(f"{w} exists and is not a folder: the run keeps its working files in DIR/work. "
                                  "Nothing was changed: move it away or use another output folder")
+        for f in (w, *(os.path.join(w, n) for n in WORK_FOLDERS)):
+            if os.path.islink(f):   # (a link to a folder: the run would write through it; whatever --overwrite says)
+                raise OutputsRefused(link_refusal(f))
         if overwrite:
             return
         known = self.earlier
