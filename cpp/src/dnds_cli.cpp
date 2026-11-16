@@ -110,6 +110,7 @@ const char* CODON_DNDS_HELP =
     "  --protein-out FILE, --protein-dir DIR  the protein alignments the codon alignments were made from, in\n"
     "                   the same layout: the same groups, records and order (a codon row is 3 x its protein row)\n"
     "  --kaks-out FILE  the same results in KaKs_Calculator's format (pairs named seq1&seq2)\n"
+    "  --kaks-digits N  significant digits of --kaks-out (default 6, as KaKs_Calculator and `coal kaks`)\n"
     "  --failures FILE  genes and groups that could not be used: group seq code message\n"
     "  --new-files      create every output file anew: a file or symbolic link of that name is removed first,\n"
     "                   never written through (`coal pipeline` writes NAME.tmp this way and renames it)\n"
@@ -481,6 +482,7 @@ struct Cli {
     dnds::Options opt;
     int jobs = 0;
     int digits = 8;
+    int kaks_digits = 6;   // --kaks-out (`coal pipeline --digits N` passes N here too)
     PairFlags flags;
     bool quiet = false;
 };
@@ -678,6 +680,10 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
         } else if (s == "--digits") {
             if (!it.value(v) || !to_int(v, n) || n < 1 || n > 17) return usage(prog, "--digits: expected 1 to 17");
             c.digits = (int)n;
+        } else if (s == "--kaks-digits") {
+            if (!it.value(v) || !to_int(v, n) || n < 1 || n > 17)
+                return usage(prog, "--kaks-digits: expected 1 to 17");
+            c.kaks_digits = (int)n;
         } else if (s == "--matrix") {
             if (!it.value(c.opt.align.matrix)) return usage(prog, s + ": expected one argument");
         } else if (s == "--gap-open") {
@@ -867,7 +873,7 @@ int codon_dnds_main_(const std::vector<std::string>& argv) {
                            kaks_num(r.S, dg) + '\t' + kaks_num(r.Nd, dg) + '\t' + kaks_num(r.Sd, dg) + '\t' +
                            std::to_string(r.codons_compared) + '\t' + std::to_string(t.res.prot_aln_length) + '\t' +
                            ident + '\t' + kaks::status_name(st) + '\t' + clean(note) + '\n';
-                    if (fkaks.is_open() && r.status != Status::error) kbuf += kaks_compat_row(id1 + "&" + id2, r, 6);
+                    if (fkaks.is_open() && r.status != Status::error) kbuf += kaks_compat_row(id1 + "&" + id2, r, c.kaks_digits);
                 }
             }
             fout << buf;

@@ -21,10 +21,11 @@ First version. In-process bindings (Rcpp) to the C++ core of COAL 0.6:
   the query and subject IDs (or are the other way round), or the sequences are protein, not coding DNA.
 - A single string with a sequence-file extension in upper case (`"CDS.FASTA"`) that names no file is still read
   as a sequence, but the error it then leads to says that no such file exists in the working folder.
-- `R CMD check --as-cran`: no error or warning (notes: the development version number; checks that need the
-  network or HTML Tidy). DESCRIPTION cites the methods with their DOIs; the examples of `coal_msa_aligner()` run
-  on the shipped data where Clustal Omega is installed, and those of `coal_pipeline_pairs()` (which need Python,
-  `coal-cpp` and DIAMOND) use the shipped data; the tests use at most two threads unless `NOT_CRAN=true`.
+- `R CMD check --as-cran`: no error or warning (notes: checks that need the network or HTML Tidy; the
+  development builds, 0.6.0.9000, also had one for their version number). DESCRIPTION cites the methods with their
+  DOIs; the examples of `coal_msa_aligner()` run on the shipped data where Clustal Omega is installed, and those of
+  `coal_pipeline_pairs()` (which need Python, `coal-cpp` and DIAMOND) use the shipped data; the tests use at most
+  two threads unless `NOT_CRAN=true`.
 - Comeron: `comeron_min_sites` applies only where it gives a positive distance; a 0 caused by a small class
   stays `NA` (`saturated`). Numbers: COAL's CHANGELOG (D9, Refined).
 - `coal_info()$features`: names of behaviours that the version number of a development build does not tell

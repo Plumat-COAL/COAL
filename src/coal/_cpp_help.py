@@ -149,6 +149,7 @@ HELP = {
         '  --protein-out FILE, --protein-dir DIR  the protein alignments the codon alignments were made from, in\n'
         '                   the same layout: the same groups, records and order (a codon row is 3 x its protein row)\n'
         "  --kaks-out FILE  the same results in KaKs_Calculator's format (pairs named seq1&seq2)\n"
+        '  --kaks-digits N  significant digits of --kaks-out (default 6, as KaKs_Calculator and `coal kaks`)\n'
         '  --failures FILE  genes and groups that could not be used: group seq code message\n'
         '  --new-files      create every output file anew: a file or symbolic link of that name is removed first,\n'
         '                   never written through (`coal pipeline` writes NAME.tmp this way and renames it)\n'
