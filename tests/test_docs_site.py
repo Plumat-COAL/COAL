@@ -96,7 +96,7 @@ class TestReleaseScripts(unittest.TestCase):
         self.assertIn("apps/coal-app/pyproject.toml", r.stderr)
 
     def test_dry_run_and_release_conditions(self):
-        """--dry-run (release.yml dispatched with publish off on a branch): the source's version, once the six
+        """--dry-run (release.yml dispatched with publish off on a branch): the source's version, once the seven
         places agree; a tag is also refused while CHANGELOG.md has "Unreleased" entries or coalr's DESCRIPTION has
         another version (tested on a copy of the files the check reads)."""
         rv = _load("release_version")

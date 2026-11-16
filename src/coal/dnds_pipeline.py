@@ -3422,7 +3422,8 @@ def codon_dnds(groups: Iterable[Sequence[Any]], out_tsv: _Path, method: Sequence
     number of groups sent. Raises PipelineError when coal-cpp is missing or fails. When anything else ends the
     call (an exception raised by groups, Ctrl-C), coal-cpp is killed and waited for, and the output files that did
     not exist before the call (out_tsv, codon_out, kaks_out, failures: a table with its header only, or part of
-    the groups) are removed; a file that was there before is never removed. Then the exception is raised again."""
+    the groups) are removed; a file that was there before the call is overwritten as in a normal call, never
+    removed. Then the exception is raised again."""
     cpp = cpp or _find_cpp()
     if isinstance(method, str):
         method = [method]

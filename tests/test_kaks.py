@@ -704,7 +704,9 @@ class TestCli(KaKsBase):
 
     def test_axt_wrapped_sequences(self):
         """Wrapped sequences (KaKs_Calculator joins the lines and halves them) give the same numbers as one line
-        each: lines of 60, a second sequence wrapped differently from the first, gaps and lower case."""
+        each: lines of 60, a second sequence wrapped differently from the first, gaps and lower case; and the
+        missing / stop symbols `?`, `.` and `*`, which a wrapped record may hold (a line with any other non-letter
+        but `-`, `~`, `!` is taken for a name line: audit of #106)."""
         rng = random.Random(11)
         s1 = "".join(rng.choice("ACGT") for _ in range(150)).replace("TAA", "TCA").replace("TAG", "TCG") \
             .replace("TGA", "TCA")
@@ -713,29 +715,37 @@ class TestCli(KaKsBase):
             s2[i] = "ACGT"[("ACGT".index(s2[i]) + 1) % 4]
         s2 = "".join(s2[:30]) + "---" + "".join(s2[33:])
         s1 = s1[:120] + s1[120:].lower()
+        # each of ?, . and * in both sequences, in a codon of their own
+        m1 = s1[:45] + "???" + s1[48:90] + "*.." + s1[93:]
+        m2 = s2[:60] + "..." + s2[63:105] + "?*-" + s2[108:]
 
         def wrap(s, w):
             return "\n".join(s[i:i + w] for i in range(0, len(s), w))
         text = (f"one&line\n{s1}\n{s2}\n\n"
                 f"w60&w60\n{wrap(s1, 60)}\n{wrap(s2, 60)}\n\n"
                 f"w50&w75\n{wrap(s1, 50)}\n{wrap(s2, 75)}\n\n"
-                f"w150&w30\n{s1}\n{wrap(s2, 30)}\n")
+                f"w150&w30\n{s1}\n{wrap(s2, 30)}\n\n"
+                f"sym&line\n{m1}\n{m2}\n\n"
+                f"sym&w50\n{wrap(m1, 50)}\n{wrap(m2, 50)}\n\n"
+                f"sym&w60w75\n{wrap(m1, 60)}\n{wrap(m2, 75)}\n")
         with tempfile.TemporaryDirectory() as td:
             axt = Path(td) / "wrapped.axt"
             axt.write_text(text, encoding="utf-8")
             r = self.run_cpp("dnds", axt, "-m", "NG", "-m", "YN", "--digits", "15")
             rows = [l.split("\t") for l in r.stdout.splitlines()[1:]]
-            self.assertEqual(len(rows), 8)
+            self.assertEqual(len(rows), 14)
             for f in rows:
                 self.assertIn(f[13], ("ok", "warning"), f)
-            base = {f[2]: f[3:] for f in rows[:2]}
-            for f in rows[2:]:
-                self.assertEqual(f[3:], base[f[2]], f)
+            base = {(f[0], f[2]): f[3:] for f in rows if f[1] == "line"}
+            self.assertNotEqual(base[("one", "NG")], base[("sym", "NG")])   # the symbols are read, as one line
+            for f in rows:
+                self.assertEqual(f[3:], base[(f[0] if f[0] == "sym" else "one", f[2])], f)
             k = self.run_cpp("kaks", "-i", axt, "-m", "NG", "-m", "YN")
             krows = [l.split("\t") for l in k.stdout.splitlines()[1:]]
-            self.assertEqual(len(krows), 8)
-            for f in krows[2:]:
-                self.assertEqual(f[1:], krows[0 if f[1] == krows[0][1] else 1][1:], f)
+            self.assertEqual(len(krows), 14)
+            kbase = {(f[0].split("&")[0], f[1]): f[1:] for f in krows if f[0].endswith("&line")}
+            for f in krows:
+                self.assertEqual(f[1:], kbase[("sym" if f[0].startswith("sym&") else "one", f[1])], f)
 
     @unittest.skipUnless(hasattr(os, "mkfifo"), "needs FIFOs")
     def test_fifo_input_is_refused(self):

@@ -4,25 +4,29 @@
 
 ### Fixed
 
-- **`coal kaks` / `coal dnds`: a blank line lost between two AXT records no longer gives a wrong pair.** The two
-  records were read as one of five lines, joined and cut in half: the first gene was compared with part of the
-  second gene's lines, and the second gene was missing without a word. A record of more than two sequence lines
+- **`coal kaks` / `coal dnds`: a blank line lost between two AXT records is an error instead of a wrong pair (but
+  for one rare case, below).** The two records were read as one of five lines, joined and cut in half: the first
+  gene was compared with part of the second gene's lines, and the second gene was missing without a word. A record of more than two sequence lines
   is still joined and halved (wrapped sequences, as KaKs_Calculator reads them) when the half falls at the end of
   a line and every line holds only letters and `- . ? * ~ !`; otherwise it is that record's error (status `error`
-  in `coal dnds`, left out with a warning in `coal kaks`), and the other records are computed. docs/kaks.md
-  "Input". (Final review of 2026-11-16, M1.)
+  in `coal dnds`, left out with a warning in `coal kaks`), and the other records are computed. A lost blank line
+  before a name made only of letters (such as `Sample` or `ACGTAC`) can still be read as a wrapped record when the
+  lengths happen to put the half at the end of a line, so a record can still be mis-paired in that rare case.
+  docs/kaks.md "Input". (Final review of 2026-11-16, M1; audit of #106.)
 - `coal kaks` / `coal dnds`: a FIFO or a process substitution (`-i <(zcat x.axt.gz)`) as the input is refused
   (exit 2) as standard input is, with "reading a pipe or device ... is not supported: give a file": the input is
   opened more than once, so it was read as an empty file, or a named FIFO made the command wait for ever. The
-  Python command's gzip check no longer opens such a file. (Final review of 2026-11-16, L3.)
+  Python command's gzip check no longer opens such a file. (Final review of 2026-11-16, L3.) A folder as the
+  input is "cannot open 'DIR': it is a folder, not a file" (exit 1, as an input that cannot be opened); on Linux
+  and macOS it was read as an empty file ("the input holds no pair", exit 2). (Audit of #106.)
 - `coal pipeline`: Ctrl-C or SIGTERM while the groups are written to the engine no longer prints an "Exception
   ignored ... BrokenPipeError" traceback after the "interrupted" message: the engine's input is closed once the
   engine is killed. (Final review of 2026-11-16, L1.)
 - Python API `codon_dnds()`: an exception raised by the `groups` iterable, or Ctrl-C, kills and waits for the
   `coal-cpp codon-dnds` process (it was left running, and an `OSError` of the iterable made the call wait for
   ever), closes its pipes, removes the output files that the call created (a table with its header only) and
-  raises the exception again; a file that was there before the call is never removed. (Final review of
-  2026-11-16, L2.)
+  raises the exception again; a file that was there before the call is overwritten as in a normal call, never
+  removed. (Final review of 2026-11-16, L2.)
 - docs/kaks.md "GY: maximum likelihood": for a pair of very few codons the likelihood over t can have two peaks,
   and the reported t can be the lower one (the example `GAGCTTTCT` / `AAGCTTTCT`). (Final review of 2026-11-16,
   L4.)
@@ -31,8 +35,10 @@
   Q1.)
 - App (`coal_app.tools`, `save_as` of `codon_align` and `dnds_pairs`): the copy is created as a new file
   (`open(dest, "xb")`), so a dangling symbolic link at that name is not written through and a file that takes
-  the name between the check and the copy is not overwritten; the two tools share the one copy function.
-  (Final review of 2026-11-16, Q3.)
+  the name between the check and the copy is not overwritten; the two tools share the one copy function. On
+  Windows, where creating a new file follows a symbolic link, a link already at that name is refused by the check
+  before the copy, but a link created between the check and the copy would be written through. (Final review of
+  2026-11-16, Q3.)
 - **Authors in the Python packages**: `coal-align` and `coal-align-app` declare their authors, Chloe Newton and
   Keanu Murati (their metadata named none, so `pip show` listed no author), as `CITATION.cff`, coalr's
   DESCRIPTION, NOTICE and the website already did; README.md has an Authors section and `CITATION.cff` gives each

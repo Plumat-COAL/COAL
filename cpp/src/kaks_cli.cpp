@@ -710,6 +710,12 @@ int kaks_main(const std::string& sub, const std::vector<std::string>& argv) {
             if (x == m) methods.push_back(m);
     const char* prog = c.compat ? "coal kaks" : "coal dnds";
     try {
+        {
+            // A folder opens as an empty file on POSIX (and was reported as one): say what it is, as for an input
+            // that cannot be opened (exit status 1; audit of #106).
+            std::error_code ec;
+            if (std::filesystem::is_directory(c.in, ec)) throw InputError(open_error(c.in), "file_error");
+        }
         refuse_gzip_kaks(c.in);
         std::string fmt = c.format == "auto" ? sniff(c.in) : c.format;
         std::unique_ptr<AxtReader> axt;

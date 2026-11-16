@@ -195,7 +195,10 @@ with `--format`.
   that break either rule (how a blank line lost between two records shows: the next record's name line and
   sequences are joined to this one), is an error for that record: `coal dnds` gives it status `error`, `coal kaks`
   leaves it out with a warning, and the other records are computed. (KaKs_Calculator would cut the line, or the
-  joined records, in half and compare the halves.) Lines starting with `#` before a record are skipped.
+  joined records, in half and compare the halves.) One case still passes both rules: a lost blank line before a
+  name made only of letters (such as `Sample` or `ACGTAC`), when the lengths happen to put the half at the end of a
+  line, is read as one wrapped record, so in that rare case a record can still be mis-paired (and the next one is
+  missing). Lines starting with `#` before a record are skipped.
 - **Aligned FASTA**: `--pairs all` (the default) compares every pair of the alignment in AXTConvertor's order
   (1-2, 1-3, ... 2-3, ...). `--pairs consecutive` compares records 1 and 2, 3 and 4, and so on. In `coal kaks`, a
   FASTA pair is named `id1&id2`, as KaKs_Calculator's AXTConvertor names it.
