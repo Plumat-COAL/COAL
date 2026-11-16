@@ -1093,16 +1093,21 @@ data support no nonsynonymous change (dN is then 1e-6 dS, where the counting met
 the other methods when dS is 0). A parameter that the data want at a bound is reported at the bound itself: the
 likelihood is linear in kappa or omega near 0, so its gradient in the logarithm fades before the bound is reached
 and the iteration would stop about a factor 10 short of it (omega 1.1e-6 to 1.5e-5, up to 1e-5 log units below
-the value at the bound, at a point that depends on the path); when it stops with kappa or omega below 1e-3 or
-above 99 and the gradient pointing at the bound, the bound is tried and taken if the likelihood there is not
-lower. A maximum inside the bounds is not affected.
+the value at the bound, at a point that depends on the path). The same fading hides a maximum further inside from
+an iteration that is near or on the bound. So when the iteration stops with kappa or omega in the zone of a bound
+(below 1e-3 or above 99), both ends of the zone are tried: the bound, taken if the likelihood there is not lower,
+and the inner edge (1e-3 or 99), taken if the likelihood there is higher; the iteration goes on from the better
+one. An iteration that stops outside these zones is not affected, and later starts are seeded from where the
+first one stopped by itself, never from a bound it was moved to.
 
 **Which start wins.** Two log-likelihoods within 1e-7 of each other count as the same maximum (the optimiser's own
 stopping rule leaves about 1e-11, starts from elsewhere up to 1e-8): the earlier, or the converged, start is kept.
-A start is usable if it converged or ended on the ridge (t at its bound). A start that ran out of steps
-elsewhere never displaces a usable one by itself: if its likelihood is the higher one the iteration is continued
-from where it stopped (twice at most), and only if it still has not converged and is higher by more than 1e-4 is
-the pair `not_converged`.
+A start is usable if it converged or ended on the ridge (t at its bound, converged or not: the pair is saturated
+either way). A start that ran out of steps elsewhere never displaces a usable one by itself: if its likelihood is
+higher than that of the best usable start, the iteration is continued from where it stopped (twice at most, and
+not again once a continuation ends lower), and only if it still has not converged and is higher than the best
+usable start by more than 1e-4 is the pair `not_converged`. (That last case has not occurred in 25,200 random
+pairs; it is there so that a converged maximum known to be lower is not reported as the estimate.)
 
 **Statuses.** The policy for gaps, ambiguity letters and stop codons is that of every method ("Policy").
 
@@ -1112,7 +1117,7 @@ the pair `not_converged`.
 | The estimate of dS (or dN) is above 10 substitutions per site. Every pair whose t ends at its bound of 50 is such a pair (t / 3 is the mean of dS and dN over the sites) | that estimate and dN/dS are `NA`; the other estimate, the sites, kappa, t and lnL are kept. The note gives the estimate left out and says when t is at its bound | `saturated` |
 | The likelihood is flat in t from the optimiser's stopping point to the bound (within 1e-6 log units): one codon, or every site different, so that the data put no upper limit on the distance | no estimate of either distance (`NA`); t is reported at its bound, 50. The note says so. (Without this rule the value would be wherever the optimiser's tolerance stopped it: 4.6 for `AAA` against `AAG`) | `saturated` |
 | No synonymous site, or no nonsynonymous site (under F3x4: e.g. Met and Trp codons only) | omega cancels in the scaled model, so t and kappa are estimated and the one distance that exists is given, as for YN (if it is not saturated: the note then has both reasons) | `no_data` |
-| The optimiser ends without a maximum, away from the bound of t | no estimate; the note has the last point. Before that: a start that uses up its 100 steps without converging, after steps of the gradient's size on a nearly flat likelihood, is run again with lengthened steps, and that run is taken if it converges with a likelihood not more than 1e-7 lower; a start that still has not converged is continued from its last point if it is the best one ("Which start wins"); `not_converged` is what remains: no usable start at all, or an unconverged point more than 1e-4 above every converged one. Not seen on real and simulated genes; of 12,600 random pairs of 1 to 40 codons (all-random or heavily mutated, nine genetic codes), none (0.6.0: 50) | `not_converged` |
+| The optimiser ends without a maximum, away from the bound of t | no estimate; the note has the last point. Before that: a start that uses up its 100 steps without converging, after steps of the gradient's size on a nearly flat likelihood, is run again with lengthened steps, and that run is taken if it converges with a likelihood not more than 1e-7 lower; a start that still has not converged is continued from its last point if it is the best one ("Which start wins"); `not_converged` is what remains: no usable start at all, or an unconverged point more than 1e-4 above the best usable start. Not seen on real and simulated genes; of 25,200 random pairs of 1 to 40 codons (all-random or heavily mutated, nine genetic codes), none (0.6.0: 103) | `not_converged` |
 
 10 substitutions per site is far beyond what a pairwise comparison can resolve (the likelihood is flat there, and
 an estimate of 15 or of 60 says the same thing: saturated); it is also the bound that the property tests put on

@@ -54,24 +54,29 @@
   starts of a diverged pair were compared by likelihood alone, so a start that stopped at its step limit with a higher
   likelihood made the pair `not_converged` although three starts had converged (`TGGTTACGCTTT` against `TACAGCTTTCGC`:
   `saturated` in 0.6.0, `not_converged` after the change above). Now a start is usable if it converged or ended on the
-  ridge of saturation; the highest usable start wins (the earlier or the converged one within 1e-7); a start that is
-  not usable is continued from where it stopped, twice at most, when its likelihood is the higher one, and only an
-  unconverged point more than 1e-4 above every converged one, or the absence of any usable start, gives
-  `not_converged`. That pair is `saturated` with lnL -24.0821 (0.6.0: -24.1755). A start that never took a step the
-  second run would lengthen is not run a second time (it would repeat itself step for step). On 12,600 random pairs of
-  1 to 40 codons under nine genetic codes: `not_converged` 50 in 0.6.0, 25 after the change above, none now, and no
-  pair goes from `ok` or `saturated` to `not_converged`.
-- **GY: kappa or omega that the data want at a bound is reported at the bound** (audit of #95, L5). Near 0 the
-  likelihood is linear in kappa or omega, so the gradient in the logarithm fades before the bound and the iteration
-  stopped about a factor 10 short of it, at a point that depended on the path (omega 1.1e-6 to 1.5e-5 instead of 1e-6,
-  up to 1e-5 log units below the likelihood at the bound). When the iteration stops with a parameter below 1e-3 or
-  above 99 and the gradient pointing at the bound, the bound is tried and taken if the likelihood there is not lower.
-  Maxima inside the bounds are untouched: of 4,388 yeast pairs no GY row changes at 12 digits, of 2,862 *Salmonella* /
-  *Shigella* pairs 6 (omega or kappa now exactly 1e-6, lnL higher by 7e-7 to 6e-6, dS the same to six digits), of
-  3,142 *E. coli* / *Salmonella* pairs 8 (the same), and one of the 20 codeml fixtures (`real0_8`: omega 1.143e-6 to
-  1e-6). On the random pairs every changed row with an unchanged status has kappa or omega in that zone or is a
-  saturated row with t at its bound; 27 flat pairs of 2 to 4 codons go from `ok` or `warning` to `saturated`, the
-  likelihood then being flat in t up to its bound (three of them with an lnL 1e-7 lower, the tolerance of that rule).
+  ridge of saturation (t at its bound, converged or not); the highest usable start wins (the earlier or the converged
+  one within 1e-7); a start that is not usable is continued from where it stopped, twice at most, when its likelihood
+  is higher than that of the best usable start, and only an unconverged point more than 1e-4 above the best usable
+  start, or the absence of any usable start, gives `not_converged`. That pair is `saturated` with lnL -24.0821 (0.6.0:
+  -24.1755). A start that never took a step the second run would lengthen is not run a second time (it would repeat
+  itself step for step). On 25,200 random pairs of 1 to 40 codons under nine genetic codes: `not_converged` 103 in
+  0.6.0, 47 after the change above, none now, and no pair goes from `ok` or `saturated` to `not_converged`.
+- **GY: kappa or omega near a bound** (audits of #95, L5, and of #97, M1). Near 0 the likelihood is linear in kappa or
+  omega, so the gradient in the logarithm fades before the bound: the iteration stopped about a factor 10 short of it,
+  at a point that depended on the path (omega 1.1e-6 to 1.5e-5 instead of 1e-6, up to 1e-5 log units below the
+  likelihood at the bound), and an iteration near or on the bound could not see a maximum further inside. When the
+  iteration stops with a parameter below 1e-3 or above 99, both ends of that zone are now tried: the bound, taken if
+  the likelihood there is not lower, and the inner edge (1e-3 or 99), taken if the likelihood there is higher; the
+  iteration goes on from the better one. Later starts are seeded from where the first one stopped by itself, never
+  from a bound it was moved to (a start on the bound stalls there: one random pair of 25,200 lost 6.6e-3 log units
+  that way in the first version of this change). An iteration that stops outside the zones is as before: of 4,388
+  yeast pairs no GY row changes at 12 digits; of 2,862 *Salmonella* / *Shigella* pairs 6 and of 3,142 *E. coli* /
+  *Salmonella* pairs 8 (9 different pairs: omega or kappa now exactly 1e-6, lnL higher by 7e-7 to 6e-6, dS the same to
+  six digits, no status change); one of the 20 codeml fixtures (`real0_8`: omega 1.143e-6 to 1e-6). On the 25,200
+  random pairs, against the change above: no likelihood lower by more than 1e-4 (three flat pairs lower by 1.4e-7 to
+  1.8e-7, the tolerance of the flat-likelihood rule, which now calls them `saturated`); 39 flat pairs of 2 to 4 codons
+  go from `ok` or `warning` to `saturated` and one back. Against 0.6.0 one pair of the 25,200 has a lower likelihood
+  (3 codons, saturated in both, 0.010 lower since the change above).
 
 ### Added
 

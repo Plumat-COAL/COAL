@@ -427,6 +427,27 @@ class TestEdgeCases(GyBase):
         self.assertNotEqual(r["status"], "not_converged")
         self.assertGreater(val(r["lnL"]), -11.0903573)
 
+    def test_bound_zone(self):
+        """When the iteration stops with kappa or omega near a bound, both ends of that zone are tried (the
+        gradient in the logarithm fades there in both directions), and later starts are seeded from where the
+        first one stopped by itself. Random pairs on which each part decides the result (audit of #97; the
+        likelihood a build without that part reports is given):
+        - a start must not begin on the kappa bound: 0.6.1-rc reported -140.0750 (kappa 2.5e-6), the maximum is
+          -140.0684 at kappa 0.0075;
+        - the bound is taken only if the likelihood there is not lower (taken always: -13.9772);
+        - the inner edge of the zone is tried (not tried: saturated at -7.7946);
+        - the ridge start is seeded from the first stop, not from the bound (from the bound: -36.8438)."""
+        for a, b, code, least in (
+                ("GTGTGTACCGTTCTAGTCAGATTGGGGCTGAAATCAGTTCGCCACACAGGCTCATCAATC",
+                 "GTGCGGACGGCGGTGTTCCTATGTTGAATATGGAGTAATACGTCAGCATTCAGGACGTTC", 2, -140.0690),
+                ("CATCTTGTC", "CCCCTTCGT", 22, -13.9400),
+                ("GGACAG", "CGACAC", 4, -7.4000),
+                ("CCACGGTTACTGCTC", "GATGTTACACCATCC", 22, -36.8330)):
+            r = self.one(a, b, "-c", str(code))
+            with self.subTest(pair=a):
+                self.assertNotEqual(r["status"], "not_converged")
+                self.assertGreater(val(r["lnL"]), least)
+
     def test_synonymous_changes_only(self):
         b = self.codonwise({"GCT": "GCA", "GGT": "GGC", "CCC": "CCA", "CTG": "CTA"})
         r = self.one(self.GENE, b)

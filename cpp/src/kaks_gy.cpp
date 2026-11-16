@@ -409,7 +409,7 @@ struct GyModel {
 constexpr double T_MIN = 1e-6, T_MAX = 50;
 constexpr double PAR_MIN = 1e-6, PAR_MAX = 999;   // kappa and omega
 // the stopping rule tries the bound itself from this near (in log units: below 1e-3, above 99)
-constexpr double BOUND_ZONE_LOW = 6.907755278982137, BOUND_ZONE_HIGH = 2.3116349285139637;
+const double BOUND_ZONE_LOW = std::log(1e-3 / 1e-6), BOUND_ZONE_HIGH = std::log(999.0 / 99.0);
 constexpr double SE_PAR_MIN = 1e-4, SE_PAR_MAX = 99;   // between these, kappa or omega counts as estimated (SE)
 
 // max over t in [T_MIN, T_MAX] of lnl(t), by Newton steps in u = log t inside a bracket; t: start and result.
@@ -462,6 +462,9 @@ struct Fit {
     bool converged = false;
     bool at_limit = false;   // the iteration used all its steps
     bool crawled = false;    // it took a step that the second run of optimise() would lengthen
+    // kappa and omega where the iteration first stopped by itself, before the ends of a bound's zone were tried
+    // (the result itself when they were not): what later starts are seeded from, so that none begins on a bound
+    double seed_kappa = NA, seed_omega = NA;
     int iterations = 0;
 };
 
@@ -498,7 +501,8 @@ Fit optimise_run(GyModel& m, double kappa0, double omega0, double t0, bool fix_o
     int small_steps = 0;   // successive steps that changed the likelihood by less than 1e-9
     int at_tmax = 0;       // successive iterates with t at its upper bound
     bool curvature = false;   // a BFGS update has been made (H holds curvature of this surface)
-    bool snapped[2] = {false, false};   // the bound has been tried for this parameter (see the stopping rule)
+    int probes[2] = {0, 0};   // times the ends of a bound's zone were tried for this parameter (stopping rule)
+    bool seeded = false;      // fit.seed_* hold the point of the first stop
     for (; it < maxit; ++it) {
         bool act[2];
         double pg[2];
@@ -512,30 +516,65 @@ Fit optimise_run(GyModel& m, double kappa0, double omega0, double t0, bool fix_o
         // curvatures of real pairs, a distance of 1e-6 or less from the maximum and 1e-11 in lnL; the rounding of
         // the likelihood sits just below)
         if (gmax < 1e-5 || (small_steps >= 2 && gmax < 1e-3)) {
-            // Not so on the way to a bound. Where the data want kappa or omega at 0 the likelihood is linear in
-            // the parameter itself, so its gradient in the logarithm is the parameter times a constant: it falls
-            // below the tolerance at about 1e-5, a factor 10 short of the bound and up to 1e-5 in lnL below the
-            // value there (and at a point that depends on the path). So when the iteration stops with a
-            // parameter near a bound (below 1e-3, above 99) and the gradient pointing at that bound, the bound
-            // itself is tried, once per parameter, and taken if the likelihood there is not lower; the
-            // iteration then goes on with the other parameter. A maximum inside the bounds is not touched: the
-            // bound is not tried from there, and would be refused.
+            // Not so near a bound. Where the data want kappa or omega at 0 the likelihood is linear in the
+            // parameter itself, so its gradient in the logarithm is the parameter times a constant: it falls below
+            // the tolerance at about 1e-5, a factor 10 short of the bound and up to 1e-5 in lnL below the value
+            // there, at a point that depends on the path. And it fades in the other direction as well: an
+            // iteration that is near or on the bound sees no gradient towards a maximum that lies further inside
+            // (a start on the bound "converged" there, 6.6e-3 below a maximum at kappa 0.0075: audit of #97). So
+            // when the iteration stops with a parameter in the zone of a bound (below 1e-3, above 99), the two
+            // ends of the zone are tried: the bound itself, taken if the likelihood there is not lower, and the
+            // inner edge (1e-3 or 99), where the logarithmic gradient is alive again, taken if the likelihood
+            // there is higher. The iteration then goes on from the better one. Twice per parameter at most. A
+            // stop outside the zones is final as before.
             bool moved = false;
             for (int i = 0; i < nfree && !moved; ++i) {
-                const bool low = x[i] > lo && x[i] < lo + BOUND_ZONE_LOW && g[i] > 0;
-                const bool high = x[i] < hi && x[i] > hi - BOUND_ZONE_HIGH && g[i] < 0;
-                if (snapped[i] || !(low || high)) continue;
-                snapped[i] = true;
-                double xs[2] = {x[0], x[1]}, gs[2], ts = t;
-                xs[i] = low ? lo : hi;
-                const double fs = eval(xs, ts, gs);
-                if (fs <= f) {
-                    x[0] = xs[0];
-                    x[1] = xs[1];
-                    f = fs;
-                    t = ts;
-                    g[0] = gs[0];
-                    g[1] = gs[1];
+                const bool low = x[i] < lo + BOUND_ZONE_LOW, high = x[i] > hi - BOUND_ZONE_HIGH;
+                if (probes[i] >= 2 || !(low || high)) continue;
+                if (probes[0] + probes[1] == 0) {   // where the iteration stopped by itself: the seed of later starts
+                    fit.seed_kappa = std::exp(x[0]);
+                    fit.seed_omega = std::exp(x[1]);
+                    seeded = true;
+                }
+                ++probes[i];
+                const double bound = low ? lo : hi, edge = low ? lo + BOUND_ZONE_LOW : hi - BOUND_ZONE_HIGH;
+                double fb = f, tb = t, gb[2] = {g[0], g[1]}, xb[2] = {x[0], x[1]};
+                bool take = false;
+                if (x[i] != bound) {
+                    double xs[2] = {x[0], x[1]}, gs[2], ts = t;
+                    xs[i] = bound;
+                    const double fs = eval(xs, ts, gs);
+                    if (fs <= fb) {
+                        take = true;
+                        fb = fs;
+                        tb = ts;
+                        xb[i] = bound;
+                        gb[0] = gs[0];
+                        gb[1] = gs[1];
+                    }
+                }
+                {
+                    double xs[2] = {x[0], x[1]}, gs[2], ts = t;
+                    xs[i] = edge;
+                    const double fs = eval(xs, ts, gs);
+                    if (fs < fb - 1e-9) {
+                        take = true;
+                        fb = fs;
+                        tb = ts;
+                        xb[i] = edge;
+                        gb[0] = gs[0];
+                        gb[1] = gs[1];
+                        H[0][0] = H[1][1] = 1;   // (what was learnt near the bound says nothing here)
+                        H[0][1] = H[1][0] = 0;
+                    }
+                }
+                if (take) {
+                    x[0] = xb[0];
+                    x[1] = xb[1];
+                    f = fb;
+                    t = tb;
+                    g[0] = gb[0];
+                    g[1] = gb[1];
                     small_steps = 0;
                     moved = true;
                 }
@@ -674,6 +713,10 @@ Fit optimise_run(GyModel& m, double kappa0, double omega0, double t0, bool fix_o
     if (x[0] >= hi) fit.kappa = PAR_MAX;
     if (x[1] <= lo) fit.omega = PAR_MIN;
     if (x[1] >= hi) fit.omega = PAR_MAX;
+    if (!seeded) {
+        fit.seed_kappa = fit.kappa;
+        fit.seed_omega = fit.omega;
+    }
     fit.at_limit = it >= maxit;
     return fit;
 }
@@ -681,8 +724,8 @@ Fit optimise_run(GyModel& m, double kappa0, double omega0, double t0, bool fix_o
 // Two log-likelihoods within LNL_TIE of each other are the same maximum as far as the optimiser can tell (its
 // stopping rule leaves about 1e-11, a start from elsewhere up to 1e-8): the earlier or the converged one is kept.
 constexpr double LNL_TIE = 1e-7;
-// An iteration that did not converge displaces a converged maximum only if its likelihood is higher by more than
-// this (run_gy): below it the two are, for every use of the result, the same likelihood.
+// An iteration that did not converge displaces the best usable start (run_gy) only if its likelihood is higher by
+// more than this: below it the two are, for every use of the result, the same likelihood.
 constexpr double LNL_MATERIAL = 1e-4;
 
 // One start. An iteration that ends at its limit of steps without converging, away from the bound of t, and that
@@ -855,10 +898,12 @@ Result run_gy(const Prepared& p, const GeneticCode& g, const Options& opt, Resul
     // A start is usable if it converged or ended on the ridge (t at its bound: saturated whatever else). Among
     // the usable starts the highest likelihood wins, the earlier or the converged one within LNL_TIE (1e-7). A
     // start that is not usable (it ran out of steps somewhere else) never displaces a usable one by itself: if
-    // its likelihood is the higher one, the iteration is continued from where it stopped (twice at most), and
-    // only if it still has not converged and is higher by more than LNL_MATERIAL (1e-4) is the pair
-    // `not_converged`: the converged maximum is then known not to be the highest. Without a usable start the
-    // best point is reported as `not_converged`, after the same continuations.
+    // its likelihood is higher than that of the best usable start (which may itself be an unconverged ridge
+    // start), the iteration is continued from where it stopped (twice at most; not again once a continuation
+    // ends lower), and only if it still has not converged and is higher than the best usable start by more
+    // than LNL_MATERIAL (1e-4) is the pair `not_converged`: the usable start is then known not to be the
+    // highest point. (No pair of 25,200 random ones gets there; no test can reach this branch.) Without a
+    // usable start the best point is reported as `not_converged`, after the same continuations.
     const auto usable = [](const Fit& f) { return f.converged || f.t >= T_MAX * (1 - 1e-3); };
     Fit best, cand;   // the best usable start; the best start that is not usable
     bool have = false, have_cand = false;
@@ -878,15 +923,20 @@ Result run_gy(const Prepared& p, const GeneticCode& g, const Options& opt, Resul
     offer(first);
     if (!first.converged || first.t >= 1.0) {
         // the ridge start: t at its bound, omega such that omega * t (about dN) is that of the first maximum
-        const double w_ridge = std::min(std::max(first.omega * first.t / T_MAX, PAR_MIN), 1.0);
-        const double start[3][3] = {{6.0, 1.5, t0}, {2.0, 0.02, 10.0}, {first.kappa, w_ridge, T_MAX}};
+        // (from where the first iteration stopped by itself, not from a bound it was then moved to: at a bound
+        // the gradient in the logarithm is 0 in both directions and a start would stall)
+        const double w_ridge = std::min(std::max(first.seed_omega * first.t / T_MAX, PAR_MIN), 1.0);
+        const double start[3][3] = {{6.0, 1.5, t0}, {2.0, 0.02, 10.0}, {first.seed_kappa, w_ridge, T_MAX}};
         for (const double* st : start) offer(optimise(m, st[0], fix_omega ? 1.0 : st[1], st[2], fix_omega));
     }
     for (int c = 0; c < 2 && have_cand && (!have || cand.lnl > best.lnl + LNL_TIE); ++c) {
         const Fit from = cand;
         have_cand = false;
         offer(optimise(m, from.kappa, fix_omega ? 1.0 : from.omega, from.t, fix_omega));
-        if (have_cand && cand.lnl < from.lnl) cand = from;   // (never a lower point than the one continued)
+        if (have_cand && cand.lnl < from.lnl) {   // it ended lower: keep the point it started from, and stop
+            cand = from;                          // (continuing from there again would repeat the same run)
+            break;
+        }
     }
     if (!have || (have_cand && cand.lnl > best.lnl + LNL_MATERIAL)) best = cand;
     best.iterations = iterations;
