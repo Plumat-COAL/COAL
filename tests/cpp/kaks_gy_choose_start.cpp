@@ -4,6 +4,7 @@
 // itself, are reached by no pair of 25,200 random ones, so no test of the command can hold them in place; this
 // one does, through the hooks the library has for them. Built and run by tests/test_kaks_gy.py against the build's libcoal_core. Exit 0 when
 // every check holds; otherwise the failed checks on stderr and exit 1.
+#include <cstddef>
 #include <cstdio>
 #include <vector>
 
@@ -18,6 +19,9 @@ void gy_choose_start(const double* lnl, const double* t, const int* converged, i
 // likelihood reported
 void gy_continue_starts(const double* lnl, const double* t, const int* converged, int n, const double* s_lnl,
                         const double* s_t, const int* s_converged, int ns, int out[4], double* lnl_out);
+// whether the coarse scan is made for a pair of n codons whose result has likelihood lnl, branch length t and
+// convergence `converged`, with the plateau of saturation at `plateau`
+bool gy_scan_wanted(size_t n, double lnl, double t, int converged, double plateau);
 }  // namespace detail
 }  // namespace kaks
 }  // namespace coal
@@ -132,6 +136,32 @@ int main() {
                 {{-9.6, 3, 1}, {-1, 3, 1}}, 1, 1, 2, 0, -9.6);
     // no usable start: the best point is continued, and its continuation is reported
     expect_cont("no usable start", {{-10, 2, 0}, {-9, 3, 0}}, {{-8, 3, 1}}, 1, 0, 1, 0, -8);
+
+    // Which pairs are scanned (scan_wanted): 40 codons or fewer always; a larger one if its result did not converge
+    // off the ridge, or is within 0.05 lnL per codon of the plateau of saturation.
+    struct Gate {
+        const char* what;
+        size_t n;
+        double lnl, t;
+        int converged;
+        bool want;
+    };
+    const double plateau = -1000;
+    const Gate gates[] = {
+        {"40 codons, far from the plateau", 40, plateau + 40 * 0.5, 2, 1, true},
+        {"41 codons, far from the plateau", 41, plateau + 41 * 0.5, 2, 1, false},
+        {"0.049 per codon above the plateau", 100, plateau + 100 * 0.049, 2, 1, true},
+        {"0.051 per codon above the plateau", 100, plateau + 100 * 0.051, 2, 1, false},
+        {"on the ridge, 0.049 above", 100, plateau + 100 * 0.049, T, 0, true},
+        {"on the ridge, 0.051 above", 100, plateau + 100 * 0.051, T, 0, false},
+        {"not converged off the ridge", 100, plateau + 100 * 0.5, 2, 0, true},
+        {"converged on the ridge, far", 100, plateau + 100 * 0.5, T, 1, false},
+    };
+    for (const Gate& g : gates)
+        if (coal::kaks::detail::gy_scan_wanted(g.n, g.lnl, g.t, g.converged, plateau) != g.want) {
+            std::fprintf(stderr, "FAILED: scan_wanted: %s: expected %d\n", g.what, (int)g.want);
+            ++bad;
+        }
     std::printf("%s\n", bad ? "failed" : "ok");
     return bad ? 1 : 0;
 }

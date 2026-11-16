@@ -481,11 +481,14 @@ class TestEdgeCases(GyBase):
           start was made);
         - s2_c14_188, 20 codons: reached from the second best point of the scan only (-154.2312 on the ridge, kappa
           1e-6; saturated -154.2366);
+        - s11_c1_73, 35 codons (so a smaller cutoff for small pairs would miss it), 0.107 lnL per codon above the
+          plateau of saturation (so not scanned for that reason): -277.3324 on the ridge, kappa 26 (warning,
+          t 5.02, -277.7419);
         - b13 and b87, 200 random codons each, more than SCAN_SMALL_PAIR: scanned because the best start ended on
           the ridge next to its plateau, started from a point of the scan higher than it (saturated, 0.18 and 1.49
-          lower)."""
+          lower). Which pairs are scanned is held exactly by tests/cpp/kaks_gy_choose_start.cpp (scan_wanted)."""
         best = {"f1": -16.576072, "s11_c22_656": -8.648831, "s4242_c11_176": -18.773624,
-                "s1_c4_330": -12.984563, "s2_c14_188": -154.231177, "b13": -1611.770170, "b87": -1543.709337}
+                "s1_c4_330": -12.984563, "s2_c14_188": -154.231177, "s11_c1_73": -277.332427, "b13": -1611.770170, "b87": -1543.709337}
         for name, a, b in read_axt(KDIR / "gy_scan.axt"):
             key, code = name.split("&")[0].rsplit("_c", 1)
             r = self.one(a, b, "-c", code)
@@ -501,6 +504,14 @@ class TestEdgeCases(GyBase):
         -35.81142 at t 5.9, was reported."""
         r = self.one("GTCGGGCTCTCCTAC", "CGCTGGATGTAAGCA", "-c", "6")
         self.assertGreater(val(r["lnL"]), -35.8105)
+
+    def test_scan_taken_only_if_higher_after_the_flat_rule(self):
+        """A scan start is taken only if the likelihood reported for it, after the flat-likelihood rule, is higher
+        than without it. TAACCGGTAGAA / CCTCTCCGCTCC under code 11 (AUDIT-103): saturated at -19.974297045 on the
+        ridge (kappa 0.82); a converged scan start within 1e-7 of it replaced it, and the flat rule then reported
+        the bound at -19.974297157 (kappa 1)."""
+        r = self.one("TAACCGGTAGAA", "CCTCTCCGCTCC", "-c", "11", "--digits", "14")
+        self.assertGreater(val(r["lnL"]), -19.97429705)
 
     def test_synonymous_changes_only(self):
         b = self.codonwise({"GCT": "GCA", "GGT": "GGC", "CCC": "CCA", "CTG": "CTA"})

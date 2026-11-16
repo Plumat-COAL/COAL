@@ -930,30 +930,48 @@ Choice choose_start(const std::vector<Fit>& fits) {
 }
 
 // The coarse scan of run_gy (see there): the likelihood, maximised over t from t0, at each point of a grid in kappa and
-// omega (kappa alone when omega is fixed), highest first (ties in the order of the grid). The grids avoid the
-// bounds (an iteration started on a bound sees no gradient in the logarithm and stalls) and span their zones'
-// inner edges, 1e-3 and 99: 6 x 6 points for a small pair, 3 x 3 for a larger one on the ridge (whose cost the
-// scan would otherwise add to every saturated pair of a real data set: 9 points find all but one of the 14
-// random pairs of 60 to 200 codons that 36 find).
-constexpr double SCAN_SMALL[] = {1e-3, 1e-2, 0.1, 1, 10, 99};
-constexpr double SCAN_LARGE[] = {1e-3, 1, 99};
-constexpr size_t SCAN_SMALL_PAIR = 40;   // codons compared: every such pair is scanned, on the finer grid
-// a larger pair on the ridge is scanned if its likelihood is within this, per codon compared, of the plateau of
-// saturation (t to infinity: sum log pi_a pi_b, 2 lconst), where kappa and omega have no gradient left. Random
-// pairs whose scan found a higher maximum were within 0.001 of it; the saturated yeast pairs of docs/kaks.md,
-// whose scan finds nothing, are all more than 0.2 above it.
+// omega (kappa alone when omega is fixed), highest first (ties in the order of the grid). The grid avoids the
+// bounds (an iteration started on a bound sees no gradient in the logarithm and stalls) and spans their zones'
+// inner edges, 1e-3 and 99.
+constexpr double SCAN_GRID[] = {1e-3, 1e-2, 0.1, 1, 10, 99};
+constexpr size_t SCAN_SMALL_PAIR = 40;   // codons compared: every such pair is scanned
+// A larger pair is scanned if its likelihood is within this, per codon compared, of the plateau of saturation (t to
+// infinity: sum log pi_a pi_b, 2 lconst), where kappa and omega have no gradient left, or if its result did not
+// converge (off the ridge). In four samples of random pairs every result of more than 40 codons that the scan raised
+// was within 0.002 of the plateau; every pair of more than 40 codons in the three real data sets of docs/kaks.md is
+// more than 0.18 above it, so none of them is scanned.
 constexpr double SCAN_PLATEAU = 0.05;
 constexpr int SCAN_STARTS = 2;           // starts from the highest points of the scan
+
+// Whether run_gy scans a pair of n codons whose result so far is `now` (plateau: 2 lconst).
+bool scan_wanted(size_t n, const Fit& now, double plateau) {
+    const bool ridge = now.t >= T_MAX * (1 - 1e-3);
+    return n <= SCAN_SMALL_PAIR || (!now.converged && !ridge) || now.lnl - plateau < SCAN_PLATEAU * (double)n;
+}
+
+// The flat-likelihood rule of run_gy: a converged result off the ridge whose likelihood at the bound of t is within
+// 1e-6 of its own is reported at the bound (at_bound: the likelihood there). Leaves the model built at `fit`.
+bool flat_to_bound(GyModel& m, const Fit& fit, double& at_bound) {
+    if (!fit.converged || fit.t >= T_MAX * (1 - 1e-3)) return false;
+    m.build(fit.kappa, fit.omega);
+    at_bound = m.lnl(T_MAX);
+    return at_bound >= fit.lnl - 1e-6;
+}
+
+// The likelihood run_gy reports for `fit` (after the flat-likelihood rule).
+double reported_lnl(GyModel& m, const Fit& fit) {
+    double at_bound = 0;
+    return flat_to_bound(m, fit, at_bound) ? at_bound : fit.lnl;
+}
 
 struct ScanPoint {
     double lnl, kappa, omega, t;
 };
 
-template <size_t N>
-std::vector<ScanPoint> scan_grid(GyModel& m, double t0, bool fix_omega, const double (&values)[N]) {
+std::vector<ScanPoint> scan_grid(GyModel& m, double t0, bool fix_omega) {
     std::vector<ScanPoint> pts;
-    for (const double k : values)
-        for (const double w : values) {
+    for (const double k : SCAN_GRID)
+        for (const double w : SCAN_GRID) {
             const double omega = fix_omega ? 1.0 : w;
             m.build(k, omega);
             double t = t0;
@@ -1040,6 +1058,17 @@ void gy_choose_start(const double* lnl, const double* t, const int* converged, i
     out[1] = c.cand;
     out[2] = c.report;
     out[3] = c.go_on ? 1 : 0;
+}
+
+// gy_scan_wanted: scan_wanted for a pair of n codons whose result has likelihood lnl, branch length t and
+// convergence `converged`, with the plateau of saturation at `plateau`.
+bool gy_scan_wanted(size_t n, double lnl, double t, int converged, double plateau);
+bool gy_scan_wanted(size_t n, double lnl, double t, int converged, double plateau) {
+    Fit f;
+    f.lnl = lnl;
+    f.t = t;
+    f.converged = converged != 0;
+    return scan_wanted(n, f, plateau);
 }
 
 // gy_continue_starts: choose_start and continue_starts for n starts as above, the continuations scripted: the
@@ -1158,52 +1187,55 @@ Result run_gy(const Prepared& p, const GeneticCode& g, const Options&, Result r)
     };
     Choice ch = continue_starts(fits, choose_start(fits), cont, iterations);
     // The coarse scan. On a pair of few codons the likelihood is flat and has several maxima, often with kappa or
-    // omega at a bound, which none of the starts above may reach; and a start that ends on the ridge of saturation
-    // next to its plateau (t to infinity, where kappa and omega have no gradient left) cannot see a higher maximum at
-    // a moderate t or with another kappa (GTGGACAAC / TCCGGGAAG under code 11: every start ended on the ridge, at lnL
-    // -17.3590 or below; the maximum is -16.5761 at t 7.96, kappa 1e-6). So a pair of SCAN_SMALL_PAIR (40) codons or
-    // fewer, a pair whose result so far did not converge, and a pair whose result is on the ridge within SCAN_PLATEAU
-    // of the plateau has its likelihood evaluated on a grid in (kappa, omega), each point maximised over t (scan_grid:
-    // 36 points for a small pair, 9 for another), and is started once more from the two highest points: a small pair
-    // always, any other pair only from a point higher than its result so far (there the extra starts would only repeat
-    // what the starts found). The scan comes after the choice among the starts above and its continuation, which are
-    // as they were without it; the new starts then join that choice (and a continuation, if one of them asks for it),
-    // so the likelihood reported can only be higher (by more than LNL_TIE; within it a converged start can still
-    // replace an unconverged one on the ridge).
+    // omega at a bound, which none of the starts above may reach; and a start that ends next to the plateau of
+    // saturation (t to infinity, where kappa and omega have no gradient left), on the ridge or at a large t, cannot
+    // see a higher maximum elsewhere (GTGGACAAC / TCCGGGAAG under code 11: every start ended on the ridge, at lnL
+    // -17.3590 or below; the maximum is -16.5761 at t 7.96, kappa 1e-6). So a pair that scan_wanted picks
+    // (SCAN_SMALL_PAIR codons or fewer, a result that did not converge, or one within SCAN_PLATEAU per codon of the
+    // plateau) has its likelihood evaluated on a grid of 36 points in (kappa, omega), each maximised over t
+    // (scan_grid), and is started once more from the two highest points: a small pair always, any other pair only from
+    // a point higher than its result so far (there the extra starts would only repeat what the starts found). The scan
+    // comes after the choice among the starts above and its continuation, which are as they were without it; the new
+    // starts then join that choice (and a continuation, if one of them asks for it), and the new choice is taken only
+    // if the likelihood reported for it, after the flat-likelihood rule below, is higher than for the old one.
     {
         const Fit now = fits[(size_t)ch.report];   // (a copy: offer() grows fits)
         const bool small = n <= SCAN_SMALL_PAIR;
-        const bool ridge = now.t >= T_MAX * (1 - 1e-3);
-        const bool unsettled = (!now.converged && !ridge) ||
-                               (ridge && now.lnl - 2 * m.lconst < SCAN_PLATEAU * (double)n);
-        if (small || unsettled) {
+        if (scan_wanted(n, now, 2 * m.lconst)) {
+            const std::vector<Fit> fits_before = fits;
+            const Choice ch_before = ch;
             const double bar = now.lnl;
-            const std::vector<ScanPoint> pts =
-                small ? scan_grid(m, t0, fix_omega, SCAN_SMALL) : scan_grid(m, t0, fix_omega, SCAN_LARGE);
+            const std::vector<ScanPoint> pts = scan_grid(m, t0, fix_omega);
             bool offered = false;
             for (int i = 0; i < SCAN_STARTS && i < (int)pts.size(); ++i) {
                 if (!small && !(pts[(size_t)i].lnl > bar + LNL_TIE)) break;
                 offer(optimise(m, pts[(size_t)i].kappa, pts[(size_t)i].omega, pts[(size_t)i].t, fix_omega));
                 offered = true;
             }
-            if (offered) ch = continue_starts(fits, choose_start(fits), cont, iterations);
+            if (offered) {
+                ch = continue_starts(fits, choose_start(fits), cont, iterations);
+                // taken only if what is reported, after the flat-likelihood rule, is higher than without the scan
+                // (a converged scan start within LNL_TIE of an unconverged ridge result would otherwise replace
+                // it and then, if the likelihood is flat to the bound, be reported up to 1e-6 lower)
+                if (!(reported_lnl(m, fits[(size_t)ch.report]) > reported_lnl(m, now))) {
+                    fits = fits_before;
+                    ch = ch_before;
+                }
+            }
         }
     }
     Fit best = fits[ch.report];
     best.iterations = iterations;
     r.iterations = best.iterations;
-    m.build(best.kappa, best.omega);
     // A likelihood that is flat in t from the estimate to the bound (within 1e-6: one codon, one kind of change,
     // every site different) has its maximum at the bound as much as anywhere: the optimiser stops where the slope
     // falls below its tolerance, which is not an estimate of t. Such a pair is saturated, with t at the bound.
-    bool flat = false;
-    if (best.converged && best.t < T_MAX * (1 - 1e-3)) {
-        const double at_bound = m.lnl(T_MAX);
-        if (at_bound >= best.lnl - 1e-6) {
-            flat = true;
-            best.t = T_MAX;
-            best.lnl = at_bound;
-        }
+    double at_bound = 0;
+    const bool flat = flat_to_bound(m, best, at_bound);
+    m.build(best.kappa, best.omega);
+    if (flat) {
+        best.t = T_MAX;
+        best.lnl = at_bound;
     }
     r.kappa = best.kappa;
     r.rates[0] = r.rates[1] = best.kappa;
