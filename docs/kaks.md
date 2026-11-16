@@ -1077,22 +1077,23 @@ start stopped. Where the first start had to be run a second time with lengthened
 the first run's stop does (`GCTGATCCC` against `GATGCCGCG` under code 4: lnL -12.5851 from the one, -12.5748
 from the other); such a pair gets a ridge start from each. Fixed starts are not a global search, and two kinds of
 pair need more: on a pair of few codons the likelihood is flat and often has its maximum with kappa or omega at a
-bound, where no start may lead; and a start that ends on the ridge stops on a plateau (at t = 50 the likelihood
-hardly depends on kappa and omega) from which a higher maximum elsewhere is out of sight (`GTGGACAAC` against
-`TCCGGGAAG` under code 11: every start ended on the ridge at lnL -17.3590 or below; the maximum is -16.5761 at t
-7.96, kappa 1e-6). So after the starts above (and the continuation of an unconverged one, "Statuses"), a pair of
-40 codons or fewer, a pair whose result did not converge, and a pair whose result is on the ridge with a
-likelihood within 0.05 per codon of the plateau of saturation (t to infinity: the sum of log pi_a pi_b over the
-codon pairs) is also scanned: the likelihood, maximised over t, at the points of a grid in kappa and omega (36 for
-a small pair: 1e-3, 0.01, 0.1, 1, 10, 99 each; 9 for a larger one: 1e-3, 1, 99), and the two highest points are
-started from (a pair of more than 40 codons only from a point higher than its result); a scan start replaces the
-result only if it is higher. Against an independent likelihood and a bounded global search, of 600 random pairs of
-1 to 40 codons (nine genetic codes) 67 were more than 1e-3 below the global maximum without the scan and 4 are
-with it, all four with the maximum on the ridge of saturation at kappa or omega near a bound (three of them
-`saturated` in COAL too, one `warning` with t 9.2 where the maximum has t at 50, 0.097 higher); of 150 random
-pairs of 60 to 200 codons, 14 were and 1 is (0.013 below); of 60 of 300 to 800 codons, 5 were and 2 are (both
-`warning`, not on the ridge). On the three real data sets below the scan changes no row, and GY's time is the
-same. COAL's likelihood is the highest of its starts, not a proven global maximum.
+bound, where no start may lead; and a start that ends next to the plateau of saturation (t to infinity, where the
+likelihood is the sum of log pi_a pi_b over the codon pairs and has no gradient in kappa or omega), on the ridge
+or at a large t, cannot see a higher maximum elsewhere (`GTGGACAAC` against `TCCGGGAAG` under code 11: every start
+ended on the ridge at lnL -17.3590 or below; the maximum is -16.5761 at t 7.96, kappa 1e-6). So after the starts
+above (and the continuation of an unconverged one, "Statuses"), a pair of 40 codons or fewer, a pair whose result
+did not converge, and a pair whose likelihood is within 0.05 per codon of the plateau is also scanned: the
+likelihood, maximised over t, at 36 points of a grid in kappa and omega (1e-3, 0.01, 0.1, 1, 10, 99 each), and the
+two highest points are started from (a pair of more than 40 codons only from a point higher than its result). What
+the scan finds is taken only if the likelihood reported for it is higher than without it, after the
+flat-likelihood rule ("Statuses"). Against an independent likelihood and a bounded global search, the pairs more
+than 1e-3 below the global maximum, without and with the scan, in two sets of samples (this change's and its
+audit's, each with its own search): of random pairs of 1 to 40 codons (nine codes), 67 and 4 of 600, 75 and 8 of
+642; of 60 to 200 codons, 14 and 0 of 150, 11 and 2 of 150; of 300 to 800 codons, 5 and 1 of 60, 9 and 1 of 60.
+Most of the remaining maxima have omega or kappa at a bound, on the ridge or near it, but not all (one pair of 39
+codons has its maximum at kappa 2.0, omega 2.2, 0.055 above COAL's). No pair of more than 40 codons in the three
+real data sets below is within 0.18 per codon of the plateau, so the scan does not touch them, and GY's time is
+the same. COAL's likelihood is the highest of its starts, not a proven global maximum.
 
 **Genetic codes.** `-c` sets the code for GY as for every method, and all 17 tables work (NCBI 1 to 6, 9 to 16,
 21 to 23). The code enters the model in three places, each taken from the table: its stop codons are not states
