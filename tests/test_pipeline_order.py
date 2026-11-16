@@ -66,7 +66,8 @@ class DeepClustInput(PipelineCase):
             'if [ "$1" = version ]; then echo "diamond version 2.2.8"; exit 0; fi\n'
             'db=; out=\n'
             'while [ $# -gt 0 ]; do case "$1" in --db) db=$2; shift;; --out) out=$2; shift;; esac; shift; done\n'
-            f'cp "$db" "{self.tmp}/given_$(basename "$(dirname "$out")").faa"\n'
+            # (the run's folder from --db, DIR/work/proteins.sorted.faa: --out is in a private folder in work/)
+            f'cp "$db" "{self.tmp}/given_$(basename "$(dirname "$(dirname "$db")")").faa"\n'
             "grep '^>' \"$db\" | sed 's/^>//; s/[[:space:]].*//' | awk '{print $1 \"\\t\" $1}' > \"$out\"\n",
             encoding="utf-8")
         fake.chmod(0o755)

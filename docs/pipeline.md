@@ -357,8 +357,27 @@ there, the report lists only the files that are, and the `.tmp` files are remove
 removed by the next run into the folder, which knows the names from `work/outputs.json`). The temporary files are
 created anew (`O_EXCL`, and `O_NOFOLLOW` where the system has it), and the rename replaces whatever has the final
 name: **a symbolic link in the output folder is replaced, never written through** (an output name that is a link
-to another file leaves that file untouched). `report.json` shows the engine's command line with the `.tmp` names
-and `--new-files`, as it ran.
+to another file leaves that file untouched). The same holds in `work/`: the record `outputs.json`, `state.json`,
+the logs, the decompressed and `--prefix-ids` copies of the inputs, and the files that `coal-cpp translate` and
+DIAMOND write there are created anew, a link (or a hard link) with such a name is removed first, never followed;
+`coal-cpp translate` and DIAMOND write into a staging folder of their stage, `work/NAME.staging` (e.g.
+`work/diamond_search.staging`), whose files are then renamed into place, so they never open a name a link could
+have been put at. The folder is made anew for the stage (whatever had its name is removed first, a link unlinked,
+never followed; then it is created with mode 0700, which fails rather than follow a link put there in between) and
+removed after it; the next run removes one that a killed run left (only these names: `translate_query`,
+`translate_subject`, `translate_proteins`, `diamond_search`, `deepclust`, `realign` with `.staging`; nothing else
+in `work/` is touched). The command lines in `report.json` and the logs
+name these folders: to run one again by hand, make the folder first. (Someone who can write `DIR/work` while a run
+is going could still swap the staging folder for a link during the stage, and could change the run's results
+anyway: not guarded against.) A
+folder COAL writes into that is a symbolic link (`DIR/work` itself, `work/logs`, `work/inputs`, or
+`codon_alignments/` / `protein_alignments/` for a run that writes them) is refused with exit 1 before anything
+changes, with or without `--overwrite`: `out/work is a symbolic link (to ...): COAL writes its files only into
+folders inside the output folder, never through a link`. To keep the working files on another file system, give
+`-o` a folder on that file system (`DIR` itself may be a link). On Windows, which has no `O_NOFOLLOW`, a dangling
+link put at a name in the instant between its removal and the creation could still make the file appear at the
+link's target (created there, never an existing file overwritten).
+`report.json` shows the engine's command line with the `.tmp` names and `--new-files`, as it ran.
 
 **One run per folder, and one run's files only.** A run takes the lock `<out_dir>.coal-lock` (next to the real
 folder: a symbolic link to the folder and the folder are one output; COAL's convention for `-o` files) and a
