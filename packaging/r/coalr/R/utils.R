@@ -207,6 +207,13 @@ align_params <- function(matrix, gap_open, gap_extend, end_gaps, max_cells, pres
        free_end_gaps = end_gaps == "free", max_cells = as.numeric(max_cells), tie_break = tie_break)
 }
 
+# attr(, "alignment") of coal_dnds_pairs() / coal_dnds_clusters(): the scoring align_params() resolved, in the
+# arguments' terms (REVIEW-COAL-3 L3: the default is needle's, not pwalign's, and dS can differ between the two)
+alignment_used <- function(ap) {
+  list(matrix = ap$matrix, gap_open = ap$gap_open, gap_extend = ap$gap_extend,
+       end_gaps = if (isTRUE(ap$free_end_gaps)) "free" else "penalized", tie_break = ap$tie_break)
+}
+
 default_threads <- function() getOption("coalr.threads", 1L)
 
 # min_codons / max_ds of coal_dnds_pairs(), coal_dnds_clusters() and coal_kaks(): the flags of

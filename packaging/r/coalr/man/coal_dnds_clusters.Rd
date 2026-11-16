@@ -154,12 +154,25 @@ Clusters in the order of \code{clusters}, pairs 1-2, 1-3, ..., 2-3, ...
 \item \code{alignments} (with \code{keep_alignments = TRUE}): data frame \code{cluster_id}, \code{id}, \code{protein}, \code{codon} for clusters
 aligned as a whole.
 }
+
+Attributes \code{"seconds"} (time in alignment + threading and in Ka/Ks) and \code{"alignment"} (the built-in aligner's
+scoring, as for \code{\link[=coal_dnds_pairs]{coal_dnds_pairs()}}; an \code{msa} or \code{aligner} makes its own alignments).
 }
 \description{
 For each cluster (for example of \verb{diamond deepclust}, or of orthologr's \code{deepclust()}): translate the members,
 take or build their protein alignment, thread the codons and estimate dN, dS and dN/dS for the pairs of the
 cluster; then summarise each cluster. The result matches \code{dnds.tsv} and \code{cluster_summary.tsv} of
 \verb{coal pipeline clusters}.
+}
+\details{
+\strong{Which protein alignment.} By default the proteins are aligned with the scoring of EMBOSS needle, which is
+also that of \verb{coal pipeline}: BLOSUM62, gap open 10, extend 0.5, free end gaps, the leftmost of equally good
+alignments. The R package orthologr aligns as \code{pwalign::pairwiseAlignment()} does (open 14, extend 4, end gaps
+penalised, pwalign's copy of BLOSUM62 and its choice among equally good alignments); \code{preset = "pwalign"} gives
+exactly those alignments. The two give the same alignment for most pairs but not for all, and dS can then
+differ by more than 10 \% (118 of 2,958 \emph{E. coli} / \emph{Salmonella} ortholog pairs with a dS in both, in COAL's
+tutorial 4, docs/tutorials/04-r-coalr.md). Use \code{preset = "pwalign"} to reproduce orthologr's numbers and the
+default to match \verb{coal pipeline}. Attribute \code{"alignment"} of the result records the scoring that was used.
 }
 \section{Protein alignments}{
 

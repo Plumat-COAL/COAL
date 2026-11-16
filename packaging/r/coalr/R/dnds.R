@@ -9,6 +9,16 @@
 #' When every pair fails, a warning gives the common cause (for example the columns of `pairs` are not the query
 #' and subject IDs, or protein sequences were given instead of coding DNA).
 #'
+#' @details
+#' **Which protein alignment.** By default the proteins are aligned with the scoring of EMBOSS needle, which is
+#' also that of `coal pipeline`: BLOSUM62, gap open 10, extend 0.5, free end gaps, the leftmost of equally good
+#' alignments. The R package orthologr aligns as `pwalign::pairwiseAlignment()` does (open 14, extend 4, end gaps
+#' penalised, pwalign's copy of BLOSUM62 and its choice among equally good alignments); `preset = "pwalign"` gives
+#' exactly those alignments. The two give the same alignment for most pairs but not for all, and dS can then
+#' differ by more than 10 % (118 of 2,958 *E. coli* / *Salmonella* ortholog pairs with a dS in both, in COAL's
+#' tutorial 4, docs/tutorials/04-r-coalr.md). Use `preset = "pwalign"` to reproduce orthologr's numbers and the
+#' default to match `coal pipeline`. Attribute `"alignment"` of the result records the scoring that was used.
+#'
 #' @param query_cds,subject_cds Coding sequences: a named character vector (names = IDs), a `DNAStringSet`, a list
 #'   as `seqinr::read.fasta()` returns it, a two-column data frame (ID, sequence) or the path of a FASTA file.
 #'   When an ID occurs twice the first record is used.
@@ -98,7 +108,8 @@
 #'   saturated pairs; there is no estimate (`dN`,
 #'   `dS`, `dNdS`, the SEs, `Nd` and `Sd` are `NA`), and `note` has the values of the last round, which are not
 #'   estimates and can differ between platforms. Rows are in the order of `pairs`. Attribute `"seconds"`: time spent in
-#'   alignment + codon threading and in Ka/Ks.
+#'   alignment + codon threading and in Ka/Ks. Attribute `"alignment"`: the protein-alignment scoring used, a list
+#'   with `matrix`, `gap_open`, `gap_extend`, `end_gaps` (`"free"` or `"penalized"`) and `tie_break` (see Details).
 #'
 #' @examples
 #' q <- c(g1 = "ATGGCTAAAGGTCTGGAACGTTAA", g2 = "ATGAAACCCGGGTTTTAG")
@@ -166,6 +177,7 @@ coal_dnds_pairs <- function(query_cds, subject_cds, pairs = NULL, methods = "YN"
                     terminal_stops == "compare", keep_alignments, com$twosubs, com$min_sites)
   out <- flag_pairs(pair_table(raw, member_ids), flags)
   attr(out, "seconds") <- raw$seconds
+  attr(out, "alignment") <- alignment_used(ap)
   # After the table is complete, so that a warning never changes a value (new-user audit 2026-11-14, U02, U18)
   if (is.null(pairs)) warn_position_pairs(names(q), names(s), out)
   warn_all_failed(out, n, by_position, id1, id2, qi, si, q, s)
