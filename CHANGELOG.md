@@ -107,6 +107,13 @@
   1.8e-7, the tolerance of the flat-likelihood rule, which now calls them `saturated`); 39 flat pairs of 2 to 4 codons
   go from `ok` or `warning` to `saturated` and one back. Against 0.6.0 one pair of the 25,200 has a lower likelihood
   (3 codons, saturated in both, 0.010 lower since the change above).
+- `coal pipeline clusters --keep-protein-alignments` (or `--keep-alignments`): when the engine step ends while an
+  alignment folder it writes is not there (`os.makedirs` failed: permission denied, disk full), the run now records
+  an empty list of files for it in `work/outputs.json`. It recorded none, which means "every `.fasta` here is the
+  run's", so a `protein_alignments/` you made afterwards had every `.fasta` in it removed by the next run into `DIR`;
+  now they are yours (kept, and a run writing that folder is refused as for any file of yours there). The warning
+  for a list that could not be written now says what follows: the next run takes every `.fasta` file there for this
+  run's (it said the next run keeps them).
 
 ### Added
 
@@ -125,9 +132,6 @@
   for some pairs (118 of 2,958 in tutorial 4). (Final review of 2026-11-16, L3.)
 - `nightly.yml` job `msa-tools`: Clustal Omega and MAFFT installed with no fallback, and the cluster-mode MSA tests
   must not skip for want of them (ci.yml's install stays best effort). (Final review of 2026-11-16, L4.)
-
-### Added
-
 - **GY is validated on every genetic code** (NCBI 1 to 6, 9 to 16, 21 to 23; the audits of 0.6.0 covered the
   standard code and three pairs of code 2). No change was needed: per code, the stop codons are out of the
   chain's states and of the F3x4 frequencies, synonymous / nonsynonymous follows the code, and columns with a
@@ -138,6 +142,17 @@
   printed digits. Tests: `tests/test_kaks_gy.py::TestGeneticCodes` (20 pairs under ten non-standard codes with
   codeml's stored output, `tests/kaks/make_gy_code_fixtures.py`; the likelihood from the definition under
   codes 2, 4, 11, 12, 14, 16, 21, 22, 23; the stop codons of codes 1, 2 and 4). docs/kaks.md, "Genetic codes".
+
+### Internal
+
+- `coal pipeline`: the record of whose files are in the output folder (`work/outputs.json`: what an earlier run
+  wrote, the checks before a run changes anything, the clean-up at its start, the alignment-folder lists around the
+  engine) is its own module, `src/coal/outputs_record.py` (class `OutputsRecord`), out of `dnds_pipeline.py`
+  (4,447 lines, 86 methods in `_Run`), with unit tests that need no engine (`tests/test_outputs_record.py`: the
+  user's `.fasta` kept, a killed run resumed, a foreign `work/` and `--report` refused, tampered lists, 0.6.0
+  records, `.FASTA`). Behaviour unchanged but for the fix above: the same files, byte for byte, on `examples/dnds`
+  and the cluster fixture. Comments in `dnds_pipeline.py` cite the pull request of a change instead of review
+  documents that are not in the repository.
 
 ## 0.6.0 — 2026-11-15
 
