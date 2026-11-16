@@ -5,6 +5,7 @@ import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 AUTHORS = ["Chloe Newton", "Keanu Murati"]
+HANDLES = ["chloe-newt", "Keanu-MUR"]
 
 
 def _read(*parts):
@@ -24,6 +25,14 @@ class TestAuthors(unittest.TestCase):
         head = _read("CITATION.cff").split("references:")[0]
         names = [f"{g} {f}" for g, f in re.findall(r"- given-names: (\S+)\n\s+family-names: (\S+)", head)]
         self.assertEqual(names, AUTHORS)
+        for handle in HANDLES:  # GitHub profiles, so each author's credit links to them
+            self.assertIn(f'    alias: {handle}\n    website: "https://github.com/{handle}"', head)
+
+    def test_readme_authors_section(self):
+        readme = _read("README.md")
+        section = readme[readme.index("\n## Authors\n"):]
+        for name, handle in zip(AUTHORS, HANDLES):
+            self.assertIn(f"**{name}** ([@{handle}](https://github.com/{handle}))", section)
 
     def test_coalr_description(self):
         desc = _read("packaging", "r", "coalr", "DESCRIPTION")
