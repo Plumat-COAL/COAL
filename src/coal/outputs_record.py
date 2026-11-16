@@ -307,6 +307,20 @@ class OutputsRecord:
                       and (n not in listed if listed is not None else not n.endswith(".fasta")))
 
     # -- before anything changes
+    def check_before_start(self, report=None, report_is_default: bool = False, writes: Iterable[str] = (), *,
+                           check_inputs: Callable[[], tuple] = lambda: ((), False), overwrite: bool = False) -> None:
+        """Every check a run makes before it changes anything in the folder, in the order that decides which
+        refusal a run gets: --report that is not a regular file (check_report_path); check_inputs(), the caller's
+        own checks of its inputs, which returns (the names it plans to write, whether it reads
+        DIR/orthologs.tsv in place); what an earlier run wrote and the alignment folders this run writes
+        (read_earlier); the names it writes, work/ and --report FILE (check_foreign). OutputsRefused (or what
+        check_inputs raises) on the first refusal."""
+        check_report_path(report)
+        planned, pairs_in_place = check_inputs()
+        self.read_earlier(report, report_is_default, writes)
+        self.check_foreign(planned, overwrite=overwrite, pairs_in_place=pairs_in_place, report=report,
+                           report_is_default=report_is_default)
+
     def check_foreign(self, planned: Iterable[str], *, overwrite: bool = False, pairs_in_place: bool = False,
                       report=None, report_is_default: bool = False) -> None:
         """Refuse (OutputsRefused), before anything in the folder is removed or written, a run whose outputs

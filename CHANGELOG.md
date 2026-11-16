@@ -128,6 +128,12 @@
   records, `.FASTA`). Behaviour unchanged but for the fix above: the same files, byte for byte, on `examples/dnds`
   and the cluster fixture. Comments in `dnds_pipeline.py` cite the pull request of a change instead of review
   documents that are not in the repository.
+- `coal.outputs_record`: `OutputsRecord.check_before_start()` is the sequence of checks `_Run.start()` makes
+  (`--report` path, the run's inputs, earlier outputs and alignment folders, output names, `work/`, `--report FILE`),
+  so the unit tests run that same sequence; `open_new` / `open_append` / `remove_file` write without following
+  links. The alignment-folder options of `_Run` come from `outputs_record.ALIGNMENT_DIRS`. Tests for four rules no
+  test caught when broken on purpose (a record's `read_in_place` voids the report's list, a broken link at a
+  recorded name, a `work/logs` link, a named pipe as `work/outputs.json`).
 
 ## 0.6.0 — 2026-11-15
 

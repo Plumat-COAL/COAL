@@ -22,6 +22,7 @@ build/coal-cpp, COAL_CPP_BIN).
 """
 from __future__ import annotations
 
+import contextlib
 import errno
 import io
 import json
@@ -38,11 +39,12 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "tests"))
+from test_dnds_pipeline import FAM, PipelineCase, needs_cpp, read_fasta  # noqa: E402
+
 from coal import __version__  # noqa: E402
 from coal import dnds_pipeline as P  # noqa: E402
 from coal import outputs_record as R  # noqa: E402
 from coal.outputs_record import OutputsRecord, OutputsRefused  # noqa: E402
-from test_dnds_pipeline import FAM, PipelineCase, needs_cpp, read_fasta  # noqa: E402
 
 SCHEMA = "coal.pipeline/1"
 CODON, PROT = "codon_alignments", "protein_alignments"
@@ -89,13 +91,16 @@ class Folder(unittest.TestCase):
         owned.read_earlier(report, report_is_default, writes)
         return owned
 
-    def start(self, writes=(), planned=PLANNED, keep=(), is_input=lambda p: None, **check) -> OutputsRecord:
-        """A run's start: what the earlier run wrote, the checks, its clean-up, the new record (written)."""
-        owned = self.earlier(writes, check.get("report"), check.get("report_is_default", False))
-        owned.check_foreign(planned, **check)
+    def start(self, writes=(), planned=PLANNED, keep=(), is_input=lambda p: None, report=None,
+              report_is_default=False, overwrite=False, pairs_in_place=False) -> OutputsRecord:
+        """A run's start as _Run.start makes it: the checks (check_before_start, the same sequence), the clean-up,
+        the new record (written)."""
+        owned = OutputsRecord(str(self.out), SCHEMA)
+        owned.check_before_start(report, report_is_default, writes, check_inputs=lambda: (planned, pairs_in_place),
+                                 overwrite=overwrite)
         owned.clear(keep, is_input)
         (self.out / "work" / "logs").mkdir(parents=True, exist_ok=True)
-        owned.new_record([n for n in planned if not (n == "orthologs.tsv" and check.get("pairs_in_place"))], writes)
+        owned.new_record([n for n in planned if not (n == "orthologs.tsv" and pairs_in_place)], writes)
         owned.write()
         return owned
 
@@ -589,6 +594,100 @@ class AlignmentFolderNotMade(PipelineCase):
             res = P.run_clusters(FAM, out, clusters=tsv)
         self.assertEqual(res.exit_code, 2, err.getvalue())     # (one record of the fixture is not usable)
         self.assertEqual(sorted(os.listdir(out / PROT)), ["mine.fasta"])
+
+
+class Gaps(Folder):
+    """Rules no test caught when they were broken on purpose (AUDIT-99, S1)."""
+
+    def test_a_record_with_read_in_place_makes_the_reports_list_void(self):
+        """#87: a record that says what was read in place replaces the report's list: a user's own orthologs.tsv
+        that the report names (it was read in place) is not COAL's."""
+        self.write_record({"coal_version": "0.6.0", "files": ["dnds.tsv"], "read_in_place": []})
+        self.put("report.json", json.dumps({"schema": SCHEMA, "outputs": {"orthologs": "orthologs.tsv"}}))
+        self.put("orthologs.tsv", "mine\n")
+        owned = self.earlier()
+        self.assertEqual(owned.listed, set())
+        with self.assertRaisesRegex(OutputsRefused, "already holds orthologs.tsv"):
+            owned.check_foreign(["orthologs.tsv"])
+
+    def test_a_broken_link_at_a_recorded_name_is_removed(self):
+        self.write_record({"coal_version": "0.6.0", "files": ["dnds.tsv"], "read_in_place": []})
+        self.symlink(self.tmp / "nowhere", self.out / "dnds.tsv")
+        self.earlier().clear()
+        self.assertFalse(os.path.lexists(self.out / "dnds.tsv"))
+
+    def test_a_logs_link_is_not_coals_mark_on_work(self):
+        (self.out / "work").mkdir()
+        elsewhere = self.tmp / "empty"
+        elsewhere.mkdir()
+        self.symlink(elsewhere, self.out / "work" / "logs")      # work/ holds only "logs", an empty folder's link
+        self.assertFalse(self.earlier().work_is_coal)
+        with self.assertRaisesRegex(OutputsRefused, "work exists and no COAL run made it"):
+            self.earlier().check_foreign(PLANNED)
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "named pipes (POSIX)")
+    def test_a_named_pipe_is_never_opened(self):
+        """starts_like_coal_record() and read_earlier() on a work/outputs.json (or report.json) that is a named
+        pipe: not opened (open() would wait for a writer for ever)."""
+        import threading
+        (self.out / "work").mkdir()
+        fifo = self.out / "work" / "outputs.json"
+        os.mkfifo(fifo)
+        os.mkfifo(self.out / "report.json")
+        got = []
+        t = threading.Thread(target=lambda: got.append((R.starts_like_coal_record(str(fifo)),
+                                                        self.earlier().work_is_coal)), daemon=True)
+        t.start()
+        t.join(10)
+        if t.is_alive():      # (let the blocked open() go: a writer that comes and goes)
+            for p in (fifo, self.out / "report.json"):
+                with contextlib.suppress(OSError):
+                    os.close(os.open(p, os.O_WRONLY | os.O_NONBLOCK))
+            t.join(10)
+            self.fail("a named pipe was opened")
+        self.assertEqual(got, [(False, False)])
+
+
+class TheOrderOfTheChecks(Folder):
+    """check_before_start, the sequence _Run.start runs: the first refusal is the one a run gets."""
+
+    def test_report_path_then_inputs_then_folders_then_names(self):
+        self.put("work/notes.txt")                         # a work/ of the user's ...
+        self.put("dnds.tsv")                               # ... an output name no run wrote ...
+        self.put(f"{CODON}/data.txt")                      # ... an alignment folder no run wrote
+        d = self.tmp / "reports"
+        d.mkdir()
+        calls = []
+
+        def inputs():
+            calls.append("inputs")
+            raise RuntimeError("an input is a file this run writes")
+        owned = OutputsRecord(str(self.out), SCHEMA)
+        with self.assertRaisesRegex(OutputsRefused, "is a folder"):
+            owned.check_before_start(str(d), writes=(CODON,), check_inputs=inputs)
+        self.assertEqual(calls, [])                        # --report first: the inputs were not looked at
+        with self.assertRaisesRegex(RuntimeError, "an input"):
+            owned.check_before_start(None, writes=(CODON,), check_inputs=inputs)
+        ok = lambda: (PLANNED, False)                      # noqa: E731
+        with self.assertRaisesRegex(OutputsRefused, "was not written by a COAL run: --keep-alignments"):
+            owned.check_before_start(None, writes=(CODON,), check_inputs=ok)
+        with self.assertRaisesRegex(OutputsRefused, "already holds dnds.tsv"):
+            owned.check_before_start(None, check_inputs=ok)
+        (self.out / "dnds.tsv").unlink()
+        rp = self.tmp / "mine.json"
+        rp.write_text("{}", encoding="utf-8")
+        with self.assertRaisesRegex(OutputsRefused, "is not a COAL report"):
+            owned.check_before_start(str(rp), check_inputs=ok)
+        with self.assertRaisesRegex(OutputsRefused, "work exists and no COAL run made it"):
+            owned.check_before_start(None, check_inputs=ok)
+        owned.check_before_start(str(rp), check_inputs=ok, overwrite=True)
+
+    def test_the_planned_names_come_from_check_inputs(self):
+        self.put("orthologs.tsv", "mine\n")
+        owned = OutputsRecord(str(self.out), SCHEMA)
+        owned.check_before_start(check_inputs=lambda: (["orthologs.tsv"], True))     # read in place
+        with self.assertRaisesRegex(OutputsRefused, "already holds orthologs.tsv"):
+            owned.check_before_start(check_inputs=lambda: (["orthologs.tsv"], False))
 
 
 class NoLinkIsWrittenThrough(Folder):

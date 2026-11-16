@@ -59,9 +59,10 @@ from . import __version__
 from . import align as _align
 from . import msa as _msa
 from .core import CoalError
+from .outputs_record import ALIGNMENT_DIRS as _ALIGNMENT_FLAGS
 from .outputs_record import RUN_OUTPUTS as _RUN_OUTPUTS  # noqa: F401  (these four: the names they had here)
 from .outputs_record import RUN_TABLES as _RUN_TABLES  # noqa: F401
-from .outputs_record import OutputsRecord, OutputsRefused, check_report_path, open_append, open_new, remove_file
+from .outputs_record import OutputsRecord, OutputsRefused, open_append, open_new, remove_file
 from .outputs_record import is_coal_report as _is_coal_report  # noqa: F401
 from .outputs_record import starts_like_coal_record as _starts_like_coal_record  # noqa: F401
 from .pipeline import release_output_lock, take_output_lock
@@ -1193,16 +1194,15 @@ class _Run:
         except CoalError as e:
             raise PipelineError(str(e).replace("write to another file", "use another output folder")) from None
         try:
+            def inputs():
+                self._check_inputs()     # (PipelineError: a run that would write onto one of its inputs)
+                return self._planned_outputs(), self.pairs_in_place
             try:
-                # (in this order: the first refusal is the one a run gets)
-                check_report_path(self.a.report)    # --report a folder, a named pipe, a device: always refused
-                self._check_inputs()
-                # what earlier COAL runs wrote here; an alignment folder this run writes that holds what no run
-                # wrote there, an output name, a work/ or a --report FILE that is not COAL's: refused
-                self.owned.read_earlier(self.a.report, self._report_is_default(), self._writes_alignment_folders())
-                self.owned.check_foreign(self._planned_outputs(), overwrite=getattr(self.a, "overwrite", False),
-                                         pairs_in_place=self.pairs_in_place, report=self.a.report,
-                                         report_is_default=self._report_is_default())
+                # --report, this run's inputs, what earlier COAL runs wrote here and the names this run writes, in
+                # that order (OutputsRecord.check_before_start)
+                self.owned.check_before_start(self.a.report, self._report_is_default(),
+                                              self._writes_alignment_folders(), check_inputs=inputs,
+                                              overwrite=getattr(self.a, "overwrite", False))
             except OutputsRefused as e:
                 raise PipelineError(str(e)) from None
         except PipelineError:
@@ -1501,8 +1501,9 @@ class _Run:
                     raise PipelineError(f"{opt} {inp} is inside {d}, a folder this run writes: nothing was "
                                         "changed. Use another output folder, or move the input out of it")
 
-    # the folders of per-cluster alignment files (cluster mode): name -> the option that writes it
-    _ALIGNMENT_DIRS = {"codon_alignments": "keep_alignments", "protein_alignments": "keep_protein_alignments"}
+    # the folders of per-cluster alignment files (cluster mode): name -> the argparse attribute of the option that
+    # writes it ("--keep-alignments" -> keep_alignments; outputs_record.ALIGNMENT_DIRS has the folders and options)
+    _ALIGNMENT_DIRS = {name: flag[2:].replace("-", "_") for name, flag in _ALIGNMENT_FLAGS.items()}
 
     def _writes_alignment_folders(self) -> list[str]:
         """The per-cluster alignment folders this run writes (cluster mode, --keep-alignments /
