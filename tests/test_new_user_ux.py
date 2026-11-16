@@ -75,7 +75,11 @@ class TestInstallTexts(unittest.TestCase):
                 self.assertIn(BANNER_MARK, text, p)
                 block = text[text.index(BANNER_MARK):][:1500]
                 self.assertIn(__version__, block, p)
-                for must in ("0.5.0", "git clone https://github.com/plumat-coal/COAL", "python -m pip install -e .",
+                # a patch line (0.6.1.dev0) names the release it follows (0.6.0); the first of a minor line
+                # (0.6.0.dev0) names whatever the latest release is, which the version alone does not give
+                x, y, z = (int(n) for n in __version__.split(".dev")[0].split("."))
+                follows = [f"{x}.{y}.{z - 1}"] if z else []
+                for must in (*follows, "git clone https://github.com/plumat-coal/COAL", "python -m pip install -e .",
                              "cmake -S . -B build -DCMAKE_BUILD_TYPE=Release", "export COAL_CPP=$PWD/build/coal-cpp"):
                     self.assertIn(must, block, p)
                 self.assertLess(text.index(BANNER_MARK), 1200, f"{p}: the banner belongs at the top")

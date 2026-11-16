@@ -18,9 +18,26 @@ numbers: the in-process functions compile the same C++ sources as `coal-cpp`.
 
 ## Install
 
+From a release: each release of COAL from 0.6.1 on has the package as a file, `coalr_<version>.tar.gz` (built,
+installed and run by the release workflow; its version is COAL's):
+
 ```r
+install.packages("Rcpp")   # a file is installed without its dependencies; install_github() gets them itself
+install.packages("https://github.com/Plumat-COAL/COAL/releases/download/v0.6.1/coalr_0.6.1.tar.gz",
+                 repos = NULL, type = "source")
+# or the same version from its tag:
 # install.packages("remotes")
-remotes::install_github("Plumat-COAL/COAL", subdir = "packaging/r/coalr")
+remotes::install_github("Plumat-COAL/COAL@v0.6.1", subdir = "packaging/r/coalr")
+```
+
+<!-- until 0.6.1 is published (tests/test_docs_site.py): remove this note at the release -->
+Until 0.6.1 is published, there is no v0.6.1 for these lines to install. 0.6.0 has no `coalr` file; its package
+is installed from its tag: `remotes::install_github("Plumat-COAL/COAL@v0.6.0", subdir = "packaging/r/coalr")`.
+
+**Development version** (`main`, a `coalr` of R's development form, e.g. 0.6.1.9000; it can change at any time):
+
+```r
+remotes::install_github("Plumat-COAL/COAL", subdir = "packaging/r/coalr")   # development version
 ```
 
 or from a clone: `R CMD INSTALL packaging/r/coalr`. The package is self-contained: `src/coal/` holds a copy of
@@ -90,6 +107,16 @@ res <- coal_dnds_pairs("thaliana_cds.fasta", "lyrata_cds.fasta",
   such pairs in `summary$n_not_converged`, not in `n_ok`.
 - Alignment options are those of the command line: `matrix`, `gap_open`, `gap_extend`, `end_gaps`, `max_cells`,
   `preset = "pwalign"`; `code` is the NCBI genetic code; `yn_flavour`, `yn_weighting` as in [kaks.md](kaks.md).
+- **Which protein alignment.** By default `coal_dnds_pairs()` and `coal_dnds_clusters()` score protein alignments
+  as EMBOSS needle does and as `coal pipeline` does: BLOSUM62, gap open 10, extend 0.5, free end gaps, the
+  leftmost of equally good alignments ([alignment.md](alignment.md)). orthologr aligns as
+  `pwalign::pairwiseAlignment()` does (open 14, extend 4, end gaps penalised, pwalign's BLOSUM62 and its choice
+  among equally good alignments); `preset = "pwalign"` gives exactly those alignments. The two scorings give the
+  same alignment for most pairs, but not all, and dS can then differ by more than 10%: in
+  [tutorial 4](tutorials/04-r-coalr.md) that is 118 of the 2,958 *E. coli* / *Salmonella* pairs with a dS in
+  both. To reproduce orthologr's numbers use `preset = "pwalign"`; to match `coal pipeline`, the default. The
+  scoring a call used is `attr(res, "alignment")` (`matrix`, `gap_open`, `gap_extend`, `end_gaps`,
+  `tie_break`), next to `attr(res, "seconds")`.
 - `methods` takes KaKs_Calculator's seven names (`"ALL"` for these seven) and `"Comeron"` (alias `"C95"`) and
   `"Li"`, the two methods of the R package orthologr that need no KaKs_Calculator, in any case. Comeron and Li
   need `code = 1`. `comeron_flavour = "gestimator"` gives the numbers of orthologr 0.4.3's `gestimator()`

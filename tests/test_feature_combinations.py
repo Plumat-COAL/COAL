@@ -344,6 +344,8 @@ class TestMrg8Version(unittest.TestCase):
         # the website) name the release it becomes, the R package has R's development form, and the changelog's
         # section is still "Unreleased".
         shown = numeric if dev else v
+        # a prerelease (0.6.1rc1) has no R form (scripts/release_version.py r_version): DESCRIPTION is not checked
+        pre = re.search(r"(a|b|rc)\d+$", v) is not None
         r_v = f"{numeric}.{9000 + int(dev.group(2))}" if dev else v
         checks = [("pyproject.toml", f'version = "{v}"'), ("CMakeLists.txt", f"VERSION {numeric} "),
                   ("CMakeLists.txt", f'set(COAL_VERSION_FULL "{v}")'),
@@ -356,10 +358,36 @@ class TestMrg8Version(unittest.TestCase):
                   ("site/cite.html", f"<span data-version-ref>{shown}</span>"),
                   ("CHANGELOG.md", "## Unreleased" if dev else f"## {v}")]
         self.assertTrue((ROOT / "pyproject.toml").exists())
+        if pre:
+            checks = [c for c in checks if c[0] != "packaging/r/coalr/DESCRIPTION"]
         for rel, want in checks:
             path = ROOT / rel
             if path.exists():
                 self.assertIn(want, path.read_text(encoding="utf-8"), rel)
+
+    def test_a_release_has_nothing_unreleased(self):
+        """No build of a release version may carry changes the release does not describe: once the version is
+        X.Y.Z (not X.Y.Z.devN) the text between "## Unreleased" and the next "## " heading must be empty. The
+        version is bumped to the next .dev0 in the first change after a release (main said 0.6.0 for #95-#98)."""
+        path = ROOT / "CHANGELOG.md"
+        if not path.exists():
+            self.skipTest("CHANGELOG.md is not in this copy of the repository")
+        text = path.read_text(encoding="utf-8")
+        self.assertEqual(unreleased_entries("# Changelog\n\n## Unreleased\n\n## 1.0.0\n\n- x\n"), "")
+        self.assertEqual(unreleased_entries("# Changelog\n\n## Unreleased\n\n- y\n\n## 1.0.0\n\n- x\n"), "- y")
+        self.assertEqual(unreleased_entries("# Changelog\n\n## Unreleased\n\n### Fixed\n\n- y\n"), "### Fixed\n\n- y")
+        self.assertEqual(unreleased_entries("# Changelog\n\n## 1.0.0\n\n- x\n"), "")
+        if not re.search(r"\.dev\d+$", __version__):
+            self.assertEqual(unreleased_entries(text), "",
+                             f"{__version__} is a release version, but CHANGELOG.md has entries under \"## Unreleased\": "
+                             f"bump to the next X.Y.Z.dev0 (scripts/release_version.py) or move them into \"## {__version__}\"")
+
+
+def unreleased_entries(text: str) -> str:
+    """The text between "## Unreleased" and the next "## " heading, stripped ("" without the heading); the same rule
+    as scripts/release_version.py unreleased_text()."""
+    m = re.search(r"(?m)^## Unreleased[ \t]*\n(.*?)(?=^## |\Z)", text, re.S)
+    return m.group(1).strip() if m else ""
 
 
 if __name__ == "__main__":

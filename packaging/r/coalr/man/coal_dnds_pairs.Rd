@@ -143,7 +143,8 @@ limit without settling (or the optimisation of GY did not converge), which happe
 saturated pairs; there is no estimate (\code{dN},
 \code{dS}, \code{dNdS}, the SEs, \code{Nd} and \code{Sd} are \code{NA}), and \code{note} has the values of the last round, which are not
 estimates and can differ between platforms. Rows are in the order of \code{pairs}. Attribute \code{"seconds"}: time spent in
-alignment + codon threading and in Ka/Ks.
+alignment + codon threading and in Ka/Ks. Attribute \code{"alignment"}: the protein-alignment scoring used, a list
+with \code{matrix}, \code{gap_open}, \code{gap_extend}, \code{end_gaps} (\code{"free"} or \code{"penalized"}) and \code{tie_break} (see Details).
 }
 \description{
 For every pair: translate both coding sequences (CDS), align the proteins globally (Needleman-Wunsch,
@@ -155,6 +156,15 @@ columns of \code{dnds.tsv} of \verb{coal pipeline pairs}.
 One bad gene or pair never stops the call: the pair's row gets \code{status = "error"} and the reason in \code{note}.
 When every pair fails, a warning gives the common cause (for example the columns of \code{pairs} are not the query
 and subject IDs, or protein sequences were given instead of coding DNA).
+
+\strong{Which protein alignment.} By default the proteins are aligned with the scoring of EMBOSS needle, which is
+also that of \verb{coal pipeline}: BLOSUM62, gap open 10, extend 0.5, free end gaps, the leftmost of equally good
+alignments. The R package orthologr aligns as \code{pwalign::pairwiseAlignment()} does (open 14, extend 4, end gaps
+penalised, pwalign's copy of BLOSUM62 and its choice among equally good alignments); \code{preset = "pwalign"} gives
+exactly those alignments. The two give the same alignment for most pairs but not for all, and dS can then
+differ by more than 10 \% (118 of 2,958 \emph{E. coli} / \emph{Salmonella} ortholog pairs with a dS in both, in COAL's
+tutorial 4, docs/tutorials/04-r-coalr.md). Use \code{preset = "pwalign"} to reproduce orthologr's numbers and the
+default to match \verb{coal pipeline}. Attribute \code{"alignment"} of the result records the scoring that was used.
 }
 \examples{
 q <- c(g1 = "ATGGCTAAAGGTCTGGAACGTTAA", g2 = "ATGAAACCCGGGTTTTAG")

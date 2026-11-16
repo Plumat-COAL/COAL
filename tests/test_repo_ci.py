@@ -270,8 +270,8 @@ class TestNightlyWorkflow(unittest.TestCase):
 
     def test_every_job_has_a_timeout_and_no_write_permission(self):
         jobs = self._jobs()
-        self.assertEqual(sorted(jobs), ["cpp-extras", "engine-fuzz", "kaks-properties", "pal2nal-fuzz", "sanitizers", "tsan",
-                                        "tutorials"])
+        self.assertEqual(sorted(jobs), ["cpp-extras", "engine-fuzz", "kaks-properties", "msa-tools", "pal2nal-fuzz",
+                                        "sanitizers", "tsan", "tutorials"])
         for j in jobs:
             job = self._job(j)
             self.assertRegex(job, r"(?m)^    timeout-minutes: \d+", j)
@@ -309,6 +309,34 @@ class TestNightlyWorkflow(unittest.TestCase):
         self.assertIn("engine-fuzz-keep/", job)
         self.assertTrue(os.path.isfile(os.path.join(ROOT, "tests", "tools", "engine_fuzz.py")))
         self.assertTrue(os.path.isfile(os.path.join(ROOT, "tests", "test_engine_fuzz.py")))  # the tool's own test
+
+    def test_msa_tools_job(self):
+        """ci.yml installs Clustal Omega and MAFFT best effort, so its MSA tests may skip: here the install must
+        succeed and those tests must not skip for want of the tools (REVIEW-COAL-3 L4)."""
+        job = self._job("msa-tools")
+        self.assertIn("python -m coal pipeline install clustalo mafft\n", job)
+        self.assertIn("assert c and m", job)
+        self.assertNotIn("|| {", job.split("Install Clustal Omega", 1)[1].split("- name:", 1)[0])   # no fallback
+        self.assertIn('python .github/ci_cpp_tests.py --no-skip "$mods"', job)
+        mods = re.search(r"mods=(\S+)", job).group(1).split(",")
+        for m in ("test_msa", "test_dnds_pipeline", "test_pipeline_provenance"):
+            self.assertIn(m, mods)
+        for m in mods:
+            self.assertTrue(os.path.isfile(os.path.join(ROOT, "tests", m + ".py")), m)
+        allow = re.search(r"--allow '([^']+)'", job).group(1)
+        # every skip reason may stay, except one that names the MSA tools
+        rx = re.compile(allow, re.I)
+        for reason in ("needs coal-cpp and Clustal Omega", "needs MAFFT", "neither clustalo nor mafft found"):
+            self.assertIsNone(rx.search(reason), reason)
+        for reason in ("POSIX shell stand-ins", "symbolic links need a privilege on Windows", "Biopython missing"):
+            self.assertIsNotNone(rx.search(reason), reason)
+        for env in ("COAL_REQUIRE_CPP", "COAL_REQUIRE_ALIGN", "COAL_REQUIRE_DIAMOND=1"):
+            self.assertIn(env, job)
+        # ci.yml's install stays best effort (it says so) and this job is what makes up for it
+        ci_step = re.search(r"\n((?:      #[^\n]*\n)*)      - name: Install Clustal Omega and MAFFT.*?\n(?=      - name:)",
+                            self.ci, re.S).group(0)
+        self.assertIn("continue-on-error: true", ci_step)
+        self.assertIn("nightly.yml msa-tools", ci_step)
 
     def test_sanitizer_job(self):
         job = self._job("sanitizers")

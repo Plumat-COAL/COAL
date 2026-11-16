@@ -2,6 +2,7 @@
 import importlib.util
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -50,10 +51,17 @@ def platform_wheel_tags():
 
 
 def release_file_names(version="9.9.9"):
-    """The exact file list the release job checks (step "Check the release files"), with ${V} filled in."""
-    run = _steps(_workflow("release.yml"), "release")["Check the release files"]["run"]
+    """The exact file list release.yml checks (the files job, step "Check the release files"), with ${V} filled in
+    and, when the version has an R form (not a prerelease), coalr's files with ${R_V} = r_version(version)."""
+    run = _steps(_workflow("release.yml"), "files")["Check the release files"]["run"]
     block = re.search(r"expected=\((.*?)\)", run, re.S).group(1)
-    return [n.replace("${V}", version) for n in re.findall(r'"([^"]+)"', block)]
+    names = re.findall(r'"([^"]+)"', block)
+    r_v = _load("release_version").r_version(version.replace("${V}", "9.9.9"))
+    if r_v:
+        extra = re.search(r'if \[ -n "\$R_V" \]; then expected\+=\((.*?)\); fi', run, re.S)
+        names += re.findall(r'"([^"]+)"', extra.group(1))
+    r_name = "${R_V}" if version == "${V}" else (r_v or "")
+    return [n.replace("${V}", version).replace("${R_V}", r_name) for n in names]
 
 
 class TestReleaseScripts(unittest.TestCase):
@@ -73,8 +81,9 @@ class TestReleaseScripts(unittest.TestCase):
         else:
             self.assertEqual(rv.check("v" + init), (init, bool(re.search(r"(a|b|rc)\d+$", init))))
         self.assertEqual([rv.base_version(v) for v in ("0.6.0.dev0", "0.5.0rc1", "0.5.0")], ["0.6.0", "0.5.0", "0.5.0"])
-        self.assertEqual([rv.r_version(v) for v in ("0.6.0.dev0", "0.6.0.dev3", "0.6.0")],
-                         ["0.6.0.9000", "0.6.0.9003", "0.6.0"])
+        self.assertEqual([rv.r_version(v) for v in ("0.6.0.dev0", "0.6.0.dev3", "0.6.0", "0.6.1rc1", "1.0.0b2")],
+                         ["0.6.0.9000", "0.6.0.9003", "0.6.0", None, None])
+        self.assertEqual(rv.description_version(), rv.r_version(init) or rv.description_version())
         for bad in ("v9.9.9", init, "v" + init + "x", "", "release-" + init):
             with self.assertRaises(ValueError, msg=bad):
                 rv.check(bad)
@@ -84,6 +93,77 @@ class TestReleaseScripts(unittest.TestCase):
         self.assertIn("bump all six", r.stderr)
         self.assertIn("cpp/src/main.cpp", r.stderr)
         self.assertIn("apps/coal-app/pyproject.toml", r.stderr)
+
+    def test_dry_run_and_release_conditions(self):
+        """--dry-run (release.yml dispatched with publish off on a branch): the source's version, once the six
+        places agree; a tag is also refused while CHANGELOG.md has "Unreleased" entries or coalr's DESCRIPTION has
+        another version (tested on a copy of the files the check reads)."""
+        rv = _load("release_version")
+        init = rv.source_versions()[0]
+        with tempfile.TemporaryDirectory() as t:
+            out = os.path.join(t, "out.txt")
+            r = subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "release_version.py"), "--dry-run",
+                                "main", "--github-output"], capture_output=True, text=True, timeout=60,
+                               env={**os.environ, "GITHUB_OUTPUT": out})
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(r.stdout, init + "\n")
+            self.assertIn(f"dry run of main: version {init}", r.stderr)
+            with open(out, encoding="utf-8") as fh:
+                self.assertEqual(fh.read(), f"version={init}\nprerelease=true\nr_version={rv.r_version(init) or ''}\n")
+            # a copy of the tree's version files at release 1.2.3, then each thing the check refuses
+            for rel in ("src/coal/__init__.py", "pyproject.toml", "apps/coal-app/pyproject.toml", "cpp/src/main.cpp",
+                        "cpp/src/report.cpp", "CHANGELOG.md", "packaging/r/coalr/DESCRIPTION",
+                        "packaging/r/coalr/NEWS.md"):
+                dst = os.path.join(t, "tree", *rel.split("/"))
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                with open(os.path.join(ROOT, *rel.split("/")), encoding="utf-8") as fh:
+                    text = fh.read().replace(init, "1.2.3")
+                if rel == "CHANGELOG.md":
+                    text = "# Changelog\n\n## Unreleased\n\n## 1.2.3\n\n- x\n"
+                if rel.endswith("DESCRIPTION"):
+                    text = re.sub(r"(?m)^Version: .*$", "Version: 1.2.3", text)
+                if rel.endswith("NEWS.md"):
+                    text = "# coalr 1.2.3\n\n- x\n\n# coalr 1.2.2\n"
+                with open(dst, "w", encoding="utf-8") as fh:
+                    fh.write(text)
+            tree = os.path.join(t, "tree")
+            self.assertEqual(rv.check("v1.2.3", tree), ("1.2.3", False))
+            self.assertEqual(rv.dry_run(tree), "1.2.3")
+            log = os.path.join(tree, "CHANGELOG.md")
+            with open(log, "w", encoding="utf-8") as fh:
+                fh.write("# Changelog\n\n## Unreleased\n\n### Fixed\n\n- y\n\n## 1.2.3\n\n- x\n")
+            with self.assertRaisesRegex(ValueError, "entries under \"## Unreleased\""):
+                rv.check("v1.2.3", tree)
+            self.assertEqual(rv.dry_run(tree), "1.2.3")          # a dry run publishes nothing: not refused
+            with open(log, "w", encoding="utf-8") as fh:
+                fh.write("# Changelog\n\n## 1.2.3\n\n- x\n")
+            desc = os.path.join(tree, "packaging", "r", "coalr", "DESCRIPTION")
+            with open(desc, encoding="utf-8") as fh:
+                text = fh.read()
+            with open(desc, "w", encoding="utf-8") as fh:
+                fh.write(text.replace("Version: 1.2.3", "Version: 1.2.2.9000"))
+            with self.assertRaisesRegex(ValueError, "DESCRIPTION says Version: 1.2.2.9000, not 1.2.3"):
+                rv.check("v1.2.3", tree)
+            with open(desc, "w", encoding="utf-8") as fh:
+                fh.write(text)
+            news = os.path.join(tree, "packaging", "r", "coalr", "NEWS.md")
+            with open(news, "w", encoding="utf-8") as fh:
+                fh.write("# coalr (development version)\n\n- y\n\n# coalr 1.2.2\n")
+            with self.assertRaisesRegex(ValueError, 'NEWS.md starts with "# coalr \\(development version\\)", not "# coalr 1.2.3"'):
+                rv.check("v1.2.3", tree)
+            with open(news, "w", encoding="utf-8") as fh:
+                fh.write("# coalr 1.2.3\n")
+            self.assertEqual(rv.check("v1.2.3", tree), ("1.2.3", False))
+            with open(desc, "w", encoding="utf-8") as fh:
+                fh.write(text.replace("Version: 1.2.3", "Version: 1.2.2.9000"))
+            with open(os.path.join(tree, "src", "coal", "__init__.py"), "a", encoding="utf-8") as fh:
+                fh.write('__version__ = "1.2.4"\n')   # the last assignment is not read: the first one is
+            with open(os.path.join(tree, "pyproject.toml"), encoding="utf-8") as fh:
+                proj = fh.read()
+            with open(os.path.join(tree, "pyproject.toml"), "w", encoding="utf-8") as fh:
+                fh.write(proj.replace('version = "1.2.3"', 'version = "1.2.4"', 1))
+            with self.assertRaisesRegex(ValueError, "dry run: the versions disagree"):
+                rv.dry_run(tree)
 
     def test_prerelease_tags(self):
         rv = _load("release_version")
@@ -103,6 +183,15 @@ class TestReleaseScripts(unittest.TestCase):
         self.assertGreaterEqual(len(found), 6)
         for f in found:
             self.assertIn(f, names)
+        # and every file of the list is in the notes' Downloads table, coalr's too (none for a prerelease)
+        for version in ("1.2.3", "1.2.3rc1"):
+            notes = rn.fixed_part(version)
+            table = notes[notes.index("## Downloads"):notes.index("The version-free names")]
+            names = release_file_names(version)
+            for f in names:
+                self.assertIn(f"`{f}`", table, f"{version}: the release notes do not list {f}")
+            self.assertEqual("coalr_" in table, version == "1.2.3", version)
+        self.assertIn("releases/download/v1.2.3/coalr_1.2.3.tar.gz", rn.fixed_part("1.2.3"))
 
     def test_changelog_section(self):
         rn = _load("release_notes")
@@ -140,11 +229,79 @@ class TestReleaseWorkflow(unittest.TestCase):
         on = wf.get("on", wf.get(True))  # YAML 1.1 reads a bare `on` key as True
         self.assertEqual(on["push"]["tags"], ["v*"])
         self.assertIn("workflow_dispatch", on)
-        self.assertEqual(set(wf["jobs"]), {"python", "cpp-wheels", "windows", "release", "pypi"})
+        self.assertEqual(set(wf["jobs"]), {"python", "cpp-wheels", "windows", "coalr", "files", "release", "pypi"})
+
+    def test_coalr_job(self):
+        """coalr is a release asset (REVIEW-COAL-3 H1): built from packaging/r/coalr after the vendored-source and
+        version checks, installed and run, uploaded versioned and version-free; skipped for a prerelease, whose
+        release then has no coalr files; the files and release jobs still run then."""
+        wf = _workflow("release.yml")
+        job = wf["jobs"]["coalr"]
+        self.assertEqual(job["needs"], "python")
+        self.assertEqual(job["if"], "${{ needs.python.outputs.r_version != '' }}")
+        self.assertEqual(job["env"]["R_V"], "${{ needs.python.outputs.r_version }}")
+        self.assertEqual(wf["jobs"]["python"]["outputs"]["r_version"], "${{ steps.v.outputs.r_version }}")
+        runs = "\n".join(s.get("run", "") for s in job["steps"])
+        for must in ("python scripts/sync_r_sources.py --check", 'grep -qx "Version: ${R_V}" packaging/r/coalr/DESCRIPTION',
+                     "R CMD build --no-manual packaging/r/coalr", 'R CMD INSTALL "coalr_${R_V}.tar.gz"',
+                     'packageVersion("coalr")', "coal_dnds_pairs(", 'cp "coalr_${R_V}.tar.gz" release/coalr_src.tar.gz'):
+            self.assertIn(must, runs)
+        uses = [s["uses"].split("@")[0] for s in job["steps"] if "uses" in s]
+        self.assertEqual(uses, ["actions/checkout", "actions/setup-python", "r-lib/actions/setup-r",
+                                "r-lib/actions/setup-pandoc", "r-lib/actions/setup-r-dependencies",
+                                "actions/upload-artifact"])
+        self.assertEqual(job["steps"][-1]["with"]["name"], "dist-coalr")
+        # the same r-lib actions (SHAs) as r-package.yml
+        rpkg = {u.split("@")[0]: u for u in re.findall(r"uses: (\S+)", _read(".github", "workflows", "r-package.yml"))}
+        for st in job["steps"]:
+            if st.get("uses", "").startswith("r-lib/"):
+                self.assertEqual(st["uses"], rpkg[st["uses"].split("@")[0]])
+        self.assertIn("coalr", wf["jobs"]["files"]["needs"])
+        self.assertEqual(wf["jobs"]["release"]["needs"], ["python", "files"])
+        for j in ("files", "release", "pypi"):
+            self.assertIn("!cancelled() && !failure()", wf["jobs"][j]["if"], j)   # a skipped coalr does not skip them
+        self.assertIn("coalr_1.2.3.tar.gz", release_file_names("1.2.3"))
+        self.assertIn("coalr_src.tar.gz", release_file_names("1.2.3"))
+        self.assertIn("coalr_1.2.3.9000.tar.gz", release_file_names("1.2.3.dev0"))
+        self.assertFalse([n for n in release_file_names("1.2.3rc1") if n.startswith("coalr")])
+        check = _steps(wf, "files")["Check the release files"]
+        self.assertEqual(check["env"]["PRE"], "${{ needs.python.outputs.prerelease }}")
+        self.assertIn('if [ "$PRE" = false ] && [ -z "$R_V" ]; then', check["run"])   # a release needs coalr
+
+    def test_bash_steps_parse(self):
+        """Every bash step of release.yml and release-smoke.yml is valid shell (bash -n): a quote inside the R
+        snippet of the coalr job ended its single-quoted script on the first dry run."""
+        bash = shutil.which("bash")
+        if not bash:
+            self.skipTest("no bash")
+        for fname in ("release.yml", "release-smoke.yml"):
+            for name, job in _workflow(fname)["jobs"].items():
+                default = job.get("defaults", {}).get("run", {}).get("shell")
+                for st in job["steps"]:
+                    if "run" in st and (st.get("shell") or default or "bash") == "bash":
+                        r = subprocess.run([bash, "-n"], input=st["run"], text=True, capture_output=True, timeout=60)
+                        self.assertEqual(r.returncode, 0, f"{fname} {name} / {st.get('name')}: {r.stderr}")
+
+    def test_dry_run_and_existing_release(self):
+        """The dry-run version check is scripts/release_version.py --dry-run (tested above), not inline Python; an
+        existing release gets the same prerelease flag as a new one."""
+        wf = _workflow("release.yml")
+        for j in ("python", "windows"):
+            run = _steps(wf, j)["Tag matches the version in the source"]["run"]
+            self.assertIn('python scripts/release_version.py --dry-run "$TAG" --github-output', run, j)
+            self.assertIn('python scripts/release_version.py "$TAG" --github-output', run, j)
+            self.assertNotIn("<<", run, j)
+        run = _steps(wf, "release")["Create or update the GitHub Release"]["run"]
+        self.assertIn('gh release edit "$TAG" --title "COAL $V" --notes-file notes.md "--prerelease=${PRE}"', run)
+        self.assertIn('if [ "$PRE" = "true" ]; then extra+=(--prerelease); fi', run)
+        # the release publishes exactly what the files job checked
+        downloads = [st["with"] for st in wf["jobs"]["release"]["steps"]
+                     if st.get("uses", "").startswith("actions/download-artifact@")]
+        self.assertEqual(downloads, [{"name": "release-files", "path": "release"}])
 
     def test_pypi_job_is_opt_in_and_uses_trusted_publishing(self):
         job = _workflow("release.yml")["jobs"]["pypi"]
-        self.assertEqual(job["if"], "vars.PYPI_PUBLISH == 'true'")  # off until the variable is set
+        self.assertTrue(job["if"].endswith("&& vars.PYPI_PUBLISH == 'true' }}"), job["if"])  # off until the variable is set
         self.assertEqual(job["environment"], "pypi")
         self.assertEqual(job["permissions"], {"id-token": "write", "contents": "read"})  # no API token
         self.assertIn("release", job["needs"])  # the GitHub Release exists before PyPI gets the files
@@ -196,7 +353,7 @@ class TestReleaseWorkflow(unittest.TestCase):
         self.assertIn("group", wf["concurrency"])
         self.assertEqual(wf["env"]["FUZZ_SEED"], "${{ inputs.seed || github.run_number }}")
         self.assertEqual(set(wf["jobs"]), {"pal2nal-fuzz", "engine-fuzz", "kaks-properties", "sanitizers", "tsan", "cpp-extras",
-                                         "tutorials"})
+                                         "msa-tools", "tutorials"})
         for name, job in wf["jobs"].items():
             self.assertIsInstance(job.get("timeout-minutes"), int, name)
             self.assertNotIn("permissions", job, name)
@@ -220,7 +377,7 @@ class TestReleaseWorkflow(unittest.TestCase):
     def test_every_listed_file_is_produced(self):
         """Each name in the release check list is created by some build step (or is the checksum file)."""
         wf = _workflow("release.yml")
-        made = "\n".join(s.get("run", "") for j in ("python", "windows") for s in wf["jobs"][j]["steps"])
+        made = "\n".join(s.get("run", "") for j in ("python", "windows", "coalr") for s in wf["jobs"][j]["steps"])
         made = made.replace("$v", "${V}").replace("${env:VERSION}", "${V}")
         # the cpp-wheels job names its wheel through the matrix tag
         wheels = "\n".join(s.get("run", "") for s in wf["jobs"]["cpp-wheels"]["steps"])
@@ -231,7 +388,7 @@ class TestReleaseWorkflow(unittest.TestCase):
                 continue
             self.assertTrue(name in made or name in ("coal_align-${V}-py3-none-any.whl", "coal_align-${V}.tar.gz")
                             and "python -m build" in made, f"no build step makes {name}")
-        sums = _steps(wf, "release")["SHA-256 of every file"]["run"]
+        sums = _steps(wf, "files")["SHA-256 of every file"]["run"]
         self.assertIn("> SHA256SUMS.txt", sums)
 
     def test_platform_wheels_job(self):
@@ -267,7 +424,7 @@ class TestReleaseWorkflow(unittest.TestCase):
         uploads = [st for st in job["steps"] if st.get("uses", "").startswith("actions/upload-artifact@")]
         self.assertEqual(len(uploads), 1)
         self.assertEqual(uploads[0]["with"]["name"], "dist-wheel-${{ matrix.tag }}")
-        for j in ("release", "pypi"):
+        for j in ("files", "pypi"):
             self.assertIn("cpp-wheels", wf["jobs"][j]["needs"], j)
         names = release_file_names("1.2.3")
         self.assertIn("coal_align-1.2.3-py3-none-any.whl", names)  # the fallback wheel is still released
@@ -424,7 +581,10 @@ class TestSiteFiles(unittest.TestCase):
     def test_version_is_current(self):
         """The page names the current version; it must match the package."""
         init = re.search(r'__version__ = "([^"]+)"', _read("src", "coal", "__init__.py")).group(1)
-        init = _load("release_version").base_version(init)   # a development tree shows the release it becomes
+        # a development tree shows the release it becomes; a prerelease (0.6.1rc1) shows itself, as
+        # tests/test_feature_combinations.py and CITATION.cff have it (docs/development.md "Releasing COAL")
+        rv = _load("release_version")
+        init = rv.base_version(init) if rv.DEV_RE.match(init) else init
         shown = re.search(r'<span id="version" data-version="([^"]+)">([^<]+)</span>', self.index)
         self.assertIsNotNone(shown, "version span missing")
         self.assertEqual(shown.group(1), shown.group(2))
@@ -633,6 +793,58 @@ class TestSiteWithoutRelease(unittest.TestCase):
         self.assertIn("GH_TOKEN: ${{ github.token }}", wf)
         with open(os.path.join(ROOT, "site", "README.md"), encoding="utf-8") as fh:
             self.assertIn("before merging to `main`", fh.read())
+
+
+class TestCoalrInstallLines(unittest.TestCase):
+    """The five places that tell people how to install coalr name a release (REVIEW-COAL-3 H1): the release file
+    coalr_<v>.tar.gz (from 0.6.1, the first release with one) or the tag v<v>; an unpinned install_github() of
+    main only as the development version. At a release commit every pinned version is that release's and the
+    "until <v> is published" notes are gone; in a development tree they name the release it becomes or an older one
+    (docs/development.md "Releasing COAL")."""
+
+    FILES = ("docs/r.md", "README.md", "packaging/r/coalr/README.md", "docs/tutorials/04-r-coalr.md",
+             "packaging/orthologr/README.md")
+    TARBALL = re.compile(r"https://github\.com/Plumat-COAL/COAL/releases/download/v([\d.]+)/coalr_([\d.]+)\.tar\.gz")
+    TAG = re.compile(r'install_github\("Plumat-COAL/COAL@v([\d.]+)"')
+    MAIN = re.compile(r'install_github\("Plumat-COAL/COAL"')
+
+    @staticmethod
+    def key(v):
+        return tuple(int(x) for x in v.split("."))
+
+    def test_pinned_to_a_release(self):
+        rv = _load("release_version")
+        version = rv.source_versions()[0]
+        release = not rv.DEV_RE.match(version) and not rv.PRE_RE.search(version)
+        target = rv.base_version(version)
+        for rel in self.FILES:
+            text = _read(*rel.split("/"))
+            tarballs = self.TARBALL.findall(text)
+            tags = self.TAG.findall(text)
+            self.assertTrue(tarballs or tags, f"{rel}: no install line pinned to a release")
+            for tag, name in tarballs:
+                self.assertEqual(tag, name, f"{rel}: release v{tag} with coalr_{name}.tar.gz")
+                self.assertGreaterEqual(self.key(tag), (0, 6, 1), f"{rel}: releases before 0.6.1 have no coalr file")
+            for v in [t for t, _ in tarballs] + tags:
+                if release:
+                    self.assertEqual(v, version, f"{rel}: {version} is a release, but an install line names v{v}")
+                else:
+                    self.assertLessEqual(self.key(v), self.key(target), f"{rel}: v{v} is newer than this tree")
+            for m in self.MAIN.finditer(text):
+                around = text[max(0, m.start() - 200):text.find("\n", m.end())]
+                self.assertIn("development version", around.lower(),
+                              f"{rel}: an unpinned install_github() of main must say it is the development version")
+            if release:
+                self.assertNotIn(f"until {version} is published", text.lower(),
+                                 f"{rel}: {version} is published with this commit: remove the note")
+
+    def test_the_rule_itself(self):
+        text = ('install.packages("https://github.com/Plumat-COAL/COAL/releases/download/v0.6.1/coalr_0.6.1.tar.gz")\n'
+                'remotes::install_github("Plumat-COAL/COAL@v0.6.0", subdir = "packaging/r/coalr")\n')
+        self.assertEqual(self.TARBALL.findall(text), [("0.6.1", "0.6.1")])
+        self.assertEqual(self.TAG.findall(text), ["0.6.0"])
+        self.assertEqual(self.MAIN.findall(text), [])
+        self.assertEqual(len(self.MAIN.findall('install_github("Plumat-COAL/COAL", subdir = "packaging/r/coalr")')), 1)
 
 
 if __name__ == "__main__":

@@ -2,6 +2,21 @@
 
 **Website:** [plumat-coal.github.io/COAL](https://plumat-coal.github.io/COAL/) · [Install](https://plumat-coal.github.io/COAL/install.html) · [Guide](https://plumat-coal.github.io/COAL/guide.html)
 
+<!-- dev-version banner (tests/test_new_user_ux.py): remove it when 0.6.1 is released -->
+> **These pages describe the development version, 0.6.1.dev0.** The latest release is
+> [0.6.0](https://github.com/plumat-coal/COAL/releases/tag/v0.6.0); what has changed since is under "Unreleased" in
+> [CHANGELOG.md](CHANGELOG.md), and the `coalr` install lines pinned to v0.6.1 work once 0.6.1 is published. To use
+> the development version now, install from a checkout (Python 3.10+, a C++17 compiler, CMake 3.16+; about a minute):
+>
+> ```
+> git clone https://github.com/plumat-coal/COAL && cd COAL
+> python -m pip install -e .
+> cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release
+> export COAL_CPP=$PWD/build/coal-cpp     # for this shell
+> ```
+>
+> To keep `COAL_CPP` in new shells, and for what each install gives: [docs/install.md, Option 3](docs/install.md#option-3-from-source).
+
 **Codon alignments from a protein alignment and its coding DNA, Ka/Ks (dN/dS) for pairs, and one step from coding
 sequences to a dN/dS table.** COAL is a fast, open-source alternative to
 [PAL2NAL](https://www.bork.embl.de/pal2nal/): it maps unaligned coding DNA onto an existing protein multiple sequence
@@ -144,9 +159,9 @@ very small dS give numbers that mean little.
   (clustal output by default, as PAL2NAL). To call COAL's own options, use `coal`, whose default output is FASTA.
 - **orthologr:** its `dNdS()` runs a bundled `pal2nal.pl`; `packaging/orthologr/` has a stand-in for that file,
   notes on what COAL changes there, and the fork whose `dNdS(engine = "coal")` hands all pairs to COAL at once.
-- **R:** `remotes::install_github("Plumat-COAL/COAL", subdir = "packaging/r/coalr")` installs `coalr`: dN/dS for
-  ortholog pairs or clusters, Ka/Ks, codon alignment and protein alignment inside the R process
-  ([docs/r.md](docs/r.md)).
+- **R:** `remotes::install_github("Plumat-COAL/COAL@v0.6.1", subdir = "packaging/r/coalr")` (or the release file
+  `coalr_0.6.1.tar.gz`; the development version without `@v0.6.1`) installs `coalr`: dN/dS for ortholog pairs or
+  clusters, Ka/Ks, codon alignment and protein alignment inside the R process ([docs/r.md](docs/r.md#install)).
 - **Exit codes:** 0 success; 1 bad input or a gene that cannot be converted; 2 usage error (`coal`), or some
   sequences left out with `--keep-going`; 141 closed output pipe; 130 / 143 / 129 interrupted. Messages go to stderr,
   each line starting `coal: error:`, `coal: warning:`, `coal: notice:` or `coal: summary:`.

@@ -1696,7 +1696,8 @@ class ClustersGiven(PipelineCase):
         self.assertIn("Clustal Omega was not found", err.getvalue())
 
 
-@needs_clustalo
+# each test names the tool it needs (with only MAFFT installed, test_mafft runs and test_clustalo says why it skips)
+@unittest.skipUnless(CPP and (CLUSTALO or MAFFT), "needs coal-cpp and Clustal Omega or MAFFT")
 class ClustersMsa(PipelineCase):
     def check(self, tool):
         res = P.run_clusters(FAM, self.tmp / tool, clusters=FAM_CLUSTERS, max_cluster_size=8, aligner=tool, jobs=2,
@@ -1724,6 +1725,7 @@ class ClustersMsa(PipelineCase):
         self.assertIn(tool, res.report["tools"])
         return res
 
+    @unittest.skipUnless(CLUSTALO, "needs Clustal Omega")
     def test_clustalo(self):
         a = self.check("clustalo")
         b = P.run_clusters(FAM, self.tmp / "j1", clusters=FAM_CLUSTERS, max_cluster_size=8, jobs=1, quiet=True)

@@ -1,7 +1,8 @@
 # Release: on a pushed tag v* (or by hand), build the Python wheels + sdists of both packages (the engine coal-align
 # from the repository root, the app coal-align-app from apps/coal-app), the engine's platform wheels with coal-cpp
-# inside (Linux x86_64/aarch64, macOS, Windows) and the Windows app (installer + portable zip), check them, and
-# publish a GitHub Release with every file, version-free copies and SHA256SUMS.txt.
+# inside (Linux x86_64/aarch64, macOS, Windows), the Windows app (installer + portable zip) and the R package coalr
+# (R CMD build of packaging/r/coalr; not for a prerelease), check them, and publish a GitHub Release with every file,
+# version-free copies and SHA256SUMS.txt. A dry run (dispatched with publish off) runs every job but the release.
 # The website (site/) links to https://github.com/plumat-coal/COAL/releases/latest/download/<version-free name>,
 # so a new release updates the download buttons without editing the site. See site/README.md.
 name: Release
@@ -39,6 +40,7 @@ jobs:
     outputs:
       version: ${{ steps.v.outputs.version }}
       prerelease: ${{ steps.v.outputs.prerelease }}
+      r_version: ${{ steps.v.outputs.r_version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -50,25 +52,15 @@ jobs:
       - name: Tag matches the version in the source
         id: v
         # A dry run (dispatched with publish off) of a branch or commit, e.g. main between releases, builds the
-        # development version (0.6.0.dev0) the source carries: release_version.py rejects it as a tag, and nothing is
-        # published, but the six places must still agree. Anything that can publish goes through the tag check.
+        # development version (0.6.1.dev0) the source carries: release_version.py rejects it as a tag, and nothing is
+        # published, but the six places must still agree (--dry-run). Anything that can publish goes through the tag
+        # check, which also refuses a CHANGELOG with entries under "Unreleased" and a coalr DESCRIPTION of another
+        # version. Outputs: version, prerelease, r_version (coalr's version; empty for a prerelease).
         env:
           PUBLISH: ${{ inputs.publish }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ "$PUBLISH" != true ] && [[ ! "$TAG" =~ ^v[0-9] ]]; then
-            python - <<'PY'
-          import os, sys
-          sys.path.insert(0, "scripts")
-          import release_version as r
-          init, proj = r.source_versions()
-          app, pin = r.app_versions()
-          cpp = r.cpp_versions()
-          if len({init, proj, app, pin, *cpp}) != 1:
-              sys.exit(f"dry run: the versions disagree: {init}, {proj}, app {app} pinning {pin}, coal-cpp {cpp}")
-          print(f"dry run of {os.environ['TAG']}: version {init}")
-          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
-              fh.write(f"version={init}\nprerelease=true\n")
-          PY
+            python scripts/release_version.py --dry-run "$TAG" --github-output
           else
             python scripts/release_version.py "$TAG" --github-output
           fi
@@ -261,25 +253,15 @@ jobs:
         id: v
         shell: bash
         # A dry run (dispatched with publish off) of a branch or commit, e.g. main between releases, builds the
-        # development version (0.6.0.dev0) the source carries: release_version.py rejects it as a tag, and nothing is
-        # published, but the six places must still agree. Anything that can publish goes through the tag check.
+        # development version (0.6.1.dev0) the source carries: release_version.py rejects it as a tag, and nothing is
+        # published, but the six places must still agree (--dry-run). Anything that can publish goes through the tag
+        # check, which also refuses a CHANGELOG with entries under "Unreleased" and a coalr DESCRIPTION of another
+        # version. Outputs: version, prerelease, r_version (coalr's version; empty for a prerelease).
         env:
           PUBLISH: ${{ inputs.publish }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ "$PUBLISH" != true ] && [[ ! "$TAG" =~ ^v[0-9] ]]; then
-            python - <<'PY'
-          import os, sys
-          sys.path.insert(0, "scripts")
-          import release_version as r
-          init, proj = r.source_versions()
-          app, pin = r.app_versions()
-          cpp = r.cpp_versions()
-          if len({init, proj, app, pin, *cpp}) != 1:
-              sys.exit(f"dry run: the versions disagree: {init}, {proj}, app {app} pinning {pin}, coal-cpp {cpp}")
-          print(f"dry run of {os.environ['TAG']}: version {init}")
-          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
-              fh.write(f"version={init}\nprerelease=true\n")
-          PY
+            python scripts/release_version.py --dry-run "$TAG" --github-output
           else
             python scripts/release_version.py "$TAG" --github-output
           fi
@@ -355,19 +337,87 @@ jobs:
           path: release/
           if-no-files-found: error
 
-  release:
-    name: GitHub Release
-    needs: [python, cpp-wheels, windows]
-    if: ${{ github.event_name == 'push' || inputs.publish }}
+  # The R package coalr: R CMD build of packaging/r/coalr (its vendored copy of cpp/src, which must be in sync), the
+  # tarball installed and run, uploaded as coalr_<version>.tar.gz and the version-free coalr_src.tar.gz. The install
+  # lines in docs/r.md and the READMEs name the versioned file of a release (tests/test_docs_site.py keeps them at
+  # the version). Not for a prerelease: 0.6.1rc1 is no R package version (scripts/release_version.py r_version gives
+  # "" for it), so its release has no coalr; a dry run of a development tree builds R's form of it (0.6.1.9000).
+  # Setup as in r-package.yml (the full R CMD check of coalr runs there on every change).
+  coalr:
+    name: R package coalr (source tarball)
+    needs: python
+    if: ${{ needs.python.outputs.r_version != '' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: write   # create the release and upload its files; nothing else
+    timeout-minutes: 40
+    env:
+      R_V: ${{ needs.python.outputs.r_version }}
+      V: ${{ needs.python.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ inputs.tag || github.ref }}
           persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: The vendored C++ sources are cpp/src, and DESCRIPTION has this version
+        run: |
+          python scripts/sync_r_sources.py --check
+          grep -qx "Version: ${R_V}" packaging/r/coalr/DESCRIPTION \
+            || { echo "::error::packaging/r/coalr/DESCRIPTION is not Version: ${R_V}"; exit 1; }
+      - uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05  # v2.14.0
+        timeout-minutes: 15
+        with:
+          r-version: release
+          use-public-rspm: true
+      # R CMD build builds the vignette (rmarkdown, so pandoc)
+      - uses: r-lib/actions/setup-pandoc@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05  # v2.14.0
+      - uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05  # v2.14.0
+        timeout-minutes: 20
+        with:
+          working-directory: packaging/r/coalr
+      - name: R CMD build, R CMD INSTALL, and the installed package runs
+        run: |
+          R CMD build --no-manual packaging/r/coalr
+          test -s "coalr_${R_V}.tar.gz"
+          R CMD INSTALL "coalr_${R_V}.tar.gz"
+          cd "$RUNNER_TEMP"   # not the checkout: the installed package, not packaging/r/coalr
+          Rscript -e '
+            v <- as.character(packageVersion("coalr"))
+            if (v != Sys.getenv("R_V")) stop("coalr ", v, " is installed, not ", Sys.getenv("R_V"))
+            info <- coalr::coal_info()
+            if (info$coal_version != Sys.getenv("V")) stop("coalr vendors COAL ", info$coal_version, ", not ", Sys.getenv("V"))
+            q <- c(g1 = "ATGGCTAAAGGTCTGGAACGTTAA", g2 = "ATGAAACCCGGGTTTTAG")
+            s <- c(h1 = "ATGGCGAAAGGCCTGGATCGTTAA", h2 = "ATGAAGCCAGGGTTCTAG")
+            out <- coalr::coal_dnds_pairs(q, s, pairs = data.frame(query = c("g1", "g2"), subject = c("h1", "h2")))
+            print(out[, 1:7])
+            # the example of ?coal_dnds_pairs: g1-h1 has an estimate, g2-h2 (no synonymous difference) no dS
+            if (nrow(out) != 2 || any(out$status == "error") || !is.finite(out$dS[1]))
+              stop("coal_dnds_pairs() example failed")
+            cat("coalr", v, "(COAL", info$coal_version, ") installs and runs\n")'
+      - name: Collect the versioned and the version-free tarball
+        run: |
+          mkdir -p release
+          cp "coalr_${R_V}.tar.gz" release/
+          # version-free, for releases/latest/download/coalr_src.tar.gz (no "coalr_<version>" look: see the sdists)
+          cp "coalr_${R_V}.tar.gz" release/coalr_src.tar.gz
+          ls -l release
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: dist-coalr
+          path: release/
+          if-no-files-found: error
+
+  # Every file of the release in one place, checksummed and checked against the exact list (the website links to
+  # the version-free names): on a dry run too, so a dry run shows the list a release would publish. coalr may be
+  # skipped (a prerelease): then its files are not expected.
+  files:
+    name: Release files (checksums, the exact list)
+    needs: [python, cpp-wheels, windows, coalr]
+    if: ${{ !cancelled() && !failure() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
         with:
           pattern: dist-*
@@ -383,7 +433,11 @@ jobs:
         # The website links to the version-free names below; tests/test_docs_site.py checks it against this list.
         env:
           V: ${{ needs.python.outputs.version }}
+          R_V: ${{ needs.python.outputs.r_version }}
+          PRE: ${{ needs.python.outputs.prerelease }}
         run: |
+          # only a prerelease (or a dry run) may come without coalr
+          if [ "$PRE" = false ] && [ -z "$R_V" ]; then echo "::error::release $V has no coalr version"; exit 1; fi
           expected=(
             "COAL-Setup-${V}.exe"
             "COAL-Setup-windows-x64.exe"
@@ -401,8 +455,38 @@ jobs:
             "coal_app_src.tar.gz"
             "SHA256SUMS.txt"
           )
+          # coalr: not for a prerelease (R_V is empty then; scripts/release_version.py r_version)
+          if [ -n "$R_V" ]; then expected+=("coalr_${R_V}.tar.gz" "coalr_src.tar.gz"); fi
           for f in "${expected[@]}"; do test -s "release/$f" || { echo "::error::missing release file $f"; exit 1; }; done
           test "$(ls release | wc -l)" -eq "${#expected[@]}" || { echo "::error::unexpected files: $(ls release)"; exit 1; }
+          printf '%s\n' "${expected[@]}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: release-files   # not dist-*: the pypi job takes its files from those
+          path: release/
+          if-no-files-found: error
+
+  release:
+    name: GitHub Release
+    needs: [python, files]
+    # !failure(): run although coalr was skipped (a prerelease); a skipped job further up would skip this one
+    if: ${{ !cancelled() && !failure() && needs.files.result == 'success' && (github.event_name == 'push' || inputs.publish) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write   # create the release and upload its files; nothing else
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: release-files
+          path: release
+      - name: The checked files, unchanged
+        working-directory: release
+        run: sha256sum -c SHA256SUMS.txt
       - name: Create or update the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -419,7 +503,9 @@ jobs:
           if [ "$PRE" = "true" ]; then extra+=(--prerelease); fi
           if gh release view "$TAG" > /dev/null 2>&1; then
             gh release upload "$TAG" release/* --clobber
-            gh release edit "$TAG" --title "COAL $V" --notes-file notes.md
+            # an existing release (a re-run, or one made on the "new release" page first) gets the same prerelease
+            # flag as a new one: false for X.Y.Z, so a page wrongly marked prerelease is corrected, and the reverse
+            gh release edit "$TAG" --title "COAL $V" --notes-file notes.md "--prerelease=${PRE}"
           else
             gh release create "$TAG" release/* --verify-tag --title "COAL $V" --notes-file notes.md "${extra[@]}"
           fi
@@ -430,7 +516,8 @@ jobs:
   pypi:
     name: Publish to PyPI (coal-align, coal-align-app)
     needs: [python, cpp-wheels, release]
-    if: vars.PYPI_PUBLISH == 'true'
+    # as for the release job: coalr may have been skipped (a prerelease) further up
+    if: ${{ !cancelled() && !failure() && needs.release.result == 'success' && vars.PYPI_PUBLISH == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: pypi
@@ -440,7 +527,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
         with:
-          pattern: dist-*   # dist-python and dist-wheel-<tag>; dist-windows comes along and is left alone
+          pattern: dist-*   # dist-python and dist-wheel-<tag>; dist-windows and dist-coalr come along and are left alone
           merge-multiple: true
           path: release/
       - name: Only the versioned wheels and sdists (not the version-free copies or checksums)

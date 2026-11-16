@@ -23,6 +23,16 @@
 #' cluster ID, and does not touch R's random number stream) or `"skip"`. Such clusters are aligned pairwise.
 #' The sample is not the one `coal pipeline clusters` draws for the same seed (another generator).
 #'
+#' @details
+#' **Which protein alignment.** By default the proteins are aligned with the scoring of EMBOSS needle, which is
+#' also that of `coal pipeline`: BLOSUM62, gap open 10, extend 0.5, free end gaps, the leftmost of equally good
+#' alignments. The R package orthologr aligns as `pwalign::pairwiseAlignment()` does (open 14, extend 4, end gaps
+#' penalised, pwalign's copy of BLOSUM62 and its choice among equally good alignments); `preset = "pwalign"` gives
+#' exactly those alignments. The two give the same alignment for most pairs but not for all, and dS can then
+#' differ by more than 10 % (118 of 2,958 *E. coli* / *Salmonella* ortholog pairs with a dS in both, in COAL's
+#' tutorial 4, docs/tutorials/04-r-coalr.md). Use `preset = "pwalign"` to reproduce orthologr's numbers and the
+#' default to match `coal pipeline`. Attribute `"alignment"` of the result records the scoring that was used.
+#'
 #' @param cds Coding sequences of all members (see `query_cds` of [coal_dnds_pairs()]).
 #' @param clusters The clusters: a data frame or matrix whose first two columns are representative and member, one
 #'   row per member, as `diamond deepclust` writes them (a member named in two clusters stays in its first one);
@@ -46,6 +56,9 @@
 #' * `failed`: data frame of what could not be used (`level`, `cluster_id`, `seq1`, `seq2`, `code`, `message`).
 #' * `alignments` (with `keep_alignments = TRUE`): data frame `cluster_id`, `id`, `protein`, `codon` for clusters
 #'   aligned as a whole.
+#'
+#' Attributes `"seconds"` (time in alignment + threading and in Ka/Ks) and `"alignment"` (the built-in aligner's
+#' scoring, as for [coal_dnds_pairs()]; an `msa` or `aligner` makes its own alignments).
 #'
 #' @examples
 #' cds <- c(a = "ATGGCTAAAGGTCTGGAACGTTAA", b = "ATGGCGAAAGGCCTGGATCGTTAA",
@@ -300,6 +313,7 @@ coal_dnds_clusters <- function(cds, clusters, msa = NULL, aligner = NULL, method
       protein = na_empty(raw$protein_rows[pos]), codon = na_empty(raw$codon_rows[pos]), stringsAsFactors = FALSE)
   }
   attr(out, "seconds") <- raw$seconds
+  attr(out, "alignment") <- alignment_used(ap)
   out
 }
 
