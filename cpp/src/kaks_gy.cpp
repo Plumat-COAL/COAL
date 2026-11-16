@@ -938,6 +938,11 @@ Choice choose_start(const std::vector<Fit>& fits) {
 constexpr double SCAN_SMALL[] = {1e-3, 1e-2, 0.1, 1, 10, 99};
 constexpr double SCAN_LARGE[] = {1e-3, 1, 99};
 constexpr size_t SCAN_SMALL_PAIR = 40;   // codons compared: every such pair is scanned, on the finer grid
+// a larger pair on the ridge is scanned if its likelihood is within this, per codon compared, of the plateau of
+// saturation (t to infinity: sum log pi_a pi_b, 2 lconst), where kappa and omega have no gradient left. Random
+// pairs whose scan found a higher maximum were within 0.001 of it; the saturated yeast pairs of docs/kaks.md,
+// whose scan finds nothing, are all more than 0.2 above it.
+constexpr double SCAN_PLATEAU = 0.05;
 constexpr int SCAN_STARTS = 2;           // starts from the highest points of the scan
 
 struct ScanPoint {
@@ -1154,22 +1159,23 @@ Result run_gy(const Prepared& p, const GeneticCode& g, const Options&, Result r)
     Choice ch = continue_starts(fits, choose_start(fits), cont, iterations);
     // The coarse scan. On a pair of few codons the likelihood is flat and has several maxima, often with kappa or
     // omega at a bound, which none of the starts above may reach; and a start that ends on the ridge of saturation
-    // stops on a plateau (at t = 50 the likelihood barely depends on kappa and omega), where it cannot see a higher
-    // maximum at a moderate t or with another kappa (GTGGACAAC / TCCGGGAAG under code 11: every start ended on
-    // the ridge, at lnL -17.3590 or below; the maximum is -16.5761 at t 7.96, kappa 1e-6). So a pair of
-    // SCAN_SMALL_PAIR (40) codons or fewer, and a pair whose result so far is on the ridge or did not converge,
-    // has its likelihood evaluated on a grid in (kappa, omega), each point maximised over t (scan_grid: 36 points
-    // for a small pair, 9 for another), and is started once more from the two highest points: a small pair
-    // always, any other pair only from a point higher than its result so far (there the extra starts would only
-    // repeat what the starts found; on the three real data sets of docs/kaks.md none is made). The scan
-    // comes after the choice among the starts above and its continuation, which are as they were without it; the
-    // new starts then join that choice (and a continuation, if one of them asks for it), so the likelihood
-    // reported can only be higher (by more than LNL_TIE; within it a converged start can still replace an
-    // unconverged one on the ridge).
+    // next to its plateau (t to infinity, where kappa and omega have no gradient left) cannot see a higher maximum at
+    // a moderate t or with another kappa (GTGGACAAC / TCCGGGAAG under code 11: every start ended on the ridge, at lnL
+    // -17.3590 or below; the maximum is -16.5761 at t 7.96, kappa 1e-6). So a pair of SCAN_SMALL_PAIR (40) codons or
+    // fewer, a pair whose result so far did not converge, and a pair whose result is on the ridge within SCAN_PLATEAU
+    // of the plateau has its likelihood evaluated on a grid in (kappa, omega), each point maximised over t (scan_grid:
+    // 36 points for a small pair, 9 for another), and is started once more from the two highest points: a small pair
+    // always, any other pair only from a point higher than its result so far (there the extra starts would only repeat
+    // what the starts found). The scan comes after the choice among the starts above and its continuation, which are
+    // as they were without it; the new starts then join that choice (and a continuation, if one of them asks for it),
+    // so the likelihood reported can only be higher (by more than LNL_TIE; within it a converged start can still
+    // replace an unconverged one on the ridge).
     {
         const Fit now = fits[(size_t)ch.report];   // (a copy: offer() grows fits)
         const bool small = n <= SCAN_SMALL_PAIR;
-        const bool unsettled = !now.converged || now.t >= T_MAX * (1 - 1e-3);
+        const bool ridge = now.t >= T_MAX * (1 - 1e-3);
+        const bool unsettled = (!now.converged && !ridge) ||
+                               (ridge && now.lnl - 2 * m.lconst < SCAN_PLATEAU * (double)n);
         if (small || unsettled) {
             const double bar = now.lnl;
             const std::vector<ScanPoint> pts =
