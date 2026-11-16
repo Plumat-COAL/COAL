@@ -2,6 +2,7 @@
 import importlib.util
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -239,6 +240,20 @@ class TestReleaseWorkflow(unittest.TestCase):
         self.assertIn("coalr_src.tar.gz", release_file_names("1.2.3"))
         self.assertIn("coalr_1.2.3.9000.tar.gz", release_file_names("1.2.3.dev0"))
         self.assertFalse([n for n in release_file_names("1.2.3rc1") if n.startswith("coalr")])
+
+    def test_bash_steps_parse(self):
+        """Every bash step of release.yml and release-smoke.yml is valid shell (bash -n): a quote inside the R
+        snippet of the coalr job ended its single-quoted script on the first dry run."""
+        bash = shutil.which("bash")
+        if not bash:
+            self.skipTest("no bash")
+        for fname in ("release.yml", "release-smoke.yml"):
+            for name, job in _workflow(fname)["jobs"].items():
+                default = job.get("defaults", {}).get("run", {}).get("shell")
+                for st in job["steps"]:
+                    if "run" in st and (st.get("shell") or default or "bash") == "bash":
+                        r = subprocess.run([bash, "-n"], input=st["run"], text=True, capture_output=True, timeout=60)
+                        self.assertEqual(r.returncode, 0, f"{fname} {name} / {st.get('name')}: {r.stderr}")
 
     def test_dry_run_and_existing_release(self):
         """The dry-run version check is scripts/release_version.py --dry-run (tested above), not inline Python; an

@@ -391,7 +391,7 @@ jobs:
             s <- c(h1 = "ATGGCGAAAGGCCTGGATCGTTAA", h2 = "ATGAAGCCAGGGTTCTAG")
             out <- coalr::coal_dnds_pairs(q, s, pairs = data.frame(query = c("g1", "g2"), subject = c("h1", "h2")))
             print(out[, 1:7])
-            # the help page's example: g1-h1 has an estimate; g2-h2 (no synonymous difference) has no dS
+            # the example of ?coal_dnds_pairs: g1-h1 has an estimate, g2-h2 (no synonymous difference) no dS
             if (nrow(out) != 2 || any(out$status == "error") || !is.finite(out$dS[1]))
               stop("coal_dnds_pairs() example failed")
             cat("coalr", v, "(COAL", info$coal_version, ") installs and runs\n")'
