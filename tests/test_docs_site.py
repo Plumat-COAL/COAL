@@ -741,6 +741,61 @@ class TestSiteForRelease(unittest.TestCase):
         once = self.m.rewrite(_read("site", "install.html"), "0.4.1")
         self.assertEqual(self.m.rewrite(once, "0.4.1"), once)
 
+    def test_no_page_keeps_a_marker(self):
+        """Every marker goes, at any release, also a marked element inside a marked element of another kind (AUDIT-107
+        LOW-1: index.html's <p data-since="0.6.1"> in <section data-since="0.6.0"> was never handled)."""
+        pages = [n for n in sorted(os.listdir(SITE)) if n.endswith(".html")]
+        self.assertIn("index.html", pages)
+        for name in pages:
+            for v in ("0.4.1", "0.5.0", "0.6.0", "0.6.1", "1.0"):
+                out = self.m.rewrite(_read("site", name), v)
+                self.assertNotIn("data-since", out, (name, v))
+                self.assertEqual(self.m.rewrite(out, v), out, (name, v))
+
+    def test_nested_markers(self):
+        html = ('<section class="sec" id="dnds" data-since="0.6.0">\n  <h2>Ka/Ks</h2>\n  <p>a</p>\n'
+                '  <p data-since="0.6.1">From R</p>\n  <p>b</p>\n</section>\n<p>after</p>\n')
+        plain = html.replace(' data-since="0.6.0"', "").replace(' data-since="0.6.1"', "")
+        self.assertEqual(self.m.rewrite(html, "0.5.0"), "<p>after</p>\n")
+        self.assertEqual(self.m.rewrite(html, "0.6.0"), plain.replace("  <p>From R</p>\n", ""))
+        self.assertEqual(self.m.rewrite(html, "0.6.1"), plain)
+        for v in ("0.5.0", "0.6.0", "0.6.1"):
+            once = self.m.rewrite(html, v)
+            self.assertEqual(self.m.rewrite(once, v), once, v)
+
+    def test_table_rows(self):
+        """AUDIT-107 LOW-2: a <tr> can be marked (install.html's list of files)."""
+        html = ('<table><tbody>\n        <tr><td>a</td></tr>\n'
+                '        <tr data-since="0.6.1"><td><a href="x/coalr_src.tar.gz">coalr_src.tar.gz</a></td></tr>\n'
+                '        <tr><td>b</td></tr>\n      </tbody></table>\n')
+        self.assertEqual(self.m.rewrite(html, "0.6.0"),
+                         '<table><tbody>\n        <tr><td>a</td></tr>\n        <tr><td>b</td></tr>\n      </tbody></table>\n')
+        self.assertEqual(self.m.rewrite(html, "0.6.1"), html.replace(' data-since="0.6.1"', ""))
+        self.assertIn("tr", self.m.SINCE_TAGS)
+        # not <track> or <td>, nor <pre> for <p>
+        for other in ('<track data-since="9.0">', '<td data-since="9.0">x</td>', '<pre data-since="9.0">x</pre>'):
+            self.assertEqual(self.m.rewrite(other, "0.1"), other)
+
+    @staticmethod
+    def same_kind_inside(html, tags):
+        """Marked elements that hold an element of their own kind: the script would cut them at the inner one's
+        closing tag."""
+        bad = []
+        for m in re.finditer(r'<(' + "|".join(tags) + r')\b[^>]*?\sdata-since="[^"]*"[^>]*>', html):
+            end = html.find(f"</{m.group(1)}>", m.end())
+            if end < 0 or re.search(rf"<{m.group(1)}\b", html[m.end():end]):
+                bad.append(m.group(0))
+        return bad
+
+    def test_no_marked_element_holds_one_of_its_kind(self):
+        tags = self.m.SINCE_TAGS
+        self.assertEqual(self.same_kind_inside('<div data-since="1.0"><div>x</div>y</div>', tags),
+                         ['<div data-since="1.0">'])
+        self.assertEqual(self.same_kind_inside('<section data-since="1.0"><p data-since="1.1">x</p></section>', tags), [])
+        for name in sorted(os.listdir(SITE)):
+            if name.endswith(".html"):
+                self.assertEqual(self.same_kind_inside(_read("site", name), tags), [], name)
+
     def test_bad_arguments(self):
         self.assertEqual(self.m.main(["latest", "x.html"]), 2)
         self.assertEqual(self.m.main(["0.4.1"]), 2)
@@ -779,7 +834,10 @@ class TestSiteWithoutRelease(unittest.TestCase):
             self.assertIn('pip install "coal-align @ git+https://github.com/plumat-coal/COAL" "coal-align-app[gui] @ '
                           'git+https://github.com/plumat-coal/COAL#subdirectory=apps/coal-app"', m.rewrite(fh.read()))
         with open(os.path.join(ROOT, "site", "install.html"), encoding="utf-8") as fh:   # coalr's line (0.6.1)
-            self.assertIn('remotes::install_github("Plumat-COAL/COAL", subdir = "packaging/r/coalr")', m.rewrite(fh.read()))
+            out = m.rewrite(fh.read())
+        self.assertIn('remotes::install_github("Plumat-COAL/COAL", subdir = "packaging/r/coalr")', out)
+        # and its row in the list of files (no data-since: every release from 0.6.1 has the file; AUDIT-107 LOW-2)
+        self.assertIn('<a class="pending" href="#no-release">coalr_src.tar.gz: first release coming soon</a>', out)
 
     def test_script_rewrites_every_page_given(self):
         import shutil
