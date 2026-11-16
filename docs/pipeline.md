@@ -388,7 +388,8 @@ For the per-cluster folders a run records the names of the `.fasta` files it wro
 `protein_alignments_files` in `work/outputs.json`), and the next run removes those and no others: a `.fasta` of your
 own put into `codon_alignments/` stays. The list is written when the run starts (empty: the folder holds no `.fasta`
 then; a run that fails before its engine starts leaves it so), is dropped when the engine starts writing, and is
-written again when the engine ends, with success, an error or an interrupt. A run killed while the engine writes
+written again when the engine ends, with success, an error or an interrupt (empty for a folder that is not there
+then because it could not be made). A run killed while the engine writes
 (SIGKILL, out of memory, power loss) leaves no list: everything with the engine's `.fasta` in the folder is that
 run's, the next run removes it, and the same command with `--resume` goes on (a file of your own put there while
 that run was going would count as its file too). Two more cases have no list: a folder recorded by 0.6.0, and a

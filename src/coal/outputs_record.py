@@ -10,7 +10,7 @@ a file of the user's:
     still COAL's to write again); for the per-cluster folders codon_alignments/ and protein_alignments/,
     "<folder>_dir" (the run writes it) and "<folder>_files" (the .fasta names it wrote there).
   * The folder list is [] when the run starts, dropped just before the engine writes there and written again when
-    the engine ends in any way but SIGKILL. No list (0.6.0, or a run killed while
+    the engine ends in any way but SIGKILL ([] when the folder is not there). No list (0.6.0, or a run killed while
     its engine wrote) means every .fasta with the engine's lower-case extension is the earlier run's.
   * Without a readable record (a version without it, work/ deleted) the outputs that a COAL report.json of this
     folder lists are the earlier run's; a record that cannot be read but begins as COAL writes it, or a work/ that
@@ -381,13 +381,15 @@ class OutputsRecord:
         """Cluster mode, after the engine: the .fasta files this run wrote into the alignment folders it writes, by
         name, so that the next run removes those and no others (a file of the user's put there later stays: #96).
         The folder held no .fasta of anyone else's when the engine started (read_earlier refuses that), so what it
-        holds now is this run's. True when the record changed. OSError when a folder cannot be read."""
+        holds now is this run's. A folder that is not there (it could not be made) gets an empty list: with none, a
+        folder of that name that the user makes later would be taken for the run's, every .fasta in it removed by
+        the next run. True when the record changed. OSError when a folder cannot be read."""
         changed = False
         for name in ALIGNMENT_DIRS:
             if not self.record.get(name + "_dir"):
                 continue
             d = self.path(name)
-            if os.path.isdir(d) and not os.path.islink(d):
-                self.record[name + "_files"] = sorted(n for n in os.listdir(d) if n.endswith(".fasta"))
-                changed = True
+            self.record[name + "_files"] = (sorted(n for n in os.listdir(d) if n.endswith(".fasta"))
+                                            if os.path.isdir(d) and not os.path.islink(d) else [])
+            changed = True
         return changed

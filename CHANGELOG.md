@@ -88,6 +88,13 @@
   1.8e-7, the tolerance of the flat-likelihood rule, which now calls them `saturated`); 39 flat pairs of 2 to 4 codons
   go from `ok` or `warning` to `saturated` and one back. Against 0.6.0 one pair of the 25,200 has a lower likelihood
   (3 codons, saturated in both, 0.010 lower since the change above).
+- `coal pipeline clusters --keep-protein-alignments` (or `--keep-alignments`): when the engine step ends while an
+  alignment folder it writes is not there (`os.makedirs` failed: permission denied, disk full), the run now records
+  an empty list of files for it in `work/outputs.json`. It recorded none, which means "every `.fasta` here is the
+  run's", so a `protein_alignments/` you made afterwards had every `.fasta` in it removed by the next run into `DIR`;
+  now they are yours (kept, and a run writing that folder is refused as for any file of yours there). The warning
+  for a list that could not be written now says what follows: the next run takes every `.fasta` file there for this
+  run's (it said the next run keeps them).
 
 ### Added
 
@@ -109,7 +116,7 @@
   engine) is its own module, `src/coal/outputs_record.py` (class `OutputsRecord`), out of `dnds_pipeline.py`
   (4,447 lines, 86 methods in `_Run`), with unit tests that need no engine (`tests/test_outputs_record.py`: the
   user's `.fasta` kept, a killed run resumed, a foreign `work/` and `--report` refused, tampered lists, 0.6.0
-  records, `.FASTA`). Behaviour unchanged: the same files, byte for byte, on `examples/dnds`
+  records, `.FASTA`). Behaviour unchanged but for the fix above: the same files, byte for byte, on `examples/dnds`
   and the cluster fixture. Comments in `dnds_pipeline.py` cite the pull request of a change instead of review
   documents that are not in the repository.
 

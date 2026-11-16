@@ -13,25 +13,34 @@ and #98 established:
   * a tampered record or report cannot make the clean-up remove anything outside the folder or the files COAL
     names (links are removed, never followed);
   * a record of 0.6.0 (no per-folder lists) clears the engine's lower-case .fasta files as before;
-  * .fasta in any other case (X.FASTA) is never COAL's.
+  * .fasta in any other case (X.FASTA) is never COAL's;
+  * a folder that is not there when the engine ends (it could not be made) gets an empty list: with none, a folder
+    of that name that the user made later had every .fasta in it removed by the next run.
+
+The last case also runs through the pipeline with os.makedirs made to fail (class AlignmentFolderNotMade; needs
+build/coal-cpp, COAL_CPP_BIN).
 """
 from __future__ import annotations
 
 import errno
+import io
 import json
 import os
 import shutil
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "tests"))
+from test_dnds_pipeline import FAM, PipelineCase, needs_cpp, read_fasta  # noqa: E402
 
 from coal import __version__  # noqa: E402
+from coal import dnds_pipeline as P  # noqa: E402
 from coal import outputs_record as R  # noqa: E402
 from coal.outputs_record import OutputsRecord, OutputsRefused  # noqa: E402
 
@@ -133,6 +142,27 @@ class TheRecord(Folder):
         self.assertNotIn("codon_alignments_files", owned.record)
         self.assertFalse(owned.engine_starts())
         self.assertFalse(owned.list_alignment_files())
+
+    def test_a_folder_that_is_not_there_when_the_engine_ends_gets_an_empty_list(self):
+        """os.makedirs of protein_alignments/ failed (EACCES, ENOSPC) after engine_starts() dropped both lists: the
+        record kept protein_alignments_dir: true with no list, and a protein_alignments/ the user made later had
+        every .fasta in it removed by the next run."""
+        owned = self.start(writes=(CODON, PROT))
+        self.engine(owned, {CODON: ["c1.fasta"]})          # protein_alignments/ was never made
+        rec = self.record_on_disk()
+        self.assertEqual((rec["codon_alignments_files"], rec["protein_alignments_files"]), (["c1.fasta"], []))
+        # the same for a folder that is a link (never COAL's) or a file
+        self.put(PROT, "a file\n")
+        self.assertTrue(owned.list_alignment_files())
+        self.assertEqual(owned.record["protein_alignments_files"], [])
+        (self.out / PROT).unlink()
+        # the user's protein_alignments/ made afterwards: kept by a run that does not write it, refused by one that does
+        self.put(f"{PROT}/mine.fasta")
+        with self.assertRaisesRegex(OutputsRefused, "holds mine.fasta, which no COAL run wrote there"):
+            self.earlier(writes=(PROT,))
+        self.start()
+        self.assertEqual(self.names(PROT), ["mine.fasta"])
+        self.assertEqual(self.names(CODON), [])
 
     def test_the_record_cannot_be_read_back_as_a_list_when_the_folder_cannot_be_read(self):
         owned = self.start(writes=(CODON,))
@@ -516,6 +546,44 @@ class CaseOfFasta(Folder):
         owned = self.start(writes=(PROT,))
         self.engine(owned, {PROT: ["a.fasta", "B.FASTA"]})
         self.assertEqual(owned.record["protein_alignments_files"], ["a.fasta"])
+
+
+@needs_cpp
+class AlignmentFolderNotMade(PipelineCase):
+    """The same through the pipeline: os.makedirs of protein_alignments/ fails (EACCES) in the engine step, after
+    engine_starts() dropped both lists."""
+
+    def clusters(self) -> Path:
+        ids = list(read_fasta(FAM))
+        tsv = self.tmp / "clusters.tsv"
+        tsv.write_text("".join(f"{ids[k]}\t{ids[k]}\n{ids[k]}\t{ids[k + 1]}\n" for k in range(0, 8, 2)),
+                       encoding="utf-8")
+        return tsv
+
+    def test_the_record_lists_nothing_for_a_folder_that_was_not_made(self):
+        tsv = self.clusters()
+        out = self.tmp / "c"
+        real = os.makedirs
+
+        def makedirs(name, *a, **k):
+            if os.path.basename(os.fspath(name)) == PROT:
+                raise PermissionError(errno.EACCES, "Permission denied", os.fspath(name))
+            return real(name, *a, **k)
+        with mock.patch.object(P.os, "makedirs", makedirs), redirect_stderr(io.StringIO()) as err:
+            res = P.run_clusters(FAM, out, clusters=tsv, keep_alignments=True, keep_protein_alignments=True)
+        self.assertEqual(res.exit_code, 1, err.getvalue())
+        self.assertIn("Permission denied", err.getvalue())
+        rec = json.loads((out / "work" / "outputs.json").read_text(encoding="utf-8"))
+        self.assertTrue(rec["protein_alignments_dir"])
+        self.assertEqual(rec["protein_alignments_files"], [])
+        self.assertFalse((out / PROT).exists())
+        # a protein_alignments/ the user makes afterwards is not the run's
+        (out / PROT).mkdir()
+        (out / PROT / "mine.fasta").write_text(">mine\nMK\n", encoding="utf-8")
+        with redirect_stderr(io.StringIO()) as err:
+            res = P.run_clusters(FAM, out, clusters=tsv)
+        self.assertEqual(res.exit_code, 2, err.getvalue())     # (one record of the fixture is not usable)
+        self.assertEqual(sorted(os.listdir(out / PROT)), ["mine.fasta"])
 
 
 if __name__ == "__main__":

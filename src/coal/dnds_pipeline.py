@@ -1588,10 +1588,10 @@ class _Run:
             if self.owned.list_alignment_files():
                 self._write_record()
         except OSError as e:
-            # (never a traceback for a run whose results are there: the next run then keeps those files, as not
-            # COAL's, and a run that writes the folder again names them)
+            # (never a traceback for a run whose results are there; the record on disk keeps no list, as while
+            # the engine wrote, so the next run takes every .fasta of the folder for this run's)
             self.warn(f"could not record the alignment files in {self.wpath('outputs.json')}: {e.strerror or e}; "
-                      "the next run into this folder keeps them")
+                      "the next run into this folder takes every .fasta file there for this run's")
 
     def remove_temporaries(self) -> None:
         """Remove what is left of this run's NAME.tmp files (a stage that failed or was interrupted while it was
