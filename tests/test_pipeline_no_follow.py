@@ -22,7 +22,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "tests"))
-from test_dnds_pipeline import FAM, FAM_CLUSTERS, PLAIN, PipelineCase, Q, S, needs_cpp, needs_diamond  # noqa: E402
+from test_dnds_pipeline import (CLUSTALO, FAM, PLAIN, PipelineCase, Q, S, needs_cpp, needs_diamond,  # noqa: E402
+                                read_fasta)
 
 from coal import dnds_pipeline as P  # noqa: E402
 
@@ -97,7 +98,11 @@ class Planted(_Planting):
         self.assertTrue(any(p.is_file() and not p.is_symlink() for p in (out / "work" / "inputs").iterdir()))
 
     def test_clusters_with_both_alignment_folders(self):
-        out = self.twice(P.run_clusters, FAM, self.tmp / "c", clusters=FAM_CLUSTERS, keep_alignments=True,
+        ids = list(read_fasta(FAM))      # clusters of two (aligned by NW: no Clustal Omega needed)
+        tsv = self.tmp / "clusters.tsv"
+        tsv.write_text("".join(f"{ids[k]}\t{ids[k]}\n{ids[k]}\t{ids[k + 1]}\n" for k in range(0, 8, 2)),
+                       encoding="utf-8")
+        out = self.twice(P.run_clusters, FAM, self.tmp / "c", clusters=tsv, keep_alignments=True,
                          keep_protein_alignments=True, kaks_format=True)
         for d in ("codon_alignments", "protein_alignments"):
             files = list((out / d).iterdir())
@@ -112,6 +117,7 @@ class PlantedDiamond(_Planting):
     def test_pairs_found_by_diamond(self):
         self.twice(P.run_pairs, Q, S, self.tmp / "o", kaks_format=True)
 
+    @unittest.skipUnless(CLUSTALO, "needs Clustal Omega (DeepClust's clusters have more than two members)")
     def test_clusters_by_deepclust_with_prefixed_ids(self):
         self.twice(P.run_clusters, [FAM, S], self.tmp / "c", prefix_ids=True, realign=True, keep_alignments=True)
 
