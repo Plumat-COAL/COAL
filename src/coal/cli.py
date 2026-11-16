@@ -427,13 +427,16 @@ def is_gzip(path) -> bool:
 
 def gunzip_to(src: str, dst: str) -> str:
     """Decompress the gzip file src into dst (streamed) and return the SHA-256 of the decompressed bytes (hex).
-    ValueError with a readable reason when src is not a complete gzip file; OSError when dst cannot be written."""
+    ValueError with a readable reason when src is not a complete gzip file; OSError when dst cannot be written.
+    dst is created as a new file (O_CREAT | O_EXCL, and O_NOFOLLOW where the system has it): FileExistsError when
+    something has that name, so a symbolic link put there is never written through (the caller removes a leftover)."""
     import gzip
     import hashlib
     import zlib
     h = hashlib.sha256()
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
     try:
-        with gzip.open(src, "rb") as fin, open(dst, "wb") as fout:
+        with gzip.open(src, "rb") as fin, open(dst, "wb", opener=lambda p, _f: os.open(p, flags, 0o666)) as fout:
             for block in iter(lambda: fin.read(1 << 20), b""):
                 h.update(block)
                 fout.write(block)

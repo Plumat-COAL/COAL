@@ -169,6 +169,22 @@
   now they are yours (kept, and a run writing that folder is refused as for any file of yours there). The warning
   for a list that could not be written now says what follows: the next run takes every `.fasta` file there for this
   run's (it said the next run keeps them).
+- `coal pipeline` no longer writes through a symbolic link in `DIR/work/`. `work/outputs.json.tmp` (the record),
+  `state.json.tmp`, `inputs/sources.json.tmp`, the logs (`work/logs/*.log`), the decompressed and `--prefix-ids`
+  copies of the inputs, `proteins.sorted.faa.tmp`, `*.kept.faa.tmp`, and the files `coal-cpp translate` and DIAMOND
+  write there (`*.faa`, `*.genes.tsv`, the hit tables, `subject.dmnd` / `query.dmnd`) were opened as they were
+  found: a link planted with such a name made the next run write into its target, outside `DIR` (the record, the
+  logs, the proteins), and the renamed record became that link. They are now created anew like the tables in
+  `DIR` (a link or hard link with the name is removed, never followed; `O_CREAT | O_EXCL | O_NOFOLLOW`), a log is
+  appended to only when it is no link and has no other name, and `--resume` no longer reuses a stage whose output
+  is a link. `coal-cpp translate` and DIAMOND write into a folder of their stage, `work/NAME.staging` (made anew
+  for the stage, mode 0700, removed after it and by the next run after a kill), and their files are renamed into
+  place (a link put at a name after COAL removed it, while DIAMOND searched, was followed); the
+  decompressed copy of a `.gz` input is created with `O_EXCL | O_NOFOLLOW`. A folder COAL writes into that is a
+  symbolic link (`DIR/work`, `work/logs`, `work/inputs`, an alignment folder) is refused with exit 1 before
+  anything changes, also with `--overwrite` (it was written through: `O_NOFOLLOW` guards only the last part of a
+  path); to keep the working files elsewhere, give `-o` a folder there. The programs' command lines in `report.json`
+  name those staging folders (the same paths in every run). (Found by the audits of #99 and #102.)
 
 ### Added
 
@@ -208,6 +224,12 @@
   records, `.FASTA`). Behaviour unchanged but for the fix above: the same files, byte for byte, on `examples/dnds`
   and the cluster fixture. Comments in `dnds_pipeline.py` cite the pull request of a change instead of review
   documents that are not in the repository.
+- `coal.outputs_record`: `OutputsRecord.check_before_start()` is the sequence of checks `_Run.start()` makes
+  (`--report` path, the run's inputs, earlier outputs and alignment folders, output names, `work/`, `--report FILE`),
+  so the unit tests run that same sequence; `open_new` / `open_append` / `remove_file` write without following
+  links. The alignment-folder options of `_Run` come from `outputs_record.ALIGNMENT_DIRS`. Tests for four rules no
+  test caught when broken on purpose (a record's `read_in_place` voids the report's list, a broken link at a
+  recorded name, a `work/logs` link, a named pipe as `work/outputs.json`).
 
 ## 0.6.0 — 2026-11-15
 

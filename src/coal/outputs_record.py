@@ -26,9 +26,12 @@ and ends. Internal: not part of the supported Python API.
 """
 from __future__ import annotations
 
+import contextlib
+import errno
 import json
 import os
 import re
+import shutil
 import stat
 from collections.abc import Callable, Iterable
 
@@ -50,6 +53,147 @@ ALIGNMENT_DIRS = {"codon_alignments": "--keep-alignments", "protein_alignments":
 
 class OutputsRefused(Exception):
     """A run that would replace or mix with files that are not COAL's: nothing in the folder was changed."""
+
+
+# -- writing into the output folder without following links
+# A name in DIR or DIR/work may be a symbolic link (or a hard link) to a file elsewhere, planted or left there:
+# COAL never writes through it. A file it writes is created anew (whatever has the name is removed first, then
+# O_CREAT | O_EXCL | O_NOFOLLOW where the system has it), a log it appends to is never a link or a file with other
+# names, and an external program writes into a staging folder made anew (work/NAME.staging) whose files are
+# renamed into place. Removing a link removes the link, never what it points to. A folder COAL writes into (work/
+# and its logs/ and inputs/, the alignment folders) is never a link: the run is refused (O_NOFOLLOW guards only the
+# last part of a path). Windows has no O_NOFOLLOW: there a dangling link put at a name between its removal and the
+# O_CREAT | O_EXCL open (which needs the privilege to make links, and winning that race) could make the file
+# appear at the link's target; it is created, never an existing file overwritten.
+_NEW_FILE = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+_APPEND_FILE = os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+
+
+def remove_file(path: str) -> None:
+    """Remove whatever has the name `path` but a folder (a file, a symbolic link, also a broken one); nothing when
+    there is nothing. Before a program writes `path`: what it writes is then a new file, not a link's target."""
+    try:
+        if not stat.S_ISDIR(os.lstat(path).st_mode):
+            os.remove(path)
+    except FileNotFoundError:
+        pass
+
+
+# the folders inside DIR/work that a run makes and writes into
+WORK_FOLDERS = ("logs", "inputs")
+
+
+def link_refusal(path: str) -> str:
+    """The message for a folder COAL writes into that is a symbolic link."""
+    return (f"{path} is a symbolic link (to {os.readlink(path) if os.path.islink(path) else '?'}): COAL writes its "
+            "files only into folders inside the output folder, never through a link. Nothing was changed there: "
+            "remove the link (to keep the working files on another file system, give -o a folder on that file "
+            "system)")
+
+
+def make_folder(path: str) -> None:
+    """os.makedirs(path, exist_ok=True), and OutputsRefused when `path` is a symbolic link (which makedirs
+    accepts as a folder); OSError when it cannot be made."""
+    if os.path.islink(path):
+        raise OutputsRefused(link_refusal(path))
+    os.makedirs(path, exist_ok=True)
+    if os.path.islink(path):
+        raise OutputsRefused(link_refusal(path))
+
+
+def remove_entry(path: str) -> None:
+    """Remove whatever has the name `path`: a symbolic link (also one to a folder) or a file is unlinked, never
+    followed; a real folder is removed with what it holds (shutil.rmtree, which follows no link inside). For names
+    in DIR/work only, which are COAL's while the run holds the folder's lock."""
+    try:
+        st = os.lstat(path)
+    except FileNotFoundError:
+        return
+    if stat.S_ISDIR(st.st_mode):
+        shutil.rmtree(path)
+    else:
+        os.remove(path)
+
+
+# The stages whose programs write into work/NAME.staging (coal.dnds_pipeline: _Run.translate's sets, _search,
+# DeepClust, realign). staging() takes no other name, so this list and the code cannot drift apart, and
+# clear_staging() removes these names and nothing else of what work/ holds.
+STAGING_STAGES = ("translate_query", "translate_subject", "translate_proteins", "diamond_search", "deepclust",
+                  "realign")
+# NAME.staging, and NAME.staging-XXXXXXXX (tempfile.mkdtemp's eight characters) of the 0.6.1 development builds
+_STAGING_NAME = re.compile(r"(%s)\.staging(-[a-z0-9_]{8})?" % "|".join(STAGING_STAGES))
+
+
+def clear_staging(work: str) -> None:
+    """Remove the staging folders a run left in `work` (killed or out of memory while a program wrote there; they
+    can hold DIAMOND's databases and temporary files): exactly the names of STAGING_STAGES with .staging (or a
+    development build's .staging-XXXXXXXX), never another file of work/ (with --overwrite a user's work/ may hold
+    a backup.staging of their own). Links are unlinked, never followed. OSError (with its filename) when one
+    cannot be removed."""
+    try:
+        names = os.listdir(work)
+    except FileNotFoundError:
+        return
+    for n in sorted(names):
+        if _STAGING_NAME.fullmatch(n):
+            remove_entry(os.path.join(work, n))
+
+
+@contextlib.contextmanager
+def staging(folder: str, name: str):
+    """The staging folder `folder`/NAME.staging, made anew for an external program to write its files into; place()
+    renames them where they belong. Whatever had the name is removed first (remove_entry), then os.mkdir(..., 0o700),
+    which never follows a link and fails (FileExistsError) if one was put there in between. A fixed name: the
+    commands a run records name a path that exists again after `mkdir` (and report.json is the same for the same
+    run), and a killed run's folder is removed by the next run (clear_staging, and here). Removed afterwards,
+    whatever is left in it.
+    A link put at the name while the program runs (by someone who can write DIR/work during the run, and so could
+    change its results anyway) would be followed by the program: not guarded against."""
+    if name not in STAGING_STAGES:
+        raise ValueError(f"staging({name!r}): not one of STAGING_STAGES")
+    d = os.path.join(folder, name + ".staging")
+    remove_entry(d)
+    os.mkdir(d, 0o700)
+    try:
+        yield d
+    finally:
+        with contextlib.suppress(OSError):
+            remove_entry(d)
+
+
+def place(src: str, dst: str) -> None:
+    """Rename the finished file `src` onto `dst`: a file or symbolic link at `dst` is replaced, never followed; a
+    folder there is an error (IsADirectoryError)."""
+    if os.path.isdir(dst) and not os.path.islink(dst):
+        raise IsADirectoryError(errno.EISDIR, "is a folder", dst)
+    os.replace(src, dst)
+
+
+def open_new(path: str, binary: bool = False):
+    """A file created anew for writing (UTF-8 text with \\n line ends, or bytes): whatever has this name (a
+    leftover, a symbolic or hard link) is removed first and never written through, then the file is created with
+    O_CREAT | O_EXCL | O_NOFOLLOW (where the system has it), so a link put there in between makes the open fail
+    instead of being followed. COAL writes its tables, records and copies to NAME.tmp this way and renames them
+    when they are complete."""
+    remove_file(path)
+
+    def opener(p, _flags):
+        return os.open(p, _NEW_FILE, 0o666)
+    if binary:
+        return open(path, "wb", opener=opener)
+    return open(path, "w", encoding="utf-8", errors="backslashreplace", newline="\n", opener=opener)
+
+
+def open_append(path: str):
+    """A log opened for appending (bytes): a symbolic link of that name, or a file that has other names too (a
+    hard link), is removed first, so only a log of this folder's own grows; O_NOFOLLOW where the system has it."""
+    try:
+        st = os.lstat(path)
+        if stat.S_ISLNK(st.st_mode) or (stat.S_ISREG(st.st_mode) and st.st_nlink > 1):
+            os.remove(path)
+    except FileNotFoundError:
+        pass
+    return open(path, "ab", opener=lambda p, _flags: os.open(p, _APPEND_FILE, 0o666))
 
 
 def starts_like_coal_record(path: str) -> bool:
@@ -260,6 +404,20 @@ class OutputsRecord:
                       and (n not in listed if listed is not None else not n.endswith(".fasta")))
 
     # -- before anything changes
+    def check_before_start(self, report=None, report_is_default: bool = False, writes: Iterable[str] = (), *,
+                           check_inputs: Callable[[], tuple] = lambda: ((), False), overwrite: bool = False) -> None:
+        """Every check a run makes before it changes anything in the folder, in the order that decides which
+        refusal a run gets: --report that is not a regular file (check_report_path); check_inputs(), the caller's
+        own checks of its inputs, which returns (the names it plans to write, whether it reads
+        DIR/orthologs.tsv in place); what an earlier run wrote and the alignment folders this run writes
+        (read_earlier); the names it writes, work/ and --report FILE (check_foreign). OutputsRefused (or what
+        check_inputs raises) on the first refusal."""
+        check_report_path(report)
+        planned, pairs_in_place = check_inputs()
+        self.read_earlier(report, report_is_default, writes)
+        self.check_foreign(planned, overwrite=overwrite, pairs_in_place=pairs_in_place, report=report,
+                           report_is_default=report_is_default)
+
     def check_foreign(self, planned: Iterable[str], *, overwrite: bool = False, pairs_in_place: bool = False,
                       report=None, report_is_default: bool = False) -> None:
         """Refuse (OutputsRefused), before anything in the folder is removed or written, a run whose outputs
@@ -269,12 +427,16 @@ class OutputsRecord:
         (read_earlier) is that run's and is replaced as before; so is everything with --overwrite. Temporary names
         (NAME.tmp) are COAL's own and not checked. Then, the same way (#96): a --report FILE that exists and is not
         a COAL report, and a DIR/work/ that no COAL run made (not empty, no work/outputs.json, no COAL report.json
-        in DIR); a `work` that is not a folder is refused always."""
+        in DIR); a `work` that is not a folder, and a work/, work/logs or work/inputs that is a symbolic link (the
+        run would write through it: #102), are refused always."""
         w = self.work
         if os.path.lexists(w) and not os.path.isdir(w):
             # (a file or a broken link: COAL never removes it, so --overwrite cannot help)
             raise OutputsRefused(f"{w} exists and is not a folder: the run keeps its working files in DIR/work. "
                                  "Nothing was changed: move it away or use another output folder")
+        for f in (w, *(os.path.join(w, n) for n in WORK_FOLDERS)):
+            if os.path.islink(f):   # (a link to a folder: the run would write through it; whatever --overwrite says)
+                raise OutputsRefused(link_refusal(f))
         if overwrite:
             return
         known = self.earlier
@@ -358,9 +520,10 @@ class OutputsRecord:
         return self.record
 
     def write(self) -> None:
-        """Put the record into work/outputs.json (through outputs.json.tmp, renamed: never cut short)."""
+        """Put the record into work/outputs.json (through outputs.json.tmp, created anew and renamed: never cut
+        short, never written through a link)."""
         tmp = self.wpath("outputs.json.tmp")
-        with open(tmp, "w", encoding="utf-8", errors="backslashreplace", newline="\n") as fh:
+        with open_new(tmp) as fh:      # (a link planted at outputs.json.tmp is removed, never written through)
             json.dump(self.record, fh)
             fh.write("\n")
         os.replace(tmp, self.wpath("outputs.json"))

@@ -22,6 +22,7 @@ build/coal-cpp, COAL_CPP_BIN).
 """
 from __future__ import annotations
 
+import contextlib
 import errno
 import io
 import json
@@ -90,13 +91,16 @@ class Folder(unittest.TestCase):
         owned.read_earlier(report, report_is_default, writes)
         return owned
 
-    def start(self, writes=(), planned=PLANNED, keep=(), is_input=lambda p: None, **check) -> OutputsRecord:
-        """A run's start: what the earlier run wrote, the checks, its clean-up, the new record (written)."""
-        owned = self.earlier(writes, check.get("report"), check.get("report_is_default", False))
-        owned.check_foreign(planned, **check)
+    def start(self, writes=(), planned=PLANNED, keep=(), is_input=lambda p: None, report=None,
+              report_is_default=False, overwrite=False, pairs_in_place=False) -> OutputsRecord:
+        """A run's start as _Run.start makes it: the checks (check_before_start, the same sequence), the clean-up,
+        the new record (written)."""
+        owned = OutputsRecord(str(self.out), SCHEMA)
+        owned.check_before_start(report, report_is_default, writes, check_inputs=lambda: (planned, pairs_in_place),
+                                 overwrite=overwrite)
         owned.clear(keep, is_input)
         (self.out / "work" / "logs").mkdir(parents=True, exist_ok=True)
-        owned.new_record([n for n in planned if not (n == "orthologs.tsv" and check.get("pairs_in_place"))], writes)
+        owned.new_record([n for n in planned if not (n == "orthologs.tsv" and pairs_in_place)], writes)
         owned.write()
         return owned
 
@@ -591,6 +595,251 @@ class AlignmentFolderNotMade(PipelineCase):
         self.assertEqual(res.exit_code, 2, err.getvalue())     # (one record of the fixture is not usable)
         self.assertEqual(sorted(os.listdir(out / PROT)), ["mine.fasta"])
 
+
+class Gaps(Folder):
+    """Rules no test caught when they were broken on purpose (AUDIT-99, S1)."""
+
+    def test_a_record_with_read_in_place_makes_the_reports_list_void(self):
+        """#87: a record that says what was read in place replaces the report's list: a user's own orthologs.tsv
+        that the report names (it was read in place) is not COAL's."""
+        self.write_record({"coal_version": "0.6.0", "files": ["dnds.tsv"], "read_in_place": []})
+        self.put("report.json", json.dumps({"schema": SCHEMA, "outputs": {"orthologs": "orthologs.tsv"}}))
+        self.put("orthologs.tsv", "mine\n")
+        owned = self.earlier()
+        self.assertEqual(owned.listed, set())
+        with self.assertRaisesRegex(OutputsRefused, "already holds orthologs.tsv"):
+            owned.check_foreign(["orthologs.tsv"])
+
+    def test_a_broken_link_at_a_recorded_name_is_removed(self):
+        self.write_record({"coal_version": "0.6.0", "files": ["dnds.tsv"], "read_in_place": []})
+        self.symlink(self.tmp / "nowhere", self.out / "dnds.tsv")
+        self.earlier().clear()
+        self.assertFalse(os.path.lexists(self.out / "dnds.tsv"))
+
+    def test_a_logs_link_is_not_coals_mark_on_work(self):
+        (self.out / "work").mkdir()
+        elsewhere = self.tmp / "empty"
+        elsewhere.mkdir()
+        self.symlink(elsewhere, self.out / "work" / "logs")      # work/ holds only "logs", an empty folder's link
+        self.assertFalse(self.earlier().work_is_coal)
+        with self.assertRaisesRegex(OutputsRefused, "logs is a symbolic link"):   # (and never written through)
+            self.earlier().check_foreign(PLANNED, overwrite=True)
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "named pipes (POSIX)")
+    def test_a_named_pipe_is_never_opened(self):
+        """starts_like_coal_record() and read_earlier() on a work/outputs.json (or report.json) that is a named
+        pipe: not opened (open() would wait for a writer for ever)."""
+        import threading
+        (self.out / "work").mkdir()
+        fifo = self.out / "work" / "outputs.json"
+        os.mkfifo(fifo)
+        os.mkfifo(self.out / "report.json")
+        got = []
+        t = threading.Thread(target=lambda: got.append((R.starts_like_coal_record(str(fifo)),
+                                                        self.earlier().work_is_coal)), daemon=True)
+        t.start()
+        t.join(10)
+        if t.is_alive():      # (let the blocked open() go: a writer that comes and goes)
+            for p in (fifo, self.out / "report.json"):
+                with contextlib.suppress(OSError):
+                    os.close(os.open(p, os.O_WRONLY | os.O_NONBLOCK))
+            t.join(10)
+            self.fail("a named pipe was opened")
+        self.assertEqual(got, [(False, False)])
+
+
+class TheOrderOfTheChecks(Folder):
+    """check_before_start, the sequence _Run.start runs: the first refusal is the one a run gets."""
+
+    def test_report_path_then_inputs_then_folders_then_names(self):
+        self.put("work/notes.txt")                         # a work/ of the user's ...
+        self.put("dnds.tsv")                               # ... an output name no run wrote ...
+        self.put(f"{CODON}/data.txt")                      # ... an alignment folder no run wrote
+        d = self.tmp / "reports"
+        d.mkdir()
+        calls = []
+
+        def inputs():
+            calls.append("inputs")
+            raise RuntimeError("an input is a file this run writes")
+        owned = OutputsRecord(str(self.out), SCHEMA)
+        with self.assertRaisesRegex(OutputsRefused, "is a folder"):
+            owned.check_before_start(str(d), writes=(CODON,), check_inputs=inputs)
+        self.assertEqual(calls, [])                        # --report first: the inputs were not looked at
+        with self.assertRaisesRegex(RuntimeError, "an input"):
+            owned.check_before_start(None, writes=(CODON,), check_inputs=inputs)
+        ok = lambda: (PLANNED, False)                      # noqa: E731
+        with self.assertRaisesRegex(OutputsRefused, "was not written by a COAL run: --keep-alignments"):
+            owned.check_before_start(None, writes=(CODON,), check_inputs=ok)
+        with self.assertRaisesRegex(OutputsRefused, "already holds dnds.tsv"):
+            owned.check_before_start(None, check_inputs=ok)
+        (self.out / "dnds.tsv").unlink()
+        rp = self.tmp / "mine.json"
+        rp.write_text("{}", encoding="utf-8")
+        with self.assertRaisesRegex(OutputsRefused, "is not a COAL report"):
+            owned.check_before_start(str(rp), check_inputs=ok)
+        with self.assertRaisesRegex(OutputsRefused, "work exists and no COAL run made it"):
+            owned.check_before_start(None, check_inputs=ok)
+        owned.check_before_start(str(rp), check_inputs=ok, overwrite=True)
+
+    def test_the_planned_names_come_from_check_inputs(self):
+        self.put("orthologs.tsv", "mine\n")
+        owned = OutputsRecord(str(self.out), SCHEMA)
+        owned.check_before_start(check_inputs=lambda: (["orthologs.tsv"], True))     # read in place
+        with self.assertRaisesRegex(OutputsRefused, "already holds orthologs.tsv"):
+            owned.check_before_start(check_inputs=lambda: (["orthologs.tsv"], False))
+
+
+class NoLinkIsWrittenThrough(Folder):
+    """L1 of AUDIT-99: work/outputs.json.tmp was opened with open(..., "w"), which follows a symbolic link: a link
+    planted there made the next run write its record into the link's target, outside the folder. Every file COAL
+    writes in the folder is now created anew (open_new), a log is appended to only when it is no link
+    (open_append), and what a program writes is removed before it runs (remove_file)."""
+
+    def victim(self, name="victim.txt") -> Path:
+        v = self.tmp / name
+        v.write_text("keep me\n", encoding="utf-8")
+        return v
+
+    def test_the_record_is_not_written_through_a_link(self):
+        v = self.victim()
+        owned = self.start()
+        self.symlink(v, self.out / "work" / "outputs.json.tmp")
+        owned.write()
+        self.assertEqual(v.read_text(encoding="utf-8"), "keep me\n")
+        self.assertFalse(os.path.islink(self.out / "work" / "outputs.json"))
+        self.assertEqual(self.record_on_disk(), owned.record)
+        os.link(v, self.out / "work" / "outputs.json.tmp")   # a hard link: removed, not written into
+        owned.write()
+        self.assertEqual(v.read_text(encoding="utf-8"), "keep me\n")
+
+    def test_open_new(self):
+        v = self.victim()
+        p = self.out / "t.tmp"
+        for make in (lambda: self.symlink(v, p), lambda: self.symlink(self.tmp / "nowhere", p),
+                     lambda: os.link(v, p), lambda: p.write_text("old\n", encoding="utf-8")):
+            make()
+            with R.open_new(str(p)) as fh:
+                fh.write("new\n")
+            self.assertFalse(os.path.islink(p))
+            self.assertEqual(p.read_bytes(), b"new\n")
+            self.assertEqual(v.read_text(encoding="utf-8"), "keep me\n")
+            p.unlink()
+        with R.open_new(str(p), binary=True) as fh:
+            fh.write(b"\x00\xff")
+        self.assertEqual(p.read_bytes(), b"\x00\xff")
+
+    def test_a_link_made_after_the_removal_is_not_followed(self):
+        """O_EXCL (and O_NOFOLLOW): a link that appears between the removal and the open makes the open fail."""
+        v = self.victim()
+        p = self.out / "t.tmp"
+        self.symlink(v, p)
+        with mock.patch.object(R, "remove_file", lambda path: None), self.assertRaises(FileExistsError):
+            R.open_new(str(p))
+        self.assertEqual(v.read_text(encoding="utf-8"), "keep me\n")
+
+    def test_open_append(self):
+        v = self.victim()
+        log = self.out / "work" / "logs" / "tool.log"
+        log.parent.mkdir(parents=True)
+        for k in range(2):                                 # a log of the folder's own grows
+            with R.open_append(str(log)) as fh:
+                fh.write(b"line %d\n" % k)
+        self.assertEqual(log.read_bytes(), b"line 0\nline 1\n")
+        log.unlink()
+        for make in (lambda: self.symlink(v, log), lambda: os.link(v, log)):
+            make()
+            with R.open_append(str(log)) as fh:
+                fh.write(b"mine\n")
+            self.assertEqual(log.read_bytes(), b"mine\n")
+            self.assertEqual(v.read_text(encoding="utf-8"), "keep me\n")
+            log.unlink()
+
+    def test_remove_file(self):
+        v = self.victim()
+        for make in (lambda p: self.symlink(v, p), lambda p: self.symlink(self.tmp / "nowhere", p),
+                     lambda p: p.write_text("x", encoding="utf-8")):
+            p = self.out / "x.tsv"
+            make(p)
+            R.remove_file(str(p))
+            self.assertFalse(os.path.lexists(p))
+        R.remove_file(str(self.out / "missing"))
+        (self.out / "d").mkdir()
+        R.remove_file(str(self.out / "d"))                 # a folder stays
+        self.assertTrue((self.out / "d").is_dir())
+        self.assertEqual(v.read_text(encoding="utf-8"), "keep me\n")
+
+
+class Staging(Folder):
+    """outputs_record.staging(): work/NAME.staging made anew (AUDIT-102 re-audit, M2 / M3)."""
+
+    def test_made_anew_and_removed(self):
+        work = self.out / "work"
+        (work / "deepclust.staging" / "sub").mkdir(parents=True)          # a killed run's folder
+        (work / "deepclust.staging" / "old.dmnd").write_text("big", encoding="utf-8")
+        with R.staging(str(work), "deepclust") as d:
+            self.assertEqual(d, str(work / "deepclust.staging"))
+            self.assertEqual(os.listdir(d), [])
+            if os.name == "posix":
+                self.assertEqual(os.stat(d).st_mode & 0o777, 0o700)
+            Path(d, "out.tsv").write_text("x", encoding="utf-8")
+        self.assertFalse(os.path.lexists(work / "deepclust.staging"))
+
+    def test_a_link_at_the_name_is_removed_never_followed(self):
+        work = self.out / "work"
+        work.mkdir()
+        elsewhere = self.tmp / "elsewhere"
+        elsewhere.mkdir()
+        (elsewhere / "keep.txt").write_text("keep me\n", encoding="utf-8")
+        self.symlink(elsewhere, work / "deepclust.staging")
+        with R.staging(str(work), "deepclust") as d:
+            self.assertFalse(os.path.islink(d))
+        self.assertEqual(os.listdir(elsewhere), ["keep.txt"])
+        # a link put back between the removal and os.mkdir: FileExistsError, nothing written there
+        real = R.remove_entry
+
+        def remove_then_link(path):
+            real(path)
+            os.symlink(elsewhere, path)
+        with mock.patch.object(R, "remove_entry", remove_then_link), self.assertRaises(FileExistsError):
+            with R.staging(str(work), "deepclust"):
+                pass
+        self.assertEqual(os.listdir(elsewhere), ["keep.txt"])
+
+    def test_clear_staging(self):
+        """Exactly COAL's stage names with .staging (or a development build's .staging-XXXXXXXX) go; anything else
+        in work/ stays, whatever it is called (a user's work/ written into with --overwrite)."""
+        work = self.out / "work"
+        for n in ("deepclust.staging", "translate_query.staging-k3j4h5g6", "translate_proteins.staging"):
+            (work / n).mkdir(parents=True)
+            (work / n / "f").write_text("x", encoding="utf-8")
+        (work / "diamond_search.staging").write_text("x", encoding="utf-8")         # (a file of that name too)
+        users = ["backup.staging", "notes.staging-2024.txt", "deepclust.staging.bak", "translate_query.staging-1",
+                 "realign.staging-ABCDEFGH", "xdeepclust.staging", "translate_.staging"]
+        for n in users:
+            if n == "backup.staging":
+                (work / n).mkdir()
+                (work / n / "mine.txt").write_text("mine\n", encoding="utf-8")
+            else:
+                (work / n).write_text("mine\n", encoding="utf-8")
+        (work / "logs").mkdir()
+        (work / "state.json").write_text("{}", encoding="utf-8")
+        elsewhere = self.tmp / "elsewhere"
+        elsewhere.mkdir()
+        (elsewhere / "keep.txt").write_text("keep me\n", encoding="utf-8")
+        self.symlink(elsewhere, work / "realign.staging")
+        R.clear_staging(str(work))
+        self.assertEqual(sorted(os.listdir(work)), sorted(["logs", "state.json", *users]))
+        self.assertEqual((work / "backup.staging" / "mine.txt").read_text(encoding="utf-8"), "mine\n")
+        self.assertEqual(os.listdir(elsewhere), ["keep.txt"])
+        R.clear_staging(str(self.out / "missing"))
+
+    def test_only_the_stages_names(self):
+        with self.assertRaises(ValueError):
+            with R.staging(str(self.out), "backup"):
+                pass
+        self.assertEqual(os.listdir(self.out), [])
+        self.assertFalse(R.remove_entry(str(self.out / "missing")))     # (a plain function: returns None)
 
 if __name__ == "__main__":
     unittest.main()
