@@ -2,13 +2,14 @@
 
 CI's C++ job sets COAL_TEST_REAL_MAFFT=1 on its Windows runner. There `coal pipeline install mafft` installs the
 pinned package into a new cache folder, and every run here has the cache folder, the current folder and TMP / TEMP
-in paths with spaces, `&`, `^` and `( )` (cmd.exe's special characters: COAL runs the package's bash.exe, not
+in paths with spaces, `&`, `^` and `( )`, the cache folder also with non-ASCII letters (cmd.exe's special characters: COAL runs the package's bash.exe, not
 mafft.bat, so they are only text). The tests check the record of the install, that a second install downloads
 nothing, that MAFFT runs (--version, an alignment, the paths MSYS2 reads), and one `coal pipeline clusters
 --aligner mafft` run on examples/dnds, end to end with coal-cpp (COAL_CPP_BIN), with the numbers of before. On another system the download is checked and unpacked the same way, with the
 platform taken to be x86-64 Windows (nothing of it is run there).
 
-A download that cannot be made (the site cannot be reached) is a skip that says so; a file that is not the pinned
+A download that cannot be made (the site cannot be reached) is a skip that says so (show_skip: also a warning on
+the CI run and a line in its summary); a file that is not the pinned
 one (another size or SHA-256: MAFFT replaced the file at that address) fails. Without COAL_TEST_REAL_MAFFT=1
 everything here skips: tests/test_windows_tools.py tests the same code with the download mocked."""
 from __future__ import annotations
@@ -16,6 +17,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import locale
 import os
 import shutil
 import subprocess
@@ -52,12 +54,38 @@ def unreachable(text: str) -> bool:
     return "download failed (" in text
 
 
+_SKIP_SHOWN: list = []
+
+
+def show_skip(reason: str) -> str:
+    """The reason of the skip when MAFFT's site cannot be reached, made visible once per run, not only in the list of
+    skips: a warning annotation on the CI run (GitHub Actions), a line in the job summary and on stderr. The tests
+    then skip with that reason: nothing passes that did not run."""
+    reason = " ".join(reason.split())
+    if not _SKIP_SHOWN:
+        _SKIP_SHOWN.append(reason)
+        if os.environ.get("GITHUB_ACTIONS") == "true":
+            text = reason.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+            print(f"::warning title=MAFFT real-download tests skipped::{text}", flush=True)
+        summary = os.environ.get("GITHUB_STEP_SUMMARY")
+        if summary:
+            try:
+                with open(summary, "a", encoding="utf-8") as fh:
+                    fh.write(f"- **MAFFT real-download tests skipped**: {reason}\n")
+            except OSError:
+                pass
+        print(f"\n[real MAFFT] SKIPPED, not run: {reason}", file=sys.stderr)
+    return reason
+
+
 @unittest.skipUnless(REAL, "COAL_TEST_REAL_MAFFT=1 is not set (downloads MAFFT's Windows package, 27 MB)")
 class TestRealMafftWindowsPackage(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.mkdtemp(prefix="coal real & ^ mafft ")
-        cls.cache = os.path.join(cls.tmp, "cache & ^ (x) dir")
+        # non-ASCII letters in the install folder too (review of 2026-11-15: untested with the real package). Letters
+        # of the runner's ANSI code page (cp1252), since the install prints the path on its standard output
+        cls.cache = os.path.join(cls.tmp, "cache & ^ (x) d\u00efr \u00fc\u00e9")
         cls.cwd = os.path.join(cls.tmp, "work & ^ (x)")          # the current folder of every run
         cls.temp = os.path.join(cls.tmp, "temp & ^ (x)")         # TMP / TEMP of every run
         for d in (cls.cwd, cls.temp):
@@ -77,9 +105,12 @@ class TestRealMafftWindowsPackage(unittest.TestCase):
         process, with the platform taken to be x86-64 Windows and the version not read (nothing runs)."""
         if WINDOWS:
             r = subprocess.run([sys.executable, "-m", "coal", "pipeline", "install", "mafft"], capture_output=True,
-                               text=True, env=cls.env, timeout=900, stdin=subprocess.DEVNULL, encoding="utf-8",
-                               errors="backslashreplace", cwd=cls.cwd)
-            return r.returncode, r.stdout, r.stderr
+                               env=cls.env, timeout=900, stdin=subprocess.DEVNULL, cwd=cls.cwd)
+            # Python writes a pipe in the ANSI code page (cp1252 on the runner), not UTF-8: the path printed on
+            # standard output, with its non-ASCII letters, is read back in that encoding
+            enc = locale.getpreferredencoding(False)
+            return (r.returncode, r.stdout.decode(enc, "backslashreplace").replace("\r\n", "\n"),
+                    r.stderr.decode(enc, "backslashreplace").replace("\r\n", "\n"))
         out, err = io.StringIO(), io.StringIO()
         with mock.patch.dict(os.environ, {"COAL_CACHE_DIR": cls.cache}), \
                 mock.patch.object(msa, "_platform", return_value=("Windows", "AMD64")), \
@@ -92,7 +123,7 @@ class TestRealMafftWindowsPackage(unittest.TestCase):
     def setUp(self):
         rc, out, err = self.first
         if rc != 0 and unreachable(err):
-            self.skipTest(f"MAFFT's site could not be reached: {err.strip()[-300:]}")
+            self.skipTest(show_skip(f"MAFFT's site could not be reached: {err.strip()[-300:]}"))
         self.assertEqual(rc, 0, err)
         self.entry = os.path.join(self.cache, "tools", "mafft", "mafft-win", "mafft.bat")
 

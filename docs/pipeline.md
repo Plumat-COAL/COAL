@@ -304,20 +304,20 @@ coal pipeline clusters --cds all_cds.fa --clusters deepclust.tsv -o out --max-cl
 | `-m METHOD` | Ka/Ks method, repeatable: YN, NG, LWL, MLWL, LPB, MLPB, MYN, GY (maximum likelihood), Comeron (alias C95), Li ([kaks.md](kaks.md)); names are read in any case; Comeron and Li need `-c 1` | YN |
 | `-c N` | NCBI genetic code, used for translation, the codon alignment and Ka/Ks | 1 |
 | `-j N` | threads of DIAMOND and of the engine, and MSA processes at a time. The default is one per CPU the process may use (its affinity: `taskset`, a SLURM or cgroup allocation), not one per CPU of the machine; a larger `-j` is cut to that number for every program, with a warning, and `report.json` `threads` has what was asked and used | one per usable CPU |
-| `--kaks-format` | also write `dnds.kaks` in KaKs_Calculator's 22-column format | off |
+| `--kaks-format` | also write `dnds.kaks` in KaKs_Calculator's 22-column format (6 significant digits, as KaKs_Calculator and `coal kaks`; `--digits N` given: N) | off |
 | `--keep-alignments` | also write the codon alignments | off |
 | `--keep-protein-alignments` | also write the protein alignments the codon alignments are made from | off |
 | `--resume` | reuse the translation, search and clustering results in `DIR/work` when the inputs (full path, size, modification time), the options and the DIAMOND version are the same. Where `DIR` itself is does not count: a renamed or moved output folder, or a copy that keeps the files' times (`cp -a`, `rsync -a`), is resumed (a copy with new times, `cp -r`, redoes the stages after the translation of unchanged plain inputs) | off |
 | `--install-tools` | install a missing DIAMOND / Clustal Omega / MAFFT into COAL's cache | off |
 | `--diamond PATH` | the DIAMOND to run | found automatically |
-| `--report FILE` | the JSON report | `DIR/report.json` |
+| `--report FILE` | the JSON report. A `FILE` that exists and is not a COAL report (one with `"schema": "coal.<name>/<n>"`) is refused with exit 1 before anything changes, unless `--overwrite` | `DIR/report.json` |
 | `--overwrite` | replace files in `DIR` that have the names of this run's outputs but that no COAL run wrote there (your own `genes.tsv`, `dnds.tsv`, `report.json`, `clusters.tsv`, ...); without it such a run is refused with exit 1 before anything changes ([Output](#output)). The files of an earlier COAL run in `DIR` are replaced either way. It does not cover a `codon_alignments/` or `protein_alignments/` folder that is not COAL's (cluster mode), which is always refused | off |
 | `--hash-inputs auto\|always\|never` | SHA-256 of the input files in the report: files up to 2 GiB, every file, or none | `auto` |
 | `--msa-timeout S` | give up on one Clustal Omega / MAFFT run after S seconds | none |
 | `--longest-isoform`, `--gene-map TSV` | keep the longest CDS per gene; the genes from a map where it names the record, else from the headers and IDs ([One record is one gene](#one-record-is-one-gene)) | off |
 | `--isoform-rule auto\|suffix\|map` | `auto`: header fields, else ID suffixes, and `--longest-isoform` stops when a suffix rule alone would drop more than half of a file's records; `suffix`: the ID suffixes are transcripts, whatever their share; `map`: only `--gene-map`, nothing is read from headers or IDs | `auto` |
 | `--min-codons N`, `--max-ds X`, `--min-identity P` | flag estimates from fewer than N compared codons / with dS above X / from a pair whose protein identity is below P percent: status `warning` and a note; no row dropped, no number changed ([Filtering before interpretation](#filtering-before-interpretation)) | off |
-| `--yn-flavour`, `--yn-weighting`, `--digits`, `--max-cells` | as in `coal dnds` and `coal-cpp-align` | |
+| `--yn-flavour`, `--yn-weighting`, `--digits`, `--max-cells` | as in `coal dnds` and `coal-cpp-align`; `--digits N` (1 to 17; the same for `digits=N` from Python) sets the significant digits of `dnds.tsv` (default 8) and of `dnds.kaks` (default 6) | |
 | `--comeron-flavour coal\|gestimator`, `--li-flavour coal\|seqinr` | how `Comeron` and `Li` read a pair: COAL's policy, or as their reference programs (stop codons compared; [kaks.md](kaks.md), "Comeron and Li") | `coal` |
 | `--comeron-twosubs comeron\|libsequence` | Comeron, codons that differ at two positions: Comeron's two pathways, or libsequence's branches (orthologr 0.4.3's numbers; they depend on which gene is first). `report.json` records the order used ([kaks.md](kaks.md), "Two-position codon differences") | `comeron` (`libsequence` with `--comeron-flavour gestimator`) |
 | `--comeron-min-sites N` | Comeron: a site class with fewer than N sites cannot make dN or dS `NA` unless the distance is then 0 (its undefined logarithm is 0; status `warning`); 0 = any class can ([kaks.md](kaks.md), "Small site classes") | `3` |
@@ -384,6 +384,21 @@ removes only what a run is known to have written: each run lists the files it ma
 before it writes the first one (for a folder of a version without that list, the outputs named in its
 `report.json`). A file with one of those names that no run wrote (your own `clusters.tsv`, your own files in
 `codon_alignments/` or `protein_alignments/`) is not removed, files with other names are not touched, and `work/` is kept for `--resume`.
+For the per-cluster folders a run records the names of the `.fasta` files it wrote (`codon_alignments_files`,
+`protein_alignments_files` in `work/outputs.json`), and the next run removes those and no others: a `.fasta` of your
+own put into `codon_alignments/` stays (a folder recorded by 0.6.0, or by a run killed while it wrote the folder,
+has no list, and all its `.fasta` files are that run's). A run with `--keep-alignments` (or
+`--keep-protein-alignments`) into such a folder that holds a `.fasta` of yours is refused with exit 1 before anything
+changes, since one of its per-cluster files could have that name: `out/codon_alignments holds mine.fasta, which no
+COAL run wrote there ... move it out of out/codon_alignments, or use another output folder`.
+
+**`work/` and `--report` are checked the same way.** A `DIR/work/` that is not empty and that no COAL run made (no
+`work/outputs.json`, and no COAL `report.json` in `DIR` from an older version) is refused with exit 1 before
+anything changes: the run would put its logs, `state.json` and decompressed inputs among your files. `--overwrite`
+writes into it (nothing in it is removed). A `work` that is a file is always refused. `--report FILE` (in `DIR` or
+anywhere else) onto an existing file that is not a COAL report (a JSON file whose `schema` is `coal.<name>/<n>`, as
+`coal pipeline` and `coal --report` write) is refused the same way, `--overwrite` replaces it; a COAL report there is
+replaced as before. Before, both were written into or replaced without a word.
 
 **A file COAL did not write is never replaced without `--overwrite`.** When a file that this run would write
 (`genes.tsv`, `dnds.tsv`, `failed.tsv`, `report.json`, `orthologs.tsv`, `unpaired.tsv`, `clusters.tsv`,
@@ -978,7 +993,11 @@ machine is still to be done.
   `mafft.bat`, which re-expands paths unquoted in `cmd.exe`; so spaces, `&`, `^` and `( )` in the cache folder,
   the current folder and `TMP` / `TEMP` are fine (COAL's CI runs it with all three in such paths, one `coal
   pipeline clusters --aligner mafft` included). A `.bat` of your own in `COAL_MAFFT` runs through `cmd.exe` and is
-  refused while one of those folders has `& | < > ^ % ! "` in its path. Clustal Omega: the pre-compiled binaries of the Clustal site are gone (the address serves an unrelated
+  refused while its folder, the run's folder or `TMP` / `TEMP` has `& | < > ^ % ! "` in its path (the folder COAL
+  is started from does not reach it, and is not checked). A `mafft` on `PATH` that is such a batch file is passed
+  over for the pinned package in COAL's cache when that is installed (a note says so; `COAL_MAFFT` picks yours).
+  The package in a folder whose path has a `;` is refused (it would split `PATH`); non-ASCII folder names work
+  (COAL's CI installs it under one). Clustal Omega: the pre-compiled binaries of the Clustal site are gone (the address serves an unrelated
   site since 2026-11) and neither Bioconda nor conda-forge has Windows packages, so `coal pipeline install
   clustalo` cannot install one there and says what works: `--aligner mafft`; run COAL under WSL; or install
   Clustal Omega 1.2.4 with MSYS2 (`pacman -S mingw-w64-ucrt-x86_64-clustal-omega`, then `COAL_CLUSTALO` =

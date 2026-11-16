@@ -4,6 +4,37 @@
 
 ### Fixed
 
+- `coal pipeline`: a `.fasta` file of your own in `DIR/codon_alignments/` or `DIR/protein_alignments/` is no longer
+  deleted by the next run into `DIR`. A cluster run records the names of the per-cluster files it wrote
+  (`codon_alignments_files` / `protein_alignments_files` in `work/outputs.json`) and the next run removes those
+  only; a run with `--keep-alignments` / `--keep-protein-alignments` into a folder that holds a file of yours is
+  refused with exit 1 before anything changes, since one of its files could have that name. A folder recorded by
+  0.6.0 (no list) is cleared as before. (Final review of 2026-11-15, L3.)
+- `coal pipeline`: a `DIR/work/` folder that no COAL run made (not empty, no `work/outputs.json`, no COAL
+  `report.json` of an older version) is no longer written into: the run is refused with exit 1 and a message
+  before anything changes; `--overwrite` writes into it (and removes nothing there). A `work` that is a file is
+  refused, also with `--overwrite`. (L2.)
+- `coal pipeline --report FILE`: an existing `FILE` (outside `DIR` or in it) that is not a COAL report is no longer
+  replaced without a word: exit 1 before anything changes, unless `--overwrite`. A COAL report there (`"schema":
+  "coal.<name>/<n>"`, as `coal pipeline` and `coal --report` write) is replaced as before. (L1.)
+- `coal pipeline --digits N` (and `digits=N` from Python) now also sets the digits of `dnds.kaks`
+  (`--kaks-format`), which always had 6; without `--digits` it keeps KaKs_Calculator's 6, so a run without it
+  writes the same files as before. `coal-cpp codon-dnds` has `--kaks-digits N` for `--kaks-out` (default 6).
+  `digits` outside 1 to 17 is refused by the Python API too (it reached coal-cpp). (L6.)
+- `coal-cpp kaks` / `dnds`: the refusal of a gzip-compressed input names the commands that decompress it for
+  this engine, the Python package's `coal kaks` and `coal dnds` (it named `coal` and `coal pipeline`). (L5.)
+- Windows, MAFFT (AUDIT-91 notes): a `mafft` on `PATH` that is a batch file of your own (not MAFFT's package, so
+  it would run through `cmd.exe`) gives way to the pinned `mafft-win\mafft.bat` package in COAL's cache when that
+  is installed and unchanged, with a note once; `COAL_MAFFT` still picks any batch file. A batch file of your own
+  is no longer refused because of the folder COAL was started from: it runs in the run's folder, and now with an
+  environment without Windows' hidden per-drive current folders, so that folder never reaches it (its own folder,
+  the run's folder and `TMP` / `TEMP` are checked as before). MAFFT's package in a folder whose path has a `;`
+  (which would split `PATH`) is refused with a message; non-ASCII letters in its folder are tested, mocked and in
+  CI's real download (now under a cache folder with such letters). When that real-download test cannot reach
+  mafft.cbrc.jp, its skip is shown as a warning on the CI run and in the job summary, with the reason.
+- Texts: `CITATION.cff` has `date-released: 2026-11-15` for 0.6.0; `docs/python-api.md` no longer says its
+  examples were run with 0.6.0.dev0; coalr's NEWS no longer lists a development-version note for 0.6.0;
+  `scripts/release_notes.py` no longer gives a wrong size for the 0.6.0 section.
 - **GY: a start of the optimiser that crawled to its step limit is run again with longer steps.** On a nearly flat
   likelihood (two random codons with every site different: `AACTGG` against `GGTACA`) the first steps have the
   gradient's own size, 1e-4 in log kappa and log omega, and no curvature for the BFGS update to scale them with, so
