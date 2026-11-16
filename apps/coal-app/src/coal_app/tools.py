@@ -501,7 +501,8 @@ def _save_copy(path: str, save_as: str, what: str) -> str:
     """Copy `path` to `save_as` (a file path, or an existing folder to save in under the same name); never
     overwrites. Returns the new path. The copy is created as a new file (open mode "x", O_CREAT | O_EXCL): a name
     that something takes between the check and the copy, or a symbolic link (dangling or not), is never written
-    through (final review of 2026-11-16, Q3)."""
+    through (final review of 2026-11-16, Q3). (On Windows, where creating a new file follows a symbolic link, the
+    check of the name before the copy is what refuses a link.)"""
     import shutil
     dest = save_as
     if os.path.isdir(dest):

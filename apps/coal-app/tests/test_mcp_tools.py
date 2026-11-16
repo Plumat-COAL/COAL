@@ -99,6 +99,8 @@ class TestTools(_PrivateRuns):
                 pass
         for dest in names:
             for race in (False, True):   # race: the name is taken after the check
+                if race and dest != theirs and os.name == "nt":
+                    continue   # Windows: CREATE_NEW follows a symbolic link (no O_NOFOLLOW); the check covers it
                 with self.subTest(dest=os.path.basename(dest), race=race):
                     with mock.patch.object(tools.os.path, "lexists", return_value=False) if race else nullcontext():
                         with self.assertRaises(tools.CoalToolError) as cm:
